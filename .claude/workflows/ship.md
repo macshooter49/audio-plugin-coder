@@ -39,7 +39,7 @@ The Ship phase creates distribution-ready plugin packages for Windows, macOS, an
 | Platform | VST3 | AU | Standalone | LV2 | Build Method |
 |----------|------|-----|------------|-----|--------------|
 | Windows  | ✓    | -   | ✓          | -   | Local or GitHub |
-| macOS    | ✓    | ✓   | ✓          | -   | GitHub only |
+| macOS    | ✓    | ✓   | ✓          | -   | Local or GitHub |
 | Linux    | ✓    | -   | ✓          | ✓   | GitHub only |
 
 ---
@@ -104,6 +104,12 @@ Enter numbers (comma-separated) or 'all':
 - Compile installer executable
 - Include license agreement page
 - Support custom installation path
+
+**macOS Only:**
+- Build VST3 + AU + Standalone via `./scripts/build-and-install.sh -p <Name>`
+- Create `.pkg` installer (component selection: VST3, AU, Standalone) and `.dmg` (drag-and-drop)
+- Command: `./scripts/installer/create-macos-installer.sh -p <Name> -v <Version>`
+- Install paths: VST3 → `/Library/Audio/Plug-Ins/VST3/`, AU → `/Library/Audio/Plug-Ins/Components/`, Standalone → `/Applications/`
 
 **Reference:** See `skill_packaging/SKILL.md` - "STEP 3: LOCAL BUILD PROCESS"
 

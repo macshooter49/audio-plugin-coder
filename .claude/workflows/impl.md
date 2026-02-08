@@ -65,9 +65,17 @@ Fix the order before building to avoid crashes on plugin unload.
 ```
 
 **Build & Test:**
+
+Windows:
 ```powershell
 # Run build script
 .\scripts\build-and-install.ps1 -PluginName $PluginName
+```
+
+macOS/Linux:
+```bash
+# Run build script
+./scripts/build-and-install.sh -p "$PluginName"
 ```
 
 **Validation:**
@@ -79,8 +87,16 @@ Fix the order before building to avoid crashes on plugin unload.
 
 **Error Recovery:**
 If build fails:
+
+Windows:
 ```powershell
 Restore-PluginState -PluginPath "plugins\$PluginName"
+```
+
+macOS/Linux:
+```bash
+source scripts/state-management.sh
+restore_plugin_state "plugins/$PluginName"
 ```
 
 **Completion:**

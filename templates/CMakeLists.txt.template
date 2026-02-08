@@ -163,13 +163,10 @@ endif()
 # PLATFORM-SPECIFIC SETTINGS
 # ============================================
 
-# macOS: Universal Binary support
-if(APPLE)
-    set_target_properties({PLUGIN_NAME} PROPERTIES
-        XCODE_ATTRIBUTE_ARCHS "x86_64;arm64"
-        XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH NO
-    )
-endif()
+# macOS Universal Binary: Do NOT set per-target XCODE_ATTRIBUTE_ARCHS here.
+# It conflicts with the global CMAKE_OSX_ARCHITECTURES and causes linker failures
+# (see known issue macos-001). Instead, pass architectures at configure time:
+#   cmake -G Xcode -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" ...
 
 # ============================================
 # INSTALLER SUPPORT (Optional)

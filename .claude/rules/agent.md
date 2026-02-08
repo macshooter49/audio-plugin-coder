@@ -1,14 +1,15 @@
 ﻿# APC AGENT (Master Dispatcher)
 
 **Role:** You are the Lead Architect of the audio-plugin-coder (APC).
-**System:** Windows 11 | VS Code | JUCE 8 | Visage | WebView | CMake.
+**System:** Windows 11 / macOS | VS Code | JUCE 8 | Visage | WebView | CMake.
 
 ## âš ï¸ CRITICAL RULES (ANTI-HALLUCINATION)
 
 ### 1. OS & Shell Protocol
-*   **No Bash/Linux:** NEVER use `mkdir -p`, `rm`, `cp`.
-*   **PowerShell Only:** Use `New-Item`, `Remove-Item`, `Copy-Item`.
-*   **Path Separators:** Always use backslashes (`\`) for paths in commands.
+*   **Detect Platform First:** Check `uname -s` (or equivalent) before choosing shell commands.
+*   **Windows:** Use PowerShell (`New-Item`, `Remove-Item`, `Copy-Item`). Backslash (`\`) paths.
+*   **macOS/Linux:** Use bash (`mkdir -p`, `rm -rf`, `cp -R`). Forward-slash (`/`) paths.
+*   **Scripts:** Use `.ps1` scripts on Windows, `.sh` scripts on macOS/Linux. Both are side-by-side in `scripts/`.
 
 ### 2. UI Architecture Protocol (The Fork)
 You must determine the **UI_FRAMEWORK** selection from `status.json` before generating code.
@@ -26,9 +27,14 @@ You must determine the **UI_FRAMEWORK** selection from `status.json` before gene
 
 ### 3. Build Protocol
 *   **NEVER** run `cmake` manually.
-*   **Preview (Visage):** `powershell -ExecutionPolicy Bypass -File .\scripts\preview-design.ps1 -PluginName <Name>`
-*   **Preview (WebView):** Open `plugins/[Name]/Design/index.html` in Edge/Chrome.
-*   **Full Build:** `powershell -ExecutionPolicy Bypass -File .\scripts\build-and-install.ps1 -PluginName <Name>`
+*   **Windows:**
+    *   **Preview (Visage):** `powershell -ExecutionPolicy Bypass -File .\scripts\preview-design.ps1 -PluginName <Name>`
+    *   **Preview (WebView):** Open `plugins/[Name]/Design/index.html` in Edge/Chrome.
+    *   **Full Build:** `powershell -ExecutionPolicy Bypass -File .\scripts\build-and-install.ps1 -PluginName <Name>`
+*   **macOS/Linux:**
+    *   **Preview (Visage):** `./scripts/preview-design.sh -p <Name>`
+    *   **Preview (WebView):** Open `plugins/[Name]/Design/index.html` in Safari/Chrome.
+    *   **Full Build:** `./scripts/build-and-install.sh -p <Name>`
 
 ## ðŸ›‘ PHASE GATING PROTOCOL (STRICT)
 **You are strictly forbidden from "rushing ahead."**
@@ -36,7 +42,7 @@ You must determine the **UI_FRAMEWORK** selection from `status.json` before gene
 1.  **State Injection:** Before executing any command, read `plugins/[Name]/status.json`.
     *   **Check Phase:** Ensure previous phase is complete (e.g., do not `/impl` if phase is "ideation").
     *   **Check Framework:** If `ui_framework` is "visage", do not suggest HTML.
-    *   **Use State Management:** Import `scripts/state-management.ps1` and use `Test-PluginState` for validation.
+    *   **Use State Management:** Import `scripts/state-management.ps1` (Windows) or `source scripts/state-management.sh` (macOS/Linux) and use `Test-PluginState` / `test_plugin_state` for validation.
 2.  **One Phase at a Time:** You may ONLY execute instructions from the *current* active Skill file.
 3.  **State Updates:** After each phase completion, use `Update-PluginState` to update `status.json`.
 4.  **Error Recovery:** Always backup state before major operations using `Backup-PluginState`.
@@ -50,6 +56,12 @@ You must determine the **UI_FRAMEWORK** selection from `status.json` before gene
     *   `Source/`: Clean C++ Code (`PluginProcessor`, `PluginEditor`).
 *   **The Dirty Zone (`build/`):** All artifacts/compilation. Located at Project Root.
 *   **The Shipping Zone (`dist/`):** Final Zips/Installers. Located at Project Root.
+*   **macOS Install Paths:**
+    *   VST3: `~/Library/Audio/Plug-Ins/VST3/`
+    *   AU: `~/Library/Audio/Plug-Ins/Components/`
+    *   Standalone: `.app` bundle in build output
+*   **Windows Install Paths:**
+    *   VST3: `C:\Program Files\Common Files\VST3\`
 *   **The Knowledge Base (`..claude/troubleshooting/`):** Known issues and resolutions.
 
 ## ðŸ”§ AUTOMATIC TROUBLESHOOTING CAPTURE
@@ -250,8 +262,10 @@ Applying documented solution...
 *   **State:** `ship_complete`
 
 ### MAINTENANCE
-*   **Backup:** `/backup [Name]` -> `powershell -File .\scripts\backup.ps1 ...`
-*   **Rollback:** `/rollback [Name]` -> `powershell -File .\scripts\rollback.ps1 ...`
+*   **Backup (Windows):** `/backup [Name]` -> `powershell -File .\scripts\backup.ps1 ...`
+*   **Backup (macOS):** `/backup [Name]` -> `./scripts/backup.sh -p [Name] -v [Version]`
+*   **Rollback (Windows):** `/rollback [Name]` -> `powershell -File .\scripts\rollback.ps1 ...`
+*   **Rollback (macOS):** `/rollback [Name]` -> `./scripts/rollback.sh -p [Name] -v [Version]`
 
 ---
 **DEFAULT BEHAVIOR:**

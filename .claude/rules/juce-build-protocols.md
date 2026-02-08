@@ -1,18 +1,20 @@
 # JUCE 8 CRITICAL SYSTEM PROTOCOLS
-**REQUIRED READING:** strict constraints for Windows 11 & APC Monorepo.
+**REQUIRED READING:** strict constraints for Windows 11 / macOS & APC Monorepo.
 ## 1. ⚠️ GOLDEN BUILD RULES (HIGHEST PRIORITY)
 ### A. The "One-Script" Rule
 - **NEVER** run cmake, msbuild, or cl.exe manually.
 - **NEVER** try to copy VST3 files manually.
 - **ALWAYS** use the master script for Building, Installing, and Repairing.
-- **COMMAND:** .\scripts\build-and-install.ps1 -PluginName "TailSync"
+- **Windows:** `.\scripts\build-and-install.ps1 -PluginName "TailSync"`
+- **macOS/Linux:** `./scripts/build-and-install.sh -p "TailSync"`
 ### B. Monorepo & Path Logic
 - **Root Context:** All build operations must happen from the Repository Root _nps/).
 - **Subdirectories:** NEVER run commands inside plugins/[Name]/.
 - **Environment:**
-  - OS: **Windows 11**
-  - Shell: **PowerShell** (Bashrmmkdir -p are FORBIDDEN).
-  - Create Folders: New-Item -ItemType Directory -Force -Path "..."
+  - OS: **Windows 11** or **macOS** (Xcode)
+  - Shell: **PowerShell** (Windows) or **bash** (macOS/Linux)
+  - Windows: `New-Item -ItemType Directory -Force -Path "..."`
+  - macOS/Linux: `mkdir -p "..."`
 ---
 ## 2. 📂 FILE STRUCTURE & WEBVIEW
 ### A. WebView/GUI Architecture
@@ -94,3 +96,41 @@ cmake -G Xcode -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" ...
 ```
 
 Per-target `XCODE_ATTRIBUTE_ARCHS` conflicts with global setting, causes Xcode to misinterpret arch list → intermediate libs don't build → linker fails with "libPlugin_SharedCode.a not found".
+
+---
+
+## 4. macOS Build Commands
+
+### A. Configure (Xcode Generator, Universal Binary)
+```bash
+cmake -S . -B build -G Xcode \
+    -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+```
+
+### B. Build Targets
+```bash
+cmake --build build --config Release --target PluginName_VST3
+cmake --build build --config Release --target PluginName_AU         # macOS only
+cmake --build build --config Release --target PluginName_Standalone
+```
+
+### C. Install Locations (macOS)
+| Format     | Install Path                                    |
+|------------|------------------------------------------------|
+| VST3       | `~/Library/Audio/Plug-Ins/VST3/`               |
+| AU         | `~/Library/Audio/Plug-Ins/Components/`          |
+| Standalone | `.app` bundle — run with `open PluginName.app`  |
+
+### D. macOS Installer Creation
+```bash
+./scripts/installer/create-macos-installer.sh -p PluginName -v 1.0.0
+```
+Creates `.dmg` (drag-and-drop) and `.pkg` (system installer with component selection) in `dist/`.
+
+### E. System Prerequisites Check
+```bash
+./scripts/system-check.sh --pretty   # Human-readable
+./scripts/system-check.sh            # JSON output
+```
+Checks: cmake 3.22+, Xcode, python3 3.8+, JUCE submodule, pluginval.
