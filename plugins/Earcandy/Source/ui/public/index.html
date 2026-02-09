@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Earcandy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #F3EFF8;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      width: 600px;
+      height: 350px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .plugin-container {
+      width: 600px;
+      height: 350px;
+      padding: 20px 30px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 30px;
+      margin-bottom: 20px;
+    }
+
+    .plugin-title {
+      font-weight: 300;
+      font-size: 16px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #6B5F80;
+    }
+
+    .series-badge {
+      font-weight: 300;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #B0A4C0;
+    }
+
+    .series-badge .diamond {
+      color: #8B5CF6;
+      margin-left: 4px;
+    }
+
+    .knob-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex: 1;
+      padding: 0 10px;
+    }
+
+    .knob-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 80px;
+      cursor: grab;
+    }
+
+    .knob-group:active,
+    .knob-group.dragging {
+      cursor: grabbing;
+    }
+
+    .knob-canvas {
+      width: 72px;
+      height: 72px;
+      transition: filter 0.15s ease;
+    }
+
+    .knob-group:hover .knob-canvas {
+      filter: brightness(1.03);
+    }
+
+    .knob-group.dragging .knob-canvas {
+      filter: brightness(1.05);
+    }
+
+    .knob-value {
+      font-weight: 400;
+      font-size: 13px;
+      color: #5B4F70;
+      margin-top: 10px;
+      height: 18px;
+      line-height: 18px;
+      transition: color 0.15s ease;
+    }
+
+    .knob-group.dragging .knob-value {
+      color: #8B5CF6;
+    }
+
+    .knob-label {
+      font-weight: 400;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #8B7FA0;
+      margin-top: 4px;
+      text-align: center;
+      line-height: 1.3;
+    }
+  </style>
+</head>
+<body>
+  <div class="plugin-container">
+    <div class="header">
+      <div class="plugin-title">Earcandy</div>
+      <div class="series-badge">rack<span class="diamond">&#x25C6;</span></div>
+    </div>
+
+    <div class="knob-row" id="knobRow">
+      <div class="knob-group" data-param="GRAIN_SIZE" data-min="5" data-max="500" data-default="80" data-value="80" data-unit=" ms" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">80.0 ms</div>
+        <div class="knob-label">Grain<br>Size</div>
+      </div>
+
+      <div class="knob-group" data-param="DENSITY" data-min="1" data-max="100" data-default="20" data-value="20" data-unit="" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">20.0</div>
+        <div class="knob-label">Density</div>
+      </div>
+
+      <div class="knob-group" data-param="SPRAY" data-min="0" data-max="100" data-default="40" data-value="40" data-unit="%" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">40.0%</div>
+        <div class="knob-label">Spray</div>
+      </div>
+
+      <div class="knob-group" data-param="PITCH" data-min="-12" data-max="12" data-default="0" data-value="0" data-unit=" st" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">0.0 st</div>
+        <div class="knob-label">Pitch</div>
+      </div>
+
+      <div class="knob-group" data-param="FEEDBACK" data-min="0" data-max="95" data-default="15" data-value="15" data-unit="%" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">15.0%</div>
+        <div class="knob-label">Feedback</div>
+      </div>
+
+      <div class="knob-group" data-param="MIX" data-min="0" data-max="100" data-default="50" data-value="50" data-unit="%" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">50.0%</div>
+        <div class="knob-label">Mix</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- JUCE Native Interop (inlined from juce/check_native_interop.js)    -->
+  <!-- ================================================================== -->
+  <script>
+  if (
+    typeof window.__JUCE__ !== "undefined" &&
+    typeof window.__JUCE__.getAndroidUserScripts !== "undefined" &&
+    typeof window.inAndroidUserScriptEval === "undefined"
+  ) {
+    window.inAndroidUserScriptEval = true;
+    eval(window.__JUCE__.getAndroidUserScripts());
+    delete window.inAndroidUserScriptEval;
+  }
+
+  {
+    if (typeof window.__JUCE__ === "undefined") {
+      console.warn(
+        "The 'window.__JUCE__' object is undefined." +
+          " Native integration features will not work." +
+          " Defining a placeholder 'window.__JUCE__' object."
+      );
+
+      window.__JUCE__ = {
+        postMessage: function () {},
+      };
+    }
+
+    if (typeof window.__JUCE__.initialisationData === "undefined") {
+      window.__JUCE__.initialisationData = {
+        __juce__platform: [],
+        __juce__functions: [],
+        __juce__registeredGlobalEventIds: [],
+        __juce__sliders: [],
+        __juce__toggles: [],
+        __juce__comboBoxes: [],
+      };
+    }
+
+    class ListenerList {
+      constructor() {
+        this.listeners = new Map();
+        this.listenerId = 0;
+      }
+
+      addListener(fn) {
+        const newListenerId = this.listenerId++;
+        this.listeners.set(newListenerId, fn);
+        return newListenerId;
+      }
+
+      removeListener(id) {
+        if (this.listeners.has(id)) {
+          this.listeners.delete(id);
+        }
+      }
+
+      callListeners(payload) {
+        for (const [, value] of this.listeners) {
+          value(payload);
+        }
+      }
+    }
+
+    class EventListenerList {
+      constructor() {
+        this.eventListeners = new Map();
+      }
+
+      addEventListener(eventId, fn) {
+        if (!this.eventListeners.has(eventId))
+          this.eventListeners.set(eventId, new ListenerList());
+
+        const id = this.eventListeners.get(eventId).addListener(fn);
+        return [eventId, id];
+      }
+
+      removeEventListener([eventId, id]) {
+        if (this.eventListeners.has(eventId)) {
+          this.eventListeners.get(eventId).removeListener(id);
+        }
+      }
+
+      emitEvent(eventId, object) {
+        if (this.eventListeners.has(eventId))
+          this.eventListeners.get(eventId).callListeners(object);
+      }
+    }
+
+    class Backend {
+      constructor() {
+        this.listeners = new EventListenerList();
+      }
+
+      addEventListener(eventId, fn) {
+        return this.listeners.addEventListener(eventId, fn);
+      }
+
+      removeEventListener([eventId, id]) {
+        this.listeners.removeEventListener([eventId, id]);
+      }
+
+      emitEvent(eventId, object) {
+        window.__JUCE__.postMessage(
+          JSON.stringify({ eventId: eventId, payload: object })
+        );
+      }
+
+      emitByBackend(eventId, object) {
+        this.listeners.emitEvent(eventId, JSON.parse(object));
+      }
+    }
+
+    if (typeof window.__JUCE__.backend === "undefined")
+      window.__JUCE__.backend = new Backend();
+  }
+  </script>
+
+  <!-- ================================================================== -->
+  <!-- JUCE Frontend Library (inlined from juce/index.js)                 -->
+  <!-- ================================================================== -->
+  <script>
+  (function() {
+    'use strict';
+
+    class PromiseHandler {
+      constructor() {
+        this.lastPromiseId = 0;
+        this.promises = new Map();
+
+        window.__JUCE__.backend.addEventListener(
+          "__juce__complete",
+          ({ promiseId, result }) => {
+            if (this.promises.has(promiseId)) {
+              this.promises.get(promiseId).resolve(result);
+              this.promises.delete(promiseId);
+            }
+          }
+        );
+      }
+
+      createPromise() {
+        const promiseId = this.lastPromiseId++;
+        const result = new Promise((resolve, reject) => {
+          this.promises.set(promiseId, { resolve: resolve, reject: reject });
+        });
+        return [promiseId, result];
+      }
+    }
+
+    const promiseHandler = new PromiseHandler();
+
+    function getNativeFunction(name) {
+      if (!window.__JUCE__.initialisationData.__juce__functions.includes(name))
+        console.warn(
+          "Creating native function binding for '" + name + "', which is unknown to the backend"
+        );
+
+      const f = function () {
+        const [promiseId, result] = promiseHandler.createPromise();
+        window.__JUCE__.backend.emitEvent("__juce__invoke", {
+          name: name,
+          params: Array.prototype.slice.call(arguments),
+          resultId: promiseId,
+        });
+        return result;
+      };
+
+      return f;
+    }
+
+    class ListenerList {
+      constructor() {
+        this.listeners = new Map();
+        this.listenerId = 0;
+      }
+
+      addListener(fn) {
+        const newListenerId = this.listenerId++;
+        this.listeners.set(newListenerId, fn);
+        return newListenerId;
+      }
+
+      removeListener(id) {
+        if (this.listeners.has(id)) {
+          this.listeners.delete(id);
+        }
+      }
+
+      callListeners(payload) {
+        for (const [, value] of this.listeners) {
+          value(payload);
+        }
+      }
+    }
+
+    const BasicControl_valueChangedEventId = "valueChanged";
+    const BasicControl_propertiesChangedId = "propertiesChanged";
+    const SliderControl_sliderDragStartedEventId = "sliderDragStarted";
+    const SliderControl_sliderDragEndedEventId = "sliderDragEnded";
+
+    class SliderState {
+      constructor(name) {
+        if (!window.__JUCE__.initialisationData.__juce__sliders.includes(name))
+          console.warn(
+            "Creating SliderState for '" + name + "', which is unknown to the backend"
+          );
+
+        this.name = name;
+        this.identifier = "__juce__slider" + this.name;
+        this.scaledValue = 0;
+        this.properties = {
+          start: 0, end: 1, skew: 1, name: "", label: "",
+          numSteps: 100, interval: 0, parameterIndex: -1,
+        };
+        this.valueChangedEvent = new ListenerList();
+        this.propertiesChangedEvent = new ListenerList();
+
+        window.__JUCE__.backend.addEventListener(this.identifier, (event) =>
+          this.handleEvent(event)
+        );
+
+        window.__JUCE__.backend.emitEvent(this.identifier, {
+          eventType: "requestInitialUpdate",
+        });
+      }
+
+      setNormalisedValue(newValue) {
+        this.scaledValue = this.snapToLegalValue(
+          this.normalisedToScaledValue(newValue)
+        );
+        window.__JUCE__.backend.emitEvent(this.identifier, {
+          eventType: BasicControl_valueChangedEventId,
+          value: this.scaledValue,
+        });
+      }
+
+      sliderDragStarted() {
+        window.__JUCE__.backend.emitEvent(this.identifier, {
+          eventType: SliderControl_sliderDragStartedEventId,
+        });
+      }
+
+      sliderDragEnded() {
+        window.__JUCE__.backend.emitEvent(this.identifier, {
+          eventType: SliderControl_sliderDragEndedEventId,
+        });
+      }
+
+      handleEvent(event) {
+        if (event.eventType == BasicControl_valueChangedEventId) {
+          this.scaledValue = event.value;
+          this.valueChangedEvent.callListeners();
+        }
+        if (event.eventType == BasicControl_propertiesChangedId) {
+          let { eventType: _, ...rest } = event;
+          this.properties = rest;
+          this.propertiesChangedEvent.callListeners();
+        }
+      }
+
+      getScaledValue() {
+        return this.scaledValue;
+      }
+
+      getNormalisedValue() {
+        return Math.pow(
+          (this.scaledValue - this.properties.start) /
+            (this.properties.end - this.properties.start),
+          this.properties.skew
+        );
+      }
+
+      normalisedToScaledValue(normalisedValue) {
+        return (
+          Math.pow(normalisedValue, 1 / this.properties.skew) *
+            (this.properties.end - this.properties.start) +
+          this.properties.start
+        );
+      }
+
+      snapToLegalValue(value) {
+        const interval = this.properties.interval;
+        if (interval == 0) return value;
+        const start = this.properties.start;
+        const clamp = (val, min = 0, max = 1) => Math.max(min, Math.min(max, val));
+        return clamp(
+          start + interval * Math.floor((value - start) / interval + 0.5),
+          this.properties.start,
+          this.properties.end
+        );
+      }
+    }
+
+    const sliderStates = new Map();
+    for (const sliderName of window.__JUCE__.initialisationData.__juce__sliders)
+      sliderStates.set(sliderName, new SliderState(sliderName));
+
+    function getSliderState(name) {
+      if (!sliderStates.has(name)) sliderStates.set(name, new SliderState(name));
+      return sliderStates.get(name);
+    }
+
+    // Expose API as global
+    window.Juce = {
+      getNativeFunction: getNativeFunction,
+      getSliderState: getSliderState,
+    };
+  })();
+  </script>
+
+  <!-- ================================================================== -->
+  <!-- Earcandy UI (inlined from js/index.js)                            -->
+  <!-- ================================================================== -->
+  <script>
+  (function() {
+    'use strict';
+
+    // Arc Knob Constants
+    var ARC_START = 0.75 * Math.PI;   // 135deg = 7:30 position (bottom-left)
+    var ARC_END   = 0.25 * Math.PI;   // 45deg  = 4:30 position (bottom-right)
+    var ARC_RANGE = 1.5  * Math.PI;   // 270deg sweep
+    var KNOB_RADIUS = 33;
+    var CANVAS_SIZE = 144;
+    var CENTER = CANVAS_SIZE / 2;
+
+    function valueToAngle(normalized) {
+      return ARC_START + normalized * ARC_RANGE;
+    }
+
+    // Canvas Knob Renderer
+    function drawKnob(canvas, normalized, isActive) {
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+      // Glass body
+      var glassGrad = ctx.createRadialGradient(
+        CENTER - 8, CENTER - 8, 2,
+        CENTER, CENTER, KNOB_RADIUS + 2
+      );
+      glassGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+      glassGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.7)');
+      glassGrad.addColorStop(1, 'rgba(243, 239, 248, 0.4)');
+
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = glassGrad;
+      ctx.fill();
+
+      // Purple tint overlay
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
+      ctx.fill();
+
+      // Top-left highlight (refraction)
+      var highlightGrad = ctx.createRadialGradient(
+        CENTER - 12, CENTER - 14, 1,
+        CENTER - 8, CENTER - 10, 18
+      );
+      highlightGrad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+      highlightGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS - 1, 0, Math.PI * 2);
+      ctx.fillStyle = highlightGrad;
+      ctx.fill();
+
+      // Inner shadow
+      var shadowGrad = ctx.createRadialGradient(
+        CENTER, CENTER, KNOB_RADIUS - 6,
+        CENTER, CENTER, KNOB_RADIUS
+      );
+      shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = shadowGrad;
+      ctx.fill();
+
+      // Arc track (inactive)
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS + 5, ARC_START, ARC_END, false);
+      ctx.strokeStyle = '#E8E0F0';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Active arc
+      if (normalized > 0.003) {
+        var endAngle = valueToAngle(normalized);
+
+        // Glow when active
+        if (isActive) {
+          ctx.beginPath();
+          ctx.arc(CENTER, CENTER, KNOB_RADIUS + 5, ARC_START, endAngle, false);
+          ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+          ctx.lineWidth = 8;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+
+        // Active arc stroke
+        ctx.beginPath();
+        ctx.arc(CENTER, CENTER, KNOB_RADIUS + 5, ARC_START, endAngle, false);
+        ctx.strokeStyle = isActive ? '#7C3AED' : '#8B5CF6';
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Indicator dot
+        var dotX = CENTER + (KNOB_RADIUS + 5) * Math.cos(endAngle);
+        var dotY = CENTER + (KNOB_RADIUS + 5) * Math.sin(endAngle);
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = isActive ? '#7C3AED' : '#8B5CF6';
+        ctx.fill();
+
+        if (isActive) {
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(139, 92, 246, 0.3)';
+          ctx.fill();
+        }
+      }
+    }
+
+    // Knob Controller
+    function KnobController(groupEl, sliderState) {
+      this.group = groupEl;
+      this.sliderState = sliderState;
+      this.canvas = groupEl.querySelector('.knob-canvas');
+      this.valueEl = groupEl.querySelector('.knob-value');
+      this.min = parseFloat(groupEl.dataset.min);
+      this.max = parseFloat(groupEl.dataset.max);
+      this.defaultVal = parseFloat(groupEl.dataset['default']);
+      this.decimals = parseInt(groupEl.dataset.decimals);
+      this.unit = groupEl.dataset.unit;
+      this.paramId = groupEl.dataset.param;
+      this.isActive = false;
+      this.dragStartY = 0;
+      this.dragStartNorm = 0;
+
+      var self = this;
+
+      // Listen for C++ automation changes
+      if (this.sliderState) {
+        this.sliderState.valueChangedEvent.addListener(function() {
+          var norm = self.sliderState.getNormalisedValue();
+          self.updateFromNormalized(norm, false);
+        });
+      }
+
+      // Mouse interaction
+      this.group.addEventListener('mousedown', function(e) { self.onMouseDown(e); });
+      this.group.addEventListener('dblclick', function(e) { self.onDoubleClick(e); });
+
+      // Initial draw
+      this.updateFromNormalized(this.valueToNormalized(parseFloat(groupEl.dataset.value)), false);
+    }
+
+    KnobController.prototype.valueToNormalized = function(val) {
+      return (val - this.min) / (this.max - this.min);
+    };
+
+    KnobController.prototype.normalizedToValue = function(norm) {
+      return this.min + norm * (this.max - this.min);
+    };
+
+    KnobController.prototype.updateFromNormalized = function(norm, notifyHost) {
+      norm = Math.max(0, Math.min(1, norm));
+      var val = this.normalizedToValue(norm);
+      this.group.dataset.value = val.toFixed(this.decimals);
+
+      var sign = val > 0 && this.paramId === 'PITCH' ? '+' : '';
+      this.valueEl.textContent = sign + val.toFixed(this.decimals) + this.unit;
+
+      drawKnob(this.canvas, norm, this.isActive);
+
+      if (notifyHost && this.sliderState) {
+        this.sliderState.setNormalisedValue(norm);
+      }
+    };
+
+    KnobController.prototype.onMouseDown = function(e) {
+      e.preventDefault();
+      this.isActive = true;
+      this.dragStartY = e.clientY;
+      this.dragStartNorm = this.valueToNormalized(parseFloat(this.group.dataset.value));
+      this.group.classList.add('dragging');
+
+      if (this.sliderState) this.sliderState.sliderDragStarted();
+
+      drawKnob(this.canvas, this.dragStartNorm, true);
+
+      var self = this;
+
+      var onMove = function(ev) {
+        var sensitivity = ev.shiftKey ? 800 : 200;
+        var deltaY = self.dragStartY - ev.clientY;
+        var deltaNorm = deltaY / sensitivity;
+        self.updateFromNormalized(self.dragStartNorm + deltaNorm, true);
+      };
+
+      var onUp = function() {
+        self.isActive = false;
+        self.group.classList.remove('dragging');
+        if (self.sliderState) self.sliderState.sliderDragEnded();
+        var norm = self.valueToNormalized(parseFloat(self.group.dataset.value));
+        drawKnob(self.canvas, norm, false);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    };
+
+    KnobController.prototype.onDoubleClick = function(e) {
+      e.preventDefault();
+      var norm = this.valueToNormalized(this.defaultVal);
+      this.updateFromNormalized(norm, true);
+    };
+
+    // Initialize
+    document.addEventListener("DOMContentLoaded", function() {
+      var knobGroups = document.querySelectorAll('.knob-group');
+
+      knobGroups.forEach(function(group) {
+        var paramId = group.dataset.param;
+        var sliderState = null;
+
+        try {
+          sliderState = window.Juce.getSliderState(paramId);
+        } catch (e) {
+          console.log("Preview mode: no JUCE backend for " + paramId);
+        }
+
+        new KnobController(group, sliderState);
+      });
+
+      console.log("Earcandy WebView UI initialized");
+    });
+  })();
+  </script>
+</body>
+</html>

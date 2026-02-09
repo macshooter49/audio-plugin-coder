@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Earcandy - Rack Series</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #F3EFF8;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      width: 600px;
+      height: 350px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .plugin-container {
+      width: 600px;
+      height: 350px;
+      padding: 20px 30px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 30px;
+      margin-bottom: 20px;
+    }
+
+    .plugin-title {
+      font-weight: 300;
+      font-size: 16px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #6B5F80;
+    }
+
+    .series-badge {
+      font-weight: 300;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #B0A4C0;
+    }
+
+    .series-badge .diamond {
+      color: #8B5CF6;
+      margin-left: 4px;
+    }
+
+    /* ── Knob Row ── */
+    .knob-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex: 1;
+      padding: 0 10px;
+    }
+
+    .knob-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 80px;
+      cursor: grab;
+    }
+
+    .knob-group:active {
+      cursor: grabbing;
+    }
+
+    .knob-group.dragging {
+      cursor: grabbing;
+    }
+
+    .knob-canvas {
+      width: 72px;
+      height: 72px;
+      transition: filter 0.15s ease;
+    }
+
+    .knob-group:hover .knob-canvas {
+      filter: brightness(1.03);
+    }
+
+    .knob-group.dragging .knob-canvas {
+      filter: brightness(1.05);
+    }
+
+    .knob-value {
+      font-weight: 400;
+      font-size: 13px;
+      color: #5B4F70;
+      margin-top: 10px;
+      height: 18px;
+      line-height: 18px;
+      transition: color 0.15s ease;
+    }
+
+    .knob-group.dragging .knob-value {
+      color: #8B5CF6;
+    }
+
+    .knob-label {
+      font-weight: 400;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #8B7FA0;
+      margin-top: 4px;
+      text-align: center;
+      line-height: 1.3;
+    }
+  </style>
+</head>
+<body>
+  <div class="plugin-container">
+    <div class="header">
+      <div class="plugin-title">Earcandy</div>
+      <div class="series-badge">rack<span class="diamond">&#x25C6;</span></div>
+    </div>
+
+    <div class="knob-row" id="knobRow">
+      <div class="knob-group" data-param="grain_size" data-min="5" data-max="500" data-default="80" data-value="80" data-unit=" ms" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">80.0 ms</div>
+        <div class="knob-label">Grain<br>Size</div>
+      </div>
+
+      <div class="knob-group" data-param="density" data-min="1" data-max="100" data-default="20" data-value="20" data-unit="" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">20.0</div>
+        <div class="knob-label">Density</div>
+      </div>
+
+      <div class="knob-group" data-param="spray" data-min="0" data-max="100" data-default="40" data-value="40" data-unit="%" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">40.0%</div>
+        <div class="knob-label">Spray</div>
+      </div>
+
+      <div class="knob-group" data-param="pitch" data-min="-12" data-max="12" data-default="0" data-value="0" data-unit=" st" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">0.0 st</div>
+        <div class="knob-label">Pitch</div>
+      </div>
+
+      <div class="knob-group" data-param="feedback" data-min="0" data-max="95" data-default="15" data-value="15" data-unit="%" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">15.0%</div>
+        <div class="knob-label">Feedback</div>
+      </div>
+
+      <div class="knob-group" data-param="mix" data-min="0" data-max="100" data-default="50" data-value="50" data-unit="%" data-decimals="1">
+        <canvas class="knob-canvas" width="144" height="144"></canvas>
+        <div class="knob-value">50.0%</div>
+        <div class="knob-label">Mix</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ─── Knob Renderer ───
+    // Canvas angles: 0=3o'clock, π/2=6o'clock, π=9o'clock, 3π/2=12o'clock
+    // Knob sweep: 7:30 (bottom-left) → clockwise through top → 4:30 (bottom-right)
+    const ARC_START = 0.75 * Math.PI;           // 135° = 7:30 position
+    const ARC_END   = 0.25 * Math.PI;           // 45°  = 4:30 position
+    const ARC_RANGE = 1.5  * Math.PI;           // 270° sweep
+    const KNOB_RADIUS = 33;
+    const CANVAS_SIZE = 144; // 2x for retina
+    const CENTER = CANVAS_SIZE / 2;
+
+    function valueToAngle(normalized) {
+      // Clockwise from bottom-left to bottom-right
+      return ARC_START + normalized * ARC_RANGE;
+    }
+
+    function drawKnob(canvas, normalized, isActive) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+      // ── Glass body ──
+      // Base circle with radial gradient (glass effect)
+      const glassGrad = ctx.createRadialGradient(
+        CENTER - 8, CENTER - 8, 2,
+        CENTER, CENTER, KNOB_RADIUS + 2
+      );
+      glassGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+      glassGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.7)');
+      glassGrad.addColorStop(1, 'rgba(243, 239, 248, 0.4)');
+
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = glassGrad;
+      ctx.fill();
+
+      // Purple tint overlay
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
+      ctx.fill();
+
+      // Top-left highlight (refraction)
+      const highlightGrad = ctx.createRadialGradient(
+        CENTER - 12, CENTER - 14, 1,
+        CENTER - 8, CENTER - 10, 18
+      );
+      highlightGrad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+      highlightGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS - 1, 0, Math.PI * 2);
+      ctx.fillStyle = highlightGrad;
+      ctx.fill();
+
+      // Subtle inner shadow
+      const shadowGrad = ctx.createRadialGradient(
+        CENTER, CENTER, KNOB_RADIUS - 6,
+        CENTER, CENTER, KNOB_RADIUS
+      );
+      shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = shadowGrad;
+      ctx.fill();
+
+      // ── Arc track (inactive) ──
+      ctx.beginPath();
+      ctx.arc(CENTER, CENTER, KNOB_RADIUS + 5, ARC_START, ARC_END, false);
+      ctx.strokeStyle = '#E8E0F0';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // ── Active arc ──
+      if (normalized > 0.003) {
+        const endAngle = valueToAngle(normalized);
+
+        // Glow
+        if (isActive) {
+          ctx.beginPath();
+          ctx.arc(CENTER, CENTER, KNOB_RADIUS + 5, ARC_START, endAngle, false);
+          ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+          ctx.lineWidth = 8;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+
+        // Active arc stroke (clockwise from start to value)
+        ctx.beginPath();
+        ctx.arc(CENTER, CENTER, KNOB_RADIUS + 5, ARC_START, endAngle, false);
+        ctx.strokeStyle = isActive ? '#7C3AED' : '#8B5CF6';
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Indicator dot at end
+        const dotX = CENTER + (KNOB_RADIUS + 5) * Math.cos(endAngle);
+        const dotY = CENTER + (KNOB_RADIUS + 5) * Math.sin(endAngle);
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = isActive ? '#7C3AED' : '#8B5CF6';
+        ctx.fill();
+
+        // Dot glow when active
+        if (isActive) {
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(139, 92, 246, 0.3)';
+          ctx.fill();
+        }
+      }
+    }
+
+    // ─── Knob State & Interaction ───
+    const knobGroups = document.querySelectorAll('.knob-group');
+    let activeKnob = null;
+    let dragStartY = 0;
+    let dragStartValue = 0;
+
+    function getNormalized(group) {
+      const min = parseFloat(group.dataset.min);
+      const max = parseFloat(group.dataset.max);
+      const val = parseFloat(group.dataset.value);
+      return (val - min) / (max - min);
+    }
+
+    function setValueFromNormalized(group, normalized) {
+      normalized = Math.max(0, Math.min(1, normalized));
+      const min = parseFloat(group.dataset.min);
+      const max = parseFloat(group.dataset.max);
+      const decimals = parseInt(group.dataset.decimals);
+      const val = min + normalized * (max - min);
+      group.dataset.value = val.toFixed(decimals);
+
+      // Update display
+      const unit = group.dataset.unit;
+      const sign = val > 0 && group.dataset.param === 'pitch' ? '+' : '';
+      group.querySelector('.knob-value').textContent = sign + val.toFixed(decimals) + unit;
+
+      // Redraw
+      const canvas = group.querySelector('.knob-canvas');
+      drawKnob(canvas, getNormalized(group), group === activeKnob);
+    }
+
+    function initKnobs() {
+      knobGroups.forEach(group => {
+        const canvas = group.querySelector('.knob-canvas');
+        drawKnob(canvas, getNormalized(group), false);
+      });
+    }
+
+    // Mouse interaction
+    knobGroups.forEach(group => {
+      group.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        activeKnob = group;
+        dragStartY = e.clientY;
+        dragStartValue = getNormalized(group);
+        group.classList.add('dragging');
+        drawKnob(group.querySelector('.knob-canvas'), getNormalized(group), true);
+      });
+
+      // Double-click to reset
+      group.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        const defaultVal = parseFloat(group.dataset.default);
+        const min = parseFloat(group.dataset.min);
+        const max = parseFloat(group.dataset.max);
+        setValueFromNormalized(group, (defaultVal - min) / (max - min));
+      });
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!activeKnob) return;
+
+      const sensitivity = e.shiftKey ? 800 : 200;
+      const deltaY = dragStartY - e.clientY;
+      const deltaNorm = deltaY / sensitivity;
+      setValueFromNormalized(activeKnob, dragStartValue + deltaNorm);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (activeKnob) {
+        activeKnob.classList.remove('dragging');
+        drawKnob(activeKnob.querySelector('.knob-canvas'), getNormalized(activeKnob), false);
+        activeKnob = null;
+      }
+    });
+
+    // ─── Init ───
+    initKnobs();
+  </script>
+</body>
+</html>

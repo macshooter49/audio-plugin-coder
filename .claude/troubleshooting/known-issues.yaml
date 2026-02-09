@@ -223,3 +223,16 @@ issues:
     attempts_before_resolution: 1
     prevention: "ALWAYS use git submodule add, NEVER commit framework directories as regular files"
     critical_fix: "git rm -r --cached _tools/JUCE && rm -rf _tools/JUCE && git submodule add https://github.com/juce-framework/JUCE _tools/JUCE"
+  - id: build-015
+    title: "[Auto] xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/D..."
+    category: build
+    severity: high
+    symptoms:
+    - "xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance"
+    error_patterns:
+    - "error:"
+    resolution_status: investigating
+    resolution_file: resolutions/build-015.md
+    frequency: 1
+    last_occurred: 2026-02-09
+    attempts_before_resolution: 1
