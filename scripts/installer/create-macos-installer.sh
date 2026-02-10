@@ -165,7 +165,7 @@ if [[ "$DMG_ONLY" != "true" ]]; then
     warn "Creating PKG installer..."
 
     PKG_BUILD_DIR="$(mktemp -d)"
-    PKG_IDENTIFIER="com.${COMPANY_NAME,,}.${PLUGIN_NAME,,}"
+    PKG_IDENTIFIER="com.$(echo "$COMPANY_NAME" | tr '[:upper:] ' '[:lower:]').$(echo "$PLUGIN_NAME" | tr '[:upper:] ' '[:lower:]')"
 
     # Create component packages
     COMPONENT_PKGS=()

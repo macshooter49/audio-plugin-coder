@@ -21,6 +21,8 @@ juce_add_plugin(Terrain
     PLUGIN_CODE Trrn
     FORMATS VST3 AU Standalone
     PRODUCT_NAME "Terrain"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
     NEEDS_WEBVIEW2 ${NEEDS_WEBVIEW2}
     NEEDS_WEB_BROWSER ${NEEDS_WEB_BROWSER}
 )
