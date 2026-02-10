@@ -15,6 +15,12 @@ struct PresetData
     float grainSize, density, spray, pitch, drift, mix;
     float wowFlutter, saturation, hiss;
     float outputGain;
+    // XY pad automation state
+    float xyAutoEnabled = 0.f;  // 0 = off, 1 = on
+    float xyAutoMode    = 0.f;  // 0 = chaotic, 1 = smooth
+    float xyAutoSpeed   = 0.5f; // 0-1 normalized
+    // Grain sync state
+    float grainSyncEnabled = 0.f; // 0 = free (ms), 1 = synced to BPM
 };
 
 //==============================================================================
@@ -65,6 +71,15 @@ public:
     std::atomic<int> activeGrainCount { 0 };
     std::atomic<int> currentPresetIndex { 0 };
 
+    // XY automation state (synced from JS, captured into presets)
+    std::atomic<float> xyAutoEnabled { 0.f };
+    std::atomic<float> xyAutoMode    { 0.f };
+    std::atomic<float> xyAutoSpeed   { 0.5f };
+
+    // Grain BPM sync state (synced from JS, captured into presets)
+    std::atomic<float> grainSyncEnabled { 0.f };
+    std::atomic<float> currentBPM { 120.f }; // populated from playhead
+
     static constexpr int SCOPE_SIZE = 256;
     std::array<std::atomic<float>, SCOPE_SIZE> scopeBuffer {};
     std::atomic<int> scopeWritePos { 0 };
@@ -102,6 +117,11 @@ private:
     PresetData captureCurrentParams() const;
     std::vector<PresetData> presets;
     int numFactoryPresets = 0;
+
+    // User preset file persistence
+    juce::File getUserPresetsFile() const;
+    void saveUserPresetsToFile();
+    void loadUserPresetsFromFile();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainAudioProcessor)
 };

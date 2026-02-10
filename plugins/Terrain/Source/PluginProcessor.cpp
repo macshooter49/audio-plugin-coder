@@ -18,20 +18,37 @@ TerrainAudioProcessor::~TerrainAudioProcessor()
 //==============================================================================
 void TerrainAudioProcessor::initializePresets()
 {
+    //                                    grSz   dens  spray pitch  drift  mix    wow    sat   hiss  outGn  xyEn xyMd xySpd  gSync
     presets = {
-        //                 name               grSz  dens  spray pitch drift  mix   wow   sat   hiss  outGn
-        { "Init",                              80.f, 20.f, 40.f,  0.f,  0.f, 50.f,  0.f,  0.f,  0.f, 0.f },
-        { "Pristine Cloud",                   120.f, 60.f, 25.f,  0.f,  0.f, 70.f,  0.f,  0.f,  0.f, 0.f },
-        { "Cassette Haze",                     80.f, 25.f, 50.f,  0.f, 15.f, 55.f, 45.f, 40.f, 50.f, 0.f },
-        { "Warped Vinyl",                      60.f, 10.f, 30.f, -2.f, 20.f, 65.f, 85.f, 25.f, 20.f, 0.f },
-        { "Octave Chaos",                     100.f, 40.f, 60.f,  0.f, 70.f, 60.f, 15.f, 30.f, 10.f, 0.f },
-        { "Lo-Fi Dream",                       90.f, 30.f, 70.f,  0.f, 25.f, 50.f, 30.f, 45.f, 65.f, 0.f },
-        { "Shimmer",                          150.f, 40.f, 20.f, 12.f, 40.f, 55.f, 10.f, 20.f,  0.f, 0.f },
-        { "Ghost Machine",                     40.f,  5.f, 95.f,  7.f, 60.f, 80.f, 50.f, 15.f, 80.f, 0.f },
-        { "Frozen Texture",                   400.f, 50.f,  0.f,  0.f,  5.f, 75.f, 20.f, 30.f,  0.f, 0.f },
-        { "Cosmic Wash",                      250.f, 80.f, 80.f,  5.f, 50.f, 85.f, 70.f, 60.f, 40.f, 0.f },
+        { "Init",                          80.f,  20.f, 40.f,  0.f,   0.f,  50.f,  0.f,   0.f,  0.f,  0.f,  0.f, 0.f, 0.5f,  0.f },
+        { "Soft Keys",                    332.5f, 29.8f, 7.f,  0.f,  17.9f, 82.f, 39.5f, 54.5f, 5.f,  7.f,  0.f, 0.f, 0.5f,  0.f },
+        { "Movements",                     99.3f, 34.f, 43.6f, 0.f,  57.7f, 50.f,  0.f,   0.f,  0.f,  7.f,  1.f, 0.f, 0.5f,  0.f },
+        { "Super Messed Up",               55.4f,  7.1f, 31.9f, 0.f, 24.9f, 74.f, 43.f,  12.f,  3.f,  3.5f, 1.f, 1.f, 0.472f, 0.f },
+        { "Tape Master",                   60.3f, 80.1f, 11.9f, 0.f,  0.f,  39.f, 46.f,  70.f,  3.f,  0.f,  0.f, 1.f, 0.472f, 0.f },
+        { "Delay The Pluck",              500.f,   3.3f,  3.5f, 12.f,  0.f,  40.f, 26.5f, 22.5f, 0.f,  0.f,  0.f, 0.f, 0.5f,  0.f },
+        { "Synced Grains",                268.7f,  5.8f,  9.5f, 0.f,   0.f,  67.5f, 17.5f, 31.5f, 1.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Clown Delay",                  114.3f, 16.8f,  0.f,  0.f,   0.f,  80.5f, 17.5f,  7.f,  1.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Instant Pad",                  152.1f, 26.8f,  5.f,  0.f,   3.f,  50.f, 41.f,  13.f,  0.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Slow Changes",                 346.5f, 43.8f, 83.1f, 0.f,  65.8f,100.f,  0.f,   0.f,  0.f,  0.f, 1.f, 0.f, 0.f,   1.f },
+        { "Mood",                          156.f,  7.8f,  9.f,  0.f,  23.1f, 50.f, 40.f,  32.5f, 1.f,  0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Soundscape",                   220.2f, 54.9f, 81.5f, 0.f,   0.f, 100.f, 44.f,  20.5f, 0.f,  0.f, 0.f, 0.f, 0.5f,  0.f },
+        { "Use A Key",                    103.3f, 28.3f,  1.f, -12.f,  0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 0.f, 1.f, 0.f,   1.f },
+        { "Blank Forms",                   17.5f, 100.f, 25.f,  0.f,   0.f, 100.f,  9.5f, 29.f,  5.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Habits",                       261.1f, 55.2f,  0.f,  0.f,  71.f,  20.5f, 44.f,   9.5f, 8.f, 0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Pitch Drifter",                146.3f, 24.2f,  2.5f,-12.f, 100.f, 100.f, 28.f,  30.5f, 0.5f, 0.f, 0.f, 0.f, 0.5f,  0.f },
+        { "Mandalorian",                  240.1f, 13.5f, 68.9f,-12.f,  35.6f,100.f, 28.f,  30.5f, 0.5f, 0.f, 1.f, 1.f, 0.056f, 0.f },
+        { "See The Light",                280.7f, 53.f,  32.6f, 12.f,  31.9f,100.f, 28.f,  30.5f, 0.5f, 0.f, 0.f, 1.f, 0.056f, 0.f },
+        { "Back To The Future",           325.8f,  1.f, 100.f,  0.f,  39.f,  50.f,  0.f,   0.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Saturation",                   268.9f, 10.5f,  1.5f, 0.f,   0.f,  50.f, 19.f,  83.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Chop Shop",                     49.3f, 100.f, 40.f,  0.f,   0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  0.f },
+        { "Depressed",                    171.2f, 81.2f, 40.f, -12.f,  0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  0.f },
+        { "Deep Rest",                    168.3f, 81.2f, 40.f, -12.f, 25.f, 100.f, 48.5f, 54.5f, 3.5f, 0.f, 0.f, 0.f, 0.5f,  0.f },
+        { "Final Tape",                   183.3f, 71.2f,  3.f,  0.f,   0.f,  40.f, 33.f,  53.f, 15.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
     };
-    numFactoryPresets = static_cast<int>(presets.size());
+    numFactoryPresets = static_cast<int>(presets.size());  // All presets above are factory
+
+    // Load any additional user presets from disk
+    loadUserPresetsFromFile();
 }
 
 void TerrainAudioProcessor::loadPreset(int index)
@@ -58,6 +75,14 @@ void TerrainAudioProcessor::loadPreset(int index)
     setParam(ParameterIDs::SATURATION,   p.saturation);
     setParam(ParameterIDs::HISS,         p.hiss);
     setParam(ParameterIDs::OUTPUT_GAIN,  p.outputGain);
+
+    // Restore XY automation state for this preset
+    xyAutoEnabled.store(p.xyAutoEnabled);
+    xyAutoMode.store(p.xyAutoMode);
+    xyAutoSpeed.store(p.xyAutoSpeed);
+
+    // Restore grain sync state
+    grainSyncEnabled.store(p.grainSyncEnabled);
 }
 
 int TerrainAudioProcessor::getPresetCount() const
@@ -86,6 +111,10 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.saturation = apvts.getRawParameterValue(ParameterIDs::SATURATION)->load();
     p.hiss       = apvts.getRawParameterValue(ParameterIDs::HISS)->load();
     p.outputGain = apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load();
+    p.xyAutoEnabled    = xyAutoEnabled.load();
+    p.xyAutoMode       = xyAutoMode.load();
+    p.xyAutoSpeed      = xyAutoSpeed.load();
+    p.grainSyncEnabled = grainSyncEnabled.load();
     return p;
 }
 
@@ -96,6 +125,7 @@ int TerrainAudioProcessor::saveNewPreset(const juce::String& name)
     presets.push_back(p);
     int newIdx = static_cast<int>(presets.size()) - 1;
     currentPresetIndex.store(newIdx);
+    saveUserPresetsToFile();
     return newIdx;
 }
 
@@ -104,6 +134,7 @@ void TerrainAudioProcessor::renamePreset(int index, const juce::String& newName)
     if (index < 0 || index >= static_cast<int>(presets.size()))
         return;
     presets[static_cast<size_t>(index)].name = newName;
+    saveUserPresetsToFile();
 }
 
 void TerrainAudioProcessor::overwritePreset(int index)
@@ -113,6 +144,7 @@ void TerrainAudioProcessor::overwritePreset(int index)
     juce::String name = presets[static_cast<size_t>(index)].name;
     presets[static_cast<size_t>(index)] = captureCurrentParams();
     presets[static_cast<size_t>(index)].name = name;
+    saveUserPresetsToFile();
 }
 
 void TerrainAudioProcessor::deletePreset(int index)
@@ -122,6 +154,7 @@ void TerrainAudioProcessor::deletePreset(int index)
     presets.erase(presets.begin() + index);
     if (currentPresetIndex.load() >= static_cast<int>(presets.size()))
         currentPresetIndex.store(static_cast<int>(presets.size()) - 1);
+    saveUserPresetsToFile();
 }
 
 //==============================================================================
@@ -270,8 +303,40 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     for (auto i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
         buffer.clear(i, 0, numSamples);
 
+    // Read BPM from DAW playhead
+    if (auto* playHead = getPlayHead())
+    {
+        if (auto position = playHead->getPosition())
+        {
+            if (auto bpm = position->getBpm())
+                currentBPM.store(static_cast<float>(*bpm));
+        }
+    }
+
     // Update smoothing targets from APVTS
-    smoothedGrainSize.setTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load());
+    float grainSizeMs = apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load();
+
+    // BPM sync: override grain size with note-division-based ms
+    if (grainSyncEnabled.load() > 0.5f)
+    {
+        static constexpr float divisionMultipliers[10] = {
+            0.125f, 0.1667f, 0.25f, 0.3333f, 0.5f,
+            0.6667f, 1.0f, 1.3333f, 2.0f, 4.0f
+        };
+
+        // Map the knob's normalized 0-1 value to one of 10 divisions
+        auto* param = apvts.getParameter(ParameterIDs::GRAIN_SIZE);
+        float norm = param->convertTo0to1(grainSizeMs);
+        int idx = static_cast<int>(norm * 10.0f);
+        if (idx > 9) idx = 9;
+        if (idx < 0) idx = 0;
+
+        float bpm = currentBPM.load();
+        if (bpm < 20.f) bpm = 20.f;
+        grainSizeMs = (60000.f / bpm) * divisionMultipliers[idx];
+    }
+
+    smoothedGrainSize.setTargetValue(grainSizeMs);
     smoothedDensity.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DENSITY)->load());
     smoothedSpray.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPRAY)->load());
     smoothedPitch.setTargetValue(apvts.getRawParameterValue(ParameterIDs::PITCH)->load());
@@ -355,27 +420,14 @@ void TerrainAudioProcessor::changeProgramName (int, const juce::String&) {}
 //==============================================================================
 void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    // DAW state: parameter values + preset index + XY auto state
+    // Presets themselves live on disk only (getUserPresetsFile)
     auto state = apvts.copyState();
-    state.setProperty("presetIndex", currentPresetIndex.load(), nullptr);
-
-    // Serialize user presets (beyond factory)
-    for (int i = numFactoryPresets; i < static_cast<int>(presets.size()); ++i)
-    {
-        const auto& p = presets[static_cast<size_t>(i)];
-        juce::ValueTree presetNode ("UserPreset");
-        presetNode.setProperty("name",       p.name,       nullptr);
-        presetNode.setProperty("grainSize",  p.grainSize,  nullptr);
-        presetNode.setProperty("density",    p.density,    nullptr);
-        presetNode.setProperty("spray",      p.spray,      nullptr);
-        presetNode.setProperty("pitch",      p.pitch,      nullptr);
-        presetNode.setProperty("drift",      p.drift,      nullptr);
-        presetNode.setProperty("mix",        p.mix,        nullptr);
-        presetNode.setProperty("wowFlutter", p.wowFlutter, nullptr);
-        presetNode.setProperty("saturation", p.saturation, nullptr);
-        presetNode.setProperty("hiss",       p.hiss,       nullptr);
-        presetNode.setProperty("outputGain", p.outputGain, nullptr);
-        state.addChild(presetNode, -1, nullptr);
-    }
+    state.setProperty("presetIndex",      currentPresetIndex.load(),  nullptr);
+    state.setProperty("xyAutoEnabled",    xyAutoEnabled.load(),     nullptr);
+    state.setProperty("xyAutoMode",       xyAutoMode.load(),        nullptr);
+    state.setProperty("xyAutoSpeed",      xyAutoSpeed.load(),       nullptr);
+    state.setProperty("grainSyncEnabled", grainSyncEnabled.load(),  nullptr);
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
@@ -390,38 +442,135 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
         if (xmlState->hasTagName (apvts.state.getType()))
         {
             auto newState = juce::ValueTree::fromXml (*xmlState);
-            int presetIdx = newState.getProperty("presetIndex", 0);
-            currentPresetIndex.store(presetIdx);
 
-            // Restore user presets
-            // Remove any existing user presets first
+            // Restore preset index (clamped to valid range after disk presets load)
+            int presetIdx = newState.getProperty("presetIndex", 0);
+
+            // Restore XY auto state
+            xyAutoEnabled.store(static_cast<float>(newState.getProperty("xyAutoEnabled", 0.f)));
+            xyAutoMode.store(static_cast<float>(newState.getProperty("xyAutoMode", 0.f)));
+            xyAutoSpeed.store(static_cast<float>(newState.getProperty("xyAutoSpeed", 0.5f)));
+
+            // Restore grain sync state
+            grainSyncEnabled.store(static_cast<float>(newState.getProperty("grainSyncEnabled", 0.f)));
+
+            // Reload presets from disk (the single source of truth)
             while (static_cast<int>(presets.size()) > numFactoryPresets)
                 presets.pop_back();
+            loadUserPresetsFromFile();
 
-            for (int i = 0; i < newState.getNumChildren(); ++i)
-            {
-                auto child = newState.getChild(i);
-                if (child.hasType("UserPreset"))
-                {
-                    PresetData p;
-                    p.name       = child.getProperty("name").toString();
-                    p.grainSize  = static_cast<float>(child.getProperty("grainSize",  80.f));
-                    p.density    = static_cast<float>(child.getProperty("density",    20.f));
-                    p.spray      = static_cast<float>(child.getProperty("spray",      40.f));
-                    p.pitch      = static_cast<float>(child.getProperty("pitch",       0.f));
-                    p.drift      = static_cast<float>(child.getProperty("drift",       0.f));
-                    p.mix        = static_cast<float>(child.getProperty("mix",        50.f));
-                    p.wowFlutter = static_cast<float>(child.getProperty("wowFlutter",  0.f));
-                    p.saturation = static_cast<float>(child.getProperty("saturation",  0.f));
-                    p.hiss       = static_cast<float>(child.getProperty("hiss",        0.f));
-                    p.outputGain = static_cast<float>(child.getProperty("outputGain",  0.f));
-                    presets.push_back(p);
-                }
-            }
+            // Clamp preset index to valid range
+            if (presetIdx >= static_cast<int>(presets.size()))
+                presetIdx = 0;
+            currentPresetIndex.store(presetIdx);
 
             apvts.replaceState (newState);
         }
     }
+}
+
+//==============================================================================
+// User Preset File Persistence
+//==============================================================================
+juce::File TerrainAudioProcessor::getUserPresetsFile() const
+{
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("Noizefield")
+        .getChildFile("Terrain")
+        .getChildFile("UserPresets.xml");
+}
+
+void TerrainAudioProcessor::saveUserPresetsToFile()
+{
+    auto file = getUserPresetsFile();
+
+    // Ensure the directory tree exists
+    auto dir = file.getParentDirectory();
+    if (!dir.exists())
+        dir.createDirectory();
+
+    juce::ValueTree root ("TerrainUserPresets");
+
+    // Save everything except Init (index 0)
+    for (int i = numFactoryPresets; i < static_cast<int>(presets.size()); ++i)
+    {
+        const auto& p = presets[static_cast<size_t>(i)];
+        juce::ValueTree node ("Preset");
+        node.setProperty("name",          p.name,          nullptr);
+        node.setProperty("grainSize",     p.grainSize,     nullptr);
+        node.setProperty("density",       p.density,       nullptr);
+        node.setProperty("spray",         p.spray,         nullptr);
+        node.setProperty("pitch",         p.pitch,         nullptr);
+        node.setProperty("drift",         p.drift,         nullptr);
+        node.setProperty("mix",           p.mix,           nullptr);
+        node.setProperty("wowFlutter",    p.wowFlutter,    nullptr);
+        node.setProperty("saturation",    p.saturation,    nullptr);
+        node.setProperty("hiss",          p.hiss,          nullptr);
+        node.setProperty("outputGain",    p.outputGain,    nullptr);
+        node.setProperty("xyAutoEnabled",    p.xyAutoEnabled,    nullptr);
+        node.setProperty("xyAutoMode",       p.xyAutoMode,       nullptr);
+        node.setProperty("xyAutoSpeed",      p.xyAutoSpeed,      nullptr);
+        node.setProperty("grainSyncEnabled", p.grainSyncEnabled, nullptr);
+        root.addChild(node, -1, nullptr);
+    }
+
+    if (auto xml = root.createXml())
+    {
+        auto result = xml->writeTo(file);
+        DBG("Terrain: saveUserPresetsToFile -> " + file.getFullPathName()
+            + " (" + juce::String(presets.size() - numFactoryPresets) + " presets, "
+            + (result ? "OK" : "FAILED") + ")");
+    }
+}
+
+void TerrainAudioProcessor::loadUserPresetsFromFile()
+{
+    auto file = getUserPresetsFile();
+
+    DBG("Terrain: loadUserPresetsFromFile -> " + file.getFullPathName()
+        + " exists=" + (file.existsAsFile() ? "YES" : "NO"));
+
+    if (!file.existsAsFile())
+        return;
+
+    auto xml = juce::XmlDocument::parse(file);
+    if (xml == nullptr || !xml->hasTagName("TerrainUserPresets"))
+    {
+        DBG("Terrain: XML parse failed or wrong tag");
+        return;
+    }
+
+    auto root = juce::ValueTree::fromXml(*xml);
+    int loaded = 0;
+
+    for (int i = 0; i < root.getNumChildren(); ++i)
+    {
+        auto child = root.getChild(i);
+        if (!child.hasType("Preset"))
+            continue;
+
+        PresetData p;
+        p.name          = child.getProperty("name").toString();
+        p.grainSize     = static_cast<float>(child.getProperty("grainSize",     80.f));
+        p.density       = static_cast<float>(child.getProperty("density",       20.f));
+        p.spray         = static_cast<float>(child.getProperty("spray",         40.f));
+        p.pitch         = static_cast<float>(child.getProperty("pitch",          0.f));
+        p.drift         = static_cast<float>(child.getProperty("drift",          0.f));
+        p.mix           = static_cast<float>(child.getProperty("mix",           50.f));
+        p.wowFlutter    = static_cast<float>(child.getProperty("wowFlutter",     0.f));
+        p.saturation    = static_cast<float>(child.getProperty("saturation",     0.f));
+        p.hiss          = static_cast<float>(child.getProperty("hiss",           0.f));
+        p.outputGain    = static_cast<float>(child.getProperty("outputGain",     0.f));
+        p.xyAutoEnabled    = static_cast<float>(child.getProperty("xyAutoEnabled",    0.f));
+        p.xyAutoMode       = static_cast<float>(child.getProperty("xyAutoMode",       0.f));
+        p.xyAutoSpeed      = static_cast<float>(child.getProperty("xyAutoSpeed",     0.5f));
+        p.grainSyncEnabled = static_cast<float>(child.getProperty("grainSyncEnabled", 0.f));
+
+        presets.push_back(p);
+        loaded++;
+    }
+
+    DBG("Terrain: loaded " + juce::String(loaded) + " user presets from disk, total=" + juce::String(presets.size()));
 }
 
 //==============================================================================

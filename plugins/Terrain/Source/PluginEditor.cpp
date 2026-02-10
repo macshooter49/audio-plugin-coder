@@ -81,6 +81,43 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             {
                 complete(audioProcessor.getFactoryPresetCount());
             })
+            .withNativeFunction("setXYAutoState", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 3)
+                {
+                    audioProcessor.xyAutoEnabled.store(static_cast<float>(args[0]));
+                    audioProcessor.xyAutoMode.store(static_cast<float>(args[1]));
+                    audioProcessor.xyAutoSpeed.store(static_cast<float>(args[2]));
+                }
+                complete({});
+            })
+            .withNativeFunction("getXYAutoState", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::var result;
+                auto* obj = new juce::DynamicObject();
+                obj->setProperty("enabled", audioProcessor.xyAutoEnabled.load());
+                obj->setProperty("mode",    audioProcessor.xyAutoMode.load());
+                obj->setProperty("speed",   audioProcessor.xyAutoSpeed.load());
+                result = juce::var(obj);
+                complete(result);
+            })
+            .withNativeFunction("setGrainSync", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.grainSyncEnabled.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getGrainSync", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                auto* obj = new juce::DynamicObject();
+                obj->setProperty("enabled", audioProcessor.grainSyncEnabled.load());
+                obj->setProperty("bpm",     audioProcessor.currentBPM.load());
+                complete(juce::var(obj));
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
@@ -154,10 +191,13 @@ void TerrainAudioProcessorEditor::timerCallback()
     }
     scopeData << "]";
 
+    // Read BPM for grain sync display
+    float bpm = audioProcessor.currentBPM.load();
+
     // Push visualization data to JS
     juce::String js;
     js << "if(window.updateVisualization){"
-       << "window.updateVisualization(" << grainCount << "," << scopeData << ");}";
+       << "window.updateVisualization(" << grainCount << "," << scopeData << "," << juce::String(bpm, 1) << ");}";
 
     webView->evaluateJavascript(js);
 }

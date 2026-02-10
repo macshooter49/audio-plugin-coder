@@ -30,8 +30,12 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      height: 30px;
       margin-bottom: 12px;
+    }
+
+    .plugin-brand {
+      display: flex;
+      flex-direction: column;
     }
 
     .plugin-title {
@@ -41,6 +45,16 @@
       letter-spacing: 3px;
       text-transform: uppercase;
       color: #6B5F80;
+      line-height: 1;
+    }
+
+    .plugin-version {
+      font-family: 'SF Pro Display', -apple-system, system-ui, sans-serif;
+      font-weight: 400;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      color: #4A4358;
+      margin-top: 3px;
     }
 
     .preset-nav {
@@ -193,6 +207,34 @@
       margin-top: 3px;
       text-align: center;
       line-height: 1.3;
+    }
+
+    /* ── Grain sync toggle ── */
+    .sync-toggle {
+      display: inline-block;
+      font-family: 'SF Pro Display', -apple-system, system-ui, sans-serif;
+      font-weight: 500;
+      font-size: 8px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #A89BBE;
+      background: rgba(212, 204, 224, 0.3);
+      border: 1px solid rgba(212, 204, 224, 0.5);
+      border-radius: 3px;
+      padding: 2px 5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-top: 2px;
+      line-height: 1;
+    }
+    .sync-toggle:hover {
+      border-color: #8B5CF6;
+      color: #8B5CF6;
+    }
+    .sync-toggle.active {
+      background: rgba(139, 92, 246, 0.15);
+      border-color: #8B5CF6;
+      color: #8B5CF6;
     }
 
     /* ── Section divider ── */
@@ -435,7 +477,10 @@
   <div class="plugin-container">
     <!-- Header -->
     <div class="header">
-      <div class="plugin-title">Terrain</div>
+      <div class="plugin-brand">
+        <div class="plugin-title">Terrain</div>
+        <div class="plugin-version">v1.0.0</div>
+      </div>
       <div class="preset-nav">
         <button class="preset-btn" id="presetPrev">&#x25C0;</button>
         <span class="preset-name" id="presetName">Init</span>
@@ -462,6 +507,7 @@
         <canvas class="knob-canvas" width="128" height="128"></canvas>
         <div class="knob-value">80.0 ms</div>
         <div class="knob-label">Grain<br>Size</div>
+        <div class="sync-toggle" id="grainSyncBtn" title="Sync grain size to BPM">SYNC</div>
       </div>
 
       <div class="knob-group" data-param="DENSITY" data-min="1" data-max="100" data-default="20" data-value="20" data-unit="" data-decimals="1">
@@ -1016,8 +1062,16 @@
       var val = this.normalizedToValue(norm);
       this.group.dataset.value = val.toFixed(this.decimals);
 
-      var sign = val > 0 && this.paramId === 'PITCH' ? '+' : '';
-      this.valueEl.textContent = sign + val.toFixed(this.decimals) + this.unit;
+      // Grain sync: show division name instead of ms
+      if (this.paramId === 'GRAIN_SIZE' && grainSyncEnabled) {
+        var idx = Math.floor(norm * 10);
+        if (idx > 9) idx = 9;
+        if (idx < 0) idx = 0;
+        this.valueEl.textContent = grainSyncDivisions[idx].name;
+      } else {
+        var sign = val > 0 && this.paramId === 'PITCH' ? '+' : '';
+        this.valueEl.textContent = sign + val.toFixed(this.decimals) + this.unit;
+      }
 
       drawKnob(this.canvas, norm, this.isActive);
 
@@ -1073,6 +1127,26 @@
     var getPresetNameFn = null;
     var getNumPresetsFn = null;
     var getCurrentPresetIndexFn = null;
+    var setXYAutoStateFn = null;
+    var getXYAutoStateFn = null;
+    var setGrainSyncFn = null;
+    var getGrainSyncFn = null;
+
+    // Grain BPM sync state
+    var grainSyncEnabled = false;
+    var currentBPM = 120;
+    var grainSyncDivisions = [
+      { name: '1/32',  mult: 0.125  },
+      { name: '1/16T', mult: 0.1667 },
+      { name: '1/16',  mult: 0.25   },
+      { name: '1/8T',  mult: 0.3333 },
+      { name: '1/8',   mult: 0.5    },
+      { name: '1/4T',  mult: 0.6667 },
+      { name: '1/4',   mult: 1.0    },
+      { name: '1/2T',  mult: 1.3333 },
+      { name: '1/2',   mult: 2.0    },
+      { name: '1/1',   mult: 4.0    }
+    ];
 
     function updatePresetDisplay(name) {
       var el = document.getElementById('presetName');
@@ -1085,14 +1159,124 @@
         getPresetNameFn = window.Juce.getNativeFunction('getPresetName');
         getNumPresetsFn = window.Juce.getNativeFunction('getNumPresets');
         getCurrentPresetIndexFn = window.Juce.getNativeFunction('getCurrentPresetIndex');
+        setXYAutoStateFn = window.Juce.getNativeFunction('setXYAutoState');
+        getXYAutoStateFn = window.Juce.getNativeFunction('getXYAutoState');
+        setGrainSyncFn = window.Juce.getNativeFunction('setGrainSync');
+        getGrainSyncFn = window.Juce.getNativeFunction('getGrainSync');
 
         numPresets = await getNumPresetsFn();
         currentPresetIdx = await getCurrentPresetIndexFn();
         var name = await getPresetNameFn(currentPresetIdx);
         updatePresetDisplay(name);
+
+        // Restore XY auto state from the current preset
+        await pullXYAutoState();
+        await pullGrainSyncState();
       } catch (e) {
         console.log('Preview mode: preset functions not available');
       }
+    }
+
+    // Push grain sync state to C++
+    function pushGrainSyncState() {
+      if (setGrainSyncFn) {
+        setGrainSyncFn(grainSyncEnabled ? 1.0 : 0.0);
+      }
+    }
+
+    // Pull grain sync state from C++ and apply to JS
+    async function pullGrainSyncState() {
+      if (!getGrainSyncFn) return;
+      var state = await getGrainSyncFn();
+      if (!state) return;
+
+      grainSyncEnabled = state.enabled > 0.5;
+      if (state.bpm > 0) currentBPM = state.bpm;
+
+      var btn = document.getElementById('grainSyncBtn');
+      if (btn) {
+        if (grainSyncEnabled) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+
+      // Force grain size display update
+      updateGrainSyncDisplay();
+    }
+
+    // Update the grain size knob value display for sync mode
+    function updateGrainSyncDisplay() {
+      var grainGroup = document.querySelector('[data-param="GRAIN_SIZE"]');
+      if (!grainGroup) return;
+      var valueEl = grainGroup.querySelector('.knob-value');
+      if (!valueEl) return;
+
+      if (grainSyncEnabled) {
+        var norm = 0.5;
+        if (xySliders.grainSize) norm = xySliders.grainSize.getNormalisedValue();
+        var idx = Math.floor(norm * 10);
+        if (idx > 9) idx = 9;
+        if (idx < 0) idx = 0;
+        var div = grainSyncDivisions[idx];
+        var ms = (60000 / currentBPM) * div.mult;
+        valueEl.textContent = div.name;
+        valueEl.title = ms.toFixed(0) + ' ms @ ' + currentBPM.toFixed(0) + ' BPM';
+      } else {
+        valueEl.title = '';
+      }
+    }
+
+    // Sync XY pad dot position from actual parameter values
+    function syncXYPadFromParams() {
+      if (xySliders.grainSize) {
+        xyPadPos.x = xySliders.grainSize.getNormalisedValue();
+      }
+      if (xySliders.density) {
+        xyPadPos.y = 1.0 - xySliders.density.getNormalisedValue();
+      }
+    }
+
+    // Push current XY automation state to C++
+    function pushXYAutoState() {
+      if (setXYAutoStateFn) {
+        setXYAutoStateFn(
+          xyAuto.enabled ? 1.0 : 0.0,
+          xyAuto.mode === 'smooth' ? 1.0 : 0.0,
+          xyAuto.speed
+        );
+      }
+    }
+
+    // Pull XY automation state from C++ and apply to JS
+    async function pullXYAutoState() {
+      if (!getXYAutoStateFn) return;
+      var state = await getXYAutoStateFn();
+      if (!state) return;
+
+      var shouldEnable = state.enabled > 0.5;
+      var shouldSmooth = state.mode > 0.5;
+      var newSpeed = state.speed;
+
+      // Stop current automation if running
+      if (xyAuto.enabled) stopXYAuto();
+
+      // Apply mode
+      xyAuto.mode = shouldSmooth ? 'smooth' : 'chaotic';
+      var modeBtn = document.getElementById('xyAutoMode');
+      if (modeBtn) {
+        modeBtn.innerHTML = shouldSmooth ? '&#x223F;' : '&#x26A1;';
+        modeBtn.title = shouldSmooth ? 'Smooth' : 'Chaotic';
+      }
+
+      // Apply speed
+      xyAuto.speed = newSpeed;
+      var speedThumb = document.getElementById('xyAutoSpeedThumb');
+      if (speedThumb) speedThumb.style.left = (xyAuto.speed * 100) + '%';
+
+      // Start automation if preset had it enabled
+      if (shouldEnable) startXYAuto();
+
+      // Sync XY pad position from parameter values
+      syncXYPadFromParams();
     }
 
     async function navigatePreset(delta) {
@@ -1101,6 +1285,8 @@
       await loadPresetFn(currentPresetIdx);
       var name = await getPresetNameFn(currentPresetIdx);
       updatePresetDisplay(name);
+      await pullXYAutoState();
+      await pullGrainSyncState();
     }
 
     // ── Preset List (click name to browse) ──
@@ -1118,6 +1304,8 @@
             currentPresetIdx = idx;
             await loadPresetFn(idx);
             updatePresetDisplay(await getPresetNameFn(idx));
+            await pullXYAutoState();
+            await pullGrainSyncState();
             closePresetList();
           };
         })(i));
@@ -1222,6 +1410,8 @@
       // Overwrite
       document.getElementById('pmOverwrite').addEventListener('click', async function() {
         if (!overwritePresetFn) return;
+        pushXYAutoState();
+        pushGrainSyncState();
         await overwritePresetFn(currentPresetIdx);
         closePresetMenu();
       });
@@ -1234,6 +1424,8 @@
         if (currentPresetIdx >= numPresets) currentPresetIdx = numPresets - 1;
         await loadPresetFn(currentPresetIdx);
         updatePresetDisplay(await getPresetNameFn(currentPresetIdx));
+        await pullXYAutoState();
+        await pullGrainSyncState();
         closePresetMenu();
       });
 
@@ -1249,6 +1441,10 @@
       var input = document.getElementById('pmInput');
       var name = input.value.trim();
       if (!name) return;
+
+      // Ensure C++ has latest XY auto state before saving
+      pushXYAutoState();
+      pushGrainSyncState();
 
       if (pmPendingAction === 'save' && saveNewPresetFn) {
         var newIdx = await saveNewPresetFn(name);
@@ -1648,6 +1844,7 @@
     function toggleXYAuto() {
       if (xyAuto.enabled) stopXYAuto();
       else startXYAuto();
+      pushXYAutoState();
     }
 
     function cycleXYAutoMode() {
@@ -1663,6 +1860,7 @@
       }
       // Reset target for smooth mode
       xyAuto.target = { x: Math.random(), y: Math.random() };
+      pushXYAutoState();
     }
 
     function initXYAuto() {
@@ -1699,6 +1897,7 @@
         updateSpeedVisual();
       }
       function onSpeedUp() {
+        if (speedDragging) pushXYAutoState();
         speedDragging = false;
       }
 
@@ -1861,9 +2060,11 @@
       document.addEventListener('touchend', onUp);
     }
 
-    window.updateVisualization = function(grainCount, scopeArray) {
+    window.updateVisualization = function(grainCount, scopeArray, bpm) {
+      if (bpm > 0) currentBPM = bpm;
       updateGrainViz(grainCount);
       updateScopeViz(scopeArray);
+      if (grainSyncEnabled) updateGrainSyncDisplay();
     };
 
     // ── Initialize ──
@@ -1890,6 +2091,18 @@
       document.getElementById('presetNext').addEventListener('click', function() {
         navigatePreset(1);
       });
+
+      // Init grain sync toggle
+      var syncBtn = document.getElementById('grainSyncBtn');
+      if (syncBtn) {
+        syncBtn.addEventListener('click', function() {
+          grainSyncEnabled = !grainSyncEnabled;
+          if (grainSyncEnabled) syncBtn.classList.add('active');
+          else syncBtn.classList.remove('active');
+          pushGrainSyncState();
+          updateGrainSyncDisplay();
+        });
+      }
 
       // Init visualizers
       initGrainViz();
