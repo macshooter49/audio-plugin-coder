@@ -12,4 +12,5 @@ namespace ParameterIDs
     constexpr char SATURATION[]   = "SATURATION";
     constexpr char HISS[]         = "HISS";
     constexpr char OUTPUT_GAIN[]  = "OUTPUT_GAIN";
+    constexpr char MASTER_MIX[]   = "MASTER_MIX";
 }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=820">
-<title>Terrain</title>
+<title>Terrain v2 — Interactive Mockup</title>
 <style>
 /* ============ RESET & TOKENS ============ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -28,23 +28,24 @@
 }
 
 body {
-  background: var(--bg-main);
+  background: #D8D0E4;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
   font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  width: 820px;
-  height: 640px;
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 #plugin {
   width: 820px;
   height: 640px;
   background: var(--bg-main);
+  border-radius: 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 8px 32px rgba(91,79,112,0.18), 0 2px 8px rgba(91,79,112,0.08);
   position: relative;
   user-select: none;
 }
@@ -129,11 +130,8 @@ body {
   color: var(--text-primary);
   min-width: 140px;
   text-align: center;
-  cursor: pointer;
-  transition: opacity 0.15s, color 0.15s;
-}
-.preset-name:hover {
-  color: var(--purple-500);
+  cursor: default;
+  transition: opacity 0.15s;
 }
 
 .preset-grid-btn {
@@ -173,7 +171,7 @@ body {
   border-bottom: 1px solid transparent;
 }
 #preset-browser.open {
-  max-height: 400px;
+  max-height: 340px;
   border-bottom-color: var(--border);
 }
 
@@ -208,28 +206,13 @@ body {
   flex: 1;
 }
 .search-wrap::before {
-  content: '';
+  content: '\u2315';
   position: absolute;
   left: 9px;
   top: 50%;
   transform: translateY(-50%);
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid var(--text-dim);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1;
-  box-sizing: border-box;
-}
-.search-wrap::after {
-  content: '';
-  position: absolute;
-  left: 18px;
-  top: calc(50% + 4px);
-  width: 4px;
-  height: 1.5px;
-  background: var(--text-dim);
-  transform: rotate(45deg);
+  font-size: 13px;
+  color: var(--text-dim);
   pointer-events: none;
   z-index: 1;
 }
@@ -263,7 +246,7 @@ body {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 6px;
-  max-height: 300px;
+  max-height: 240px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -416,24 +399,6 @@ body {
   color: var(--purple-600);
 }
 
-.xy-speed-wrap {
-  width: 24px;
-  height: 24px;
-  cursor: grab;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(139,92,246,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.xy-speed-wrap:hover {
-  border-color: var(--purple-500);
-  background: rgba(255,255,255,0.8);
-}
-
 .crosshair-h, .crosshair-v {
   position: absolute;
   background: rgba(139,92,246,0.3);
@@ -446,9 +411,7 @@ body {
 #hero:hover .crosshair-h,
 #hero:hover .crosshair-v,
 #hero.dragging .crosshair-h,
-#hero.dragging .crosshair-v,
-#hero.xy-active .crosshair-h,
-#hero.xy-active .crosshair-v { opacity: 1; }
+#hero.dragging .crosshair-v { opacity: 1; }
 
 /* ============ CONTROLS ============ */
 #controls {
@@ -499,7 +462,7 @@ body {
   /* Fade out IMMEDIATELY before the section shrinks (no delay) */
   transition: opacity 0.12s 0s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s 0s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.control-section.minimized .section-toggle-btn {
+.control-section.minimized .section-icon {
   transform: rotate(90deg);
 }
 
@@ -514,41 +477,24 @@ body {
 }
 .section-header:hover .section-label { color: var(--purple-500); }
 
-.section-toggle-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1.5px solid var(--purple-400);
-  background: var(--bg-glass);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+.section-toggle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--purple-500);
   flex-shrink: 0;
-  padding: 0;
-  box-shadow: 0 2px 8px rgba(91,79,112,0.10), 0 1px 3px rgba(91,79,112,0.08);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.15s;
+  cursor: pointer;
 }
-.section-toggle-btn:hover {
-  border-color: var(--purple-500);
-  box-shadow: 0 3px 12px rgba(139,92,246,0.15), 0 1px 4px rgba(91,79,112,0.1);
-  transform: translateY(-1px);
+.section-toggle.off { background: var(--border); }
+
+.section-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
 }
-.section-toggle-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 4px rgba(91,79,112,0.1);
-}
-.section-toggle-btn.off {
-  border-color: var(--border);
-  background: var(--bg-main);
-  box-shadow: inset 0 1px 3px rgba(91,79,112,0.06);
-  opacity: 0.6;
-}
-.section-toggle-btn canvas {
-  display: block;
-  width: 20px;
-  height: 20px;
-}
+.section-icon canvas { display: block; }
 
 .section-label {
   font-weight: 500;
@@ -590,9 +536,16 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 80px;
+  width: 72px;
   gap: 2px;
 }
+
+.knob-icon {
+  width: 16px;
+  height: 16px;
+  margin-bottom: 2px;
+}
+.knob-icon canvas { display: block; cursor: pointer; }
 
 .knob-canvas-wrap {
   position: relative;
@@ -601,34 +554,21 @@ body {
   cursor: grab;
 }
 .knob-canvas-wrap:active { cursor: grabbing; }
-.knob-canvas-wrap canvas.knob-arc {
+.knob-canvas-wrap canvas {
   display: block;
   width: 56px;
   height: 56px;
-}
-.knob-canvas-wrap canvas.knob-icon-inner {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  transition: filter 0.15s ease, opacity 0.15s ease;
-}
-.knob-group:hover .knob-icon-inner,
-.knob-group.dragging .knob-icon-inner {
-  filter: drop-shadow(0 0 4px rgba(139,92,246,0.6));
 }
 
 .knob-value {
   font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
   font-weight: 500;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-primary);
   text-align: center;
   line-height: 14px;
   min-height: 14px;
   white-space: nowrap;
-  overflow: visible;
   transition: text-shadow 0.15s ease, color 0.15s ease;
 }
 .knob-value.glowing {
@@ -648,22 +588,20 @@ body {
 
 /* ============ TOOLTIP ============ */
 #tooltip {
-  position: absolute;
-  z-index: 25;
-  width: 240px;
-  bottom: 10px;
-  right: 10px;
+  position: fixed;
+  z-index: 100;
+  width: 260px;
   background: var(--bg-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   pointer-events: none;
   opacity: 0;
   transform: translateY(4px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  box-shadow: 0 4px 16px rgba(91,79,112,0.12);
+  transition: opacity 0.15s, transform 0.15s;
+  box-shadow: 0 4px 16px rgba(91,79,112,0.1);
 }
 #tooltip.visible {
   opacity: 1;
@@ -783,6 +721,7 @@ body {
   height: 100%;
   background: var(--purple-500);
   border-radius: 3px;
+  transition: width 0.05s;
 }
 .output-slider-thumb {
   position: absolute;
@@ -988,22 +927,7 @@ body {
     </div>
     <div class="xy-controls">
       <button class="xy-ctrl-btn active" id="xy-play" title="Auto">&#9654;</button>
-      <button class="xy-ctrl-btn" id="xy-mode" title="Mode: Chaotic">?</button>
-      <div class="xy-speed-wrap" id="xy-speed-wrap" title="Speed">
-        <canvas id="xy-speed-canvas" width="24" height="24"></canvas>
-      </div>
-    </div>
-    <!-- TOOLTIP (anchored inside hero, bottom-right) -->
-    <div id="tooltip">
-      <div class="tooltip-header">
-        <span class="tooltip-title" id="tt-title"></span>
-        <div class="tooltip-icon"><canvas id="tt-icon" width="28" height="28"></canvas></div>
-      </div>
-      <div class="tooltip-desc" id="tt-desc"></div>
-      <div class="tooltip-stats" id="tt-stats"></div>
-      <div class="tooltip-bar-wrap"><div class="tooltip-bar" id="tt-bar"></div></div>
-      <div class="tooltip-bar-pct" id="tt-pct"></div>
-      <div class="tooltip-tip" id="tt-tip"></div>
+      <button class="xy-ctrl-btn" id="xy-mode" title="Mode">~</button>
     </div>
   </div>
 
@@ -1011,9 +935,8 @@ body {
   <div id="controls">
     <div class="control-section" id="grain-section">
       <div class="section-header" id="grain-header">
-        <button class="section-toggle-btn" id="grain-toggle" title="Toggle Grain Engine">
-          <canvas id="grain-section-icon" width="28" height="28"></canvas>
-        </button>
+        <div class="section-toggle" id="grain-toggle"></div>
+        <div class="section-icon"><canvas id="grain-section-icon" width="28" height="28"></canvas></div>
         <span class="section-label">Grain Engine</span>
         <span class="section-collapse-icon">&#9662;</span>
       </div>
@@ -1021,9 +944,8 @@ body {
     </div>
     <div class="control-section" id="tape-section">
       <div class="section-header" id="tape-header">
-        <button class="section-toggle-btn" id="tape-toggle" title="Toggle Tape">
-          <canvas id="tape-section-icon" width="28" height="28"></canvas>
-        </button>
+        <div class="section-toggle" id="tape-toggle"></div>
+        <div class="section-icon"><canvas id="tape-section-icon" width="28" height="28"></canvas></div>
         <span class="section-label">Tape</span>
         <span class="section-collapse-icon">&#9662;</span>
       </div>
@@ -1063,6 +985,19 @@ body {
   </div>
 </div>
 
+<!-- TOOLTIP -->
+<div id="tooltip">
+  <div class="tooltip-header">
+    <span class="tooltip-title" id="tt-title"></span>
+    <div class="tooltip-icon"><canvas id="tt-icon" width="28" height="28"></canvas></div>
+  </div>
+  <div class="tooltip-desc" id="tt-desc"></div>
+  <div class="tooltip-stats" id="tt-stats"></div>
+  <div class="tooltip-bar-wrap"><div class="tooltip-bar" id="tt-bar"></div></div>
+  <div class="tooltip-bar-pct" id="tt-pct"></div>
+  <div class="tooltip-tip" id="tt-tip"></div>
+</div>
+
 <!-- CONTEXT MENU -->
 <div id="context-menu">
   <div class="ctx-item" data-action="copy">Copy value</div>
@@ -1071,315 +1006,9 @@ body {
   <div class="ctx-item" data-action="midi">MIDI learn</div>
 </div>
 
-<!-- JUCE Native Interop (inlined from juce/check_native_interop.js) -->
-<script>
-if (
-  typeof window.__JUCE__ !== "undefined" &&
-  typeof window.__JUCE__.getAndroidUserScripts !== "undefined" &&
-  typeof window.inAndroidUserScriptEval === "undefined"
-) {
-  window.inAndroidUserScriptEval = true;
-  eval(window.__JUCE__.getAndroidUserScripts());
-  delete window.inAndroidUserScriptEval;
-}
-
-{
-  if (typeof window.__JUCE__ === "undefined") {
-    console.warn(
-      "The 'window.__JUCE__' object is undefined." +
-        " Native integration features will not work." +
-        " Defining a placeholder 'window.__JUCE__' object."
-    );
-
-    window.__JUCE__ = {
-      postMessage: function () {},
-    };
-  }
-
-  if (typeof window.__JUCE__.initialisationData === "undefined") {
-    window.__JUCE__.initialisationData = {
-      __juce__platform: [],
-      __juce__functions: [],
-      __juce__registeredGlobalEventIds: [],
-      __juce__sliders: [],
-      __juce__toggles: [],
-      __juce__comboBoxes: [],
-    };
-  }
-
-  class ListenerList {
-    constructor() {
-      this.listeners = new Map();
-      this.listenerId = 0;
-    }
-
-    addListener(fn) {
-      const newListenerId = this.listenerId++;
-      this.listeners.set(newListenerId, fn);
-      return newListenerId;
-    }
-
-    removeListener(id) {
-      if (this.listeners.has(id)) {
-        this.listeners.delete(id);
-      }
-    }
-
-    callListeners(payload) {
-      for (const [, value] of this.listeners) {
-        value(payload);
-      }
-    }
-  }
-
-  class EventListenerList {
-    constructor() {
-      this.eventListeners = new Map();
-    }
-
-    addEventListener(eventId, fn) {
-      if (!this.eventListeners.has(eventId))
-        this.eventListeners.set(eventId, new ListenerList());
-
-      const id = this.eventListeners.get(eventId).addListener(fn);
-      return [eventId, id];
-    }
-
-    removeEventListener([eventId, id]) {
-      if (this.eventListeners.has(eventId)) {
-        this.eventListeners.get(eventId).removeListener(id);
-      }
-    }
-
-    emitEvent(eventId, object) {
-      if (this.eventListeners.has(eventId))
-        this.eventListeners.get(eventId).callListeners(object);
-    }
-  }
-
-  class Backend {
-    constructor() {
-      this.listeners = new EventListenerList();
-    }
-
-    addEventListener(eventId, fn) {
-      return this.listeners.addEventListener(eventId, fn);
-    }
-
-    removeEventListener([eventId, id]) {
-      this.listeners.removeEventListener([eventId, id]);
-    }
-
-    emitEvent(eventId, object) {
-      window.__JUCE__.postMessage(
-        JSON.stringify({ eventId: eventId, payload: object })
-      );
-    }
-
-    emitByBackend(eventId, object) {
-      this.listeners.emitEvent(eventId, JSON.parse(object));
-    }
-  }
-
-  if (typeof window.__JUCE__.backend === "undefined")
-    window.__JUCE__.backend = new Backend();
-}
-</script>
-
-<!-- JUCE Frontend Library (inlined from juce/index.js) -->
-<script>
-(function() {
-  'use strict';
-
-  class PromiseHandler {
-    constructor() {
-      this.lastPromiseId = 0;
-      this.promises = new Map();
-
-      window.__JUCE__.backend.addEventListener(
-        "__juce__complete",
-        ({ promiseId, result }) => {
-          if (this.promises.has(promiseId)) {
-            this.promises.get(promiseId).resolve(result);
-            this.promises.delete(promiseId);
-          }
-        }
-      );
-    }
-
-    createPromise() {
-      const promiseId = this.lastPromiseId++;
-      const result = new Promise((resolve, reject) => {
-        this.promises.set(promiseId, { resolve: resolve, reject: reject });
-      });
-      return [promiseId, result];
-    }
-  }
-
-  const promiseHandler = new PromiseHandler();
-
-  function getNativeFunction(name) {
-    if (!window.__JUCE__.initialisationData.__juce__functions.includes(name))
-      console.warn(
-        "Creating native function binding for '" + name + "', which is unknown to the backend"
-      );
-
-    const f = function () {
-      const [promiseId, result] = promiseHandler.createPromise();
-      window.__JUCE__.backend.emitEvent("__juce__invoke", {
-        name: name,
-        params: Array.prototype.slice.call(arguments),
-        resultId: promiseId,
-      });
-      return result;
-    };
-
-    return f;
-  }
-
-  class ListenerList {
-    constructor() {
-      this.listeners = new Map();
-      this.listenerId = 0;
-    }
-
-    addListener(fn) {
-      const newListenerId = this.listenerId++;
-      this.listeners.set(newListenerId, fn);
-      return newListenerId;
-    }
-
-    removeListener(id) {
-      if (this.listeners.has(id)) {
-        this.listeners.delete(id);
-      }
-    }
-
-    callListeners(payload) {
-      for (const [, value] of this.listeners) {
-        value(payload);
-      }
-    }
-  }
-
-  const BasicControl_valueChangedEventId = "valueChanged";
-  const BasicControl_propertiesChangedId = "propertiesChanged";
-  const SliderControl_sliderDragStartedEventId = "sliderDragStarted";
-  const SliderControl_sliderDragEndedEventId = "sliderDragEnded";
-
-  class SliderState {
-    constructor(name) {
-      if (!window.__JUCE__.initialisationData.__juce__sliders.includes(name))
-        console.warn(
-          "Creating SliderState for '" + name + "', which is unknown to the backend"
-        );
-
-      this.name = name;
-      this.identifier = "__juce__slider" + this.name;
-      this.scaledValue = 0;
-      this.properties = {
-        start: 0, end: 1, skew: 1, name: "", label: "",
-        numSteps: 100, interval: 0, parameterIndex: -1,
-      };
-      this.valueChangedEvent = new ListenerList();
-      this.propertiesChangedEvent = new ListenerList();
-
-      window.__JUCE__.backend.addEventListener(this.identifier, (event) =>
-        this.handleEvent(event)
-      );
-
-      window.__JUCE__.backend.emitEvent(this.identifier, {
-        eventType: "requestInitialUpdate",
-      });
-    }
-
-    setNormalisedValue(newValue) {
-      this.scaledValue = this.snapToLegalValue(
-        this.normalisedToScaledValue(newValue)
-      );
-      window.__JUCE__.backend.emitEvent(this.identifier, {
-        eventType: BasicControl_valueChangedEventId,
-        value: this.scaledValue,
-      });
-    }
-
-    sliderDragStarted() {
-      window.__JUCE__.backend.emitEvent(this.identifier, {
-        eventType: SliderControl_sliderDragStartedEventId,
-      });
-    }
-
-    sliderDragEnded() {
-      window.__JUCE__.backend.emitEvent(this.identifier, {
-        eventType: SliderControl_sliderDragEndedEventId,
-      });
-    }
-
-    handleEvent(event) {
-      if (event.eventType == BasicControl_valueChangedEventId) {
-        this.scaledValue = event.value;
-        this.valueChangedEvent.callListeners();
-      }
-      if (event.eventType == BasicControl_propertiesChangedId) {
-        let { eventType: _, ...rest } = event;
-        this.properties = rest;
-        this.propertiesChangedEvent.callListeners();
-      }
-    }
-
-    getScaledValue() {
-      return this.scaledValue;
-    }
-
-    getNormalisedValue() {
-      return Math.pow(
-        (this.scaledValue - this.properties.start) /
-          (this.properties.end - this.properties.start),
-        this.properties.skew
-      );
-    }
-
-    normalisedToScaledValue(normalisedValue) {
-      return (
-        Math.pow(normalisedValue, 1 / this.properties.skew) *
-          (this.properties.end - this.properties.start) +
-        this.properties.start
-      );
-    }
-
-    snapToLegalValue(value) {
-      const interval = this.properties.interval;
-      if (interval == 0) return value;
-      const start = this.properties.start;
-      const clamp = (val, min = 0, max = 1) => Math.max(min, Math.min(max, val));
-      return clamp(
-        start + interval * Math.floor((value - start) / interval + 0.5),
-        this.properties.start,
-        this.properties.end
-      );
-    }
-  }
-
-  const sliderStates = new Map();
-  for (const sliderName of window.__JUCE__.initialisationData.__juce__sliders)
-    sliderStates.set(sliderName, new SliderState(sliderName));
-
-  function getSliderState(name) {
-    if (!sliderStates.has(name)) sliderStates.set(name, new SliderState(name));
-    return sliderStates.get(name);
-  }
-
-  // Expose API as global
-  window.Juce = {
-    getNativeFunction: getNativeFunction,
-    getSliderState: getSliderState,
-  };
-})();
-</script>
-
 <script>
 // ============================================================
-// TERRAIN V2 — Production UI with JUCE Integration
+// TERRAIN V2 — Full Interactive Prototype
 // ============================================================
 
 // ---- roundRect polyfill ----
@@ -1444,15 +1073,15 @@ const PARAMS = {
   grainSize:   { label: 'SIZE',      section: 'grain', min: 5,   max: 500, default: 80,  unit: 'ms',     desc: 'Controls the length of each grain extracted from the circular buffer.', tip: 'Larger grains create smoother textures. Try 200ms+ for pads.' },
   density:     { label: 'DENSITY',   section: 'grain', min: 1,   max: 100, default: 20,  unit: 'g/s',    desc: 'Sets the rate at which new grains are spawned per second.', tip: 'Higher density fills gaps. Lower values create rhythmic textures.' },
   spray:       { label: 'SPRAY',     section: 'grain', min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Randomizes the read position offset for each grain in the buffer.', tip: '40%+ creates lush, unpredictable spread. 0% is perfectly locked.' },
-  pitch:       { label: 'PITCH',     section: 'grain', min: -12, max: 12,  default: 0,   unit: 'st',     desc: 'Shifts the pitch of all grains by semitone increments.', tip: '+12 st = one octave up. Try small values (1-3 st) for subtle detuning.' },
+  pitch:       { label: 'PITCH',     section: 'grain', min: -24, max: 24,  default: 0,   unit: 'st',     desc: 'Shifts the pitch of all grains by semitone increments.', tip: '+12 st = one octave up. Try small values (1-3 st) for subtle detuning.' },
   drift:       { label: 'DRIFT',     section: 'grain', min: 0,   max: 100, default: 0,   unit: '% prob', desc: 'Probability that a grain will randomly jump to a new pitch state.', tip: 'Low drift (5-15%) adds organic movement. High drift is chaotic.' },
-  mix:         { label: 'GRAIN MIX', section: 'grain', min: 0,   max: 100, default: 50,  unit: '%',      desc: 'Blends between the dry input and the granular processed output.', tip: '50:50 is balanced. Use 100% wet for full grain effect.' },
+  mix:         { label: 'MIX',       section: 'tape',  min: 0,   max: 100, default: 50,  unit: '%',      desc: 'Blends between the dry input signal and the wet processed output.', tip: '50:50 is balanced. Use 100% wet for full effect in a send.' },
   wowFlutter:  { label: 'WOW',       section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Simulates the speed variance of analog tape transport mechanisms.', tip: 'Subtle values (10-20%) add warmth. Higher values sound broken.' },
   saturation:  { label: 'SATURATION',section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Applies harmonic distortion modeling magnetic tape saturation.', tip: 'Low saturation (20-40%) thickens. High values crush transients.' },
   hiss:        { label: 'HISS',      section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Adds calibrated tape noise from a modeled noise floor.', tip: 'A touch of hiss (5-10%) adds analog character and fills silence.' },
 };
 
-const OUTPUT_PARAM = { min: -12, max: 12, default: 0 };
+const OUTPUT_PARAM = { min: -24, max: 6, default: 0 };
 
 // ---- State ----
 const state = {
@@ -1461,8 +1090,6 @@ const state = {
   masterMix: 100,
   xyX: 0.5, xyY: 0.5,
   xyAutoPlay: true,
-  xyAutoMode: 0,    // 0 = chaotic (random), 1 = smooth (sinusoidal)
-  xyAutoSpeed: 0.5, // 0-1 normalized speed
   presetIdx: 0,
   browserOpen: false,
   browserCat: 'ALL',
@@ -1489,144 +1116,7 @@ for (const [id, p] of Object.entries(PARAMS)) {
   state.params[id] = p.default;
 }
 
-// ---- JUCE Parameter Bindings ----
-const JUCE_PARAMS = {
-  grainSize:  { juceId: 'GRAIN_SIZE',  sliderState: null },
-  density:    { juceId: 'DENSITY',     sliderState: null },
-  spray:      { juceId: 'SPRAY',       sliderState: null },
-  pitch:      { juceId: 'PITCH',       sliderState: null },
-  drift:      { juceId: 'DRIFT',       sliderState: null },
-  mix:        { juceId: 'MIX',         sliderState: null },
-  wowFlutter: { juceId: 'WOW_FLUTTER', sliderState: null },
-  saturation: { juceId: 'SATURATION',  sliderState: null },
-  hiss:       { juceId: 'HISS',        sliderState: null },
-};
-const JUCE_OUTPUT = { juceId: 'OUTPUT_GAIN', sliderState: null };
-const JUCE_MASTER_MIX = { juceId: 'MASTER_MIX', sliderState: null };
-let juceMode = false;
-
-// Scope data from JUCE (pushed via evaluateJavascript at 30Hz)
-let scopeData = null;
-let grainCountFromJuce = 0;
-let bpmFromJuce = 120;
-
-window.updateVisualization = function(grainCount, scopeArray, bpm) {
-  scopeData = scopeArray;
-  grainCountFromJuce = grainCount;
-  bpmFromJuce = bpm;
-};
-
-let setGrainEngineEnabledFn, getGrainEngineEnabledFn;
-let setTapeEnabledFn, getTapeEnabledFn;
-let setXYAutoStateFn, getXYAutoStateFn;
-
-function syncXYState() {
-  if (juceMode && setXYAutoStateFn) {
-    setXYAutoStateFn(state.xyAutoPlay ? 1 : 0, state.xyAutoMode, state.xyAutoSpeed);
-  }
-}
-
-async function initJuceBindings() {
-  try {
-    for (const [key, p] of Object.entries(JUCE_PARAMS)) {
-      p.sliderState = window.Juce.getSliderState(p.juceId);
-      state.params[key] = p.sliderState.scaledValue;
-      p.sliderState.valueChangedEvent.addListener(() => {
-        if (state.draggingKnob === key) return; // skip echo while dragging
-        state.params[key] = p.sliderState.scaledValue;
-        updateKnobDisplay(key);
-      });
-    }
-    JUCE_OUTPUT.sliderState = window.Juce.getSliderState(JUCE_OUTPUT.juceId);
-    state.outputGain = JUCE_OUTPUT.sliderState.scaledValue;
-    JUCE_OUTPUT.sliderState.valueChangedEvent.addListener(() => {
-      if (state.draggingOutput) return; // skip echo while dragging
-      state.outputGain = JUCE_OUTPUT.sliderState.scaledValue;
-      updateOutputDisplay();
-    });
-    JUCE_MASTER_MIX.sliderState = window.Juce.getSliderState(JUCE_MASTER_MIX.juceId);
-    state.masterMix = JUCE_MASTER_MIX.sliderState.scaledValue;
-    JUCE_MASTER_MIX.sliderState.valueChangedEvent.addListener(() => {
-      if (draggingMasterMix) return; // skip echo while dragging
-      state.masterMix = JUCE_MASTER_MIX.sliderState.scaledValue;
-      updateMasterMixDisplay();
-    });
-    juceMode = true;
-
-    // Section toggle native functions
-    setGrainEngineEnabledFn = window.Juce.getNativeFunction('setGrainEngineEnabled');
-    getGrainEngineEnabledFn = window.Juce.getNativeFunction('getGrainEngineEnabled');
-    setTapeEnabledFn = window.Juce.getNativeFunction('setTapeEnabled');
-    getTapeEnabledFn = window.Juce.getNativeFunction('getTapeEnabled');
-
-    // XY auto state native functions
-    setXYAutoStateFn = window.Juce.getNativeFunction('setXYAutoState');
-    getXYAutoStateFn = window.Juce.getNativeFunction('getXYAutoState');
-
-    // Sync initial section toggle states from backend
-    const grainOn = await getGrainEngineEnabledFn();
-    state.sectionEnabled.grain = grainOn > 0.5;
-    document.getElementById('grain-toggle').classList.toggle('off', !state.sectionEnabled.grain);
-
-    const tapeOn = await getTapeEnabledFn();
-    state.sectionEnabled.tape = tapeOn > 0.5;
-    document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
-
-    // Sync initial XY auto state from backend
-    const xyState = await getXYAutoStateFn();
-    state.xyAutoPlay = xyState.enabled > 0.5;
-    state.xyAutoMode = xyState.mode;
-    state.xyAutoSpeed = xyState.speed;
-    document.getElementById('xy-play').classList.toggle('active', state.xyAutoPlay);
-    const modeBtn = document.getElementById('xy-mode');
-    modeBtn.classList.toggle('active', state.xyAutoMode === 1);
-    modeBtn.textContent = state.xyAutoMode === 1 ? '~' : '?';
-    modeBtn.title = state.xyAutoMode === 1 ? 'Mode: Smooth' : 'Mode: Chaotic';
-    drawSpeedKnob();
-
-    console.log('JUCE bindings initialized');
-  } catch (e) {
-    console.log('Preview mode: JUCE bindings unavailable', e);
-  }
-}
-
-let loadPresetFn, getPresetNameFn, getNumPresetsFn, getCurrentPresetIndexFn;
-
-async function initJucePresets() {
-  try {
-    loadPresetFn = window.Juce.getNativeFunction('loadPreset');
-    getPresetNameFn = window.Juce.getNativeFunction('getPresetName');
-    getNumPresetsFn = window.Juce.getNativeFunction('getNumPresets');
-    getCurrentPresetIndexFn = window.Juce.getNativeFunction('getCurrentPresetIndex');
-    const count = await getNumPresetsFn();
-    // Replace mock PRESETS with real data from backend
-    PRESETS.length = 0;
-    for (let i = 0; i < count; i++) {
-      const name = await getPresetNameFn(i);
-      PRESETS.push({ name: name, cat: PRESET_CATEGORIES[name] || 'ALL', vals: null, idx: i });
-    }
-    const currentIdx = await getCurrentPresetIndexFn();
-    state.presetIdx = currentIdx;
-    document.getElementById('preset-name').textContent = PRESETS[currentIdx]?.name || 'Init';
-    buildPresetGrid();
-    console.log('JUCE presets loaded: ' + count);
-  } catch (e) {
-    console.log('Preview mode: using mock presets', e);
-  }
-}
-
-function pushParamToJuce(id) {
-  if (!juceMode) return;
-  const jp = JUCE_PARAMS[id];
-  if (jp?.sliderState) {
-    const norm = normalize(id, state.params[id]);
-    jp.sliderState.sliderDragStarted();
-    jp.sliderState.setNormalisedValue(norm);
-    jp.sliderState.sliderDragEnded();
-  }
-}
-
-// ---- Factory Presets (mock — replaced by JUCE in plugin mode) ----
+// ---- Factory Presets ----
 const PRESETS = [
   { name: 'Crystal Shimmer',  cat: 'AMBIENT',   vals: {grainSize:180,density:40,spray:60,pitch:7,drift:10,mix:70,wowFlutter:5,saturation:10,hiss:3} },
   { name: 'Tape Haze',        cat: 'TAPE',      vals: {grainSize:120,density:25,spray:20,pitch:0,drift:5,mix:60,wowFlutter:35,saturation:55,hiss:12} },
@@ -1657,34 +1147,6 @@ const PRESETS = [
 
 const CATEGORIES = ['ALL','GRAIN','TAPE','AMBIENT','RHYTHMIC','EXTREME'];
 
-// Category map for factory presets (name → category)
-const PRESET_CATEGORIES = {
-  'Init': 'ALL',
-  'Soft Keys': 'AMBIENT',
-  'Movements': 'AMBIENT',
-  'Super Messed Up': 'EXTREME',
-  'Tape Master': 'TAPE',
-  'Delay The Pluck': 'RHYTHMIC',
-  'Synced Grains': 'RHYTHMIC',
-  'Clown Delay': 'RHYTHMIC',
-  'Instant Pad': 'AMBIENT',
-  'Slow Changes': 'AMBIENT',
-  'Mood': 'TAPE',
-  'Soundscape': 'AMBIENT',
-  'Use A Key': 'RHYTHMIC',
-  'Blank Forms': 'GRAIN',
-  'Habits': 'GRAIN',
-  'Pitch Drifter': 'EXTREME',
-  'Mandalorian': 'EXTREME',
-  'See The Light': 'AMBIENT',
-  'Back To The Future': 'GRAIN',
-  'Saturation': 'TAPE',
-  'Chop Shop': 'EXTREME',
-  'Depressed': 'GRAIN',
-  'Deep Rest': 'TAPE',
-  'Final Tape': 'TAPE',
-};
-
 // ---- Precision Formatting ----
 function formatValue(id, val) {
   const p = PARAMS[id];
@@ -1695,7 +1157,8 @@ function formatValue(id, val) {
     case 'density':
       return `${Math.round(val)} g/s`;
     case 'spray': {
-      return `${Math.round(val)}%`;
+      const offsetMs = (val / 100) * 80;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B1${Math.round(offsetMs)} ms`;
     }
     case 'pitch':
       if (val === 0) return '0 st';
@@ -1709,13 +1172,16 @@ function formatValue(id, val) {
       return `${dry}:${wet}`;
     }
     case 'wowFlutter': {
-      return `${Math.round(val)}%`;
+      const rate = 0.5 + (val / 100) * 3.5;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B7 ~${rate.toFixed(1)} Hz`;
     }
     case 'saturation': {
-      return `${Math.round(val)}%`;
+      const dB = (val / 100) * 18;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B7 +${dB.toFixed(1)} dB`;
     }
     case 'hiss': {
-      return `${Math.round(val)}%`;
+      const floor = -72 + (val / 100) * 50;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B7 ${Math.round(floor)} dBFS`;
     }
     default:
       return `${Math.round(val)}`;
@@ -1746,9 +1212,7 @@ function denormalizeOutput(norm) {
 // ---- Icon Rendering ----
 const DPR = window.devicePixelRatio || 1;
 
-function drawIcon(canvas, type, color, norm, time) {
-  norm = norm || 0;
-  time = time || 0;
+function drawIcon(canvas, type, color) {
   const w = canvas.width / DPR, h = canvas.height / DPR;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1762,44 +1226,40 @@ function drawIcon(canvas, type, color, norm, time) {
   const cx = w / 2, cy = h / 2, r = w * 0.38;
 
   switch (type) {
-    case 'grainSize': { // Hexagonal crystal — rotates with value
-      const rot = norm * time * 0.8;
+    case 'grainSize': { // Hexagonal crystal lattice
       const s = r * 0.6;
       for (let i = 0; i < 6; i++) {
-        const a1 = (Math.PI / 3) * i - Math.PI / 6 + rot;
-        const a2 = (Math.PI / 3) * ((i + 1) % 6) - Math.PI / 6 + rot;
+        const a1 = (Math.PI / 3) * i - Math.PI / 6;
+        const a2 = (Math.PI / 3) * ((i + 1) % 6) - Math.PI / 6;
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(a1) * s, cy + Math.sin(a1) * s);
         ctx.lineTo(cx + Math.cos(a2) * s, cy + Math.sin(a2) * s);
         ctx.stroke();
       }
+      // Inner hex
       const s2 = s * 0.45;
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
-        const a = (Math.PI / 3) * i - Math.PI / 6 - rot * 0.6;
+        const a = (Math.PI / 3) * i - Math.PI / 6;
         ctx[i === 0 ? 'moveTo' : 'lineTo'](cx + Math.cos(a) * s2, cy + Math.sin(a) * s2);
       }
       ctx.closePath();
       ctx.stroke();
       break;
     }
-    case 'density': { // Particle cloud — dots pulse outward
+    case 'density': { // Particle cloud (dots)
       const dots = [[0,0],[0.35,0.2],[-0.3,0.25],[0.2,-0.35],[-0.25,-0.2],[0.4,-0.1],[-0.4,0.05],[0.1,0.4],[-0.15,-0.4],[0.3,0.35],[-0.35,-0.3],[0.05,0.25]];
-      for (let j = 0; j < dots.length; j++) {
-        const [dx, dy] = dots[j];
-        const pulse = 1 + norm * Math.sin(time * 3 + j * 1.1) * 0.25;
-        const dotR = 1.1 + norm * 0.4;
+      for (const [dx, dy] of dots) {
         ctx.beginPath();
-        ctx.arc(cx + dx * r * 1.3 * pulse, cy + dy * r * 1.3 * pulse, dotR, 0, Math.PI * 2);
+        ctx.arc(cx + dx * r * 1.3, cy + dy * r * 1.3, 1.1, 0, Math.PI * 2);
         ctx.fill();
       }
       break;
     }
-    case 'spray': { // Diverging rays — spread widens with value
+    case 'spray': { // Diverging light rays
       const origin = { x: cx - r * 0.5, y: cy };
-      const spread = 0.35 + norm * 0.25;
       for (let i = -2; i <= 2; i++) {
-        const angle = (i / 2) * spread + norm * Math.sin(time * 2 + i) * 0.06;
+        const angle = (i / 2) * 0.35;
         ctx.beginPath();
         ctx.moveTo(origin.x, origin.y);
         ctx.lineTo(origin.x + Math.cos(angle) * r * 2, origin.y + Math.sin(angle) * r * 2);
@@ -1807,66 +1267,49 @@ function drawIcon(canvas, type, color, norm, time) {
       }
       break;
     }
-    case 'pitch': { // Tuning fork — vibrates with value
-      const vib = norm * Math.sin(time * 12) * r * 0.08;
-      const forkW = r * 0.35;
-      const forkH = r * 1.2;
-      // Left prong
+    case 'pitch': { // Compressed sine wave
       ctx.beginPath();
-      ctx.moveTo(cx - forkW + vib, cy - forkH);
-      ctx.quadraticCurveTo(cx - forkW - r * 0.05, cy - forkH * 0.3, cx, cy - forkH * 0.15);
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const x = (cx - r) + t * r * 2;
+        const freq = 1.5 + t * 2;
+        const y = cy + Math.sin(t * Math.PI * freq) * r * 0.55;
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](x, y);
+      }
       ctx.stroke();
-      // Right prong
-      ctx.beginPath();
-      ctx.moveTo(cx + forkW - vib, cy - forkH);
-      ctx.quadraticCurveTo(cx + forkW + r * 0.05, cy - forkH * 0.3, cx, cy - forkH * 0.15);
-      ctx.stroke();
-      // Handle
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - forkH * 0.15);
-      ctx.lineTo(cx, cy + forkH * 0.55);
-      ctx.stroke();
-      // Base dot
-      ctx.beginPath();
-      ctx.arc(cx, cy + forkH * 0.55, 1.5, 0, Math.PI * 2);
-      ctx.fill();
       break;
     }
-    case 'drift': { // Electron orbitals — spin with value
-      const spin = norm * time * 0.6;
+    case 'drift': { // Electron orbital paths
       ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, spin, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, Math.PI / 3 + spin, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, Math.PI / 3, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, -Math.PI / 3 + spin, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, -Math.PI / 3, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
       ctx.fill();
       break;
     }
-    case 'mix': { // Venn diagram — circles breathe
+    case 'mix': { // Venn diagram
       ctx.globalAlpha = 0.6;
-      const breathe = norm * Math.sin(time * 1.5) * r * 0.08;
       ctx.beginPath();
-      ctx.arc(cx - r * 0.28 - breathe, cy, r * 0.55, 0, Math.PI * 2);
+      ctx.arc(cx - r * 0.28, cy, r * 0.55, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(cx + r * 0.28 + breathe, cy, r * 0.55, 0, Math.PI * 2);
+      ctx.arc(cx + r * 0.28, cy, r * 0.55, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
       break;
     }
-    case 'wowFlutter': { // Modulated circle — wobble intensifies
-      const wobAmt = 0.18 + norm * 0.2;
-      const wobPhase = time * (1 + norm * 2);
+    case 'wowFlutter': { // Modulated circle
       ctx.beginPath();
       for (let i = 0; i <= 60; i++) {
         const a = (i / 60) * Math.PI * 2;
-        const mod = r * 0.7 + Math.sin(a * 4 + wobPhase) * r * wobAmt;
+        const mod = r * 0.7 + Math.sin(a * 4) * r * 0.18;
         const x = cx + Math.cos(a) * mod;
         const y = cy + Math.sin(a) * mod;
         ctx[i === 0 ? 'moveTo' : 'lineTo'](x, y);
@@ -1875,38 +1318,36 @@ function drawIcon(canvas, type, color, norm, time) {
       ctx.stroke();
       break;
     }
-    case 'saturation': { // Clipped waveform — clip threshold tightens
-      const clip = 0.5 - norm * 0.25;
-      const phase = norm * time * 1.5;
+    case 'saturation': { // Clipped waveform
       ctx.beginPath();
       for (let i = 0; i <= 24; i++) {
         const t = i / 24;
         const x = (cx - r) + t * r * 2;
-        let y = Math.sin(t * Math.PI * 2.5 + phase) * r * 1.0;
-        y = Math.max(-r * clip, Math.min(r * clip, y));
+        let y = Math.sin(t * Math.PI * 2.5) * r * 1.0;
+        y = Math.max(-r * 0.5, Math.min(r * 0.5, y)); // clip
         ctx[i === 0 ? 'moveTo' : 'lineTo'](x, cy + y);
       }
       ctx.stroke();
+      // Clip lines
       ctx.setLineDash([2, 2]);
       ctx.globalAlpha = 0.4;
       ctx.beginPath();
-      ctx.moveTo(cx - r, cy - r * clip);
-      ctx.lineTo(cx + r, cy - r * clip);
-      ctx.moveTo(cx - r, cy + r * clip);
-      ctx.lineTo(cx + r, cy + r * clip);
+      ctx.moveTo(cx - r, cy - r * 0.5);
+      ctx.lineTo(cx + r, cy - r * 0.5);
+      ctx.moveTo(cx - r, cy + r * 0.5);
+      ctx.lineTo(cx + r, cy + r * 0.5);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
       break;
     }
-    case 'hiss': { // Spectral noise bars — jitter with value
+    case 'hiss': { // Spectral noise bars
       const bars = 7;
       const bw = (r * 2) / (bars * 2 - 1);
-      const baseH = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.3];
+      const heights = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.3];
       for (let i = 0; i < bars; i++) {
         const x = cx - r + i * bw * 2;
-        const jitter = norm * Math.sin(time * 8 + i * 2.3) * 0.25;
-        const h = (baseH[i] + jitter) * r * 1.4;
+        const h = heights[i] * r * 1.4;
         ctx.fillRect(x, cy + r * 0.7 - h, bw, h);
       }
       break;
@@ -2098,18 +1539,9 @@ function updateHeightMap(time) {
       h += Perlin.noise2D(nx * 2.3, nz * 2.3) * 0.25;
       h += Perlin.noise2D(nx * 4.5 + 10, nz * 4.5 + 10) * 0.1;
 
-      // Blend in real scope data from JUCE when available
-      if (scopeData && scopeData.length > 0) {
-        const scopeIdx = Math.floor(c / (GRID - 1) * (scopeData.length - 1));
-        const scopeVal = scopeData[scopeIdx] || 0;
-        // Spread across rows with slight time offset for depth effect
-        const rowFactor = 1 - Math.abs(r / (GRID - 1) - 0.5) * 1.5;
-        h += scopeVal * 0.4 * Math.max(0, rowFactor);
-      } else {
-        // Fake audio reactivity in preview mode
-        const audioSim = Math.sin(time * 2.0 + c * 0.4) * 0.15 * Math.exp(-Math.abs(c / GRID - 0.5) * 4);
-        h += audioSim;
-      }
+      // Fake audio reactivity: add sine waves
+      const audioSim = Math.sin(time * 2.0 + c * 0.4) * 0.15 * Math.exp(-Math.abs(c / GRID - 0.5) * 4);
+      h += audioSim;
 
       // Edge fade
       const edgeFade = 1 - Math.pow(Math.abs(c / (GRID - 1) - 0.5) * 2, 3);
@@ -2244,22 +1676,21 @@ function buildKnobs() {
     group.className = 'knob-group';
     group.dataset.param = id;
 
-    // Knob wrap with icon inside
+    // Icon
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'knob-icon';
+    const iconCanvas = document.createElement('canvas');
+    setupCanvas(iconCanvas, 16, 16);
+    drawIcon(iconCanvas, id, '#B0A4C0');
+    iconDiv.appendChild(iconCanvas);
+    group.appendChild(iconDiv);
+
+    // Knob
     const knobWrap = document.createElement('div');
     knobWrap.className = 'knob-canvas-wrap';
     const knobCanvas = document.createElement('canvas');
-    knobCanvas.className = 'knob-arc';
     setupCanvas(knobCanvas, 56, 56);
     knobWrap.appendChild(knobCanvas);
-
-    // Icon overlaid inside knob center
-    const iconCanvas = document.createElement('canvas');
-    iconCanvas.className = 'knob-icon-inner';
-    setupCanvas(iconCanvas, 28, 28);
-    const initNorm = normalize(id, state.params[id]);
-    drawIcon(iconCanvas, id, iconColorForNorm(initNorm), initNorm, 0);
-    knobWrap.appendChild(iconCanvas);
-
     group.appendChild(knobWrap);
 
     // Value
@@ -2291,14 +1722,12 @@ function buildKnobs() {
       state.dragStartY = e.clientY;
       state.dragStartVal = normalize(id, state.params[id]);
       hideTooltip();
-      if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.sliderDragStarted();
     });
 
     knobWrap.addEventListener('dblclick', (e) => {
       e.preventDefault();
       state.params[id] = p.default;
       updateKnobDisplay(id);
-      pushParamToJuce(id);
       // Flash animation
       knobWrap.style.animation = 'flash-default 0.3s ease-out';
       setTimeout(() => knobWrap.style.animation = '', 300);
@@ -2311,10 +1740,12 @@ function buildKnobs() {
 
     group.addEventListener('mouseenter', () => {
       state.hoveredKnob = id;
+      drawIcon(iconCanvas, id, '#8B5CF6');
       state.tooltipTimer = setTimeout(() => showTooltip(group, id), 300);
     });
     group.addEventListener('mouseleave', () => {
       state.hoveredKnob = null;
+      drawIcon(iconCanvas, id, '#B0A4C0');
       clearTimeout(state.tooltipTimer);
       hideTooltip();
     });
@@ -2324,27 +1755,16 @@ function buildKnobs() {
   }
 }
 
-// Blend from muted (#B0A4C0) to purple (#8B5CF6) based on normalized value
-function iconColorForNorm(norm) {
-  const r = Math.round(176 + (139 - 176) * norm);
-  const g = Math.round(164 + (92 - 164) * norm);
-  const b = Math.round(192 + (246 - 192) * norm);
-  return `rgb(${r},${g},${b})`;
-}
-
 function updateKnobDisplay(id) {
   const group = document.querySelector(`.knob-group[data-param="${id}"]`);
   if (!group) return;
   const norm = normalize(id, state.params[id]);
   drawKnob(group._knobCanvas, norm, state.draggingKnob === id, state.hoveredKnob === id);
   group._valueEl.textContent = formatValue(id, state.params[id]);
-  // Icon redrawn by updateAnimatedIcons() in animation loop — skip here to avoid double-draw
   if (state.draggingKnob === id) {
     group._valueEl.classList.add('glowing');
-    group.classList.add('dragging');
   } else {
     group._valueEl.classList.remove('glowing');
-    group.classList.remove('dragging');
   }
 }
 
@@ -2365,7 +1785,7 @@ function showTooltip(group, id) {
   document.getElementById('tt-title').textContent = p.label;
   const ttIcon = document.getElementById('tt-icon');
   setupCanvas(ttIcon, 14, 14);
-  drawIcon(ttIcon, id, '#8B5CF6', norm, 0);
+  drawIcon(ttIcon, id, '#8B5CF6');
 
   document.getElementById('tt-desc').textContent = p.desc;
 
@@ -2387,75 +1807,19 @@ function showTooltip(group, id) {
   document.getElementById('tt-pct').textContent = (norm * 100).toFixed(1) + '%';
   document.getElementById('tt-tip').textContent = 'Tip: ' + p.tip;
 
-  // Positioned by CSS inside hero (bottom-right) — just show it
+  // Position
+  const rect = group.getBoundingClientRect();
+  const ttW = 260;
+  let left = rect.left + rect.width / 2 - ttW / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - ttW - 8));
+  tooltipEl.style.left = left + 'px';
+  tooltipEl.style.top = (rect.bottom + 8) + 'px';
   tooltipEl.classList.add('visible');
 }
 
 function hideTooltip() {
   tooltipEl.classList.remove('visible');
 }
-
-// Scope control tooltip definitions
-const SCOPE_TIPS = {
-  'randomize-btn': {
-    title: 'RANDOMIZE',
-    desc: 'Scrambles all parameter values to generate unexpected textures. Great for discovering new sounds and happy accidents.',
-    tip: 'Tip: Double-click any knob to reset it back to default after randomizing.'
-  },
-  'xy-play': {
-    title: 'XY AUTO-PLAY',
-    desc: 'Enables automatic XY pad animation. The cursor moves on its own, continuously modulating Grain Size, Spray, Density, Drift, and Mix in real time.',
-    tip: 'Tip: Combine with different modes and speeds for evolving, hands-free textures.'
-  },
-  'xy-mode': {
-    title: 'XY MODE',
-    desc: 'Switches between Chaotic and Smooth animation styles. Chaotic jumps randomly across the pad. Smooth traces flowing Lissajous curves for gradual, organic movement.',
-    tip: 'Tip: Chaotic mode at low speed creates slow, unpredictable shifts. Smooth mode is great for ambient drifts.'
-  },
-  'xy-speed-wrap': {
-    title: 'XY SPEED',
-    desc: 'Controls how fast the XY auto-animation moves. In Chaotic mode, it sets the jump frequency. In Smooth mode, it sets the curve traversal speed.',
-    tip: 'Tip: Drag up/down to adjust. Low speed for slow evolution, high speed for rapid modulation.'
-  }
-};
-
-function showScopeTooltip(id) {
-  const info = SCOPE_TIPS[id];
-  if (!info) return;
-
-  document.getElementById('tt-title').textContent = info.title;
-  // Hide the icon for scope tips
-  const ttIcon = document.getElementById('tt-icon');
-  ttIcon.style.display = 'none';
-
-  document.getElementById('tt-desc').textContent = info.desc;
-  document.getElementById('tt-stats').innerHTML = '';
-  document.getElementById('tt-bar').style.width = '0%';
-  document.getElementById('tt-pct').textContent = '';
-  document.getElementById('tt-tip').textContent = info.tip;
-
-  tooltipEl.classList.add('visible');
-}
-
-function hideScopeTooltip() {
-  tooltipEl.classList.remove('visible');
-  // Restore icon visibility for param tooltips
-  document.getElementById('tt-icon').style.display = '';
-}
-
-// Wire up scope control hover events
-['randomize-btn', 'xy-play', 'xy-mode', 'xy-speed-wrap'].forEach(id => {
-  const el = document.getElementById(id);
-  if (!el) return;
-  let timer;
-  el.addEventListener('mouseenter', () => {
-    timer = setTimeout(() => showScopeTooltip(id), 300);
-  });
-  el.addEventListener('mouseleave', () => {
-    clearTimeout(timer);
-    hideScopeTooltip();
-  });
-});
 
 // ---- Context Menu ----
 const ctxMenu = document.getElementById('context-menu');
@@ -2480,11 +1844,9 @@ ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
       // Only paste if same param type or compatible
       state.params[ctxParam] = Math.max(PARAMS[ctxParam].min, Math.min(PARAMS[ctxParam].max, state.copiedValue.val));
       updateKnobDisplay(ctxParam);
-      pushParamToJuce(ctxParam);
     } else if (action === 'reset' && ctxParam) {
       state.params[ctxParam] = PARAMS[ctxParam].default;
       updateKnobDisplay(ctxParam);
-      pushParamToJuce(ctxParam);
     }
     ctxMenu.style.display = 'none';
   });
@@ -2500,7 +1862,6 @@ document.addEventListener('mousemove', (e) => {
     const newNorm = Math.max(0, Math.min(1, state.dragStartVal + delta));
     state.params[id] = denormalize(id, newNorm);
     updateKnobDisplay(id);
-    if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.setNormalisedValue(newNorm);
   }
 
   // Output slider dragging
@@ -2510,7 +1871,6 @@ document.addEventListener('mousemove', (e) => {
     const norm = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     state.outputGain = denormalizeOutput(norm);
     updateOutputDisplay();
-    if (juceMode && JUCE_OUTPUT.sliderState) JUCE_OUTPUT.sliderState.setNormalisedValue(norm);
   }
 
   // Hero XY
@@ -2520,7 +1880,6 @@ document.addEventListener('mousemove', (e) => {
     state.xyX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     state.xyY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
     updateXYReadout();
-    applyXYToParams();
     updateCrosshair(e);
   }
 });
@@ -2528,12 +1887,8 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
   if (state.draggingKnob) {
     const id = state.draggingKnob;
-    if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.sliderDragEnded();
     state.draggingKnob = null;
     updateKnobDisplay(id);
-  }
-  if (state.draggingOutput && juceMode && JUCE_OUTPUT.sliderState) {
-    JUCE_OUTPUT.sliderState.sliderDragEnded();
   }
   state.draggingOutput = false;
   if (state.draggingHero) {
@@ -2546,44 +1901,18 @@ document.addEventListener('mouseup', () => {
 const heroEl = document.getElementById('hero');
 heroEl.addEventListener('mousedown', (e) => {
   if (e.target.closest('.xy-controls')) return;
-  if (e.target.closest('.scope-controls-left')) return;
   state.draggingHero = true;
   heroEl.classList.add('dragging');
   const rect = heroEl.getBoundingClientRect();
   state.xyX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   state.xyY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
   updateXYReadout();
-  applyXYToParams();
   updateCrosshair(e);
 });
 
 function updateXYReadout() {
   const el = document.getElementById('xy-readout');
   el.textContent = `X: ${Math.round(state.xyX * 100)}%  Y: ${Math.round(state.xyY * 100)}%`;
-}
-
-// Map XY pad position to grain parameters
-function applyXYToParams() {
-  const x = state.xyX; // 0-1
-  const y = state.xyY; // 0-1
-
-  // X axis controls grain size and spray
-  state.params.grainSize = PARAMS.grainSize.min + x * (PARAMS.grainSize.max - PARAMS.grainSize.min);
-  state.params.spray = x * PARAMS.spray.max;
-
-  // Y axis controls density, drift, mix
-  state.params.density = PARAMS.density.min + y * (PARAMS.density.max - PARAMS.density.min);
-  state.params.drift = y * PARAMS.drift.max;
-  state.params.mix = PARAMS.mix.min + y * (PARAMS.mix.max - PARAMS.mix.min);
-
-  // Update knob displays and push to JUCE (lightweight — no drag start/end)
-  const xyParams = ['grainSize', 'spray', 'density', 'drift', 'mix'];
-  for (const id of xyParams) {
-    updateKnobDisplay(id);
-    if (juceMode && JUCE_PARAMS[id]?.sliderState) {
-      JUCE_PARAMS[id].sliderState.setNormalisedValue(normalize(id, state.params[id]));
-    }
-  }
 }
 
 function updateCrosshair(e) {
@@ -2599,90 +1928,15 @@ function updateCrosshair(e) {
 document.getElementById('xy-play').addEventListener('click', function() {
   state.xyAutoPlay = !state.xyAutoPlay;
   this.classList.toggle('active', state.xyAutoPlay);
-  syncXYState();
 });
-
-// XY mode button (chaotic vs smooth)
-document.getElementById('xy-mode').addEventListener('click', function() {
-  state.xyAutoMode = state.xyAutoMode === 0 ? 1 : 0;
-  this.classList.toggle('active', state.xyAutoMode === 1);
-  this.textContent = state.xyAutoMode === 1 ? '~' : '?';
-  this.title = state.xyAutoMode === 1 ? 'Mode: Smooth' : 'Mode: Chaotic';
-  syncXYState();
-});
-
-// XY speed knob (drag to adjust)
-function drawSpeedKnob() {
-  const c = document.getElementById('xy-speed-canvas');
-  if (!c) return;
-  const dpr = window.devicePixelRatio || 1;
-  c.width = 20 * dpr;
-  c.height = 20 * dpr;
-  c.style.width = '20px';
-  c.style.height = '20px';
-  const ctx = c.getContext('2d');
-  ctx.scale(dpr, dpr);
-  const cx = 10, cy = 10, r = 7;
-  // Arc background
-  const startAngle = 0.75 * Math.PI;
-  const endAngle = 0.75 * Math.PI + 1.5 * Math.PI;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, startAngle, endAngle, false);
-  ctx.strokeStyle = 'rgba(139,92,246,0.15)';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  // Arc value
-  const valueAngle = startAngle + state.xyAutoSpeed * 1.5 * Math.PI;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, startAngle, valueAngle, false);
-  ctx.strokeStyle = '#8B5CF6';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  // Indicator dot
-  const dotX = cx + Math.cos(valueAngle) * r;
-  const dotY = cy + Math.sin(valueAngle) * r;
-  ctx.beginPath();
-  ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
-  ctx.fillStyle = '#8B5CF6';
-  ctx.fill();
-}
-
-(function() {
-  const wrap = document.getElementById('xy-speed-wrap');
-  if (!wrap) return;
-  let dragging = false, startY = 0, startVal = 0;
-  wrap.addEventListener('mousedown', (e) => {
-    dragging = true;
-    startY = e.clientY;
-    startVal = state.xyAutoSpeed;
-    e.preventDefault();
-    e.stopPropagation();
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    const delta = (startY - e.clientY) / 100;
-    state.xyAutoSpeed = Math.max(0, Math.min(1, startVal + delta));
-    drawSpeedKnob();
-    syncXYState();
-  });
-  window.addEventListener('mouseup', () => { dragging = false; });
-})();
 
 // ---- Preset Navigation ----
 function loadPreset(idx) {
   state.presetIdx = idx;
   const preset = PRESETS[idx];
   document.getElementById('preset-name').textContent = preset.name;
-  if (juceMode && loadPresetFn) {
-    // In JUCE mode, let the backend load the preset — slider value change listeners will update local state
-    loadPresetFn(idx);
-  } else if (preset.vals) {
-    // Browser preview mode — apply mock values
-    for (const [id, val] of Object.entries(preset.vals)) {
-      state.params[id] = val;
-    }
+  for (const [id, val] of Object.entries(preset.vals)) {
+    state.params[id] = val;
   }
   updateAllKnobs();
   buildPresetGrid();
@@ -2696,13 +1950,11 @@ document.getElementById('preset-next').addEventListener('click', () => {
 });
 
 // ---- Preset Browser ----
-function togglePresetBrowser() {
+document.getElementById('preset-grid-btn').addEventListener('click', () => {
   state.browserOpen = !state.browserOpen;
   document.getElementById('preset-browser').classList.toggle('open', state.browserOpen);
   document.getElementById('preset-grid-btn').classList.toggle('active', state.browserOpen);
-}
-document.getElementById('preset-grid-btn').addEventListener('click', togglePresetBrowser);
-document.getElementById('preset-name').addEventListener('click', togglePresetBrowser);
+});
 
 function buildCategoryButtons() {
   const container = document.getElementById('browser-cats');
@@ -2772,10 +2024,9 @@ function updateSectionFocus() {
 }
 
 document.getElementById('grain-header').addEventListener('click', (e) => {
-  if (e.target.closest('.section-toggle-btn')) {
+  if (e.target.closest('.section-toggle')) {
     state.sectionEnabled.grain = !state.sectionEnabled.grain;
     document.getElementById('grain-toggle').classList.toggle('off', !state.sectionEnabled.grain);
-    if (juceMode && setGrainEngineEnabledFn) setGrainEngineEnabledFn(state.sectionEnabled.grain ? 1 : 0);
     return;
   }
   state.focusedSection = state.focusedSection === 'grain' ? null : 'grain';
@@ -2783,10 +2034,9 @@ document.getElementById('grain-header').addEventListener('click', (e) => {
 });
 
 document.getElementById('tape-header').addEventListener('click', (e) => {
-  if (e.target.closest('.section-toggle-btn')) {
+  if (e.target.closest('.section-toggle')) {
     state.sectionEnabled.tape = !state.sectionEnabled.tape;
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
-    if (juceMode && setTapeEnabledFn) setTapeEnabledFn(state.sectionEnabled.tape ? 1 : 0);
     return;
   }
   state.focusedSection = state.focusedSection === 'tape' ? null : 'tape';
@@ -2808,22 +2058,12 @@ outputSlider.addEventListener('mousedown', (e) => {
   const norm = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   state.outputGain = denormalizeOutput(norm);
   updateOutputDisplay();
-  if (juceMode && JUCE_OUTPUT.sliderState) {
-    JUCE_OUTPUT.sliderState.sliderDragStarted();
-    JUCE_OUTPUT.sliderState.setNormalisedValue(norm);
-  }
 });
 
 // Double-click to reset output
 outputSlider.addEventListener('dblclick', () => {
   state.outputGain = OUTPUT_PARAM.default;
   updateOutputDisplay();
-  if (juceMode && JUCE_OUTPUT.sliderState) {
-    const norm = normalizeOutput(state.outputGain);
-    JUCE_OUTPUT.sliderState.sliderDragStarted();
-    JUCE_OUTPUT.sliderState.setNormalisedValue(norm);
-    JUCE_OUTPUT.sliderState.sliderDragEnded();
-  }
 });
 
 // ---- Master Mix Knob ----
@@ -2892,17 +2132,11 @@ masterMixKnob.addEventListener('mousedown', (e) => {
   draggingMasterMix = true;
   state.dragStartY = e.clientY;
   state.dragStartVal = state.masterMix;
-  if (juceMode && JUCE_MASTER_MIX.sliderState) JUCE_MASTER_MIX.sliderState.sliderDragStarted();
 });
 
 masterMixKnob.addEventListener('dblclick', () => {
   state.masterMix = 100;
   updateMasterMixDisplay();
-  if (juceMode && JUCE_MASTER_MIX.sliderState) {
-    JUCE_MASTER_MIX.sliderState.sliderDragStarted();
-    JUCE_MASTER_MIX.sliderState.setNormalisedValue(1.0);
-    JUCE_MASTER_MIX.sliderState.sliderDragEnded();
-  }
 });
 
 document.addEventListener('mousemove', (e) => {
@@ -2912,11 +2146,9 @@ document.addEventListener('mousemove', (e) => {
   const delta = (dy / shift) * 100;
   state.masterMix = Math.max(0, Math.min(100, state.dragStartVal + delta));
   updateMasterMixDisplay();
-  if (juceMode && JUCE_MASTER_MIX.sliderState) JUCE_MASTER_MIX.sliderState.setNormalisedValue(state.masterMix / 100);
 });
 
 document.addEventListener('mouseup', () => {
-  if (draggingMasterMix && juceMode && JUCE_MASTER_MIX.sliderState) JUCE_MASTER_MIX.sliderState.sliderDragEnded();
   draggingMasterMix = false;
 });
 
@@ -2947,8 +2179,8 @@ function updateMeters(time) {
 function updateSectionIcons() {
   const grainIcon = document.getElementById('grain-section-icon');
   const tapeIcon = document.getElementById('tape-section-icon');
-  setupCanvas(grainIcon, 20, 20);
-  setupCanvas(tapeIcon, 20, 20);
+  setupCanvas(grainIcon, 14, 14);
+  setupCanvas(tapeIcon, 14, 14);
   const grainColor = state.sectionEnabled.grain ? '#8B5CF6' : '#B0A4C0';
   const tapeColor = state.sectionEnabled.tape ? '#8B5CF6' : '#B0A4C0';
   drawIcon(grainIcon, 'grainWave', grainColor);
@@ -3025,59 +2257,14 @@ document.getElementById('randomize-btn').addEventListener('click', function() {
     }
   }
   updateAllKnobs();
-  // Push all randomized params to JUCE
-  if (juceMode) {
-    for (const id of Object.keys(PARAMS)) {
-      pushParamToJuce(id);
-    }
-  }
 });
 
 // ---- XY Auto Animation ----
-let _chaosLastJump = 0;
-let _chaosTargetX = 0.5;
-let _chaosTargetY = 0.5;
-
 function updateXYAuto(time) {
-  const hero = document.getElementById('hero');
-  if (!state.xyAutoPlay || state.draggingHero) {
-    hero.classList.remove('xy-active');
-    return;
-  }
-  hero.classList.add('xy-active');
-  const speed = 0.1 + state.xyAutoSpeed * 1.5; // map 0-1 → 0.1-1.6
-  if (state.xyAutoMode === 1) {
-    // Smooth: sinusoidal Lissajous figure
-    state.xyX = 0.5 + Math.sin(time * speed * 0.7) * 0.35;
-    state.xyY = 0.5 + Math.cos(time * speed * 0.5) * 0.3;
-  } else {
-    // Chaotic: true random jumps — speed controls jump frequency
-    const jumpInterval = Math.max(0.08, 3.0 - speed * 1.8); // slow ~3s, fast ~0.1s
-    if (time - _chaosLastJump > jumpInterval) {
-      _chaosLastJump = time;
-      // Random position within padded bounds (10%-90%)
-      _chaosTargetX = 0.1 + Math.random() * 0.8;
-      _chaosTargetY = 0.1 + Math.random() * 0.8;
-    }
-    state.xyX = _chaosTargetX;
-    state.xyY = _chaosTargetY;
-  }
-  // Update crosshair position from XY state
-  document.getElementById('crosshair-h').style.top = (state.xyY * hero.offsetHeight) + 'px';
-  document.getElementById('crosshair-v').style.left = (state.xyX * hero.offsetWidth) + 'px';
-  updateXYReadout();
-  applyXYToParams();
-}
-
-// ---- Animated Icons ----
-function updateAnimatedIcons(time) {
-  for (const [id, p] of Object.entries(PARAMS)) {
-    const norm = normalize(id, state.params[id]);
-    if (norm < 0.01 && state.draggingKnob !== id && state.hoveredKnob !== id) continue;
-    const group = document.querySelector(`.knob-group[data-param="${id}"]`);
-    if (!group || !group._iconCanvas) continue;
-    const color = (state.hoveredKnob === id || state.draggingKnob === id) ? '#8B5CF6' : iconColorForNorm(norm);
-    drawIcon(group._iconCanvas, id, color, norm, time);
+  if (state.xyAutoPlay && !state.draggingHero) {
+    state.xyX = 0.5 + Math.sin(time * 0.3) * 0.3;
+    state.xyY = 0.5 + Math.cos(time * 0.23) * 0.25;
+    updateXYReadout();
   }
 }
 
@@ -3090,7 +2277,6 @@ function animate(timestamp) {
   updateMeters(time);
   updateSectionIcons();
   updateXYAuto(time);
-  updateAnimatedIcons(time);
 
   requestAnimationFrame(animate);
 }
@@ -3101,17 +2287,10 @@ function init() {
   drawGridIcon();
   drawOutputIcon();
   drawRandomizeIcon();
-  drawSpeedKnob();
   buildKnobs();
   buildCategoryButtons();
   buildPresetGrid();
-  // Initialize JUCE bindings (sync param values from DAW)
-  initJuceBindings();
-  initJucePresets();
-  if (!juceMode) {
-    // Browser preview — load first mock preset
-    loadPreset(0);
-  }
+  loadPreset(0);
   updateOutputDisplay();
   updateMasterMixDisplay();
   requestAnimationFrame(animate);

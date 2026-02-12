@@ -18,32 +18,32 @@ TerrainAudioProcessor::~TerrainAudioProcessor()
 //==============================================================================
 void TerrainAudioProcessor::initializePresets()
 {
-    //                                    grSz   dens  spray pitch  drift  mix    wow    sat   hiss  outGn  xyEn xyMd xySpd  gSync
+    //                                    grSz   dens  spray pitch  drift  mix    wow    sat   hiss  outGn  mMix xyEn xyMd xySpd  gSync  grEn  tpEn
     presets = {
-        { "Init",                          80.f,  20.f, 40.f,  0.f,   0.f,  50.f,  0.f,   0.f,  0.f,  0.f,  0.f, 0.f, 0.5f,  0.f },
-        { "Soft Keys",                    332.5f, 29.8f, 7.f,  0.f,  17.9f, 82.f, 39.5f, 54.5f, 5.f,  7.f,  0.f, 0.f, 0.5f,  0.f },
-        { "Movements",                     99.3f, 34.f, 43.6f, 0.f,  57.7f, 50.f,  0.f,   0.f,  0.f,  7.f,  1.f, 0.f, 0.5f,  0.f },
-        { "Super Messed Up",               55.4f,  7.1f, 31.9f, 0.f, 24.9f, 74.f, 43.f,  12.f,  3.f,  3.5f, 1.f, 1.f, 0.472f, 0.f },
-        { "Tape Master",                   60.3f, 80.1f, 11.9f, 0.f,  0.f,  39.f, 46.f,  70.f,  3.f,  0.f,  0.f, 1.f, 0.472f, 0.f },
-        { "Delay The Pluck",              500.f,   3.3f,  3.5f, 12.f,  0.f,  40.f, 26.5f, 22.5f, 0.f,  0.f,  0.f, 0.f, 0.5f,  0.f },
-        { "Synced Grains",                268.7f,  5.8f,  9.5f, 0.f,   0.f,  67.5f, 17.5f, 31.5f, 1.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Clown Delay",                  114.3f, 16.8f,  0.f,  0.f,   0.f,  80.5f, 17.5f,  7.f,  1.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Instant Pad",                  152.1f, 26.8f,  5.f,  0.f,   3.f,  50.f, 41.f,  13.f,  0.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Slow Changes",                 346.5f, 43.8f, 83.1f, 0.f,  65.8f,100.f,  0.f,   0.f,  0.f,  0.f, 1.f, 0.f, 0.f,   1.f },
-        { "Mood",                          156.f,  7.8f,  9.f,  0.f,  23.1f, 50.f, 40.f,  32.5f, 1.f,  0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Soundscape",                   220.2f, 54.9f, 81.5f, 0.f,   0.f, 100.f, 44.f,  20.5f, 0.f,  0.f, 0.f, 0.f, 0.5f,  0.f },
-        { "Use A Key",                    103.3f, 28.3f,  1.f, -12.f,  0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 0.f, 1.f, 0.f,   1.f },
-        { "Blank Forms",                   17.5f, 100.f, 25.f,  0.f,   0.f, 100.f,  9.5f, 29.f,  5.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Habits",                       261.1f, 55.2f,  0.f,  0.f,  71.f,  20.5f, 44.f,   9.5f, 8.f, 0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Pitch Drifter",                146.3f, 24.2f,  2.5f,-12.f, 100.f, 100.f, 28.f,  30.5f, 0.5f, 0.f, 0.f, 0.f, 0.5f,  0.f },
-        { "Mandalorian",                  240.1f, 13.5f, 68.9f,-12.f,  35.6f,100.f, 28.f,  30.5f, 0.5f, 0.f, 1.f, 1.f, 0.056f, 0.f },
-        { "See The Light",                280.7f, 53.f,  32.6f, 12.f,  31.9f,100.f, 28.f,  30.5f, 0.5f, 0.f, 0.f, 1.f, 0.056f, 0.f },
-        { "Back To The Future",           325.8f,  1.f, 100.f,  0.f,  39.f,  50.f,  0.f,   0.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Saturation",                   268.9f, 10.5f,  1.5f, 0.f,   0.f,  50.f, 19.f,  83.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  1.f },
-        { "Chop Shop",                     49.3f, 100.f, 40.f,  0.f,   0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  0.f },
-        { "Depressed",                    171.2f, 81.2f, 40.f, -12.f,  0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 0.f, 0.f, 0.5f,  0.f },
-        { "Deep Rest",                    168.3f, 81.2f, 40.f, -12.f, 25.f, 100.f, 48.5f, 54.5f, 3.5f, 0.f, 0.f, 0.f, 0.5f,  0.f },
-        { "Final Tape",                   183.3f, 71.2f,  3.f,  0.f,   0.f,  40.f, 33.f,  53.f, 15.5f, 0.f, 0.f, 0.f, 0.5f,  1.f },
+        { "Init",                          80.f,  20.f, 40.f,  0.f,   0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Soft Keys",                    332.5f, 29.8f, 7.f,  0.f,  17.9f, 82.f, 39.5f, 54.5f, 5.f,  7.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Movements",                     99.3f, 34.f, 43.6f, 0.f,  57.7f, 50.f,  0.f,   0.f,  0.f,  7.f, 100.f, 1.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Super Messed Up",               55.4f,  7.1f, 31.9f, 0.f, 24.9f, 74.f, 43.f,  12.f,  3.f,  3.5f, 100.f, 1.f, 1.f, 0.472f, 0.f, 1.f, 1.f },
+        { "Tape Master",                   60.3f, 80.1f, 11.9f, 0.f,  0.f,  39.f, 46.f,  70.f,  3.f,  0.f, 100.f, 0.f, 1.f, 0.472f, 0.f, 1.f, 1.f },
+        { "Delay The Pluck",              500.f,   3.3f,  3.5f, 12.f,  0.f,  40.f, 26.5f, 22.5f, 0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Synced Grains",                268.7f,  5.8f,  9.5f, 0.f,   0.f,  67.5f, 17.5f, 31.5f, 1.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Clown Delay",                  114.3f, 16.8f,  0.f,  0.f,   0.f,  80.5f, 17.5f,  7.f,  1.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Instant Pad",                  152.1f, 26.8f,  5.f,  0.f,   3.f,  50.f, 41.f,  13.f,  0.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Slow Changes",                 346.5f, 43.8f, 83.1f, 0.f,  65.8f,100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 1.f, 0.f, 0.f,   1.f, 1.f, 1.f },
+        { "Mood",                          156.f,  7.8f,  9.f,  0.f,  23.1f, 50.f, 40.f,  32.5f, 1.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Soundscape",                   220.2f, 54.9f, 81.5f, 0.f,   0.f, 100.f, 44.f,  20.5f, 0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Use A Key",                    103.3f, 28.3f,  1.f, -12.f,  0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 1.f, 0.f,   1.f, 1.f, 1.f },
+        { "Blank Forms",                   17.5f, 100.f, 25.f,  0.f,   0.f, 100.f,  9.5f, 29.f,  5.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Habits",                       261.1f, 55.2f,  0.f,  0.f,  71.f,  20.5f, 44.f,   9.5f, 8.f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Pitch Drifter",                146.3f, 24.2f,  2.5f,-12.f, 100.f, 100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Mandalorian",                  240.1f, 13.5f, 68.9f,-12.f,  35.6f,100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 1.f, 1.f, 0.056f, 0.f, 1.f, 1.f },
+        { "See The Light",                280.7f, 53.f,  32.6f, 12.f,  31.9f,100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 0.f, 1.f, 0.056f, 0.f, 1.f, 1.f },
+        { "Back To The Future",           325.8f,  1.f, 100.f,  0.f,  39.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Saturation",                   268.9f, 10.5f,  1.5f, 0.f,   0.f,  50.f, 19.f,  83.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Chop Shop",                     49.3f, 100.f, 40.f,  0.f,   0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Depressed",                    171.2f, 81.2f, 40.f, -12.f,  0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Deep Rest",                    168.3f, 81.2f, 40.f, -12.f, 25.f, 100.f, 48.5f, 54.5f, 3.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Final Tape",                   183.3f, 71.2f,  3.f,  0.f,   0.f,  40.f, 33.f,  53.f, 15.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
     };
     numFactoryPresets = static_cast<int>(presets.size());  // All presets above are factory
 
@@ -75,6 +75,7 @@ void TerrainAudioProcessor::loadPreset(int index)
     setParam(ParameterIDs::SATURATION,   p.saturation);
     setParam(ParameterIDs::HISS,         p.hiss);
     setParam(ParameterIDs::OUTPUT_GAIN,  p.outputGain);
+    setParam(ParameterIDs::MASTER_MIX,   p.masterMix);
 
     // Restore XY automation state for this preset
     xyAutoEnabled.store(p.xyAutoEnabled);
@@ -83,6 +84,11 @@ void TerrainAudioProcessor::loadPreset(int index)
 
     // Restore grain sync state
     grainSyncEnabled.store(p.grainSyncEnabled);
+
+    // Restore grain engine on/off, tape on/off, and drift link states
+    grainEngineEnabled.store(p.grainEngineEnabled);
+    tapeEnabled.store(p.tapeEnabled);
+    driftLinked.store(p.driftLinked);
 }
 
 int TerrainAudioProcessor::getPresetCount() const
@@ -111,10 +117,14 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.saturation = apvts.getRawParameterValue(ParameterIDs::SATURATION)->load();
     p.hiss       = apvts.getRawParameterValue(ParameterIDs::HISS)->load();
     p.outputGain = apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load();
+    p.masterMix  = apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load();
     p.xyAutoEnabled    = xyAutoEnabled.load();
     p.xyAutoMode       = xyAutoMode.load();
     p.xyAutoSpeed      = xyAutoSpeed.load();
     p.grainSyncEnabled = grainSyncEnabled.load();
+    p.grainEngineEnabled = grainEngineEnabled.load();
+    p.tapeEnabled        = tapeEnabled.load();
+    p.driftLinked        = driftLinked.load();
     return p;
 }
 
@@ -234,6 +244,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("dB")));
 
+    // Master dry/wet mix: 0-100%, default 100% (fully wet)
+    layout.add (std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::MASTER_MIX, 1 },
+        "Master Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        100.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
     return layout;
 }
 
@@ -256,6 +274,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedSaturation.reset(sampleRate, 0.02);
     smoothedHiss.reset(sampleRate, 0.02);
     smoothedOutputGain.reset(sampleRate, 0.02);
+    smoothedMasterMix.reset(sampleRate, 0.02);
 
     // Set initial values
     smoothedGrainSize.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load());
@@ -268,6 +287,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedSaturation.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
     smoothedHiss.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::HISS)->load());
     smoothedOutputGain.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load());
+    smoothedMasterMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load());
 }
 
 void TerrainAudioProcessor::releaseResources()
@@ -346,12 +366,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     smoothedSaturation.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
     smoothedHiss.setTargetValue(apvts.getRawParameterValue(ParameterIDs::HISS)->load());
     smoothedOutputGain.setTargetValue(apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load());
+    smoothedMasterMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load());
 
     // Per-sample processing
     auto* leftChannel  = buffer.getWritePointer(0);
     auto* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
 
     int scopePos = scopeWritePos.load();
+
+    const bool grainOn = grainEngineEnabled.load() > 0.5f;
+    const bool tapeOn = tapeEnabled.load() > 0.5f;
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -366,22 +390,31 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float hissAmt      = smoothedHiss.getNextValue() * 0.01f;
         const float outputGainDb = smoothedOutputGain.getNextValue();
         const float outputGain   = std::pow(10.0f, outputGainDb / 20.0f); // dB to linear
+        const float masterMixAmt = smoothedMasterMix.getNextValue() * 0.01f; // 0-1
 
-        // Signal chain: Input → GrainEngine → TapeProcessor → Output Gain
-        float outL = grainEngineL.processSample(leftChannel[i],
-                                                 grainSize, density, spray,
-                                                 pitch, drift, mix);
-        outL = tapeProcessorL.processSample(outL, wowFlutter, saturationAmt, hissAmt);
-        outL *= outputGain;
+        // Capture dry input before processing
+        const float dryL = leftChannel[i];
+        const float dryR = rightChannel != nullptr ? rightChannel[i] : 0.0f;
+
+        // Signal chain: Input → GrainEngine (if enabled) → TapeProcessor → Master Mix → Output Gain
+        float wetL = grainOn
+            ? grainEngineL.processSample(leftChannel[i], grainSize, density, spray, pitch, drift, mix)
+            : leftChannel[i];
+        if (tapeOn)
+            wetL = tapeProcessorL.processSample(wetL, wowFlutter, saturationAmt, hissAmt);
+
+        float outL = (dryL * (1.0f - masterMixAmt) + wetL * masterMixAmt) * outputGain;
         leftChannel[i] = outL;
 
         if (rightChannel != nullptr)
         {
-            float outR = grainEngineR.processSample(rightChannel[i],
-                                                     grainSize, density, spray,
-                                                     pitch, drift, mix);
-            outR = tapeProcessorR.processSample(outR, wowFlutter, saturationAmt, hissAmt);
-            outR *= outputGain;
+            float wetR = grainOn
+                ? grainEngineR.processSample(rightChannel[i], grainSize, density, spray, pitch, drift, mix)
+                : rightChannel[i];
+            if (tapeOn)
+                wetR = tapeProcessorR.processSample(wetR, wowFlutter, saturationAmt, hissAmt);
+
+            float outR = (dryR * (1.0f - masterMixAmt) + wetR * masterMixAmt) * outputGain;
             rightChannel[i] = outR;
         }
 
@@ -427,7 +460,10 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty("xyAutoEnabled",    xyAutoEnabled.load(),     nullptr);
     state.setProperty("xyAutoMode",       xyAutoMode.load(),        nullptr);
     state.setProperty("xyAutoSpeed",      xyAutoSpeed.load(),       nullptr);
-    state.setProperty("grainSyncEnabled", grainSyncEnabled.load(),  nullptr);
+    state.setProperty("grainSyncEnabled",  grainSyncEnabled.load(),  nullptr);
+    state.setProperty("grainEngineEnabled", grainEngineEnabled.load(), nullptr);
+    state.setProperty("tapeEnabled",        tapeEnabled.load(),        nullptr);
+    state.setProperty("driftLinked",        driftLinked.load(),        nullptr);
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
@@ -453,6 +489,11 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
 
             // Restore grain sync state
             grainSyncEnabled.store(static_cast<float>(newState.getProperty("grainSyncEnabled", 0.f)));
+
+            // Restore grain engine on/off, tape on/off, and drift link states
+            grainEngineEnabled.store(static_cast<float>(newState.getProperty("grainEngineEnabled", 1.f)));
+            tapeEnabled.store(static_cast<float>(newState.getProperty("tapeEnabled", 1.f)));
+            driftLinked.store(static_cast<float>(newState.getProperty("driftLinked", 1.f)));
 
             // Reload presets from disk (the single source of truth)
             while (static_cast<int>(presets.size()) > numFactoryPresets)
@@ -507,10 +548,14 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("saturation",    p.saturation,    nullptr);
         node.setProperty("hiss",          p.hiss,          nullptr);
         node.setProperty("outputGain",    p.outputGain,    nullptr);
+        node.setProperty("masterMix",     p.masterMix,     nullptr);
         node.setProperty("xyAutoEnabled",    p.xyAutoEnabled,    nullptr);
         node.setProperty("xyAutoMode",       p.xyAutoMode,       nullptr);
         node.setProperty("xyAutoSpeed",      p.xyAutoSpeed,      nullptr);
-        node.setProperty("grainSyncEnabled", p.grainSyncEnabled, nullptr);
+        node.setProperty("grainSyncEnabled",  p.grainSyncEnabled,  nullptr);
+        node.setProperty("grainEngineEnabled", p.grainEngineEnabled, nullptr);
+        node.setProperty("tapeEnabled",        p.tapeEnabled,        nullptr);
+        node.setProperty("driftLinked",        p.driftLinked,        nullptr);
         root.addChild(node, -1, nullptr);
     }
 
@@ -561,10 +606,14 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.saturation    = static_cast<float>(child.getProperty("saturation",     0.f));
         p.hiss          = static_cast<float>(child.getProperty("hiss",           0.f));
         p.outputGain    = static_cast<float>(child.getProperty("outputGain",     0.f));
+        p.masterMix     = static_cast<float>(child.getProperty("masterMix",    100.f));
         p.xyAutoEnabled    = static_cast<float>(child.getProperty("xyAutoEnabled",    0.f));
         p.xyAutoMode       = static_cast<float>(child.getProperty("xyAutoMode",       0.f));
         p.xyAutoSpeed      = static_cast<float>(child.getProperty("xyAutoSpeed",     0.5f));
-        p.grainSyncEnabled = static_cast<float>(child.getProperty("grainSyncEnabled", 0.f));
+        p.grainSyncEnabled  = static_cast<float>(child.getProperty("grainSyncEnabled",  0.f));
+        p.grainEngineEnabled = static_cast<float>(child.getProperty("grainEngineEnabled", 1.f));
+        p.tapeEnabled        = static_cast<float>(child.getProperty("tapeEnabled",        1.f));
+        p.driftLinked        = static_cast<float>(child.getProperty("driftLinked",        1.f));
 
         presets.push_back(p);
         loaded++;

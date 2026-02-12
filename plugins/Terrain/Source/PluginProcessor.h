@@ -15,12 +15,19 @@ struct PresetData
     float grainSize, density, spray, pitch, drift, mix;
     float wowFlutter, saturation, hiss;
     float outputGain;
+    float masterMix = 100.f;
     // XY pad automation state
     float xyAutoEnabled = 0.f;  // 0 = off, 1 = on
     float xyAutoMode    = 0.f;  // 0 = chaotic, 1 = smooth
     float xyAutoSpeed   = 0.5f; // 0-1 normalized
     // Grain sync state
     float grainSyncEnabled = 0.f; // 0 = free (ms), 1 = synced to BPM
+    // Grain engine on/off
+    float grainEngineEnabled = 1.f; // 1 = on (default), 0 = bypass grain processing
+    // Tape engine on/off
+    float tapeEnabled = 1.f; // 1 = on (default), 0 = bypass tape processing
+    // Drift link to XY pad
+    float driftLinked = 1.f; // 1 = linked (default), 0 = unlinked from XY pad
 };
 
 //==============================================================================
@@ -80,6 +87,15 @@ public:
     std::atomic<float> grainSyncEnabled { 0.f };
     std::atomic<float> currentBPM { 120.f }; // populated from playhead
 
+    // Grain engine master on/off (synced from JS, captured into presets)
+    std::atomic<float> grainEngineEnabled { 1.f }; // 1 = on, 0 = bypass
+
+    // Tape engine master on/off (synced from JS, captured into presets)
+    std::atomic<float> tapeEnabled { 1.f }; // 1 = on, 0 = bypass
+
+    // Drift link to XY pad (synced from JS, captured into presets)
+    std::atomic<float> driftLinked { 1.f }; // 1 = linked, 0 = unlinked
+
     static constexpr int SCOPE_SIZE = 256;
     std::array<std::atomic<float>, SCOPE_SIZE> scopeBuffer {};
     std::atomic<int> scopeWritePos { 0 };
@@ -111,6 +127,7 @@ private:
 
     // Smoothed parameters — output
     juce::SmoothedValue<float> smoothedOutputGain;
+    juce::SmoothedValue<float> smoothedMasterMix;
 
     // Presets
     void initializePresets();

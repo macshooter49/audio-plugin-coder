@@ -37,6 +37,7 @@ private:
     juce::WebSliderRelay saturationRelay { ParameterIDs::SATURATION };
     juce::WebSliderRelay hissRelay       { ParameterIDs::HISS };
     juce::WebSliderRelay outputGainRelay { ParameterIDs::OUTPUT_GAIN };
+    juce::WebSliderRelay masterMixRelay  { ParameterIDs::MASTER_MIX };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -52,6 +53,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> saturationAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> hissAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> outputGainAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> masterMixAttachment;
 
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);

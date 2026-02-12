@@ -25,6 +25,7 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             .withOptionsFrom(saturationRelay)
             .withOptionsFrom(hissRelay)
             .withOptionsFrom(outputGainRelay)
+            .withOptionsFrom(masterMixRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -118,6 +119,42 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
                 obj->setProperty("bpm",     audioProcessor.currentBPM.load());
                 complete(juce::var(obj));
             })
+            .withNativeFunction("setGrainEngineEnabled", [this](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.grainEngineEnabled.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getGrainEngineEnabled", [this](const juce::Array<juce::var>&,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.grainEngineEnabled.load());
+            })
+            .withNativeFunction("setTapeEnabled", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.tapeEnabled.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getTapeEnabled", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.tapeEnabled.load());
+            })
+            .withNativeFunction("setDriftLinked", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.driftLinked.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getDriftLinked", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.driftLinked.load());
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
@@ -156,11 +193,14 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     outputGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::OUTPUT_GAIN), outputGainRelay, nullptr);
 
+    masterMixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::MASTER_MIX), masterMixRelay, nullptr);
+
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
     // Set size AFTER webView is created (setSize triggers resized())
-    setSize (600, 570);
+    setSize (820, 640);
 
     // Start visualization timer at 30Hz
     startTimerHz(30);
