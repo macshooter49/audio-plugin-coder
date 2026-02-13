@@ -20,6 +20,7 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             .withOptionsFrom(sprayRelay)
             .withOptionsFrom(pitchRelay)
             .withOptionsFrom(wanderRelay)
+            .withOptionsFrom(freezeRelay)
             .withOptionsFrom(mixRelay)
             .withOptionsFrom(wowFlutterRelay)
             .withOptionsFrom(saturationRelay)
@@ -177,6 +178,9 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
 
     wanderAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::WANDER), wanderRelay, nullptr);
+
+    freezeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::FREEZE), freezeRelay, nullptr);
 
     mixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::MIX), mixRelay, nullptr);

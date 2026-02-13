@@ -32,6 +32,7 @@ private:
     juce::WebSliderRelay sprayRelay      { ParameterIDs::SPRAY };
     juce::WebSliderRelay pitchRelay      { ParameterIDs::PITCH };
     juce::WebSliderRelay wanderRelay   { ParameterIDs::WANDER };
+    juce::WebSliderRelay freezeRelay   { ParameterIDs::FREEZE };
     juce::WebSliderRelay mixRelay        { ParameterIDs::MIX };
     juce::WebSliderRelay wowFlutterRelay { ParameterIDs::WOW_FLUTTER };
     juce::WebSliderRelay saturationRelay { ParameterIDs::SATURATION };
@@ -48,6 +49,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> sprayAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> pitchAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> wanderAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> freezeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> mixAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> wowFlutterAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> saturationAttachment;

@@ -99,10 +99,13 @@ public:
                         float sprayPercent,
                         float pitchSemitones,
                         float wanderAmount,
+                        float freezeAmount,
                         float mixAmount)
     {
-        // Write input into circular buffer
-        circularBuffer[static_cast<size_t>(writeHead)] = inputSample;
+        // Write input into circular buffer (freeze blends old+new)
+        circularBuffer[static_cast<size_t>(writeHead)] =
+            inputSample * (1.0f - freezeAmount)
+            + circularBuffer[static_cast<size_t>(writeHead)] * freezeAmount;
 
         // Advance write head
         writeHead = (writeHead + 1) % bufferLength;

@@ -1445,6 +1445,7 @@ const PARAMS = {
   density:     { label: 'DENSITY',   section: 'grain', min: 1,   max: 100, default: 20,  unit: 'g/s',    desc: 'Sets the rate at which new grains are spawned per second.', tip: 'Higher density fills gaps. Lower values create rhythmic textures.' },
   spray:       { label: 'SPRAY',     section: 'grain', min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Randomizes the read position offset for each grain in the buffer.', tip: '40%+ creates lush, unpredictable spread. 0% is perfectly locked.' },
   pitch:       { label: 'PITCH',     section: 'grain', min: -12, max: 12,  default: 0,   unit: 'st',     desc: 'Shifts the pitch of all grains by semitone increments.', tip: '+12 st = one octave up. Try small values (1-3 st) for subtle detuning.' },
+  freeze:      { label: 'FREEZE',    section: 'grain', min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Controls how much new audio enters the grain buffer.', tip: '0% = live input. 100% = frozen. 30-70% = ghostly half-frozen blend.' },
   wander:      { label: 'WANDER',    section: 'grain', min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Macro randomization — scales 5 independent per-grain behaviors: pitch drift, reverse probability, timing jitter, amplitude variation, and speed variation.', tip: 'Low (10-20%) adds warm analog instability. Mid (40-60%) creates creative happy accidents. High (80%+) is beautiful chaos.' },
   mix:         { label: 'GRAIN MIX', section: 'grain', min: 0,   max: 100, default: 50,  unit: '%',      desc: 'Blends between the dry input and the granular processed output.', tip: '50:50 is balanced. Use 100% wet for full grain effect.' },
   wowFlutter:  { label: 'WOW',       section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Simulates the speed variance of analog tape transport mechanisms.', tip: 'Subtle values (10-20%) add warmth. Higher values sound broken.' },
@@ -1495,6 +1496,7 @@ const JUCE_PARAMS = {
   density:    { juceId: 'DENSITY',     sliderState: null },
   spray:      { juceId: 'SPRAY',       sliderState: null },
   pitch:      { juceId: 'PITCH',       sliderState: null },
+  freeze:     { juceId: 'FREEZE',      sliderState: null },
   wander:     { juceId: 'DRIFT',       sliderState: null },
   mix:        { juceId: 'MIX',         sliderState: null },
   wowFlutter: { juceId: 'WOW_FLUTTER', sliderState: null },
@@ -1711,6 +1713,8 @@ function formatValue(id, val) {
     case 'pitch':
       if (val === 0) return '0 st';
       return (val > 0 ? '+' : '') + (Number.isInteger(val) ? val : val.toFixed(2)) + ' st';
+    case 'freeze':
+      return `${Math.round(val)}%`;
     case 'wander':
       return `${Math.round(val)}%`;
     case 'mix': {
@@ -1840,6 +1844,39 @@ function drawIcon(canvas, type, color, norm, time) {
       // Base dot
       ctx.beginPath();
       ctx.arc(cx, cy + forkH * 0.55, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'freeze': { // Snowflake — solidifies as value increases
+      const spin = time * (1.0 - norm) * 0.8; // spins when unfrozen, stops when frozen
+      const armLen = r * (0.35 + norm * 0.5);
+      const branchLen = armLen * 0.35 * norm;
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI * 2 * i / 6) + spin;
+        const ax = cx + Math.cos(angle) * armLen;
+        const ay = cy + Math.sin(angle) * armLen;
+        // Main arm
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(ax, ay);
+        ctx.stroke();
+        // Branches (appear with higher norm)
+        if (norm > 0.15) {
+          const mid = 0.55;
+          const mx = cx + Math.cos(angle) * armLen * mid;
+          const my = cy + Math.sin(angle) * armLen * mid;
+          for (const side of [-1, 1]) {
+            const bAngle = angle + side * Math.PI / 3;
+            ctx.beginPath();
+            ctx.moveTo(mx, my);
+            ctx.lineTo(mx + Math.cos(bAngle) * branchLen, my + Math.sin(bAngle) * branchLen);
+            ctx.stroke();
+          }
+        }
+      }
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, 1.5 + norm, 0, Math.PI * 2);
       ctx.fill();
       break;
     }

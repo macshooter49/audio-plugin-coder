@@ -18,38 +18,46 @@ TerrainAudioProcessor::~TerrainAudioProcessor()
 //==============================================================================
 void TerrainAudioProcessor::initializePresets()
 {
-    //                                    grSz   dens  spray pitch  drift  mix    wow    sat   hiss  outGn  mMix xyEn xyMd xySpd  gSync  grEn  tpEn
+    //                                    grSz   dens  spray pitch  drift  frz    mix    wow    sat   hiss  outGn  mMix xyEn xyMd xySpd  gSync  grEn  tpEn
     presets = {
-        { "Init",                          80.f,  20.f, 40.f,  0.f,   0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Soft Keys",                    332.5f, 29.8f, 7.f,  0.f,  17.9f, 82.f, 39.5f, 54.5f, 5.f,  7.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Movements",                     99.3f, 34.f, 43.6f, 0.f,  57.7f, 50.f,  0.f,   0.f,  0.f,  7.f, 100.f, 1.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Super Messed Up",               55.4f,  7.1f, 31.9f, 0.f, 24.9f, 74.f, 43.f,  12.f,  3.f,  3.5f, 100.f, 1.f, 1.f, 0.472f, 0.f, 1.f, 1.f },
-        { "Tape Master",                   60.3f, 80.1f, 11.9f, 0.f,  0.f,  39.f, 46.f,  70.f,  3.f,  0.f, 100.f, 0.f, 1.f, 0.472f, 0.f, 1.f, 1.f },
-        { "Delay The Pluck",              500.f,   3.3f,  3.5f, 12.f,  0.f,  40.f, 26.5f, 22.5f, 0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Synced Grains",                268.7f,  5.8f,  9.5f, 0.f,   0.f,  67.5f, 17.5f, 31.5f, 1.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Clown Delay",                  114.3f, 16.8f,  0.f,  0.f,   0.f,  80.5f, 17.5f,  7.f,  1.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Instant Pad",                  152.1f, 26.8f,  5.f,  0.f,   3.f,  50.f, 41.f,  13.f,  0.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Slow Changes",                 346.5f, 43.8f, 83.1f, 0.f,  65.8f,100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 1.f, 0.f, 0.f,   1.f, 1.f, 1.f },
-        { "Mood",                          156.f,  7.8f,  9.f,  0.f,  23.1f, 50.f, 40.f,  32.5f, 1.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Soundscape",                   220.2f, 54.9f, 81.5f, 0.f,   0.f, 100.f, 44.f,  20.5f, 0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Use A Key",                    103.3f, 28.3f,  1.f, -12.f,  0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 1.f, 0.f,   1.f, 1.f, 1.f },
-        { "Blank Forms",                   17.5f, 100.f, 25.f,  0.f,   0.f, 100.f,  9.5f, 29.f,  5.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Habits",                       261.1f, 55.2f,  0.f,  0.f,  71.f,  20.5f, 44.f,   9.5f, 8.f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Pitch Drifter",                146.3f, 24.2f,  2.5f,-12.f, 100.f, 100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Mandalorian",                  240.1f, 13.5f, 68.9f,-12.f,  35.6f,100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 1.f, 1.f, 0.056f, 0.f, 1.f, 1.f },
-        { "See The Light",                280.7f, 53.f,  32.6f, 12.f,  31.9f,100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 0.f, 1.f, 0.056f, 0.f, 1.f, 1.f },
-        { "Back To The Future",           325.8f,  1.f, 100.f,  0.f,  39.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Saturation",                   268.9f, 10.5f,  1.5f, 0.f,   0.f,  50.f, 19.f,  83.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
-        { "Chop Shop",                     49.3f, 100.f, 40.f,  0.f,   0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Depressed",                    171.2f, 81.2f, 40.f, -12.f,  0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Deep Rest",                    168.3f, 81.2f, 40.f, -12.f, 25.f, 100.f, 48.5f, 54.5f, 3.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Final Tape",                   183.3f, 71.2f,  3.f,  0.f,   0.f,  40.f, 33.f,  53.f, 15.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Init",                          80.f,  20.f, 40.f,  0.f,   0.f,   0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Soft Keys",                    332.5f, 29.8f, 7.f,  0.f,  17.9f,  0.f,  82.f, 39.5f, 54.5f, 5.f,  7.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Movements",                     99.3f, 34.f, 43.6f, 0.f,  57.7f,  0.f,  50.f,  0.f,   0.f,  0.f,  7.f, 100.f, 1.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Super Messed Up",               55.4f,  7.1f, 31.9f, 0.f, 24.9f,  0.f,  74.f, 43.f,  12.f,  3.f,  3.5f, 100.f, 1.f, 1.f, 0.472f, 0.f, 1.f, 1.f },
+        { "Tape Master",                   60.3f, 80.1f, 11.9f, 0.f,  0.f,   0.f,  39.f, 46.f,  70.f,  3.f,  0.f, 100.f, 0.f, 1.f, 0.472f, 0.f, 1.f, 1.f },
+        { "Delay The Pluck",              500.f,   3.3f,  3.5f, 12.f,  0.f,   0.f,  40.f, 26.5f, 22.5f, 0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Synced Grains",                268.7f,  5.8f,  9.5f, 0.f,   0.f,   0.f,  67.5f, 17.5f, 31.5f, 1.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Clown Delay",                  114.3f, 16.8f,  0.f,  0.f,   0.f,   0.f,  80.5f, 17.5f,  7.f,  1.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Instant Pad",                  152.1f, 26.8f,  5.f,  0.f,   3.f,   0.f,  50.f, 41.f,  13.f,  0.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Slow Changes",                 346.5f, 43.8f, 83.1f, 0.f,  65.8f,  0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 1.f, 0.f, 0.f,   1.f, 1.f, 1.f },
+        { "Mood",                          156.f,  7.8f,  9.f,  0.f,  23.1f,  0.f,  50.f, 40.f,  32.5f, 1.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Soundscape",                   220.2f, 54.9f, 81.5f, 0.f,   0.f,   0.f, 100.f, 44.f,  20.5f, 0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Use A Key",                    103.3f, 28.3f,  1.f, -12.f,  0.f,   0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 1.f, 0.f,   1.f, 1.f, 1.f },
+        { "Blank Forms",                   17.5f, 100.f, 25.f,  0.f,   0.f,   0.f, 100.f,  9.5f, 29.f,  5.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Habits",                       261.1f, 55.2f,  0.f,  0.f,  71.f,   0.f,  20.5f, 44.f,   9.5f, 8.f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Pitch Drifter",                146.3f, 24.2f,  2.5f,-12.f, 100.f,  0.f, 100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Mandalorian",                  240.1f, 13.5f, 68.9f,-12.f,  35.6f, 0.f, 100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 1.f, 1.f, 0.056f, 0.f, 1.f, 1.f },
+        { "See The Light",                280.7f, 53.f,  32.6f, 12.f,  31.9f, 0.f, 100.f, 28.f,  30.5f, 0.5f, 0.f, 100.f, 0.f, 1.f, 0.056f, 0.f, 1.f, 1.f },
+        { "Back To The Future",           325.8f,  1.f, 100.f,  0.f,  39.f,   0.f,  50.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Saturation",                   268.9f, 10.5f,  1.5f, 0.f,   0.f,   0.f,  50.f, 19.f,  83.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        { "Chop Shop",                     49.3f, 100.f, 40.f,  0.f,   0.f,   0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Depressed",                    171.2f, 81.2f, 40.f, -12.f,  0.f,   0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Deep Rest",                    168.3f, 81.2f, 40.f, -12.f, 25.f,   0.f, 100.f, 48.5f, 54.5f, 3.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Final Tape",                   183.3f, 71.2f,  3.f,  0.f,   0.f,   0.f,  40.f, 33.f,  53.f, 15.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
         // ── Wander presets ──
-        { "Gentle Wander",                150.f,  25.f, 20.f,  0.f,  15.f,  55.f, 10.f,  15.f,  2.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Scattered",                     80.f,  65.f, 45.f,  0.f,  55.f,  70.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Disintegration",               120.f,  12.f, 30.f, 12.f,  85.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Breathing Texture",            350.f,  60.f, 15.f,  0.f,  25.f,  60.f,  5.f,   8.f,  1.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
-        { "Glitch Cloud",                  20.f,  15.f, 50.f,  0.f,  70.f,  80.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Gentle Wander",                150.f,  25.f, 20.f,  0.f,  15.f,   0.f,  55.f, 10.f,  15.f,  2.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Scattered",                     80.f,  65.f, 45.f,  0.f,  55.f,   0.f,  70.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Disintegration",               120.f,  12.f, 30.f, 12.f,  85.f,   0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Breathing Texture",            350.f,  60.f, 15.f,  0.f,  25.f,   0.f,  60.f,  5.f,   8.f,  1.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Glitch Cloud",                  20.f,  15.f, 50.f,  0.f,  70.f,   0.f,  80.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        // ── Freeze presets ──
+        { "Frozen Cathedral",             200.f,  60.f, 30.f,  0.f,  20.f, 100.f,  80.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Ghost Layer",                  120.f,  30.f, 20.f,  0.f,  10.f,  60.f,  65.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Living Pad",                   250.f,  50.f, 25.f, 12.f,  40.f, 100.f,  90.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Instant Eno",                  400.f,  10.f, 80.f,  0.f,  15.f,  85.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Sub Freeze",                   300.f,  40.f, 15.f,-12.f,   5.f, 100.f,  85.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Thaw",                         150.f,  35.f, 40.f,  0.f,  60.f,  40.f,  70.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Time Crystal",                 180.f,  45.f,100.f,  0.f,   0.f, 100.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
     };
     numFactoryPresets = static_cast<int>(presets.size());  // All presets above are factory
 
@@ -76,6 +84,7 @@ void TerrainAudioProcessor::loadPreset(int index)
     setParam(ParameterIDs::SPRAY,        p.spray);
     setParam(ParameterIDs::PITCH,        p.pitch);
     setParam(ParameterIDs::WANDER,       p.drift);
+    setParam(ParameterIDs::FREEZE,       p.freeze);
     setParam(ParameterIDs::MIX,          p.mix);
     setParam(ParameterIDs::WOW_FLUTTER,  p.wowFlutter);
     setParam(ParameterIDs::SATURATION,   p.saturation);
@@ -118,6 +127,7 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.spray      = apvts.getRawParameterValue(ParameterIDs::SPRAY)->load();
     p.pitch      = apvts.getRawParameterValue(ParameterIDs::PITCH)->load();
     p.drift      = apvts.getRawParameterValue(ParameterIDs::WANDER)->load();
+    p.freeze     = apvts.getRawParameterValue(ParameterIDs::FREEZE)->load();
     p.mix        = apvts.getRawParameterValue(ParameterIDs::MIX)->load();
     p.wowFlutter = apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load();
     p.saturation = apvts.getRawParameterValue(ParameterIDs::SATURATION)->load();
@@ -214,6 +224,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::FREEZE, 1 },
+        "Freeze",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParameterIDs::MIX, 1 },
         "Mix",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
@@ -275,6 +292,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedSpray.reset(sampleRate, 0.02);
     smoothedPitch.reset(sampleRate, 0.02);
     smoothedWander.reset(sampleRate, 0.02);
+    smoothedFreeze.reset(sampleRate, 0.02);
     smoothedMix.reset(sampleRate, 0.02);
     smoothedWowFlutter.reset(sampleRate, 0.02);
     smoothedSaturation.reset(sampleRate, 0.02);
@@ -288,6 +306,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedSpray.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPRAY)->load());
     smoothedPitch.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::PITCH)->load());
     smoothedWander.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
+    smoothedFreeze.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::FREEZE)->load());
     smoothedMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
     smoothedWowFlutter.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
     smoothedSaturation.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
@@ -367,6 +386,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     smoothedSpray.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPRAY)->load());
     smoothedPitch.setTargetValue(apvts.getRawParameterValue(ParameterIDs::PITCH)->load());
     smoothedWander.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
+    smoothedFreeze.setTargetValue(apvts.getRawParameterValue(ParameterIDs::FREEZE)->load());
     smoothedMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
     smoothedWowFlutter.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
     smoothedSaturation.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
@@ -390,6 +410,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float spray        = smoothedSpray.getNextValue();
         const float pitch        = smoothedPitch.getNextValue();
         const float wander       = smoothedWander.getNextValue() * 0.01f;
+        const float freezeRaw    = smoothedFreeze.getNextValue() * 0.01f;
+        const float freeze       = std::pow(freezeRaw, 1.5f); // log curve: more resolution in mid-range
         const float mix          = smoothedMix.getNextValue();
         const float wowFlutter   = smoothedWowFlutter.getNextValue() * 0.01f;
         const float saturationAmt = smoothedSaturation.getNextValue() * 0.01f;
@@ -404,7 +426,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
         // Signal chain: Input → GrainEngine (if enabled) → TapeProcessor → Master Mix → Output Gain
         float wetL = grainOn
-            ? grainEngineL.processSample(leftChannel[i], grainSize, density, spray, pitch, wander, mix)
+            ? grainEngineL.processSample(leftChannel[i], grainSize, density, spray, pitch, wander, freeze, mix)
             : leftChannel[i];
         if (tapeOn)
             wetL = tapeProcessorL.processSample(wetL, wowFlutter, saturationAmt, hissAmt);
@@ -415,7 +437,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (rightChannel != nullptr)
         {
             float wetR = grainOn
-                ? grainEngineR.processSample(rightChannel[i], grainSize, density, spray, pitch, wander, mix)
+                ? grainEngineR.processSample(rightChannel[i], grainSize, density, spray, pitch, wander, freeze, mix)
                 : rightChannel[i];
             if (tapeOn)
                 wetR = tapeProcessorR.processSample(wetR, wowFlutter, saturationAmt, hissAmt);
@@ -549,6 +571,7 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("spray",         p.spray,         nullptr);
         node.setProperty("pitch",         p.pitch,         nullptr);
         node.setProperty("drift",         p.drift,         nullptr);
+        node.setProperty("freeze",        p.freeze,        nullptr);
         node.setProperty("mix",           p.mix,           nullptr);
         node.setProperty("wowFlutter",    p.wowFlutter,    nullptr);
         node.setProperty("saturation",    p.saturation,    nullptr);
@@ -607,6 +630,7 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.spray         = static_cast<float>(child.getProperty("spray",         40.f));
         p.pitch         = static_cast<float>(child.getProperty("pitch",          0.f));
         p.drift         = static_cast<float>(child.getProperty("drift",          0.f));
+        p.freeze        = static_cast<float>(child.getProperty("freeze",         0.f));
         p.mix           = static_cast<float>(child.getProperty("mix",           50.f));
         p.wowFlutter    = static_cast<float>(child.getProperty("wowFlutter",     0.f));
         p.saturation    = static_cast<float>(child.getProperty("saturation",     0.f));

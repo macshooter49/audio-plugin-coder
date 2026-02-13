@@ -12,7 +12,7 @@
 struct PresetData
 {
     juce::String name;
-    float grainSize, density, spray, pitch, drift, mix;
+    float grainSize, density, spray, pitch, drift, freeze = 0.f, mix;
     float wowFlutter, saturation, hiss;
     float outputGain;
     float masterMix = 100.f;
@@ -118,6 +118,7 @@ private:
     juce::SmoothedValue<float> smoothedSpray;
     juce::SmoothedValue<float> smoothedPitch;
     juce::SmoothedValue<float> smoothedWander;
+    juce::SmoothedValue<float> smoothedFreeze;
     juce::SmoothedValue<float> smoothedMix;
 
     // Smoothed parameters — tape
