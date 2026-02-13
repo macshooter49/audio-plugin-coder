@@ -142,7 +142,7 @@ public:
             // Stutter micro-crossfade: fade in/out at loop boundaries to kill clicks
             if (grain.isStuttering)
             {
-                const int fadeLen = std::min(16, grain.stutterLoopSize / 4);
+                const int fadeLen = std::min(32, grain.stutterLoopSize / 4);
                 if (fadeLen > 0)
                 {
                     if (grain.stutterCounter < fadeLen)

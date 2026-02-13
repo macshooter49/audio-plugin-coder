@@ -94,6 +94,22 @@ public:
 
     bool hasUndo() const { return hasUndo_; }
 
+    // Apply fade-in/fade-out to the recorded buffer edges to eliminate onset/offset clicks
+    void applyEdgeFades(int fadeLen = 128)
+    {
+        if (loopLength <= fadeLen * 2 || !hasContent_) return;
+        for (int i = 0; i < fadeLen; ++i)
+        {
+            const float gain = static_cast<float>(i) / static_cast<float>(fadeLen);
+            // Fade in at the start
+            bufL[static_cast<size_t>(i)] *= gain;
+            bufR[static_cast<size_t>(i)] *= gain;
+            // Fade out at the end
+            bufL[static_cast<size_t>(loopLength - 1 - i)] *= gain;
+            bufR[static_cast<size_t>(loopLength - 1 - i)] *= gain;
+        }
+    }
+
     //--------------------------------------------------------------------------
     // Process one stereo sample. Modifies wetL/wetR in-place.
     // wantRecord/wantPlay are passed by reference so we can auto-stop recording.
@@ -138,6 +154,7 @@ public:
                 isFirstPass = false;
                 // Sync write head to current read position
                 writePos = static_cast<int>(readPos) % loopLength;
+                overdubSamplesWritten = 0; // Track for auto-stop after one pass
             }
         }
 
@@ -151,6 +168,7 @@ public:
                     loopLength = writePos;
                 isFirstPass = false;
                 readPos = 0.0;
+                applyEdgeFades(); // Smooth the loop edges to prevent clicks
             }
         }
 
@@ -178,6 +196,7 @@ public:
                 readPos = 0.0;
                 writePos = 0;
                 wantRecord = false; // auto-stop recording, keep playing
+                applyEdgeFades(); // Smooth the loop edges to prevent clicks
             }
             // Free mode: if buffer full, auto-stop
             else if (loopLength == 0 && writePos >= maxSamples)
@@ -187,6 +206,7 @@ public:
                 readPos = 0.0;
                 writePos = 0;
                 wantRecord = false;
+                applyEdgeFades();
             }
 
             // Output = pass-through (user hears themselves while recording)
@@ -226,6 +246,12 @@ public:
             writePos = (writePos + 1) % loopLength;
             // Keep readPos in sync during overdub
             readPos = static_cast<double>(writePos);
+
+            // Auto-stop overdub after one full pass
+            overdubSamplesWritten++;
+            if (overdubSamplesWritten >= loopLength)
+                wantRecord = false;
+
             return;
         }
 
@@ -252,6 +278,39 @@ public:
             // Read with Hermite interpolation
             float loopL = hermiteRead(bufL, readPos, loopLength);
             float loopR = hermiteRead(bufR, readPos, loopLength);
+
+            // Crossfade near loop boundaries to eliminate wrap discontinuity clicks
+            // (especially important for feed-to-grain where clicks get amplified)
+            static constexpr int XFADE_LEN = 256;
+            if (loopLength > XFADE_LEN * 2)
+            {
+                double posInLoop = readPos;
+                while (posInLoop < 0.0) posInLoop += static_cast<double>(loopLength);
+                posInLoop = std::fmod(posInLoop, static_cast<double>(loopLength));
+
+                const double fadeStartFwd = static_cast<double>(loopLength - XFADE_LEN);
+                if (posInLoop >= fadeStartFwd)
+                {
+                    // Near the end: blend with the start of the loop
+                    const double d = posInLoop - fadeStartFwd;
+                    const float alpha = 1.0f - static_cast<float>(d) / static_cast<float>(XFADE_LEN);
+                    const float startL = hermiteRead(bufL, d, loopLength);
+                    const float startR = hermiteRead(bufR, d, loopLength);
+                    loopL = loopL * alpha + startL * (1.0f - alpha);
+                    loopR = loopR * alpha + startR * (1.0f - alpha);
+                }
+                else if (posInLoop < static_cast<double>(XFADE_LEN) && speed < 0.0f)
+                {
+                    // Reverse playback near the start: blend with the end of the loop
+                    const double d = posInLoop;
+                    const float alpha = static_cast<float>(d) / static_cast<float>(XFADE_LEN);
+                    const double endPos = static_cast<double>(loopLength - XFADE_LEN) + d;
+                    const float endL = hermiteRead(bufL, endPos, loopLength);
+                    const float endR = hermiteRead(bufR, endPos, loopLength);
+                    loopL = loopL * alpha + endL * (1.0f - alpha);
+                    loopR = loopR * alpha + endR * (1.0f - alpha);
+                }
+            }
 
             // Subtle degrade filtering on playback output
             if (degrade > 0.001f)
@@ -338,6 +397,7 @@ private:
     bool isFirstPass = true;  // True during initial recording (vs overdub)
     bool prevWantRecord = false;
     bool prevWantPlay = false;
+    int overdubSamplesWritten = 0; // Counts samples for overdub auto-stop
 
     // Degrade filter state (one-pole lowpass)
     float degradeStateL = 0.0f;

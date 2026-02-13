@@ -320,6 +320,7 @@ void TerrainAudioProcessorEditor::timerCallback()
     float tapeLoopProg = audioProcessor.getTapeLoopProgress();
     bool  tapeLoopHas  = audioProcessor.getTapeLoopHasContent();
     bool  tapeLoopUndo = audioProcessor.getTapeLoopHasUndo();
+    bool  feedToGrain  = audioProcessor.tapeLoopFeedToGrain.load() > 0.5f;
 
     // Push visualization data to JS
     juce::String js;
@@ -332,6 +333,8 @@ void TerrainAudioProcessorEditor::timerCallback()
        << (tapeLoopHas ? "true" : "false") << ","
        << juce::String(tapeLoopProg, 4) << ","
        << (tapeLoopUndo ? "true" : "false") << ");}";
+    js << "if(window.updateFeedState){"
+       << "window.updateFeedState(" << (feedToGrain ? "true" : "false") << ");}";
 
     webView->evaluateJavascript(js);
 }

@@ -466,7 +466,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float density      = smoothedDensity.getNextValue();
         const float spray        = smoothedSpray.getNextValue();
         const float pitch        = smoothedPitch.getNextValue();
-        const float wander       = smoothedWander.getNextValue() * 0.01f;
+        const float wanderRaw    = smoothedWander.getNextValue() * 0.01f;
         const float freezeRaw    = smoothedFreeze.getNextValue() * 0.01f;
         const float freeze       = std::pow(freezeRaw, 1.5f);
         const float mix          = smoothedMix.getNextValue();
@@ -484,10 +484,15 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float dryR = rightChannel != nullptr ? rightChannel[i] : 0.0f;
 
         // Choose grain engine input: live audio OR tape loop feedback (one-sample delay)
-        const float grainInputL = (feedToGrain && wantPlay && tapeLoop.hasContent()) ? feedDelayL : leftChannel[i];
-        const float grainInputR = (feedToGrain && wantPlay && tapeLoop.hasContent())
+        const bool feedActive = feedToGrain && wantPlay && tapeLoop.hasContent();
+        const float grainInputL = feedActive ? feedDelayL : leftChannel[i];
+        const float grainInputR = feedActive
             ? feedDelayR
             : (rightChannel != nullptr ? rightChannel[i] : leftChannel[i]);
+
+        // When feed-to-grain is active, reduce wander to prevent click compounding
+        // (already-wandered signal gets re-wandered → clicks multiply)
+        const float wander = feedActive ? wanderRaw * 0.7f : wanderRaw;
 
         // Signal chain: Input → GrainEngine → TapeProcessor → TapeLoop → MasterMix → OutputGain
         float wetL = grainOn
@@ -551,6 +556,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // Sync transport state back (auto-stop may have changed wantRecord/wantPlay)
     tapeLoopRecording.store(wantRecord ? 1.f : 0.f);
     tapeLoopPlaying.store(wantPlay ? 1.f : 0.f);
+
+    // Auto-disable feed-to-grain when recording stops (prevents accidental feedback loops)
+    if (prevProcessBlockRecording && !wantRecord)
+        tapeLoopFeedToGrain.store(0.f);
+    prevProcessBlockRecording = wantRecord;
 
     scopeWritePos.store(scopePos);
 

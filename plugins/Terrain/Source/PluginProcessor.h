@@ -172,6 +172,7 @@ private:
     // Feed-to-grain: one-sample delay buffer (previous tape loop output)
     float feedDelayL = 0.0f;
     float feedDelayR = 0.0f;
+    bool prevProcessBlockRecording = false; // Track recording transitions for auto-disabling feed
 
     // Presets
     void initializePresets();

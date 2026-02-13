@@ -1756,6 +1756,15 @@ window.updateTapeLoopState = function(recording, playing, hasContent, progress, 
   updateUndoButton();
 };
 
+// Sync feed-to-grain button from C++ (auto-disables when recording stops)
+window.updateFeedState = function(active) {
+  if (state.feedToGrain === active) return;
+  state.feedToGrain = active;
+  const btn = document.getElementById('btn-feed');
+  if (btn) btn.classList.toggle('active', active);
+  drawFeedIcon();
+};
+
 let setGrainEngineEnabledFn, getGrainEngineEnabledFn;
 let setGrainSyncFn, getGrainSyncFn;
 let setTapeEnabledFn, getTapeEnabledFn;
