@@ -1445,7 +1445,7 @@ const PARAMS = {
   density:     { label: 'DENSITY',   section: 'grain', min: 1,   max: 100, default: 20,  unit: 'g/s',    desc: 'Sets the rate at which new grains are spawned per second.', tip: 'Higher density fills gaps. Lower values create rhythmic textures.' },
   spray:       { label: 'SPRAY',     section: 'grain', min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Randomizes the read position offset for each grain in the buffer.', tip: '40%+ creates lush, unpredictable spread. 0% is perfectly locked.' },
   pitch:       { label: 'PITCH',     section: 'grain', min: -12, max: 12,  default: 0,   unit: 'st',     desc: 'Shifts the pitch of all grains by semitone increments.', tip: '+12 st = one octave up. Try small values (1-3 st) for subtle detuning.' },
-  drift:       { label: 'DRIFT',     section: 'grain', min: 0,   max: 100, default: 0,   unit: '% prob', desc: 'Probability that a grain will randomly jump to a new pitch state.', tip: 'Low drift (5-15%) adds organic movement. High drift is chaotic.' },
+  wander:      { label: 'WANDER',    section: 'grain', min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Macro randomization — scales 5 independent per-grain behaviors: pitch drift, reverse probability, timing jitter, amplitude variation, and speed variation.', tip: 'Low (10-20%) adds warm analog instability. Mid (40-60%) creates creative happy accidents. High (80%+) is beautiful chaos.' },
   mix:         { label: 'GRAIN MIX', section: 'grain', min: 0,   max: 100, default: 50,  unit: '%',      desc: 'Blends between the dry input and the granular processed output.', tip: '50:50 is balanced. Use 100% wet for full grain effect.' },
   wowFlutter:  { label: 'WOW',       section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Simulates the speed variance of analog tape transport mechanisms.', tip: 'Subtle values (10-20%) add warmth. Higher values sound broken.' },
   saturation:  { label: 'SATURATION',section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Applies harmonic distortion modeling magnetic tape saturation.', tip: 'Low saturation (20-40%) thickens. High values crush transients.' },
@@ -1495,7 +1495,7 @@ const JUCE_PARAMS = {
   density:    { juceId: 'DENSITY',     sliderState: null },
   spray:      { juceId: 'SPRAY',       sliderState: null },
   pitch:      { juceId: 'PITCH',       sliderState: null },
-  drift:      { juceId: 'DRIFT',       sliderState: null },
+  wander:     { juceId: 'DRIFT',       sliderState: null },
   mix:        { juceId: 'MIX',         sliderState: null },
   wowFlutter: { juceId: 'WOW_FLUTTER', sliderState: null },
   saturation: { juceId: 'SATURATION',  sliderState: null },
@@ -1628,31 +1628,37 @@ function pushParamToJuce(id) {
 
 // ---- Factory Presets (mock — replaced by JUCE in plugin mode) ----
 const PRESETS = [
-  { name: 'Crystal Shimmer',  cat: 'AMBIENT',   vals: {grainSize:180,density:40,spray:60,pitch:7,drift:10,mix:70,wowFlutter:5,saturation:10,hiss:3} },
-  { name: 'Tape Haze',        cat: 'TAPE',      vals: {grainSize:120,density:25,spray:20,pitch:0,drift:5,mix:60,wowFlutter:35,saturation:55,hiss:12} },
-  { name: 'Grain Storm',      cat: 'EXTREME',   vals: {grainSize:10,density:95,spray:90,pitch:-5,drift:80,mix:85,wowFlutter:20,saturation:70,hiss:8} },
-  { name: 'Dusty Vinyl',      cat: 'TAPE',      vals: {grainSize:200,density:15,spray:10,pitch:0,drift:2,mix:50,wowFlutter:15,saturation:40,hiss:25} },
-  { name: 'Ethereal Pad',     cat: 'AMBIENT',   vals: {grainSize:350,density:30,spray:45,pitch:12,drift:15,mix:80,wowFlutter:8,saturation:5,hiss:2} },
-  { name: 'Stutter Gate',     cat: 'RHYTHMIC',  vals: {grainSize:25,density:60,spray:5,pitch:0,drift:0,mix:90,wowFlutter:0,saturation:30,hiss:0} },
-  { name: 'Pitch Drift',      cat: 'GRAIN',     vals: {grainSize:100,density:35,spray:30,pitch:3,drift:45,mix:65,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Warm Saturation',  cat: 'TAPE',      vals: {grainSize:150,density:20,spray:15,pitch:0,drift:0,mix:50,wowFlutter:10,saturation:65,hiss:8} },
-  { name: 'Noise Floor',      cat: 'TAPE',      vals: {grainSize:80,density:20,spray:0,pitch:0,drift:0,mix:40,wowFlutter:5,saturation:20,hiss:40} },
-  { name: 'Particle Cloud',   cat: 'GRAIN',     vals: {grainSize:40,density:80,spray:70,pitch:5,drift:30,mix:75,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Deep Space',       cat: 'AMBIENT',   vals: {grainSize:400,density:10,spray:80,pitch:-12,drift:20,mix:90,wowFlutter:12,saturation:15,hiss:5} },
-  { name: 'Broken Radio',     cat: 'EXTREME',   vals: {grainSize:15,density:70,spray:95,pitch:-7,drift:90,mix:100,wowFlutter:60,saturation:80,hiss:30} },
-  { name: 'Subtle Texture',   cat: 'GRAIN',     vals: {grainSize:160,density:18,spray:25,pitch:0,drift:8,mix:30,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Lo-Fi Dreams',     cat: 'TAPE',      vals: {grainSize:130,density:22,spray:20,pitch:0,drift:5,mix:55,wowFlutter:25,saturation:45,hiss:18} },
-  { name: 'Frozen Time',      cat: 'AMBIENT',   vals: {grainSize:500,density:8,spray:50,pitch:0,drift:0,mix:85,wowFlutter:3,saturation:8,hiss:1} },
-  { name: 'Pulse Engine',     cat: 'RHYTHMIC',  vals: {grainSize:30,density:50,spray:10,pitch:0,drift:0,mix:80,wowFlutter:0,saturation:45,hiss:0} },
-  { name: 'Micro Grains',     cat: 'GRAIN',     vals: {grainSize:5,density:100,spray:40,pitch:2,drift:15,mix:70,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Cassette Warble',  cat: 'TAPE',      vals: {grainSize:140,density:20,spray:15,pitch:0,drift:3,mix:50,wowFlutter:55,saturation:35,hiss:15} },
-  { name: 'Quantum Scatter',  cat: 'EXTREME',   vals: {grainSize:20,density:85,spray:100,pitch:-3,drift:70,mix:95,wowFlutter:40,saturation:55,hiss:12} },
-  { name: 'Dawn Chorus',      cat: 'AMBIENT',   vals: {grainSize:250,density:28,spray:55,pitch:5,drift:12,mix:65,wowFlutter:6,saturation:10,hiss:3} },
-  { name: 'Step Sequence',    cat: 'RHYTHMIC',  vals: {grainSize:50,density:45,spray:8,pitch:0,drift:0,mix:75,wowFlutter:0,saturation:20,hiss:0} },
-  { name: 'Thick Glue',       cat: 'GRAIN',     vals: {grainSize:220,density:50,spray:35,pitch:-1,drift:5,mix:60,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'VHS Memory',       cat: 'TAPE',      vals: {grainSize:160,density:18,spray:25,pitch:0,drift:8,mix:55,wowFlutter:45,saturation:50,hiss:22} },
-  { name: 'Time Stretch',     cat: 'RHYTHMIC',  vals: {grainSize:300,density:12,spray:15,pitch:0,drift:0,mix:80,wowFlutter:0,saturation:10,hiss:0} },
-  { name: 'Event Horizon',    cat: 'EXTREME',   vals: {grainSize:8,density:100,spray:100,pitch:-24,drift:100,mix:100,wowFlutter:70,saturation:90,hiss:35} },
+  { name: 'Crystal Shimmer',  cat: 'AMBIENT',   vals: {grainSize:180,density:40,spray:60,pitch:7,wander:10,mix:70,wowFlutter:5,saturation:10,hiss:3} },
+  { name: 'Tape Haze',        cat: 'TAPE',      vals: {grainSize:120,density:25,spray:20,pitch:0,wander:5,mix:60,wowFlutter:35,saturation:55,hiss:12} },
+  { name: 'Grain Storm',      cat: 'EXTREME',   vals: {grainSize:10,density:95,spray:90,pitch:-5,wander:80,mix:85,wowFlutter:20,saturation:70,hiss:8} },
+  { name: 'Dusty Vinyl',      cat: 'TAPE',      vals: {grainSize:200,density:15,spray:10,pitch:0,wander:2,mix:50,wowFlutter:15,saturation:40,hiss:25} },
+  { name: 'Ethereal Pad',     cat: 'AMBIENT',   vals: {grainSize:350,density:30,spray:45,pitch:12,wander:15,mix:80,wowFlutter:8,saturation:5,hiss:2} },
+  { name: 'Stutter Gate',     cat: 'RHYTHMIC',  vals: {grainSize:25,density:60,spray:5,pitch:0,wander:0,mix:90,wowFlutter:0,saturation:30,hiss:0} },
+  { name: 'Pitch Drift',      cat: 'GRAIN',     vals: {grainSize:100,density:35,spray:30,pitch:3,wander:45,mix:65,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Warm Saturation',  cat: 'TAPE',      vals: {grainSize:150,density:20,spray:15,pitch:0,wander:0,mix:50,wowFlutter:10,saturation:65,hiss:8} },
+  { name: 'Noise Floor',      cat: 'TAPE',      vals: {grainSize:80,density:20,spray:0,pitch:0,wander:0,mix:40,wowFlutter:5,saturation:20,hiss:40} },
+  { name: 'Particle Cloud',   cat: 'GRAIN',     vals: {grainSize:40,density:80,spray:70,pitch:5,wander:30,mix:75,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Deep Space',       cat: 'AMBIENT',   vals: {grainSize:400,density:10,spray:80,pitch:-12,wander:20,mix:90,wowFlutter:12,saturation:15,hiss:5} },
+  { name: 'Broken Radio',     cat: 'EXTREME',   vals: {grainSize:15,density:70,spray:95,pitch:-7,wander:90,mix:100,wowFlutter:60,saturation:80,hiss:30} },
+  { name: 'Subtle Texture',   cat: 'GRAIN',     vals: {grainSize:160,density:18,spray:25,pitch:0,wander:8,mix:30,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Lo-Fi Dreams',     cat: 'TAPE',      vals: {grainSize:130,density:22,spray:20,pitch:0,wander:5,mix:55,wowFlutter:25,saturation:45,hiss:18} },
+  { name: 'Frozen Time',      cat: 'AMBIENT',   vals: {grainSize:500,density:8,spray:50,pitch:0,wander:0,mix:85,wowFlutter:3,saturation:8,hiss:1} },
+  { name: 'Pulse Engine',     cat: 'RHYTHMIC',  vals: {grainSize:30,density:50,spray:10,pitch:0,wander:0,mix:80,wowFlutter:0,saturation:45,hiss:0} },
+  { name: 'Micro Grains',     cat: 'GRAIN',     vals: {grainSize:5,density:100,spray:40,pitch:2,wander:15,mix:70,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Cassette Warble',  cat: 'TAPE',      vals: {grainSize:140,density:20,spray:15,pitch:0,wander:3,mix:50,wowFlutter:55,saturation:35,hiss:15} },
+  { name: 'Quantum Scatter',  cat: 'EXTREME',   vals: {grainSize:20,density:85,spray:100,pitch:-3,wander:70,mix:95,wowFlutter:40,saturation:55,hiss:12} },
+  { name: 'Dawn Chorus',      cat: 'AMBIENT',   vals: {grainSize:250,density:28,spray:55,pitch:5,wander:12,mix:65,wowFlutter:6,saturation:10,hiss:3} },
+  { name: 'Step Sequence',    cat: 'RHYTHMIC',  vals: {grainSize:50,density:45,spray:8,pitch:0,wander:0,mix:75,wowFlutter:0,saturation:20,hiss:0} },
+  { name: 'Thick Glue',       cat: 'GRAIN',     vals: {grainSize:220,density:50,spray:35,pitch:-1,wander:5,mix:60,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'VHS Memory',       cat: 'TAPE',      vals: {grainSize:160,density:18,spray:25,pitch:0,wander:8,mix:55,wowFlutter:45,saturation:50,hiss:22} },
+  { name: 'Time Stretch',     cat: 'RHYTHMIC',  vals: {grainSize:300,density:12,spray:15,pitch:0,wander:0,mix:80,wowFlutter:0,saturation:10,hiss:0} },
+  { name: 'Event Horizon',    cat: 'EXTREME',   vals: {grainSize:8,density:100,spray:100,pitch:-24,wander:100,mix:100,wowFlutter:70,saturation:90,hiss:35} },
+  // ── Wander presets ──
+  { name: 'Gentle Wander',    cat: 'GRAIN',     vals: {grainSize:150,density:25,spray:20,pitch:0,wander:15,mix:55,wowFlutter:10,saturation:15,hiss:2} },
+  { name: 'Scattered',         cat: 'GRAIN',     vals: {grainSize:80,density:65,spray:45,pitch:0,wander:55,mix:70,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Disintegration',    cat: 'EXTREME',   vals: {grainSize:120,density:12,spray:30,pitch:12,wander:85,mix:100,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Breathing Texture', cat: 'AMBIENT',   vals: {grainSize:350,density:60,spray:15,pitch:0,wander:25,mix:60,wowFlutter:5,saturation:8,hiss:1} },
+  { name: 'Glitch Cloud',      cat: 'EXTREME',   vals: {grainSize:20,density:15,spray:50,pitch:0,wander:70,mix:80,wowFlutter:0,saturation:0,hiss:0} },
 ];
 
 const CATEGORIES = ['ALL','GRAIN','TAPE','AMBIENT','RHYTHMIC','EXTREME'];
@@ -1683,6 +1689,11 @@ const PRESET_CATEGORIES = {
   'Depressed': 'GRAIN',
   'Deep Rest': 'TAPE',
   'Final Tape': 'TAPE',
+  'Gentle Wander': 'GRAIN',
+  'Scattered': 'GRAIN',
+  'Disintegration': 'EXTREME',
+  'Breathing Texture': 'AMBIENT',
+  'Glitch Cloud': 'EXTREME',
 };
 
 // ---- Precision Formatting ----
@@ -1700,8 +1711,8 @@ function formatValue(id, val) {
     case 'pitch':
       if (val === 0) return '0 st';
       return (val > 0 ? '+' : '') + (Number.isInteger(val) ? val : val.toFixed(2)) + ' st';
-    case 'drift':
-      return `${Math.round(val)}% prob`;
+    case 'wander':
+      return `${Math.round(val)}%`;
     case 'mix': {
       const dry = Math.round(100 - val), wet = Math.round(val);
       if (wet === 0) return '100:0 dry';
@@ -1832,19 +1843,28 @@ function drawIcon(canvas, type, color, norm, time) {
       ctx.fill();
       break;
     }
-    case 'drift': { // Electron orbitals — spin with value
-      const spin = norm * time * 0.6;
+    case 'wander': { // Wandering zigzag path — becomes more erratic with value
+      const segments = 6;
+      const amp = r * (0.2 + norm * 0.65);
+      const phase = time * (0.4 + norm * 1.8);
       ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, spin, 0, Math.PI * 2);
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const px = cx - r * 0.75 + t * r * 1.5;
+        const jitter = Math.sin(t * 5.7 + phase) * amp * (0.3 + norm * 0.7)
+                     + Math.cos(t * 8.3 + phase * 1.3) * amp * norm * 0.3;
+        const py = cy + jitter;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
       ctx.stroke();
+      // Dot traveling along path
+      const dotT = (Math.sin(time * (0.6 + norm * 0.8)) * 0.5 + 0.5);
+      const dotX = cx - r * 0.75 + dotT * r * 1.5;
+      const dotJ = Math.sin(dotT * 5.7 + phase) * amp * (0.3 + norm * 0.7)
+                 + Math.cos(dotT * 8.3 + phase * 1.3) * amp * norm * 0.3;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, Math.PI / 3 + spin, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, -Math.PI / 3 + spin, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+      ctx.arc(dotX, cy + dotJ, 1.8, 0, Math.PI * 2);
       ctx.fill();
       break;
     }
@@ -2404,13 +2424,13 @@ const SCOPE_TIPS = {
   },
   'xy-play': {
     title: 'XY AUTO-PLAY',
-    desc: 'Enables automatic XY pad animation. The cursor moves on its own, continuously modulating Grain Size, Spray, Density, Drift, and Mix in real time.',
+    desc: 'Enables automatic XY pad animation. The cursor moves on its own, continuously modulating Grain Size, Spray, Density, Wander, and Mix in real time.',
     tip: 'Tip: Combine with different modes and speeds for evolving, hands-free textures.'
   },
   'xy-mode': {
     title: 'XY MODE',
     desc: 'Switches between Chaotic and Smooth animation styles. Chaotic jumps randomly across the pad. Smooth traces flowing Lissajous curves for gradual, organic movement.',
-    tip: 'Tip: Chaotic mode at low speed creates slow, unpredictable shifts. Smooth mode is great for ambient drifts.'
+    tip: 'Tip: Chaotic mode at low speed creates slow, unpredictable shifts. Smooth mode is great for ambient wandering.'
   },
   'xy-speed-wrap': {
     title: 'XY SPEED',
@@ -2571,13 +2591,13 @@ function applyXYToParams() {
   state.params.grainSize = PARAMS.grainSize.min + x * (PARAMS.grainSize.max - PARAMS.grainSize.min);
   state.params.spray = x * PARAMS.spray.max;
 
-  // Y axis controls density, drift, mix
+  // Y axis controls density, wander, mix
   state.params.density = PARAMS.density.min + y * (PARAMS.density.max - PARAMS.density.min);
-  state.params.drift = y * PARAMS.drift.max;
+  state.params.wander = y * PARAMS.wander.max;
   state.params.mix = PARAMS.mix.min + y * (PARAMS.mix.max - PARAMS.mix.min);
 
   // Update knob displays and push to JUCE (lightweight — no drag start/end)
-  const xyParams = ['grainSize', 'spray', 'density', 'drift', 'mix'];
+  const xyParams = ['grainSize', 'spray', 'density', 'wander', 'mix'];
   for (const id of xyParams) {
     updateKnobDisplay(id);
     if (juceMode && JUCE_PARAMS[id]?.sliderState) {

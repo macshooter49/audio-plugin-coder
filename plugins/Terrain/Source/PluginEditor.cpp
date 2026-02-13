@@ -19,7 +19,7 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             .withOptionsFrom(densityRelay)
             .withOptionsFrom(sprayRelay)
             .withOptionsFrom(pitchRelay)
-            .withOptionsFrom(driftRelay)
+            .withOptionsFrom(wanderRelay)
             .withOptionsFrom(mixRelay)
             .withOptionsFrom(wowFlutterRelay)
             .withOptionsFrom(saturationRelay)
@@ -147,13 +147,13 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 if (args.size() >= 1)
-                    audioProcessor.driftLinked.store(static_cast<float>(args[0]));
+                    audioProcessor.wanderLinked.store(static_cast<float>(args[0]));
                 complete({});
             })
             .withNativeFunction("getDriftLinked", [this](const juce::Array<juce::var>&,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete(audioProcessor.driftLinked.load());
+                complete(audioProcessor.wanderLinked.load());
             })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
@@ -175,8 +175,8 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     pitchAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::PITCH), pitchRelay, nullptr);
 
-    driftAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
-        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DRIFT), driftRelay, nullptr);
+    wanderAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::WANDER), wanderRelay, nullptr);
 
     mixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::MIX), mixRelay, nullptr);

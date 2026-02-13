@@ -27,7 +27,7 @@ struct PresetData
     // Tape engine on/off
     float tapeEnabled = 1.f; // 1 = on (default), 0 = bypass tape processing
     // Drift link to XY pad
-    float driftLinked = 1.f; // 1 = linked (default), 0 = unlinked from XY pad
+    float wanderLinked = 1.f; // 1 = linked (default), 0 = unlinked from XY pad
 };
 
 //==============================================================================
@@ -94,7 +94,7 @@ public:
     std::atomic<float> tapeEnabled { 1.f }; // 1 = on, 0 = bypass
 
     // Drift link to XY pad (synced from JS, captured into presets)
-    std::atomic<float> driftLinked { 1.f }; // 1 = linked, 0 = unlinked
+    std::atomic<float> wanderLinked { 1.f }; // 1 = linked, 0 = unlinked
 
     static constexpr int SCOPE_SIZE = 256;
     std::array<std::atomic<float>, SCOPE_SIZE> scopeBuffer {};
@@ -117,7 +117,7 @@ private:
     juce::SmoothedValue<float> smoothedDensity;
     juce::SmoothedValue<float> smoothedSpray;
     juce::SmoothedValue<float> smoothedPitch;
-    juce::SmoothedValue<float> smoothedDrift;
+    juce::SmoothedValue<float> smoothedWander;
     juce::SmoothedValue<float> smoothedMix;
 
     // Smoothed parameters — tape

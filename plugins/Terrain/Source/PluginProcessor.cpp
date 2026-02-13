@@ -44,6 +44,12 @@ void TerrainAudioProcessor::initializePresets()
         { "Depressed",                    171.2f, 81.2f, 40.f, -12.f,  0.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
         { "Deep Rest",                    168.3f, 81.2f, 40.f, -12.f, 25.f, 100.f, 48.5f, 54.5f, 3.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
         { "Final Tape",                   183.3f, 71.2f,  3.f,  0.f,   0.f,  40.f, 33.f,  53.f, 15.5f, 0.f, 100.f, 0.f, 0.f, 0.5f,  1.f, 1.f, 1.f },
+        // ── Wander presets ──
+        { "Gentle Wander",                150.f,  25.f, 20.f,  0.f,  15.f,  55.f, 10.f,  15.f,  2.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Scattered",                     80.f,  65.f, 45.f,  0.f,  55.f,  70.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Disintegration",               120.f,  12.f, 30.f, 12.f,  85.f, 100.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Breathing Texture",            350.f,  60.f, 15.f,  0.f,  25.f,  60.f,  5.f,   8.f,  1.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
+        { "Glitch Cloud",                  20.f,  15.f, 50.f,  0.f,  70.f,  80.f,  0.f,   0.f,  0.f,  0.f, 100.f, 0.f, 0.f, 0.5f,  0.f, 1.f, 1.f },
     };
     numFactoryPresets = static_cast<int>(presets.size());  // All presets above are factory
 
@@ -69,7 +75,7 @@ void TerrainAudioProcessor::loadPreset(int index)
     setParam(ParameterIDs::DENSITY,      p.density);
     setParam(ParameterIDs::SPRAY,        p.spray);
     setParam(ParameterIDs::PITCH,        p.pitch);
-    setParam(ParameterIDs::DRIFT,        p.drift);
+    setParam(ParameterIDs::WANDER,       p.drift);
     setParam(ParameterIDs::MIX,          p.mix);
     setParam(ParameterIDs::WOW_FLUTTER,  p.wowFlutter);
     setParam(ParameterIDs::SATURATION,   p.saturation);
@@ -88,7 +94,7 @@ void TerrainAudioProcessor::loadPreset(int index)
     // Restore grain engine on/off, tape on/off, and drift link states
     grainEngineEnabled.store(p.grainEngineEnabled);
     tapeEnabled.store(p.tapeEnabled);
-    driftLinked.store(p.driftLinked);
+    wanderLinked.store(p.wanderLinked);
 }
 
 int TerrainAudioProcessor::getPresetCount() const
@@ -111,7 +117,7 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.density    = apvts.getRawParameterValue(ParameterIDs::DENSITY)->load();
     p.spray      = apvts.getRawParameterValue(ParameterIDs::SPRAY)->load();
     p.pitch      = apvts.getRawParameterValue(ParameterIDs::PITCH)->load();
-    p.drift      = apvts.getRawParameterValue(ParameterIDs::DRIFT)->load();
+    p.drift      = apvts.getRawParameterValue(ParameterIDs::WANDER)->load();
     p.mix        = apvts.getRawParameterValue(ParameterIDs::MIX)->load();
     p.wowFlutter = apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load();
     p.saturation = apvts.getRawParameterValue(ParameterIDs::SATURATION)->load();
@@ -124,7 +130,7 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.grainSyncEnabled = grainSyncEnabled.load();
     p.grainEngineEnabled = grainEngineEnabled.load();
     p.tapeEnabled        = tapeEnabled.load();
-    p.driftLinked        = driftLinked.load();
+    p.wanderLinked        = wanderLinked.load();
     return p;
 }
 
@@ -201,8 +207,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::AudioParameterFloatAttributes().withLabel("st")));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID { ParameterIDs::DRIFT, 1 },
-        "Drift",
+        juce::ParameterID { ParameterIDs::WANDER, 1 },
+        "Wander",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
@@ -268,7 +274,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedDensity.reset(sampleRate, 0.02);
     smoothedSpray.reset(sampleRate, 0.02);
     smoothedPitch.reset(sampleRate, 0.02);
-    smoothedDrift.reset(sampleRate, 0.02);
+    smoothedWander.reset(sampleRate, 0.02);
     smoothedMix.reset(sampleRate, 0.02);
     smoothedWowFlutter.reset(sampleRate, 0.02);
     smoothedSaturation.reset(sampleRate, 0.02);
@@ -281,7 +287,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedDensity.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DENSITY)->load());
     smoothedSpray.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPRAY)->load());
     smoothedPitch.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::PITCH)->load());
-    smoothedDrift.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DRIFT)->load());
+    smoothedWander.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
     smoothedMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
     smoothedWowFlutter.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
     smoothedSaturation.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
@@ -360,7 +366,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     smoothedDensity.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DENSITY)->load());
     smoothedSpray.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPRAY)->load());
     smoothedPitch.setTargetValue(apvts.getRawParameterValue(ParameterIDs::PITCH)->load());
-    smoothedDrift.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DRIFT)->load());
+    smoothedWander.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
     smoothedMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
     smoothedWowFlutter.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
     smoothedSaturation.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
@@ -383,7 +389,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float density      = smoothedDensity.getNextValue();
         const float spray        = smoothedSpray.getNextValue();
         const float pitch        = smoothedPitch.getNextValue();
-        const float drift        = smoothedDrift.getNextValue() * 0.01f;
+        const float wander       = smoothedWander.getNextValue() * 0.01f;
         const float mix          = smoothedMix.getNextValue();
         const float wowFlutter   = smoothedWowFlutter.getNextValue() * 0.01f;
         const float saturationAmt = smoothedSaturation.getNextValue() * 0.01f;
@@ -398,7 +404,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
         // Signal chain: Input → GrainEngine (if enabled) → TapeProcessor → Master Mix → Output Gain
         float wetL = grainOn
-            ? grainEngineL.processSample(leftChannel[i], grainSize, density, spray, pitch, drift, mix)
+            ? grainEngineL.processSample(leftChannel[i], grainSize, density, spray, pitch, wander, mix)
             : leftChannel[i];
         if (tapeOn)
             wetL = tapeProcessorL.processSample(wetL, wowFlutter, saturationAmt, hissAmt);
@@ -409,7 +415,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (rightChannel != nullptr)
         {
             float wetR = grainOn
-                ? grainEngineR.processSample(rightChannel[i], grainSize, density, spray, pitch, drift, mix)
+                ? grainEngineR.processSample(rightChannel[i], grainSize, density, spray, pitch, wander, mix)
                 : rightChannel[i];
             if (tapeOn)
                 wetR = tapeProcessorR.processSample(wetR, wowFlutter, saturationAmt, hissAmt);
@@ -463,7 +469,7 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty("grainSyncEnabled",  grainSyncEnabled.load(),  nullptr);
     state.setProperty("grainEngineEnabled", grainEngineEnabled.load(), nullptr);
     state.setProperty("tapeEnabled",        tapeEnabled.load(),        nullptr);
-    state.setProperty("driftLinked",        driftLinked.load(),        nullptr);
+    state.setProperty("wanderLinked",        wanderLinked.load(),        nullptr);
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
@@ -493,7 +499,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // Restore grain engine on/off, tape on/off, and drift link states
             grainEngineEnabled.store(static_cast<float>(newState.getProperty("grainEngineEnabled", 1.f)));
             tapeEnabled.store(static_cast<float>(newState.getProperty("tapeEnabled", 1.f)));
-            driftLinked.store(static_cast<float>(newState.getProperty("driftLinked", 1.f)));
+            wanderLinked.store(static_cast<float>(newState.getProperty("wanderLinked", 1.f)));
 
             // Reload presets from disk (the single source of truth)
             while (static_cast<int>(presets.size()) > numFactoryPresets)
@@ -555,7 +561,7 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("grainSyncEnabled",  p.grainSyncEnabled,  nullptr);
         node.setProperty("grainEngineEnabled", p.grainEngineEnabled, nullptr);
         node.setProperty("tapeEnabled",        p.tapeEnabled,        nullptr);
-        node.setProperty("driftLinked",        p.driftLinked,        nullptr);
+        node.setProperty("wanderLinked",        p.wanderLinked,        nullptr);
         root.addChild(node, -1, nullptr);
     }
 
@@ -613,7 +619,7 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.grainSyncEnabled  = static_cast<float>(child.getProperty("grainSyncEnabled",  0.f));
         p.grainEngineEnabled = static_cast<float>(child.getProperty("grainEngineEnabled", 1.f));
         p.tapeEnabled        = static_cast<float>(child.getProperty("tapeEnabled",        1.f));
-        p.driftLinked        = static_cast<float>(child.getProperty("driftLinked",        1.f));
+        p.wanderLinked        = static_cast<float>(child.getProperty("wanderLinked",        1.f));
 
         presets.push_back(p);
         loaded++;

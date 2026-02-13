@@ -6,7 +6,7 @@ namespace ParameterIDs
     constexpr char DENSITY[]      = "DENSITY";
     constexpr char SPRAY[]        = "SPRAY";
     constexpr char PITCH[]        = "PITCH";
-    constexpr char DRIFT[]        = "DRIFT";
+    constexpr char WANDER[]       = "DRIFT";  // Keep "DRIFT" string for DAW session backward compat
     constexpr char MIX[]          = "MIX";
     constexpr char WOW_FLUTTER[]  = "WOW_FLUTTER";
     constexpr char SATURATION[]   = "SATURATION";
