@@ -91,6 +91,10 @@ void TerrainAudioProcessor::loadPreset(int index)
     setParam(ParameterIDs::HISS,         p.hiss);
     setParam(ParameterIDs::OUTPUT_GAIN,  p.outputGain);
     setParam(ParameterIDs::MASTER_MIX,   p.masterMix);
+    setParam(ParameterIDs::LOOP_LENGTH,   p.loopLength);
+    setParam(ParameterIDs::LOOP_FEEDBACK, p.loopFeedback);
+    setParam(ParameterIDs::LOOP_DEGRADE,  p.loopDegrade);
+    setParam(ParameterIDs::LOOP_SPEED,    p.loopSpeed);
 
     // Restore XY automation state for this preset
     xyAutoEnabled.store(p.xyAutoEnabled);
@@ -134,6 +138,10 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.hiss       = apvts.getRawParameterValue(ParameterIDs::HISS)->load();
     p.outputGain = apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load();
     p.masterMix  = apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load();
+    p.loopLength   = apvts.getRawParameterValue(ParameterIDs::LOOP_LENGTH)->load();
+    p.loopFeedback = apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load();
+    p.loopDegrade  = apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load();
+    p.loopSpeed    = apvts.getRawParameterValue(ParameterIDs::LOOP_SPEED)->load();
     p.xyAutoEnabled    = xyAutoEnabled.load();
     p.xyAutoMode       = xyAutoMode.load();
     p.xyAutoSpeed      = xyAutoSpeed.load();
@@ -275,6 +283,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         100.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // Tape loop params
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::LOOP_LENGTH, 1 },
+        "Loop Length",
+        juce::NormalisableRange<float>(0.0f, 6.0f, 1.0f),
+        3.0f,
+        juce::AudioParameterFloatAttributes().withLabel("")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::LOOP_FEEDBACK, 1 },
+        "Loop Feedback",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        85.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::LOOP_DEGRADE, 1 },
+        "Loop Degrade",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        30.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::LOOP_SPEED, 1 },
+        "Loop Speed",
+        juce::NormalisableRange<float>(0.0f, 9.0f, 0.01f),
+        6.0f,
+        juce::AudioParameterFloatAttributes().withLabel("")));
+
     return layout;
 }
 
@@ -285,6 +322,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     grainEngineR.prepare(sampleRate, samplesPerBlock);
     tapeProcessorL.prepare(sampleRate, samplesPerBlock);
     tapeProcessorR.prepare(sampleRate, samplesPerBlock);
+    tapeLoop.prepare(sampleRate, samplesPerBlock);
 
     // 20ms ramp for all smoothed parameters
     smoothedGrainSize.reset(sampleRate, 0.02);
@@ -299,6 +337,8 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedHiss.reset(sampleRate, 0.02);
     smoothedOutputGain.reset(sampleRate, 0.02);
     smoothedMasterMix.reset(sampleRate, 0.02);
+    smoothedLoopFeedback.reset(sampleRate, 0.02);
+    smoothedLoopDegrade.reset(sampleRate, 0.02);
 
     // Set initial values
     smoothedGrainSize.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load());
@@ -313,6 +353,8 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedHiss.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::HISS)->load());
     smoothedOutputGain.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load());
     smoothedMasterMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load());
+    smoothedLoopFeedback.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load());
+    smoothedLoopDegrade.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load());
 }
 
 void TerrainAudioProcessor::releaseResources()
@@ -321,6 +363,7 @@ void TerrainAudioProcessor::releaseResources()
     grainEngineR.reset();
     tapeProcessorL.reset();
     tapeProcessorR.reset();
+    tapeLoop.reset();
 }
 
 bool TerrainAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -394,6 +437,19 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     smoothedOutputGain.setTargetValue(apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load());
     smoothedMasterMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load());
 
+    smoothedLoopFeedback.setTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load());
+    smoothedLoopDegrade.setTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load());
+
+    // Tape loop discrete params (no smoothing needed)
+    const float loopLengthParam = apvts.getRawParameterValue(ParameterIDs::LOOP_LENGTH)->load();
+    const float loopSpeedParam  = apvts.getRawParameterValue(ParameterIDs::LOOP_SPEED)->load();
+
+    // Tape loop transport state (may be modified by auto-stop)
+    bool wantRecord = tapeLoopRecording.load() > 0.5f;
+    bool wantPlay   = tapeLoopPlaying.load() > 0.5f;
+    const float bpm = currentBPM.load();
+    const bool isFreeform = speedFreeform.load() > 0.5f;
+
     // Per-sample processing
     auto* leftChannel  = buffer.getWritePointer(0);
     auto* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -402,6 +458,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     const bool grainOn = grainEngineEnabled.load() > 0.5f;
     const bool tapeOn = tapeEnabled.load() > 0.5f;
+    const bool feedToGrain = tapeLoopFeedToGrain.load() > 0.5f;
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -411,46 +468,89 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float pitch        = smoothedPitch.getNextValue();
         const float wander       = smoothedWander.getNextValue() * 0.01f;
         const float freezeRaw    = smoothedFreeze.getNextValue() * 0.01f;
-        const float freeze       = std::pow(freezeRaw, 1.5f); // log curve: more resolution in mid-range
+        const float freeze       = std::pow(freezeRaw, 1.5f);
         const float mix          = smoothedMix.getNextValue();
         const float wowFlutter   = smoothedWowFlutter.getNextValue() * 0.01f;
         const float saturationAmt = smoothedSaturation.getNextValue() * 0.01f;
         const float hissAmt      = smoothedHiss.getNextValue() * 0.01f;
         const float outputGainDb = smoothedOutputGain.getNextValue();
-        const float outputGain   = std::pow(10.0f, outputGainDb / 20.0f); // dB to linear
-        const float masterMixAmt = smoothedMasterMix.getNextValue() * 0.01f; // 0-1
+        const float outputGain   = std::pow(10.0f, outputGainDb / 20.0f);
+        const float masterMixAmt = smoothedMasterMix.getNextValue() * 0.01f;
+        const float loopFeedback = smoothedLoopFeedback.getNextValue() * 0.01f;
+        const float loopDegrade  = smoothedLoopDegrade.getNextValue() * 0.01f;
 
         // Capture dry input before processing
         const float dryL = leftChannel[i];
         const float dryR = rightChannel != nullptr ? rightChannel[i] : 0.0f;
 
-        // Signal chain: Input → GrainEngine (if enabled) → TapeProcessor → Master Mix → Output Gain
+        // Choose grain engine input: live audio OR tape loop feedback (one-sample delay)
+        const float grainInputL = (feedToGrain && wantPlay && tapeLoop.hasContent()) ? feedDelayL : leftChannel[i];
+        const float grainInputR = (feedToGrain && wantPlay && tapeLoop.hasContent())
+            ? feedDelayR
+            : (rightChannel != nullptr ? rightChannel[i] : leftChannel[i]);
+
+        // Signal chain: Input → GrainEngine → TapeProcessor → TapeLoop → MasterMix → OutputGain
         float wetL = grainOn
-            ? grainEngineL.processSample(leftChannel[i], grainSize, density, spray, pitch, wander, freeze, mix)
-            : leftChannel[i];
+            ? grainEngineL.processSample(grainInputL, grainSize, density, spray, pitch, wander, freeze, mix)
+            : grainInputL;
         if (tapeOn)
             wetL = tapeProcessorL.processSample(wetL, wowFlutter, saturationAmt, hissAmt);
 
+        float wetR;
+        if (rightChannel != nullptr)
+        {
+            wetR = grainOn
+                ? grainEngineR.processSample(grainInputR, grainSize, density, spray, pitch, wander, freeze, mix)
+                : grainInputR;
+            if (tapeOn)
+                wetR = tapeProcessorR.processSample(wetR, wowFlutter, saturationAmt, hissAmt);
+        }
+        else
+        {
+            wetR = wetL;
+        }
+
+        // Tape loop (stereo, modifies wetL/wetR in-place, may auto-stop recording)
+        const float preLoopL = wetL;
+        const float preLoopR = wetR;
+        tapeLoop.processStereo(wetL, wetR, wantRecord, wantPlay,
+                               loopLengthParam, loopFeedback, loopDegrade,
+                               loopSpeedParam, bpm, isFreeform);
+
+        if (feedToGrain)
+        {
+            // Extract loop-only contribution for the feed delay buffer
+            feedDelayL = wetL - preLoopL;
+            feedDelayR = wetR - preLoopR;
+            // Remove loop from direct output (user hears it only through grain)
+            wetL = preLoopL;
+            wetR = preLoopR;
+        }
+        else
+        {
+            feedDelayL = wetL;
+            feedDelayR = wetR;
+        }
+
+        // Master mix + output gain
         float outL = (dryL * (1.0f - masterMixAmt) + wetL * masterMixAmt) * outputGain;
         leftChannel[i] = outL;
 
         if (rightChannel != nullptr)
         {
-            float wetR = grainOn
-                ? grainEngineR.processSample(rightChannel[i], grainSize, density, spray, pitch, wander, freeze, mix)
-                : rightChannel[i];
-            if (tapeOn)
-                wetR = tapeProcessorR.processSample(wetR, wowFlutter, saturationAmt, hissAmt);
-
             float outR = (dryR * (1.0f - masterMixAmt) + wetR * masterMixAmt) * outputGain;
             rightChannel[i] = outR;
         }
 
         // Write to scope buffer (mono mix for visualization)
-        float scopeSample = rightChannel != nullptr ? (outL + rightChannel[i]) * 0.5f : outL;
+        float scopeSample = rightChannel != nullptr ? (leftChannel[i] + rightChannel[i]) * 0.5f : leftChannel[i];
         scopeBuffer[static_cast<size_t>(scopePos)].store(scopeSample, std::memory_order_relaxed);
         scopePos = (scopePos + 1) % SCOPE_SIZE;
     }
+
+    // Sync transport state back (auto-stop may have changed wantRecord/wantPlay)
+    tapeLoopRecording.store(wantRecord ? 1.f : 0.f);
+    tapeLoopPlaying.store(wantPlay ? 1.f : 0.f);
 
     scopeWritePos.store(scopePos);
 
@@ -585,6 +685,10 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("grainEngineEnabled", p.grainEngineEnabled, nullptr);
         node.setProperty("tapeEnabled",        p.tapeEnabled,        nullptr);
         node.setProperty("wanderLinked",        p.wanderLinked,        nullptr);
+        node.setProperty("loopLength",      p.loopLength,      nullptr);
+        node.setProperty("loopFeedback",    p.loopFeedback,    nullptr);
+        node.setProperty("loopDegrade",     p.loopDegrade,     nullptr);
+        node.setProperty("loopSpeed",       p.loopSpeed,       nullptr);
         root.addChild(node, -1, nullptr);
     }
 
@@ -644,6 +748,10 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.grainEngineEnabled = static_cast<float>(child.getProperty("grainEngineEnabled", 1.f));
         p.tapeEnabled        = static_cast<float>(child.getProperty("tapeEnabled",        1.f));
         p.wanderLinked        = static_cast<float>(child.getProperty("wanderLinked",        1.f));
+        p.loopLength      = static_cast<float>(child.getProperty("loopLength",      3.f));
+        p.loopFeedback    = static_cast<float>(child.getProperty("loopFeedback",   85.f));
+        p.loopDegrade     = static_cast<float>(child.getProperty("loopDegrade",    30.f));
+        p.loopSpeed       = static_cast<float>(child.getProperty("loopSpeed",       6.f));
 
         presets.push_back(p);
         loaded++;

@@ -39,6 +39,10 @@ private:
     juce::WebSliderRelay hissRelay       { ParameterIDs::HISS };
     juce::WebSliderRelay outputGainRelay { ParameterIDs::OUTPUT_GAIN };
     juce::WebSliderRelay masterMixRelay  { ParameterIDs::MASTER_MIX };
+    juce::WebSliderRelay loopLengthRelay   { ParameterIDs::LOOP_LENGTH };
+    juce::WebSliderRelay loopFeedbackRelay { ParameterIDs::LOOP_FEEDBACK };
+    juce::WebSliderRelay loopDegradeRelay  { ParameterIDs::LOOP_DEGRADE };
+    juce::WebSliderRelay loopSpeedRelay    { ParameterIDs::LOOP_SPEED };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -56,6 +60,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> hissAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> outputGainAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> masterMixAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> loopLengthAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> loopFeedbackAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> loopDegradeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> loopSpeedAttachment;
 
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);

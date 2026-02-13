@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "GrainEngine.h"
 #include "TapeProcessor.h"
+#include "TapeLoopProcessor.h"
 #include "ParameterIDs.hpp"
 #include <atomic>
 #include <array>
@@ -16,6 +17,8 @@ struct PresetData
     float wowFlutter, saturation, hiss;
     float outputGain;
     float masterMix = 100.f;
+    // Tape loop params (loopSpeed: 0-9 stepped, 6 = 1x normal)
+    float loopLength = 3.f, loopFeedback = 85.f, loopDegrade = 30.f, loopSpeed = 6.f;
     // XY pad automation state
     float xyAutoEnabled = 0.f;  // 0 = off, 1 = on
     float xyAutoMode    = 0.f;  // 0 = chaotic, 1 = smooth
@@ -96,6 +99,35 @@ public:
     // Drift link to XY pad (synced from JS, captured into presets)
     std::atomic<float> wanderLinked { 1.f }; // 1 = linked, 0 = unlinked
 
+    // Tape loop transport state (synced from JS, may be modified by auto-stop in processBlock)
+    std::atomic<float> tapeLoopRecording { 0.f };
+    std::atomic<float> tapeLoopPlaying { 0.f };
+
+    // Speed freeform mode (synced from JS)
+    std::atomic<float> speedFreeform { 0.f }; // 0 = stepped, 1 = freeform
+
+    // Feed tape loop back into granular engine (synced from JS)
+    std::atomic<float> tapeLoopFeedToGrain { 0.f }; // 0 = off, 1 = on
+
+    // Tape loop read-only state (set by processBlock for UI)
+    bool getTapeLoopHasContent() const { return tapeLoop.hasContent(); }
+    float getTapeLoopProgress() const { return tapeLoop.getProgress(); }
+    bool getTapeLoopHasUndo() const { return tapeLoop.hasUndo(); }
+
+    // Tape loop actions (called from editor native functions)
+    void clearTapeLoop()
+    {
+        tapeLoop.clear();
+        tapeLoopRecording.store(0.f);
+        tapeLoopPlaying.store(0.f);
+    }
+
+    void undoTapeLoop()
+    {
+        tapeLoop.restoreFromUndo();
+        tapeLoopRecording.store(0.f);
+    }
+
     static constexpr int SCOPE_SIZE = 256;
     std::array<std::atomic<float>, SCOPE_SIZE> scopeBuffer {};
     std::atomic<int> scopeWritePos { 0 };
@@ -112,6 +144,9 @@ private:
     TapeProcessor tapeProcessorL;
     TapeProcessor tapeProcessorR;
 
+    // Tape loop (stereo — single instance)
+    TapeLoopProcessor tapeLoop;
+
     // Smoothed parameters — granular
     juce::SmoothedValue<float> smoothedGrainSize;
     juce::SmoothedValue<float> smoothedDensity;
@@ -126,9 +161,17 @@ private:
     juce::SmoothedValue<float> smoothedSaturation;
     juce::SmoothedValue<float> smoothedHiss;
 
+    // Smoothed parameters — tape loop (continuous params only)
+    juce::SmoothedValue<float> smoothedLoopFeedback;
+    juce::SmoothedValue<float> smoothedLoopDegrade;
+
     // Smoothed parameters — output
     juce::SmoothedValue<float> smoothedOutputGain;
     juce::SmoothedValue<float> smoothedMasterMix;
+
+    // Feed-to-grain: one-sample delay buffer (previous tape loop output)
+    float feedDelayL = 0.0f;
+    float feedDelayR = 0.0f;
 
     // Presets
     void initializePresets();

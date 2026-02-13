@@ -82,7 +82,7 @@ body {
 .brand-name {
   font-weight: 600;
   font-size: 18px;
-  letter-spacing: 5px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--text-primary);
 }
@@ -586,6 +586,163 @@ body {
   transition: opacity 0.25s 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ============ TAPE SUB-TABS ============ */
+.tape-subtabs {
+  display: flex; gap: 2px; margin-left: 8px;
+}
+.tape-subtab {
+  font-size: 8px; font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; font-family: inherit;
+  padding: 3px 8px; border-radius: 4px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); cursor: pointer;
+  transition: all 0.15s;
+}
+.tape-subtab:hover { color: var(--purple-500); border-color: var(--purple-400); }
+.tape-subtab.active {
+  background: var(--purple-500); color: #fff;
+  border-color: var(--purple-500);
+}
+.control-section.minimized .tape-subtabs { display: none; }
+.control-section.minimized .tape-tab-content {
+  opacity: 0; pointer-events: none; flex: 0; overflow: hidden;
+  transition: opacity 0.12s 0s;
+}
+
+/* ============ TAPE LOOP CONTENT ============ */
+.tape-loop-content {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+  opacity: 1; transform: translateY(0);
+  transition: opacity 0.25s 0.35s, transform 0.25s 0.35s;
+}
+#tape-reel-canvas { display: block; max-height: 56px; }
+
+/* ---- Glass Deck Container ---- */
+.tape-deck-glass {
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  padding: 10px 14px 8px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(139,92,246,0.18);
+  background: rgba(255,255,255,0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 2px 10px rgba(139,92,246,0.06), inset 0 1px 0 rgba(255,255,255,0.6);
+  width: calc(100% - 16px);
+  max-width: 300px;
+}
+
+/* ---- Deck Status Dots ---- */
+.deck-status {
+  position: absolute;
+  top: 8px; left: 10px;
+  display: flex; align-items: center; gap: 5px;
+}
+.deck-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  border: 1px solid rgba(160,140,180,0.35);
+  transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+}
+#dot-rec { background: rgba(239,68,68,0.15); }
+#dot-play { background: rgba(52,211,153,0.15); }
+#dot-content { background: rgba(139,92,246,0.15); }
+#dot-rec.active {
+  background: #EF4444;
+  border-color: #EF4444;
+  box-shadow: 0 0 6px rgba(239,68,68,0.6);
+}
+#dot-play.active {
+  background: #34D399;
+  border-color: #34D399;
+  box-shadow: 0 0 6px rgba(52,211,153,0.6);
+}
+#dot-content.active {
+  background: #8B5CF6;
+  border-color: #8B5CF6;
+  box-shadow: 0 0 6px rgba(139,92,246,0.5);
+}
+.deck-label {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: rgba(139,92,246,0.4);
+  margin-left: 2px;
+}
+
+/* ---- Undo Button ---- */
+.tape-undo-btn {
+  position: absolute;
+  top: 7px; right: 9px;
+  width: 26px; height: 26px;
+  border: 1.5px solid rgba(139,92,246,0.2);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.5);
+  cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.55;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+.tape-undo-btn:hover { opacity: 1; border-color: var(--purple-400); }
+.tape-undo-btn.has-undo { opacity: 0.75; border-color: rgba(139,92,246,0.35); }
+.tape-undo-btn.has-undo:hover { opacity: 1; border-color: var(--purple-500); }
+.tape-undo-btn canvas { display: block; width: 18px; height: 18px; }
+
+/* ---- Feed-to-Grain Button ---- */
+.tape-feed-btn {
+  position: absolute;
+  top: 7px; right: 40px;
+  width: 26px; height: 26px;
+  border: 1.5px solid rgba(139,92,246,0.2);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.5);
+  cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.55;
+  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+}
+.tape-feed-btn:hover { opacity: 1; border-color: var(--purple-400); }
+.tape-feed-btn.active {
+  opacity: 1;
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.12);
+}
+.tape-feed-btn canvas { display: block; width: 18px; height: 18px; }
+
+/* ============ TRANSPORT BUTTONS ============ */
+.tape-transport {
+  display: flex; gap: 10px; justify-content: center; align-items: center;
+}
+.transport-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1.5px solid var(--border); background: var(--bg-glass);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+  box-shadow: 0 2px 6px rgba(91,79,112,0.08);
+  transition: all 0.15s;
+}
+.transport-btn:hover {
+  border-color: var(--purple-400);
+  box-shadow: 0 3px 10px rgba(139,92,246,0.12);
+  transform: translateY(-1px);
+}
+.transport-btn:active { transform: translateY(0); }
+.transport-btn.active {
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.08);
+}
+.transport-btn.recording {
+  border-color: #EF4444;
+  background: rgba(239,68,68,0.08);
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+.transport-btn canvas { display: block; width: 16px; height: 16px; }
+@keyframes rec-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+}
+
 .knob-group {
   display: flex;
   flex-direction: column;
@@ -644,6 +801,21 @@ body {
   color: var(--text-secondary);
   text-align: center;
   line-height: 12px;
+}
+.knob-label-clickable {
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  padding-bottom: 1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.knob-label-clickable:hover {
+  color: var(--purple-500);
+  border-bottom-color: var(--purple-400);
+}
+.knob-label-clickable.freeform-active {
+  color: var(--purple-500);
+  border-bottom: 1px solid var(--purple-500);
+  font-weight: 600;
 }
 
 /* ============ TOOLTIP ============ */
@@ -1025,9 +1197,44 @@ body {
           <canvas id="tape-section-icon" width="28" height="28"></canvas>
         </button>
         <span class="section-label">Tape</span>
+        <div class="tape-subtabs" id="tape-subtabs">
+          <button class="tape-subtab active" data-tab="fx">FX</button>
+          <button class="tape-subtab" data-tab="loop">LOOP</button>
+        </div>
         <span class="section-collapse-icon">&#9662;</span>
       </div>
-      <div class="knobs-container" id="tape-knobs"></div>
+      <!-- TAPE FX content (existing knobs) -->
+      <div class="knobs-container tape-tab-content" id="tape-knobs" data-tab="fx"></div>
+      <!-- TAPE LOOP content -->
+      <div class="tape-tab-content tape-loop-content" id="tape-loop-content" data-tab="loop" style="display:none">
+        <div class="tape-deck-glass">
+          <div class="deck-status">
+            <span class="deck-dot" id="dot-rec"></span>
+            <span class="deck-dot" id="dot-play"></span>
+            <span class="deck-dot" id="dot-content"></span>
+            <span class="deck-label">DECK</span>
+          </div>
+          <button class="tape-feed-btn" id="btn-feed" title="Feed loop into granular">
+            <canvas id="feed-icon-canvas" width="28" height="28"></canvas>
+          </button>
+          <button class="tape-undo-btn" id="btn-undo" title="Undo last recording">
+            <canvas id="undo-icon-canvas" width="28" height="28"></canvas>
+          </button>
+          <canvas id="tape-reel-canvas"></canvas>
+          <div class="tape-transport" id="tape-transport">
+            <button class="transport-btn" id="btn-record" title="Record">
+              <canvas id="transport-rec-icon" width="32" height="32"></canvas>
+            </button>
+            <button class="transport-btn" id="btn-play" title="Play">
+              <canvas id="transport-play-icon" width="32" height="32"></canvas>
+            </button>
+            <button class="transport-btn" id="btn-stop" title="Stop / Double-click to clear">
+              <canvas id="transport-stop-icon" width="32" height="32"></canvas>
+            </button>
+          </div>
+        </div>
+        <div class="knobs-container" id="tape-loop-knobs"></div>
+      </div>
     </div>
   </div>
 
@@ -1451,6 +1658,10 @@ const PARAMS = {
   wowFlutter:  { label: 'WOW',       section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Simulates the speed variance of analog tape transport mechanisms.', tip: 'Subtle values (10-20%) add warmth. Higher values sound broken.' },
   saturation:  { label: 'SATURATION',section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Applies harmonic distortion modeling magnetic tape saturation.', tip: 'Low saturation (20-40%) thickens. High values crush transients.' },
   hiss:        { label: 'HISS',      section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Adds calibrated tape noise from a modeled noise floor.', tip: 'A touch of hiss (5-10%) adds analog character and fills silence.' },
+  loopLength:  { label: 'LENGTH',   section: 'tapeloop', min: 0, max: 6,   default: 3,  unit: '',  desc: 'Sets the loop recording length. Syncs to host tempo for beat/bar values.', tip: '0=1 beat, 1=2 beats, 2=1 bar, 3=2 bars, 4=4 bars, 5=8 bars, 6=Free' },
+  loopFeedback:{ label: 'FEEDBACK', section: 'tapeloop', min: 0, max: 100, default: 85, unit: '%', desc: 'Controls how much existing loop content is preserved during overdub.', tip: '100% = infinite layers. 80% = gradual Basinski decay. 0% = replace each pass.' },
+  loopDegrade: { label: 'DEGRADE',  section: 'tapeloop', min: 0, max: 100, default: 30, unit: '%', desc: 'Intensity of tape degradation applied to the loop on each pass.', tip: '0% = digital looper. 50% = warm evolution. 100% = rapid transformation.' },
+  loopSpeed:   { label: 'SPEED',    section: 'tapeloop', min: 0, max: 9,   default: 6,  unit: '',  desc: 'Playback speed and direction of the loop.', tip: '0=-3x, 1=-2x, 2=-1.5x, 3=-1x, 4=-0.5x, 5=0.5x, 6=1x, 7=1.5x, 8=2x, 9=3x' },
 };
 
 const OUTPUT_PARAM = { min: -12, max: 12, default: 0 };
@@ -1483,6 +1694,18 @@ const state = {
   copiedValue: null,
   hoveredHero: false,
   draggingHero: false,
+  tapeSubTab: 'fx',
+  grainSyncEnabled: false,
+  speedFreeform: false,
+  feedToGrain: false,
+  tapeLoop: {
+    recording: false,
+    playing: false,
+    hasContent: false,
+    loopProgress: 0,
+    reelAngle: 0,
+    hasUndo: false,
+  },
 };
 
 // Initialize param values
@@ -1502,6 +1725,10 @@ const JUCE_PARAMS = {
   wowFlutter: { juceId: 'WOW_FLUTTER', sliderState: null },
   saturation: { juceId: 'SATURATION',  sliderState: null },
   hiss:       { juceId: 'HISS',        sliderState: null },
+  loopLength:   { juceId: 'LOOP_LENGTH',   sliderState: null },
+  loopFeedback: { juceId: 'LOOP_FEEDBACK', sliderState: null },
+  loopDegrade:  { juceId: 'LOOP_DEGRADE',  sliderState: null },
+  loopSpeed:    { juceId: 'LOOP_SPEED',    sliderState: null },
 };
 const JUCE_OUTPUT = { juceId: 'OUTPUT_GAIN', sliderState: null };
 const JUCE_MASTER_MIX = { juceId: 'MASTER_MIX', sliderState: null };
@@ -1518,8 +1745,23 @@ window.updateVisualization = function(grainCount, scopeArray, bpm) {
   bpmFromJuce = bpm;
 };
 
+window.updateTapeLoopState = function(recording, playing, hasContent, progress, hasUndo) {
+  const changed = state.tapeLoop.recording !== recording || state.tapeLoop.playing !== playing;
+  state.tapeLoop.recording = recording;
+  state.tapeLoop.playing = playing;
+  state.tapeLoop.hasContent = hasContent;
+  state.tapeLoop.loopProgress = progress;
+  if (hasUndo !== undefined) state.tapeLoop.hasUndo = hasUndo;
+  if (changed) updateTransportButtons();
+  updateUndoButton();
+};
+
 let setGrainEngineEnabledFn, getGrainEngineEnabledFn;
+let setGrainSyncFn, getGrainSyncFn;
 let setTapeEnabledFn, getTapeEnabledFn;
+let setTapeLoopRecordFn, getTapeLoopRecordFn;
+let setTapeLoopPlayFn, getTapeLoopPlayFn;
+let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn;
 let setXYAutoStateFn, getXYAutoStateFn;
 
 function syncXYState() {
@@ -1558,8 +1800,20 @@ async function initJuceBindings() {
     // Section toggle native functions
     setGrainEngineEnabledFn = window.Juce.getNativeFunction('setGrainEngineEnabled');
     getGrainEngineEnabledFn = window.Juce.getNativeFunction('getGrainEngineEnabled');
+    setGrainSyncFn = window.Juce.getNativeFunction('setGrainSync');
+    getGrainSyncFn = window.Juce.getNativeFunction('getGrainSync');
     setTapeEnabledFn = window.Juce.getNativeFunction('setTapeEnabled');
     getTapeEnabledFn = window.Juce.getNativeFunction('getTapeEnabled');
+
+    // Tape loop transport native functions
+    setTapeLoopRecordFn = window.Juce.getNativeFunction('setTapeLoopRecord');
+    getTapeLoopRecordFn = window.Juce.getNativeFunction('getTapeLoopRecord');
+    setTapeLoopPlayFn = window.Juce.getNativeFunction('setTapeLoopPlay');
+    getTapeLoopPlayFn = window.Juce.getNativeFunction('getTapeLoopPlay');
+    clearTapeLoopFn = window.Juce.getNativeFunction('clearTapeLoop');
+    undoTapeLoopFn = window.Juce.getNativeFunction('undoTapeLoop');
+    setSpeedFreeformFn = window.Juce.getNativeFunction('setSpeedFreeform');
+    setFeedToGrainFn = window.Juce.getNativeFunction('setFeedToGrain');
 
     // XY auto state native functions
     setXYAutoStateFn = window.Juce.getNativeFunction('setXYAutoState');
@@ -1573,6 +1827,17 @@ async function initJuceBindings() {
     const tapeOn = await getTapeEnabledFn();
     state.sectionEnabled.tape = tapeOn > 0.5;
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
+
+    // Sync initial grain sync state from backend
+    const grainSyncState = await getGrainSyncFn();
+    state.grainSyncEnabled = grainSyncState.enabled > 0.5;
+    // Update grain size label if sync is on
+    const grainSizeLabel = document.querySelector('.knob-group[data-param="grainSize"] .knob-label');
+    if (grainSizeLabel) {
+      grainSizeLabel.classList.toggle('freeform-active', state.grainSyncEnabled);
+      grainSizeLabel.textContent = state.grainSyncEnabled ? 'BPM SYNC' : 'SIZE';
+    }
+    if (state.grainSyncEnabled) updateKnobDisplay('grainSize');
 
     // Sync initial XY auto state from backend
     const xyState = await getXYAutoStateFn();
@@ -1703,8 +1968,17 @@ function formatValue(id, val) {
   const p = PARAMS[id];
   if (!p) return '';
   switch (id) {
-    case 'grainSize':
+    case 'grainSize': {
+      if (state.grainSyncEnabled) {
+        // Map normalized 0-1 to 10 note divisions (matches C++ divisionMultipliers)
+        const p = PARAMS.grainSize;
+        const norm = (val - p.min) / (p.max - p.min);
+        const idx = Math.min(9, Math.max(0, Math.round(norm * 10)));
+        const labels = ['1/32', '1/16T', '1/16', '1/8T', '1/8', '1/4T', '1/4', '1/2T', '1/2', '1 bar'];
+        return labels[idx] || '1/4';
+      }
       return val < 100 ? `${Math.round(val)} ms` : `${val.toFixed(1)} ms`;
+    }
     case 'density':
       return `${Math.round(val)} g/s`;
     case 'spray': {
@@ -1731,6 +2005,20 @@ function formatValue(id, val) {
     }
     case 'hiss': {
       return `${Math.round(val)}%`;
+    }
+    case 'loopLength': {
+      const labels = ['1 beat', '2 beats', '1 bar', '2 bars', '4 bars', '8 bars', 'Free'];
+      return labels[Math.round(val)] || '2 bars';
+    }
+    case 'loopFeedback': return `${Math.round(val)}%`;
+    case 'loopDegrade': return `${Math.round(val)}%`;
+    case 'loopSpeed': {
+      if (state.speedFreeform) {
+        const speed = -3.0 + (val / 9.0) * 6.0;
+        return `${speed.toFixed(2)}x`;
+      }
+      const speeds = ['-3x', '-2x', '-1.5x', '-1x', '-0.5x', '0.5x', '1x', '1.5x', '2x', '3x'];
+      return speeds[Math.round(val)] || '1x';
     }
     default:
       return `${Math.round(val)}`;
@@ -1965,6 +2253,104 @@ function drawIcon(canvas, type, color, norm, time) {
         const jitter = norm * Math.sin(time * 8 + i * 2.3) * 0.25;
         const h = (baseH[i] + jitter) * r * 1.4;
         ctx.fillRect(x, cy + r * 0.7 - h, bw, h);
+      }
+      break;
+    }
+    case 'loopLength': { // Circular arrow — arc grows with value, gentle rotation
+      const rot = time * 0.6;
+      const sweep = 0.4 + norm * 0.5; // 40%-90% of circle
+      const arcR = r * 0.65;
+      const startA = -Math.PI * 0.5 + rot;
+      const endA = startA + Math.PI * 2 * sweep;
+      ctx.beginPath();
+      ctx.arc(cx, cy, arcR, startA, endA);
+      ctx.stroke();
+      // Arrowhead at end of arc
+      const ax = cx + Math.cos(endA) * arcR;
+      const ay = cy + Math.sin(endA) * arcR;
+      const aSize = r * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(ax + Math.cos(endA + 0.5) * aSize, ay + Math.sin(endA + 0.5) * aSize);
+      ctx.lineTo(ax, ay);
+      ctx.lineTo(ax + Math.cos(endA - 1.2) * aSize, ay + Math.sin(endA - 1.2) * aSize);
+      ctx.stroke();
+      break;
+    }
+    case 'loopFeedback': { // Two chasing arrows in a circle — tighten with value
+      const fbR = r * 0.55;
+      const gap = 0.3 - norm * 0.2; // arrows closer together at high feedback
+      const spin = time * (0.5 + norm * 0.8);
+      for (let a = 0; a < 2; a++) {
+        const base = spin + a * Math.PI;
+        const aStart = base + gap;
+        const aEnd = base + Math.PI - gap;
+        ctx.beginPath();
+        ctx.arc(cx, cy, fbR, aStart, aEnd);
+        ctx.stroke();
+        // Arrowhead
+        const ax = cx + Math.cos(aEnd) * fbR;
+        const ay = cy + Math.sin(aEnd) * fbR;
+        const aSize = r * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(ax + Math.cos(aEnd + 0.6) * aSize, ay + Math.sin(aEnd + 0.6) * aSize);
+        ctx.lineTo(ax, ay);
+        ctx.lineTo(ax + Math.cos(aEnd - 1.1) * aSize, ay + Math.sin(aEnd - 1.1) * aSize);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'loopDegrade': { // Degraded waveform — fragmented sine with noise
+      const segs = 20;
+      const noiseAmt = norm;
+      ctx.beginPath();
+      let prevDrawn = true;
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const x = (cx - r) + t * r * 2;
+        const baseY = Math.sin(t * Math.PI * 2.5) * r * 0.65;
+        const noise = noiseAmt * (Math.sin(t * 37 + time * 5) * 0.4 + Math.sin(t * 73 + time * 3) * 0.3) * r;
+        const gapChance = noiseAmt * Math.sin(t * 17 + time * 4);
+        if (gapChance > 0.6) {
+          prevDrawn = false;
+          continue;
+        }
+        const y = cy + baseY + noise;
+        if (!prevDrawn || i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        prevDrawn = true;
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'loopSpeed': { // Direction arrow with speed bars
+      const speedIdx = Math.round(norm * 9);
+      const reverse = speedIdx < 5; // 0-4 = reverse; 5-9 = forward
+      const magnitude = reverse ? (5 - speedIdx) : (speedIdx - 4); // 1-5 bars
+      const dir = reverse ? -1 : 1;
+      // Arrow
+      const arrowLen = r * 1.0;
+      const arrowX = cx - dir * arrowLen * 0.5;
+      const arrowEndX = cx + dir * arrowLen * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(arrowX, cy);
+      ctx.lineTo(arrowEndX, cy);
+      ctx.stroke();
+      // Arrowhead
+      const headSize = r * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(arrowEndX, cy);
+      ctx.lineTo(arrowEndX - dir * headSize, cy - headSize * 0.6);
+      ctx.moveTo(arrowEndX, cy);
+      ctx.lineTo(arrowEndX - dir * headSize, cy + headSize * 0.6);
+      ctx.stroke();
+      // Speed bars
+      for (let i = 0; i < magnitude; i++) {
+        const bx = cx + dir * (r * 0.15 + i * r * 0.22);
+        const bh = r * (0.3 + i * 0.15);
+        ctx.beginPath();
+        ctx.moveTo(bx, cy - bh);
+        ctx.lineTo(bx, cy + bh);
+        ctx.stroke();
       }
       break;
     }
@@ -2295,6 +2681,7 @@ function renderTerrain(time) {
 function buildKnobs() {
   const grainContainer = document.getElementById('grain-knobs');
   const tapeContainer = document.getElementById('tape-knobs');
+  const tapeLoopContainer = document.getElementById('tape-loop-knobs');
 
   for (const [id, p] of Object.entries(PARAMS)) {
     const group = document.createElement('div');
@@ -2329,6 +2716,30 @@ function buildKnobs() {
     const labelEl = document.createElement('div');
     labelEl.className = 'knob-label';
     labelEl.textContent = p.label;
+    if (id === 'loopSpeed') {
+      labelEl.classList.add('knob-label-clickable');
+      labelEl.title = 'Click to toggle freeform speed';
+      labelEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.speedFreeform = !state.speedFreeform;
+        labelEl.classList.toggle('freeform-active', state.speedFreeform);
+        labelEl.textContent = state.speedFreeform ? 'FREE SPD' : 'SPEED';
+        updateKnobDisplay(id);
+        if (juceMode && setSpeedFreeformFn) setSpeedFreeformFn(state.speedFreeform ? 1 : 0);
+      });
+    }
+    if (id === 'grainSize') {
+      labelEl.classList.add('knob-label-clickable');
+      labelEl.title = 'Click to toggle BPM sync';
+      labelEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.grainSyncEnabled = !state.grainSyncEnabled;
+        labelEl.classList.toggle('freeform-active', state.grainSyncEnabled);
+        labelEl.textContent = state.grainSyncEnabled ? 'BPM SYNC' : 'SIZE';
+        updateKnobDisplay(id);
+        if (juceMode && setGrainSyncFn) setGrainSyncFn(state.grainSyncEnabled ? 1 : 0);
+      });
+    }
     group.appendChild(labelEl);
 
     // Store references
@@ -2377,6 +2788,7 @@ function buildKnobs() {
     });
 
     if (p.section === 'grain') grainContainer.appendChild(group);
+    else if (p.section === 'tapeloop') tapeLoopContainer.appendChild(group);
     else tapeContainer.appendChild(group);
   }
 }
@@ -2840,6 +3252,7 @@ document.getElementById('grain-header').addEventListener('click', (e) => {
 });
 
 document.getElementById('tape-header').addEventListener('click', (e) => {
+  if (e.target.closest('.tape-subtab')) return; // sub-tab handles itself
   if (e.target.closest('.section-toggle-btn')) {
     state.sectionEnabled.tape = !state.sectionEnabled.tape;
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
@@ -2849,6 +3262,307 @@ document.getElementById('tape-header').addEventListener('click', (e) => {
   state.focusedSection = state.focusedSection === 'tape' ? null : 'tape';
   updateSectionFocus();
 });
+
+// ---- Tape Sub-tabs ----
+document.getElementById('tape-subtabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tape-subtab');
+  if (!btn) return;
+  e.stopPropagation();
+  const tab = btn.dataset.tab;
+  if (tab === state.tapeSubTab) return;
+  state.tapeSubTab = tab;
+  document.querySelectorAll('.tape-subtab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tape-knobs').style.display = tab === 'fx' ? '' : 'none';
+  document.getElementById('tape-loop-content').style.display = tab === 'loop' ? '' : 'none';
+});
+
+// ---- Tape Loop Transport ----
+document.getElementById('btn-record').addEventListener('click', () => {
+  state.tapeLoop.recording = !state.tapeLoop.recording;
+  if (state.tapeLoop.recording) {
+    state.tapeLoop.playing = true;
+    state.tapeLoop.hasContent = true;
+  }
+  updateTransportButtons();
+  if (juceMode && setTapeLoopRecordFn) setTapeLoopRecordFn(state.tapeLoop.recording ? 1 : 0);
+  if (juceMode && setTapeLoopPlayFn) setTapeLoopPlayFn(state.tapeLoop.playing ? 1 : 0);
+});
+
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (!state.tapeLoop.hasContent) return;
+  state.tapeLoop.playing = !state.tapeLoop.playing;
+  if (!state.tapeLoop.playing) state.tapeLoop.recording = false;
+  updateTransportButtons();
+  if (juceMode && setTapeLoopPlayFn) setTapeLoopPlayFn(state.tapeLoop.playing ? 1 : 0);
+  if (juceMode && setTapeLoopRecordFn) setTapeLoopRecordFn(state.tapeLoop.recording ? 1 : 0);
+});
+
+document.getElementById('btn-stop').addEventListener('click', () => {
+  state.tapeLoop.playing = false;
+  state.tapeLoop.recording = false;
+  updateTransportButtons();
+  if (juceMode && setTapeLoopPlayFn) setTapeLoopPlayFn(0);
+  if (juceMode && setTapeLoopRecordFn) setTapeLoopRecordFn(0);
+});
+
+// Double-click stop = clear deck
+document.getElementById('btn-stop').addEventListener('dblclick', () => {
+  state.tapeLoop.playing = false;
+  state.tapeLoop.recording = false;
+  state.tapeLoop.hasContent = false;
+  state.tapeLoop.loopProgress = 0;
+  state.tapeLoop.hasUndo = false;
+  updateTransportButtons();
+  updateUndoButton();
+  if (juceMode && clearTapeLoopFn) clearTapeLoopFn();
+  if (juceMode && setTapeLoopPlayFn) setTapeLoopPlayFn(0);
+  if (juceMode && setTapeLoopRecordFn) setTapeLoopRecordFn(0);
+});
+
+// Undo last recording
+document.getElementById('btn-undo').addEventListener('click', () => {
+  if (!state.tapeLoop.hasUndo) return;
+  if (juceMode && undoTapeLoopFn) undoTapeLoopFn();
+  state.tapeLoop.hasUndo = false;
+  updateUndoButton();
+});
+
+// ---- Feed-to-Grain button ----
+document.getElementById('btn-feed').addEventListener('click', () => {
+  state.feedToGrain = !state.feedToGrain;
+  updateFeedButton();
+  if (juceMode && setFeedToGrainFn) setFeedToGrainFn(state.feedToGrain ? 1 : 0);
+});
+
+function updateFeedButton() {
+  const btn = document.getElementById('btn-feed');
+  if (btn) btn.classList.toggle('active', state.feedToGrain);
+  drawFeedIcon();
+}
+
+function drawFeedIcon() {
+  const canvas = document.getElementById('feed-icon-canvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = 28 * dpr; canvas.height = 28 * dpr;
+  canvas.style.width = '18px'; canvas.style.height = '18px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, 28, 28);
+  const color = state.feedToGrain ? '#7C3AED' : '#A78BFA';
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // Loop arrow (circular, left side)
+  ctx.beginPath();
+  ctx.arc(10, 14, 5, Math.PI * 0.3, Math.PI * 1.7);
+  ctx.stroke();
+  // Arrowhead on the loop
+  const ax = 10 + Math.cos(Math.PI * 0.3) * 5;
+  const ay = 14 + Math.sin(Math.PI * 0.3) * 5;
+  ctx.beginPath();
+  ctx.moveTo(ax + 1, ay - 3.5);
+  ctx.lineTo(ax, ay);
+  ctx.lineTo(ax - 3.5, ay - 1);
+  ctx.stroke();
+  // Arrow pointing right (feed direction)
+  ctx.beginPath();
+  ctx.moveTo(15, 14);
+  ctx.lineTo(21, 14);
+  ctx.stroke();
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(19, 11.5);
+  ctx.lineTo(22, 14);
+  ctx.lineTo(19, 16.5);
+  ctx.stroke();
+  // Small grain dot (destination)
+  ctx.beginPath();
+  ctx.arc(24, 14, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function updateUndoButton() {
+  const btn = document.getElementById('btn-undo');
+  if (btn) btn.classList.toggle('has-undo', state.tapeLoop.hasUndo);
+  drawUndoIcon();
+}
+
+function drawUndoIcon() {
+  const canvas = document.getElementById('undo-icon-canvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = 28 * dpr; canvas.height = 28 * dpr;
+  canvas.style.width = '18px'; canvas.style.height = '18px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, 28, 28);
+  ctx.strokeStyle = state.tapeLoop.hasUndo ? '#7C3AED' : '#A78BFA';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // Curved arrow (undo)
+  ctx.beginPath();
+  ctx.arc(14, 14, 6, Math.PI * 0.8, Math.PI * 2.2);
+  ctx.stroke();
+  // Arrowhead
+  const ax = 14 + Math.cos(Math.PI * 0.8) * 6;
+  const ay = 14 + Math.sin(Math.PI * 0.8) * 6;
+  ctx.beginPath();
+  ctx.moveTo(ax - 1, ay - 4.5);
+  ctx.lineTo(ax, ay);
+  ctx.lineTo(ax + 4.5, ay - 1);
+  ctx.stroke();
+}
+
+function updateTransportButtons() {
+  const rec = document.getElementById('btn-record');
+  const play = document.getElementById('btn-play');
+  const stop = document.getElementById('btn-stop');
+  rec.classList.toggle('recording', state.tapeLoop.recording);
+  rec.classList.toggle('active', state.tapeLoop.recording);
+  play.classList.toggle('active', state.tapeLoop.playing && !state.tapeLoop.recording);
+  stop.classList.toggle('active', !state.tapeLoop.playing);
+  drawTransportIcons();
+  // Update deck status dots
+  document.getElementById('dot-rec')?.classList.toggle('active', state.tapeLoop.recording);
+  document.getElementById('dot-play')?.classList.toggle('active', state.tapeLoop.playing && !state.tapeLoop.recording);
+  document.getElementById('dot-content')?.classList.toggle('active', state.tapeLoop.hasContent);
+}
+
+// ---- Transport Icon Drawing ----
+function drawTransportIcons() {
+  const dpr = window.devicePixelRatio || 1;
+  // Coordinate space is 32x32 after scale, center = (16,16)
+  const c = 16;
+
+  // Record icon — filled circle
+  const recC = document.getElementById('transport-rec-icon');
+  recC.width = 32 * dpr; recC.height = 32 * dpr;
+  recC.style.width = '16px'; recC.style.height = '16px';
+  const rCtx = recC.getContext('2d');
+  rCtx.scale(dpr, dpr);
+  rCtx.beginPath();
+  rCtx.arc(c, c, 5, 0, Math.PI * 2);
+  rCtx.fillStyle = state.tapeLoop.recording ? '#EF4444' : '#B0A4C0';
+  rCtx.fill();
+
+  // Play icon — triangle centered
+  const playC = document.getElementById('transport-play-icon');
+  playC.width = 32 * dpr; playC.height = 32 * dpr;
+  playC.style.width = '16px'; playC.style.height = '16px';
+  const pCtx = playC.getContext('2d');
+  pCtx.scale(dpr, dpr);
+  pCtx.beginPath();
+  pCtx.moveTo(c - 4, c - 6);
+  pCtx.lineTo(c + 6, c);
+  pCtx.lineTo(c - 4, c + 6);
+  pCtx.closePath();
+  pCtx.fillStyle = (state.tapeLoop.playing && !state.tapeLoop.recording) ? '#8B5CF6' : '#B0A4C0';
+  pCtx.fill();
+
+  // Stop icon — square centered
+  const stopC = document.getElementById('transport-stop-icon');
+  stopC.width = 32 * dpr; stopC.height = 32 * dpr;
+  stopC.style.width = '16px'; stopC.style.height = '16px';
+  const sCtx = stopC.getContext('2d');
+  sCtx.scale(dpr, dpr);
+  sCtx.fillStyle = !state.tapeLoop.playing ? '#8B5CF6' : '#B0A4C0';
+  sCtx.fillRect(c - 5, c - 5, 10, 10);
+}
+
+// ---- Tape Reel Visualization ----
+function setupTapeReelCanvas() {
+  const canvas = document.getElementById('tape-reel-canvas');
+  if (!canvas) return;
+  const container = canvas.parentElement;
+  const w = Math.min(container.clientWidth - 16, 260);
+  const h = Math.min(56, w * 0.28);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+}
+
+function drawTapeReels(time) {
+  const canvas = document.getElementById('tape-reel-canvas');
+  if (!canvas || canvas.style.display === 'none') return;
+  if (state.tapeSubTab !== 'loop') return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(dpr, dpr);
+
+  const reelR = h * 0.38;
+  const hubR = reelR * 0.2;
+  const leftCx = w * 0.28;
+  const rightCx = w * 0.72;
+  const cy = h * 0.5;
+
+  ctx.strokeStyle = '#7C3AED';
+  ctx.fillStyle = '#7C3AED';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+
+  // Reel rotation
+  if (state.tapeLoop.playing || state.tapeLoop.recording) {
+    state.tapeLoop.reelAngle += 0.05;
+  }
+  const angle = state.tapeLoop.reelAngle;
+
+  function drawReel(cx_r, radiusMod) {
+    const rr = reelR * radiusMod;
+    // Outer circle
+    ctx.beginPath();
+    ctx.arc(cx_r, cy, rr, 0, Math.PI * 2);
+    ctx.stroke();
+    // Hub circle
+    ctx.beginPath();
+    ctx.arc(cx_r, cy, hubR, 0, Math.PI * 2);
+    ctx.fill();
+    // 3 spokes
+    for (let i = 0; i < 3; i++) {
+      const a = angle + (Math.PI * 2 * i / 3);
+      ctx.beginPath();
+      ctx.moveTo(cx_r + Math.cos(a) * hubR, cy + Math.sin(a) * hubR);
+      ctx.lineTo(cx_r + Math.cos(a) * rr * 0.85, cy + Math.sin(a) * rr * 0.85);
+      ctx.stroke();
+    }
+  }
+
+  const progress = state.tapeLoop.loopProgress;
+  drawReel(leftCx, 1.0 - progress * 0.15);
+  drawReel(rightCx, 0.85 + progress * 0.15);
+
+  // Tape path lines
+  ctx.beginPath();
+  ctx.moveTo(leftCx + reelR * 0.9, cy - reelR * 0.1);
+  ctx.lineTo(rightCx - reelR * 0.75, cy - reelR * 0.1);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(leftCx + reelR * 0.9, cy + reelR * 0.1);
+  ctx.lineTo(rightCx - reelR * 0.75, cy + reelR * 0.1);
+  ctx.stroke();
+
+  // Recording indicator
+  if (state.tapeLoop.recording) {
+    const pulse = Math.sin(time * 4) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(239,68,68,${0.4 + pulse * 0.6})`;
+    ctx.beginPath();
+    ctx.arc(w * 0.5, cy - reelR * 0.1, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
 
 // ---- Output Gain Slider ----
 function updateOutputDisplay() {
@@ -3148,6 +3862,7 @@ function animate(timestamp) {
   updateSectionIcons();
   updateXYAuto(time);
   updateAnimatedIcons(time);
+  drawTapeReels(time);
 
   requestAnimationFrame(animate);
 }
@@ -3162,6 +3877,10 @@ function init() {
   buildKnobs();
   buildCategoryButtons();
   buildPresetGrid();
+  setupTapeReelCanvas();
+  drawTransportIcons();
+  drawUndoIcon();
+  drawFeedIcon();
   // Initialize JUCE bindings (sync param values from DAW)
   initJuceBindings();
   initJucePresets();

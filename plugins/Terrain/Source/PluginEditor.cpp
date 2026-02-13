@@ -27,6 +27,10 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             .withOptionsFrom(hissRelay)
             .withOptionsFrom(outputGainRelay)
             .withOptionsFrom(masterMixRelay)
+            .withOptionsFrom(loopLengthRelay)
+            .withOptionsFrom(loopFeedbackRelay)
+            .withOptionsFrom(loopDegradeRelay)
+            .withOptionsFrom(loopSpeedRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -156,6 +160,66 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             {
                 complete(audioProcessor.wanderLinked.load());
             })
+            .withNativeFunction("setTapeLoopRecord", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.tapeLoopRecording.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getTapeLoopRecord", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.tapeLoopRecording.load());
+            })
+            .withNativeFunction("setTapeLoopPlay", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.tapeLoopPlaying.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getTapeLoopPlay", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.tapeLoopPlaying.load());
+            })
+            .withNativeFunction("clearTapeLoop", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.clearTapeLoop();
+                complete({});
+            })
+            .withNativeFunction("undoTapeLoop", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.undoTapeLoop();
+                complete({});
+            })
+            .withNativeFunction("setSpeedFreeform", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.speedFreeform.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getSpeedFreeform", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.speedFreeform.load());
+            })
+            .withNativeFunction("setFeedToGrain", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.tapeLoopFeedToGrain.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getFeedToGrain", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.tapeLoopFeedToGrain.load());
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
@@ -200,6 +264,18 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     masterMixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::MASTER_MIX), masterMixRelay, nullptr);
 
+    loopLengthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LOOP_LENGTH), loopLengthRelay, nullptr);
+
+    loopFeedbackAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LOOP_FEEDBACK), loopFeedbackRelay, nullptr);
+
+    loopDegradeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LOOP_DEGRADE), loopDegradeRelay, nullptr);
+
+    loopSpeedAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LOOP_SPEED), loopSpeedRelay, nullptr);
+
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
@@ -238,10 +314,24 @@ void TerrainAudioProcessorEditor::timerCallback()
     // Read BPM for grain sync display
     float bpm = audioProcessor.currentBPM.load();
 
+    // Read tape loop state
+    float tapeLoopRec  = audioProcessor.tapeLoopRecording.load();
+    float tapeLoopPlay = audioProcessor.tapeLoopPlaying.load();
+    float tapeLoopProg = audioProcessor.getTapeLoopProgress();
+    bool  tapeLoopHas  = audioProcessor.getTapeLoopHasContent();
+    bool  tapeLoopUndo = audioProcessor.getTapeLoopHasUndo();
+
     // Push visualization data to JS
     juce::String js;
     js << "if(window.updateVisualization){"
        << "window.updateVisualization(" << grainCount << "," << scopeData << "," << juce::String(bpm, 1) << ");}";
+    js << "if(window.updateTapeLoopState){"
+       << "window.updateTapeLoopState("
+       << (tapeLoopRec > 0.5f ? "true" : "false") << ","
+       << (tapeLoopPlay > 0.5f ? "true" : "false") << ","
+       << (tapeLoopHas ? "true" : "false") << ","
+       << juce::String(tapeLoopProg, 4) << ","
+       << (tapeLoopUndo ? "true" : "false") << ");}";
 
     webView->evaluateJavascript(js);
 }
