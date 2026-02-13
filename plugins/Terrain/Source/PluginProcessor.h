@@ -31,6 +31,7 @@ struct PresetData
     float tapeEnabled = 1.f; // 1 = on (default), 0 = bypass tape processing
     // Drift link to XY pad
     float wanderLinked = 1.f; // 1 = linked (default), 0 = unlinked from XY pad
+    float grainFilter = 50.f; // 0 = HP, 50 = bypass, 100 = LP
 };
 
 //==============================================================================
@@ -161,6 +162,9 @@ private:
     juce::SmoothedValue<float> smoothedSaturation;
     juce::SmoothedValue<float> smoothedHiss;
 
+    // Smoothed parameters — grain filter
+    juce::SmoothedValue<float> smoothedGrainFilter;
+
     // Smoothed parameters — tape loop (continuous params only)
     juce::SmoothedValue<float> smoothedLoopFeedback;
     juce::SmoothedValue<float> smoothedLoopDegrade;
@@ -169,10 +173,15 @@ private:
     juce::SmoothedValue<float> smoothedOutputGain;
     juce::SmoothedValue<float> smoothedMasterMix;
 
+    // Grain filter state (one-pole)
+    float grainFilterStateL = 0.0f;
+    float grainFilterStateR = 0.0f;
+
     // Feed-to-grain: one-sample delay buffer (previous tape loop output)
     float feedDelayL = 0.0f;
     float feedDelayR = 0.0f;
     bool prevProcessBlockRecording = false; // Track recording transitions for auto-disabling feed
+    bool prevFeedActive = false; // Track feed mode transitions for grain buffer clearing
 
     // Presets
     void initializePresets();

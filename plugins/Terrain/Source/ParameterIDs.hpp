@@ -8,6 +8,7 @@ namespace ParameterIDs
     constexpr char PITCH[]        = "PITCH";
     constexpr char WANDER[]       = "DRIFT";  // Keep "DRIFT" string for DAW session backward compat
     constexpr char FREEZE[]       = "FREEZE";
+    constexpr char GRAIN_FILTER[] = "GRAIN_FILTER";
     constexpr char LOOP_LENGTH[]   = "LOOP_LENGTH";
     constexpr char LOOP_FEEDBACK[] = "LOOP_FEEDBACK";
     constexpr char LOOP_DEGRADE[]  = "LOOP_DEGRADE";

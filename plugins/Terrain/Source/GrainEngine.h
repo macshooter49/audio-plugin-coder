@@ -91,6 +91,12 @@ public:
         return count;
     }
 
+    // Clear the circular buffer (removes stale data when input source switches)
+    void clearBuffer()
+    {
+        std::fill(circularBuffer.begin(), circularBuffer.end(), 0.0f);
+    }
+
     // Process one sample: write input, spawn grains, sum voices
     // wanderAmount: 0-1 macro randomization intensity
     float processSample(float inputSample,

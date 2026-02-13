@@ -11,8 +11,8 @@
 //   STOPPED    — pass-through (no effect on signal)
 //   RECORDING  — captures input to buffer, pass-through output
 //   PLAYING    — reads loop from buffer, mixes with live input
-//   OVERDUBBING — reads existing loop, blends with new input via feedback,
-//                 writes back. Output = input + existing loop content.
+//   OVERDUBBING — silently writes to buffer while playback continues.
+//                 At 0% feedback replaces content; at 100% layers.
 //
 // Features:
 //   - BPM-synced loop lengths: 1 beat, 2 beats, 1/2/4/8 bars, Free
@@ -21,14 +21,14 @@
 //   - Degrade: one-pole lowpass on feedback path (tape wear per pass)
 //   - Variable speed playback: -3x to +3x (10 stepped presets + freeform)
 //   - Hermite interpolation for smooth variable-speed reads
-//   - Speed locked to 1x during record/overdub (standard looper behavior)
-//   - Single-level undo: snapshot before each recording, restore on undo
-//   - Clear: wipe all loop content
+//   - Multi-level undo (up to 10 levels): snapshot before each recording
+//   - Clear: wipe all loop content and undo history
 //==============================================================================
 class TapeLoopProcessor
 {
 public:
     static constexpr double MAX_BUFFER_SECONDS = 60.0;
+    static constexpr int MAX_UNDO_LEVELS = 10;
 
     TapeLoopProcessor() = default;
 
@@ -38,8 +38,6 @@ public:
         maxSamples = static_cast<int>(sr * MAX_BUFFER_SECONDS);
         bufL.assign(static_cast<size_t>(maxSamples), 0.0f);
         bufR.assign(static_cast<size_t>(maxSamples), 0.0f);
-        undoBufL.assign(static_cast<size_t>(maxSamples), 0.0f);
-        undoBufR.assign(static_cast<size_t>(maxSamples), 0.0f);
         reset();
     }
 
@@ -56,46 +54,68 @@ public:
         prevWantPlay = false;
         degradeStateL = 0.0f;
         degradeStateR = 0.0f;
-        hasUndo_ = false;
+        prevPlaybackSpeed = 1.0f;
+        reversalFadeCounter = 0;
+        playFromSnapshot = false;
+        snapBufL.clear();
+        snapBufR.clear();
     }
 
-    // Clear all loop content (double-click stop)
+    // Clear all loop content and undo history (double-click stop)
     void clear()
     {
         reset();
-        std::fill(undoBufL.begin(), undoBufL.end(), 0.0f);
-        std::fill(undoBufR.begin(), undoBufR.end(), 0.0f);
-        undoLoopLength = 0;
+        undoStack.clear();
+        snapBufL.clear();
+        snapBufR.clear();
     }
 
-    // Snapshot current state before recording (for undo)
+    // Snapshot current state before recording (push to undo stack)
     void snapshotForUndo()
     {
-        std::copy(bufL.begin(), bufL.end(), undoBufL.begin());
-        std::copy(bufR.begin(), bufR.end(), undoBufR.begin());
-        undoLoopLength = loopLength;
-        undoHasContent = hasContent_;
-        hasUndo_ = true;
+        // Only snapshot if there's something meaningful to save
+        // (either existing content or a loop length to preserve)
+        UndoState state;
+        const int copyLen = (loopLength > 0) ? loopLength : maxSamples;
+        state.bufL.assign(bufL.begin(), bufL.begin() + copyLen);
+        state.bufR.assign(bufR.begin(), bufR.begin() + copyLen);
+        state.loopLength = loopLength;
+        state.hasContent = hasContent_;
+
+        undoStack.push_back(std::move(state));
+
+        // Cap undo levels — drop oldest when exceeded
+        if (static_cast<int>(undoStack.size()) > MAX_UNDO_LEVELS)
+            undoStack.erase(undoStack.begin());
     }
 
-    // Restore from undo snapshot
+    // Restore from most recent undo snapshot (pop from stack)
     void restoreFromUndo()
     {
-        if (!hasUndo_) return;
-        std::copy(undoBufL.begin(), undoBufL.end(), bufL.begin());
-        std::copy(undoBufR.begin(), undoBufR.end(), bufR.begin());
-        loopLength = undoLoopLength;
-        hasContent_ = undoHasContent;
+        if (undoStack.empty()) return;
+
+        auto& state = undoStack.back();
+
+        // Clear buffer first, then copy the saved portion
+        std::fill(bufL.begin(), bufL.end(), 0.0f);
+        std::fill(bufR.begin(), bufR.end(), 0.0f);
+        std::copy(state.bufL.begin(), state.bufL.end(), bufL.begin());
+        std::copy(state.bufR.begin(), state.bufR.end(), bufR.begin());
+        loopLength = state.loopLength;
+        hasContent_ = state.hasContent;
+
+        undoStack.pop_back();
+
         readPos = 0.0;
         writePos = 0;
         isFirstPass = false;
-        hasUndo_ = false;
     }
 
-    bool hasUndo() const { return hasUndo_; }
+    bool hasUndo() const { return !undoStack.empty(); }
+    int getUndoLevels() const { return static_cast<int>(undoStack.size()); }
 
     // Apply fade-in/fade-out to the recorded buffer edges to eliminate onset/offset clicks
-    void applyEdgeFades(int fadeLen = 128)
+    void applyEdgeFades(int fadeLen = 768)
     {
         if (loopLength <= fadeLen * 2 || !hasContent_) return;
         for (int i = 0; i < fadeLen; ++i)
@@ -110,16 +130,33 @@ public:
         }
     }
 
+    // Apply retroactive fade-out at current write position when user manually stops overdub
+    void applyOverdubFadeOut(int fadeLen = 256)
+    {
+        if (loopLength <= 0 || overdubSamplesWritten <= 0) return;
+        const int actualFade = std::min(fadeLen, overdubSamplesWritten);
+        for (int i = 0; i < actualFade; ++i)
+        {
+            const float gain = static_cast<float>(i + 1) / static_cast<float>(actualFade);
+            const int pos = (writePos - 1 - i + loopLength) % loopLength;
+            bufL[static_cast<size_t>(pos)] *= gain;
+            bufR[static_cast<size_t>(pos)] *= gain;
+        }
+    }
+
     //--------------------------------------------------------------------------
     // Process one stereo sample. Modifies wetL/wetR in-place.
     // wantRecord/wantPlay are passed by reference so we can auto-stop recording.
     // speedFreeform: if true, speedParam is continuous (-3..+3 mapped from 0..9)
+    // preTapeL/R: signal before tape processor (used for overdub writing to
+    //             prevent wow/flutter accumulation in the buffer)
     //--------------------------------------------------------------------------
     void processStereo(float& wetL, float& wetR,
                        bool& wantRecord, bool& wantPlay,
                        float loopLengthParam, float feedback,
                        float degrade, float speedParam,
-                       float bpm, bool speedFreeform = false)
+                       float bpm, bool speedFreeform = false,
+                       float preTapeL = 0.0f, float preTapeR = 0.0f)
     {
         int lengthIdx = static_cast<int>(std::round(loopLengthParam));
         if (lengthIdx < 0) lengthIdx = 0;
@@ -155,6 +192,14 @@ public:
                 // Sync write head to current read position
                 writePos = static_cast<int>(readPos) % loopLength;
                 overdubSamplesWritten = 0; // Track for auto-stop after one pass
+
+                // Snapshot buffer for playback isolation during overdub.
+                // Playback reads from this frozen copy while the write head
+                // modifies the live buffer. Prevents feed-to-grain compounding
+                // (grain engine always processes original content, never its own output).
+                snapBufL.assign(bufL.begin(), bufL.begin() + loopLength);
+                snapBufR.assign(bufR.begin(), bufR.begin() + loopLength);
+                playFromSnapshot = true;
             }
         }
 
@@ -170,6 +215,15 @@ public:
                 readPos = 0.0;
                 applyEdgeFades(); // Smooth the loop edges to prevent clicks
             }
+            else if (loopLength > 0 && overdubSamplesWritten > 0
+                     && overdubSamplesWritten < loopLength)
+            {
+                // Manual overdub stop mid-pass — retroactive fade-out to prevent click
+                applyOverdubFadeOut();
+            }
+
+            // End playback isolation — switch back to live buffer
+            playFromSnapshot = false;
         }
 
         prevWantRecord = wantRecord;
@@ -213,57 +267,13 @@ public:
             return;
         }
 
-        //--- OVERDUB (recording on existing content) ---
-        if (wantRecord && !isFirstPass && hasContent_ && loopLength > 0)
+        //--- Compute current speed (shared by overdub + playback) ---
+        static constexpr float speedMults[] = { -3.0f, -2.0f, -1.5f, -1.0f, -0.5f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f };
+        float speed = 1.0f;
+        if (hasContent_ && loopLength > 0)
         {
-            const int rp = writePos % loopLength;
-            const float existL = bufL[static_cast<size_t>(rp)];
-            const float existR = bufR[static_cast<size_t>(rp)];
-
-            // Feedback with optional degrade filtering
-            float fbL = existL * feedback;
-            float fbR = existR * feedback;
-
-            if (degrade > 0.001f)
-            {
-                // One-pole lowpass on feedback path (tape wear simulation)
-                // alpha near 1.0 = clean, near 0.0 = heavy filtering
-                const float alpha = 1.0f - degrade * 0.65f;
-                degradeStateL = alpha * fbL + (1.0f - alpha) * degradeStateL;
-                degradeStateR = alpha * fbR + (1.0f - alpha) * degradeStateR;
-                fbL = degradeStateL;
-                fbR = degradeStateR;
-            }
-
-            // Write: new input + degraded feedback
-            bufL[static_cast<size_t>(rp)] = wetL + fbL;
-            bufR[static_cast<size_t>(rp)] = wetR + fbR;
-
-            // Output: live input + existing loop content (before overdub write)
-            wetL += existL;
-            wetR += existR;
-
-            writePos = (writePos + 1) % loopLength;
-            // Keep readPos in sync during overdub
-            readPos = static_cast<double>(writePos);
-
-            // Auto-stop overdub after one full pass
-            overdubSamplesWritten++;
-            if (overdubSamplesWritten >= loopLength)
-                wantRecord = false;
-
-            return;
-        }
-
-        //--- PLAYBACK (no recording) ---
-        if (wantPlay && hasContent_ && loopLength > 0)
-        {
-            // 10 stepped presets: -3x, -2x, -1.5x, -1x, -0.5x, 0.5x, 1x, 1.5x, 2x, 3x
-            static constexpr float speedMults[] = { -3.0f, -2.0f, -1.5f, -1.0f, -0.5f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f };
-            float speed;
             if (speedFreeform)
             {
-                // Freeform: map 0..9 → -3.0..+3.0 (skip 0 to avoid stall)
                 float raw = -3.0f + (speedParam / 9.0f) * 6.0f;
                 speed = (std::abs(raw) < 0.05f) ? 0.05f : raw;
             }
@@ -274,14 +284,92 @@ public:
                 if (speedIdx > 9) speedIdx = 9;
                 speed = speedMults[speedIdx];
             }
+        }
+
+        //--- OVERDUB (silent background recording on existing content) ---
+        // The loop keeps playing normally — recording just updates the buffer.
+        // At 0% feedback the old content is replaced; at 100% it layers.
+        if (wantRecord && !isFirstPass && hasContent_ && loopLength > 0)
+        {
+            const int wp = writePos % loopLength;
+            const float existL = bufL[static_cast<size_t>(wp)];
+            const float existR = bufR[static_cast<size_t>(wp)];
+
+            // Feedback with optional degrade filtering
+            float fbL = existL * feedback;
+            float fbR = existR * feedback;
+
+            if (degrade > 0.001f)
+            {
+                const float alpha = 1.0f - degrade * 0.65f;
+                degradeStateL = alpha * fbL + (1.0f - alpha) * degradeStateL;
+                degradeStateR = alpha * fbR + (1.0f - alpha) * degradeStateR;
+                fbL = degradeStateL;
+                fbR = degradeStateR;
+            }
+
+            // Overdub fade envelope — smooth layer transitions
+            static constexpr int OD_FADE = 256;
+            float inputGain = 1.0f;
+            if (overdubSamplesWritten < OD_FADE)
+                inputGain = static_cast<float>(overdubSamplesWritten) / static_cast<float>(OD_FADE);
+            if (loopLength > OD_FADE && (loopLength - overdubSamplesWritten) <= OD_FADE)
+                inputGain = std::min(inputGain,
+                    static_cast<float>(loopLength - overdubSamplesWritten) / static_cast<float>(OD_FADE));
+
+            // Write: faded new input + degraded feedback (write head always at 1x)
+            // Use preTapeL/R (grain+filter output WITHOUT tape processor effects)
+            // so wow/flutter/saturation never accumulate in the buffer across passes.
+            // Tape effects are applied in real-time during playback only.
+            bufL[static_cast<size_t>(wp)] = preTapeL * inputGain + fbL;
+            bufR[static_cast<size_t>(wp)] = preTapeR * inputGain + fbR;
+
+            // Advance write head at 1x
+            writePos = (writePos + 1) % loopLength;
+
+            // Auto-stop overdub after one full pass
+            overdubSamplesWritten++;
+            if (overdubSamplesWritten >= loopLength)
+            {
+                wantRecord = false;
+                playFromSnapshot = false; // Switch back to live buffer
+            }
+
+            // Fall through to PLAYBACK — loop keeps playing normally
+        }
+
+        //--- PLAYBACK (runs during both normal play and overdub) ---
+        if (wantPlay && hasContent_ && loopLength > 0)
+        {
+            // During overdub, read from frozen snapshot to prevent feed-to-grain
+            // compounding. The grain engine always processes original content.
+            const auto& readBufL = playFromSnapshot ? snapBufL : bufL;
+            const auto& readBufR = playFromSnapshot ? snapBufR : bufR;
+
+            // Detect speed direction reversal (forward ↔ reverse)
+            static constexpr int REVERSAL_FADE = 512;
+            if ((speed > 0.0f && prevPlaybackSpeed < 0.0f) ||
+                (speed < 0.0f && prevPlaybackSpeed > 0.0f))
+                reversalFadeCounter = REVERSAL_FADE;
+            prevPlaybackSpeed = speed;
 
             // Read with Hermite interpolation
-            float loopL = hermiteRead(bufL, readPos, loopLength);
-            float loopR = hermiteRead(bufR, readPos, loopLength);
+            float loopL = hermiteRead(readBufL, readPos, loopLength);
+            float loopR = hermiteRead(readBufR, readPos, loopLength);
+
+            // Speed reversal fade-in (masks direction change click)
+            if (reversalFadeCounter > 0)
+            {
+                const float fadeGain = 1.0f - static_cast<float>(reversalFadeCounter)
+                                            / static_cast<float>(REVERSAL_FADE);
+                loopL *= fadeGain;
+                loopR *= fadeGain;
+                reversalFadeCounter--;
+            }
 
             // Crossfade near loop boundaries to eliminate wrap discontinuity clicks
             // (especially important for feed-to-grain where clicks get amplified)
-            static constexpr int XFADE_LEN = 256;
+            static constexpr int XFADE_LEN = 768;
             if (loopLength > XFADE_LEN * 2)
             {
                 double posInLoop = readPos;
@@ -294,8 +382,8 @@ public:
                     // Near the end: blend with the start of the loop
                     const double d = posInLoop - fadeStartFwd;
                     const float alpha = 1.0f - static_cast<float>(d) / static_cast<float>(XFADE_LEN);
-                    const float startL = hermiteRead(bufL, d, loopLength);
-                    const float startR = hermiteRead(bufR, d, loopLength);
+                    const float startL = hermiteRead(readBufL, d, loopLength);
+                    const float startR = hermiteRead(readBufR, d, loopLength);
                     loopL = loopL * alpha + startL * (1.0f - alpha);
                     loopR = loopR * alpha + startR * (1.0f - alpha);
                 }
@@ -305,8 +393,8 @@ public:
                     const double d = posInLoop;
                     const float alpha = static_cast<float>(d) / static_cast<float>(XFADE_LEN);
                     const double endPos = static_cast<double>(loopLength - XFADE_LEN) + d;
-                    const float endL = hermiteRead(bufL, endPos, loopLength);
-                    const float endR = hermiteRead(bufR, endPos, loopLength);
+                    const float endL = hermiteRead(readBufL, endPos, loopLength);
+                    const float endR = hermiteRead(readBufR, endPos, loopLength);
                     loopL = loopL * alpha + endL * (1.0f - alpha);
                     loopR = loopR * alpha + endR * (1.0f - alpha);
                 }
@@ -398,14 +486,25 @@ private:
     bool prevWantRecord = false;
     bool prevWantPlay = false;
     int overdubSamplesWritten = 0; // Counts samples for overdub auto-stop
+    float prevPlaybackSpeed = 1.0f;   // Track speed for reversal detection
+    int reversalFadeCounter = 0;      // Countdown for speed reversal fade-in
 
     // Degrade filter state (one-pole lowpass)
     float degradeStateL = 0.0f;
     float degradeStateR = 0.0f;
 
-    // Undo snapshot (single-level)
-    std::vector<float> undoBufL, undoBufR;
-    int undoLoopLength = 0;
-    bool undoHasContent = false;
-    bool hasUndo_ = false;
+    // Overdub playback isolation: during overdub, playback reads from this
+    // frozen snapshot instead of the live buffer. Prevents feed-to-grain
+    // compounding (grain engine always processes original content, not its own output).
+    std::vector<float> snapBufL, snapBufR;
+    bool playFromSnapshot = false;
+
+    // Multi-level undo stack (up to MAX_UNDO_LEVELS snapshots)
+    struct UndoState
+    {
+        std::vector<float> bufL, bufR;
+        int loopLength = 0;
+        bool hasContent = false;
+    };
+    std::vector<UndoState> undoStack;
 };

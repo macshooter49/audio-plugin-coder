@@ -85,6 +85,7 @@ void TerrainAudioProcessor::loadPreset(int index)
     setParam(ParameterIDs::PITCH,        p.pitch);
     setParam(ParameterIDs::WANDER,       p.drift);
     setParam(ParameterIDs::FREEZE,       p.freeze);
+    setParam(ParameterIDs::GRAIN_FILTER, p.grainFilter);
     setParam(ParameterIDs::MIX,          p.mix);
     setParam(ParameterIDs::WOW_FLUTTER,  p.wowFlutter);
     setParam(ParameterIDs::SATURATION,   p.saturation);
@@ -132,6 +133,7 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.pitch      = apvts.getRawParameterValue(ParameterIDs::PITCH)->load();
     p.drift      = apvts.getRawParameterValue(ParameterIDs::WANDER)->load();
     p.freeze     = apvts.getRawParameterValue(ParameterIDs::FREEZE)->load();
+    p.grainFilter = apvts.getRawParameterValue(ParameterIDs::GRAIN_FILTER)->load();
     p.mix        = apvts.getRawParameterValue(ParameterIDs::MIX)->load();
     p.wowFlutter = apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load();
     p.saturation = apvts.getRawParameterValue(ParameterIDs::SATURATION)->load();
@@ -245,6 +247,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // Grain filter: 0 = HP, 50 = bypass, 100 = LP
+    layout.add (std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::GRAIN_FILTER, 1 },
+        "Grain Filter",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("")));
+
     // Tape parameters
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParameterIDs::WOW_FLUTTER, 1 },
@@ -332,6 +342,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedWander.reset(sampleRate, 0.02);
     smoothedFreeze.reset(sampleRate, 0.02);
     smoothedMix.reset(sampleRate, 0.02);
+    smoothedGrainFilter.reset(sampleRate, 0.02);
     smoothedWowFlutter.reset(sampleRate, 0.02);
     smoothedSaturation.reset(sampleRate, 0.02);
     smoothedHiss.reset(sampleRate, 0.02);
@@ -348,6 +359,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedWander.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
     smoothedFreeze.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::FREEZE)->load());
     smoothedMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
+    smoothedGrainFilter.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_FILTER)->load());
     smoothedWowFlutter.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
     smoothedSaturation.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
     smoothedHiss.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::HISS)->load());
@@ -431,6 +443,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     smoothedWander.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
     smoothedFreeze.setTargetValue(apvts.getRawParameterValue(ParameterIDs::FREEZE)->load());
     smoothedMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
+    smoothedGrainFilter.setTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_FILTER)->load());
     smoothedWowFlutter.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
     smoothedSaturation.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
     smoothedHiss.setTargetValue(apvts.getRawParameterValue(ParameterIDs::HISS)->load());
@@ -460,6 +473,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const bool tapeOn = tapeEnabled.load() > 0.5f;
     const bool feedToGrain = tapeLoopFeedToGrain.load() > 0.5f;
 
+    // When feed mode activates, clear the grain engine's circular buffer.
+    // Without this, stale live-input data persists (up to 5s) and grains with
+    // spray read old piano/input instead of loop content → dry signal leaks
+    // into overdub recordings.
+    const bool feedActiveNow = feedToGrain && wantPlay && tapeLoop.hasContent();
+    if (feedActiveNow && !prevFeedActive)
+    {
+        grainEngineL.clearBuffer();
+        grainEngineR.clearBuffer();
+    }
+    prevFeedActive = feedActiveNow;
+
     for (int i = 0; i < numSamples; ++i)
     {
         const float grainSize    = smoothedGrainSize.getNextValue();
@@ -470,6 +495,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float freezeRaw    = smoothedFreeze.getNextValue() * 0.01f;
         const float freeze       = std::pow(freezeRaw, 1.5f);
         const float mix          = smoothedMix.getNextValue();
+        const float grainFilterVal = smoothedGrainFilter.getNextValue();
         const float wowFlutter   = smoothedWowFlutter.getNextValue() * 0.01f;
         const float saturationAmt = smoothedSaturation.getNextValue() * 0.01f;
         const float hissAmt      = smoothedHiss.getNextValue() * 0.01f;
@@ -494,12 +520,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // (already-wandered signal gets re-wandered → clicks multiply)
         const float wander = feedActive ? wanderRaw * 0.7f : wanderRaw;
 
-        // Signal chain: Input → GrainEngine → TapeProcessor → TapeLoop → MasterMix → OutputGain
+        // Signal chain: Input → GrainEngine → GrainFilter → TapeProcessor → TapeLoop → MasterMix → OutputGain
         float wetL = grainOn
             ? grainEngineL.processSample(grainInputL, grainSize, density, spray, pitch, wander, freeze, mix)
             : grainInputL;
-        if (tapeOn)
-            wetL = tapeProcessorL.processSample(wetL, wowFlutter, saturationAmt, hissAmt);
 
         float wetR;
         if (rightChannel != nullptr)
@@ -507,12 +531,56 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             wetR = grainOn
                 ? grainEngineR.processSample(grainInputR, grainSize, density, spray, pitch, wander, freeze, mix)
                 : grainInputR;
-            if (tapeOn)
-                wetR = tapeProcessorR.processSample(wetR, wowFlutter, saturationAmt, hissAmt);
         }
         else
         {
             wetR = wetL;
+        }
+
+        // Grain filter: bipolar one-pole (0=HP, 50=bypass, 100=LP)
+        if (grainOn && std::abs(grainFilterVal - 50.f) > 0.5f)
+        {
+            float cutoff;
+            bool isHP;
+            if (grainFilterVal < 50.f)
+            {
+                const float hpNorm = (50.f - grainFilterVal) / 50.f;
+                cutoff = 20.f * std::pow(400.f, hpNorm);
+                isHP = true;
+            }
+            else
+            {
+                const float lpNorm = (grainFilterVal - 50.f) / 50.f;
+                cutoff = 20000.f * std::pow(0.01f, lpNorm);
+                isHP = false;
+            }
+            const float alpha = 1.f - std::exp(-6.283185f * cutoff / static_cast<float>(getSampleRate()));
+            grainFilterStateL += alpha * (wetL - grainFilterStateL);
+            grainFilterStateR += alpha * (wetR - grainFilterStateR);
+            if (isHP)
+            {
+                wetL -= grainFilterStateL;
+                wetR -= grainFilterStateR;
+            }
+            else
+            {
+                wetL = grainFilterStateL;
+                wetR = grainFilterStateR;
+            }
+        }
+
+        // Capture pre-tape signal (after grain + filter, before wow/flutter/saturation)
+        // Used by overdub to write clean signal — prevents tape effect compounding
+        const float preTapeL = wetL;
+        const float preTapeR = wetR;
+
+        if (tapeOn)
+        {
+            wetL = tapeProcessorL.processSample(wetL, wowFlutter, saturationAmt, hissAmt);
+            if (rightChannel != nullptr)
+                wetR = tapeProcessorR.processSample(wetR, wowFlutter, saturationAmt, hissAmt);
+            else
+                wetR = wetL;
         }
 
         // Tape loop (stereo, modifies wetL/wetR in-place, may auto-stop recording)
@@ -520,7 +588,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float preLoopR = wetR;
         tapeLoop.processStereo(wetL, wetR, wantRecord, wantPlay,
                                loopLengthParam, loopFeedback, loopDegrade,
-                               loopSpeedParam, bpm, isFreeform);
+                               loopSpeedParam, bpm, isFreeform,
+                               preTapeL, preTapeR);
 
         if (feedToGrain)
         {
@@ -682,6 +751,7 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("pitch",         p.pitch,         nullptr);
         node.setProperty("drift",         p.drift,         nullptr);
         node.setProperty("freeze",        p.freeze,        nullptr);
+        node.setProperty("grainFilter",   p.grainFilter,   nullptr);
         node.setProperty("mix",           p.mix,           nullptr);
         node.setProperty("wowFlutter",    p.wowFlutter,    nullptr);
         node.setProperty("saturation",    p.saturation,    nullptr);
@@ -745,6 +815,7 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.pitch         = static_cast<float>(child.getProperty("pitch",          0.f));
         p.drift         = static_cast<float>(child.getProperty("drift",          0.f));
         p.freeze        = static_cast<float>(child.getProperty("freeze",         0.f));
+        p.grainFilter   = static_cast<float>(child.getProperty("grainFilter",  50.f));
         p.mix           = static_cast<float>(child.getProperty("mix",           50.f));
         p.wowFlutter    = static_cast<float>(child.getProperty("wowFlutter",     0.f));
         p.saturation    = static_cast<float>(child.getProperty("saturation",     0.f));
