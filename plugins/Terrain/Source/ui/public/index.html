@@ -462,7 +462,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 14px 12px 10px;
+  padding: 10px 12px 6px;
   background: var(--bg-surface);
   overflow: hidden;
   transition: flex 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
@@ -612,18 +612,47 @@ body {
 /* ============ TAPE LOOP CONTENT ============ */
 .tape-loop-content {
   flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 6px;
+  align-items: center; justify-content: center; gap: 3px;
   opacity: 1; transform: translateY(0);
   transition: opacity 0.25s 0.35s, transform 0.25s 0.35s;
 }
-#tape-reel-canvas { display: block; max-height: 56px; }
+#tape-reel-canvas { display: block; max-height: 48px; }
+
+/* ---- Tape Loop Progress Track ---- */
+.tape-progress-track {
+  position: relative;
+  width: 70%;
+  height: 6px;
+  display: flex;
+  align-items: center;
+  margin: -5px 0 2px;
+}
+.tape-progress-rail {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: rgba(139,92,246,0.15);
+  border-radius: 0.5px;
+}
+.tape-progress-head {
+  position: absolute;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--purple-500);
+  box-shadow: 0 0 3px rgba(139,92,246,0.35);
+  left: 0%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tape-progress-head.visible { opacity: 1; }
 
 /* ---- Glass Deck Container ---- */
 .tape-deck-glass {
   position: relative;
   display: flex; flex-direction: column;
-  align-items: center; gap: 4px;
-  padding: 10px 14px 8px;
+  align-items: center; gap: 2px;
+  padding: 8px 14px 5px;
   border-radius: 14px;
   border: 1.5px solid rgba(139,92,246,0.18);
   background: rgba(255,255,255,0.45);
@@ -712,7 +741,7 @@ body {
 
 /* ============ TRANSPORT BUTTONS ============ */
 .tape-transport {
-  display: flex; gap: 10px; justify-content: center; align-items: center;
+  display: flex; gap: 8px; justify-content: center; align-items: center;
 }
 .transport-btn {
   width: 32px; height: 32px; border-radius: 8px;
@@ -1221,6 +1250,10 @@ body {
             <canvas id="undo-icon-canvas" width="28" height="28"></canvas>
           </button>
           <canvas id="tape-reel-canvas"></canvas>
+          <div class="tape-progress-track" id="tape-progress-track">
+            <div class="tape-progress-rail"></div>
+            <div class="tape-progress-head" id="tape-progress-head"></div>
+          </div>
           <div class="tape-transport" id="tape-transport">
             <button class="transport-btn" id="btn-record" title="Record">
               <canvas id="transport-rec-icon" width="32" height="32"></canvas>
@@ -2952,6 +2985,31 @@ const SCOPE_TIPS = {
     title: 'XY SPEED',
     desc: 'Controls how fast the XY auto-animation moves. In Chaotic mode, it sets the jump frequency. In Smooth mode, it sets the curve traversal speed.',
     tip: 'Tip: Drag up/down to adjust. Low speed for slow evolution, high speed for rapid modulation.'
+  },
+  'btn-record': {
+    title: 'RECORD',
+    desc: 'Start recording a new loop or overdub onto the existing loop. First press captures a new loop. Press again while playing to overdub \u2014 new audio layers on top of existing content.',
+    tip: 'Tip: Use the Feedback knob to control how much old content is preserved during overdub. 0% = full replace, 100% = infinite layers.'
+  },
+  'btn-play': {
+    title: 'PLAY',
+    desc: 'Start or resume loop playback. The loop plays at the current Speed setting with all tape effects applied in real-time. Works independently from recording.',
+    tip: 'Tip: Change Speed while playing for instant pitch-shifting and time-stretching effects.'
+  },
+  'btn-stop': {
+    title: 'STOP',
+    desc: 'Stop loop playback and recording. The loop content is preserved \u2014 press Play to resume anytime. Double-click Stop to clear the entire tape deck and start fresh.',
+    tip: 'Tip: Double-click to clear all loop content and undo history.'
+  },
+  'btn-feed': {
+    title: 'FEED',
+    desc: 'Routes the tape loop output back into the grain engine input. Instead of processing live audio, the grains process loop content \u2014 creating evolving, self-generating textures.',
+    tip: 'Tip: Record with Feed on to capture granulized loop content back into the tape. Great for building layered soundscapes.'
+  },
+  'btn-undo': {
+    title: 'UNDO',
+    desc: 'Reverts the loop to the state before the last recording or overdub. Supports up to 10 levels of undo so you can step back through multiple takes.',
+    tip: 'Tip: Each recording automatically creates an undo snapshot. Undo won\'t affect playback position.'
   }
 };
 
@@ -2979,8 +3037,9 @@ function hideScopeTooltip() {
   document.getElementById('tt-icon').style.display = '';
 }
 
-// Wire up scope control hover events
-['randomize-btn', 'xy-play', 'xy-mode', 'xy-speed-wrap'].forEach(id => {
+// Wire up scope + tape transport hover events for tooltips
+['randomize-btn', 'xy-play', 'xy-mode', 'xy-speed-wrap',
+ 'btn-record', 'btn-play', 'btn-stop', 'btn-feed', 'btn-undo'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
   let timer;
@@ -3530,7 +3589,7 @@ function setupTapeReelCanvas() {
   if (!canvas) return;
   const container = canvas.parentElement;
   const w = Math.min(container.clientWidth - 16, 260);
-  const h = Math.min(56, w * 0.28);
+  const h = Math.min(48, w * 0.24);
   const dpr = window.devicePixelRatio || 1;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
@@ -3613,6 +3672,49 @@ function drawTapeReels(time) {
   }
 
   ctx.restore();
+
+  // Update progress track playhead
+  const head = document.getElementById('tape-progress-head');
+  if (head) {
+    const active = state.tapeLoop.hasContent && (state.tapeLoop.playing || state.tapeLoop.recording);
+    if (active) {
+      head.classList.add('visible');
+      head.style.left = (progress * 100) + '%';
+    } else {
+      head.classList.remove('visible');
+    }
+  }
+
+  // Draw beat/bar tick marks on the progress rail (synced lengths only)
+  drawProgressTicks();
+}
+
+function drawProgressTicks() {
+  const track = document.getElementById('tape-progress-track');
+  if (!track) return;
+
+  // Remove old ticks
+  track.querySelectorAll('.progress-tick').forEach(t => t.remove());
+
+  if (!state.tapeLoop.hasContent) return;
+
+  // Get current loop length setting (0-6 stepped)
+  const lengthVal = Math.round(state.params.loopLength || 0);
+  if (lengthVal >= 6) return; // Free mode — no ticks
+
+  // Beat counts for each length setting: 1, 2, 4(1bar), 8(2bars), 16(4bars), 32(8bars)
+  const beatCounts = [1, 2, 4, 8, 16, 32];
+  const beats = beatCounts[lengthVal];
+  if (beats <= 1) return; // Single beat — no subdivisions to show
+
+  const trackW = track.clientWidth;
+  for (let i = 1; i < beats; i++) {
+    const pct = (i / beats) * 100;
+    const tick = document.createElement('div');
+    tick.className = 'progress-tick';
+    tick.style.cssText = `position:absolute;left:${pct}%;top:50%;width:1px;height:${i % 4 === 0 ? 5 : 3}px;transform:translate(-50%,-50%);background:rgba(139,92,246,${i % 4 === 0 ? 0.25 : 0.12});border-radius:0.5px;`;
+    track.appendChild(tick);
+  }
 }
 
 // ---- Output Gain Slider ----
@@ -3913,6 +4015,10 @@ function animate(timestamp) {
   updateSectionIcons();
   updateXYAuto(time);
   updateAnimatedIcons(time);
+  // Safari preview: simulate loop progress when no JUCE backend
+  if (!juceMode && (state.tapeLoop.playing || state.tapeLoop.recording)) {
+    state.tapeLoop.loopProgress = (state.tapeLoop.loopProgress + 0.003) % 1.0;
+  }
   drawTapeReels(time);
 
   requestAnimationFrame(animate);

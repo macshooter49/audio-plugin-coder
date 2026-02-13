@@ -56,6 +56,8 @@ public:
         degradeStateR = 0.0f;
         prevPlaybackSpeed = 1.0f;
         reversalFadeCounter = 0;
+        tapeStopCounter = 0;
+        tapeStartCounter = 0;
         playFromSnapshot = false;
         snapBufL.clear();
         snapBufR.clear();
@@ -226,12 +228,50 @@ public:
             playFromSnapshot = false;
         }
 
+        //--- Tape stop/start effect (decorative motor slowdown/speedup) ---
+        if (!wantPlay && prevWantPlay && hasContent_ && loopLength > 0 && !isFirstPass)
+        {
+            tapeStopSamples = static_cast<int>(sr * 0.2); // 200ms deceleration
+            tapeStopCounter = tapeStopSamples;
+        }
+        if (wantPlay && !prevWantPlay && hasContent_ && loopLength > 0 && !isFirstPass)
+        {
+            tapeStartSamples = static_cast<int>(sr * 0.12); // 120ms acceleration
+            tapeStartCounter = tapeStartSamples;
+            tapeStopCounter = 0; // Cancel any in-progress tape stop
+        }
+
         prevWantRecord = wantRecord;
         prevWantPlay = wantPlay;
 
         //--- STOPPED ---
         if (!wantPlay && !wantRecord)
+        {
+            // Tape stop effect: brief deceleration tail when playback stops
+            if (tapeStopCounter > 0 && hasContent_ && loopLength > 0)
+            {
+                const float t = static_cast<float>(tapeStopCounter)
+                              / static_cast<float>(std::max(1, tapeStopSamples));
+                const float mult = t * t; // Squared curve — natural motor deceleration
+
+                const auto& rBufL = playFromSnapshot ? snapBufL : bufL;
+                const auto& rBufR = playFromSnapshot ? snapBufR : bufR;
+                float loopL = hermiteRead(rBufL, readPos, loopLength) * mult;
+                float loopR = hermiteRead(rBufR, readPos, loopLength) * mult;
+
+                wetL += loopL;
+                wetR += loopR;
+
+                // Advance at decelerating speed (pitch drops naturally)
+                readPos += static_cast<double>(prevPlaybackSpeed * mult);
+                const double len = static_cast<double>(loopLength);
+                while (readPos >= len) readPos -= len;
+                while (readPos < 0.0) readPos += len;
+
+                tapeStopCounter--;
+            }
             return;
+        }
 
         //--- FIRST RECORDING ---
         if (wantRecord && isFirstPass)
@@ -341,6 +381,16 @@ public:
         //--- PLAYBACK (runs during both normal play and overdub) ---
         if (wantPlay && hasContent_ && loopLength > 0)
         {
+            // Tape start acceleration (decorative motor speedup)
+            float tapeStartMult = 1.0f;
+            if (tapeStartCounter > 0)
+            {
+                const float t = 1.0f - static_cast<float>(tapeStartCounter)
+                                     / static_cast<float>(std::max(1, tapeStartSamples));
+                tapeStartMult = t * t; // Squared curve — natural motor acceleration
+                tapeStartCounter--;
+            }
+
             // During overdub, read from frozen snapshot to prevent feed-to-grain
             // compounding. The grain engine always processes original content.
             const auto& readBufL = playFromSnapshot ? snapBufL : bufL;
@@ -410,12 +460,16 @@ public:
                 loopR = degradeStateR;
             }
 
+            // Apply tape start acceleration to output (pitch + volume ramp up together)
+            loopL *= tapeStartMult;
+            loopR *= tapeStartMult;
+
             // Mix loop playback into the wet signal
             wetL += loopL;
             wetR += loopR;
 
-            // Advance read position
-            readPos += static_cast<double>(speed);
+            // Advance read position (tape start scales speed for pitch ramp)
+            readPos += static_cast<double>(speed * tapeStartMult);
             const double len = static_cast<double>(loopLength);
             while (readPos >= len) readPos -= len;
             while (readPos < 0.0) readPos += len;
@@ -488,6 +542,12 @@ private:
     int overdubSamplesWritten = 0; // Counts samples for overdub auto-stop
     float prevPlaybackSpeed = 1.0f;   // Track speed for reversal detection
     int reversalFadeCounter = 0;      // Countdown for speed reversal fade-in
+
+    // Tape stop/start motor effect (decorative)
+    int tapeStopCounter = 0;          // Remaining samples in stop deceleration
+    int tapeStopSamples = 0;          // Total duration of current stop ramp
+    int tapeStartCounter = 0;         // Remaining samples in start acceleration
+    int tapeStartSamples = 0;         // Total duration of current start ramp
 
     // Degrade filter state (one-pole lowpass)
     float degradeStateL = 0.0f;
