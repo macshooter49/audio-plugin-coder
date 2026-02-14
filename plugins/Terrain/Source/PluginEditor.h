@@ -48,6 +48,41 @@ private:
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
+    // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
+    static constexpr int CAPTURE_STRIP_HEIGHT = 26;
+
+    class CaptureDragStrip : public juce::Component
+    {
+    public:
+        CaptureDragStrip (TerrainAudioProcessor& p) : processor (p) {}
+
+        void updateState (int exportState, float availSeconds)
+        {
+            if (state != exportState || std::abs (avail - availSeconds) > 0.5f)
+            {
+                state = exportState;
+                avail = availSeconds;
+                repaint();
+            }
+        }
+
+        int getState() const { return state; }
+
+        void paint (juce::Graphics& g) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent& e) override;
+        void mouseUp (const juce::MouseEvent& e) override;
+
+    private:
+        TerrainAudioProcessor& processor;
+        int state = 0;
+        float avail = 0.f;
+        bool mouseWasDown = false;
+        bool isDragging = false;
+    };
+
+    CaptureDragStrip captureDragStrip { audioProcessor };
+
     // 3. PARAMETER ATTACHMENTS LAST (destroyed first)
     std::unique_ptr<juce::WebSliderParameterAttachment> grainSizeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> densityAttachment;

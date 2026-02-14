@@ -5,9 +5,12 @@
 #include "GrainEngine.h"
 #include "TapeProcessor.h"
 #include "TapeLoopProcessor.h"
+#include "RollingCaptureBuffer.h"
 #include "ParameterIDs.hpp"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
+#include <thread>
 
 //==============================================================================
 struct PresetData
@@ -130,6 +133,13 @@ public:
         tapeLoopRecording.store(0.f);
     }
 
+    // Rolling capture buffer state
+    // 0 = idle, 1 = exporting, 2 = ready (file saved), 3 = error
+    std::atomic<int> captureExportState { 0 };
+    void exportCapture(int durationSeconds);
+    juce::String getLastCaptureFilePath() const;
+    float getCaptureAvailableSeconds() const;
+
     static constexpr int SCOPE_SIZE = 256;
     std::array<std::atomic<float>, SCOPE_SIZE> scopeBuffer {};
     std::atomic<int> scopeWritePos { 0 };
@@ -183,6 +193,11 @@ private:
     float feedDelayR = 0.0f;
     bool prevProcessBlockRecording = false; // Track recording transitions for auto-disabling feed
     bool prevFeedActive = false; // Track feed mode transitions for grain buffer clearing
+
+    // Rolling capture buffer
+    RollingCaptureBuffer captureBuffer;
+    std::unique_ptr<std::thread> captureExportThread;
+    juce::String lastCaptureFilePath;
 
     // Presets
     void initializePresets();

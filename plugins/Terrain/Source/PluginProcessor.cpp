@@ -13,6 +13,8 @@ TerrainAudioProcessor::TerrainAudioProcessor()
 
 TerrainAudioProcessor::~TerrainAudioProcessor()
 {
+    if (captureExportThread && captureExportThread->joinable())
+        captureExportThread->join();
 }
 
 //==============================================================================
@@ -333,6 +335,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     tapeProcessorL.prepare(sampleRate, samplesPerBlock);
     tapeProcessorR.prepare(sampleRate, samplesPerBlock);
     tapeLoop.prepare(sampleRate, samplesPerBlock);
+    captureBuffer.prepare(sampleRate, samplesPerBlock);
 
     // 20ms ramp for all smoothed parameters
     smoothedGrainSize.reset(sampleRate, 0.02);
@@ -644,6 +647,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         scopePos = (scopePos + 1) % SCOPE_SIZE;
     }
 
+    // Write final output to rolling capture buffer
+    captureBuffer.writeBlock(leftChannel,
+        numChannels > 1 ? rightChannel : nullptr, numSamples);
+
     // Sync transport state back (auto-stop may have changed wantRecord/wantPlay)
     tapeLoopRecording.store(wantRecord ? 1.f : 0.f);
     tapeLoopPlaying.store(wantPlay ? 1.f : 0.f);
@@ -867,6 +874,104 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
     }
 
     DBG("Terrain: loaded " + juce::String(loaded) + " user presets from disk, total=" + juce::String(presets.size()));
+}
+
+//==============================================================================
+// Rolling Capture Buffer
+//==============================================================================
+float TerrainAudioProcessor::getCaptureAvailableSeconds() const
+{
+    return captureBuffer.getAvailableSeconds();
+}
+
+juce::String TerrainAudioProcessor::getLastCaptureFilePath() const
+{
+    return lastCaptureFilePath;
+}
+
+void TerrainAudioProcessor::exportCapture(int durationSeconds)
+{
+    // CAS: only start if idle (0)
+    int expected = 0;
+    if (!captureExportState.compare_exchange_strong(expected, 1))
+        return; // already exporting or ready
+
+    // Join any previous thread
+    if (captureExportThread && captureExportThread->joinable())
+        captureExportThread->join();
+
+    const double sr = captureBuffer.getSampleRate();
+    if (sr <= 0.0)
+    {
+        captureExportState.store(3); // error
+        return;
+    }
+
+    const int maxSamples = static_cast<int>(sr * durationSeconds);
+    auto tempL = std::make_shared<std::vector<float>>(static_cast<size_t>(maxSamples), 0.0f);
+    auto tempR = std::make_shared<std::vector<float>>(static_cast<size_t>(maxSamples), 0.0f);
+
+    int copied = captureBuffer.copyForExport(tempL->data(), tempR->data(),
+                                              static_cast<double>(durationSeconds));
+    if (copied <= 0)
+    {
+        captureExportState.store(3); // error
+        return;
+    }
+
+    // Build output path: ~/Music/Waves Crate/Terrain/Terrain_Capture_YYYY-MM-DD_HH-MM-SS.wav
+    auto now = juce::Time::getCurrentTime();
+    auto timestamp = now.formatted("%Y-%m-%d_%H-%M-%S");
+    auto dir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                   .getChildFile("Waves Crate")
+                   .getChildFile("Terrain");
+
+    if (!dir.exists())
+        dir.createDirectory();
+
+    auto filePath = dir.getChildFile("Terrain_Capture_" + timestamp + ".wav");
+
+    captureExportThread = std::make_unique<std::thread>(
+        [this, tempL, tempR, copied, sr, filePath]()
+        {
+            juce::WavAudioFormat wav;
+            auto outFile = filePath;
+            outFile.deleteFile(); // remove if exists
+
+            auto stream = outFile.createOutputStream();
+            if (stream == nullptr)
+            {
+                captureExportState.store(3);
+                return;
+            }
+
+            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wdeprecated-declarations")
+            auto* writer = wav.createWriterFor(stream.release(), sr, 2, 16, {}, 0);
+            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            if (writer == nullptr)
+            {
+                captureExportState.store(3);
+                return;
+            }
+            std::unique_ptr<juce::AudioFormatWriter> writerPtr(writer);
+
+            // Write in chunks
+            constexpr int chunkSize = 8192;
+            juce::AudioBuffer<float> chunk(2, chunkSize);
+
+            for (int pos = 0; pos < copied; pos += chunkSize)
+            {
+                int samplesThisChunk = std::min(chunkSize, copied - pos);
+                chunk.copyFrom(0, 0, tempL->data() + pos, samplesThisChunk);
+                chunk.copyFrom(1, 0, tempR->data() + pos, samplesThisChunk);
+                writerPtr->writeFromAudioSampleBuffer(chunk, 0, samplesThisChunk);
+            }
+
+            writerPtr.reset(); // flush and close
+
+            lastCaptureFilePath = outFile.getFullPathName();
+            captureExportState.store(2); // ready
+        });
 }
 
 //==============================================================================

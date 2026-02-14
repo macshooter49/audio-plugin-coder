@@ -221,12 +221,28 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             {
                 complete(audioProcessor.tapeLoopFeedToGrain.load());
             })
+            .withNativeFunction("exportCapture", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                int dur = args.size() > 0 ? static_cast<int>(args[0]) : 60;
+                audioProcessor.exportCapture(dur);
+                complete({});
+            })
+            .withNativeFunction("resetCaptureState", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.captureExportState.store(0);
+                complete({});
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
     );
 
     addAndMakeVisible(*webView);
+
+    // Native capture drag strip below WebView (real mouse events for drag-to-DAW)
+    addAndMakeVisible(captureDragStrip);
 
     // Create parameter attachments AFTER webView
     grainSizeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
@@ -284,7 +300,7 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
     // Set size AFTER webView is created (setSize triggers resized())
-    setSize (820, 640);
+    setSize (820, 640 + CAPTURE_STRIP_HEIGHT);
 
     // Start visualization timer at 30Hz
     startTimerHz(30);
@@ -341,6 +357,15 @@ void TerrainAudioProcessorEditor::timerCallback()
        << countInBeat << ");}";
     js << "if(window.updateFeedState){"
        << "window.updateFeedState(" << (feedToGrain ? "true" : "false") << ");}";
+    int captureState = audioProcessor.captureExportState.load();
+    float captureAvail = audioProcessor.getCaptureAvailableSeconds();
+    js << "if(window.updateCaptureState){"
+       << "window.updateCaptureState("
+       << captureState << ","
+       << juce::String(captureAvail, 1) << ");}";
+
+    // Update native drag strip state
+    captureDragStrip.updateState(captureState, captureAvail);
 
     webView->evaluateJavascript(js);
 }
@@ -353,8 +378,88 @@ void TerrainAudioProcessorEditor::paint (juce::Graphics& g)
 
 void TerrainAudioProcessorEditor::resized()
 {
+    auto b = getLocalBounds();
+    captureDragStrip.setBounds(b.removeFromBottom(CAPTURE_STRIP_HEIGHT));
     if (webView != nullptr)
-        webView->setBounds(getLocalBounds());
+        webView->setBounds(b);
+}
+
+//==============================================================================
+// CaptureDragStrip implementation
+//==============================================================================
+void TerrainAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat();
+
+    g.setColour(juce::Colours::white);
+    g.fillRect(b);
+
+    if (state == 2) // ready — green
+    {
+        g.setColour(juce::Colour(0xFF10B981));
+        g.setFont(juce::FontOptions(11.0f).withStyle("Bold"));
+        g.drawText(juce::String::fromUTF8("DRAG WAV TO DAW \u2193"), b, juce::Justification::centred);
+    }
+    else if (state == 1) // exporting — amber
+    {
+        g.setColour(juce::Colour(0xFFD97706));
+        g.setFont(juce::FontOptions(10.0f));
+        g.drawText("EXPORTING...", b, juce::Justification::centred);
+    }
+    else // idle
+    {
+        g.setColour(juce::Colour(0xFFB0A4C0)); // muted, blends in
+        g.setFont(juce::FontOptions(10.0f));
+        int mins = static_cast<int>(avail) / 60;
+        int secs = static_cast<int>(avail) % 60;
+        g.drawText("CAPTURE: " + juce::String(mins) + "m " + juce::String(secs) + "s",
+                   b, juce::Justification::centred);
+    }
+}
+
+void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDown (const juce::MouseEvent&)
+{
+    mouseWasDown = true;
+    isDragging = false;
+}
+
+void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::MouseEvent& e)
+{
+    if (!mouseWasDown || isDragging) return;
+    if (state != 2) return; // only drag when ready
+
+    // Need a few pixels of movement to trigger drag
+    if (e.getDistanceFromDragStart() < 4) return;
+
+    isDragging = true;
+
+    auto filePath = processor.getLastCaptureFilePath();
+    if (filePath.isEmpty()) return;
+
+    juce::File file(filePath);
+    if (!file.existsAsFile()) return;
+
+    juce::DragAndDropContainer::performExternalDragDropOfFiles(
+        { filePath }, false, nullptr, [this]()
+        {
+            // After drag completes, reset state to idle
+            juce::MessageManager::callAsync([this]()
+            {
+                processor.captureExportState.store(0);
+            });
+        }
+    );
+}
+
+void TerrainAudioProcessorEditor::CaptureDragStrip::mouseUp (const juce::MouseEvent&)
+{
+    if (mouseWasDown && !isDragging && state == 2)
+    {
+        // Single click on ready strip — reset to idle
+        processor.captureExportState.store(0);
+    }
+    mouseWasDown = false;
+    isDragging = false;
 }
 
 //==============================================================================
