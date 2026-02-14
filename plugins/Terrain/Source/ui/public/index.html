@@ -173,7 +173,7 @@ body {
   border-bottom: 1px solid transparent;
 }
 #preset-browser.open {
-  max-height: 400px;
+  max-height: 320px;
   border-bottom-color: var(--border);
 }
 
@@ -263,7 +263,7 @@ body {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 6px;
-  max-height: 300px;
+  max-height: 208px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -1239,6 +1239,406 @@ body {
   background: rgba(139,92,246,0.08);
 }
 
+/* ============ MODULATION SYSTEM ============ */
+
+/* --- MOD Button (header) --- */
+.mod-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(139,92,246,0.2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding-left: 11.5px;
+  padding-right: 10px;
+  margin-left: 12px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.mod-btn:hover {
+  border-color: rgba(139,92,246,0.4);
+  color: var(--purple-500);
+}
+.mod-btn.active {
+  background: var(--purple-500);
+  border-color: var(--purple-500);
+  color: #fff;
+}
+.mod-btn.has-routes {
+  border-color: var(--purple-500);
+  animation: mod-btn-breathe 2s ease-in-out infinite;
+}
+.mod-btn.has-routes.active {
+  animation: none;
+}
+.mod-btn .mod-dot { display: none; }
+
+@keyframes mod-btn-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.3); }
+  50% { box-shadow: 0 0 8px 2px rgba(139,92,246,0.25); }
+}
+
+/* --- Modulation Panel Overlay --- */
+#mod-panel {
+  display: none;
+  width: 820px;
+  height: 272px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  z-index: 15;
+}
+#mod-panel.open { display: flex; }
+
+.lfo-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  gap: 6px;
+  overflow: hidden;
+}
+.lfo-column + .lfo-column {
+  border-left: 1px solid var(--border);
+}
+
+/* LFO Header */
+.lfo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lfo-color-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lfo-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* LFO Waveform Display */
+.lfo-waveform {
+  width: 100%;
+  height: 50px;
+  border-radius: 6px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.lfo-waveform canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Shape Selector */
+.lfo-shapes {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.shape-btn {
+  width: 26px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-glass);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s;
+}
+.shape-btn:hover {
+  border-color: var(--text-muted);
+}
+.shape-btn.active {
+  border-width: 1.5px;
+}
+.shape-btn canvas {
+  display: block;
+  width: 16px;
+  height: 12px;
+}
+
+/* Mini Knobs Row */
+.lfo-knobs-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.mini-knob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 48px;
+}
+.mini-knob-canvas {
+  width: 32px;
+  height: 32px;
+  cursor: grab;
+}
+.mini-knob-canvas:active { cursor: grabbing; }
+.mini-knob-value {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 8px;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 10px;
+}
+.mini-knob-label {
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Rate Sync Toggle */
+.rate-sync-toggle {
+  display: flex;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.rate-sync-opt {
+  padding: 2px 6px;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: all 0.15s;
+}
+.rate-sync-opt.active {
+  background: var(--purple-500);
+  color: #fff;
+}
+
+/* Polarity Selector */
+.polarity-pills {
+  display: flex;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.polarity-opt {
+  padding: 2px 7px;
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: all 0.15s;
+}
+.polarity-opt.active {
+  background: var(--purple-500);
+  color: #fff;
+}
+
+/* Controls + Polarity Row */
+.lfo-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Targets List */
+.lfo-targets {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lfo-target-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--bg-main);
+  font-size: 8px;
+}
+.lfo-target-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.lfo-target-depth {
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+.lfo-target-remove {
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 50%;
+  padding: 0;
+  transition: all 0.15s;
+}
+.lfo-target-remove:hover {
+  background: rgba(239,68,68,0.1);
+  color: #EF4444;
+}
+.lfo-targets-empty {
+  font-size: 8px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 2px 4px;
+}
+
+/* --- Right-Click Modulation Context Menu --- */
+#mod-ctx-menu {
+  position: fixed;
+  z-index: 100;
+  width: 240px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(139,92,246,0.18);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(139,92,246,0.15);
+  padding: 8px 0;
+  font-size: 11px;
+  opacity: 0;
+  transform: scale(0.92) translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.2, 0, 0.2, 1);
+}
+#mod-ctx-menu.open {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+.mod-ctx-title {
+  padding: 4px 12px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.mod-ctx-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+.mod-ctx-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.08s;
+}
+.mod-ctx-row:hover {
+  background: rgba(139,92,246,0.06);
+}
+.mod-ctx-toggle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.mod-ctx-toggle.active {
+  border-width: 4px;
+}
+.mod-ctx-source-label {
+  font-weight: 500;
+  color: var(--text-primary);
+  width: 40px;
+  flex-shrink: 0;
+}
+.mod-ctx-depth-wrap {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-main);
+  position: relative;
+  cursor: pointer;
+}
+.mod-ctx-depth-fill {
+  height: 100%;
+  border-radius: 3px;
+  width: 50%;
+  transition: width 0.1s;
+}
+.mod-ctx-depth-pct {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 9px;
+  color: var(--text-secondary);
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.mod-ctx-clear {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 10px;
+  color: #EF4444;
+  cursor: pointer;
+  transition: background 0.08s;
+}
+.mod-ctx-clear:hover {
+  background: rgba(239,68,68,0.06);
+}
+
+/* --- Modulation Rings on Knobs --- */
+.mod-ring-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.mod-ring-badge.visible { opacity: 1; }
+
 /* ============ ANIMATIONS ============ */
 @keyframes flash-default {
   0% { box-shadow: 0 0 0 0 rgba(139,92,246,0.3); }
@@ -1256,6 +1656,10 @@ body {
       <span class="brand-name">Terrain</span>
       <span class="brand-version">v2.0</span>
     </div>
+    <button class="mod-btn" id="mod-btn" title="Modulation Panel">
+      <span class="mod-dot" id="mod-dot"></span>
+      MOD
+    </button>
     <div class="preset-area">
       <button class="preset-nav-btn" id="preset-prev">&lsaquo;</button>
       <span class="preset-name" id="preset-name">Crystal Shimmer</span>
@@ -1309,6 +1713,122 @@ body {
       <div class="tooltip-bar-pct" id="tt-pct"></div>
       <div class="tooltip-tip" id="tt-tip"></div>
     </div>
+  </div>
+
+  <!-- MODULATION PANEL -->
+  <div id="mod-panel">
+    <div class="lfo-column" id="lfo-col-0">
+      <div class="lfo-header">
+        <div class="lfo-color-dot" style="background:#8B5CF6"></div>
+        <span class="lfo-label">LFO 1</span>
+      </div>
+      <div class="lfo-waveform"><canvas id="lfo-wave-0"></canvas></div>
+      <div class="lfo-shapes" id="lfo-shapes-0"></div>
+      <div class="lfo-knobs-row" id="lfo-knobs-0"></div>
+      <div class="lfo-controls-row">
+        <div class="rate-sync-toggle" id="lfo-sync-0">
+          <button class="rate-sync-opt active" data-mode="free">FREE</button>
+          <button class="rate-sync-opt" data-mode="sync">SYNC</button>
+        </div>
+        <div class="polarity-pills" id="lfo-pol-0">
+          <button class="polarity-opt active" data-pol="bi">Bi</button>
+          <button class="polarity-opt" data-pol="uni+">+</button>
+          <button class="polarity-opt" data-pol="uni-">&minus;</button>
+        </div>
+      </div>
+      <div class="lfo-targets" id="lfo-targets-0">
+        <div class="lfo-targets-empty">(no assignments)</div>
+      </div>
+    </div>
+    <div class="lfo-column" id="lfo-col-1">
+      <div class="lfo-header">
+        <div class="lfo-color-dot" style="background:#06B6D4"></div>
+        <span class="lfo-label">LFO 2</span>
+      </div>
+      <div class="lfo-waveform"><canvas id="lfo-wave-1"></canvas></div>
+      <div class="lfo-shapes" id="lfo-shapes-1"></div>
+      <div class="lfo-knobs-row" id="lfo-knobs-1"></div>
+      <div class="lfo-controls-row">
+        <div class="rate-sync-toggle" id="lfo-sync-1">
+          <button class="rate-sync-opt active" data-mode="free">FREE</button>
+          <button class="rate-sync-opt" data-mode="sync">SYNC</button>
+        </div>
+        <div class="polarity-pills" id="lfo-pol-1">
+          <button class="polarity-opt active" data-pol="bi">Bi</button>
+          <button class="polarity-opt" data-pol="uni+">+</button>
+          <button class="polarity-opt" data-pol="uni-">&minus;</button>
+        </div>
+      </div>
+      <div class="lfo-targets" id="lfo-targets-1">
+        <div class="lfo-targets-empty">(no assignments)</div>
+      </div>
+    </div>
+    <div class="lfo-column" id="lfo-col-2">
+      <div class="lfo-header">
+        <div class="lfo-color-dot" style="background:#F59E0B"></div>
+        <span class="lfo-label">LFO 3</span>
+      </div>
+      <div class="lfo-waveform"><canvas id="lfo-wave-2"></canvas></div>
+      <div class="lfo-shapes" id="lfo-shapes-2"></div>
+      <div class="lfo-knobs-row" id="lfo-knobs-2"></div>
+      <div class="lfo-controls-row">
+        <div class="rate-sync-toggle" id="lfo-sync-2">
+          <button class="rate-sync-opt active" data-mode="free">FREE</button>
+          <button class="rate-sync-opt" data-mode="sync">SYNC</button>
+        </div>
+        <div class="polarity-pills" id="lfo-pol-2">
+          <button class="polarity-opt active" data-pol="bi">Bi</button>
+          <button class="polarity-opt" data-pol="uni+">+</button>
+          <button class="polarity-opt" data-pol="uni-">&minus;</button>
+        </div>
+      </div>
+      <div class="lfo-targets" id="lfo-targets-2">
+        <div class="lfo-targets-empty">(no assignments)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODULATION CONTEXT MENU -->
+  <div id="mod-ctx-menu">
+    <div class="mod-ctx-title" id="mod-ctx-title">MODULATE: PARAM</div>
+    <div class="mod-ctx-divider"></div>
+    <div class="mod-ctx-row" data-src="0">
+      <div class="mod-ctx-toggle" style="border-color:#8B5CF6"></div>
+      <span class="mod-ctx-source-label">LFO 1</span>
+      <div class="mod-ctx-depth-wrap"><div class="mod-ctx-depth-fill" style="background:#8B5CF6"></div></div>
+      <span class="mod-ctx-depth-pct">50%</span>
+    </div>
+    <div class="mod-ctx-row" data-src="1">
+      <div class="mod-ctx-toggle" style="border-color:#06B6D4"></div>
+      <span class="mod-ctx-source-label">LFO 2</span>
+      <div class="mod-ctx-depth-wrap"><div class="mod-ctx-depth-fill" style="background:#06B6D4"></div></div>
+      <span class="mod-ctx-depth-pct">50%</span>
+    </div>
+    <div class="mod-ctx-row" data-src="2">
+      <div class="mod-ctx-toggle" style="border-color:#F59E0B"></div>
+      <span class="mod-ctx-source-label">LFO 3</span>
+      <div class="mod-ctx-depth-wrap"><div class="mod-ctx-depth-fill" style="background:#F59E0B"></div></div>
+      <span class="mod-ctx-depth-pct">50%</span>
+    </div>
+    <div class="mod-ctx-divider"></div>
+    <div class="mod-ctx-row" data-src="3">
+      <div class="mod-ctx-toggle" style="border-color:#A78BFA"></div>
+      <span class="mod-ctx-source-label">XY X</span>
+      <div class="mod-ctx-depth-wrap"><div class="mod-ctx-depth-fill" style="background:#A78BFA"></div></div>
+      <span class="mod-ctx-depth-pct">50%</span>
+    </div>
+    <div class="mod-ctx-row" data-src="4">
+      <div class="mod-ctx-toggle" style="border-color:#7C3AED"></div>
+      <span class="mod-ctx-source-label">XY Y</span>
+      <div class="mod-ctx-depth-wrap"><div class="mod-ctx-depth-fill" style="background:#7C3AED"></div></div>
+      <span class="mod-ctx-depth-pct">50%</span>
+    </div>
+    <div class="mod-ctx-divider"></div>
+    <div class="mod-ctx-clear" id="mod-ctx-clear">&#x2715; Clear All</div>
+    <div class="mod-ctx-divider"></div>
+    <div class="ctx-item" data-action="copy">Copy value</div>
+    <div class="ctx-item" data-action="paste">Paste value</div>
+    <div class="ctx-item" data-action="reset">Reset to default</div>
   </div>
 
   <!-- CONTROLS -->
@@ -1811,6 +2331,13 @@ const PARAMS = {
 };
 
 const OUTPUT_PARAM = { min: -12, max: 12, default: 0 };
+
+// Modulatable parameter IDs (used by mod system + buildKnobs context menu)
+const MODULATABLE = [
+  'grainSize','density','spray','pitch','freeze','wander','grainFilter','mix',
+  'wowFlutter','saturation','hiss',
+  'loopFeedback','loopDegrade','loopSpeed',
+];
 
 // ---- State ----
 const state = {
@@ -3013,10 +3540,13 @@ function buildKnobs() {
       setTimeout(() => knobWrap.style.animation = '', 300);
     });
 
-    knobWrap.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      showContextMenu(e.clientX, e.clientY, id);
-    });
+    // Non-modulatable knobs get old context menu
+    if (!MODULATABLE.includes(id)) {
+      knobWrap.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showContextMenu(e.clientX, e.clientY, id);
+      });
+    }
 
     group.addEventListener('mouseenter', () => {
       state.hoveredKnob = id;
@@ -4284,8 +4814,11 @@ function updateAnimatedIcons(time) {
 }
 
 // ---- Animation Loop ----
+let _prevAnimTime = 0;
 function animate(timestamp) {
   const time = timestamp * 0.001;
+  const dt = _prevAnimTime > 0 ? time - _prevAnimTime : 1/60;
+  _prevAnimTime = time;
   state.terrainTime = time;
 
   renderTerrain(time);
@@ -4298,8 +4831,641 @@ function animate(timestamp) {
     state.tapeLoop.loopProgress = (state.tapeLoop.loopProgress + 0.003) % 1.0;
   }
   drawTapeReels(time);
+  updateModulation(time, dt);
 
   requestAnimationFrame(animate);
+}
+
+// ==== MODULATION SYSTEM ====
+
+const MOD_COLORS = ['#8B5CF6', '#06B6D4', '#F59E0B', '#A78BFA', '#7C3AED'];
+const MOD_SOURCE_NAMES = ['LFO 1', 'LFO 2', 'LFO 3', 'XY X', 'XY Y'];
+const MOD_SHAPES = ['sine', 'triangle', 'square', 'sawUp', 'sawDown', 'sampleHold', 'smoothRandom'];
+const MOD_SHAPE_LABELS = ['Sin', 'Tri', 'Sq', 'Saw+', 'Saw-', 'S&H', 'Rnd'];
+const SYNC_DIVISIONS = ['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32'];
+
+// Modulation state
+const modState = {
+  panelOpen: false,
+  lfos: [
+    { shape: 0, rate: 1.0, sync: false, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
+    { shape: 0, rate: 0.5, sync: false, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
+    { shape: 0, rate: 0.25, sync: false, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
+  ],
+  // assignments: [{source, target, depth, enabled}]
+  assignments: [],
+  // Current LFO output values [-1..1] after polarity
+  lfoOutputs: [0, 0, 0],
+  ctxMenuParam: null,
+};
+
+// ---- LFO Waveform Generators ----
+function lfoWaveform(shape, phase) {
+  const p = phase % 1.0;
+  switch (shape) {
+    case 0: return Math.sin(p * Math.PI * 2); // sine
+    case 1: return 1.0 - 4.0 * Math.abs(p - 0.5); // triangle
+    case 2: return p < 0.5 ? 1.0 : -1.0; // square
+    case 3: return 2.0 * p - 1.0; // saw up
+    case 4: return 1.0 - 2.0 * p; // saw down
+    case 5: return 0; // S&H handled separately
+    case 6: return 0; // smooth random handled separately
+    default: return 0;
+  }
+}
+
+function applyPolarity(val, polarity) {
+  if (polarity === 'uni+') return val * 0.5 + 0.5;
+  if (polarity === 'uni-') return val * -0.5 + 0.5;
+  return val; // bipolar
+}
+
+// ---- LFO Phase Update (called from animate) ----
+function updateLFOs(dt) {
+  for (let i = 0; i < 3; i++) {
+    const lfo = modState.lfos[i];
+    const prevPhase = lfo._phase;
+    lfo._phase = (lfo._phase + lfo.rate * dt) % 1.0;
+
+    let raw;
+    if (lfo.shape === 5) { // S&H
+      if (lfo._phase < prevPhase) { // wrapped
+        lfo._holdVal = Math.random() * 2 - 1;
+      }
+      raw = lfo._holdVal;
+    } else if (lfo.shape === 6) { // smooth random
+      if (lfo._phase < prevPhase) { // wrapped
+        lfo._prevRand = lfo._nextRand;
+        lfo._nextRand = Math.random() * 2 - 1;
+      }
+      const t = lfo._phase;
+      raw = lfo._prevRand + (lfo._nextRand - lfo._prevRand) * (t * t * (3 - 2 * t));
+    } else {
+      raw = lfoWaveform(lfo.shape, lfo._phase + lfo.phase);
+    }
+
+    modState.lfoOutputs[i] = applyPolarity(raw, lfo.polarity) * lfo.depth;
+  }
+}
+
+// ---- Mod Ring Drawing on Knobs ----
+function drawModRing(canvas, paramId) {
+  const assignments = modState.assignments.filter(a => a.target === paramId && a.enabled);
+  if (assignments.length === 0) return;
+
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const ctx = canvas.getContext('2d');
+  // Don't clear — draw on top of existing knob
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  const cx = w / 2, cy = h / 2;
+  const outerR = 25; // just outside the main arc (radius=22 + gap)
+  const startAngle = 0.75 * Math.PI;
+  const sweep = 1.5 * Math.PI;
+
+  const baseNorm = normalize(paramId, state.params[paramId]);
+
+  for (const a of assignments) {
+    let modVal = 0;
+    if (a.source < 3) modVal = modState.lfoOutputs[a.source];
+    else if (a.source === 3) modVal = (state.xyX - 0.5) * 2;
+    else if (a.source === 4) modVal = (state.xyY - 0.5) * 2;
+
+    const offset = modVal * a.depth;
+    const modLow = Math.max(0, Math.min(1, baseNorm - Math.abs(offset)));
+    const modHigh = Math.max(0, Math.min(1, baseNorm + Math.abs(offset)));
+
+    const arcStart = startAngle + modLow * sweep;
+    const arcEnd = startAngle + modHigh * sweep;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, arcStart, arcEnd, false);
+    ctx.strokeStyle = MOD_COLORS[a.source];
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+// Update mod badges on knobs
+function updateModBadges() {
+  for (const paramId of MODULATABLE) {
+    const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
+    if (!group) continue;
+    let badge = group.querySelector('.mod-ring-badge');
+    const hasAssignment = modState.assignments.some(a => a.target === paramId && a.enabled);
+    if (hasAssignment) {
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'mod-ring-badge';
+        group.querySelector('.knob-canvas-wrap').appendChild(badge);
+      }
+      // Use dominant source color
+      const firstActive = modState.assignments.find(a => a.target === paramId && a.enabled);
+      badge.style.background = MOD_COLORS[firstActive.source];
+      badge.classList.add('visible');
+    } else {
+      if (badge) badge.classList.remove('visible');
+      // Redraw knob to clear stale mod ring pixels
+      if (group._knobCanvas) {
+        const norm = normalize(paramId, state.params[paramId]);
+        drawKnob(group._knobCanvas, norm, state.draggingKnob === paramId, state.hoveredKnob === paramId);
+      }
+    }
+  }
+  // Update mod button glow when routes active
+  const modBtn = document.getElementById('mod-btn');
+  if (modBtn) {
+    modBtn.classList.toggle('has-routes', modState.assignments.some(a => a.enabled));
+  }
+}
+
+// ---- LFO Waveform Canvas Drawing ----
+function drawLFOWaveform(idx) {
+  const canvas = document.getElementById(`lfo-wave-${idx}`);
+  if (!canvas) return;
+  const lfo = modState.lfos[idx];
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = Math.round(rect.width);
+  const h = Math.round(rect.height);
+  if (w === 0 || h === 0) return;
+  if (canvas.width !== w * DPR || canvas.height !== h * DPR) {
+    canvas.width = w * DPR;
+    canvas.height = h * DPR;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+  ctx.lineWidth = 0.5;
+  for (const y of [0.25, 0.5, 0.75]) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * h);
+    ctx.lineTo(w, y * h);
+    ctx.stroke();
+  }
+  // Center line
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.beginPath();
+  ctx.moveTo(0, h * 0.5);
+  ctx.lineTo(w, h * 0.5);
+  ctx.stroke();
+
+  // Waveform
+  ctx.beginPath();
+  ctx.strokeStyle = MOD_COLORS[idx];
+  ctx.lineWidth = 2;
+  for (let x = 0; x <= w; x++) {
+    const phase = (x / w + lfo.phase) % 1.0;
+    let val;
+    if (lfo.shape === 5) val = lfoWaveform(2, phase); // S&H: show square-ish preview
+    else if (lfo.shape === 6) val = lfoWaveform(0, phase); // smooth random: show sine preview
+    else val = lfoWaveform(lfo.shape, phase);
+    val = applyPolarity(val, lfo.polarity);
+    const py = h * 0.5 - val * h * 0.4;
+    if (x === 0) ctx.moveTo(x, py);
+    else ctx.lineTo(x, py);
+  }
+  ctx.stroke();
+
+  // Phase position dot
+  const dotX = lfo._phase * w;
+  let dotVal;
+  if (lfo.shape <= 4) dotVal = lfoWaveform(lfo.shape, lfo._phase + lfo.phase);
+  else dotVal = modState.lfoOutputs[idx] / Math.max(0.001, lfo.depth);
+  dotVal = applyPolarity(dotVal, lfo.polarity);
+  const dotY = h * 0.5 - dotVal * h * 0.4;
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+  ctx.fillStyle = MOD_COLORS[idx];
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ---- Shape Selector Buttons ----
+function buildShapeButtons() {
+  for (let i = 0; i < 3; i++) {
+    const container = document.getElementById(`lfo-shapes-${i}`);
+    if (!container) continue;
+    container.innerHTML = '';
+    for (let s = 0; s < MOD_SHAPES.length; s++) {
+      const btn = document.createElement('button');
+      btn.className = 'shape-btn' + (s === modState.lfos[i].shape ? ' active' : '');
+      btn.title = MOD_SHAPE_LABELS[s];
+      const c = document.createElement('canvas');
+      btn.appendChild(c);
+      container.appendChild(btn);
+      // Draw shape icon
+      drawShapeIcon(c, s, i, s === modState.lfos[i].shape);
+      btn.addEventListener('click', () => {
+        modState.lfos[i].shape = s;
+        // Update active state
+        container.querySelectorAll('.shape-btn').forEach((b, si) => {
+          b.classList.toggle('active', si === s);
+          drawShapeIcon(b.querySelector('canvas'), si, i, si === s);
+        });
+      });
+    }
+  }
+}
+
+function drawShapeIcon(canvas, shapeIdx, lfoIdx, active) {
+  const w = 16, h = 12;
+  canvas.width = w * DPR;
+  canvas.height = h * DPR;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.save();
+  ctx.scale(DPR, DPR);
+  ctx.strokeStyle = active ? MOD_COLORS[lfoIdx] : '#B0A4C0';
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  const cy = h / 2, amp = h * 0.35;
+  for (let x = 0; x <= w; x++) {
+    const p = x / w;
+    let v = lfoWaveform(shapeIdx, p);
+    const py = cy - v * amp;
+    if (x === 0) ctx.moveTo(x, py);
+    else ctx.lineTo(x, py);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---- Mini Knobs for LFO Parameters ----
+function buildLFOKnobs() {
+  const knobDefs = [
+    { key: 'rate', label: 'RATE', min: 0.01, max: 20, default: 1.0, format: v => v < 1 ? v.toFixed(2) + ' Hz' : v.toFixed(1) + ' Hz' },
+    { key: 'depth', label: 'DEPTH', min: 0, max: 1, default: 1.0, format: v => Math.round(v * 100) + '%' },
+    { key: 'phase', label: 'PHASE', min: 0, max: 1, default: 0, format: v => Math.round(v * 360) + '\u00B0' },
+  ];
+
+  for (let i = 0; i < 3; i++) {
+    const container = document.getElementById(`lfo-knobs-${i}`);
+    if (!container) continue;
+    container.innerHTML = '';
+    for (const def of knobDefs) {
+      const group = document.createElement('div');
+      group.className = 'mini-knob-group';
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'mini-knob-canvas';
+      setupCanvas(canvas, 32, 32);
+      group.appendChild(canvas);
+
+      const valEl = document.createElement('div');
+      valEl.className = 'mini-knob-value';
+      valEl.textContent = def.format(modState.lfos[i][def.key]);
+      group.appendChild(valEl);
+
+      const labelEl = document.createElement('div');
+      labelEl.className = 'mini-knob-label';
+      labelEl.textContent = def.label;
+      group.appendChild(labelEl);
+
+      container.appendChild(group);
+
+      // Draw initial
+      const norm = (modState.lfos[i][def.key] - def.min) / (def.max - def.min);
+      drawMiniKnob(canvas, norm, MOD_COLORS[i]);
+
+      // Drag behavior
+      let dragging = false, startY = 0, startVal = 0;
+      canvas.addEventListener('pointerdown', (e) => {
+        dragging = true;
+        startY = e.clientY;
+        startVal = modState.lfos[i][def.key];
+        canvas.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+      canvas.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const dy = startY - e.clientY;
+        const range = def.max - def.min;
+        const sensitivity = range / 150;
+        let newVal = startVal + dy * sensitivity;
+        newVal = Math.max(def.min, Math.min(def.max, newVal));
+        modState.lfos[i][def.key] = newVal;
+        const n = (newVal - def.min) / (def.max - def.min);
+        drawMiniKnob(canvas, n, MOD_COLORS[i]);
+        valEl.textContent = def.format(newVal);
+      });
+      canvas.addEventListener('pointerup', () => { dragging = false; });
+      canvas.addEventListener('lostpointercapture', () => { dragging = false; });
+    }
+  }
+}
+
+function drawMiniKnob(canvas, normValue, color) {
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  const cx = w / 2, cy = h / 2, radius = 13;
+  const startAngle = 0.75 * Math.PI;
+  const sweep = 1.5 * Math.PI;
+  const endAngle = startAngle + sweep;
+  const activeEnd = startAngle + normValue * sweep;
+
+  // Track
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, startAngle, endAngle, false);
+  ctx.strokeStyle = '#E8E0F0';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Active
+  if (normValue > 0.002) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  // Dot
+  const dx = cx + Math.cos(activeEnd) * radius;
+  const dy = cy + Math.sin(activeEnd) * radius;
+  ctx.beginPath();
+  ctx.arc(dx, dy, 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ---- Polarity + Sync Toggle Handlers ----
+function initLFOControls() {
+  for (let i = 0; i < 3; i++) {
+    // Sync toggle
+    const syncEl = document.getElementById(`lfo-sync-${i}`);
+    if (syncEl) {
+      syncEl.querySelectorAll('.rate-sync-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const mode = btn.dataset.mode;
+          modState.lfos[i].sync = (mode === 'sync');
+          syncEl.querySelectorAll('.rate-sync-opt').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+    }
+    // Polarity toggle
+    const polEl = document.getElementById(`lfo-pol-${i}`);
+    if (polEl) {
+      polEl.querySelectorAll('.polarity-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+          modState.lfos[i].polarity = btn.dataset.pol;
+          polEl.querySelectorAll('.polarity-opt').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
+    }
+  }
+}
+
+// ---- MOD Panel Toggle ----
+function initModPanel() {
+  const modBtn = document.getElementById('mod-btn');
+  const modPanel = document.getElementById('mod-panel');
+  const controls = document.getElementById('controls');
+  if (!modBtn || !modPanel || !controls) return;
+
+  modBtn.addEventListener('click', () => {
+    modState.panelOpen = !modState.panelOpen;
+    modBtn.classList.toggle('active', modState.panelOpen);
+    modPanel.classList.toggle('open', modState.panelOpen);
+    controls.style.display = modState.panelOpen ? 'none' : 'flex';
+  });
+}
+
+// ---- Right-Click Context Menu ----
+function initModContextMenu() {
+  const menu = document.getElementById('mod-ctx-menu');
+  if (!menu) return;
+
+  // Attach right-click to every modulatable knob
+  for (const paramId of MODULATABLE) {
+    const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
+    if (!group) continue;
+    group.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openModContextMenu(paramId, e.clientX, e.clientY);
+    });
+  }
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target)) {
+      menu.classList.remove('open');
+      modState.ctxMenuParam = null;
+    }
+  });
+
+  // Clear all button
+  document.getElementById('mod-ctx-clear').addEventListener('click', () => {
+    if (!modState.ctxMenuParam) return;
+    modState.assignments = modState.assignments.filter(a => a.target !== modState.ctxMenuParam);
+    updateModBadges();
+    updateTargetLists();
+    refreshCtxMenuState();
+  });
+
+  // Copy/Paste/Reset items
+  menu.querySelectorAll('.ctx-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = item.dataset.action;
+      const pid = modState.ctxMenuParam;
+      if (!pid) return;
+      if (action === 'copy') {
+        state.copiedValue = { id: pid, val: state.params[pid] };
+      } else if (action === 'paste' && state.copiedValue) {
+        state.params[pid] = Math.max(PARAMS[pid].min, Math.min(PARAMS[pid].max, state.copiedValue.val));
+        updateKnobDisplay(pid);
+        pushParamToJuce(pid);
+      } else if (action === 'reset') {
+        state.params[pid] = PARAMS[pid].default;
+        updateKnobDisplay(pid);
+        pushParamToJuce(pid);
+      }
+      menu.classList.remove('open');
+      modState.ctxMenuParam = null;
+    });
+  });
+
+  // Row click handlers (toggle + depth drag)
+  menu.querySelectorAll('.mod-ctx-row').forEach(row => {
+    const srcIdx = parseInt(row.dataset.src);
+    const toggle = row.querySelector('.mod-ctx-toggle');
+    const depthWrap = row.querySelector('.mod-ctx-depth-wrap');
+    const depthFill = row.querySelector('.mod-ctx-depth-fill');
+    const depthPct = row.querySelector('.mod-ctx-depth-pct');
+
+    // Toggle click
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!modState.ctxMenuParam) return;
+      const existing = modState.assignments.find(a => a.source === srcIdx && a.target === modState.ctxMenuParam);
+      if (existing) {
+        existing.enabled = !existing.enabled;
+      } else {
+        modState.assignments.push({ source: srcIdx, target: modState.ctxMenuParam, depth: 0.5, enabled: true });
+      }
+      updateModBadges();
+      updateTargetLists();
+      refreshCtxMenuState();
+    });
+
+    // Depth slider drag
+    let dragging = false;
+    depthWrap.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      depthWrap.setPointerCapture(e.pointerId);
+      updateDepthFromEvent(e, srcIdx, depthWrap, depthFill, depthPct);
+    });
+    depthWrap.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      updateDepthFromEvent(e, srcIdx, depthWrap, depthFill, depthPct);
+    });
+    depthWrap.addEventListener('pointerup', () => { dragging = false; });
+    depthWrap.addEventListener('lostpointercapture', () => { dragging = false; });
+  });
+}
+
+function updateDepthFromEvent(e, srcIdx, wrap, fill, pct) {
+  if (!modState.ctxMenuParam) return;
+  const rect = wrap.getBoundingClientRect();
+  let norm = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const a = modState.assignments.find(a => a.source === srcIdx && a.target === modState.ctxMenuParam);
+  if (a) {
+    a.depth = norm;
+    fill.style.width = (norm * 100) + '%';
+    pct.textContent = Math.round(norm * 100) + '%';
+  }
+}
+
+function openModContextMenu(paramId, x, y) {
+  const menu = document.getElementById('mod-ctx-menu');
+  modState.ctxMenuParam = paramId;
+  const p = PARAMS[paramId];
+  document.getElementById('mod-ctx-title').textContent = 'MODULATE: ' + (p ? p.label : paramId);
+
+  // Position
+  const menuW = 240, menuH = 280;
+  let left = x;
+  let top = y;
+  if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 8;
+  if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 8;
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+
+  refreshCtxMenuState();
+  menu.classList.add('open');
+}
+
+function refreshCtxMenuState() {
+  const menu = document.getElementById('mod-ctx-menu');
+  if (!menu || !modState.ctxMenuParam) return;
+
+  menu.querySelectorAll('.mod-ctx-row').forEach(row => {
+    const srcIdx = parseInt(row.dataset.src);
+    const a = modState.assignments.find(a => a.source === srcIdx && a.target === modState.ctxMenuParam);
+    const toggle = row.querySelector('.mod-ctx-toggle');
+    const fill = row.querySelector('.mod-ctx-depth-fill');
+    const pct = row.querySelector('.mod-ctx-depth-pct');
+
+    if (a && a.enabled) {
+      toggle.classList.add('active');
+      toggle.style.borderColor = MOD_COLORS[srcIdx];
+      fill.style.width = (a.depth * 100) + '%';
+      pct.textContent = Math.round(a.depth * 100) + '%';
+    } else {
+      toggle.classList.remove('active');
+      toggle.style.borderColor = '#E8E0F0';
+      fill.style.width = a ? (a.depth * 100) + '%' : '50%';
+      pct.textContent = a ? Math.round(a.depth * 100) + '%' : '50%';
+    }
+  });
+}
+
+// ---- Target Lists in LFO Columns ----
+function updateTargetLists() {
+  for (let i = 0; i < 3; i++) {
+    const container = document.getElementById(`lfo-targets-${i}`);
+    if (!container) continue;
+    container.innerHTML = '';
+    const targets = modState.assignments.filter(a => a.source === i && a.enabled);
+    if (targets.length === 0) {
+      container.innerHTML = '<div class="lfo-targets-empty">(no assignments)</div>';
+      continue;
+    }
+    for (const a of targets) {
+      const row = document.createElement('div');
+      row.className = 'lfo-target-row';
+      const p = PARAMS[a.target];
+      row.innerHTML = `<span class="lfo-target-name">${p ? p.label : a.target}</span>` +
+        `<span class="lfo-target-depth">${Math.round(a.depth * 100)}%</span>`;
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'lfo-target-remove';
+      removeBtn.textContent = '\u00D7';
+      removeBtn.addEventListener('click', () => {
+        modState.assignments = modState.assignments.filter(x => x !== a);
+        updateModBadges();
+        updateTargetLists();
+      });
+      row.appendChild(removeBtn);
+      container.appendChild(row);
+    }
+  }
+}
+
+// ---- Mod Update in Animation Loop ----
+function updateModulation(time, dt) {
+  if (dt <= 0 || dt > 0.1) dt = 1/60;
+  updateLFOs(dt);
+
+  // Draw waveforms if panel is open
+  if (modState.panelOpen) {
+    for (let i = 0; i < 3; i++) drawLFOWaveform(i);
+  }
+
+  // Draw mod rings on knobs (even when panel is closed)
+  if (modState.assignments.some(a => a.enabled)) {
+    for (const paramId of MODULATABLE) {
+      const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
+      if (!group || !group._knobCanvas) continue;
+      // Redraw knob + mod ring
+      const norm = normalize(paramId, state.params[paramId]);
+      drawKnob(group._knobCanvas, norm, state.draggingKnob === paramId, state.hoveredKnob === paramId);
+      drawModRing(group._knobCanvas, paramId);
+    }
+  }
+}
+
+// ---- Initialize Mod System ----
+function initModSystem() {
+  initModPanel();
+  buildShapeButtons();
+  buildLFOKnobs();
+  initLFOControls();
+  initModContextMenu();
+  updateModBadges();
+  updateTargetLists();
 }
 
 // ---- Initialize ----
@@ -4325,6 +5491,7 @@ function init() {
   }
   updateOutputDisplay();
   updateMasterMixDisplay();
+  initModSystem();
   requestAnimationFrame(animate);
 }
 
