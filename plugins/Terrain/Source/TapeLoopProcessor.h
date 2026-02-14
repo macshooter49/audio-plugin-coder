@@ -59,10 +59,16 @@ public:
         degradeStateR = 0.0f;
         prevPlaybackSpeed = 1.0f;
         reversalFadeCounter = 0;
+        reversalPrevL = 0.0f;
+        reversalPrevR = 0.0f;
+        reversalHoldL = 0.0f;
+        reversalHoldR = 0.0f;
         tapeStopCounter = 0;
         tapeStartCounter = 0;
         overdubDistance = 0.0;
         prevOverdubReadPos = 0.0;
+        prevWriteInputL = 0.0f;
+        prevWriteInputR = 0.0f;
         playFromSnapshot = false;
         snapBufL.clear();
         snapBufR.clear();
@@ -513,8 +519,10 @@ public:
             bufL[static_cast<size_t>(wpCenter)] = newL;
             bufR[static_cast<size_t>(wpCenter)] = newR;
 
-            // Fill gap positions for speeds > 1x to prevent old content
-            // bleeding through Hermite interpolation at unwritten positions
+            // Fill gap positions with interpolated input for speeds > 1x.
+            // Each gap gets its own interpolated input value (not a duplicate)
+            // and reads its own existing content for feedback — eliminates the
+            // sample-rate-reduction artifacts that caused freeform speed degradation.
             if (followRead && overdubSamplesWritten > 0)
             {
                 const int numGaps = std::max(0, static_cast<int>(std::ceil(stepDist)) - 1);
@@ -525,10 +533,24 @@ public:
                         gapPos = (wpCenter - i + loopLength) % loopLength;
                     else
                         gapPos = (wpCenter + i) % loopLength;
-                    bufL[static_cast<size_t>(gapPos)] = newL;
-                    bufR[static_cast<size_t>(gapPos)] = newR;
+
+                    // Interpolate input between previous and current frame
+                    const float t = static_cast<float>(i) / static_cast<float>(numGaps + 1);
+                    const float interpL = preTapeL + (prevWriteInputL - preTapeL) * t;
+                    const float interpR = preTapeR + (prevWriteInputR - preTapeR) * t;
+
+                    // Read THIS position's existing content for feedback
+                    const float gapExL = bufL[static_cast<size_t>(gapPos)] * fbGain;
+                    const float gapExR = bufR[static_cast<size_t>(gapPos)] * fbGain;
+
+                    bufL[static_cast<size_t>(gapPos)] = interpL * inputGain + gapExL;
+                    bufR[static_cast<size_t>(gapPos)] = interpR * inputGain + gapExR;
                 }
             }
+
+            // Track input for next sample's gap interpolation
+            prevWriteInputL = preTapeL;
+            prevWriteInputR = preTapeR;
 
             // Advance write position
             if (followRead)
@@ -568,25 +590,38 @@ public:
             const auto& readBufR = playFromSnapshot ? snapBufR : bufR;
 
             // Detect speed direction reversal (forward ↔ reverse)
-            static constexpr int REVERSAL_FADE = 512;
+            // Crossfade from pre-reversal output to new direction instead of
+            // dipping through zero (which causes an audible click).
+            static constexpr int REVERSAL_FADE = 768;
             if ((speed > 0.0f && prevPlaybackSpeed < 0.0f) ||
                 (speed < 0.0f && prevPlaybackSpeed > 0.0f))
+            {
                 reversalFadeCounter = REVERSAL_FADE;
+                reversalPrevL = reversalHoldL;
+                reversalPrevR = reversalHoldR;
+            }
             prevPlaybackSpeed = speed;
 
             // Read with Hermite interpolation
             float loopL = hermiteRead(readBufL, readPos, loopLength);
             float loopR = hermiteRead(readBufR, readPos, loopLength);
 
-            // Speed reversal fade-in
+            // Speed reversal crossfade: blend from stored pre-reversal output
+            // into new reversed output (avoids zero-crossing click)
             if (reversalFadeCounter > 0)
             {
-                const float fadeGain = 1.0f - static_cast<float>(reversalFadeCounter)
-                                            / static_cast<float>(REVERSAL_FADE);
-                loopL *= fadeGain;
-                loopR *= fadeGain;
+                const float t = static_cast<float>(reversalFadeCounter)
+                              / static_cast<float>(REVERSAL_FADE);
+                const float fadeOut = t * t;        // Squared curve — smooth tail
+                const float fadeIn  = 1.0f - fadeOut;
+                loopL = reversalPrevL * fadeOut + loopL * fadeIn;
+                loopR = reversalPrevR * fadeOut + loopR * fadeIn;
                 reversalFadeCounter--;
             }
+
+            // Store current output for future reversal crossfade
+            reversalHoldL = loopL;
+            reversalHoldR = loopR;
 
             // Crossfade near loop boundaries
             static constexpr int XFADE_LEN = 768;
@@ -713,8 +748,14 @@ private:
     int overdubSamplesWritten = 0;
     double overdubDistance = 0.0;
     double prevOverdubReadPos = 0.0;
+    float prevWriteInputL = 0.0f;   // Previous frame's input for gap interpolation
+    float prevWriteInputR = 0.0f;
     float prevPlaybackSpeed = 1.0f;
     int reversalFadeCounter = 0;
+    float reversalPrevL = 0.0f;     // Pre-reversal output for crossfade
+    float reversalPrevR = 0.0f;
+    float reversalHoldL = 0.0f;     // Last output sample (captured each sample)
+    float reversalHoldR = 0.0f;
 
     // Tape stop/start motor effect
     int tapeStopCounter = 0;
