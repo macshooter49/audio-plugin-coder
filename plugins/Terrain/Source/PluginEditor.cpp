@@ -324,6 +324,7 @@ void TerrainAudioProcessorEditor::timerCallback()
     float tapeLoopProg = audioProcessor.getTapeLoopProgress();
     bool  tapeLoopHas  = audioProcessor.getTapeLoopHasContent();
     bool  tapeLoopUndo = audioProcessor.getTapeLoopHasUndo();
+    int   countInBeat  = audioProcessor.getTapeLoopCountInBeat();
     bool  feedToGrain  = audioProcessor.tapeLoopFeedToGrain.load() > 0.5f;
 
     // Push visualization data to JS
@@ -336,7 +337,8 @@ void TerrainAudioProcessorEditor::timerCallback()
        << (tapeLoopPlay > 0.5f ? "true" : "false") << ","
        << (tapeLoopHas ? "true" : "false") << ","
        << juce::String(tapeLoopProg, 4) << ","
-       << (tapeLoopUndo ? "true" : "false") << ");}";
+       << (tapeLoopUndo ? "true" : "false") << ","
+       << countInBeat << ");}";
     js << "if(window.updateFeedState){"
        << "window.updateFeedState(" << (feedToGrain ? "true" : "false") << ");}";
 

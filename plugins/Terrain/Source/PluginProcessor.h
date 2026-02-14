@@ -114,6 +114,7 @@ public:
     bool getTapeLoopHasContent() const { return tapeLoop.hasContent(); }
     float getTapeLoopProgress() const { return tapeLoop.getProgress(); }
     bool getTapeLoopHasUndo() const { return tapeLoop.hasUndo(); }
+    int getTapeLoopCountInBeat() const { return tapeLoop.getCountInBeat(); }
 
     // Tape loop actions (called from editor native functions)
     void clearTapeLoop()

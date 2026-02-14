@@ -647,6 +647,33 @@ body {
 }
 .tape-progress-head.visible { opacity: 1; }
 
+/* ---- Count-in Dots ---- */
+.tape-countin-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 10px;
+  margin: -2px 0 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tape-countin-dots.active { opacity: 1; }
+.countin-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(139,92,246,0.2);
+  transition: background 0.1s, box-shadow 0.1s;
+}
+.countin-dot.lit {
+  background: #8B5CF6;
+  box-shadow: 0 0 6px rgba(139,92,246,0.6);
+}
+.countin-dot.go {
+  background: #EF4444;
+  box-shadow: 0 0 8px rgba(239,68,68,0.7);
+}
+
 /* ---- Glass Deck Container ---- */
 .tape-deck-glass {
   position: relative;
@@ -691,6 +718,17 @@ body {
   background: #8B5CF6;
   border-color: #8B5CF6;
   box-shadow: 0 0 6px rgba(139,92,246,0.5);
+}
+/* Count-in overrides on deck dots */
+.deck-dot.countin-lit {
+  background: #8B5CF6 !important;
+  border-color: #8B5CF6 !important;
+  box-shadow: 0 0 8px rgba(139,92,246,0.7) !important;
+}
+.deck-dot.countin-go {
+  background: #EF4444 !important;
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 10px rgba(239,68,68,0.8) !important;
 }
 .deck-label {
   font-size: 7px;
@@ -1250,6 +1288,7 @@ body {
             <canvas id="undo-icon-canvas" width="28" height="28"></canvas>
           </button>
           <canvas id="tape-reel-canvas"></canvas>
+          <!-- Count-in uses deck status dots (top-left) -->
           <div class="tape-progress-track" id="tape-progress-track">
             <div class="tape-progress-rail"></div>
             <div class="tape-progress-head" id="tape-progress-head"></div>
@@ -1737,6 +1776,7 @@ const state = {
     playing: false,
     hasContent: false,
     loopProgress: 0,
+    smoothProgress: 0,
     reelAngle: 0,
     hasUndo: false,
   },
@@ -1780,7 +1820,7 @@ window.updateVisualization = function(grainCount, scopeArray, bpm) {
   bpmFromJuce = bpm;
 };
 
-window.updateTapeLoopState = function(recording, playing, hasContent, progress, hasUndo) {
+window.updateTapeLoopState = function(recording, playing, hasContent, progress, hasUndo, countInBeat) {
   const changed = state.tapeLoop.recording !== recording || state.tapeLoop.playing !== playing;
   state.tapeLoop.recording = recording;
   state.tapeLoop.playing = playing;
@@ -1789,6 +1829,31 @@ window.updateTapeLoopState = function(recording, playing, hasContent, progress, 
   if (hasUndo !== undefined) state.tapeLoop.hasUndo = hasUndo;
   if (changed) updateTransportButtons();
   updateUndoButton();
+
+  // Count-in: repurpose deck status dots (top-left) for 1-2-3-GO sequence
+  const deckDots = [
+    document.getElementById('dot-rec'),
+    document.getElementById('dot-play'),
+    document.getElementById('dot-content')
+  ];
+  if (countInBeat >= 0) {
+    deckDots.forEach((dot, i) => {
+      if (!dot) return;
+      dot.classList.remove('active', 'countin-lit', 'countin-go');
+      if (countInBeat >= 3) {
+        dot.classList.add('countin-go'); // GO: all red
+      } else if (i <= countInBeat) {
+        dot.classList.add('countin-lit'); // 1-2-3: sequential purple
+      }
+    });
+  } else {
+    deckDots.forEach(dot => {
+      if (!dot) return;
+      dot.classList.remove('countin-lit', 'countin-go');
+    });
+    // Restore normal deck dot state
+    if (changed) updateTransportButtons();
+  }
 };
 
 // Sync feed-to-grain button from C++ (auto-disables when recording stops)
@@ -3647,7 +3712,19 @@ function drawTapeReels(time) {
     }
   }
 
-  const progress = state.tapeLoop.loopProgress;
+  // Smooth progress interpolation (30Hz updates → 60fps rendering)
+  const target = state.tapeLoop.loopProgress;
+  let sp = state.tapeLoop.smoothProgress;
+  const diff = target - sp;
+  // Wrap-around detection: if jump > 0.5, snap (loop wrapped)
+  if (Math.abs(diff) > 0.5) {
+    sp = target;
+  } else {
+    sp += diff * 0.25; // Smooth lerp toward target
+  }
+  state.tapeLoop.smoothProgress = sp;
+  const progress = sp;
+
   drawReel(leftCx, 1.0 - progress * 0.15);
   drawReel(rightCx, 0.85 + progress * 0.15);
 
@@ -3673,13 +3750,13 @@ function drawTapeReels(time) {
 
   ctx.restore();
 
-  // Update progress track playhead
+  // Update progress track playhead (stays visible when paused)
   const head = document.getElementById('tape-progress-head');
   if (head) {
-    const active = state.tapeLoop.hasContent && (state.tapeLoop.playing || state.tapeLoop.recording);
-    if (active) {
+    if (state.tapeLoop.hasContent) {
       head.classList.add('visible');
-      head.style.left = (progress * 100) + '%';
+      if (state.tapeLoop.playing || state.tapeLoop.recording)
+        head.style.left = (progress * 100) + '%';
     } else {
       head.classList.remove('visible');
     }

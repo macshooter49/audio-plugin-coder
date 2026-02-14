@@ -460,8 +460,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // Tape loop transport state (may be modified by auto-stop)
     bool wantRecord = tapeLoopRecording.load() > 0.5f;
     bool wantPlay   = tapeLoopPlaying.load() > 0.5f;
+
+    // Auto-start playback when recording with existing content (overdub while paused).
+    // Without this, feed-to-grain doesn't activate and playback section doesn't run.
+    if (wantRecord && tapeLoop.hasContent() && !wantPlay)
+        wantPlay = true;
     const float bpm = currentBPM.load();
     const bool isFreeform = speedFreeform.load() > 0.5f;
+
+    // Dynamic loop length resizing (once per block, not per sample)
+    tapeLoop.updateLength(loopLengthParam, bpm);
 
     // Per-sample processing
     auto* leftChannel  = buffer.getWritePointer(0);
@@ -537,6 +545,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             wetR = wetL;
         }
 
+        // When feed-to-grain is active during overdub, strip the dry feed-through
+        // from the ENTIRE signal path (not just overdub write). The dry component
+        // IS the old loop content passed through the grain engine's dry/wet mix
+        // unchanged. Without this, the user hears the original signal in both the
+        // monitoring output AND the overdub buffer never fully replaces.
+        if (feedActive && wantRecord && grainOn)
+        {
+            const float mixNorm = mix * 0.01f;
+            wetL -= grainInputL * (1.0f - mixNorm);
+            wetR -= grainInputR * (1.0f - mixNorm);
+        }
+
         // Grain filter: bipolar one-pole (0=HP, 50=bypass, 100=LP)
         if (grainOn && std::abs(grainFilterVal - 50.f) > 0.5f)
         {
@@ -571,6 +591,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
         // Capture pre-tape signal (after grain + filter, before wow/flutter/saturation)
         // Used by overdub to write clean signal — prevents tape effect compounding
+        // NOTE: When feed+overdub is active, wetL/wetR are already stripped of dry
+        // feed-through (above), so preTapeL/R are automatically clean too.
         const float preTapeL = wetL;
         const float preTapeR = wetR;
 
@@ -628,7 +650,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     // Auto-disable feed-to-grain when recording stops (prevents accidental feedback loops)
     if (prevProcessBlockRecording && !wantRecord)
+    {
         tapeLoopFeedToGrain.store(0.f);
+        // Flush grain engine circular buffers to purge stale loop content
+        // that would otherwise persist for up to 5 seconds after overdub
+        grainEngineL.clearBuffer();
+        grainEngineR.clearBuffer();
+    }
     prevProcessBlockRecording = wantRecord;
 
     scopeWritePos.store(scopePos);
