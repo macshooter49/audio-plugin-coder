@@ -42,6 +42,15 @@ public:
     {
         if (maxSamples == 0) return;
 
+        // Auto-reset when buffer is full — start fresh from 0
+        auto prev = samplesWritten.load(std::memory_order_relaxed);
+        if (prev >= maxSamples)
+        {
+            writePos.store(0, std::memory_order_relaxed);
+            samplesWritten.store(0, std::memory_order_release);
+            prev = 0;
+        }
+
         int wp = writePos.load(std::memory_order_relaxed);
 
         for (int i = 0; i < numSamples; ++i)
@@ -53,8 +62,6 @@ public:
 
         writePos.store(wp, std::memory_order_release);
 
-        // Track total samples written (capped at maxSamples)
-        auto prev = samplesWritten.load(std::memory_order_relaxed);
         auto next = prev + numSamples;
         if (next > maxSamples) next = maxSamples;
         samplesWritten.store(next, std::memory_order_release);
