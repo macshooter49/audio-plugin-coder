@@ -2575,6 +2575,10 @@ async function initJuceBindings() {
     modeBtn.title = state.xyAutoMode === 1 ? 'Mode: Smooth' : 'Mode: Chaotic';
     drawSpeedKnob();
 
+    // Restore modulation state from C++ (persists across editor close/reopen)
+    const savedModJson = await window.Juce.getNativeFunction('getModState')();
+    if (savedModJson) restoreModState(savedModJson);
+
     console.log('JUCE bindings initialized');
   } catch (e) {
     console.log('Preview mode: JUCE bindings unavailable', e);
@@ -5689,13 +5693,6 @@ function initModSystem() {
   initModContextMenu();
   updateModBadges();
   updateTargetLists();
-
-  // Restore saved mod state from C++
-  if (juceMode) {
-    window.Juce.getNativeFunction('getModState')().then(json => {
-      if (json) restoreModState(json);
-    });
-  }
 }
 
 // ---- Initialize ----
