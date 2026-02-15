@@ -6039,491 +6039,377 @@ function init() {
     if (tip) tip.classList.remove('visible');
   });
 
-  // ─── Tape Reel-to-Reel Visualization (TEAC-inspired) ───
+  // ─── Tape Reel-to-Reel Visualization — Minimal Line Art ───
+  // Inspired by Teenage Engineering OP-1 tape mode / technical schematics
   const hissParticles = [];
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 40; i++) {
     hissParticles.push({
       x: Math.random(), y: Math.random(),
-      life: Math.random(), speed: 0.2 + Math.random() * 0.6,
-      size: 0.4 + Math.random() * 1.2
+      life: Math.random(), speed: 0.3 + Math.random() * 0.5,
+      size: 0.3 + Math.random() * 0.8
     });
   }
 
-  // Helper: draw a 3-window reel (like the TEAC X-2000R)
-  function drawReel(ctx, x, y, outerR, hubR, tapeR, angle, isSupply) {
-    // Tape wound on reel (visible behind the windows)
-    if (tapeR > hubR + 2) {
-      ctx.beginPath();
-      ctx.arc(x, y, tapeR, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
-      ctx.fill();
-      // Tape edge ring
-      ctx.beginPath();
-      ctx.arc(x, y, tapeR, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      // Subtle tape "grooves" — concentric hints
-      for (let gr = hubR + 4; gr < tapeR - 1; gr += 3) {
-        ctx.beginPath();
-        ctx.arc(x, y, gr, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(167, 139, 250, 0.04)';
-        ctx.lineWidth = 0.3;
-        ctx.stroke();
-      }
-    }
-
-    // Outer flange (filled frosted glass disc)
-    ctx.beginPath();
-    ctx.arc(x, y, outerR, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Flange lip (thin outer ring)
-    ctx.beginPath();
-    ctx.arc(x, y, outerR + 2, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.15)';
-    ctx.lineWidth = 0.5;
-    ctx.stroke();
-
-    // 3 window cutouts — filled areas showing background through the reel
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    for (let i = 0; i < 3; i++) {
-      const a = (i * Math.PI * 2 / 3);
-      ctx.save();
-      ctx.rotate(a);
-      // Window shape: trapezoidal/fan sector between hub and outer rim
-      const innerEdge = hubR + 4;
-      const outerEdge = outerR - 3;
-      const halfAngle = Math.PI / 4.8; // width of each window
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(-halfAngle) * innerEdge, Math.sin(-halfAngle) * innerEdge);
-      ctx.lineTo(Math.cos(-halfAngle * 1.3) * outerEdge, Math.sin(-halfAngle * 1.3) * outerEdge);
-      ctx.arc(0, 0, outerEdge, -halfAngle * 1.3, halfAngle * 1.3);
-      ctx.lineTo(Math.cos(halfAngle) * innerEdge, Math.sin(halfAngle) * innerEdge);
-      ctx.arc(0, 0, innerEdge, halfAngle, -halfAngle, true);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(248, 245, 252, 0.9)'; // window shows bg
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 3 spokes (solid sections between windows)
-    for (let i = 0; i < 3; i++) {
-      const a = (i * Math.PI * 2 / 3) + Math.PI / 3;
-      ctx.save();
-      ctx.rotate(a);
-      const spokeW = Math.PI / 7;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(-spokeW) * (hubR + 2), Math.sin(-spokeW) * (hubR + 2));
-      ctx.lineTo(Math.cos(-spokeW * 0.7) * (outerR - 2), Math.sin(-spokeW * 0.7) * (outerR - 2));
-      ctx.arc(0, 0, outerR - 2, -spokeW * 0.7, spokeW * 0.7);
-      ctx.lineTo(Math.cos(spokeW) * (hubR + 2), Math.sin(spokeW) * (hubR + 2));
-      ctx.arc(0, 0, hubR + 2, spokeW, -spokeW, true);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      ctx.restore();
-    }
-    ctx.restore();
-
-    // Hub ring (frosted glass)
-    ctx.beginPath();
-    ctx.arc(x, y, hubR, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Inner hub detail ring
-    ctx.beginPath();
-    ctx.arc(x, y, hubR * 0.6, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.4)';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-
-    // Center spindle (3-prong mount like the TEAC)
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    for (let i = 0; i < 3; i++) {
-      const a = i * Math.PI * 2 / 3;
-      const px = Math.cos(a) * (hubR * 0.32);
-      const py = Math.sin(a) * (hubR * 0.32);
-      ctx.beginPath();
-      ctx.arc(px, py, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#8B5CF6';
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Center dot
-    ctx.beginPath();
-    ctx.arc(x, y, 2.2, 0, Math.PI * 2);
-    ctx.fillStyle = '#7C3AED';
-    ctx.fill();
-  }
+  // ═══════════════════════════════════════════════════════
+  // 3D VECTOR TAPE MACHINE — Upright cabinet style
+  // Reels mounted on front face, 3/4 oblique view
+  // ═══════════════════════════════════════════════════════
 
   function drawTapeMechanism(ctx, w, h, t) {
     ctx.clearRect(0, 0, w * DPR, h * DPR);
     ctx.save();
     ctx.scale(DPR, DPR);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
 
     const { wow, saturation: sat, hiss } = fxSuite.tape;
-    const cx = w / 2;
+
+    // ── Scale to fit canvas ──
+    const maxH = h * 0.85;
+    const sc = Math.min(maxH / 160, w / 220);
+
+    // ── Cabinet dimensions (screen px before scale) ──
+    const fW = 110 * sc;  // front face width
+    const fH = 140 * sc;  // front face height
+    const dX = 18 * sc;   // depth offset X (oblique)
+    const dY = -12 * sc;  // depth offset Y (oblique, goes up-right)
+
+    // Position front face centered, accounting for depth offset
+    const fL = (w - fW - dX) / 2;
+    const fT = (h - fH) / 2 + 4;
+    const fR = fL + fW;
+    const fB = fT + fH;
+
+    // ── COLORS ──
+    const fillFront = 'rgba(167, 139, 250, 0.10)';
+    const fillSide  = 'rgba(124, 58, 237, 0.14)';
+    const fillTop   = 'rgba(200, 180, 255, 0.08)';
+    const fillBase  = 'rgba(124, 58, 237, 0.18)';
+    const strokeMain = 'rgba(139, 92, 246, 0.55)';
+    const strokeBold = 'rgba(139, 92, 246, 0.7)';
+
+    // ── HELPER: point on front face (0-1 normalized) ──
+    function fp(nx, ny) { return { x: fL + nx * fW, y: fT + ny * fH }; }
+    // Point on front face with depth offset (back face)
+    function bp(nx, ny) { return { x: fL + nx * fW + dX, y: fT + ny * fH + dY }; }
 
     // ══════════════════════════════════════
-    // LAYOUT — 3-zone reel-to-reel machine
+    // 1. RIGHT SIDE FACE
     // ══════════════════════════════════════
-    const margin = 10;
-    const bodyL = margin;
-    const bodyR = w - margin;
-    const bodyT = 4;
-    const bodyB = h - 4;
-    const bodyW = bodyR - bodyL;
-    const bodyH = bodyB - bodyT;
-    const woodW = 6; // side cheek width
-    const innerL = bodyL + woodW;
-    const innerR = bodyR - woodW;
-    const innerW = innerR - innerL;
-
-    // Zone heights
-    const upperH = bodyH * 0.58;   // reel deck area
-    const nameH = bodyH * 0.09;    // nameplate strip
-    const lowerH = bodyH * 0.33;   // console panel
-    const upperB = bodyT + upperH;
-    const nameB = upperB + nameH;
-    const lowerB = bodyB;
-
-    // Reel geometry
-    const reelSpacing = Math.min(innerW * 0.27, 95);
-    const reelL = cx - reelSpacing;
-    const reelR = cx + reelSpacing;
-    const reelY = bodyT + upperH * 0.44;
-    const outerR = Math.min(upperH * 0.42, reelSpacing * 0.72);
-    const hubR = outerR * 0.30;
-    const supplyTapeR = outerR * 0.52 + Math.sin(t * 0.15) * outerR * 0.04;
-    const takeupTapeR = outerR * 0.72 - Math.sin(t * 0.15) * outerR * 0.04;
-
-    // ══════════════════════════════════════
-    // FROSTED GLASS BODY (matches deck style)
-    // ══════════════════════════════════════
-    const bodyRad = 10;
-
-    // Main frosted glass body
-    const bodyGrad = ctx.createLinearGradient(0, bodyT, 0, bodyB);
-    bodyGrad.addColorStop(0, 'rgba(255, 255, 255, 0.50)');
-    bodyGrad.addColorStop(0.4, 'rgba(248, 245, 252, 0.42)');
-    bodyGrad.addColorStop(1, 'rgba(240, 236, 248, 0.38)');
-    ctx.fillStyle = bodyGrad;
     ctx.beginPath();
-    ctx.roundRect(bodyL, bodyT, bodyW, bodyH, bodyRad);
+    ctx.moveTo(fR, fT);
+    ctx.lineTo(fR + dX, fT + dY);
+    ctx.lineTo(fR + dX, fB + dY);
+    ctx.lineTo(fR, fB);
+    ctx.closePath();
+    ctx.fillStyle = fillSide;
     ctx.fill();
-
-    // Inner glow highlight (top edge)
-    const innerGlow = ctx.createLinearGradient(0, bodyT, 0, bodyT + 20);
-    innerGlow.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
-    innerGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = innerGlow;
-    ctx.beginPath();
-    ctx.roundRect(bodyL + 1, bodyT + 1, bodyW - 2, 20, [bodyRad - 1, bodyRad - 1, 0, 0]);
-    ctx.fill();
-
-    // Glass border
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.18)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(bodyL, bodyT, bodyW, bodyH, bodyRad);
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 1.2;
     ctx.stroke();
 
-    // Subtle purple shadow (simulates box-shadow)
-    ctx.shadowColor = 'rgba(139, 92, 246, 0.08)';
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.05)';
+    // 2. TOP FACE
     ctx.beginPath();
-    ctx.roundRect(bodyL, bodyT, bodyW, bodyH, bodyRad);
-    ctx.stroke();
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-
-    // ═══════════════════
-    // NAMEPLATE STRIP (frosted purple divider)
-    // ═══════════════════
-    const nameGrad = ctx.createLinearGradient(0, upperB, 0, nameB);
-    nameGrad.addColorStop(0, 'rgba(139, 92, 246, 0.15)');
-    nameGrad.addColorStop(1, 'rgba(124, 58, 237, 0.12)');
-    ctx.fillStyle = nameGrad;
-    ctx.fillRect(innerL, upperB, innerW, nameH);
-    // Separator lines
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.12)';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(innerL, upperB); ctx.lineTo(innerR, upperB); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(innerL, nameB); ctx.lineTo(innerR, nameB); ctx.stroke();
-    // "TERRAIN" text
-    ctx.fillStyle = 'rgba(124, 58, 237, 0.55)';
-    ctx.font = `600 ${Math.max(7, nameH * 0.55)}px -apple-system, system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('T E R R A I N', cx, upperB + nameH / 2);
-
-    // ═══════════════════
-    // LOWER CONSOLE — subtle tinted zone
-    // ═══════════════════
-    const consoleGrad = ctx.createLinearGradient(0, nameB, 0, lowerB);
-    consoleGrad.addColorStop(0, 'rgba(139, 92, 246, 0.06)');
-    consoleGrad.addColorStop(1, 'rgba(124, 58, 237, 0.10)');
-    ctx.fillStyle = consoleGrad;
-    ctx.beginPath();
-    ctx.roundRect(bodyL + 1, nameB, bodyW - 2, lowerH - 1, [0, 0, bodyRad - 1, bodyRad - 1]);
+    ctx.moveTo(fL, fT);
+    ctx.lineTo(fL + dX, fT + dY);
+    ctx.lineTo(fR + dX, fT + dY);
+    ctx.lineTo(fR, fT);
+    ctx.closePath();
+    ctx.fillStyle = fillTop;
     ctx.fill();
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
 
-    // ── VU Meters (glass style) ──
-    const vuW = Math.min(36, innerW * 0.14);
-    const vuH = vuW * 0.7;
-    const vuY = nameB + lowerH * 0.15;
-    const vuL = cx - vuW - 6;
-    const vuR = cx + 6;
+    // 3. FRONT FACE (main face — largest, drawn last)
+    ctx.beginPath();
+    ctx.moveTo(fL, fT);
+    ctx.lineTo(fR, fT);
+    ctx.lineTo(fR, fB);
+    ctx.lineTo(fL, fB);
+    ctx.closePath();
+    ctx.fillStyle = fillFront;
+    ctx.fill();
+    ctx.strokeStyle = strokeBold;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
 
-    for (let vi = 0; vi < 2; vi++) {
-      const vx = vi === 0 ? vuL : vuR;
-      // Glass meter face
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-      ctx.lineWidth = 0.8;
-      const vuRad = 3;
-      ctx.beginPath();
-      ctx.roundRect(vx, vuY, vuW, vuH, vuRad);
-      ctx.fill();
-      ctx.stroke();
+    // ── Base trim (darker strip at bottom of front face) ──
+    const baseH = fH * 0.06;
+    ctx.fillStyle = fillBase;
+    ctx.fillRect(fL, fB - baseH, fW, baseH);
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(fL, fB - baseH);
+    ctx.lineTo(fR, fB - baseH);
+    ctx.stroke();
 
-      // VU arc
-      const vCx = vx + vuW / 2;
-      const vCy = vuY + vuH * 0.85;
-      const arcR = vuW * 0.38;
-      ctx.beginPath();
-      ctx.arc(vCx, vCy, arcR, Math.PI + 0.3, -0.3);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
+    // ══════════════════════════════════════
+    // FRONT FACE DETAILS
+    // ══════════════════════════════════════
 
-      // Scale ticks
-      for (let ti = 0; ti <= 8; ti++) {
-        const ta = Math.PI + 0.3 + (ti / 8) * (Math.PI - 0.6);
-        const inner = arcR - 2;
-        const outer = arcR;
+    // ── REELS (circles on front face, upper area) ──
+    const reelR = fW * 0.18;
+    const reelCY = fT + fH * 0.22;
+    const reelLx = fL + fW * 0.30;
+    const reelRx = fL + fW * 0.70;
+    const spokeAngle = t * 1.2;
+
+    // Supply tape amount (oscillates)
+    const supplyTR = reelR * (0.5 + Math.sin(t * 0.15) * 0.04);
+    const takeupTR = reelR * (0.78 - Math.sin(t * 0.15) * 0.04);
+
+    for (let ri = 0; ri < 2; ri++) {
+      const rcx = ri === 0 ? reelLx : reelRx;
+      const tapeAmt = ri === 0 ? supplyTR : takeupTR;
+
+      // Tape pack fill
+      if (tapeAmt > 4) {
         ctx.beginPath();
-        ctx.moveTo(vCx + Math.cos(ta) * inner, vCy + Math.sin(ta) * inner);
-        ctx.lineTo(vCx + Math.cos(ta) * outer, vCy + Math.sin(ta) * outer);
-        ctx.strokeStyle = ti > 6 ? 'rgba(239, 68, 68, 0.45)' : 'rgba(139, 92, 246, 0.3)';
+        ctx.arc(rcx, reelCY, tapeAmt, 0, Math.PI * 2);
+        ctx.fillStyle = ri === 0 ? 'rgba(167, 139, 250, 0.08)' : 'rgba(139, 92, 246, 0.12)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
         ctx.lineWidth = 0.4;
         ctx.stroke();
       }
 
-      // Animated needle
-      const needleVal = sat * 0.5 + hiss * 0.3 + Math.sin(t * 2.5 + vi * 1.2) * 0.08;
-      const needleAngle = Math.PI + 0.3 + Math.min(1, needleVal) * (Math.PI - 0.6);
+      // Outer flange
       ctx.beginPath();
-      ctx.moveTo(vCx, vCy);
-      ctx.lineTo(vCx + Math.cos(needleAngle) * (arcR + 1), vCy + Math.sin(needleAngle) * (arcR + 1));
-      ctx.strokeStyle = 'rgba(124, 58, 237, 0.7)';
-      ctx.lineWidth = 0.6;
+      ctx.arc(rcx, reelCY, reelR, 0, Math.PI * 2);
+      ctx.strokeStyle = strokeBold;
+      ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      // Needle pivot
+      // 3 spokes (animated rotation)
+      for (let si = 0; si < 3; si++) {
+        const a = spokeAngle + si * Math.PI * 2 / 3;
+        const hubD = reelR * 0.25;
+        const flangeD = reelR * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(rcx + Math.cos(a) * hubD, reelCY + Math.sin(a) * hubD);
+        ctx.lineTo(rcx + Math.cos(a) * flangeD, reelCY + Math.sin(a) * flangeD);
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      // Hub circle
       ctx.beginPath();
-      ctx.arc(vCx, vCy, 1, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(124, 58, 237, 0.6)';
+      ctx.arc(rcx, reelCY, reelR * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.fill();
-
-      // "VU" label
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.35)';
-      ctx.font = `bold ${Math.max(4, vuH * 0.2)}px -apple-system, system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('VU', vCx, vuY + vuH * 0.35);
-    }
-
-    // ── Transport Buttons (glass pill style, right side) ──
-    const btnY = vuY + 2;
-    const btnSize = Math.max(5, lowerH * 0.16);
-    const btnGap = btnSize + 4;
-    const btnStartX = innerR - 16 - btnSize * 4 - 12;
-
-    const buttons = [
-      { color: 'rgba(239, 68, 68, 0.35)', border: 'rgba(239, 68, 68, 0.4)' },  // REC
-      { color: 'rgba(34, 197, 94, 0.3)', border: 'rgba(34, 197, 94, 0.35)' },   // PLAY
-      { color: 'rgba(139, 92, 246, 0.25)', border: 'rgba(139, 92, 246, 0.3)' },  // STOP
-      { color: 'rgba(167, 139, 250, 0.2)', border: 'rgba(167, 139, 250, 0.3)' }, // PAUSE
-    ];
-    for (let bi = 0; bi < buttons.length; bi++) {
-      const bx = btnStartX + bi * btnGap;
-      ctx.fillStyle = buttons[bi].color;
-      ctx.strokeStyle = buttons[bi].border;
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.roundRect(bx, btnY, btnSize, btnSize, 2);
-      ctx.fill();
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
+      ctx.lineWidth = 0.8;
       ctx.stroke();
-      // Glass highlight on top half
-      const btnHl = ctx.createLinearGradient(0, btnY, 0, btnY + btnSize / 2);
-      btnHl.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
-      btnHl.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = btnHl;
+
+      // Center dot
       ctx.beginPath();
-      ctx.roundRect(bx + 0.5, btnY + 0.5, btnSize - 1, btnSize / 2, [1.5, 1.5, 0, 0]);
+      ctx.arc(rcx, reelCY, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.6)';
       ctx.fill();
     }
 
-    // ── Decorative knobs (frosted circles, left side) ──
-    const knobY = nameB + lowerH * 0.65;
-    const dKnobR = Math.max(3.5, lowerH * 0.1);
-    const knobPositions = [innerL + 18, innerL + 18 + dKnobR * 4.5, innerL + 18 + dKnobR * 9];
-    for (let ki = 0; ki < knobPositions.length; ki++) {
-      const kx = knobPositions[ki];
-      // Frosted knob body
-      ctx.beginPath();
-      ctx.arc(kx, knobY, dKnobR, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
-      // Indicator line (deterministic angle per knob)
-      const indAngle = -Math.PI * 0.4 + ki * 0.5;
-      ctx.beginPath();
-      ctx.moveTo(kx, knobY);
-      ctx.lineTo(kx + Math.cos(indAngle) * dKnobR * 0.65, knobY + Math.sin(indAngle) * dKnobR * 0.65);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-    }
+    // ── TAPE PATH (between reels, across head) ──
+    const headY = fT + fH * 0.40;
+    const headCX = fL + fW * 0.5;
+    const gLx = fL + fW * 0.24;
+    const gRx = fL + fW * 0.76;
+    const gY = fT + fH * 0.34;
 
-    // ── Small indicator LEDs ──
-    const ledY = nameB + lowerH * 0.35;
-    const ledColors = [
-      { fill: 'rgba(239, 68, 68, 0.4)', glow: 'rgba(239, 68, 68, 0.15)' },
-      { fill: 'rgba(34, 197, 94, 0.45)', glow: 'rgba(34, 197, 94, 0.15)' }
-    ];
-    for (let li = 0; li < 2; li++) {
-      // LED glow
-      ctx.beginPath();
-      ctx.arc(innerL + 14 + li * 10, ledY, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = ledColors[li].glow;
-      ctx.fill();
-      // LED dot
-      ctx.beginPath();
-      ctx.arc(innerL + 14 + li * 10, ledY, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = ledColors[li].fill;
-      ctx.fill();
-    }
-
-    // ═══════════════════
-    // REELS (on top of deck)
-    // ═══════════════════
-    const spokeAngle = t * 1.0;
-    drawReel(ctx, reelL, reelY, outerR, hubR, supplyTapeR, spokeAngle, true);
-    drawReel(ctx, reelR, reelY, outerR, hubR, takeupTapeR, spokeAngle, false);
-
-    // ═══════════════════
-    // TAPE PATH + HEADS
-    // ═══════════════════
-    const headY = upperB - 4;
-    const headCenterY = headY + 5;
-
-    // Guide posts
-    const gL1 = { x: reelL + outerR * 0.5, y: reelY + outerR * 0.7 };
-    const gL2 = { x: cx - 30, y: headCenterY };
-    const gR1 = { x: cx + 30, y: headCenterY };
-    const gR2 = { x: reelR - outerR * 0.5, y: reelY + outerR * 0.7 };
-
-    // Tape path with wobble
+    // Tape ribbon
     ctx.beginPath();
-    ctx.moveTo(reelL + supplyTapeR * 0.65, reelY + supplyTapeR * 0.65);
-    ctx.lineTo(gL1.x, gL1.y);
-    ctx.lineTo(gL2.x, gL2.y);
-    const segs = 30;
-    for (let i = 1; i <= segs; i++) {
-      const f = i / segs;
-      const sx = gL2.x + (gR1.x - gL2.x) * f;
-      const wobble = wow * 2 * Math.sin(t * 3 + f * Math.PI * 5) * Math.sin(f * Math.PI);
-      ctx.lineTo(sx, headCenterY + wobble);
+    ctx.moveTo(reelLx + supplyTR * 0.7, reelCY + supplyTR * 0.7);
+    ctx.lineTo(gLx, gY);
+    ctx.lineTo(headCX - 12 * sc, headY);
+    // Wobble across head
+    const wobSegs = 16;
+    for (let i = 0; i <= wobSegs; i++) {
+      const f = i / wobSegs;
+      const mx = (headCX - 12 * sc) + (24 * sc) * f;
+      const wb = wow * 2 * Math.sin(t * 3 + f * Math.PI * 5) * Math.sin(f * Math.PI);
+      ctx.lineTo(mx, headY + wb);
     }
-    ctx.lineTo(gR2.x, gR2.y);
-    ctx.lineTo(reelR - takeupTapeR * 0.65, reelY + takeupTapeR * 0.65);
-    ctx.strokeStyle = '#8B5CF6';
-    ctx.lineWidth = 1.5;
+    ctx.lineTo(gRx, gY);
+    ctx.lineTo(reelRx - takeupTR * 0.7, reelCY + takeupTR * 0.7);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.55)';
+    ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Guide posts (frosted glass dots)
-    for (const gp of [gL1, gL2, gR1, gR2]) {
+    // Guide rollers (tiny filled circles)
+    for (const gp of [{x:gLx,y:gY}, {x:gRx,y:gY}]) {
       ctx.beginPath();
-      ctx.arc(gp.x, gp.y, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.arc(gp.x, gp.y, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
-      ctx.lineWidth = 0.7;
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+      ctx.lineWidth = 0.6;
       ctx.stroke();
     }
 
-    // Head block
-    const hdW = 22;
-    const hdH = 10;
-
-    // Saturation glow
-    if (sat > 0.01) {
-      const glowR = 18 + sat * 16;
-      const grad = ctx.createRadialGradient(cx, headCenterY, 1, cx, headCenterY, glowR);
-      grad.addColorStop(0, `rgba(${Math.round(139 + sat * 80)}, ${Math.round(92 - sat * 20)}, ${Math.round(246 - sat * 50)}, ${sat * 0.4})`);
-      grad.addColorStop(0.5, `rgba(139, 92, 246, ${sat * 0.1})`);
-      grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(cx - glowR, headCenterY - glowR, glowR * 2, glowR * 2);
+    // Head assembly block
+    const hdW = 26 * sc;
+    const hdH = 6 * sc;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.rect(headCX - hdW/2, headY - hdH/2, hdW, hdH);
+    ctx.fill();
+    ctx.stroke();
+    // Head gap lines
+    for (let i = 0; i < 3; i++) {
+      const gx = headCX - 5 * sc + i * 5 * sc;
+      ctx.beginPath();
+      ctx.moveTo(gx, headY - hdH/2 + 1.5);
+      ctx.lineTo(gx, headY + hdH/2 - 1.5);
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
     }
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
-    ctx.lineWidth = 0.8;
+    // Saturation glow at head
+    if (sat > 0.02) {
+      const glowR = 10 * sc + sat * 14 * sc;
+      const grad = ctx.createRadialGradient(headCX, headY, 0, headCX, headY, glowR);
+      grad.addColorStop(0, `rgba(139, 92, 246, ${sat * 0.25})`);
+      grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(headCX, headY, glowR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ── HORIZONTAL SLOT / BAY (below head, like the reference) ──
+    const slotY = fT + fH * 0.50;
+    const slotW = fW * 0.7;
+    const slotH = fH * 0.06;
+    ctx.fillStyle = 'rgba(124, 58, 237, 0.06)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+    ctx.lineWidth = 0.6;
     ctx.beginPath();
-    ctx.roundRect(cx - hdW / 2, headY, hdW, hdH, 2);
+    ctx.rect(fL + (fW - slotW)/2, slotY, slotW, slotH);
     ctx.fill();
     ctx.stroke();
 
-    // Head gap lines
-    for (let i = 0; i < 3; i++) {
-      const gx = cx - 5 + i * 5;
-      ctx.beginPath();
-      ctx.moveTo(gx, headY + 2);
-      ctx.lineTo(gx, headY + hdH - 2);
-      ctx.strokeStyle = 'rgba(124, 58, 237, 0.4)';
+    // ── VU METERS (small, below the slot) ──
+    const vuW = 18 * sc;
+    const vuH = 12 * sc;
+    const vuY = fT + fH * 0.60;
+    const vuLx = fL + fW * 0.22;
+    const vuRxP = fL + fW * 0.52;
+
+    for (let vi = 0; vi < 2; vi++) {
+      const vx = vi === 0 ? vuLx : vuRxP;
+
+      // Meter rectangle
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
       ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.rect(vx, vuY, vuW, vuH);
+      ctx.fill();
+      ctx.stroke();
+
+      // Arc
+      const vCx = vx + vuW / 2;
+      const vCy = vuY + vuH * 0.85;
+      const arcR = vuW * 0.35;
+      ctx.beginPath();
+      ctx.arc(vCx, vCy, arcR, Math.PI + 0.3, -0.3);
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
+
+      // Ticks
+      for (let ti = 0; ti <= 6; ti++) {
+        const ta = Math.PI + 0.3 + (ti / 6) * (Math.PI - 0.6);
+        ctx.beginPath();
+        ctx.moveTo(vCx + Math.cos(ta) * (arcR - 1.5), vCy + Math.sin(ta) * (arcR - 1.5));
+        ctx.lineTo(vCx + Math.cos(ta) * arcR, vCy + Math.sin(ta) * arcR);
+        ctx.strokeStyle = ti > 4 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(139, 92, 246, 0.25)';
+        ctx.lineWidth = 0.3;
+        ctx.stroke();
+      }
+
+      // Needle
+      const nv = sat * 0.5 + hiss * 0.3 + Math.sin(t * 2.5 + vi * 1.3) * 0.08;
+      const na = Math.PI + 0.3 + Math.min(1, nv) * (Math.PI - 0.6);
+      ctx.beginPath();
+      ctx.moveTo(vCx, vCy);
+      ctx.lineTo(vCx + Math.cos(na) * (arcR + 1), vCy + Math.sin(na) * (arcR + 1));
+      ctx.strokeStyle = 'rgba(124, 58, 237, 0.6)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+      // Pivot
+      ctx.beginPath();
+      ctx.arc(vCx, vCy, 0.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.5)';
+      ctx.fill();
+    }
+
+    // ── TRANSPORT BUTTONS (row below VU meters) ──
+    const btnY = fT + fH * 0.76;
+    const btnSz = 5 * sc;
+    const btnGap = btnSz + 2 * sc;
+    const btnStartX = fL + fW * 0.5 - (btnGap * 2.5);
+    const btnColors = [
+      'rgba(239, 68, 68, 0.45)',   // REC (red)
+      'rgba(34, 197, 94, 0.4)',    // PLAY (green)
+      'rgba(59, 130, 246, 0.35)',  // REW (blue)
+      'rgba(139, 92, 246, 0.35)',  // FF (purple)
+      'rgba(107, 114, 128, 0.3)', // STOP (gray)
+    ];
+    for (let bi = 0; bi < btnColors.length; bi++) {
+      const bx = btnStartX + bi * btnGap;
+      ctx.fillStyle = btnColors[bi];
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, btnY, btnSz, btnSz, 1);
+      ctx.fill();
       ctx.stroke();
     }
 
-    // ═══════════════════
+    // (LED indicators removed — transport buttons are sufficient)
+
+    // ── "TERRAIN" micro-label (bottom of front face, above base) ──
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
+    ctx.font = `500 ${Math.max(5, 5.5 * sc)}px -apple-system, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('T E R R A I N', fL + fW / 2, fB - baseH - 3);
+
+    // ══════════════════════════════════════
+    // SIDE FACE DETAILS (subtle vent lines)
+    // ══════════════════════════════════════
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.12)';
+    ctx.lineWidth = 0.4;
+    for (let vi = 0; vi < 5; vi++) {
+      const vy = fT + fH * (0.55 + vi * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(fR + 3, vy + dY * (vy - fT) / fH);
+      ctx.lineTo(fR + dX - 3, vy + dY);
+      ctx.stroke();
+    }
+
+    // ══════════════════════════════════════
     // HISS PARTICLES
-    // ═══════════════════
-    if (hiss > 0.01) {
-      const count = Math.floor(hiss * 60);
+    // ══════════════════════════════════════
+    if (hiss > 0.02) {
+      const count = Math.floor(hiss * 20);
       for (let i = 0; i < count && i < hissParticles.length; i++) {
         const p = hissParticles[i];
         p.life += p.speed * 0.018;
         if (p.life > 1) { p.life = 0; p.x = Math.random(); p.y = Math.random(); }
-        const alpha = Math.sin(p.life * Math.PI) * hiss * 0.4;
+        const alpha = Math.sin(p.life * Math.PI) * hiss * 0.3;
         if (alpha > 0.01) {
-          ctx.fillStyle = `rgba(167, 139, 250, ${alpha})`;
+          const px = fL + p.x * fW;
+          const py = fT + p.y * fH;
+          ctx.fillStyle = `rgba(139, 92, 246, ${alpha})`;
           ctx.beginPath();
-          ctx.arc(bodyL + p.x * bodyW, bodyT + p.y * bodyH, p.size, 0, Math.PI * 2);
+          ctx.arc(px, py, p.size, 0, Math.PI * 2);
           ctx.fill();
         }
       }
