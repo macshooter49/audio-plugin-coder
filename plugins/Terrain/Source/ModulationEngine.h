@@ -199,7 +199,8 @@ public:
                 sourceVal = xySourceY;
 
             float range = paramMax[asgn.target] - paramMin[asgn.target];
-            offsets[asgn.target] += sourceVal * asgn.depth * range;
+            float scaledDepth = asgn.depth * asgn.depth * asgn.depth; // cubic curve: subtle at low values
+            offsets[asgn.target] += sourceVal * scaledDepth * range;
         }
     }
 

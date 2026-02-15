@@ -463,7 +463,7 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
 {
     auto b = getLocalBounds().toFloat();
 
-    g.fillAll(juce::Colours::white);
+    g.fillAll(juce::Colour(0xFFF8F5FC)); // match WebView --bg-footer
 
     if (state == 2) // ready — green, drag to DAW
     {

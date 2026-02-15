@@ -5291,7 +5291,7 @@ function initModContextMenu() {
       if (!dragging) return;
       updateDepthFromEvent(e, srcIdx, depthWrap, depthFill, depthPct);
     });
-    depthWrap.addEventListener('pointerup', () => { dragging = false; persistModState(); });
+    depthWrap.addEventListener('pointerup', () => { dragging = false; persistModState(); updateTargetLists(); });
     depthWrap.addEventListener('lostpointercapture', () => { dragging = false; });
   });
 }
@@ -5432,7 +5432,7 @@ function updateModulation(time, dt) {
         } else if (a.source === 4) {
           sourceVal = (state.xyY - 0.5) * 2;
         }
-        offset += sourceVal * a.depth * range;
+        offset += sourceVal * (a.depth * a.depth * a.depth) * range; // cubic depth curve
       }
 
       const modulated = Math.max(p.min, Math.min(p.max, baseVal + offset));
