@@ -706,6 +706,8 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty("grainEngineEnabled", grainEngineEnabled.load(), nullptr);
     state.setProperty("tapeEnabled",        tapeEnabled.load(),        nullptr);
     state.setProperty("wanderLinked",        wanderLinked.load(),        nullptr);
+    if (modStateJson.isNotEmpty())
+        state.setProperty("modStateJson", modStateJson, nullptr);
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
@@ -736,6 +738,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             grainEngineEnabled.store(static_cast<float>(newState.getProperty("grainEngineEnabled", 1.f)));
             tapeEnabled.store(static_cast<float>(newState.getProperty("tapeEnabled", 1.f)));
             wanderLinked.store(static_cast<float>(newState.getProperty("wanderLinked", 1.f)));
+            modStateJson = newState.getProperty("modStateJson", "").toString();
 
             // Reload presets from disk (the single source of truth)
             while (static_cast<int>(presets.size()) > numFactoryPresets)

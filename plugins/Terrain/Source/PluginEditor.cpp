@@ -234,6 +234,18 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
                 audioProcessor.captureExportState.store(0);
                 complete({});
             })
+            .withNativeFunction("saveModState", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.modStateJson = args[0].toString();
+                complete({});
+            })
+            .withNativeFunction("getModState", [this](const juce::Array<juce::var>&,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(juce::var(audioProcessor.modStateJson));
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })

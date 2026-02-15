@@ -1348,13 +1348,14 @@ body {
 /* Shape Selector */
 .lfo-shapes {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   flex-shrink: 0;
+  justify-content: center;
 }
 .shape-btn {
-  width: 26px;
-  height: 20px;
-  border-radius: 4px;
+  flex: 1;
+  height: 24px;
+  border-radius: 5px;
   border: 1px solid var(--border);
   background: var(--bg-glass);
   cursor: pointer;
@@ -1372,8 +1373,8 @@ body {
 }
 .shape-btn canvas {
   display: block;
-  width: 16px;
-  height: 12px;
+  width: 20px;
+  height: 14px;
 }
 
 /* Mini Knobs Row */
@@ -1382,31 +1383,33 @@ body {
   align-items: flex-start;
   gap: 4px;
   flex-shrink: 0;
+  width: 100%;
 }
 .mini-knob-group {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  width: 48px;
 }
 .mini-knob-canvas {
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 42px;
   cursor: grab;
 }
 .mini-knob-canvas:active { cursor: grabbing; }
 .mini-knob-value {
   font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: 8px;
+  font-size: 10px;
+  font-weight: 400;
   color: var(--text-primary);
   text-align: center;
-  line-height: 10px;
+  line-height: 12px;
 }
 .mini-knob-label {
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 500;
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
   color: var(--text-secondary);
   text-align: center;
@@ -1415,6 +1418,7 @@ body {
 /* Rate Sync Toggle */
 .rate-sync-toggle {
   display: flex;
+  flex: 1;
   border-radius: 6px;
   border: 1px solid var(--border);
   overflow: hidden;
@@ -1422,11 +1426,13 @@ body {
   margin-top: 2px;
 }
 .rate-sync-opt {
+  flex: 1;
   padding: 2px 6px;
   font-size: 7px;
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  text-align: center;
   color: var(--text-muted);
   cursor: pointer;
   background: transparent;
@@ -1441,15 +1447,18 @@ body {
 /* Polarity Selector */
 .polarity-pills {
   display: flex;
+  flex: 1;
   border-radius: 6px;
   border: 1px solid var(--border);
   overflow: hidden;
   flex-shrink: 0;
 }
 .polarity-opt {
+  flex: 1;
   padding: 2px 7px;
   font-size: 8px;
   font-weight: 600;
+  text-align: center;
   color: var(--text-muted);
   cursor: pointer;
   background: transparent;
@@ -1467,6 +1476,7 @@ body {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  width: 100%;
 }
 
 /* Targets List */
@@ -1600,7 +1610,6 @@ body {
   height: 100%;
   border-radius: 3px;
   width: 50%;
-  transition: width 0.1s;
 }
 .mod-ctx-depth-pct {
   font-family: 'SF Mono', 'Menlo', monospace;
@@ -2487,7 +2496,10 @@ async function initJuceBindings() {
       state.params[key] = p.sliderState.scaledValue;
       p.sliderState.valueChangedEvent.addListener(() => {
         if (state.draggingKnob === key) return; // skip echo while dragging
+        // If this param is actively modulated, don't let JUCE echo overwrite
+        if (modState.assignments.some(a => a.target === key && a.enabled)) return;
         state.params[key] = p.sliderState.scaledValue;
+        modBaseValues[key] = p.sliderState.scaledValue;
         updateKnobDisplay(key);
       });
     }
@@ -3525,7 +3537,10 @@ function buildKnobs() {
       e.preventDefault();
       state.draggingKnob = id;
       state.dragStartY = e.clientY;
-      state.dragStartVal = normalize(id, state.params[id]);
+      // Use base value (not modulated) so drag starts from user's set position
+      const baseVal = modBaseValues[id] !== undefined ? modBaseValues[id] : state.params[id];
+      state.dragStartVal = normalize(id, baseVal);
+      state.params[id] = baseVal; // snap visual back to base
       hideTooltip();
       if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.sliderDragStarted();
     });
@@ -3533,6 +3548,7 @@ function buildKnobs() {
     knobWrap.addEventListener('dblclick', (e) => {
       e.preventDefault();
       state.params[id] = p.default;
+      modBaseValues[id] = p.default; // sync mod base on reset
       updateKnobDisplay(id);
       pushParamToJuce(id);
       // Flash animation
@@ -3799,6 +3815,7 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
   if (state.draggingKnob) {
     const id = state.draggingKnob;
+    modBaseValues[id] = state.params[id]; // lock base to where user left it
     if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.sliderDragEnded();
     state.draggingKnob = null;
     updateKnobDisplay(id);
@@ -4848,9 +4865,9 @@ const SYNC_DIVISIONS = ['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16'
 const modState = {
   panelOpen: false,
   lfos: [
-    { shape: 0, rate: 1.0, sync: false, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
-    { shape: 0, rate: 0.5, sync: false, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
-    { shape: 0, rate: 0.25, sync: false, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
+    { shape: 0, rate: 1.0, sync: false, syncIdx: 5, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
+    { shape: 0, rate: 0.5, sync: false, syncIdx: 5, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
+    { shape: 0, rate: 0.25, sync: false, syncIdx: 5, depth: 1.0, phase: 0, polarity: 'bi', _phase: 0, _prevRand: 0, _nextRand: 0, _holdVal: 0 },
   ],
   // assignments: [{source, target, depth, enabled}]
   assignments: [],
@@ -4881,11 +4898,23 @@ function applyPolarity(val, polarity) {
 }
 
 // ---- LFO Phase Update (called from animate) ----
+// Convert sync division index to Hz given BPM
+// SYNC_DIVISIONS: ['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32']
+function syncDivisionToHz(idx, bpm) {
+  // Beats per division (at 4/4 time, 1 bar = 4 beats)
+  const beatsPerDiv = [32, 16, 8, 4, 2, 1, 0.5, 0.25, 0.125];
+  const beatsPerSec = bpm / 60;
+  const divDurationSec = beatsPerDiv[idx] / beatsPerSec;
+  return 1.0 / divDurationSec;
+}
+
 function updateLFOs(dt) {
   for (let i = 0; i < 3; i++) {
     const lfo = modState.lfos[i];
+    // Calculate effective rate (Hz)
+    const effectiveRate = lfo.sync ? syncDivisionToHz(lfo.syncIdx, bpmFromJuce) : lfo.rate;
     const prevPhase = lfo._phase;
-    lfo._phase = (lfo._phase + lfo.rate * dt) % 1.0;
+    lfo._phase = (lfo._phase + effectiveRate * dt) % 1.0;
 
     let raw;
     if (lfo.shape === 5) { // S&H
@@ -4924,7 +4953,9 @@ function drawModRing(canvas, paramId) {
   const startAngle = 0.75 * Math.PI;
   const sweep = 1.5 * Math.PI;
 
-  const baseNorm = normalize(paramId, state.params[paramId]);
+  // Use the user's base value (not the modulated value) as the ring center
+  const baseVal = modBaseValues[paramId] !== undefined ? modBaseValues[paramId] : state.params[paramId];
+  const baseNorm = normalize(paramId, baseVal);
 
   for (const a of assignments) {
     let modVal = 0;
@@ -4933,8 +4964,8 @@ function drawModRing(canvas, paramId) {
     else if (a.source === 4) modVal = (state.xyY - 0.5) * 2;
 
     const offset = modVal * a.depth;
-    const modLow = Math.max(0, Math.min(1, baseNorm - Math.abs(offset)));
-    const modHigh = Math.max(0, Math.min(1, baseNorm + Math.abs(offset)));
+    const modLow = Math.max(0, Math.min(1, baseNorm + Math.min(0, offset)));
+    const modHigh = Math.max(0, Math.min(1, baseNorm + Math.max(0, offset)));
 
     const arcStart = startAngle + modLow * sweep;
     const arcEnd = startAngle + modHigh * sweep;
@@ -4983,6 +5014,8 @@ function updateModBadges() {
   if (modBtn) {
     modBtn.classList.toggle('has-routes', modState.assignments.some(a => a.enabled));
   }
+  // Persist to C++ for window close/reopen + session save
+  persistModState();
 }
 
 // ---- LFO Waveform Canvas Drawing ----
@@ -5075,13 +5108,14 @@ function buildShapeButtons() {
           b.classList.toggle('active', si === s);
           drawShapeIcon(b.querySelector('canvas'), si, i, si === s);
         });
+        persistModState();
       });
     }
   }
 }
 
 function drawShapeIcon(canvas, shapeIdx, lfoIdx, active) {
-  const w = 16, h = 12;
+  const w = 20, h = 14;
   canvas.width = w * DPR;
   canvas.height = h * DPR;
   canvas.style.width = w + 'px';
@@ -5090,7 +5124,7 @@ function drawShapeIcon(canvas, shapeIdx, lfoIdx, active) {
   ctx.save();
   ctx.scale(DPR, DPR);
   ctx.strokeStyle = active ? MOD_COLORS[lfoIdx] : '#B0A4C0';
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = 1.4;
   ctx.lineCap = 'round';
   ctx.beginPath();
   const cy = h / 2, amp = h * 0.35;
@@ -5106,6 +5140,9 @@ function drawShapeIcon(canvas, shapeIdx, lfoIdx, active) {
 }
 
 // ---- Mini Knobs for LFO Parameters ----
+// Store rate knob refs so sync toggle can update them
+const lfoRateRefs = [null, null, null]; // {canvas, valEl, update}
+
 function buildLFOKnobs() {
   const knobDefs = [
     { key: 'rate', label: 'RATE', min: 0.01, max: 20, default: 1.0, format: v => v < 1 ? v.toFixed(2) + ' Hz' : v.toFixed(1) + ' Hz' },
@@ -5123,12 +5160,11 @@ function buildLFOKnobs() {
 
       const canvas = document.createElement('canvas');
       canvas.className = 'mini-knob-canvas';
-      setupCanvas(canvas, 32, 32);
+      setupCanvas(canvas, 42, 42);
       group.appendChild(canvas);
 
       const valEl = document.createElement('div');
       valEl.className = 'mini-knob-value';
-      valEl.textContent = def.format(modState.lfos[i][def.key]);
       group.appendChild(valEl);
 
       const labelEl = document.createElement('div');
@@ -5138,33 +5174,84 @@ function buildLFOKnobs() {
 
       container.appendChild(group);
 
-      // Draw initial
-      const norm = (modState.lfos[i][def.key] - def.min) / (def.max - def.min);
-      drawMiniKnob(canvas, norm, MOD_COLORS[i]);
+      if (def.key === 'rate') {
+        // Rate knob: dual-mode (free Hz / sync divisions)
+        const lfo = modState.lfos[i];
+        const updateRateDisplay = () => {
+          if (lfo.sync) {
+            const idx = lfo.syncIdx;
+            valEl.textContent = SYNC_DIVISIONS[idx];
+            const n = idx / (SYNC_DIVISIONS.length - 1);
+            drawMiniKnob(canvas, n, MOD_COLORS[i]);
+          } else {
+            valEl.textContent = def.format(lfo.rate);
+            const n = (lfo.rate - def.min) / (def.max - def.min);
+            drawMiniKnob(canvas, n, MOD_COLORS[i]);
+          }
+        };
+        lfoRateRefs[i] = { canvas, valEl, update: updateRateDisplay };
+        updateRateDisplay();
 
-      // Drag behavior
-      let dragging = false, startY = 0, startVal = 0;
-      canvas.addEventListener('pointerdown', (e) => {
-        dragging = true;
-        startY = e.clientY;
-        startVal = modState.lfos[i][def.key];
-        canvas.setPointerCapture(e.pointerId);
-        e.preventDefault();
-      });
-      canvas.addEventListener('pointermove', (e) => {
-        if (!dragging) return;
-        const dy = startY - e.clientY;
-        const range = def.max - def.min;
-        const sensitivity = range / 150;
-        let newVal = startVal + dy * sensitivity;
-        newVal = Math.max(def.min, Math.min(def.max, newVal));
-        modState.lfos[i][def.key] = newVal;
-        const n = (newVal - def.min) / (def.max - def.min);
-        drawMiniKnob(canvas, n, MOD_COLORS[i]);
-        valEl.textContent = def.format(newVal);
-      });
-      canvas.addEventListener('pointerup', () => { dragging = false; });
-      canvas.addEventListener('lostpointercapture', () => { dragging = false; });
+        let dragging = false, startY = 0, startVal = 0;
+        canvas.addEventListener('pointerdown', (e) => {
+          dragging = true;
+          startY = e.clientY;
+          startVal = lfo.sync ? lfo.syncIdx : lfo.rate;
+          canvas.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        canvas.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const dy = startY - e.clientY;
+          if (lfo.sync) {
+            // Snap through divisions — 30px per step
+            const steps = Math.round(dy / 30);
+            let newIdx = Math.round(startVal) + steps;
+            newIdx = Math.max(0, Math.min(SYNC_DIVISIONS.length - 1, newIdx));
+            if (newIdx !== lfo.syncIdx) {
+              lfo.syncIdx = newIdx;
+              updateRateDisplay();
+            }
+          } else {
+            const range = def.max - def.min;
+            const sensitivity = range / 150;
+            let newVal = startVal + dy * sensitivity;
+            newVal = Math.max(def.min, Math.min(def.max, newVal));
+            lfo.rate = newVal;
+            updateRateDisplay();
+          }
+        });
+        canvas.addEventListener('pointerup', () => { dragging = false; persistModState(); });
+        canvas.addEventListener('lostpointercapture', () => { dragging = false; });
+      } else {
+        // Depth / Phase knobs: standard behavior
+        valEl.textContent = def.format(modState.lfos[i][def.key]);
+        const norm = (modState.lfos[i][def.key] - def.min) / (def.max - def.min);
+        drawMiniKnob(canvas, norm, MOD_COLORS[i]);
+
+        let dragging = false, startY = 0, startVal = 0;
+        canvas.addEventListener('pointerdown', (e) => {
+          dragging = true;
+          startY = e.clientY;
+          startVal = modState.lfos[i][def.key];
+          canvas.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        canvas.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const dy = startY - e.clientY;
+          const range = def.max - def.min;
+          const sensitivity = range / 150;
+          let newVal = startVal + dy * sensitivity;
+          newVal = Math.max(def.min, Math.min(def.max, newVal));
+          modState.lfos[i][def.key] = newVal;
+          const n = (newVal - def.min) / (def.max - def.min);
+          drawMiniKnob(canvas, n, MOD_COLORS[i]);
+          valEl.textContent = def.format(newVal);
+        });
+        canvas.addEventListener('pointerup', () => { dragging = false; persistModState(); });
+        canvas.addEventListener('lostpointercapture', () => { dragging = false; });
+      }
     }
   }
 }
@@ -5176,7 +5263,7 @@ function drawMiniKnob(canvas, normValue, color) {
   ctx.save();
   ctx.scale(DPR, DPR);
 
-  const cx = w / 2, cy = h / 2, radius = 13;
+  const cx = w / 2, cy = h / 2, radius = 17;
   const startAngle = 0.75 * Math.PI;
   const sweep = 1.5 * Math.PI;
   const endAngle = startAngle + sweep;
@@ -5186,7 +5273,7 @@ function drawMiniKnob(canvas, normValue, color) {
   ctx.beginPath();
   ctx.arc(cx, cy, radius, startAngle, endAngle, false);
   ctx.strokeStyle = '#E8E0F0';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.stroke();
 
@@ -5195,7 +5282,7 @@ function drawMiniKnob(canvas, normValue, color) {
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.stroke();
   }
@@ -5204,7 +5291,7 @@ function drawMiniKnob(canvas, normValue, color) {
   const dx = cx + Math.cos(activeEnd) * radius;
   const dy = cy + Math.sin(activeEnd) * radius;
   ctx.beginPath();
-  ctx.arc(dx, dy, 1.5, 0, Math.PI * 2);
+  ctx.arc(dx, dy, 2, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
 
@@ -5222,6 +5309,9 @@ function initLFOControls() {
           const mode = btn.dataset.mode;
           modState.lfos[i].sync = (mode === 'sync');
           syncEl.querySelectorAll('.rate-sync-opt').forEach(b => b.classList.toggle('active', b === btn));
+          // Refresh rate knob display for new mode
+          if (lfoRateRefs[i]) lfoRateRefs[i].update();
+          persistModState();
         });
       });
     }
@@ -5232,6 +5322,7 @@ function initLFOControls() {
         btn.addEventListener('click', () => {
           modState.lfos[i].polarity = btn.dataset.pol;
           polEl.querySelectorAll('.polarity-opt').forEach(b => b.classList.toggle('active', b === btn));
+          persistModState();
         });
       });
     }
@@ -5342,7 +5433,7 @@ function initModContextMenu() {
       if (!dragging) return;
       updateDepthFromEvent(e, srcIdx, depthWrap, depthFill, depthPct);
     });
-    depthWrap.addEventListener('pointerup', () => { dragging = false; });
+    depthWrap.addEventListener('pointerup', () => { dragging = false; persistModState(); });
     depthWrap.addEventListener('lostpointercapture', () => { dragging = false; });
   });
 }
@@ -5435,6 +5526,10 @@ function updateTargetLists() {
 }
 
 // ---- Mod Update in Animation Loop ----
+// Base values: the user-set values before modulation offsets.
+// We store these so modulation doesn't permanently drift params.
+const modBaseValues = {};
+
 function updateModulation(time, dt) {
   if (dt <= 0 || dt > 0.1) dt = 1/60;
   updateLFOs(dt);
@@ -5444,16 +5539,144 @@ function updateModulation(time, dt) {
     for (let i = 0; i < 3; i++) drawLFOWaveform(i);
   }
 
-  // Draw mod rings on knobs (even when panel is closed)
-  if (modState.assignments.some(a => a.enabled)) {
-    for (const paramId of MODULATABLE) {
-      const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
-      if (!group || !group._knobCanvas) continue;
-      // Redraw knob + mod ring
-      const norm = normalize(paramId, state.params[paramId]);
-      drawKnob(group._knobCanvas, norm, state.draggingKnob === paramId, state.hoveredKnob === paramId);
-      drawModRing(group._knobCanvas, paramId);
+  const hasActiveAssignment = modState.assignments.some(a => a.enabled);
+
+  // For each modulatable param, if user is NOT dragging it,
+  // capture its current value as the base value.
+  // If user IS dragging, update the base to match their drag (live input).
+  for (const paramId of MODULATABLE) {
+    if (state.draggingKnob === paramId) {
+      modBaseValues[paramId] = state.params[paramId];
+    } else if (modBaseValues[paramId] === undefined) {
+      modBaseValues[paramId] = state.params[paramId];
     }
+  }
+
+  // Apply modulation offsets
+  if (hasActiveAssignment) {
+    for (const paramId of MODULATABLE) {
+      const assignments = modState.assignments.filter(a => a.target === paramId && a.enabled);
+      if (assignments.length === 0) continue;
+      if (state.draggingKnob === paramId) continue; // don't fight user
+
+      const p = PARAMS[paramId];
+      const baseVal = modBaseValues[paramId];
+      const range = p.max - p.min;
+      let offset = 0;
+
+      for (const a of assignments) {
+        let sourceVal = 0;
+        if (a.source < 3) {
+          // LFO 1/2/3
+          sourceVal = modState.lfoOutputs[a.source];
+        } else if (a.source === 3) {
+          // XY X: map 0..1 to -1..1
+          sourceVal = (state.xyX - 0.5) * 2;
+        } else if (a.source === 4) {
+          // XY Y: map 0..1 to -1..1
+          sourceVal = (state.xyY - 0.5) * 2;
+        }
+        offset += sourceVal * a.depth * range;
+      }
+
+      const modulated = Math.max(p.min, Math.min(p.max, baseVal + offset));
+      state.params[paramId] = modulated;
+
+      // Push to JUCE
+      if (juceMode && JUCE_PARAMS[paramId]?.sliderState) {
+        const norm = normalize(paramId, modulated);
+        JUCE_PARAMS[paramId].sliderState.setNormalisedValue(norm);
+      }
+
+      // Update knob visual
+      const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
+      if (group && group._knobCanvas) {
+        const norm = normalize(paramId, modulated);
+        drawKnob(group._knobCanvas, norm, false, state.hoveredKnob === paramId);
+        drawModRing(group._knobCanvas, paramId);
+        if (group._valueEl) group._valueEl.textContent = formatValue(paramId, modulated);
+      }
+    }
+  } else {
+    // No active assignments — restore base values for any params that
+    // were previously modulated (so knobs snap back)
+    for (const paramId of MODULATABLE) {
+      if (modBaseValues[paramId] !== undefined && state.draggingKnob !== paramId) {
+        const base = modBaseValues[paramId];
+        if (Math.abs(state.params[paramId] - base) > 0.001) {
+          state.params[paramId] = base;
+          updateKnobDisplay(paramId);
+          pushParamToJuce(paramId);
+        }
+      }
+    }
+  }
+}
+
+// When JUCE pushes a param change (e.g., preset load), update our base value too
+function updateModBaseFromJuce(paramId, value) {
+  modBaseValues[paramId] = value;
+}
+
+// ---- Mod State Persistence ----
+function serializeModState() {
+  return JSON.stringify({
+    lfos: modState.lfos.map(l => ({
+      shape: l.shape, rate: l.rate, sync: l.sync, syncIdx: l.syncIdx,
+      depth: l.depth, phase: l.phase, polarity: l.polarity
+    })),
+    assignments: modState.assignments
+  });
+}
+
+function persistModState() {
+  if (!juceMode) return;
+  const json = serializeModState();
+  window.Juce.getNativeFunction('saveModState')(json);
+}
+
+function restoreModState(json) {
+  if (!json || json === '') return;
+  try {
+    const saved = JSON.parse(json);
+    if (saved.lfos) {
+      for (let i = 0; i < 3 && i < saved.lfos.length; i++) {
+        const s = saved.lfos[i];
+        const l = modState.lfos[i];
+        if (s.shape !== undefined) l.shape = s.shape;
+        if (s.rate !== undefined) l.rate = s.rate;
+        if (s.sync !== undefined) l.sync = s.sync;
+        if (s.syncIdx !== undefined) l.syncIdx = s.syncIdx;
+        if (s.depth !== undefined) l.depth = s.depth;
+        if (s.phase !== undefined) l.phase = s.phase;
+        if (s.polarity !== undefined) l.polarity = s.polarity;
+      }
+    }
+    if (saved.assignments) {
+      modState.assignments = saved.assignments;
+    }
+    // Rebuild UI to reflect restored state
+    buildShapeButtons();
+    buildLFOKnobs();
+    // Restore sync/polarity toggle visuals
+    for (let i = 0; i < 3; i++) {
+      const syncEl = document.getElementById(`lfo-sync-${i}`);
+      if (syncEl) {
+        syncEl.querySelectorAll('.rate-sync-opt').forEach(b => {
+          b.classList.toggle('active', modState.lfos[i].sync ? b.dataset.mode === 'sync' : b.dataset.mode === 'free');
+        });
+      }
+      const polEl = document.getElementById(`lfo-pol-${i}`);
+      if (polEl) {
+        polEl.querySelectorAll('.polarity-opt').forEach(b => {
+          b.classList.toggle('active', b.dataset.pol === modState.lfos[i].polarity);
+        });
+      }
+    }
+    updateModBadges();
+    updateTargetLists();
+  } catch (e) {
+    console.warn('Failed to restore mod state:', e);
   }
 }
 
@@ -5466,6 +5689,13 @@ function initModSystem() {
   initModContextMenu();
   updateModBadges();
   updateTargetLists();
+
+  // Restore saved mod state from C++
+  if (juceMode) {
+    window.Juce.getNativeFunction('getModState')().then(json => {
+      if (json) restoreModState(json);
+    });
+  }
 }
 
 // ---- Initialize ----

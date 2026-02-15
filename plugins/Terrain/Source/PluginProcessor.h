@@ -113,6 +113,9 @@ public:
     // Feed tape loop back into granular engine (synced from JS)
     std::atomic<float> tapeLoopFeedToGrain { 0.f }; // 0 = off, 1 = on
 
+    // Modulation state JSON (persisted from JS, survives editor close/reopen + DAW session)
+    juce::String modStateJson;
+
     // Tape loop read-only state (set by processBlock for UI)
     bool getTapeLoopHasContent() const { return tapeLoop.hasContent(); }
     float getTapeLoopProgress() const { return tapeLoop.getProgress(); }
