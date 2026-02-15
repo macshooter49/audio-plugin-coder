@@ -6,6 +6,7 @@
 #include "TapeProcessor.h"
 #include "TapeLoopProcessor.h"
 #include "RollingCaptureBuffer.h"
+#include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
@@ -112,6 +113,13 @@ public:
 
     // Feed tape loop back into granular engine (synced from JS)
     std::atomic<float> tapeLoopFeedToGrain { 0.f }; // 0 = off, 1 = on
+
+    // Modulation engine (runs in processBlock, independent of editor window)
+    ModulationEngine modulationEngine;
+
+    // XY pad values (UI writes, audio reads)
+    std::atomic<float> xyPadX { 0.5f };
+    std::atomic<float> xyPadY { 0.5f };
 
     // Modulation state JSON (persisted from JS, survives editor close/reopen + DAW session)
     juce::String modStateJson;

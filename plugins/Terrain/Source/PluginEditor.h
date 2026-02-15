@@ -102,6 +102,12 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> loopDegradeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> loopSpeedAttachment;
 
+    // Mod state lifecycle tick counter
+    // Ticks 1-10:  RESTORE phase — push saved JSON to JS every tick
+    // Ticks 11-30: SETTLE phase — wait for page to stabilize
+    // Ticks 31+:   SAVE phase — pull serialized state from JS every 10 ticks
+    int modStateTickCount { 0 };
+
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);
 

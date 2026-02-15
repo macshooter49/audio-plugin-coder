@@ -777,70 +777,7 @@ body {
 }
 .tape-feed-btn canvas { display: block; width: 18px; height: 18px; }
 
-/* ---- Capture Button ---- */
-.tape-capture-btn {
-  position: absolute;
-  top: 7px; right: 71px;
-  width: 26px; height: 26px;
-  border: 1.5px solid rgba(139,92,246,0.2);
-  border-radius: 7px;
-  background: rgba(255,255,255,0.5);
-  cursor: pointer; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  opacity: 0.55;
-  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
-}
-.tape-capture-btn:hover { opacity: 1; border-color: var(--purple-400); }
-.tape-capture-btn.exporting {
-  opacity: 1;
-  border-color: #F59E0B;
-  background: rgba(245,158,11,0.12);
-  animation: capture-pulse 1s ease-in-out infinite;
-}
-.tape-capture-btn.ready {
-  opacity: 1;
-  border-color: #10B981;
-  background: rgba(16,185,129,0.12);
-  cursor: pointer;
-}
-.tape-capture-btn.ready:hover { border-color: #059669; }
-.tape-capture-btn canvas { display: block; width: 18px; height: 18px; }
-@keyframes capture-pulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-
-/* ---- Capture Duration Picker ---- */
-.capture-picker {
-  display: none;
-  position: absolute;
-  top: 36px; right: 55px;
-  min-width: 120px;
-  border-radius: 10px;
-  border: 1.5px solid rgba(139,92,246,0.18);
-  background: rgba(255,255,255,0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 16px rgba(139,92,246,0.15);
-  z-index: 50;
-  overflow: hidden;
-}
-.capture-picker.open { display: block; }
-.capture-picker-option {
-  padding: 7px 12px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background 0.1s;
-  white-space: nowrap;
-}
-.capture-picker-option:hover { background: rgba(139,92,246,0.08); }
-.capture-picker-option.disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  pointer-events: none;
-}
+/* Capture button + picker removed — capture is handled by native strip below */
 
 /* ============ TRANSPORT BUTTONS ============ */
 .tape-transport {
@@ -1875,14 +1812,6 @@ body {
             <span class="deck-dot" id="dot-content"></span>
             <span class="deck-label">DECK</span>
           </div>
-          <button class="tape-capture-btn" id="btn-capture" title="CAPTURE — Save last 1-10 minutes of output to WAV">
-            <canvas id="capture-icon-canvas" width="28" height="28"></canvas>
-          </button>
-          <div class="capture-picker" id="capture-picker">
-            <div class="capture-picker-option" data-dur="60">Last 1 min</div>
-            <div class="capture-picker-option" data-dur="300">Last 5 min</div>
-            <div class="capture-picker-option" data-dur="600">Last 10 min</div>
-          </div>
           <button class="tape-feed-btn" id="btn-feed" title="Feed loop into granular">
             <canvas id="feed-icon-canvas" width="28" height="28"></canvas>
           </button>
@@ -2480,8 +2409,8 @@ let setTapeEnabledFn, getTapeEnabledFn;
 let setTapeLoopRecordFn, getTapeLoopRecordFn;
 let setTapeLoopPlayFn, getTapeLoopPlayFn;
 let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn;
-let exportCaptureFn, resetCaptureStateFn;
 let setXYAutoStateFn, getXYAutoStateFn;
+let updateModConfigFn, getModStateFn, setXYPadFn;
 
 function syncXYState() {
   if (juceMode && setXYAutoStateFn) {
@@ -2496,8 +2425,6 @@ async function initJuceBindings() {
       state.params[key] = p.sliderState.scaledValue;
       p.sliderState.valueChangedEvent.addListener(() => {
         if (state.draggingKnob === key) return; // skip echo while dragging
-        // If this param is actively modulated, don't let JUCE echo overwrite
-        if (modState.assignments.some(a => a.target === key && a.enabled)) return;
         state.params[key] = p.sliderState.scaledValue;
         modBaseValues[key] = p.sliderState.scaledValue;
         updateKnobDisplay(key);
@@ -2536,12 +2463,15 @@ async function initJuceBindings() {
     undoTapeLoopFn = window.Juce.getNativeFunction('undoTapeLoop');
     setSpeedFreeformFn = window.Juce.getNativeFunction('setSpeedFreeform');
     setFeedToGrainFn = window.Juce.getNativeFunction('setFeedToGrain');
-    exportCaptureFn = window.Juce.getNativeFunction('exportCapture');
-    resetCaptureStateFn = window.Juce.getNativeFunction('resetCaptureState');
 
     // XY auto state native functions
     setXYAutoStateFn = window.Juce.getNativeFunction('setXYAutoState');
     getXYAutoStateFn = window.Juce.getNativeFunction('getXYAutoState');
+
+    // Modulation state persistence + C++ engine config
+    updateModConfigFn = window.Juce.getNativeFunction('updateModConfig');
+    getModStateFn = window.Juce.getNativeFunction('getModState');
+    setXYPadFn = window.Juce.getNativeFunction('setXYPad');
 
     // Sync initial section toggle states from backend
     const grainOn = await getGrainEngineEnabledFn();
@@ -2576,7 +2506,7 @@ async function initJuceBindings() {
     drawSpeedKnob();
 
     // Restore modulation state from C++ (persists across editor close/reopen)
-    const savedModJson = await window.Juce.getNativeFunction('getModState')();
+    const savedModJson = await getModStateFn();
     if (savedModJson) restoreModState(savedModJson);
 
     console.log('JUCE bindings initialized');
@@ -3702,11 +3632,6 @@ const SCOPE_TIPS = {
     desc: 'Reverts the loop to the state before the last recording or overdub. Supports up to 10 levels of undo so you can step back through multiple takes.',
     tip: 'Tip: Each recording automatically creates an undo snapshot. Undo won\'t affect playback position.'
   },
-  'btn-capture': {
-    title: 'CAPTURE',
-    desc: 'Always-on rolling buffer that captures the last 1\u201310 minutes of plugin output. Click to choose a duration, then drag the WAV file from the green strip below into your DAW.',
-    tip: 'Tip: The buffer never resets during playback \u2014 capture anytime without interrupting your session.'
-  }
 };
 
 function showScopeTooltip(id) {
@@ -3735,7 +3660,7 @@ function hideScopeTooltip() {
 
 // Wire up scope + tape transport hover events for tooltips
 ['randomize-btn', 'xy-play', 'xy-mode', 'xy-speed-wrap',
- 'btn-record', 'btn-play', 'btn-stop', 'btn-feed', 'btn-undo', 'btn-capture'].forEach(id => {
+ 'btn-record', 'btn-play', 'btn-stop', 'btn-feed', 'btn-undo'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
   let timer;
@@ -3857,9 +3782,8 @@ function updateXYReadout() {
 // Map XY pad position to grain parameters
 // (Unlinked — custom linking will be added later)
 function applyXYToParams() {
-  // XY pad is unlinked from all parameters.
-  // Visual crosshair and animation still work.
-  // Custom user-assignable linking coming in a future version.
+  // Forward XY position to C++ modulation engine (XY as mod source)
+  if (setXYPadFn) setXYPadFn(state.xyX, state.xyY);
 }
 
 function updateCrosshair(e) {
@@ -4231,118 +4155,12 @@ state.captureExportState = 0; // 0=idle, 1=exporting, 2=ready, 3=error
 state.captureAvailSeconds = 0;
 
 window.updateCaptureState = function(exportState, availSec) {
-  const changed = state.captureExportState !== exportState || Math.abs(state.captureAvailSeconds - availSec) > 0.5;
   state.captureExportState = exportState;
   state.captureAvailSeconds = availSec;
-  if (changed) {
-    updateCaptureButton();
-    updateCapturePicker();
-  }
 };
 
-function updateCaptureButton() {
-  const btn = document.getElementById('btn-capture');
-  if (!btn) return;
-  btn.classList.remove('exporting', 'ready');
-  if (state.captureExportState === 1) {
-    btn.classList.add('exporting');
-    btn.title = 'Exporting capture...';
-  } else if (state.captureExportState === 2) {
-    btn.classList.add('ready');
-    btn.title = 'Ready \u2014 drag from strip below, or click to dismiss';
-  } else {
-    btn.title = 'CAPTURE \u2014 Save last 1-10 minutes of output to WAV';
-  }
-  drawCaptureIcon();
-}
-
-function updateCapturePicker() {
-  const picker = document.getElementById('capture-picker');
-  if (!picker) return;
-  const options = picker.querySelectorAll('.capture-picker-option');
-  options.forEach(opt => {
-    const dur = parseInt(opt.dataset.dur, 10);
-    opt.classList.toggle('disabled', state.captureAvailSeconds < dur);
-  });
-}
-
-function drawCaptureIcon() {
-  const canvas = document.getElementById('capture-icon-canvas');
-  if (!canvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = 28 * dpr; canvas.height = 28 * dpr;
-  canvas.style.width = '18px'; canvas.style.height = '18px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, 28, 28);
-  let color;
-  if (state.captureExportState === 1) color = '#F59E0B'; // amber exporting
-  else if (state.captureExportState === 2) color = '#10B981'; // green ready
-  else color = '#A78BFA'; // purple idle
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  // Download arrow
-  ctx.beginPath();
-  ctx.moveTo(14, 7);
-  ctx.lineTo(14, 17);
-  ctx.stroke();
-  // Arrow head
-  ctx.beginPath();
-  ctx.moveTo(10, 14);
-  ctx.lineTo(14, 18);
-  ctx.lineTo(18, 14);
-  ctx.stroke();
-  // Tray line
-  ctx.beginPath();
-  ctx.moveTo(7, 21);
-  ctx.lineTo(21, 21);
-  ctx.stroke();
-}
-
-// Capture button click handler
-document.getElementById('btn-capture').addEventListener('click', (e) => {
-  e.stopPropagation();
-  if (state.captureExportState === 1) return; // exporting, ignore
-  if (state.captureExportState === 2) {
-    // Ready — click to dismiss (drag is handled by native strip below)
-    if (juceMode && resetCaptureStateFn) resetCaptureStateFn();
-    state.captureExportState = 0;
-    updateCaptureButton();
-    return;
-  }
-  // Idle — toggle picker
-  const picker = document.getElementById('capture-picker');
-  picker.classList.toggle('open');
-  updateCapturePicker();
-});
-
-// Duration option click handlers
-document.querySelectorAll('.capture-picker-option').forEach(opt => {
-  opt.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const dur = parseInt(opt.dataset.dur, 10);
-    if (state.captureAvailSeconds < dur) return;
-    document.getElementById('capture-picker').classList.remove('open');
-    if (juceMode && exportCaptureFn) exportCaptureFn(dur);
-    state.captureExportState = 1;
-    updateCaptureButton();
-  });
-});
-
-// Close picker on outside click
-document.addEventListener('click', (e) => {
-  const picker = document.getElementById('capture-picker');
-  const btn = document.getElementById('btn-capture');
-  if (picker && !picker.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
-    picker.classList.remove('open');
-  }
-});
-
-// Draw initial capture icon
-drawCaptureIcon();
+// Global entry point for C++ timer to push saved mod state
+// (Do NOT wrap — restoreModState is already a global function declaration)
 
 function updateTransportButtons() {
   const rec = document.getElementById('btn-record');
@@ -4912,31 +4730,37 @@ function syncDivisionToHz(idx, bpm) {
   return 1.0 / divDurationSec;
 }
 
+// LFO computation now runs in C++ processBlock (ModulationEngine).
+// C++ pushes outputs to JS via window.updateLFOOutputs() for display only.
+window.updateLFOOutputs = function(lfo0, lfo1, lfo2, p0, p1, p2) {
+  modState.lfoOutputs[0] = lfo0;
+  modState.lfoOutputs[1] = lfo1;
+  modState.lfoOutputs[2] = lfo2;
+  modState.lfos[0]._phase = p0;
+  modState.lfos[1]._phase = p1;
+  modState.lfos[2]._phase = p2;
+};
+
+// Fallback for preview mode (no C++ backend)
 function updateLFOs(dt) {
+  if (juceMode) return; // C++ drives LFOs when running in plugin
   for (let i = 0; i < 3; i++) {
     const lfo = modState.lfos[i];
-    // Calculate effective rate (Hz)
     const effectiveRate = lfo.sync ? syncDivisionToHz(lfo.syncIdx, bpmFromJuce) : lfo.rate;
     const prevPhase = lfo._phase;
     lfo._phase = (lfo._phase + effectiveRate * dt) % 1.0;
 
     let raw;
-    if (lfo.shape === 5) { // S&H
-      if (lfo._phase < prevPhase) { // wrapped
-        lfo._holdVal = Math.random() * 2 - 1;
-      }
+    if (lfo.shape === 5) {
+      if (lfo._phase < prevPhase) lfo._holdVal = Math.random() * 2 - 1;
       raw = lfo._holdVal;
-    } else if (lfo.shape === 6) { // smooth random
-      if (lfo._phase < prevPhase) { // wrapped
-        lfo._prevRand = lfo._nextRand;
-        lfo._nextRand = Math.random() * 2 - 1;
-      }
+    } else if (lfo.shape === 6) {
+      if (lfo._phase < prevPhase) { lfo._prevRand = lfo._nextRand; lfo._nextRand = Math.random() * 2 - 1; }
       const t = lfo._phase;
       raw = lfo._prevRand + (lfo._nextRand - lfo._prevRand) * (t * t * (3 - 2 * t));
     } else {
       raw = lfoWaveform(lfo.shape, lfo._phase + lfo.phase);
     }
-
     modState.lfoOutputs[i] = applyPolarity(raw, lfo.polarity) * lfo.depth;
   }
 }
@@ -5536,7 +5360,7 @@ const modBaseValues = {};
 
 function updateModulation(time, dt) {
   if (dt <= 0 || dt > 0.1) dt = 1/60;
-  updateLFOs(dt);
+  updateLFOs(dt); // no-op in JUCE mode (C++ drives LFOs), active in preview
 
   // Draw waveforms if panel is open
   if (modState.panelOpen) {
@@ -5545,23 +5369,24 @@ function updateModulation(time, dt) {
 
   const hasActiveAssignment = modState.assignments.some(a => a.enabled);
 
-  // For each modulatable param, if user is NOT dragging it,
-  // capture its current value as the base value.
-  // If user IS dragging, update the base to match their drag (live input).
+  // Track base values: user-set values before modulation offsets
   for (const paramId of MODULATABLE) {
     if (state.draggingKnob === paramId) {
       modBaseValues[paramId] = state.params[paramId];
     } else if (modBaseValues[paramId] === undefined) {
-      modBaseValues[paramId] = state.params[paramId];
+      // Initialize from APVTS if available, else from state
+      const jp = JUCE_PARAMS[paramId];
+      modBaseValues[paramId] = (jp?.sliderState) ? jp.sliderState.scaledValue : state.params[paramId];
     }
   }
 
-  // Apply modulation offsets
+  // Display-only modulation: compute visual offsets from C++ LFO outputs
+  // C++ processBlock handles actual audio modulation — this is just for knob visuals
   if (hasActiveAssignment) {
     for (const paramId of MODULATABLE) {
       const assignments = modState.assignments.filter(a => a.target === paramId && a.enabled);
       if (assignments.length === 0) continue;
-      if (state.draggingKnob === paramId) continue; // don't fight user
+      if (state.draggingKnob === paramId) continue;
 
       const p = PARAMS[paramId];
       const baseVal = modBaseValues[paramId];
@@ -5571,13 +5396,10 @@ function updateModulation(time, dt) {
       for (const a of assignments) {
         let sourceVal = 0;
         if (a.source < 3) {
-          // LFO 1/2/3
           sourceVal = modState.lfoOutputs[a.source];
         } else if (a.source === 3) {
-          // XY X: map 0..1 to -1..1
           sourceVal = (state.xyX - 0.5) * 2;
         } else if (a.source === 4) {
-          // XY Y: map 0..1 to -1..1
           sourceVal = (state.xyY - 0.5) * 2;
         }
         offset += sourceVal * a.depth * range;
@@ -5586,13 +5408,7 @@ function updateModulation(time, dt) {
       const modulated = Math.max(p.min, Math.min(p.max, baseVal + offset));
       state.params[paramId] = modulated;
 
-      // Push to JUCE
-      if (juceMode && JUCE_PARAMS[paramId]?.sliderState) {
-        const norm = normalize(paramId, modulated);
-        JUCE_PARAMS[paramId].sliderState.setNormalisedValue(norm);
-      }
-
-      // Update knob visual
+      // Update knob visual only — NO push to APVTS (C++ handles audio)
       const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
       if (group && group._knobCanvas) {
         const norm = normalize(paramId, modulated);
@@ -5602,15 +5418,13 @@ function updateModulation(time, dt) {
       }
     }
   } else {
-    // No active assignments — restore base values for any params that
-    // were previously modulated (so knobs snap back)
+    // No active assignments — restore base values visually
     for (const paramId of MODULATABLE) {
       if (modBaseValues[paramId] !== undefined && state.draggingKnob !== paramId) {
         const base = modBaseValues[paramId];
         if (Math.abs(state.params[paramId] - base) > 0.001) {
           state.params[paramId] = base;
           updateKnobDisplay(paramId);
-          pushParamToJuce(paramId);
         }
       }
     }
@@ -5634,9 +5448,9 @@ function serializeModState() {
 }
 
 function persistModState() {
-  if (!juceMode) return;
+  if (!juceMode || !updateModConfigFn) return;
   const json = serializeModState();
-  window.Juce.getNativeFunction('saveModState')(json);
+  updateModConfigFn(json); // stores JSON + pushes config to C++ engine
 }
 
 function restoreModState(json) {

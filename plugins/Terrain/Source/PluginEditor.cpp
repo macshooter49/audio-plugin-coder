@@ -234,17 +234,32 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
                 audioProcessor.captureExportState.store(0);
                 complete({});
             })
-            .withNativeFunction("saveModState", [this](const juce::Array<juce::var>& args,
-                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            .withNativeFunction("updateModConfig", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 if (args.size() > 0)
-                    audioProcessor.modStateJson = args[0].toString();
+                {
+                    auto json = args[0].toString();
+                    audioProcessor.modStateJson = json;
+                    audioProcessor.modulationEngine.updateConfig(
+                        ModulationEngine::parseJSON(json));
+                }
                 complete({});
             })
             .withNativeFunction("getModState", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 complete(juce::var(audioProcessor.modStateJson));
+            })
+            .withNativeFunction("setXYPad", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    audioProcessor.xyPadX.store(static_cast<float>(args[0]), std::memory_order_relaxed);
+                    audioProcessor.xyPadY.store(static_cast<float>(args[1]), std::memory_order_relaxed);
+                }
+                complete({});
             })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
@@ -379,7 +394,52 @@ void TerrainAudioProcessorEditor::timerCallback()
     // Update native drag strip state
     captureDragStrip.updateState(captureState, captureAvail);
 
+    // Push LFO outputs from C++ engine to JS for visualization (mod rings, waveform preview)
+    {
+        float lfo0 = audioProcessor.modulationEngine.lfoOutputsAtomic[0].load(std::memory_order_relaxed);
+        float lfo1 = audioProcessor.modulationEngine.lfoOutputsAtomic[1].load(std::memory_order_relaxed);
+        float lfo2 = audioProcessor.modulationEngine.lfoOutputsAtomic[2].load(std::memory_order_relaxed);
+        float p0 = audioProcessor.modulationEngine.lfoPhasesAtomic[0].load(std::memory_order_relaxed);
+        float p1 = audioProcessor.modulationEngine.lfoPhasesAtomic[1].load(std::memory_order_relaxed);
+        float p2 = audioProcessor.modulationEngine.lfoPhasesAtomic[2].load(std::memory_order_relaxed);
+        js << "if(window.updateLFOOutputs){window.updateLFOOutputs("
+           << juce::String(lfo0, 4) << "," << juce::String(lfo1, 4) << "," << juce::String(lfo2, 4) << ","
+           << juce::String(p0, 4) << "," << juce::String(p1, 4) << "," << juce::String(p2, 4) << ");}";
+    }
+
+    // ── Mod state lifecycle (phased: restore → settle → save) ──
+    // Ticks 1-10:  RESTORE — push saved JSON to JS every tick (10 attempts)
+    // Ticks 11-15: SETTLE  — wait for restore to take effect in DOM
+    // Ticks 16+:   SAVE    — pull serialized state from JS every 5 ticks (~167ms)
+    // CRITICAL: never save during restore/settle or we'd overwrite saved data with empty state
+    modStateTickCount++;
+
+    if (modStateTickCount <= 10 && audioProcessor.modStateJson.isNotEmpty())
+    {
+        auto escaped = audioProcessor.modStateJson.replace("\\", "\\\\").replace("'", "\\'");
+        js << "if(typeof restoreModState==='function'){restoreModState('" << escaped << "');}";
+    }
+
     webView->evaluateJavascript(js);
+
+    if (modStateTickCount > 15 && (modStateTickCount % 5 == 0))
+    {
+        webView->evaluateJavascript(
+            "typeof serializeModState==='function'?serializeModState():''",
+            [this](juce::WebBrowserComponent::EvaluationResult result)
+            {
+                if (auto* val = result.getResult())
+                {
+                    auto json = val->toString();
+                    if (json.isNotEmpty())
+                    {
+                        audioProcessor.modStateJson = json;
+                        audioProcessor.modulationEngine.updateConfig(
+                            ModulationEngine::parseJSON(json));
+                    }
+                }
+            });
+    }
 }
 
 //==============================================================================
@@ -403,29 +463,37 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
 {
     auto b = getLocalBounds().toFloat();
 
-    g.setColour(juce::Colours::white);
-    g.fillRect(b);
+    g.fillAll(juce::Colours::white);
 
-    if (state == 2) // ready — green
+    if (state == 2) // ready — green, drag to DAW
     {
-        g.setColour(juce::Colour(0xFF10B981));
-        g.setFont(juce::FontOptions(11.0f).withStyle("Bold"));
-        g.drawText(juce::String::fromUTF8("DRAG WAV TO DAW \u2193"), b, juce::Justification::centred);
+        g.setColour(juce::Colour(0xFF059669));
+        g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+        g.drawText(juce::String::fromUTF8("DRAG TO DAW \u2193"), b, juce::Justification::centred);
     }
-    else if (state == 1) // exporting — amber
+    else if (state == 1) // exporting
     {
-        g.setColour(juce::Colour(0xFFD97706));
-        g.setFont(juce::FontOptions(10.0f));
-        g.drawText("EXPORTING...", b, juce::Justification::centred);
+        g.setColour(juce::Colour(0xFF92400E));
+        g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+        g.drawText("SAVING...", b, juce::Justification::centred);
     }
     else // idle
     {
-        g.setColour(juce::Colour(0xFFB0A4C0)); // muted, blends in
-        g.setFont(juce::FontOptions(10.0f));
         int mins = static_cast<int>(avail) / 60;
         int secs = static_cast<int>(avail) % 60;
-        g.drawText("CAPTURE: " + juce::String(mins) + "m " + juce::String(secs) + "s",
-                   b, juce::Justification::centred);
+        if (avail < 1.0f)
+        {
+            g.setColour(juce::Colour(0x44857399));
+            g.setFont(juce::FontOptions(10.0f));
+            g.drawText("CAPTURE: LISTENING...", b, juce::Justification::centred);
+        }
+        else
+        {
+            g.setColour(juce::Colour(0xFF6B5B7B));
+            g.setFont(juce::FontOptions(10.0f));
+            g.drawText("CAPTURE: " + juce::String(mins) + "m " + juce::String(secs) + "s  \u2014  DRAG TO DAW",
+                       b, juce::Justification::centred);
+        }
     }
 }
 
@@ -433,6 +501,13 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDown (const juce::Mouse
 {
     mouseWasDown = true;
     isDragging = false;
+
+    // Click when idle: instantly export ALL available capture
+    if (state == 0 && avail >= 1.0f)
+    {
+        int durSeconds = static_cast<int>(avail);
+        processor.exportCapture(durSeconds);
+    }
 }
 
 void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::MouseEvent& e)
@@ -440,7 +515,6 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::Mouse
     if (!mouseWasDown || isDragging) return;
     if (state != 2) return; // only drag when ready
 
-    // Need a few pixels of movement to trigger drag
     if (e.getDistanceFromDragStart() < 4) return;
 
     isDragging = true;
@@ -454,7 +528,6 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::Mouse
     juce::DragAndDropContainer::performExternalDragDropOfFiles(
         { filePath }, false, nullptr, [this]()
         {
-            // After drag completes, reset state to idle
             juce::MessageManager::callAsync([this]()
             {
                 processor.captureExportState.store(0);

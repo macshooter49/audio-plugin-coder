@@ -337,6 +337,11 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     tapeLoop.prepare(sampleRate, samplesPerBlock);
     captureBuffer.prepare(sampleRate, samplesPerBlock);
 
+    // Prepare modulation engine
+    modulationEngine.prepare(sampleRate);
+    if (modStateJson.isNotEmpty())
+        modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
+
     // 20ms ramp for all smoothed parameters
     smoothedGrainSize.reset(sampleRate, 0.02);
     smoothedDensity.reset(sampleRate, 0.02);
@@ -458,7 +463,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     // Tape loop discrete params (no smoothing needed)
     const float loopLengthParam = apvts.getRawParameterValue(ParameterIDs::LOOP_LENGTH)->load();
-    const float loopSpeedParam  = apvts.getRawParameterValue(ParameterIDs::LOOP_SPEED)->load();
+    const float loopSpeedBase   = apvts.getRawParameterValue(ParameterIDs::LOOP_SPEED)->load();
 
     // Tape loop transport state (may be modified by auto-stop)
     bool wantRecord = tapeLoopRecording.load() > 0.5f;
@@ -469,6 +474,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     if (wantRecord && tapeLoop.hasContent() && !wantPlay)
         wantPlay = true;
     const float bpm = currentBPM.load();
+
+    // Modulation engine: pick up pending config, set XY, precompute rates
+    modulationEngine.setXY(xyPadX.load(std::memory_order_relaxed),
+                           xyPadY.load(std::memory_order_relaxed));
+    modulationEngine.beginBlock(bpm);
     const bool isFreeform = speedFreeform.load() > 0.5f;
 
     // Dynamic loop length resizing (once per block, not per sample)
@@ -498,23 +508,28 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const float grainSize    = smoothedGrainSize.getNextValue();
-        const float density      = smoothedDensity.getNextValue();
-        const float spray        = smoothedSpray.getNextValue();
-        const float pitch        = smoothedPitch.getNextValue();
-        const float wanderRaw    = smoothedWander.getNextValue() * 0.01f;
-        const float freezeRaw    = smoothedFreeze.getNextValue() * 0.01f;
+        // Advance LFOs and compute per-param offsets
+        modulationEngine.processSample();
+
+        // Read smoothed base values, apply modulation offsets, then scale
+        const float grainSize    = modulationEngine.getModulatedValue(ModulationEngine::pGrainSize,  smoothedGrainSize.getNextValue());
+        const float density      = modulationEngine.getModulatedValue(ModulationEngine::pDensity,    smoothedDensity.getNextValue());
+        const float spray        = modulationEngine.getModulatedValue(ModulationEngine::pSpray,      smoothedSpray.getNextValue());
+        const float pitch        = modulationEngine.getModulatedValue(ModulationEngine::pPitch,      smoothedPitch.getNextValue());
+        const float wanderRaw    = modulationEngine.getModulatedValue(ModulationEngine::pWander,     smoothedWander.getNextValue()) * 0.01f;
+        const float freezeRaw    = modulationEngine.getModulatedValue(ModulationEngine::pFreeze,     smoothedFreeze.getNextValue()) * 0.01f;
         const float freeze       = std::pow(freezeRaw, 1.5f);
-        const float mix          = smoothedMix.getNextValue();
-        const float grainFilterVal = smoothedGrainFilter.getNextValue();
-        const float wowFlutter   = smoothedWowFlutter.getNextValue() * 0.01f;
-        const float saturationAmt = smoothedSaturation.getNextValue() * 0.01f;
-        const float hissAmt      = smoothedHiss.getNextValue() * 0.01f;
+        const float mix          = modulationEngine.getModulatedValue(ModulationEngine::pMix,        smoothedMix.getNextValue());
+        const float grainFilterVal = modulationEngine.getModulatedValue(ModulationEngine::pGrainFilter, smoothedGrainFilter.getNextValue());
+        const float wowFlutter   = modulationEngine.getModulatedValue(ModulationEngine::pWowFlutter, smoothedWowFlutter.getNextValue()) * 0.01f;
+        const float saturationAmt = modulationEngine.getModulatedValue(ModulationEngine::pSaturation, smoothedSaturation.getNextValue()) * 0.01f;
+        const float hissAmt      = modulationEngine.getModulatedValue(ModulationEngine::pHiss,       smoothedHiss.getNextValue()) * 0.01f;
         const float outputGainDb = smoothedOutputGain.getNextValue();
         const float outputGain   = std::pow(10.0f, outputGainDb / 20.0f);
         const float masterMixAmt = smoothedMasterMix.getNextValue() * 0.01f;
-        const float loopFeedback = smoothedLoopFeedback.getNextValue() * 0.01f;
-        const float loopDegrade  = smoothedLoopDegrade.getNextValue() * 0.01f;
+        const float loopFeedback = modulationEngine.getModulatedValue(ModulationEngine::pLoopFeedback, smoothedLoopFeedback.getNextValue()) * 0.01f;
+        const float loopDegrade  = modulationEngine.getModulatedValue(ModulationEngine::pLoopDegrade,  smoothedLoopDegrade.getNextValue()) * 0.01f;
+        const float loopSpeedParam = modulationEngine.getModulatedValue(ModulationEngine::pLoopSpeed, loopSpeedBase);
 
         // Capture dry input before processing
         const float dryL = leftChannel[i];
@@ -739,6 +754,8 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             tapeEnabled.store(static_cast<float>(newState.getProperty("tapeEnabled", 1.f)));
             wanderLinked.store(static_cast<float>(newState.getProperty("wanderLinked", 1.f)));
             modStateJson = newState.getProperty("modStateJson", "").toString();
+            if (modStateJson.isNotEmpty())
+                modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
 
             // Reload presets from disk (the single source of truth)
             while (static_cast<int>(presets.size()) > numFactoryPresets)
