@@ -4956,13 +4956,39 @@ function drawShapeIcon(canvas, shapeIdx, lfoIdx, active) {
   ctx.lineCap = 'round';
   ctx.beginPath();
   const cy = h / 2, amp = h * 0.35;
-  for (let x = 0; x <= w; x++) {
-    const p = x / w;
-    let v = lfoWaveform(shapeIdx, p);
-    const py = cy - v * amp;
-    if (x === 0) ctx.moveTo(x, py);
-    else ctx.lineTo(x, py);
+
+  if (shapeIdx === 5) {
+    // S&H: staircase — random held levels
+    const steps = [0.7, -0.4, 0.9, -0.8, 0.2, -0.6];
+    const sw = w / steps.length;
+    for (let s = 0; s < steps.length; s++) {
+      const y = cy - steps[s] * amp;
+      if (s === 0) ctx.moveTo(0, y);
+      else ctx.lineTo(s * sw, y);
+      ctx.lineTo((s + 1) * sw, y);
+    }
+  } else if (shapeIdx === 6) {
+    // Smooth random: wobbly organic line
+    const pts = [0.3, -0.6, 0.8, -0.2, 0.5, -0.9, 0.1, -0.5, 0.7];
+    for (let i = 0; i <= w; i++) {
+      const t = i / w * (pts.length - 1);
+      const idx = Math.floor(t);
+      const frac = t - idx;
+      const a = pts[Math.min(idx, pts.length - 1)];
+      const b = pts[Math.min(idx + 1, pts.length - 1)];
+      const v = a + (b - a) * (frac * frac * (3 - 2 * frac));
+      const py = cy - v * amp;
+      if (i === 0) ctx.moveTo(i, py); else ctx.lineTo(i, py);
+    }
+  } else {
+    for (let x = 0; x <= w; x++) {
+      const p = x / w;
+      const v = lfoWaveform(shapeIdx, p);
+      const py = cy - v * amp;
+      if (x === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
+    }
   }
+
   ctx.stroke();
   ctx.restore();
 }
@@ -4971,9 +4997,14 @@ function drawShapeIcon(canvas, shapeIdx, lfoIdx, active) {
 // Store rate knob refs so sync toggle can update them
 const lfoRateRefs = [null, null, null]; // {canvas, valEl, update}
 
+// Exponential rate mapping: most knob travel covers slow rates, fast only at top
+const RATE_MIN = 0.01, RATE_MAX = 20, RATE_LOG_RATIO = Math.log(RATE_MAX / RATE_MIN);
+function rateToNorm(hz) { return Math.log(Math.max(RATE_MIN, hz) / RATE_MIN) / RATE_LOG_RATIO; }
+function normToRate(n) { return RATE_MIN * Math.exp(n * RATE_LOG_RATIO); }
+
 function buildLFOKnobs() {
   const knobDefs = [
-    { key: 'rate', label: 'RATE', min: 0.01, max: 20, default: 1.0, format: v => v < 1 ? v.toFixed(2) + ' Hz' : v.toFixed(1) + ' Hz' },
+    { key: 'rate', label: 'RATE', min: RATE_MIN, max: RATE_MAX, default: 1.0, format: v => v < 1 ? v.toFixed(2) + ' Hz' : v.toFixed(1) + ' Hz' },
     { key: 'depth', label: 'DEPTH', min: 0, max: 1, default: 1.0, format: v => Math.round(v * 100) + '%' },
     { key: 'phase', label: 'PHASE', min: 0, max: 1, default: 0, format: v => Math.round(v * 360) + '\u00B0' },
   ];
@@ -5013,7 +5044,7 @@ function buildLFOKnobs() {
             drawMiniKnob(canvas, n, MOD_COLORS[i]);
           } else {
             valEl.textContent = def.format(lfo.rate);
-            const n = (lfo.rate - def.min) / (def.max - def.min);
+            const n = rateToNorm(lfo.rate);
             drawMiniKnob(canvas, n, MOD_COLORS[i]);
           }
         };
@@ -5041,11 +5072,10 @@ function buildLFOKnobs() {
               updateRateDisplay();
             }
           } else {
-            const range = def.max - def.min;
-            const sensitivity = range / 150;
-            let newVal = startVal + dy * sensitivity;
-            newVal = Math.max(def.min, Math.min(def.max, newVal));
-            lfo.rate = newVal;
+            // Drag in normalized (log) space for even feel across range
+            const startNorm = rateToNorm(startVal);
+            const newNorm = Math.max(0, Math.min(1, startNorm + dy / 150));
+            lfo.rate = normToRate(newNorm);
             updateRateDisplay();
           }
         });
