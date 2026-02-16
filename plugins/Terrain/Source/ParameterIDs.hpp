@@ -19,4 +19,18 @@ namespace ParameterIDs
     constexpr char HISS[]         = "HISS";
     constexpr char OUTPUT_GAIN[]  = "OUTPUT_GAIN";
     constexpr char MASTER_MIX[]   = "MASTER_MIX";
+
+    // Space reverb
+    constexpr char SPACE_SIZE[]   = "SPACE_SIZE";
+    constexpr char SPACE_DECAY[]  = "SPACE_DECAY";
+    constexpr char SPACE_TONE[]   = "SPACE_TONE";
+    constexpr char SPACE_MIX[]    = "SPACE_MIX";
+
+    // 3-band EQ
+    constexpr char EQ_LOW_FREQ[]  = "EQ_LOW_FREQ";
+    constexpr char EQ_LOW_GAIN[]  = "EQ_LOW_GAIN";
+    constexpr char EQ_MID_FREQ[]  = "EQ_MID_FREQ";
+    constexpr char EQ_MID_GAIN[]  = "EQ_MID_GAIN";
+    constexpr char EQ_HIGH_FREQ[] = "EQ_HIGH_FREQ";
+    constexpr char EQ_HIGH_GAIN[] = "EQ_HIGH_GAIN";
 }

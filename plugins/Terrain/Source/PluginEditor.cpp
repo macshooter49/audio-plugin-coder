@@ -32,6 +32,16 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             .withOptionsFrom(loopFeedbackRelay)
             .withOptionsFrom(loopDegradeRelay)
             .withOptionsFrom(loopSpeedRelay)
+            .withOptionsFrom(spaceSizeRelay)
+            .withOptionsFrom(spaceDecayRelay)
+            .withOptionsFrom(spaceToneRelay)
+            .withOptionsFrom(spaceMixRelay)
+            .withOptionsFrom(eqLowFreqRelay)
+            .withOptionsFrom(eqLowGainRelay)
+            .withOptionsFrom(eqMidFreqRelay)
+            .withOptionsFrom(eqMidGainRelay)
+            .withOptionsFrom(eqHighFreqRelay)
+            .withOptionsFrom(eqHighGainRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -322,6 +332,36 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
 
     loopSpeedAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::LOOP_SPEED), loopSpeedRelay, nullptr);
+
+    spaceSizeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SPACE_SIZE), spaceSizeRelay, nullptr);
+
+    spaceDecayAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SPACE_DECAY), spaceDecayRelay, nullptr);
+
+    spaceToneAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SPACE_TONE), spaceToneRelay, nullptr);
+
+    spaceMixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SPACE_MIX), spaceMixRelay, nullptr);
+
+    eqLowFreqAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_LOW_FREQ), eqLowFreqRelay, nullptr);
+
+    eqLowGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_LOW_GAIN), eqLowGainRelay, nullptr);
+
+    eqMidFreqAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_MID_FREQ), eqMidFreqRelay, nullptr);
+
+    eqMidGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_MID_GAIN), eqMidGainRelay, nullptr);
+
+    eqHighFreqAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_HIGH_FREQ), eqHighFreqRelay, nullptr);
+
+    eqHighGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_HIGH_GAIN), eqHighGainRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

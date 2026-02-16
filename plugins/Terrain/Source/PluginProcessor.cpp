@@ -98,6 +98,16 @@ void TerrainAudioProcessor::loadPreset(int index)
     setParam(ParameterIDs::LOOP_FEEDBACK, p.loopFeedback);
     setParam(ParameterIDs::LOOP_DEGRADE,  p.loopDegrade);
     setParam(ParameterIDs::LOOP_SPEED,    p.loopSpeed);
+    setParam(ParameterIDs::SPACE_SIZE,   p.spaceSize);
+    setParam(ParameterIDs::SPACE_DECAY,  p.spaceDecay);
+    setParam(ParameterIDs::SPACE_TONE,   p.spaceTone);
+    setParam(ParameterIDs::SPACE_MIX,    p.spaceMix);
+    setParam(ParameterIDs::EQ_LOW_FREQ,  p.eqLowFreq);
+    setParam(ParameterIDs::EQ_LOW_GAIN,  p.eqLowGain);
+    setParam(ParameterIDs::EQ_MID_FREQ,  p.eqMidFreq);
+    setParam(ParameterIDs::EQ_MID_GAIN,  p.eqMidGain);
+    setParam(ParameterIDs::EQ_HIGH_FREQ, p.eqHighFreq);
+    setParam(ParameterIDs::EQ_HIGH_GAIN, p.eqHighGain);
 
     // Restore XY automation state for this preset
     xyAutoEnabled.store(p.xyAutoEnabled);
@@ -146,6 +156,16 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.loopFeedback = apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load();
     p.loopDegrade  = apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load();
     p.loopSpeed    = apvts.getRawParameterValue(ParameterIDs::LOOP_SPEED)->load();
+    p.spaceSize    = apvts.getRawParameterValue(ParameterIDs::SPACE_SIZE)->load();
+    p.spaceDecay   = apvts.getRawParameterValue(ParameterIDs::SPACE_DECAY)->load();
+    p.spaceTone    = apvts.getRawParameterValue(ParameterIDs::SPACE_TONE)->load();
+    p.spaceMix     = apvts.getRawParameterValue(ParameterIDs::SPACE_MIX)->load();
+    p.eqLowFreq   = apvts.getRawParameterValue(ParameterIDs::EQ_LOW_FREQ)->load();
+    p.eqLowGain   = apvts.getRawParameterValue(ParameterIDs::EQ_LOW_GAIN)->load();
+    p.eqMidFreq   = apvts.getRawParameterValue(ParameterIDs::EQ_MID_FREQ)->load();
+    p.eqMidGain   = apvts.getRawParameterValue(ParameterIDs::EQ_MID_GAIN)->load();
+    p.eqHighFreq  = apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_FREQ)->load();
+    p.eqHighGain  = apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_GAIN)->load();
     p.xyAutoEnabled    = xyAutoEnabled.load();
     p.xyAutoMode       = xyAutoMode.load();
     p.xyAutoSpeed      = xyAutoSpeed.load();
@@ -324,6 +344,78 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         6.0f,
         juce::AudioParameterFloatAttributes().withLabel("")));
 
+    // Space reverb params (0-100%)
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::SPACE_SIZE, 1 },
+        "Space Size",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::SPACE_DECAY, 1 },
+        "Space Decay",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::SPACE_TONE, 1 },
+        "Space Tone",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::SPACE_MIX, 1 },
+        "Space Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // EQ params
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::EQ_LOW_FREQ, 1 },
+        "EQ Low Freq",
+        juce::NormalisableRange<float>(30.0f, 500.0f, 0.1f, 0.4f),
+        200.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::EQ_LOW_GAIN, 1 },
+        "EQ Low Gain",
+        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("dB")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::EQ_MID_FREQ, 1 },
+        "EQ Mid Freq",
+        juce::NormalisableRange<float>(200.0f, 8000.0f, 0.1f, 0.35f),
+        1000.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::EQ_MID_GAIN, 1 },
+        "EQ Mid Gain",
+        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("dB")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::EQ_HIGH_FREQ, 1 },
+        "EQ High Freq",
+        juce::NormalisableRange<float>(2000.0f, 20000.0f, 0.1f, 0.35f),
+        6000.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::EQ_HIGH_GAIN, 1 },
+        "EQ High Gain",
+        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("dB")));
+
     return layout;
 }
 
@@ -335,6 +427,9 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     tapeProcessorL.prepare(sampleRate, samplesPerBlock);
     tapeProcessorR.prepare(sampleRate, samplesPerBlock);
     tapeLoop.prepare(sampleRate, samplesPerBlock);
+    spaceReverb.prepare(sampleRate, samplesPerBlock);
+    eqL.prepare(sampleRate, samplesPerBlock);
+    eqR.prepare(sampleRate, samplesPerBlock);
     captureBuffer.prepare(sampleRate, samplesPerBlock);
 
     // Prepare modulation engine
@@ -359,6 +454,20 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedLoopFeedback.reset(sampleRate, 0.02);
     smoothedLoopDegrade.reset(sampleRate, 0.02);
 
+    // Space reverb smoothing
+    smoothedSpaceSize.reset(sampleRate, 0.02);
+    smoothedSpaceDecay.reset(sampleRate, 0.02);
+    smoothedSpaceTone.reset(sampleRate, 0.02);
+    smoothedSpaceMix.reset(sampleRate, 0.02);
+
+    // EQ smoothing
+    smoothedEqLowFreq.reset(sampleRate, 0.02);
+    smoothedEqLowGain.reset(sampleRate, 0.02);
+    smoothedEqMidFreq.reset(sampleRate, 0.02);
+    smoothedEqMidGain.reset(sampleRate, 0.02);
+    smoothedEqHighFreq.reset(sampleRate, 0.02);
+    smoothedEqHighGain.reset(sampleRate, 0.02);
+
     // Set initial values
     smoothedGrainSize.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load());
     smoothedDensity.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DENSITY)->load());
@@ -375,6 +484,36 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedMasterMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load());
     smoothedLoopFeedback.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load());
     smoothedLoopDegrade.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load());
+
+    // Space reverb initial values
+    smoothedSpaceSize.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_SIZE)->load());
+    smoothedSpaceDecay.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_DECAY)->load());
+    smoothedSpaceTone.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_TONE)->load());
+    smoothedSpaceMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_MIX)->load());
+
+    // EQ initial values
+    smoothedEqLowFreq.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_LOW_FREQ)->load());
+    smoothedEqLowGain.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_LOW_GAIN)->load());
+    smoothedEqMidFreq.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_MID_FREQ)->load());
+    smoothedEqMidGain.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_MID_GAIN)->load());
+    smoothedEqHighFreq.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_FREQ)->load());
+    smoothedEqHighGain.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_GAIN)->load());
+
+    // Initialize EQ coefficients with current values
+    eqL.updateCoefficients(
+        apvts.getRawParameterValue(ParameterIDs::EQ_LOW_FREQ)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_LOW_GAIN)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_MID_FREQ)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_MID_GAIN)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_FREQ)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_GAIN)->load());
+    eqR.updateCoefficients(
+        apvts.getRawParameterValue(ParameterIDs::EQ_LOW_FREQ)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_LOW_GAIN)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_MID_FREQ)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_MID_GAIN)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_FREQ)->load(),
+        apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_GAIN)->load());
 }
 
 void TerrainAudioProcessor::releaseResources()
@@ -384,6 +523,9 @@ void TerrainAudioProcessor::releaseResources()
     tapeProcessorL.reset();
     tapeProcessorR.reset();
     tapeLoop.reset();
+    spaceReverb.reset();
+    eqL.reset();
+    eqR.reset();
 }
 
 bool TerrainAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -460,6 +602,20 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     smoothedLoopFeedback.setTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load());
     smoothedLoopDegrade.setTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load());
+
+    // Space reverb targets
+    smoothedSpaceSize.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_SIZE)->load());
+    smoothedSpaceDecay.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_DECAY)->load());
+    smoothedSpaceTone.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_TONE)->load());
+    smoothedSpaceMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_MIX)->load());
+
+    // EQ targets
+    smoothedEqLowFreq.setTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_LOW_FREQ)->load());
+    smoothedEqLowGain.setTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_LOW_GAIN)->load());
+    smoothedEqMidFreq.setTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_MID_FREQ)->load());
+    smoothedEqMidGain.setTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_MID_GAIN)->load());
+    smoothedEqHighFreq.setTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_FREQ)->load());
+    smoothedEqHighGain.setTargetValue(apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_GAIN)->load());
 
     // Tape loop discrete params (no smoothing needed)
     const float loopLengthParam = apvts.getRawParameterValue(ParameterIDs::LOOP_LENGTH)->load();
@@ -646,6 +802,33 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             feedDelayR = wetR;
         }
 
+        // Space reverb (stereo, after tape loop)
+        {
+            const float spSize  = modulationEngine.getModulatedValue(ModulationEngine::pSpaceSize,  smoothedSpaceSize.getNextValue()) * 0.01f;
+            const float spDecay = modulationEngine.getModulatedValue(ModulationEngine::pSpaceDecay, smoothedSpaceDecay.getNextValue()) * 0.01f;
+            const float spTone  = modulationEngine.getModulatedValue(ModulationEngine::pSpaceTone,  smoothedSpaceTone.getNextValue()) * 0.01f;
+            const float spMix   = modulationEngine.getModulatedValue(ModulationEngine::pSpaceMix,   smoothedSpaceMix.getNextValue()) * 0.01f;
+            if (spMix > 0.001f)
+                spaceReverb.processStereo(wetL, wetR, spSize, spDecay, spTone, spMix);
+        }
+
+        // 3-band EQ (per-channel, after space reverb)
+        {
+            const float eqLF = smoothedEqLowFreq.getNextValue();
+            const float eqLG = modulationEngine.getModulatedValue(ModulationEngine::pEqLowGain,  smoothedEqLowGain.getNextValue());
+            const float eqMF = smoothedEqMidFreq.getNextValue();
+            const float eqMG = modulationEngine.getModulatedValue(ModulationEngine::pEqMidGain,  smoothedEqMidGain.getNextValue());
+            const float eqHF = smoothedEqHighFreq.getNextValue();
+            const float eqHG = modulationEngine.getModulatedValue(ModulationEngine::pEqHighGain, smoothedEqHighGain.getNextValue());
+
+            // Update coefficients every sample (SmoothedValue makes this safe)
+            eqL.updateCoefficients(eqLF, eqLG, eqMF, eqMG, eqHF, eqHG);
+            eqR.updateCoefficients(eqLF, eqLG, eqMF, eqMG, eqHF, eqHG);
+
+            wetL = eqL.processSample(wetL);
+            wetR = eqR.processSample(wetR);
+        }
+
         // Master mix + output gain
         float outL = (dryL * (1.0f - masterMixAmt) + wetL * masterMixAmt) * outputGain;
         leftChannel[i] = outL;
@@ -824,6 +1007,16 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("loopFeedback",    p.loopFeedback,    nullptr);
         node.setProperty("loopDegrade",     p.loopDegrade,     nullptr);
         node.setProperty("loopSpeed",       p.loopSpeed,       nullptr);
+        node.setProperty("spaceSize",      p.spaceSize,       nullptr);
+        node.setProperty("spaceDecay",     p.spaceDecay,      nullptr);
+        node.setProperty("spaceTone",      p.spaceTone,       nullptr);
+        node.setProperty("spaceMix",       p.spaceMix,        nullptr);
+        node.setProperty("eqLowFreq",     p.eqLowFreq,      nullptr);
+        node.setProperty("eqLowGain",     p.eqLowGain,      nullptr);
+        node.setProperty("eqMidFreq",     p.eqMidFreq,      nullptr);
+        node.setProperty("eqMidGain",     p.eqMidGain,      nullptr);
+        node.setProperty("eqHighFreq",    p.eqHighFreq,     nullptr);
+        node.setProperty("eqHighGain",    p.eqHighGain,     nullptr);
         root.addChild(node, -1, nullptr);
     }
 
@@ -888,6 +1081,16 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.loopFeedback    = static_cast<float>(child.getProperty("loopFeedback",   85.f));
         p.loopDegrade     = static_cast<float>(child.getProperty("loopDegrade",    30.f));
         p.loopSpeed       = static_cast<float>(child.getProperty("loopSpeed",       6.f));
+        p.spaceSize       = static_cast<float>(child.getProperty("spaceSize",      50.f));
+        p.spaceDecay      = static_cast<float>(child.getProperty("spaceDecay",     50.f));
+        p.spaceTone       = static_cast<float>(child.getProperty("spaceTone",      50.f));
+        p.spaceMix        = static_cast<float>(child.getProperty("spaceMix",        0.f));
+        p.eqLowFreq      = static_cast<float>(child.getProperty("eqLowFreq",    200.f));
+        p.eqLowGain      = static_cast<float>(child.getProperty("eqLowGain",      0.f));
+        p.eqMidFreq      = static_cast<float>(child.getProperty("eqMidFreq",   1000.f));
+        p.eqMidGain      = static_cast<float>(child.getProperty("eqMidGain",      0.f));
+        p.eqHighFreq     = static_cast<float>(child.getProperty("eqHighFreq",  6000.f));
+        p.eqHighGain     = static_cast<float>(child.getProperty("eqHighGain",     0.f));
 
         presets.push_back(p);
         loaded++;

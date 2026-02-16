@@ -44,6 +44,16 @@ private:
     juce::WebSliderRelay loopFeedbackRelay { ParameterIDs::LOOP_FEEDBACK };
     juce::WebSliderRelay loopDegradeRelay  { ParameterIDs::LOOP_DEGRADE };
     juce::WebSliderRelay loopSpeedRelay    { ParameterIDs::LOOP_SPEED };
+    juce::WebSliderRelay spaceSizeRelay    { ParameterIDs::SPACE_SIZE };
+    juce::WebSliderRelay spaceDecayRelay   { ParameterIDs::SPACE_DECAY };
+    juce::WebSliderRelay spaceToneRelay    { ParameterIDs::SPACE_TONE };
+    juce::WebSliderRelay spaceMixRelay     { ParameterIDs::SPACE_MIX };
+    juce::WebSliderRelay eqLowFreqRelay    { ParameterIDs::EQ_LOW_FREQ };
+    juce::WebSliderRelay eqLowGainRelay    { ParameterIDs::EQ_LOW_GAIN };
+    juce::WebSliderRelay eqMidFreqRelay    { ParameterIDs::EQ_MID_FREQ };
+    juce::WebSliderRelay eqMidGainRelay    { ParameterIDs::EQ_MID_GAIN };
+    juce::WebSliderRelay eqHighFreqRelay   { ParameterIDs::EQ_HIGH_FREQ };
+    juce::WebSliderRelay eqHighGainRelay   { ParameterIDs::EQ_HIGH_GAIN };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -101,6 +111,16 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> loopFeedbackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> loopDegradeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> loopSpeedAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> spaceSizeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> spaceDecayAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> spaceToneAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> spaceMixAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> eqLowFreqAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> eqLowGainAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> eqMidFreqAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> eqMidGainAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> eqHighFreqAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> eqHighGainAttachment;
 
     // Mod state lifecycle tick counter
     // Ticks 1-10:  RESTORE phase — push saved JSON to JS every tick

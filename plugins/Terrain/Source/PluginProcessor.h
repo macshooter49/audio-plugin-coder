@@ -5,6 +5,8 @@
 #include "GrainEngine.h"
 #include "TapeProcessor.h"
 #include "TapeLoopProcessor.h"
+#include "SpaceReverb.h"
+#include "SimpleEQ.h"
 #include "RollingCaptureBuffer.h"
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
@@ -36,6 +38,12 @@ struct PresetData
     // Drift link to XY pad
     float wanderLinked = 1.f; // 1 = linked (default), 0 = unlinked from XY pad
     float grainFilter = 50.f; // 0 = HP, 50 = bypass, 100 = LP
+    // Space reverb
+    float spaceSize = 50.f, spaceDecay = 50.f, spaceTone = 50.f, spaceMix = 0.f;
+    // 3-band EQ
+    float eqLowFreq = 200.f, eqLowGain = 0.f;
+    float eqMidFreq = 1000.f, eqMidGain = 0.f;
+    float eqHighFreq = 6000.f, eqHighGain = 0.f;
 };
 
 //==============================================================================
@@ -170,6 +178,13 @@ private:
     // Tape loop (stereo — single instance)
     TapeLoopProcessor tapeLoop;
 
+    // Space reverb (stereo — single instance handles both channels)
+    SpaceReverb spaceReverb;
+
+    // 3-band EQ (one per channel)
+    SimpleEQ eqL;
+    SimpleEQ eqR;
+
     // Smoothed parameters — granular
     juce::SmoothedValue<float> smoothedGrainSize;
     juce::SmoothedValue<float> smoothedDensity;
@@ -190,6 +205,20 @@ private:
     // Smoothed parameters — tape loop (continuous params only)
     juce::SmoothedValue<float> smoothedLoopFeedback;
     juce::SmoothedValue<float> smoothedLoopDegrade;
+
+    // Smoothed parameters — space reverb
+    juce::SmoothedValue<float> smoothedSpaceSize;
+    juce::SmoothedValue<float> smoothedSpaceDecay;
+    juce::SmoothedValue<float> smoothedSpaceTone;
+    juce::SmoothedValue<float> smoothedSpaceMix;
+
+    // Smoothed parameters — EQ
+    juce::SmoothedValue<float> smoothedEqLowFreq;
+    juce::SmoothedValue<float> smoothedEqLowGain;
+    juce::SmoothedValue<float> smoothedEqMidFreq;
+    juce::SmoothedValue<float> smoothedEqMidGain;
+    juce::SmoothedValue<float> smoothedEqHighFreq;
+    juce::SmoothedValue<float> smoothedEqHighGain;
 
     // Smoothed parameters — output
     juce::SmoothedValue<float> smoothedOutputGain;

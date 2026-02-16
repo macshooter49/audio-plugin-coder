@@ -25,6 +25,13 @@ public:
         pLoopFeedback,
         pLoopDegrade,
         pLoopSpeed,
+        pSpaceSize,
+        pSpaceDecay,
+        pSpaceTone,
+        pSpaceMix,
+        pEqLowGain,
+        pEqMidGain,
+        pEqHighGain,
         pNumParams
     };
 
@@ -68,12 +75,16 @@ public:
     // Parameter range definitions (APVTS raw units)
 
     static constexpr float paramMin[pNumParams] = {
-        5.0f, 1.0f, 0.0f, -12.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
+        5.0f, 1.0f, 0.0f, -12.0f, 0.0f, 0.0f, 0.0f, 0.0f,    // grainSize..mix
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,                    // wowFlutter..loopSpeed
+        0.0f, 0.0f, 0.0f, 0.0f,                                  // spaceSize..spaceMix
+        -12.0f, -12.0f, -12.0f                                    // eqLowGain..eqHighGain
     };
     static constexpr float paramMax[pNumParams] = {
-        500.0f, 100.0f, 100.0f, 12.0f, 100.0f, 100.0f, 100.0f, 100.0f,
-        100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 9.0f
+        500.0f, 100.0f, 100.0f, 12.0f, 100.0f, 100.0f, 100.0f, 100.0f,  // grainSize..mix
+        100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 9.0f,                    // wowFlutter..loopSpeed
+        100.0f, 100.0f, 100.0f, 100.0f,                                    // spaceSize..spaceMix
+        12.0f, 12.0f, 12.0f                                                // eqLowGain..eqHighGain
     };
 
     //==============================================================================
@@ -391,7 +402,9 @@ private:
         static const char* names[pNumParams] = {
             "grainSize", "density", "spray", "pitch", "freeze", "wander",
             "grainFilter", "mix", "wowFlutter", "saturation", "hiss",
-            "loopFeedback", "loopDegrade", "loopSpeed"
+            "loopFeedback", "loopDegrade", "loopSpeed",
+            "spaceSize", "spaceDecay", "spaceTone", "spaceMix",
+            "eqLowGain", "eqMidGain", "eqHighGain"
         };
         for (int i = 0; i < pNumParams; i++)
             if (name == names[i]) return i;
@@ -403,7 +416,9 @@ private:
         static const char* names[pNumParams] = {
             "grainSize", "density", "spray", "pitch", "freeze", "wander",
             "grainFilter", "mix", "wowFlutter", "saturation", "hiss",
-            "loopFeedback", "loopDegrade", "loopSpeed"
+            "loopFeedback", "loopDegrade", "loopSpeed",
+            "spaceSize", "spaceDecay", "spaceTone", "spaceMix",
+            "eqLowGain", "eqMidGain", "eqHighGain"
         };
         if (idx >= 0 && idx < pNumParams) return names[idx];
         return "grainSize";

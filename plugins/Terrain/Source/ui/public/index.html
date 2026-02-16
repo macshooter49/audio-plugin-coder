@@ -609,6 +609,220 @@ body {
   transition: opacity 0.12s 0s;
 }
 
+/* ============ FX PAGE SYSTEM ============ */
+.fx-page-nav {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 22px;
+  gap: 4px;
+}
+.fx-nav-arrow {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 9px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+  font-family: inherit;
+}
+.fx-nav-arrow:hover {
+  border-color: var(--purple-500);
+  color: var(--purple-500);
+}
+.fx-page-label {
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  font-weight: 600;
+  margin: 0 4px;
+  min-width: 32px;
+  text-align: center;
+}
+.fx-page-dots {
+  display: flex;
+  gap: 4px;
+  margin-left: 4px;
+}
+.fx-page-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.fx-page-dot.active { background: var(--purple-500); }
+.fx-page-dot.inactive {
+  border: 1px solid var(--text-dim);
+  background: transparent;
+}
+.fx-page-dot.inactive:hover { border-color: var(--purple-500); }
+
+.fx-pages-container {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+.fx-page {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: none;
+}
+.fx-page.active {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tape FX page */
+.tape-fx-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 4px 0;
+}
+.tape-mechanism-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+.tape-mechanism-wrap canvas { display: block; }
+.tape-fx-knobs {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 10px 0 6px;
+}
+
+/* Space page */
+.space-page-layout {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+}
+.space-page-layout canvas {
+  display: block;
+  width: 100%; height: 100%;
+}
+.space-knobs-left, .space-knobs-right {
+  position: absolute;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 5;
+}
+.space-knobs-left { left: 10px; }
+.space-knobs-right { right: 10px; }
+.space-knob-pair {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+/* EQ page */
+.eq-page-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 4px 8px;
+}
+.eq-page-inner canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.eq-flatten-btn {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  font-size: 7px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(255,255,255,0.85);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.15s;
+  z-index: 5;
+}
+.eq-flatten-btn:hover {
+  border-color: var(--purple-500);
+  color: var(--purple-500);
+}
+.eq-tooltip {
+  position: absolute;
+  font-size: 9px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 10;
+  display: none;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.eq-tooltip.visible { display: block; }
+
+/* FX page knob groups (smaller than standard) */
+.fx-knob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.fx-knob-wrap {
+  position: relative;
+  display: inline-block;
+}
+.fx-knob-wrap canvas.fx-knob-arc {
+  display: block;
+  cursor: grab;
+}
+.fx-knob-wrap canvas.fx-knob-arc:active { cursor: grabbing; }
+.fx-knob-wrap canvas.fx-knob-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.fx-knob-value {
+  font-size: 9px;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: center;
+}
+.fx-knob-label {
+  font-size: 7px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
 /* ============ TAPE LOOP CONTENT ============ */
 .tape-loop-content {
   flex: 1; display: flex; flex-direction: column;
@@ -1801,8 +2015,49 @@ body {
         </div>
         <span class="section-collapse-icon">&#9662;</span>
       </div>
-      <!-- TAPE FX content (existing knobs) -->
-      <div class="knobs-container tape-tab-content" id="tape-knobs" data-tab="fx"></div>
+      <!-- TAPE FX content — 3-page FX suite -->
+      <div class="tape-tab-content" id="tape-fx-container" data-tab="fx" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div class="fx-page-nav">
+          <button class="fx-nav-arrow" id="fxNavPrev">&#9664;</button>
+          <span class="fx-page-label" id="fxPageLabel">TAPE</span>
+          <button class="fx-nav-arrow" id="fxNavNext">&#9654;</button>
+          <div class="fx-page-dots">
+            <div class="fx-page-dot active" data-fxpage="0"></div>
+            <div class="fx-page-dot inactive" data-fxpage="1"></div>
+            <div class="fx-page-dot inactive" data-fxpage="2"></div>
+          </div>
+        </div>
+        <div class="fx-pages-container">
+          <div class="fx-page active" id="fxPageTape">
+            <div class="tape-fx-page">
+              <div class="tape-mechanism-wrap">
+                <canvas id="tapeMechCanvas"></canvas>
+              </div>
+              <div class="tape-fx-knobs" id="tapeFxKnobs"></div>
+            </div>
+          </div>
+          <div class="fx-page" id="fxPageSpace">
+            <div class="space-page-layout">
+              <canvas id="spaceVisCanvas"></canvas>
+              <div class="space-knobs-left">
+                <div class="space-knob-pair" id="spaceKnobsLeft"></div>
+              </div>
+              <div class="space-knobs-right">
+                <div class="space-knob-pair" id="spaceKnobsRight"></div>
+              </div>
+            </div>
+          </div>
+          <div class="fx-page" id="fxPageEq">
+            <div class="eq-page-inner" id="eqPageInner">
+              <canvas id="eqVisCanvas"></canvas>
+              <button class="eq-flatten-btn" id="eqFlattenBtn">FLATTEN</button>
+              <div class="eq-tooltip" id="eqTooltip"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Hidden container for buildKnobs tape-section knobs (wow/sat/hiss are now in FX suite) -->
+      <div id="tape-knobs" style="display:none"></div>
       <!-- TAPE LOOP content -->
       <div class="tape-tab-content tape-loop-content" id="tape-loop-content" data-tab="loop" style="display:none">
         <div class="tape-deck-glass">
@@ -2266,6 +2521,18 @@ const PARAMS = {
   loopFeedback:{ label: 'FEEDBACK', section: 'tapeloop', min: 0, max: 100, default: 85, unit: '%', desc: 'Controls how much existing loop content is preserved during overdub.', tip: '100% = infinite layers. 80% = gradual Basinski decay. 0% = replace each pass.' },
   loopDegrade: { label: 'DEGRADE',  section: 'tapeloop', min: 0, max: 100, default: 30, unit: '%', desc: 'Intensity of tape degradation applied to the loop on each pass.', tip: '0% = digital looper. 50% = warm evolution. 100% = rapid transformation.' },
   loopSpeed:   { label: 'SPEED',    section: 'tapeloop', min: 0, max: 9,   default: 6,  unit: '',  desc: 'Playback speed and direction of the loop.', tip: '0=-3x, 1=-2x, 2=-1.5x, 3=-1x, 4=-0.5x, 5=0.5x, 6=1x, 7=1.5x, 8=2x, 9=3x' },
+  // Space (reverb) parameters
+  spaceSize:   { label: 'SIZE',    section: 'space', min: 0,   max: 100, default: 50,   unit: '%',  desc: 'Controls the perceived size of the reverb space.', tip: 'Small values = tight room. Large values = vast hall.' },
+  spaceDecay:  { label: 'DECAY',   section: 'space', min: 0,   max: 100, default: 50,   unit: '%',  desc: 'Sets how long the reverb tail sustains.', tip: 'Short decay for slap-back, long decay for ambient washes.' },
+  spaceTone:   { label: 'TONE',    section: 'space', min: 0,   max: 100, default: 50,   unit: '%',  desc: 'Tone color of the reverb. Center is neutral.', tip: 'Left = darker/warmer. Right = brighter/airy.' },
+  spaceMix:    { label: 'MIX',     section: 'space', min: 0,   max: 100, default: 0,    unit: '%',  desc: 'Wet/dry mix for the space reverb.', tip: '0% = dry. 100% = fully wet reverb.' },
+  // EQ parameters
+  eqLowFreq:  { label: 'LOW FREQ',  section: 'eq', min: 30,   max: 500,   default: 200,  unit: 'Hz', desc: 'Center frequency of the low shelf EQ band.', tip: 'Typical range: 80-300 Hz for bass shaping.' },
+  eqLowGain:  { label: 'LOW GAIN',  section: 'eq', min: -12,  max: 12,    default: 0,    unit: 'dB', desc: 'Gain of the low shelf EQ band.', tip: 'Boost for warmth, cut to reduce muddiness.' },
+  eqMidFreq:  { label: 'MID FREQ',  section: 'eq', min: 200,  max: 8000,  default: 1000, unit: 'Hz', desc: 'Center frequency of the mid parametric EQ band.', tip: 'Sweep to find problem frequencies or sweet spots.' },
+  eqMidGain:  { label: 'MID GAIN',  section: 'eq', min: -12,  max: 12,    default: 0,    unit: 'dB', desc: 'Gain of the mid parametric EQ band.', tip: 'Cut narrow, boost wide for musical results.' },
+  eqHighFreq: { label: 'HIGH FREQ', section: 'eq', min: 2000, max: 20000, default: 6000, unit: 'Hz', desc: 'Center frequency of the high shelf EQ band.', tip: 'Typical range: 4-10 kHz for presence and air.' },
+  eqHighGain: { label: 'HIGH GAIN', section: 'eq', min: -12,  max: 12,    default: 0,    unit: 'dB', desc: 'Gain of the high shelf EQ band.', tip: 'Boost for air and shimmer, cut for darker tone.' },
 };
 
 const OUTPUT_PARAM = { min: -12, max: 12, default: 0 };
@@ -2275,6 +2542,8 @@ const MODULATABLE = [
   'grainSize','density','spray','pitch','freeze','wander','grainFilter','mix',
   'wowFlutter','saturation','hiss',
   'loopFeedback','loopDegrade','loopSpeed',
+  'spaceSize','spaceDecay','spaceTone','spaceMix',
+  'eqLowGain','eqMidGain','eqHighGain',
 ];
 
 // ---- State ----
@@ -2342,6 +2611,18 @@ const JUCE_PARAMS = {
   loopFeedback: { juceId: 'LOOP_FEEDBACK', sliderState: null },
   loopDegrade:  { juceId: 'LOOP_DEGRADE',  sliderState: null },
   loopSpeed:    { juceId: 'LOOP_SPEED',    sliderState: null },
+  // Space (reverb)
+  spaceSize:    { juceId: 'SPACE_SIZE',    sliderState: null },
+  spaceDecay:   { juceId: 'SPACE_DECAY',   sliderState: null },
+  spaceTone:    { juceId: 'SPACE_TONE',    sliderState: null },
+  spaceMix:     { juceId: 'SPACE_MIX',     sliderState: null },
+  // EQ
+  eqLowFreq:   { juceId: 'EQ_LOW_FREQ',   sliderState: null },
+  eqLowGain:   { juceId: 'EQ_LOW_GAIN',   sliderState: null },
+  eqMidFreq:   { juceId: 'EQ_MID_FREQ',   sliderState: null },
+  eqMidGain:   { juceId: 'EQ_MID_GAIN',   sliderState: null },
+  eqHighFreq:  { juceId: 'EQ_HIGH_FREQ',  sliderState: null },
+  eqHighGain:  { juceId: 'EQ_HIGH_GAIN',  sliderState: null },
 };
 const JUCE_OUTPUT = { juceId: 'OUTPUT_GAIN', sliderState: null };
 const JUCE_MASTER_MIX = { juceId: 'MASTER_MIX', sliderState: null };
@@ -2424,7 +2705,8 @@ async function initJuceBindings() {
       p.sliderState = window.Juce.getSliderState(p.juceId);
       state.params[key] = p.sliderState.scaledValue;
       p.sliderState.valueChangedEvent.addListener(() => {
-        if (state.draggingKnob === key) return; // skip echo while dragging
+        if (state.draggingKnob === key) return; // skip echo while dragging main knobs
+        if (window._fxDragging && window._fxDragging[key]) return; // skip echo while dragging FX suite knobs/EQ
         state.params[key] = p.sliderState.scaledValue;
         modBaseValues[key] = p.sliderState.scaledValue;
         updateKnobDisplay(key);
@@ -2689,6 +2971,22 @@ function formatValue(id, val) {
       const speeds = ['-3x', '-2x', '-1.5x', '-1x', '-0.5x', '0.5x', '1x', '1.5x', '2x', '3x'];
       return speeds[Math.round(val)] || '1x';
     }
+    case 'spaceSize':
+    case 'spaceDecay':
+    case 'spaceMix':
+      return `${Math.round(val)}%`;
+    case 'spaceTone': {
+      const bipolar = Math.round(val - 50);
+      return (bipolar > 0 ? '+' : '') + bipolar + '%';
+    }
+    case 'eqLowFreq':
+    case 'eqMidFreq':
+    case 'eqHighFreq':
+      return val >= 1000 ? `${(val/1000).toFixed(1)}k` : `${Math.round(val)} Hz`;
+    case 'eqLowGain':
+    case 'eqMidGain':
+    case 'eqHighGain':
+      return (val > 0 ? '+' : '') + val.toFixed(1) + ' dB';
     default:
       return `${Math.round(val)}`;
   }
@@ -2700,13 +2998,20 @@ function formatOutput(dB) {
 }
 
 // ---- Normalize / Denormalize ----
+// Skew factors matching JUCE NormalisableRange (4th arg). Omitted = linear (skew 1.0).
+const PARAM_SKEW = { eqLowFreq: 0.4, eqMidFreq: 0.35, eqHighFreq: 0.35 };
+
 function normalize(id, val) {
   const p = PARAMS[id];
-  return (val - p.min) / (p.max - p.min);
+  const linear = (val - p.min) / (p.max - p.min);
+  const skew = PARAM_SKEW[id];
+  return skew ? Math.pow(Math.max(0, Math.min(1, linear)), skew) : linear;
 }
 function denormalize(id, norm) {
   const p = PARAMS[id];
-  return p.min + norm * (p.max - p.min);
+  const skew = PARAM_SKEW[id];
+  const linear = skew ? Math.pow(Math.max(0, Math.min(1, norm)), 1.0 / skew) : norm;
+  return p.min + linear * (p.max - p.min);
 }
 function normalizeOutput(dB) {
   return (dB - OUTPUT_PARAM.min) / (OUTPUT_PARAM.max - OUTPUT_PARAM.min);
@@ -3398,6 +3703,8 @@ function buildKnobs() {
   const tapeLoopContainer = document.getElementById('tape-loop-knobs');
 
   for (const [id, p] of Object.entries(PARAMS)) {
+    // Space and EQ params are handled by FX suite knobs / EQ band points — skip standard knob creation
+    if (p.section === 'space' || p.section === 'eq') continue;
     const group = document.createElement('div');
     group.className = 'knob-group';
     group.dataset.param = id;
@@ -3969,6 +4276,11 @@ function updateSectionFocus() {
   } else if (state.focusedSection === 'tape') {
     grain.classList.add('minimized');
   }
+  // Re-size FX canvases after the CSS transition (350ms flex + margin)
+  if (window._fxSizeFn) {
+    setTimeout(window._fxSizeFn, 100);
+    setTimeout(window._fxSizeFn, 400);
+  }
 }
 
 document.getElementById('grain-header').addEventListener('click', (e) => {
@@ -4003,8 +4315,12 @@ document.getElementById('tape-subtabs').addEventListener('click', (e) => {
   if (tab === state.tapeSubTab) return;
   state.tapeSubTab = tab;
   document.querySelectorAll('.tape-subtab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.getElementById('tape-knobs').style.display = tab === 'fx' ? '' : 'none';
-  document.getElementById('tape-loop-content').style.display = tab === 'loop' ? '' : 'none';
+  const fxC = document.getElementById('tape-fx-container');
+  const loopC = document.getElementById('tape-loop-content');
+  fxC.style.display = tab === 'fx' ? 'flex' : 'none';
+  loopC.style.display = tab === 'loop' ? 'flex' : 'none';
+  // Re-size FX canvases after tab switch
+  if (tab === 'fx' && window._fxSizeFn) setTimeout(window._fxSizeFn, 50);
 });
 
 // ---- Tape Loop Transport ----
@@ -4766,7 +5082,7 @@ function updateLFOs(dt) {
 }
 
 // ---- Mod Ring Drawing on Knobs ----
-function drawModRing(canvas, paramId) {
+function drawModRing(canvas, paramId, ringRadius) {
   const assignments = modState.assignments.filter(a => a.target === paramId && a.enabled);
   if (assignments.length === 0) return;
 
@@ -4777,7 +5093,7 @@ function drawModRing(canvas, paramId) {
   ctx.scale(DPR, DPR);
 
   const cx = w / 2, cy = h / 2;
-  const outerR = 25; // just outside the main arc (radius=22 + gap)
+  const outerR = ringRadius || 25; // 25 for standard (56px), 19 for FX (44px)
   const startAngle = 0.75 * Math.PI;
   const sweep = 1.5 * Math.PI;
 
@@ -4813,27 +5129,54 @@ function drawModRing(canvas, paramId) {
 
 // Update mod badges on knobs
 function updateModBadges() {
+  // Reverse map for FX knobs
+  const _p2fx = {
+    wowFlutter:'wow', saturation:'saturation', hiss:'hiss',
+    spaceSize:'spaceSize', spaceDecay:'spaceDecay', spaceTone:'spaceTone', spaceMix:'spaceMix',
+  };
   for (const paramId of MODULATABLE) {
-    const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
-    if (!group) continue;
-    let badge = group.querySelector('.mod-ring-badge');
     const hasAssignment = modState.assignments.some(a => a.target === paramId && a.enabled);
-    if (hasAssignment) {
-      if (!badge) {
-        badge = document.createElement('div');
-        badge.className = 'mod-ring-badge';
-        group.querySelector('.knob-canvas-wrap').appendChild(badge);
+    // Standard knobs
+    const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
+    if (group) {
+      let badge = group.querySelector('.mod-ring-badge');
+      if (hasAssignment) {
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.className = 'mod-ring-badge';
+          group.querySelector('.knob-canvas-wrap').appendChild(badge);
+        }
+        const firstActive = modState.assignments.find(a => a.target === paramId && a.enabled);
+        badge.style.background = MOD_COLORS[firstActive.source];
+        badge.classList.add('visible');
+      } else {
+        if (badge) badge.classList.remove('visible');
+        if (group._knobCanvas) {
+          const norm = normalize(paramId, state.params[paramId]);
+          drawKnob(group._knobCanvas, norm, state.draggingKnob === paramId, state.hoveredKnob === paramId);
+        }
       }
-      // Use dominant source color
-      const firstActive = modState.assignments.find(a => a.target === paramId && a.enabled);
-      badge.style.background = MOD_COLORS[firstActive.source];
-      badge.classList.add('visible');
-    } else {
-      if (badge) badge.classList.remove('visible');
-      // Redraw knob to clear stale mod ring pixels
-      if (group._knobCanvas) {
-        const norm = normalize(paramId, state.params[paramId]);
-        drawKnob(group._knobCanvas, norm, state.draggingKnob === paramId, state.hoveredKnob === paramId);
+      continue;
+    }
+    // FX suite knobs
+    const fxId = _p2fx[paramId];
+    if (fxId) {
+      const fxGroup = document.querySelector(`.fx-knob-group[data-fxknob="${fxId}"]`);
+      if (fxGroup) {
+        let badge = fxGroup.querySelector('.mod-ring-badge');
+        if (hasAssignment) {
+          if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'mod-ring-badge';
+            var wrap = fxGroup.querySelector('.fx-knob-wrap');
+            if (wrap) wrap.appendChild(badge);
+          }
+          const firstActive = modState.assignments.find(a => a.target === paramId && a.enabled);
+          badge.style.background = MOD_COLORS[firstActive.source];
+          badge.classList.add('visible');
+        } else {
+          if (badge) badge.classList.remove('visible');
+        }
       }
     }
   }
@@ -5207,14 +5550,36 @@ function initModContextMenu() {
   const menu = document.getElementById('mod-ctx-menu');
   if (!menu) return;
 
-  // Attach right-click to every modulatable knob
+  // Reverse map: param key → FX knob data-fxknob value
+  const PARAM_TO_FXKNOB = {
+    wowFlutter: 'wow', saturation: 'saturation', hiss: 'hiss',
+    spaceSize: 'spaceSize', spaceDecay: 'spaceDecay', spaceTone: 'spaceTone', spaceMix: 'spaceMix',
+  };
+
+  // Attach right-click to every modulatable knob (standard + FX suite)
   for (const paramId of MODULATABLE) {
+    // FX suite knobs get priority (tape knobs exist hidden in standard too)
+    const fxKnobId = PARAM_TO_FXKNOB[paramId];
+    if (fxKnobId) {
+      const fxGroup = document.querySelector(`.fx-knob-group[data-fxknob="${fxKnobId}"]`);
+      if (fxGroup) {
+        (function(pid) {
+          fxGroup.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            openModContextMenu(pid, e.clientX, e.clientY);
+          });
+        })(paramId);
+        continue;
+      }
+    }
+    // Standard knobs (fallback for non-FX params)
     const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
-    if (!group) continue;
-    group.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      openModContextMenu(paramId, e.clientX, e.clientY);
-    });
+    if (group) {
+      group.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openModContextMenu(paramId, e.clientX, e.clientY);
+      });
+    }
   }
 
   // Close on outside click
@@ -5401,7 +5766,8 @@ function updateModulation(time, dt) {
 
   // Track base values: user-set values before modulation offsets
   for (const paramId of MODULATABLE) {
-    if (state.draggingKnob === paramId) {
+    const isDraggingFx = window._fxDragging && window._fxDragging[paramId];
+    if (state.draggingKnob === paramId || isDraggingFx) {
       modBaseValues[paramId] = state.params[paramId];
     } else if (modBaseValues[paramId] === undefined) {
       // Initialize from APVTS if available, else from state
@@ -5410,6 +5776,12 @@ function updateModulation(time, dt) {
     }
   }
 
+  // Reverse map for FX knob visuals
+  const _p2fxVis = {
+    wowFlutter:'wow', saturation:'saturation', hiss:'hiss',
+    spaceSize:'spaceSize', spaceDecay:'spaceDecay', spaceTone:'spaceTone', spaceMix:'spaceMix',
+  };
+
   // Display-only modulation: compute visual offsets from C++ LFO outputs
   // C++ processBlock handles actual audio modulation — this is just for knob visuals
   if (hasActiveAssignment) {
@@ -5417,6 +5789,8 @@ function updateModulation(time, dt) {
       const assignments = modState.assignments.filter(a => a.target === paramId && a.enabled);
       if (assignments.length === 0) continue;
       if (state.draggingKnob === paramId) continue;
+      // Skip if FX suite is dragging this param
+      if (window._fxDragging && window._fxDragging[paramId]) continue;
 
       const p = PARAMS[paramId];
       const baseVal = modBaseValues[paramId];
@@ -5438,7 +5812,7 @@ function updateModulation(time, dt) {
       const modulated = Math.max(p.min, Math.min(p.max, baseVal + offset));
       state.params[paramId] = modulated;
 
-      // Update knob visual only — NO push to APVTS (C++ handles audio)
+      // Update standard knob visual (if visible)
       const group = document.querySelector(`.knob-group[data-param="${paramId}"]`);
       if (group && group._knobCanvas) {
         const norm = normalize(paramId, modulated);
@@ -5446,11 +5820,21 @@ function updateModulation(time, dt) {
         drawModRing(group._knobCanvas, paramId);
         if (group._valueEl) group._valueEl.textContent = formatValue(paramId, modulated);
       }
+
+      // Update FX suite knob visual (mod ring overlay)
+      const fxId = _p2fxVis[paramId];
+      if (fxId) {
+        const fxCanvas = document.getElementById('fxKnob_' + fxId);
+        if (fxCanvas) {
+          drawModRing(fxCanvas, paramId, 19);
+        }
+      }
     }
   } else {
     // No active assignments — restore base values visually
     for (const paramId of MODULATABLE) {
-      if (modBaseValues[paramId] !== undefined && state.draggingKnob !== paramId) {
+      const isDraggingFx = window._fxDragging && window._fxDragging[paramId];
+      if (modBaseValues[paramId] !== undefined && state.draggingKnob !== paramId && !isDraggingFx) {
         const base = modBaseValues[paramId];
         if (Math.abs(state.params[paramId] - base) > 0.001) {
           state.params[paramId] = base;
@@ -5539,6 +5923,1274 @@ function initModSystem() {
   updateTargetLists();
 }
 
+// ═══════════════════════════════════════════════
+// FX SUITE — PAGE SYSTEM (Tape / Space / EQ)
+// ═══════════════════════════════════════════════
+function initFxSuite() {
+  const DPR = window.devicePixelRatio || 1;
+  const FX_PAGE_NAMES = ['TAPE', 'SPACE', 'EQ'];
+  const FX_PAGE_IDS = ['fxPageTape', 'fxPageSpace', 'fxPageEq'];
+
+  // Canvas setup helper
+  function fxSetupCanvas(canvas, w, h) {
+    canvas.width = w * DPR;
+    canvas.height = h * DPR;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+  }
+
+  // FX suite local state (page, dragging, etc.)
+  const fxSuite = {
+    page: 0,
+    dragging: null,
+    dragStartY: 0,
+    dragStartX: 0,
+    dragStartVal: 0,
+    dragStartVal2: 0,
+    hoveredKnob: null,
+    eqFlattening: false,
+    eqHoveredBand: null,
+  };
+
+  let tapeTime = 0, spaceTime = 0, lastFxTime = 0;
+
+  // ─── Mapping between FX knob IDs and state.params keys ───
+  // Tape knobs use existing param keys; space knobs use new param keys
+  const FX_KNOB_PARAM_MAP = {
+    wow: 'wowFlutter',
+    saturation: 'saturation',
+    hiss: 'hiss',
+    spaceSize: 'spaceSize',
+    spaceDecay: 'spaceDecay',
+    spaceTone: 'spaceTone',
+    spaceMix: 'spaceMix',
+  };
+
+  // Get normalized value (0-1) for an FX knob from state.params
+  function getFxKnobValue(id) {
+    const paramKey = FX_KNOB_PARAM_MAP[id];
+    if (!paramKey) return 0;
+    return normalize(paramKey, state.params[paramKey]);
+  }
+
+  // Set normalized value (0-1) for an FX knob, updating state.params + JUCE
+  // Note: drag lifecycle (sliderDragStarted/Ended) is handled by createFxKnob mouse handlers,
+  // so we only call setNormalisedValue here (not pushParamToJuce which does its own lifecycle).
+  function setFxKnobValue(id, normVal) {
+    normVal = Math.max(0, Math.min(1, normVal));
+    const paramKey = FX_KNOB_PARAM_MAP[id];
+    if (!paramKey) return;
+    const denorm = denormalize(paramKey, normVal);
+    state.params[paramKey] = denorm;
+    modBaseValues[paramKey] = denorm;
+    // Push to JUCE directly (drag lifecycle managed by mousedown/mouseup)
+    if (juceMode && JUCE_PARAMS[paramKey] && JUCE_PARAMS[paramKey].sliderState) {
+      JUCE_PARAMS[paramKey].sliderState.setNormalisedValue(normVal);
+    }
+  }
+
+  function fmtFxKnobValue(id, normVal) {
+    const paramKey = FX_KNOB_PARAM_MAP[id];
+    if (!paramKey) return Math.round(normVal * 100) + '%';
+    return formatValue(paramKey, state.params[paramKey]);
+  }
+
+  // ─── Page Navigation ───
+  function navigateFxPage(newPage, dir) {
+    if (newPage === fxSuite.page) return;
+    if (newPage < 0 || newPage > 2) return;
+
+    const oldEl = document.getElementById(FX_PAGE_IDS[fxSuite.page]);
+    const newEl = document.getElementById(FX_PAGE_IDS[newPage]);
+
+    oldEl.classList.remove('active');
+    newEl.classList.add('active');
+
+    fxSuite.page = newPage;
+
+    document.getElementById('fxPageLabel').textContent = FX_PAGE_NAMES[newPage];
+    document.querySelectorAll('.fx-page-dot').forEach(function(dot) {
+      var idx = parseInt(dot.dataset.fxpage);
+      dot.className = 'fx-page-dot ' + (idx === newPage ? 'active' : 'inactive');
+    });
+  }
+
+  document.getElementById('fxNavPrev').addEventListener('click', function() {
+    navigateFxPage((fxSuite.page - 1 + 3) % 3, -1);
+  });
+  document.getElementById('fxNavNext').addEventListener('click', function() {
+    navigateFxPage((fxSuite.page + 1) % 3, 1);
+  });
+  document.querySelectorAll('.fx-page-dot').forEach(function(dot) {
+    dot.addEventListener('click', function() {
+      var target = parseInt(dot.dataset.fxpage);
+      navigateFxPage(target, target > fxSuite.page ? 1 : -1);
+    });
+  });
+
+  // ─── FX Knob Drawing (matching Terrain style) ───
+  function drawFxKnob(canvas, normValue, dragging, hover) {
+    var w = canvas.width / DPR, h = canvas.height / DPR;
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(DPR, DPR);
+
+    var cx = w / 2, cy = h / 2, radius = w / 2 - 3;
+    var startAngle = 0.75 * Math.PI;
+    var sweep = 1.5 * Math.PI;
+    var endAngle = startAngle + sweep;
+    var activeEnd = startAngle + normValue * sweep;
+
+    // Subtle body
+    var bodyGrad = ctx.createRadialGradient(cx, cy - 3, 0, cx, cy, radius);
+    bodyGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
+    bodyGrad.addColorStop(1, 'rgba(255,255,255,0.05)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius - 4, 0, Math.PI * 2);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    if (dragging) { ctx.shadowColor = 'rgba(139,92,246,0.15)'; ctx.shadowBlur = 6; }
+
+    // Track arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, endAngle, false);
+    ctx.strokeStyle = '#E8E0F0';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Active arc
+    if (normValue > 0.002) {
+      if (dragging) { ctx.shadowColor = 'rgba(139,92,246,0.15)'; ctx.shadowBlur = 6; }
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
+      ctx.strokeStyle = '#8B5CF6';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Dot
+    var dotX = cx + Math.cos(activeEnd) * radius;
+    var dotY = cy + Math.sin(activeEnd) * radius;
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = hover || dragging ? '#7C3AED' : '#8B5CF6';
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // ─── FX Knob Setup ───
+  var KNOB_SIZE = 44;
+
+  // Tape knob IDs that get animated icons (maps FX knob id → drawIcon type)
+  var TAPE_ICON_IDS = { wow: 'wowFlutter', saturation: 'saturation', hiss: 'hiss' };
+  var ICON_SIZE = 20;
+
+  function createFxKnob(id, label, container) {
+    var group = document.createElement('div');
+    group.className = 'fx-knob-group';
+    group.dataset.fxknob = id;
+
+    // Wrap canvas (+ optional icon) for positioning
+    var wrap = document.createElement('div');
+    wrap.className = 'fx-knob-wrap';
+
+    var canvas = document.createElement('canvas');
+    canvas.className = 'fx-knob-arc';
+    fxSetupCanvas(canvas, KNOB_SIZE, KNOB_SIZE);
+    canvas.id = 'fxKnob_' + id;
+    wrap.appendChild(canvas);
+
+    // Add animated icon for tape knobs
+    var iconCanvas = null;
+    if (TAPE_ICON_IDS[id]) {
+      iconCanvas = document.createElement('canvas');
+      iconCanvas.className = 'fx-knob-icon';
+      fxSetupCanvas(iconCanvas, ICON_SIZE, ICON_SIZE);
+      iconCanvas.id = 'fxIcon_' + id;
+      wrap.appendChild(iconCanvas);
+    }
+    group.appendChild(wrap);
+
+    var valEl = document.createElement('div');
+    valEl.className = 'fx-knob-value';
+    valEl.id = 'fxVal_' + id;
+    group.appendChild(valEl);
+
+    var labelEl = document.createElement('div');
+    labelEl.className = 'fx-knob-label';
+    labelEl.textContent = label;
+    group.appendChild(labelEl);
+
+    container.appendChild(group);
+
+    // Interaction
+    canvas.addEventListener('mousedown', function(e) {
+      if (e.button === 2) return;
+      e.preventDefault();
+      e.stopPropagation();
+      fxSuite.dragging = id;
+      fxSuite.dragStartY = e.clientY;
+      fxSuite.dragStartVal = getFxKnobValue(id);
+      // Set echo guard + notify JUCE drag started
+      var paramKey = FX_KNOB_PARAM_MAP[id];
+      if (paramKey) {
+        window._fxDragging = window._fxDragging || {};
+        window._fxDragging[paramKey] = true;
+        if (juceMode && JUCE_PARAMS[paramKey] && JUCE_PARAMS[paramKey].sliderState) {
+          JUCE_PARAMS[paramKey].sliderState.sliderDragStarted();
+        }
+      }
+    });
+
+    canvas.addEventListener('dblclick', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      // Reset to default
+      var paramKey = FX_KNOB_PARAM_MAP[id];
+      if (paramKey) {
+        state.params[paramKey] = PARAMS[paramKey].default;
+        modBaseValues[paramKey] = PARAMS[paramKey].default;
+        pushParamToJuce(paramKey);
+      }
+    });
+
+    canvas.addEventListener('mouseenter', function() { fxSuite.hoveredKnob = id; });
+    canvas.addEventListener('mouseleave', function() { fxSuite.hoveredKnob = null; });
+
+    return { canvas: canvas, valEl: valEl, iconCanvas: iconCanvas };
+  }
+
+  // Create tape knobs
+  var tapeKnobContainer = document.getElementById('tapeFxKnobs');
+  createFxKnob('wow', 'WOW', tapeKnobContainer);
+  createFxKnob('saturation', 'SATURATION', tapeKnobContainer);
+  createFxKnob('hiss', 'HISS', tapeKnobContainer);
+
+  // Create space knobs
+  var spaceKnobsLeft = document.getElementById('spaceKnobsLeft');
+  var spaceKnobsRight = document.getElementById('spaceKnobsRight');
+  createFxKnob('spaceSize', 'SIZE', spaceKnobsLeft);
+  createFxKnob('spaceDecay', 'DECAY', spaceKnobsLeft);
+  createFxKnob('spaceTone', 'TONE', spaceKnobsRight);
+  createFxKnob('spaceMix', 'MIX', spaceKnobsRight);
+
+  // ─── Mouse Handling for FX knobs ───
+  document.addEventListener('mousemove', function(e) {
+    if (fxSuite.dragging && !fxSuite.dragging.startsWith('eq_')) {
+      var dy = fxSuite.dragStartY - e.clientY;
+      var newVal = Math.max(0, Math.min(1, fxSuite.dragStartVal + dy * 0.005));
+      setFxKnobValue(fxSuite.dragging, newVal);
+    }
+    if (fxSuite.dragging && fxSuite.dragging.startsWith('eq_')) {
+      handleEqDrag(e);
+    }
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (fxSuite.dragging) {
+      // Notify JUCE drag ended + clear echo guard for knob params
+      var paramKey = FX_KNOB_PARAM_MAP[fxSuite.dragging];
+      if (paramKey) {
+        if (juceMode && JUCE_PARAMS[paramKey] && JUCE_PARAMS[paramKey].sliderState) {
+          JUCE_PARAMS[paramKey].sliderState.sliderDragEnded();
+        }
+        if (window._fxDragging) delete window._fxDragging[paramKey];
+      }
+      // For EQ drags, end gesture + clear echo guard on both freq and gain
+      if (fxSuite.dragging.startsWith('eq_')) {
+        var bandName = fxSuite.dragging.replace('eq_', '');
+        var fk = bandName === 'low' ? 'eqLowFreq' : bandName === 'mid' ? 'eqMidFreq' : 'eqHighFreq';
+        var gk = bandName === 'low' ? 'eqLowGain' : bandName === 'mid' ? 'eqMidGain' : 'eqHighGain';
+        if (juceMode) {
+          if (JUCE_PARAMS[fk] && JUCE_PARAMS[fk].sliderState) JUCE_PARAMS[fk].sliderState.sliderDragEnded();
+          if (JUCE_PARAMS[gk] && JUCE_PARAMS[gk].sliderState) JUCE_PARAMS[gk].sliderState.sliderDragEnded();
+        }
+        if (window._fxDragging) { delete window._fxDragging[fk]; delete window._fxDragging[gk]; }
+      }
+      fxSuite.dragging = null;
+    }
+    var tip = document.getElementById('eqTooltip');
+    if (tip) tip.classList.remove('visible');
+  });
+
+  // ─── Tape Reel-to-Reel Visualization — Isometric 3D Cabinet ───
+  var hissParticles = [];
+  for (var i = 0; i < 40; i++) {
+    hissParticles.push({
+      x: Math.random(), y: Math.random(),
+      life: Math.random(), speed: 0.3 + Math.random() * 0.5,
+      size: 0.3 + Math.random() * 0.8
+    });
+  }
+
+  function drawTapeMechanism(ctx, w, h, t) {
+    ctx.clearRect(0, 0, w * DPR, h * DPR);
+    ctx.save();
+    ctx.scale(DPR, DPR);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    var wow = normalize('wowFlutter', state.params.wowFlutter);
+    var sat = normalize('saturation', state.params.saturation);
+    var hiss = normalize('hiss', state.params.hiss);
+
+    // Scale to fit canvas
+    var maxH = h * 0.85;
+    var sc = Math.min(maxH / 160, w / 220);
+
+    // Cabinet dimensions
+    var fW = 110 * sc;
+    var fH = 140 * sc;
+    var dX = 18 * sc;
+    var dY = -12 * sc;
+
+    var fL = (w - fW - dX) / 2;
+    var fT = (h - fH) / 2 + 4;
+    var fR = fL + fW;
+    var fB = fT + fH;
+
+    // Colors
+    var fillFront = 'rgba(167, 139, 250, 0.10)';
+    var fillSide  = 'rgba(124, 58, 237, 0.14)';
+    var fillTop   = 'rgba(200, 180, 255, 0.08)';
+    var fillBase  = 'rgba(124, 58, 237, 0.18)';
+    var strokeMain = 'rgba(139, 92, 246, 0.55)';
+    var strokeBold = 'rgba(139, 92, 246, 0.7)';
+
+    // Right side face
+    ctx.beginPath();
+    ctx.moveTo(fR, fT);
+    ctx.lineTo(fR + dX, fT + dY);
+    ctx.lineTo(fR + dX, fB + dY);
+    ctx.lineTo(fR, fB);
+    ctx.closePath();
+    ctx.fillStyle = fillSide;
+    ctx.fill();
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Top face
+    ctx.beginPath();
+    ctx.moveTo(fL, fT);
+    ctx.lineTo(fL + dX, fT + dY);
+    ctx.lineTo(fR + dX, fT + dY);
+    ctx.lineTo(fR, fT);
+    ctx.closePath();
+    ctx.fillStyle = fillTop;
+    ctx.fill();
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Front face
+    ctx.beginPath();
+    ctx.moveTo(fL, fT);
+    ctx.lineTo(fR, fT);
+    ctx.lineTo(fR, fB);
+    ctx.lineTo(fL, fB);
+    ctx.closePath();
+    ctx.fillStyle = fillFront;
+    ctx.fill();
+    ctx.strokeStyle = strokeBold;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+
+    // Base trim
+    var baseH = fH * 0.06;
+    ctx.fillStyle = fillBase;
+    ctx.fillRect(fL, fB - baseH, fW, baseH);
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(fL, fB - baseH);
+    ctx.lineTo(fR, fB - baseH);
+    ctx.stroke();
+
+    // Reels
+    var reelR = fW * 0.18;
+    var reelCY = fT + fH * 0.22;
+    var reelLx = fL + fW * 0.30;
+    var reelRx = fL + fW * 0.70;
+    var spokeAngle = t * 1.2;
+
+    var supplyTR = reelR * (0.5 + Math.sin(t * 0.15) * 0.04);
+    var takeupTR = reelR * (0.78 - Math.sin(t * 0.15) * 0.04);
+
+    for (var ri = 0; ri < 2; ri++) {
+      var rcx = ri === 0 ? reelLx : reelRx;
+      var tapeAmt = ri === 0 ? supplyTR : takeupTR;
+
+      if (tapeAmt > 4) {
+        ctx.beginPath();
+        ctx.arc(rcx, reelCY, tapeAmt, 0, Math.PI * 2);
+        ctx.fillStyle = ri === 0 ? 'rgba(167, 139, 250, 0.08)' : 'rgba(139, 92, 246, 0.12)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+        ctx.lineWidth = 0.4;
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.arc(rcx, reelCY, reelR, 0, Math.PI * 2);
+      ctx.strokeStyle = strokeBold;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      for (var si = 0; si < 3; si++) {
+        var a = spokeAngle + si * Math.PI * 2 / 3;
+        var hubD = reelR * 0.25;
+        var flangeD = reelR * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(rcx + Math.cos(a) * hubD, reelCY + Math.sin(a) * hubD);
+        ctx.lineTo(rcx + Math.cos(a) * flangeD, reelCY + Math.sin(a) * flangeD);
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.arc(rcx, reelCY, reelR * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(rcx, reelCY, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.6)';
+      ctx.fill();
+    }
+
+    // Tape path
+    var headY = fT + fH * 0.40;
+    var headCX = fL + fW * 0.5;
+    var gLx = fL + fW * 0.24;
+    var gRx = fL + fW * 0.76;
+    var gY = fT + fH * 0.34;
+
+    ctx.beginPath();
+    ctx.moveTo(reelLx + supplyTR * 0.7, reelCY + supplyTR * 0.7);
+    ctx.lineTo(gLx, gY);
+    ctx.lineTo(headCX - 12 * sc, headY);
+    var wobSegs = 16;
+    for (var ws = 0; ws <= wobSegs; ws++) {
+      var f = ws / wobSegs;
+      var mx = (headCX - 12 * sc) + (24 * sc) * f;
+      var wb = wow * 2 * Math.sin(t * 3 + f * Math.PI * 5) * Math.sin(f * Math.PI);
+      ctx.lineTo(mx, headY + wb);
+    }
+    ctx.lineTo(gRx, gY);
+    ctx.lineTo(reelRx - takeupTR * 0.7, reelCY + takeupTR * 0.7);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Guide rollers
+    var guidePoints = [{x:gLx,y:gY}, {x:gRx,y:gY}];
+    for (var gi = 0; gi < guidePoints.length; gi++) {
+      var gp = guidePoints[gi];
+      ctx.beginPath();
+      ctx.arc(gp.x, gp.y, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+
+    // Head assembly
+    var hdW = 26 * sc;
+    var hdH = 6 * sc;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.rect(headCX - hdW/2, headY - hdH/2, hdW, hdH);
+    ctx.fill();
+    ctx.stroke();
+    for (var hi = 0; hi < 3; hi++) {
+      var gx = headCX - 5 * sc + hi * 5 * sc;
+      ctx.beginPath();
+      ctx.moveTo(gx, headY - hdH/2 + 1.5);
+      ctx.lineTo(gx, headY + hdH/2 - 1.5);
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
+    }
+
+    // Saturation glow
+    if (sat > 0.02) {
+      var glowR = 10 * sc + sat * 14 * sc;
+      var grad = ctx.createRadialGradient(headCX, headY, 0, headCX, headY, glowR);
+      grad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.25) + ')');
+      grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(headCX, headY, glowR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Horizontal slot
+    var slotY = fT + fH * 0.50;
+    var slotW = fW * 0.7;
+    var slotH = fH * 0.06;
+    ctx.fillStyle = 'rgba(124, 58, 237, 0.06)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.rect(fL + (fW - slotW)/2, slotY, slotW, slotH);
+    ctx.fill();
+    ctx.stroke();
+
+    // VU Meters
+    var vuW = 18 * sc;
+    var vuH = 12 * sc;
+    var vuY = fT + fH * 0.60;
+    var vuLx = fL + fW * 0.22;
+    var vuRxP = fL + fW * 0.52;
+
+    for (var vi = 0; vi < 2; vi++) {
+      var vx = vi === 0 ? vuLx : vuRxP;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.rect(vx, vuY, vuW, vuH);
+      ctx.fill();
+      ctx.stroke();
+
+      var vCx = vx + vuW / 2;
+      var vCy = vuY + vuH * 0.85;
+      var arcR = vuW * 0.35;
+      ctx.beginPath();
+      ctx.arc(vCx, vCy, arcR, Math.PI + 0.3, -0.3);
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
+
+      for (var ti = 0; ti <= 6; ti++) {
+        var ta = Math.PI + 0.3 + (ti / 6) * (Math.PI - 0.6);
+        ctx.beginPath();
+        ctx.moveTo(vCx + Math.cos(ta) * (arcR - 1.5), vCy + Math.sin(ta) * (arcR - 1.5));
+        ctx.lineTo(vCx + Math.cos(ta) * arcR, vCy + Math.sin(ta) * arcR);
+        ctx.strokeStyle = ti > 4 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(139, 92, 246, 0.25)';
+        ctx.lineWidth = 0.3;
+        ctx.stroke();
+      }
+
+      var nv = sat * 0.5 + hiss * 0.3 + Math.sin(t * 2.5 + vi * 1.3) * 0.08;
+      var na = Math.PI + 0.3 + Math.min(1, nv) * (Math.PI - 0.6);
+      ctx.beginPath();
+      ctx.moveTo(vCx, vCy);
+      ctx.lineTo(vCx + Math.cos(na) * (arcR + 1), vCy + Math.sin(na) * (arcR + 1));
+      ctx.strokeStyle = 'rgba(124, 58, 237, 0.6)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(vCx, vCy, 0.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.5)';
+      ctx.fill();
+    }
+
+    // Transport buttons
+    var btnY = fT + fH * 0.76;
+    var btnSz = 5 * sc;
+    var btnGap = btnSz + 2 * sc;
+    var btnStartX = fL + fW * 0.5 - (btnGap * 2.5);
+    var btnColors = [
+      'rgba(239, 68, 68, 0.45)',
+      'rgba(34, 197, 94, 0.4)',
+      'rgba(59, 130, 246, 0.35)',
+      'rgba(139, 92, 246, 0.35)',
+      'rgba(107, 114, 128, 0.3)',
+    ];
+    for (var bi = 0; bi < btnColors.length; bi++) {
+      var bx = btnStartX + bi * btnGap;
+      ctx.fillStyle = btnColors[bi];
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, btnY, btnSz, btnSz, 1);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // TERRAIN label
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
+    ctx.font = '500 ' + Math.max(5, 5.5 * sc) + 'px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('T E R R A I N', fL + fW / 2, fB - baseH - 3);
+
+    // Side face vent lines
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.12)';
+    ctx.lineWidth = 0.4;
+    for (var vli = 0; vli < 5; vli++) {
+      var vy = fT + fH * (0.55 + vli * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(fR + 3, vy + dY * (vy - fT) / fH);
+      ctx.lineTo(fR + dX - 3, vy + dY);
+      ctx.stroke();
+    }
+
+    // Hiss particles
+    if (hiss > 0.02) {
+      var count = Math.floor(hiss * 20);
+      for (var pi = 0; pi < count && pi < hissParticles.length; pi++) {
+        var p = hissParticles[pi];
+        p.life += p.speed * 0.018;
+        if (p.life > 1) { p.life = 0; p.x = Math.random(); p.y = Math.random(); }
+        var alpha = Math.sin(p.life * Math.PI) * hiss * 0.3;
+        if (alpha > 0.01) {
+          var px = fL + p.x * fW;
+          var py = fT + p.y * fH;
+          ctx.fillStyle = 'rgba(139, 92, 246, ' + alpha + ')';
+          ctx.beginPath();
+          ctx.arc(px, py, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // ─── Space Visualization — Dense Reverb Particle Cloud ───
+  var SPACE_PARTICLE_COUNT = 150;
+  var spaceParticles = [];
+  for (var spi = 0; spi < SPACE_PARTICLE_COUNT; spi++) {
+    spaceParticles.push({
+      angle: Math.random() * Math.PI * 2,
+      dist: Math.random(),
+      speed: 0.008 + Math.random() * 0.025,
+      baseSize: 0.4 + Math.random() * 2.8,
+      depth: Math.random(),
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.3 + Math.random() * 0.8
+    });
+  }
+
+  function spaceToneRGB(tone) {
+    var r, g, b;
+    if (tone < 0.5) {
+      var tt = tone * 2;
+      r = Math.round(109 + (139 - 109) * tt);
+      g = Math.round(40 + (92 - 40) * tt);
+      b = Math.round(217 + (246 - 217) * tt);
+    } else {
+      var tt2 = (tone - 0.5) * 2;
+      r = Math.round(139 + (196 - 139) * tt2);
+      g = Math.round(92 + (181 - 92) * tt2);
+      b = Math.round(246 + (253 - 246) * tt2);
+    }
+    return { r: r, g: g, b: b };
+  }
+
+  function drawSpace(ctx, w, h, t) {
+    ctx.clearRect(0, 0, w * DPR, h * DPR);
+    ctx.save();
+    ctx.scale(DPR, DPR);
+
+    var size = normalize('spaceSize', state.params.spaceSize);
+    var decay = normalize('spaceDecay', state.params.spaceDecay);
+    var tone = normalize('spaceTone', state.params.spaceTone);
+    var mix = normalize('spaceMix', state.params.spaceMix);
+    var cx = w / 2, cy = h / 2;
+    var maxR = Math.max(w, h) * 0.52;
+    var intensity = 0.08 + mix * 0.92;
+
+    // Background gradient
+    var bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * 0.9);
+    bgGrad.addColorStop(0, 'rgba(248, 245, 252, ' + (intensity * 0.15) + ')');
+    bgGrad.addColorStop(0.5, 'rgba(237, 228, 248, ' + (intensity * 0.06) + ')');
+    bgGrad.addColorStop(1, 'rgba(232, 224, 240, 0)');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Guide rings
+    var ringCount = 3 + Math.floor(size * 3);
+    var spreadFactor = 0.25 + size * 0.75;
+    for (var ri = 1; ri <= ringCount; ri++) {
+      var r = (ri / ringCount) * spreadFactor * maxR;
+      var pulse = Math.sin(t * 0.4 + ri * 0.7) * 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + pulse, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.04 + 0.03 * (1 - ri / ringCount)) + ')';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Particle cloud
+    var toneC = spaceToneRGB(tone);
+    var lifeSpan = 0.2 + decay * 0.8;
+    var emitRate = 0.5 + mix * 2.5;
+
+    ctx.globalCompositeOperation = 'lighter';
+
+    var respawnBudget = emitRate;
+
+    for (var pi = 0; pi < spaceParticles.length; pi++) {
+      var p = spaceParticles[pi];
+      p.dist += p.speed * 0.012;
+      p.wobble += p.wobbleSpeed * 0.02;
+
+      if (p.dist > lifeSpan || p.dist > 1.0) {
+        if (respawnBudget > 0) {
+          respawnBudget -= 1;
+          p.dist = 0;
+          p.angle = Math.random() * Math.PI * 2;
+          p.depth = 0.2 + Math.random() * 0.8;
+          p.baseSize = 0.4 + Math.random() * 2.8;
+          p.speed = 0.008 + Math.random() * 0.025;
+        } else {
+          continue;
+        }
+      }
+
+      var actualDist = p.dist * spreadFactor * maxR;
+      var wobbleOffset = Math.sin(p.wobble) * (2 + p.dist * 4);
+      var px = cx + Math.cos(p.angle) * actualDist * 1.15 + Math.cos(p.wobble * 1.3) * wobbleOffset;
+      var py = cy + Math.sin(p.angle) * actualDist + Math.sin(p.wobble) * wobbleOffset * 0.6;
+
+      var depthScale = 0.4 + p.depth * 0.6;
+      var particleSize = p.baseSize * depthScale * (1 - p.dist * 0.3);
+
+      var distFade = 1 - (p.dist / lifeSpan);
+      var alpha = Math.max(0, distFade * depthScale * intensity * 0.55);
+
+      if (alpha < 0.005 || particleSize < 0.2) continue;
+
+      var highlight = p.depth > 0.7 ? 1.15 : 1.0;
+      var pr = Math.min(255, Math.round(toneC.r * highlight));
+      var pg = Math.min(255, Math.round(toneC.g * highlight));
+      var pb = Math.min(255, Math.round(toneC.b * highlight));
+
+      ctx.fillStyle = 'rgba(' + pr + ', ' + pg + ', ' + pb + ', ' + alpha.toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.arc(px, py, particleSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Center source glow
+    var glowSize = 18 + size * 8 + Math.sin(t * 0.8) * 2;
+    var coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowSize);
+    coreGrad.addColorStop(0, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.35 * intensity) + ')');
+    coreGrad.addColorStop(0.3, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.12 * intensity) + ')');
+    coreGrad.addColorStop(0.7, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.03 * intensity) + ')');
+    coreGrad.addColorStop(1, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', 0)');
+    ctx.fillStyle = coreGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowSize, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Center dot
+    ctx.fillStyle = 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.7 * intensity) + ')';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Breathing halo
+    var haloR = spreadFactor * maxR * 0.85;
+    var haloPulse = Math.sin(t * 0.3) * 0.015 + 0.025;
+    ctx.beginPath();
+    ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (haloPulse * intensity) + ')';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // ─── EQ Visualization ───
+  var EQ_SAMPLE_RATE = 44100;
+  var EQ_MIN_FREQ = 20, EQ_MAX_FREQ = 20000;
+  var EQ_MIN_DB = -15, EQ_MAX_DB = 15;
+
+  function freqToX(freq, w) {
+    return (Math.log10(freq / EQ_MIN_FREQ) / Math.log10(EQ_MAX_FREQ / EQ_MIN_FREQ)) * w;
+  }
+  function xToFreq(x, w) {
+    return EQ_MIN_FREQ * Math.pow(EQ_MAX_FREQ / EQ_MIN_FREQ, x / w);
+  }
+  function dbToY(db, h) {
+    return h * (1 - (db - EQ_MIN_DB) / (EQ_MAX_DB - EQ_MIN_DB));
+  }
+  function yToDb(y, h) {
+    return EQ_MIN_DB + (1 - y / h) * (EQ_MAX_DB - EQ_MIN_DB);
+  }
+
+  function computeBiquadCoeffs(type, freq, gain, Q) {
+    var A = Math.pow(10, gain / 40);
+    var w0 = 2 * Math.PI * freq / EQ_SAMPLE_RATE;
+    var cosw = Math.cos(w0), sinw = Math.sin(w0);
+    var b0, b1, b2, a0, a1, a2;
+
+    if (type === 'lowshelf') {
+      var alpha = sinw / 2 * Math.sqrt(2);
+      var tsa = 2 * Math.sqrt(A) * alpha;
+      b0 = A * ((A+1) - (A-1)*cosw + tsa);
+      b1 = 2*A * ((A-1) - (A+1)*cosw);
+      b2 = A * ((A+1) - (A-1)*cosw - tsa);
+      a0 = (A+1) + (A-1)*cosw + tsa;
+      a1 = -2 * ((A-1) + (A+1)*cosw);
+      a2 = (A+1) + (A-1)*cosw - tsa;
+    } else if (type === 'peak') {
+      var alpha2 = sinw / (2 * Q);
+      b0 = 1 + alpha2 * A;
+      b1 = -2 * cosw;
+      b2 = 1 - alpha2 * A;
+      a0 = 1 + alpha2 / A;
+      a1 = -2 * cosw;
+      a2 = 1 - alpha2 / A;
+    } else if (type === 'highshelf') {
+      var alpha3 = sinw / 2 * Math.sqrt(2);
+      var tsa3 = 2 * Math.sqrt(A) * alpha3;
+      b0 = A * ((A+1) + (A-1)*cosw + tsa3);
+      b1 = -2*A * ((A-1) + (A+1)*cosw);
+      b2 = A * ((A+1) + (A-1)*cosw - tsa3);
+      a0 = (A+1) - (A-1)*cosw + tsa3;
+      a1 = 2 * ((A-1) - (A+1)*cosw);
+      a2 = (A+1) - (A-1)*cosw - tsa3;
+    }
+    return { b0: b0/a0, b1: b1/a0, b2: b2/a0, a1: a1/a0, a2: a2/a0 };
+  }
+
+  // Get current EQ band settings from state.params
+  function getEqBands() {
+    return {
+      low:  { freq: state.params.eqLowFreq,  gain: state.params.eqLowGain,  q: 0.707 },
+      mid:  { freq: state.params.eqMidFreq,  gain: state.params.eqMidGain,  q: 1.0 },
+      high: { freq: state.params.eqHighFreq, gain: state.params.eqHighGain, q: 0.707 },
+    };
+  }
+
+  function evalMagnitudeDb(freq) {
+    var totalDb = 0;
+    var bands = getEqBands();
+    var bandList = [
+      { type: 'lowshelf', freq: bands.low.freq, gain: bands.low.gain, q: bands.low.q },
+      { type: 'peak', freq: bands.mid.freq, gain: bands.mid.gain, q: bands.mid.q },
+      { type: 'highshelf', freq: bands.high.freq, gain: bands.high.gain, q: bands.high.q },
+    ];
+    for (var bi = 0; bi < bandList.length; bi++) {
+      var b = bandList[bi];
+      if (Math.abs(b.gain) < 0.01) continue;
+      var c = computeBiquadCoeffs(b.type, b.freq, b.gain, b.q);
+      var w = 2 * Math.PI * freq / EQ_SAMPLE_RATE;
+      var cos1 = Math.cos(w), cos2 = Math.cos(2*w);
+      var sin1 = Math.sin(w), sin2 = Math.sin(2*w);
+      var numR = c.b0 + c.b1*cos1 + c.b2*cos2;
+      var numI = -(c.b1*sin1 + c.b2*sin2);
+      var denR = 1 + c.a1*cos1 + c.a2*cos2;
+      var denI = -(c.a1*sin1 + c.a2*sin2);
+      var mag = Math.sqrt(numR*numR + numI*numI) / Math.sqrt(denR*denR + denI*denI);
+      totalDb += 20 * Math.log10(Math.max(mag, 0.0001));
+    }
+    return totalDb;
+  }
+
+  function drawEQ(ctx, w, h) {
+    ctx.clearRect(0, 0, w * DPR, h * DPR);
+    ctx.save();
+    ctx.scale(DPR, DPR);
+
+    var pad = { left: 24, right: 8, top: 8, bottom: 18 };
+    var pw = w - pad.left - pad.right;
+    var ph = h - pad.top - pad.bottom;
+
+    // Grid
+    var freqMarkers = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    var freqLabels = ['20','50','100','200','500','1k','2k','5k','10k','20k'];
+    var dbMarkers = [-12, -6, 0, 6, 12];
+
+    ctx.strokeStyle = 'rgba(232, 224, 240, 0.4)';
+    ctx.lineWidth = 0.5;
+
+    for (var fi = 0; fi < freqMarkers.length; fi++) {
+      var x = pad.left + freqToX(freqMarkers[fi], pw);
+      ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + ph); ctx.stroke();
+      ctx.fillStyle = '#B0A4C0';
+      ctx.font = '8px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(freqLabels[fi], x, h - 4);
+    }
+
+    for (var di = 0; di < dbMarkers.length; di++) {
+      var db = dbMarkers[di];
+      var y = pad.top + dbToY(db, ph);
+      ctx.strokeStyle = db === 0 ? 'rgba(232, 224, 240, 0.7)' : 'rgba(232, 224, 240, 0.4)';
+      ctx.lineWidth = db === 0 ? 0.8 : 0.5;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + pw, y); ctx.stroke();
+      ctx.fillStyle = '#B0A4C0';
+      ctx.font = '8px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText((db > 0 ? '+' : '') + db, pad.left - 4, y + 3);
+    }
+
+    // Frequency response curve
+    var zeroY = pad.top + dbToY(0, ph);
+    ctx.beginPath();
+    var curvePts = [];
+    for (var cpx = 0; cpx <= pw; cpx += 2) {
+      var freq = xToFreq(cpx, pw);
+      var cdb = evalMagnitudeDb(freq);
+      var clampedDb = Math.max(EQ_MIN_DB, Math.min(EQ_MAX_DB, cdb));
+      var cy2 = pad.top + dbToY(clampedDb, ph);
+      curvePts.push({ x: pad.left + cpx, y: cy2 });
+      if (cpx === 0) ctx.moveTo(pad.left + cpx, cy2);
+      else ctx.lineTo(pad.left + cpx, cy2);
+    }
+    ctx.strokeStyle = '#8B5CF6';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Fill between curve and 0dB
+    ctx.beginPath();
+    for (var ci = 0; ci < curvePts.length; ci++) {
+      if (ci === 0) ctx.moveTo(curvePts[ci].x, curvePts[ci].y);
+      else ctx.lineTo(curvePts[ci].x, curvePts[ci].y);
+    }
+    ctx.lineTo(curvePts[curvePts.length - 1].x, zeroY);
+    ctx.lineTo(curvePts[0].x, zeroY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
+    ctx.fill();
+
+    // Band control points
+    var bandColors = { low: '#A78BFA', mid: '#8B5CF6', high: '#C4B5FD' };
+    var bands = getEqBands();
+
+    var bandKeys = ['low', 'mid', 'high'];
+    for (var bki = 0; bki < bandKeys.length; bki++) {
+      var key = bandKeys[bki];
+      var band = bands[key];
+      var bx = pad.left + freqToX(band.freq, pw);
+      var by = pad.top + dbToY(band.gain, ph);
+      var isActive = fxSuite.dragging === 'eq_' + key;
+      var isHovered = fxSuite.eqHoveredBand === key;
+      var radius = isActive || isHovered ? 9 : 7;
+
+      ctx.beginPath();
+      ctx.arc(bx, by, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isActive ? '#7C3AED' : bandColors[key];
+      ctx.fill();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      if (isActive || isHovered) {
+        var freqStr = band.freq >= 1000 ? (band.freq / 1000).toFixed(1) + 'kHz' : Math.round(band.freq) + 'Hz';
+        var gainStr = (band.gain > 0 ? '+' : '') + band.gain.toFixed(1) + 'dB';
+        var label = freqStr + ' ' + gainStr;
+
+        var tip = document.getElementById('eqTooltip');
+        if (tip) {
+          tip.textContent = label;
+          tip.classList.add('visible');
+          var wrapper = document.getElementById('eqPageInner');
+          var rect = wrapper.getBoundingClientRect();
+          var canvas = document.getElementById('eqVisCanvas');
+          var cRect = canvas.getBoundingClientRect();
+          var scaleX = cRect.width / w;
+          var scaleY = cRect.height / h;
+          tip.style.left = (bx * scaleX + 12) + 'px';
+          tip.style.top = (by * scaleY - 8) + 'px';
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // ─── EQ Interaction ───
+  function handleEqDrag(e) {
+    var bandName = fxSuite.dragging.replace('eq_', '');
+    var canvas = document.getElementById('eqVisCanvas');
+    var rect = canvas.getBoundingClientRect();
+
+    var pad = { left: 24, right: 8, top: 8, bottom: 18 };
+    var cw = canvas.width / DPR;
+    var ch = canvas.height / DPR;
+    var pw = cw - pad.left - pad.right;
+    var ph = ch - pad.top - pad.bottom;
+
+    var scaleX = cw / rect.width;
+    var scaleY = ch / rect.height;
+    var mx = (e.clientX - rect.left) * scaleX - pad.left;
+    var my = (e.clientY - rect.top) * scaleY - pad.top;
+
+    var ranges = { low: [30, 500], mid: [200, 8000], high: [2000, 20000] };
+    var range = ranges[bandName];
+    var gainRanges = { low: [-12, 12], mid: [-12, 12], high: [-12, 12] };
+
+    var newFreq = Math.max(range[0], Math.min(range[1], xToFreq(mx, pw)));
+    var newGain = Math.max(EQ_MIN_DB, Math.min(EQ_MAX_DB, yToDb(my, ph)));
+    // Clamp gain to param range
+    newGain = Math.max(-12, Math.min(12, newGain));
+
+    // Map band name to param keys
+    var freqKey = bandName === 'low' ? 'eqLowFreq' : bandName === 'mid' ? 'eqMidFreq' : 'eqHighFreq';
+    var gainKey = bandName === 'low' ? 'eqLowGain' : bandName === 'mid' ? 'eqMidGain' : 'eqHighGain';
+
+    state.params[freqKey] = newFreq;
+    state.params[gainKey] = newGain;
+    modBaseValues[freqKey] = newFreq;
+    modBaseValues[gainKey] = newGain;
+    // Push to JUCE continuously during drag
+    if (juceMode) {
+      var jpF = JUCE_PARAMS[freqKey];
+      if (jpF && jpF.sliderState) jpF.sliderState.setNormalisedValue(normalize(freqKey, newFreq));
+      var jpG = JUCE_PARAMS[gainKey];
+      if (jpG && jpG.sliderState) jpG.sliderState.setNormalisedValue(normalize(gainKey, newGain));
+    }
+  }
+
+  // Push all EQ params to JUCE
+  function pushEqToJuce() {
+    var eqParams = ['eqLowFreq','eqLowGain','eqMidFreq','eqMidGain','eqHighFreq','eqHighGain'];
+    for (var ei = 0; ei < eqParams.length; ei++) {
+      pushParamToJuce(eqParams[ei]);
+    }
+  }
+
+  var eqCanvas = document.getElementById('eqVisCanvas');
+  if (eqCanvas) {
+    eqCanvas.addEventListener('mousedown', function(e) {
+      var rect = eqCanvas.getBoundingClientRect();
+      var cw = eqCanvas.width / DPR;
+      var ch = eqCanvas.height / DPR;
+      var pad = { left: 24, right: 8, top: 8, bottom: 18 };
+      var pw = cw - pad.left - pad.right;
+      var ph = ch - pad.top - pad.bottom;
+      var scaleX = cw / rect.width;
+      var scaleY = ch / rect.height;
+      var mx = (e.clientX - rect.left) * scaleX;
+      var my = (e.clientY - rect.top) * scaleY;
+
+      var bands = getEqBands();
+      var bandKeys2 = ['low', 'mid', 'high'];
+      for (var ki = 0; ki < bandKeys2.length; ki++) {
+        var key = bandKeys2[ki];
+        var b = bands[key];
+        var bx = pad.left + freqToX(b.freq, pw);
+        var by = pad.top + dbToY(b.gain, ph);
+        var dist = Math.sqrt(Math.pow(mx - bx, 2) + Math.pow(my - by, 2));
+        if (dist < 14) {
+          e.preventDefault();
+          e.stopPropagation();
+          fxSuite.dragging = 'eq_' + key;
+          // Set echo guard + begin JUCE gesture for both freq and gain
+          var fk = key === 'low' ? 'eqLowFreq' : key === 'mid' ? 'eqMidFreq' : 'eqHighFreq';
+          var gk = key === 'low' ? 'eqLowGain' : key === 'mid' ? 'eqMidGain' : 'eqHighGain';
+          window._fxDragging = window._fxDragging || {};
+          window._fxDragging[fk] = true;
+          window._fxDragging[gk] = true;
+          if (juceMode) {
+            if (JUCE_PARAMS[fk] && JUCE_PARAMS[fk].sliderState) JUCE_PARAMS[fk].sliderState.sliderDragStarted();
+            if (JUCE_PARAMS[gk] && JUCE_PARAMS[gk].sliderState) JUCE_PARAMS[gk].sliderState.sliderDragStarted();
+          }
+          return;
+        }
+      }
+    });
+
+    eqCanvas.addEventListener('mousemove', function(e) {
+      if (fxSuite.dragging) return;
+      var rect = eqCanvas.getBoundingClientRect();
+      var cw = eqCanvas.width / DPR;
+      var ch = eqCanvas.height / DPR;
+      var pad = { left: 24, right: 8, top: 8, bottom: 18 };
+      var pw = cw - pad.left - pad.right;
+      var ph = ch - pad.top - pad.bottom;
+      var scaleX = cw / rect.width;
+      var scaleY = ch / rect.height;
+      var mx = (e.clientX - rect.left) * scaleX;
+      var my = (e.clientY - rect.top) * scaleY;
+
+      fxSuite.eqHoveredBand = null;
+      var bands = getEqBands();
+      var bandKeys3 = ['low', 'mid', 'high'];
+      for (var ki = 0; ki < bandKeys3.length; ki++) {
+        var key = bandKeys3[ki];
+        var b = bands[key];
+        var bx = pad.left + freqToX(b.freq, pw);
+        var by = pad.top + dbToY(b.gain, ph);
+        if (Math.sqrt(Math.pow(mx - bx, 2) + Math.pow(my - by, 2)) < 14) {
+          fxSuite.eqHoveredBand = key;
+          eqCanvas.style.cursor = 'grab';
+          return;
+        }
+      }
+      eqCanvas.style.cursor = 'default';
+      var tip = document.getElementById('eqTooltip');
+      if (tip) tip.classList.remove('visible');
+    });
+
+    eqCanvas.addEventListener('dblclick', function(e) {
+      var rect = eqCanvas.getBoundingClientRect();
+      var cw = eqCanvas.width / DPR;
+      var ch = eqCanvas.height / DPR;
+      var pad = { left: 24, right: 8, top: 8, bottom: 18 };
+      var pw = cw - pad.left - pad.right;
+      var ph = ch - pad.top - pad.bottom;
+      var scaleX = cw / rect.width;
+      var scaleY = ch / rect.height;
+      var mx = (e.clientX - rect.left) * scaleX;
+      var my = (e.clientY - rect.top) * scaleY;
+
+      var bands = getEqBands();
+      var bandKeys4 = ['low', 'mid', 'high'];
+      for (var ki = 0; ki < bandKeys4.length; ki++) {
+        var key = bandKeys4[ki];
+        var b = bands[key];
+        var bx = pad.left + freqToX(b.freq, pw);
+        var by = pad.top + dbToY(b.gain, ph);
+        if (Math.sqrt(Math.pow(mx - bx, 2) + Math.pow(my - by, 2)) < 14) {
+          var gainKey = key === 'low' ? 'eqLowGain' : key === 'mid' ? 'eqMidGain' : 'eqHighGain';
+          state.params[gainKey] = 0;
+          modBaseValues[gainKey] = 0;
+          pushParamToJuce(gainKey);
+          return;
+        }
+      }
+    });
+  }
+
+  // Flatten button
+  var flattenBtn = document.getElementById('eqFlattenBtn');
+  if (flattenBtn) {
+    flattenBtn.addEventListener('click', function() { fxSuite.eqFlattening = true; });
+  }
+
+  // ─── Animation Loop ───
+  function fxAnimate(timestamp) {
+    var dt = Math.min((timestamp - lastFxTime) / 1000, 0.1);
+    lastFxTime = timestamp;
+
+    // Only draw active page
+    if (fxSuite.page === 0) {
+      tapeTime += dt;
+      var tapeCanvas = document.getElementById('tapeMechCanvas');
+      if (tapeCanvas && tapeCanvas.width > 0) {
+        drawTapeMechanism(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);
+      }
+      var tapeKnobIds = ['wow', 'saturation', 'hiss'];
+      for (var tki = 0; tki < tapeKnobIds.length; tki++) {
+        var tid = tapeKnobIds[tki];
+        var tc = document.getElementById('fxKnob_' + tid);
+        if (tc) {
+          var tNorm = getFxKnobValue(tid);
+          drawFxKnob(tc, tNorm, fxSuite.dragging === tid, fxSuite.hoveredKnob === tid);
+          var tv = document.getElementById('fxVal_' + tid);
+          if (tv) tv.textContent = fmtFxKnobValue(tid, tNorm);
+          // Draw animated icon inside tape knobs
+          var tIcon = document.getElementById('fxIcon_' + tid);
+          if (tIcon) {
+            var iconType = TAPE_ICON_IDS[tid];
+            var iconColor = (fxSuite.hoveredKnob === tid || fxSuite.dragging === tid) ? '#8B5CF6' : '#B0A4C0';
+            drawIcon(tIcon, iconType, iconColor, tNorm, tapeTime);
+          }
+        }
+      }
+    }
+
+    if (fxSuite.page === 1) {
+      spaceTime += dt;
+      var spaceCanvas = document.getElementById('spaceVisCanvas');
+      if (spaceCanvas && spaceCanvas.width > 0) {
+        drawSpace(spaceCanvas.getContext('2d'), spaceCanvas.width / DPR, spaceCanvas.height / DPR, spaceTime);
+      }
+      var spaceKnobIds = ['spaceSize', 'spaceDecay', 'spaceTone', 'spaceMix'];
+      for (var ski = 0; ski < spaceKnobIds.length; ski++) {
+        var sid = spaceKnobIds[ski];
+        var sc2 = document.getElementById('fxKnob_' + sid);
+        if (sc2) {
+          drawFxKnob(sc2, getFxKnobValue(sid), fxSuite.dragging === sid, fxSuite.hoveredKnob === sid);
+          var sv = document.getElementById('fxVal_' + sid);
+          if (sv) sv.textContent = fmtFxKnobValue(sid, getFxKnobValue(sid));
+        }
+      }
+    }
+
+    if (fxSuite.page === 2) {
+      if (fxSuite.eqFlattening) {
+        var allFlat = true;
+        var gainKeys = ['eqLowGain', 'eqMidGain', 'eqHighGain'];
+        for (var gki = 0; gki < gainKeys.length; gki++) {
+          var g = state.params[gainKeys[gki]];
+          if (Math.abs(g) > 0.05) {
+            state.params[gainKeys[gki]] += (0 - g) * 0.12;
+            allFlat = false;
+          } else {
+            state.params[gainKeys[gki]] = 0;
+          }
+        }
+        if (allFlat) {
+          fxSuite.eqFlattening = false;
+          pushEqToJuce();
+        }
+      }
+      var eqC = document.getElementById('eqVisCanvas');
+      if (eqC && eqC.width > 0) {
+        drawEQ(eqC.getContext('2d'), eqC.width / DPR, eqC.height / DPR);
+      }
+    }
+
+    requestAnimationFrame(fxAnimate);
+  }
+
+  // ─── Size Canvases to Actual Container ───
+  function sizeFxCanvases() {
+    var container = document.querySelector('.fx-pages-container');
+    if (!container) return;
+    var cw = container.offsetWidth;
+    var ch = container.offsetHeight;
+    if (cw < 30 || ch < 30) return;
+
+    var tapeMech = document.getElementById('tapeMechCanvas');
+    if (tapeMech) {
+      var mechH = Math.max(60, ch - 70);
+      fxSetupCanvas(tapeMech, Math.min(cw - 20, 360), mechH);
+    }
+
+    var spaceVis = document.getElementById('spaceVisCanvas');
+    if (spaceVis) {
+      fxSetupCanvas(spaceVis, cw, ch);
+    }
+
+    var eqVis = document.getElementById('eqVisCanvas');
+    if (eqVis) {
+      fxSetupCanvas(eqVis, cw - 16, ch - 8);
+    }
+  }
+
+  sizeFxCanvases();
+
+  var resizeObs = new ResizeObserver(function() { sizeFxCanvases(); });
+  var pagesContainer = document.querySelector('.fx-pages-container');
+  if (pagesContainer) resizeObs.observe(pagesContainer);
+
+  var tapeSection = document.getElementById('tape-section');
+  if (tapeSection) {
+    tapeSection.addEventListener('transitionend', function() { sizeFxCanvases(); });
+  }
+
+  window._fxSizeFn = sizeFxCanvases;
+
+  requestAnimationFrame(fxAnimate);
+}
+
 // ---- Initialize ----
 function init() {
   initTerrain();
@@ -5553,6 +7205,7 @@ function init() {
   drawTransportIcons();
   drawUndoIcon();
   drawFeedIcon();
+  initFxSuite();
   // Initialize JUCE bindings (sync param values from DAW)
   initJuceBindings();
   initJucePresets();
