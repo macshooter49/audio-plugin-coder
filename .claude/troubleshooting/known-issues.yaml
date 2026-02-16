@@ -236,3 +236,17 @@ issues:
     frequency: 1
     last_occurred: 2026-02-09
     attempts_before_resolution: 1
+
+  - id: build-016
+    title: "[Auto] xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/D..."
+    category: build
+    severity: high
+    symptoms:
+    - "xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance"
+    error_patterns:
+    - "error:"
+    resolution_status: investigating
+    resolution_file: resolutions/build-016.md
+    frequency: 1
+    last_occurred: 2026-02-16
+    attempts_before_resolution: 1
