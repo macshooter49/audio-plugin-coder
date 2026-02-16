@@ -120,6 +120,7 @@ void TerrainAudioProcessor::loadPreset(int index)
     // Restore grain engine on/off, tape on/off, and drift link states
     grainEngineEnabled.store(p.grainEngineEnabled);
     tapeEnabled.store(p.tapeEnabled);
+    setParam(ParameterIDs::TAPE_MACHINE, p.tapeMachine);
     wanderLinked.store(p.wanderLinked);
 }
 
@@ -172,6 +173,7 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.grainSyncEnabled = grainSyncEnabled.load();
     p.grainEngineEnabled = grainEngineEnabled.load();
     p.tapeEnabled        = tapeEnabled.load();
+    p.tapeMachine        = apvts.getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load();
     p.wanderLinked        = wanderLinked.load();
     return p;
 }
@@ -298,6 +300,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Tape machine selection
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::TAPE_MACHINE, 1 },
+        "Tape Machine",
+        juce::StringArray { "Studio", "Cassette", "Wire" },
+        0));
 
     // Output gain: -12 dB to +12 dB, default 0 dB
     layout.add (std::make_unique<juce::AudioParameterFloat>(
@@ -648,6 +657,9 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     const bool grainOn = grainEngineEnabled.load() > 0.5f;
     const bool tapeOn = tapeEnabled.load() > 0.5f;
+    const int tapeMachineIdx = static_cast<int>(apvts.getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load());
+    tapeProcessorL.setMachine(tapeMachineIdx);
+    tapeProcessorR.setMachine(tapeMachineIdx);
     const bool feedToGrain = tapeLoopFeedToGrain.load() > 0.5f;
 
     // When feed mode activates, clear the grain engine's circular buffer.
@@ -1002,6 +1014,7 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("grainSyncEnabled",  p.grainSyncEnabled,  nullptr);
         node.setProperty("grainEngineEnabled", p.grainEngineEnabled, nullptr);
         node.setProperty("tapeEnabled",        p.tapeEnabled,        nullptr);
+        node.setProperty("tapeMachine",        p.tapeMachine,        nullptr);
         node.setProperty("wanderLinked",        p.wanderLinked,        nullptr);
         node.setProperty("loopLength",      p.loopLength,      nullptr);
         node.setProperty("loopFeedback",    p.loopFeedback,    nullptr);
@@ -1076,6 +1089,7 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.grainSyncEnabled  = static_cast<float>(child.getProperty("grainSyncEnabled",  0.f));
         p.grainEngineEnabled = static_cast<float>(child.getProperty("grainEngineEnabled", 1.f));
         p.tapeEnabled        = static_cast<float>(child.getProperty("tapeEnabled",        1.f));
+        p.tapeMachine        = static_cast<float>(child.getProperty("tapeMachine",        0.f));
         p.wanderLinked        = static_cast<float>(child.getProperty("wanderLinked",        1.f));
         p.loopLength      = static_cast<float>(child.getProperty("loopLength",      3.f));
         p.loopFeedback    = static_cast<float>(child.getProperty("loopFeedback",   85.f));

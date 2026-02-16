@@ -35,6 +35,7 @@ struct PresetData
     float grainEngineEnabled = 1.f; // 1 = on (default), 0 = bypass grain processing
     // Tape engine on/off
     float tapeEnabled = 1.f; // 1 = on (default), 0 = bypass tape processing
+    float tapeMachine = 0.f; // 0=Studio, 1=Cassette, 2=Wire
     // Drift link to XY pad
     float wanderLinked = 1.f; // 1 = linked (default), 0 = unlinked from XY pad
     float grainFilter = 50.f; // 0 = HP, 50 = bypass, 100 = LP

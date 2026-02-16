@@ -159,6 +159,22 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             {
                 complete(audioProcessor.tapeEnabled.load());
             })
+            .withNativeFunction("getTapeMachine", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(static_cast<int>(audioProcessor.getAPVTS().getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load()));
+            })
+            .withNativeFunction("setTapeMachine", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    int idx = static_cast<int>(args[0]);
+                    if (auto* param = audioProcessor.getAPVTS().getParameter(ParameterIDs::TAPE_MACHINE))
+                        param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(idx)));
+                }
+                complete({});
+            })
             .withNativeFunction("setDriftLinked", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

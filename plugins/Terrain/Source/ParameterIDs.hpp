@@ -17,6 +17,7 @@ namespace ParameterIDs
     constexpr char WOW_FLUTTER[]  = "WOW_FLUTTER";
     constexpr char SATURATION[]   = "SATURATION";
     constexpr char HISS[]         = "HISS";
+    constexpr char TAPE_MACHINE[] = "TAPE_MACHINE";
     constexpr char OUTPUT_GAIN[]  = "OUTPUT_GAIN";
     constexpr char MASTER_MIX[]   = "MASTER_MIX";
 
