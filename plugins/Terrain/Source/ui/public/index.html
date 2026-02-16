@@ -710,6 +710,49 @@ body {
   gap: 16px;
   padding: 10px 0 6px;
 }
+.machine-switcher {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 0 4px;
+  gap: 2px;
+}
+.machine-arrow {
+  background: none;
+  border: none;
+  color: rgba(139, 92, 246, 0.5);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s;
+}
+.machine-arrow:hover {
+  color: rgba(167, 139, 250, 0.9);
+}
+.machine-name {
+  color: rgba(167, 139, 250, 0.85);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  min-width: 70px;
+  text-align: center;
+}
+.machine-dots {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.machine-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.2);
+  transition: background 0.2s;
+}
+.machine-dot.active {
+  background: rgba(167, 139, 250, 0.8);
+}
 
 /* Space page */
 .space-page-layout {
@@ -2030,6 +2073,18 @@ body {
         <div class="fx-pages-container">
           <div class="fx-page active" id="fxPageTape">
             <div class="tape-fx-page">
+              <div class="machine-switcher" id="machineSwitcher">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <button class="machine-arrow" id="machPrev">&#9664;</button>
+                  <span class="machine-name" id="machineName">STUDIO</span>
+                  <button class="machine-arrow" id="machNext">&#9654;</button>
+                </div>
+                <div class="machine-dots">
+                  <span class="machine-dot active"></span>
+                  <span class="machine-dot"></span>
+                  <span class="machine-dot"></span>
+                </div>
+              </div>
               <div class="tape-mechanism-wrap">
                 <canvas id="tapeMechCanvas"></canvas>
               </div>
@@ -2575,6 +2630,7 @@ const state = {
   hoveredHero: false,
   draggingHero: false,
   tapeSubTab: 'fx',
+  tapeMachine: 0,
   grainSyncEnabled: false,
   speedFreeform: false,
   feedToGrain: false,
@@ -2687,6 +2743,7 @@ window.updateFeedState = function(active) {
 let setGrainEngineEnabledFn, getGrainEngineEnabledFn;
 let setGrainSyncFn, getGrainSyncFn;
 let setTapeEnabledFn, getTapeEnabledFn;
+let setTapeMachineFn, getTapeMachineFn;
 let setTapeLoopRecordFn, getTapeLoopRecordFn;
 let setTapeLoopPlayFn, getTapeLoopPlayFn;
 let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn;
@@ -2735,6 +2792,8 @@ async function initJuceBindings() {
     getGrainSyncFn = window.Juce.getNativeFunction('getGrainSync');
     setTapeEnabledFn = window.Juce.getNativeFunction('setTapeEnabled');
     getTapeEnabledFn = window.Juce.getNativeFunction('getTapeEnabled');
+    getTapeMachineFn = window.Juce.getNativeFunction('getTapeMachine');
+    setTapeMachineFn = window.Juce.getNativeFunction('setTapeMachine');
 
     // Tape loop transport native functions
     setTapeLoopRecordFn = window.Juce.getNativeFunction('setTapeLoopRecord');
@@ -2763,6 +2822,10 @@ async function initJuceBindings() {
     const tapeOn = await getTapeEnabledFn();
     state.sectionEnabled.tape = tapeOn > 0.5;
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
+
+    const machineIdx = await getTapeMachineFn();
+    state.tapeMachine = parseInt(machineIdx) || 0;
+    updateMachineSwitcher();
 
     // Sync initial grain sync state from backend
     const grainSyncState = await getGrainSyncFn();
@@ -6164,6 +6227,10 @@ function initFxSuite() {
   createFxKnob('saturation', 'SATURATION', tapeKnobContainer);
   createFxKnob('hiss', 'HISS', tapeKnobContainer);
 
+  // Machine switcher event handlers
+  document.getElementById('machPrev').addEventListener('click', function() { cycleMachine(-1); });
+  document.getElementById('machNext').addEventListener('click', function() { cycleMachine(1); });
+
   // Create space knobs
   var spaceKnobsLeft = document.getElementById('spaceKnobsLeft');
   var spaceKnobsRight = document.getElementById('spaceKnobsRight');
@@ -6211,6 +6278,25 @@ function initFxSuite() {
     if (tip) tip.classList.remove('visible');
   });
 
+  // ─── Machine Switcher Logic ───
+  var TAPE_MACHINES = ['STUDIO', 'CASSETTE', 'WIRE'];
+
+  function cycleMachine(dir) {
+    state.tapeMachine = (state.tapeMachine + dir + 3) % 3;
+    if (setTapeMachineFn) setTapeMachineFn(state.tapeMachine);
+    updateMachineSwitcher();
+  }
+
+  function updateMachineSwitcher() {
+    var nameEl = document.getElementById('machineName');
+    if (nameEl) nameEl.textContent = TAPE_MACHINES[state.tapeMachine];
+    var dots = document.querySelectorAll('.machine-dot');
+    for (var i = 0; i < dots.length; i++) {
+      if (i === state.tapeMachine) dots[i].classList.add('active');
+      else dots[i].classList.remove('active');
+    }
+  }
+
   // ─── Tape Reel-to-Reel Visualization — Isometric 3D Cabinet ───
   var hissParticles = [];
   for (var i = 0; i < 40; i++) {
@@ -6221,7 +6307,7 @@ function initFxSuite() {
     });
   }
 
-  function drawTapeMechanism(ctx, w, h, t) {
+  function drawStudioViz(ctx, w, h, t) {
     ctx.clearRect(0, 0, w * DPR, h * DPR);
     ctx.save();
     ctx.scale(DPR, DPR);
@@ -6553,6 +6639,417 @@ function initFxSuite() {
     }
 
     ctx.restore();
+  }
+
+  // ─── Cassette Visualization ───
+  function drawCassetteViz(ctx, w, h, t) {
+    ctx.clearRect(0, 0, w * DPR, h * DPR);
+    ctx.save();
+    ctx.scale(DPR, DPR);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    var wow = normalize('wowFlutter', state.params.wowFlutter);
+    var sat = normalize('saturation', state.params.saturation);
+    var hiss = normalize('hiss', state.params.hiss);
+
+    // Scale to fit
+    var sc = Math.min(h * 0.8 / 130, w / 200);
+
+    // Cassette body dimensions (roughly 100x64 aspect, like a real cassette)
+    var cW = 160 * sc;
+    var cH = 100 * sc;
+    var cL = (w - cW) / 2;
+    var cT = (h - cH) / 2;
+    var cR = cL + cW;
+    var cB = cT + cH;
+    var cornerR = 6 * sc;
+
+    // Colors
+    var strokeMain = 'rgba(139, 92, 246, 0.55)';
+    var strokeBold = 'rgba(139, 92, 246, 0.7)';
+    var fillBody = 'rgba(167, 139, 250, 0.06)';
+    var fillWindow = 'rgba(124, 58, 237, 0.08)';
+
+    // Cassette body (rounded rect)
+    ctx.beginPath();
+    ctx.roundRect(cL, cT, cW, cH, cornerR);
+    ctx.fillStyle = fillBody;
+    ctx.fill();
+    ctx.strokeStyle = strokeBold;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+
+    // Tape window (upper area)
+    var winL = cL + cW * 0.12;
+    var winR = cR - cW * 0.12;
+    var winT = cT + cH * 0.12;
+    var winB = cT + cH * 0.55;
+    var winW = winR - winL;
+    var winH = winB - winT;
+    var winCornerR = 4 * sc;
+
+    ctx.beginPath();
+    ctx.roundRect(winL, winT, winW, winH, winCornerR);
+    ctx.fillStyle = fillWindow;
+    ctx.fill();
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Spool hubs (two circles in the window)
+    var spoolR = winH * 0.32;
+    var spoolCY = winT + winH * 0.5;
+    var spoolLx = winL + winW * 0.28;
+    var spoolRx = winL + winW * 0.72;
+    var spokeAngle = t * 1.5;
+
+    // Tape wound on spools (supply side has more, takeup less, animated)
+    var supplyR = spoolR * (0.85 + Math.sin(t * 0.12) * 0.05);
+    var takeupR = spoolR * (0.55 - Math.sin(t * 0.12) * 0.05);
+
+    for (var si = 0; si < 2; si++) {
+      var sx = si === 0 ? spoolLx : spoolRx;
+      var tapeR = si === 0 ? supplyR : takeupR;
+
+      // Tape wound
+      if (tapeR > 2) {
+        ctx.beginPath();
+        ctx.arc(sx, spoolCY, tapeR, 0, Math.PI * 2);
+        ctx.fillStyle = si === 0 ? 'rgba(167, 139, 250, 0.1)' : 'rgba(139, 92, 246, 0.14)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+        ctx.lineWidth = 0.4;
+        ctx.stroke();
+      }
+
+      // Spool hub circle
+      ctx.beginPath();
+      ctx.arc(sx, spoolCY, spoolR * 0.35, 0, Math.PI * 2);
+      ctx.strokeStyle = strokeBold;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Spool teeth (6 teeth)
+      for (var ti = 0; ti < 6; ti++) {
+        var a = spokeAngle + ti * Math.PI / 3;
+        var innerR = spoolR * 0.12;
+        var outerR = spoolR * 0.32;
+        ctx.beginPath();
+        ctx.moveTo(sx + Math.cos(a) * innerR, spoolCY + Math.sin(a) * innerR);
+        ctx.lineTo(sx + Math.cos(a) * outerR, spoolCY + Math.sin(a) * outerR);
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(sx, spoolCY, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.6)';
+      ctx.fill();
+    }
+
+    // Tape strip between spools (visible through window)
+    var tapeY = winB - winH * 0.15;
+    ctx.beginPath();
+    ctx.moveTo(spoolLx - supplyR * 0.5, spoolCY + supplyR * 0.85);
+    ctx.lineTo(winL + 4, tapeY);
+    // Wobble along bottom of window
+    var wobSegs = 12;
+    for (var ws = 0; ws <= wobSegs; ws++) {
+      var f = ws / wobSegs;
+      var wx = (winL + 4) + (winW - 8) * f;
+      var wb = wow * 1.5 * Math.sin(t * 3.5 + f * Math.PI * 4) * Math.sin(f * Math.PI);
+      ctx.lineTo(wx, tapeY + wb);
+    }
+    ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Tape guide pins at bottom of cassette shell
+    var pinY = cB - cH * 0.15;
+    var pins = [cL + cW * 0.2, cL + cW * 0.35, cL + cW * 0.5, cL + cW * 0.65, cL + cW * 0.8];
+    for (var pi = 0; pi < pins.length; pi++) {
+      ctx.beginPath();
+      ctx.arc(pins[pi], pinY, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Label area
+    var labelY = cT + cH * 0.62;
+    var labelH = cH * 0.18;
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cL + cW * 0.15, labelY);
+    ctx.lineTo(cR - cW * 0.15, labelY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cL + cW * 0.15, labelY + labelH);
+    ctx.lineTo(cR - cW * 0.15, labelY + labelH);
+    ctx.stroke();
+
+    // "CASSETTE" label text
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
+    ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('C A S S E T T E', cL + cW / 2, labelY + labelH / 2);
+
+    // Screw holes (corners)
+    var screwInset = 8 * sc;
+    var screwPositions = [
+      [cL + screwInset, cT + screwInset],
+      [cR - screwInset, cT + screwInset],
+      [cL + screwInset, cB - screwInset],
+      [cR - screwInset, cB - screwInset],
+    ];
+    for (var sci = 0; sci < screwPositions.length; sci++) {
+      ctx.beginPath();
+      ctx.arc(screwPositions[sci][0], screwPositions[sci][1], 2.5, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(screwPositions[sci][0], screwPositions[sci][1], 0.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.3)';
+      ctx.fill();
+    }
+
+    // Saturation glow on tape strip
+    if (sat > 0.02) {
+      var glowCX = cL + cW / 2;
+      var grad = ctx.createRadialGradient(glowCX, tapeY, 0, glowCX, tapeY, 30 * sc);
+      grad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.2) + ')');
+      grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(glowCX, tapeY, 30 * sc, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Hiss particles
+    if (hiss > 0.02) {
+      var count = Math.floor(hiss * 20);
+      for (var pi2 = 0; pi2 < count && pi2 < hissParticles.length; pi2++) {
+        var hp = hissParticles[pi2];
+        hp.life += hp.speed * 0.018;
+        if (hp.life > 1) { hp.life = 0; hp.x = Math.random(); hp.y = Math.random(); }
+        var alpha = Math.sin(hp.life * Math.PI) * hiss * 0.3;
+        if (alpha > 0.01) {
+          var hpx = cL + hp.x * cW;
+          var hpy = cT + hp.y * cH;
+          ctx.fillStyle = 'rgba(139, 92, 246, ' + alpha + ')';
+          ctx.beginPath();
+          ctx.arc(hpx, hpy, hp.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // ─── Wire Visualization ───
+  function drawWireViz(ctx, w, h, t) {
+    ctx.clearRect(0, 0, w * DPR, h * DPR);
+    ctx.save();
+    ctx.scale(DPR, DPR);
+
+    var wow = normalize('wowFlutter', state.params.wowFlutter);
+    var sat = normalize('saturation', state.params.saturation);
+    var hiss = normalize('hiss', state.params.hiss);
+
+    var sc = Math.min(h * 0.8 / 140, w / 220);
+    var cx = w / 2;
+    var cy = h / 2;
+
+    var strokeMain = 'rgba(139, 92, 246, 0.45)';
+    var strokeBold = 'rgba(139, 92, 246, 0.6)';
+
+    // Jitter function — everything shakes with wow
+    var jit = function() { return (Math.random() - 0.5) * wow * 4; };
+
+    // Wire spool (left side) — circular, with wire wrapping
+    var spoolCX = cx - 50 * sc;
+    var spoolCY = cy - 5 * sc;
+    var spoolR = 35 * sc;
+
+    // Outer spool ring (incomplete — broken)
+    ctx.beginPath();
+    var spoolSegs = 8;
+    for (var si = 0; si < spoolSegs; si++) {
+      var a1 = (si / spoolSegs) * Math.PI * 2 + t * 0.3;
+      var a2 = a1 + (Math.PI * 2 / spoolSegs) * 0.7; // gap between segments
+      ctx.moveTo(spoolCX + Math.cos(a1) * spoolR + jit(), spoolCY + Math.sin(a1) * spoolR + jit());
+      for (var aj = 0; aj <= 8; aj++) {
+        var aa = a1 + (a2 - a1) * (aj / 8);
+        ctx.lineTo(spoolCX + Math.cos(aa) * spoolR + jit() * 0.3, spoolCY + Math.sin(aa) * spoolR + jit() * 0.3);
+      }
+    }
+    ctx.strokeStyle = strokeBold;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Wire wrapping (concentric broken arcs)
+    for (var wi = 0; wi < 4; wi++) {
+      var wr = spoolR * (0.4 + wi * 0.12);
+      var startA = t * (0.5 + wi * 0.2) + wi * 1.3;
+      var arcLen = Math.PI * (0.8 + Math.sin(t + wi) * 0.3);
+      ctx.beginPath();
+      ctx.arc(spoolCX + jit() * 0.5, spoolCY + jit() * 0.5, wr, startA, startA + arcLen);
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.15 + wi * 0.05) + ')';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+
+    // Spool center
+    ctx.beginPath();
+    ctx.arc(spoolCX, spoolCY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fill();
+    ctx.strokeStyle = strokeMain;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Wire path from spool to playback mechanism (jagged, broken)
+    var mechX = cx + 45 * sc;
+    var mechY = cy;
+    ctx.beginPath();
+    ctx.moveTo(spoolCX + spoolR, spoolCY + jit());
+    var wireSegs = 20;
+    for (var wsi = 1; wsi <= wireSegs; wsi++) {
+      var f = wsi / wireSegs;
+      var wx = spoolCX + spoolR + (mechX - spoolCX - spoolR) * f;
+      var wy = spoolCY + (mechY - spoolCY) * f;
+      // Add jaggedness that increases with wow
+      wy += Math.sin(t * 4 + f * Math.PI * 6) * wow * 3;
+      wy += (Math.random() - 0.5) * wow * 2;
+      // Saturation creates occasional displacement
+      if (sat > 0.3 && Math.random() < sat * 0.1) {
+        wy += (Math.random() - 0.5) * sat * 8;
+      }
+      ctx.lineTo(wx, wy);
+    }
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Playback mechanism (right side) — angular, geometric, broken
+    // Main frame — incomplete rectangle
+    var mW = 40 * sc;
+    var mH = 55 * sc;
+    var mL = mechX - mW / 2;
+    var mT = mechY - mH / 2;
+
+    // Draw sides as separate broken lines
+    var sides = [
+      [[mL, mT], [mL + mW, mT]],           // top
+      [[mL + mW, mT], [mL + mW, mT + mH]], // right
+      [[mL + mW, mT + mH], [mL, mT + mH]], // bottom
+      [[mL, mT + mH], [mL, mT]],           // left
+    ];
+    for (var sdi = 0; sdi < sides.length; sdi++) {
+      // Each side is drawn partially (broken effect)
+      var drawLen = 0.5 + Math.sin(t * 0.7 + sdi * 1.5) * 0.2 + 0.2;
+      var s0 = sides[sdi][0];
+      var s1 = sides[sdi][1];
+      ctx.beginPath();
+      ctx.moveTo(s0[0] + jit(), s0[1] + jit());
+      ctx.lineTo(
+        s0[0] + (s1[0] - s0[0]) * drawLen + jit(),
+        s0[1] + (s1[1] - s0[1]) * drawLen + jit()
+      );
+      ctx.strokeStyle = strokeMain;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Internal components — angular shapes
+    // Playback head (triangle-ish)
+    ctx.beginPath();
+    ctx.moveTo(mechX - 6 * sc + jit(), mechY - 12 * sc + jit());
+    ctx.lineTo(mechX + 6 * sc + jit(), mechY - 12 * sc + jit());
+    ctx.lineTo(mechX + jit(), mechY - 4 * sc + jit());
+    ctx.closePath();
+    ctx.strokeStyle = strokeBold;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Motor circle (off-center)
+    ctx.beginPath();
+    ctx.arc(mechX + 8 * sc + jit(), mechY + 12 * sc + jit(), 8 * sc, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+
+    // Rotating element inside motor
+    var motorAngle = t * 2.5;
+    for (var mi = 0; mi < 3; mi++) {
+      var ma = motorAngle + mi * Math.PI * 2 / 3;
+      ctx.beginPath();
+      ctx.moveTo(mechX + 8 * sc, mechY + 12 * sc);
+      ctx.lineTo(
+        mechX + 8 * sc + Math.cos(ma) * 6 * sc + jit(),
+        mechY + 12 * sc + Math.sin(ma) * 6 * sc + jit()
+      );
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Glitch artifacts (increase with saturation)
+    if (sat > 0.05) {
+      var numGlitches = Math.floor(sat * 8);
+      for (var gi = 0; gi < numGlitches; gi++) {
+        var gx = cx + (Math.sin(t * 3.7 + gi * 2.1) * 0.5) * w * 0.6;
+        var gy = cy + (Math.cos(t * 2.3 + gi * 1.7) * 0.5) * h * 0.5;
+        var gLen = 5 + Math.sin(t * 1.3 + gi) * 10 * sat;
+        var gAngle = t * 0.5 + gi * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(gx, gy);
+        ctx.lineTo(gx + Math.cos(gAngle) * gLen * sc, gy + Math.sin(gAngle) * gLen * sc);
+        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (sat * 0.15 + Math.sin(t + gi) * 0.05) + ')';
+        ctx.lineWidth = 0.3 + Math.sin(t * 2 + gi) * 0.25 + 0.25;
+        ctx.stroke();
+      }
+    }
+
+    // Hiss — static/noise dots (different from other machines' particles)
+    if (hiss > 0.02) {
+      var noiseDots = Math.floor(hiss * 40);
+      for (var ni = 0; ni < noiseDots; ni++) {
+        var nx = cx + Math.sin(t * 5.1 + ni * 3.7) * w * 0.35;
+        var ny = cy + Math.cos(t * 4.3 + ni * 2.9) * h * 0.3;
+        var na = hiss * (0.1 + Math.sin(t * 7 + ni) * 0.05 + 0.05);
+        ctx.fillStyle = 'rgba(139, 92, 246, ' + na + ')';
+        ctx.fillRect(nx, ny, 1 + Math.sin(t + ni) * 0.5 + 0.5, 1 + Math.cos(t + ni) * 0.5 + 0.5);
+      }
+    }
+
+    // "W I R E" label (barely visible, glitchy)
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.12)';
+    ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('W I R E', cx + jit() * 2, cy + 55 * sc + jit() * 2);
+
+    ctx.restore();
+  }
+
+  // ─── Tape Visualization Dispatcher ───
+  function drawTapeVisualization(ctx, w, h, t) {
+    switch (state.tapeMachine) {
+      case 0: drawStudioViz(ctx, w, h, t); break;
+      case 1: drawCassetteViz(ctx, w, h, t); break;
+      case 2: drawWireViz(ctx, w, h, t); break;
+    }
   }
 
   // ─── Space Visualization — Animated Waveform Decay ───
@@ -7044,7 +7541,7 @@ function initFxSuite() {
       tapeTime += dt;
       var tapeCanvas = document.getElementById('tapeMechCanvas');
       if (tapeCanvas && tapeCanvas.width > 0) {
-        drawTapeMechanism(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);
+        drawTapeVisualization(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);
       }
       var tapeKnobIds = ['wow', 'saturation', 'hiss'];
       for (var tki = 0; tki < tapeKnobIds.length; tki++) {
