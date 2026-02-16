@@ -687,6 +687,20 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float loopDegrade  = modulationEngine.getModulatedValue(ModulationEngine::pLoopDegrade,  smoothedLoopDegrade.getNextValue()) * 0.01f;
         const float loopSpeedParam = modulationEngine.getModulatedValue(ModulationEngine::pLoopSpeed, loopSpeedBase);
 
+        // Space reverb params (read early so smoothers advance every sample)
+        const float spSize  = modulationEngine.getModulatedValue(ModulationEngine::pSpaceSize,  smoothedSpaceSize.getNextValue()) * 0.01f;
+        const float spDecay = modulationEngine.getModulatedValue(ModulationEngine::pSpaceDecay, smoothedSpaceDecay.getNextValue()) * 0.01f;
+        const float spTone  = modulationEngine.getModulatedValue(ModulationEngine::pSpaceTone,  smoothedSpaceTone.getNextValue()) * 0.01f;
+        const float spMix   = modulationEngine.getModulatedValue(ModulationEngine::pSpaceMix,   smoothedSpaceMix.getNextValue()) * 0.01f;
+
+        // EQ params (read early so smoothers advance every sample)
+        const float eqLF = smoothedEqLowFreq.getNextValue();
+        const float eqLG = modulationEngine.getModulatedValue(ModulationEngine::pEqLowGain,  smoothedEqLowGain.getNextValue());
+        const float eqMF = smoothedEqMidFreq.getNextValue();
+        const float eqMG = modulationEngine.getModulatedValue(ModulationEngine::pEqMidGain,  smoothedEqMidGain.getNextValue());
+        const float eqHF = smoothedEqHighFreq.getNextValue();
+        const float eqHG = modulationEngine.getModulatedValue(ModulationEngine::pEqHighGain, smoothedEqHighGain.getNextValue());
+
         // Capture dry input before processing
         const float dryL = leftChannel[i];
         const float dryR = rightChannel != nullptr ? rightChannel[i] : 0.0f;
@@ -763,10 +777,22 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             }
         }
 
-        // Capture pre-tape signal (after grain + filter, before wow/flutter/saturation)
-        // Used by overdub to write clean signal — prevents tape effect compounding
-        // NOTE: When feed+overdub is active, wetL/wetR are already stripped of dry
-        // feed-through (above), so preTapeL/R are automatically clean too.
+        // Signal chain: Grain → Space → EQ → TapeProc → TapeLoop
+        // Space + EQ are applied BEFORE the tape loop so all recordings
+        // capture the full FX chain (reverb, EQ, and tape character).
+
+        // Space reverb (before tape loop so recordings include reverb)
+        if (spMix > 0.001f)
+            spaceReverb.processStereo(wetL, wetR, spSize, spDecay, spTone, spMix);
+
+        // EQ (before tape loop so recordings include EQ)
+        eqL.updateCoefficients(eqLF, eqLG, eqMF, eqMG, eqHF, eqHG);
+        eqR.updateCoefficients(eqLF, eqLG, eqMF, eqMG, eqHF, eqHG);
+        wetL = eqL.processSample(wetL);
+        wetR = eqR.processSample(wetR);
+
+        // Capture pre-tape signal (after Space + EQ, before tape effects)
+        // Overdub records this — includes reverb + EQ, avoids tape compounding
         const float preTapeL = wetL;
         const float preTapeR = wetR;
 
@@ -779,7 +805,8 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 wetR = wetL;
         }
 
-        // Tape loop (stereo, modifies wetL/wetR in-place, may auto-stop recording)
+        // Tape loop (records fully processed signal on first pass,
+        // preTapeL/R on overdub to avoid tape effect compounding)
         const float preLoopL = wetL;
         const float preLoopR = wetR;
         tapeLoop.processStereo(wetL, wetR, wantRecord, wantPlay,
@@ -800,33 +827,6 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             feedDelayL = wetL;
             feedDelayR = wetR;
-        }
-
-        // Space reverb (stereo, after tape loop)
-        {
-            const float spSize  = modulationEngine.getModulatedValue(ModulationEngine::pSpaceSize,  smoothedSpaceSize.getNextValue()) * 0.01f;
-            const float spDecay = modulationEngine.getModulatedValue(ModulationEngine::pSpaceDecay, smoothedSpaceDecay.getNextValue()) * 0.01f;
-            const float spTone  = modulationEngine.getModulatedValue(ModulationEngine::pSpaceTone,  smoothedSpaceTone.getNextValue()) * 0.01f;
-            const float spMix   = modulationEngine.getModulatedValue(ModulationEngine::pSpaceMix,   smoothedSpaceMix.getNextValue()) * 0.01f;
-            if (spMix > 0.001f)
-                spaceReverb.processStereo(wetL, wetR, spSize, spDecay, spTone, spMix);
-        }
-
-        // 3-band EQ (per-channel, after space reverb)
-        {
-            const float eqLF = smoothedEqLowFreq.getNextValue();
-            const float eqLG = modulationEngine.getModulatedValue(ModulationEngine::pEqLowGain,  smoothedEqLowGain.getNextValue());
-            const float eqMF = smoothedEqMidFreq.getNextValue();
-            const float eqMG = modulationEngine.getModulatedValue(ModulationEngine::pEqMidGain,  smoothedEqMidGain.getNextValue());
-            const float eqHF = smoothedEqHighFreq.getNextValue();
-            const float eqHG = modulationEngine.getModulatedValue(ModulationEngine::pEqHighGain, smoothedEqHighGain.getNextValue());
-
-            // Update coefficients every sample (SmoothedValue makes this safe)
-            eqL.updateCoefficients(eqLF, eqLG, eqMF, eqMG, eqHF, eqHG);
-            eqR.updateCoefficients(eqLF, eqLG, eqMF, eqMG, eqHF, eqHG);
-
-            wetL = eqL.processSample(wetL);
-            wetR = eqR.processSample(wetR);
         }
 
         // Master mix + output gain
