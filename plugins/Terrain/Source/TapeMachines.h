@@ -156,15 +156,15 @@ protected:
         double smoothing = 0.0;   // One-pole smoothing coefficient
         std::mt19937* rngPtr = nullptr;
 
-        void prepare(double rateHz, double smoothFreq, double sampleRate, std::mt19937& rng)
+        void prepare(double rateHz, double smoothFreq, double sampleRate, std::mt19937& r)
         {
-            rngPtr = &rng;
+            rngPtr = &r;
             rate = rateHz;
             smoothing = onePoleCoeff(smoothFreq, sampleRate);
             phase = 0.0;
             state = 0.0;
             std::uniform_real_distribution<double> dist(-1.0, 1.0);
-            target = dist(rng);
+            target = dist(*rngPtr);
         }
 
         void reset()
