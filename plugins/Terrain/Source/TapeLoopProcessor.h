@@ -126,18 +126,11 @@ public:
     bool hasUndo() const { return !undoStack.empty(); }
     int getUndoLevels() const { return static_cast<int>(undoStack.size()); }
 
-    // Apply fade-in/fade-out to the recorded buffer edges to eliminate onset/offset clicks
-    void applyEdgeFades(int fadeLen = 768)
+    // Edge fades removed — they destructively zeroed the first/last 768
+    // samples of the buffer, causing audible silence at the loop wrap point.
+    // The playback crossfade (XFADE_LEN) now handles seamless boundaries.
+    void applyEdgeFades(int /*fadeLen*/ = 768)
     {
-        if (loopLength <= fadeLen * 2 || !hasContent_) return;
-        for (int i = 0; i < fadeLen; ++i)
-        {
-            const float gain = static_cast<float>(i) / static_cast<float>(fadeLen);
-            bufL[static_cast<size_t>(i)] *= gain;
-            bufR[static_cast<size_t>(i)] *= gain;
-            bufL[static_cast<size_t>(loopLength - 1 - i)] *= gain;
-            bufR[static_cast<size_t>(loopLength - 1 - i)] *= gain;
-        }
     }
 
     // Apply retroactive fade-out at current write position when user manually stops overdub
@@ -623,35 +616,10 @@ public:
             reversalHoldL = loopL;
             reversalHoldR = loopR;
 
-            // Crossfade near loop boundaries
-            static constexpr int XFADE_LEN = 768;
-            if (loopLength > XFADE_LEN * 2)
-            {
-                double posInLoop = readPos;
-                while (posInLoop < 0.0) posInLoop += static_cast<double>(loopLength);
-                posInLoop = std::fmod(posInLoop, static_cast<double>(loopLength));
-
-                const double fadeStartFwd = static_cast<double>(loopLength - XFADE_LEN);
-                if (posInLoop >= fadeStartFwd)
-                {
-                    const double d = posInLoop - fadeStartFwd;
-                    const float alpha = 1.0f - static_cast<float>(d) / static_cast<float>(XFADE_LEN);
-                    const float startL = hermiteRead(readBufL, d, loopLength);
-                    const float startR = hermiteRead(readBufR, d, loopLength);
-                    loopL = loopL * alpha + startL * (1.0f - alpha);
-                    loopR = loopR * alpha + startR * (1.0f - alpha);
-                }
-                else if (posInLoop < static_cast<double>(XFADE_LEN))
-                {
-                    const double d = posInLoop;
-                    const float alpha = static_cast<float>(d) / static_cast<float>(XFADE_LEN);
-                    const double endPos = static_cast<double>(loopLength - XFADE_LEN) + d;
-                    const float endL = hermiteRead(readBufL, endPos, loopLength);
-                    const float endR = hermiteRead(readBufR, endPos, loopLength);
-                    loopL = loopL * alpha + endL * (1.0f - alpha);
-                    loopR = loopR * alpha + endR * (1.0f - alpha);
-                }
-            }
+            // No playback crossfade — Hermite interpolation already wraps
+            // indices via modulo, producing smooth sub-sample transitions.
+            // The old crossfade had a design flaw that created a discontinuity
+            // at the exact wrap point (reading from mismatched positions).
 
             // Subtle degrade filtering on playback output
             if (degrade > 0.001f)

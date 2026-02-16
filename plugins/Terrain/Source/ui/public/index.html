@@ -4598,18 +4598,9 @@ function drawTapeReels(time) {
     }
   }
 
-  // Smooth progress interpolation (30Hz updates → 60fps rendering)
-  const target = state.tapeLoop.loopProgress;
-  let sp = state.tapeLoop.smoothProgress;
-  const diff = target - sp;
-  // Wrap-around detection: if jump > 0.5, snap (loop wrapped)
-  if (Math.abs(diff) > 0.5) {
-    sp = target;
-  } else {
-    sp += diff * 0.25; // Smooth lerp toward target
-  }
-  state.tapeLoop.smoothProgress = sp;
-  const progress = sp;
+  // Direct progress tracking (no lerp lag — 30Hz updates are smooth enough)
+  const progress = state.tapeLoop.loopProgress;
+  state.tapeLoop.smoothProgress = progress;
 
   drawReel(leftCx, 1.0 - progress * 0.15);
   drawReel(rightCx, 0.85 + progress * 0.15);
