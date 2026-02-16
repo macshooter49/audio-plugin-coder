@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terrain — Space Visualization Options</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    background: #F8F5FC;
+    color: #2D2640;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.3px; }
+  .subtitle { font-size: 12px; color: #8B7FA0; margin-bottom: 16px; }
+  .tabs {
+    display: flex; gap: 6px; margin-bottom: 16px;
+  }
+  .tab {
+    padding: 8px 18px; border-radius: 8px; border: 1px solid #E0D8EC;
+    background: white; font-size: 13px; font-weight: 600; cursor: pointer;
+    color: #6B5F80; transition: all 0.15s;
+  }
+  .tab:hover { background: #F0EAFF; }
+  .tab.active { background: #8B5CF6; color: white; border-color: #8B5CF6; }
+  .viz-container {
+    width: 420px; background: white; border-radius: 14px;
+    border: 1px solid #E8E0F0; overflow: hidden;
+    box-shadow: 0 2px 12px rgba(100,70,160,0.07);
+  }
+  .viz-header {
+    padding: 10px 16px; font-size: 13px; font-weight: 600; color: #6B5F80;
+    border-bottom: 1px solid #F0EAF8; background: #FDFBFF;
+  }
+  .viz-header span { font-weight: 400; color: #A090B8; font-size: 11px; margin-left: 8px; }
+  canvas#vizCanvas {
+    display: block; width: 420px; height: 200px;
+    background: #FDFBFF;
+  }
+  .knobs-row {
+    display: flex; justify-content: space-around; padding: 14px 16px;
+    border-top: 1px solid #F0EAF8; background: #FDFBFF;
+  }
+  .knob-col {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .knob-col label { font-size: 10px; font-weight: 600; color: #8B7FA0; letter-spacing: 0.5px; }
+  .knob-col input[type=range] {
+    -webkit-appearance: none; width: 80px; height: 4px;
+    border-radius: 2px; background: #E0D8EC; outline: none;
+  }
+  .knob-col input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: #8B5CF6; cursor: pointer; border: 2px solid white;
+    box-shadow: 0 1px 4px rgba(100,50,200,0.3);
+  }
+  .knob-col .val { font-size: 11px; color: #6B5F80; font-weight: 500; }
+</style>
+</head>
+<body>
+<h1>Space Visualization Options</h1>
+<p class="subtitle">Option 1 = current (waveform decay). Options 2–5 = alternatives.</p>
+
+<div class="tabs">
+  <div class="tab" data-viz="1">1 Current</div>
+  <div class="tab active" data-viz="2">2 Echo Trails</div>
+  <div class="tab" data-viz="3">3 Spectral Bars</div>
+  <div class="tab" data-viz="4">4 Ripples</div>
+  <div class="tab" data-viz="5">5 Reflection Rays</div>
+</div>
+
+<div class="viz-container">
+  <div class="viz-header" id="vizTitle">2 — Multi-Echo Trails <span>Layered waveform traces with delay</span></div>
+  <canvas id="vizCanvas" width="840" height="400"></canvas>
+  <div class="knobs-row">
+    <div class="knob-col">
+      <label>SIZE</label>
+      <input type="range" id="kSize" min="0" max="100" value="50">
+      <div class="val" id="vSize">50%</div>
+    </div>
+    <div class="knob-col">
+      <label>DECAY</label>
+      <input type="range" id="kDecay" min="0" max="100" value="60">
+      <div class="val" id="vDecay">60%</div>
+    </div>
+    <div class="knob-col">
+      <label>TONE</label>
+      <input type="range" id="kTone" min="0" max="100" value="50">
+      <div class="val" id="vTone">50%</div>
+    </div>
+    <div class="knob-col">
+      <label>MIX</label>
+      <input type="range" id="kMix" min="0" max="100" value="80">
+      <div class="val" id="vMix">80%</div>
+    </div>
+  </div>
+</div>
+
+<script>
+var canvas = document.getElementById('vizCanvas');
+var ctx = canvas.getContext('2d');
+var DPR = 2;
+canvas.width = 420 * DPR;
+canvas.height = 200 * DPR;
+var W = 420, H = 200;
+
+var currentViz = 2;
+var params = { size: 0.5, decay: 0.6, tone: 0.5, mix: 0.8 };
+
+var titles = {
+  1: '1 — Waveform Decay <span>Current production visualization</span>',
+  2: '2 — Multi-Echo Trails <span>Layered waveform traces with delay</span>',
+  3: '3 — Spectral Bars <span>Frequency bars with reverb decay</span>',
+  4: '4 — Concentric Ripples <span>Expanding rings from center</span>',
+  5: '5 — Reflection Rays <span>Sound rays bouncing in a room</span>'
+};
+
+document.querySelectorAll('.tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+    tab.classList.add('active');
+    currentViz = parseInt(tab.dataset.viz);
+    document.getElementById('vizTitle').innerHTML = titles[currentViz];
+  });
+});
+
+['Size','Decay','Tone','Mix'].forEach(function(name) {
+  var el = document.getElementById('k' + name);
+  el.addEventListener('input', function() {
+    params[name.toLowerCase()] = el.value / 100;
+    document.getElementById('v' + name).textContent = el.value + '%';
+  });
+});
+
+function toneRGB(tone) {
+  var r, g, b;
+  if (tone < 0.5) {
+    var tt = tone * 2;
+    r = 109 + (139 - 109) * tt;
+    g = 40 + (92 - 40) * tt;
+    b = 217 + (246 - 217) * tt;
+  } else {
+    var tt2 = (tone - 0.5) * 2;
+    r = 139 + (196 - 139) * tt2;
+    g = 92 + (181 - 92) * tt2;
+    b = 246 + (253 - 246) * tt2;
+  }
+  return { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+}
+
+function rgba(c, a) {
+  return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + a.toFixed(3) + ')';
+}
+
+// ─── Viz 1: Waveform Decay (current production) ───
+function drawViz1(t) {
+  var size = params.size, decay = params.decay, tone = params.tone, mix = params.mix;
+  var cy = H * 0.36;
+  var c = toneRGB(tone);
+  var intensity = 0.18 + mix * 0.82;
+  var amplitude = 6 + size * (H * 0.38);
+  var tailEnd = 0.12 + decay * 0.88;
+  var decayRate = 2.5 + (1 - decay) * 6.0;
+  var phase = t * 3.2;
+  var f1 = 6 + size * 10, f2 = f1 * 2.13, f3 = f1 * 0.47;
+
+  ctx.strokeStyle = rgba(c, 0.05 * intensity);
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+
+  var steps = Math.ceil(W / 1.5);
+  var pts = [];
+  for (var i = 0; i <= steps; i++) {
+    var xn = i / steps, x = xn * W;
+    var env = Math.exp(-xn * decayRate / tailEnd);
+    var ef = xn > tailEnd * 0.85 ? Math.max(0, 1 - (xn - tailEnd * 0.85) / (tailEnd * 0.15)) : 1;
+    env *= ef;
+    var eb = xn < 0.12 ? 1 + Math.sin(xn * 80) * 0.3 * (1 - xn / 0.12) : 1;
+    var wave = Math.sin(phase + xn * f1) * 0.65 + Math.sin(phase * 0.7 + xn * f2 + 1.2) * 0.25 + Math.sin(phase * 1.3 + xn * f3 + 2.8) * 0.10;
+    pts.push({ x: x, y: cy + wave * amplitude * env * eb });
+  }
+
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (var fi = 1; fi < pts.length; fi++) ctx.lineTo(pts[fi].x, pts[fi].y);
+  ctx.lineTo(W, cy); ctx.lineTo(0, cy); ctx.closePath();
+  var fg = ctx.createLinearGradient(0, cy - amplitude, 0, cy);
+  fg.addColorStop(0, rgba(c, 0.18 * intensity)); fg.addColorStop(1, rgba(c, 0.02 * intensity));
+  ctx.fillStyle = fg; ctx.fill();
+
+  ctx.beginPath(); ctx.moveTo(pts[0].x, cy - (pts[0].y - cy));
+  for (var mi = 1; mi < pts.length; mi++) ctx.lineTo(pts[mi].x, cy - (pts[mi].y - cy));
+  ctx.lineTo(W, cy); ctx.lineTo(0, cy); ctx.closePath();
+  var mg = ctx.createLinearGradient(0, cy + amplitude, 0, cy);
+  mg.addColorStop(0, rgba(c, 0.10 * intensity)); mg.addColorStop(1, rgba(c, 0.01 * intensity));
+  ctx.fillStyle = mg; ctx.fill();
+
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (var gi = 1; gi < pts.length; gi++) ctx.lineTo(pts[gi].x, pts[gi].y);
+  ctx.strokeStyle = rgba(c, 0.15 * intensity); ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (var li = 1; li < pts.length; li++) ctx.lineTo(pts[li].x, pts[li].y);
+  ctx.strokeStyle = rgba(c, 0.7 * intensity); ctx.lineWidth = 2; ctx.stroke();
+
+  ctx.beginPath(); ctx.moveTo(pts[0].x, cy - (pts[0].y - cy));
+  for (var ri = 1; ri < pts.length; ri++) ctx.lineTo(pts[ri].x, cy - (pts[ri].y - cy));
+  ctx.strokeStyle = rgba(c, 0.25 * intensity); ctx.lineWidth = 1.5; ctx.stroke();
+
+  var gr = 12 + size * 10 + Math.sin(t * 0.8) * 2;
+  var sg = ctx.createRadialGradient(4, cy, 0, 4, cy, gr);
+  sg.addColorStop(0, rgba(c, 0.4 * intensity)); sg.addColorStop(0.4, rgba(c, 0.12 * intensity)); sg.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(4, cy, gr, 0, Math.PI * 2); ctx.fill();
+}
+
+// ─── Viz 2: Multi-Echo Trails ───
+function drawViz2(t) {
+  var size = params.size, decay = params.decay, tone = params.tone, mix = params.mix;
+  var cy = H * 0.5;
+  var c = toneRGB(tone);
+  var intensity = 0.2 + mix * 0.8;
+  var amplitude = 8 + size * (H * 0.32);
+  var tailEnd = 0.15 + decay * 0.85;
+  var decayRate = 2.5 + (1 - decay) * 5.0;
+  var numTrails = 5;
+
+  // Center line
+  ctx.strokeStyle = rgba(c, 0.04 * intensity);
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+
+  for (var tr = numTrails - 1; tr >= 0; tr--) {
+    var trailAlpha = (1 - tr / numTrails) * intensity;
+    var trailOffset = tr * 3.5;  // vertical spread
+    var trailDelay = tr * 0.8;   // phase delay
+    var trailAmp = amplitude * (1 - tr * 0.12); // decreasing amplitude
+    var phase = t * 2.8 - trailDelay;
+    var f1 = 5 + size * 8;
+
+    var steps = Math.ceil(W / 2);
+    ctx.beginPath();
+    for (var i = 0; i <= steps; i++) {
+      var xn = i / steps, x = xn * W;
+      var env = Math.exp(-xn * decayRate / tailEnd);
+      var ef = xn > tailEnd * 0.9 ? Math.max(0, 1 - (xn - tailEnd * 0.9) / (tailEnd * 0.1)) : 1;
+      env *= ef;
+      var wave = Math.sin(phase + xn * f1) * 0.7
+               + Math.sin(phase * 0.6 + xn * f1 * 1.5 + tr) * 0.3;
+      var y = cy + trailOffset + wave * trailAmp * env;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+
+    // Glow under each trail
+    ctx.strokeStyle = rgba(c, 0.08 * trailAlpha);
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Main trail line
+    ctx.beginPath();
+    for (var j = 0; j <= steps; j++) {
+      var xn2 = j / steps, x2 = xn2 * W;
+      var env2 = Math.exp(-xn2 * decayRate / tailEnd);
+      var ef2 = xn2 > tailEnd * 0.9 ? Math.max(0, 1 - (xn2 - tailEnd * 0.9) / (tailEnd * 0.1)) : 1;
+      env2 *= ef2;
+      var wave2 = Math.sin(phase + xn2 * f1) * 0.7
+                + Math.sin(phase * 0.6 + xn2 * f1 * 1.5 + tr) * 0.3;
+      var y2 = cy + trailOffset + wave2 * trailAmp * env2;
+      if (j === 0) ctx.moveTo(x2, y2); else ctx.lineTo(x2, y2);
+    }
+    ctx.strokeStyle = rgba(c, 0.55 * trailAlpha);
+    ctx.lineWidth = tr === 0 ? 2.5 : 1.5;
+    ctx.stroke();
+  }
+
+  // Source glow
+  var gr = 14 + size * 8 + Math.sin(t * 0.9) * 2;
+  var sg = ctx.createRadialGradient(6, cy, 0, 6, cy, gr);
+  sg.addColorStop(0, rgba(c, 0.45 * intensity)); sg.addColorStop(0.5, rgba(c, 0.1 * intensity)); sg.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(6, cy, gr, 0, Math.PI * 2); ctx.fill();
+}
+
+// ─── Viz 3: Spectral Bars ───
+function drawViz3(t) {
+  var size = params.size, decay = params.decay, tone = params.tone, mix = params.mix;
+  var c = toneRGB(tone);
+  var intensity = 0.2 + mix * 0.8;
+  var barCount = 28 + Math.floor(size * 16);
+  var barWidth = (W - 20) / barCount - 1.5;
+  var maxBarH = H * 0.42 + size * (H * 0.2);
+  var decaySpeed = 0.3 + (1 - decay) * 2.0;
+
+  for (var bi = 0; bi < barCount; bi++) {
+    var barNorm = bi / barCount;
+    var x = 10 + bi * ((W - 20) / barCount);
+
+    // Frequency-shaped envelope (bass + presence boost)
+    var freqShape = Math.exp(-barNorm * 2) * 0.6 + Math.exp(-Math.pow(barNorm - 0.35, 2) * 20) * 0.4;
+
+    // Animated height with per-bar phase
+    var barPhase = t * (1.5 + barNorm * 1.5) + bi * 0.4;
+    var pulse = (Math.sin(barPhase) * 0.5 + 0.5);
+    pulse = Math.pow(pulse, 1.5); // sharper peaks
+
+    // Decay tail - bars further right decay more
+    var decayEnv = Math.exp(-barNorm * decaySpeed);
+
+    var barH = maxBarH * freqShape * pulse * decayEnv * intensity;
+    if (barH < 1) barH = 1;
+
+    var cy = H * 0.5;
+
+    // Main bar (upward)
+    var barGrad = ctx.createLinearGradient(0, cy - barH, 0, cy);
+    barGrad.addColorStop(0, rgba(c, 0.8 * intensity));
+    barGrad.addColorStop(1, rgba(c, 0.2 * intensity));
+    ctx.fillStyle = barGrad;
+    ctx.fillRect(x, cy - barH, barWidth, barH);
+
+    // Mirror bar (downward, lighter)
+    var mirrorGrad = ctx.createLinearGradient(0, cy, 0, cy + barH * 0.6);
+    mirrorGrad.addColorStop(0, rgba(c, 0.15 * intensity));
+    mirrorGrad.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = mirrorGrad;
+    ctx.fillRect(x, cy, barWidth, barH * 0.6);
+
+    // Peak dot
+    if (barH > 5) {
+      ctx.fillStyle = rgba(c, 0.9 * intensity);
+      ctx.fillRect(x, cy - barH - 3, barWidth, 2);
+    }
+  }
+
+  // Center line
+  ctx.strokeStyle = rgba(c, 0.08 * intensity);
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0, H * 0.5); ctx.lineTo(W, H * 0.5); ctx.stroke();
+}
+
+// ─── Viz 4: Concentric Ripples ───
+function drawViz4(t) {
+  var size = params.size, decay = params.decay, tone = params.tone, mix = params.mix;
+  var cx = W / 2, cy = H * 0.48;
+  var c = toneRGB(tone);
+  var intensity = 0.2 + mix * 0.8;
+  var maxR = Math.min(W, H) * 0.48;
+  var ringCount = 4 + Math.floor(size * 8);
+  var ringSpacing = maxR / ringCount;
+  var expansionSpeed = 0.8 + decay * 1.5;
+
+  for (var ri = 0; ri < ringCount; ri++) {
+    var phase = (t * expansionSpeed + ri * 0.5) % (ringCount * 0.5);
+    var radius = (phase / (ringCount * 0.5)) * maxR;
+    if (radius > maxR) continue;
+
+    var fadeOut = 1 - (radius / maxR);
+    fadeOut = Math.pow(fadeOut, 0.7);
+    var alpha = fadeOut * intensity;
+
+    // Ring thickness decreases with distance
+    var thickness = 2.5 - (radius / maxR) * 1.5;
+
+    // Wobble the ring slightly
+    ctx.beginPath();
+    for (var a = 0; a <= 64; a++) {
+      var angle = (a / 64) * Math.PI * 2;
+      var wobble = Math.sin(angle * 3 + t * 2 + ri) * (2 + size * 4) * (radius / maxR);
+      var rx = cx + Math.cos(angle) * (radius + wobble);
+      var ry = cy + Math.sin(angle) * (radius * 0.7 + wobble * 0.5); // slight ellipse
+      if (a === 0) ctx.moveTo(rx, ry); else ctx.lineTo(rx, ry);
+    }
+    ctx.closePath();
+
+    // Glow
+    ctx.strokeStyle = rgba(c, 0.1 * alpha);
+    ctx.lineWidth = thickness + 4;
+    ctx.stroke();
+
+    // Main ring
+    ctx.strokeStyle = rgba(c, 0.6 * alpha);
+    ctx.lineWidth = thickness;
+    ctx.stroke();
+  }
+
+  // Center source pulse
+  var pulseR = 4 + Math.sin(t * 3) * 2 + size * 3;
+  var coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pulseR + 8);
+  coreGrad.addColorStop(0, rgba(c, 0.6 * intensity));
+  coreGrad.addColorStop(0.5, rgba(c, 0.15 * intensity));
+  coreGrad.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath(); ctx.arc(cx, cy, pulseR + 8, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = rgba(c, 0.8 * intensity);
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+// ─── Viz 5: Reflection Rays ───
+var rays = [];
+for (var rr = 0; rr < 40; rr++) {
+  rays.push({
+    angle: Math.random() * Math.PI * 2,
+    speed: 0.5 + Math.random() * 2,
+    x: 0, y: 0,
+    dx: 0, dy: 0,
+    life: Math.random(),
+    born: 0
+  });
+}
+
+function drawViz5(t) {
+  var size = params.size, decay = params.decay, tone = params.tone, mix = params.mix;
+  var cx = W * 0.12, cy = H * 0.5;
+  var c = toneRGB(tone);
+  var intensity = 0.2 + mix * 0.8;
+  var roomW = W * 0.85, roomH = H * (0.3 + size * 0.4);
+  var roomLeft = W * 0.08, roomTop = cy - roomH / 2;
+
+  // Room outline (faint)
+  ctx.strokeStyle = rgba(c, 0.06 * intensity);
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(roomLeft, roomTop, roomW, roomH);
+
+  var rayCount = 12 + Math.floor(size * 20);
+  var tailLength = 0.15 + decay * 0.6;
+
+  for (var ri = 0; ri < rayCount; ri++) {
+    var seed = ri * 137.508;
+    var angle = (seed % (Math.PI * 2));
+    var speed = 60 + (seed % 40);
+    var phase = ((t * speed * 0.02 + seed) % 3.0) / 3.0; // 0 to 1 cycling
+
+    // Ray starts from source, bounces
+    var segments = [];
+    var rx = cx, ry = cy;
+    var rdx = Math.cos(angle) * 1;
+    var rdy = Math.sin(angle) * 1;
+    var totalDist = 0;
+    var maxDist = roomW * (0.5 + decay * 1.5);
+
+    segments.push({ x: rx, y: ry });
+
+    for (var bounce = 0; bounce < 6 && totalDist < maxDist; bounce++) {
+      // Cast ray to next wall
+      var stepLen = 30 + Math.random() * 60;
+      rx += rdx * stepLen;
+      ry += rdy * stepLen;
+      totalDist += stepLen;
+
+      // Bounce off walls
+      if (rx < roomLeft) { rx = roomLeft; rdx = Math.abs(rdx); }
+      if (rx > roomLeft + roomW) { rx = roomLeft + roomW; rdx = -Math.abs(rdx); }
+      if (ry < roomTop) { ry = roomTop; rdy = Math.abs(rdy); }
+      if (ry > roomTop + roomH) { ry = roomTop + roomH; rdy = -Math.abs(rdy); }
+
+      segments.push({ x: rx, y: ry });
+    }
+
+    // Draw ray segments with fade
+    if (segments.length < 2) continue;
+
+    var visibleEnd = Math.floor(phase * segments.length * 2);
+
+    for (var si = 0; si < segments.length - 1; si++) {
+      var segFade = 1 - (si / segments.length);
+      segFade *= intensity;
+      var distFromHead = Math.abs(si - visibleEnd * 0.5);
+      var proxAlpha = Math.max(0, 1 - distFromHead / (segments.length * tailLength));
+
+      var alpha = segFade * proxAlpha;
+      if (alpha < 0.01) continue;
+
+      // Glow
+      ctx.beginPath();
+      ctx.moveTo(segments[si].x, segments[si].y);
+      ctx.lineTo(segments[si + 1].x, segments[si + 1].y);
+      ctx.strokeStyle = rgba(c, 0.06 * alpha);
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Line
+      ctx.beginPath();
+      ctx.moveTo(segments[si].x, segments[si].y);
+      ctx.lineTo(segments[si + 1].x, segments[si + 1].y);
+      ctx.strokeStyle = rgba(c, 0.4 * alpha);
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // Bounce dot
+      if (si > 0) {
+        ctx.fillStyle = rgba(c, 0.3 * alpha);
+        ctx.beginPath();
+        ctx.arc(segments[si].x, segments[si].y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // Source glow
+  var gr = 10 + size * 6 + Math.sin(t * 1.2) * 2;
+  var sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, gr);
+  sg.addColorStop(0, rgba(c, 0.5 * intensity));
+  sg.addColorStop(0.5, rgba(c, 0.12 * intensity));
+  sg.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.arc(cx, cy, gr, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = rgba(c, 0.9 * intensity);
+  ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+}
+
+var drawFns = { 1: drawViz1, 2: drawViz2, 3: drawViz3, 4: drawViz4, 5: drawViz5 };
+
+var startTime = performance.now();
+function animate() {
+  var t = (performance.now() - startTime) / 1000;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+  drawFns[currentViz](t);
+  ctx.restore();
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>

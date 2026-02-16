@@ -6564,20 +6564,7 @@ function initFxSuite() {
     ctx.restore();
   }
 
-  // ─── Space Visualization — Dense Reverb Particle Cloud ───
-  var SPACE_PARTICLE_COUNT = 150;
-  var spaceParticles = [];
-  for (var spi = 0; spi < SPACE_PARTICLE_COUNT; spi++) {
-    spaceParticles.push({
-      angle: Math.random() * Math.PI * 2,
-      dist: Math.random(),
-      speed: 0.008 + Math.random() * 0.025,
-      baseSize: 0.4 + Math.random() * 2.8,
-      depth: Math.random(),
-      wobble: Math.random() * Math.PI * 2,
-      wobbleSpeed: 0.3 + Math.random() * 0.8
-    });
-  }
+  // ─── Space Visualization — Animated Waveform Decay ───
 
   function spaceToneRGB(tone) {
     var r, g, b;
@@ -6604,110 +6591,93 @@ function initFxSuite() {
     var decay = normalize('spaceDecay', state.params.spaceDecay);
     var tone = normalize('spaceTone', state.params.spaceTone);
     var mix = normalize('spaceMix', state.params.spaceMix);
-    var cx = w / 2, cy = h / 2;
-    var maxR = Math.max(w, h) * 0.52;
-    var intensity = 0.08 + mix * 0.92;
+    var cy = h * 0.36;
+    var toneC = spaceToneRGB(tone);
 
-    // Background gradient
-    var bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * 0.9);
-    bgGrad.addColorStop(0, 'rgba(248, 245, 252, ' + (intensity * 0.15) + ')');
-    bgGrad.addColorStop(0.5, 'rgba(237, 228, 248, ' + (intensity * 0.06) + ')');
-    bgGrad.addColorStop(1, 'rgba(232, 224, 240, 0)');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, w, h);
+    // Intensity — always visible, even at mix=0 show faint trace
+    var intensity = 0.2 + mix * 0.8;
+    var amplitude = 8 + size * (h * 0.32);
+    var tailEnd = 0.15 + decay * 0.85;
+    var decayRate = 2.5 + (1 - decay) * 5.0;
+    var numTrails = 5;
 
-    // Guide rings
-    var ringCount = 3 + Math.floor(size * 3);
-    var spreadFactor = 0.25 + size * 0.75;
-    for (var ri = 1; ri <= ringCount; ri++) {
-      var r = (ri / ringCount) * spreadFactor * maxR;
-      var pulse = Math.sin(t * 0.4 + ri * 0.7) * 2;
+    // Faint center reference line
+    ctx.strokeStyle = 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.04 * intensity).toFixed(3) + ')';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, cy);
+    ctx.lineTo(w, cy);
+    ctx.stroke();
+
+    // Draw trails back-to-front (farthest first)
+    for (var tr = numTrails - 1; tr >= 0; tr--) {
+      var trailAlpha = (1 - tr / numTrails) * intensity;
+      var trailOffset = tr * 3.5;
+      var trailDelay = tr * 0.8;
+      var trailAmp = amplitude * (1 - tr * 0.12);
+      var phase = t * 2.8 - trailDelay;
+      var f1 = 5 + size * 8;
+      var steps = Math.ceil(w / 2);
+
+      // Build points for this trail
+      var pts = new Array(steps + 1);
+      for (var i = 0; i <= steps; i++) {
+        var xn = i / steps;
+        var x = xn * w;
+        var env = Math.exp(-xn * decayRate / tailEnd);
+        var ef = xn > tailEnd * 0.9 ? Math.max(0, 1 - (xn - tailEnd * 0.9) / (tailEnd * 0.1)) : 1;
+        env *= ef;
+        var wave = Math.sin(phase + xn * f1) * 0.7
+                 + Math.sin(phase * 0.6 + xn * f1 * 1.5 + tr) * 0.3;
+        pts[i] = { x: x, y: cy + trailOffset + wave * trailAmp * env };
+      }
+
+      // Gradient fill between trail and center line (primary trail only)
+      if (tr === 0) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (var fi = 1; fi <= steps; fi++) ctx.lineTo(pts[fi].x, pts[fi].y);
+        ctx.lineTo(w, cy);
+        ctx.lineTo(0, cy);
+        ctx.closePath();
+        var fillGrad = ctx.createLinearGradient(0, cy - amplitude, 0, cy);
+        fillGrad.addColorStop(0, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.14 * intensity).toFixed(3) + ')');
+        fillGrad.addColorStop(1, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.01 * intensity).toFixed(3) + ')');
+        ctx.fillStyle = fillGrad;
+        ctx.fill();
+      }
+
+      // Glow under each trail
       ctx.beginPath();
-      ctx.arc(cx, cy, r + pulse, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.04 + 0.03 * (1 - ri / ringCount)) + ')';
-      ctx.lineWidth = 0.5;
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (var gi = 1; gi <= steps; gi++) ctx.lineTo(pts[gi].x, pts[gi].y);
+      ctx.strokeStyle = 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.08 * trailAlpha).toFixed(3) + ')';
+      ctx.lineWidth = 5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Main trail line
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (var li = 1; li <= steps; li++) ctx.lineTo(pts[li].x, pts[li].y);
+      ctx.strokeStyle = 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.55 * trailAlpha).toFixed(3) + ')';
+      ctx.lineWidth = tr === 0 ? 2.5 : 1.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.stroke();
     }
 
-    // Particle cloud
-    var toneC = spaceToneRGB(tone);
-    var lifeSpan = 0.2 + decay * 0.8;
-    var emitRate = 0.5 + mix * 2.5;
-
-    ctx.globalCompositeOperation = 'lighter';
-
-    var respawnBudget = emitRate;
-
-    for (var pi = 0; pi < spaceParticles.length; pi++) {
-      var p = spaceParticles[pi];
-      p.dist += p.speed * 0.012;
-      p.wobble += p.wobbleSpeed * 0.02;
-
-      if (p.dist > lifeSpan || p.dist > 1.0) {
-        if (respawnBudget > 0) {
-          respawnBudget -= 1;
-          p.dist = 0;
-          p.angle = Math.random() * Math.PI * 2;
-          p.depth = 0.2 + Math.random() * 0.8;
-          p.baseSize = 0.4 + Math.random() * 2.8;
-          p.speed = 0.008 + Math.random() * 0.025;
-        } else {
-          continue;
-        }
-      }
-
-      var actualDist = p.dist * spreadFactor * maxR;
-      var wobbleOffset = Math.sin(p.wobble) * (2 + p.dist * 4);
-      var px = cx + Math.cos(p.angle) * actualDist * 1.15 + Math.cos(p.wobble * 1.3) * wobbleOffset;
-      var py = cy + Math.sin(p.angle) * actualDist + Math.sin(p.wobble) * wobbleOffset * 0.6;
-
-      var depthScale = 0.4 + p.depth * 0.6;
-      var particleSize = p.baseSize * depthScale * (1 - p.dist * 0.3);
-
-      var distFade = 1 - (p.dist / lifeSpan);
-      var alpha = Math.max(0, distFade * depthScale * intensity * 0.55);
-
-      if (alpha < 0.005 || particleSize < 0.2) continue;
-
-      var highlight = p.depth > 0.7 ? 1.15 : 1.0;
-      var pr = Math.min(255, Math.round(toneC.r * highlight));
-      var pg = Math.min(255, Math.round(toneC.g * highlight));
-      var pb = Math.min(255, Math.round(toneC.b * highlight));
-
-      ctx.fillStyle = 'rgba(' + pr + ', ' + pg + ', ' + pb + ', ' + alpha.toFixed(3) + ')';
-      ctx.beginPath();
-      ctx.arc(px, py, particleSize, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.globalCompositeOperation = 'source-over';
-
-    // Center source glow
-    var glowSize = 18 + size * 8 + Math.sin(t * 0.8) * 2;
-    var coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowSize);
-    coreGrad.addColorStop(0, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.35 * intensity) + ')');
-    coreGrad.addColorStop(0.3, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.12 * intensity) + ')');
-    coreGrad.addColorStop(0.7, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.03 * intensity) + ')');
-    coreGrad.addColorStop(1, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', 0)');
-    ctx.fillStyle = coreGrad;
+    // Source glow at left edge
+    var glowR = 14 + size * 8 + Math.sin(t * 0.9) * 2;
+    var srcGrad = ctx.createRadialGradient(6, cy, 0, 6, cy, glowR);
+    srcGrad.addColorStop(0, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.45 * intensity).toFixed(3) + ')');
+    srcGrad.addColorStop(0.5, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.1 * intensity).toFixed(3) + ')');
+    srcGrad.addColorStop(1, 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', 0)');
+    ctx.fillStyle = srcGrad;
     ctx.beginPath();
-    ctx.arc(cx, cy, glowSize, 0, Math.PI * 2);
+    ctx.arc(6, cy, glowR, 0, Math.PI * 2);
     ctx.fill();
-
-    // Center dot
-    ctx.fillStyle = 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (0.7 * intensity) + ')';
-    ctx.beginPath();
-    ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Breathing halo
-    var haloR = spreadFactor * maxR * 0.85;
-    var haloPulse = Math.sin(t * 0.3) * 0.015 + 0.025;
-    ctx.beginPath();
-    ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(' + toneC.r + ', ' + toneC.g + ', ' + toneC.b + ', ' + (haloPulse * intensity) + ')';
-    ctx.lineWidth = 1;
-    ctx.stroke();
 
     ctx.restore();
   }

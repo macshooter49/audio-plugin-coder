@@ -256,8 +256,8 @@ public:
             prevHissLP = hissFilterState1;
 
             // Level: cassette hiss is typically -50 to -60 dB below signal
-            // hiss param 0-1 maps to subtle→obvious
-            const float hissLevel = hiss * 0.008f;
+            // hiss param 0-1 maps linearly: 5%=subtle, 50%=moderate, 100%=full character
+            const float hissLevel = hiss * 0.0008f;
             output += static_cast<double>(hissFilterState2 * hissLevel);
         }
 
