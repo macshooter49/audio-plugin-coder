@@ -309,15 +309,16 @@ public:
     // 15 IPS = wide bandwidth, retains highs even when driven
     double processSaturation(double input, double amount) override
     {
-        if (amount < 0.001) { prevOversampleInput = input; return input; }
-
+        // Always run the full chain to keep filter state warm (prevents clicks)
         const double midSample = (prevOversampleInput + input) * 0.5;
         prevOversampleInput = input;
 
         const double out1 = saturateSample(midSample, amount);
         const double out2 = saturateSample(input, amount);
 
-        return (out1 + out2) * 0.5;
+        const double processed = (out1 + out2) * 0.5;
+        // At zero amount, saturateSample already returns near-dry due to drive=1 + tanh(x)≈x
+        return processed;
     }
 
     //==========================================================================
@@ -325,8 +326,7 @@ public:
     // Smooth, gentle, "professional machine with slight speed issues"
     double processWow(double input, double amount) override
     {
-        if (amount < 0.001) return input;
-
+        // Always write to delay line to keep buffer current (prevents clicks on activation)
         delay.write(static_cast<float>(input));
 
         const double drift = rateDrift.next(sr);
@@ -355,7 +355,10 @@ public:
         const double clampedDelay = std::max(1.0, std::min(totalDelay,
             static_cast<double>(delay.bufferSize - 2)));
 
-        return static_cast<double>(delay.readCubic(clampedDelay));
+        const double delayed = static_cast<double>(delay.readCubic(clampedDelay));
+        // Crossfade dry→delayed to prevent phase-jump click at activation
+        const double blend = std::min(amount * 10.0, 1.0); // full wet by 10% amount
+        return input * (1.0 - blend) + delayed * blend;
     }
 
     //==========================================================================
@@ -518,8 +521,7 @@ public:
     // mid-bump, aggressive bandwidth restriction. Gets DARK when driven.
     double processSaturation(double input, double amount) override
     {
-        if (amount < 0.001) { prevOversampleInput = input; return input; }
-
+        // Always run full chain to keep filter state warm (prevents clicks)
         const double midSample = (prevOversampleInput + input) * 0.5;
         prevOversampleInput = input;
 
@@ -534,8 +536,7 @@ public:
     // All with rate drift. Total ±3.2ms. Complex, wobbly, irregular.
     double processWow(double input, double amount) override
     {
-        if (amount < 0.001) return input;
-
+        // Always write to delay line to keep buffer current (prevents clicks)
         delay.write(static_cast<float>(input));
 
         const double slowDriftVal = slowDrift.next(sr);
@@ -573,7 +574,10 @@ public:
         const double clampedDelay = std::max(1.0, std::min(totalDelay,
             static_cast<double>(delay.bufferSize - 2)));
 
-        return static_cast<double>(delay.readCubic(clampedDelay));
+        const double delayed = static_cast<double>(delay.readCubic(clampedDelay));
+        // Crossfade dry→delayed to prevent phase-jump click at activation
+        const double blend = std::min(amount * 10.0, 1.0); // full wet by 10% amount
+        return input * (1.0 - blend) + delayed * blend;
     }
 
     //==========================================================================
@@ -787,8 +791,7 @@ public:
     // At 30%+: full Wire algorithm.
     double processSaturation(double input, double amount) override
     {
-        if (amount < 0.001) { prevOversampleInput = input; return input; }
-
+        // Always run full chain to keep filter state warm (prevents clicks)
         const double midSample = (prevOversampleInput + input) * 0.5;
         prevOversampleInput = input;
 
@@ -807,12 +810,9 @@ public:
     // Total max ±8.5ms. 12ms center delay.
     double processWow(double input, double amount) override
     {
-        if (amount < 0.001)
-        {
-            speedJumpOffset *= 0.999;
-            return input;
-        }
+        speedJumpOffset *= 0.999;
 
+        // Always write to delay line to keep buffer current (prevents clicks)
         delay.write(static_cast<float>(input));
 
         // 1. Slow drift: wire tension changes unpredictably
@@ -857,7 +857,10 @@ public:
         const double clampedDelay = std::max(1.0, std::min(totalDelay,
             static_cast<double>(delay.bufferSize - 2)));
 
-        return static_cast<double>(delay.readCubic(clampedDelay));
+        const double delayed = static_cast<double>(delay.readCubic(clampedDelay));
+        // Crossfade dry→delayed to prevent phase-jump click at activation
+        const double blend = std::min(amount * 10.0, 1.0); // full wet by 10% amount
+        return input * (1.0 - blend) + delayed * blend;
     }
 
     //==========================================================================

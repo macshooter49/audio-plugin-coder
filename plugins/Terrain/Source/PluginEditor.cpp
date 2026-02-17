@@ -473,10 +473,25 @@ void TerrainAudioProcessorEditor::timerCallback()
     // CRITICAL: never save during restore/settle or we'd overwrite saved data with empty state
     modStateTickCount++;
 
-    if (modStateTickCount <= 10 && audioProcessor.modStateJson.isNotEmpty())
+    if (modStateTickCount <= 10)
     {
-        auto escaped = audioProcessor.modStateJson.replace("\\", "\\\\").replace("'", "\\'");
-        js << "if(typeof restoreModState==='function'){restoreModState('" << escaped << "');}";
+        // Push mod state JSON restore
+        if (audioProcessor.modStateJson.isNotEmpty())
+        {
+            auto escaped = audioProcessor.modStateJson.replace("\\", "\\\\").replace("'", "\\'");
+            js << "if(typeof restoreModState==='function'){restoreModState('" << escaped << "');}";
+        }
+
+        // Push grain sync and XY pad state (same phased restore window)
+        float grainSync = audioProcessor.grainSyncEnabled.load();
+        float xyEnabled = audioProcessor.xyAutoEnabled.load();
+        float xyMode    = audioProcessor.xyAutoMode.load();
+        float xySpeed   = audioProcessor.xyAutoSpeed.load();
+        js << "if(typeof restoreUIState==='function'){restoreUIState("
+           << juce::String(grainSync, 1) << ","
+           << juce::String(xyEnabled, 1) << ","
+           << juce::String(xyMode, 1) << ","
+           << juce::String(xySpeed, 3) << ");}";
     }
 
     webView->evaluateJavascript(js);

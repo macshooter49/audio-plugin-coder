@@ -5208,9 +5208,24 @@ function drawLFOWaveform(idx) {
   for (let x = 0; x <= w; x++) {
     const phase = (x / w + lfo.phase) % 1.0;
     let val;
-    if (lfo.shape === 5) val = lfoWaveform(2, phase); // S&H: show square-ish preview
-    else if (lfo.shape === 6) val = lfoWaveform(0, phase); // smooth random: show sine preview
-    else val = lfoWaveform(lfo.shape, phase);
+    if (lfo.shape === 5) {
+      // S&H: stepped random — each "step" holds a random value
+      var shSteps = 12;
+      var shIdx = Math.floor(phase * shSteps);
+      // Deterministic hash per step
+      var shSeed = (shIdx * 2654435761) & 0xFFFFFF;
+      val = ((shSeed / 0xFFFFFF) * 2 - 1);
+    } else if (lfo.shape === 6) {
+      // Smooth random: interpolated noise between random values
+      var srSteps = 10;
+      var srPos = phase * srSteps;
+      var srI0 = Math.floor(srPos);
+      var srFrac = srPos - srI0;
+      // Smooth interpolation (cubic hermite-ish)
+      var srT = srFrac * srFrac * (3 - 2 * srFrac);
+      var srHash = function(n) { var s = ((n * 2654435761) & 0xFFFFFF); return (s / 0xFFFFFF) * 2 - 1; };
+      val = srHash(srI0) * (1 - srT) + srHash(srI0 + 1) * srT;
+    } else val = lfoWaveform(lfo.shape, phase);
     val = applyPolarity(val, lfo.polarity);
     const py = h * 0.5 - val * h * 0.4;
     if (x === 0) ctx.moveTo(x, py);
@@ -5843,6 +5858,32 @@ function persistModState() {
   updateModConfigFn(json); // stores JSON + pushes config to C++ engine
 }
 
+// Restore grain sync + XY pad state from C++ (called by timer ticks 1-10)
+function restoreUIState(grainSync, xyEnabled, xyMode, xySpeed) {
+  // Grain sync
+  state.grainSyncEnabled = grainSync > 0.5;
+  var grainSizeLabel = document.querySelector('.knob-group[data-param="grainSize"] .knob-label');
+  if (grainSizeLabel) {
+    grainSizeLabel.classList.toggle('freeform-active', state.grainSyncEnabled);
+    grainSizeLabel.textContent = state.grainSyncEnabled ? 'BPM SYNC' : 'SIZE';
+  }
+  if (state.grainSyncEnabled) updateKnobDisplay('grainSize');
+
+  // XY pad auto state
+  state.xyAutoPlay = xyEnabled > 0.5;
+  state.xyAutoMode = xyMode > 0.5 ? 1 : 0;
+  state.xyAutoSpeed = xySpeed;
+  var playBtn = document.getElementById('xy-play');
+  if (playBtn) playBtn.classList.toggle('active', state.xyAutoPlay);
+  var modeBtn = document.getElementById('xy-mode');
+  if (modeBtn) {
+    modeBtn.classList.toggle('active', state.xyAutoMode === 1);
+    modeBtn.textContent = state.xyAutoMode === 1 ? '~' : '?';
+    modeBtn.title = state.xyAutoMode === 1 ? 'Mode: Smooth' : 'Mode: Chaotic';
+  }
+  drawSpeedKnob();
+}
+
 function restoreModState(json) {
   if (!json || json === '') return;
   try {
@@ -6256,12 +6297,12 @@ function initFxSuite() {
     var fB = fT + fH;
 
     // Colors
-    var fillFront = 'rgba(167, 139, 250, 0.10)';
-    var fillSide  = 'rgba(124, 58, 237, 0.14)';
-    var fillTop   = 'rgba(200, 180, 255, 0.08)';
-    var fillBase  = 'rgba(124, 58, 237, 0.18)';
-    var strokeMain = 'rgba(139, 92, 246, 0.55)';
-    var strokeBold = 'rgba(139, 92, 246, 0.7)';
+    var fillFront = 'rgba(167, 139, 250, 0.15)';
+    var fillSide  = 'rgba(124, 58, 237, 0.2)';
+    var fillTop   = 'rgba(200, 180, 255, 0.12)';
+    var fillBase  = 'rgba(124, 58, 237, 0.25)';
+    var strokeMain = 'rgba(139, 92, 246, 0.75)';
+    var strokeBold = 'rgba(139, 92, 246, 0.9)';
 
     // Right side face
     ctx.beginPath();
@@ -6588,10 +6629,10 @@ function initFxSuite() {
     var cornerR = 6 * sc;
 
     // Colors
-    var strokeMain = 'rgba(139, 92, 246, 0.55)';
-    var strokeBold = 'rgba(139, 92, 246, 0.7)';
-    var fillBody = 'rgba(167, 139, 250, 0.06)';
-    var fillWindow = 'rgba(124, 58, 237, 0.08)';
+    var strokeMain = 'rgba(139, 92, 246, 0.75)';
+    var strokeBold = 'rgba(139, 92, 246, 0.9)';
+    var fillBody = 'rgba(167, 139, 250, 0.1)';
+    var fillWindow = 'rgba(124, 58, 237, 0.12)';
 
     // Cassette body (rounded rect)
     ctx.beginPath();
@@ -6638,9 +6679,9 @@ function initFxSuite() {
       if (tapeR > 2) {
         ctx.beginPath();
         ctx.arc(sx, spoolCY, tapeR, 0, Math.PI * 2);
-        ctx.fillStyle = si === 0 ? 'rgba(167, 139, 250, 0.1)' : 'rgba(139, 92, 246, 0.14)';
+        ctx.fillStyle = si === 0 ? 'rgba(167, 139, 250, 0.18)' : 'rgba(139, 92, 246, 0.22)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
         ctx.lineWidth = 0.4;
         ctx.stroke();
       }
@@ -6660,7 +6701,7 @@ function initFxSuite() {
         ctx.beginPath();
         ctx.moveTo(sx + Math.cos(a) * innerR, spoolCY + Math.sin(a) * innerR);
         ctx.lineTo(sx + Math.cos(a) * outerR, spoolCY + Math.sin(a) * outerR);
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.55)';
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
@@ -6668,7 +6709,7 @@ function initFxSuite() {
       // Center dot
       ctx.beginPath();
       ctx.arc(sx, spoolCY, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.6)';
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.8)';
       ctx.fill();
     }
 
@@ -6686,7 +6727,7 @@ function initFxSuite() {
       ctx.lineTo(wx, tapeY + wb);
     }
     ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.65)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -6696,9 +6737,9 @@ function initFxSuite() {
     for (var pi = 0; pi < pins.length; pi++) {
       ctx.beginPath();
       ctx.arc(pins[pi], pinY, 1.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
       ctx.lineWidth = 0.5;
       ctx.stroke();
     }
@@ -6706,7 +6747,7 @@ function initFxSuite() {
     // Label area
     var labelY = cT + cH * 0.62;
     var labelH = cH * 0.18;
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
     ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.moveTo(cL + cW * 0.15, labelY);
@@ -6718,7 +6759,7 @@ function initFxSuite() {
     ctx.stroke();
 
     // "CASSETTE" label text
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.45)';
     ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -6735,12 +6776,12 @@ function initFxSuite() {
     for (var sci = 0; sci < screwPositions.length; sci++) {
       ctx.beginPath();
       ctx.arc(screwPositions[sci][0], screwPositions[sci][1], 2.5, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
       ctx.lineWidth = 0.5;
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(screwPositions[sci][0], screwPositions[sci][1], 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.3)';
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.5)';
       ctx.fill();
     }
 
@@ -6806,7 +6847,7 @@ function initFxSuite() {
       var fa2 = fa1 + (Math.PI * 2 / 6) * (0.5 + Math.sin(t * 0.3 + fi) * 0.15);
       ctx.beginPath();
       ctx.arc(sL + jit(1), sY + jit(1), sR, fa1, fa2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.35 + Math.sin(t * 0.5 + fi * 0.9) * 0.1) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.55 + Math.sin(t * 0.5 + fi * 0.9) * 0.1) + ')';
       ctx.lineWidth = 1.0;
       ctx.stroke();
     }
@@ -6818,7 +6859,7 @@ function initFxSuite() {
       var cl = Math.PI * (0.5 + ci * 0.1);
       ctx.beginPath();
       ctx.arc(sL, sY, cr, ca, ca + cl);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.08 + ci * 0.03) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.15 + ci * 0.05) + ')';
       ctx.lineWidth = 0.4;
       ctx.stroke();
     }
@@ -6826,12 +6867,12 @@ function initFxSuite() {
     // Supply hub
     ctx.beginPath();
     ctx.arc(sL, sY, 3 * sc, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.6)';
     ctx.lineWidth = 0.7;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(sL, sY, 1.2 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.15)';
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.3)';
     ctx.fill();
 
     // ── Take-up spool (right) — larger, more wire wound ──
@@ -6845,7 +6886,7 @@ function initFxSuite() {
       var ta2 = ta1 + (Math.PI * 2 / 6) * (0.55 + Math.sin(t * 0.4 + ti * 0.7) * 0.15);
       ctx.beginPath();
       ctx.arc(tR + jit(1), tY + jit(1), tRad, ta1, ta2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.35 + Math.sin(t * 0.6 + ti * 1.1) * 0.1) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.55 + Math.sin(t * 0.6 + ti * 1.1) * 0.1) + ')';
       ctx.lineWidth = 1.0;
       ctx.stroke();
     }
@@ -6857,7 +6898,7 @@ function initFxSuite() {
       var ul = Math.PI * (0.4 + ui * 0.08);
       ctx.beginPath();
       ctx.arc(tR, tY, ur, ua, ua + ul);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.06 + ui * 0.025) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.12 + ui * 0.04) + ')';
       ctx.lineWidth = 0.4;
       ctx.stroke();
     }
@@ -6865,12 +6906,12 @@ function initFxSuite() {
     // Take-up hub
     ctx.beginPath();
     ctx.arc(tR, tY, 3 * sc, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.6)';
     ctx.lineWidth = 0.7;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(tR, tY, 1.2 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.15)';
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.3)';
     ctx.fill();
 
     // ── Wire path between spools — irregular, with tangles and splice marks ──
@@ -6890,7 +6931,7 @@ function initFxSuite() {
       ctx.beginPath();
       ctx.moveTo(px, wireY - 5 * sc);
       ctx.lineTo(px + jit(1), wireY + 5 * sc);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
@@ -6955,14 +6996,14 @@ function initFxSuite() {
     ctx.lineTo(headX - 4 * sc, headY - 4 * sc);
     ctx.lineTo(headX + 4 * sc, headY - 4 * sc);
     ctx.lineTo(headX + 8 * sc, headY + 2 * sc);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
     ctx.lineWidth = 0.8;
     ctx.stroke();
 
     // Magnetic field lines (subtle arcs emanating from head)
     for (var mf = 0; mf < 3; mf++) {
       var mfR = (4 + mf * 4) * sc;
-      var mfAlpha = 0.08 + Math.sin(t * 2 + mf) * 0.04;
+      var mfAlpha = 0.15 + Math.sin(t * 2 + mf) * 0.06;
       ctx.beginPath();
       ctx.arc(headX, headY - 3 * sc, mfR, Math.PI * 1.1, Math.PI * 1.9);
       ctx.strokeStyle = 'rgba(167, 139, 250, ' + mfAlpha + ')';
@@ -6980,7 +7021,7 @@ function initFxSuite() {
     ctx.setLineDash([3, 4]);
     ctx.beginPath();
     ctx.rect(scopeL, scopeY - scopeH / 2, scopeW, scopeH);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
     ctx.lineWidth = 0.4;
     ctx.stroke();
     ctx.setLineDash([]);
@@ -7008,7 +7049,7 @@ function initFxSuite() {
       if (si === 0) ctx.moveTo(sx, sy);
       else ctx.lineTo(sx, sy);
     }
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.3)';
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.5)';
     ctx.lineWidth = 0.6;
     ctx.stroke();
 
@@ -7021,7 +7062,7 @@ function initFxSuite() {
       if (gi === 0) ctx.moveTo(gx, gy);
       else ctx.lineTo(gx, gy);
     }
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
     ctx.lineWidth = 0.4;
     ctx.stroke();
 
@@ -7041,7 +7082,7 @@ function initFxSuite() {
             fy + Math.sin(t * 3 + fi + fj) * 1.5
           );
         }
-        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.04 + sat * 0.06) + ')';
+        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.08 + sat * 0.1) + ')';
         ctx.lineWidth = 0.3;
         ctx.stroke();
       }
@@ -7063,7 +7104,7 @@ function initFxSuite() {
           skX + Math.cos(skAngle + 0.8) * skLen * 0.7,
           skY + Math.sin(skAngle + 0.8) * skLen * 0.7
         );
-        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (hiss * 0.15 + Math.sin(t * 8 + sk) * 0.05) + ')';
+        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (hiss * 0.25 + Math.sin(t * 8 + sk) * 0.08) + ')';
         ctx.lineWidth = 0.3;
         ctx.stroke();
       }
@@ -7080,7 +7121,7 @@ function initFxSuite() {
       if (letters[li] === ' ') continue;
       var lx = cx - totalW / 2 + (li / 6) * totalW + jit(1.5);
       var ly = labelY + jit(1);
-      var la = 0.1 + Math.sin(t * 0.8 + li * 1.2) * 0.04;
+      var la = 0.25 + Math.sin(t * 0.8 + li * 1.2) * 0.08;
       ctx.fillStyle = 'rgba(139, 92, 246, ' + la + ')';
       ctx.fillText(letters[li], lx, ly);
     }
@@ -7127,8 +7168,8 @@ function initFxSuite() {
     var cy = h * 0.36;
     var toneC = spaceToneRGB(tone);
 
-    // Intensity — always visible, even at mix=0 show faint trace
-    var intensity = 0.2 + mix * 0.8;
+    // Intensity — always vibrant; size/decay/tone shape the look, not mix
+    var intensity = 0.7 + mix * 0.3;
     var amplitude = 8 + size * (h * 0.32);
     var tailEnd = 0.15 + decay * 0.85;
     var decayRate = 2.5 + (1 - decay) * 5.0;

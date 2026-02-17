@@ -39,6 +39,14 @@ public:
         crossfadeSamples = static_cast<int>(sr * 0.075);
         crossfadeCounter = 0;
         crossfading = false;
+
+        // One-pole smoothing for amount parameters (~5ms time constant)
+        // Prevents clicks when LFO modulation crosses zero boundary
+        double tau = 0.005; // 5ms
+        amountSmoothCoeff = 1.0 - std::exp(-1.0 / (sampleRate * tau));
+        smoothedWow = 0.0;
+        smoothedSat = 0.0;
+        smoothedHiss = 0.0;
     }
 
     void reset()
@@ -46,6 +54,9 @@ public:
         studioMachine.reset();
         cassetteMachine.reset();
         wireMachine.reset();
+        smoothedWow = 0.0;
+        smoothedSat = 0.0;
+        smoothedHiss = 0.0;
 
         crossfadeCounter = 0;
         crossfading = false;
@@ -88,15 +99,23 @@ public:
     // wowFlutter: 0-1, saturation: 0-1, hiss: 0-1
     float processSample(float input, float wowFlutter, float saturation, float hiss)
     {
+        // Smooth amount params ONCE per sample to prevent clicks when LFO modulation crosses zero
+        smoothedSat  += amountSmoothCoeff * (static_cast<double>(saturation) - smoothedSat);
+        smoothedWow  += amountSmoothCoeff * (static_cast<double>(wowFlutter) - smoothedWow);
+        smoothedHiss += amountSmoothCoeff * (static_cast<double>(hiss) - smoothedHiss);
+        const float sSat  = static_cast<float>(smoothedSat);
+        const float sWow  = static_cast<float>(smoothedWow);
+        const float sHiss = static_cast<float>(smoothedHiss);
+
         if (!crossfading)
         {
             // Single machine path — zero CPU for inactive machines
-            return processOneMachine(machines[activeMachine], input, saturation, wowFlutter, hiss);
+            return processOneMachine(machines[activeMachine], input, sSat, sWow, sHiss);
         }
 
         // Crossfading: process through BOTH old and new machines
-        float outputOld = processOneMachine(machines[activeMachine], input, saturation, wowFlutter, hiss);
-        float outputNew = processOneMachine(machines[targetMachine], input, saturation, wowFlutter, hiss);
+        float outputOld = processOneMachine(machines[activeMachine], input, sSat, sWow, sHiss);
+        float outputNew = processOneMachine(machines[targetMachine], input, sSat, sWow, sHiss);
 
         // Linear blend: 1.0 at start (all old) -> 0.0 at end (all new)
         const float blend = static_cast<float>(crossfadeCounter) / static_cast<float>(crossfadeSamples);
@@ -159,4 +178,10 @@ private:
     int crossfadeCounter = 0; // Counts down from crossfadeSamples to 0
 
     double sr = 44100.0;
+
+    // Per-sample one-pole smoothing for amount params (anti-click)
+    double amountSmoothCoeff = 0.0;
+    double smoothedWow = 0.0;
+    double smoothedSat = 0.0;
+    double smoothedHiss = 0.0;
 };
