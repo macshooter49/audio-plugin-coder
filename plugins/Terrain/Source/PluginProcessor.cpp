@@ -664,6 +664,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     }();
     tapeProcessorL.setMachine(tapeMachineIdx);
     tapeProcessorR.setMachine(tapeMachineIdx);
+
+    // Wire-only mode toggles
+    const bool wireSpace = wireSpaceNoiseEnabled.load() > 0.5f;
+    const bool wireTube = wireTubeSatEnabled.load() > 0.5f;
+    tapeProcessorL.setWireModes(wireSpace, wireTube);
+    tapeProcessorR.setWireModes(wireSpace, wireTube);
+
     const bool feedToGrain = tapeLoopFeedToGrain.load() > 0.5f;
 
     // When feed mode activates, clear the grain engine's circular buffer.
@@ -920,6 +927,8 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty("grainEngineEnabled", grainEngineEnabled.load(), nullptr);
     state.setProperty("tapeEnabled",        tapeEnabled.load(),        nullptr);
     state.setProperty("wanderLinked",        wanderLinked.load(),        nullptr);
+    state.setProperty("wireSpaceNoise",     wireSpaceNoiseEnabled.load(), nullptr);
+    state.setProperty("wireTubeSat",        wireTubeSatEnabled.load(),    nullptr);
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
 
@@ -952,6 +961,8 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             grainEngineEnabled.store(static_cast<float>(newState.getProperty("grainEngineEnabled", 1.f)));
             tapeEnabled.store(static_cast<float>(newState.getProperty("tapeEnabled", 1.f)));
             wanderLinked.store(static_cast<float>(newState.getProperty("wanderLinked", 1.f)));
+            wireSpaceNoiseEnabled.store(static_cast<float>(newState.getProperty("wireSpaceNoise", 0.f)));
+            wireTubeSatEnabled.store(static_cast<float>(newState.getProperty("wireTubeSat", 0.f)));
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));

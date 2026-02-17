@@ -292,6 +292,30 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             {
                 complete(juce::var(audioProcessor.modStateJson));
             })
+            .withNativeFunction("setWireSpaceNoise", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.wireSpaceNoiseEnabled.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getWireSpaceNoise", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.wireSpaceNoiseEnabled.load());
+            })
+            .withNativeFunction("setWireTubeSat", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.wireTubeSatEnabled.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getWireTubeSat", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.wireTubeSatEnabled.load());
+            })
             .withNativeFunction("setXYPad", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -494,18 +518,22 @@ void TerrainAudioProcessorEditor::timerCallback()
             js << "if(typeof restoreModState==='function'){restoreModState('" << escaped << "');}";
         }
 
-        // Push grain sync, XY pad, and pitch locked state (same phased restore window)
+        // Push grain sync, XY pad, pitch locked, and wire mode state (same phased restore window)
         float grainSync  = audioProcessor.grainSyncEnabled.load();
         float xyEnabled  = audioProcessor.xyAutoEnabled.load();
         float xyMode     = audioProcessor.xyAutoMode.load();
         float xySpeed    = audioProcessor.xyAutoSpeed.load();
         float pitchLock  = audioProcessor.pitchLocked.load();
+        float wireSpace  = audioProcessor.wireSpaceNoiseEnabled.load();
+        float wireTube   = audioProcessor.wireTubeSatEnabled.load();
         js << "if(typeof restoreUIState==='function'){restoreUIState("
            << juce::String(grainSync, 1) << ","
            << juce::String(xyEnabled, 1) << ","
            << juce::String(xyMode, 1) << ","
            << juce::String(xySpeed, 3) << ","
-           << juce::String(pitchLock, 1) << ");}";
+           << juce::String(pitchLock, 1) << ","
+           << juce::String(wireSpace, 1) << ","
+           << juce::String(wireTube, 1) << ");}";
     }
 
     webView->evaluateJavascript(js);

@@ -94,6 +94,13 @@ public:
         return crossfading ? targetMachine : activeMachine;
     }
 
+    // Wire-only mode toggles (space noise hiss, tube saturator)
+    void setWireModes(bool spaceNoise, bool tubeSat)
+    {
+        wireMachine.setSpaceNoiseEnabled(spaceNoise);
+        wireMachine.setTubeSatEnabled(tubeSat);
+    }
+
     //==========================================================================
     // Process one sample with tape character
     // wowFlutter: 0-1, saturation: 0-1, hiss: 0-1

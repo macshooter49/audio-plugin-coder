@@ -126,6 +126,10 @@ public:
     // Feed tape loop back into granular engine (synced from JS)
     std::atomic<float> tapeLoopFeedToGrain { 0.f }; // 0 = off, 1 = on
 
+    // Wire-only mode toggles (synced from JS, persisted in DAW state)
+    std::atomic<float> wireSpaceNoiseEnabled { 0.f }; // 0 = standard hiss, 1 = space noise
+    std::atomic<float> wireTubeSatEnabled { 0.f };    // 0 = standard sat, 1 = tube
+
     // Modulation engine (runs in processBlock, independent of editor window)
     ModulationEngine modulationEngine;
 

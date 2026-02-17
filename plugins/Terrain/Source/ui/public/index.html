@@ -2576,6 +2576,8 @@ const state = {
   speedFreeform: false,
   pitchLocked: false,
   feedToGrain: false,
+  wireSpaceNoise: false,
+  wireTubeSat: false,
   tapeLoop: {
     recording: false,
     playing: false,
@@ -2691,6 +2693,8 @@ let setTapeLoopPlayFn, getTapeLoopPlayFn;
 let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn, setPitchLockedFn;
 let setXYAutoStateFn, getXYAutoStateFn;
 let updateModConfigFn, getModStateFn, setXYPadFn;
+let setWireSpaceNoiseFn, getWireSpaceNoiseFn;
+let setWireTubeSatFn, getWireTubeSatFn;
 
 function syncXYState() {
   if (juceMode && setXYAutoStateFn) {
@@ -2756,6 +2760,12 @@ async function initJuceBindings() {
     updateModConfigFn = window.Juce.getNativeFunction('updateModConfig');
     getModStateFn = window.Juce.getNativeFunction('getModState');
     setXYPadFn = window.Juce.getNativeFunction('setXYPad');
+
+    // Wire-only mode toggles
+    setWireSpaceNoiseFn = window.Juce.getNativeFunction('setWireSpaceNoise');
+    getWireSpaceNoiseFn = window.Juce.getNativeFunction('getWireSpaceNoise');
+    setWireTubeSatFn = window.Juce.getNativeFunction('setWireTubeSat');
+    getWireTubeSatFn = window.Juce.getNativeFunction('getWireTubeSat');
 
     // Sync initial section toggle states from backend
     const grainOn = await getGrainEngineEnabledFn();
@@ -5896,7 +5906,7 @@ function persistModState() {
 }
 
 // Restore grain sync + XY pad state from C++ (called by timer ticks 1-10)
-function restoreUIState(grainSync, xyEnabled, xyMode, xySpeed, pitchLock) {
+function restoreUIState(grainSync, xyEnabled, xyMode, xySpeed, pitchLock, wireSpace, wireTube) {
   // Grain sync
   state.grainSyncEnabled = grainSync > 0.5;
   var grainSizeLabel = document.querySelector('.knob-group[data-param="grainSize"] .knob-label');
@@ -5928,6 +5938,11 @@ function restoreUIState(grainSync, xyEnabled, xyMode, xySpeed, pitchLock) {
     modeBtn.title = state.xyAutoMode === 1 ? 'Mode: Smooth' : 'Mode: Chaotic';
   }
   drawSpeedKnob();
+
+  // Wire-only mode toggles
+  if (wireSpace !== undefined) state.wireSpaceNoise = wireSpace > 0.5;
+  if (wireTube !== undefined) state.wireTubeSat = wireTube > 0.5;
+  updateMachineSwitcher();
 }
 
 function restoreModState(json) {
@@ -6240,6 +6255,28 @@ function initFxSuite() {
   document.getElementById('machPrev').addEventListener('click', function() { cycleMachine(-1); });
   document.getElementById('machNext').addEventListener('click', function() { cycleMachine(1); });
 
+  // Wire-only label click toggles (HISS↔SPACE, SATURATION↔TUBE)
+  var hissLabel = document.querySelector('.fx-knob-group[data-fxknob="hiss"] .fx-knob-label');
+  if (hissLabel) {
+    hissLabel.addEventListener('click', function() {
+      if (state.tapeMachine !== 2) return; // Wire only
+      state.wireSpaceNoise = !state.wireSpaceNoise;
+      hissLabel.textContent = state.wireSpaceNoise ? 'SPACE' : 'HISS';
+      hissLabel.classList.toggle('freeform-active', state.wireSpaceNoise);
+      if (setWireSpaceNoiseFn) setWireSpaceNoiseFn(state.wireSpaceNoise ? 1 : 0);
+    });
+  }
+  var satLabel = document.querySelector('.fx-knob-group[data-fxknob="saturation"] .fx-knob-label');
+  if (satLabel) {
+    satLabel.addEventListener('click', function() {
+      if (state.tapeMachine !== 2) return; // Wire only
+      state.wireTubeSat = !state.wireTubeSat;
+      satLabel.textContent = state.wireTubeSat ? 'TUBE' : 'SATURATION';
+      satLabel.classList.toggle('freeform-active', state.wireTubeSat);
+      if (setWireTubeSatFn) setWireTubeSatFn(state.wireTubeSat ? 1 : 0);
+    });
+  }
+
   // Create space knobs
   var spaceKnobsLeft = document.getElementById('spaceKnobsLeft');
   var spaceKnobsRight = document.getElementById('spaceKnobsRight');
@@ -6303,6 +6340,30 @@ function initFxSuite() {
     for (var i = 0; i < dots.length; i++) {
       if (i === state.tapeMachine) dots[i].classList.add('active');
       else dots[i].classList.remove('active');
+    }
+    // Wire-only label clickable state
+    var isWire = state.tapeMachine === 2;
+    var hLabel = document.querySelector('.fx-knob-group[data-fxknob="hiss"] .fx-knob-label');
+    var sLabel = document.querySelector('.fx-knob-group[data-fxknob="saturation"] .fx-knob-label');
+    if (hLabel) {
+      if (isWire) {
+        hLabel.classList.add('knob-label-clickable');
+        hLabel.textContent = state.wireSpaceNoise ? 'SPACE' : 'HISS';
+        hLabel.classList.toggle('freeform-active', state.wireSpaceNoise);
+      } else {
+        hLabel.classList.remove('knob-label-clickable', 'freeform-active');
+        hLabel.textContent = 'HISS';
+      }
+    }
+    if (sLabel) {
+      if (isWire) {
+        sLabel.classList.add('knob-label-clickable');
+        sLabel.textContent = state.wireTubeSat ? 'TUBE' : 'SATURATION';
+        sLabel.classList.toggle('freeform-active', state.wireTubeSat);
+      } else {
+        sLabel.classList.remove('knob-label-clickable', 'freeform-active');
+        sLabel.textContent = 'SATURATION';
+      }
     }
   }
 
@@ -6893,7 +6954,7 @@ function initFxSuite() {
       var fa2 = fa1 + (Math.PI * 2 / 6) * (0.5 + Math.sin(t * 0.3 + fi) * 0.15);
       ctx.beginPath();
       ctx.arc(sL + jit(1), sY + jit(1), sR, fa1, fa2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.55 + Math.sin(t * 0.5 + fi * 0.9) * 0.1) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.75 + Math.sin(t * 0.5 + fi * 0.9) * 0.1) + ')';
       ctx.lineWidth = 1.0;
       ctx.stroke();
     }
@@ -6905,7 +6966,7 @@ function initFxSuite() {
       var cl = Math.PI * (0.5 + ci * 0.1);
       ctx.beginPath();
       ctx.arc(sL, sY, cr, ca, ca + cl);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.15 + ci * 0.05) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.35 + ci * 0.07) + ')';
       ctx.lineWidth = 0.4;
       ctx.stroke();
     }
@@ -6913,12 +6974,12 @@ function initFxSuite() {
     // Supply hub
     ctx.beginPath();
     ctx.arc(sL, sY, 3 * sc, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.6)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.8)';
     ctx.lineWidth = 0.7;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(sL, sY, 1.2 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.3)';
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.5)';
     ctx.fill();
 
     // ── Take-up spool (right) — larger, more wire wound ──
@@ -6932,7 +6993,7 @@ function initFxSuite() {
       var ta2 = ta1 + (Math.PI * 2 / 6) * (0.55 + Math.sin(t * 0.4 + ti * 0.7) * 0.15);
       ctx.beginPath();
       ctx.arc(tR + jit(1), tY + jit(1), tRad, ta1, ta2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.55 + Math.sin(t * 0.6 + ti * 1.1) * 0.1) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.75 + Math.sin(t * 0.6 + ti * 1.1) * 0.1) + ')';
       ctx.lineWidth = 1.0;
       ctx.stroke();
     }
@@ -6944,7 +7005,7 @@ function initFxSuite() {
       var ul = Math.PI * (0.4 + ui * 0.08);
       ctx.beginPath();
       ctx.arc(tR, tY, ur, ua, ua + ul);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.12 + ui * 0.04) + ')';
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.30 + ui * 0.06) + ')';
       ctx.lineWidth = 0.4;
       ctx.stroke();
     }
@@ -6952,12 +7013,12 @@ function initFxSuite() {
     // Take-up hub
     ctx.beginPath();
     ctx.arc(tR, tY, 3 * sc, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.6)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.8)';
     ctx.lineWidth = 0.7;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(tR, tY, 1.2 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.3)';
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.5)';
     ctx.fill();
 
     // ── Wire path between spools — irregular, with tangles and splice marks ──
@@ -6977,7 +7038,7 @@ function initFxSuite() {
       ctx.beginPath();
       ctx.moveTo(px, wireY - 5 * sc);
       ctx.lineTo(px + jit(1), wireY + 5 * sc);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
@@ -7006,7 +7067,7 @@ function initFxSuite() {
 
       // Break/splice points — gap in the wire
       if (ws === breakAt || ws === breakAt2) {
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
         ctx.lineWidth = 0.7;
         ctx.stroke();
         // Splice mark — small X
@@ -7015,7 +7076,7 @@ function initFxSuite() {
         ctx.lineTo(wx + 2, wy + 2);
         ctx.moveTo(wx + 2, wy - 2);
         ctx.lineTo(wx - 2, wy + 2);
-        ctx.strokeStyle = 'rgba(167, 139, 250, 0.4)';
+        ctx.strokeStyle = 'rgba(167, 139, 250, 0.6)';
         ctx.lineWidth = 0.5;
         ctx.stroke();
         // Start new segment
@@ -7031,7 +7092,7 @@ function initFxSuite() {
         ctx.lineTo(wx + jit(0.5), wy + jit(0.5));
       }
     }
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
     ctx.lineWidth = 0.7;
     ctx.stroke();
 
@@ -7042,14 +7103,14 @@ function initFxSuite() {
     ctx.lineTo(headX - 4 * sc, headY - 4 * sc);
     ctx.lineTo(headX + 4 * sc, headY - 4 * sc);
     ctx.lineTo(headX + 8 * sc, headY + 2 * sc);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.85)';
     ctx.lineWidth = 0.8;
     ctx.stroke();
 
     // Magnetic field lines (subtle arcs emanating from head)
     for (var mf = 0; mf < 3; mf++) {
       var mfR = (4 + mf * 4) * sc;
-      var mfAlpha = 0.15 + Math.sin(t * 2 + mf) * 0.06;
+      var mfAlpha = 0.25 + Math.sin(t * 2 + mf) * 0.08;
       ctx.beginPath();
       ctx.arc(headX, headY - 3 * sc, mfR, Math.PI * 1.1, Math.PI * 1.9);
       ctx.strokeStyle = 'rgba(167, 139, 250, ' + mfAlpha + ')';
@@ -7067,7 +7128,7 @@ function initFxSuite() {
     ctx.setLineDash([3, 4]);
     ctx.beginPath();
     ctx.rect(scopeL, scopeY - scopeH / 2, scopeW, scopeH);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
     ctx.lineWidth = 0.4;
     ctx.stroke();
     ctx.setLineDash([]);
@@ -7095,7 +7156,7 @@ function initFxSuite() {
       if (si === 0) ctx.moveTo(sx, sy);
       else ctx.lineTo(sx, sy);
     }
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.5)';
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.75)';
     ctx.lineWidth = 0.6;
     ctx.stroke();
 
@@ -7108,7 +7169,7 @@ function initFxSuite() {
       if (gi === 0) ctx.moveTo(gx, gy);
       else ctx.lineTo(gx, gy);
     }
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
     ctx.lineWidth = 0.4;
     ctx.stroke();
 
@@ -7128,7 +7189,7 @@ function initFxSuite() {
             fy + Math.sin(t * 3 + fi + fj) * 1.5
           );
         }
-        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.08 + sat * 0.1) + ')';
+        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.2 + sat * 0.2) + ')';
         ctx.lineWidth = 0.3;
         ctx.stroke();
       }
@@ -7150,7 +7211,7 @@ function initFxSuite() {
           skX + Math.cos(skAngle + 0.8) * skLen * 0.7,
           skY + Math.sin(skAngle + 0.8) * skLen * 0.7
         );
-        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (hiss * 0.25 + Math.sin(t * 8 + sk) * 0.08) + ')';
+        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (hiss * 0.45 + Math.sin(t * 8 + sk) * 0.1) + ')';
         ctx.lineWidth = 0.3;
         ctx.stroke();
       }
@@ -7167,7 +7228,7 @@ function initFxSuite() {
       if (letters[li] === ' ') continue;
       var lx = cx - totalW / 2 + (li / 6) * totalW + jit(1.5);
       var ly = labelY + jit(1);
-      var la = 0.25 + Math.sin(t * 0.8 + li * 1.2) * 0.08;
+      var la = 0.55 + Math.sin(t * 0.8 + li * 1.2) * 0.1;
       ctx.fillStyle = 'rgba(139, 92, 246, ' + la + ')';
       ctx.fillText(letters[li], lx, ly);
     }

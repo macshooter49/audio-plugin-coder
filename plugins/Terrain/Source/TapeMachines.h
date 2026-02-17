@@ -145,6 +145,72 @@ protected:
         }
     };
 
+    // Allpass diffusion stage for space noise (fixed-delay allpass)
+    struct AllpassDiffusionStage
+    {
+        std::vector<double> bufX, bufY;
+        int bufSize = 0;
+        int writePos = 0;
+        double feedback = 0.0;
+
+        void prepare(int delaySamples, double fb)
+        {
+            bufSize = delaySamples;
+            bufX.resize(static_cast<size_t>(bufSize), 0.0);
+            bufY.resize(static_cast<size_t>(bufSize), 0.0);
+            std::fill(bufX.begin(), bufX.end(), 0.0);
+            std::fill(bufY.begin(), bufY.end(), 0.0);
+            writePos = 0;
+            feedback = fb;
+        }
+
+        void reset()
+        {
+            std::fill(bufX.begin(), bufX.end(), 0.0);
+            std::fill(bufY.begin(), bufY.end(), 0.0);
+            writePos = 0;
+        }
+
+        double process(double input)
+        {
+            int readPos = (writePos + 1) % bufSize;
+            double delayed = bufX[static_cast<size_t>(readPos)];
+            double y = -feedback * input + delayed + feedback * bufY[static_cast<size_t>(readPos)];
+            bufX[static_cast<size_t>(writePos)] = input;
+            bufY[static_cast<size_t>(writePos)] = y;
+            writePos = (writePos + 1) % bufSize;
+            return y;
+        }
+    };
+
+    // Andrew Simper's State Variable Filter (bandpass mode)
+    struct SVFBandpass
+    {
+        double ic1eq = 0.0, ic2eq = 0.0;
+        double a1 = 0.0, a2 = 0.0, a3 = 0.0;
+
+        void setParams(double cutoffHz, double Q, double sampleRate)
+        {
+            double g = std::tan(M_PI * cutoffHz / sampleRate);
+            double k = 1.0 / Q;
+            a1 = 1.0 / (1.0 + g * (g + k));
+            a2 = g * a1;
+            a3 = g * a2;
+        }
+
+        void reset() { ic1eq = 0.0; ic2eq = 0.0; }
+
+        double process(double input)
+        {
+            double v3 = input - ic2eq;
+            double v1 = a1 * ic1eq + a2 * v3;
+            double v2 = ic2eq + a2 * ic1eq + a3 * v3;
+            ic1eq = 2.0 * v1 - ic1eq;
+            ic2eq = 2.0 * v2 - ic2eq;
+            return v1; // bandpass output
+        }
+    };
+
     struct SmoothRandom
     {
         double state = 0.0;
@@ -699,11 +765,16 @@ private:
 //
 //  Saturation: Asymmetric hard clip + wavefolder with smoothstep blend
 //              (0-30% amount blends from clean to full Wire character).
+//              Optional TUBE mode: dual-stage tube emulation with
+//              bias-modulated asymmetry + even harmonics + transformer.
 //              Extremely narrow bandwidth (200Hz-6kHz). 2x oversampled.
-//  Wow: 4 chaotic components: slow drift, irregular wow (wandering rate),
-//       chaotic flutter (wildly wandering rate), random speed jumps.
-//       Total max ±8.5ms. Broken, lurching, haunted.
-//  Hiss: Pink noise + crackle + micro-dropouts + wire twist all-pass artifact.
+//  Wow: 4 chaotic components with breathing LFO:
+//       slow drift (±3ms), irregular wow (wandering rate 0.5-2.5Hz),
+//       chaotic flutter (2-7Hz), random speed jumps (±5ms).
+//       Breathing LFO (0.03Hz) modulates depth ±25%. Organic, lurching.
+//  Hiss: Pink noise + micro-dropouts + wire twist all-pass artifact.
+//        Optional SPACE NOISE mode: allpass diffusion + swept bandpass
+//        + whistler chirps for ethereal spatial noise character.
 //        pow(amount,2.5) * 0.01 max. Worst SNR of all three machines.
 //
 //==============================================================================
@@ -719,6 +790,7 @@ public:
         initRng();
 
         dcBlocker.prepare(sr);
+        dcBlockerTube.prepare(sr);
         preHP1.setFreq(200.0, sr);
         preHP2.setFreq(200.0, sr);
         preLP1.setFreq(6000.0, sr);
@@ -727,12 +799,18 @@ public:
         postLP.setFreq(4000.0, sr);
         postLPDriven.setFreq(2000.0, sr);
 
+        // Tube saturator filters
+        tubeLowShelf.setFreq(80.0, sr);
+        tubeHFRolloff.setFreq(8000.0, sr);
+        tubeBias.prepare(0.1, 0.3, sr, rng);
+
         // Wow delay line: 100ms buffer for massive chaotic modulation
         delay.prepare(0.1, sr);
 
         slowRandom.prepare(0.12, 0.5, sr, rng);
         irregWowDrift.prepare(0.3, 1.5, sr, rng);
         chaoticDrift.prepare(0.5, 2.0, sr, rng);
+        breathingLFO.prepare(0.03, 0.1, sr, rng);
 
         std::uniform_real_distribution<double> phaseDist(0.0, 1.0);
         irregPhase = phaseDist(rng);
@@ -748,14 +826,24 @@ public:
         hissBell.setFreq(800.0, sr);
         hissHP.setFreq(100.0, sr);
 
-        crackleState = 0.0;
-        crackleSmooth.setFreq(2000.0, sr);
-
         dropoutGain = 1.0;
 
         // Wire twist all-pass artifact
         wireTwistAP.setFreq(800.0, sr);
         wireTwistRandom.prepare(0.3, 1.0, sr, rng);
+
+        // Space noise: allpass diffusion network (prime-number delays scaled to SR)
+        double srScale = sr / 44100.0;
+        diffusion[0].prepare(static_cast<int>(113 * srScale), 0.55);
+        diffusion[1].prepare(static_cast<int>(173 * srScale), 0.62);
+        diffusion[2].prepare(static_cast<int>(241 * srScale), 0.68);
+        diffusion[3].prepare(static_cast<int>(337 * srScale), 0.73);
+        spaceFilter.setParams(800.0, 2.5, sr);
+        spaceSweepLFO.prepare(0.15, 0.3, sr, rng);
+        spaceDCBlocker.prepare(sr);
+        whistlerPhase = 0.0;
+        whistlerActive = false;
+        whistlerFreq = 8000.0;
 
         prevOversampleInput = 0.0;
     }
@@ -763,37 +851,51 @@ public:
     void reset() override
     {
         dcBlocker.reset();
+        dcBlockerTube.reset();
         preHP1.reset(); preHP2.reset();
         preLP1.reset(); preLP2.reset();
         preBell.reset();
         postLP.reset(); postLPDriven.reset();
+        tubeLowShelf.reset(); tubeHFRolloff.reset();
+        tubeBias.reset();
         delay.reset();
         slowRandom.reset();
         irregWowDrift.reset();
         chaoticDrift.reset();
+        breathingLFO.reset();
         irregPhase = 0.0;
         chaoticPhase = 0.0;
         speedJumpOffset = 0.0;
         pinkB0 = 0.0; pinkB1 = 0.0; pinkB2 = 0.0;
         pinkB3 = 0.0; pinkB4 = 0.0; pinkB5 = 0.0; pinkB6 = 0.0;
         hissLP.reset(); hissBell.reset(); hissHP.reset();
-        crackleState = 0.0;
-        crackleSmooth.reset();
         dropoutGain = 1.0;
         wireTwistAP.reset();
         wireTwistRandom.reset();
+        for (auto& d : diffusion) d.reset();
+        spaceFilter.reset();
+        spaceSweepLFO.reset();
+        spaceDCBlocker.reset();
+        whistlerPhase = 0.0;
+        whistlerActive = false;
         prevOversampleInput = 0.0;
     }
 
     //==========================================================================
     // Saturation: Asymmetric clip + wavefolder with smoothstep blend.
-    // At 0-30%: gradually blend in Wire character (subtle at low settings).
-    // At 30%+: full Wire algorithm.
+    // TUBE mode: dual-stage tube emulation with bias-modulated asymmetry.
     double processSaturation(double input, double amount) override
     {
         // Always run full chain to keep filter state warm (prevents clicks)
         const double midSample = (prevOversampleInput + input) * 0.5;
         prevOversampleInput = input;
+
+        if (tubeSatEnabled)
+        {
+            const double out1 = tubeSaturateSample(midSample, amount);
+            const double out2 = tubeSaturateSample(input, amount);
+            return (out1 + out2) * 0.5;
+        }
 
         const double out1 = saturateSample(midSample, amount);
         const double out2 = saturateSample(input, amount);
@@ -802,12 +904,13 @@ public:
     }
 
     //==========================================================================
-    // Wow: 4 chaotic components
-    //   1. Slow drift (smoothRandom, ±2.5ms) — wire tension wandering
+    // Wow: 4 chaotic components + breathing LFO
+    //   1. Slow drift (smoothRandom, ±3ms) — wire tension wandering
     //   2. Irregular wow (wandering rate 0.5-2.5Hz, ±1.5ms) — spool inconsistency
-    //   3. Chaotic flutter (wildly wandering rate 1-9Hz, ±0.5ms) — friction
-    //   4. Random speed jumps (±4ms, slow decay ~300ms) — the signature Wire feature
-    // Total max ±8.5ms. 12ms center delay.
+    //   3. Chaotic flutter (wandering rate 2-7Hz, ±0.4ms) — friction (vintage range)
+    //   4. Random speed jumps (±5ms, slow decay ~300ms) — the signature Wire feature
+    //   Breathing LFO (0.03Hz) modulates drift + irregular depth ±25%
+    // 12ms center delay.
     double processWow(double input, double amount) override
     {
         speedJumpOffset *= 0.999;
@@ -815,35 +918,34 @@ public:
         // Always write to delay line to keep buffer current (prevents clicks)
         delay.write(static_cast<float>(input));
 
-        // 1. Slow drift: wire tension changes unpredictably
-        const double driftValue = slowRandom.next(sr) * amount * 2.5;
+        // Breathing LFO: very slow organic depth variation ±25%
+        const double breathVal = breathingLFO.next(sr); // -1 to 1
+        const double breathScale = 1.0 + breathVal * 0.25; // 0.75 to 1.25
 
-        // 2. Irregular wow: rate itself wanders 0.5-2.5Hz
+        // 1. Slow drift: wire tension changes unpredictably (±3ms, breathing modulated)
+        const double driftValue = slowRandom.next(sr) * amount * 3.0 * breathScale;
+
+        // 2. Irregular wow: rate itself wanders 0.5-2.5Hz (breathing modulated)
         const double irregDriftVal = irregWowDrift.next(sr);
         const double irregRate = 1.0 + irregDriftVal * 1.5;
         irregPhase += std::max(irregRate, 0.1) / sr;
         if (irregPhase >= 1.0) irregPhase -= 1.0;
-        const double irregMod = std::sin(2.0 * M_PI * irregPhase) * amount * 1.5;
+        const double irregMod = std::sin(2.0 * M_PI * irregPhase) * amount * 1.5 * breathScale;
 
-        // 3. Chaotic flutter: rate wanders wildly 1-9Hz
+        // 3. Chaotic flutter: rate wanders 2-7Hz (narrower, more vintage)
         const double chaoticDriftVal = chaoticDrift.next(sr);
-        const double chaoticRate = 4.0 + chaoticDriftVal * 5.0;
+        const double chaoticRate = 4.5 + chaoticDriftVal * 2.5; // 2-7Hz
         chaoticPhase += std::max(chaoticRate, 0.5) / sr;
         if (chaoticPhase >= 1.0) chaoticPhase -= 1.0;
-        const double chaoticMod = std::sin(2.0 * M_PI * chaoticPhase) * amount * 0.5;
+        const double chaoticMod = std::sin(2.0 * M_PI * chaoticPhase) * amount * 0.4;
 
-        // 4. Random speed jumps — the signature Wire feature
-        // Per-sample probability: ~0.0005 * amount
+        // 4. Random speed jumps — less frequent but deeper
         std::uniform_real_distribution<double> prob(0.0, 1.0);
-        if (prob(rng) < 0.0005 * amount)
+        if (prob(rng) < 0.0003 * amount)
         {
             std::uniform_real_distribution<double> jumpDist(-1.0, 1.0);
-            // Sudden ±4ms jump in delay time
-            speedJumpOffset += jumpDist(rng) * amount * 4.0;
+            speedJumpOffset += jumpDist(rng) * amount * 5.0;
         }
-        // Slow exponential decay (~300ms to half at 44.1kHz)
-        // 0.9999^44100 ≈ 0.012 so about 100ms to reach 1%
-        // Use 0.99993 for ~300ms half-life
         speedJumpOffset *= 0.99993;
 
         // Combine all (in ms)
@@ -864,7 +966,8 @@ public:
     }
 
     //==========================================================================
-    // Hiss: Pink noise + crackle + micro-dropouts + wire twist all-pass.
+    // Hiss: Pink noise + micro-dropouts + wire twist all-pass.
+    // SPACE NOISE mode: allpass diffusion + swept bandpass + whistler chirps.
     // pow(amount,2.5) * 0.01 max. Worst noise floor.
     double processHiss(double amount, float& audioGainMultiplier) override
     {
@@ -903,44 +1006,74 @@ public:
 
         pink *= 0.11;
 
-        // LP at 6kHz
-        pink = hissLP.process(pink);
+        double totalNoise;
 
-        // Bell +3dB at 800Hz
-        const double bellLP = hissBell.process(pink);
-        const double bellHF = pink - bellLP;
-        pink = bellLP * 1.41 + bellHF;
-
-        // HP at 100Hz
-        pink = hissHP.process(pink);
-
-        // --- Wire twist phase artifact ---
-        // All-pass modulated by slow random, unique to Wire
-        const double twistVal = wireTwistRandom.next(sr);
-        const double twistFreq = 800.0 + amount * 2000.0 * (0.5 + twistVal * 0.5);
-        wireTwistAP.setFreq(std::max(200.0, std::min(twistFreq, 4000.0)), sr);
-        pink = wireTwistAP.process(pink);
-
-        // --- Crackle ---
-        double crackle = 0.0;
+        if (spaceNoiseEnabled)
         {
-            std::uniform_real_distribution<double> cProb(0.0, 1.0);
-            if (cProb(rng) < 0.03 * amount)
-            {
-                std::uniform_real_distribution<double> impDist(-0.4, 0.4);
-                crackleState = impDist(rng);
-            }
-            crackle = crackleSmooth.process(crackleState);
-            crackleState *= 0.8;
-        }
+            // --- Space Noise mode ---
+            // Pink → 4-stage allpass diffusion → swept bandpass → whistler chirps → DC block
+            double spaceSig = pink;
+            for (auto& d : diffusion)
+                spaceSig = d.process(spaceSig);
 
-        const double totalNoise = pink + crackle * amount;
+            // Swept bandpass: cutoff wanders 200-3000Hz
+            const double sweepVal = spaceSweepLFO.next(sr); // -1 to 1
+            const double sweepCutoff = 200.0 + (sweepVal * 0.5 + 0.5) * 2800.0; // 200-3000
+            spaceFilter.setParams(sweepCutoff, 2.5, sr);
+            spaceSig = spaceFilter.process(spaceSig);
+
+            // Sparse whistler chirps (descending sine, very quiet)
+            std::uniform_real_distribution<double> wProb(0.0, 1.0);
+            if (!whistlerActive && wProb(rng) < 0.0001)
+            {
+                whistlerActive = true;
+                whistlerFreq = 8000.0;
+                whistlerPhase = 0.0;
+            }
+            if (whistlerActive)
+            {
+                whistlerPhase += whistlerFreq / sr;
+                double chirp = std::sin(2.0 * M_PI * whistlerPhase) * 0.03 * amount;
+                spaceSig += chirp;
+                whistlerFreq *= 0.9997; // descend toward 500Hz
+                if (whistlerFreq < 500.0) whistlerActive = false;
+            }
+
+            spaceSig = spaceDCBlocker.process(spaceSig);
+            totalNoise = spaceSig;
+        }
+        else
+        {
+            // --- Standard Wire hiss ---
+            // LP at 6kHz
+            pink = hissLP.process(pink);
+
+            // Bell +3dB at 800Hz
+            const double bellLP = hissBell.process(pink);
+            const double bellHF = pink - bellLP;
+            pink = bellLP * 1.41 + bellHF;
+
+            // HP at 100Hz
+            pink = hissHP.process(pink);
+
+            // Wire twist phase artifact
+            const double twistVal = wireTwistRandom.next(sr);
+            const double twistFreq = 800.0 + amount * 2000.0 * (0.5 + twistVal * 0.5);
+            wireTwistAP.setFreq(std::max(200.0, std::min(twistFreq, 4000.0)), sr);
+            pink = wireTwistAP.process(pink);
+
+            totalNoise = pink;
+        }
 
         // Exponential curve: pow(amount, 2.5) * 0.01
         const double level = std::pow(amount, 2.5) * 0.01;
 
         return totalNoise * level;
     }
+
+    // Mode setters (called from processBlock via TapeProcessor)
+    void setSpaceNoiseEnabled(bool enabled) { spaceNoiseEnabled = enabled; }
+    void setTubeSatEnabled(bool enabled) { tubeSatEnabled = enabled; }
 
 private:
     double saturateSample(double input, double amount)
@@ -996,17 +1129,69 @@ private:
         return x;
     }
 
+    double tubeSaturateSample(double input, double amount)
+    {
+        // Reuse existing pre-filters to keep state warm (shared with standard sat)
+        double x = preHP1.process(input);
+        x = preHP2.process(x);
+        x = preLP1.process(x);
+        x = preLP2.process(x);
+
+        // Stage 1: moderate drive with bias-modulated asymmetry
+        const double drive1 = 1.0 + amount * 3.0;
+        const double biasVal = tubeBias.next(sr);
+        const double bias = biasVal * 0.08 * amount; // subtle bias wander
+        x = x * drive1 + bias;
+        x = std::tanh(x);
+        // Even harmonic injection (x * |x| adds 2nd harmonic character)
+        x += x * std::abs(x) * 0.2 * amount;
+
+        // Stage 2: higher drive + more even harmonics
+        const double drive2 = 1.0 + amount * 5.0;
+        x *= drive2;
+        x = std::tanh(x);
+        x += x * std::abs(x) * 0.15 * amount;
+
+        x = dcBlockerTube.process(x);
+
+        // Transformer output: low shelf bump at ~80Hz
+        const double shelfLP = tubeLowShelf.process(x);
+        const double shelfHF = x - shelfLP;
+        x = shelfLP * (1.0 + amount * 0.3) + shelfHF; // +2-3dB at 80Hz
+
+        // HF rolloff: 8kHz → 4kHz with amount
+        const double hfCutoff = 8000.0 - 4000.0 * amount;
+        tubeHFRolloff.alpha = onePoleCoeff(std::max(hfCutoff, 2000.0), sr);
+        x = tubeHFRolloff.process(x);
+
+        // Smoothstep blend: same 0→30% curve as standard sat
+        const double blendCurve = smoothstep(0.0, 0.3, amount);
+        x = input * (1.0 - blendCurve) + x * blendCurve;
+
+        const double gainComp = 1.0 / (1.0 + amount * 0.6);
+        x *= gainComp;
+
+        return x;
+    }
+
     DCBlocker dcBlocker;
+    DCBlocker dcBlockerTube;
     OnePoleHP preHP1, preHP2;
     OnePoleLP preLP1, preLP2;
     OnePoleLP preBell;
     OnePoleLP postLP;
     OnePoleLP postLPDriven;
 
+    // Tube saturator state
+    OnePoleLP tubeLowShelf;
+    OnePoleLP tubeHFRolloff;
+    SmoothRandom tubeBias;
+
     DelayLine delay;
     SmoothRandom slowRandom;
     SmoothRandom irregWowDrift;
     SmoothRandom chaoticDrift;
+    SmoothRandom breathingLFO;
     double irregPhase = 0.0;
     double chaoticPhase = 0.0;
     double speedJumpOffset = 0.0;
@@ -1017,12 +1202,23 @@ private:
     OnePoleLP hissLP;
     OnePoleLP hissBell;
     OnePoleHP hissHP;
-    OnePoleLP crackleSmooth;
-    double crackleState = 0.0;
 
     double dropoutGain = 1.0;
 
     // Wire twist artifact
     OnePoleAP wireTwistAP;
     SmoothRandom wireTwistRandom;
+
+    // Space noise state
+    AllpassDiffusionStage diffusion[4];
+    SVFBandpass spaceFilter;
+    SmoothRandom spaceSweepLFO;
+    DCBlocker spaceDCBlocker;
+    double whistlerPhase = 0.0;
+    double whistlerFreq = 8000.0;
+    bool whistlerActive = false;
+
+    // Mode toggles (set from processBlock)
+    bool spaceNoiseEnabled = false;
+    bool tubeSatEnabled = false;
 };
