@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=780">
+<title>Wave Rack v4</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #F5F2F8;
+  --surface: #FFFFFF;
+  --border: #E8E2F0;
+  --border-light: #F0ECF5;
+  --text: #3D3450;
+  --text-mid: #7B7090;
+  --text-dim: #B0A8C0;
+  --orange: #FF6D2E;
+  --orange-soft: rgba(255, 109, 46, 0.12);
+  --orange-hover: rgba(255, 109, 46, 0.06);
+  --orange-glow: rgba(255, 109, 46, 0.08);
+  --green-on: #3DBB6E;
+  --green-dim: #C8E8D4;
+  --cell-off: #EDE8F4;
+  --cell-hover: #E4DFF0;
+  --mute-on: #E05555;
+  --solo-on: #D4A020;
+  --gap: 5px;
+}
+
+html, body {
+  width: 780px;
+  height: 440px;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  width: 780px;
+  height: 440px;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 5px;
+}
+
+/* ===== TOOLBAR ===== */
+#toolbar {
+  height: 30px;
+  min-height: 30px;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(60, 50, 80, 0.04);
+}
+
+.pat-grp { display: flex; gap: 3px; }
+
+.pat-btn {
+  width: 22px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.pat-btn:hover { background: var(--orange-hover); color: var(--text-mid); }
+
+.pat-btn.active {
+  background: var(--orange);
+  color: #fff;
+  border-color: var(--orange);
+  box-shadow: 0 1px 4px rgba(255, 109, 46, 0.25);
+}
+
+/* Dot indicator for patterns with data */
+.pat-btn .dot {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.pat-btn .dot.has-data {
+  background: var(--orange);
+}
+
+.pat-btn.active .dot.has-data {
+  background: #fff;
+}
+
+.sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
+
+.tb-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tb-ctrl label {
+  font-size: 8px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 500;
+}
+
+.tb-sel {
+  height: 20px;
+  padding: 0 5px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 9px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.tb-sel:focus { border-color: var(--orange); }
+
+.swing-grp {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.swing-grp label {
+  font-size: 8px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 500;
+}
+
+#swing {
+  width: 44px;
+  height: 2px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 1px;
+  outline: none;
+  cursor: pointer;
+}
+
+#swing::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  background: var(--orange);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 3px rgba(255,109,46,0.2);
+}
+
+.swing-v {
+  font-size: 8px;
+  color: var(--text-dim);
+  min-width: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.spacer { flex: 1; }
+
+.bpm {
+  font-size: 9px;
+  color: var(--text-mid);
+  font-variant-numeric: tabular-nums;
+}
+
+.bpm b { color: var(--text); font-weight: 600; }
+
+/* Chain indicator */
+.chain-indicator {
+  font-size: 7px;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+  padding: 2px 5px;
+  background: var(--orange-soft);
+  border-radius: 4px;
+  color: var(--orange);
+  font-weight: 600;
+}
+
+#play-btn {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+#play-btn:hover { border-color: var(--orange); }
+
+#play-btn .tri {
+  width: 0; height: 0;
+  border-left: 5px solid var(--text-dim);
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  margin-left: 1px;
+}
+
+#play-btn.on {
+  background: var(--orange);
+  border-color: var(--orange);
+}
+
+#play-btn.on .tri {
+  border-left-color: #fff;
+}
+
+/* ===== MAIN ===== */
+#main {
+  flex: 1;
+  display: flex;
+  gap: 5px;
+  overflow: hidden;
+}
+
+/* ===== CHANNELS ===== */
+#ch-panel {
+  width: 148px;
+  min-width: 148px;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(60,50,80,0.04);
+}
+
+.ch {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: background 0.1s ease;
+  min-height: 0;
+}
+
+.ch:last-child { border-bottom: none; }
+.ch:hover { background: var(--orange-hover); }
+.ch.sel { background: var(--orange-soft); }
+.ch.muted { opacity: 0.25; }
+
+.ch-led {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green-dim);
+  flex-shrink: 0;
+}
+
+.ch-led.on {
+  background: var(--green-on);
+  box-shadow: 0 0 3px rgba(61,187,110,0.3);
+}
+
+.ch-nm {
+  flex: 1;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.2px;
+}
+
+.ch-nt {
+  font-size: 7px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ch-ms {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.ms {
+  width: 13px;
+  height: 13px;
+  border: none;
+  border-radius: 3px;
+  font-size: 6px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cell-off);
+  color: var(--text-dim);
+  transition: all 0.1s ease;
+}
+
+.ms:hover { background: var(--cell-hover); }
+.ms.m-on { background: var(--mute-on); color: #fff; }
+.ms.s-on { background: var(--solo-on); color: #fff; }
+
+/* ===== GRID ===== */
+#grid-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(60,50,80,0.04);
+}
+
+#nums {
+  height: 13px;
+  min-height: 13px;
+  display: flex;
+  padding: 0 3px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ng { display: flex; flex: 1; }
+.ng + .ng { margin-left: var(--gap); }
+
+.sn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.sn.b { color: var(--text-mid); font-weight: 600; }
+
+#grid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: 2px 3px;
+}
+
+.gr {
+  flex: 1;
+  display: flex;
+  padding: 1px 0;
+}
+
+.cg {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.cg + .cg { margin-left: var(--gap); }
+
+/* Clean step cell */
+.c {
+  flex: 1;
+  min-height: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--cell-off);
+  border: 1px solid transparent;
+  transition: background 0.06s ease, border-color 0.06s ease, box-shadow 0.06s ease;
+}
+
+.c:hover {
+  background: var(--cell-hover);
+}
+
+/* ON: orange fill */
+.c.on {
+  background: var(--orange);
+  border-color: rgba(255, 109, 46, 0.3);
+  box-shadow: 0 1px 4px rgba(255, 109, 46, 0.15);
+}
+
+/* ACCENT: brighter orange + glow */
+.c.acc {
+  background: #FF8A50;
+  border-color: rgba(255, 138, 80, 0.4);
+  box-shadow: 0 1px 6px rgba(255, 109, 46, 0.25), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+/* Cursor */
+#cur {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  background: rgba(255, 109, 46, 0.08);
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 109, 46, 0.1);
+}
+
+/* ===== GRAPH ===== */
+#graph-wrap {
+  display: flex;
+  gap: 5px;
+  height: 44px;
+}
+
+#g-side {
+  width: 148px;
+  min-width: 148px;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(60,50,80,0.04);
+}
+
+.g-lbl {
+  font-size: 7px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 500;
+}
+
+.g-tabs { display: flex; gap: 2px; }
+
+.g-t {
+  font-size: 8px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.1s ease;
+}
+
+.g-t:hover { color: var(--text-mid); background: var(--orange-hover); }
+
+.g-t.active {
+  background: var(--orange);
+  color: #fff;
+}
+
+#g-bars {
+  flex: 1;
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  padding: 3px;
+  box-shadow: 0 1px 3px rgba(60,50,80,0.04);
+}
+
+.vg { display: flex; gap: 1px; flex: 1; align-items: flex-end; height: 100%; }
+.vg + .vg { margin-left: var(--gap); }
+
+.vb {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  cursor: ns-resize;
+  min-width: 0;
+  min-height: 1px;
+}
+
+.vb:hover { filter: brightness(0.92); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="toolbar">
+    <div class="pat-grp" id="pat-grp"></div>
+    <div class="sep"></div>
+    <div class="tb-ctrl">
+      <label>Steps</label>
+      <select class="tb-sel" id="s-steps">
+        <option value="16" selected>16</option>
+        <option value="32">32</option>
+      </select>
+    </div>
+    <div class="tb-ctrl">
+      <label>Res</label>
+      <select class="tb-sel" id="s-res">
+        <option value="1/16" selected>1/16</option>
+        <option value="1/8">1/8</option>
+        <option value="1/32">1/32</option>
+      </select>
+    </div>
+    <div class="sep"></div>
+    <div class="swing-grp">
+      <label>Swing</label>
+      <input type="range" id="swing" min="50" max="100" value="50">
+      <span class="swing-v" id="sw-v">50%</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="chain-indicator" id="chain-label">A</span>
+    <div class="sep"></div>
+    <span class="bpm">BPM <b>128</b></span>
+    <div class="sep"></div>
+    <button id="play-btn" class="on"><span class="tri"></span></button>
+  </div>
+
+  <div id="main">
+    <div id="ch-panel"></div>
+    <div id="grid-panel">
+      <div id="nums"></div>
+      <div id="grid"><div id="cur" style="display:none;"></div></div>
+    </div>
+  </div>
+
+  <div id="graph-wrap">
+    <div id="g-side">
+      <span class="g-lbl">Graph</span>
+      <div class="g-tabs">
+        <button class="g-t active">Vel</button>
+        <button class="g-t">Pitch</button>
+        <button class="g-t">Len</button>
+      </div>
+    </div>
+    <div id="g-bars"></div>
+  </div>
+
+</div>
+
+<script>
+const CH = [
+  { name:'Kick',      note:'C1',  color:'#FF6D2E' },
+  { name:'Snare',     note:'D1',  color:'#FF6D2E' },
+  { name:'Closed HH', note:'F#1', color:'#FF6D2E' },
+  { name:'Open HH',   note:'A#1', color:'#FF6D2E' },
+  { name:'Clap',      note:'D#1', color:'#FF6D2E' },
+  { name:'Rim',       note:'C#1', color:'#FF6D2E' },
+  { name:'Low Tom',   note:'F1',  color:'#FF6D2E' },
+  { name:'Mid Tom',   note:'B1',  color:'#FF6D2E' }
+];
+
+const NS=16, SPG=4, NP=4;
+const PLBL=['A','B','C','D'];
+let P=[], V=[];
+for(let p=0;p<NP;p++){P[p]=[];V[p]=[];for(let c=0;c<CH.length;c++){P[p][c]=new Array(NS).fill(0);V[p][c]=new Array(NS).fill(100);}}
+
+// Pattern A: basic beat
+[0,4,8,12].forEach(s=>{P[0][0][s]=1;V[0][0][s]=120;});
+[4,12].forEach(s=>{P[0][1][s]=1;V[0][1][s]=110;});
+[0,2,4,6,8,10,12,14].forEach(s=>{P[0][2][s]=1;V[0][2][s]=90;});
+[7].forEach(s=>{P[0][3][s]=1;V[0][3][s]=100;});
+[4,12].forEach(s=>{P[0][4][s]=2;V[0][4][s]=127;});
+
+let ap=0, selCh=0;
+let muted=new Array(CH.length).fill(false);
+let solod=new Array(CH.length).fill(false);
+let playing=true, curStep=-1, timer=null;
+
+// ===== AUTO-CHAIN: only loop patterns with data =====
+function patternsWithData() {
+  const active = [];
+  for (let p=0; p<NP; p++) {
+    let hasData = false;
+    for (let c=0; c<CH.length; c++) {
+      if (P[p][c].some(s=>s>0)) { hasData=true; break; }
+    }
+    if (hasData) active.push(p);
+  }
+  return active.length > 0 ? active : [0];
+}
+
+function updateChainLabel() {
+  const chain = patternsWithData();
+  const label = chain.map(p=>PLBL[p]).join(' → ');
+  document.getElementById('chain-label').textContent = label;
+}
+
+// Track which pattern is currently playing in the chain
+let chainIdx = 0;
+
+function advanceStep() {
+  const chain = patternsWithData();
+  if (chain.length === 0) return;
+
+  curStep++;
+  if (curStep >= NS) {
+    curStep = 0;
+    // Move to next pattern in chain
+    chainIdx = (chainIdx + 1) % chain.length;
+    const nextPat = chain[chainIdx];
+    if (nextPat !== ap) {
+      ap = nextPat;
+      document.querySelectorAll('.pat-btn').forEach(b => {
+        b.classList.toggle('active', parseInt(b.dataset.p) === ap);
+      });
+      renderGrid(); renderCh(); renderGraph();
+    }
+  }
+  updateCursor();
+}
+
+// ===== PATTERN BUTTONS =====
+function renderPatBtns() {
+  const grp = document.getElementById('pat-grp');
+  grp.innerHTML = '';
+  const chain = patternsWithData();
+  for (let i=0; i<NP; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'pat-btn' + (i===ap?' active':'');
+    btn.dataset.p = i;
+    btn.textContent = PLBL[i];
+
+    const dot = document.createElement('span');
+    dot.className = 'dot' + (chain.includes(i)?' has-data':'');
+    btn.appendChild(dot);
+
+    btn.onclick = () => {
+      ap = i;
+      // Reset chain index to this pattern
+      const ch = patternsWithData();
+      chainIdx = ch.indexOf(i);
+      if (chainIdx < 0) chainIdx = 0;
+      renderPatBtns();
+      renderGrid(); renderCh(); renderGraph();
+      updateChainLabel();
+    };
+    grp.appendChild(btn);
+  }
+}
+
+// ===== CHANNELS =====
+function renderCh() {
+  const el=document.getElementById('ch-panel');
+  el.innerHTML='';
+  CH.forEach((c,i) => {
+    const row=document.createElement('div');
+    row.className='ch'+(i===selCh?' sel':'')+(muted[i]?' muted':'');
+
+    const led=document.createElement('div');
+    led.className='ch-led'+(P[ap][i].some(s=>s>0)?' on':'');
+
+    const nm=document.createElement('div');
+    nm.className='ch-nm'; nm.textContent=c.name;
+
+    const nt=document.createElement('div');
+    nt.className='ch-nt'; nt.textContent=c.note;
+
+    const ms=document.createElement('div');
+    ms.className='ch-ms';
+
+    const mb=document.createElement('div');
+    mb.className='ms'+(muted[i]?' m-on':''); mb.textContent='M';
+    mb.onclick=(e)=>{e.stopPropagation();muted[i]=!muted[i];renderCh();renderGrid();};
+
+    const sb=document.createElement('div');
+    sb.className='ms'+(solod[i]?' s-on':''); sb.textContent='S';
+    sb.onclick=(e)=>{e.stopPropagation();solod[i]=!solod[i];renderCh();};
+
+    ms.appendChild(mb); ms.appendChild(sb);
+
+    row.appendChild(led);
+    row.appendChild(nm);
+    row.appendChild(nt);
+    row.appendChild(ms);
+
+    row.onclick=()=>{selCh=i;renderCh();renderGraph();};
+    el.appendChild(row);
+  });
+}
+
+// ===== NUMS =====
+function renderNums() {
+  const el=document.getElementById('nums');
+  el.innerHTML='';
+  for(let g=0;g<NS/SPG;g++){
+    const grp=document.createElement('div');
+    grp.className='ng';
+    for(let s=0;s<SPG;s++){
+      const n=document.createElement('div');
+      n.className='sn'+(s===0?' b':'');
+      if(s===0) n.textContent=(g+1);
+      grp.appendChild(n);
+    }
+    el.appendChild(grp);
+  }
+}
+
+// ===== GRID =====
+function renderGrid() {
+  const el=document.getElementById('grid');
+  el.querySelectorAll('.gr').forEach(r=>r.remove());
+  CH.forEach((c,ci)=>{
+    const row=document.createElement('div');
+    row.className='gr';
+    for(let g=0;g<NS/SPG;g++){
+      const grp=document.createElement('div');
+      grp.className='cg';
+      for(let s=0;s<SPG;s++){
+        const idx=g*SPG+s;
+        const cell=document.createElement('div');
+        cell.className='c';
+        const st=P[ap][ci][idx];
+        if(st===1) cell.classList.add('on');
+        else if(st===2) cell.classList.add('acc');
+        if(muted[ci]) cell.style.opacity='0.2';
+
+        cell.onclick=(e)=>{
+          const cur=P[ap][ci][idx];
+          if(e.shiftKey){P[ap][ci][idx]=cur===2?0:2;V[ap][ci][idx]=cur===2?100:127;}
+          else{P[ap][ci][idx]=cur===0?1:0;V[ap][ci][idx]=100;}
+          renderGrid();renderCh();renderPatBtns();updateChainLabel();
+          if(ci===selCh) renderGraph();
+        };
+        grp.appendChild(cell);
+      }
+      row.appendChild(grp);
+    }
+    el.appendChild(row);
+  });
+  updateCursor();
+}
+
+// ===== GRAPH =====
+function renderGraph() {
+  const el=document.getElementById('g-bars');
+  el.innerHTML='';
+  for(let g=0;g<NS/SPG;g++){
+    const grp=document.createElement('div');
+    grp.className='vg';
+    for(let s=0;s<SPG;s++){
+      const idx=g*SPG+s;
+      const bar=document.createElement('div');
+      bar.className='vb';
+      const h=(V[ap][selCh][idx]/127)*100;
+      bar.style.height=(P[ap][selCh][idx]>0?h:4)+'%';
+      bar.style.background=P[ap][selCh][idx]>0?'rgba(255,109,46,0.5)':'rgba(255,109,46,0.08)';
+
+      bar.onmousedown=(e)=>{
+        const set=(ev)=>{
+          const r=el.getBoundingClientRect();
+          let y=(ev.clientY-r.top)/(r.height-6);
+          let v=Math.round((1-y)*127);
+          v=Math.max(1,Math.min(127,v));
+          V[ap][selCh][idx]=v;
+          if(v>0&&P[ap][selCh][idx]===0){P[ap][selCh][idx]=1;renderGrid();renderCh();renderPatBtns();updateChainLabel();}
+          renderGraph();
+        };
+        set(e);
+        const mv=(ev)=>set(ev);
+        const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);};
+        document.addEventListener('mousemove',mv);
+        document.addEventListener('mouseup',up);
+      };
+      grp.appendChild(bar);
+    }
+    el.appendChild(grp);
+  }
+}
+
+// ===== PLAYBACK =====
+function startPlay() {
+  if(timer) return;
+  curStep=-1;
+  const chain=patternsWithData();
+  chainIdx=chain.indexOf(ap);
+  if(chainIdx<0) chainIdx=0;
+  ap=chain[chainIdx];
+  renderPatBtns(); renderGrid(); renderCh(); renderGraph();
+  timer=setInterval(advanceStep, (60000/128)/4);
+}
+
+function stopPlay() {
+  if(timer){clearInterval(timer);timer=null;}
+  curStep=-1; updateCursor();
+}
+
+function updateCursor() {
+  const cur=document.getElementById('cur');
+  if(curStep<0||!playing){cur.style.display='none';return;}
+  cur.style.display='block';
+  const rows=document.querySelectorAll('.gr');
+  if(!rows.length)return;
+  const gIdx=Math.floor(curStep/SPG),sIdx=curStep%SPG;
+  const grps=rows[0].querySelectorAll('.cg');
+  if(!grps[gIdx])return;
+  const cells=grps[gIdx].querySelectorAll('.c');
+  if(!cells[sIdx])return;
+  const gr=document.getElementById('grid').getBoundingClientRect();
+  const cr=cells[sIdx].getBoundingClientRect();
+  cur.style.left=(cr.left-gr.left)+'px';
+  cur.style.width=cr.width+'px';
+}
+
+// ===== EVENTS =====
+document.getElementById('play-btn').onclick=()=>{
+  playing=!playing;
+  document.getElementById('play-btn').classList.toggle('on',playing);
+  if(playing) startPlay(); else stopPlay();
+};
+
+document.getElementById('swing').oninput=(e)=>{
+  document.getElementById('sw-v').textContent=e.target.value+'%';
+};
+
+window.onresize=updateCursor;
+
+// INIT
+renderPatBtns();
+renderCh();
+renderNums();
+renderGrid();
+renderGraph();
+updateChainLabel();
+if(playing) startPlay();
+</script>
+</body>
+</html>

@@ -610,63 +610,72 @@ body {
 }
 
 /* ============ FX PAGE SYSTEM ============ */
+.fx-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  height: 24px;
+  background: rgba(139, 92, 246, 0.04);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+}
 .fx-page-nav {
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  height: 22px;
-  gap: 4px;
+  gap: 5px;
 }
-.fx-nav-arrow {
-  width: 18px;
-  height: 18px;
+.fx-nav-arrow, .machine-arrow {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(139, 92, 246, 0.25);
   background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 9px;
-  color: var(--text-secondary);
+  font-size: 7px;
+  color: rgba(167, 139, 250, 0.7);
   transition: all 0.15s;
   flex-shrink: 0;
   line-height: 1;
   padding: 0;
   font-family: inherit;
 }
-.fx-nav-arrow:hover {
-  border-color: var(--purple-500);
-  color: var(--purple-500);
+.fx-nav-arrow:hover, .machine-arrow:hover {
+  border-color: rgba(167, 139, 250, 0.6);
+  color: rgba(167, 139, 250, 1);
+  background: rgba(139, 92, 246, 0.1);
 }
-.fx-page-label {
+.fx-page-label, .machine-name {
   font-size: 8px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--text-primary);
+  color: rgba(167, 139, 250, 0.85);
   font-weight: 600;
-  margin: 0 4px;
+  margin: 0 2px;
   min-width: 32px;
   text-align: center;
 }
-.fx-page-dots {
+.fx-page-dots, .machine-dots {
   display: flex;
   gap: 4px;
   margin-left: 4px;
+  align-items: center;
 }
-.fx-page-dot {
+.fx-page-dot, .machine-dot {
   width: 4px;
   height: 4px;
   border-radius: 50%;
   cursor: pointer;
   transition: all 0.2s;
 }
-.fx-page-dot.active { background: var(--purple-500); }
-.fx-page-dot.inactive {
-  border: 1px solid var(--text-dim);
+.fx-page-dot.active, .machine-dot.active { background: rgba(167, 139, 250, 0.85); }
+.fx-page-dot.inactive, .machine-dot:not(.active) {
+  border: 1px solid rgba(139, 92, 246, 0.3);
   background: transparent;
 }
-.fx-page-dot.inactive:hover { border-color: var(--purple-500); }
+.fx-page-dot.inactive:hover { border-color: rgba(167, 139, 250, 0.6); }
 
 .fx-pages-container {
   position: relative;
@@ -712,46 +721,9 @@ body {
 }
 .machine-switcher {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 2px 0 4px;
-  gap: 2px;
-}
-.machine-arrow {
-  background: none;
-  border: none;
-  color: rgba(139, 92, 246, 0.5);
-  font-size: 10px;
-  cursor: pointer;
-  padding: 2px 4px;
-  transition: color 0.15s;
-}
-.machine-arrow:hover {
-  color: rgba(167, 139, 250, 0.9);
-}
-.machine-name {
-  color: rgba(167, 139, 250, 0.85);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  min-width: 70px;
-  text-align: center;
-}
-.machine-dots {
-  display: flex;
-  gap: 4px;
-  justify-content: center;
-}
-.machine-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(139, 92, 246, 0.2);
-  transition: background 0.2s;
-}
-.machine-dot.active {
-  background: rgba(167, 139, 250, 0.8);
+  gap: 5px;
+  user-select: none;
 }
 
 /* Space page */
@@ -2060,31 +2032,31 @@ body {
       </div>
       <!-- TAPE FX content — 3-page FX suite -->
       <div class="tape-tab-content" id="tape-fx-container" data-tab="fx" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-        <div class="fx-page-nav">
-          <button class="fx-nav-arrow" id="fxNavPrev">&#9664;</button>
-          <span class="fx-page-label" id="fxPageLabel">TAPE</span>
-          <button class="fx-nav-arrow" id="fxNavNext">&#9654;</button>
-          <div class="fx-page-dots">
-            <div class="fx-page-dot active" data-fxpage="0"></div>
-            <div class="fx-page-dot inactive" data-fxpage="1"></div>
-            <div class="fx-page-dot inactive" data-fxpage="2"></div>
+        <div class="fx-top-bar">
+          <div class="fx-page-nav">
+            <button class="fx-nav-arrow" id="fxNavPrev">&#9664;</button>
+            <span class="fx-page-label" id="fxPageLabel">TAPE</span>
+            <button class="fx-nav-arrow" id="fxNavNext">&#9654;</button>
+            <div class="fx-page-dots">
+              <div class="fx-page-dot active" data-fxpage="0"></div>
+              <div class="fx-page-dot inactive" data-fxpage="1"></div>
+              <div class="fx-page-dot inactive" data-fxpage="2"></div>
+            </div>
+          </div>
+          <div class="machine-switcher" id="machineSwitcher">
+            <button class="machine-arrow" id="machPrev">&#9664;</button>
+            <span class="machine-name" id="machineName">STUDIO</span>
+            <button class="machine-arrow" id="machNext">&#9654;</button>
+            <div class="machine-dots">
+              <span class="machine-dot active"></span>
+              <span class="machine-dot"></span>
+              <span class="machine-dot"></span>
+            </div>
           </div>
         </div>
         <div class="fx-pages-container">
           <div class="fx-page active" id="fxPageTape">
             <div class="tape-fx-page">
-              <div class="machine-switcher" id="machineSwitcher">
-                <div style="display:flex;align-items:center;gap:8px">
-                  <button class="machine-arrow" id="machPrev">&#9664;</button>
-                  <span class="machine-name" id="machineName">STUDIO</span>
-                  <button class="machine-arrow" id="machNext">&#9654;</button>
-                </div>
-                <div class="machine-dots">
-                  <span class="machine-dot active"></span>
-                  <span class="machine-dot"></span>
-                  <span class="machine-dot"></span>
-                </div>
-              </div>
               <div class="tape-mechanism-wrap">
                 <canvas id="tapeMechCanvas"></canvas>
               </div>
@@ -6067,6 +6039,9 @@ function initFxSuite() {
       var idx = parseInt(dot.dataset.fxpage);
       dot.className = 'fx-page-dot ' + (idx === newPage ? 'active' : 'inactive');
     });
+    // Show machine switcher only on TAPE page
+    var ms = document.getElementById('machineSwitcher');
+    if (ms) ms.style.visibility = newPage === 0 ? 'visible' : 'hidden';
   }
 
   document.getElementById('fxNavPrev').addEventListener('click', function() {

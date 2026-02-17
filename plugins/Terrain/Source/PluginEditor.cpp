@@ -162,7 +162,10 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             .withNativeFunction("getTapeMachine", [this](const juce::Array<juce::var>&,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete(static_cast<int>(audioProcessor.getAPVTS().getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load()));
+                if (auto* cp = dynamic_cast<juce::AudioParameterChoice*>(audioProcessor.getAPVTS().getParameter(ParameterIDs::TAPE_MACHINE)))
+                    complete(cp->getIndex());
+                else
+                    complete(0);
             })
             .withNativeFunction("setTapeMachine", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)

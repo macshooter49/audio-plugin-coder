@@ -657,7 +657,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     const bool grainOn = grainEngineEnabled.load() > 0.5f;
     const bool tapeOn = tapeEnabled.load() > 0.5f;
-    const int tapeMachineIdx = static_cast<int>(apvts.getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load());
+    const int tapeMachineIdx = [&]() {
+        if (auto* cp = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter(ParameterIDs::TAPE_MACHINE)))
+            return cp->getIndex();
+        return 0;
+    }();
     tapeProcessorL.setMachine(tapeMachineIdx);
     tapeProcessorR.setMachine(tapeMachineIdx);
     const bool feedToGrain = tapeLoopFeedToGrain.load() > 0.5f;
