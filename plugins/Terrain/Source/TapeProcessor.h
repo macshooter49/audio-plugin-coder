@@ -157,8 +157,9 @@ private:
 
         // 3. Hiss — returns additive noise; audioGainMultiplier set by reference
         //    (Wire machine uses this for micro-dropouts, others always set 1.0)
+        //    Pass post-saturation/post-wow signal for input-reactive space noise
         float audioGainMultiplier = 1.0f;
-        double hissNoise = machine->processHiss(dHiss, audioGainMultiplier);
+        double hissNoise = machine->processHiss(dHiss, audioGainMultiplier, processed);
 
         // Combine: signal * gain multiplier + hiss noise
         double output = processed * static_cast<double>(audioGainMultiplier) + hissNoise;

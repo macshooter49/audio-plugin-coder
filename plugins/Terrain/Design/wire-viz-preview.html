@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Wire Viz — Box Design Preview</title>
+<style>
+  body {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #F3F0F8;
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  .frame {
+    background: rgba(255,255,255,0.85);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 4px 24px rgba(139,92,246,0.08);
+  }
+  canvas { display: block; border-radius: 10px; }
+  .label { text-align: center; color: #8B5CF6; font-size: 11px; margin-top: 8px; opacity: 0.6; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <canvas id="c" width="720" height="440"></canvas>
+  <div class="label">Wire Recorder — Terrain v2.2 Preview</div>
+</div>
+<script>
+var DPR = window.devicePixelRatio || 1;
+var canvas = document.getElementById('c');
+var W = 360, H = 220;
+canvas.width = W * DPR;
+canvas.height = H * DPR;
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+
+// Simulated params for preview
+var wow = 0.35, sat = 0.4, hiss = 0.5;
+
+function drawWireBox(ctx, w, h, t) {
+  ctx.clearRect(0, 0, w * DPR, h * DPR);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  var cx = w / 2;
+  var cy = h * 0.55;
+  var sc = Math.min(h / 220, w / 360);
+
+  // Pulse for life
+  var pulse = 0.88 + Math.sin(t * 1.5) * 0.12;
+  var fastPulse = 0.9 + Math.sin(t * 3.2) * 0.1;
+  var jit = function(s) { return (Math.random() - 0.5) * wow * (s || 2); };
+
+  // ━━━━ CASE BODY (front face — wooden box) ━━━━
+  var boxL = cx - 140 * sc;
+  var boxR = cx + 140 * sc;
+  var boxTop = cy - 48 * sc;
+  var boxBot = cy + 62 * sc;
+  var boxRad = 4 * sc;
+
+  // Box body — dark wood gradient
+  var bodyGrad = ctx.createLinearGradient(boxL, boxTop, boxL, boxBot);
+  bodyGrad.addColorStop(0, 'rgba(58, 32, 80, 0.85)');
+  bodyGrad.addColorStop(0.4, 'rgba(42, 20, 62, 0.9)');
+  bodyGrad.addColorStop(1, 'rgba(30, 14, 48, 0.95)');
+  ctx.beginPath();
+  ctx.moveTo(boxL + boxRad, boxTop);
+  ctx.lineTo(boxR - boxRad, boxTop);
+  ctx.quadraticCurveTo(boxR, boxTop, boxR, boxTop + boxRad);
+  ctx.lineTo(boxR, boxBot - boxRad);
+  ctx.quadraticCurveTo(boxR, boxBot, boxR - boxRad, boxBot);
+  ctx.lineTo(boxL + boxRad, boxBot);
+  ctx.quadraticCurveTo(boxL, boxBot, boxL, boxBot - boxRad);
+  ctx.lineTo(boxL, boxTop + boxRad);
+  ctx.quadraticCurveTo(boxL, boxTop, boxL + boxRad, boxTop);
+  ctx.closePath();
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // Wood grain lines (very subtle)
+  ctx.globalAlpha = 0.06;
+  for (var gi = 0; gi < 12; gi++) {
+    var gy = boxTop + (boxBot - boxTop) * (gi / 12) + Math.sin(gi * 1.7) * 2;
+    ctx.beginPath();
+    ctx.moveTo(boxL + 6, gy);
+    ctx.bezierCurveTo(
+      boxL + (boxR - boxL) * 0.3, gy + Math.sin(gi * 2.3) * 3,
+      boxL + (boxR - boxL) * 0.7, gy - Math.sin(gi * 1.8) * 2,
+      boxR - 6, gy + Math.sin(gi * 3.1) * 2
+    );
+    ctx.strokeStyle = 'rgba(200, 180, 220, 1)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1.0;
+
+  // Box edge highlight (top rim)
+  ctx.beginPath();
+  ctx.moveTo(boxL + boxRad, boxTop);
+  ctx.lineTo(boxR - boxRad, boxTop);
+  ctx.strokeStyle = 'rgba(167, 139, 250, 0.25)';
+  ctx.lineWidth = 1.0;
+  ctx.stroke();
+
+  // Box side edges
+  ctx.beginPath();
+  ctx.moveTo(boxL, boxTop + boxRad);
+  ctx.lineTo(boxL, boxBot - boxRad);
+  ctx.moveTo(boxR, boxTop + boxRad);
+  ctx.lineTo(boxR, boxBot - boxRad);
+  ctx.strokeStyle = 'rgba(167, 139, 250, 0.15)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Bottom edge — darker ledge
+  ctx.beginPath();
+  ctx.moveTo(boxL + boxRad, boxBot);
+  ctx.lineTo(boxR - boxRad, boxBot);
+  ctx.strokeStyle = 'rgba(100, 60, 140, 0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // ━━━━ LID (opened, shown as perspective trapezoid above box) ━━━━
+  var lidBot = boxTop; // lid bottom = box top
+  var lidTop = cy - 100 * sc;
+  // Perspective: lid narrows at top
+  var lidInset = 18 * sc;
+
+  var lidGrad = ctx.createLinearGradient(boxL, lidTop, boxL, lidBot);
+  lidGrad.addColorStop(0, 'rgba(48, 24, 70, 0.5)');
+  lidGrad.addColorStop(0.7, 'rgba(52, 28, 75, 0.7)');
+  lidGrad.addColorStop(1, 'rgba(58, 32, 80, 0.85)');
+
+  ctx.beginPath();
+  ctx.moveTo(boxL, lidBot);
+  ctx.lineTo(boxL + lidInset, lidTop);
+  ctx.lineTo(boxR - lidInset, lidTop);
+  ctx.lineTo(boxR, lidBot);
+  ctx.closePath();
+  ctx.fillStyle = lidGrad;
+  ctx.fill();
+
+  // Lid inner lining — darker felt
+  ctx.beginPath();
+  ctx.moveTo(boxL + 4, lidBot - 2);
+  ctx.lineTo(boxL + lidInset + 4, lidTop + 4);
+  ctx.lineTo(boxR - lidInset - 4, lidTop + 4);
+  ctx.lineTo(boxR - 4, lidBot - 2);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(25, 10, 40, 0.4)';
+  ctx.fill();
+
+  // Lid edges
+  ctx.beginPath();
+  ctx.moveTo(boxL, lidBot);
+  ctx.lineTo(boxL + lidInset, lidTop);
+  ctx.lineTo(boxR - lidInset, lidTop);
+  ctx.lineTo(boxR, lidBot);
+  ctx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // ━━━━ INTERIOR PANEL (recessed deck plate where spools sit) ━━━━
+  var panelL = boxL + 12 * sc;
+  var panelR = boxR - 12 * sc;
+  var panelT = boxTop + 6 * sc;
+  var panelB = boxBot - 18 * sc;
+  var panelRad = 3 * sc;
+
+  var panelGrad = ctx.createLinearGradient(panelL, panelT, panelL, panelB);
+  panelGrad.addColorStop(0, 'rgba(20, 8, 35, 0.6)');
+  panelGrad.addColorStop(1, 'rgba(15, 5, 28, 0.7)');
+
+  ctx.beginPath();
+  ctx.moveTo(panelL + panelRad, panelT);
+  ctx.lineTo(panelR - panelRad, panelT);
+  ctx.quadraticCurveTo(panelR, panelT, panelR, panelT + panelRad);
+  ctx.lineTo(panelR, panelB - panelRad);
+  ctx.quadraticCurveTo(panelR, panelB, panelR - panelRad, panelB);
+  ctx.lineTo(panelL + panelRad, panelB);
+  ctx.quadraticCurveTo(panelL, panelB, panelL, panelB - panelRad);
+  ctx.lineTo(panelL, panelT + panelRad);
+  ctx.quadraticCurveTo(panelL, panelT, panelL + panelRad, panelT);
+  ctx.closePath();
+  ctx.fillStyle = panelGrad;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+
+  // ━━━━ SPOOLS (inside the box) ━━━━
+  var deckCy = (panelT + panelB) / 2;
+  var spoolSpacing = 50 * sc;
+
+  // Supply spool (left)
+  var sX = cx - spoolSpacing;
+  var sY = deckCy;
+  var sR = 28 * sc;
+
+  // Spool disc — metallic gradient
+  var spoolGrad = ctx.createRadialGradient(sX - 4 * sc, sY - 4 * sc, 0, sX, sY, sR);
+  spoolGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.22 * pulse) + ')');
+  spoolGrad.addColorStop(0.6, 'rgba(139, 92, 246, ' + (0.12 * pulse) + ')');
+  spoolGrad.addColorStop(1, 'rgba(88, 28, 135, 0.06)');
+  ctx.beginPath();
+  ctx.arc(sX, sY, sR, 0, Math.PI * 2);
+  ctx.fillStyle = spoolGrad;
+  ctx.fill();
+
+  // Spool rim — bright ring
+  ctx.shadowColor = 'rgba(167, 139, 250, 0.5)';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.arc(sX + jit(0.5), sY + jit(0.5), sR, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.8 * pulse) + ')';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Spool spokes (4 radial lines, rotating)
+  for (var si = 0; si < 4; si++) {
+    var sa = (si / 4) * Math.PI * 2 + t * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(sX + Math.cos(sa) * 5 * sc, sY + Math.sin(sa) * 5 * sc);
+    ctx.lineTo(sX + Math.cos(sa) * sR * 0.85, sY + Math.sin(sa) * sR * 0.85);
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  // Wire wound on supply (few turns — running out)
+  for (var sci = 0; sci < 4; sci++) {
+    var scr = 8 * sc + sci * 2.5 * sc;
+    var sca = t * (0.4 + sci * 0.2) + sci * 1.3;
+    ctx.beginPath();
+    ctx.arc(sX, sY, scr, sca, sca + Math.PI * 0.6);
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.4 + sci * 0.08) * pulse + ')';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+  }
+
+  // Hub center
+  ctx.shadowColor = 'rgba(196, 181, 253, 0.6)';
+  ctx.shadowBlur = 5;
+  ctx.beginPath();
+  ctx.arc(sX, sY, 4 * sc, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Take-up spool (right)
+  var tX = cx + spoolSpacing;
+  var tY = deckCy;
+  var tRa = 32 * sc;
+
+  // Spool disc
+  var tSpoolGrad = ctx.createRadialGradient(tX - 4 * sc, tY - 4 * sc, 0, tX, tY, tRa);
+  tSpoolGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.22 * pulse) + ')');
+  tSpoolGrad.addColorStop(0.6, 'rgba(139, 92, 246, ' + (0.12 * pulse) + ')');
+  tSpoolGrad.addColorStop(1, 'rgba(88, 28, 135, 0.06)');
+  ctx.beginPath();
+  ctx.arc(tX, tY, tRa, 0, Math.PI * 2);
+  ctx.fillStyle = tSpoolGrad;
+  ctx.fill();
+
+  // Spool rim
+  ctx.shadowColor = 'rgba(167, 139, 250, 0.5)';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.arc(tX + jit(0.5), tY + jit(0.5), tRa, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.8 * pulse) + ')';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Spokes
+  for (var tti = 0; tti < 4; tti++) {
+    var tta = (tti / 4) * Math.PI * 2 - t * 0.35;
+    ctx.beginPath();
+    ctx.moveTo(tX + Math.cos(tta) * 5 * sc, tY + Math.sin(tta) * 5 * sc);
+    ctx.lineTo(tX + Math.cos(tta) * tRa * 0.85, tY + Math.sin(tta) * tRa * 0.85);
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  // Wire wound on take-up (more turns — collecting wire)
+  for (var tci = 0; tci < 7; tci++) {
+    var tcr = 8 * sc + tci * 2.5 * sc;
+    var tca = -t * (0.35 + tci * 0.15) + tci * 1.0;
+    ctx.beginPath();
+    ctx.arc(tX, tY, tcr, tca, tca + Math.PI * 0.5);
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.35 + tci * 0.06) * pulse + ')';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+  }
+
+  // Hub center
+  ctx.shadowColor = 'rgba(196, 181, 253, 0.6)';
+  ctx.shadowBlur = 5;
+  ctx.beginPath();
+  ctx.arc(tX, tY, 4 * sc, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // ━━━━ WIRE PATH (between spools, dipping to head) ━━━━
+  var wireStartX = sX + sR;
+  var wireEndX = tX - tRa;
+  var wireY2 = deckCy;
+  var headX = cx;
+  var headY2 = deckCy + 14 * sc;
+
+  // Wire glow underlayer
+  ctx.shadowColor = 'rgba(139, 92, 246, 0.4)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(wireStartX, wireY2);
+  ctx.quadraticCurveTo(headX, headY2 + 6 * sc, wireEndX, wireY2);
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Actual wire — bright, wobbly
+  var wireSegs = 36;
+
+  ctx.beginPath();
+  for (var wi = 0; wi <= wireSegs; wi++) {
+    var wf = wi / wireSegs;
+    var wx = wireStartX + (wireEndX - wireStartX) * wf;
+    // Catenary dip toward head
+    var dip = Math.sin(wf * Math.PI) * 14 * sc;
+    var wy = wireY2 + dip;
+    // Wow waviness
+    wy += Math.sin(t * 3 + wf * Math.PI * 8) * wow * 2;
+    wy += Math.sin(t * 1.7 + wf * Math.PI * 3) * wow * 1.2;
+    if (wi === 0) ctx.moveTo(wx + jit(0.3), wy + jit(0.3));
+    else ctx.lineTo(wx + jit(0.3), wy + jit(0.3));
+  }
+  ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.9 * pulse) + ')';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+
+  // ━━━━ PLAYBACK HEAD (small wedge between spools) ━━━━
+  ctx.shadowColor = 'rgba(196, 181, 253, 0.7)';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.moveTo(headX - 6 * sc, headY2 + 2 * sc);
+  ctx.lineTo(headX - 3 * sc, headY2 - 3 * sc);
+  ctx.lineTo(headX + 3 * sc, headY2 - 3 * sc);
+  ctx.lineTo(headX + 6 * sc, headY2 + 2 * sc);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(88, 28, 135, 0.6)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.9 * pulse) + ')';
+  ctx.lineWidth = 1.0;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Field lines from head
+  for (var mfi = 0; mfi < 3; mfi++) {
+    var mfRad = (3 + mfi * 3) * sc;
+    ctx.beginPath();
+    ctx.arc(headX, headY2 - 2 * sc, mfRad, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 + Math.sin(t * 2.5 + mfi) * 0.1) * pulse + ')';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  // ━━━━ ELECTRICAL SPARKS (around spools & wire) ━━━━
+  if (hiss > 0.02) {
+    var nSparks = Math.floor(hiss * 35);
+    for (var ski = 0; ski < nSparks; ski++) {
+      var skpX = cx + Math.sin(t * 4.3 + ski * 3.1) * (panelR - panelL) * 0.42;
+      var skpY = deckCy + Math.cos(t * 3.7 + ski * 2.7) * (panelB - panelT) * 0.4;
+      var skpLen = 2 + Math.sin(t * 6 + ski) * 1.5;
+      var skpA = t * 2 + ski * 1.4;
+      var spkAlpha = hiss * 0.6 + Math.sin(t * 8 + ski) * 0.12;
+      ctx.shadowColor = 'rgba(167,139,250,0.4)';
+      ctx.shadowBlur = 2;
+      ctx.beginPath();
+      ctx.moveTo(skpX, skpY);
+      ctx.lineTo(skpX + Math.cos(skpA) * skpLen, skpY + Math.sin(skpA) * skpLen);
+      ctx.lineTo(skpX + Math.cos(skpA + 0.8) * skpLen * 0.6, skpY + Math.sin(skpA + 0.8) * skpLen * 0.6);
+      ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  // ━━━━ NAMEPLATE (bottom center of box) ━━━━
+  var npW = 50 * sc;
+  var npH = 10 * sc;
+  var npX = cx - npW / 2;
+  var npY = boxBot - 15 * sc;
+
+  // Plate background
+  ctx.beginPath();
+  ctx.rect(npX, npY, npW, npH);
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.08)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Plate text
+  ctx.font = '500 ' + Math.max(4, 4.5 * sc) + 'px -apple-system, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+  ctx.fillText('W I R E', cx, npY + npH / 2);
+
+  // ━━━━ INDICATOR LIGHTS (vintage R/Y/G) ━━━━
+  var indY = boxBot - 8 * sc;
+  var indStartX = boxR - 38 * sc;
+  var indGap = 6.5 * sc;
+  var indR = 2.2 * sc;
+
+  var lights = [
+    { r: 239, g: 68, b: 68, param: hiss, phase: 0 },
+    { r: 234, g: 179, b: 8, param: sat, phase: 2.1 },
+    { r: 34, g: 197, b: 94, param: wow, phase: 4.3 },
+  ];
+
+  for (var li = 0; li < lights.length; li++) {
+    var light = lights[li];
+    var lx = indStartX + li * indGap;
+    var ly = indY;
+
+    var baseBright = 0.3 + light.param * 0.5;
+    var flicker = Math.sin(t * 3.7 + light.phase) * 0.12
+                + Math.sin(t * 7.3 + light.phase * 1.6) * 0.08
+                + Math.sin(t * 13.1 + light.phase * 2.4) * 0.05;
+    var brownout = Math.pow(Math.sin(t * 0.8 + light.phase * 3.1), 8) * 0.35;
+    var brightness = Math.max(0.08, baseBright + flicker - brownout);
+
+    ctx.beginPath();
+    ctx.arc(lx, ly, indR + 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(15, 6, 25, 0.5)';
+    ctx.fill();
+
+    ctx.shadowColor = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + (brightness * 0.6) + ')';
+    ctx.shadowBlur = 6 * brightness;
+    ctx.beginPath();
+    ctx.arc(lx, ly, indR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + brightness + ')';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(lx - 0.5, ly - 0.5, indR * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, ' + (brightness * 0.3) + ')';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // ━━━━ CORNER FEET (two small bumps at bottom) ━━━━
+  for (var foot = 0; foot < 2; foot++) {
+    var fX = foot === 0 ? boxL + 14 * sc : boxR - 14 * sc;
+    ctx.beginPath();
+    ctx.arc(fX, boxBot + 2 * sc, 3 * sc, 0, Math.PI);
+    ctx.fillStyle = 'rgba(42, 20, 62, 0.5)';
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+var time = 0;
+function animate() {
+  time += 1 / 60;
+  var ctx = canvas.getContext('2d');
+  drawWireBox(ctx, W, H, time);
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>

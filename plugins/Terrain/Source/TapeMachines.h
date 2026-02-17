@@ -43,7 +43,7 @@ public:
 
     virtual double processSaturation(double input, double amount) = 0;
     virtual double processWow(double input, double amount) = 0;
-    virtual double processHiss(double amount, float& audioGainMultiplier) = 0;
+    virtual double processHiss(double amount, float& audioGainMultiplier, double audioInput) = 0;
 
 protected:
     double sr = 44100.0;
@@ -430,7 +430,7 @@ public:
     //==========================================================================
     // Hiss: Shaped white noise. Exponential curve, max 0.003 coefficient.
     // 15 IPS = lowest noise floor of all three machines.
-    double processHiss(double amount, float& audioGainMultiplier) override
+    double processHiss(double amount, float& audioGainMultiplier, double /*audioInput*/) override
     {
         audioGainMultiplier = 1.0f;
         if (amount < 0.001) return 0.0;
@@ -649,7 +649,7 @@ public:
     //==========================================================================
     // Hiss: Mid-colored noise + motor rumble. pow(amount,2.5) * 0.006 max.
     // 1⅞ IPS = worse SNR than 15 IPS Studio.
-    double processHiss(double amount, float& audioGainMultiplier) override
+    double processHiss(double amount, float& audioGainMultiplier, double /*audioInput*/) override
     {
         audioGainMultiplier = 1.0f;
         if (amount < 0.001) return 0.0;
@@ -772,9 +772,10 @@ private:
 //       slow drift (±3ms), irregular wow (wandering rate 0.5-2.5Hz),
 //       chaotic flutter (2-7Hz), random speed jumps (±5ms).
 //       Breathing LFO (0.03Hz) modulates depth ±25%. Organic, lurching.
-//  Hiss: Pink noise + micro-dropouts + wire twist all-pass artifact.
-//        Optional SPACE NOISE mode: allpass diffusion + swept bandpass
-//        + whistler chirps for ethereal spatial noise character.
+//  Hiss: Pink noise + deep slow micro-dropouts + wire twist all-pass artifact.
+//        Optional SPACE NOISE mode: 8-stage allpass diffusion network with
+//        recirculating feedback (convolution-reverb character), input-reactive,
+//        swept bandpass for spectral movement.
 //        pow(amount,2.5) * 0.01 max. Worst SNR of all three machines.
 //
 //==============================================================================
@@ -817,6 +818,7 @@ public:
         chaoticPhase = phaseDist(rng);
 
         speedJumpOffset = 0.0;
+        speedJumpTarget = 0.0;
 
         // Pink noise state
         pinkB0 = 0.0; pinkB1 = 0.0; pinkB2 = 0.0;
@@ -827,23 +829,28 @@ public:
         hissHP.setFreq(100.0, sr);
 
         dropoutGain = 1.0;
+        dropoutTarget = 1.0;
 
         // Wire twist all-pass artifact
         wireTwistAP.setFreq(800.0, sr);
         wireTwistRandom.prepare(0.3, 1.0, sr, rng);
 
-        // Space noise: allpass diffusion network (prime-number delays scaled to SR)
+        // Space noise: 8-stage allpass diffusion (convolution-reverb character)
+        // Prime-number delays, longer than before for dense reverb tail
         double srScale = sr / 44100.0;
         diffusion[0].prepare(static_cast<int>(113 * srScale), 0.55);
-        diffusion[1].prepare(static_cast<int>(173 * srScale), 0.62);
-        diffusion[2].prepare(static_cast<int>(241 * srScale), 0.68);
-        diffusion[3].prepare(static_cast<int>(337 * srScale), 0.73);
-        spaceFilter.setParams(800.0, 2.5, sr);
+        diffusion[1].prepare(static_cast<int>(197 * srScale), 0.60);
+        diffusion[2].prepare(static_cast<int>(281 * srScale), 0.64);
+        diffusion[3].prepare(static_cast<int>(397 * srScale), 0.68);
+        diffusion[4].prepare(static_cast<int>(547 * srScale), 0.71);
+        diffusion[5].prepare(static_cast<int>(701 * srScale), 0.74);
+        diffusion[6].prepare(static_cast<int>(887 * srScale), 0.76);
+        diffusion[7].prepare(static_cast<int>(1087 * srScale), 0.78);
+        spaceFilter.setParams(800.0, 1.2, sr); // Wider Q for less colored reverb
         spaceSweepLFO.prepare(0.15, 0.3, sr, rng);
         spaceDCBlocker.prepare(sr);
-        whistlerPhase = 0.0;
-        whistlerActive = false;
-        whistlerFreq = 8000.0;
+        spaceDampingLP.setFreq(3000.0, sr); // Feedback damping: highs decay faster
+        spaceFeedbackState = 0.0;
 
         prevOversampleInput = 0.0;
     }
@@ -866,18 +873,20 @@ public:
         irregPhase = 0.0;
         chaoticPhase = 0.0;
         speedJumpOffset = 0.0;
+        speedJumpTarget = 0.0;
         pinkB0 = 0.0; pinkB1 = 0.0; pinkB2 = 0.0;
         pinkB3 = 0.0; pinkB4 = 0.0; pinkB5 = 0.0; pinkB6 = 0.0;
         hissLP.reset(); hissBell.reset(); hissHP.reset();
         dropoutGain = 1.0;
+        dropoutTarget = 1.0;
         wireTwistAP.reset();
         wireTwistRandom.reset();
         for (auto& d : diffusion) d.reset();
         spaceFilter.reset();
         spaceSweepLFO.reset();
         spaceDCBlocker.reset();
-        whistlerPhase = 0.0;
-        whistlerActive = false;
+        spaceDampingLP.reset();
+        spaceFeedbackState = 0.0;
         prevOversampleInput = 0.0;
     }
 
@@ -913,8 +922,6 @@ public:
     // 12ms center delay.
     double processWow(double input, double amount) override
     {
-        speedJumpOffset *= 0.999;
-
         // Always write to delay line to keep buffer current (prevents clicks)
         delay.write(static_cast<float>(input));
 
@@ -932,21 +939,23 @@ public:
         if (irregPhase >= 1.0) irregPhase -= 1.0;
         const double irregMod = std::sin(2.0 * M_PI * irregPhase) * amount * 1.5 * breathScale;
 
-        // 3. Chaotic flutter: rate wanders 2-7Hz (narrower, more vintage)
+        // 3. Chaotic flutter: rate wanders 1.5-4Hz (gentle, vintage)
         const double chaoticDriftVal = chaoticDrift.next(sr);
-        const double chaoticRate = 4.5 + chaoticDriftVal * 2.5; // 2-7Hz
+        const double chaoticRate = 2.75 + chaoticDriftVal * 1.25; // 1.5-4Hz
         chaoticPhase += std::max(chaoticRate, 0.5) / sr;
         if (chaoticPhase >= 1.0) chaoticPhase -= 1.0;
-        const double chaoticMod = std::sin(2.0 * M_PI * chaoticPhase) * amount * 0.4;
+        const double chaoticMod = std::sin(2.0 * M_PI * chaoticPhase) * amount * 0.25;
 
-        // 4. Random speed jumps — less frequent but deeper
+        // 4. Random speed jumps — slow target + very slow slew (no clicks)
         std::uniform_real_distribution<double> prob(0.0, 1.0);
-        if (prob(rng) < 0.0003 * amount)
+        if (prob(rng) < 0.0002 * amount)
         {
             std::uniform_real_distribution<double> jumpDist(-1.0, 1.0);
-            speedJumpOffset += jumpDist(rng) * amount * 5.0;
+            speedJumpTarget += jumpDist(rng) * amount * 3.0; // ±3ms max (was ±5ms)
         }
-        speedJumpOffset *= 0.99993;
+        speedJumpTarget *= 0.99993; // Slow decay on target (~300ms)
+        // Very slow slew: ~10ms ramp (was ~2ms) — eliminates clicks entirely
+        speedJumpOffset += 0.001 * (speedJumpTarget - speedJumpOffset);
 
         // Combine all (in ms)
         const double totalModMs = driftValue + irregMod + chaoticMod + speedJumpOffset;
@@ -966,24 +975,32 @@ public:
     }
 
     //==========================================================================
-    // Hiss: Pink noise + micro-dropouts + wire twist all-pass.
-    // SPACE NOISE mode: allpass diffusion + swept bandpass + whistler chirps.
+    // Hiss: Pink noise + deep slow micro-dropouts + wire twist all-pass.
+    // SPACE NOISE mode: 8-stage diffusion + feedback reverb tail + swept bandpass.
+    // Input-reactive: feeds audio through diffusion for convolution-like smearing.
     // pow(amount,2.5) * 0.01 max. Worst noise floor.
-    double processHiss(double amount, float& audioGainMultiplier) override
+    double processHiss(double amount, float& audioGainMultiplier, double audioInput) override
     {
-        // --- Micro-dropouts ---
+        // --- Micro-dropouts (slow, deep, prominent dips) ---
         if (amount > 0.01)
         {
             std::uniform_real_distribution<double> prob(0.0, 1.0);
-            if (prob(rng) < 0.001 * amount)
+            // Occurrence scales with amount squared — barely any at low, frequent at max
+            const double dropoutProb = 0.0004 * amount * amount;
+            if (prob(rng) < dropoutProb)
             {
-                dropoutGain = 0.3;
+                // Deep dropout: drop to 15-40% depending on amount
+                dropoutTarget = 0.15 + 0.25 * (1.0 - amount);
             }
-            dropoutGain = dropoutGain * 0.999 + 0.001;
-            dropoutGain = std::min(dropoutGain, 1.0);
+            // Slow recovery: ~150ms drift back to 1.0 (prominent, lingering dip)
+            dropoutTarget = dropoutTarget * 0.99985 + 0.00015;
+            dropoutTarget = std::min(dropoutTarget, 1.0);
+            // Slow one-pole envelope: ~5ms swooping onset (no click, audible sweep)
+            dropoutGain += 0.004 * (dropoutTarget - dropoutGain);
         }
         else
         {
+            dropoutTarget = 1.0;
             dropoutGain = 1.0;
         }
         audioGainMultiplier = static_cast<float>(dropoutGain);
@@ -1010,36 +1027,28 @@ public:
 
         if (spaceNoiseEnabled)
         {
-            // --- Space Noise mode ---
-            // Pink → 4-stage allpass diffusion → swept bandpass → whistler chirps → DC block
-            double spaceSig = pink;
+            // --- Space Noise mode (input-reactive + convolution-reverb character) ---
+            // Feed audio + recirculated feedback through 8-stage allpass diffusion
+            // This creates dense, IR-like smearing similar to a convolution reverb
+            double spaceSig = audioInput + pink * 0.15 + spaceFeedbackState;
+
+            // 8-stage allpass diffusion — dense reflections, long tail
             for (auto& d : diffusion)
                 spaceSig = d.process(spaceSig);
 
-            // Swept bandpass: cutoff wanders 200-3000Hz
+            // Swept bandpass: wider Q (1.2) for natural reverb coloring
             const double sweepVal = spaceSweepLFO.next(sr); // -1 to 1
             const double sweepCutoff = 200.0 + (sweepVal * 0.5 + 0.5) * 2800.0; // 200-3000
-            spaceFilter.setParams(sweepCutoff, 2.5, sr);
+            spaceFilter.setParams(sweepCutoff, 1.2, sr);
             spaceSig = spaceFilter.process(spaceSig);
 
-            // Sparse whistler chirps (descending sine, very quiet)
-            std::uniform_real_distribution<double> wProb(0.0, 1.0);
-            if (!whistlerActive && wProb(rng) < 0.0001)
-            {
-                whistlerActive = true;
-                whistlerFreq = 8000.0;
-                whistlerPhase = 0.0;
-            }
-            if (whistlerActive)
-            {
-                whistlerPhase += whistlerFreq / sr;
-                double chirp = std::sin(2.0 * M_PI * whistlerPhase) * 0.03 * amount;
-                spaceSig += chirp;
-                whistlerFreq *= 0.9997; // descend toward 500Hz
-                if (whistlerFreq < 500.0) whistlerActive = false;
-            }
-
             spaceSig = spaceDCBlocker.process(spaceSig);
+
+            // Recirculating feedback with damping — creates reverb tail
+            // LP damping at 3kHz: highs decay faster (natural room behavior)
+            double fb = spaceDampingLP.process(spaceSig);
+            spaceFeedbackState = fb * 0.55; // 55% feedback = ~500ms tail
+
             totalNoise = spaceSig;
         }
         else
@@ -1195,6 +1204,7 @@ private:
     double irregPhase = 0.0;
     double chaoticPhase = 0.0;
     double speedJumpOffset = 0.0;
+    double speedJumpTarget = 0.0;
 
     double pinkB0 = 0.0, pinkB1 = 0.0, pinkB2 = 0.0;
     double pinkB3 = 0.0, pinkB4 = 0.0, pinkB5 = 0.0, pinkB6 = 0.0;
@@ -1204,19 +1214,19 @@ private:
     OnePoleHP hissHP;
 
     double dropoutGain = 1.0;
+    double dropoutTarget = 1.0;
 
     // Wire twist artifact
     OnePoleAP wireTwistAP;
     SmoothRandom wireTwistRandom;
 
-    // Space noise state
-    AllpassDiffusionStage diffusion[4];
+    // Space noise state — 8-stage diffusion network with feedback (convolution-reverb character)
+    AllpassDiffusionStage diffusion[8];
     SVFBandpass spaceFilter;
     SmoothRandom spaceSweepLFO;
     DCBlocker spaceDCBlocker;
-    double whistlerPhase = 0.0;
-    double whistlerFreq = 8000.0;
-    bool whistlerActive = false;
+    OnePoleLP spaceDampingLP;    // LP in feedback loop for natural high-freq decay
+    double spaceFeedbackState = 0.0; // Recirculating feedback for reverb tail
 
     // Mode toggles (set from processBlock)
     bool spaceNoiseEnabled = false;

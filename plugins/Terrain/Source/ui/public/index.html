@@ -6377,6 +6377,43 @@ function initFxSuite() {
     });
   }
 
+  // ─── Shared Indicator Lights (vintage R/Y/G) ───
+  function drawIndicatorLights(ctx, x, y, sc, t, wow, sat, hiss) {
+    var indGap = 6.5 * sc;
+    var indR = 2.2 * sc;
+    var lights = [
+      { r: 239, g: 68, b: 68, param: hiss, phase: 0 },
+      { r: 234, g: 179, b: 8, param: sat, phase: 2.1 },
+      { r: 34, g: 197, b: 94, param: wow, phase: 4.3 },
+    ];
+    for (var li = 0; li < lights.length; li++) {
+      var light = lights[li];
+      var lx = x + li * indGap;
+      var ly = y;
+      var baseBright = 0.3 + light.param * 0.5;
+      var flicker = Math.sin(t * 3.7 + light.phase) * 0.12
+                  + Math.sin(t * 7.3 + light.phase * 1.6) * 0.08
+                  + Math.sin(t * 13.1 + light.phase * 2.4) * 0.05;
+      var brownout = Math.pow(Math.sin(t * 0.8 + light.phase * 3.1), 8) * 0.35;
+      var brightness = Math.max(0.08, baseBright + flicker - brownout);
+      ctx.beginPath();
+      ctx.arc(lx, ly, indR + 0.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(15, 6, 25, 0.5)';
+      ctx.fill();
+      ctx.shadowColor = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + (brightness * 0.6) + ')';
+      ctx.shadowBlur = 6 * brightness;
+      ctx.beginPath();
+      ctx.arc(lx, ly, indR, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + brightness + ')';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(lx - 0.5, ly - 0.5, indR * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, ' + (brightness * 0.3) + ')';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+
   function drawStudioViz(ctx, w, h, t) {
     ctx.clearRect(0, 0, w * DPR, h * DPR);
     ctx.save();
@@ -6388,11 +6425,14 @@ function initFxSuite() {
     var sat = normalize('saturation', state.params.saturation);
     var hiss = normalize('hiss', state.params.hiss);
 
-    // Scale to fit canvas
     var maxH = h * 0.85;
     var sc = Math.min(maxH / 160, w / 220);
 
-    // Cabinet dimensions
+    var pulse = 0.88 + Math.sin(t * 1.5) * 0.12;
+    var fastPulse = 0.9 + Math.sin(t * 3.2) * 0.1;
+    var jit = function(s) { return (Math.random() - 0.5) * wow * (s || 2); };
+
+    // Cabinet dimensions (3D isometric)
     var fW = 110 * sc;
     var fH = 140 * sc;
     var dX = 18 * sc;
@@ -6403,71 +6443,64 @@ function initFxSuite() {
     var fR = fL + fW;
     var fB = fT + fH;
 
-    // Colors
-    var fillFront = 'rgba(167, 139, 250, 0.15)';
-    var fillSide  = 'rgba(124, 58, 237, 0.2)';
-    var fillTop   = 'rgba(200, 180, 255, 0.12)';
-    var fillBase  = 'rgba(124, 58, 237, 0.25)';
-    var strokeMain = 'rgba(139, 92, 246, 0.75)';
-    var strokeBold = 'rgba(139, 92, 246, 0.9)';
-
-    // Right side face
+    // Right side face — filled dark
+    var sideGrad = ctx.createLinearGradient(fR, fT, fR + dX, fT);
+    sideGrad.addColorStop(0, 'rgba(42, 20, 62, 0.85)');
+    sideGrad.addColorStop(1, 'rgba(30, 14, 48, 0.75)');
     ctx.beginPath();
-    ctx.moveTo(fR, fT);
-    ctx.lineTo(fR + dX, fT + dY);
-    ctx.lineTo(fR + dX, fB + dY);
-    ctx.lineTo(fR, fB);
+    ctx.moveTo(fR, fT); ctx.lineTo(fR + dX, fT + dY); ctx.lineTo(fR + dX, fB + dY); ctx.lineTo(fR, fB);
     ctx.closePath();
-    ctx.fillStyle = fillSide;
-    ctx.fill();
-    ctx.strokeStyle = strokeMain;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+    ctx.fillStyle = sideGrad; ctx.fill();
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.35)'; ctx.lineWidth = 1.0; ctx.stroke();
 
-    // Top face
+    // Top face — filled
+    var topGrad = ctx.createLinearGradient(fL, fT, fL, fT + dY);
+    topGrad.addColorStop(0, 'rgba(58, 32, 80, 0.7)');
+    topGrad.addColorStop(1, 'rgba(48, 24, 70, 0.5)');
     ctx.beginPath();
-    ctx.moveTo(fL, fT);
-    ctx.lineTo(fL + dX, fT + dY);
-    ctx.lineTo(fR + dX, fT + dY);
-    ctx.lineTo(fR, fT);
+    ctx.moveTo(fL, fT); ctx.lineTo(fL + dX, fT + dY); ctx.lineTo(fR + dX, fT + dY); ctx.lineTo(fR, fT);
     ctx.closePath();
-    ctx.fillStyle = fillTop;
-    ctx.fill();
-    ctx.strokeStyle = strokeMain;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+    ctx.fillStyle = topGrad; ctx.fill();
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.3)'; ctx.lineWidth = 1.0; ctx.stroke();
 
-    // Front face
+    // Front face — dark gradient
+    var frontGrad = ctx.createLinearGradient(fL, fT, fL, fB);
+    frontGrad.addColorStop(0, 'rgba(55, 28, 78, 0.88)');
+    frontGrad.addColorStop(0.3, 'rgba(42, 20, 62, 0.92)');
+    frontGrad.addColorStop(1, 'rgba(30, 14, 48, 0.95)');
     ctx.beginPath();
-    ctx.moveTo(fL, fT);
-    ctx.lineTo(fR, fT);
-    ctx.lineTo(fR, fB);
-    ctx.lineTo(fL, fB);
+    ctx.moveTo(fL, fT); ctx.lineTo(fR, fT); ctx.lineTo(fR, fB); ctx.lineTo(fL, fB);
     ctx.closePath();
-    ctx.fillStyle = fillFront;
-    ctx.fill();
-    ctx.strokeStyle = strokeBold;
-    ctx.lineWidth = 1.3;
-    ctx.stroke();
+    ctx.fillStyle = frontGrad; ctx.fill();
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.4)'; ctx.lineWidth = 1.2; ctx.stroke();
+
+    // Subtle wood grain
+    ctx.globalAlpha = 0.04;
+    for (var gi = 0; gi < 10; gi++) {
+      var gy = fT + fH * (gi / 10) + Math.sin(gi * 1.7) * 2;
+      ctx.beginPath();
+      ctx.moveTo(fL + 4, gy);
+      ctx.bezierCurveTo(fL + fW * 0.3, gy + Math.sin(gi * 2.3) * 2.5, fL + fW * 0.7, gy - Math.sin(gi * 1.8) * 1.8, fR - 4, gy + Math.sin(gi * 3.1) * 1.5);
+      ctx.strokeStyle = 'rgba(200, 180, 220, 1)'; ctx.lineWidth = 0.7; ctx.stroke();
+    }
+    ctx.globalAlpha = 1.0;
 
     // Base trim
-    var baseH = fH * 0.06;
-    ctx.fillStyle = fillBase;
+    var baseH = fH * 0.05;
+    var baseGrad = ctx.createLinearGradient(fL, fB - baseH, fL, fB);
+    baseGrad.addColorStop(0, 'rgba(88, 28, 135, 0.3)');
+    baseGrad.addColorStop(1, 'rgba(60, 20, 90, 0.4)');
+    ctx.fillStyle = baseGrad;
     ctx.fillRect(fL, fB - baseH, fW, baseH);
-    ctx.strokeStyle = strokeMain;
-    ctx.lineWidth = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(fL, fB - baseH);
-    ctx.lineTo(fR, fB - baseH);
-    ctx.stroke();
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.2)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(fL, fB - baseH); ctx.lineTo(fR, fB - baseH); ctx.stroke();
 
     // Reels
-    var reelR = fW * 0.18;
+    var reelR = fW * 0.19;
     var reelCY = fT + fH * 0.22;
     var reelLx = fL + fW * 0.30;
     var reelRx = fL + fW * 0.70;
     var spokeAngle = t * 1.2;
-
     var supplyTR = reelR * (0.5 + Math.sin(t * 0.15) * 0.04);
     var takeupTR = reelR * (0.78 - Math.sin(t * 0.15) * 0.04);
 
@@ -6475,46 +6508,52 @@ function initFxSuite() {
       var rcx = ri === 0 ? reelLx : reelRx;
       var tapeAmt = ri === 0 ? supplyTR : takeupTR;
 
+      // Tape wound — filled gradient
       if (tapeAmt > 4) {
-        ctx.beginPath();
-        ctx.arc(rcx, reelCY, tapeAmt, 0, Math.PI * 2);
-        ctx.fillStyle = ri === 0 ? 'rgba(167, 139, 250, 0.08)' : 'rgba(139, 92, 246, 0.12)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
-        ctx.lineWidth = 0.4;
-        ctx.stroke();
+        var tapeGrad = ctx.createRadialGradient(rcx, reelCY, 0, rcx, reelCY, tapeAmt);
+        tapeGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (0.18 * pulse) + ')');
+        tapeGrad.addColorStop(0.7, 'rgba(88, 28, 135, ' + (0.1 * pulse) + ')');
+        tapeGrad.addColorStop(1, 'rgba(88, 28, 135, 0.04)');
+        ctx.beginPath(); ctx.arc(rcx, reelCY, tapeAmt, 0, Math.PI * 2);
+        ctx.fillStyle = tapeGrad; ctx.fill();
+        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.2 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
       }
 
-      ctx.beginPath();
-      ctx.arc(rcx, reelCY, reelR, 0, Math.PI * 2);
-      ctx.strokeStyle = strokeBold;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+      // Reel flange — metallic gradient
+      var flangeGrad = ctx.createRadialGradient(rcx - 3 * sc, reelCY - 3 * sc, 0, rcx, reelCY, reelR);
+      flangeGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.18 * pulse) + ')');
+      flangeGrad.addColorStop(0.5, 'rgba(139, 92, 246, ' + (0.08 * pulse) + ')');
+      flangeGrad.addColorStop(1, 'rgba(88, 28, 135, 0.03)');
+      ctx.beginPath(); ctx.arc(rcx, reelCY, reelR, 0, Math.PI * 2);
+      ctx.fillStyle = flangeGrad; ctx.fill();
 
+      // Glowing rim
+      ctx.shadowColor = 'rgba(167, 139, 250, 0.45)'; ctx.shadowBlur = 6;
+      ctx.beginPath(); ctx.arc(rcx + jit(0.3), reelCY + jit(0.3), reelR, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.7 * pulse) + ')'; ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 3 spokes
       for (var si = 0; si < 3; si++) {
         var a = spokeAngle + si * Math.PI * 2 / 3;
-        var hubD = reelR * 0.25;
-        var flangeD = reelR * 0.9;
         ctx.beginPath();
-        ctx.moveTo(rcx + Math.cos(a) * hubD, reelCY + Math.sin(a) * hubD);
-        ctx.lineTo(rcx + Math.cos(a) * flangeD, reelCY + Math.sin(a) * flangeD);
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
+        ctx.moveTo(rcx + Math.cos(a) * reelR * 0.25, reelCY + Math.sin(a) * reelR * 0.25);
+        ctx.lineTo(rcx + Math.cos(a) * reelR * 0.88, reelCY + Math.sin(a) * reelR * 0.88);
+        ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.4 * pulse) + ')'; ctx.lineWidth = 0.9; ctx.stroke();
       }
 
-      ctx.beginPath();
-      ctx.arc(rcx, reelCY, reelR * 0.22, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
+      // Hub — filled
+      ctx.shadowColor = 'rgba(196, 181, 253, 0.5)'; ctx.shadowBlur = 4;
+      ctx.beginPath(); ctx.arc(rcx, reelCY, reelR * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(58, 32, 80, 0.6)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.65 * pulse) + ')'; ctx.lineWidth = 0.9; ctx.stroke();
+      ctx.shadowBlur = 0;
 
-      ctx.beginPath();
-      ctx.arc(rcx, reelCY, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.6)';
-      ctx.fill();
+      // Center spindle
+      ctx.shadowColor = 'rgba(196, 181, 253, 0.5)'; ctx.shadowBlur = 3;
+      ctx.beginPath(); ctx.arc(rcx, reelCY, 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')'; ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
     // Tape path
@@ -6524,6 +6563,16 @@ function initFxSuite() {
     var gRx = fL + fW * 0.76;
     var gY = fT + fH * 0.34;
 
+    // Tape glow underlayer
+    ctx.shadowColor = 'rgba(139, 92, 246, 0.3)'; ctx.shadowBlur = 5;
+    ctx.beginPath();
+    ctx.moveTo(reelLx + supplyTR * 0.7, reelCY + supplyTR * 0.7);
+    ctx.lineTo(gLx, gY); ctx.lineTo(headCX, headY + 4 * sc); ctx.lineTo(gRx, gY);
+    ctx.lineTo(reelRx - takeupTR * 0.7, reelCY + takeupTR * 0.7);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Tape with wobble
     ctx.beginPath();
     ctx.moveTo(reelLx + supplyTR * 0.7, reelCY + supplyTR * 0.7);
     ctx.lineTo(gLx, gY);
@@ -6533,72 +6582,62 @@ function initFxSuite() {
       var f = ws / wobSegs;
       var mx = (headCX - 12 * sc) + (24 * sc) * f;
       var wb = wow * 2 * Math.sin(t * 3 + f * Math.PI * 5) * Math.sin(f * Math.PI);
-      ctx.lineTo(mx, headY + wb);
+      ctx.lineTo(mx + jit(0.2), headY + wb + jit(0.2));
     }
     ctx.lineTo(gRx, gY);
     ctx.lineTo(reelRx - takeupTR * 0.7, reelCY + takeupTR * 0.7);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.55)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.8 * pulse) + ')'; ctx.lineWidth = 1.1; ctx.stroke();
 
-    // Guide rollers
+    // Guide rollers — filled
     var guidePoints = [{x:gLx,y:gY}, {x:gRx,y:gY}];
-    for (var gi = 0; gi < guidePoints.length; gi++) {
-      var gp = guidePoints[gi];
-      ctx.beginPath();
-      ctx.arc(gp.x, gp.y, 2.2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
+    for (var gpi = 0; gpi < guidePoints.length; gpi++) {
+      var gp = guidePoints[gpi];
+      ctx.shadowColor = 'rgba(196, 181, 253, 0.4)'; ctx.shadowBlur = 3;
+      ctx.beginPath(); ctx.arc(gp.x, gp.y, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(88, 28, 135, 0.5)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')'; ctx.lineWidth = 0.7; ctx.stroke();
+      ctx.shadowBlur = 0;
     }
 
-    // Head assembly
+    // Head assembly — filled
     var hdW = 26 * sc;
     var hdH = 6 * sc;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
-    ctx.lineWidth = 0.7;
-    ctx.beginPath();
-    ctx.rect(headCX - hdW/2, headY - hdH/2, hdW, hdH);
-    ctx.fill();
-    ctx.stroke();
+    ctx.shadowColor = 'rgba(196, 181, 253, 0.4)'; ctx.shadowBlur = 5;
+    var headGrad = ctx.createLinearGradient(headCX - hdW/2, headY, headCX + hdW/2, headY);
+    headGrad.addColorStop(0, 'rgba(58, 32, 80, 0.7)');
+    headGrad.addColorStop(0.5, 'rgba(50, 25, 72, 0.8)');
+    headGrad.addColorStop(1, 'rgba(58, 32, 80, 0.7)');
+    ctx.beginPath(); ctx.rect(headCX - hdW/2, headY - hdH/2, hdW, hdH);
+    ctx.fillStyle = headGrad; ctx.fill();
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')'; ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.shadowBlur = 0;
+
     for (var hi = 0; hi < 3; hi++) {
-      var gx = headCX - 5 * sc + hi * 5 * sc;
+      var hgx = headCX - 5 * sc + hi * 5 * sc;
       ctx.beginPath();
-      ctx.moveTo(gx, headY - hdH/2 + 1.5);
-      ctx.lineTo(gx, headY + hdH/2 - 1.5);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-      ctx.lineWidth = 0.4;
-      ctx.stroke();
+      ctx.moveTo(hgx, headY - hdH/2 + 1.5); ctx.lineTo(hgx, headY + hdH/2 - 1.5);
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.35 * pulse) + ')'; ctx.lineWidth = 0.6; ctx.stroke();
     }
 
     // Saturation glow
     if (sat > 0.02) {
       var glowR = 10 * sc + sat * 14 * sc;
-      var grad = ctx.createRadialGradient(headCX, headY, 0, headCX, headY, glowR);
-      grad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.25) + ')');
-      grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(headCX, headY, glowR, 0, Math.PI * 2);
-      ctx.fill();
+      var satGrad = ctx.createRadialGradient(headCX, headY, 0, headCX, headY, glowR);
+      satGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.22) + ')');
+      satGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      ctx.fillStyle = satGrad;
+      ctx.beginPath(); ctx.arc(headCX, headY, glowR, 0, Math.PI * 2); ctx.fill();
     }
 
     // Horizontal slot
     var slotY = fT + fH * 0.50;
     var slotW = fW * 0.7;
-    var slotH = fH * 0.06;
-    ctx.fillStyle = 'rgba(124, 58, 237, 0.06)';
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-    ctx.lineWidth = 0.6;
-    ctx.beginPath();
-    ctx.rect(fL + (fW - slotW)/2, slotY, slotW, slotH);
-    ctx.fill();
-    ctx.stroke();
+    var slotH = fH * 0.05;
+    ctx.beginPath(); ctx.rect(fL + (fW - slotW)/2, slotY, slotW, slotH);
+    ctx.fillStyle = 'rgba(20, 8, 35, 0.5)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.2 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
 
-    // VU Meters
+    // VU Meters — filled
     var vuW = 18 * sc;
     var vuH = 12 * sc;
     var vuY = fT + fH * 0.60;
@@ -6607,106 +6646,97 @@ function initFxSuite() {
 
     for (var vi = 0; vi < 2; vi++) {
       var vx = vi === 0 ? vuLx : vuRxP;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.35)';
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.rect(vx, vuY, vuW, vuH);
-      ctx.fill();
-      ctx.stroke();
+      ctx.beginPath(); ctx.rect(vx, vuY, vuW, vuH);
+      ctx.fillStyle = 'rgba(20, 8, 35, 0.55)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')'; ctx.lineWidth = 0.6; ctx.stroke();
 
       var vCx = vx + vuW / 2;
       var vCy = vuY + vuH * 0.85;
       var arcR = vuW * 0.35;
-      ctx.beginPath();
-      ctx.arc(vCx, vCy, arcR, Math.PI + 0.3, -0.3);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-      ctx.lineWidth = 0.4;
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(vCx, vCy, arcR, Math.PI + 0.3, -0.3);
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.25 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
 
       for (var ti = 0; ti <= 6; ti++) {
         var ta = Math.PI + 0.3 + (ti / 6) * (Math.PI - 0.6);
         ctx.beginPath();
         ctx.moveTo(vCx + Math.cos(ta) * (arcR - 1.5), vCy + Math.sin(ta) * (arcR - 1.5));
         ctx.lineTo(vCx + Math.cos(ta) * arcR, vCy + Math.sin(ta) * arcR);
-        ctx.strokeStyle = ti > 4 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(139, 92, 246, 0.25)';
-        ctx.lineWidth = 0.3;
-        ctx.stroke();
+        ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.2 + (ti > 4 ? 0.15 : 0)) + ')';
+        ctx.lineWidth = 0.3; ctx.stroke();
       }
 
       var nv = sat * 0.5 + hiss * 0.3 + Math.sin(t * 2.5 + vi * 1.3) * 0.08;
       var na = Math.PI + 0.3 + Math.min(1, nv) * (Math.PI - 0.6);
-      ctx.beginPath();
-      ctx.moveTo(vCx, vCy);
+      ctx.shadowColor = 'rgba(196, 181, 253, 0.3)'; ctx.shadowBlur = 2;
+      ctx.beginPath(); ctx.moveTo(vCx, vCy);
       ctx.lineTo(vCx + Math.cos(na) * (arcR + 1), vCy + Math.sin(na) * (arcR + 1));
-      ctx.strokeStyle = 'rgba(124, 58, 237, 0.6)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(vCx, vCy, 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(124, 58, 237, 0.5)';
-      ctx.fill();
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')'; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      ctx.beginPath(); ctx.arc(vCx, vCy, 0.9, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(196, 181, 253, 0.5)'; ctx.fill();
     }
 
-    // Transport buttons
+    // Transport buttons — all purple
     var btnY = fT + fH * 0.76;
     var btnSz = 5 * sc;
     var btnGap = btnSz + 2 * sc;
     var btnStartX = fL + fW * 0.5 - (btnGap * 2.5);
-    var btnColors = [
-      'rgba(239, 68, 68, 0.45)',
-      'rgba(34, 197, 94, 0.4)',
-      'rgba(59, 130, 246, 0.35)',
-      'rgba(139, 92, 246, 0.35)',
-      'rgba(107, 114, 128, 0.3)',
-    ];
-    for (var bi = 0; bi < btnColors.length; bi++) {
+    for (var bi = 0; bi < 5; bi++) {
       var bx = btnStartX + bi * btnGap;
-      ctx.fillStyle = btnColors[bi];
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.roundRect(bx, btnY, btnSz, btnSz, 1);
-      ctx.fill();
-      ctx.stroke();
+      var btnAlpha = 0.25 + bi * 0.04;
+      var btnGradV = ctx.createLinearGradient(bx, btnY, bx, btnY + btnSz);
+      btnGradV.addColorStop(0, 'rgba(139, 92, 246, ' + (btnAlpha + 0.1) + ')');
+      btnGradV.addColorStop(1, 'rgba(88, 28, 135, ' + btnAlpha + ')');
+      ctx.beginPath(); ctx.roundRect(bx, btnY, btnSz, btnSz, 1);
+      ctx.fillStyle = btnGradV; ctx.fill();
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
     }
 
-    // TERRAIN label
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
-    ctx.font = '500 ' + Math.max(5, 5.5 * sc) + 'px -apple-system, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('T E R R A I N', fL + fW / 2, fB - baseH - 3);
+    // Sparks (hiss)
+    if (hiss > 0.02) {
+      var nSparks = Math.floor(hiss * 24);
+      for (var ski = 0; ski < nSparks; ski++) {
+        var skpX = fL + fW * 0.1 + Math.sin(t * 4.3 + ski * 3.1) * fW * 0.4;
+        var skpY = fT + fH * 0.1 + Math.cos(t * 3.7 + ski * 2.7) * fH * 0.4;
+        var skpLen = 2 + Math.sin(t * 6 + ski) * 1.5;
+        var skpA = t * 2 + ski * 1.4;
+        var spkAlpha = hiss * 0.5 + Math.sin(t * 8 + ski) * 0.1;
+        ctx.shadowColor = 'rgba(167,139,250,0.3)'; ctx.shadowBlur = 2;
+        ctx.beginPath(); ctx.moveTo(skpX, skpY);
+        ctx.lineTo(skpX + Math.cos(skpA) * skpLen, skpY + Math.sin(skpA) * skpLen);
+        ctx.lineTo(skpX + Math.cos(skpA + 0.8) * skpLen * 0.6, skpY + Math.sin(skpA + 0.8) * skpLen * 0.6);
+        ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
 
-    // Side face vent lines
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.12)';
-    ctx.lineWidth = 0.4;
+    // Nameplate
+    var npW = 40 * sc;
+    var npH = 8 * sc;
+    var npX = fL + fW / 2 - npW / 2;
+    var npY = fB - baseH - 12 * sc;
+    ctx.beginPath(); ctx.rect(npX, npY, npW, npH);
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.08)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
+    ctx.font = '500 ' + Math.max(4, 4 * sc) + 'px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')';
+    ctx.fillText('S T U D I O', fL + fW / 2, npY + npH / 2);
+
+    // Side vent lines
+    ctx.globalAlpha = 0.12;
     for (var vli = 0; vli < 5; vli++) {
       var vy = fT + fH * (0.55 + vli * 0.06);
       ctx.beginPath();
       ctx.moveTo(fR + 3, vy + dY * (vy - fT) / fH);
       ctx.lineTo(fR + dX - 3, vy + dY);
-      ctx.stroke();
+      ctx.strokeStyle = 'rgba(167, 139, 250, 1)'; ctx.lineWidth = 0.5; ctx.stroke();
     }
+    ctx.globalAlpha = 1.0;
 
-    // Hiss particles
-    if (hiss > 0.02) {
-      var count = Math.floor(hiss * 20);
-      for (var pi = 0; pi < count && pi < hissParticles.length; pi++) {
-        var p = hissParticles[pi];
-        p.life += p.speed * 0.018;
-        if (p.life > 1) { p.life = 0; p.x = Math.random(); p.y = Math.random(); }
-        var alpha = Math.sin(p.life * Math.PI) * hiss * 0.3;
-        if (alpha > 0.01) {
-          var px = fL + p.x * fW;
-          var py = fT + p.y * fH;
-          ctx.fillStyle = 'rgba(139, 92, 246, ' + alpha + ')';
-          ctx.beginPath();
-          ctx.arc(px, py, p.size, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
+    // Indicator lights
+    drawIndicatorLights(ctx, fL + fW * 0.72, fT + fH * 0.89, sc, t, wow, sat, hiss);
 
     ctx.restore();
   }
@@ -6723,10 +6753,12 @@ function initFxSuite() {
     var sat = normalize('saturation', state.params.saturation);
     var hiss = normalize('hiss', state.params.hiss);
 
-    // Scale to fit
     var sc = Math.min(h * 0.8 / 130, w / 200);
 
-    // Cassette body dimensions (roughly 100x64 aspect, like a real cassette)
+    var pulse = 0.88 + Math.sin(t * 1.5) * 0.12;
+    var jit = function(s) { return (Math.random() - 0.5) * wow * (s || 2); };
+
+    // Cassette body
     var cW = 160 * sc;
     var cH = 100 * sc;
     var cL = (w - cW) / 2;
@@ -6735,22 +6767,28 @@ function initFxSuite() {
     var cB = cT + cH;
     var cornerR = 6 * sc;
 
-    // Colors
-    var strokeMain = 'rgba(139, 92, 246, 0.75)';
-    var strokeBold = 'rgba(139, 92, 246, 0.9)';
-    var fillBody = 'rgba(167, 139, 250, 0.1)';
-    var fillWindow = 'rgba(124, 58, 237, 0.12)';
+    // Body — dark filled gradient
+    var bodyGrad = ctx.createLinearGradient(cL, cT, cL, cB);
+    bodyGrad.addColorStop(0, 'rgba(55, 28, 78, 0.88)');
+    bodyGrad.addColorStop(0.4, 'rgba(42, 20, 62, 0.92)');
+    bodyGrad.addColorStop(1, 'rgba(32, 14, 50, 0.95)');
+    ctx.beginPath(); ctx.roundRect(cL, cT, cW, cH, cornerR);
+    ctx.fillStyle = bodyGrad; ctx.fill();
+    ctx.shadowColor = 'rgba(167, 139, 250, 0.3)'; ctx.shadowBlur = 5;
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.55 * pulse) + ')'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Cassette body (rounded rect)
-    ctx.beginPath();
-    ctx.roundRect(cL, cT, cW, cH, cornerR);
-    ctx.fillStyle = fillBody;
-    ctx.fill();
-    ctx.strokeStyle = strokeBold;
-    ctx.lineWidth = 1.3;
-    ctx.stroke();
+    // Surface texture
+    ctx.globalAlpha = 0.035;
+    for (var gi = 0; gi < 8; gi++) {
+      var gy = cT + cH * (gi / 8) + Math.sin(gi * 2.1) * 1.5;
+      ctx.beginPath(); ctx.moveTo(cL + 8, gy);
+      ctx.bezierCurveTo(cL + cW * 0.35, gy + Math.sin(gi * 1.8) * 2, cL + cW * 0.65, gy - Math.sin(gi * 2.4) * 1.5, cR - 8, gy + Math.sin(gi * 3.0) * 1.8);
+      ctx.strokeStyle = 'rgba(200, 180, 220, 1)'; ctx.lineWidth = 0.6; ctx.stroke();
+    }
+    ctx.globalAlpha = 1.0;
 
-    // Tape window (upper area)
+    // Tape window — dark interior
     var winL = cL + cW * 0.12;
     var winR = cR - cW * 0.12;
     var winT = cT + cH * 0.12;
@@ -6759,22 +6797,21 @@ function initFxSuite() {
     var winH = winB - winT;
     var winCornerR = 4 * sc;
 
-    ctx.beginPath();
-    ctx.roundRect(winL, winT, winW, winH, winCornerR);
-    ctx.fillStyle = fillWindow;
-    ctx.fill();
-    ctx.strokeStyle = strokeMain;
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
+    var winGrad = ctx.createLinearGradient(winL, winT, winL, winB);
+    winGrad.addColorStop(0, 'rgba(12, 4, 22, 0.65)');
+    winGrad.addColorStop(1, 'rgba(18, 8, 30, 0.55)');
+    ctx.beginPath(); ctx.roundRect(winL, winT, winW, winH, winCornerR);
+    ctx.fillStyle = winGrad; ctx.fill();
+    ctx.shadowColor = 'rgba(139, 92, 246, 0.2)'; ctx.shadowBlur = 3;
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')'; ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Spool hubs (two circles in the window)
+    // Spool hubs
     var spoolR = winH * 0.32;
     var spoolCY = winT + winH * 0.5;
     var spoolLx = winL + winW * 0.28;
     var spoolRx = winL + winW * 0.72;
     var spokeAngle = t * 1.5;
-
-    // Tape wound on spools (supply side has more, takeup less, animated)
     var supplyR = spoolR * (0.85 + Math.sin(t * 0.12) * 0.05);
     var takeupR = spoolR * (0.55 - Math.sin(t * 0.12) * 0.05);
 
@@ -6782,151 +6819,141 @@ function initFxSuite() {
       var sx = si === 0 ? spoolLx : spoolRx;
       var tapeR = si === 0 ? supplyR : takeupR;
 
-      // Tape wound
       if (tapeR > 2) {
-        ctx.beginPath();
-        ctx.arc(sx, spoolCY, tapeR, 0, Math.PI * 2);
-        ctx.fillStyle = si === 0 ? 'rgba(167, 139, 250, 0.18)' : 'rgba(139, 92, 246, 0.22)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
-        ctx.lineWidth = 0.4;
-        ctx.stroke();
+        var tapeGrad = ctx.createRadialGradient(sx, spoolCY, 0, sx, spoolCY, tapeR);
+        tapeGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (0.18 * pulse) + ')');
+        tapeGrad.addColorStop(0.7, 'rgba(88, 28, 135, ' + (0.08 * pulse) + ')');
+        tapeGrad.addColorStop(1, 'rgba(88, 28, 135, 0.03)');
+        ctx.beginPath(); ctx.arc(sx, spoolCY, tapeR, 0, Math.PI * 2);
+        ctx.fillStyle = tapeGrad; ctx.fill();
+        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.2 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
       }
 
-      // Spool hub circle
-      ctx.beginPath();
-      ctx.arc(sx, spoolCY, spoolR * 0.35, 0, Math.PI * 2);
-      ctx.strokeStyle = strokeBold;
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      ctx.shadowColor = 'rgba(167, 139, 250, 0.4)'; ctx.shadowBlur = 4;
+      ctx.beginPath(); ctx.arc(sx, spoolCY, spoolR * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(35, 15, 55, 0.5)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.65 * pulse) + ')'; ctx.lineWidth = 1.0; ctx.stroke();
+      ctx.shadowBlur = 0;
 
-      // Spool teeth (6 teeth)
       for (var ti = 0; ti < 6; ti++) {
         var a = spokeAngle + ti * Math.PI / 3;
-        var innerR = spoolR * 0.12;
-        var outerR = spoolR * 0.32;
         ctx.beginPath();
-        ctx.moveTo(sx + Math.cos(a) * innerR, spoolCY + Math.sin(a) * innerR);
-        ctx.lineTo(sx + Math.cos(a) * outerR, spoolCY + Math.sin(a) * outerR);
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.55)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.moveTo(sx + Math.cos(a) * spoolR * 0.12, spoolCY + Math.sin(a) * spoolR * 0.12);
+        ctx.lineTo(sx + Math.cos(a) * spoolR * 0.32, spoolCY + Math.sin(a) * spoolR * 0.32);
+        ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.5 * pulse) + ')'; ctx.lineWidth = 1.3; ctx.stroke();
       }
 
-      // Center dot
-      ctx.beginPath();
-      ctx.arc(sx, spoolCY, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.8)';
-      ctx.fill();
+      ctx.shadowColor = 'rgba(196, 181, 253, 0.5)'; ctx.shadowBlur = 3;
+      ctx.beginPath(); ctx.arc(sx, spoolCY, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')'; ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
-    // Tape strip between spools (visible through window)
+    // Tape strip
     var tapeY = winB - winH * 0.15;
+    ctx.shadowColor = 'rgba(139, 92, 246, 0.25)'; ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.moveTo(spoolLx - supplyR * 0.5, spoolCY + supplyR * 0.85);
+    ctx.lineTo(winL + 4, tapeY); ctx.lineTo(winR - 4, tapeY);
+    ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)'; ctx.lineWidth = 3.5; ctx.stroke();
+    ctx.shadowBlur = 0;
+
     ctx.beginPath();
     ctx.moveTo(spoolLx - supplyR * 0.5, spoolCY + supplyR * 0.85);
     ctx.lineTo(winL + 4, tapeY);
-    // Wobble along bottom of window
     var wobSegs = 12;
     for (var ws = 0; ws <= wobSegs; ws++) {
       var f = ws / wobSegs;
       var wx = (winL + 4) + (winW - 8) * f;
       var wb = wow * 1.5 * Math.sin(t * 3.5 + f * Math.PI * 4) * Math.sin(f * Math.PI);
-      ctx.lineTo(wx, tapeY + wb);
+      ctx.lineTo(wx + jit(0.2), tapeY + wb + jit(0.2));
     }
     ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.65)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.8 * pulse) + ')'; ctx.lineWidth = 1.1; ctx.stroke();
 
-    // Tape guide pins at bottom of cassette shell
+    // Guide pins
     var pinY = cB - cH * 0.15;
     var pins = [cL + cW * 0.2, cL + cW * 0.35, cL + cW * 0.5, cL + cW * 0.65, cL + cW * 0.8];
     for (var pi = 0; pi < pins.length; pi++) {
-      ctx.beginPath();
-      ctx.arc(pins[pi], pinY, 1.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
+      ctx.shadowColor = 'rgba(196, 181, 253, 0.3)'; ctx.shadowBlur = 2;
+      ctx.beginPath(); ctx.arc(pins[pi], pinY, 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(58, 32, 80, 0.6)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.5 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.shadowBlur = 0;
     }
 
     // Label area
     var labelY = cT + cH * 0.62;
     var labelH = cH * 0.18;
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(cL + cW * 0.15, labelY);
-    ctx.lineTo(cR - cW * 0.15, labelY);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cL + cW * 0.15, labelY + labelH);
-    ctx.lineTo(cR - cW * 0.15, labelY + labelH);
-    ctx.stroke();
+    var labelL = cL + cW * 0.15;
+    var labelRt = cR - cW * 0.15;
+    var labelW = labelRt - labelL;
 
-    // "CASSETTE" label text
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.45)';
+    var labelGrad = ctx.createLinearGradient(labelL, labelY, labelL, labelY + labelH);
+    labelGrad.addColorStop(0, 'rgba(50, 25, 72, 0.35)');
+    labelGrad.addColorStop(1, 'rgba(42, 20, 62, 0.4)');
+    ctx.beginPath(); ctx.rect(labelL, labelY, labelW, labelH);
+    ctx.fillStyle = labelGrad; ctx.fill();
+
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.1)'; ctx.lineWidth = 0.4;
+    ctx.beginPath(); ctx.moveTo(labelL, labelY); ctx.lineTo(labelRt, labelY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(labelL, labelY + labelH); ctx.lineTo(labelRt, labelY + labelH); ctx.stroke();
+
     ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.55 * pulse) + ')';
     ctx.fillText('C A S S E T T E', cL + cW / 2, labelY + labelH / 2);
 
-    // Screw holes (corners)
+    // Screw holes
     var screwInset = 8 * sc;
-    var screwPositions = [
-      [cL + screwInset, cT + screwInset],
-      [cR - screwInset, cT + screwInset],
-      [cL + screwInset, cB - screwInset],
-      [cR - screwInset, cB - screwInset],
-    ];
+    var screwPositions = [[cL + screwInset, cT + screwInset], [cR - screwInset, cT + screwInset], [cL + screwInset, cB - screwInset], [cR - screwInset, cB - screwInset]];
     for (var sci = 0; sci < screwPositions.length; sci++) {
+      var scX = screwPositions[sci][0]; var scY2 = screwPositions[sci][1];
+      ctx.beginPath(); ctx.arc(scX, scY2, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(20, 8, 35, 0.4)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
       ctx.beginPath();
-      ctx.arc(screwPositions[sci][0], screwPositions[sci][1], 2.5, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(screwPositions[sci][0], screwPositions[sci][1], 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.5)';
-      ctx.fill();
+      ctx.moveTo(scX - 1.3, scY2); ctx.lineTo(scX + 1.3, scY2);
+      ctx.moveTo(scX, scY2 - 1.3); ctx.lineTo(scX, scY2 + 1.3);
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
     }
 
-    // Saturation glow on tape strip
+    // Saturation glow
     if (sat > 0.02) {
       var glowCX = cL + cW / 2;
-      var grad = ctx.createRadialGradient(glowCX, tapeY, 0, glowCX, tapeY, 30 * sc);
-      grad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.2) + ')');
-      grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(glowCX, tapeY, 30 * sc, 0, Math.PI * 2);
-      ctx.fill();
+      var satGrad = ctx.createRadialGradient(glowCX, tapeY, 0, glowCX, tapeY, 30 * sc);
+      satGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.2) + ')');
+      satGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      ctx.fillStyle = satGrad;
+      ctx.beginPath(); ctx.arc(glowCX, tapeY, 30 * sc, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Hiss particles
+    // Sparks (hiss)
     if (hiss > 0.02) {
-      var count = Math.floor(hiss * 20);
-      for (var pi2 = 0; pi2 < count && pi2 < hissParticles.length; pi2++) {
-        var hp = hissParticles[pi2];
-        hp.life += hp.speed * 0.018;
-        if (hp.life > 1) { hp.life = 0; hp.x = Math.random(); hp.y = Math.random(); }
-        var alpha = Math.sin(hp.life * Math.PI) * hiss * 0.3;
-        if (alpha > 0.01) {
-          var hpx = cL + hp.x * cW;
-          var hpy = cT + hp.y * cH;
-          ctx.fillStyle = 'rgba(139, 92, 246, ' + alpha + ')';
-          ctx.beginPath();
-          ctx.arc(hpx, hpy, hp.size, 0, Math.PI * 2);
-          ctx.fill();
-        }
+      var nSparks = Math.floor(hiss * 22);
+      for (var ski = 0; ski < nSparks; ski++) {
+        var skpX = cL + cW * 0.1 + Math.sin(t * 4.3 + ski * 3.1) * cW * 0.4;
+        var skpY = cT + cH * 0.1 + Math.cos(t * 3.7 + ski * 2.7) * cH * 0.4;
+        var skpLen = 2 + Math.sin(t * 6 + ski) * 1.3;
+        var skpA = t * 2 + ski * 1.4;
+        var spkAlpha = hiss * 0.5 + Math.sin(t * 8 + ski) * 0.1;
+        ctx.shadowColor = 'rgba(167,139,250,0.3)'; ctx.shadowBlur = 2;
+        ctx.beginPath(); ctx.moveTo(skpX, skpY);
+        ctx.lineTo(skpX + Math.cos(skpA) * skpLen, skpY + Math.sin(skpA) * skpLen);
+        ctx.lineTo(skpX + Math.cos(skpA + 0.8) * skpLen * 0.6, skpY + Math.sin(skpA + 0.8) * skpLen * 0.6);
+        ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')'; ctx.lineWidth = 0.5; ctx.stroke();
       }
+      ctx.shadowBlur = 0;
     }
+
+    // Indicator lights
+    drawIndicatorLights(ctx, cR - cW * 0.22, cT + cH * 0.91, sc, t, wow, sat, hiss);
 
     ctx.restore();
   }
 
-  // ─── Wire Visualization ───
+  // ─── Wire Visualization — Open Box Design ───
   function drawWireViz(ctx, w, h, t) {
     ctx.clearRect(0, 0, w * DPR, h * DPR);
     ctx.save();
@@ -6936,301 +6963,360 @@ function initFxSuite() {
     var sat = normalize('saturation', state.params.saturation);
     var hiss = normalize('hiss', state.params.hiss);
 
-    var sc = Math.min(h * 0.8 / 140, w / 220);
     var cx = w / 2;
-    var cy = h * 0.46;
+    var cy = h * 0.55;
+    var sc = Math.min(h / 220, w / 360);
 
-    // Jitter — everything trembles with wow
-    var jit = function(s) { return (Math.random() - 0.5) * wow * (s || 3); };
+    var pulse = 0.88 + Math.sin(t * 1.5) * 0.12;
+    var jit = function(s) { return (Math.random() - 0.5) * wow * (s || 2); };
 
-    // ── Supply spool (left) — smaller, corroded ──
-    var sL = cx - 60 * sc;
-    var sY = cy - 2 * sc;
-    var sR = 22 * sc;
+    // ━━━━ CASE BODY ━━━━
+    var boxL = cx - 140 * sc;
+    var boxR = cx + 140 * sc;
+    var boxTop = cy - 48 * sc;
+    var boxBot = cy + 62 * sc;
+    var boxRad = 4 * sc;
 
-    // Spool flange — corroded ring with gaps
-    for (var fi = 0; fi < 6; fi++) {
-      var fa1 = (fi / 6) * Math.PI * 2 + t * 0.2;
-      var fa2 = fa1 + (Math.PI * 2 / 6) * (0.5 + Math.sin(t * 0.3 + fi) * 0.15);
-      ctx.beginPath();
-      ctx.arc(sL + jit(1), sY + jit(1), sR, fa1, fa2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.75 + Math.sin(t * 0.5 + fi * 0.9) * 0.1) + ')';
-      ctx.lineWidth = 1.0;
-      ctx.stroke();
-    }
-
-    // Wire coiled on supply (thinning — wire is running out)
-    for (var ci = 0; ci < 5; ci++) {
-      var cr = sR * (0.3 + ci * 0.1);
-      var ca = t * (0.3 + ci * 0.15) + ci * 1.1;
-      var cl = Math.PI * (0.5 + ci * 0.1);
-      ctx.beginPath();
-      ctx.arc(sL, sY, cr, ca, ca + cl);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.35 + ci * 0.07) + ')';
-      ctx.lineWidth = 0.4;
-      ctx.stroke();
-    }
-
-    // Supply hub
+    var bodyGrad = ctx.createLinearGradient(boxL, boxTop, boxL, boxBot);
+    bodyGrad.addColorStop(0, 'rgba(58, 32, 80, 0.85)');
+    bodyGrad.addColorStop(0.4, 'rgba(42, 20, 62, 0.9)');
+    bodyGrad.addColorStop(1, 'rgba(30, 14, 48, 0.95)');
     ctx.beginPath();
-    ctx.arc(sL, sY, 3 * sc, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.8)';
-    ctx.lineWidth = 0.7;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(sL, sY, 1.2 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.5)';
+    ctx.moveTo(boxL + boxRad, boxTop);
+    ctx.lineTo(boxR - boxRad, boxTop);
+    ctx.quadraticCurveTo(boxR, boxTop, boxR, boxTop + boxRad);
+    ctx.lineTo(boxR, boxBot - boxRad);
+    ctx.quadraticCurveTo(boxR, boxBot, boxR - boxRad, boxBot);
+    ctx.lineTo(boxL + boxRad, boxBot);
+    ctx.quadraticCurveTo(boxL, boxBot, boxL, boxBot - boxRad);
+    ctx.lineTo(boxL, boxTop + boxRad);
+    ctx.quadraticCurveTo(boxL, boxTop, boxL + boxRad, boxTop);
+    ctx.closePath();
+    ctx.fillStyle = bodyGrad;
     ctx.fill();
 
-    // ── Take-up spool (right) — larger, more wire wound ──
-    var tR = cx + 55 * sc;
-    var tY = cy - 2 * sc;
-    var tRad = 26 * sc;
-
-    // Spool flange
-    for (var ti = 0; ti < 6; ti++) {
-      var ta1 = (ti / 6) * Math.PI * 2 - t * 0.25;
-      var ta2 = ta1 + (Math.PI * 2 / 6) * (0.55 + Math.sin(t * 0.4 + ti * 0.7) * 0.15);
+    // Wood grain
+    ctx.globalAlpha = 0.06;
+    for (var gi = 0; gi < 12; gi++) {
+      var gy = boxTop + (boxBot - boxTop) * (gi / 12) + Math.sin(gi * 1.7) * 2;
       ctx.beginPath();
-      ctx.arc(tR + jit(1), tY + jit(1), tRad, ta1, ta2);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.75 + Math.sin(t * 0.6 + ti * 1.1) * 0.1) + ')';
-      ctx.lineWidth = 1.0;
+      ctx.moveTo(boxL + 6, gy);
+      ctx.bezierCurveTo(
+        boxL + (boxR - boxL) * 0.3, gy + Math.sin(gi * 2.3) * 3,
+        boxL + (boxR - boxL) * 0.7, gy - Math.sin(gi * 1.8) * 2,
+        boxR - 6, gy + Math.sin(gi * 3.1) * 2
+      );
+      ctx.strokeStyle = 'rgba(200, 180, 220, 1)';
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     }
+    ctx.globalAlpha = 1.0;
 
-    // Wire coiled on take-up (more dense)
-    for (var ui = 0; ui < 8; ui++) {
-      var ur = tRad * (0.25 + ui * 0.08);
-      var ua = -t * (0.25 + ui * 0.12) + ui * 0.9;
-      var ul = Math.PI * (0.4 + ui * 0.08);
-      ctx.beginPath();
-      ctx.arc(tR, tY, ur, ua, ua + ul);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.30 + ui * 0.06) + ')';
-      ctx.lineWidth = 0.4;
-      ctx.stroke();
-    }
-
-    // Take-up hub
+    // Box edges
     ctx.beginPath();
-    ctx.arc(tR, tY, 3 * sc, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.8)';
-    ctx.lineWidth = 0.7;
+    ctx.moveTo(boxL + boxRad, boxTop);
+    ctx.lineTo(boxR - boxRad, boxTop);
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.25)';
+    ctx.lineWidth = 1.0;
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(tR, tY, 1.2 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.5)';
+    ctx.moveTo(boxL, boxTop + boxRad);
+    ctx.lineTo(boxL, boxBot - boxRad);
+    ctx.moveTo(boxR, boxTop + boxRad);
+    ctx.lineTo(boxR, boxBot - boxRad);
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.15)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(boxL + boxRad, boxBot);
+    ctx.lineTo(boxR - boxRad, boxBot);
+    ctx.strokeStyle = 'rgba(100, 60, 140, 0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // ━━━━ LID (perspective trapezoid) ━━━━
+    var lidBot = boxTop;
+    var lidTop = cy - 100 * sc;
+    var lidInset = 18 * sc;
+
+    var lidGrad = ctx.createLinearGradient(boxL, lidTop, boxL, lidBot);
+    lidGrad.addColorStop(0, 'rgba(48, 24, 70, 0.5)');
+    lidGrad.addColorStop(0.7, 'rgba(52, 28, 75, 0.7)');
+    lidGrad.addColorStop(1, 'rgba(58, 32, 80, 0.85)');
+    ctx.beginPath();
+    ctx.moveTo(boxL, lidBot);
+    ctx.lineTo(boxL + lidInset, lidTop);
+    ctx.lineTo(boxR - lidInset, lidTop);
+    ctx.lineTo(boxR, lidBot);
+    ctx.closePath();
+    ctx.fillStyle = lidGrad;
     ctx.fill();
 
-    // ── Wire path between spools — irregular, with tangles and splice marks ──
-    var wireStartX = sL + sR;
-    var wireEndX = tR - tRad;
-    var wireY = cy + 8 * sc;
+    // Lid inner lining
+    ctx.beginPath();
+    ctx.moveTo(boxL + 4, lidBot - 2);
+    ctx.lineTo(boxL + lidInset + 4, lidTop + 4);
+    ctx.lineTo(boxR - lidInset - 4, lidTop + 4);
+    ctx.lineTo(boxR - 4, lidBot - 2);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(25, 10, 40, 0.4)';
+    ctx.fill();
 
-    // Guide posts (small vertical lines where wire touches)
-    var postX1 = sL + sR + 10 * sc;
-    var postX2 = tR - tRad - 10 * sc;
-    var headX = cx;
-    var headY = wireY + 6 * sc;
+    // Lid edges
+    ctx.beginPath();
+    ctx.moveTo(boxL, lidBot);
+    ctx.lineTo(boxL + lidInset, lidTop);
+    ctx.lineTo(boxR - lidInset, lidTop);
+    ctx.lineTo(boxR, lidBot);
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
 
-    // Post marks
-    for (var pi = 0; pi < 2; pi++) {
-      var px = pi === 0 ? postX1 : postX2;
+    // ━━━━ INTERIOR PANEL ━━━━
+    var panelL = boxL + 12 * sc;
+    var panelR = boxR - 12 * sc;
+    var panelT = boxTop + 6 * sc;
+    var panelB = boxBot - 18 * sc;
+    var panelRad = 3 * sc;
+
+    var panelGrad = ctx.createLinearGradient(panelL, panelT, panelL, panelB);
+    panelGrad.addColorStop(0, 'rgba(20, 8, 35, 0.6)');
+    panelGrad.addColorStop(1, 'rgba(15, 5, 28, 0.7)');
+    ctx.beginPath();
+    ctx.moveTo(panelL + panelRad, panelT);
+    ctx.lineTo(panelR - panelRad, panelT);
+    ctx.quadraticCurveTo(panelR, panelT, panelR, panelT + panelRad);
+    ctx.lineTo(panelR, panelB - panelRad);
+    ctx.quadraticCurveTo(panelR, panelB, panelR - panelRad, panelB);
+    ctx.lineTo(panelL + panelRad, panelB);
+    ctx.quadraticCurveTo(panelL, panelB, panelL, panelB - panelRad);
+    ctx.lineTo(panelL, panelT + panelRad);
+    ctx.quadraticCurveTo(panelL, panelT, panelL + panelRad, panelT);
+    ctx.closePath();
+    ctx.fillStyle = panelGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+
+    // ━━━━ SPOOLS ━━━━
+    var deckCy = (panelT + panelB) / 2;
+    var spoolSpacing = 50 * sc;
+
+    // Supply spool (left)
+    var sX = cx - spoolSpacing;
+    var sY = deckCy;
+    var sR = 28 * sc;
+
+    var spoolGrad = ctx.createRadialGradient(sX - 4 * sc, sY - 4 * sc, 0, sX, sY, sR);
+    spoolGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.22 * pulse) + ')');
+    spoolGrad.addColorStop(0.6, 'rgba(139, 92, 246, ' + (0.12 * pulse) + ')');
+    spoolGrad.addColorStop(1, 'rgba(88, 28, 135, 0.06)');
+    ctx.beginPath();
+    ctx.arc(sX, sY, sR, 0, Math.PI * 2);
+    ctx.fillStyle = spoolGrad;
+    ctx.fill();
+
+    ctx.shadowColor = 'rgba(167, 139, 250, 0.5)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(sX + jit(0.5), sY + jit(0.5), sR, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.8 * pulse) + ')';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    for (var si = 0; si < 4; si++) {
+      var sa = (si / 4) * Math.PI * 2 + t * 0.3;
       ctx.beginPath();
-      ctx.moveTo(px, wireY - 5 * sc);
-      ctx.lineTo(px + jit(1), wireY + 5 * sc);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
+      ctx.moveTo(sX + Math.cos(sa) * 5 * sc, sY + Math.sin(sa) * 5 * sc);
+      ctx.lineTo(sX + Math.cos(sa) * sR * 0.85, sY + Math.sin(sa) * sR * 0.85);
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
 
-    // Main wire path — drawn as a wobbly line with occasional breaks
-    var wireSegs = 40;
-    var breakAt = Math.floor(7 + Math.sin(t * 0.7) * 3); // splice location moves slowly
-    var breakAt2 = Math.floor(25 + Math.cos(t * 0.5) * 4);
-
-    ctx.beginPath();
-    var moved = false;
-    for (var ws = 0; ws <= wireSegs; ws++) {
-      var f = ws / wireSegs;
-      var wx = wireStartX + (wireEndX - wireStartX) * f;
-      var wy = wireY;
-      // Wire dips down at playback head (center)
-      var headDist = Math.abs(f - 0.5) * 2;
-      wy += (1 - headDist * headDist) * 10 * sc;
-      // Wow adds waviness
-      wy += Math.sin(t * 3 + f * Math.PI * 8) * wow * 2.5;
-      wy += Math.sin(t * 1.7 + f * Math.PI * 3) * wow * 1.5;
-      // Saturation adds micro-tangles
-      if (sat > 0.1) {
-        wy += Math.sin(t * 8 + f * 40) * sat * 1.5;
-      }
-
-      // Break/splice points — gap in the wire
-      if (ws === breakAt || ws === breakAt2) {
-        ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
-        ctx.lineWidth = 0.7;
-        ctx.stroke();
-        // Splice mark — small X
-        ctx.beginPath();
-        ctx.moveTo(wx - 2, wy - 2);
-        ctx.lineTo(wx + 2, wy + 2);
-        ctx.moveTo(wx + 2, wy - 2);
-        ctx.lineTo(wx - 2, wy + 2);
-        ctx.strokeStyle = 'rgba(167, 139, 250, 0.6)';
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-        // Start new segment
-        ctx.beginPath();
-        moved = false;
-        continue;
-      }
-
-      if (!moved) {
-        ctx.moveTo(wx + jit(0.5), wy + jit(0.5));
-        moved = true;
-      } else {
-        ctx.lineTo(wx + jit(0.5), wy + jit(0.5));
-      }
-    }
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)';
-    ctx.lineWidth = 0.7;
-    ctx.stroke();
-
-    // ── Playback head — electromagnetic, minimal ──
-    // Head housing
-    ctx.beginPath();
-    ctx.moveTo(headX - 8 * sc, headY + 2 * sc);
-    ctx.lineTo(headX - 4 * sc, headY - 4 * sc);
-    ctx.lineTo(headX + 4 * sc, headY - 4 * sc);
-    ctx.lineTo(headX + 8 * sc, headY + 2 * sc);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.85)';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-
-    // Magnetic field lines (subtle arcs emanating from head)
-    for (var mf = 0; mf < 3; mf++) {
-      var mfR = (4 + mf * 4) * sc;
-      var mfAlpha = 0.25 + Math.sin(t * 2 + mf) * 0.08;
+    for (var sci = 0; sci < 4; sci++) {
+      var scr = 8 * sc + sci * 2.5 * sc;
+      var sca = t * (0.4 + sci * 0.2) + sci * 1.3;
       ctx.beginPath();
-      ctx.arc(headX, headY - 3 * sc, mfR, Math.PI * 1.1, Math.PI * 1.9);
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + mfAlpha + ')';
-      ctx.lineWidth = 0.3;
+      ctx.arc(sX, sY, scr, sca, sca + Math.PI * 0.6);
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.4 + sci * 0.08) * pulse + ')';
+      ctx.lineWidth = 0.7;
       ctx.stroke();
     }
 
-    // ── Corrupted oscilloscope trace (center, below wire) ──
-    var scopeY = cy + 30 * sc;
-    var scopeW = 70 * sc;
-    var scopeH = 18 * sc;
-    var scopeL = cx - scopeW / 2;
-
-    // Scope border (faint rectangle, broken)
-    ctx.setLineDash([3, 4]);
+    ctx.shadowColor = 'rgba(196, 181, 253, 0.6)';
+    ctx.shadowBlur = 5;
     ctx.beginPath();
-    ctx.rect(scopeL, scopeY - scopeH / 2, scopeW, scopeH);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
-    ctx.lineWidth = 0.4;
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.arc(sX, sY, 4 * sc, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+    ctx.fill();
+    ctx.shadowBlur = 0;
 
-    // Waveform trace — corrupted sine with dropout glitches
+    // Take-up spool (right)
+    var tX = cx + spoolSpacing;
+    var tY = deckCy;
+    var tRa = 32 * sc;
+
+    var tSpoolGrad = ctx.createRadialGradient(tX - 4 * sc, tY - 4 * sc, 0, tX, tY, tRa);
+    tSpoolGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.22 * pulse) + ')');
+    tSpoolGrad.addColorStop(0.6, 'rgba(139, 92, 246, ' + (0.12 * pulse) + ')');
+    tSpoolGrad.addColorStop(1, 'rgba(88, 28, 135, 0.06)');
     ctx.beginPath();
-    var scopeSegs = 60;
-    for (var si = 0; si <= scopeSegs; si++) {
-      var sf = si / scopeSegs;
-      var sx = scopeL + scopeW * sf;
-      var sy = scopeY;
-      // Base waveform
-      sy += Math.sin(t * 4 + sf * Math.PI * 6) * scopeH * 0.3;
-      // Saturation distortion — clipping
-      if (sat > 0.2) {
-        var wave = Math.sin(t * 4 + sf * Math.PI * 6);
-        var clip = 1 - sat * 0.6;
-        wave = Math.max(-clip, Math.min(clip, wave));
-        sy = scopeY + wave * scopeH * 0.3;
-      }
-      // Random dropouts
-      if (wow > 0.1 && Math.sin(t * 7 + si * 1.3) > 0.85) {
-        sy = scopeY; // signal drops to zero
-      }
-      if (si === 0) ctx.moveTo(sx, sy);
-      else ctx.lineTo(sx, sy);
-    }
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.75)';
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
+    ctx.arc(tX, tY, tRa, 0, Math.PI * 2);
+    ctx.fillStyle = tSpoolGrad;
+    ctx.fill();
 
-    // Ghost trace (delayed duplicate, phase-shifted — the wire twist artifact)
+    ctx.shadowColor = 'rgba(167, 139, 250, 0.5)';
+    ctx.shadowBlur = 6;
     ctx.beginPath();
-    for (var gi = 0; gi <= scopeSegs; gi++) {
-      var gf = gi / scopeSegs;
-      var gx = scopeL + scopeW * gf;
-      var gy = scopeY + Math.sin(t * 4 + gf * Math.PI * 6 + 0.8) * scopeH * 0.2;
-      if (gi === 0) ctx.moveTo(gx, gy);
-      else ctx.lineTo(gx, gy);
-    }
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
-    ctx.lineWidth = 0.4;
+    ctx.arc(tX + jit(0.5), tY + jit(0.5), tRa, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.8 * pulse) + ')';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // ── Electromagnetic interference fringes ──
-    if (sat > 0.05) {
-      var numFringes = Math.floor(3 + sat * 6);
-      for (var fi = 0; fi < numFringes; fi++) {
-        var fy = cy + Math.sin(t * 0.9 + fi * 2.3) * h * 0.35;
-        var fxStart = cx - w * 0.3 + Math.sin(t * 0.4 + fi) * 20;
-        var fLen = 15 + sat * 30 + Math.sin(t * 1.2 + fi) * 10;
-        ctx.beginPath();
-        ctx.moveTo(fxStart, fy);
-        // Slightly wavy horizontal line
-        for (var fj = 0; fj < 5; fj++) {
-          ctx.lineTo(
-            fxStart + fLen * (fj + 1) / 5,
-            fy + Math.sin(t * 3 + fi + fj) * 1.5
-          );
-        }
-        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.2 + sat * 0.2) + ')';
-        ctx.lineWidth = 0.3;
-        ctx.stroke();
-      }
+    for (var tti = 0; tti < 4; tti++) {
+      var tta = (tti / 4) * Math.PI * 2 - t * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(tX + Math.cos(tta) * 5 * sc, tY + Math.sin(tta) * 5 * sc);
+      ctx.lineTo(tX + Math.cos(tta) * tRa * 0.85, tY + Math.sin(tta) * tRa * 0.85);
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
     }
 
-    // ── Hiss — electrical static sparks ──
+    for (var tci = 0; tci < 7; tci++) {
+      var tcr = 8 * sc + tci * 2.5 * sc;
+      var tca = -t * (0.35 + tci * 0.15) + tci * 1.0;
+      ctx.beginPath();
+      ctx.arc(tX, tY, tcr, tca, tca + Math.PI * 0.5);
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.35 + tci * 0.06) * pulse + ')';
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+    }
+
+    ctx.shadowColor = 'rgba(196, 181, 253, 0.6)';
+    ctx.shadowBlur = 5;
+    ctx.beginPath();
+    ctx.arc(tX, tY, 4 * sc, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // ━━━━ WIRE PATH ━━━━
+    var wireStartX = sX + sR;
+    var wireEndX = tX - tRa;
+    var wireY = deckCy;
+    var headX = cx;
+    var headY = deckCy + 14 * sc;
+
+    // Wire glow underlayer
+    ctx.shadowColor = 'rgba(139, 92, 246, 0.4)';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(wireStartX, wireY);
+    ctx.quadraticCurveTo(headX, headY + 6 * sc, wireEndX, wireY);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Wire — wobbly with wow
+    var wireSegs = 36;
+    ctx.beginPath();
+    for (var wi = 0; wi <= wireSegs; wi++) {
+      var wf = wi / wireSegs;
+      var wx = wireStartX + (wireEndX - wireStartX) * wf;
+      var dip = Math.sin(wf * Math.PI) * 14 * sc;
+      var wy = wireY + dip;
+      wy += Math.sin(t * 3 + wf * Math.PI * 8) * wow * 2;
+      wy += Math.sin(t * 1.7 + wf * Math.PI * 3) * wow * 1.2;
+      if (wi === 0) ctx.moveTo(wx + jit(0.3), wy + jit(0.3));
+      else ctx.lineTo(wx + jit(0.3), wy + jit(0.3));
+    }
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.9 * pulse) + ')';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // ━━━━ PLAYBACK HEAD ━━━━
+    ctx.shadowColor = 'rgba(196, 181, 253, 0.7)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(headX - 6 * sc, headY + 2 * sc);
+    ctx.lineTo(headX - 3 * sc, headY - 3 * sc);
+    ctx.lineTo(headX + 3 * sc, headY - 3 * sc);
+    ctx.lineTo(headX + 6 * sc, headY + 2 * sc);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(88, 28, 135, 0.6)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.9 * pulse) + ')';
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    for (var mfi = 0; mfi < 3; mfi++) {
+      var mfRad = (3 + mfi * 3) * sc;
+      ctx.beginPath();
+      ctx.arc(headX, headY - 2 * sc, mfRad, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 + Math.sin(t * 2.5 + mfi) * 0.1) * pulse + ')';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // ━━━━ SPARKS (hiss) ━━━━
     if (hiss > 0.02) {
-      var sparks = Math.floor(hiss * 30);
-      for (var sk = 0; sk < sparks; sk++) {
-        var skX = cx + Math.sin(t * 4.3 + sk * 3.1) * w * 0.38;
-        var skY = cy + Math.cos(t * 3.7 + sk * 2.7) * h * 0.35;
-        var skLen = 1.5 + Math.sin(t * 6 + sk) * 1.5;
-        var skAngle = t * 2 + sk * 1.4;
-        // Tiny lightning bolt (2 segments)
+      var nSparks = Math.floor(hiss * 35);
+      for (var sk = 0; sk < nSparks; sk++) {
+        var skX = cx + Math.sin(t * 4.3 + sk * 3.1) * (panelR - panelL) * 0.42;
+        var skY = deckCy + Math.cos(t * 3.7 + sk * 2.7) * (panelB - panelT) * 0.4;
+        var skLen = 2 + Math.sin(t * 6 + sk) * 1.5;
+        var skA = t * 2 + sk * 1.4;
+        var spkAlpha = hiss * 0.6 + Math.sin(t * 8 + sk) * 0.12;
+        ctx.shadowColor = 'rgba(167,139,250,0.4)';
+        ctx.shadowBlur = 2;
         ctx.beginPath();
         ctx.moveTo(skX, skY);
-        ctx.lineTo(skX + Math.cos(skAngle) * skLen, skY + Math.sin(skAngle) * skLen);
-        ctx.lineTo(
-          skX + Math.cos(skAngle + 0.8) * skLen * 0.7,
-          skY + Math.sin(skAngle + 0.8) * skLen * 0.7
-        );
-        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (hiss * 0.45 + Math.sin(t * 8 + sk) * 0.1) + ')';
-        ctx.lineWidth = 0.3;
+        ctx.lineTo(skX + Math.cos(skA) * skLen, skY + Math.sin(skA) * skLen);
+        ctx.lineTo(skX + Math.cos(skA + 0.8) * skLen * 0.6, skY + Math.sin(skA + 0.8) * skLen * 0.6);
+        ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')';
+        ctx.lineWidth = 0.5;
         ctx.stroke();
       }
+      ctx.shadowBlur = 0;
     }
 
-    // ── "W I R E" label — fragmented, each letter slightly displaced ──
-    var letters = ['W', ' ', 'I', ' ', 'R', ' ', 'E'];
-    var labelY = cy + 52 * sc;
-    ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
+    // ━━━━ NAMEPLATE ━━━━
+    var npW = 50 * sc;
+    var npH = 10 * sc;
+    var npX = cx - npW / 2;
+    var npY = boxBot - 15 * sc;
+
+    ctx.beginPath();
+    ctx.rect(npX, npY, npW, npH);
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.08)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    ctx.font = '500 ' + Math.max(4, 4.5 * sc) + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    var totalW = 30 * sc;
-    for (var li = 0; li < letters.length; li++) {
-      if (letters[li] === ' ') continue;
-      var lx = cx - totalW / 2 + (li / 6) * totalW + jit(1.5);
-      var ly = labelY + jit(1);
-      var la = 0.55 + Math.sin(t * 0.8 + li * 1.2) * 0.1;
-      ctx.fillStyle = 'rgba(139, 92, 246, ' + la + ')';
-      ctx.fillText(letters[li], lx, ly);
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+    ctx.fillText('W I R E', cx, npY + npH / 2);
+
+    // ━━━━ INDICATOR LIGHTS ━━━━
+    drawIndicatorLights(ctx, boxR - 38 * sc, boxBot - 8 * sc, sc, t, wow, sat, hiss);
+
+    // ━━━━ FEET ━━━━
+    for (var foot = 0; foot < 2; foot++) {
+      var fX = foot === 0 ? boxL + 14 * sc : boxR - 14 * sc;
+      ctx.beginPath();
+      ctx.arc(fX, boxBot + 2 * sc, 3 * sc, 0, Math.PI);
+      ctx.fillStyle = 'rgba(42, 20, 62, 0.5)';
+      ctx.fill();
     }
 
     ctx.restore();
