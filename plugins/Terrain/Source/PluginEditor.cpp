@@ -238,6 +238,18 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             {
                 complete(audioProcessor.speedFreeform.load());
             })
+            .withNativeFunction("setPitchLocked", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.pitchLocked.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getPitchLocked", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.pitchLocked.load());
+            })
             .withNativeFunction("setFeedToGrain", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -482,16 +494,18 @@ void TerrainAudioProcessorEditor::timerCallback()
             js << "if(typeof restoreModState==='function'){restoreModState('" << escaped << "');}";
         }
 
-        // Push grain sync and XY pad state (same phased restore window)
-        float grainSync = audioProcessor.grainSyncEnabled.load();
-        float xyEnabled = audioProcessor.xyAutoEnabled.load();
-        float xyMode    = audioProcessor.xyAutoMode.load();
-        float xySpeed   = audioProcessor.xyAutoSpeed.load();
+        // Push grain sync, XY pad, and pitch locked state (same phased restore window)
+        float grainSync  = audioProcessor.grainSyncEnabled.load();
+        float xyEnabled  = audioProcessor.xyAutoEnabled.load();
+        float xyMode     = audioProcessor.xyAutoMode.load();
+        float xySpeed    = audioProcessor.xyAutoSpeed.load();
+        float pitchLock  = audioProcessor.pitchLocked.load();
         js << "if(typeof restoreUIState==='function'){restoreUIState("
            << juce::String(grainSync, 1) << ","
            << juce::String(xyEnabled, 1) << ","
            << juce::String(xyMode, 1) << ","
-           << juce::String(xySpeed, 3) << ");}";
+           << juce::String(xySpeed, 3) << ","
+           << juce::String(pitchLock, 1) << ");}";
     }
 
     webView->evaluateJavascript(js);

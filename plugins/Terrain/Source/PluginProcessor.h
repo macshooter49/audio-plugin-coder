@@ -120,6 +120,9 @@ public:
     // Speed freeform mode (synced from JS)
     std::atomic<float> speedFreeform { 0.f }; // 0 = stepped, 1 = freeform
 
+    // Pitch locked to semitone steps 1-12 (synced from JS)
+    std::atomic<float> pitchLocked { 0.f }; // 0 = free, 1 = locked
+
     // Feed tape loop back into granular engine (synced from JS)
     std::atomic<float> tapeLoopFeedToGrain { 0.f }; // 0 = off, 1 = on
 

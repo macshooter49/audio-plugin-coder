@@ -2574,6 +2574,7 @@ const state = {
   tapeMachine: 0,
   grainSyncEnabled: false,
   speedFreeform: false,
+  pitchLocked: false,
   feedToGrain: false,
   tapeLoop: {
     recording: false,
@@ -2687,7 +2688,7 @@ let setTapeEnabledFn, getTapeEnabledFn;
 let setTapeMachineFn, getTapeMachineFn;
 let setTapeLoopRecordFn, getTapeLoopRecordFn;
 let setTapeLoopPlayFn, getTapeLoopPlayFn;
-let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn;
+let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn, setPitchLockedFn;
 let setXYAutoStateFn, getXYAutoStateFn;
 let updateModConfigFn, getModStateFn, setXYPadFn;
 
@@ -2744,6 +2745,7 @@ async function initJuceBindings() {
     clearTapeLoopFn = window.Juce.getNativeFunction('clearTapeLoop');
     undoTapeLoopFn = window.Juce.getNativeFunction('undoTapeLoop');
     setSpeedFreeformFn = window.Juce.getNativeFunction('setSpeedFreeform');
+    setPitchLockedFn = window.Juce.getNativeFunction('setPitchLocked');
     setFeedToGrainFn = window.Juce.getNativeFunction('setFeedToGrain');
 
     // XY auto state native functions
@@ -2929,6 +2931,7 @@ function formatValue(id, val) {
       return `${Math.round(val)}%`;
     }
     case 'pitch':
+      if (state.pitchLocked) return Math.round(val) + ' st';
       if (val === 0) return '0 st';
       return (val > 0 ? '+' : '') + (Number.isInteger(val) ? val : val.toFixed(2)) + ' st';
     case 'freeze':
@@ -3765,6 +3768,25 @@ function buildKnobs() {
         if (juceMode && setGrainSyncFn) setGrainSyncFn(state.grainSyncEnabled ? 1 : 0);
       });
     }
+    if (id === 'pitch') {
+      labelEl.classList.add('knob-label-clickable');
+      labelEl.title = 'Click to lock to semitone steps (0-12)';
+      labelEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.pitchLocked = !state.pitchLocked;
+        labelEl.classList.toggle('freeform-active', state.pitchLocked);
+        labelEl.textContent = state.pitchLocked ? 'SEMI' : 'PITCH';
+        if (state.pitchLocked) {
+          // Snap current value into 1-12 range
+          const snapped = Math.max(0, Math.min(12, Math.round(state.params.pitch)));
+          state.params.pitch = snapped;
+          modBaseValues.pitch = snapped;
+          pushParamToJuce('pitch');
+        }
+        updateKnobDisplay(id);
+        if (juceMode && setPitchLockedFn) setPitchLockedFn(state.pitchLocked ? 1 : 0);
+      });
+    }
     group.appendChild(labelEl);
 
     // Store references
@@ -3784,7 +3806,9 @@ function buildKnobs() {
       state.dragStartY = e.clientY;
       // Use base value (not modulated) so drag starts from user's set position
       const baseVal = modBaseValues[id] !== undefined ? modBaseValues[id] : state.params[id];
-      state.dragStartVal = normalize(id, baseVal);
+      state.dragStartVal = (id === 'pitch' && state.pitchLocked)
+        ? Math.max(0, Math.min(1, baseVal / 12))
+        : normalize(id, baseVal);
       state.params[id] = baseVal; // snap visual back to base
       hideTooltip();
       if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.sliderDragStarted();
@@ -3792,8 +3816,9 @@ function buildKnobs() {
 
     knobWrap.addEventListener('dblclick', (e) => {
       e.preventDefault();
-      state.params[id] = p.default;
-      modBaseValues[id] = p.default; // sync mod base on reset
+      const resetVal = (id === 'pitch' && state.pitchLocked) ? 0 : p.default;
+      state.params[id] = resetVal;
+      modBaseValues[id] = resetVal; // sync mod base on reset
       updateKnobDisplay(id);
       pushParamToJuce(id);
       // Flash animation
@@ -3836,7 +3861,9 @@ function iconColorForNorm(norm) {
 function updateKnobDisplay(id) {
   const group = document.querySelector(`.knob-group[data-param="${id}"]`);
   if (!group) return;
-  const norm = normalize(id, state.params[id]);
+  const norm = (id === 'pitch' && state.pitchLocked)
+    ? Math.max(0, Math.min(1, state.params[id] / 12))
+    : normalize(id, state.params[id]);
   drawKnob(group._knobCanvas, norm, state.draggingKnob === id, state.hoveredKnob === id);
   group._valueEl.textContent = formatValue(id, state.params[id]);
   // Icon redrawn by updateAnimatedIcons() in animation loop — skip here to avoid double-draw
@@ -4025,9 +4052,19 @@ document.addEventListener('mousemove', (e) => {
     const sensitivity = e.shiftKey ? 800 : 200;
     const delta = (state.dragStartY - e.clientY) / sensitivity;
     const newNorm = Math.max(0, Math.min(1, state.dragStartVal + delta));
-    state.params[id] = denormalize(id, newNorm);
-    updateKnobDisplay(id);
-    if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.setNormalisedValue(newNorm);
+    if (id === 'pitch' && state.pitchLocked) {
+      // Snap to integer semitones 1-12
+      const semi = Math.max(0, Math.min(12, Math.round(newNorm * 12)));
+      state.params[id] = semi;
+      updateKnobDisplay(id);
+      // Convert to APVTS normalized [-12,+12] range
+      const apvtsNorm = (semi + 12) / 24;
+      if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.setNormalisedValue(apvtsNorm);
+    } else {
+      state.params[id] = denormalize(id, newNorm);
+      updateKnobDisplay(id);
+      if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.setNormalisedValue(newNorm);
+    }
   }
 
   // Output slider dragging
@@ -5859,7 +5896,7 @@ function persistModState() {
 }
 
 // Restore grain sync + XY pad state from C++ (called by timer ticks 1-10)
-function restoreUIState(grainSync, xyEnabled, xyMode, xySpeed) {
+function restoreUIState(grainSync, xyEnabled, xyMode, xySpeed, pitchLock) {
   // Grain sync
   state.grainSyncEnabled = grainSync > 0.5;
   var grainSizeLabel = document.querySelector('.knob-group[data-param="grainSize"] .knob-label');
@@ -5868,6 +5905,15 @@ function restoreUIState(grainSync, xyEnabled, xyMode, xySpeed) {
     grainSizeLabel.textContent = state.grainSyncEnabled ? 'BPM SYNC' : 'SIZE';
   }
   if (state.grainSyncEnabled) updateKnobDisplay('grainSize');
+
+  // Pitch locked mode
+  state.pitchLocked = pitchLock > 0.5;
+  var pitchLabel = document.querySelector('.knob-group[data-param="pitch"] .knob-label');
+  if (pitchLabel) {
+    pitchLabel.classList.toggle('freeform-active', state.pitchLocked);
+    pitchLabel.textContent = state.pitchLocked ? 'SEMI' : 'PITCH';
+  }
+  if (state.pitchLocked) updateKnobDisplay('pitch');
 
   // XY pad auto state
   state.xyAutoPlay = xyEnabled > 0.5;
