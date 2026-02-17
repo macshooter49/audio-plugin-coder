@@ -6,26 +6,28 @@
 #include <algorithm>
 
 //==============================================================================
-// TapeMachines.h — Three distinct tape machine DSP algorithms for Terrain
+// TapeMachines.h — Three distinct tape machine DSP algorithms for Terrain v2.0
 //
-// StudioMachine:   Warm reel-to-reel. Smooth tanh saturation, single gentle
-//                  wow LFO, clean white hiss. Musical and predictable.
+// Each machine models a different tape speed (IPS) which affects bandwidth,
+// noise floor, saturation onset, and wow/flutter severity.
 //
-// CassetteMachine: Lo-fi degraded cassette. Cubic soft clip with asymmetric
-//                  harmonics, triple-component wow/flutter, colored mid-range
-//                  hiss with motor rumble. Complex and wobbly.
+// StudioMachine:   15 IPS reel-to-reel. Wide bandwidth, smooth tanh saturation
+//                  with pre/post emphasis, single gentle wow LFO (±1.2ms),
+//                  clean shaped white hiss.
 //
-// WireMachine:     Experimental broken wire recorder. Asymmetric hard clip
-//                  with wavefolder, chaotic multi-component flutter with random
-//                  speed jumps, pink noise + crackle + micro-dropouts. Harsh
-//                  and unpredictable.
+// CassetteMachine: 1⅞ IPS consumer cassette. Narrow bandwidth, cubic soft clip
+//                  with aggressive frequency-dependent darkening, triple-LFO
+//                  wow/flutter (±3.2ms), colored mid-range hiss + motor rumble.
 //
-// All machines share TapeMachineBase which provides:
-//   - Virtual interface (prepare, reset, processSaturation, processWow, processHiss)
-//   - DCBlocker, OnePoleLP, OnePoleHP, SmoothRandom utility structs
-//   - Shared delay line with cubic Hermite interpolation
-//   - onePoleCoeff() helper for filter coefficient calculation
-//   - 2x oversampling support via prevOversampleInput
+// WireMachine:     Experimental wire recorder. Extremely narrow bandwidth,
+//                  asymmetric clip + wavefolder with smoothstep blend at low
+//                  settings, chaotic 4-component wow with random speed jumps
+//                  (±8.5ms), pink noise + crackle + micro-dropouts + wire twist
+//                  phase artifact.
+//
+// Hiss uses exponential curve: pow(amount, 2.5) * machineGain
+//   Studio max: 0.003, Cassette max: 0.006, Wire max: 0.01
+//   At 5%: barely audible. At 50%: moderate. At 100%: heavy but never clipping.
 //==============================================================================
 
 //==============================================================================
@@ -39,35 +41,25 @@ public:
     virtual void prepare(double sampleRate) = 0;
     virtual void reset() = 0;
 
-    // processSaturation: nonlinear waveshaping with 2x oversampling
-    // input: audio sample, amount: 0-1 normalized control
-    // Returns: processed sample
     virtual double processSaturation(double input, double amount) = 0;
-
-    // processWow: pitch modulation via modulated delay line
-    // input: audio sample, amount: 0-1 normalized control
-    // Returns: processed sample
     virtual double processWow(double input, double amount) = 0;
-
-    // processHiss: additive noise generation + optional gain modulation
-    // amount: 0-1 normalized control
-    // audioGainMultiplier: set by reference (1.0 normally, <1.0 for dropouts)
-    // Returns: additive noise sample to be summed with signal
     virtual double processHiss(double amount, float& audioGainMultiplier) = 0;
 
 protected:
     double sr = 44100.0;
 
-    //==========================================================================
-    // Utility: one-pole lowpass coefficient from frequency
     static double onePoleCoeff(double freqHz, double sampleRate)
     {
-        // Standard one-pole: alpha = 1 / (1 + fs / (2*pi*f))
         return 1.0 / (1.0 + sampleRate / (2.0 * M_PI * freqHz));
     }
 
-    //==========================================================================
-    // DC Blocker — highpass at ~10 Hz to remove bias-induced DC offset
+    // Smoothstep helper for Wire blend curve
+    static double smoothstep(double edge0, double edge1, double x)
+    {
+        double t = std::max(0.0, std::min(1.0, (x - edge0) / (edge1 - edge0)));
+        return t * t * (3.0 - 2.0 * t);
+    }
+
     struct DCBlocker
     {
         double state = 0.0;
@@ -81,11 +73,7 @@ protected:
             prev = 0.0;
         }
 
-        void reset()
-        {
-            state = 0.0;
-            prev = 0.0;
-        }
+        void reset() { state = 0.0; prev = 0.0; }
 
         double process(double input)
         {
@@ -95,8 +83,6 @@ protected:
         }
     };
 
-    //==========================================================================
-    // One-pole lowpass filter
     struct OnePoleLP
     {
         double state = 0.0;
@@ -116,8 +102,6 @@ protected:
         }
     };
 
-    //==========================================================================
-    // One-pole highpass filter
     struct OnePoleHP
     {
         double prevInput = 0.0;
@@ -126,15 +110,10 @@ protected:
 
         void setFreq(double freqHz, double sampleRate)
         {
-            // HPF alpha: closer to 1.0 = lower cutoff
             alpha = 1.0 / (1.0 + (2.0 * M_PI * freqHz) / sampleRate);
         }
 
-        void reset()
-        {
-            prevInput = 0.0;
-            prevOutput = 0.0;
-        }
+        void reset() { prevInput = 0.0; prevOutput = 0.0; }
 
         double process(double input)
         {
@@ -144,16 +123,35 @@ protected:
         }
     };
 
-    //==========================================================================
-    // Smooth random generator — slowly wandering random value
-    // Uses filtered white noise for smooth, continuous random modulation
+    // One-pole allpass filter for Wire twist artifact
+    struct OnePoleAP
+    {
+        double state = 0.0;
+        double alpha = 0.0;
+
+        void setFreq(double freqHz, double sampleRate)
+        {
+            double tanVal = std::tan(M_PI * freqHz / sampleRate);
+            alpha = (tanVal - 1.0) / (tanVal + 1.0);
+        }
+
+        void reset() { state = 0.0; }
+
+        double process(double input)
+        {
+            double output = alpha * input + state;
+            state = input - alpha * output;
+            return output;
+        }
+    };
+
     struct SmoothRandom
     {
         double state = 0.0;
         double target = 0.0;
         double phase = 0.0;
-        double rate = 1.0;        // How many times per second to pick a new target
-        double smoothing = 0.0;   // One-pole smoothing coefficient
+        double rate = 1.0;
+        double smoothing = 0.0;
         std::mt19937* rngPtr = nullptr;
 
         void prepare(double rateHz, double smoothFreq, double sampleRate, std::mt19937& r)
@@ -167,14 +165,8 @@ protected:
             target = dist(*rngPtr);
         }
 
-        void reset()
-        {
-            state = 0.0;
-            target = 0.0;
-            phase = 0.0;
-        }
+        void reset() { state = 0.0; target = 0.0; phase = 0.0; }
 
-        // Returns smoothly wandering value in [-1, 1]
         double next(double sampleRate)
         {
             phase += rate / sampleRate;
@@ -192,9 +184,6 @@ protected:
         }
     };
 
-    //==========================================================================
-    // Delay line with cubic Hermite interpolation
-    // Same algorithm as existing TapeProcessor.h
     struct DelayLine
     {
         std::vector<float> buffer;
@@ -221,7 +210,6 @@ protected:
             writePos = (writePos + 1) % bufferSize;
         }
 
-        // Read with cubic Hermite interpolation at fractional delay
         float readCubic(double delaySamples) const
         {
             double pos = static_cast<double>(writePos) - delaySamples - 1.0;
@@ -240,7 +228,6 @@ protected:
             const float y2 = buffer[static_cast<size_t>(idx2)];
             const float y3 = buffer[static_cast<size_t>(idx3)];
 
-            // Hermite interpolation coefficients
             const float c0 = y1;
             const float c1 = 0.5f * (y2 - y0);
             const float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
@@ -250,8 +237,6 @@ protected:
         }
     };
 
-    //==========================================================================
-    // RNG — each machine instance gets its own, seeded from pointer address
     std::mt19937 rng;
 
     void initRng()
@@ -259,7 +244,6 @@ protected:
         rng.seed(static_cast<unsigned>(reinterpret_cast<uintptr_t>(this)));
     }
 
-    // Previous input sample for 2x oversampling midpoint interpolation
     double prevOversampleInput = 0.0;
 };
 
@@ -267,11 +251,13 @@ protected:
 //==============================================================================
 //==============================================================================
 //
-//  StudioMachine — Warm reel-to-reel tape
+//  StudioMachine — 15 IPS professional reel-to-reel
 //
-//  Saturation: tanh waveshaper, DC bias for even harmonics, 2x oversampled
-//  Wow: Single slow LFO with rate drift, gentle and musical
-//  Hiss: White noise shaped with high-shelf boost, clean
+//  Saturation: tanh with DC bias, pre-emphasis +3dB@3kHz, gentle post-rolloff
+//              that preserves highs (16kHz - 4kHz*amount). 2x oversampled.
+//  Wow: Single clean LFO at 0.8Hz, ±1.2ms max delay modulation + subtle
+//       flutter at 5.5Hz ±0.15ms. Smooth, musical, predictable.
+//  Hiss: Shaped white noise, pow(amount,2.5) * 0.003 max. Clean and subtle.
 //
 //==============================================================================
 //==============================================================================
@@ -285,51 +271,46 @@ public:
         sr = sampleRate;
         initRng();
 
-        // Saturation filters
         dcBlocker.prepare(sr);
-        preEmphasis.setFreq(3000.0, sr);   // HF boost at 3kHz
-        deEmphasis.setFreq(8000.0, sr);    // Post rolloff at 8kHz
+        preEmphasis.setFreq(3000.0, sr);
+        // Post rolloff: starts at 16kHz, darkens to 12kHz at full drive
+        postRolloff.setFreq(16000.0, sr);
 
-        // Wow delay line: 30ms buffer (generous for +-8 cents)
-        delay.prepare(0.03, sr);
-
-        // Wow LFO smooth random for rate drift
+        // Wow delay line: 50ms buffer for ±1.2ms modulation
+        delay.prepare(0.05, sr);
         rateDrift.prepare(0.1, 2.0, sr, rng);
 
-        // Randomize LFO start phase
         std::uniform_real_distribution<double> phaseDist(0.0, 1.0);
         wowPhase = phaseDist(rng);
+        flutterPhase = phaseDist(rng);
 
-        // Hiss filters
-        hissHiShelf.setFreq(4000.0, sr);    // High-shelf corner
-        hissHP.setFreq(200.0, sr);           // HP to remove rumble
+        hissHiShelf.setFreq(4000.0, sr);
+        hissHP.setFreq(200.0, sr);
 
         prevOversampleInput = 0.0;
-        hissFilterState = 0.0;
     }
 
     void reset() override
     {
         dcBlocker.reset();
         preEmphasis.reset();
-        deEmphasis.reset();
+        postRolloff.reset();
         delay.reset();
         rateDrift.reset();
         wowPhase = 0.0;
+        flutterPhase = 0.0;
         hissHiShelf.reset();
         hissHP.reset();
         prevOversampleInput = 0.0;
-        hissFilterState = 0.0;
     }
 
     //==========================================================================
-    // Saturation: tanh waveshaper with DC bias offset for even harmonics
-    // 2x oversampled to prevent aliasing
+    // Saturation: tanh with DC bias, pre-emphasis, gentle post-rolloff
+    // 15 IPS = wide bandwidth, retains highs even when driven
     double processSaturation(double input, double amount) override
     {
         if (amount < 0.001) { prevOversampleInput = input; return input; }
 
-        // 2x oversampling: generate midpoint sample, process both, average
         const double midSample = (prevOversampleInput + input) * 0.5;
         prevOversampleInput = input;
 
@@ -340,36 +321,37 @@ public:
     }
 
     //==========================================================================
-    // Wow: Single slow LFO (0.5-2.5Hz) with smooth random rate drift
-    // Max +/-8 cents pitch deviation, 5ms center delay
+    // Wow: Single primary LFO at 0.8Hz (±1.2ms) + subtle flutter at 5.5Hz (±0.15ms)
+    // Smooth, gentle, "professional machine with slight speed issues"
     double processWow(double input, double amount) override
     {
         if (amount < 0.001) return input;
 
         delay.write(static_cast<float>(input));
 
-        // Rate drift: smooth random modulation of LFO frequency
         const double drift = rateDrift.next(sr);
-        const double wowFreq = 0.5 + 2.0 * amount + drift * 0.3 * amount;
 
-        // Advance wow LFO (sine)
+        // Primary wow: 0.8Hz with subtle drift
+        const double wowFreq = 0.8 + drift * 0.15 * amount;
         wowPhase += std::max(wowFreq, 0.1) / sr;
         if (wowPhase >= 1.0) wowPhase -= 1.0;
-
         const double wowMod = std::sin(2.0 * M_PI * wowPhase);
 
-        // +/-8 cents = +/-0.46% pitch shift
-        // At 44.1kHz, 1 cent = ~0.000578 * sampleRate/frequency
-        // Using delay modulation: 8 cents at 440Hz ~= 0.21ms
-        // Scale by amount and convert to samples
-        const double maxDeviationMs = 0.21 * amount;  // max 0.21ms = +/-8 cents
-        const double deviationSamples = maxDeviationMs * 0.001 * sr * wowMod;
+        // Subtle flutter: 5.5Hz
+        flutterPhase += 5.5 / sr;
+        if (flutterPhase >= 1.0) flutterPhase -= 1.0;
+        const double flutterMod = std::sin(2.0 * M_PI * flutterPhase);
+
+        // ±1.2ms wow + ±0.15ms flutter
+        const double wowDepthMs = amount * 1.2;
+        const double flutterDepthMs = amount * 0.15;
+        const double totalModMs = wowMod * wowDepthMs + flutterMod * flutterDepthMs;
+        const double deviationSamples = totalModMs * 0.001 * sr;
 
         // 5ms center delay
         const double centerDelay = sr * 0.005;
         const double totalDelay = centerDelay + deviationSamples;
 
-        // Clamp to valid range
         const double clampedDelay = std::max(1.0, std::min(totalDelay,
             static_cast<double>(delay.bufferSize - 2)));
 
@@ -377,92 +359,93 @@ public:
     }
 
     //==========================================================================
-    // Hiss: White noise shaped with high-shelf +3dB at 4kHz, HP at 200Hz
-    // Max level coefficient 0.15. No dropouts.
+    // Hiss: Shaped white noise. Exponential curve, max 0.003 coefficient.
+    // 15 IPS = lowest noise floor of all three machines.
     double processHiss(double amount, float& audioGainMultiplier) override
     {
-        audioGainMultiplier = 1.0f;  // Studio: never any dropouts
-
+        audioGainMultiplier = 1.0f;
         if (amount < 0.001) return 0.0;
 
         std::uniform_real_distribution<double> dist(-1.0, 1.0);
         double noise = dist(rng);
 
-        // High-shelf at 4kHz: +3dB
-        // Simple approach: LP the noise, subtract to get HP, boost HP, add back
+        // High-shelf at 4kHz: +3dB on highs
         const double lpNoise = hissHiShelf.process(noise);
         const double hpNoise = noise - lpNoise;
-        // +3dB boost on highs = multiply by ~1.41
         noise = lpNoise + hpNoise * 1.41;
 
-        // Highpass at 200Hz to remove low rumble
+        // HP at 200Hz
         noise = hissHP.process(noise);
 
-        // Level: max coefficient 0.15
-        const double level = amount * 0.15;
+        // Exponential curve: pow(amount, 2.5) * 0.003
+        const double level = std::pow(amount, 2.5) * 0.003;
 
         return noise * level;
     }
 
 private:
-    // Internal saturation function (called twice per sample for 2x oversampling)
     double saturateSample(double input, double amount)
     {
-        const double drive = 1.0 + amount * 4.0;  // 1x to 5x drive
+        const double drive = 1.0 + amount * 4.0;
 
-        // Pre-emphasis: HF boost at 3kHz
+        // Pre-emphasis: +3dB shelf at 3kHz (record head equalization)
         const double lp = preEmphasis.process(input);
         const double hfContent = input - lp;
         double x = input + hfContent * amount * 0.6;
 
-        // DC bias for even harmonics (asymmetry generates 2nd harmonic = warmth)
+        // DC bias for even harmonics
         const double bias = 0.05 * amount;
         x = x * drive + bias;
 
-        // tanh waveshaper — smooth, warm compression
+        // tanh waveshaper
         x = std::tanh(x);
 
-        // DC blocker (removes bias offset)
         x = dcBlocker.process(x);
 
-        // Post de-emphasis: rolloff at 8kHz
-        const double postLP = deEmphasis.process(x);
+        // Post-rolloff: gentle, cutoff = 16kHz - 4kHz*amount
+        // At 0%: 16kHz (nearly flat). At 100%: 12kHz (warm but still open)
+        const double cutoff = 16000.0 - 4000.0 * amount;
+        postRolloff.alpha = onePoleCoeff(std::max(cutoff, 4000.0), sr);
+        const double postLP = postRolloff.process(x);
         const double postHF = x - postLP;
-        x = postLP + postHF * (1.0 - amount * 0.5);
+        // -6dB/oct slope: attenuate HF proportional to amount
+        x = postLP + postHF * (1.0 - amount * 0.4);
 
-        // Gain compensation: prevent excessive volume increase at high drive
         const double gainComp = 1.0 / (1.0 + amount * 0.5);
         x *= gainComp;
 
         return x;
     }
 
-    // Saturation filters
     DCBlocker dcBlocker;
     OnePoleLP preEmphasis;
-    OnePoleLP deEmphasis;
+    OnePoleLP postRolloff;
 
-    // Wow
     DelayLine delay;
     SmoothRandom rateDrift;
     double wowPhase = 0.0;
+    double flutterPhase = 0.0;
 
-    // Hiss
     OnePoleLP hissHiShelf;
     OnePoleHP hissHP;
-    double hissFilterState = 0.0;
 };
 
 
 //==============================================================================
 //==============================================================================
 //
-//  CassetteMachine — Lo-fi degraded cassette
+//  CassetteMachine — 1⅞ IPS consumer cassette
 //
-//  Saturation: Cubic soft clip with asymmetric 2nd harmonic injection,
-//              pre/post filtering for cassette character, 2x oversampled
-//  Wow: Three components (slow + medium + flutter), all with rate drift
-//  Hiss: Mid-range colored noise + motor rumble
+//  Saturation: Cubic soft clip with pre-gain boost (distorts earlier than
+//              Studio), mid-range resonance +4dB@2kHz, aggressive bandwidth
+//              restriction that DRAMATICALLY darkens when driven.
+//              Pre-LP: 13kHz - 7kHz*amount. Post-LP: 10kHz - 5kHz*amount.
+//              2x oversampled.
+//  Wow: Three interfering LFOs with rate drift:
+//       Primary 0.6Hz ±2.0ms, Secondary 2.2Hz ±0.8ms, Flutter 7Hz ±0.4ms.
+//       Total max ±3.2ms. Complex, wobbly, never repeats.
+//  Hiss: Mid-colored noise + motor rumble, pow(amount,2.5) * 0.006 max.
+//        Louder than Studio at same knob position (worse SNR at 1⅞ IPS).
 //
 //==============================================================================
 //==============================================================================
@@ -476,42 +459,42 @@ public:
         sr = sampleRate;
         initRng();
 
-        // Saturation pre-filters
         dcBlocker.prepare(sr);
-        preHP.setFreq(60.0, sr);          // HP at 60Hz
-        preLP.setFreq(12000.0, sr);       // LP at 12kHz
-        preBell.setFreq(2500.0, sr);      // Bell resonance at 2.5kHz
-        postLP.setFreq(8000.0, sr);       // Post-LP starts at 8kHz
-        postLPDriven.setFreq(4000.0, sr); // Post-LP darkens to 4kHz at full drive
+        preHP.setFreq(60.0, sr);
+        // Pre-bandwidth: starts at 13kHz, driven down to 6kHz (1⅞ IPS = narrow)
+        preBandwidthLP.setFreq(13000.0, sr);
+        // Mid-range resonance at 2kHz (cassette head bump)
+        preBell.setFreq(2000.0, sr);
+        // Post-LP: 10kHz clean, 5kHz driven (aggressive darkening)
+        postLP.setFreq(10000.0, sr);
+        postLPDriven.setFreq(5000.0, sr);
 
-        // Wow delay line: 40ms buffer for complex modulation
-        delay.prepare(0.04, sr);
+        // Wow delay line: 60ms buffer for complex modulation (±3.2ms)
+        delay.prepare(0.06, sr);
 
-        // Rate drift generators for each LFO component
         slowDrift.prepare(0.08, 1.5, sr, rng);
-        medDrift.prepare(0.12, 2.0, sr, rng);
+        medDrift.prepare(0.15, 2.5, sr, rng);
         flutterDrift.prepare(0.2, 3.0, sr, rng);
 
-        // Randomize LFO start phases
         std::uniform_real_distribution<double> phaseDist(0.0, 1.0);
         slowPhase = phaseDist(rng);
         medPhase = phaseDist(rng);
         flutterPhase = phaseDist(rng);
 
-        // Hiss filters
-        hissBell.setFreq(3500.0, sr);     // Sibilant emphasis at 3.5kHz
-        hissLP.setFreq(10000.0, sr);      // LP at 10kHz
-        hissHP.setFreq(150.0, sr);        // HP at 150Hz
-        rumbleLP.setFreq(300.0, sr);      // Motor rumble LP at 300Hz
+        hissBell.setFreq(3500.0, sr);
+        hissLP.setFreq(10000.0, sr);
+        hissHP.setFreq(150.0, sr);
+        rumbleLP.setFreq(300.0, sr);
 
         prevOversampleInput = 0.0;
+        rumbleState = 0.0;
     }
 
     void reset() override
     {
         dcBlocker.reset();
         preHP.reset();
-        preLP.reset();
+        preBandwidthLP.reset();
         preBell.reset();
         postLP.reset();
         postLPDriven.reset();
@@ -531,15 +514,12 @@ public:
     }
 
     //==========================================================================
-    // Saturation: Cubic soft clip with asymmetric 2nd harmonic injection
-    // Pre: HP 60Hz, LP 12kHz, bell +2.5dB at 2.5kHz
-    // Post: LP 8kHz->4kHz (darkens with drive)
-    // 2x oversampled
+    // Saturation: Cubic soft clip, pre-gain boost (cassette distorts earlier),
+    // mid-bump, aggressive bandwidth restriction. Gets DARK when driven.
     double processSaturation(double input, double amount) override
     {
         if (amount < 0.001) { prevOversampleInput = input; return input; }
 
-        // 2x oversampling
         const double midSample = (prevOversampleInput + input) * 0.5;
         prevOversampleInput = input;
 
@@ -550,44 +530,41 @@ public:
     }
 
     //==========================================================================
-    // Wow: Three components — slow wow (0.8Hz, 60%), medium wow (2.5Hz, 25%),
-    // fast flutter (6.5Hz, 15%). All rates drift +/-10%. Max +/-25 cents.
-    // 8ms center delay.
+    // Wow: Three interfering LFOs — primary 0.6Hz, secondary 2.2Hz, flutter 7Hz
+    // All with rate drift. Total ±3.2ms. Complex, wobbly, irregular.
     double processWow(double input, double amount) override
     {
         if (amount < 0.001) return input;
 
         delay.write(static_cast<float>(input));
 
-        // Rate drift for each component (+/-10% of base rate)
         const double slowDriftVal = slowDrift.next(sr);
         const double medDriftVal = medDrift.next(sr);
         const double flutterDriftVal = flutterDrift.next(sr);
 
-        // Slow wow: 0.8Hz base, triangle wave for natural motor wow
-        const double slowRate = 0.8 * (1.0 + slowDriftVal * 0.1);
-        slowPhase += slowRate / sr;
+        // Primary wow: 0.6Hz (capstan eccentricity), triangle wave
+        const double slowRate = 0.6 + slowDriftVal * 0.2;
+        slowPhase += std::max(slowRate, 0.1) / sr;
         if (slowPhase >= 1.0) slowPhase -= 1.0;
-        const double slowMod = 4.0 * std::abs(slowPhase - 0.5) - 1.0; // Triangle
+        const double slowMod = 4.0 * std::abs(slowPhase - 0.5) - 1.0;
 
-        // Medium wow: 2.5Hz, sine
-        const double medRate = 2.5 * (1.0 + medDriftVal * 0.1);
-        medPhase += medRate / sr;
+        // Secondary wow: 2.2Hz (take-up tension), sine
+        const double medRate = 2.2 + medDriftVal * 0.5;
+        medPhase += std::max(medRate, 0.1) / sr;
         if (medPhase >= 1.0) medPhase -= 1.0;
         const double medMod = std::sin(2.0 * M_PI * medPhase);
 
-        // Fast flutter: 6.5Hz, sine
-        const double flutRate = 6.5 * (1.0 + flutterDriftVal * 0.1);
-        flutterPhase += flutRate / sr;
+        // Flutter: 7Hz (motor vibration), sine
+        const double flutRate = 7.0 + flutterDriftVal * 1.5;
+        flutterPhase += std::max(flutRate, 0.5) / sr;
         if (flutterPhase >= 1.0) flutterPhase -= 1.0;
         const double flutMod = std::sin(2.0 * M_PI * flutterPhase);
 
-        // Combine: 60% slow, 25% medium, 15% flutter
-        const double combined = slowMod * 0.60 + medMod * 0.25 + flutMod * 0.15;
-
-        // +/-25 cents: 25 cents at 440Hz ~= 0.64ms deviation
-        const double maxDeviationMs = 0.64 * amount;
-        const double deviationSamples = maxDeviationMs * 0.001 * sr * combined;
+        // Depth: primary ±2.0ms, secondary ±0.8ms, flutter ±0.4ms
+        const double totalModMs = slowMod * amount * 2.0
+                                + medMod * amount * 0.8
+                                + flutMod * amount * 0.4;
+        const double deviationSamples = totalModMs * 0.001 * sr;
 
         // 8ms center delay
         const double centerDelay = sr * 0.008;
@@ -600,23 +577,19 @@ public:
     }
 
     //==========================================================================
-    // Hiss: White noise with bell +5dB at 3.5kHz, LP 10kHz, HP 150Hz.
-    // Plus motor rumble: pink-ish noise LP'd at 300Hz at 0.1x level.
-    // Max level coefficient 0.25 (louder than Studio). No dropouts.
+    // Hiss: Mid-colored noise + motor rumble. pow(amount,2.5) * 0.006 max.
+    // 1⅞ IPS = worse SNR than 15 IPS Studio.
     double processHiss(double amount, float& audioGainMultiplier) override
     {
-        audioGainMultiplier = 1.0f;  // Cassette: no dropouts
-
+        audioGainMultiplier = 1.0f;
         if (amount < 0.001) return 0.0;
 
         std::uniform_real_distribution<double> dist(-1.0, 1.0);
         double noise = dist(rng);
 
         // Bell +5dB at 3.5kHz (sibilant emphasis)
-        // LP the noise at bell frequency, extract HF, boost it
         const double bellLP = hissBell.process(noise);
         const double bellHF = noise - bellLP;
-        // +5dB = ~1.78x
         noise = bellLP + bellHF * 1.78;
 
         // LP at 10kHz
@@ -625,78 +598,80 @@ public:
         // HP at 150Hz
         noise = hissHP.process(noise);
 
-        // Motor rumble: white noise -> pink approximation -> LP at 300Hz
+        // Motor rumble
         const double rumbleNoise = dist(rng);
-        // Simple pinking: integrate and leak (one-pole LP at low freq)
         rumbleState = rumbleState * 0.99 + rumbleNoise * 0.01;
         const double rumble = rumbleLP.process(rumbleState) * 0.1;
 
-        // Total noise: main hiss + motor rumble
         const double total = noise + rumble;
 
-        // Level: max coefficient 0.25
-        const double level = amount * 0.25;
+        // Exponential curve: pow(amount, 2.5) * 0.006
+        const double level = std::pow(amount, 2.5) * 0.006;
 
         return total * level;
     }
 
 private:
-    // Internal saturation function for cassette character
     double saturateSample(double input, double amount)
     {
-        const double drive = 1.0 + amount * 6.0;  // 1x to 7x drive
+        // Pre-gain: cassette has less headroom, distorts earlier than Studio
+        // 1.5x base + 3x at full drive = up to 4.5x pre-gain before waveshaper
+        const double preGain = 1.5 + amount * 3.0;
+        const double drive = preGain;
 
-        // Pre-filter: HP at 60Hz (remove rumble before saturation)
+        // HP at 60Hz
         double x = preHP.process(input);
 
-        // Pre-filter: LP at 12kHz (cassette bandwidth limit)
-        x = preLP.process(x);
+        // Pre-bandwidth restriction: LP at 13kHz - 7kHz*amount
+        // At 0%: 13kHz. At 100%: 6kHz (very muffled)
+        const double bwCutoff = 13000.0 - 7000.0 * amount;
+        preBandwidthLP.alpha = onePoleCoeff(std::max(bwCutoff, 2000.0), sr);
+        x = preBandwidthLP.process(x);
 
-        // Bell +2.5dB at 2.5kHz (head bump resonance)
+        // Mid-range resonance: +4dB at 2kHz (cassette head bump)
         const double bellLP = preBell.process(x);
         const double bellHF = x - bellLP;
-        // +2.5dB = ~1.33x
-        x = bellLP + bellHF * 1.33;
+        // +4dB = ~1.58x on the low band
+        x = bellLP * 1.58 + bellHF;
 
         // Apply drive
         x *= drive;
 
-        // Asymmetric 2nd harmonic injection
-        // x^2 term creates pure 2nd harmonic, scaled by amount
-        const double secondHarmonic = 0.12 * amount * x * std::abs(x);
+        // Asymmetric 2nd harmonic injection (messier than Studio)
+        const double secondHarmonic = 0.15 * amount * x * std::abs(x);
 
-        // Cubic soft clip: x - x^3/3 (smooth limiting)
+        // Cubic soft clip
         if (x > 1.0) x = 2.0 / 3.0;
         else if (x < -1.0) x = -2.0 / 3.0;
         else x = x - (x * x * x) / 3.0;
 
-        // Add 2nd harmonic after clipping
         x += secondHarmonic;
 
-        // DC blocker
         x = dcBlocker.process(x);
 
-        // Post-LP: blend between 8kHz (clean) and 4kHz (driven)
-        const double cleanLP = postLP.process(x);
-        const double drivenLP = postLPDriven.process(x);
-        x = cleanLP * (1.0 - amount) + drivenLP * amount;
+        // Post-LP: blend between 10kHz (clean) and 5kHz (driven)
+        // This is where cassette gets DARK — much more aggressive than Studio
+        const double postCutoff = 10000.0 - 5000.0 * amount;
+        postLP.alpha = onePoleCoeff(std::max(postCutoff, 3000.0), sr);
+        const double postDrivenCutoff = 5000.0 - 2000.0 * amount;
+        postLPDriven.alpha = onePoleCoeff(std::max(postDrivenCutoff, 2000.0), sr);
+        const double cleanOut = postLP.process(x);
+        const double drivenOut = postLPDriven.process(x);
+        x = cleanOut * (1.0 - amount) + drivenOut * amount;
 
-        // Gain compensation
-        const double gainComp = 1.0 / (1.0 + amount * 0.6);
+        const double gainComp = 1.0 / (1.0 + amount * 0.7);
         x *= gainComp;
 
         return x;
     }
 
-    // Saturation filters
     DCBlocker dcBlocker;
     OnePoleHP preHP;
-    OnePoleLP preLP;
+    OnePoleLP preBandwidthLP;
     OnePoleLP preBell;
     OnePoleLP postLP;
     OnePoleLP postLPDriven;
 
-    // Wow
     DelayLine delay;
     SmoothRandom slowDrift;
     SmoothRandom medDrift;
@@ -705,7 +680,6 @@ private:
     double medPhase = 0.0;
     double flutterPhase = 0.0;
 
-    // Hiss
     OnePoleLP hissBell;
     OnePoleLP hissLP;
     OnePoleHP hissHP;
@@ -719,12 +693,14 @@ private:
 //
 //  WireMachine — Experimental/broken wire recorder
 //
-//  Saturation: Asymmetric hard clipping + wavefolder, harsh/metallic,
-//              extreme bandwidth limitation, 2x oversampled
-//  Wow: Four chaotic components including random speed jumps,
-//       massive +/-50 cents, unpredictable and broken
-//  Hiss: Pink noise + crackle impulses + micro-dropouts,
-//        hiss knob controls all three proportionally
+//  Saturation: Asymmetric hard clip + wavefolder with smoothstep blend
+//              (0-30% amount blends from clean to full Wire character).
+//              Extremely narrow bandwidth (200Hz-6kHz). 2x oversampled.
+//  Wow: 4 chaotic components: slow drift, irregular wow (wandering rate),
+//       chaotic flutter (wildly wandering rate), random speed jumps.
+//       Total max ±8.5ms. Broken, lurching, haunted.
+//  Hiss: Pink noise + crackle + micro-dropouts + wire twist all-pass artifact.
+//        pow(amount,2.5) * 0.01 max. Worst SNR of all three machines.
 //
 //==============================================================================
 //==============================================================================
@@ -738,51 +714,44 @@ public:
         sr = sampleRate;
         initRng();
 
-        // Saturation filters
         dcBlocker.prepare(sr);
-        // HP 200Hz (two cascaded one-poles for ~12dB/oct)
         preHP1.setFreq(200.0, sr);
         preHP2.setFreq(200.0, sr);
-        // LP 6kHz (two cascaded for ~12dB/oct)
         preLP1.setFreq(6000.0, sr);
         preLP2.setFreq(6000.0, sr);
-        // Bell +4dB at 1kHz
         preBell.setFreq(1000.0, sr);
-        // Post-LP: 4kHz -> 2kHz
         postLP.setFreq(4000.0, sr);
         postLPDriven.setFreq(2000.0, sr);
 
-        // Wow delay line: 80ms buffer for wild modulation
-        delay.prepare(0.08, sr);
+        // Wow delay line: 100ms buffer for massive chaotic modulation
+        delay.prepare(0.1, sr);
 
-        // Chaotic smooth random generators
-        slowRandom.prepare(0.15, 0.5, sr, rng);    // Very slow drift
-        irregWowDrift.prepare(0.3, 1.5, sr, rng);   // Rate drift for irregular wow
-        chaoticDrift.prepare(0.5, 2.0, sr, rng);    // Rate drift for chaotic flutter
+        slowRandom.prepare(0.12, 0.5, sr, rng);
+        irregWowDrift.prepare(0.3, 1.5, sr, rng);
+        chaoticDrift.prepare(0.5, 2.0, sr, rng);
 
-        // Randomize phases
         std::uniform_real_distribution<double> phaseDist(0.0, 1.0);
         irregPhase = phaseDist(rng);
         chaoticPhase = phaseDist(rng);
 
-        // Speed jump state
         speedJumpOffset = 0.0;
 
-        // Hiss: pink noise state (Paul Kellet's algorithm)
+        // Pink noise state
         pinkB0 = 0.0; pinkB1 = 0.0; pinkB2 = 0.0;
         pinkB3 = 0.0; pinkB4 = 0.0; pinkB5 = 0.0; pinkB6 = 0.0;
 
-        // Hiss filters
         hissLP.setFreq(6000.0, sr);
         hissBell.setFreq(800.0, sr);
         hissHP.setFreq(100.0, sr);
 
-        // Crackle smoothing
         crackleState = 0.0;
-        crackleSmooth.setFreq(2000.0, sr);  // Smoothing to avoid ultra-sharp clicks
+        crackleSmooth.setFreq(2000.0, sr);
 
-        // Dropout state
         dropoutGain = 1.0;
+
+        // Wire twist all-pass artifact
+        wireTwistAP.setFreq(800.0, sr);
+        wireTwistRandom.prepare(0.3, 1.0, sr, rng);
 
         prevOversampleInput = 0.0;
     }
@@ -807,21 +776,19 @@ public:
         crackleState = 0.0;
         crackleSmooth.reset();
         dropoutGain = 1.0;
+        wireTwistAP.reset();
+        wireTwistRandom.reset();
         prevOversampleInput = 0.0;
     }
 
     //==========================================================================
-    // Saturation: Asymmetric hard clipping + mild wavefolder
-    // Positive: tanh(x * 1.5), Negative: tanh(x * 3.0) * 0.7
-    // Wavefolder at high saturation, drive 1x-9x
-    // Pre: HP 200Hz 12dB/oct, LP 6kHz 12dB/oct, bell +4dB at 1kHz Q=1.5
-    // Post: LP 4kHz->2kHz (extremely dark)
-    // 2x oversampled
+    // Saturation: Asymmetric clip + wavefolder with smoothstep blend.
+    // At 0-30%: gradually blend in Wire character (subtle at low settings).
+    // At 30%+: full Wire algorithm.
     double processSaturation(double input, double amount) override
     {
         if (amount < 0.001) { prevOversampleInput = input; return input; }
 
-        // 2x oversampling
         const double midSample = (prevOversampleInput + input) * 0.5;
         prevOversampleInput = input;
 
@@ -832,67 +799,56 @@ public:
     }
 
     //==========================================================================
-    // Wow: Four chaotic components
-    //   1. Slow random drift (smoothRandom at 0.15Hz)
-    //   2. Irregular wow (1.2Hz +/-0.8Hz drift)
-    //   3. Chaotic flutter (5Hz +/-4Hz drift)
-    //   4. Random speed jumps (1% * amount probability, +/-50 cents, exp decay)
-    // Max +/-50 cents total. 12ms center delay. 80ms delay buffer.
+    // Wow: 4 chaotic components
+    //   1. Slow drift (smoothRandom, ±2.5ms) — wire tension wandering
+    //   2. Irregular wow (wandering rate 0.5-2.5Hz, ±1.5ms) — spool inconsistency
+    //   3. Chaotic flutter (wildly wandering rate 1-9Hz, ±0.5ms) — friction
+    //   4. Random speed jumps (±4ms, slow decay ~300ms) — the signature Wire feature
+    // Total max ±8.5ms. 12ms center delay.
     double processWow(double input, double amount) override
     {
         if (amount < 0.001)
         {
-            // Even when off, decay any lingering speed jump
             speedJumpOffset *= 0.999;
             return input;
         }
 
         delay.write(static_cast<float>(input));
 
-        // 1. Slow random drift
-        const double slowDriftVal = slowRandom.next(sr);
+        // 1. Slow drift: wire tension changes unpredictably
+        const double driftValue = slowRandom.next(sr) * amount * 2.5;
 
-        // 2. Irregular wow: 1.2Hz +/-0.8Hz drift
+        // 2. Irregular wow: rate itself wanders 0.5-2.5Hz
         const double irregDriftVal = irregWowDrift.next(sr);
-        const double irregRate = 1.2 + irregDriftVal * 0.8;
+        const double irregRate = 1.0 + irregDriftVal * 1.5;
         irregPhase += std::max(irregRate, 0.1) / sr;
         if (irregPhase >= 1.0) irregPhase -= 1.0;
-        const double irregMod = std::sin(2.0 * M_PI * irregPhase);
+        const double irregMod = std::sin(2.0 * M_PI * irregPhase) * amount * 1.5;
 
-        // 3. Chaotic flutter: 5Hz +/-4Hz drift
+        // 3. Chaotic flutter: rate wanders wildly 1-9Hz
         const double chaoticDriftVal = chaoticDrift.next(sr);
-        const double chaoticRate = 5.0 + chaoticDriftVal * 4.0;
+        const double chaoticRate = 4.0 + chaoticDriftVal * 5.0;
         chaoticPhase += std::max(chaoticRate, 0.5) / sr;
         if (chaoticPhase >= 1.0) chaoticPhase -= 1.0;
-        const double chaoticMod = std::sin(2.0 * M_PI * chaoticPhase);
+        const double chaoticMod = std::sin(2.0 * M_PI * chaoticPhase) * amount * 0.5;
 
-        // 4. Random speed jumps
-        // 1% probability * amount per sample
+        // 4. Random speed jumps — the signature Wire feature
+        // Per-sample probability: ~0.0005 * amount
         std::uniform_real_distribution<double> prob(0.0, 1.0);
-        if (prob(rng) < 0.01 * amount)
+        if (prob(rng) < 0.0005 * amount)
         {
-            // Random jump: +/-50 cents worth of delay offset
             std::uniform_real_distribution<double> jumpDist(-1.0, 1.0);
-            const double jumpCents = jumpDist(rng) * 50.0;
-            // Convert cents to delay offset in samples
-            // 50 cents at center delay ~= significant pitch jump
-            const double jumpMs = jumpCents * 0.0128 * 0.001;  // rough cents-to-ms
-            speedJumpOffset += jumpMs * sr;
+            // Sudden ±4ms jump in delay time
+            speedJumpOffset += jumpDist(rng) * amount * 4.0;
         }
-        // Exponential decay of jump offset (0.95 per sample = very fast at audio rate,
-        // but we want it audible, so use a slower decay)
-        speedJumpOffset *= (1.0 - (1.0 - 0.9999));  // ~= 0.9999 decay
+        // Slow exponential decay (~300ms to half at 44.1kHz)
+        // 0.9999^44100 ≈ 0.012 so about 100ms to reach 1%
+        // Use 0.99993 for ~300ms half-life
+        speedJumpOffset *= 0.99993;
 
-        // Combine all components, scale to +/-50 cents deviation
-        // 50 cents at 440Hz ~= 1.28ms max deviation
-        const double maxDeviationMs = 1.28 * amount;
-        const double combinedMod = slowDriftVal * 0.25
-                                 + irregMod * 0.30
-                                 + chaoticMod * 0.20
-                                 + 0.25; // DC offset: always slightly detuned
-
-        const double deviationSamples = maxDeviationMs * 0.001 * sr * combinedMod
-                                      + speedJumpOffset * amount;
+        // Combine all (in ms)
+        const double totalModMs = driftValue + irregMod + chaoticMod + speedJumpOffset;
+        const double deviationSamples = totalModMs * 0.001 * sr;
 
         // 12ms center delay
         const double centerDelay = sr * 0.012;
@@ -905,12 +861,11 @@ public:
     }
 
     //==========================================================================
-    // Hiss: Pink noise (Paul Kellet) + crackle impulses + micro-dropouts
-    // Hiss knob controls ALL three: noise level, crackle, AND dropouts
+    // Hiss: Pink noise + crackle + micro-dropouts + wire twist all-pass.
+    // pow(amount,2.5) * 0.01 max. Worst noise floor.
     double processHiss(double amount, float& audioGainMultiplier) override
     {
         // --- Micro-dropouts ---
-        // Rare: 0.1% chance * amount per sample, dips gain to 0.3, slow recovery
         if (amount > 0.01)
         {
             std::uniform_real_distribution<double> prob(0.0, 1.0);
@@ -918,7 +873,6 @@ public:
             {
                 dropoutGain = 0.3;
             }
-            // Slow recovery toward 1.0
             dropoutGain = dropoutGain * 0.999 + 0.001;
             dropoutGain = std::min(dropoutGain, 1.0);
         }
@@ -930,7 +884,7 @@ public:
 
         if (amount < 0.001) return 0.0;
 
-        // --- Pink noise (Paul Kellet's algorithm) ---
+        // --- Pink noise (Paul Kellet) ---
         std::uniform_real_distribution<double> dist(-1.0, 1.0);
         const double white = dist(rng);
 
@@ -944,7 +898,6 @@ public:
         double pink = pinkB0 + pinkB1 + pinkB2 + pinkB3 + pinkB4 + pinkB5 + pinkB6 + white * 0.5362;
         pinkB6 = white * 0.115926;
 
-        // Normalize pink noise (Paul Kellet output is roughly +/-4-5)
         pink *= 0.11;
 
         // LP at 6kHz
@@ -953,117 +906,100 @@ public:
         // Bell +3dB at 800Hz
         const double bellLP = hissBell.process(pink);
         const double bellHF = pink - bellLP;
-        // +3dB = ~1.41x
         pink = bellLP * 1.41 + bellHF;
 
         // HP at 100Hz
         pink = hissHP.process(pink);
 
-        // --- Crackle: random impulse events ---
-        // 3% chance/sample at max amount, +/-0.4 amplitude, smoothed
+        // --- Wire twist phase artifact ---
+        // All-pass modulated by slow random, unique to Wire
+        const double twistVal = wireTwistRandom.next(sr);
+        const double twistFreq = 800.0 + amount * 2000.0 * (0.5 + twistVal * 0.5);
+        wireTwistAP.setFreq(std::max(200.0, std::min(twistFreq, 4000.0)), sr);
+        pink = wireTwistAP.process(pink);
+
+        // --- Crackle ---
         double crackle = 0.0;
         {
-            std::uniform_real_distribution<double> prob(0.0, 1.0);
-            if (prob(rng) < 0.03 * amount)
+            std::uniform_real_distribution<double> cProb(0.0, 1.0);
+            if (cProb(rng) < 0.03 * amount)
             {
                 std::uniform_real_distribution<double> impDist(-0.4, 0.4);
                 crackleState = impDist(rng);
             }
-            // Smooth the crackle impulse with a one-pole to avoid ultra-sharp clicks
             crackle = crackleSmooth.process(crackleState);
-            // Decay the crackle state
             crackleState *= 0.8;
         }
 
-        // Combine: pink noise + crackle
         const double totalNoise = pink + crackle * amount;
 
-        // Level: max coefficient matches approximate combined loudness
-        // Pink is already quieter than white, so scale appropriately
-        const double level = amount * 0.25;
+        // Exponential curve: pow(amount, 2.5) * 0.01
+        const double level = std::pow(amount, 2.5) * 0.01;
 
         return totalNoise * level;
     }
 
 private:
-    // Internal saturation function for wire character
     double saturateSample(double input, double amount)
     {
-        const double drive = 1.0 + amount * 8.0;  // 1x to 9x drive
+        const double drive = 1.0 + amount * 8.0;
 
-        // Pre-filter: HP 200Hz, ~12dB/oct (two cascaded one-poles)
+        // Pre-filter: HP 200Hz ~12dB/oct
         double x = preHP1.process(input);
         x = preHP2.process(x);
 
-        // Pre-filter: LP 6kHz, ~12dB/oct (two cascaded one-poles)
+        // Pre-filter: LP 6kHz ~12dB/oct (extremely narrow bandwidth)
         x = preLP1.process(x);
         x = preLP2.process(x);
 
-        // Bell +4dB at 1kHz (wire recorder head resonance)
+        // Bell +4dB at 1kHz
         const double bellLP = preBell.process(x);
         const double bellHF = x - bellLP;
-        // +4dB = ~1.58x on the low band (since bell boosts center, not HF)
         x = bellLP * 1.58 + bellHF;
 
-        // Apply drive
         x *= drive;
 
-        // Asymmetric hard clipping
-        // Positive side: tanh(x * 1.5) — moderate saturation
-        // Negative side: tanh(x * 3.0) * 0.7 — harder clip, quieter
+        // Asymmetric hard clipping + wavefolder
         double clipped;
         if (x >= 0.0)
-        {
             clipped = std::tanh(x * 1.5);
-        }
         else
-        {
             clipped = std::tanh(x * 3.0) * 0.7;
-        }
 
-        // Mild wavefolder at high saturation
-        // fold depth scales with amount (0.3 * amount)
         const double foldDepth = 0.3 * amount;
         if (foldDepth > 0.01)
         {
-            // Simple wavefolder: if |x| exceeds threshold, fold back
             const double threshold = 1.0 - foldDepth * 0.5;
             if (clipped > threshold)
-            {
                 clipped = threshold - (clipped - threshold);
-            }
             else if (clipped < -threshold)
-            {
                 clipped = -threshold - (clipped + threshold);
-            }
         }
 
-        x = clipped;
+        // Smoothstep blend: 0-30% amount blends from clean to full Wire
+        const double blendCurve = smoothstep(0.0, 0.3, amount);
+        x = input * (1.0 - blendCurve) + clipped * blendCurve;
 
-        // DC blocker
         x = dcBlocker.process(x);
 
-        // Post-LP: blend 4kHz (clean) to 2kHz (driven) — extremely dark
+        // Post-LP: 4kHz->2kHz
         const double cleanLP = postLP.process(x);
         const double drivenLP = postLPDriven.process(x);
         x = cleanLP * (1.0 - amount) + drivenLP * amount;
 
-        // Gain compensation
         const double gainComp = 1.0 / (1.0 + amount * 0.8);
         x *= gainComp;
 
         return x;
     }
 
-    // Saturation filters
     DCBlocker dcBlocker;
-    OnePoleHP preHP1, preHP2;         // Cascaded for ~12dB/oct
-    OnePoleLP preLP1, preLP2;         // Cascaded for ~12dB/oct
+    OnePoleHP preHP1, preHP2;
+    OnePoleLP preLP1, preLP2;
     OnePoleLP preBell;
     OnePoleLP postLP;
     OnePoleLP postLPDriven;
 
-    // Wow
     DelayLine delay;
     SmoothRandom slowRandom;
     SmoothRandom irregWowDrift;
@@ -1072,17 +1008,18 @@ private:
     double chaoticPhase = 0.0;
     double speedJumpOffset = 0.0;
 
-    // Hiss: Paul Kellet pink noise state
     double pinkB0 = 0.0, pinkB1 = 0.0, pinkB2 = 0.0;
     double pinkB3 = 0.0, pinkB4 = 0.0, pinkB5 = 0.0, pinkB6 = 0.0;
 
-    // Hiss filters
     OnePoleLP hissLP;
     OnePoleLP hissBell;
     OnePoleHP hissHP;
     OnePoleLP crackleSmooth;
     double crackleState = 0.0;
 
-    // Dropout state
     double dropoutGain = 1.0;
+
+    // Wire twist artifact
+    OnePoleAP wireTwistAP;
+    SmoothRandom wireTwistRandom;
 };

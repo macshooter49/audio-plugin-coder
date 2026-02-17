@@ -210,7 +210,7 @@ public:
                 sourceVal = xySourceY;
 
             float range = paramMax[asgn.target] - paramMin[asgn.target];
-            float scaledDepth = asgn.depth * asgn.depth * asgn.depth; // cubic curve: subtle at low values
+            float scaledDepth = asgn.depth * asgn.depth; // quadratic curve: visible at low values, staged at mid
             offsets[asgn.target] += sourceVal * scaledDepth * range;
         }
     }

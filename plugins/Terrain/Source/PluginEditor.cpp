@@ -388,8 +388,8 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     // Set size AFTER webView is created (setSize triggers resized())
     setSize (820, 640 + CAPTURE_STRIP_HEIGHT);
 
-    // Start visualization timer at 30Hz
-    startTimerHz(30);
+    // Start visualization timer at 60Hz for smooth LFO/mod display
+    startTimerHz(60);
 }
 
 TerrainAudioProcessorEditor::~TerrainAudioProcessorEditor()

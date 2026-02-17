@@ -559,17 +559,6 @@ body {
   transition: color 0.1s;
 }
 
-.section-collapse-icon {
-  margin-left: auto;
-  font-size: 8px;
-  color: var(--text-dim);
-  opacity: 1;
-  transition: transform 0.15s, opacity 0.15s 0.2s;
-}
-.control-section.minimized .section-collapse-icon {
-  opacity: 0;
-  transition: opacity 0.1s 0s;
-}
 
 .knobs-container {
   flex: 1;
@@ -604,29 +593,23 @@ body {
   border-color: var(--purple-500);
 }
 .control-section.minimized .tape-subtabs { display: none; }
+.control-section.minimized .fx-page-nav { display: none; }
 .control-section.minimized .tape-tab-content {
   opacity: 0; pointer-events: none; flex: 0; overflow: hidden;
   transition: opacity 0.12s 0s;
 }
 
 /* ============ FX PAGE SYSTEM ============ */
-.fx-top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 3px 8px;
-  height: 24px;
-  background: rgba(139, 92, 246, 0.04);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
-}
+/* FX page nav — sits next to FX/LOOP subtabs */
 .fx-page-nav {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  margin-left: 4px;
 }
-.fx-nav-arrow, .machine-arrow {
-  width: 14px;
-  height: 14px;
+.fx-nav-arrow {
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 1px solid rgba(139, 92, 246, 0.25);
   background: transparent;
@@ -637,45 +620,24 @@ body {
   font-size: 7px;
   color: rgba(167, 139, 250, 0.7);
   transition: all 0.15s;
-  flex-shrink: 0;
-  line-height: 1;
   padding: 0;
+  line-height: 1;
   font-family: inherit;
 }
-.fx-nav-arrow:hover, .machine-arrow:hover {
-  border-color: rgba(167, 139, 250, 0.6);
+.fx-nav-arrow:hover {
+  border-color: rgba(124, 58, 237, 0.7);
   color: rgba(167, 139, 250, 1);
-  background: rgba(139, 92, 246, 0.1);
+  background: rgba(139, 92, 246, 0.08);
 }
-.fx-page-label, .machine-name {
+.fx-page-label {
   font-size: 8px;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: rgba(167, 139, 250, 0.85);
+  color: rgba(167, 139, 250, 0.9);
   font-weight: 600;
-  margin: 0 2px;
-  min-width: 32px;
+  min-width: 30px;
   text-align: center;
 }
-.fx-page-dots, .machine-dots {
-  display: flex;
-  gap: 4px;
-  margin-left: 4px;
-  align-items: center;
-}
-.fx-page-dot, .machine-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.fx-page-dot.active, .machine-dot.active { background: rgba(167, 139, 250, 0.85); }
-.fx-page-dot.inactive, .machine-dot:not(.active) {
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  background: transparent;
-}
-.fx-page-dot.inactive:hover { border-color: rgba(167, 139, 250, 0.6); }
 
 .fx-pages-container {
   position: relative;
@@ -702,28 +664,50 @@ body {
   align-items: center;
   width: 100%;
   height: 100%;
-  padding: 4px 0;
+  padding: 2px 0;
 }
-.tape-mechanism-wrap {
+.tape-viz-row {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
   min-height: 0;
+  position: relative;
+}
+.tape-mechanism-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  height: 100%;
 }
 .tape-mechanism-wrap canvas { display: block; }
+.machine-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(167, 139, 250, 0.65);
+  padding: 6px 2px;
+  line-height: 1;
+  font-family: inherit;
+  transition: color 0.15s;
+  z-index: 2;
+}
+#machPrev { right: 100%; margin-right: 2px; }
+#machNext { left: 100%; margin-left: 2px; }
+.machine-nav-arrow:hover {
+  color: rgba(167, 139, 250, 1);
+}
 .tape-fx-knobs {
   display: flex;
   justify-content: center;
   gap: 16px;
   padding: 10px 0 6px;
-}
-.machine-switcher {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  user-select: none;
 }
 
 /* Space page */
@@ -2014,7 +1998,6 @@ body {
           <canvas id="grain-section-icon" width="28" height="28"></canvas>
         </button>
         <span class="section-label">Grain Engine</span>
-        <span class="section-collapse-icon">&#9662;</span>
       </div>
       <div class="knobs-container" id="grain-knobs"></div>
     </div>
@@ -2028,37 +2011,23 @@ body {
           <button class="tape-subtab active" data-tab="fx">FX</button>
           <button class="tape-subtab" data-tab="loop">LOOP</button>
         </div>
-        <span class="section-collapse-icon">&#9662;</span>
+        <div class="fx-page-nav" id="fxPageNav">
+          <button class="fx-nav-arrow" id="fxNavPrev">&#9664;</button>
+          <span class="fx-page-label" id="fxPageLabel">TAPE</span>
+          <button class="fx-nav-arrow" id="fxNavNext">&#9654;</button>
+        </div>
       </div>
       <!-- TAPE FX content — 3-page FX suite -->
       <div class="tape-tab-content" id="tape-fx-container" data-tab="fx" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-        <div class="fx-top-bar">
-          <div class="fx-page-nav">
-            <button class="fx-nav-arrow" id="fxNavPrev">&#9664;</button>
-            <span class="fx-page-label" id="fxPageLabel">TAPE</span>
-            <button class="fx-nav-arrow" id="fxNavNext">&#9654;</button>
-            <div class="fx-page-dots">
-              <div class="fx-page-dot active" data-fxpage="0"></div>
-              <div class="fx-page-dot inactive" data-fxpage="1"></div>
-              <div class="fx-page-dot inactive" data-fxpage="2"></div>
-            </div>
-          </div>
-          <div class="machine-switcher" id="machineSwitcher">
-            <button class="machine-arrow" id="machPrev">&#9664;</button>
-            <span class="machine-name" id="machineName">STUDIO</span>
-            <button class="machine-arrow" id="machNext">&#9654;</button>
-            <div class="machine-dots">
-              <span class="machine-dot active"></span>
-              <span class="machine-dot"></span>
-              <span class="machine-dot"></span>
-            </div>
-          </div>
-        </div>
         <div class="fx-pages-container">
           <div class="fx-page active" id="fxPageTape">
             <div class="tape-fx-page">
-              <div class="tape-mechanism-wrap">
-                <canvas id="tapeMechCanvas"></canvas>
+              <div class="tape-viz-row">
+                <div class="tape-mechanism-wrap">
+                  <button class="machine-nav-arrow" id="machPrev">&#9664;</button>
+                  <canvas id="tapeMechCanvas"></canvas>
+                  <button class="machine-nav-arrow" id="machNext">&#9654;</button>
+                </div>
               </div>
               <div class="tape-fx-knobs" id="tapeFxKnobs"></div>
             </div>
@@ -4300,45 +4269,23 @@ document.getElementById('browser-search').addEventListener('input', (e) => {
   buildPresetGrid();
 });
 
-// ---- Section Focus/Slide ----
-function updateSectionFocus() {
-  const grain = document.getElementById('grain-section');
-  const tape = document.getElementById('tape-section');
-  grain.classList.remove('minimized');
-  tape.classList.remove('minimized');
-  if (state.focusedSection === 'grain') {
-    tape.classList.add('minimized');
-  } else if (state.focusedSection === 'tape') {
-    grain.classList.add('minimized');
-  }
-  // Re-size FX canvases after the CSS transition (350ms flex + margin)
-  if (window._fxSizeFn) {
-    setTimeout(window._fxSizeFn, 100);
-    setTimeout(window._fxSizeFn, 400);
-  }
-}
-
+// ---- Section Toggle (enable/disable only, no collapse) ----
 document.getElementById('grain-header').addEventListener('click', (e) => {
   if (e.target.closest('.section-toggle-btn')) {
     state.sectionEnabled.grain = !state.sectionEnabled.grain;
     document.getElementById('grain-toggle').classList.toggle('off', !state.sectionEnabled.grain);
     if (juceMode && setGrainEngineEnabledFn) setGrainEngineEnabledFn(state.sectionEnabled.grain ? 1 : 0);
-    return;
   }
-  state.focusedSection = state.focusedSection === 'grain' ? null : 'grain';
-  updateSectionFocus();
 });
 
 document.getElementById('tape-header').addEventListener('click', (e) => {
-  if (e.target.closest('.tape-subtab')) return; // sub-tab handles itself
+  if (e.target.closest('.tape-subtab')) return;
+  if (e.target.closest('.fx-nav-arrow') || e.target.closest('.fx-page-label') || e.target.closest('.fx-page-nav')) return;
   if (e.target.closest('.section-toggle-btn')) {
     state.sectionEnabled.tape = !state.sectionEnabled.tape;
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
     if (juceMode && setTapeEnabledFn) setTapeEnabledFn(state.sectionEnabled.tape ? 1 : 0);
-    return;
   }
-  state.focusedSection = state.focusedSection === 'tape' ? null : 'tape';
-  updateSectionFocus();
 });
 
 // ---- Tape Sub-tabs ----
@@ -4354,6 +4301,9 @@ document.getElementById('tape-subtabs').addEventListener('click', (e) => {
   const loopC = document.getElementById('tape-loop-content');
   fxC.style.display = tab === 'fx' ? 'flex' : 'none';
   loopC.style.display = tab === 'loop' ? 'flex' : 'none';
+  // Show/hide FX page nav based on active tab
+  var fpn = document.getElementById('fxPageNav');
+  if (fpn) fpn.style.display = tab === 'fx' ? 'flex' : 'none';
   // Re-size FX canvases after tab switch
   if (tab === 'fx' && window._fxSizeFn) setTimeout(window._fxSizeFn, 50);
 });
@@ -5832,7 +5782,7 @@ function updateModulation(time, dt) {
         } else if (a.source === 4) {
           sourceVal = (state.xyY - 0.5) * 2;
         }
-        offset += sourceVal * (a.depth * a.depth * a.depth) * range; // cubic depth curve
+        offset += sourceVal * (a.depth * a.depth) * range; // quadratic depth curve
       }
 
       const modulated = Math.max(p.min, Math.min(p.max, baseVal + offset));
@@ -6039,9 +5989,6 @@ function initFxSuite() {
       var idx = parseInt(dot.dataset.fxpage);
       dot.className = 'fx-page-dot ' + (idx === newPage ? 'active' : 'inactive');
     });
-    // Show machine switcher only on TAPE page
-    var ms = document.getElementById('machineSwitcher');
-    if (ms) ms.style.visibility = newPage === 0 ? 'visible' : 'hidden';
   }
 
   document.getElementById('fxNavPrev').addEventListener('click', function() {
@@ -6843,177 +6790,300 @@ function initFxSuite() {
 
     var sc = Math.min(h * 0.8 / 140, w / 220);
     var cx = w / 2;
-    var cy = h / 2;
+    var cy = h * 0.46;
 
-    var strokeMain = 'rgba(139, 92, 246, 0.45)';
-    var strokeBold = 'rgba(139, 92, 246, 0.6)';
+    // Jitter — everything trembles with wow
+    var jit = function(s) { return (Math.random() - 0.5) * wow * (s || 3); };
 
-    // Jitter function — everything shakes with wow
-    var jit = function() { return (Math.random() - 0.5) * wow * 4; };
+    // ── Supply spool (left) — smaller, corroded ──
+    var sL = cx - 60 * sc;
+    var sY = cy - 2 * sc;
+    var sR = 22 * sc;
 
-    // Wire spool (left side) — circular, with wire wrapping
-    var spoolCX = cx - 50 * sc;
-    var spoolCY = cy - 5 * sc;
-    var spoolR = 35 * sc;
-
-    // Outer spool ring (incomplete — broken)
-    ctx.beginPath();
-    var spoolSegs = 8;
-    for (var si = 0; si < spoolSegs; si++) {
-      var a1 = (si / spoolSegs) * Math.PI * 2 + t * 0.3;
-      var a2 = a1 + (Math.PI * 2 / spoolSegs) * 0.7; // gap between segments
-      ctx.moveTo(spoolCX + Math.cos(a1) * spoolR + jit(), spoolCY + Math.sin(a1) * spoolR + jit());
-      for (var aj = 0; aj <= 8; aj++) {
-        var aa = a1 + (a2 - a1) * (aj / 8);
-        ctx.lineTo(spoolCX + Math.cos(aa) * spoolR + jit() * 0.3, spoolCY + Math.sin(aa) * spoolR + jit() * 0.3);
-      }
-    }
-    ctx.strokeStyle = strokeBold;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-
-    // Wire wrapping (concentric broken arcs)
-    for (var wi = 0; wi < 4; wi++) {
-      var wr = spoolR * (0.4 + wi * 0.12);
-      var startA = t * (0.5 + wi * 0.2) + wi * 1.3;
-      var arcLen = Math.PI * (0.8 + Math.sin(t + wi) * 0.3);
+    // Spool flange — corroded ring with gaps
+    for (var fi = 0; fi < 6; fi++) {
+      var fa1 = (fi / 6) * Math.PI * 2 + t * 0.2;
+      var fa2 = fa1 + (Math.PI * 2 / 6) * (0.5 + Math.sin(t * 0.3 + fi) * 0.15);
       ctx.beginPath();
-      ctx.arc(spoolCX + jit() * 0.5, spoolCY + jit() * 0.5, wr, startA, startA + arcLen);
-      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.15 + wi * 0.05) + ')';
+      ctx.arc(sL + jit(1), sY + jit(1), sR, fa1, fa2);
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.35 + Math.sin(t * 0.5 + fi * 0.9) * 0.1) + ')';
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+    }
+
+    // Wire coiled on supply (thinning — wire is running out)
+    for (var ci = 0; ci < 5; ci++) {
+      var cr = sR * (0.3 + ci * 0.1);
+      var ca = t * (0.3 + ci * 0.15) + ci * 1.1;
+      var cl = Math.PI * (0.5 + ci * 0.1);
+      ctx.beginPath();
+      ctx.arc(sL, sY, cr, ca, ca + cl);
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.08 + ci * 0.03) + ')';
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
+    }
+
+    // Supply hub
+    ctx.beginPath();
+    ctx.arc(sL, sY, 3 * sc, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(sL, sY, 1.2 * sc, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.15)';
+    ctx.fill();
+
+    // ── Take-up spool (right) — larger, more wire wound ──
+    var tR = cx + 55 * sc;
+    var tY = cy - 2 * sc;
+    var tRad = 26 * sc;
+
+    // Spool flange
+    for (var ti = 0; ti < 6; ti++) {
+      var ta1 = (ti / 6) * Math.PI * 2 - t * 0.25;
+      var ta2 = ta1 + (Math.PI * 2 / 6) * (0.55 + Math.sin(t * 0.4 + ti * 0.7) * 0.15);
+      ctx.beginPath();
+      ctx.arc(tR + jit(1), tY + jit(1), tRad, ta1, ta2);
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.35 + Math.sin(t * 0.6 + ti * 1.1) * 0.1) + ')';
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+    }
+
+    // Wire coiled on take-up (more dense)
+    for (var ui = 0; ui < 8; ui++) {
+      var ur = tRad * (0.25 + ui * 0.08);
+      var ua = -t * (0.25 + ui * 0.12) + ui * 0.9;
+      var ul = Math.PI * (0.4 + ui * 0.08);
+      ctx.beginPath();
+      ctx.arc(tR, tY, ur, ua, ua + ul);
+      ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.06 + ui * 0.025) + ')';
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
+    }
+
+    // Take-up hub
+    ctx.beginPath();
+    ctx.arc(tR, tY, 3 * sc, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.4)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tR, tY, 1.2 * sc, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.15)';
+    ctx.fill();
+
+    // ── Wire path between spools — irregular, with tangles and splice marks ──
+    var wireStartX = sL + sR;
+    var wireEndX = tR - tRad;
+    var wireY = cy + 8 * sc;
+
+    // Guide posts (small vertical lines where wire touches)
+    var postX1 = sL + sR + 10 * sc;
+    var postX2 = tR - tRad - 10 * sc;
+    var headX = cx;
+    var headY = wireY + 6 * sc;
+
+    // Post marks
+    for (var pi = 0; pi < 2; pi++) {
+      var px = pi === 0 ? postX1 : postX2;
+      ctx.beginPath();
+      ctx.moveTo(px, wireY - 5 * sc);
+      ctx.lineTo(px + jit(1), wireY + 5 * sc);
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
 
-    // Spool center
+    // Main wire path — drawn as a wobbly line with occasional breaks
+    var wireSegs = 40;
+    var breakAt = Math.floor(7 + Math.sin(t * 0.7) * 3); // splice location moves slowly
+    var breakAt2 = Math.floor(25 + Math.cos(t * 0.5) * 4);
+
     ctx.beginPath();
-    ctx.arc(spoolCX, spoolCY, 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fill();
-    ctx.strokeStyle = strokeMain;
-    ctx.lineWidth = 0.8;
+    var moved = false;
+    for (var ws = 0; ws <= wireSegs; ws++) {
+      var f = ws / wireSegs;
+      var wx = wireStartX + (wireEndX - wireStartX) * f;
+      var wy = wireY;
+      // Wire dips down at playback head (center)
+      var headDist = Math.abs(f - 0.5) * 2;
+      wy += (1 - headDist * headDist) * 10 * sc;
+      // Wow adds waviness
+      wy += Math.sin(t * 3 + f * Math.PI * 8) * wow * 2.5;
+      wy += Math.sin(t * 1.7 + f * Math.PI * 3) * wow * 1.5;
+      // Saturation adds micro-tangles
+      if (sat > 0.1) {
+        wy += Math.sin(t * 8 + f * 40) * sat * 1.5;
+      }
+
+      // Break/splice points — gap in the wire
+      if (ws === breakAt || ws === breakAt2) {
+        ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+        // Splice mark — small X
+        ctx.beginPath();
+        ctx.moveTo(wx - 2, wy - 2);
+        ctx.lineTo(wx + 2, wy + 2);
+        ctx.moveTo(wx + 2, wy - 2);
+        ctx.lineTo(wx - 2, wy + 2);
+        ctx.strokeStyle = 'rgba(167, 139, 250, 0.4)';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+        // Start new segment
+        ctx.beginPath();
+        moved = false;
+        continue;
+      }
+
+      if (!moved) {
+        ctx.moveTo(wx + jit(0.5), wy + jit(0.5));
+        moved = true;
+      } else {
+        ctx.lineTo(wx + jit(0.5), wy + jit(0.5));
+      }
+    }
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+    ctx.lineWidth = 0.7;
     ctx.stroke();
 
-    // Wire path from spool to playback mechanism (jagged, broken)
-    var mechX = cx + 45 * sc;
-    var mechY = cy;
+    // ── Playback head — electromagnetic, minimal ──
+    // Head housing
     ctx.beginPath();
-    ctx.moveTo(spoolCX + spoolR, spoolCY + jit());
-    var wireSegs = 20;
-    for (var wsi = 1; wsi <= wireSegs; wsi++) {
-      var f = wsi / wireSegs;
-      var wx = spoolCX + spoolR + (mechX - spoolCX - spoolR) * f;
-      var wy = spoolCY + (mechY - spoolCY) * f;
-      // Add jaggedness that increases with wow
-      wy += Math.sin(t * 4 + f * Math.PI * 6) * wow * 3;
-      wy += (Math.random() - 0.5) * wow * 2;
-      // Saturation creates occasional displacement
-      if (sat > 0.3 && Math.random() < sat * 0.1) {
-        wy += (Math.random() - 0.5) * sat * 8;
-      }
-      ctx.lineTo(wx, wy);
-    }
+    ctx.moveTo(headX - 8 * sc, headY + 2 * sc);
+    ctx.lineTo(headX - 4 * sc, headY - 4 * sc);
+    ctx.lineTo(headX + 4 * sc, headY - 4 * sc);
+    ctx.lineTo(headX + 8 * sc, headY + 2 * sc);
     ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
     ctx.lineWidth = 0.8;
     ctx.stroke();
 
-    // Playback mechanism (right side) — angular, geometric, broken
-    // Main frame — incomplete rectangle
-    var mW = 40 * sc;
-    var mH = 55 * sc;
-    var mL = mechX - mW / 2;
-    var mT = mechY - mH / 2;
-
-    // Draw sides as separate broken lines
-    var sides = [
-      [[mL, mT], [mL + mW, mT]],           // top
-      [[mL + mW, mT], [mL + mW, mT + mH]], // right
-      [[mL + mW, mT + mH], [mL, mT + mH]], // bottom
-      [[mL, mT + mH], [mL, mT]],           // left
-    ];
-    for (var sdi = 0; sdi < sides.length; sdi++) {
-      // Each side is drawn partially (broken effect)
-      var drawLen = 0.5 + Math.sin(t * 0.7 + sdi * 1.5) * 0.2 + 0.2;
-      var s0 = sides[sdi][0];
-      var s1 = sides[sdi][1];
+    // Magnetic field lines (subtle arcs emanating from head)
+    for (var mf = 0; mf < 3; mf++) {
+      var mfR = (4 + mf * 4) * sc;
+      var mfAlpha = 0.08 + Math.sin(t * 2 + mf) * 0.04;
       ctx.beginPath();
-      ctx.moveTo(s0[0] + jit(), s0[1] + jit());
-      ctx.lineTo(
-        s0[0] + (s1[0] - s0[0]) * drawLen + jit(),
-        s0[1] + (s1[1] - s0[1]) * drawLen + jit()
-      );
-      ctx.strokeStyle = strokeMain;
-      ctx.lineWidth = 1;
+      ctx.arc(headX, headY - 3 * sc, mfR, Math.PI * 1.1, Math.PI * 1.9);
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + mfAlpha + ')';
+      ctx.lineWidth = 0.3;
       ctx.stroke();
     }
 
-    // Internal components — angular shapes
-    // Playback head (triangle-ish)
-    ctx.beginPath();
-    ctx.moveTo(mechX - 6 * sc + jit(), mechY - 12 * sc + jit());
-    ctx.lineTo(mechX + 6 * sc + jit(), mechY - 12 * sc + jit());
-    ctx.lineTo(mechX + jit(), mechY - 4 * sc + jit());
-    ctx.closePath();
-    ctx.strokeStyle = strokeBold;
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
+    // ── Corrupted oscilloscope trace (center, below wire) ──
+    var scopeY = cy + 30 * sc;
+    var scopeW = 70 * sc;
+    var scopeH = 18 * sc;
+    var scopeL = cx - scopeW / 2;
 
-    // Motor circle (off-center)
+    // Scope border (faint rectangle, broken)
+    ctx.setLineDash([3, 4]);
     ctx.beginPath();
-    ctx.arc(mechX + 8 * sc + jit(), mechY + 12 * sc + jit(), 8 * sc, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
-    ctx.lineWidth = 0.7;
+    ctx.rect(scopeL, scopeY - scopeH / 2, scopeW, scopeH);
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)';
+    ctx.lineWidth = 0.4;
     ctx.stroke();
+    ctx.setLineDash([]);
 
-    // Rotating element inside motor
-    var motorAngle = t * 2.5;
-    for (var mi = 0; mi < 3; mi++) {
-      var ma = motorAngle + mi * Math.PI * 2 / 3;
-      ctx.beginPath();
-      ctx.moveTo(mechX + 8 * sc, mechY + 12 * sc);
-      ctx.lineTo(
-        mechX + 8 * sc + Math.cos(ma) * 6 * sc + jit(),
-        mechY + 12 * sc + Math.sin(ma) * 6 * sc + jit()
-      );
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
+    // Waveform trace — corrupted sine with dropout glitches
+    ctx.beginPath();
+    var scopeSegs = 60;
+    for (var si = 0; si <= scopeSegs; si++) {
+      var sf = si / scopeSegs;
+      var sx = scopeL + scopeW * sf;
+      var sy = scopeY;
+      // Base waveform
+      sy += Math.sin(t * 4 + sf * Math.PI * 6) * scopeH * 0.3;
+      // Saturation distortion — clipping
+      if (sat > 0.2) {
+        var wave = Math.sin(t * 4 + sf * Math.PI * 6);
+        var clip = 1 - sat * 0.6;
+        wave = Math.max(-clip, Math.min(clip, wave));
+        sy = scopeY + wave * scopeH * 0.3;
+      }
+      // Random dropouts
+      if (wow > 0.1 && Math.sin(t * 7 + si * 1.3) > 0.85) {
+        sy = scopeY; // signal drops to zero
+      }
+      if (si === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
     }
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.3)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
 
-    // Glitch artifacts (increase with saturation)
+    // Ghost trace (delayed duplicate, phase-shifted — the wire twist artifact)
+    ctx.beginPath();
+    for (var gi = 0; gi <= scopeSegs; gi++) {
+      var gf = gi / scopeSegs;
+      var gx = scopeL + scopeW * gf;
+      var gy = scopeY + Math.sin(t * 4 + gf * Math.PI * 6 + 0.8) * scopeH * 0.2;
+      if (gi === 0) ctx.moveTo(gx, gy);
+      else ctx.lineTo(gx, gy);
+    }
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)';
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+
+    // ── Electromagnetic interference fringes ──
     if (sat > 0.05) {
-      var numGlitches = Math.floor(sat * 8);
-      for (var gi = 0; gi < numGlitches; gi++) {
-        var gx = cx + (Math.sin(t * 3.7 + gi * 2.1) * 0.5) * w * 0.6;
-        var gy = cy + (Math.cos(t * 2.3 + gi * 1.7) * 0.5) * h * 0.5;
-        var gLen = 5 + Math.sin(t * 1.3 + gi) * 10 * sat;
-        var gAngle = t * 0.5 + gi * 0.8;
+      var numFringes = Math.floor(3 + sat * 6);
+      for (var fi = 0; fi < numFringes; fi++) {
+        var fy = cy + Math.sin(t * 0.9 + fi * 2.3) * h * 0.35;
+        var fxStart = cx - w * 0.3 + Math.sin(t * 0.4 + fi) * 20;
+        var fLen = 15 + sat * 30 + Math.sin(t * 1.2 + fi) * 10;
         ctx.beginPath();
-        ctx.moveTo(gx, gy);
-        ctx.lineTo(gx + Math.cos(gAngle) * gLen * sc, gy + Math.sin(gAngle) * gLen * sc);
-        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (sat * 0.15 + Math.sin(t + gi) * 0.05) + ')';
-        ctx.lineWidth = 0.3 + Math.sin(t * 2 + gi) * 0.25 + 0.25;
+        ctx.moveTo(fxStart, fy);
+        // Slightly wavy horizontal line
+        for (var fj = 0; fj < 5; fj++) {
+          ctx.lineTo(
+            fxStart + fLen * (fj + 1) / 5,
+            fy + Math.sin(t * 3 + fi + fj) * 1.5
+          );
+        }
+        ctx.strokeStyle = 'rgba(139, 92, 246, ' + (0.04 + sat * 0.06) + ')';
+        ctx.lineWidth = 0.3;
         ctx.stroke();
       }
     }
 
-    // Hiss — static/noise dots (different from other machines' particles)
+    // ── Hiss — electrical static sparks ──
     if (hiss > 0.02) {
-      var noiseDots = Math.floor(hiss * 40);
-      for (var ni = 0; ni < noiseDots; ni++) {
-        var nx = cx + Math.sin(t * 5.1 + ni * 3.7) * w * 0.35;
-        var ny = cy + Math.cos(t * 4.3 + ni * 2.9) * h * 0.3;
-        var na = hiss * (0.1 + Math.sin(t * 7 + ni) * 0.05 + 0.05);
-        ctx.fillStyle = 'rgba(139, 92, 246, ' + na + ')';
-        ctx.fillRect(nx, ny, 1 + Math.sin(t + ni) * 0.5 + 0.5, 1 + Math.cos(t + ni) * 0.5 + 0.5);
+      var sparks = Math.floor(hiss * 30);
+      for (var sk = 0; sk < sparks; sk++) {
+        var skX = cx + Math.sin(t * 4.3 + sk * 3.1) * w * 0.38;
+        var skY = cy + Math.cos(t * 3.7 + sk * 2.7) * h * 0.35;
+        var skLen = 1.5 + Math.sin(t * 6 + sk) * 1.5;
+        var skAngle = t * 2 + sk * 1.4;
+        // Tiny lightning bolt (2 segments)
+        ctx.beginPath();
+        ctx.moveTo(skX, skY);
+        ctx.lineTo(skX + Math.cos(skAngle) * skLen, skY + Math.sin(skAngle) * skLen);
+        ctx.lineTo(
+          skX + Math.cos(skAngle + 0.8) * skLen * 0.7,
+          skY + Math.sin(skAngle + 0.8) * skLen * 0.7
+        );
+        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (hiss * 0.15 + Math.sin(t * 8 + sk) * 0.05) + ')';
+        ctx.lineWidth = 0.3;
+        ctx.stroke();
       }
     }
 
-    // "W I R E" label (barely visible, glitchy)
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.12)';
+    // ── "W I R E" label — fragmented, each letter slightly displaced ──
+    var letters = ['W', ' ', 'I', ' ', 'R', ' ', 'E'];
+    var labelY = cy + 52 * sc;
     ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('W I R E', cx + jit() * 2, cy + 55 * sc + jit() * 2);
+    var totalW = 30 * sc;
+    for (var li = 0; li < letters.length; li++) {
+      if (letters[li] === ' ') continue;
+      var lx = cx - totalW / 2 + (li / 6) * totalW + jit(1.5);
+      var ly = labelY + jit(1);
+      var la = 0.1 + Math.sin(t * 0.8 + li * 1.2) * 0.04;
+      ctx.fillStyle = 'rgba(139, 92, 246, ' + la + ')';
+      ctx.fillText(letters[li], lx, ly);
+    }
 
     ctx.restore();
   }
