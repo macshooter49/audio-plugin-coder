@@ -4561,13 +4561,30 @@ function drawSpeedKnob() {
 })();
 
 // ---- Preset Navigation ----
-function loadPreset(idx) {
+async function loadPreset(idx) {
   state.presetIdx = idx;
   const preset = PRESETS[idx];
   document.getElementById('preset-name').textContent = preset.name;
   if (juceMode && loadPresetFn) {
     // In JUCE mode, let the backend load the preset — slider value change listeners will update local state
-    loadPresetFn(idx);
+    await loadPresetFn(idx);
+    // Refresh modulation UI to match this preset's saved LFO/mod state
+    if (getModStateFn) {
+      const modJson = await getModStateFn();
+      if (modJson && modJson !== '') {
+        restoreModState(modJson);
+      } else {
+        // Preset has no saved mod state — clear all LFOs and assignments
+        modState.assignments = [];
+        for (let i = 0; i < 3; i++) {
+          Object.assign(modState.lfos[i], { shape: 0, rate: [1.0, 0.5, 0.25][i], sync: false, syncIdx: 5, depth: 1.0, phase: 0, polarity: 'bi' });
+        }
+        buildShapeButtons();
+        buildLFOKnobs();
+        updateModBadges();
+        updateTargetLists();
+      }
+    }
   } else if (preset.vals) {
     // Browser preview mode — apply mock values
     for (const [id, val] of Object.entries(preset.vals)) {

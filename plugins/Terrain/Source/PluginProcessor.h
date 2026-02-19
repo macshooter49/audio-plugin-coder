@@ -47,6 +47,8 @@ struct PresetData
     float eqHighFreq = 6000.f, eqHighGain = 0.f;
     // Category tag (at end so initializer lists work without specifying it)
     juce::String tag;  // e.g. "GRAIN", "TAPE", "AMBIENT", custom
+    // Modulation state JSON (LFO configs + assignments, saved per-preset)
+    juce::String modState;
 };
 
 //==============================================================================

@@ -122,6 +122,13 @@ void TerrainAudioProcessor::loadPreset(int index)
     tapeEnabled.store(p.tapeEnabled);
     setParam(ParameterIDs::TAPE_MACHINE, p.tapeMachine);
     wanderLinked.store(p.wanderLinked);
+
+    // Restore modulation state (LFOs + assignments) for this preset
+    modStateJson = p.modState;
+    if (modStateJson.isNotEmpty())
+        modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
+    else
+        modulationEngine.updateConfig(ModulationEngine::Config{});  // Clear all LFOs
 }
 
 int TerrainAudioProcessor::getPresetCount() const
@@ -175,6 +182,7 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     p.tapeEnabled        = tapeEnabled.load();
     p.tapeMachine        = apvts.getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load();
     p.wanderLinked        = wanderLinked.load();
+    p.modState            = modStateJson;  // Capture current LFO/mod config
     return p;
 }
 
@@ -1082,6 +1090,8 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
         node.setProperty("eqMidGain",     p.eqMidGain,      nullptr);
         node.setProperty("eqHighFreq",    p.eqHighFreq,     nullptr);
         node.setProperty("eqHighGain",    p.eqHighGain,     nullptr);
+        if (p.modState.isNotEmpty())
+            node.setProperty("modState",  p.modState,       nullptr);
         root.addChild(node, -1, nullptr);
     }
 
@@ -1167,6 +1177,7 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
         p.eqMidGain      = static_cast<float>(child.getProperty("eqMidGain",      0.f));
         p.eqHighFreq     = static_cast<float>(child.getProperty("eqHighFreq",  6000.f));
         p.eqHighGain     = static_cast<float>(child.getProperty("eqHighGain",     0.f));
+        p.modState       = child.getProperty("modState", "").toString();
 
         presets.push_back(p);
         loaded++;
