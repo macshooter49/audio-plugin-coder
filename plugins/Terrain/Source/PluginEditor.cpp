@@ -69,7 +69,8 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 juce::String name = args.size() > 0 ? args[0].toString() : "New Preset";
-                int newIdx = audioProcessor.saveNewPreset(name);
+                juce::String tag  = args.size() > 1 ? args[1].toString() : juce::String();
+                int newIdx = audioProcessor.saveNewPreset(name, tag);
                 complete(newIdx);
             })
             .withNativeFunction("renamePreset", [this](const juce::Array<juce::var>& args,
@@ -97,6 +98,31 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
                                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 complete(audioProcessor.getFactoryPresetCount());
+            })
+            .withNativeFunction("getPresetTag", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                int idx = args.size() > 0 ? static_cast<int>(args[0]) : -1;
+                complete(audioProcessor.getPresetTag(idx));
+            })
+            .withNativeFunction("setPresetTag", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                    audioProcessor.setPresetTag(static_cast<int>(args[0]), args[1].toString());
+                complete({});
+            })
+            .withNativeFunction("getCustomTags", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.getCustomTags());
+            })
+            .withNativeFunction("setCustomTags", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.setCustomTags(args[0].toString());
+                complete({});
             })
             .withNativeFunction("setXYAutoState", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)

@@ -178,10 +178,11 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     return p;
 }
 
-int TerrainAudioProcessor::saveNewPreset(const juce::String& name)
+int TerrainAudioProcessor::saveNewPreset(const juce::String& name, const juce::String& tag)
 {
     PresetData p = captureCurrentParams();
     p.name = name;
+    p.tag = tag;
     presets.push_back(p);
     int newIdx = static_cast<int>(presets.size()) - 1;
     currentPresetIndex.store(newIdx);
@@ -202,8 +203,10 @@ void TerrainAudioProcessor::overwritePreset(int index)
     if (index < 0 || index >= static_cast<int>(presets.size()))
         return;
     juce::String name = presets[static_cast<size_t>(index)].name;
+    juce::String tag  = presets[static_cast<size_t>(index)].tag;
     presets[static_cast<size_t>(index)] = captureCurrentParams();
     presets[static_cast<size_t>(index)].name = name;
+    presets[static_cast<size_t>(index)].tag  = tag;
     saveUserPresetsToFile();
 }
 
@@ -214,6 +217,34 @@ void TerrainAudioProcessor::deletePreset(int index)
     presets.erase(presets.begin() + index);
     if (currentPresetIndex.load() >= static_cast<int>(presets.size()))
         currentPresetIndex.store(static_cast<int>(presets.size()) - 1);
+    saveUserPresetsToFile();
+}
+
+juce::String TerrainAudioProcessor::getPresetTag(int index) const
+{
+    if (index < 0 || index >= static_cast<int>(presets.size()))
+        return {};
+    return presets[static_cast<size_t>(index)].tag;
+}
+
+void TerrainAudioProcessor::setPresetTag(int index, const juce::String& tag)
+{
+    if (index < numFactoryPresets || index >= static_cast<int>(presets.size()))
+        return;
+    presets[static_cast<size_t>(index)].tag = tag;
+    saveUserPresetsToFile();
+}
+
+juce::String TerrainAudioProcessor::getCustomTags() const
+{
+    return customTags.joinIntoString(",");
+}
+
+void TerrainAudioProcessor::setCustomTags(const juce::String& commaSeparated)
+{
+    customTags.clear();
+    customTags.addTokens(commaSeparated, ",", "");
+    customTags.removeEmptyStrings();
     saveUserPresetsToFile();
 }
 
@@ -1004,12 +1035,18 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
 
     juce::ValueTree root ("TerrainUserPresets");
 
+    // Save custom tags list
+    if (customTags.size() > 0)
+        root.setProperty("customTags", customTags.joinIntoString(","), nullptr);
+
     // Save everything except Init (index 0)
     for (int i = numFactoryPresets; i < static_cast<int>(presets.size()); ++i)
     {
         const auto& p = presets[static_cast<size_t>(i)];
         juce::ValueTree node ("Preset");
         node.setProperty("name",          p.name,          nullptr);
+        if (p.tag.isNotEmpty())
+            node.setProperty("tag",       p.tag,           nullptr);
         node.setProperty("grainSize",     p.grainSize,     nullptr);
         node.setProperty("density",       p.density,       nullptr);
         node.setProperty("spray",         p.spray,         nullptr);
@@ -1077,6 +1114,15 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
     auto root = juce::ValueTree::fromXml(*xml);
     int loaded = 0;
 
+    // Load custom tags
+    juce::String tagsStr = root.getProperty("customTags", "").toString();
+    if (tagsStr.isNotEmpty())
+    {
+        customTags.clear();
+        customTags.addTokens(tagsStr, ",", "");
+        customTags.removeEmptyStrings();
+    }
+
     for (int i = 0; i < root.getNumChildren(); ++i)
     {
         auto child = root.getChild(i);
@@ -1085,6 +1131,7 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
 
         PresetData p;
         p.name          = child.getProperty("name").toString();
+        p.tag           = child.getProperty("tag", "").toString();
         p.grainSize     = static_cast<float>(child.getProperty("grainSize",     80.f));
         p.density       = static_cast<float>(child.getProperty("density",       20.f));
         p.spray         = static_cast<float>(child.getProperty("spray",         40.f));

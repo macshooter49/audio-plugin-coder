@@ -45,6 +45,8 @@ struct PresetData
     float eqLowFreq = 200.f, eqLowGain = 0.f;
     float eqMidFreq = 1000.f, eqMidGain = 0.f;
     float eqHighFreq = 6000.f, eqHighGain = 0.f;
+    // Category tag (at end so initializer lists work without specifying it)
+    juce::String tag;  // e.g. "GRAIN", "TAPE", "AMBIENT", custom
 };
 
 //==============================================================================
@@ -85,11 +87,17 @@ public:
     juce::String getPresetName (int index) const;
 
     // Preset management (save/rename/overwrite/delete)
-    int saveNewPreset (const juce::String& name);
+    int saveNewPreset (const juce::String& name, const juce::String& tag = {});
     void renamePreset (int index, const juce::String& newName);
     void overwritePreset (int index);
     void deletePreset (int index);
     int getFactoryPresetCount() const { return numFactoryPresets; }
+
+    // Tag management
+    juce::String getPresetTag (int index) const;
+    void setPresetTag (int index, const juce::String& tag);
+    juce::String getCustomTags() const;
+    void setCustomTags (const juce::String& commaSeparated);
 
     // Visualization data (read from editor on timer thread)
     std::atomic<int> activeGrainCount { 0 };
@@ -252,6 +260,7 @@ private:
     PresetData captureCurrentParams() const;
     std::vector<PresetData> presets;
     int numFactoryPresets = 0;
+    juce::StringArray customTags;  // User-created tags beyond built-in ones
 
     // User preset file persistence
     juce::File getUserPresetsFile() const;
