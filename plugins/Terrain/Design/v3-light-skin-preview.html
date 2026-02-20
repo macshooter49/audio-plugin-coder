@@ -1,0 +1,2411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=820">
+<title>Terrain v2.0 — Light Mode (Revised) Preview</title>
+<style>
+/* ============ RESET & TOKENS ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-main: #F0EDF4;
+  --bg-hero: #1A1525;
+  --bg-surface: #EDE9F3;
+  --bg-footer: #E8E4F0;
+  --bg-glass: rgba(228,223,237,0.90);
+  --bg-card: #E4DFE9;
+  --bg-card-hover: #DDD7E3;
+  --purple-600: #7C5CBF;
+  --purple-500: #8B5CF6;
+  --purple-400: #A78BFA;
+  --border: rgba(124,92,191,0.12);
+  --border-strong: rgba(124,92,191,0.20);
+  --text-primary: #2A2035;
+  --text-secondary: #5C5068;
+  --text-muted: #8A7F96;
+  --text-dim: #A89BBE;
+  --accent-active: #FF7733;
+  --knob-inactive: #D0C8DD;
+  --knob-active: #7C5CBF;
+  --knob-body: #EDE9F3;
+  --mesh-line: rgba(139,92,246,0.3);
+  --mesh-contour: rgba(167,139,250,0.55);
+  --mesh-peak: rgba(124,58,237,0.8);
+}
+
+body {
+  background: #888;
+  font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#plugin {
+  width: 820px;
+  height: 640px;
+  background: var(--bg-main);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  border-radius: 4px;
+}
+
+/* ============ HEADER (44px) ============ */
+#header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid rgba(124,92,191,0.15);
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #7B4DDF 0%, #A78BFA 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brand-logo-inner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.9);
+  border-radius: 3px;
+  position: relative;
+}
+.brand-logo-inner::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px; right: 2px; bottom: 2px;
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 1px;
+}
+
+.brand-name {
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.brand-version {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-left: -2px;
+  padding-top: 3px;
+}
+
+.preset-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.preset-nav-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--knob-inactive);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.1s;
+}
+.preset-nav-btn:hover {
+  border-color: var(--purple-600);
+  color: var(--purple-600);
+}
+
+.preset-name {
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  min-width: 140px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.preset-grid-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--knob-inactive);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.preset-save-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--knob-inactive);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.mod-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(123,77,223,0.2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-left: 8px;
+  transition: all 0.2s ease;
+}
+.mod-btn:hover {
+  border-color: rgba(123,77,223,0.4);
+  color: var(--purple-600);
+}
+.mod-btn.active {
+  background: var(--purple-600);
+  border-color: var(--purple-600);
+  color: #fff;
+}
+
+/* ============ HERO / VISUALIZATION (276px) ============ */
+#hero {
+  height: 276px;
+  background: var(--bg-hero);
+  position: relative;
+  cursor: crosshair;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+#terrain-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.xy-readout {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--purple-400);
+  background: rgba(26,26,46,0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(139,92,246,0.15);
+}
+
+.scope-controls-left {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 5;
+}
+
+.scope-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(139,92,246,0.25);
+  border-radius: 5px;
+  background: rgba(26,26,46,0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--purple-400);
+  font-size: 12px;
+}
+
+.xy-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.xy-ctrl-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(139,92,246,0.25);
+  border-radius: 4px;
+  background: rgba(26,26,46,0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--purple-400);
+  font-size: 10px;
+}
+.xy-ctrl-btn.active {
+  background: rgba(139,92,246,0.2);
+  border-color: var(--purple-500);
+  color: #fff;
+}
+
+.xy-speed-wrap {
+  width: 24px;
+  height: 24px;
+  cursor: grab;
+  border-radius: 50%;
+  background: rgba(26,26,46,0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(139,92,246,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--purple-400);
+  font-size: 8px;
+}
+
+.crosshair-h, .crosshair-v {
+  position: absolute;
+  background: rgba(139,92,246,0.3);
+  pointer-events: none;
+}
+.crosshair-h { height: 1px; left: 0; right: 0; top: 50%; }
+.crosshair-v { width: 1px; top: 0; bottom: 0; left: 50%; }
+
+/* XY dot */
+.xy-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--purple-500);
+  box-shadow: 0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3);
+  transform: translate(-50%, -50%);
+  top: 50%;
+  left: 50%;
+  pointer-events: none;
+}
+
+/* Tooltip in viz area */
+#tooltip {
+  position: absolute;
+  z-index: 25;
+  width: 220px;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(26,26,46,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  pointer-events: none;
+}
+.tooltip-title {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--purple-400);
+  margin-bottom: 4px;
+}
+.tooltip-desc {
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.tooltip-bar-wrap {
+  height: 3px;
+  background: rgba(139,92,246,0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+.tooltip-bar {
+  height: 100%;
+  background: var(--purple-500);
+  border-radius: 2px;
+  width: 62%;
+}
+.tooltip-pct {
+  font-family: 'SF Mono', monospace;
+  font-size: 8px;
+  color: rgba(167,139,250,0.6);
+  text-align: right;
+}
+
+/* ============ CONTROLS (272px) ============ */
+#controls {
+  height: 272px;
+  display: flex;
+  flex-shrink: 0;
+  border-top: none;
+}
+
+.control-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 6px;
+  background: var(--bg-main);
+  overflow: hidden;
+}
+.control-section:first-child {
+  border-right: 1px solid rgba(124,92,191,0.15);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 2px 0;
+}
+
+.section-toggle-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1.5px solid var(--purple-400);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.section-label {
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Knobs container */
+.knobs-container {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  align-content: center;
+  gap: 4px 8px;
+  overflow: hidden;
+}
+
+.knob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 80px;
+  gap: 2px;
+}
+
+.knob-canvas-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  cursor: grab;
+}
+
+.knob-value {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 14px;
+}
+
+.knob-label {
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ============ TAPE SUBTABS & FX NAV ============ */
+.tape-subtabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.tape-subtab {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-family: inherit;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--knob-inactive);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.tape-subtab.active {
+  background: rgba(123,77,223,0.12);
+  color: var(--text-primary);
+  border-color: rgba(123,77,223,0.25);
+}
+
+.fx-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+.fx-nav-arrow {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(123,77,223,0.25);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 7px;
+  color: var(--text-muted);
+  padding: 0;
+  line-height: 1;
+}
+.fx-nav-arrow:hover {
+  border-color: var(--purple-600);
+  color: var(--purple-600);
+  background: rgba(123,77,223,0.06);
+}
+.fx-page-label {
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--purple-600);
+  font-weight: 600;
+  min-width: 30px;
+  text-align: center;
+}
+
+/* Tape FX page */
+.tape-fx-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 2px 0;
+}
+
+.tape-viz-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+}
+
+.tape-mechanism-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  height: 100%;
+}
+
+.machine-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px 2px;
+  line-height: 1;
+  z-index: 2;
+}
+#machPrev { right: 100%; margin-right: 2px; }
+#machNext { left: 100%; margin-left: 2px; }
+.machine-nav-arrow:hover { color: var(--purple-600); }
+
+.tape-fx-knobs {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 0 4px;
+}
+
+/* FX knob groups */
+.fx-knob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.fx-knob-value {
+  font-size: 9px;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: center;
+  font-family: 'SF Mono', monospace;
+}
+.fx-knob-label {
+  font-size: 7px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ============ FOOTER (48px) ============ */
+#footer {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg-footer);
+  border-top: 1px solid rgba(124,92,191,0.15);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.output-label {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.output-slider-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--knob-inactive);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+}
+.output-slider-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--purple-600);
+  border-radius: 3px;
+  width: 70%;
+}
+.output-slider-thumb {
+  position: absolute;
+  top: 50%;
+  left: 70%;
+  width: 14px;
+  height: 14px;
+  background: var(--bg-surface);
+  border: 2px solid var(--purple-600);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  box-shadow: 0 1px 3px rgba(42,32,53,0.08);
+}
+
+.output-value {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--text-primary);
+  min-width: 52px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.output-meters {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.meter-channel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.meter-label {
+  font-size: 7px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.meter-bar-wrap {
+  width: 4px;
+  height: 24px;
+  background: var(--knob-inactive);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.meter-bar {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background: var(--purple-400);
+  border-radius: 2px;
+}
+
+.meter-rms {
+  font-family: 'SF Mono', monospace;
+  font-size: 7px;
+  color: var(--text-dim);
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.footer-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(124,92,191,0.15);
+  flex-shrink: 0;
+}
+
+.master-mix-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.master-mix-label {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.master-mix-value {
+  font-family: 'SF Mono', monospace;
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--text-primary);
+  min-width: 36px;
+  text-align: right;
+}
+
+.footer-brand {
+  font-size: 8px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ============ MODULATION PANEL (272px, replaces controls) ============ */
+#mod-panel {
+  display: none;
+  width: 820px;
+  height: 272px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  z-index: 15;
+}
+#mod-panel.open { display: flex; }
+
+.lfo-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  gap: 6px;
+  overflow: hidden;
+}
+.lfo-column + .lfo-column {
+  border-left: 1px solid rgba(124,92,191,0.15);
+}
+
+.lfo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lfo-color-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lfo-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.lfo-waveform {
+  width: 100%;
+  height: 50px;
+  border-radius: 6px;
+  background: var(--bg-hero);
+  border: 1px solid rgba(139,92,246,0.15);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.lfo-shapes {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+  justify-content: center;
+}
+.shape-btn {
+  flex: 1;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--knob-inactive);
+  background: var(--bg-card);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  color: var(--text-dim);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.shape-btn.active {
+  border-color: var(--purple-600);
+  background: rgba(123,77,223,0.08);
+  color: var(--purple-600);
+  font-weight: 600;
+}
+
+.lfo-knobs-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex-shrink: 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.lfo-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.rate-sync-toggle {
+  display: flex;
+  flex: 1;
+  border-radius: 6px;
+  border: 1px solid var(--knob-inactive);
+  overflow: hidden;
+}
+.rate-sync-opt {
+  flex: 1;
+  padding: 2px 6px;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+.rate-sync-opt.active {
+  background: var(--purple-600);
+  color: #fff;
+}
+
+.polarity-pills {
+  display: flex;
+  flex: 1;
+  border-radius: 6px;
+  border: 1px solid var(--knob-inactive);
+  overflow: hidden;
+}
+.polarity-opt {
+  flex: 1;
+  padding: 2px 7px;
+  font-size: 8px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+.polarity-opt.active {
+  background: var(--purple-600);
+  color: #fff;
+}
+
+.lfo-targets {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lfo-target-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-main);
+  font-size: 8px;
+}
+.lfo-target-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.lfo-target-depth {
+  color: var(--text-secondary);
+  font-family: 'SF Mono', monospace;
+}
+.lfo-target-remove {
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 9px;
+  text-align: center;
+  border-radius: 50%;
+}
+.lfo-targets-empty {
+  font-size: 8px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 2px 4px;
+}
+
+/* ============ PRESET BROWSER OVERLAY ============ */
+#preset-browser {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  max-height: 0;
+  overflow: hidden;
+  z-index: 15;
+  transition: max-height 0.25s ease-out;
+  background: rgba(240,237,245,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid transparent;
+}
+#preset-browser.open {
+  max-height: 320px;
+  border-bottom-color: rgba(124,92,191,0.15);
+}
+
+.browser-inner {
+  padding: 12px 16px 16px;
+}
+
+.browser-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.browser-search {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--knob-inactive);
+  border-radius: 5px;
+  padding: 0 8px 0 28px;
+  font-size: 11px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+}
+.browser-search:focus { border-color: var(--purple-600); }
+
+.browser-cats {
+  display: flex;
+  gap: 4px;
+}
+
+.cat-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--knob-inactive);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cat-btn.active {
+  background: var(--purple-600);
+  color: white;
+  border-color: var(--purple-600);
+}
+
+.browser-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.preset-card {
+  padding: 8px 10px;
+  border: 1px solid var(--knob-inactive);
+  border-radius: 5px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(42,32,53,0.06);
+}
+.preset-card.selected {
+  border-color: var(--purple-600);
+  box-shadow: 0 0 0 1px var(--purple-600);
+}
+.preset-card.user-preset {
+  border-left: 2.5px solid var(--purple-400);
+}
+.preset-card-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.preset-card-cat {
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ============ TOGGLE PANEL BUTTONS (demo only) ============ */
+.demo-controls {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 100;
+}
+.demo-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(42,32,53,0.08);
+}
+.demo-btn:hover { background: var(--bg-card); }
+.demo-btn.active-demo { background: var(--purple-600); color: white; border-color: var(--purple-600); }
+
+/* Tape Loop content (hidden by default, shown via JS toggle) */
+.tape-loop-content {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.tape-loop-content.visible {
+  display: flex;
+}
+
+.tape-deck-glass {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px 5px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(123,77,223,0.15);
+  background: rgba(228,223,237,0.65);
+  box-shadow: 0 1px 6px rgba(42,32,53,0.06);
+  width: calc(100% - 16px);
+  max-width: 300px;
+}
+
+.deck-status {
+  position: absolute;
+  top: 8px; left: 10px;
+  display: flex; align-items: center; gap: 5px;
+}
+.deck-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  border: 1px solid rgba(160,140,180,0.35);
+}
+.deck-label {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: rgba(123,77,223,0.35);
+}
+
+.tape-transport {
+  display: flex; gap: 8px; justify-content: center; align-items: center;
+}
+.transport-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1.5px solid var(--knob-inactive);
+  background: var(--bg-card);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.transport-btn:hover {
+  border-color: var(--purple-400);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.tape-progress-track {
+  position: relative;
+  width: 70%;
+  height: 6px;
+  display: flex;
+  align-items: center;
+  margin: -3px 0 2px;
+}
+.tape-progress-rail {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: rgba(123,77,223,0.15);
+}
+</style>
+</head>
+<body>
+
+<!-- Demo toggle buttons -->
+<div class="demo-controls">
+  <button class="demo-btn" onclick="toggleMod()" id="demo-mod-btn">Toggle MOD Panel</button>
+  <button class="demo-btn" onclick="togglePresets()" id="demo-preset-btn">Toggle Presets</button>
+  <button class="demo-btn" onclick="toggleLoop()" id="demo-loop-btn">Toggle LOOP Tab</button>
+</div>
+
+<div id="plugin">
+  <!-- HEADER -->
+  <div id="header">
+    <div class="header-left">
+      <div class="brand-logo"><div class="brand-logo-inner"></div></div>
+      <span class="brand-name">Terrain</span>
+      <span class="brand-version">v2.0</span>
+    </div>
+    <div class="preset-area">
+      <button class="preset-nav-btn">&#9664;</button>
+      <span class="preset-name">Ambient Wash</span>
+      <button class="preset-nav-btn">&#9654;</button>
+      <button class="preset-grid-btn" onclick="togglePresets()">
+        <canvas id="grid-icon" width="28" height="28"></canvas>
+      </button>
+    </div>
+    <div class="header-right">
+      <button class="preset-save-btn">&#128190;</button>
+      <button class="mod-btn" id="mod-btn" onclick="toggleMod()">MOD</button>
+    </div>
+  </div>
+
+  <!-- PRESET BROWSER -->
+  <div id="preset-browser">
+    <div class="browser-inner">
+      <div class="browser-top">
+        <input class="browser-search" type="text" placeholder="Search presets...">
+        <div class="browser-cats">
+          <button class="cat-btn active">ALL</button>
+          <button class="cat-btn">PAD</button>
+          <button class="cat-btn">TEXTURE</button>
+          <button class="cat-btn">GLITCH</button>
+          <button class="cat-btn">AMBIENT</button>
+          <button class="cat-btn">RHYTHMIC</button>
+        </div>
+      </div>
+      <div class="browser-grid" id="browser-grid"></div>
+    </div>
+  </div>
+
+  <!-- HERO / VISUALIZATION AREA -->
+  <div id="hero">
+    <canvas id="terrain-canvas"></canvas>
+    <div class="crosshair-h"></div>
+    <div class="crosshair-v"></div>
+    <div class="xy-dot"></div>
+    <div class="xy-readout">X: 50% Y: 50%</div>
+    <div class="scope-controls-left">
+      <button class="scope-btn">&#x21BB;</button>
+    </div>
+    <div class="xy-controls">
+      <button class="xy-ctrl-btn active">&#9654;</button>
+      <button class="xy-ctrl-btn">&#x2662;</button>
+      <div class="xy-speed-wrap">S</div>
+    </div>
+    <div id="tooltip">
+      <div class="tooltip-title">Grain Engine</div>
+      <div class="tooltip-desc">Granular synthesis processor with real-time terrain control</div>
+      <div class="tooltip-bar-wrap"><div class="tooltip-bar"></div></div>
+      <div class="tooltip-pct">62%</div>
+    </div>
+  </div>
+
+  <!-- MODULATION PANEL (hidden by default, replaces controls) -->
+  <div id="mod-panel">
+    <div class="lfo-column" id="lfo-col-0">
+      <div class="lfo-header">
+        <div class="lfo-color-dot" style="background:#8B5CF6"></div>
+        <span class="lfo-label">LFO 1</span>
+      </div>
+      <div class="lfo-waveform"><canvas id="lfo-wave-0"></canvas></div>
+      <div class="lfo-shapes">
+        <button class="shape-btn active">Sin</button>
+        <button class="shape-btn">Tri</button>
+        <button class="shape-btn">Saw</button>
+        <button class="shape-btn">Sq</button>
+        <button class="shape-btn">S&H</button>
+        <button class="shape-btn">Rnd</button>
+        <button class="shape-btn">Env</button>
+      </div>
+      <div class="lfo-knobs-row" id="lfo-knobs-0"></div>
+      <div class="lfo-controls-row">
+        <div class="rate-sync-toggle">
+          <button class="rate-sync-opt active">FREE</button>
+          <button class="rate-sync-opt">SYNC</button>
+        </div>
+        <div class="polarity-pills">
+          <button class="polarity-opt active">BI</button>
+          <button class="polarity-opt">UNI</button>
+        </div>
+      </div>
+      <div class="lfo-targets">
+        <div class="lfo-target-row">
+          <span class="lfo-target-name">Spray</span>
+          <span class="lfo-target-depth">72%</span>
+          <button class="lfo-target-remove">x</button>
+        </div>
+        <div class="lfo-target-row">
+          <span class="lfo-target-name">Filter</span>
+          <span class="lfo-target-depth">45%</span>
+          <button class="lfo-target-remove">x</button>
+        </div>
+      </div>
+    </div>
+    <div class="lfo-column" id="lfo-col-1">
+      <div class="lfo-header">
+        <div class="lfo-color-dot" style="background:#06B6D4"></div>
+        <span class="lfo-label">LFO 2</span>
+      </div>
+      <div class="lfo-waveform"><canvas id="lfo-wave-1"></canvas></div>
+      <div class="lfo-shapes">
+        <button class="shape-btn">Sin</button>
+        <button class="shape-btn active">Tri</button>
+        <button class="shape-btn">Saw</button>
+        <button class="shape-btn">Sq</button>
+        <button class="shape-btn">S&H</button>
+        <button class="shape-btn">Rnd</button>
+        <button class="shape-btn">Env</button>
+      </div>
+      <div class="lfo-knobs-row" id="lfo-knobs-1"></div>
+      <div class="lfo-controls-row">
+        <div class="rate-sync-toggle">
+          <button class="rate-sync-opt">FREE</button>
+          <button class="rate-sync-opt active">SYNC</button>
+        </div>
+        <div class="polarity-pills">
+          <button class="polarity-opt active">BI</button>
+          <button class="polarity-opt">UNI</button>
+        </div>
+      </div>
+      <div class="lfo-targets">
+        <div class="lfo-target-row">
+          <span class="lfo-target-name">Pitch</span>
+          <span class="lfo-target-depth">30%</span>
+          <button class="lfo-target-remove">x</button>
+        </div>
+        <div class="lfo-targets-empty">(1 assignment)</div>
+      </div>
+    </div>
+    <div class="lfo-column" id="lfo-col-2">
+      <div class="lfo-header">
+        <div class="lfo-color-dot" style="background:#F59E0B"></div>
+        <span class="lfo-label">LFO 3</span>
+      </div>
+      <div class="lfo-waveform"><canvas id="lfo-wave-2"></canvas></div>
+      <div class="lfo-shapes">
+        <button class="shape-btn">Sin</button>
+        <button class="shape-btn">Tri</button>
+        <button class="shape-btn">Saw</button>
+        <button class="shape-btn">Sq</button>
+        <button class="shape-btn active">S&H</button>
+        <button class="shape-btn">Rnd</button>
+        <button class="shape-btn">Env</button>
+      </div>
+      <div class="lfo-knobs-row" id="lfo-knobs-2"></div>
+      <div class="lfo-controls-row">
+        <div class="rate-sync-toggle">
+          <button class="rate-sync-opt active">FREE</button>
+          <button class="rate-sync-opt">SYNC</button>
+        </div>
+        <div class="polarity-pills">
+          <button class="polarity-opt">BI</button>
+          <button class="polarity-opt active">UNI</button>
+        </div>
+      </div>
+      <div class="lfo-targets">
+        <div class="lfo-targets-empty">(no assignments)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls">
+    <!-- LEFT: Grain Engine -->
+    <div class="control-section" id="grain-section">
+      <div class="section-header">
+        <button class="section-toggle-btn" id="grain-toggle">
+          <canvas id="grain-icon" width="28" height="28"></canvas>
+        </button>
+        <span class="section-label">Grain Engine</span>
+      </div>
+      <div class="knobs-container" id="grain-knobs"></div>
+    </div>
+    <!-- RIGHT: Tape / FX + Loop -->
+    <div class="control-section" id="tape-section">
+      <div class="section-header" id="tape-header">
+        <button class="section-toggle-btn" id="tape-toggle">
+          <canvas id="tape-icon" width="28" height="28"></canvas>
+        </button>
+        <span class="section-label">Tape</span>
+        <div class="tape-subtabs" id="tape-subtabs">
+          <button class="tape-subtab active" data-tab="fx" onclick="showFxTab()">FX</button>
+          <button class="tape-subtab" data-tab="loop" onclick="showLoopTab()">LOOP</button>
+        </div>
+        <div class="fx-page-nav" id="fxPageNav">
+          <button class="fx-nav-arrow" id="fxNavPrev">&#9664;</button>
+          <span class="fx-page-label" id="fxPageLabel">TAPE</span>
+          <button class="fx-nav-arrow" id="fxNavNext">&#9654;</button>
+        </div>
+      </div>
+      <!-- FX content -->
+      <div id="tape-fx-container" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div class="tape-fx-page" style="flex:1;">
+          <div class="tape-viz-row">
+            <div class="tape-mechanism-wrap">
+              <button class="machine-nav-arrow" id="machPrev">&#9664;</button>
+              <canvas id="tapeMechCanvas"></canvas>
+              <button class="machine-nav-arrow" id="machNext">&#9654;</button>
+            </div>
+          </div>
+          <div class="tape-fx-knobs" id="tapeFxKnobs"></div>
+        </div>
+      </div>
+      <!-- Loop content (hidden by default) -->
+      <div class="tape-loop-content" id="tape-loop-content">
+        <div class="tape-deck-glass">
+          <div class="deck-status">
+            <span class="deck-dot" style="background: rgba(239,68,68,0.15)"></span>
+            <span class="deck-dot" style="background: rgba(52,211,153,0.15)"></span>
+            <span class="deck-dot" style="background: rgba(139,92,246,0.15)"></span>
+            <span class="deck-label">DECK</span>
+          </div>
+          <canvas id="tape-reel-canvas" width="200" height="48"></canvas>
+          <div class="tape-progress-track">
+            <div class="tape-progress-rail"></div>
+          </div>
+          <div class="tape-transport">
+            <button class="transport-btn"><canvas id="t-rec" width="32" height="32"></canvas></button>
+            <button class="transport-btn"><canvas id="t-play" width="32" height="32"></canvas></button>
+            <button class="transport-btn"><canvas id="t-stop" width="32" height="32"></canvas></button>
+          </div>
+        </div>
+        <div class="knobs-container" id="tape-loop-knobs" style="padding-top:6px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div id="footer">
+    <span class="output-label">Output</span>
+    <canvas id="output-icon-canvas" width="16" height="16" style="flex-shrink:0;"></canvas>
+    <div class="output-slider-wrap">
+      <div class="output-slider-fill"></div>
+      <div class="output-slider-thumb"></div>
+    </div>
+    <span class="output-value">0.0 dB</span>
+    <div class="output-meters">
+      <div class="meter-channel">
+        <span class="meter-label">L</span>
+        <div class="meter-bar-wrap"><div class="meter-bar" id="meter-l" style="height:55%"></div></div>
+      </div>
+      <div class="meter-channel">
+        <span class="meter-label">R</span>
+        <div class="meter-bar-wrap"><div class="meter-bar" id="meter-r" style="height:48%"></div></div>
+      </div>
+    </div>
+    <span class="meter-rms">-18 dB</span>
+    <div class="footer-divider"></div>
+    <div class="master-mix-group">
+      <span class="master-mix-label">Mix</span>
+      <canvas id="master-mix-canvas" width="32" height="32" style="cursor:grab;"></canvas>
+      <span class="master-mix-value">100%</span>
+    </div>
+    <span class="footer-brand">waves crate</span>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CANVAS RENDERING — All visual elements drawn via Canvas API
+// ============================================================
+
+const dpr = window.devicePixelRatio || 1;
+
+function setupCanvas(canvas, w, h) {
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return ctx;
+}
+
+// ---- Color palette ----
+const C = {
+  knobInactive: '#D0C8DD',
+  knobActive: '#7C5CBF',
+  knobBody: '#EDE9F3',
+  textPrimary: '#2A2035',
+  textMuted: '#8A7F96',
+  textDim: '#A89BBE',
+  purple500: '#8B5CF6',
+  purple400: '#A78BFA',
+  purple600: '#7C5CBF',
+  heroGrad1: '#1A1A2E',
+  heroGrad2: '#16162A',
+  lfoColors: ['#8B5CF6', '#06B6D4', '#F59E0B'],
+};
+
+// ============ DRAW KNOB ============
+function drawKnob(canvas, value, label, valueText, size, opts) {
+  size = size || 56;
+  opts = opts || {};
+  const ctx = setupCanvas(canvas, size, size);
+  const cx = size / 2, cy = size / 2;
+  const outerR = size * 0.44;
+  const innerR = size * 0.32;
+  const lineWidth = size * 0.065;
+
+  // Arc geometry — 270 degree sweep starting at 135 degrees (0.75 PI)
+  const startAngle = Math.PI * 0.75;
+  const endAngle = Math.PI * 2.25;
+  const valueAngle = startAngle + (endAngle - startAngle) * value;
+
+  // Track arc (inactive)
+  ctx.beginPath();
+  ctx.arc(cx, cy, outerR, startAngle, endAngle, false);
+  ctx.strokeStyle = C.knobInactive;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Value arc (active)
+  if (value > 0.01) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, startAngle, valueAngle, false);
+    ctx.strokeStyle = opts.arcColor || C.knobActive;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  // Knob body (white circle with shadow)
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.12)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.fillStyle = C.knobBody;
+  ctx.fill();
+  ctx.restore();
+
+  // Subtle border
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(124,92,191,0.12)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Value text inside knob
+  if (valueText) {
+    ctx.fillStyle = C.textPrimary;
+    ctx.font = `500 ${Math.round(size * 0.17)}px -apple-system, 'SF Pro Display', system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(valueText, cx, cy);
+  }
+
+  // Indicator notch
+  const notchAngle = valueAngle;
+  const notchInner = innerR - 2;
+  const notchOuter = innerR + 1;
+  ctx.beginPath();
+  ctx.moveTo(cx + Math.cos(notchAngle) * notchInner, cy + Math.sin(notchAngle) * notchInner);
+  ctx.lineTo(cx + Math.cos(notchAngle) * notchOuter, cy + Math.sin(notchAngle) * notchOuter);
+  ctx.strokeStyle = opts.arcColor || C.knobActive;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+}
+
+// ============ DRAW MINI KNOB (for mod panel) ============
+function drawMiniKnob(canvas, value, size, color) {
+  size = size || 42;
+  const ctx = setupCanvas(canvas, size, size);
+  const cx = size / 2, cy = size / 2;
+  const outerR = size * 0.42;
+  const innerR = size * 0.28;
+  const lw = size * 0.07;
+
+  const startAngle = Math.PI * 0.75;
+  const endAngle = Math.PI * 2.25;
+  const valueAngle = startAngle + (endAngle - startAngle) * value;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, outerR, startAngle, endAngle, false);
+  ctx.strokeStyle = C.knobInactive;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  if (value > 0.01) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, startAngle, valueAngle, false);
+    ctx.strokeStyle = color || C.knobActive;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.1)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetY = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.fillStyle = '#EDE9F3';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(124,92,191,0.12)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+}
+
+// ============ TERRAIN MESH VISUALIZATION ============
+let terrainPhase = 0;
+
+function drawTerrain() {
+  const canvas = document.getElementById('terrain-canvas');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+  const ctx = setupCanvas(canvas, w, h);
+
+  terrainPhase += 0.008;
+
+  // Dark background gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+  bgGrad.addColorStop(0, '#1A1A2E');
+  bgGrad.addColorStop(0.5, '#16162A');
+  bgGrad.addColorStop(1, '#1A1A2E');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle radial glow behind mesh
+  const radGrad = ctx.createRadialGradient(w * 0.5, h * 0.45, 0, w * 0.5, h * 0.45, w * 0.5);
+  radGrad.addColorStop(0, 'rgba(123,77,223,0.08)');
+  radGrad.addColorStop(0.5, 'rgba(123,77,223,0.03)');
+  radGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = radGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Terrain mesh — perspective wireframe
+  const gridX = 28;
+  const gridY = 18;
+  const perspective = 0.55;
+  const baseY = h * 0.55;
+  const amplitude = h * 0.22;
+
+  // Generate heightmap
+  const heights = [];
+  for (let gy = 0; gy <= gridY; gy++) {
+    heights[gy] = [];
+    for (let gx = 0; gx <= gridX; gx++) {
+      const nx = gx / gridX;
+      const ny = gy / gridY;
+      const d = Math.sqrt((nx - 0.5) * (nx - 0.5) + (ny - 0.5) * (ny - 0.5));
+
+      let height = 0;
+      height += Math.sin(nx * 4 + terrainPhase * 1.2) * 0.3;
+      height += Math.sin(ny * 3 + terrainPhase * 0.8) * 0.25;
+      height += Math.sin((nx + ny) * 5 + terrainPhase * 1.5) * 0.2;
+      height += Math.cos(nx * 7 - terrainPhase * 0.6) * Math.sin(ny * 6 + terrainPhase * 0.4) * 0.25;
+
+      // Center peak
+      const peakInfluence = Math.max(0, 1 - d * 2.8);
+      height += peakInfluence * 0.8 * (0.8 + 0.2 * Math.sin(terrainPhase * 2));
+
+      // Edge falloff
+      const edgeFade = Math.min(nx * 4, (1 - nx) * 4, ny * 3, (1 - ny) * 3, 1);
+      height *= edgeFade;
+
+      heights[gy][gx] = height;
+    }
+  }
+
+  // Project 3D to 2D with perspective
+  function project(gx, gy) {
+    const nx = gx / gridX;
+    const ny = gy / gridY;
+    const h_val = heights[gy][gx];
+
+    const x = (nx - 0.5) * w * 0.85;
+    const depth = ny;
+    const scale = 0.5 + depth * perspective;
+    const px = w / 2 + x * scale;
+    const py = baseY + (ny - 0.5) * h * 0.5 * scale - h_val * amplitude * scale;
+    return { x: px, y: py, h: h_val };
+  }
+
+  // Draw grid lines back to front
+  for (let gy = 0; gy <= gridY; gy++) {
+    const depth = gy / gridY;
+    const baseAlpha = 0.12 + depth * 0.25;
+
+    // Horizontal lines
+    ctx.beginPath();
+    for (let gx = 0; gx <= gridX; gx++) {
+      const p = project(gx, gy);
+      if (gx === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.strokeStyle = `rgba(139,92,246,${baseAlpha})`;
+    ctx.lineWidth = 0.6 + depth * 0.4;
+    ctx.stroke();
+  }
+
+  // Vertical lines
+  for (let gx = 0; gx <= gridX; gx++) {
+    ctx.beginPath();
+    for (let gy = 0; gy <= gridY; gy++) {
+      const p = project(gx, gy);
+      if (gy === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    const nx = gx / gridX;
+    const alpha = 0.08 + 0.15 * (1 - Math.abs(nx - 0.5) * 2);
+    ctx.strokeStyle = `rgba(167,139,250,${alpha})`;
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+  }
+
+  // Glow on peaks — draw bright dots at high points
+  for (let gy = 1; gy < gridY; gy += 2) {
+    for (let gx = 1; gx < gridX; gx += 2) {
+      const p = project(gx, gy);
+      if (p.h > 0.35) {
+        const glowAlpha = (p.h - 0.35) * 1.2;
+        const glowR = 2 + p.h * 4;
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
+        glow.addColorStop(0, `rgba(167,139,250,${glowAlpha * 0.5})`);
+        glow.addColorStop(1, 'transparent');
+        ctx.fillStyle = glow;
+        ctx.fillRect(p.x - glowR, p.y - glowR, glowR * 2, glowR * 2);
+      }
+    }
+  }
+
+  // Contour highlights at regular height intervals
+  for (let gy = 0; gy < gridY; gy++) {
+    for (let gx = 0; gx < gridX; gx++) {
+      const p1 = project(gx, gy);
+      const p2 = project(gx + 1, gy);
+      const avgH = (p1.h + p2.h) / 2;
+      if (avgH > 0.45) {
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = `rgba(124,58,237,${(avgH - 0.45) * 0.8})`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(drawTerrain);
+}
+
+// ============ TAPE MACHINE ILLUSTRATION ============
+function drawTapeMachine() {
+  const canvas = document.getElementById('tapeMechCanvas');
+  const mechWrap = canvas.parentElement;
+  const parentH = mechWrap.parentElement.clientHeight;
+  const vizH = Math.min(parentH, 130);
+  const vizW = 200;
+  const ctx = setupCanvas(canvas, vizW, vizH);
+
+  // Dark filled body (looks great on white/light bg)
+  const bodyGrad = ctx.createLinearGradient(0, 0, 0, vizH);
+  bodyGrad.addColorStop(0, '#2A2040');
+  bodyGrad.addColorStop(0.5, '#1E1834');
+  bodyGrad.addColorStop(1, '#2A2040');
+
+  // Main housing
+  const hx = 15, hy = 8, hw = vizW - 30, hh = vizH - 16;
+  ctx.beginPath();
+  ctx.roundRect(hx, hy, hw, hh, 8);
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // Metallic border
+  ctx.beginPath();
+  ctx.roundRect(hx, hy, hw, hh, 8);
+  ctx.strokeStyle = 'rgba(167,139,250,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Tape reels
+  const reelY = vizH * 0.4;
+  const reelR = vizH * 0.2;
+  const lReelX = vizW * 0.32;
+  const rReelX = vizW * 0.68;
+
+  // Left reel
+  ctx.save();
+  ctx.shadowColor = 'rgba(139,92,246,0.3)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.arc(lReelX, reelY, reelR, 0, Math.PI * 2);
+  ctx.fillStyle = '#0D0B14';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(lReelX, reelY, reelR, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(139,92,246,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Reel spokes
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + terrainPhase * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(lReelX, reelY);
+    ctx.lineTo(lReelX + Math.cos(a) * reelR * 0.8, reelY + Math.sin(a) * reelR * 0.8);
+    ctx.strokeStyle = 'rgba(139,92,246,0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Center hub
+  ctx.beginPath();
+  ctx.arc(lReelX, reelY, reelR * 0.25, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(139,92,246,0.15)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(139,92,246,0.3)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Right reel
+  ctx.save();
+  ctx.shadowColor = 'rgba(139,92,246,0.3)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.arc(rReelX, reelY, reelR, 0, Math.PI * 2);
+  ctx.fillStyle = '#0D0B14';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(rReelX, reelY, reelR, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(139,92,246,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 - terrainPhase * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(rReelX, reelY);
+    ctx.lineTo(rReelX + Math.cos(a) * reelR * 0.8, reelY + Math.sin(a) * reelR * 0.8);
+    ctx.strokeStyle = 'rgba(139,92,246,0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(rReelX, reelY, reelR * 0.25, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(139,92,246,0.15)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(139,92,246,0.3)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Tape path (connecting reels)
+  ctx.beginPath();
+  ctx.moveTo(lReelX + reelR, reelY);
+  ctx.lineTo(rReelX - reelR, reelY);
+  ctx.strokeStyle = 'rgba(167,139,250,0.4)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Tape head (center bottom)
+  const headX = vizW * 0.5;
+  const headY = reelY + reelR + 8;
+  ctx.beginPath();
+  ctx.roundRect(headX - 6, headY - 3, 12, 8, 2);
+  ctx.fillStyle = 'rgba(167,139,250,0.2)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(167,139,250,0.3)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Tape from reels to head
+  ctx.beginPath();
+  ctx.moveTo(lReelX, reelY + reelR);
+  ctx.quadraticCurveTo(lReelX + 10, headY, headX - 6, headY);
+  ctx.strokeStyle = 'rgba(167,139,250,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(rReelX, reelY + reelR);
+  ctx.quadraticCurveTo(rReelX - 10, headY, headX + 6, headY);
+  ctx.strokeStyle = 'rgba(167,139,250,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Indicator lights (R/Y/G)
+  const lightY = hy + 10;
+  const lightBaseX = hx + hw - 35;
+  const lights = [
+    { color: '#EF4444', glow: 'rgba(239,68,68,0.4)' },
+    { color: '#F59E0B', glow: 'rgba(245,158,11,0.4)' },
+    { color: '#34D399', glow: 'rgba(52,211,153,0.4)' },
+  ];
+  lights.forEach((l, i) => {
+    const lx = lightBaseX + i * 10;
+    const flicker = 0.6 + 0.4 * Math.sin(terrainPhase * 3 + i * 2);
+    ctx.save();
+    ctx.shadowColor = l.glow;
+    ctx.shadowBlur = 4 * flicker;
+    ctx.beginPath();
+    ctx.arc(lx, lightY, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = l.color;
+    ctx.globalAlpha = 0.5 + 0.5 * flicker;
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // Machine label
+  ctx.fillStyle = 'rgba(167,139,250,0.5)';
+  ctx.font = '600 7px -apple-system, system-ui, sans-serif';
+  ctx.letterSpacing = '1.5px';
+  ctx.fillText('STUDIO  15 IPS', hx + 10, lightY + 2);
+}
+
+// ============ LFO WAVEFORM DRAWING ============
+function drawLFOWave(canvasId, shape, color, phase) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  const w = parent.clientWidth;
+  const h = parent.clientHeight || 50;
+  const ctx = setupCanvas(canvas, w, h);
+
+  // Dark background (matches viz area)
+  ctx.fillStyle = '#1A1A2E';
+  ctx.fillRect(0, 0, w, h);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(139,92,246,0.08)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+  ctx.stroke();
+
+  // Waveform
+  ctx.beginPath();
+  const amp = h * 0.35;
+  const cy = h / 2;
+
+  for (let x = 0; x < w; x++) {
+    const t = (x / w) * Math.PI * 4 + phase;
+    let y;
+    switch(shape) {
+      case 'sin': y = cy - Math.sin(t) * amp; break;
+      case 'tri': y = cy - (2 * Math.abs(2 * ((t / (Math.PI * 2)) % 1) - 1) - 1) * amp; break;
+      case 'saw': y = cy - (2 * ((t / (Math.PI * 2)) % 1) - 1) * amp; break;
+      case 'sq': y = cy - (Math.sin(t) > 0 ? 1 : -1) * amp; break;
+      case 'sh': {
+        const seg = Math.floor(t / (Math.PI * 0.5));
+        const seed = Math.sin(seg * 12.9898 + 78.233) * 43758.5453;
+        y = cy - (seed % 1) * 2 * amp + amp;
+        break;
+      }
+      default: y = cy - Math.sin(t) * amp;
+    }
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Glow
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 6;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// ============ GRID ICON ============
+function drawGridIcon() {
+  const canvas = document.getElementById('grid-icon');
+  const ctx = setupCanvas(canvas, 28, 28);
+  ctx.strokeStyle = '#7A7090';
+  ctx.lineWidth = 1;
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      ctx.strokeRect(6 + c * 6, 6 + r * 6, 4, 4);
+    }
+  }
+}
+
+// ============ SECTION TOGGLE ICON ============
+function drawToggleIcon(canvasId, active) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = setupCanvas(canvas, 28, 28);
+  const cx = 14, cy = 14;
+
+  if (active) {
+    // Power icon — circle with line
+    ctx.beginPath();
+    ctx.arc(cx, cy + 1, 8, -Math.PI * 0.7, Math.PI * 1.7, false);
+    ctx.strokeStyle = C.purple600;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 7);
+    ctx.lineTo(cx, cy - 1);
+    ctx.strokeStyle = C.purple600;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+// ============ TRANSPORT ICONS ============
+function drawTransportIcons() {
+  // Record
+  const recCanvas = document.getElementById('t-rec');
+  if (recCanvas) {
+    const ctx = setupCanvas(recCanvas, 32, 32);
+    ctx.beginPath();
+    ctx.arc(16, 16, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#EF4444';
+    ctx.fill();
+  }
+
+  // Play
+  const playCanvas = document.getElementById('t-play');
+  if (playCanvas) {
+    const ctx = setupCanvas(playCanvas, 32, 32);
+    ctx.beginPath();
+    ctx.moveTo(12, 9);
+    ctx.lineTo(22, 16);
+    ctx.lineTo(12, 23);
+    ctx.closePath();
+    ctx.fillStyle = C.purple600;
+    ctx.fill();
+  }
+
+  // Stop
+  const stopCanvas = document.getElementById('t-stop');
+  if (stopCanvas) {
+    const ctx = setupCanvas(stopCanvas, 32, 32);
+    ctx.fillStyle = C.textMuted;
+    ctx.fillRect(10, 10, 12, 12);
+  }
+}
+
+// ============ OUTPUT ICON ============
+function drawOutputIcon() {
+  const canvas = document.getElementById('output-icon-canvas');
+  if (!canvas) return;
+  const ctx = setupCanvas(canvas, 16, 16);
+  ctx.strokeStyle = C.purple600;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  // Speaker shape
+  ctx.beginPath();
+  ctx.moveTo(3, 6); ctx.lineTo(6, 6); ctx.lineTo(10, 3); ctx.lineTo(10, 13); ctx.lineTo(6, 10); ctx.lineTo(3, 10); ctx.closePath();
+  ctx.fillStyle = C.purple600;
+  ctx.fill();
+  // Sound waves
+  ctx.beginPath();
+  ctx.arc(10, 8, 3, -0.5, 0.5, false);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(10, 8, 5, -0.6, 0.6, false);
+  ctx.stroke();
+}
+
+// ============ MASTER MIX KNOB (footer) ============
+function drawMixKnob() {
+  const canvas = document.getElementById('master-mix-canvas');
+  drawKnob(canvas, 1.0, 'Mix', '100%', 32);
+}
+
+// ============ BUILD GRAIN KNOBS ============
+function buildGrainKnobs() {
+  const container = document.getElementById('grain-knobs');
+  const knobs = [
+    { label: 'SIZE', value: 0.35, text: '35 ms' },
+    { label: 'DENSITY', value: 0.6, text: '60%' },
+    { label: 'SPRAY', value: 0.45, text: '45%' },
+    { label: 'PITCH', value: 0.5, text: '0 st' },
+    { label: 'WANDER', value: 0.3, text: '30%' },
+    { label: 'FREEZE', value: 0.0, text: '0%' },
+    { label: 'FILTER', value: 0.65, text: '3.2k' },
+    { label: 'GRAIN MIX', value: 0.75, text: '75%' },
+  ];
+
+  knobs.forEach(k => {
+    const group = document.createElement('div');
+    group.className = 'knob-group';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'knob-canvas-wrap';
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    group.appendChild(wrap);
+
+    const val = document.createElement('div');
+    val.className = 'knob-value';
+    val.textContent = k.text;
+    group.appendChild(val);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'knob-label';
+    lbl.textContent = k.label;
+    group.appendChild(lbl);
+
+    container.appendChild(group);
+
+    drawKnob(canvas, k.value, k.label, k.text, 56);
+  });
+}
+
+// ============ BUILD TAPE FX KNOBS ============
+function buildTapeFxKnobs() {
+  const container = document.getElementById('tapeFxKnobs');
+  const knobs = [
+    { label: 'WOW', value: 0.4, text: '40%' },
+    { label: 'SAT', value: 0.55, text: '55%' },
+    { label: 'HISS', value: 0.2, text: '20%' },
+  ];
+
+  knobs.forEach(k => {
+    const group = document.createElement('div');
+    group.className = 'fx-knob-group';
+
+    const canvas = document.createElement('canvas');
+    group.appendChild(canvas);
+
+    const val = document.createElement('div');
+    val.className = 'fx-knob-value';
+    val.textContent = k.text;
+    group.appendChild(val);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'fx-knob-label';
+    lbl.textContent = k.label;
+    group.appendChild(lbl);
+
+    container.appendChild(group);
+
+    drawKnob(canvas, k.value, k.label, k.text, 48);
+  });
+}
+
+// ============ BUILD TAPE LOOP KNOBS ============
+function buildLoopKnobs() {
+  const container = document.getElementById('tape-loop-knobs');
+  const knobs = [
+    { label: 'LENGTH', value: 0.5, text: '4 bar' },
+    { label: 'FEEDBACK', value: 0.7, text: '70%' },
+    { label: 'DEGRADE', value: 0.3, text: '30%' },
+    { label: 'SPEED', value: 0.5, text: '1x' },
+  ];
+
+  knobs.forEach(k => {
+    const group = document.createElement('div');
+    group.className = 'knob-group';
+    group.style.width = '70px';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'knob-canvas-wrap';
+    wrap.style.width = '48px';
+    wrap.style.height = '48px';
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    group.appendChild(wrap);
+
+    const val = document.createElement('div');
+    val.className = 'knob-value';
+    val.textContent = k.text;
+    group.appendChild(val);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'knob-label';
+    lbl.textContent = k.label;
+    group.appendChild(lbl);
+
+    container.appendChild(group);
+
+    drawKnob(canvas, k.value, k.label, k.text, 48);
+  });
+}
+
+// ============ BUILD LFO MINI KNOBS ============
+function buildLFOKnobs() {
+  for (let i = 0; i < 3; i++) {
+    const container = document.getElementById(`lfo-knobs-${i}`);
+    if (!container) continue;
+
+    const knobDefs = [
+      { label: 'RATE', value: [0.35, 0.5, 0.6][i] },
+      { label: 'DEPTH', value: [0.5, 0.3, 0.7][i] },
+    ];
+
+    knobDefs.forEach(k => {
+      const group = document.createElement('div');
+      group.style.display = 'flex';
+      group.style.flexDirection = 'column';
+      group.style.alignItems = 'center';
+      group.style.gap = '1px';
+      group.style.flex = '1';
+
+      const canvas = document.createElement('canvas');
+      canvas.style.cursor = 'grab';
+      group.appendChild(canvas);
+
+      const val = document.createElement('div');
+      val.style.cssText = 'font-family: "SF Mono", monospace; font-size: 10px; color: #2A2040; text-align: center;';
+      val.textContent = Math.round(k.value * 100) + '%';
+      group.appendChild(val);
+
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size: 8px; font-weight: 500; letter-spacing: 1.2px; text-transform: uppercase; color: #7A7090; text-align: center;';
+      lbl.textContent = k.label;
+      group.appendChild(lbl);
+
+      container.appendChild(group);
+
+      drawMiniKnob(canvas, k.value, 42, C.lfoColors[i]);
+    });
+  }
+}
+
+// ============ DRAW TAPE REEL (loop content) ============
+function drawTapeReel() {
+  const canvas = document.getElementById('tape-reel-canvas');
+  if (!canvas) return;
+  const ctx = setupCanvas(canvas, 200, 48);
+
+  // Dual reel visualization
+  const reelR = 16;
+  const lx = 60, rx = 140, cy = 24;
+
+  [lx, rx].forEach((x, idx) => {
+    ctx.beginPath();
+    ctx.arc(x, cy, reelR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(123,77,223,0.06)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(123,77,223,0.2)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Spokes
+    for (let s = 0; s < 3; s++) {
+      const a = (s / 3) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(x, cy);
+      ctx.lineTo(x + Math.cos(a) * reelR * 0.8, cy + Math.sin(a) * reelR * 0.8);
+      ctx.strokeStyle = 'rgba(123,77,223,0.12)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+
+    // Center hub
+    ctx.beginPath();
+    ctx.arc(x, cy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(123,77,223,0.15)';
+    ctx.fill();
+  });
+
+  // Tape connecting
+  ctx.beginPath();
+  ctx.moveTo(lx + reelR, cy);
+  ctx.lineTo(rx - reelR, cy);
+  ctx.strokeStyle = 'rgba(123,77,223,0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+// ============ PRESET BROWSER POPULATION ============
+function populatePresets() {
+  const grid = document.getElementById('browser-grid');
+  const presets = [
+    { name: 'Ambient Wash', cat: 'AMBIENT' },
+    { name: 'Grain Cloud', cat: 'PAD' },
+    { name: 'Tape Wobble', cat: 'TEXTURE' },
+    { name: 'Glitch Storm', cat: 'GLITCH', selected: true },
+    { name: 'Space Drift', cat: 'AMBIENT' },
+    { name: 'Pixel Rain', cat: 'GLITCH' },
+    { name: 'Warm Pad', cat: 'PAD' },
+    { name: 'Lo-Fi Dream', cat: 'TEXTURE' },
+    { name: 'Rhythm Gate', cat: 'RHYTHMIC' },
+    { name: 'Frozen Air', cat: 'AMBIENT' },
+    { name: 'My Custom', cat: 'PAD', user: true },
+    { name: 'Dark Haze', cat: 'TEXTURE' },
+    { name: 'Stutter FX', cat: 'GLITCH' },
+    { name: 'Deep Reverb', cat: 'AMBIENT' },
+    { name: 'Tape Echo', cat: 'TEXTURE' },
+  ];
+
+  presets.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'preset-card' + (p.selected ? ' selected' : '') + (p.user ? ' user-preset' : '');
+    card.innerHTML = `<div class="preset-card-name">${p.name}</div><div class="preset-card-cat">${p.cat}</div>`;
+    grid.appendChild(card);
+  });
+}
+
+// ============ VIEW STATE TOGGLES (demo) ============
+let modOpen = false;
+let presetsOpen = false;
+let loopView = false;
+
+function toggleMod() {
+  modOpen = !modOpen;
+  const panel = document.getElementById('mod-panel');
+  const controls = document.getElementById('controls');
+  const btn = document.getElementById('mod-btn');
+  const demoBtn = document.getElementById('demo-mod-btn');
+
+  if (modOpen) {
+    panel.classList.add('open');
+    controls.style.display = 'none';
+    btn.classList.add('active');
+    demoBtn.classList.add('active-demo');
+  } else {
+    panel.classList.remove('open');
+    controls.style.display = 'flex';
+    btn.classList.remove('active');
+    demoBtn.classList.remove('active-demo');
+  }
+}
+
+function togglePresets() {
+  presetsOpen = !presetsOpen;
+  const browser = document.getElementById('preset-browser');
+  const demoBtn = document.getElementById('demo-preset-btn');
+  if (presetsOpen) {
+    browser.classList.add('open');
+    demoBtn.classList.add('active-demo');
+  } else {
+    browser.classList.remove('open');
+    demoBtn.classList.remove('active-demo');
+  }
+}
+
+function toggleLoop() {
+  loopView = !loopView;
+  const fxContainer = document.getElementById('tape-fx-container');
+  const loopContent = document.getElementById('tape-loop-content');
+  const fxNav = document.getElementById('fxPageNav');
+  const subtabs = document.querySelectorAll('.tape-subtab');
+  const demoBtn = document.getElementById('demo-loop-btn');
+
+  if (loopView) {
+    fxContainer.style.display = 'none';
+    loopContent.classList.add('visible');
+    fxNav.style.display = 'none';
+    subtabs[0].classList.remove('active');
+    subtabs[1].classList.add('active');
+    demoBtn.classList.add('active-demo');
+  } else {
+    fxContainer.style.display = 'flex';
+    loopContent.classList.remove('visible');
+    fxNav.style.display = 'flex';
+    subtabs[0].classList.add('active');
+    subtabs[1].classList.remove('active');
+    demoBtn.classList.remove('active-demo');
+  }
+}
+
+function showFxTab() {
+  if (loopView) toggleLoop();
+}
+function showLoopTab() {
+  if (!loopView) toggleLoop();
+}
+
+// ============ ANIMATE METERS ============
+let meterPhase = 0;
+function animateMeters() {
+  meterPhase += 0.05;
+  const mL = document.getElementById('meter-l');
+  const mR = document.getElementById('meter-r');
+  if (mL) mL.style.height = (35 + 25 * Math.sin(meterPhase * 1.3)) + '%';
+  if (mR) mR.style.height = (30 + 22 * Math.sin(meterPhase * 1.1 + 0.5)) + '%';
+  requestAnimationFrame(animateMeters);
+}
+
+// ============ INIT ============
+function init() {
+  drawGridIcon();
+  drawToggleIcon('grain-icon', true);
+  drawToggleIcon('tape-icon', true);
+  buildGrainKnobs();
+  buildTapeFxKnobs();
+  buildLoopKnobs();
+  buildLFOKnobs();
+  drawTapeMachine();
+  drawTapeReel();
+  drawTransportIcons();
+  drawOutputIcon();
+  drawMixKnob();
+  populatePresets();
+
+  // LFO waveforms (on dark background)
+  let lfoPhase = 0;
+  function animateLFOs() {
+    lfoPhase += 0.03;
+    drawLFOWave('lfo-wave-0', 'sin', C.lfoColors[0], lfoPhase);
+    drawLFOWave('lfo-wave-1', 'tri', C.lfoColors[1], lfoPhase * 0.7);
+    drawLFOWave('lfo-wave-2', 'sh', C.lfoColors[2], lfoPhase * 0.5);
+    requestAnimationFrame(animateLFOs);
+  }
+  animateLFOs();
+
+  // Terrain animation
+  drawTerrain();
+
+  // Meter animation
+  animateMeters();
+
+  // Redraw tape machine periodically (for reel rotation)
+  setInterval(drawTapeMachine, 60);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
