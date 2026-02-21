@@ -78,6 +78,11 @@ private:
 
         int getState() const { return state; }
 
+        void setDarkMode (bool dark)
+        {
+            if (isDarkMode != dark) { isDarkMode = dark; repaint(); }
+        }
+
         void paint (juce::Graphics& g) override;
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent& e) override;
@@ -89,6 +94,7 @@ private:
         float avail = 0.f;
         bool mouseWasDown = false;
         bool isDragging = false;
+        bool isDarkMode = false;
     };
 
     CaptureDragStrip captureDragStrip { audioProcessor };

@@ -9,19 +9,49 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg-main: #F3EFF8;
-  --bg-hero: #EDE8F4;
-  --bg-surface: #FFFFFF;
-  --bg-footer: #F8F5FC;
-  --bg-glass: rgba(255,255,255,0.85);
+  /* Lunar Haze Light */
+  --bg-main: #ECE8F1;
+  --bg-hero: #2D2545;
+  --bg-surface: #E8E4EF;
+  --bg-footer: #E5E1EC;
+  --bg-glass: rgba(224,218,234,0.88);
+  --bg-card: #E0DAE6;
+  --bg-card-hover: #D8D2DE;
+  --knob-body: #E8E4EF;
+  --knob-track: rgba(124,92,191,0.15);
   --purple-600: #7C3AED;
   --purple-500: #8B5CF6;
   --purple-400: #A78BFA;
-  --border: #E8E0F0;
-  --text-primary: #5B4F70;
-  --text-secondary: #8B7FA0;
-  --text-muted: #A89BBE;
-  --text-dim: #B0A4C0;
+  --border: rgba(124,92,191,0.12);
+  --border-strong: rgba(124,92,191,0.20);
+  --text-primary: #2A2035;
+  --text-secondary: #5C5068;
+  --text-muted: #8A7F96;
+  --text-dim: #A89BBE;
+  --mesh-line: rgba(139,92,246,0.25);
+  --mesh-contour: rgba(167,139,250,0.5);
+  --mesh-peak: rgba(124,58,237,0.7);
+}
+
+[data-theme="dark"] {
+  --bg-main: #1A1A2E;
+  --bg-hero: #12121F;
+  --bg-surface: #232340;
+  --bg-footer: #1E1E36;
+  --bg-glass: rgba(26,26,46,0.9);
+  --bg-card: #2A2A48;
+  --bg-card-hover: #33335C;
+  --knob-body: #2E2E4A;
+  --knob-track: rgba(100,100,150,0.3);
+  --purple-600: #9B6DFF;
+  --purple-500: #8B5CF6;
+  --purple-400: #B794FF;
+  --border: rgba(58,58,88,0.5);
+  --border-strong: rgba(88,88,128,0.5);
+  --text-primary: #E0DCE8;
+  --text-secondary: #9B93B0;
+  --text-muted: #6B6080;
+  --text-dim: #504870;
   --mesh-line: rgba(139,92,246,0.25);
   --mesh-contour: rgba(167,139,250,0.5);
   --mesh-peak: rgba(124,58,237,0.7);
@@ -54,6 +84,7 @@ body {
   height: 44px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 16px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
@@ -96,7 +127,9 @@ body {
 }
 
 .preset-area {
-  flex: 1;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -167,9 +200,7 @@ body {
   overflow: hidden;
   z-index: 15;
   transition: max-height 0.2s ease-out;
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--bg-surface);
   border-bottom: 1px solid transparent;
 }
 #preset-browser.open {
@@ -195,7 +226,7 @@ body {
   border-radius: 5px;
   padding: 0 8px 0 28px;
   font-size: 11px;
-  background: rgba(255,255,255,0.6);
+  background: var(--bg-surface);
   color: var(--text-primary);
   outline: none;
   font-family: inherit;
@@ -275,7 +306,7 @@ body {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: rgba(255,255,255,0.5);
+  background: var(--bg-surface);
   cursor: pointer;
   transition: all 0.1s;
   display: flex;
@@ -386,7 +417,7 @@ body {
   font-weight: 500;
   font-family: inherit;
   color: var(--text-primary);
-  background: white;
+  background: var(--bg-surface);
   outline: none;
   margin-bottom: 3px;
 }
@@ -416,7 +447,7 @@ body {
   font-size: 11px;
   font-family: inherit;
   color: var(--text-primary);
-  background: white;
+  background: var(--bg-surface);
   outline: none;
 }
 .save-prompt-input:focus { border-color: var(--purple-500); }
@@ -430,7 +461,7 @@ body {
   letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--text-primary);
-  background: white;
+  background: var(--bg-surface);
   outline: none;
   font-family: inherit;
   cursor: pointer;
@@ -528,7 +559,7 @@ body {
 .tag-picker-input {
   flex: 1; height: 22px; border: 1px solid var(--purple-400); border-radius: 3px;
   padding: 0 6px; font-size: 9px; font-family: inherit; color: var(--text-primary);
-  background: white; outline: none; text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--bg-surface); outline: none; text-transform: uppercase; letter-spacing: 0.5px;
 }
 .tag-picker-add-btn {
   height: 22px; padding: 0 8px; border: none; border-radius: 3px;
@@ -618,88 +649,82 @@ body {
 }
 
 .scope-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(139,92,246,0.2);
-  border-radius: 5px;
-  background: rgba(255,255,255,0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.7);
   padding: 0;
 }
 .scope-btn:hover {
-  border-color: var(--purple-500);
-  background: rgba(255,255,255,0.8);
+  border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.08);
   transform: scale(1.05);
 }
 .scope-btn:active {
   transform: scale(0.95);
 }
 .scope-btn.flash {
-  background: rgba(139,92,246,0.25);
-  border-color: var(--purple-500);
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.5);
 }
 .scope-btn canvas { display: block; }
 
 .xy-ctrl-btn {
-  width: 24px;
-  height: 24px;
-  border: 1px solid rgba(139,92,246,0.2);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-radius: 5px;
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.1s;
-  color: var(--text-secondary);
-  font-size: 10px;
+  color: rgba(255,255,255,0.7);
+  font-size: 11px;
 }
 .xy-ctrl-btn:hover {
-  border-color: var(--purple-500);
-  background: rgba(255,255,255,0.8);
+  border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.08);
 }
 .xy-ctrl-btn.active {
-  background: rgba(139,92,246,0.15);
-  border-color: var(--purple-500);
-  color: var(--purple-600);
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.9);
 }
 
 .xy-speed-wrap {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   cursor: grab;
   border-radius: 50%;
-  background: rgba(255,255,255,0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(139,92,246,0.2);
+  background: transparent;
+  border: 1.5px solid rgba(255,255,255,0.3);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .xy-speed-wrap:hover {
-  border-color: var(--purple-500);
-  background: rgba(255,255,255,0.8);
+  border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.08);
 }
 
 .crosshair-h, .crosshair-v {
   position: absolute;
-  background: rgba(139,92,246,0.3);
+  background: rgba(255,255,255,0.5);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.1s;
 }
-.crosshair-h { height: 1px; left: 0; right: 0; }
-.crosshair-v { width: 1px; top: 0; bottom: 0; }
+.crosshair-h { height: 1.5px; left: 0; right: 0; }
+.crosshair-v { width: 1.5px; top: 0; bottom: 0; }
 #hero:hover .crosshair-h,
 #hero:hover .crosshair-v,
 #hero.dragging .crosshair-h,
@@ -736,7 +761,7 @@ body {
   align-items: center;
 }
 .control-section.minimized:hover {
-  background: var(--bg-hero);
+  background: var(--bg-surface);
 }
 .control-section.minimized .section-header {
   writing-mode: vertical-rl;
@@ -832,6 +857,73 @@ body {
   transition: opacity 0.25s 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ============ GRAIN TILE LAYOUT ============ */
+#grain-knobs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 12px;
+}
+#grain-knobs .grain-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+}
+#grain-knobs .knob-group {
+  width: 72px;
+  gap: 3px;
+}
+#grain-knobs .knob-canvas-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.04);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+#grain-knobs .knob-canvas-wrap:hover {
+  filter: none;
+  background: rgba(139, 92, 246, 0.08);
+  box-shadow: 0 4px 12px rgba(139,92,246,0.1);
+  transform: translateY(-1px);
+}
+#grain-knobs .knob-canvas-wrap:active {
+  transform: translateY(0);
+}
+#grain-knobs .knob-canvas-wrap canvas.knob-arc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+}
+#grain-knobs .knob-canvas-wrap canvas.knob-icon-inner {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: grainIconBreathe 3s ease-in-out infinite;
+}
+@keyframes grainIconBreathe {
+  0%, 100% { opacity: 0.85; transform: translate(-50%, -50%) scale(1); }
+  50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.02); }
+}
+#grain-knobs .knob-group:hover .knob-icon-inner,
+#grain-knobs .knob-group.dragging .knob-icon-inner {
+  animation: none;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.05);
+  filter: drop-shadow(0 0 4px rgba(139,92,246,0.5));
+}
+#grain-knobs .knob-group .knob-value,
+#grain-knobs .knob-group .knob-label {
+  display: none !important;
+}
+
 /* ============ TAPE SUB-TABS ============ */
 .tape-subtabs {
   display: flex; gap: 2px; margin-left: 8px;
@@ -875,7 +967,7 @@ body {
   justify-content: center;
   cursor: pointer;
   font-size: 7px;
-  color: rgba(167, 139, 250, 0.7);
+  color: var(--purple-400);
   transition: all 0.15s;
   padding: 0;
   line-height: 1;
@@ -883,14 +975,14 @@ body {
 }
 .fx-nav-arrow:hover {
   border-color: rgba(124, 58, 237, 0.7);
-  color: rgba(167, 139, 250, 1);
+  color: var(--purple-400);
   background: rgba(139, 92, 246, 0.08);
 }
 .fx-page-label {
   font-size: 8px;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: rgba(167, 139, 250, 0.9);
+  color: var(--purple-400);
   font-weight: 600;
   min-width: 30px;
   text-align: center;
@@ -948,7 +1040,7 @@ body {
   border: none;
   cursor: pointer;
   font-size: 12px;
-  color: rgba(167, 139, 250, 0.65);
+  color: var(--purple-400);
   padding: 6px 2px;
   line-height: 1;
   font-family: inherit;
@@ -958,7 +1050,7 @@ body {
 #machPrev { right: 100%; margin-right: 2px; }
 #machNext { left: 100%; margin-left: 2px; }
 .machine-nav-arrow:hover {
-  color: rgba(167, 139, 250, 1);
+  color: var(--purple-400);
 }
 .tape-fx-knobs {
   display: flex;
@@ -1151,13 +1243,36 @@ body {
   align-items: center; gap: 2px;
   padding: 8px 14px 5px;
   border-radius: 14px;
-  border: 1.5px solid rgba(139,92,246,0.18);
-  background: rgba(255,255,255,0.45);
+  border: 1.5px solid var(--border);
+  background: var(--bg-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 2px 10px rgba(139,92,246,0.06), inset 0 1px 0 rgba(255,255,255,0.6);
+  box-shadow: 0 2px 10px rgba(139,92,246,0.06), inset 0 1px 0 rgba(255,255,255,0.15);
   width: calc(100% - 16px);
   max-width: 300px;
+}
+[data-theme="dark"] .tape-deck-glass {
+  border-color: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.04);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+[data-theme="dark"] .deck-label {
+  color: rgba(255,255,255,0.35);
+}
+[data-theme="dark"] .deck-dot {
+  border-color: rgba(255,255,255,0.2);
+}
+[data-theme="dark"] .tape-undo-btn,
+[data-theme="dark"] .tape-feed-btn {
+  border-color: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+}
+[data-theme="dark"] .tape-progress-rail {
+  background: rgba(255,255,255,0.15);
+}
+[data-theme="dark"] .tape-progress-head {
+  background: rgba(255,255,255,0.7);
+  box-shadow: 0 0 3px rgba(255,255,255,0.35);
 }
 
 /* ---- Deck Status Dots ---- */
@@ -1431,7 +1546,6 @@ body {
   height: 100%;
   background: var(--purple-500);
   border-radius: 2px;
-  transition: width 0.2s;
 }
 
 .tooltip-bar-pct {
@@ -1457,7 +1571,7 @@ body {
   display: flex;
   align-items: center;
   padding: 0 16px;
-  background: var(--bg-footer);
+  background: var(--bg-surface);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
   gap: 12px;
@@ -1500,7 +1614,7 @@ body {
   top: 50%;
   width: 14px;
   height: 14px;
-  background: white;
+  background: var(--bg-surface);
   border: 2px solid var(--purple-500);
   border-radius: 50%;
   transform: translate(-50%, -50%);
@@ -1691,6 +1805,97 @@ body {
 @keyframes mod-btn-breathe {
   0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.3); }
   50% { box-shadow: 0 0 8px 2px rgba(139,92,246,0.25); }
+}
+
+/* --- Settings Button & Panel --- */
+.settings-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+.settings-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-strong);
+}
+#settings-panel {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 2000;
+}
+.settings-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+}
+.settings-content {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 280px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.settings-close {
+  background: none; border: none;
+  font-size: 20px; cursor: pointer;
+  color: var(--text-muted); padding: 0 4px;
+}
+.settings-close:hover { color: var(--text-primary); }
+.settings-body { padding: 16px; }
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.settings-theme-btns { display: flex; gap: 4px; }
+.theme-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.theme-btn:hover { background: var(--bg-card-hover); }
+.theme-btn.active {
+  background: var(--purple-600);
+  color: white;
+  border-color: var(--purple-600);
+}
+.settings-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.settings-version {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 /* --- Modulation Panel Overlay --- */
@@ -1946,11 +2151,11 @@ body {
   z-index: 100;
   width: 240px;
   border-radius: 10px;
-  border: 1.5px solid rgba(139,92,246,0.18);
-  background: rgba(255,255,255,0.88);
+  border: 1.5px solid var(--border);
+  background: var(--bg-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 16px rgba(139,92,246,0.15);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
   padding: 8px 0;
   font-size: 11px;
   opacity: 0;
@@ -2076,15 +2281,15 @@ body {
       <button class="preset-nav-btn" id="preset-prev">&lsaquo;</button>
       <span class="preset-name" id="preset-name">Crystal Shimmer</span>
       <button class="preset-nav-btn" id="preset-next">&rsaquo;</button>
-      <button class="preset-grid-btn" id="preset-grid-btn">
-        <canvas id="grid-icon" width="28" height="28"></canvas>
-      </button>
     </div>
     <div class="header-right">
       <button class="preset-save-btn" id="preset-save-btn" title="Save preset">+</button>
       <button class="mod-btn" id="mod-btn" title="Modulation Panel">
         <span class="mod-dot" id="mod-dot"></span>
         MOD
+      </button>
+      <button class="settings-btn" id="settings-btn" title="Settings">
+        <canvas id="settings-icon" width="28" height="28"></canvas>
       </button>
     </div>
   </div>
@@ -2137,6 +2342,29 @@ body {
       <div class="tooltip-bar-wrap"><div class="tooltip-bar" id="tt-bar"></div></div>
       <div class="tooltip-bar-pct" id="tt-pct"></div>
       <div class="tooltip-tip" id="tt-tip"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  <div id="settings-panel" style="display:none">
+    <div class="settings-overlay"></div>
+    <div class="settings-content">
+      <div class="settings-header">
+        <span>Settings</span>
+        <button class="settings-close" id="settings-close">&times;</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-row">
+          <span class="settings-label">Theme</span>
+          <div class="settings-theme-btns">
+            <button class="theme-btn active" id="theme-light-btn">Light</button>
+            <button class="theme-btn" id="theme-dark-btn">Dark</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-footer">
+        <span class="settings-version">Terrain v3.0 by Waves Crate</span>
+      </div>
     </div>
   </div>
 
@@ -2791,6 +3019,161 @@ const Perlin = (() => {
   };
 })();
 
+// ---- Theme System ----
+const THEMES = {
+  light: {
+    name: 'light',
+    // Terrain mesh (both themes use white mesh on dark hero)
+    terrainBg: '#2D2545',
+    meshLine: 'rgba(255,255,255,0.4)',
+    meshContour: 'rgba(255,255,255,0.75)',
+    meshVertical: 0.7,  // alpha multiplier for vertical lines
+    meshGrid: 'rgba(255,255,255,0.2)',
+    peakGlow: 'rgba(200,180,255,',  // + alpha + ')'
+    crosshairRing: 'rgba(255,255,255,0.7)',
+    crosshairDot: 'rgba(255,255,255,0.85)',
+    // Knobs (canvas)
+    knobBody0: 'rgba(232,228,239,0.35)',
+    knobBody1: 'rgba(232,228,239,0.08)',
+    knobTrack: 'rgba(124,92,191,0.15)',
+    knobActive: '#8B5CF6',
+    knobDot: '#8B5CF6',
+    knobDotHover: '#7C3AED',
+    knobDragGlow: 'rgba(139,92,246,0.15)',
+    // Viz style: 'filled' = purple tape machines, 'wireframe' = white wireframe
+    vizStyle: 'filled',
+    // Viz spark/glow colors (shared)
+    vizPurpleGlow: 'rgba(139,92,246,',
+    vizLavender: 'rgba(196,181,253,',
+    vizAccent: 'rgba(167,139,250,',
+    // Toggle border (inactive)
+    toggleBorderInactive: 'rgba(124,92,191,0.15)',
+  },
+  dark: {
+    name: 'dark',
+    terrainBg: '#12121F',
+    meshLine: 'rgba(255,255,255,0.4)',
+    meshContour: 'rgba(255,255,255,0.75)',
+    meshVertical: 0.7,
+    meshGrid: 'rgba(255,255,255,0.22)',
+    peakGlow: 'rgba(200,180,255,',
+    crosshairRing: 'rgba(255,255,255,0.75)',
+    crosshairDot: 'rgba(255,255,255,0.9)',
+    knobBody0: 'rgba(46,46,74,0.45)',
+    knobBody1: 'rgba(46,46,74,0.1)',
+    knobTrack: 'rgba(100,100,150,0.3)',
+    knobActive: '#8B5CF6',
+    knobDot: '#8B5CF6',
+    knobDotHover: '#9B6DFF',
+    knobDragGlow: 'rgba(139,92,246,0.2)',
+    vizStyle: 'wireframe',
+    vizPurpleGlow: 'rgba(139,92,246,',
+    vizLavender: 'rgba(196,181,253,',
+    vizAccent: 'rgba(167,139,250,',
+    toggleBorderInactive: 'rgba(100,100,150,0.3)',
+  }
+};
+let currentTheme = THEMES.light;
+
+function setTheme(name) {
+  if (!THEMES[name]) return;
+  currentTheme = THEMES[name];
+  document.documentElement.dataset.theme = name;
+}
+
+function getTheme() {
+  return currentTheme.name;
+}
+
+// Blend from muted (#B0A4C0) to purple (#8B5CF6) based on normalized value
+function iconColorForNorm(norm) {
+  const r = Math.round(176 + (139 - 176) * norm);
+  const g = Math.round(164 + (92 - 164) * norm);
+  const b = Math.round(192 + (246 - 192) * norm);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ---- Viz Color Helpers (wireframe mode) ----
+var _vizWf = false; // set per-frame: true when dark theme wireframe
+function vA(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(167,139,250,'+a+')'; }
+function vH(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(196,181,253,'+a+')'; }
+function vP(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(139,92,246,'+a+')'; }
+function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a+')'; }
+
+// Settings panel
+function initSettingsPanel() {
+  var btn = document.getElementById('settings-btn');
+  var panel = document.getElementById('settings-panel');
+  var closeBtn = document.getElementById('settings-close');
+  var overlay = panel.querySelector('.settings-overlay');
+  var lightBtn = document.getElementById('theme-light-btn');
+  var darkBtn = document.getElementById('theme-dark-btn');
+
+  btn.addEventListener('click', function() { panel.style.display = 'block'; });
+  function closePanel() { panel.style.display = 'none'; }
+  closeBtn.addEventListener('click', closePanel);
+  overlay.addEventListener('click', closePanel);
+
+  lightBtn.addEventListener('click', function() {
+    setTheme('light');
+    lightBtn.classList.add('active'); darkBtn.classList.remove('active');
+    drawSettingsIcon(); saveSettings();
+  });
+  darkBtn.addEventListener('click', function() {
+    setTheme('dark');
+    darkBtn.classList.add('active'); lightBtn.classList.remove('active');
+    drawSettingsIcon(); saveSettings();
+  });
+  drawSettingsIcon();
+}
+
+function drawSettingsIcon() {
+  var canvas = document.getElementById('settings-icon');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = 28 * dpr; canvas.height = 28 * dpr;
+  canvas.style.width = '28px'; canvas.style.height = '28px';
+  ctx.scale(dpr, dpr);
+  var cx = 14, cy = 14;
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+  ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+  var teeth = 8;
+  ctx.beginPath();
+  for (var i = 0; i < teeth; i++) {
+    var a1 = (i / teeth) * Math.PI * 2 - Math.PI / 2;
+    var a2 = ((i + 0.35) / teeth) * Math.PI * 2 - Math.PI / 2;
+    var a3 = ((i + 0.65) / teeth) * Math.PI * 2 - Math.PI / 2;
+    var a4 = ((i + 1) / teeth) * Math.PI * 2 - Math.PI / 2;
+    var ro = 9, ri = 6.5;
+    if (i === 0) ctx.moveTo(cx + Math.cos(a1) * ri, cy + Math.sin(a1) * ri);
+    ctx.lineTo(cx + Math.cos(a2) * ro, cy + Math.sin(a2) * ro);
+    ctx.lineTo(cx + Math.cos(a3) * ro, cy + Math.sin(a3) * ro);
+    ctx.lineTo(cx + Math.cos(a4) * ri, cy + Math.sin(a4) * ri);
+  }
+  ctx.closePath(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.stroke();
+}
+
+function saveSettings() {
+  if (saveSettingsFn) {
+    try { saveSettingsFn(JSON.stringify({ theme: getTheme() })); } catch(e) {}
+  }
+}
+
+function restoreSettings(json) {
+  try {
+    var s = JSON.parse(json);
+    if (s.theme) {
+      setTheme(s.theme);
+      var lb = document.getElementById('theme-light-btn');
+      var db = document.getElementById('theme-dark-btn');
+      if (lb && db) { lb.classList.toggle('active', s.theme === 'light'); db.classList.toggle('active', s.theme === 'dark'); }
+      drawSettingsIcon();
+    }
+  } catch(e) {}
+}
+
 // ---- Parameter Definitions ----
 const PARAMS = {
   grainSize:   { label: 'SIZE',      section: 'grain', min: 5,   max: 500, default: 80,  unit: 'ms',     desc: 'Controls the length of each grain extracted from the circular buffer.', tip: 'Larger grains create smoother textures. Try 200ms+ for pads.' },
@@ -2855,6 +3238,7 @@ const state = {
   sectionEnabled: { grain: true, tape: true },
   hoveredKnob: null,
   tooltipTimer: null,
+  tooltipLocked: false,
   draggingKnob: null,
   draggingOutput: false,
   dragStartY: 0,
@@ -2990,6 +3374,7 @@ let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn, setPi
 let setXYAutoStateFn, getXYAutoStateFn;
 let updateModConfigFn, getModStateFn, setXYPadFn;
 let setWireSpaceNoiseFn, getWireSpaceNoiseFn;
+let saveSettingsFn, getSettingsFn;
 let setWireTubeSatFn, getWireTubeSatFn;
 
 function syncXYState() {
@@ -3062,6 +3447,8 @@ async function initJuceBindings() {
     getWireSpaceNoiseFn = window.Juce.getNativeFunction('getWireSpaceNoise');
     setWireTubeSatFn = window.Juce.getNativeFunction('setWireTubeSat');
     getWireTubeSatFn = window.Juce.getNativeFunction('getWireTubeSat');
+    saveSettingsFn = window.Juce.getNativeFunction('saveSettings');
+    getSettingsFn = window.Juce.getNativeFunction('getSettings');
 
     // Sync initial section toggle states from backend
     const grainOn = await getGrainEngineEnabledFn();
@@ -3382,10 +3769,14 @@ function drawIcon(canvas, type, color, norm, time) {
   ctx.scale(DPR, DPR);
   ctx.strokeStyle = color || '#B0A4C0';
   ctx.fillStyle = color || '#B0A4C0';
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const cx = w / 2, cy = h / 2, r = w * 0.38;
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  const cx = w / 2, cy = h / 2, r = w * 0.42;
+  const intensity = 0.1 + norm * 0.9;
 
   switch (type) {
     case 'grainSize': { // Hexagonal crystal — rotates with value
@@ -3774,6 +4165,67 @@ function drawIcon(canvas, type, color, norm, time) {
       ctx.stroke();
       break;
     }
+    case 'spaceSize': { // Expanding concentric rings — room size
+      var rings = 3;
+      for (var ri = 0; ri < rings; ri++) {
+        var rr = r * (0.25 + ri * 0.25) * (0.7 + norm * 0.3);
+        var pulseAlpha = 0.4 + 0.3 * Math.sin(time * 1.5 + ri * 1.2);
+        ctx.globalAlpha = intensity * pulseAlpha;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Center dot
+      ctx.globalAlpha = intensity;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'spaceDecay': { // Fading echo lines — reverb tail
+      var lines = 4;
+      for (var li = 0; li < lines; li++) {
+        var lx = cx - r * 0.55 + li * r * 0.37;
+        var lAlpha = (1 - li / lines) * intensity * (0.5 + 0.5 * Math.sin(time * 1.2 + li * 0.8));
+        var lh = r * (0.8 - li * 0.15);
+        ctx.globalAlpha = lAlpha;
+        ctx.beginPath();
+        ctx.moveTo(lx, cy - lh * 0.5);
+        ctx.lineTo(lx, cy + lh * 0.5);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'spaceTone': { // Treble/bass wave — tonal filter
+      ctx.globalAlpha = intensity;
+      ctx.beginPath();
+      for (var ti = 0; ti <= 20; ti++) {
+        var tt = ti / 20;
+        var tx = cx - r * 0.7 + tt * r * 1.4;
+        var freq = 2 + norm * 3;
+        var ty = cy + Math.sin(tt * Math.PI * freq + time * 2) * r * 0.35;
+        ctx[ti === 0 ? 'moveTo' : 'lineTo'](tx, ty);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'spaceMix': { // Dry/wet blend — two overlapping arcs
+      // Dry arc (left)
+      ctx.globalAlpha = intensity * (0.3 + (1 - norm) * 0.5);
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.25, cy, r * 0.45, 0, Math.PI * 2);
+      ctx.stroke();
+      // Wet arc (right)
+      ctx.globalAlpha = intensity * (0.3 + norm * 0.5);
+      ctx.beginPath();
+      ctx.arc(cx + r * 0.25, cy, r * 0.45, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      break;
+    }
     case 'tapeReel': { // Cassette reel
       ctx.beginPath();
       ctx.arc(cx, cy, r * 0.75, 0, Math.PI * 2);
@@ -3811,6 +4263,33 @@ function drawKnob(canvas, normValue, dragging, hover) {
   ctx.save();
   ctx.scale(DPR, DPR);
 
+  // Grain tile mode: draw bottom progress bar instead of circular arc
+  if (canvas._grainTile) {
+    const barH = 3;
+    const pad = 2;
+    const barY = h - barH - pad;
+    const maxW = w - pad * 2;
+    // Track background
+    ctx.beginPath();
+    ctx.roundRect(pad, barY, maxW, barH, 1.5);
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
+    ctx.fill();
+    // Active fill
+    if (normValue > 0.002) {
+      const barW = maxW * normValue;
+      ctx.save();
+      ctx.shadowColor = 'rgba(139, 92, 246, 0.3)';
+      ctx.shadowBlur = dragging ? 6 : 4;
+      ctx.beginPath();
+      ctx.roundRect(pad, barY, barW, barH, 1.5);
+      ctx.fillStyle = dragging ? currentTheme.knobDotHover : currentTheme.knobActive;
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+    return;
+  }
+
   const cx = w / 2, cy = h / 2, radius = 22;
   const startAngle = 0.75 * Math.PI;
   const sweep = 1.5 * Math.PI;
@@ -3819,8 +4298,8 @@ function drawKnob(canvas, normValue, dragging, hover) {
 
   // Subtle body gradient
   const bodyGrad = ctx.createRadialGradient(cx, cy - 4, 0, cx, cy, radius);
-  bodyGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
-  bodyGrad.addColorStop(1, 'rgba(255,255,255,0.05)');
+  bodyGrad.addColorStop(0, currentTheme.knobBody0);
+  bodyGrad.addColorStop(1, currentTheme.knobBody1);
   ctx.beginPath();
   ctx.arc(cx, cy, radius - 4, 0, Math.PI * 2);
   ctx.fillStyle = bodyGrad;
@@ -3828,14 +4307,14 @@ function drawKnob(canvas, normValue, dragging, hover) {
 
   // Active glow when dragging
   if (dragging) {
-    ctx.shadowColor = 'rgba(139,92,246,0.15)';
+    ctx.shadowColor = currentTheme.knobDragGlow;
     ctx.shadowBlur = 6;
   }
 
   // Track arc
   ctx.beginPath();
   ctx.arc(cx, cy, radius, startAngle, endAngle, false);
-  ctx.strokeStyle = '#E8E0F0';
+  ctx.strokeStyle = currentTheme.knobTrack;
   ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -3844,12 +4323,12 @@ function drawKnob(canvas, normValue, dragging, hover) {
   // Active arc
   if (normValue > 0.002) {
     if (dragging) {
-      ctx.shadowColor = 'rgba(139,92,246,0.15)';
+      ctx.shadowColor = currentTheme.knobDragGlow;
       ctx.shadowBlur = 6;
     }
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
-    ctx.strokeStyle = '#8B5CF6';
+    ctx.strokeStyle = currentTheme.knobActive;
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -3862,7 +4341,7 @@ function drawKnob(canvas, normValue, dragging, hover) {
   const dotY = cy + Math.sin(dotAngle) * radius;
   ctx.beginPath();
   ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
-  ctx.fillStyle = hover || dragging ? '#7C3AED' : '#8B5CF6';
+  ctx.fillStyle = hover || dragging ? currentTheme.knobDotHover : currentTheme.knobDot;
   ctx.fill();
 
   ctx.restore();
@@ -3942,12 +4421,12 @@ function renderTerrain(time) {
   ctx.clearRect(0, 0, cw, ch);
 
   // Background
-  ctx.fillStyle = '#EDE8F4';
+  ctx.fillStyle = currentTheme.terrainBg;
   ctx.fillRect(0, 0, cw, ch);
 
-  // Faint reference grid on the "floor"
-  ctx.strokeStyle = '#E8E0F0';
-  ctx.lineWidth = 0.5;
+  // Reference grid on the "floor"
+  ctx.strokeStyle = currentTheme.meshGrid;
+  ctx.lineWidth = 0.8;
   for (let r = 0; r < GRID; r += 4) {
     ctx.beginPath();
     for (let c = 0; c < GRID; c++) {
@@ -3978,13 +4457,13 @@ function renderTerrain(time) {
   // Draw mesh lines from back to front (far rows first)
   for (let r = GRID - 1; r >= 0; r--) {
     const isContour = (r % 4 === 0);
-    const alpha = isContour ? 0.5 : 0.22;
-    const width = isContour ? 1.2 : 0.8;
+    const alpha = isContour ? 0.75 : 0.4;
+    const width = isContour ? 1.8 : 1.1;
 
     // Horizontal line for this row
     ctx.strokeStyle = isContour
-      ? `rgba(167,139,250,${alpha})`
-      : `rgba(139,92,246,${alpha})`;
+      ? currentTheme.meshContour
+      : `rgba(255,255,255,${alpha})`;
     ctx.lineWidth = width;
     ctx.beginPath();
     for (let c = 0; c < GRID; c++) {
@@ -3995,8 +4474,8 @@ function renderTerrain(time) {
 
     // Vertical lines (connect to next row closer to viewer)
     if (r > 0) {
-      ctx.strokeStyle = `rgba(139,92,246,${alpha * 0.6})`;
-      ctx.lineWidth = width * 0.6;
+      ctx.strokeStyle = `rgba(255,255,255,${alpha * currentTheme.meshVertical})`;
+      ctx.lineWidth = width * 0.7;
       for (let c = 0; c < GRID; c += 2) {
         const p1 = projected[r][c];
         const p2 = projected[r - 1][c];
@@ -4015,8 +4494,8 @@ function renderTerrain(time) {
         const clampedI = Math.min(1, intensity);
         const glowR = 3 + clampedI * 10;
         const grad = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, glowR);
-        grad.addColorStop(0, `rgba(124,58,237,${0.3 * clampedI})`);
-        grad.addColorStop(1, 'rgba(124,58,237,0)');
+        grad.addColorStop(0, `${currentTheme.peakGlow}${0.3 * clampedI})`);
+        grad.addColorStop(1, `${currentTheme.peakGlow}0)`);
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(p.sx, p.sy, glowR, 0, Math.PI * 2);
@@ -4030,13 +4509,13 @@ function renderTerrain(time) {
     const dotX = state.xyX * cw;
     const dotY = state.xyY * ch;
     // Outer ring
-    ctx.strokeStyle = 'rgba(139,92,246,0.5)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = currentTheme.crosshairRing;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(dotX, dotY, 8, 0, Math.PI * 2);
     ctx.stroke();
     // Center dot
-    ctx.fillStyle = 'rgba(139,92,246,0.6)';
+    ctx.fillStyle = currentTheme.crosshairDot;
     ctx.beginPath();
     ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -4046,10 +4525,21 @@ function renderTerrain(time) {
 }
 
 // ---- Build UI ----
+const GRAIN_PRIMARY = ['grainSize', 'density', 'spray', 'pitch'];
+const GRAIN_SECONDARY = ['wander', 'freeze', 'grainFilter', 'mix'];
+
 function buildKnobs() {
   const grainContainer = document.getElementById('grain-knobs');
   const tapeContainer = document.getElementById('tape-knobs');
   const tapeLoopContainer = document.getElementById('tape-loop-knobs');
+
+  // Create grain tiered rows
+  const grainPrimaryRow = document.createElement('div');
+  grainPrimaryRow.className = 'grain-row primary';
+  const grainSecondaryRow = document.createElement('div');
+  grainSecondaryRow.className = 'grain-row secondary';
+  grainContainer.appendChild(grainPrimaryRow);
+  grainContainer.appendChild(grainSecondaryRow);
 
   for (const [id, p] of Object.entries(PARAMS)) {
     // Space and EQ params are handled by FX suite knobs / EQ band points — skip standard knob creation
@@ -4058,18 +4548,25 @@ function buildKnobs() {
     group.className = 'knob-group';
     group.dataset.param = id;
 
+    // Determine if this is a grain tile
+    const isGrain = p.section === 'grain';
+    const tileSize = isGrain ? 64 : 0;
+    const iconSize = isGrain ? 40 : 28;
+    const knobSize = isGrain ? tileSize : 56;
+
     // Knob wrap with icon inside
     const knobWrap = document.createElement('div');
     knobWrap.className = 'knob-canvas-wrap';
     const knobCanvas = document.createElement('canvas');
     knobCanvas.className = 'knob-arc';
-    setupCanvas(knobCanvas, 56, 56);
+    setupCanvas(knobCanvas, knobSize, knobSize);
+    if (isGrain) knobCanvas._grainTile = true;
     knobWrap.appendChild(knobCanvas);
 
     // Icon overlaid inside knob center
     const iconCanvas = document.createElement('canvas');
     iconCanvas.className = 'knob-icon-inner';
-    setupCanvas(iconCanvas, 28, 28);
+    setupCanvas(iconCanvas, iconSize, iconSize);
     const initNorm = normalize(id, state.params[id]);
     drawIcon(iconCanvas, id, iconColorForNorm(initNorm), initNorm, 0);
     knobWrap.appendChild(iconCanvas);
@@ -4152,7 +4649,10 @@ function buildKnobs() {
         ? Math.max(0, Math.min(1, baseVal / 12))
         : normalize(id, baseVal);
       state.params[id] = baseVal; // snap visual back to base
-      hideTooltip();
+      // Lock tooltip visible during drag
+      state.tooltipLocked = true;
+      clearTimeout(state.tooltipTimer);
+      showTooltip(group, id);
       if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.sliderDragStarted();
     });
 
@@ -4178,26 +4678,22 @@ function buildKnobs() {
 
     group.addEventListener('mouseenter', () => {
       state.hoveredKnob = id;
+      if (state.tooltipLocked) return;
       state.tooltipTimer = setTimeout(() => showTooltip(group, id), 300);
     });
     group.addEventListener('mouseleave', () => {
       state.hoveredKnob = null;
       clearTimeout(state.tooltipTimer);
-      hideTooltip();
+      if (!state.tooltipLocked) hideTooltip();
     });
 
-    if (p.section === 'grain') grainContainer.appendChild(group);
+    if (p.section === 'grain') {
+      if (GRAIN_PRIMARY.includes(id)) grainPrimaryRow.appendChild(group);
+      else grainSecondaryRow.appendChild(group);
+    }
     else if (p.section === 'tapeloop') tapeLoopContainer.appendChild(group);
     else tapeContainer.appendChild(group);
   }
-}
-
-// Blend from muted (#B0A4C0) to purple (#8B5CF6) based on normalized value
-function iconColorForNorm(norm) {
-  const r = Math.round(176 + (139 - 176) * norm);
-  const g = Math.round(164 + (92 - 164) * norm);
-  const b = Math.round(192 + (246 - 192) * norm);
-  return `rgb(${r},${g},${b})`;
 }
 
 function updateKnobDisplay(id) {
@@ -4226,21 +4722,27 @@ function updateAllKnobs() {
 
 // ---- Tooltip ----
 const tooltipEl = document.getElementById('tooltip');
+const _ttTitle = document.getElementById('tt-title');
+const _ttIcon = document.getElementById('tt-icon');
+const _ttDesc = document.getElementById('tt-desc');
+const _ttStats = document.getElementById('tt-stats');
+const _ttBar = document.getElementById('tt-bar');
+const _ttPct = document.getElementById('tt-pct');
+const _ttTip = document.getElementById('tt-tip');
+let _ttCurrentEl = null; // cached ref to "Current" value span
+
 function showTooltip(group, id) {
-  if (state.draggingKnob) return;
   const p = PARAMS[id];
   const val = state.params[id];
   const norm = normalize(id, val);
 
-  document.getElementById('tt-title').textContent = p.label;
-  const ttIcon = document.getElementById('tt-icon');
-  setupCanvas(ttIcon, 14, 14);
-  drawIcon(ttIcon, id, '#8B5CF6', norm, 0);
+  _ttTitle.textContent = p.label;
+  setupCanvas(_ttIcon, 14, 14);
+  drawIcon(_ttIcon, id, '#8B5CF6', norm, 0);
 
-  document.getElementById('tt-desc').textContent = p.desc;
+  _ttDesc.textContent = p.desc;
 
-  const statsEl = document.getElementById('tt-stats');
-  statsEl.innerHTML = '';
+  _ttStats.innerHTML = '';
   const stats = [
     { l: 'Range', v: `${p.min} \u2192 ${p.max} ${p.unit}` },
     { l: 'Default', v: formatValue(id, p.default) },
@@ -4250,19 +4752,32 @@ function showTooltip(group, id) {
     const row = document.createElement('div');
     row.className = 'tooltip-stat';
     row.innerHTML = `<span class="tooltip-stat-label">${s.l}</span><span class="tooltip-stat-value">${s.v}</span>`;
-    statsEl.appendChild(row);
+    _ttStats.appendChild(row);
   }
+  // Cache the "Current" value element for live drag updates
+  const valEls = _ttStats.querySelectorAll('.tooltip-stat-value');
+  _ttCurrentEl = valEls[2] || null;
 
-  document.getElementById('tt-bar').style.width = (norm * 100) + '%';
-  document.getElementById('tt-pct').textContent = (norm * 100).toFixed(1) + '%';
-  document.getElementById('tt-tip').textContent = 'Tip: ' + p.tip;
+  _ttBar.style.width = (norm * 100) + '%';
+  _ttPct.textContent = (norm * 100).toFixed(1) + '%';
+  _ttTip.textContent = 'Tip: ' + p.tip;
 
-  // Positioned by CSS inside hero (bottom-right) — just show it
   tooltipEl.classList.add('visible');
 }
 
-function hideTooltip() {
+function updateTooltipLive(id) {
+  const val = state.params[id];
+  const norm = (id === 'pitch' && state.pitchLocked) ? Math.max(0, Math.min(1, val / 12)) : normalize(id, val);
+  if (_ttCurrentEl) _ttCurrentEl.textContent = formatValue(id, val);
+  _ttBar.style.width = (norm * 100) + '%';
+  _ttPct.textContent = (norm * 100).toFixed(1) + '%';
+}
+
+function hideTooltip(force) {
+  if (!force && state.tooltipLocked) return;
   tooltipEl.classList.remove('visible');
+  state.tooltipLocked = false;
+  _ttCurrentEl = null;
 }
 
 // Scope control tooltip definitions
@@ -4312,6 +4827,21 @@ const SCOPE_TIPS = {
     desc: 'Reverts the loop to the state before the last recording or overdub. Supports up to 10 levels of undo so you can step back through multiple takes.',
     tip: 'Tip: Each recording automatically creates an undo snapshot. Undo won\'t affect playback position.'
   },
+  'grain-toggle': {
+    title: 'GRAIN ENGINE',
+    desc: 'Enables or bypasses the granular engine. When off, audio passes through untouched to the tape section. Toggle to A/B your dry signal against the granulated texture.',
+    tip: 'Tip: Turn off to hear your raw input through just the tape and FX chain.'
+  },
+  'tape-toggle': {
+    title: 'TAPE ENGINE',
+    desc: 'Enables or bypasses the tape processing section (Wow/Flutter, Saturation, Hiss). When off, the signal skips tape coloring entirely.',
+    tip: 'Tip: Bypass tape to use Terrain as a pure granular processor with Space reverb and EQ.'
+  },
+  'settings-btn': {
+    title: 'SETTINGS',
+    desc: 'Open the settings panel to switch between Light and Dark themes. Your preference is saved and persists across sessions.',
+    tip: 'Tip: Dark mode gives all visualizations a white wireframe look for maximum contrast.'
+  },
 };
 
 function showScopeTooltip(id) {
@@ -4340,11 +4870,13 @@ function hideScopeTooltip() {
 
 // Wire up scope + tape transport hover events for tooltips
 ['randomize-btn', 'xy-play', 'xy-mode', 'xy-speed-wrap',
- 'btn-record', 'btn-play', 'btn-stop', 'btn-feed', 'btn-undo'].forEach(id => {
+ 'btn-record', 'btn-play', 'btn-stop', 'btn-feed', 'btn-undo',
+ 'grain-toggle', 'tape-toggle', 'settings-btn'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
   let timer;
   el.addEventListener('mouseenter', () => {
+    if (state.tooltipLocked) return;
     timer = setTimeout(() => showScopeTooltip(id), 300);
   });
   el.addEventListener('mouseleave', () => {
@@ -4407,6 +4939,8 @@ document.addEventListener('mousemove', (e) => {
       updateKnobDisplay(id);
       if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.setNormalisedValue(newNorm);
     }
+    // Live-update tooltip value during drag (cached refs — no DOM queries)
+    if (state.tooltipLocked) updateTooltipLive(id);
   }
 
   // Output slider dragging
@@ -4438,6 +4972,8 @@ document.addEventListener('mouseup', () => {
     if (juceMode && JUCE_PARAMS[id]?.sliderState) JUCE_PARAMS[id].sliderState.sliderDragEnded();
     state.draggingKnob = null;
     updateKnobDisplay(id);
+    // Unlock and hide tooltip after drag ends
+    hideTooltip(true);
   }
   if (state.draggingOutput && juceMode && JUCE_OUTPUT.sliderState) {
     JUCE_OUTPUT.sliderState.sliderDragEnded();
@@ -4518,24 +5054,24 @@ function drawSpeedKnob() {
   const endAngle = 0.75 * Math.PI + 1.5 * Math.PI;
   ctx.beginPath();
   ctx.arc(cx, cy, r, startAngle, endAngle, false);
-  ctx.strokeStyle = 'rgba(139,92,246,0.15)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.stroke();
   // Arc value
   const valueAngle = startAngle + state.xyAutoSpeed * 1.5 * Math.PI;
   ctx.beginPath();
   ctx.arc(cx, cy, r, startAngle, valueAngle, false);
-  ctx.strokeStyle = '#8B5CF6';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.stroke();
   // Indicator dot
   const dotX = cx + Math.cos(valueAngle) * r;
   const dotY = cy + Math.sin(valueAngle) * r;
   ctx.beginPath();
-  ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
-  ctx.fillStyle = '#8B5CF6';
+  ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fill();
 }
 
@@ -4606,9 +5142,7 @@ document.getElementById('preset-next').addEventListener('click', () => {
 function togglePresetBrowser() {
   state.browserOpen = !state.browserOpen;
   document.getElementById('preset-browser').classList.toggle('open', state.browserOpen);
-  document.getElementById('preset-grid-btn').classList.toggle('active', state.browserOpen);
 }
-document.getElementById('preset-grid-btn').addEventListener('click', togglePresetBrowser);
 document.getElementById('preset-name').addEventListener('click', togglePresetBrowser);
 
 function buildCategoryButtons() {
@@ -5199,7 +5733,9 @@ function drawTransportIcons() {
   rCtx.scale(dpr, dpr);
   rCtx.beginPath();
   rCtx.arc(c, c, 5, 0, Math.PI * 2);
-  rCtx.fillStyle = state.tapeLoop.recording ? '#EF4444' : '#B0A4C0';
+  var inactiveTransport = _vizWf ? 'rgba(255,255,255,0.5)' : '#B0A4C0';
+  var activeTransport = _vizWf ? 'rgba(255,255,255,0.9)' : '#8B5CF6';
+  rCtx.fillStyle = state.tapeLoop.recording ? '#EF4444' : inactiveTransport;
   rCtx.fill();
 
   // Play icon — triangle centered
@@ -5213,7 +5749,7 @@ function drawTransportIcons() {
   pCtx.lineTo(c + 6, c);
   pCtx.lineTo(c - 4, c + 6);
   pCtx.closePath();
-  pCtx.fillStyle = (state.tapeLoop.playing && !state.tapeLoop.recording) ? '#8B5CF6' : '#B0A4C0';
+  pCtx.fillStyle = (state.tapeLoop.playing && !state.tapeLoop.recording) ? activeTransport : inactiveTransport;
   pCtx.fill();
 
   // Stop icon — square centered
@@ -5222,7 +5758,7 @@ function drawTransportIcons() {
   stopC.style.width = '16px'; stopC.style.height = '16px';
   const sCtx = stopC.getContext('2d');
   sCtx.scale(dpr, dpr);
-  sCtx.fillStyle = !state.tapeLoop.playing ? '#8B5CF6' : '#B0A4C0';
+  sCtx.fillStyle = !state.tapeLoop.playing ? activeTransport : inactiveTransport;
   sCtx.fillRect(c - 5, c - 5, 10, 10);
 }
 
@@ -5259,8 +5795,8 @@ function drawTapeReels(time) {
   const rightCx = w * 0.72;
   const cy = h * 0.5;
 
-  ctx.strokeStyle = '#7C3AED';
-  ctx.fillStyle = '#7C3AED';
+  ctx.strokeStyle = _vizWf ? 'rgba(255,255,255,0.7)' : '#7C3AED';
+  ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.7)' : '#7C3AED';
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
 
@@ -5417,7 +5953,7 @@ function drawMasterMixKnob() {
   // Track
   ctx.beginPath();
   ctx.arc(cx, cy, radius, startAngle, endAngle, false);
-  ctx.strokeStyle = '#E8E0F0';
+  ctx.strokeStyle = currentTheme.knobTrack;
   ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -5426,7 +5962,7 @@ function drawMasterMixKnob() {
   if (norm > 0.005) {
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, valAngle, false);
-    ctx.strokeStyle = '#8B5CF6';
+    ctx.strokeStyle = currentTheme.knobActive;
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -5437,7 +5973,7 @@ function drawMasterMixKnob() {
   const dotY = cy + Math.sin(valAngle) * radius;
   ctx.beginPath();
   ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
-  ctx.fillStyle = '#8B5CF6';
+  ctx.fillStyle = currentTheme.knobDot;
   ctx.fill();
 }
 
@@ -5526,12 +6062,6 @@ function updateSectionIcons() {
 }
 
 // ---- Brand Logo ----
-function drawGridIcon() {
-  const c = document.getElementById('grid-icon');
-  setupCanvas(c, 14, 14);
-  drawIcon(c, 'grid', '#8B7FA0');
-}
-
 function drawOutputIcon() {
   const c = document.getElementById('output-icon-canvas');
   setupCanvas(c, 16, 16);
@@ -5549,8 +6079,8 @@ function drawRandomizeIcon() {
   ctx.scale(dpr, dpr);
   const s = 18;
   // Draw a dice face
-  ctx.strokeStyle = '#8B5CF6';
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 1.5;
   ctx.lineJoin = 'round';
   // Rounded rect body
   const r = 2.5, x = 1.5, y = 1.5, w = s - 3, h = s - 3;
@@ -5567,7 +6097,7 @@ function drawRandomizeIcon() {
   ctx.closePath();
   ctx.stroke();
   // Dots (5-face pattern)
-  ctx.fillStyle = '#8B5CF6';
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
   const dot = 1.4;
   const cx = s / 2, cy = s / 2;
   [[cx - 4, cy - 4], [cx + 4, cy - 4], [cx, cy], [cx - 4, cy + 4], [cx + 4, cy + 4]].forEach(([dx, dy]) => {
@@ -5775,14 +6305,38 @@ function drawModRing(canvas, paramId, ringRadius) {
   ctx.save();
   ctx.scale(DPR, DPR);
 
+  // Use the user's base value (not the modulated value) as the ring center
+  const baseVal = modBaseValues[paramId] !== undefined ? modBaseValues[paramId] : state.params[paramId];
+  const baseNorm = normalize(paramId, baseVal);
+
+  // Grain tile: pulsing roundRect border instead of arc
+  if (canvas._grainTile) {
+    const tileR = 9;
+    for (const a of assignments) {
+      let modVal = 0;
+      if (a.source < 3) modVal = modState.lfoOutputs[a.source];
+      else if (a.source === 3) modVal = (state.xyX - 0.5) * 2;
+      else if (a.source === 4) modVal = (state.xyY - 0.5) * 2;
+      const intensity = Math.abs(modVal) * a.depth;
+      if (intensity > 0.01) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(1, 1, w - 2, h - 2, tileR);
+        ctx.strokeStyle = MOD_COLORS[a.source];
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = Math.min(1, intensity);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+    return;
+  }
+
   const cx = w / 2, cy = h / 2;
   const outerR = ringRadius || 25; // 25 for standard (56px), 19 for FX (44px)
   const startAngle = 0.75 * Math.PI;
   const sweep = 1.5 * Math.PI;
-
-  // Use the user's base value (not the modulated value) as the ring center
-  const baseVal = modBaseValues[paramId] !== undefined ? modBaseValues[paramId] : state.params[paramId];
-  const baseNorm = normalize(paramId, baseVal);
 
   for (const a of assignments) {
     let modVal = 0;
@@ -5911,7 +6465,10 @@ function drawLFOWaveform(idx) {
   // Waveform
   ctx.beginPath();
   ctx.strokeStyle = MOD_COLORS[idx];
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
+  var lfoDepth = lfo.depth || 0;
+  ctx.shadowColor = MOD_COLORS[idx];
+  ctx.shadowBlur = 4 + lfoDepth * 6;
   for (let x = 0; x <= w; x++) {
     const phase = (x / w + lfo.phase) % 1.0;
     let val;
@@ -5939,16 +6496,25 @@ function drawLFOWaveform(idx) {
     else ctx.lineTo(x, py);
   }
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
-  // Phase position dot
+  // Phase position dot with glowing halo
   const dotX = lfo._phase * w;
   let dotVal;
   if (lfo.shape <= 4) dotVal = lfoWaveform(lfo.shape, lfo._phase + lfo.phase);
   else dotVal = modState.lfoOutputs[idx] / Math.max(0.001, lfo.depth);
   dotVal = applyPolarity(dotVal, lfo.polarity);
   const dotY = h * 0.5 - dotVal * h * 0.4;
+  // Halo behind
+  ctx.globalAlpha = 0.3;
   ctx.beginPath();
-  ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+  ctx.arc(dotX, dotY, 6, 0, Math.PI * 2);
+  ctx.fillStyle = MOD_COLORS[idx];
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // Dot
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
   ctx.fillStyle = MOD_COLORS[idx];
   ctx.fill();
 
@@ -5993,8 +6559,12 @@ function drawShapeIcon(canvas, shapeIdx, lfoIdx, active) {
   ctx.save();
   ctx.scale(DPR, DPR);
   ctx.strokeStyle = active ? MOD_COLORS[lfoIdx] : '#B0A4C0';
-  ctx.lineWidth = 1.4;
+  ctx.lineWidth = 2;
   ctx.lineCap = 'round';
+  if (active) {
+    ctx.shadowColor = MOD_COLORS[lfoIdx];
+    ctx.shadowBlur = 3;
+  }
   ctx.beginPath();
   const cy = h / 2, amp = h * 0.35;
 
@@ -6171,7 +6741,7 @@ function drawMiniKnob(canvas, normValue, color) {
   // Track
   ctx.beginPath();
   ctx.arc(cx, cy, radius, startAngle, endAngle, false);
-  ctx.strokeStyle = '#E8E0F0';
+  ctx.strokeStyle = currentTheme.knobTrack;
   ctx.lineWidth = 2.5;
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -6181,7 +6751,7 @@ function drawMiniKnob(canvas, normValue, color) {
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.stroke();
   }
@@ -6190,7 +6760,7 @@ function drawMiniKnob(canvas, normValue, color) {
   const dx = cx + Math.cos(activeEnd) * radius;
   const dy = cy + Math.sin(activeEnd) * radius;
   ctx.beginPath();
-  ctx.arc(dx, dy, 2, 0, Math.PI * 2);
+  ctx.arc(dx, dy, 2.5, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
 
@@ -6408,7 +6978,7 @@ function refreshCtxMenuState() {
       pct.textContent = Math.round(a.depth * 100) + '%';
     } else {
       toggle.classList.remove('active');
-      toggle.style.borderColor = '#E8E0F0';
+      toggle.style.borderColor = currentTheme.toggleBorderInactive;
       fill.style.width = a ? (a.depth * 100) + '%' : '50%';
       pct.textContent = a ? Math.round(a.depth * 100) + '%' : '50%';
     }
@@ -6780,21 +7350,28 @@ function initFxSuite() {
     var endAngle = startAngle + sweep;
     var activeEnd = startAngle + normValue * sweep;
 
-    // Subtle body
+    // Glass body fill
     var bodyGrad = ctx.createRadialGradient(cx, cy - 3, 0, cx, cy, radius);
-    bodyGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
-    bodyGrad.addColorStop(1, 'rgba(255,255,255,0.05)');
+    bodyGrad.addColorStop(0, currentTheme.knobBody0);
+    bodyGrad.addColorStop(1, currentTheme.knobBody1);
     ctx.beginPath();
     ctx.arc(cx, cy, radius - 4, 0, Math.PI * 2);
     ctx.fillStyle = bodyGrad;
     ctx.fill();
 
-    if (dragging) { ctx.shadowColor = 'rgba(139,92,246,0.15)'; ctx.shadowBlur = 6; }
+    // Faint body ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius - 3, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(139,92,246,0.12)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
 
-    // Track arc
+    if (dragging) { ctx.shadowColor = currentTheme.knobDragGlow; ctx.shadowBlur = 6; }
+
+    // Tinted track arc
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, endAngle, false);
-    ctx.strokeStyle = '#E8E0F0';
+    ctx.strokeStyle = 'rgba(124,92,191,0.15)';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -6802,10 +7379,10 @@ function initFxSuite() {
 
     // Active arc
     if (normValue > 0.002) {
-      if (dragging) { ctx.shadowColor = 'rgba(139,92,246,0.15)'; ctx.shadowBlur = 6; }
+      if (dragging) { ctx.shadowColor = currentTheme.knobDragGlow; ctx.shadowBlur = 6; }
       ctx.beginPath();
       ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
-      ctx.strokeStyle = '#8B5CF6';
+      ctx.strokeStyle = currentTheme.knobActive;
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
       ctx.stroke();
@@ -6817,7 +7394,7 @@ function initFxSuite() {
     var dotY = cy + Math.sin(activeEnd) * radius;
     ctx.beginPath();
     ctx.arc(dotX, dotY, 1.5, 0, Math.PI * 2);
-    ctx.fillStyle = hover || dragging ? '#7C3AED' : '#8B5CF6';
+    ctx.fillStyle = hover || dragging ? currentTheme.knobDotHover : currentTheme.knobDot;
     ctx.fill();
 
     ctx.restore();
@@ -6828,6 +7405,8 @@ function initFxSuite() {
 
   // Tape knob IDs that get animated icons (maps FX knob id → drawIcon type)
   var TAPE_ICON_IDS = { wow: 'wowFlutter', saturation: 'saturation', hiss: 'hiss' };
+  // Space knob IDs that get animated icons
+  var SPACE_ICON_IDS = { spaceSize: 'spaceSize', spaceDecay: 'spaceDecay', spaceTone: 'spaceTone', spaceMix: 'spaceMix' };
   var ICON_SIZE = 20;
 
   function createFxKnob(id, label, container) {
@@ -6845,9 +7424,9 @@ function initFxSuite() {
     canvas.id = 'fxKnob_' + id;
     wrap.appendChild(canvas);
 
-    // Add animated icon for tape knobs
+    // Add animated icon for tape and space knobs
     var iconCanvas = null;
-    if (TAPE_ICON_IDS[id]) {
+    if (TAPE_ICON_IDS[id] || SPACE_ICON_IDS[id]) {
       iconCanvas = document.createElement('canvas');
       iconCanvas.className = 'fx-knob-icon';
       fxSetupCanvas(iconCanvas, ICON_SIZE, ICON_SIZE);
@@ -6884,6 +7463,11 @@ function initFxSuite() {
         if (juceMode && JUCE_PARAMS[paramKey] && JUCE_PARAMS[paramKey].sliderState) {
           JUCE_PARAMS[paramKey].sliderState.sliderDragStarted();
         }
+        // Lock tooltip during FX drag
+        state.tooltipLocked = true;
+        clearTimeout(state.tooltipTimer);
+        var stdGroup = document.querySelector('.knob-group[data-param="' + paramKey + '"]');
+        if (stdGroup) showTooltip(stdGroup, paramKey);
       }
     });
 
@@ -6899,8 +7483,22 @@ function initFxSuite() {
       }
     });
 
-    canvas.addEventListener('mouseenter', function() { fxSuite.hoveredKnob = id; });
-    canvas.addEventListener('mouseleave', function() { fxSuite.hoveredKnob = null; });
+    canvas.addEventListener('mouseenter', function() {
+      fxSuite.hoveredKnob = id;
+      if (state.tooltipLocked) return;
+      var paramKey = FX_KNOB_PARAM_MAP[id];
+      if (paramKey && PARAMS[paramKey]) {
+        var stdGroup = document.querySelector('.knob-group[data-param="' + paramKey + '"]');
+        if (stdGroup) {
+          state.tooltipTimer = setTimeout(function() { showTooltip(stdGroup, paramKey); }, 300);
+        }
+      }
+    });
+    canvas.addEventListener('mouseleave', function() {
+      fxSuite.hoveredKnob = null;
+      clearTimeout(state.tooltipTimer);
+      if (!state.tooltipLocked) hideTooltip();
+    });
 
     return { canvas: canvas, valEl: valEl, iconCanvas: iconCanvas };
   }
@@ -6979,6 +7577,8 @@ function initFxSuite() {
         if (window._fxDragging) { delete window._fxDragging[fk]; delete window._fxDragging[gk]; }
       }
       fxSuite.dragging = null;
+      // Unlock and hide tooltip after FX drag ends
+      hideTooltip(true);
     }
     var tip = document.getElementById('eqTooltip');
     if (tip) tip.classList.remove('visible');
@@ -7105,34 +7705,34 @@ function initFxSuite() {
 
     // Right side face — filled dark
     var sideGrad = ctx.createLinearGradient(fR, fT, fR + dX, fT);
-    sideGrad.addColorStop(0, 'rgba(42, 20, 62, 0.85)');
-    sideGrad.addColorStop(1, 'rgba(30, 14, 48, 0.75)');
+    sideGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(42, 20, 62, 0.85)');
+    sideGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(30, 14, 48, 0.75)');
     ctx.beginPath();
     ctx.moveTo(fR, fT); ctx.lineTo(fR + dX, fT + dY); ctx.lineTo(fR + dX, fB + dY); ctx.lineTo(fR, fB);
     ctx.closePath();
     ctx.fillStyle = sideGrad; ctx.fill();
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.35)'; ctx.lineWidth = 1.0; ctx.stroke();
+    ctx.strokeStyle = vA(0.35); ctx.lineWidth = 1.0; ctx.stroke();
 
     // Top face — filled
     var topGrad = ctx.createLinearGradient(fL, fT, fL, fT + dY);
-    topGrad.addColorStop(0, 'rgba(58, 32, 80, 0.7)');
-    topGrad.addColorStop(1, 'rgba(48, 24, 70, 0.5)');
+    topGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.7)');
+    topGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(48, 24, 70, 0.5)');
     ctx.beginPath();
     ctx.moveTo(fL, fT); ctx.lineTo(fL + dX, fT + dY); ctx.lineTo(fR + dX, fT + dY); ctx.lineTo(fR, fT);
     ctx.closePath();
     ctx.fillStyle = topGrad; ctx.fill();
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.3)'; ctx.lineWidth = 1.0; ctx.stroke();
+    ctx.strokeStyle = vA(0.3); ctx.lineWidth = 1.0; ctx.stroke();
 
     // Front face — dark gradient
     var frontGrad = ctx.createLinearGradient(fL, fT, fL, fB);
-    frontGrad.addColorStop(0, 'rgba(55, 28, 78, 0.88)');
-    frontGrad.addColorStop(0.3, 'rgba(42, 20, 62, 0.92)');
-    frontGrad.addColorStop(1, 'rgba(30, 14, 48, 0.95)');
+    frontGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(55, 28, 78, 0.88)');
+    frontGrad.addColorStop(0.3, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(42, 20, 62, 0.92)');
+    frontGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(30, 14, 48, 0.95)');
     ctx.beginPath();
     ctx.moveTo(fL, fT); ctx.lineTo(fR, fT); ctx.lineTo(fR, fB); ctx.lineTo(fL, fB);
     ctx.closePath();
     ctx.fillStyle = frontGrad; ctx.fill();
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.4)'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.strokeStyle = vA(0.4); ctx.lineWidth = 1.2; ctx.stroke();
 
     // Subtle wood grain
     ctx.globalAlpha = 0.04;
@@ -7141,18 +7741,18 @@ function initFxSuite() {
       ctx.beginPath();
       ctx.moveTo(fL + 4, gy);
       ctx.bezierCurveTo(fL + fW * 0.3, gy + Math.sin(gi * 2.3) * 2.5, fL + fW * 0.7, gy - Math.sin(gi * 1.8) * 1.8, fR - 4, gy + Math.sin(gi * 3.1) * 1.5);
-      ctx.strokeStyle = 'rgba(200, 180, 220, 1)'; ctx.lineWidth = 0.7; ctx.stroke();
+      ctx.strokeStyle = _vizWf ? 'rgba(255,255,255,1)' : 'rgba(200, 180, 220, 1)'; ctx.lineWidth = 0.7; ctx.stroke();
     }
     ctx.globalAlpha = 1.0;
 
     // Base trim
     var baseH = fH * 0.05;
     var baseGrad = ctx.createLinearGradient(fL, fB - baseH, fL, fB);
-    baseGrad.addColorStop(0, 'rgba(88, 28, 135, 0.3)');
-    baseGrad.addColorStop(1, 'rgba(60, 20, 90, 0.4)');
+    baseGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(88, 28, 135, 0.3)');
+    baseGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(60, 20, 90, 0.4)');
     ctx.fillStyle = baseGrad;
     ctx.fillRect(fL, fB - baseH, fW, baseH);
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.2)'; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = vA(0.2); ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(fL, fB - baseH); ctx.lineTo(fR, fB - baseH); ctx.stroke();
 
     // Reels
@@ -7171,26 +7771,26 @@ function initFxSuite() {
       // Tape wound — filled gradient
       if (tapeAmt > 4) {
         var tapeGrad = ctx.createRadialGradient(rcx, reelCY, 0, rcx, reelCY, tapeAmt);
-        tapeGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (0.18 * pulse) + ')');
-        tapeGrad.addColorStop(0.7, 'rgba(88, 28, 135, ' + (0.1 * pulse) + ')');
-        tapeGrad.addColorStop(1, 'rgba(88, 28, 135, 0.04)');
+        tapeGrad.addColorStop(0, vP(0.18 * pulse));
+        tapeGrad.addColorStop(0.7, vD(0.1 * pulse));
+        tapeGrad.addColorStop(1, vD(0.04));
         ctx.beginPath(); ctx.arc(rcx, reelCY, tapeAmt, 0, Math.PI * 2);
         ctx.fillStyle = tapeGrad; ctx.fill();
-        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.2 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+        ctx.strokeStyle = vA(0.2 * pulse); ctx.lineWidth = 0.5; ctx.stroke();
       }
 
       // Reel flange — metallic gradient
       var flangeGrad = ctx.createRadialGradient(rcx - 3 * sc, reelCY - 3 * sc, 0, rcx, reelCY, reelR);
-      flangeGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.18 * pulse) + ')');
-      flangeGrad.addColorStop(0.5, 'rgba(139, 92, 246, ' + (0.08 * pulse) + ')');
-      flangeGrad.addColorStop(1, 'rgba(88, 28, 135, 0.03)');
+      flangeGrad.addColorStop(0, vH(0.18 * pulse));
+      flangeGrad.addColorStop(0.5, vP(0.08 * pulse));
+      flangeGrad.addColorStop(1, vD(0.03));
       ctx.beginPath(); ctx.arc(rcx, reelCY, reelR, 0, Math.PI * 2);
       ctx.fillStyle = flangeGrad; ctx.fill();
 
       // Glowing rim
-      ctx.shadowColor = 'rgba(167, 139, 250, 0.45)'; ctx.shadowBlur = 6;
+      ctx.shadowColor = vA(0.45); ctx.shadowBlur = 6;
       ctx.beginPath(); ctx.arc(rcx + jit(0.3), reelCY + jit(0.3), reelR, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.7 * pulse) + ')'; ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.strokeStyle = vA(0.7 * pulse); ctx.lineWidth = 1.3; ctx.stroke();
       ctx.shadowBlur = 0;
 
       // 3 spokes
@@ -7199,20 +7799,20 @@ function initFxSuite() {
         ctx.beginPath();
         ctx.moveTo(rcx + Math.cos(a) * reelR * 0.25, reelCY + Math.sin(a) * reelR * 0.25);
         ctx.lineTo(rcx + Math.cos(a) * reelR * 0.88, reelCY + Math.sin(a) * reelR * 0.88);
-        ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.4 * pulse) + ')'; ctx.lineWidth = 0.9; ctx.stroke();
+        ctx.strokeStyle = vH(0.4 * pulse); ctx.lineWidth = 0.9; ctx.stroke();
       }
 
       // Hub — filled
-      ctx.shadowColor = 'rgba(196, 181, 253, 0.5)'; ctx.shadowBlur = 4;
+      ctx.shadowColor = vH(0.5); ctx.shadowBlur = 4;
       ctx.beginPath(); ctx.arc(rcx, reelCY, reelR * 0.22, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(58, 32, 80, 0.6)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.65 * pulse) + ')'; ctx.lineWidth = 0.9; ctx.stroke();
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.6)'; ctx.fill();
+      ctx.strokeStyle = vH(0.65 * pulse); ctx.lineWidth = 0.9; ctx.stroke();
       ctx.shadowBlur = 0;
 
       // Center spindle
-      ctx.shadowColor = 'rgba(196, 181, 253, 0.5)'; ctx.shadowBlur = 3;
+      ctx.shadowColor = vH(0.5); ctx.shadowBlur = 3;
       ctx.beginPath(); ctx.arc(rcx, reelCY, 2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')'; ctx.fill();
+      ctx.fillStyle = vH(0.7 * pulse); ctx.fill();
       ctx.shadowBlur = 0;
     }
 
@@ -7224,12 +7824,12 @@ function initFxSuite() {
     var gY = fT + fH * 0.34;
 
     // Tape glow underlayer
-    ctx.shadowColor = 'rgba(139, 92, 246, 0.3)'; ctx.shadowBlur = 5;
+    ctx.shadowColor = vP(0.3); ctx.shadowBlur = 5;
     ctx.beginPath();
     ctx.moveTo(reelLx + supplyTR * 0.7, reelCY + supplyTR * 0.7);
     ctx.lineTo(gLx, gY); ctx.lineTo(headCX, headY + 4 * sc); ctx.lineTo(gRx, gY);
     ctx.lineTo(reelRx - takeupTR * 0.7, reelCY + takeupTR * 0.7);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.strokeStyle = vP(0.1); ctx.lineWidth = 4; ctx.stroke();
     ctx.shadowBlur = 0;
 
     // Tape with wobble
@@ -7246,45 +7846,45 @@ function initFxSuite() {
     }
     ctx.lineTo(gRx, gY);
     ctx.lineTo(reelRx - takeupTR * 0.7, reelCY + takeupTR * 0.7);
-    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.8 * pulse) + ')'; ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.strokeStyle = vH(0.8 * pulse); ctx.lineWidth = 1.1; ctx.stroke();
 
     // Guide rollers — filled
     var guidePoints = [{x:gLx,y:gY}, {x:gRx,y:gY}];
     for (var gpi = 0; gpi < guidePoints.length; gpi++) {
       var gp = guidePoints[gpi];
-      ctx.shadowColor = 'rgba(196, 181, 253, 0.4)'; ctx.shadowBlur = 3;
+      ctx.shadowColor = vH(0.4); ctx.shadowBlur = 3;
       ctx.beginPath(); ctx.arc(gp.x, gp.y, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(88, 28, 135, 0.5)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')'; ctx.lineWidth = 0.7; ctx.stroke();
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(88, 28, 135, 0.5)'; ctx.fill();
+      ctx.strokeStyle = vH(0.6 * pulse); ctx.lineWidth = 0.7; ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
     // Head assembly — filled
     var hdW = 26 * sc;
     var hdH = 6 * sc;
-    ctx.shadowColor = 'rgba(196, 181, 253, 0.4)'; ctx.shadowBlur = 5;
+    ctx.shadowColor = vH(0.4); ctx.shadowBlur = 5;
     var headGrad = ctx.createLinearGradient(headCX - hdW/2, headY, headCX + hdW/2, headY);
-    headGrad.addColorStop(0, 'rgba(58, 32, 80, 0.7)');
-    headGrad.addColorStop(0.5, 'rgba(50, 25, 72, 0.8)');
-    headGrad.addColorStop(1, 'rgba(58, 32, 80, 0.7)');
+    headGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.7)');
+    headGrad.addColorStop(0.5, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(50, 25, 72, 0.8)');
+    headGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.7)');
     ctx.beginPath(); ctx.rect(headCX - hdW/2, headY - hdH/2, hdW, hdH);
     ctx.fillStyle = headGrad; ctx.fill();
-    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')'; ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.strokeStyle = vH(0.6 * pulse); ctx.lineWidth = 0.7; ctx.stroke();
     ctx.shadowBlur = 0;
 
     for (var hi = 0; hi < 3; hi++) {
       var hgx = headCX - 5 * sc + hi * 5 * sc;
       ctx.beginPath();
       ctx.moveTo(hgx, headY - hdH/2 + 1.5); ctx.lineTo(hgx, headY + hdH/2 - 1.5);
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.35 * pulse) + ')'; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.strokeStyle = vH(0.35 * pulse); ctx.lineWidth = 0.6; ctx.stroke();
     }
 
     // Saturation glow
     if (sat > 0.02) {
       var glowR = 10 * sc + sat * 14 * sc;
       var satGrad = ctx.createRadialGradient(headCX, headY, 0, headCX, headY, glowR);
-      satGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.22) + ')');
-      satGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      satGrad.addColorStop(0, vP(sat * 0.22));
+      satGrad.addColorStop(1, vP(0));
       ctx.fillStyle = satGrad;
       ctx.beginPath(); ctx.arc(headCX, headY, glowR, 0, Math.PI * 2); ctx.fill();
     }
@@ -7294,8 +7894,8 @@ function initFxSuite() {
     var slotW = fW * 0.7;
     var slotH = fH * 0.05;
     ctx.beginPath(); ctx.rect(fL + (fW - slotW)/2, slotY, slotW, slotH);
-    ctx.fillStyle = 'rgba(20, 8, 35, 0.5)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.2 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(20, 8, 35, 0.5)'; ctx.fill();
+    ctx.strokeStyle = vA(0.2 * pulse); ctx.lineWidth = 0.5; ctx.stroke();
 
     // VU Meters — filled
     var vuW = 18 * sc;
@@ -7307,34 +7907,34 @@ function initFxSuite() {
     for (var vi = 0; vi < 2; vi++) {
       var vx = vi === 0 ? vuLx : vuRxP;
       ctx.beginPath(); ctx.rect(vx, vuY, vuW, vuH);
-      ctx.fillStyle = 'rgba(20, 8, 35, 0.55)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')'; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(20, 8, 35, 0.55)'; ctx.fill();
+      ctx.strokeStyle = vA(0.35 * pulse); ctx.lineWidth = 0.6; ctx.stroke();
 
       var vCx = vx + vuW / 2;
       var vCy = vuY + vuH * 0.85;
       var arcR = vuW * 0.35;
       ctx.beginPath(); ctx.arc(vCx, vCy, arcR, Math.PI + 0.3, -0.3);
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.25 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
+      ctx.strokeStyle = vA(0.25 * pulse); ctx.lineWidth = 0.4; ctx.stroke();
 
       for (var ti = 0; ti <= 6; ti++) {
         var ta = Math.PI + 0.3 + (ti / 6) * (Math.PI - 0.6);
         ctx.beginPath();
         ctx.moveTo(vCx + Math.cos(ta) * (arcR - 1.5), vCy + Math.sin(ta) * (arcR - 1.5));
         ctx.lineTo(vCx + Math.cos(ta) * arcR, vCy + Math.sin(ta) * arcR);
-        ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.2 + (ti > 4 ? 0.15 : 0)) + ')';
+        ctx.strokeStyle = vH(0.2 + (ti > 4 ? 0.15 : 0));
         ctx.lineWidth = 0.3; ctx.stroke();
       }
 
       var nv = sat * 0.5 + hiss * 0.3 + Math.sin(t * 2.5 + vi * 1.3) * 0.08;
       var na = Math.PI + 0.3 + Math.min(1, nv) * (Math.PI - 0.6);
-      ctx.shadowColor = 'rgba(196, 181, 253, 0.3)'; ctx.shadowBlur = 2;
+      ctx.shadowColor = vH(0.3); ctx.shadowBlur = 2;
       ctx.beginPath(); ctx.moveTo(vCx, vCy);
       ctx.lineTo(vCx + Math.cos(na) * (arcR + 1), vCy + Math.sin(na) * (arcR + 1));
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')'; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.strokeStyle = vH(0.6 * pulse); ctx.lineWidth = 0.6; ctx.stroke();
       ctx.shadowBlur = 0;
 
       ctx.beginPath(); ctx.arc(vCx, vCy, 0.9, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(196, 181, 253, 0.5)'; ctx.fill();
+      ctx.fillStyle = vH(0.5); ctx.fill();
     }
 
     // Transport buttons — all purple
@@ -7346,27 +7946,27 @@ function initFxSuite() {
       var bx = btnStartX + bi * btnGap;
       var btnAlpha = 0.25 + bi * 0.04;
       var btnGradV = ctx.createLinearGradient(bx, btnY, bx, btnY + btnSz);
-      btnGradV.addColorStop(0, 'rgba(139, 92, 246, ' + (btnAlpha + 0.1) + ')');
-      btnGradV.addColorStop(1, 'rgba(88, 28, 135, ' + btnAlpha + ')');
+      btnGradV.addColorStop(0, vP(btnAlpha + 0.1));
+      btnGradV.addColorStop(1, vD(btnAlpha));
       ctx.beginPath(); ctx.roundRect(bx, btnY, btnSz, btnSz, 1);
       ctx.fillStyle = btnGradV; ctx.fill();
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.strokeStyle = vA(0.3 * pulse); ctx.lineWidth = 0.5; ctx.stroke();
     }
 
     // Sparks (hiss)
     if (hiss > 0.02) {
       var nSparks = Math.floor(hiss * 24);
       for (var ski = 0; ski < nSparks; ski++) {
-        var skpX = fL + fW * 0.1 + Math.sin(t * 4.3 + ski * 3.1) * fW * 0.4;
-        var skpY = fT + fH * 0.1 + Math.cos(t * 3.7 + ski * 2.7) * fH * 0.4;
+        var skpX = fL + fW * 0.5 + Math.sin(t * 4.3 + ski * 3.1) * fW * 0.35;
+        var skpY = fT + fH * 0.5 + Math.cos(t * 3.7 + ski * 2.7) * fH * 0.35;
         var skpLen = 2 + Math.sin(t * 6 + ski) * 1.5;
         var skpA = t * 2 + ski * 1.4;
         var spkAlpha = hiss * 0.5 + Math.sin(t * 8 + ski) * 0.1;
-        ctx.shadowColor = 'rgba(167,139,250,0.3)'; ctx.shadowBlur = 2;
+        ctx.shadowColor = vA(0.3); ctx.shadowBlur = 2;
         ctx.beginPath(); ctx.moveTo(skpX, skpY);
         ctx.lineTo(skpX + Math.cos(skpA) * skpLen, skpY + Math.sin(skpA) * skpLen);
         ctx.lineTo(skpX + Math.cos(skpA + 0.8) * skpLen * 0.6, skpY + Math.sin(skpA + 0.8) * skpLen * 0.6);
-        ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+        ctx.strokeStyle = vH(spkAlpha); ctx.lineWidth = 0.5; ctx.stroke();
       }
       ctx.shadowBlur = 0;
     }
@@ -7377,11 +7977,11 @@ function initFxSuite() {
     var npX = fL + fW / 2 - npW / 2;
     var npY = fB - baseH - 12 * sc;
     ctx.beginPath(); ctx.rect(npX, npY, npW, npH);
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.08)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
+    ctx.fillStyle = vP(0.08); ctx.fill();
+    ctx.strokeStyle = vA(0.3 * pulse); ctx.lineWidth = 0.4; ctx.stroke();
     ctx.font = '500 ' + Math.max(4, 4 * sc) + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.6 * pulse) + ')';
+    ctx.fillStyle = vH(0.6 * pulse);
     ctx.fillText('S T U D I O', fL + fW / 2, npY + npH / 2);
 
     // Side vent lines
@@ -7391,7 +7991,7 @@ function initFxSuite() {
       ctx.beginPath();
       ctx.moveTo(fR + 3, vy + dY * (vy - fT) / fH);
       ctx.lineTo(fR + dX - 3, vy + dY);
-      ctx.strokeStyle = 'rgba(167, 139, 250, 1)'; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.strokeStyle = vA(1); ctx.lineWidth = 0.5; ctx.stroke();
     }
     ctx.globalAlpha = 1.0;
 
@@ -7429,13 +8029,13 @@ function initFxSuite() {
 
     // Body — dark filled gradient
     var bodyGrad = ctx.createLinearGradient(cL, cT, cL, cB);
-    bodyGrad.addColorStop(0, 'rgba(55, 28, 78, 0.88)');
-    bodyGrad.addColorStop(0.4, 'rgba(42, 20, 62, 0.92)');
-    bodyGrad.addColorStop(1, 'rgba(32, 14, 50, 0.95)');
+    bodyGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(55, 28, 78, 0.88)');
+    bodyGrad.addColorStop(0.4, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(42, 20, 62, 0.92)');
+    bodyGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(32, 14, 50, 0.95)');
     ctx.beginPath(); ctx.roundRect(cL, cT, cW, cH, cornerR);
     ctx.fillStyle = bodyGrad; ctx.fill();
-    ctx.shadowColor = 'rgba(167, 139, 250, 0.3)'; ctx.shadowBlur = 5;
-    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.55 * pulse) + ')'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.shadowColor = vA(0.3); ctx.shadowBlur = 5;
+    ctx.strokeStyle = vA(0.55 * pulse); ctx.lineWidth = 1.2; ctx.stroke();
     ctx.shadowBlur = 0;
 
     // Surface texture
@@ -7444,7 +8044,7 @@ function initFxSuite() {
       var gy = cT + cH * (gi / 8) + Math.sin(gi * 2.1) * 1.5;
       ctx.beginPath(); ctx.moveTo(cL + 8, gy);
       ctx.bezierCurveTo(cL + cW * 0.35, gy + Math.sin(gi * 1.8) * 2, cL + cW * 0.65, gy - Math.sin(gi * 2.4) * 1.5, cR - 8, gy + Math.sin(gi * 3.0) * 1.8);
-      ctx.strokeStyle = 'rgba(200, 180, 220, 1)'; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.strokeStyle = _vizWf ? 'rgba(255,255,255,1)' : 'rgba(200, 180, 220, 1)'; ctx.lineWidth = 0.6; ctx.stroke();
     }
     ctx.globalAlpha = 1.0;
 
@@ -7458,12 +8058,12 @@ function initFxSuite() {
     var winCornerR = 4 * sc;
 
     var winGrad = ctx.createLinearGradient(winL, winT, winL, winB);
-    winGrad.addColorStop(0, 'rgba(12, 4, 22, 0.65)');
-    winGrad.addColorStop(1, 'rgba(18, 8, 30, 0.55)');
+    winGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(12, 4, 22, 0.65)');
+    winGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(18, 8, 30, 0.55)');
     ctx.beginPath(); ctx.roundRect(winL, winT, winW, winH, winCornerR);
     ctx.fillStyle = winGrad; ctx.fill();
-    ctx.shadowColor = 'rgba(139, 92, 246, 0.2)'; ctx.shadowBlur = 3;
-    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')'; ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.shadowColor = vP(0.2); ctx.shadowBlur = 3;
+    ctx.strokeStyle = vA(0.35 * pulse); ctx.lineWidth = 0.7; ctx.stroke();
     ctx.shadowBlur = 0;
 
     // Spool hubs
@@ -7481,18 +8081,18 @@ function initFxSuite() {
 
       if (tapeR > 2) {
         var tapeGrad = ctx.createRadialGradient(sx, spoolCY, 0, sx, spoolCY, tapeR);
-        tapeGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (0.18 * pulse) + ')');
-        tapeGrad.addColorStop(0.7, 'rgba(88, 28, 135, ' + (0.08 * pulse) + ')');
-        tapeGrad.addColorStop(1, 'rgba(88, 28, 135, 0.03)');
+        tapeGrad.addColorStop(0, vP(0.18 * pulse));
+        tapeGrad.addColorStop(0.7, vD(0.08 * pulse));
+        tapeGrad.addColorStop(1, vD(0.03));
         ctx.beginPath(); ctx.arc(sx, spoolCY, tapeR, 0, Math.PI * 2);
         ctx.fillStyle = tapeGrad; ctx.fill();
-        ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.2 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
+        ctx.strokeStyle = vA(0.2 * pulse); ctx.lineWidth = 0.4; ctx.stroke();
       }
 
-      ctx.shadowColor = 'rgba(167, 139, 250, 0.4)'; ctx.shadowBlur = 4;
+      ctx.shadowColor = vA(0.4); ctx.shadowBlur = 4;
       ctx.beginPath(); ctx.arc(sx, spoolCY, spoolR * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(35, 15, 55, 0.5)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.65 * pulse) + ')'; ctx.lineWidth = 1.0; ctx.stroke();
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(35, 15, 55, 0.5)'; ctx.fill();
+      ctx.strokeStyle = vH(0.65 * pulse); ctx.lineWidth = 1.0; ctx.stroke();
       ctx.shadowBlur = 0;
 
       for (var ti = 0; ti < 6; ti++) {
@@ -7500,23 +8100,23 @@ function initFxSuite() {
         ctx.beginPath();
         ctx.moveTo(sx + Math.cos(a) * spoolR * 0.12, spoolCY + Math.sin(a) * spoolR * 0.12);
         ctx.lineTo(sx + Math.cos(a) * spoolR * 0.32, spoolCY + Math.sin(a) * spoolR * 0.32);
-        ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.5 * pulse) + ')'; ctx.lineWidth = 1.3; ctx.stroke();
+        ctx.strokeStyle = vH(0.5 * pulse); ctx.lineWidth = 1.3; ctx.stroke();
       }
 
-      ctx.shadowColor = 'rgba(196, 181, 253, 0.5)'; ctx.shadowBlur = 3;
+      ctx.shadowColor = vH(0.5); ctx.shadowBlur = 3;
       ctx.beginPath(); ctx.arc(sx, spoolCY, 1.8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')'; ctx.fill();
+      ctx.fillStyle = vH(0.7 * pulse); ctx.fill();
       ctx.shadowBlur = 0;
     }
 
     // Tape strip
     var tapeY = winB - winH * 0.15;
-    ctx.shadowColor = 'rgba(139, 92, 246, 0.25)'; ctx.shadowBlur = 4;
+    ctx.shadowColor = vP(0.25); ctx.shadowBlur = 4;
     ctx.beginPath();
     ctx.moveTo(spoolLx - supplyR * 0.5, spoolCY + supplyR * 0.85);
     ctx.lineTo(winL + 4, tapeY); ctx.lineTo(winR - 4, tapeY);
     ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)'; ctx.lineWidth = 3.5; ctx.stroke();
+    ctx.strokeStyle = vP(0.1); ctx.lineWidth = 3.5; ctx.stroke();
     ctx.shadowBlur = 0;
 
     ctx.beginPath();
@@ -7530,16 +8130,16 @@ function initFxSuite() {
       ctx.lineTo(wx + jit(0.2), tapeY + wb + jit(0.2));
     }
     ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
-    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.8 * pulse) + ')'; ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.strokeStyle = vH(0.8 * pulse); ctx.lineWidth = 1.1; ctx.stroke();
 
     // Guide pins
     var pinY = cB - cH * 0.15;
     var pins = [cL + cW * 0.2, cL + cW * 0.35, cL + cW * 0.5, cL + cW * 0.65, cL + cW * 0.8];
     for (var pi = 0; pi < pins.length; pi++) {
-      ctx.shadowColor = 'rgba(196, 181, 253, 0.3)'; ctx.shadowBlur = 2;
+      ctx.shadowColor = vH(0.3); ctx.shadowBlur = 2;
       ctx.beginPath(); ctx.arc(pins[pi], pinY, 2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(58, 32, 80, 0.6)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.5 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.6)'; ctx.fill();
+      ctx.strokeStyle = vH(0.5 * pulse); ctx.lineWidth = 0.5; ctx.stroke();
       ctx.shadowBlur = 0;
     }
 
@@ -7551,18 +8151,18 @@ function initFxSuite() {
     var labelW = labelRt - labelL;
 
     var labelGrad = ctx.createLinearGradient(labelL, labelY, labelL, labelY + labelH);
-    labelGrad.addColorStop(0, 'rgba(50, 25, 72, 0.35)');
-    labelGrad.addColorStop(1, 'rgba(42, 20, 62, 0.4)');
+    labelGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(50, 25, 72, 0.35)');
+    labelGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(42, 20, 62, 0.4)');
     ctx.beginPath(); ctx.rect(labelL, labelY, labelW, labelH);
     ctx.fillStyle = labelGrad; ctx.fill();
 
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.1)'; ctx.lineWidth = 0.4;
+    ctx.strokeStyle = vA(0.1); ctx.lineWidth = 0.4;
     ctx.beginPath(); ctx.moveTo(labelL, labelY); ctx.lineTo(labelRt, labelY); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(labelL, labelY + labelH); ctx.lineTo(labelRt, labelY + labelH); ctx.stroke();
 
     ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.55 * pulse) + ')';
+    ctx.fillStyle = vH(0.55 * pulse);
     ctx.fillText('C A S S E T T E', cL + cW / 2, labelY + labelH / 2);
 
     // Screw holes
@@ -7571,20 +8171,20 @@ function initFxSuite() {
     for (var sci = 0; sci < screwPositions.length; sci++) {
       var scX = screwPositions[sci][0]; var scY2 = screwPositions[sci][1];
       ctx.beginPath(); ctx.arc(scX, scY2, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(20, 8, 35, 0.4)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.04)' : 'rgba(20, 8, 35, 0.4)'; ctx.fill();
+      ctx.strokeStyle = vA(0.3 * pulse); ctx.lineWidth = 0.5; ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(scX - 1.3, scY2); ctx.lineTo(scX + 1.3, scY2);
       ctx.moveTo(scX, scY2 - 1.3); ctx.lineTo(scX, scY2 + 1.3);
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.3 * pulse) + ')'; ctx.lineWidth = 0.4; ctx.stroke();
+      ctx.strokeStyle = vH(0.3 * pulse); ctx.lineWidth = 0.4; ctx.stroke();
     }
 
     // Saturation glow
     if (sat > 0.02) {
       var glowCX = cL + cW / 2;
       var satGrad = ctx.createRadialGradient(glowCX, tapeY, 0, glowCX, tapeY, 30 * sc);
-      satGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.2) + ')');
-      satGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      satGrad.addColorStop(0, vP(sat * 0.2));
+      satGrad.addColorStop(1, vP(0));
       ctx.fillStyle = satGrad;
       ctx.beginPath(); ctx.arc(glowCX, tapeY, 30 * sc, 0, Math.PI * 2); ctx.fill();
     }
@@ -7593,16 +8193,16 @@ function initFxSuite() {
     if (hiss > 0.02) {
       var nSparks = Math.floor(hiss * 22);
       for (var ski = 0; ski < nSparks; ski++) {
-        var skpX = cL + cW * 0.1 + Math.sin(t * 4.3 + ski * 3.1) * cW * 0.4;
-        var skpY = cT + cH * 0.1 + Math.cos(t * 3.7 + ski * 2.7) * cH * 0.4;
+        var skpX = cL + cW * 0.5 + Math.sin(t * 4.3 + ski * 3.1) * cW * 0.35;
+        var skpY = cT + cH * 0.5 + Math.cos(t * 3.7 + ski * 2.7) * cH * 0.35;
         var skpLen = 2 + Math.sin(t * 6 + ski) * 1.3;
         var skpA = t * 2 + ski * 1.4;
         var spkAlpha = hiss * 0.5 + Math.sin(t * 8 + ski) * 0.1;
-        ctx.shadowColor = 'rgba(167,139,250,0.3)'; ctx.shadowBlur = 2;
+        ctx.shadowColor = vA(0.3); ctx.shadowBlur = 2;
         ctx.beginPath(); ctx.moveTo(skpX, skpY);
         ctx.lineTo(skpX + Math.cos(skpA) * skpLen, skpY + Math.sin(skpA) * skpLen);
         ctx.lineTo(skpX + Math.cos(skpA + 0.8) * skpLen * 0.6, skpY + Math.sin(skpA + 0.8) * skpLen * 0.6);
-        ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')'; ctx.lineWidth = 0.5; ctx.stroke();
+        ctx.strokeStyle = vH(spkAlpha); ctx.lineWidth = 0.5; ctx.stroke();
       }
       ctx.shadowBlur = 0;
     }
@@ -7638,9 +8238,9 @@ function initFxSuite() {
     var boxRad = 4 * sc;
 
     var bodyGrad = ctx.createLinearGradient(boxL, boxTop, boxL, boxBot);
-    bodyGrad.addColorStop(0, 'rgba(58, 32, 80, 0.85)');
-    bodyGrad.addColorStop(0.4, 'rgba(42, 20, 62, 0.9)');
-    bodyGrad.addColorStop(1, 'rgba(30, 14, 48, 0.95)');
+    bodyGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.85)');
+    bodyGrad.addColorStop(0.4, _vizWf ? 'rgba(255,255,255,0.04)' : 'rgba(42, 20, 62, 0.9)');
+    bodyGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(30, 14, 48, 0.95)');
     ctx.beginPath();
     ctx.moveTo(boxL + boxRad, boxTop);
     ctx.lineTo(boxR - boxRad, boxTop);
@@ -7666,7 +8266,7 @@ function initFxSuite() {
         boxL + (boxR - boxL) * 0.7, gy - Math.sin(gi * 1.8) * 2,
         boxR - 6, gy + Math.sin(gi * 3.1) * 2
       );
-      ctx.strokeStyle = 'rgba(200, 180, 220, 1)';
+      ctx.strokeStyle = _vizWf ? 'rgba(255,255,255,1)' : 'rgba(200, 180, 220, 1)';
       ctx.lineWidth = 0.8;
       ctx.stroke();
     }
@@ -7676,7 +8276,7 @@ function initFxSuite() {
     ctx.beginPath();
     ctx.moveTo(boxL + boxRad, boxTop);
     ctx.lineTo(boxR - boxRad, boxTop);
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.25)';
+    ctx.strokeStyle = vA(0.25);
     ctx.lineWidth = 1.0;
     ctx.stroke();
     ctx.beginPath();
@@ -7684,13 +8284,13 @@ function initFxSuite() {
     ctx.lineTo(boxL, boxBot - boxRad);
     ctx.moveTo(boxR, boxTop + boxRad);
     ctx.lineTo(boxR, boxBot - boxRad);
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.15)';
+    ctx.strokeStyle = vA(0.15);
     ctx.lineWidth = 0.8;
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(boxL + boxRad, boxBot);
     ctx.lineTo(boxR - boxRad, boxBot);
-    ctx.strokeStyle = 'rgba(100, 60, 140, 0.3)';
+    ctx.strokeStyle = _vizWf ? 'rgba(255,255,255,0.3)' : 'rgba(100, 60, 140, 0.3)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -7700,9 +8300,9 @@ function initFxSuite() {
     var lidInset = 18 * sc;
 
     var lidGrad = ctx.createLinearGradient(boxL, lidTop, boxL, lidBot);
-    lidGrad.addColorStop(0, 'rgba(48, 24, 70, 0.5)');
-    lidGrad.addColorStop(0.7, 'rgba(52, 28, 75, 0.7)');
-    lidGrad.addColorStop(1, 'rgba(58, 32, 80, 0.85)');
+    lidGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.04)' : 'rgba(48, 24, 70, 0.5)');
+    lidGrad.addColorStop(0.7, _vizWf ? 'rgba(255,255,255,0.04)' : 'rgba(52, 28, 75, 0.7)');
+    lidGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.85)');
     ctx.beginPath();
     ctx.moveTo(boxL, lidBot);
     ctx.lineTo(boxL + lidInset, lidTop);
@@ -7719,7 +8319,7 @@ function initFxSuite() {
     ctx.lineTo(boxR - lidInset - 4, lidTop + 4);
     ctx.lineTo(boxR - 4, lidBot - 2);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(25, 10, 40, 0.4)';
+    ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.02)' : 'rgba(25, 10, 40, 0.4)';
     ctx.fill();
 
     // Lid edges
@@ -7728,7 +8328,7 @@ function initFxSuite() {
     ctx.lineTo(boxL + lidInset, lidTop);
     ctx.lineTo(boxR - lidInset, lidTop);
     ctx.lineTo(boxR, lidBot);
-    ctx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
+    ctx.strokeStyle = vA(0.2);
     ctx.lineWidth = 0.8;
     ctx.stroke();
 
@@ -7740,8 +8340,8 @@ function initFxSuite() {
     var panelRad = 3 * sc;
 
     var panelGrad = ctx.createLinearGradient(panelL, panelT, panelL, panelB);
-    panelGrad.addColorStop(0, 'rgba(20, 8, 35, 0.6)');
-    panelGrad.addColorStop(1, 'rgba(15, 5, 28, 0.7)');
+    panelGrad.addColorStop(0, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(20, 8, 35, 0.6)');
+    panelGrad.addColorStop(1, _vizWf ? 'rgba(255,255,255,0.03)' : 'rgba(15, 5, 28, 0.7)');
     ctx.beginPath();
     ctx.moveTo(panelL + panelRad, panelT);
     ctx.lineTo(panelR - panelRad, panelT);
@@ -7755,7 +8355,7 @@ function initFxSuite() {
     ctx.closePath();
     ctx.fillStyle = panelGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+    ctx.strokeStyle = vP(0.15);
     ctx.lineWidth = 0.6;
     ctx.stroke();
 
@@ -7769,19 +8369,19 @@ function initFxSuite() {
     var sR = 28 * sc;
 
     var spoolGrad = ctx.createRadialGradient(sX - 4 * sc, sY - 4 * sc, 0, sX, sY, sR);
-    spoolGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.22 * pulse) + ')');
-    spoolGrad.addColorStop(0.6, 'rgba(139, 92, 246, ' + (0.12 * pulse) + ')');
-    spoolGrad.addColorStop(1, 'rgba(88, 28, 135, 0.06)');
+    spoolGrad.addColorStop(0, vH(0.22 * pulse));
+    spoolGrad.addColorStop(0.6, vP(0.12 * pulse));
+    spoolGrad.addColorStop(1, vD(0.06));
     ctx.beginPath();
     ctx.arc(sX, sY, sR, 0, Math.PI * 2);
     ctx.fillStyle = spoolGrad;
     ctx.fill();
 
-    ctx.shadowColor = 'rgba(167, 139, 250, 0.5)';
+    ctx.shadowColor = vA(0.5);
     ctx.shadowBlur = 6;
     ctx.beginPath();
     ctx.arc(sX + jit(0.5), sY + jit(0.5), sR, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.8 * pulse) + ')';
+    ctx.strokeStyle = vA(0.8 * pulse);
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.shadowBlur = 0;
@@ -7791,7 +8391,7 @@ function initFxSuite() {
       ctx.beginPath();
       ctx.moveTo(sX + Math.cos(sa) * 5 * sc, sY + Math.sin(sa) * 5 * sc);
       ctx.lineTo(sX + Math.cos(sa) * sR * 0.85, sY + Math.sin(sa) * sR * 0.85);
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+      ctx.strokeStyle = vA(0.35 * pulse);
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
@@ -7801,16 +8401,16 @@ function initFxSuite() {
       var sca = t * (0.4 + sci * 0.2) + sci * 1.3;
       ctx.beginPath();
       ctx.arc(sX, sY, scr, sca, sca + Math.PI * 0.6);
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.4 + sci * 0.08) * pulse + ')';
+      ctx.strokeStyle = vH((0.4 + sci * 0.08) * pulse);
       ctx.lineWidth = 0.7;
       ctx.stroke();
     }
 
-    ctx.shadowColor = 'rgba(196, 181, 253, 0.6)';
+    ctx.shadowColor = vH(0.6);
     ctx.shadowBlur = 5;
     ctx.beginPath();
     ctx.arc(sX, sY, 4 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+    ctx.fillStyle = vH(0.7 * pulse);
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -7820,19 +8420,19 @@ function initFxSuite() {
     var tRa = 32 * sc;
 
     var tSpoolGrad = ctx.createRadialGradient(tX - 4 * sc, tY - 4 * sc, 0, tX, tY, tRa);
-    tSpoolGrad.addColorStop(0, 'rgba(196, 181, 253, ' + (0.22 * pulse) + ')');
-    tSpoolGrad.addColorStop(0.6, 'rgba(139, 92, 246, ' + (0.12 * pulse) + ')');
-    tSpoolGrad.addColorStop(1, 'rgba(88, 28, 135, 0.06)');
+    tSpoolGrad.addColorStop(0, vH(0.22 * pulse));
+    tSpoolGrad.addColorStop(0.6, vP(0.12 * pulse));
+    tSpoolGrad.addColorStop(1, vD(0.06));
     ctx.beginPath();
     ctx.arc(tX, tY, tRa, 0, Math.PI * 2);
     ctx.fillStyle = tSpoolGrad;
     ctx.fill();
 
-    ctx.shadowColor = 'rgba(167, 139, 250, 0.5)';
+    ctx.shadowColor = vA(0.5);
     ctx.shadowBlur = 6;
     ctx.beginPath();
     ctx.arc(tX + jit(0.5), tY + jit(0.5), tRa, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.8 * pulse) + ')';
+    ctx.strokeStyle = vA(0.8 * pulse);
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.shadowBlur = 0;
@@ -7842,7 +8442,7 @@ function initFxSuite() {
       ctx.beginPath();
       ctx.moveTo(tX + Math.cos(tta) * 5 * sc, tY + Math.sin(tta) * 5 * sc);
       ctx.lineTo(tX + Math.cos(tta) * tRa * 0.85, tY + Math.sin(tta) * tRa * 0.85);
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+      ctx.strokeStyle = vA(0.35 * pulse);
       ctx.lineWidth = 0.6;
       ctx.stroke();
     }
@@ -7852,16 +8452,16 @@ function initFxSuite() {
       var tca = -t * (0.35 + tci * 0.15) + tci * 1.0;
       ctx.beginPath();
       ctx.arc(tX, tY, tcr, tca, tca + Math.PI * 0.5);
-      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.35 + tci * 0.06) * pulse + ')';
+      ctx.strokeStyle = vH((0.35 + tci * 0.06) * pulse);
       ctx.lineWidth = 0.7;
       ctx.stroke();
     }
 
-    ctx.shadowColor = 'rgba(196, 181, 253, 0.6)';
+    ctx.shadowColor = vH(0.6);
     ctx.shadowBlur = 5;
     ctx.beginPath();
     ctx.arc(tX, tY, 4 * sc, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+    ctx.fillStyle = vH(0.7 * pulse);
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -7873,12 +8473,12 @@ function initFxSuite() {
     var headY = deckCy + 14 * sc;
 
     // Wire glow underlayer
-    ctx.shadowColor = 'rgba(139, 92, 246, 0.4)';
+    ctx.shadowColor = vP(0.4);
     ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.moveTo(wireStartX, wireY);
     ctx.quadraticCurveTo(headX, headY + 6 * sc, wireEndX, wireY);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.15)';
+    ctx.strokeStyle = vP(0.15);
     ctx.lineWidth = 5;
     ctx.stroke();
     ctx.shadowBlur = 0;
@@ -7896,12 +8496,12 @@ function initFxSuite() {
       if (wi === 0) ctx.moveTo(wx + jit(0.3), wy + jit(0.3));
       else ctx.lineTo(wx + jit(0.3), wy + jit(0.3));
     }
-    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.9 * pulse) + ')';
+    ctx.strokeStyle = vH(0.9 * pulse);
     ctx.lineWidth = 1.2;
     ctx.stroke();
 
     // ━━━━ PLAYBACK HEAD ━━━━
-    ctx.shadowColor = 'rgba(196, 181, 253, 0.7)';
+    ctx.shadowColor = vH(0.7);
     ctx.shadowBlur = 6;
     ctx.beginPath();
     ctx.moveTo(headX - 6 * sc, headY + 2 * sc);
@@ -7909,9 +8509,9 @@ function initFxSuite() {
     ctx.lineTo(headX + 3 * sc, headY - 3 * sc);
     ctx.lineTo(headX + 6 * sc, headY + 2 * sc);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(88, 28, 135, 0.6)';
+    ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.06)' : 'rgba(88, 28, 135, 0.6)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.9 * pulse) + ')';
+    ctx.strokeStyle = vH(0.9 * pulse);
     ctx.lineWidth = 1.0;
     ctx.stroke();
     ctx.shadowBlur = 0;
@@ -7920,7 +8520,7 @@ function initFxSuite() {
       var mfRad = (3 + mfi * 3) * sc;
       ctx.beginPath();
       ctx.arc(headX, headY - 2 * sc, mfRad, Math.PI * 1.15, Math.PI * 1.85);
-      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 + Math.sin(t * 2.5 + mfi) * 0.1) * pulse + ')';
+      ctx.strokeStyle = vA((0.3 + Math.sin(t * 2.5 + mfi) * 0.1) * pulse);
       ctx.lineWidth = 0.5;
       ctx.stroke();
     }
@@ -7934,13 +8534,13 @@ function initFxSuite() {
         var skLen = 2 + Math.sin(t * 6 + sk) * 1.5;
         var skA = t * 2 + sk * 1.4;
         var spkAlpha = hiss * 0.6 + Math.sin(t * 8 + sk) * 0.12;
-        ctx.shadowColor = 'rgba(167,139,250,0.4)';
+        ctx.shadowColor = vA(0.4);
         ctx.shadowBlur = 2;
         ctx.beginPath();
         ctx.moveTo(skX, skY);
         ctx.lineTo(skX + Math.cos(skA) * skLen, skY + Math.sin(skA) * skLen);
         ctx.lineTo(skX + Math.cos(skA + 0.8) * skLen * 0.6, skY + Math.sin(skA + 0.8) * skLen * 0.6);
-        ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')';
+        ctx.strokeStyle = vH(spkAlpha);
         ctx.lineWidth = 0.5;
         ctx.stroke();
       }
@@ -7955,16 +8555,16 @@ function initFxSuite() {
 
     ctx.beginPath();
     ctx.rect(npX, npY, npW, npH);
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.08)';
+    ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.04)' : 'rgba(139, 92, 246, 0.08)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+    ctx.strokeStyle = vA(0.35 * pulse);
     ctx.lineWidth = 0.5;
     ctx.stroke();
 
     ctx.font = '500 ' + Math.max(4, 4.5 * sc) + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+    ctx.fillStyle = vH(0.7 * pulse);
     ctx.fillText('W I R E', cx, npY + npH / 2);
 
     // ━━━━ INDICATOR LIGHTS ━━━━
@@ -7975,7 +8575,7 @@ function initFxSuite() {
       var fX = foot === 0 ? boxL + 14 * sc : boxR - 14 * sc;
       ctx.beginPath();
       ctx.arc(fX, boxBot + 2 * sc, 3 * sc, 0, Math.PI);
-      ctx.fillStyle = 'rgba(42, 20, 62, 0.5)';
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.04)' : 'rgba(42, 20, 62, 0.5)';
       ctx.fill();
     }
 
@@ -7984,6 +8584,7 @@ function initFxSuite() {
 
   // ─── Tape Visualization Dispatcher ───
   function drawTapeVisualization(ctx, w, h, t) {
+    _vizWf = currentTheme.vizStyle === 'wireframe';
     switch (state.tapeMachine) {
       case 0: drawStudioViz(ctx, w, h, t); break;
       case 1: drawCassetteViz(ctx, w, h, t); break;
@@ -8020,6 +8621,8 @@ function initFxSuite() {
     var mix = normalize('spaceMix', state.params.spaceMix);
     var cy = h * 0.36;
     var toneC = spaceToneRGB(tone);
+    // In wireframe/dark mode, override tone color to white
+    if (_vizWf) { toneC = { r: 255, g: 255, b: 255 }; }
 
     // Intensity — always vibrant; size/decay/tone shape the look, not mix
     var intensity = 0.7 + mix * 0.3;
@@ -8211,13 +8814,13 @@ function initFxSuite() {
     var freqLabels = ['20','50','100','200','500','1k','2k','5k','10k','20k'];
     var dbMarkers = [-12, -6, 0, 6, 12];
 
-    ctx.strokeStyle = 'rgba(232, 224, 240, 0.4)';
+    ctx.strokeStyle = _vizWf ? 'rgba(255, 255, 255, 0.3)' : 'rgba(232, 224, 240, 0.4)';
     ctx.lineWidth = 0.5;
 
     for (var fi = 0; fi < freqMarkers.length; fi++) {
       var x = pad.left + freqToX(freqMarkers[fi], pw);
       ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + ph); ctx.stroke();
-      ctx.fillStyle = '#B0A4C0';
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.5)' : '#B0A4C0';
       ctx.font = '8px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(freqLabels[fi], x, h - 4);
@@ -8226,10 +8829,10 @@ function initFxSuite() {
     for (var di = 0; di < dbMarkers.length; di++) {
       var db = dbMarkers[di];
       var y = pad.top + dbToY(db, ph);
-      ctx.strokeStyle = db === 0 ? 'rgba(232, 224, 240, 0.7)' : 'rgba(232, 224, 240, 0.4)';
+      ctx.strokeStyle = db === 0 ? (_vizWf ? 'rgba(255,255,255,0.6)' : 'rgba(232, 224, 240, 0.7)') : (_vizWf ? 'rgba(255,255,255,0.25)' : 'rgba(232, 224, 240, 0.4)');
       ctx.lineWidth = db === 0 ? 0.8 : 0.5;
       ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + pw, y); ctx.stroke();
-      ctx.fillStyle = '#B0A4C0';
+      ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.5)' : '#B0A4C0';
       ctx.font = '8px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText((db > 0 ? '+' : '') + db, pad.left - 4, y + 3);
@@ -8248,7 +8851,7 @@ function initFxSuite() {
       if (cpx === 0) ctx.moveTo(pad.left + cpx, cy2);
       else ctx.lineTo(pad.left + cpx, cy2);
     }
-    ctx.strokeStyle = '#8B5CF6';
+    ctx.strokeStyle = _vizWf ? 'rgba(255,255,255,0.85)' : '#8B5CF6';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -8261,11 +8864,11 @@ function initFxSuite() {
     ctx.lineTo(curvePts[curvePts.length - 1].x, zeroY);
     ctx.lineTo(curvePts[0].x, zeroY);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
+    ctx.fillStyle = _vizWf ? 'rgba(255, 255, 255, 0.06)' : 'rgba(139, 92, 246, 0.06)';
     ctx.fill();
 
     // Band control points
-    var bandColors = { low: '#A78BFA', mid: '#8B5CF6', high: '#C4B5FD' };
+    var bandColors = _vizWf ? { low: 'rgba(255,255,255,0.85)', mid: 'rgba(255,255,255,0.95)', high: 'rgba(255,255,255,0.75)' } : { low: '#A78BFA', mid: '#8B5CF6', high: '#C4B5FD' };
     var bands = getEqBands();
 
     var bandKeys = ['low', 'mid', 'high'];
@@ -8280,7 +8883,7 @@ function initFxSuite() {
 
       ctx.beginPath();
       ctx.arc(bx, by, radius, 0, Math.PI * 2);
-      ctx.fillStyle = isActive ? '#7C3AED' : bandColors[key];
+      ctx.fillStyle = isActive ? (_vizWf ? 'rgba(255,255,255,1)' : '#7C3AED') : bandColors[key];
       ctx.fill();
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 2;
@@ -8495,7 +9098,7 @@ function initFxSuite() {
           var tIcon = document.getElementById('fxIcon_' + tid);
           if (tIcon) {
             var iconType = TAPE_ICON_IDS[tid];
-            var iconColor = (fxSuite.hoveredKnob === tid || fxSuite.dragging === tid) ? '#8B5CF6' : '#B0A4C0';
+            var iconColor = iconColorForNorm(tNorm);
             drawIcon(tIcon, iconType, iconColor, tNorm, tapeTime);
           }
         }
@@ -8513,9 +9116,45 @@ function initFxSuite() {
         var sid = spaceKnobIds[ski];
         var sc2 = document.getElementById('fxKnob_' + sid);
         if (sc2) {
-          drawFxKnob(sc2, getFxKnobValue(sid), fxSuite.dragging === sid, fxSuite.hoveredKnob === sid);
+          var sNorm = getFxKnobValue(sid);
+          drawFxKnob(sc2, sNorm, fxSuite.dragging === sid, fxSuite.hoveredKnob === sid);
+          // Breathing glow overlay (no icons, just pulsing purple)
+          var sCtx = sc2.getContext('2d');
+          sCtx.save();
+          sCtx.scale(DPR, DPR);
+          var sW = sc2.width / DPR, sH = sc2.height / DPR;
+          var sCx = sW / 2, sCy = sH / 2, sR = sW / 2 - 3;
+          var breath = 0.5 + 0.5 * Math.sin(spaceTime * 2.2 + ski * 1.1);
+          var sActiveEnd = 0.75 * Math.PI + sNorm * 1.5 * Math.PI;
+          // Breathing purple arc overlay
+          if (sNorm > 0.002) {
+            sCtx.globalAlpha = 0.12 * breath;
+            sCtx.beginPath();
+            sCtx.arc(sCx, sCy, sR, 0.75 * Math.PI, sActiveEnd, false);
+            sCtx.strokeStyle = '#8B5CF6';
+            sCtx.lineWidth = 3;
+            sCtx.lineCap = 'round';
+            sCtx.stroke();
+            sCtx.globalAlpha = 1;
+          }
+          // Breathing dot
+          var sDotX = sCx + Math.cos(sActiveEnd) * sR;
+          var sDotY = sCy + Math.sin(sActiveEnd) * sR;
+          sCtx.globalAlpha = 0.3 * breath;
+          sCtx.beginPath();
+          sCtx.arc(sDotX, sDotY, 3, 0, Math.PI * 2);
+          sCtx.fillStyle = '#8B5CF6';
+          sCtx.fill();
+          sCtx.globalAlpha = 1;
+          sCtx.restore();
+          // Draw space icon
+          var sIcon = document.getElementById('fxIcon_' + sid);
+          if (sIcon) {
+            var spIconColor = _vizWf ? 'rgba(255,255,255,0.7)' : iconColorForNorm(sNorm);
+            drawIcon(sIcon, sid, spIconColor, sNorm, spaceTime);
+          }
           var sv = document.getElementById('fxVal_' + sid);
-          if (sv) sv.textContent = fmtFxKnobValue(sid, getFxKnobValue(sid));
+          if (sv) sv.textContent = fmtFxKnobValue(sid, sNorm);
         }
       }
     }
@@ -8591,7 +9230,7 @@ function initFxSuite() {
 // ---- Initialize ----
 function init() {
   initTerrain();
-  drawGridIcon();
+  initSettingsPanel();
   drawOutputIcon();
   drawRandomizeIcon();
   drawSpeedKnob();

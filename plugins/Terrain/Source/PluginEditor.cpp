@@ -352,6 +352,29 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
                 }
                 complete({});
             })
+            .withNativeFunction("getSettings", [this](const juce::Array<juce::var>&,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                auto f = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                           .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+                complete(f.existsAsFile() ? f.loadFileAsString() : juce::String("{}"));
+            })
+            .withNativeFunction("saveSettings", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    auto dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                 .getChildFile("Waves Crate").getChildFile("Terrain");
+                    dir.createDirectory();
+                    dir.getChildFile("PluginSettings.json").replaceWithText(args[0].toString());
+
+                    // Update capture strip theme
+                    auto json = args[0].toString();
+                    captureDragStrip.setDarkMode(json.contains("\"dark\""));
+                }
+                complete({});
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
@@ -361,6 +384,14 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
 
     // Native capture drag strip below WebView (real mouse events for drag-to-DAW)
     addAndMakeVisible(captureDragStrip);
+
+    // Read saved theme immediately so strip paints with correct color on first frame
+    {
+        auto sf = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                    .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+        if (sf.existsAsFile())
+            captureDragStrip.setDarkMode(sf.loadFileAsString().contains("\"dark\""));
+    }
 
     // Create parameter attachments AFTER webView
     grainSizeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
@@ -560,6 +591,16 @@ void TerrainAudioProcessorEditor::timerCallback()
            << juce::String(pitchLock, 1) << ","
            << juce::String(wireSpace, 1) << ","
            << juce::String(wireTube, 1) << ");}";
+
+        // Push plugin settings (theme) during restore window
+        auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                              .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+        if (settingsFile.existsAsFile())
+        {
+            auto sJson = settingsFile.loadFileAsString().replace("\\", "\\\\").replace("'", "\\'");
+            js << "if(typeof restoreSettings==='function'){restoreSettings('" << sJson << "');}";
+            captureDragStrip.setDarkMode(sJson.contains("\"dark\""));
+        }
     }
 
     webView->evaluateJavascript(js);
@@ -605,7 +646,7 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
 {
     auto b = getLocalBounds().toFloat();
 
-    g.fillAll(juce::Colour(0xFFF8F5FC)); // match WebView --bg-footer
+    g.fillAll(isDarkMode ? juce::Colour(0xFF232340) : juce::Colour(0xFFE8E4EF));
 
     if (state == 2) // ready — green, drag to DAW
     {
@@ -625,13 +666,13 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
         int secs = static_cast<int>(avail) % 60;
         if (avail < 1.0f)
         {
-            g.setColour(juce::Colour(0x44857399));
+            g.setColour(isDarkMode ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
             g.setFont(juce::FontOptions(10.0f));
             g.drawText("CAPTURE: LISTENING...", b, juce::Justification::centred);
         }
         else
         {
-            g.setColour(juce::Colour(0xFF6B5B7B));
+            g.setColour(isDarkMode ? juce::Colour(0xFF9B93B0) : juce::Colour(0xFF6B5B7B));
             g.setFont(juce::FontOptions(10.0f));
             g.drawText("CAPTURE: " + juce::String(mins) + "m " + juce::String(secs) + "s  \u2014  DRAG TO DAW",
                        b, juce::Justification::centred);
