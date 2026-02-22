@@ -318,6 +318,12 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
             {
                 complete(juce::var(audioProcessor.modStateJson));
             })
+            .withNativeFunction("signalPageReady", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                pageReady = true;
+                complete({});
+            })
             .withNativeFunction("setWireSpaceNoise", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -559,23 +565,22 @@ void TerrainAudioProcessorEditor::timerCallback()
            << juce::String(p0, 4) << "," << juce::String(p1, 4) << "," << juce::String(p2, 4) << ");}";
     }
 
-    // ── Mod state lifecycle (phased: restore → settle → save) ──
-    // Ticks 1-10:  RESTORE — push saved JSON to JS every tick (10 attempts)
-    // Ticks 11-15: SETTLE  — wait for restore to take effect in DOM
-    // Ticks 16+:   SAVE    — pull serialized state from JS every 5 ticks (~167ms)
-    // CRITICAL: never save during restore/settle or we'd overwrite saved data with empty state
+    // ── Mod state lifecycle ──
+    // Before pageReady: RESTORE — push saved state every tick (JS may not be ready yet)
+    // After pageReady:  SAVE    — pull serialized state from JS every 5 ticks (~83ms)
+    // CRITICAL: never save before pageReady or we'd overwrite saved data with empty/default state
     modStateTickCount++;
 
-    if (modStateTickCount <= 10)
+    if (!pageReady)
     {
-        // Push mod state JSON restore
+        // Push mod state JSON restore (repeat every tick until page signals ready)
         if (audioProcessor.modStateJson.isNotEmpty())
         {
             auto escaped = audioProcessor.modStateJson.replace("\\", "\\\\").replace("'", "\\'");
             js << "if(typeof restoreModState==='function'){restoreModState('" << escaped << "');}";
         }
 
-        // Push grain sync, XY pad, pitch locked, and wire mode state (same phased restore window)
+        // Push grain sync, XY pad, pitch locked, and wire mode state
         float grainSync  = audioProcessor.grainSyncEnabled.load();
         float xyEnabled  = audioProcessor.xyAutoEnabled.load();
         float xyMode     = audioProcessor.xyAutoMode.load();
@@ -605,7 +610,8 @@ void TerrainAudioProcessorEditor::timerCallback()
 
     webView->evaluateJavascript(js);
 
-    if (modStateTickCount > 15 && (modStateTickCount % 5 == 0))
+    // Only save AFTER the page has signaled ready (prevents overwriting stored state with defaults)
+    if (pageReady && (modStateTickCount % 5 == 0))
     {
         webView->evaluateJavascript(
             "typeof serializeModState==='function'?serializeModState():''",
@@ -734,7 +740,17 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::mouseUp (const juce::MouseEv
 std::optional<juce::WebBrowserComponent::Resource> TerrainAudioProcessorEditor::getResource (const juce::String& url)
 {
     // All JS is inlined into index.html — only one resource to serve
-    std::vector<std::byte> data(static_cast<size_t>(BinaryData::index_htmlSize));
-    std::memcpy(data.data(), BinaryData::index_html, static_cast<size_t>(BinaryData::index_htmlSize));
+    juce::String html (juce::CharPointer_UTF8 (reinterpret_cast<const char*>(BinaryData::index_html)),
+                       static_cast<size_t>(BinaryData::index_htmlSize));
+
+    // Inject saved theme into HTML so the page loads with the correct theme from frame one
+    auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                          .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+    if (settingsFile.existsAsFile() && settingsFile.loadFileAsString().contains("\"dark\""))
+        html = html.replace("<html lang=\"en\">", "<html lang=\"en\" data-theme=\"dark\">");
+
+    auto utf8 = html.toUTF8();
+    std::vector<std::byte> data(static_cast<size_t>(utf8.sizeInBytes()));
+    std::memcpy(data.data(), utf8.getAddress(), data.size());
     return juce::WebBrowserComponent::Resource{ std::move(data), juce::String("text/html") };
 }

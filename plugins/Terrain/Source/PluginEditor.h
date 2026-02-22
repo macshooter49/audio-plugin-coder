@@ -129,10 +129,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> eqHighGainAttachment;
 
     // Mod state lifecycle tick counter
-    // Ticks 1-10:  RESTORE phase — push saved JSON to JS every tick
-    // Ticks 11-30: SETTLE phase — wait for page to stabilize
-    // Ticks 31+:   SAVE phase — pull serialized state from JS every 10 ticks
+    // RESTORE phase: push saved JSON to JS every tick until pageReady
+    // SAVE phase: pull serialized state from JS every 5 ticks (only after pageReady)
     int modStateTickCount { 0 };
+    bool pageReady { false };
 
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);

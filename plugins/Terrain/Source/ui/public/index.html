@@ -873,13 +873,13 @@ body {
   gap: 16px;
 }
 #grain-knobs .knob-group {
-  width: 72px;
+  width: 82px;
   gap: 3px;
 }
 #grain-knobs .knob-canvas-wrap {
-  width: 64px;
-  height: 64px;
-  border-radius: 10px;
+  width: 74px;
+  height: 74px;
+  border-radius: 12px;
   background: rgba(139, 92, 246, 0.04);
   border: 1px solid rgba(139, 92, 246, 0.1);
   overflow: hidden;
@@ -922,6 +922,18 @@ body {
 #grain-knobs .knob-group .knob-value,
 #grain-knobs .knob-group .knob-label {
   display: none !important;
+}
+
+/* --- Dark mode: glass white grain buttons --- */
+[data-theme="dark"] #grain-knobs .knob-canvas-wrap {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 10px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+[data-theme="dark"] #grain-knobs .knob-canvas-wrap:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: 0 2px 14px rgba(139,92,246,0.2), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 
 /* ============ TAPE SUB-TABS ============ */
@@ -2244,6 +2256,51 @@ body {
 .mod-ctx-clear:hover {
   background: rgba(239,68,68,0.06);
 }
+/* --- Snap Toggle in Context Menu --- */
+.mod-ctx-snap-row {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.08s;
+  color: var(--text-primary);
+}
+.mod-ctx-snap-row.visible {
+  display: flex;
+}
+.mod-ctx-snap-row:hover {
+  background: rgba(139,92,246,0.06);
+}
+.mod-ctx-snap-toggle {
+  width: 28px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--bg-main);
+  border: 1.5px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.mod-ctx-snap-toggle.active {
+  background: #8B5CF6;
+  border-color: #8B5CF6;
+}
+.mod-ctx-snap-toggle::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: transform 0.15s, background 0.15s;
+}
+.mod-ctx-snap-toggle.active::after {
+  transform: translateX(14px);
+  background: #fff;
+}
 
 /* --- Modulation Rings on Knobs --- */
 .mod-ring-badge {
@@ -2478,6 +2535,11 @@ body {
     </div>
     <div class="mod-ctx-divider"></div>
     <div class="mod-ctx-clear" id="mod-ctx-clear">&#x2715; Clear All</div>
+    <div class="mod-ctx-snap-divider mod-ctx-divider"></div>
+    <div class="mod-ctx-snap-row" id="mod-ctx-snap-row">
+      <div class="mod-ctx-snap-toggle" id="mod-ctx-snap-toggle"></div>
+      <span class="mod-ctx-snap-label" id="mod-ctx-snap-label">Snap to Beat</span>
+    </div>
     <div class="mod-ctx-divider"></div>
     <div class="ctx-item" data-action="copy">Copy value</div>
     <div class="ctx-item" data-action="paste">Paste value</div>
@@ -3073,7 +3135,7 @@ const THEMES = {
     toggleBorderInactive: 'rgba(100,100,150,0.3)',
   }
 };
-let currentTheme = THEMES.light;
+let currentTheme = document.documentElement.dataset.theme === 'dark' ? THEMES.dark : THEMES.light;
 
 function setTheme(name) {
   if (!THEMES[name]) return;
@@ -3087,10 +3149,12 @@ function getTheme() {
 
 // Blend from muted (#B0A4C0) to purple (#8B5CF6) based on normalized value
 function iconColorForNorm(norm) {
-  const r = Math.round(176 + (139 - 176) * norm);
-  const g = Math.round(164 + (92 - 164) * norm);
-  const b = Math.round(192 + (246 - 192) * norm);
-  return `rgb(${r},${g},${b})`;
+  // 0% = muted gray, 100% = vivid purple
+  const r = Math.round(150 + (139 - 150) * norm);
+  const g = Math.round(140 + (92 - 140) * norm);
+  const b = Math.round(155 + (246 - 155) * norm);
+  const alpha = 0.45 + norm * 0.55;
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 // ---- Viz Color Helpers (wireframe mode) ----
@@ -3124,6 +3188,9 @@ function initSettingsPanel() {
     darkBtn.classList.add('active'); lightBtn.classList.remove('active');
     drawSettingsIcon(); saveSettings();
   });
+  // Sync button state with current theme (may have been injected by C++ at page serve time)
+  lightBtn.classList.toggle('active', currentTheme.name === 'light');
+  darkBtn.classList.toggle('active', currentTheme.name === 'dark');
   drawSettingsIcon();
 }
 
@@ -3486,6 +3553,12 @@ async function initJuceBindings() {
     modeBtn.title = state.xyAutoMode === 1 ? 'Mode: Smooth' : 'Mode: Chaotic';
     drawSpeedKnob();
 
+    // Restore settings (theme) from C++ — reliable fallback for timer-based restore
+    if (getSettingsFn) {
+      const settingsJson = await getSettingsFn();
+      if (settingsJson) restoreSettings(settingsJson);
+    }
+
     // Restore modulation state from C++ (persists across editor close/reopen)
     const savedModJson = await getModStateFn();
     if (savedModJson) restoreModState(savedModJson);
@@ -3493,6 +3566,13 @@ async function initJuceBindings() {
     console.log('JUCE bindings initialized');
   } catch (e) {
     console.log('Preview mode: JUCE bindings unavailable', e);
+  } finally {
+    // ALWAYS signal page ready, even if init had errors
+    // This stops the C++ timer from continuously overwriting JS state with old restore data
+    try {
+      var readyFn = window.Juce && window.Juce.getNativeFunction('signalPageReady');
+      if (readyFn) readyFn();
+    } catch(e2) {}
   }
 }
 
@@ -3769,11 +3849,11 @@ function drawIcon(canvas, type, color, norm, time) {
   ctx.scale(DPR, DPR);
   ctx.strokeStyle = color || '#B0A4C0';
   ctx.fillStyle = color || '#B0A4C0';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.8;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
+  ctx.shadowColor = norm > 0.05 ? 'rgba(139,92,246,' + (0.2 + norm * 0.4) + ')' : 'transparent';
+  ctx.shadowBlur = norm > 0.05 ? 2 + norm * 4 : 0;
   ctx.shadowOffsetY = 0;
   const cx = w / 2, cy = h / 2, r = w * 0.42;
   const intensity = 0.1 + norm * 0.9;
@@ -4550,8 +4630,8 @@ function buildKnobs() {
 
     // Determine if this is a grain tile
     const isGrain = p.section === 'grain';
-    const tileSize = isGrain ? 64 : 0;
-    const iconSize = isGrain ? 40 : 28;
+    const tileSize = isGrain ? 74 : 0;
+    const iconSize = isGrain ? 46 : 28;
     const knobSize = isGrain ? tileSize : 56;
 
     // Knob wrap with icon inside
@@ -6173,9 +6253,11 @@ function updateXYAuto(time) {
 function updateAnimatedIcons(time) {
   for (const [id, p] of Object.entries(PARAMS)) {
     const norm = normalize(id, state.params[id]);
-    if (norm < 0.01 && state.draggingKnob !== id && state.hoveredKnob !== id) continue;
     const group = document.querySelector(`.knob-group[data-param="${id}"]`);
     if (!group || !group._iconCanvas) continue;
+    const isGrain = p.section === 'grain';
+    // Grain icons always draw (show gray resting state at 0%); others skip at 0%
+    if (!isGrain && norm < 0.01 && state.draggingKnob !== id && state.hoveredKnob !== id) continue;
     const color = (state.hoveredKnob === id || state.draggingKnob === id) ? '#8B5CF6' : iconColorForNorm(norm);
     drawIcon(group._iconCanvas, id, color, norm, time);
   }
@@ -6850,9 +6932,10 @@ function initModContextMenu() {
     }
   }
 
-  // Close on outside click
+  // Close on outside click — persist any depth changes before closing
   document.addEventListener('click', (e) => {
     if (!menu.contains(e.target)) {
+      if (menu.classList.contains('open')) persistModState();
       menu.classList.remove('open');
       modState.ctxMenuParam = null;
     }
@@ -6865,6 +6948,30 @@ function initModContextMenu() {
     updateModBadges();
     updateTargetLists();
     refreshCtxMenuState();
+  });
+
+  // Snap toggle (grainSize → BPM sync, pitch → semitone lock)
+  document.getElementById('mod-ctx-snap-row').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const pid = modState.ctxMenuParam;
+    const snapToggle = document.getElementById('mod-ctx-snap-toggle');
+    if (pid === 'grainSize') {
+      state.grainSyncEnabled = !state.grainSyncEnabled;
+      snapToggle.classList.toggle('active', state.grainSyncEnabled);
+      updateKnobDisplay('grainSize');
+      if (juceMode && setGrainSyncFn) setGrainSyncFn(state.grainSyncEnabled ? 1 : 0);
+    } else if (pid === 'pitch') {
+      state.pitchLocked = !state.pitchLocked;
+      snapToggle.classList.toggle('active', state.pitchLocked);
+      if (state.pitchLocked) {
+        var snapped = Math.max(0, Math.min(12, Math.round(state.params.pitch)));
+        state.params.pitch = snapped;
+        modBaseValues.pitch = snapped;
+        pushParamToJuce('pitch');
+      }
+      updateKnobDisplay('pitch');
+      if (juceMode && setPitchLockedFn) setPitchLockedFn(state.pitchLocked ? 1 : 0);
+    }
   });
 
   // Copy/Paste/Reset items
@@ -6925,7 +7032,7 @@ function initModContextMenu() {
       updateDepthFromEvent(e, srcIdx, depthWrap, depthFill, depthPct);
     });
     depthWrap.addEventListener('pointerup', () => { dragging = false; persistModState(); updateTargetLists(); });
-    depthWrap.addEventListener('lostpointercapture', () => { dragging = false; });
+    depthWrap.addEventListener('lostpointercapture', () => { dragging = false; persistModState(); });
   });
 }
 
@@ -6947,8 +7054,29 @@ function openModContextMenu(paramId, x, y) {
   const p = PARAMS[paramId];
   document.getElementById('mod-ctx-title').textContent = 'MODULATE: ' + (p ? p.label : paramId);
 
-  // Position
-  const menuW = 240, menuH = 280;
+  // Show/hide snap toggle for grainSize and pitch
+  const snapRow = document.getElementById('mod-ctx-snap-row');
+  const snapDiv = menu.querySelector('.mod-ctx-snap-divider');
+  const snapToggle = document.getElementById('mod-ctx-snap-toggle');
+  const snapLabel = document.getElementById('mod-ctx-snap-label');
+  if (paramId === 'grainSize') {
+    snapRow.classList.add('visible');
+    snapDiv.style.display = '';
+    snapLabel.textContent = 'Sync to Beat';
+    snapToggle.classList.toggle('active', state.grainSyncEnabled);
+  } else if (paramId === 'pitch') {
+    snapRow.classList.add('visible');
+    snapDiv.style.display = '';
+    snapLabel.textContent = 'Snap to Semitone';
+    snapToggle.classList.toggle('active', state.pitchLocked);
+  } else {
+    snapRow.classList.remove('visible');
+    snapDiv.style.display = 'none';
+  }
+
+  // Position (account for taller menu when snap row is visible)
+  const hasSnap = paramId === 'grainSize' || paramId === 'pitch';
+  const menuW = 240, menuH = hasSnap ? 310 : 280;
   let left = x;
   let top = y;
   if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 8;
@@ -9260,8 +9388,21 @@ window.addEventListener('resize', () => {
   initTerrain();
 });
 
+// Dedicated theme restore — runs independently after init to guarantee theme is applied
+async function restoreThemeFromBackend() {
+  try {
+    if (!window.Juce) return;
+    var fn = window.Juce.getNativeFunction('getSettings');
+    if (!fn) return;
+    var json = await fn();
+    if (json) restoreSettings(json);
+  } catch(e) {}
+}
+
 // Start
 init();
+// Fire theme restore independently (not blocked by initJuceBindings)
+restoreThemeFromBackend();
 </script>
 </body>
 </html>
