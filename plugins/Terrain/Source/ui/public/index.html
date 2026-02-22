@@ -1385,12 +1385,12 @@ body {
   border: 1.5px solid var(--border); background: var(--bg-glass);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; padding: 0;
-  box-shadow: 0 2px 6px rgba(91,79,112,0.08);
+  box-shadow: none;
   transition: all 0.15s;
 }
 .transport-btn:hover {
   border-color: var(--purple-400);
-  box-shadow: 0 3px 10px rgba(139,92,246,0.12);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 .transport-btn:active { transform: translateY(0); }
@@ -3458,6 +3458,7 @@ async function initJuceBindings() {
       p.sliderState.valueChangedEvent.addListener(() => {
         if (state.draggingKnob === key) return; // skip echo while dragging main knobs
         if (window._fxDragging && window._fxDragging[key]) return; // skip echo while dragging FX suite knobs/EQ
+        if (window._randomizing) return; // skip echo during randomize
         state.params[key] = p.sliderState.scaledValue;
         modBaseValues[key] = p.sliderState.scaledValue;
         updateKnobDisplay(key);
@@ -6187,30 +6188,209 @@ function drawRandomizeIcon() {
   });
 }
 
-// ---- Randomize Handler ----
+// ---- Randomize Handler (Chaos Engine) ----
 document.getElementById('randomize-btn').addEventListener('click', function() {
   const btn = this;
   btn.classList.add('flash');
   setTimeout(() => btn.classList.remove('flash'), 300);
 
-  // Randomize all grain engine + tape params
+  // Suppress JUCE echoes during randomize to prevent stale values overwriting
+  window._randomizing = true;
+
+  // Helper: biased random — returns value biased toward low end
+  const biasLow = (min, max, power) => min + Math.pow(Math.random(), power) * (max - min);
+  // Helper: random int inclusive
+  const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+  // Helper: weighted coin flip (probability of true)
+  const coin = (p) => Math.random() < p;
+
+  // ── 1. Randomize all 21 PARAMS with musical intelligence ──
   for (const [id, p] of Object.entries(PARAMS)) {
-    const range = p.max - p.min;
-    state.params[id] = p.min + Math.random() * range;
-    // Snap to integers for most params
-    if (p.unit !== 'st') {
-      state.params[id] = Math.round(state.params[id]);
-    } else {
-      state.params[id] = Math.round(state.params[id] * 2) / 2; // half-semitone precision
+    let val;
+    switch (id) {
+      case 'pitch':
+        // Snap to integer semitones for musicality
+        val = randInt(-12, 12);
+        break;
+      case 'grainFilter':
+        // 40% bias toward extremes (full HP or LP), 60% middle
+        if (coin(0.4)) {
+          val = coin(0.5) ? randInt(0, 15) : randInt(85, 100);
+        } else {
+          val = randInt(15, 85);
+        }
+        break;
+      case 'grainSize':
+        // Bias toward smaller sizes (more granular textures)
+        val = Math.round(biasLow(5, 500, 1.8));
+        break;
+      case 'mix':
+        // Ensure audible (min 20%)
+        val = randInt(20, 100);
+        break;
+      case 'spaceMix':
+        // Ensure audible when randomized (min 20%)
+        val = randInt(20, 100);
+        break;
+      case 'loopLength':
+        val = randInt(0, 6);
+        break;
+      case 'loopSpeed':
+        val = randInt(0, 9);
+        break;
+      default:
+        val = p.min + Math.random() * (p.max - p.min);
+        // Round integer params
+        if (p.unit !== 'st') val = Math.round(val);
+        break;
     }
+    state.params[id] = Math.max(p.min, Math.min(p.max, val));
+    modBaseValues[id] = state.params[id];
   }
-  updateAllKnobs();
-  // Push all randomized params to JUCE
+
+  // Push all randomized params to JUCE (before visual update)
   if (juceMode) {
     for (const id of Object.keys(PARAMS)) {
       pushParamToJuce(id);
     }
   }
+
+  // ── 2. Tape Machine (random 0-2) ──
+  state.tapeMachine = randInt(0, 2);
+  if (juceMode && setTapeMachineFn) setTapeMachineFn(state.tapeMachine);
+  updateMachineSwitcher();
+
+  // ── 3. Section Toggles (weighted) ──
+  // Grain engine: 85% chance ON
+  state.sectionEnabled.grain = coin(0.85);
+  document.getElementById('grain-toggle').classList.toggle('off', !state.sectionEnabled.grain);
+  if (juceMode && setGrainEngineEnabledFn) setGrainEngineEnabledFn(state.sectionEnabled.grain ? 1 : 0);
+  // Tape engine: 70% chance ON
+  state.sectionEnabled.tape = coin(0.70);
+  document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
+  if (juceMode && setTapeEnabledFn) setTapeEnabledFn(state.sectionEnabled.tape ? 1 : 0);
+
+  // ── 4. Feature Toggles ──
+  // Grain sync: 30%
+  state.grainSyncEnabled = coin(0.30);
+  if (juceMode && setGrainSyncFn) setGrainSyncFn(state.grainSyncEnabled ? 1 : 0);
+  const grainSizeLabel = document.querySelector('.knob-group[data-param="grainSize"] .knob-label');
+  if (grainSizeLabel) {
+    grainSizeLabel.classList.toggle('freeform-active', state.grainSyncEnabled);
+    grainSizeLabel.textContent = state.grainSyncEnabled ? 'BPM SYNC' : 'SIZE';
+  }
+  // Pitch locked: 40%
+  state.pitchLocked = coin(0.40);
+  if (juceMode && setPitchLockedFn) setPitchLockedFn(state.pitchLocked ? 1 : 0);
+  if (state.pitchLocked) {
+    state.params.pitch = Math.round(state.params.pitch);
+    modBaseValues.pitch = state.params.pitch;
+  }
+  const pitchLabel = document.querySelector('.knob-group[data-param="pitch"] .knob-label');
+  if (pitchLabel) {
+    pitchLabel.classList.toggle('freeform-active', state.pitchLocked);
+    pitchLabel.textContent = state.pitchLocked ? 'SEMI' : 'PITCH';
+  }
+  // Speed freeform: 25%
+  state.speedFreeform = coin(0.25);
+  if (juceMode && setSpeedFreeformFn) setSpeedFreeformFn(state.speedFreeform ? 1 : 0);
+  const speedLabel = document.querySelector('.knob-group[data-param="loopSpeed"] .knob-label');
+  if (speedLabel) {
+    speedLabel.classList.toggle('freeform-active', state.speedFreeform);
+    speedLabel.textContent = state.speedFreeform ? 'FREE SPD' : 'SPEED';
+  }
+  // Feed-to-grain: 20%
+  const newFeed = coin(0.20);
+  if (state.feedToGrain !== newFeed) {
+    state.feedToGrain = newFeed;
+    if (juceMode && setFeedToGrainFn) setFeedToGrainFn(state.feedToGrain ? 1 : 0);
+    const feedBtn = document.getElementById('feed-to-grain-btn');
+    if (feedBtn) feedBtn.classList.toggle('active', state.feedToGrain);
+    drawFeedIcon();
+  }
+
+  // ── 5. Wire-specific toggles (only if Wire selected) ──
+  if (state.tapeMachine === 2) {
+    state.wireSpaceNoise = coin(0.50);
+    if (juceMode && setWireSpaceNoiseFn) setWireSpaceNoiseFn(state.wireSpaceNoise ? 1 : 0);
+    state.wireTubeSat = coin(0.50);
+    if (juceMode && setWireTubeSatFn) setWireTubeSatFn(state.wireTubeSat ? 1 : 0);
+  } else {
+    state.wireSpaceNoise = false;
+    state.wireTubeSat = false;
+  }
+  updateMachineSwitcher(); // refresh wire labels
+
+  // ── 6. XY Pad (random position + mode) ──
+  state.xyX = Math.random();
+  state.xyY = Math.random();
+  if (juceMode && setXYPadFn) setXYPadFn(state.xyX, state.xyY);
+  // Random auto mode: 50% chaotic, 50% smooth
+  state.xyAutoMode = coin(0.5) ? 0 : 1;
+  // Random speed 0.2-0.8
+  state.xyAutoSpeed = 0.2 + Math.random() * 0.6;
+  // Keep auto-play on
+  state.xyAutoPlay = true;
+  syncXYState();
+  // Update XY UI buttons
+  const xyPlayBtn = document.getElementById('xy-play');
+  if (xyPlayBtn) xyPlayBtn.classList.toggle('active', state.xyAutoPlay);
+  const xyModeBtn = document.getElementById('xy-mode');
+  if (xyModeBtn) {
+    xyModeBtn.classList.toggle('active', state.xyAutoMode === 1);
+    xyModeBtn.textContent = state.xyAutoMode === 1 ? '~' : '?';
+    xyModeBtn.title = state.xyAutoMode === 1 ? 'Mode: Smooth' : 'Mode: Chaotic';
+  }
+  drawSpeedKnob();
+
+  // ── 7. LFO Modulation (the wild card) ──
+  // Randomize each LFO config
+  for (let i = 0; i < 3; i++) {
+    const lfo = modState.lfos[i];
+    lfo.shape = randInt(0, 6);
+    // Exponential rate distribution biased toward slow
+    lfo.rate = 0.05 * Math.pow(160, Math.random()); // 0.05 to ~8 Hz
+    lfo.rate = Math.round(lfo.rate * 100) / 100;
+    lfo.depth = 0.3 + Math.random() * 0.7;
+    lfo.phase = Math.random();
+    lfo.polarity = coin(0.5) ? 'bi' : (coin(0.5) ? 'uni+' : 'uni-');
+    // 40% chance of BPM sync
+    lfo.sync = coin(0.40);
+    if (lfo.sync) {
+      lfo.syncIdx = randInt(0, SYNC_DIVISIONS.length - 1);
+    }
+  }
+  // Generate 3-8 random assignments for maximum chaos (no duplicate targets)
+  const numAssignments = randInt(3, 8);
+  const usedTargets = new Set();
+  const newAssignments = [];
+  for (let i = 0; i < numAssignments; i++) {
+    // Pick random target not already used
+    const available = MODULATABLE.filter(t => !usedTargets.has(t));
+    if (available.length === 0) break;
+    const target = available[randInt(0, available.length - 1)];
+    usedTargets.add(target);
+    newAssignments.push({
+      source: randInt(0, 2), // LFO 1-3
+      target: target,
+      depth: 0.2 + Math.random() * 0.6, // 0.20-0.80
+      enabled: true,
+    });
+  }
+  modState.assignments = newAssignments;
+  // Persist to C++ engine
+  persistModState();
+  // Rebuild mod panel UI + badges
+  buildShapeButtons();
+  buildLFOKnobs();
+  updateTargetLists();
+  updateModBadges();
+
+  // ── 8. Update all visuals ──
+  updateAllKnobs();
+
+  // Release echo suppression after a delay to catch async C++ echoes
+  setTimeout(() => { window._randomizing = false; }, 200);
 });
 
 // ---- XY Auto Animation ----
