@@ -20,7 +20,7 @@ juce_add_plugin(TerrainInstrument
     PLUGIN_MANUFACTURER_CODE Wvcr
     PLUGIN_CODE Tern
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "Terrain"
+    PRODUCT_NAME "Terrain Instrument"
     PLUGIN_NAME "Terrain"
     DESCRIPTION "Terrain — Sampler / Instrument"
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
