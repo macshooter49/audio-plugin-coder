@@ -47,6 +47,12 @@ public:
         smoothedWow = 0.0;
         smoothedSat = 0.0;
         smoothedHiss = 0.0;
+        smoothedSculpt = 0.0;
+        smoothedWeave  = 0.0;
+        smoothedTilt   = 0.0;
+        smoothedWireWow  = 0.0;
+        smoothedWireSat  = 0.0;
+        smoothedWireHiss = 0.0;
     }
 
     void reset()
@@ -57,6 +63,12 @@ public:
         smoothedWow = 0.0;
         smoothedSat = 0.0;
         smoothedHiss = 0.0;
+        smoothedSculpt = 0.0;
+        smoothedWeave  = 0.0;
+        smoothedTilt   = 0.0;
+        smoothedWireWow  = 0.0;
+        smoothedWireSat  = 0.0;
+        smoothedWireHiss = 0.0;
 
         crossfadeCounter = 0;
         crossfading = false;
@@ -101,31 +113,64 @@ public:
         wireMachine.setTubeSatEnabled(tubeSat);
     }
 
-    //==========================================================================
-    // Process one sample with tape character
-    // wowFlutter: 0-1, saturation: 0-1, hiss: 0-1
-    float processSample(float input, float wowFlutter, float saturation, float hiss)
+    // Process one sample with tape character.
+    // Cassette and Wire each have their OWN wow/sat/hiss values so they
+    // can be tuned independently (especially with LINK on). Studio ignores
+    // both sets — it uses sculpt/weave/tilt instead.
+    //   cWow / cSat / cHiss : Cassette wow/sat/hiss (0..1)
+    //   wWow / wSat / wHiss : Wire wow/sat/hiss     (0..1)
+    //   sculpt / weave      : 0..1 (Studio)
+    //   tilt                : -1..+1 (Studio)
+    float processSample (float input,
+                         float cWow, float cSat, float cHiss,
+                         float wWow, float wSat, float wHiss,
+                         float sculpt, float weave, float tilt)
     {
-        // Smooth amount params ONCE per sample to prevent clicks when LFO modulation crosses zero
-        smoothedSat  += amountSmoothCoeff * (static_cast<double>(saturation) - smoothedSat);
-        smoothedWow  += amountSmoothCoeff * (static_cast<double>(wowFlutter) - smoothedWow);
-        smoothedHiss += amountSmoothCoeff * (static_cast<double>(hiss) - smoothedHiss);
-        const float sSat  = static_cast<float>(smoothedSat);
-        const float sWow  = static_cast<float>(smoothedWow);
-        const float sHiss = static_cast<float>(smoothedHiss);
+        // Smooth all six wow/sat/hiss inputs (Cassette + Wire) and the three
+        // Studio sculptor inputs at 5 ms — anti-click on LFO modulation.
+        smoothedSat      += amountSmoothCoeff * (static_cast<double>(cSat)  - smoothedSat);
+        smoothedWow      += amountSmoothCoeff * (static_cast<double>(cWow)  - smoothedWow);
+        smoothedHiss     += amountSmoothCoeff * (static_cast<double>(cHiss) - smoothedHiss);
+        smoothedWireWow  += amountSmoothCoeff * (static_cast<double>(wWow)  - smoothedWireWow);
+        smoothedWireSat  += amountSmoothCoeff * (static_cast<double>(wSat)  - smoothedWireSat);
+        smoothedWireHiss += amountSmoothCoeff * (static_cast<double>(wHiss) - smoothedWireHiss);
+        smoothedSculpt   += amountSmoothCoeff * (static_cast<double>(sculpt) - smoothedSculpt);
+        smoothedWeave    += amountSmoothCoeff * (static_cast<double>(weave)  - smoothedWeave);
+        smoothedTilt     += amountSmoothCoeff * (static_cast<double>(tilt)   - smoothedTilt);
 
-        if (!crossfading)
+        studioMachine.setSculptorParams (smoothedSculpt, smoothedWeave, smoothedTilt);
+
+        // Pick the right wow/sat/hiss set per machine. Studio ignores both
+        // (it uses sculptor params), Cassette uses cassette set, Wire uses
+        // wire set — so each machine sees its own independent values.
+        auto valuesFor = [this] (int machineIdx, float& outSat, float& outWow, float& outHiss)
         {
-            // Single machine path — zero CPU for inactive machines
-            return processOneMachine(machines[activeMachine], input, sSat, sWow, sHiss);
+            if (machineIdx == 2) // Wire
+            {
+                outSat  = static_cast<float> (smoothedWireSat);
+                outWow  = static_cast<float> (smoothedWireWow);
+                outHiss = static_cast<float> (smoothedWireHiss);
+            }
+            else // Studio (ignores) or Cassette
+            {
+                outSat  = static_cast<float> (smoothedSat);
+                outWow  = static_cast<float> (smoothedWow);
+                outHiss = static_cast<float> (smoothedHiss);
+            }
+        };
+
+        if (! crossfading)
+        {
+            float aSat, aWow, aHiss; valuesFor (activeMachine, aSat, aWow, aHiss);
+            return processOneMachine (machines[activeMachine], input, aSat, aWow, aHiss);
         }
 
-        // Crossfading: process through BOTH old and new machines
-        float outputOld = processOneMachine(machines[activeMachine], input, sSat, sWow, sHiss);
-        float outputNew = processOneMachine(machines[targetMachine], input, sSat, sWow, sHiss);
+        float aSat, aWow, aHiss; valuesFor (activeMachine, aSat, aWow, aHiss);
+        float tSat, tWow, tHiss; valuesFor (targetMachine, tSat, tWow, tHiss);
+        float outputOld = processOneMachine (machines[activeMachine], input, aSat, aWow, aHiss);
+        float outputNew = processOneMachine (machines[targetMachine], input, tSat, tWow, tHiss);
 
-        // Linear blend: 1.0 at start (all old) -> 0.0 at end (all new)
-        const float blend = static_cast<float>(crossfadeCounter) / static_cast<float>(crossfadeSamples);
+        const float blend = static_cast<float> (crossfadeCounter) / static_cast<float> (crossfadeSamples);
         float output = outputOld * blend + outputNew * (1.0f - blend);
 
         crossfadeCounter--;
@@ -134,8 +179,57 @@ public:
             activeMachine = targetMachine;
             crossfading = false;
         }
-
         return output;
+    }
+
+    // Process one sample with ALL THREE tape machines in series:
+    //   input → Studio → Cassette → Wire → output
+    //
+    // Each machine receives its own knob values from APVTS via the same
+    // smoothed parameters processSample uses, so dialing in Studio's
+    // SCULPT/DRIVE/TIMBRE then switching to Cassette to dial WOW/SAT/HISS
+    // sets up an entire tape chain that all runs at once when Link is on.
+    //
+    // The series order is the machine-cycle order (0 → 1 → 2). A 0.6
+    // gain compensation at the end keeps peaks musical after three
+    // saturator stages stack — without it, hot inputs blow into the
+    // post-tape soft limiter ugly.
+    //
+    // No machine-switch crossfade applies here (link mode is "all three,
+    // always"). Toggling the link param itself produces a small step in
+    // signal energy, but the upstream ~5ms amount-smoothing on wow/sat/
+    // hiss/sculpt/weave/tilt absorbs most of it.
+    float processSampleLinked (float input,
+                               float cWow, float cSat, float cHiss,
+                               float wWow, float wSat, float wHiss,
+                               float sculpt, float weave, float tilt)
+    {
+        smoothedSat      += amountSmoothCoeff * (static_cast<double>(cSat)  - smoothedSat);
+        smoothedWow      += amountSmoothCoeff * (static_cast<double>(cWow)  - smoothedWow);
+        smoothedHiss     += amountSmoothCoeff * (static_cast<double>(cHiss) - smoothedHiss);
+        smoothedWireWow  += amountSmoothCoeff * (static_cast<double>(wWow)  - smoothedWireWow);
+        smoothedWireSat  += amountSmoothCoeff * (static_cast<double>(wSat)  - smoothedWireSat);
+        smoothedWireHiss += amountSmoothCoeff * (static_cast<double>(wHiss) - smoothedWireHiss);
+        smoothedSculpt   += amountSmoothCoeff * (static_cast<double>(sculpt) - smoothedSculpt);
+        smoothedWeave    += amountSmoothCoeff * (static_cast<double>(weave)  - smoothedWeave);
+        smoothedTilt     += amountSmoothCoeff * (static_cast<double>(tilt)   - smoothedTilt);
+
+        studioMachine.setSculptorParams (smoothedSculpt, smoothedWeave, smoothedTilt);
+
+        const float casSat  = static_cast<float> (smoothedSat);
+        const float casWow  = static_cast<float> (smoothedWow);
+        const float casHiss = static_cast<float> (smoothedHiss);
+        const float wirSat  = static_cast<float> (smoothedWireSat);
+        const float wirWow  = static_cast<float> (smoothedWireWow);
+        const float wirHiss = static_cast<float> (smoothedWireHiss);
+
+        // Cassette wow/sat/hiss for the Cassette stage. Wire wow/sat/hiss
+        // for the Wire stage. Studio uses sculptor params (set above).
+        float y = processOneMachine (machines[0], input, 0.f,    0.f,    0.f);     // Studio (Harmonic Sculptor)
+        y      = processOneMachine (machines[1], y,     casSat, casWow, casHiss); // Cassette
+        y      = processOneMachine (machines[2], y,     wirSat, wirWow, wirHiss); // Wire
+
+        return y * 0.6f; // gain comp for three series stages
     }
 
 private:
@@ -192,4 +286,11 @@ private:
     double smoothedWow = 0.0;
     double smoothedSat = 0.0;
     double smoothedHiss = 0.0;
+    double smoothedSculpt = 0.0;
+    double smoothedWeave  = 0.0;
+    double smoothedTilt   = 0.0;
+    // Wire-specific smoothed values (independent from Cassette's smoothedWow/Sat/Hiss).
+    double smoothedWireWow  = 0.0;
+    double smoothedWireSat  = 0.0;
+    double smoothedWireHiss = 0.0;
 };

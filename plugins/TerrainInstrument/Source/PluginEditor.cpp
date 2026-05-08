@@ -26,6 +26,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(wowFlutterRelay)
             .withOptionsFrom(saturationRelay)
             .withOptionsFrom(hissRelay)
+            .withOptionsFrom(wireWowRelay)
+            .withOptionsFrom(wireSaturationRelay)
+            .withOptionsFrom(wireHissRelay)
+            .withOptionsFrom(studioSculptRelay)
+            .withOptionsFrom(studioWeaveRelay)
+            .withOptionsFrom(studioTiltRelay)
             .withOptionsFrom(outputGainRelay)
             .withOptionsFrom(masterMixRelay)
             .withOptionsFrom(loopLengthRelay)
@@ -36,18 +42,44 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(spaceDecayRelay)
             .withOptionsFrom(spaceToneRelay)
             .withOptionsFrom(spaceMixRelay)
-            .withOptionsFrom(eqLowFreqRelay)
-            .withOptionsFrom(eqLowGainRelay)
-            .withOptionsFrom(eqMidFreqRelay)
-            .withOptionsFrom(eqMidGainRelay)
-            .withOptionsFrom(eqHighFreqRelay)
-            .withOptionsFrom(eqHighGainRelay)
+            .withOptionsFrom(dlyTimeRelay)
+            .withOptionsFrom(dlyFeedbackRelay)
+            .withOptionsFrom(dlyToneRelay)
+            .withOptionsFrom(dlyCharacterRelay)
+            .withOptionsFrom(dlyModRelay)
+            .withOptionsFrom(dlyModRateRelay)
+            .withOptionsFrom(dlyMixRelay)
+            .withOptionsFrom(dlyDuckRelay)
+            .withOptionsFrom(dlyFreezeRelay)
+            .withOptionsFrom(dlySyncRelay)
+            .withOptionsFrom(dlySyncDivRelay)
+            .withOptionsFrom(dlyModWaveRelay)
+            .withOptionsFrom(dlyPitchRelay)
+            .withOptionsFrom(dlyWidthRelay)
+            .withOptionsFrom(chorusAmountRelay)
+            .withOptionsFrom(chorusWidthRelay)
+            .withOptionsFrom(chorusCharacterRelay)
+            .withOptionsFrom(eqRelays[0])  .withOptionsFrom(eqRelays[1])  .withOptionsFrom(eqRelays[2])  .withOptionsFrom(eqRelays[3])  .withOptionsFrom(eqRelays[4])
+            .withOptionsFrom(eqRelays[5])  .withOptionsFrom(eqRelays[6])  .withOptionsFrom(eqRelays[7])  .withOptionsFrom(eqRelays[8])  .withOptionsFrom(eqRelays[9])
+            .withOptionsFrom(eqRelays[10]) .withOptionsFrom(eqRelays[11]) .withOptionsFrom(eqRelays[12]) .withOptionsFrom(eqRelays[13]) .withOptionsFrom(eqRelays[14])
+            .withOptionsFrom(eqRelays[15]) .withOptionsFrom(eqRelays[16]) .withOptionsFrom(eqRelays[17]) .withOptionsFrom(eqRelays[18]) .withOptionsFrom(eqRelays[19])
+            .withOptionsFrom(eqRelays[20]) .withOptionsFrom(eqRelays[21]) .withOptionsFrom(eqRelays[22]) .withOptionsFrom(eqRelays[23]) .withOptionsFrom(eqRelays[24])
+            .withOptionsFrom(eqRelays[25]) .withOptionsFrom(eqRelays[26]) .withOptionsFrom(eqRelays[27]) .withOptionsFrom(eqRelays[28]) .withOptionsFrom(eqRelays[29])
+            .withOptionsFrom(eqRelays[30]) .withOptionsFrom(eqRelays[31]) .withOptionsFrom(eqRelays[32]) .withOptionsFrom(eqRelays[33]) .withOptionsFrom(eqRelays[34])
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 if (args.size() > 0)
                     audioProcessor.loadPreset(static_cast<int>(args[0]));
                 complete({});
+            })
+            .withNativeFunction("setDelayFreeze", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_FREEZE)->setValueNotifyingHost(
+                        static_cast<bool>(args[0]) ? 1.0f : 0.0f);
+                complete(juce::var{});
             })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -184,6 +216,26 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 complete(audioProcessor.tapeEnabled.load());
+            })
+            .withNativeFunction("setEqPanelOpen", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.eqPanelOpen.store(static_cast<float>(args[0]));
+                complete(audioProcessor.eqPanelOpen.load());
+            })
+            .withNativeFunction("getEqPanelOpen", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.eqPanelOpen.load());
+            })
+            .withNativeFunction("setEqSolo", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int band = args.size() > 0 ? (int) args[0] : -1;
+                audioProcessor.eqL.setSolo(band);
+                audioProcessor.eqR.setSolo(band);
+                complete(band);
             })
             .withNativeFunction("getTapeMachine", [this](const juce::Array<juce::var>&,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -348,6 +400,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.wireTubeSatEnabled.load());
             })
+            .withNativeFunction("setTapeLinked", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.tapeLinkEnabled.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getTapeLinked", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.tapeLinkEnabled.load());
+            })
             .withNativeFunction("setXYPad", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -381,6 +445,30 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete({});
             })
+            .withNativeFunction("setChorusEnabled", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.chorusEnabled.store(static_cast<float>(args[0]));
+                complete(juce::var{});
+            })
+            .withNativeFunction("getChorusEnabled", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.chorusEnabled.load());
+            })
+            .withNativeFunction("setDelayEnabled", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.delayEnabled.store(static_cast<float>(args[0]));
+                complete(juce::var{});
+            })
+            .withNativeFunction("getDelayEnabled", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.delayEnabled.load());
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
@@ -392,11 +480,25 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     addAndMakeVisible(captureDragStrip);
 
     // Read saved theme immediately so strip paints with correct color on first frame
+    // Also restore EQ panel open state from same settings file (editor-side UI state)
     {
         auto sf = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
                     .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
         if (sf.existsAsFile())
-            captureDragStrip.setDarkMode(sf.loadFileAsString().contains("\"dark\""));
+        {
+            auto contents = sf.loadFileAsString();
+            captureDragStrip.setDarkMode(contents.contains("\"dark\""));
+
+            // Parse eqPanelOpen flag — JSON-encoded as "eqPanelOpen":true / false
+            if (auto parsed = juce::JSON::parse(contents); parsed.isObject())
+            {
+                if (auto* obj = parsed.getDynamicObject())
+                {
+                    auto v = obj->getProperty("eqPanelOpen");
+                    audioProcessor.eqPanelOpen.store(static_cast<bool>(v) ? 1.f : 0.f);
+                }
+            }
+        }
     }
 
     // Create parameter attachments AFTER webView
@@ -433,6 +535,22 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     hissAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::HISS), hissRelay, nullptr);
 
+    wireWowAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::WIRE_WOW), wireWowRelay, nullptr);
+    wireSaturationAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::WIRE_SATURATION), wireSaturationRelay, nullptr);
+    wireHissAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::WIRE_HISS), wireHissRelay, nullptr);
+
+    studioSculptAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::STUDIO_SCULPT), studioSculptRelay, nullptr);
+
+    studioWeaveAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::STUDIO_WEAVE), studioWeaveRelay, nullptr);
+
+    studioTiltAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::STUDIO_TILT), studioTiltRelay, nullptr);
+
     outputGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::OUTPUT_GAIN), outputGainRelay, nullptr);
 
@@ -463,23 +581,80 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     spaceMixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SPACE_MIX), spaceMixRelay, nullptr);
 
-    eqLowFreqAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
-        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_LOW_FREQ), eqLowFreqRelay, nullptr);
+    dlyTimeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_TIME), dlyTimeRelay, nullptr);
 
-    eqLowGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
-        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_LOW_GAIN), eqLowGainRelay, nullptr);
+    dlyFeedbackAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_FEEDBACK), dlyFeedbackRelay, nullptr);
 
-    eqMidFreqAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
-        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_MID_FREQ), eqMidFreqRelay, nullptr);
+    dlyToneAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_TONE), dlyToneRelay, nullptr);
 
-    eqMidGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
-        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_MID_GAIN), eqMidGainRelay, nullptr);
+    dlyCharacterAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_CHARACTER), dlyCharacterRelay, nullptr);
 
-    eqHighFreqAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
-        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_HIGH_FREQ), eqHighFreqRelay, nullptr);
+    dlyModAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_MOD), dlyModRelay, nullptr);
 
-    eqHighGainAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
-        *audioProcessor.getAPVTS().getParameter(ParameterIDs::EQ_HIGH_GAIN), eqHighGainRelay, nullptr);
+    dlyModRateAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_MOD_RATE), dlyModRateRelay, nullptr);
+
+    dlyMixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_MIX), dlyMixRelay, nullptr);
+
+    dlyDuckAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_DUCK), dlyDuckRelay, nullptr);
+
+    dlyFreezeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_FREEZE), dlyFreezeRelay, nullptr);
+
+    dlySyncAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_SYNC), dlySyncRelay, nullptr);
+
+    dlySyncDivAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_SYNC_DIV), dlySyncDivRelay, nullptr);
+
+    dlyModWaveAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_MOD_WAVE), dlyModWaveRelay, nullptr);
+
+    dlyPitchAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_PITCH), dlyPitchRelay, nullptr);
+
+    dlyWidthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::DLY_WIDTH), dlyWidthRelay, nullptr);
+
+    chorusAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::CHORUS_AMOUNT), chorusAmountRelay, nullptr);
+
+    chorusWidthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::CHORUS_WIDTH), chorusWidthRelay, nullptr);
+
+    chorusCharacterAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::CHORUS_CHARACTER), chorusCharacterRelay, nullptr);
+
+    // Parametric EQ — bind each of the 35 EQ APVTS params to its relay so JS
+    // setNormalisedValue() actually writes through to APVTS. The order MUST
+    // match the eqRelays array order in PluginEditor.h.
+    {
+        const char* ids[NUM_EQ_RELAYS] = {
+            ParameterIDs::EQ_MASTER_BYPASS,
+            ParameterIDs::EQ_HP_FREQ, ParameterIDs::EQ_HP_SLOPE, ParameterIDs::EQ_HP_BYPASS,
+            ParameterIDs::EQ_LP_FREQ, ParameterIDs::EQ_LP_SLOPE, ParameterIDs::EQ_LP_BYPASS,
+            ParameterIDs::EQ_B1_FREQ, ParameterIDs::EQ_B1_GAIN, ParameterIDs::EQ_B1_Q, ParameterIDs::EQ_B1_BYPASS,
+            ParameterIDs::EQ_B2_FREQ, ParameterIDs::EQ_B2_GAIN, ParameterIDs::EQ_B2_Q, ParameterIDs::EQ_B2_BYPASS,
+            ParameterIDs::EQ_B3_FREQ, ParameterIDs::EQ_B3_GAIN, ParameterIDs::EQ_B3_Q, ParameterIDs::EQ_B3_BYPASS,
+            ParameterIDs::EQ_B4_FREQ, ParameterIDs::EQ_B4_GAIN, ParameterIDs::EQ_B4_Q, ParameterIDs::EQ_B4_BYPASS,
+            ParameterIDs::EQ_B5_FREQ, ParameterIDs::EQ_B5_GAIN, ParameterIDs::EQ_B5_Q, ParameterIDs::EQ_B5_BYPASS,
+            ParameterIDs::EQ_B6_FREQ, ParameterIDs::EQ_B6_GAIN, ParameterIDs::EQ_B6_Q, ParameterIDs::EQ_B6_BYPASS,
+            ParameterIDs::EQ_B7_FREQ, ParameterIDs::EQ_B7_GAIN, ParameterIDs::EQ_B7_Q, ParameterIDs::EQ_B7_BYPASS,
+            ParameterIDs::EQ_B1_HP_MODE, ParameterIDs::EQ_B7_LP_MODE,
+        };
+        for (int i = 0; i < NUM_EQ_RELAYS; ++i)
+        {
+            eqAttachments[i] = std::make_unique<juce::WebSliderParameterAttachment>(
+                *audioProcessor.getAPVTS().getParameter(ids[i]), eqRelays[i], nullptr);
+        }
+    }
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
@@ -622,12 +797,54 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                     auto json = val->toString();
                     if (json.isNotEmpty())
                     {
+                        // Defensive guard: if the polled JSON has zero assignments
+                        // but our currently-saved JSON has assignments, refuse to
+                        // overwrite. This protects against a race where the SAVE
+                        // poll fires BEFORE JS init finishes restoring modState
+                        // from a DAW project reload — without it, that race
+                        // wipes the restored modulation. JS init also calls
+                        // persistModState after restoreModState as a primary
+                        // mitigation; this guard is belt-and-suspenders.
+                        const bool incomingEmpty
+                            = ! json.contains ("\"target\"");
+                        const bool currentHasAssignments
+                            = audioProcessor.modStateJson.contains ("\"target\"");
+                        if (incomingEmpty && currentHasAssignments)
+                            return;
+
                         audioProcessor.modStateJson = json;
                         audioProcessor.modulationEngine.updateConfig(
                             ModulationEngine::parseJSON(json));
                     }
                 }
             });
+    }
+
+    // Push pre/post EQ analyzer bins to WebView every 60 Hz tick. Combined with
+    // SpectrumAnalyzer's 75% FFT overlap (~47 fresh frames/s @ 48 kHz), this
+    // gives a smooth 60 Hz visual on the EQ canvas.
+    {
+        const float* preBins  = audioProcessor.analyzerPre.readLatest();
+        const float* postBins = audioProcessor.analyzerPost.readLatest();
+        if (preBins != nullptr && postBins != nullptr && webView != nullptr)
+        {
+            // Build a JS call: window.__terrainEqAnalyzer({pre:[...], post:[...]});
+            // ~80 KB string at 60 Hz. Modern WebView handles it.
+            juce::String s = "window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";
+            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i)
+            {
+                if (i > 0) s += ",";
+                s += juce::String (preBins[i], 6);
+            }
+            s += "],post:[";
+            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i)
+            {
+                if (i > 0) s += ",";
+                s += juce::String (postBins[i], 6);
+            }
+            s += "]});";
+            webView->evaluateJavascript (s, nullptr);
+        }
     }
 }
 

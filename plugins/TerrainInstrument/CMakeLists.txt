@@ -44,6 +44,9 @@ target_sources(TerrainInstrument
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/ParametricEQ_test.cpp
+        Source/MoogDelay_test.cpp
+        Source/TerrainChorus_test.cpp
 )
 
 # ── Include paths ──

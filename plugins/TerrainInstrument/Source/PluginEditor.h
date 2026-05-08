@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <array>
 #include "PluginProcessor.h"
 #include "ParameterIDs.hpp"
 
@@ -38,6 +39,12 @@ private:
     juce::WebSliderRelay wowFlutterRelay { ParameterIDs::WOW_FLUTTER };
     juce::WebSliderRelay saturationRelay { ParameterIDs::SATURATION };
     juce::WebSliderRelay hissRelay       { ParameterIDs::HISS };
+    juce::WebSliderRelay wireWowRelay        { ParameterIDs::WIRE_WOW };
+    juce::WebSliderRelay wireSaturationRelay { ParameterIDs::WIRE_SATURATION };
+    juce::WebSliderRelay wireHissRelay       { ParameterIDs::WIRE_HISS };
+    juce::WebSliderRelay studioSculptRelay { ParameterIDs::STUDIO_SCULPT };
+    juce::WebSliderRelay studioWeaveRelay  { ParameterIDs::STUDIO_WEAVE };
+    juce::WebSliderRelay studioTiltRelay   { ParameterIDs::STUDIO_TILT };
     juce::WebSliderRelay outputGainRelay { ParameterIDs::OUTPUT_GAIN };
     juce::WebSliderRelay masterMixRelay  { ParameterIDs::MASTER_MIX };
     juce::WebSliderRelay loopLengthRelay   { ParameterIDs::LOOP_LENGTH };
@@ -48,13 +55,43 @@ private:
     juce::WebSliderRelay spaceDecayRelay   { ParameterIDs::SPACE_DECAY };
     juce::WebSliderRelay spaceToneRelay    { ParameterIDs::SPACE_TONE };
     juce::WebSliderRelay spaceMixRelay     { ParameterIDs::SPACE_MIX };
-    juce::WebSliderRelay eqLowFreqRelay    { ParameterIDs::EQ_LOW_FREQ };
-    juce::WebSliderRelay eqLowGainRelay    { ParameterIDs::EQ_LOW_GAIN };
-    juce::WebSliderRelay eqMidFreqRelay    { ParameterIDs::EQ_MID_FREQ };
-    juce::WebSliderRelay eqMidGainRelay    { ParameterIDs::EQ_MID_GAIN };
-    juce::WebSliderRelay eqHighFreqRelay   { ParameterIDs::EQ_HIGH_FREQ };
-    juce::WebSliderRelay eqHighGainRelay   { ParameterIDs::EQ_HIGH_GAIN };
-
+    juce::WebSliderRelay dlyTimeRelay      { ParameterIDs::DLY_TIME };
+    juce::WebSliderRelay dlyFeedbackRelay  { ParameterIDs::DLY_FEEDBACK };
+    juce::WebSliderRelay dlyToneRelay      { ParameterIDs::DLY_TONE };
+    juce::WebSliderRelay dlyCharacterRelay { ParameterIDs::DLY_CHARACTER };
+    juce::WebSliderRelay dlyModRelay       { ParameterIDs::DLY_MOD };
+    juce::WebSliderRelay dlyModRateRelay   { ParameterIDs::DLY_MOD_RATE };
+    juce::WebSliderRelay dlyMixRelay       { ParameterIDs::DLY_MIX };
+    juce::WebSliderRelay dlyDuckRelay      { ParameterIDs::DLY_DUCK };
+    juce::WebSliderRelay dlyFreezeRelay    { ParameterIDs::DLY_FREEZE };
+    // Choice-type delay relays. Without these, JS setNormalisedValue() writes
+    // to a phantom SliderState — APVTS never updates and the audio thread
+    // reads the default forever (PITCH stuck at OFF, WIDTH stuck at MONO, etc.).
+    juce::WebSliderRelay dlySyncRelay      { ParameterIDs::DLY_SYNC };
+    juce::WebSliderRelay dlySyncDivRelay   { ParameterIDs::DLY_SYNC_DIV };
+    juce::WebSliderRelay dlyModWaveRelay   { ParameterIDs::DLY_MOD_WAVE };
+    juce::WebSliderRelay dlyPitchRelay     { ParameterIDs::DLY_PITCH };
+    juce::WebSliderRelay dlyWidthRelay     { ParameterIDs::DLY_WIDTH };
+    juce::WebSliderRelay chorusAmountRelay    { ParameterIDs::CHORUS_AMOUNT };
+    juce::WebSliderRelay chorusWidthRelay     { ParameterIDs::CHORUS_WIDTH };
+    juce::WebSliderRelay chorusCharacterRelay { ParameterIDs::CHORUS_CHARACTER };
+    // Parametric EQ — 37 relays bridging WebView ↔ APVTS for EQ_MASTER_BYPASS,
+    // HP/LP (freq/slope/bypass), 7 bands × (freq/gain/Q/bypass), and the two
+    // UI-only filter-mode flags (EQ_B1_HP_MODE / EQ_B7_LP_MODE).
+    static constexpr int NUM_EQ_RELAYS = 37;
+    std::array<juce::WebSliderRelay, NUM_EQ_RELAYS> eqRelays {{
+        juce::WebSliderRelay { ParameterIDs::EQ_MASTER_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_HP_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_HP_SLOPE }, juce::WebSliderRelay { ParameterIDs::EQ_HP_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_LP_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_LP_SLOPE }, juce::WebSliderRelay { ParameterIDs::EQ_LP_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B1_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B1_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B1_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B1_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B2_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B2_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B2_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B2_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B3_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B3_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B3_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B3_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B4_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B4_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B4_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B4_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B5_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B5_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B5_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B5_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B6_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B6_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B6_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B6_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B7_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B7_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B7_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B7_BYPASS },
+        juce::WebSliderRelay { ParameterIDs::EQ_B1_HP_MODE }, juce::WebSliderRelay { ParameterIDs::EQ_B7_LP_MODE },
+    }};
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
@@ -111,6 +148,12 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> wowFlutterAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> saturationAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> hissAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> wireWowAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> wireSaturationAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> wireHissAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> studioSculptAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> studioWeaveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> studioTiltAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> outputGainAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> masterMixAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> loopLengthAttachment;
@@ -121,12 +164,25 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> spaceDecayAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> spaceToneAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> spaceMixAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> eqLowFreqAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> eqLowGainAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> eqMidFreqAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> eqMidGainAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> eqHighFreqAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> eqHighGainAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyTimeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyFeedbackAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyToneAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyCharacterAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyModAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyModRateAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyMixAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyDuckAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyFreezeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlySyncAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlySyncDivAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyModWaveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyPitchAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> dlyWidthAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> chorusAmountAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> chorusWidthAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> chorusCharacterAttachment;
+    // Parametric EQ attachments — bind APVTS params to the eqRelays above.
+    std::array<std::unique_ptr<juce::WebSliderParameterAttachment>, NUM_EQ_RELAYS> eqAttachments;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady

@@ -4,6 +4,7 @@
 #include <random>
 #include <vector>
 #include <algorithm>
+#include "HarmonicSculptor.h"
 
 //==============================================================================
 // TapeMachines.h — Three distinct tape machine DSP algorithms for Terrain v2.0
@@ -332,6 +333,16 @@ class StudioMachine : public TapeMachineBase
 public:
     StudioMachine() = default;
 
+    // Called from TapeProcessor each sample BEFORE processSaturation is invoked.
+    // Studio replaces the legacy saturation/wow/hiss control surface with
+    // sculpt/weave/tilt — these are the only inputs the machine reads.
+    void setSculptorParams (double sculpt, double weave, double tilt)
+    {
+        sculptAmount = sculpt;
+        weaveAmount  = weave;
+        tiltAmount   = tilt;
+    }
+
     void prepare(double sampleRate) override
     {
         sr = sampleRate;
@@ -354,6 +365,7 @@ public:
         hissHP.setFreq(200.0, sr);
 
         prevOversampleInput = 0.0;
+        sculptor.prepare (sr);
     }
 
     void reset() override
@@ -368,88 +380,38 @@ public:
         hissHiShelf.reset();
         hissHP.reset();
         prevOversampleInput = 0.0;
+        sculptor.reset();
+        sculptAmount = 0.0;
+        weaveAmount  = 0.0;
+        tiltAmount   = 0.0;
     }
 
     //==========================================================================
-    // Saturation: tanh with DC bias, pre-emphasis, gentle post-rolloff
-    // 15 IPS = wide bandwidth, retains highs even when driven
-    double processSaturation(double input, double amount) override
+    // Saturation: delegated entirely to HarmonicSculptor (Studio v2.0).
+    // The legacy "amount" parameter is ignored — sculpt/weave/tilt drive everything.
+    double processSaturation (double input, double /*amount*/) override
     {
-        // Always run the full chain to keep filter state warm (prevents clicks)
-        const double midSample = (prevOversampleInput + input) * 0.5;
-        prevOversampleInput = input;
-
-        const double out1 = saturateSample(midSample, amount);
-        const double out2 = saturateSample(input, amount);
-
-        const double processed = (out1 + out2) * 0.5;
-        // At zero amount, saturateSample already returns near-dry due to drive=1 + tanh(x)≈x
-        return processed;
+        // Studio v2.0: ignore the legacy "amount" parameter entirely. The
+        // sculpt/weave/tilt knobs are pushed in via setSculptorParams() and
+        // drive the entire saturation engine.
+        return sculptor.processSample (input, sculptAmount, weaveAmount, tiltAmount);
     }
 
     //==========================================================================
-    // Wow: Single primary LFO at 0.8Hz (±1.2ms) + subtle flutter at 5.5Hz (±0.15ms)
-    // Smooth, gentle, "professional machine with slight speed issues"
-    double processWow(double input, double amount) override
+    // Wow: bypassed in Studio v2.0 — knob slot is now WEAVE.
+    double processWow (double input, double /*amount*/) override
     {
-        // Always write to delay line to keep buffer current (prevents clicks on activation)
-        delay.write(static_cast<float>(input));
-
-        const double drift = rateDrift.next(sr);
-
-        // Primary wow: 0.8Hz with subtle drift
-        const double wowFreq = 0.8 + drift * 0.15 * amount;
-        wowPhase += std::max(wowFreq, 0.1) / sr;
-        if (wowPhase >= 1.0) wowPhase -= 1.0;
-        const double wowMod = std::sin(2.0 * M_PI * wowPhase);
-
-        // Subtle flutter: 5.5Hz
-        flutterPhase += 5.5 / sr;
-        if (flutterPhase >= 1.0) flutterPhase -= 1.0;
-        const double flutterMod = std::sin(2.0 * M_PI * flutterPhase);
-
-        // ±1.2ms wow + ±0.15ms flutter
-        const double wowDepthMs = amount * 1.2;
-        const double flutterDepthMs = amount * 0.15;
-        const double totalModMs = wowMod * wowDepthMs + flutterMod * flutterDepthMs;
-        const double deviationSamples = totalModMs * 0.001 * sr;
-
-        // 5ms center delay
-        const double centerDelay = sr * 0.005;
-        const double totalDelay = centerDelay + deviationSamples;
-
-        const double clampedDelay = std::max(1.0, std::min(totalDelay,
-            static_cast<double>(delay.bufferSize - 2)));
-
-        const double delayed = static_cast<double>(delay.readCubic(clampedDelay));
-        // Crossfade dry→delayed to prevent phase-jump click at activation
-        const double blend = std::min(amount * 10.0, 1.0); // full wet by 10% amount
-        return input * (1.0 - blend) + delayed * blend;
+        // Studio v2.0: the wow knob slot is now WEAVE — wow DSP is bypassed.
+        return input;
     }
 
     //==========================================================================
-    // Hiss: Shaped white noise. Exponential curve, max 0.003 coefficient.
-    // 15 IPS = lowest noise floor of all three machines.
-    double processHiss(double amount, float& audioGainMultiplier, double /*audioInput*/) override
+    // Hiss: bypassed in Studio v2.0 — knob slot is now TILT.
+    double processHiss (double /*amount*/, float& audioGainMultiplier, double /*audioInput*/) override
     {
+        // Studio v2.0: the hiss knob slot is now TILT — hiss DSP is bypassed.
         audioGainMultiplier = 1.0f;
-        if (amount < 0.001) return 0.0;
-
-        std::uniform_real_distribution<double> dist(-1.0, 1.0);
-        double noise = dist(rng);
-
-        // High-shelf at 4kHz: +3dB on highs
-        const double lpNoise = hissHiShelf.process(noise);
-        const double hpNoise = noise - lpNoise;
-        noise = lpNoise + hpNoise * 1.41;
-
-        // HP at 200Hz
-        noise = hissHP.process(noise);
-
-        // Exponential curve: pow(amount, 2.5) * 0.003
-        const double level = std::pow(amount, 2.5) * 0.003;
-
-        return noise * level;
+        return 0.0;
     }
 
 private:
@@ -497,6 +459,14 @@ private:
 
     OnePoleLP hissHiShelf;
     OnePoleHP hissHP;
+
+    // Harmonic Sculptor v2.0 engine — replaces the legacy tanh saturation.
+    HarmonicSculptor sculptor;
+
+    // Latest sculpt/weave/tilt values (set by TapeProcessor each sample, normalised).
+    double sculptAmount = 0.0;
+    double weaveAmount  = 0.0;
+    double tiltAmount   = 0.0;
 };
 
 

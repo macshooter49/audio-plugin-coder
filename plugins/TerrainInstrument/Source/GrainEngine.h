@@ -191,11 +191,20 @@ public:
                 grain.active = false;
         }
 
-        // Soft clip the wet signal
+        // Soft clip the wet signal (and guard against NaN/Inf from unstable
+        // grain reads; if any active grain produced a non-finite sample the
+        // softClip would propagate it through the dry/wet mix even at mix=0
+        // because float NaN * 0 == NaN).
+        if (! std::isfinite(wetSample)) wetSample = 0.0f;
         wetSample = softClip(wetSample);
 
-        // Dry/wet mix
+        // Dry/wet mix. Hard-bypass the wet path at mix near zero so the
+        // grain engine acts as a pure passthrough. Without this, the wet
+        // arithmetic still runs and any subtle numerical artifact in the
+        // grain pool can leak into the output even at mix=0.
         const float mix = mixAmount * 0.01f;
+        if (mix < 0.001f) return inputSample;
+        if (mix > 0.999f) return wetSample;
         return inputSample * (1.0f - mix) + wetSample * mix;
     }
 

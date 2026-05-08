@@ -6,7 +6,10 @@
 #include "TapeProcessor.h"
 #include "TapeLoopProcessor.h"
 #include "SpaceReverb.h"
-#include "SimpleEQ.h"
+#include "MoogDelay.h"
+#include "TerrainChorus.h"
+#include "ParametricEQ.h"
+#include "SpectrumAnalyzer.h"
 #include "RollingCaptureBuffer.h"
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
@@ -43,10 +46,50 @@ struct PresetData
     float grainFilter = 50.f; // 0 = HP, 50 = bypass, 100 = LP
     // Space reverb
     float spaceSize = 50.f, spaceDecay = 50.f, spaceTone = 50.f, spaceMix = 0.f;
-    // 3-band EQ
-    float eqLowFreq = 200.f, eqLowGain = 0.f;
-    float eqMidFreq = 1000.f, eqMidGain = 0.f;
-    float eqHighFreq = 6000.f, eqHighGain = 0.f;
+    // Harmonic Sculptor (Studio v2.0) — placed AFTER all positionally-initialized
+    // factory preset slots so the existing initializer literals don't shift values
+    // into these fields. Defaults match APVTS defaults.
+    float studioSculpt = 0.f;
+    float studioWeave  = 0.f;
+    float studioTilt   = 0.f;
+    // Tape Link: when 1, all 3 tape machines run in series.
+    float tapeLinkEnabled = 0.f;
+    // Wire-specific wow/sat/hiss — independent of Cassette.
+    float wireWow        = 0.f;
+    float wireSaturation = 0.f;
+    float wireHiss       = 0.f;
+    // Parametric EQ (v6) — 35 APVTS params + 2 JS-side filter mode flags.
+    // Defaults mirror the APVTS layout in createParameterLayout().
+    float eqMasterBypass = 0.f;
+    float eqHpFreq = 35.f,    eqHpSlope = 1.f, eqHpBypass = 1.f;
+    float eqLpFreq = 16000.f, eqLpSlope = 0.f, eqLpBypass = 1.f;
+    float eqB1Freq = 50.f,   eqB1Gain = 0.f, eqB1Q = 0.707f, eqB1Bypass = 0.f;
+    float eqB2Freq = 110.f,  eqB2Gain = 0.f, eqB2Q = 0.707f, eqB2Bypass = 0.f;
+    float eqB3Freq = 270.f,  eqB3Gain = 0.f, eqB3Q = 0.707f, eqB3Bypass = 0.f;
+    float eqB4Freq = 630.f,  eqB4Gain = 0.f, eqB4Q = 0.707f, eqB4Bypass = 0.f;
+    float eqB5Freq = 1500.f, eqB5Gain = 0.f, eqB5Q = 0.707f, eqB5Bypass = 0.f;
+    float eqB6Freq = 3500.f, eqB6Gain = 0.f, eqB6Q = 0.707f, eqB6Bypass = 0.f;
+    float eqB7Freq = 8500.f, eqB7Gain = 0.f, eqB7Q = 0.707f, eqB7Bypass = 0.f;
+    float eqB1HpMode = 0.f;  // band 1 in HP filter mode (replaces bell + engages HP)
+    float eqB7LpMode = 0.f;  // band 7 in LP filter mode (replaces bell + engages LP)
+    // MF-104S delay (v6)
+    float dlyTime      = 350.0f;
+    float dlyFeedback  = 0.45f;
+    float dlyTone      = 0.0f;
+    float dlyCharacter = 0.5f;
+    float dlyMod       = 0.25f;
+    float dlyModRate   = 0.5f;
+    float dlyMix       = 0.0f;   // Default 0.0 so old presets sound the same.
+    float dlyDuck      = 0.0f;
+    float dlyModWave   = 0.0f;   // 0=Sine
+    float dlySync      = 0.0f;   // 0=Free
+    float dlySyncDiv   = 5.0f;   // 5=1/8
+    float dlyPitch     = 0.0f;   // 0=OFF
+    float dlyWidth     = 1.0f;   // 1=Stereo
+    // Chorus (v6)
+    float chorusAmount    = 0.0f;
+    float chorusWidth     = 0.7f;
+    float chorusCharacter = 0.3f;
     // Category tag (at end so initializer lists work without specifying it)
     juce::String tag;  // e.g. "GRAIN", "TAPE", "AMBIENT", custom
     // Modulation state JSON (LFO configs + assignments, saved per-preset)
@@ -86,6 +129,11 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
     tw::SampleBuffer& getSampleBuffer() noexcept { return sampleBuffer; }
 
+    // Sampler atomics — public so SamplerVoice can take a reference (audio-thread-safe).
+    std::atomic<int>   rootNoteMidi    { 60 };    // default C4
+    std::atomic<float> attackMsAtomic  { 5.0f };
+    std::atomic<float> releaseMsAtomic { 800.0f };
+
     // Preset system
     void loadPreset (int index);
     int getPresetCount() const;
@@ -108,11 +156,6 @@ public:
     std::atomic<int> activeGrainCount { 0 };
     std::atomic<int> currentPresetIndex { 0 };
 
-    // Public so SamplerVoice can take a reference (atomic, lock-free reads on audio thread).
-    std::atomic<int>   rootNoteMidi   { 60 };    // default C4
-    std::atomic<float> attackMsAtomic { 5.0f };
-    std::atomic<float> releaseMsAtomic { 800.0f };
-
     // XY automation state (synced from JS, captured into presets)
     std::atomic<float> xyAutoEnabled { 0.f };
     std::atomic<float> xyAutoMode    { 0.f };
@@ -127,6 +170,15 @@ public:
 
     // Tape engine master on/off (synced from JS, captured into presets)
     std::atomic<float> tapeEnabled { 1.f }; // 1 = on, 0 = bypass
+
+    // EQ panel open/closed UI state (editor-side only, persists via PluginSettings.json)
+    std::atomic<float> eqPanelOpen { 0.f };  // editor UI state, persists via PluginSettings.json
+
+    // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)
+    SpectrumAnalyzer analyzerPre, analyzerPost;
+
+    // Parametric EQ (one per channel) — public so editor's setEqSolo native fn can call setSolo()
+    ParametricEQ eqL, eqR;
 
     // Drift link to XY pad (synced from JS, captured into presets)
     std::atomic<float> wanderLinked { 1.f }; // 1 = linked, 0 = unlinked
@@ -147,6 +199,20 @@ public:
     // Wire-only mode toggles (synced from JS, persisted in DAW state)
     std::atomic<float> wireSpaceNoiseEnabled { 0.f }; // 0 = standard hiss, 1 = space noise
     std::atomic<float> wireTubeSatEnabled { 0.f };    // 0 = standard sat, 1 = tube
+
+    // Tape Link: when 1, all 3 tape machines run in series (Studio →
+    // Cassette → Wire) instead of just the active machine. Each machine
+    // reads its own knob values from APVTS. (synced from JS, persisted
+    // in DAW state and presets)
+    std::atomic<float> tapeLinkEnabled { 0.f };
+
+    // Delay freeze (now an APVTS param DLY_FREEZE; atomics replaced by APVTS + smoother)
+
+    // Chorus enable/disable (bridged via setChorusEnabled native function)
+    std::atomic<float> chorusEnabled { 1.0f };
+
+    // Delay enable/disable (bridged via setDelayEnabled native function)
+    std::atomic<float> delayEnabled { 1.0f };
 
     // Modulation engine (runs in processBlock, independent of editor window)
     ModulationEngine modulationEngine;
@@ -193,9 +259,9 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+    // Sampler engine (Terrain Instrument additions — v0a)
     juce::Synthesiser synth;
     static constexpr int kNumVoices = 16;
-
     tw::SampleBuffer sampleBuffer;
 
     // Grain engines (one per channel)
@@ -209,12 +275,21 @@ private:
     // Tape loop (stereo — single instance)
     TapeLoopProcessor tapeLoop;
 
+    // MF-104S delay (v6) — single stereo instance, internal cross-feed.
+    MoogDelay moogDelay;
+
+    // Terrain chorus (v6) — single stereo instance.
+    TerrainChorus terrainChorus;
+
+    juce::SmoothedValue<float> smoothedChorusAmount;
+    juce::SmoothedValue<float> smoothedChorusWidth;
+    juce::SmoothedValue<float> smoothedChorusCharacter;
+
     // Space reverb (stereo — single instance handles both channels)
     SpaceReverb spaceReverb;
 
-    // 3-band EQ (one per channel)
-    SimpleEQ eqL;
-    SimpleEQ eqR;
+    // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
+    // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)
 
     // Smoothed parameters — granular
     juce::SmoothedValue<float> smoothedGrainSize;
@@ -230,6 +305,16 @@ private:
     juce::SmoothedValue<float> smoothedSaturation;
     juce::SmoothedValue<float> smoothedHiss;
 
+    // Smoothed parameters — Harmonic Sculptor (Studio v2.0)
+    juce::SmoothedValue<float> smoothedStudioSculpt;
+    juce::SmoothedValue<float> smoothedStudioWeave;
+    juce::SmoothedValue<float> smoothedStudioTilt;
+
+    // Smoothed parameters — Wire machine wow/saturation/hiss
+    juce::SmoothedValue<float> smoothedWireWow;
+    juce::SmoothedValue<float> smoothedWireSat;
+    juce::SmoothedValue<float> smoothedWireHiss;
+
     // Smoothed parameters — grain filter
     juce::SmoothedValue<float> smoothedGrainFilter;
 
@@ -243,13 +328,20 @@ private:
     juce::SmoothedValue<float> smoothedSpaceTone;
     juce::SmoothedValue<float> smoothedSpaceMix;
 
-    // Smoothed parameters — EQ
-    juce::SmoothedValue<float> smoothedEqLowFreq;
-    juce::SmoothedValue<float> smoothedEqLowGain;
-    juce::SmoothedValue<float> smoothedEqMidFreq;
-    juce::SmoothedValue<float> smoothedEqMidGain;
-    juce::SmoothedValue<float> smoothedEqHighFreq;
-    juce::SmoothedValue<float> smoothedEqHighGain;
+    // Parametric EQ smoothed values (audio-thread reads)
+    std::array<juce::LinearSmoothedValue<float>, 7> smoothedEqBandFreq, smoothedEqBandGain, smoothedEqBandQ;
+    juce::LinearSmoothedValue<float> smoothedEqHpFreq, smoothedEqLpFreq;
+
+    // Smoothed parameters — delay
+    juce::SmoothedValue<float> smoothedDlyTime;
+    juce::SmoothedValue<float> smoothedDlyFeedback;
+    juce::SmoothedValue<float> smoothedDlyTone;
+    juce::SmoothedValue<float> smoothedDlyCharacter;
+    juce::SmoothedValue<float> smoothedDlyMod;
+    juce::SmoothedValue<float> smoothedDlyModRate;
+    juce::SmoothedValue<float> smoothedDlyMix;
+    juce::SmoothedValue<float> smoothedDlyDuck;
+    juce::SmoothedValue<float> smoothedDelayFreeze;  // DLY_FREEZE: APVTS 0..1, threshold 0.5
 
     // Smoothed parameters — output
     juce::SmoothedValue<float> smoothedOutputGain;
@@ -264,6 +356,7 @@ private:
     float feedDelayR = 0.0f;
     bool prevProcessBlockRecording = false; // Track recording transitions for auto-disabling feed
     bool prevFeedActive = false; // Track feed mode transitions for grain buffer clearing
+    bool prevTapeOn = true; // Track tape-section toggle transitions for filter-state reset on re-enable
 
     // Rolling capture buffer
     RollingCaptureBuffer captureBuffer;

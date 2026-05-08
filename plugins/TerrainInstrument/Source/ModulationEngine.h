@@ -29,9 +29,34 @@ public:
         pSpaceDecay,
         pSpaceTone,
         pSpaceMix,
-        pEqLowGain,
-        pEqMidGain,
-        pEqHighGain,
+        // Parametric EQ — 7 bands × 3 (freq/gain/Q) + HP/LP freq = 23 mod targets
+        pEqB1Freq, pEqB1Gain, pEqB1Q,
+        pEqB2Freq, pEqB2Gain, pEqB2Q,
+        pEqB3Freq, pEqB3Gain, pEqB3Q,
+        pEqB4Freq, pEqB4Gain, pEqB4Q,
+        pEqB5Freq, pEqB5Gain, pEqB5Q,
+        pEqB6Freq, pEqB6Gain, pEqB6Q,
+        pEqB7Freq, pEqB7Gain, pEqB7Q,
+        pEqHpFreq, pEqLpFreq,
+        pStudioSculpt,
+        pStudioWeave,
+        pStudioTilt,
+        pDlyTime,
+        pDlyFeedback,
+        pDlyTone,
+        pDlyCharacter,
+        pDlyMod,
+        pDlyModRate,
+        pDlyMix,
+        pDlyDuck,
+        pDlyFreeze,
+        pChorusAmount,
+        pChorusWidth,
+        pChorusCharacter,
+        // Wire machine — appended at END to preserve all existing saved-project indices
+        pWireWow,
+        pWireSaturation,
+        pWireHiss,
         pNumParams
     };
 
@@ -78,13 +103,42 @@ public:
         5.0f, 1.0f, 0.0f, -12.0f, 0.0f, 0.0f, 0.0f, 0.0f,    // grainSize..mix
         0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,                    // wowFlutter..loopSpeed
         0.0f, 0.0f, 0.0f, 0.0f,                                  // spaceSize..spaceMix
-        -12.0f, -12.0f, -12.0f                                    // eqLowGain..eqHighGain
+        // Parametric EQ (23 entries)
+        20.0f, -24.0f, 0.1f,   // B1: freq, gain, Q
+        20.0f, -24.0f, 0.1f,   // B2
+        20.0f, -24.0f, 0.1f,   // B3
+        20.0f, -24.0f, 0.1f,   // B4
+        20.0f, -24.0f, 0.1f,   // B5
+        20.0f, -24.0f, 0.1f,   // B6
+        20.0f, -24.0f, 0.1f,   // B7
+        20.0f, 20.0f,           // HP, LP freq
+        0.0f, 0.0f, -100.0f,                                       // studioSculpt, studioWeave, studioTilt
+        // MF-104S delay (8 continuous + 1 freeze gate: time, feedback, tone, character, mod, modRate, mix, duck, freeze)
+        5.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.05f, 0.0f, 0.0f, 0.0f,
+        // Chorus (3 entries: amount, width, character)
+        0.0f, 0.0f, 0.0f,
+        // Wire machine (3 entries: wireWow, wireSaturation, wireHiss) — 0-100 like cassette
+        0.0f, 0.0f, 0.0f
     };
     static constexpr float paramMax[pNumParams] = {
         500.0f, 100.0f, 100.0f, 12.0f, 100.0f, 100.0f, 100.0f, 100.0f,  // grainSize..mix
         100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 9.0f,                    // wowFlutter..loopSpeed
         100.0f, 100.0f, 100.0f, 100.0f,                                    // spaceSize..spaceMix
-        12.0f, 12.0f, 12.0f                                                // eqLowGain..eqHighGain
+        // Parametric EQ (23 entries)
+        20000.0f, 24.0f, 30.0f,   // B1: freq, gain, Q
+        20000.0f, 24.0f, 30.0f,   // B2
+        20000.0f, 24.0f, 30.0f,   // B3
+        20000.0f, 24.0f, 30.0f,   // B4
+        20000.0f, 24.0f, 30.0f,   // B5
+        20000.0f, 24.0f, 30.0f,   // B6
+        20000.0f, 24.0f, 30.0f,   // B7
+        20000.0f, 20000.0f,        // HP, LP freq
+        100.0f, 100.0f, 100.0f,                                              // studioSculpt, studioWeave, studioTilt
+        1500.0f, 1.10f, 1.0f, 1.0f, 1.0f, 8.0f, 1.0f, 1.0f, 1.0f,
+        // Chorus (3 entries: amount, width, character)
+        1.0f, 1.0f, 1.0f,
+        // Wire machine (3 entries: wireWow, wireSaturation, wireHiss) — 0-100 like cassette
+        100.0f, 100.0f, 100.0f
     };
 
     //==============================================================================
@@ -404,7 +458,19 @@ private:
             "grainFilter", "mix", "wowFlutter", "saturation", "hiss",
             "loopFeedback", "loopDegrade", "loopSpeed",
             "spaceSize", "spaceDecay", "spaceTone", "spaceMix",
-            "eqLowGain", "eqMidGain", "eqHighGain"
+            "eqB1Freq", "eqB1Gain", "eqB1Q",
+            "eqB2Freq", "eqB2Gain", "eqB2Q",
+            "eqB3Freq", "eqB3Gain", "eqB3Q",
+            "eqB4Freq", "eqB4Gain", "eqB4Q",
+            "eqB5Freq", "eqB5Gain", "eqB5Q",
+            "eqB6Freq", "eqB6Gain", "eqB6Q",
+            "eqB7Freq", "eqB7Gain", "eqB7Q",
+            "eqHpFreq", "eqLpFreq",
+            "studioSculpt", "studioWeave", "studioTilt",
+            "dlyTime", "dlyFeedback", "dlyTone", "dlyCharacter",
+            "dlyMod", "dlyModRate", "dlyMix", "dlyDuck", "dlyFreeze",
+            "chorusAmount", "chorusWidth", "chorusCharacter",
+            "wireWow", "wireSaturation", "wireHiss"
         };
         for (int i = 0; i < pNumParams; i++)
             if (name == names[i]) return i;
@@ -418,7 +484,19 @@ private:
             "grainFilter", "mix", "wowFlutter", "saturation", "hiss",
             "loopFeedback", "loopDegrade", "loopSpeed",
             "spaceSize", "spaceDecay", "spaceTone", "spaceMix",
-            "eqLowGain", "eqMidGain", "eqHighGain"
+            "eqB1Freq", "eqB1Gain", "eqB1Q",
+            "eqB2Freq", "eqB2Gain", "eqB2Q",
+            "eqB3Freq", "eqB3Gain", "eqB3Q",
+            "eqB4Freq", "eqB4Gain", "eqB4Q",
+            "eqB5Freq", "eqB5Gain", "eqB5Q",
+            "eqB6Freq", "eqB6Gain", "eqB6Q",
+            "eqB7Freq", "eqB7Gain", "eqB7Q",
+            "eqHpFreq", "eqLpFreq",
+            "studioSculpt", "studioWeave", "studioTilt",
+            "dlyTime", "dlyFeedback", "dlyTone", "dlyCharacter",
+            "dlyMod", "dlyModRate", "dlyMix", "dlyDuck", "dlyFreeze",
+            "chorusAmount", "chorusWidth", "chorusCharacter",
+            "wireWow", "wireSaturation", "wireHiss"
         };
         if (idx >= 0 && idx < pNumParams) return names[idx];
         return "grainSize";
