@@ -108,6 +108,9 @@ public:
     std::atomic<int> activeGrainCount { 0 };
     std::atomic<int> currentPresetIndex { 0 };
 
+    // Public so SamplerVoice can take a reference (atomic, lock-free reads on audio thread).
+    std::atomic<int> rootNoteMidi { 60 }; // default C4
+
     // XY automation state (synced from JS, captured into presets)
     std::atomic<float> xyAutoEnabled { 0.f };
     std::atomic<float> xyAutoMode    { 0.f };

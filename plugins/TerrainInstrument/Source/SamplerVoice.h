@@ -3,68 +3,110 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include "SampleBuffer.h"
+#include <atomic>
+#include <cmath>
 
-namespace tw // terrain-waves
+namespace tw
 {
-    /**
-     * SamplerVoice — one polyphonic voice for Terrain Instrument.
-     *
-     * v0a stub: accepts note-on/off, allocates space, produces silence.
-     * Real audio playback wired up in Task 6.
-     *
-     * Intentionally header-only to match the project convention.
-     */
     class SamplerVoice : public juce::SynthesiserVoice
     {
     public:
-        SamplerVoice() = default;
-        ~SamplerVoice() override = default;
+        SamplerVoice (SampleBuffer& sb, std::atomic<int>& rootNoteRef) noexcept
+            : sample (sb), rootNoteParam (rootNoteRef) {}
 
-        bool canPlaySound (juce::SynthesiserSound* /*sound*/) override { return true; }
+        bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
         void startNote (int midiNoteNumber, float velocity,
-                        juce::SynthesiserSound* /*sound*/, int /*currentPitchWheelPosition*/) override
+                        juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
-            currentNote = midiNoteNumber;
+            currentNote     = midiNoteNumber;
             currentVelocity = velocity;
+            playhead        = 0.0;
+            updatePitchRatio();
             isActive = true;
-            // TODO Task 6: read shared sample buffer + start playhead at 0
         }
 
-        void stopNote (float /*velocity*/, bool allowTailOff) override
+        void stopNote (float, bool allowTailOff) override
         {
             if (! allowTailOff)
             {
                 clearCurrentNote();
                 isActive = false;
+                playhead = 0.0;
             }
-            // TODO Task 8: trigger AR release stage
+            // Task 8 wires the AR release; stopNote without tail-off cuts immediately.
         }
 
-        void pitchWheelMoved (int /*newPitchWheelValue*/) override {}
-        void controllerMoved (int /*controllerNumber*/, int /*newControllerValue*/) override {}
+        void pitchWheelMoved (int /*newPitchWheelValue*/) override
+        {
+            // Task 7 hooks pitch bend in here.
+        }
+
+        void controllerMoved (int, int) override {}
 
         void renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
                               int startSample, int numSamples) override
         {
-            // v0a stub: silence. Real DSP wired in Task 6.
-            juce::ignoreUnused (outputBuffer, startSample, numSamples);
+            if (! isActive) return;
+
+            auto buf = sample.load();
+            if (! buf || buf->getNumSamples() == 0) return;
+
+            const int    bufLen   = buf->getNumSamples();
+            const int    bufChans = buf->getNumChannels();
+            const double pitchInc = pitchRatio;
+
+            auto* outL = outputBuffer.getWritePointer (0, startSample);
+            auto* outR = outputBuffer.getNumChannels() > 1
+                         ? outputBuffer.getWritePointer (1, startSample) : outL;
+
+            const auto* inL = buf->getReadPointer (0);
+            const auto* inR = bufChans > 1 ? buf->getReadPointer (1) : inL;
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                if (playhead >= static_cast<double> (bufLen - 1))
+                {
+                    clearCurrentNote();
+                    isActive = false;
+                    return;
+                }
+
+                const auto i0 = static_cast<int> (playhead);
+                const auto frac = static_cast<float> (playhead - i0);
+                const auto sampleL = inL[i0] + frac * (inL[i0 + 1] - inL[i0]);
+                const auto sampleR = inR[i0] + frac * (inR[i0 + 1] - inR[i0]);
+
+                const auto gain = currentVelocity;
+                outL[i] += sampleL * gain;
+                outR[i] += sampleR * gain;
+
+                playhead += pitchInc;
+            }
         }
 
     private:
-        int   currentNote     = -1;
-        float currentVelocity = 0.0f;
-        bool  isActive        = false;
+        void updatePitchRatio()
+        {
+            const int rootNote = rootNoteParam.load();
+            const double semitones = static_cast<double> (currentNote - rootNote);
+            pitchRatio = std::pow (2.0, semitones / 12.0);
+        }
+
+        SampleBuffer&     sample;
+        std::atomic<int>& rootNoteParam;
+
+        int    currentNote     = -1;
+        float  currentVelocity = 0.0f;
+        double playhead        = 0.0;
+        double pitchRatio      = 1.0;
+        bool   isActive        = false;
     };
 
-    /**
-     * SamplerSound — placeholder. juce::Synthesiser requires at least one Sound
-     * registered before any voice will play. We register a single always-active
-     * sound; per-voice gating happens in canPlaySound (which always returns true).
-     */
     struct SamplerSound : public juce::SynthesiserSound
     {
-        bool appliesToNote    (int /*midiNoteNumber*/) override { return true; }
-        bool appliesToChannel (int /*midiChannel*/)    override { return true; }
+        bool appliesToNote    (int) override { return true; }
+        bool appliesToChannel (int) override { return true; }
     };
 }

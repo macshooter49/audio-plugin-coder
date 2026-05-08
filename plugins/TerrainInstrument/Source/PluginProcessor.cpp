@@ -13,7 +13,53 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // Register one Sound (always active) and 16 voices.
     synth.addSound (new tw::SamplerSound());
     for (int i = 0; i < kNumVoices; ++i)
-        synth.addVoice (new tw::SamplerVoice());
+        synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi));
+
+    // === TEMPORARY: hardcoded test sample (replaced by drag-drop loader in Task 10). ===
+    // Tries ~/Library/Waves Crate/Terrain/test.wav, falls back to synthesized C4 sine wave.
+    {
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+
+        auto testFile = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                           .getChildFile ("Waves Crate")
+                           .getChildFile ("Terrain")
+                           .getChildFile ("test.wav");
+
+        std::shared_ptr<juce::AudioBuffer<float>> buf;
+        double nativeRate = 44100.0;
+
+        if (testFile.existsAsFile())
+        {
+            if (auto reader = std::unique_ptr<juce::AudioFormatReader> (fm.createReaderFor (testFile)))
+            {
+                buf = std::make_shared<juce::AudioBuffer<float>> (
+                          juce::jmax (2, (int) reader->numChannels), (int) reader->lengthInSamples);
+                reader->read (buf.get(), 0, (int) reader->lengthInSamples, 0, true, true);
+                nativeRate = reader->sampleRate;
+            }
+        }
+
+        if (! buf)
+        {
+            const int    sr   = 44100;
+            const int    len  = sr * 2;
+            const float  freq = 261.6256f; // C4
+            const float  twoPi = juce::MathConstants<float>::twoPi;
+
+            buf = std::make_shared<juce::AudioBuffer<float>> (2, len);
+            for (int i = 0; i < len; ++i)
+            {
+                const float s = 0.4f * std::sin (twoPi * freq * (float) i / (float) sr);
+                buf->setSample (0, i, s);
+                buf->setSample (1, i, s);
+            }
+            nativeRate = sr;
+        }
+
+        sampleBuffer.setSampleRate (nativeRate);
+        sampleBuffer.store (buf);
+    }
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
