@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cassette Viz — Filled Design Preview</title>
+<style>
+  body {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: #F3F0F8;
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  .frame {
+    background: rgba(255,255,255,0.85);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 4px 24px rgba(139,92,246,0.08);
+  }
+  canvas { display: block; border-radius: 10px; }
+  .label { text-align: center; color: #8B5CF6; font-size: 11px; margin-top: 8px; opacity: 0.6; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <canvas id="c" width="720" height="440"></canvas>
+  <div class="label">Cassette — Terrain v2.2 Preview</div>
+</div>
+<script>
+var DPR = window.devicePixelRatio || 1;
+var canvas = document.getElementById('c');
+var W = 360, H = 220;
+canvas.width = W * DPR;
+canvas.height = H * DPR;
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+
+var wow = 0.35, sat = 0.4, hiss = 0.5;
+
+function drawCassetteViz(ctx, w, h, t) {
+  ctx.clearRect(0, 0, w * DPR, h * DPR);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  var sc = Math.min(h * 0.8 / 130, w / 200);
+
+  var pulse = 0.88 + Math.sin(t * 1.5) * 0.12;
+  var fastPulse = 0.9 + Math.sin(t * 3.2) * 0.1;
+  var jit = function(s) { return (Math.random() - 0.5) * wow * (s || 2); };
+
+  // ━━━━ CASSETTE BODY ━━━━
+  var cW = 160 * sc;
+  var cH = 100 * sc;
+  var cL = (w - cW) / 2;
+  var cT = (h - cH) / 2;
+  var cR = cL + cW;
+  var cB = cT + cH;
+  var cornerR = 6 * sc;
+
+  // Body — dark filled gradient
+  var bodyGrad = ctx.createLinearGradient(cL, cT, cL, cB);
+  bodyGrad.addColorStop(0, 'rgba(55, 28, 78, 0.88)');
+  bodyGrad.addColorStop(0.4, 'rgba(42, 20, 62, 0.92)');
+  bodyGrad.addColorStop(1, 'rgba(32, 14, 50, 0.95)');
+  ctx.beginPath();
+  ctx.roundRect(cL, cT, cW, cH, cornerR);
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // Body outline — glowing
+  ctx.shadowColor = 'rgba(167, 139, 250, 0.3)';
+  ctx.shadowBlur = 5;
+  ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.55 * pulse) + ')';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Subtle surface texture
+  ctx.globalAlpha = 0.035;
+  for (var gi = 0; gi < 8; gi++) {
+    var gy = cT + cH * (gi / 8) + Math.sin(gi * 2.1) * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cL + 8, gy);
+    ctx.bezierCurveTo(
+      cL + cW * 0.35, gy + Math.sin(gi * 1.8) * 2,
+      cL + cW * 0.65, gy - Math.sin(gi * 2.4) * 1.5,
+      cR - 8, gy + Math.sin(gi * 3.0) * 1.8
+    );
+    ctx.strokeStyle = 'rgba(200, 180, 220, 1)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1.0;
+
+  // ━━━━ TAPE WINDOW ━━━━
+  var winL = cL + cW * 0.12;
+  var winR = cR - cW * 0.12;
+  var winT = cT + cH * 0.12;
+  var winB = cT + cH * 0.55;
+  var winW = winR - winL;
+  var winH = winB - winT;
+  var winCornerR = 4 * sc;
+
+  // Window — deep dark interior
+  var winGrad = ctx.createLinearGradient(winL, winT, winL, winB);
+  winGrad.addColorStop(0, 'rgba(12, 4, 22, 0.65)');
+  winGrad.addColorStop(1, 'rgba(18, 8, 30, 0.55)');
+  ctx.beginPath();
+  ctx.roundRect(winL, winT, winW, winH, winCornerR);
+  ctx.fillStyle = winGrad;
+  ctx.fill();
+
+  // Window border — subtle glow
+  ctx.shadowColor = 'rgba(139, 92, 246, 0.2)';
+  ctx.shadowBlur = 3;
+  ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.35 * pulse) + ')';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // ━━━━ SPOOL HUBS ━━━━
+  var spoolR = winH * 0.32;
+  var spoolCY = winT + winH * 0.5;
+  var spoolLx = winL + winW * 0.28;
+  var spoolRx = winL + winW * 0.72;
+  var spokeAngle = t * 1.5;
+
+  var supplyR = spoolR * (0.85 + Math.sin(t * 0.12) * 0.05);
+  var takeupR = spoolR * (0.55 - Math.sin(t * 0.12) * 0.05);
+
+  for (var si = 0; si < 2; si++) {
+    var sx = si === 0 ? spoolLx : spoolRx;
+    var tapeR = si === 0 ? supplyR : takeupR;
+
+    // Tape wound — filled gradient
+    if (tapeR > 2) {
+      var tapeGrad = ctx.createRadialGradient(sx, spoolCY, 0, sx, spoolCY, tapeR);
+      tapeGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (0.18 * pulse) + ')');
+      tapeGrad.addColorStop(0.7, 'rgba(88, 28, 135, ' + (0.08 * pulse) + ')');
+      tapeGrad.addColorStop(1, 'rgba(88, 28, 135, 0.03)');
+      ctx.beginPath();
+      ctx.arc(sx, spoolCY, tapeR, 0, Math.PI * 2);
+      ctx.fillStyle = tapeGrad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.2 * pulse) + ')';
+      ctx.lineWidth = 0.4;
+      ctx.stroke();
+    }
+
+    // Hub circle — metallic, glowing
+    ctx.shadowColor = 'rgba(167, 139, 250, 0.4)';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.arc(sx, spoolCY, spoolR * 0.35, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(35, 15, 55, 0.5)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.65 * pulse) + ')';
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // 6 teeth — rotating
+    for (var ti = 0; ti < 6; ti++) {
+      var a = spokeAngle + ti * Math.PI / 3;
+      var innerR = spoolR * 0.12;
+      var outerR = spoolR * 0.32;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.cos(a) * innerR, spoolCY + Math.sin(a) * innerR);
+      ctx.lineTo(sx + Math.cos(a) * outerR, spoolCY + Math.sin(a) * outerR);
+      ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.5 * pulse) + ')';
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+    }
+
+    // Center dot — bright
+    ctx.shadowColor = 'rgba(196, 181, 253, 0.5)';
+    ctx.shadowBlur = 3;
+    ctx.beginPath();
+    ctx.arc(sx, spoolCY, 1.8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.7 * pulse) + ')';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // ━━━━ TAPE STRIP ━━━━
+  var tapeY = winB - winH * 0.15;
+
+  // Tape glow
+  ctx.shadowColor = 'rgba(139, 92, 246, 0.25)';
+  ctx.shadowBlur = 4;
+  ctx.beginPath();
+  ctx.moveTo(spoolLx - supplyR * 0.5, spoolCY + supplyR * 0.85);
+  ctx.lineTo(winL + 4, tapeY);
+  ctx.lineTo(winR - 4, tapeY);
+  ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Actual tape with wobble
+  ctx.beginPath();
+  ctx.moveTo(spoolLx - supplyR * 0.5, spoolCY + supplyR * 0.85);
+  ctx.lineTo(winL + 4, tapeY);
+  var wobSegs = 12;
+  for (var ws = 0; ws <= wobSegs; ws++) {
+    var f = ws / wobSegs;
+    var wx = (winL + 4) + (winW - 8) * f;
+    var wb = wow * 1.5 * Math.sin(t * 3.5 + f * Math.PI * 4) * Math.sin(f * Math.PI);
+    ctx.lineTo(wx + jit(0.2), tapeY + wb + jit(0.2));
+  }
+  ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
+  ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.8 * pulse) + ')';
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+
+  // ━━━━ GUIDE PINS (bottom of cassette) ━━━━
+  var pinY = cB - cH * 0.15;
+  var pins = [cL + cW * 0.2, cL + cW * 0.35, cL + cW * 0.5, cL + cW * 0.65, cL + cW * 0.8];
+  for (var pi = 0; pi < pins.length; pi++) {
+    ctx.shadowColor = 'rgba(196, 181, 253, 0.3)';
+    ctx.shadowBlur = 2;
+    ctx.beginPath();
+    ctx.arc(pins[pi], pinY, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(58, 32, 80, 0.6)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.5 * pulse) + ')';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // ━━━━ LABEL AREA ━━━━
+  var labelY = cT + cH * 0.62;
+  var labelH = cH * 0.18;
+  var labelL = cL + cW * 0.15;
+  var labelR = cR - cW * 0.15;
+  var labelW = labelR - labelL;
+
+  // Label background — subtle panel
+  var labelGrad = ctx.createLinearGradient(labelL, labelY, labelL, labelY + labelH);
+  labelGrad.addColorStop(0, 'rgba(50, 25, 72, 0.35)');
+  labelGrad.addColorStop(1, 'rgba(42, 20, 62, 0.4)');
+  ctx.beginPath();
+  ctx.rect(labelL, labelY, labelW, labelH);
+  ctx.fillStyle = labelGrad;
+  ctx.fill();
+
+  // Label ruled lines
+  ctx.strokeStyle = 'rgba(167, 139, 250, 0.1)';
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(labelL, labelY);
+  ctx.lineTo(labelR, labelY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(labelL, labelY + labelH);
+  ctx.lineTo(labelR, labelY + labelH);
+  ctx.stroke();
+
+  // Label text
+  ctx.font = '500 ' + Math.max(5, 5 * sc) + 'px -apple-system, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(196, 181, 253, ' + (0.55 * pulse) + ')';
+  ctx.fillText('C A S S E T T E', cL + cW / 2, labelY + labelH / 2);
+
+  // ━━━━ SCREW HOLES ━━━━
+  var screwInset = 8 * sc;
+  var screwPositions = [
+    [cL + screwInset, cT + screwInset],
+    [cR - screwInset, cT + screwInset],
+    [cL + screwInset, cB - screwInset],
+    [cR - screwInset, cB - screwInset],
+  ];
+  for (var sci = 0; sci < screwPositions.length; sci++) {
+    var scX = screwPositions[sci][0];
+    var scY = screwPositions[sci][1];
+
+    // Screw recess
+    ctx.beginPath();
+    ctx.arc(scX, scY, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20, 8, 35, 0.4)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(167, 139, 250, ' + (0.3 * pulse) + ')';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Cross slot
+    ctx.beginPath();
+    ctx.moveTo(scX - 1.3, scY);
+    ctx.lineTo(scX + 1.3, scY);
+    ctx.moveTo(scX, scY - 1.3);
+    ctx.lineTo(scX, scY + 1.3);
+    ctx.strokeStyle = 'rgba(196, 181, 253, ' + (0.3 * pulse) + ')';
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+  }
+
+  // Saturation glow on tape strip
+  if (sat > 0.02) {
+    var glowCX = cL + cW / 2;
+    var satGrad = ctx.createRadialGradient(glowCX, tapeY, 0, glowCX, tapeY, 30 * sc);
+    satGrad.addColorStop(0, 'rgba(139, 92, 246, ' + (sat * 0.2) + ')');
+    satGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+    ctx.fillStyle = satGrad;
+    ctx.beginPath();
+    ctx.arc(glowCX, tapeY, 30 * sc, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ━━━━ SPARKS (hiss) ━━━━
+  if (hiss > 0.02) {
+    var nSparks = Math.floor(hiss * 22);
+    for (var ski = 0; ski < nSparks; ski++) {
+      var skpX = cL + cW * 0.1 + Math.sin(t * 4.3 + ski * 3.1) * cW * 0.4;
+      var skpY = cT + cH * 0.1 + Math.cos(t * 3.7 + ski * 2.7) * cH * 0.4;
+      var skpLen = 2 + Math.sin(t * 6 + ski) * 1.3;
+      var skpA = t * 2 + ski * 1.4;
+      var spkAlpha = hiss * 0.5 + Math.sin(t * 8 + ski) * 0.1;
+      ctx.shadowColor = 'rgba(167,139,250,0.3)';
+      ctx.shadowBlur = 2;
+      ctx.beginPath();
+      ctx.moveTo(skpX, skpY);
+      ctx.lineTo(skpX + Math.cos(skpA) * skpLen, skpY + Math.sin(skpA) * skpLen);
+      ctx.lineTo(skpX + Math.cos(skpA + 0.8) * skpLen * 0.6, skpY + Math.sin(skpA + 0.8) * skpLen * 0.6);
+      ctx.strokeStyle = 'rgba(196,181,253,' + spkAlpha + ')';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  // ━━━━ INDICATOR LIGHTS (vintage R/Y/G) ━━━━
+  var indY = cT + cH * 0.91;
+  var indStartX = cR - cW * 0.22;
+  var indGap = 6 * sc;
+  var indR = 2 * sc;
+
+  var lights = [
+    { r: 239, g: 68, b: 68, param: hiss, phase: 0 },       // Red — hiss
+    { r: 234, g: 179, b: 8, param: sat, phase: 2.1 },       // Yellow — saturation
+    { r: 34, g: 197, b: 94, param: wow, phase: 4.3 },       // Green — wow
+  ];
+
+  for (var li = 0; li < lights.length; li++) {
+    var light = lights[li];
+    var lx = indStartX + li * indGap;
+    var ly = indY;
+
+    // Vintage flicker
+    var baseBright = 0.3 + light.param * 0.5;
+    var flicker = Math.sin(t * 3.7 + light.phase) * 0.12
+                + Math.sin(t * 7.3 + light.phase * 1.6) * 0.08
+                + Math.sin(t * 13.1 + light.phase * 2.4) * 0.05;
+    var brownout = Math.pow(Math.sin(t * 0.8 + light.phase * 3.1), 8) * 0.35;
+    var brightness = Math.max(0.08, baseBright + flicker - brownout);
+
+    // Dark socket recess
+    ctx.beginPath();
+    ctx.arc(lx, ly, indR + 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(15, 6, 25, 0.5)';
+    ctx.fill();
+
+    // Glow halo
+    ctx.shadowColor = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + (brightness * 0.6) + ')';
+    ctx.shadowBlur = 6 * brightness;
+
+    // The light itself
+    ctx.beginPath();
+    ctx.arc(lx, ly, indR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + brightness + ')';
+    ctx.fill();
+
+    // Hot center highlight
+    ctx.beginPath();
+    ctx.arc(lx - 0.5, ly - 0.5, indR * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, ' + (brightness * 0.3) + ')';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
+var time = 0;
+function animate() {
+  time += 1 / 60;
+  var ctx = canvas.getContext('2d');
+  drawCassetteViz(ctx, W, H, time);
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
+</body>
+</html>

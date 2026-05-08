@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=820">
+<title>Terrain — Preset Management Preview v2</title>
+<style>
+/* ============ RESET & TOKENS ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-main: #F3EFF8;
+  --bg-hero: #EDE8F4;
+  --bg-surface: #FFFFFF;
+  --bg-footer: #F8F5FC;
+  --bg-glass: rgba(255,255,255,0.85);
+  --purple-600: #7C3AED;
+  --purple-500: #8B5CF6;
+  --purple-400: #A78BFA;
+  --border: #E8E0F0;
+  --text-primary: #5B4F70;
+  --text-secondary: #8B7FA0;
+  --text-muted: #A89BBE;
+  --text-dim: #B0A4C0;
+}
+
+body {
+  background: var(--bg-main);
+  font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  width: 820px;
+  height: 640px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#plugin {
+  width: 820px;
+  height: 640px;
+  background: var(--bg-main);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ============ HEADER — centered preset name ============ */
+#header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+/* Left wing: brand + MOD — fixed width so preset area is truly centered */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+/* Center: preset nav — takes remaining space, self-centers */
+.preset-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Right wing: grid + save — mirrors left width for true centering */
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.brand-version {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-left: -2px;
+  padding-top: 3px;
+}
+
+.mod-btn {
+  margin-left: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s;
+}
+
+.preset-nav-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.1s;
+}
+.preset-nav-btn:hover {
+  border-color: var(--purple-500);
+  color: var(--purple-500);
+}
+
+.preset-name {
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  min-width: 120px;
+  text-align: center;
+  cursor: pointer;
+  transition: opacity 0.15s, color 0.15s;
+}
+.preset-name:hover {
+  color: var(--purple-500);
+}
+
+.preset-grid-btn, .preset-save-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.preset-grid-btn:hover, .preset-save-btn:hover {
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.05);
+}
+.preset-grid-btn.active {
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.1);
+}
+.preset-save-btn {
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+.preset-save-btn:hover {
+  color: var(--purple-500);
+}
+
+/* ============ PRESET BROWSER ============ */
+#preset-browser {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  max-height: 0;
+  overflow: hidden;
+  z-index: 15;
+  transition: max-height 0.25s ease-out;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid transparent;
+}
+#preset-browser.open {
+  max-height: 400px;
+  border-bottom-color: var(--border);
+}
+
+.browser-inner {
+  padding: 12px 16px 16px;
+}
+
+.browser-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.browser-search {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 8px 0 28px;
+  font-size: 11px;
+  background: rgba(255,255,255,0.6);
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+}
+.browser-search:focus { border-color: var(--purple-500); }
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+}
+.search-wrap::before {
+  content: '';
+  position: absolute;
+  left: 9px; top: 50%;
+  transform: translateY(-50%);
+  width: 11px; height: 11px;
+  border: 1.5px solid var(--text-dim);
+  border-radius: 50%;
+  pointer-events: none; z-index: 1;
+}
+.search-wrap::after {
+  content: '';
+  position: absolute;
+  left: 18px; top: calc(50% + 4px);
+  width: 4px; height: 1.5px;
+  background: var(--text-dim);
+  transform: rotate(45deg);
+  pointer-events: none; z-index: 1;
+}
+
+.browser-cats {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cat-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.cat-btn:hover { border-color: var(--purple-400); color: var(--purple-500); }
+.cat-btn.active {
+  background: var(--purple-500);
+  color: white;
+  border-color: var(--purple-500);
+}
+
+.browser-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  max-height: 248px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.browser-grid::-webkit-scrollbar { width: 4px; }
+.browser-grid::-webkit-scrollbar-track { background: transparent; }
+.browser-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.preset-card {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: all 0.1s;
+  position: relative;
+}
+.preset-card:hover {
+  border-color: var(--purple-400);
+  background: rgba(139,92,246,0.06);
+}
+.preset-card.selected {
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.1);
+}
+
+/* User preset accent */
+.preset-card.user-preset {
+  border-left: 2.5px solid var(--purple-400);
+}
+.preset-card.user-preset:hover { border-left-color: var(--purple-500); }
+.preset-card.user-preset.selected { border-left-color: var(--purple-600); }
+
+.preset-card-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preset-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preset-card-cat {
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.preset-card-badge {
+  font-size: 6px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--purple-400);
+  background: rgba(139,92,246,0.08);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* Inline rename input */
+.preset-card-rename {
+  width: 100%;
+  border: 1px solid var(--purple-500);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: white;
+  outline: none;
+  margin-bottom: 3px;
+}
+
+/* ============ CONTEXT MENU ============ */
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(91,79,112,0.12), 0 1px 4px rgba(91,79,112,0.08);
+  display: none;
+}
+.context-menu.visible { display: block; }
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.context-menu-item:hover { background: rgba(139,92,246,0.06); }
+.context-menu-item.danger { color: #DC2626; }
+.context-menu-item.danger:hover { background: rgba(220,38,38,0.06); }
+
+.context-menu-icon {
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.context-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 10px;
+}
+
+.context-menu-disabled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  cursor: default;
+}
+
+/* ============ TAG PICKER (submenu inside context menu) ============ */
+.context-menu-submenu {
+  position: relative;
+}
+.context-menu-submenu > .context-menu-item::after {
+  content: '';
+  margin-left: auto;
+  border: 4px solid transparent;
+  border-left-color: var(--text-dim);
+}
+
+.tag-picker {
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 130px;
+  box-shadow: 0 4px 16px rgba(91,79,112,0.12), 0 1px 4px rgba(91,79,112,0.08);
+  display: none;
+}
+.tag-picker.visible { display: block; }
+
+.tag-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.tag-picker-item:hover { background: rgba(139,92,246,0.06); }
+.tag-picker-item.current {
+  color: var(--purple-500);
+  font-weight: 600;
+}
+
+.tag-picker-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tag-picker-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 8px;
+}
+
+.tag-picker-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--purple-500);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.tag-picker-new:hover { background: rgba(139,92,246,0.06); }
+
+.tag-picker-input-wrap {
+  display: none;
+  padding: 4px 8px;
+}
+.tag-picker-input-wrap.visible { display: flex; gap: 4px; }
+
+.tag-picker-input {
+  flex: 1;
+  height: 22px;
+  border: 1px solid var(--purple-400);
+  border-radius: 3px;
+  padding: 0 6px;
+  font-size: 9px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: white;
+  outline: none;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tag-picker-add-btn {
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 3px;
+  background: var(--purple-500);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tag-picker-add-btn:hover { background: var(--purple-600); }
+
+/* ============ SAVE PROMPT ============ */
+.save-prompt {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(139,92,246,0.04);
+  border-bottom: 1px solid var(--border);
+}
+.save-prompt.visible { display: flex; }
+
+.save-prompt-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.save-prompt-input {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: white;
+  outline: none;
+}
+.save-prompt-input:focus { border-color: var(--purple-500); }
+
+/* Tag dropdown in save prompt */
+.save-tag-select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  background: white;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 5 5-5' fill='none' stroke='%238B7FA0' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 22px;
+}
+.save-tag-select:focus { border-color: var(--purple-500); }
+
+.save-prompt-btn {
+  height: 28px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.save-prompt-confirm { background: var(--purple-500); color: white; }
+.save-prompt-confirm:hover { background: var(--purple-600); }
+.save-prompt-cancel { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+.save-prompt-cancel:hover { border-color: var(--text-secondary); }
+
+/* ============ DELETE CONFIRM ============ */
+.delete-confirm {
+  position: fixed;
+  z-index: 110;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  min-width: 240px;
+  box-shadow: 0 8px 32px rgba(91,79,112,0.15), 0 2px 8px rgba(91,79,112,0.1);
+  display: none;
+}
+.delete-confirm.visible { display: block; }
+
+.delete-confirm-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.delete-confirm-name { font-weight: 600; color: var(--purple-600); }
+
+.delete-confirm-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.delete-btn-cancel {
+  height: 28px; padding: 0 14px; border: 1px solid var(--border); border-radius: 5px;
+  background: transparent; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+  color: var(--text-secondary); cursor: pointer;
+}
+.delete-btn-cancel:hover { border-color: var(--text-secondary); }
+.delete-btn-confirm {
+  height: 28px; padding: 0 14px; border: none; border-radius: 5px;
+  background: #DC2626; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+  color: white; cursor: pointer;
+}
+.delete-btn-confirm:hover { background: #B91C1C; }
+
+/* ============ HERO PLACEHOLDER ============ */
+#hero {
+  flex: 1;
+  background: var(--bg-hero);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+/* ============ OVERLAY ============ */
+.overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 90;
+  display: none;
+}
+.overlay.visible { display: block; }
+</style>
+</head>
+<body>
+
+<div id="plugin">
+  <!-- HEADER — 3-column layout for true centering -->
+  <div id="header">
+    <div class="header-left">
+      <div class="brand-logo">
+        <svg width="32" height="32" viewBox="0 0 32 32">
+          <rect x="4" y="14" width="3" height="6" rx="1" fill="#A78BFA" opacity="0.5"/>
+          <rect x="8" y="10" width="3" height="14" rx="1" fill="#8B5CF6" opacity="0.6"/>
+          <rect x="12" y="6" width="3" height="22" rx="1" fill="#7C3AED" opacity="0.8"/>
+          <rect x="16" y="4" width="3" height="26" rx="1" fill="#8B5CF6"/>
+          <rect x="20" y="8" width="3" height="18" rx="1" fill="#7C3AED" opacity="0.7"/>
+          <rect x="24" y="12" width="3" height="10" rx="1" fill="#A78BFA" opacity="0.5"/>
+        </svg>
+      </div>
+      <span class="brand-name">Terrain</span>
+      <span class="brand-version">v2.0</span>
+      <button class="mod-btn">MOD</button>
+    </div>
+
+    <div class="preset-area">
+      <button class="preset-nav-btn" id="preset-prev">&lsaquo;</button>
+      <span class="preset-name" id="preset-name">Tape Haze</span>
+      <button class="preset-nav-btn" id="preset-next">&rsaquo;</button>
+    </div>
+
+    <div class="header-right">
+      <button class="preset-grid-btn" id="preset-grid-btn">
+        <canvas id="grid-icon" width="28" height="28"></canvas>
+      </button>
+      <button class="preset-save-btn" id="preset-save-btn" title="Save preset">+</button>
+    </div>
+  </div>
+
+  <!-- PRESET BROWSER -->
+  <div id="preset-browser">
+    <!-- SAVE PROMPT -->
+    <div class="save-prompt" id="save-prompt">
+      <span class="save-prompt-label">Save as:</span>
+      <input class="save-prompt-input" id="save-name-input" type="text" placeholder="My Preset" maxlength="32">
+      <select class="save-tag-select" id="save-tag-select"></select>
+      <button class="save-prompt-btn save-prompt-confirm" id="save-confirm">SAVE</button>
+      <button class="save-prompt-btn save-prompt-cancel" id="save-cancel">CANCEL</button>
+    </div>
+
+    <div class="browser-inner">
+      <div class="browser-top">
+        <div class="search-wrap">
+          <input class="browser-search" type="text" placeholder="Search presets..." id="browser-search">
+        </div>
+        <div class="browser-cats" id="browser-cats"></div>
+      </div>
+      <div class="browser-grid" id="browser-grid"></div>
+    </div>
+  </div>
+
+  <!-- HERO PLACEHOLDER -->
+  <div id="hero">XY PAD / VISUALIZATION AREA</div>
+</div>
+
+<!-- CONTEXT MENU (user preset) -->
+<div class="context-menu" id="context-menu">
+  <div class="context-menu-item" id="ctx-rename">
+    <span class="context-menu-icon">R</span> Rename
+  </div>
+  <div class="context-menu-item" id="ctx-overwrite">
+    <span class="context-menu-icon">O</span> Overwrite
+  </div>
+  <div class="context-menu-submenu" id="ctx-tag-wrap">
+    <div class="context-menu-item" id="ctx-tag">
+      <span class="context-menu-icon">T</span> Tag
+    </div>
+    <div class="tag-picker" id="tag-picker"></div>
+  </div>
+  <div class="context-menu-sep"></div>
+  <div class="context-menu-item danger" id="ctx-delete">
+    <span class="context-menu-icon">D</span> Delete
+  </div>
+</div>
+
+<!-- FACTORY CONTEXT MENU -->
+<div class="context-menu" id="factory-context-menu">
+  <div class="context-menu-disabled">
+    <span class="context-menu-icon" style="opacity:0.4">L</span> Factory preset
+  </div>
+</div>
+
+<!-- DELETE CONFIRM -->
+<div class="delete-confirm" id="delete-confirm">
+  <div class="delete-confirm-text">Delete <span class="delete-confirm-name" id="delete-name"></span>?</div>
+  <div class="delete-confirm-btns">
+    <button class="delete-btn-cancel" id="delete-cancel">CANCEL</button>
+    <button class="delete-btn-confirm" id="delete-do">DELETE</button>
+  </div>
+</div>
+
+<!-- OVERLAY -->
+<div class="overlay" id="overlay"></div>
+
+<script>
+// ---- Tag colors ----
+const TAG_COLORS = {
+  'GRAIN':    '#7C3AED',
+  'TAPE':     '#9333EA',
+  'AMBIENT':  '#6366F1',
+  'RHYTHMIC': '#EC4899',
+  'EXTREME':  '#EF4444',
+};
+
+// ---- Mock Data ----
+const FACTORY_PRESETS = [
+  { name: 'Init', tag: 'ALL' },
+  { name: 'Soft Keys', tag: 'AMBIENT' },
+  { name: 'Movements', tag: 'AMBIENT' },
+  { name: 'Super Messed Up', tag: 'EXTREME' },
+  { name: 'Tape Master', tag: 'TAPE' },
+  { name: 'Delay The Pluck', tag: 'RHYTHMIC' },
+  { name: 'Synced Grains', tag: 'RHYTHMIC' },
+  { name: 'Clown Delay', tag: 'RHYTHMIC' },
+  { name: 'Instant Pad', tag: 'AMBIENT' },
+  { name: 'Slow Changes', tag: 'AMBIENT' },
+  { name: 'Mood', tag: 'TAPE' },
+  { name: 'Soundscape', tag: 'AMBIENT' },
+  { name: 'Use A Key', tag: 'RHYTHMIC' },
+  { name: 'Blank Forms', tag: 'GRAIN' },
+  { name: 'Habits', tag: 'GRAIN' },
+  { name: 'Pitch Drifter', tag: 'EXTREME' },
+  { name: 'Mandalorian', tag: 'EXTREME' },
+  { name: 'See The Light', tag: 'AMBIENT' },
+  { name: 'Back To The Future', tag: 'GRAIN' },
+  { name: 'Saturation', tag: 'TAPE' },
+  { name: 'Chop Shop', tag: 'EXTREME' },
+  { name: 'Depressed', tag: 'GRAIN' },
+  { name: 'Deep Rest', tag: 'TAPE' },
+  { name: 'Final Tape', tag: 'TAPE' },
+];
+const NUM_FACTORY = FACTORY_PRESETS.length;
+
+let USER_PRESETS = [
+  { name: 'My Ambient Wash', tag: 'AMBIENT' },
+  { name: 'Bass Wobble FX', tag: 'EXTREME' },
+  { name: 'Live Set #3', tag: 'TAPE' },
+  { name: 'Sunday Drone', tag: 'AMBIENT' },
+];
+
+// Custom user tags (beyond the factory set)
+let CUSTOM_TAGS = ['LEAD', 'PAD'];
+
+function getBuiltinTags() { return ['GRAIN', 'TAPE', 'AMBIENT', 'RHYTHMIC', 'EXTREME']; }
+function getAllTags() { return [...getBuiltinTags(), ...CUSTOM_TAGS]; }
+function getFilterCategories() { return ['ALL', ...getBuiltinTags(), ...CUSTOM_TAGS, 'USER']; }
+function getAllPresets() { return [...FACTORY_PRESETS, ...USER_PRESETS]; }
+
+let state = {
+  presetIdx: 1,
+  browserOpen: false,
+  browserCat: 'ALL',
+  browserSearch: '',
+  savePromptOpen: false,
+  renamingIdx: -1,
+  contextTarget: -1,
+};
+
+// ---- Grid icon ----
+function drawGridIcon() {
+  const c = document.getElementById('grid-icon');
+  const ctx = c.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  c.width = 28 * dpr; c.height = 28 * dpr;
+  c.style.width = '28px'; c.style.height = '28px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,28,28);
+  const color = state.browserOpen ? '#8B5CF6' : '#8B7FA0';
+  for (let r = 0; r < 3; r++)
+    for (let col = 0; col < 3; col++) {
+      ctx.fillStyle = color;
+      ctx.fillRect(7 + col * 5, 7 + r * 5, 3.5, 3.5);
+    }
+}
+
+// ---- Preset Navigation ----
+function loadPreset(idx) {
+  const all = getAllPresets();
+  if (idx < 0 || idx >= all.length) return;
+  state.presetIdx = idx;
+  document.getElementById('preset-name').textContent = all[idx].name;
+  buildPresetGrid();
+}
+
+document.getElementById('preset-prev').addEventListener('click', () => {
+  const all = getAllPresets();
+  loadPreset((state.presetIdx - 1 + all.length) % all.length);
+});
+document.getElementById('preset-next').addEventListener('click', () => {
+  const all = getAllPresets();
+  loadPreset((state.presetIdx + 1) % all.length);
+});
+
+// ---- Browser toggle ----
+function togglePresetBrowser() {
+  state.browserOpen = !state.browserOpen;
+  document.getElementById('preset-browser').classList.toggle('open', state.browserOpen);
+  document.getElementById('preset-grid-btn').classList.toggle('active', state.browserOpen);
+  drawGridIcon();
+  if (!state.browserOpen) closeSavePrompt();
+}
+document.getElementById('preset-grid-btn').addEventListener('click', togglePresetBrowser);
+document.getElementById('preset-name').addEventListener('click', togglePresetBrowser);
+
+// ---- Category buttons ----
+function buildCategoryButtons() {
+  const container = document.getElementById('browser-cats');
+  container.innerHTML = '';
+  for (const cat of getFilterCategories()) {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (cat === state.browserCat ? ' active' : '');
+    btn.textContent = cat;
+    btn.addEventListener('click', () => {
+      state.browserCat = cat;
+      buildCategoryButtons();
+      buildPresetGrid();
+    });
+    container.appendChild(btn);
+  }
+}
+
+// ---- Tag select for save prompt ----
+function buildSaveTagSelect() {
+  const sel = document.getElementById('save-tag-select');
+  sel.innerHTML = '';
+  for (const tag of getAllTags()) {
+    const opt = document.createElement('option');
+    opt.value = tag;
+    opt.textContent = tag;
+    sel.appendChild(opt);
+  }
+}
+
+// ---- Preset Grid ----
+function buildPresetGrid() {
+  const container = document.getElementById('browser-grid');
+  container.innerHTML = '';
+  const all = getAllPresets();
+  const search = state.browserSearch.toLowerCase();
+
+  for (let i = 0; i < all.length; i++) {
+    const p = all[i];
+    const isUser = i >= NUM_FACTORY;
+    const displayTag = p.tag || 'ALL';
+
+    // Filter
+    if (state.browserCat === 'USER') {
+      if (!isUser) continue;
+    } else if (state.browserCat !== 'ALL') {
+      if (displayTag !== state.browserCat) continue;
+    }
+    if (search && !p.name.toLowerCase().includes(search)) continue;
+
+    const card = document.createElement('div');
+    card.className = 'preset-card' + (i === state.presetIdx ? ' selected' : '') + (isUser ? ' user-preset' : '');
+
+    if (state.renamingIdx === i) {
+      // Inline rename
+      const input = document.createElement('input');
+      input.className = 'preset-card-rename';
+      input.type = 'text';
+      input.value = p.name;
+      input.maxLength = 32;
+      card.appendChild(input);
+
+      const bottom = document.createElement('div');
+      bottom.className = 'preset-card-bottom';
+      const catLabel = document.createElement('span');
+      catLabel.className = 'preset-card-cat';
+      catLabel.textContent = 'RENAMING...';
+      bottom.appendChild(catLabel);
+      card.appendChild(bottom);
+
+      setTimeout(() => { input.focus(); input.select(); }, 10);
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const nm = input.value.trim();
+          if (nm) { USER_PRESETS[i - NUM_FACTORY].name = nm; if (i === state.presetIdx) document.getElementById('preset-name').textContent = nm; }
+          state.renamingIdx = -1; buildPresetGrid();
+        } else if (e.key === 'Escape') { state.renamingIdx = -1; buildPresetGrid(); }
+      });
+      input.addEventListener('blur', () => {
+        const nm = input.value.trim();
+        if (nm && state.renamingIdx === i) { USER_PRESETS[i - NUM_FACTORY].name = nm; if (i === state.presetIdx) document.getElementById('preset-name').textContent = nm; }
+        state.renamingIdx = -1; buildPresetGrid();
+      });
+
+    } else {
+      const name = document.createElement('div');
+      name.className = 'preset-card-name';
+      name.textContent = p.name;
+      card.appendChild(name);
+
+      const bottom = document.createElement('div');
+      bottom.className = 'preset-card-bottom';
+
+      const catLabel = document.createElement('span');
+      catLabel.className = 'preset-card-cat';
+      catLabel.textContent = displayTag !== 'ALL' ? displayTag : '';
+      bottom.appendChild(catLabel);
+
+      if (isUser) {
+        const badge = document.createElement('span');
+        badge.className = 'preset-card-badge';
+        badge.textContent = 'USER';
+        bottom.appendChild(badge);
+      }
+      card.appendChild(bottom);
+
+      card.addEventListener('click', () => loadPreset(i));
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (isUser) showContextMenu(e.clientX, e.clientY, i);
+        else showFactoryContextMenu(e.clientX, e.clientY);
+      });
+    }
+
+    container.appendChild(card);
+  }
+}
+
+// ---- Search ----
+document.getElementById('browser-search').addEventListener('input', (e) => {
+  state.browserSearch = e.target.value;
+  buildPresetGrid();
+});
+
+// ---- Save Prompt ----
+document.getElementById('preset-save-btn').addEventListener('click', () => {
+  if (!state.browserOpen) togglePresetBrowser();
+  state.savePromptOpen = true;
+  document.getElementById('save-prompt').classList.add('visible');
+  buildSaveTagSelect();
+  const input = document.getElementById('save-name-input');
+  input.value = '';
+  input.focus();
+});
+
+function closeSavePrompt() {
+  state.savePromptOpen = false;
+  document.getElementById('save-prompt').classList.remove('visible');
+}
+
+document.getElementById('save-confirm').addEventListener('click', () => {
+  const name = document.getElementById('save-name-input').value.trim();
+  if (!name) return;
+  const tag = document.getElementById('save-tag-select').value;
+  USER_PRESETS.push({ name, tag });
+  closeSavePrompt();
+  loadPreset(getAllPresets().length - 1);
+  buildCategoryButtons();
+  buildPresetGrid();
+});
+document.getElementById('save-cancel').addEventListener('click', closeSavePrompt);
+document.getElementById('save-name-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('save-confirm').click();
+  if (e.key === 'Escape') closeSavePrompt();
+});
+
+// ---- Context Menu ----
+function showContextMenu(x, y, idx) {
+  hideAllMenus();
+  state.contextTarget = idx;
+  const menu = document.getElementById('context-menu');
+  // Keep menu in bounds
+  menu.style.left = Math.min(x, 660) + 'px';
+  menu.style.top = Math.min(y, 500) + 'px';
+  menu.classList.add('visible');
+  document.getElementById('overlay').classList.add('visible');
+  buildTagPicker();
+}
+
+function showFactoryContextMenu(x, y) {
+  hideAllMenus();
+  const menu = document.getElementById('factory-context-menu');
+  menu.style.left = Math.min(x, 660) + 'px';
+  menu.style.top = Math.min(y, 500) + 'px';
+  menu.classList.add('visible');
+  document.getElementById('overlay').classList.add('visible');
+}
+
+function hideAllMenus() {
+  document.getElementById('context-menu').classList.remove('visible');
+  document.getElementById('factory-context-menu').classList.remove('visible');
+  document.getElementById('delete-confirm').classList.remove('visible');
+  document.getElementById('tag-picker').classList.remove('visible');
+  document.getElementById('overlay').classList.remove('visible');
+}
+
+document.getElementById('overlay').addEventListener('click', hideAllMenus);
+
+// ---- Tag Picker (submenu) ----
+document.getElementById('ctx-tag').addEventListener('click', () => {
+  document.getElementById('tag-picker').classList.toggle('visible');
+});
+
+function buildTagPicker() {
+  const picker = document.getElementById('tag-picker');
+  picker.innerHTML = '';
+  const idx = state.contextTarget;
+  const p = getAllPresets()[idx];
+  const currentTag = p ? p.tag : '';
+
+  for (const tag of getAllTags()) {
+    const item = document.createElement('div');
+    item.className = 'tag-picker-item' + (tag === currentTag ? ' current' : '');
+
+    const dot = document.createElement('span');
+    dot.className = 'tag-picker-dot';
+    dot.style.background = TAG_COLORS[tag] || 'var(--purple-400)';
+    item.appendChild(dot);
+
+    item.appendChild(document.createTextNode(tag));
+    item.addEventListener('click', () => {
+      USER_PRESETS[idx - NUM_FACTORY].tag = tag;
+      hideAllMenus();
+      buildPresetGrid();
+    });
+    picker.appendChild(item);
+  }
+
+  // Separator
+  const sep = document.createElement('div');
+  sep.className = 'tag-picker-sep';
+  picker.appendChild(sep);
+
+  // "New tag" row
+  const newBtn = document.createElement('div');
+  newBtn.className = 'tag-picker-new';
+  newBtn.textContent = '+ New tag';
+  picker.appendChild(newBtn);
+
+  // Input for creating new tag
+  const inputWrap = document.createElement('div');
+  inputWrap.className = 'tag-picker-input-wrap';
+  const inp = document.createElement('input');
+  inp.className = 'tag-picker-input';
+  inp.type = 'text';
+  inp.placeholder = 'TAG NAME';
+  inp.maxLength = 12;
+  inputWrap.appendChild(inp);
+  const addBtn = document.createElement('button');
+  addBtn.className = 'tag-picker-add-btn';
+  addBtn.textContent = 'ADD';
+  inputWrap.appendChild(addBtn);
+  picker.appendChild(inputWrap);
+
+  newBtn.addEventListener('click', () => {
+    inputWrap.classList.add('visible');
+    newBtn.style.display = 'none';
+    inp.focus();
+  });
+
+  function addTag() {
+    const val = inp.value.trim().toUpperCase();
+    if (val && !getAllTags().includes(val)) {
+      CUSTOM_TAGS.push(val);
+    }
+    if (val) {
+      USER_PRESETS[idx - NUM_FACTORY].tag = val;
+      hideAllMenus();
+      buildCategoryButtons();
+      buildPresetGrid();
+    }
+  }
+
+  addBtn.addEventListener('click', addTag);
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addTag();
+    if (e.key === 'Escape') hideAllMenus();
+  });
+}
+
+// Rename
+document.getElementById('ctx-rename').addEventListener('click', () => {
+  state.renamingIdx = state.contextTarget;
+  hideAllMenus();
+  buildPresetGrid();
+});
+
+// Overwrite
+document.getElementById('ctx-overwrite').addEventListener('click', () => {
+  const idx = state.contextTarget;
+  hideAllMenus();
+  const all = getAllPresets();
+  console.log('Overwrite:', all[idx].name);
+  // Flash feedback
+  const cards = document.querySelectorAll('.preset-card');
+  cards.forEach(c => {
+    if (c.querySelector('.preset-card-name')?.textContent === all[idx].name) {
+      c.style.transition = 'background 0.3s';
+      c.style.background = 'rgba(139,92,246,0.15)';
+      setTimeout(() => { c.style.background = ''; }, 400);
+    }
+  });
+});
+
+// Delete
+document.getElementById('ctx-delete').addEventListener('click', () => {
+  const idx = state.contextTarget;
+  const all = getAllPresets();
+  hideAllMenus();
+  document.getElementById('delete-name').textContent = all[idx].name;
+  const confirm = document.getElementById('delete-confirm');
+  confirm.style.left = '50%'; confirm.style.top = '50%';
+  confirm.style.transform = 'translate(-50%, -50%)';
+  confirm.classList.add('visible');
+  document.getElementById('overlay').classList.add('visible');
+  confirm.dataset.deleteIdx = idx;
+});
+
+document.getElementById('delete-cancel').addEventListener('click', hideAllMenus);
+document.getElementById('delete-do').addEventListener('click', () => {
+  const idx = parseInt(document.getElementById('delete-confirm').dataset.deleteIdx);
+  const userIdx = idx - NUM_FACTORY;
+  if (userIdx >= 0 && userIdx < USER_PRESETS.length) {
+    USER_PRESETS.splice(userIdx, 1);
+    const all = getAllPresets();
+    if (state.presetIdx >= all.length) state.presetIdx = all.length - 1;
+    if (state.presetIdx === idx) state.presetIdx = Math.max(0, idx - 1);
+    document.getElementById('preset-name').textContent = getAllPresets()[state.presetIdx]?.name || 'Init';
+  }
+  hideAllMenus();
+  buildPresetGrid();
+});
+
+// ---- Init ----
+drawGridIcon();
+buildCategoryButtons();
+buildPresetGrid();
+document.getElementById('preset-name').textContent = getAllPresets()[state.presetIdx].name;
+</script>
+</body>
+</html>

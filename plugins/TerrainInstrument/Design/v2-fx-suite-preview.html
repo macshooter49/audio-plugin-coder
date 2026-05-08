@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terrain — FX Suite Preview</title>
+<style>
+:root {
+  --bg-main: #F3EFF8;
+  --bg-hero: #EDE8F4;
+  --bg-surface: #FFFFFF;
+  --bg-footer: #F8F5FC;
+  --bg-glass: rgba(255,255,255,0.85);
+  --purple-600: #7C3AED;
+  --purple-500: #8B5CF6;
+  --purple-400: #A78BFA;
+  --border: #E8E0F0;
+  --text-primary: #5B4F70;
+  --text-secondary: #8B7FA0;
+  --text-muted: #A89BBE;
+  --text-dim: #B0A4C0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-main);
+  font-family: -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 24px;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.preview-title {
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.section-container {
+  width: 750px;
+  height: 280px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── Section Header ─── */
+.section-header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 10;
+  background: var(--bg-surface);
+}
+
+.toggle-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1.5px solid var(--purple-500);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.toggle-btn:hover { background: rgba(139, 92, 246, 0.06); }
+.toggle-btn canvas { display: block; }
+
+.section-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-left: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.subtabs {
+  display: flex;
+  gap: 4px;
+  margin-left: 14px;
+  flex-shrink: 0;
+}
+.subtab {
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.subtab.active {
+  background: var(--purple-500);
+  color: #FFFFFF;
+}
+.subtab.inactive {
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.subtab.inactive:hover {
+  border-color: var(--purple-400);
+  color: var(--text-secondary);
+}
+
+.collapse-icon {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.15s;
+}
+.collapse-icon:hover { color: var(--text-primary); }
+
+/* ─── FX Page Nav ─── */
+.fx-nav {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: var(--bg-surface);
+  position: relative;
+  z-index: 10;
+  border-bottom: 1px solid rgba(232, 224, 240, 0.5);
+}
+
+.nav-arrow {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+}
+.nav-arrow:hover {
+  border-color: var(--purple-500);
+  color: var(--purple-500);
+}
+
+.nav-label {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  font-weight: 600;
+  margin: 0 10px;
+  min-width: 40px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.nav-dots {
+  display: flex;
+  gap: 5px;
+  margin-left: 6px;
+}
+.nav-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.nav-dot.active { background: var(--purple-500); }
+.nav-dot.inactive {
+  border: 1px solid var(--text-dim);
+  background: transparent;
+}
+.nav-dot.inactive:hover { border-color: var(--purple-500); }
+
+/* ─── Pages Container ─── */
+.pages-container {
+  position: relative;
+  width: 100%;
+  height: 212px; /* 280 - 44 header - 24 nav */
+  overflow: hidden;
+}
+
+.fx-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  will-change: opacity, transform;
+}
+.fx-page.active {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.fx-page.exit-left {
+  opacity: 0;
+  transform: translateX(-20px);
+  pointer-events: none;
+}
+.fx-page.exit-right {
+  opacity: 0;
+  transform: translateX(20px);
+  pointer-events: none;
+}
+.fx-page.hidden {
+  opacity: 0;
+  transform: translateX(0);
+  pointer-events: none;
+  transition: none;
+}
+
+/* ─── Tape Page ─── */
+.tape-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 20px 6px;
+}
+
+.tape-mechanism-wrapper {
+  position: relative;
+  width: 360px;
+  height: 105px;
+  flex-shrink: 0;
+}
+
+.tape-connectors {
+  position: relative;
+  width: 300px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.tape-knobs {
+  display: flex;
+  justify-content: center;
+  gap: 52px;
+  align-items: flex-start;
+}
+
+.knob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: grab;
+  user-select: none;
+}
+.knob-group:active { cursor: grabbing; }
+.knob-group canvas { display: block; }
+
+.knob-value {
+  font-size: 9px;
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.knob-label {
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+/* ─── Space Page ─── */
+.space-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 20px 6px;
+}
+
+.space-vis-wrapper {
+  position: relative;
+  width: 700px;
+  height: 120px;
+  flex-shrink: 0;
+}
+
+.space-divider {
+  width: 360px;
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0 6px;
+  flex-shrink: 0;
+}
+
+.space-knobs {
+  display: flex;
+  justify-content: center;
+  gap: 36px;
+  align-items: flex-start;
+}
+
+/* ─── EQ Page ─── */
+.eq-page {
+  position: relative;
+  padding: 4px 14px 4px;
+}
+
+.eq-canvas-wrapper {
+  position: relative;
+  width: 720px;
+  height: 200px;
+  margin: 0 auto;
+  cursor: default;
+}
+
+.eq-canvas-wrapper canvas {
+  display: block;
+}
+
+.flatten-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.9);
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-family: inherit;
+  transition: all 0.15s;
+  z-index: 5;
+}
+.flatten-btn:hover {
+  border-color: var(--purple-500);
+  color: var(--purple-500);
+}
+
+.eq-tooltip {
+  position: absolute;
+  font-size: 9px;
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.92);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.eq-tooltip.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="preview-title">TERRAIN — FX SUITE PREVIEW</div>
+
+<div class="section-container">
+  <!-- Section Header -->
+  <div class="section-header">
+    <div class="toggle-btn" id="toggleBtn">
+      <canvas id="tapeIconCanvas" width="18" height="18" style="width:18px;height:18px;"></canvas>
+    </div>
+    <span class="section-label">TAPE</span>
+    <div class="subtabs">
+      <div class="subtab active" id="subtabFx">FX</div>
+      <div class="subtab inactive" id="subtabLoop">LOOP</div>
+    </div>
+    <div class="collapse-icon">&#9660;</div>
+  </div>
+
+  <!-- FX Page Nav -->
+  <div class="fx-nav">
+    <div class="nav-arrow" id="navPrev">&#9664;</div>
+    <div class="nav-label" id="navLabel">TAPE</div>
+    <div class="nav-arrow" id="navNext">&#9654;</div>
+    <div class="nav-dots">
+      <div class="nav-dot active" data-page="0"></div>
+      <div class="nav-dot inactive" data-page="1"></div>
+      <div class="nav-dot inactive" data-page="2"></div>
+    </div>
+  </div>
+
+  <!-- Pages -->
+  <div class="pages-container">
+    <!-- PAGE 1: TAPE -->
+    <div class="fx-page active" id="pageTape">
+      <div class="tape-page">
+        <div class="tape-mechanism-wrapper">
+          <canvas id="tapeMechCanvas"></canvas>
+        </div>
+        <canvas id="tapeConnectors" style="display:block;"></canvas>
+        <div class="tape-knobs">
+          <div class="knob-group" data-knob="wow">
+            <canvas id="knobWow" width="96" height="96" style="width:48px;height:48px;"></canvas>
+            <div class="knob-value" id="valWow">0%</div>
+            <div class="knob-label">WOW</div>
+          </div>
+          <div class="knob-group" data-knob="saturation">
+            <canvas id="knobSat" width="96" height="96" style="width:48px;height:48px;"></canvas>
+            <div class="knob-value" id="valSat">0%</div>
+            <div class="knob-label">SATURATION</div>
+          </div>
+          <div class="knob-group" data-knob="hiss">
+            <canvas id="knobHiss" width="96" height="96" style="width:48px;height:48px;"></canvas>
+            <div class="knob-value" id="valHiss">0%</div>
+            <div class="knob-label">HISS</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 2: SPACE -->
+    <div class="fx-page hidden" id="pageSpace">
+      <div class="space-page">
+        <div class="space-vis-wrapper">
+          <canvas id="spaceCanvas"></canvas>
+        </div>
+        <div class="space-divider"></div>
+        <div class="space-knobs">
+          <div class="knob-group" data-knob="size">
+            <canvas id="knobSize" width="96" height="96" style="width:48px;height:48px;"></canvas>
+            <div class="knob-value" id="valSize">30%</div>
+            <div class="knob-label">SIZE</div>
+          </div>
+          <div class="knob-group" data-knob="decay">
+            <canvas id="knobDecay" width="96" height="96" style="width:48px;height:48px;"></canvas>
+            <div class="knob-value" id="valDecay">40%</div>
+            <div class="knob-label">DECAY</div>
+          </div>
+          <div class="knob-group" data-knob="tone">
+            <canvas id="knobTone" width="96" height="96" style="width:48px;height:48px;"></canvas>
+            <div class="knob-value" id="valTone">0%</div>
+            <div class="knob-label">TONE</div>
+          </div>
+          <div class="knob-group" data-knob="mix">
+            <canvas id="knobMix" width="96" height="96" style="width:48px;height:48px;"></canvas>
+            <div class="knob-value" id="valMix">0%</div>
+            <div class="knob-label">MIX</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 3: EQ -->
+    <div class="fx-page hidden" id="pageEq">
+      <div class="eq-page">
+        <div class="eq-canvas-wrapper" id="eqWrapper">
+          <canvas id="eqCanvas"></canvas>
+          <button class="flatten-btn" id="flattenBtn">FLATTEN</button>
+          <div class="eq-tooltip" id="eqTooltip"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+const DPR = window.devicePixelRatio || 1;
+
+const PAGE_NAMES = ['TAPE', 'SPACE', 'EQ'];
+const PAGE_IDS = ['pageTape', 'pageSpace', 'pageEq'];
+
+const fxState = {
+  currentPage: 0,
+  tape: { wow: 0, saturation: 0, hiss: 0 },
+  space: { size: 0.3, decay: 0.4, tone: 0.5, mix: 0 },
+  eq: {
+    low:  { freq: 100,  gain: 0 },
+    mid:  { freq: 1000, gain: 0, q: 1.0 },
+    high: { freq: 8000, gain: 0 },
+  },
+  dragging: null,
+  dragStartY: 0,
+  dragStartX: 0,
+  dragStartVal: 0,
+  dragStartVal2: 0,
+  hoveredKnob: null,
+  hoveredEqBand: null,
+  eqFlattening: false,
+};
+
+// ═══════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════
+function setupCanvas(canvas, w, h) {
+  canvas.width = w * DPR;
+  canvas.height = h * DPR;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// Polyfill for roundRect (older browsers)
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (typeof r === 'number') r = [r, r, r, r];
+    const [tl, tr, br, bl] = r;
+    this.moveTo(x + tl, y);
+    this.lineTo(x + w - tr, y);
+    this.quadraticCurveTo(x + w, y, x + w, y + tr);
+    this.lineTo(x + w, y + h - br);
+    this.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+    this.lineTo(x + bl, y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - bl);
+    this.lineTo(x, y + tl);
+    this.quadraticCurveTo(x, y, x + tl, y);
+    this.closePath();
+  };
+}
+
+// ═══════════════════════════════════════════════
+// KNOB RENDERING
+// ═══════════════════════════════════════════════
+function drawKnob(canvas, normValue, dragging, hover, size) {
+  size = size || 48;
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  const cx = w / 2, cy = h / 2, radius = size / 2 - 2;
+  const startAngle = 0.75 * Math.PI;
+  const sweep = 1.5 * Math.PI;
+  const endAngle = startAngle + sweep;
+  const activeEnd = startAngle + normValue * sweep;
+
+  // Track arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, startAngle, endAngle, false);
+  ctx.strokeStyle = '#E8E0F0';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Active arc
+  if (normValue > 0.002) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
+    ctx.strokeStyle = dragging ? '#7C3AED' : '#8B5CF6';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  // Position dot
+  const dotAngle = activeEnd;
+  const dotX = cx + Math.cos(dotAngle) * radius;
+  const dotY = cy + Math.sin(dotAngle) * radius;
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, hover || dragging ? 3 : 2, 0, Math.PI * 2);
+  ctx.fillStyle = hover || dragging ? '#7C3AED' : '#8B5CF6';
+  ctx.fill();
+
+  // Center area subtle fill on hover
+  if (hover && !dragging) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius - 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.04)';
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════
+// TAPE ICON (section header toggle)
+// ═══════════════════════════════════════════════
+function drawTapeIcon(canvas) {
+  const ctx = canvas.getContext('2d');
+  const d = DPR;
+  canvas.width = 18 * d;
+  canvas.height = 18 * d;
+  canvas.style.width = '18px';
+  canvas.style.height = '18px';
+  ctx.save();
+  ctx.scale(d, d);
+
+  // Two reels
+  ctx.strokeStyle = '#8B5CF6';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(6, 8, 3.5, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(12, 8, 3.5, 0, Math.PI * 2); ctx.stroke();
+
+  // Reel centers
+  ctx.fillStyle = '#8B5CF6';
+  ctx.beginPath(); ctx.arc(6, 8, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(12, 8, 1, 0, Math.PI * 2); ctx.fill();
+
+  // Tape path (bottom arc connecting reels)
+  ctx.beginPath();
+  ctx.moveTo(2.5, 8);
+  ctx.quadraticCurveTo(4, 13.5, 9, 13.5);
+  ctx.quadraticCurveTo(14, 13.5, 15.5, 8);
+  ctx.strokeStyle = '#A78BFA';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════
+// TAPE MECHANISM
+// ═══════════════════════════════════════════════
+const TAPE_W = 360, TAPE_H = 105;
+let tapeTime = 0;
+let hissParticles = [];
+
+function initHissParticles() {
+  hissParticles = [];
+  for (let i = 0; i < 60; i++) {
+    hissParticles.push({
+      x: Math.random() * TAPE_W,
+      y: Math.random() * TAPE_H,
+      life: Math.random(),
+      speed: 0.3 + Math.random() * 0.7,
+      size: 0.5 + Math.random() * 1,
+    });
+  }
+}
+
+function drawTapeMechanism(ctx, w, h, t) {
+  ctx.clearRect(0, 0, w * DPR, h * DPR);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  const wow = fxState.tape.wow;
+  const sat = fxState.tape.saturation;
+  const hiss = fxState.tape.hiss;
+
+  // Dot grid background
+  ctx.fillStyle = `rgba(139, 92, 246, 0.025)`;
+  for (let gx = 10; gx < w; gx += 12) {
+    for (let gy = 6; gy < h; gy += 12) {
+      ctx.beginPath();
+      ctx.arc(gx, gy, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const cx = w / 2;
+  const reelY = 36;
+  const reelL = cx - 90;
+  const reelR = cx + 90;
+  const reelRadius = 32;
+  const headY = reelY + 4;
+
+  // Guide rails (top/bottom thin lines)
+  ctx.strokeStyle = 'rgba(167, 139, 250, 0.15)';
+  ctx.lineWidth = 0.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(reelL - reelRadius - 8, 8); ctx.lineTo(reelR + reelRadius + 8, 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(reelL - reelRadius - 8, h - 8); ctx.lineTo(reelR + reelRadius + 8, h - 8); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Reel housings (outer circles)
+  ctx.strokeStyle = 'rgba(167, 139, 250, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(reelL, reelY, reelRadius + 4, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(reelR, reelY, reelRadius + 4, 0, Math.PI * 2); ctx.stroke();
+
+  // Reel circles
+  ctx.strokeStyle = '#A78BFA';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(reelL, reelY, reelRadius, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(reelR, reelY, reelRadius, 0, Math.PI * 2); ctx.stroke();
+
+  // Reel spokes (rotating)
+  const spokeAngle = t * 1.2;
+  for (let reel of [reelL, reelR]) {
+    for (let i = 0; i < 3; i++) {
+      const a = spokeAngle + (i * Math.PI * 2 / 3);
+      ctx.beginPath();
+      ctx.moveTo(reel + Math.cos(a) * 8, reelY + Math.sin(a) * 8);
+      ctx.lineTo(reel + Math.cos(a) * (reelRadius - 6), reelY + Math.sin(a) * (reelRadius - 6));
+      ctx.strokeStyle = 'rgba(167, 139, 250, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Reel centers
+  ctx.fillStyle = '#A78BFA';
+  ctx.beginPath(); ctx.arc(reelL, reelY, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(reelR, reelY, 4, 0, Math.PI * 2); ctx.fill();
+
+  // Hub inner ring
+  ctx.strokeStyle = 'rgba(167, 139, 250, 0.5)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.arc(reelL, reelY, 10, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(reelR, reelY, 10, 0, Math.PI * 2); ctx.stroke();
+
+  // Tape path with wow wobble
+  const tapePathY = reelY + reelRadius + 14;
+  const segments = 80;
+  ctx.beginPath();
+  ctx.moveTo(reelL, reelY + reelRadius);
+
+  // Left reel exit → tape path
+  const exitLX = reelL + 10;
+  const exitLY = reelY + reelRadius + 2;
+
+  // Right reel entry
+  const exitRX = reelR - 10;
+  const exitRY = reelY + reelRadius + 2;
+
+  // Draw tape path with wobble
+  ctx.beginPath();
+  for (let i = 0; i <= segments; i++) {
+    const frac = i / segments;
+    const x = lerp(reelL, reelR, frac);
+    // Base: sag in the middle
+    const sagBase = Math.sin(frac * Math.PI) * 18;
+    // Wow wobble
+    const wobble = wow * 5 * Math.sin(t * 2.5 + frac * Math.PI * 4) *
+                   Math.sin(frac * Math.PI); // taper at ends
+    const y = reelY + reelRadius - 2 + sagBase + wobble;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#8B5CF6';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // Head assembly
+  const headX = cx;
+  const headTopY = reelY + reelRadius + 14;
+  const headH = 14;
+  const headW = 20;
+
+  // Saturation glow
+  if (sat > 0.01) {
+    const glowRadius = 25 + sat * 15;
+    const grad = ctx.createRadialGradient(headX, headTopY + headH / 2, 2, headX, headTopY + headH / 2, glowRadius);
+    // Warm purple-orange shift with saturation
+    const r = Math.round(139 + sat * 80);
+    const g = Math.round(92 - sat * 20);
+    const b = Math.round(246 - sat * 60);
+    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${sat * 0.35})`);
+    grad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${sat * 0.12})`);
+    grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(headX - glowRadius, headTopY + headH / 2 - glowRadius, glowRadius * 2, glowRadius * 2);
+  }
+
+  // Head body
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.strokeStyle = '#8B5CF6';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(headX - headW / 2, headTopY, headW, headH, 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Head gap lines
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < 3; i++) {
+    const lx = headX - 5 + i * 5;
+    ctx.beginPath();
+    ctx.moveTo(lx, headTopY + 2);
+    ctx.lineTo(lx, headTopY + headH - 2);
+    ctx.stroke();
+  }
+
+  // Pinch rollers
+  const rollerR = 5;
+  for (let rx of [headX - 35, headX + 35]) {
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(rx, headTopY + headH / 2, rollerR, 0, Math.PI * 2); ctx.stroke();
+    // Roller spoke
+    const ra = t * 3;
+    ctx.beginPath();
+    ctx.moveTo(rx + Math.cos(ra) * 2, headTopY + headH / 2 + Math.sin(ra) * 2);
+    ctx.lineTo(rx + Math.cos(ra) * (rollerR - 1), headTopY + headH / 2 + Math.sin(ra) * (rollerR - 1));
+    ctx.stroke();
+  }
+
+  // Hiss particles
+  if (hiss > 0.01) {
+    const count = Math.floor(hiss * 50);
+    for (let i = 0; i < count && i < hissParticles.length; i++) {
+      const p = hissParticles[i];
+      p.life += p.speed * 0.02;
+      if (p.life > 1) {
+        p.life = 0;
+        p.x = Math.random() * w;
+        p.y = Math.random() * h;
+      }
+      const alpha = Math.sin(p.life * Math.PI) * hiss * 0.6;
+      if (alpha > 0.01) {
+        ctx.fillStyle = `rgba(167, 139, 250, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+// Tape connector lines (from mechanism to knobs)
+function drawTapeConnectors(canvas, w, h) {
+  ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w * DPR, h * DPR);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  ctx.strokeStyle = '#E8E0F0';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+
+  const midX = w / 2;
+  // WOW → left reel area
+  ctx.beginPath();
+  ctx.moveTo(midX - 76, 0);
+  ctx.lineTo(midX - 76, h);
+  ctx.stroke();
+
+  // SATURATION → head
+  ctx.beginPath();
+  ctx.moveTo(midX, 0);
+  ctx.lineTo(midX, h);
+  ctx.stroke();
+
+  // HISS → right side
+  ctx.beginPath();
+  ctx.moveTo(midX + 76, 0);
+  ctx.lineTo(midX + 76, h);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════
+// SPACE VISUALIZATION
+// ═══════════════════════════════════════════════
+const SPACE_W = 700, SPACE_H = 120;
+let spaceParticles = [];
+let spaceRings = [];
+let spaceTime = 0;
+
+function initSpaceParticles() {
+  spaceParticles = [];
+  for (let i = 0; i < 50; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * 200;
+    spaceParticles.push({
+      angle: angle,
+      dist: dist,
+      speed: 0.1 + Math.random() * 0.3,
+      size: 0.8 + Math.random() * 1.2,
+      baseAlpha: 0.2 + Math.random() * 0.5,
+    });
+  }
+  spaceRings = [];
+  for (let i = 0; i < 10; i++) {
+    spaceRings.push({
+      radius: i * 25,
+      birth: -i * 1.5,
+      speed: 0.5,
+    });
+  }
+}
+
+function drawSpace(ctx, w, h, t) {
+  ctx.clearRect(0, 0, w * DPR, h * DPR);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  const cx = w / 2, cy = h / 2;
+  const size = fxState.space.size;
+  const decay = fxState.space.decay;
+  const tone = fxState.space.tone;
+  const mix = fxState.space.mix;
+
+  const masterAlpha = 0.15 + mix * 0.85;
+
+  // Subtle radial background
+  const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 200);
+  bgGrad.addColorStop(0, `rgba(243, 239, 248, ${0.4 * masterAlpha})`);
+  bgGrad.addColorStop(1, 'rgba(243, 239, 248, 0)');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Concentric rings
+  const maxRings = 2 + Math.floor(decay * 8);
+  const spacing = 12 + size * 35;
+
+  for (let i = 0; i < spaceRings.length && i < maxRings; i++) {
+    const ring = spaceRings[i];
+    const age = t * ring.speed - ring.birth;
+    if (age < 0) continue;
+
+    const baseR = (age % (spacing * 0.4)) * (spacing / (spacing * 0.4));
+    const r = baseR + i * spacing * 0.15;
+    const pulse = 1 + Math.sin(t * 0.3 + i * 0.7) * 0.03;
+    const finalR = r * pulse;
+
+    if (finalR > 300) continue;
+
+    const fadeByDist = Math.max(0, 1 - finalR / (50 + decay * 250));
+    const alpha = fadeByDist * 0.5 * masterAlpha;
+
+    if (alpha > 0.005) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, finalR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(167, 139, 250, ${alpha})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Particles
+  for (let i = 0; i < spaceParticles.length; i++) {
+    const p = spaceParticles[i];
+    p.dist += p.speed * (0.3 + size * 0.7);
+    const maxDist = 40 + decay * 260;
+    if (p.dist > maxDist) {
+      p.dist = 0;
+      p.angle = Math.random() * Math.PI * 2;
+    }
+
+    const fadeDist = Math.max(0, 1 - p.dist / maxDist);
+    const alpha = fadeDist * p.baseAlpha * masterAlpha;
+
+    if (alpha < 0.01) continue;
+
+    const px = cx + Math.cos(p.angle) * p.dist * (0.5 + size);
+    const py = cy + Math.sin(p.angle) * p.dist * 0.7 * (0.5 + size);
+
+    if (px < -10 || px > w + 10 || py < -10 || py > h + 10) continue;
+
+    // Tone color shift
+    let r, g, b;
+    if (tone < 0.5) {
+      // Cool: toward #7C3AED
+      const tt = (0.5 - tone) * 2;
+      r = Math.round(lerp(167, 124, tt));
+      g = Math.round(lerp(139, 58, tt));
+      b = Math.round(lerp(250, 237, tt));
+    } else {
+      // Warm: toward #C084FC
+      const tt = (tone - 0.5) * 2;
+      r = Math.round(lerp(167, 192, tt));
+      g = Math.round(lerp(139, 132, tt));
+      b = Math.round(lerp(250, 252, tt));
+    }
+
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(px, py, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Center glow
+  const glowGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 12);
+  glowGrad.addColorStop(0, `rgba(139, 92, 246, ${0.6 * masterAlpha})`);
+  glowGrad.addColorStop(0.4, `rgba(139, 92, 246, ${0.2 * masterAlpha})`);
+  glowGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+  ctx.fillStyle = glowGrad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Center dot
+  ctx.fillStyle = `rgba(139, 92, 246, ${0.9 * masterAlpha})`;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════
+// EQ — BIQUAD MATH
+// ═══════════════════════════════════════════════
+const EQ_MIN_FREQ = 20;
+const EQ_MAX_FREQ = 20000;
+const EQ_MIN_DB = -15;
+const EQ_MAX_DB = 15;
+const EQ_SAMPLE_RATE = 44100;
+
+function freqToX(freq, width) {
+  return (Math.log10(freq / EQ_MIN_FREQ) / Math.log10(EQ_MAX_FREQ / EQ_MIN_FREQ)) * width;
+}
+function xToFreq(x, width) {
+  return EQ_MIN_FREQ * Math.pow(EQ_MAX_FREQ / EQ_MIN_FREQ, x / width);
+}
+function dbToY(db, height) {
+  return height * (1 - (db - EQ_MIN_DB) / (EQ_MAX_DB - EQ_MIN_DB));
+}
+function yToDb(y, height) {
+  return EQ_MIN_DB + (1 - y / height) * (EQ_MAX_DB - EQ_MIN_DB);
+}
+
+function computeBiquadCoeffs(type, freq, gain, Q, sampleRate) {
+  const A = Math.pow(10, gain / 40);
+  const w0 = 2 * Math.PI * freq / sampleRate;
+  const cosw = Math.cos(w0);
+  const sinw = Math.sin(w0);
+  let alpha, b0, b1, b2, a0, a1, a2;
+
+  if (type === 'lowshelf') {
+    alpha = sinw / 2 * Math.sqrt(2);
+    const twoSqrtAalpha = 2 * Math.sqrt(A) * alpha;
+    b0 = A * ((A + 1) - (A - 1) * cosw + twoSqrtAalpha);
+    b1 = 2 * A * ((A - 1) - (A + 1) * cosw);
+    b2 = A * ((A + 1) - (A - 1) * cosw - twoSqrtAalpha);
+    a0 = (A + 1) + (A - 1) * cosw + twoSqrtAalpha;
+    a1 = -2 * ((A - 1) + (A + 1) * cosw);
+    a2 = (A + 1) + (A - 1) * cosw - twoSqrtAalpha;
+  } else if (type === 'peak') {
+    alpha = sinw / (2 * Q);
+    b0 = 1 + alpha * A;
+    b1 = -2 * cosw;
+    b2 = 1 - alpha * A;
+    a0 = 1 + alpha / A;
+    a1 = -2 * cosw;
+    a2 = 1 - alpha / A;
+  } else if (type === 'highshelf') {
+    alpha = sinw / 2 * Math.sqrt(2);
+    const twoSqrtAalpha = 2 * Math.sqrt(A) * alpha;
+    b0 = A * ((A + 1) + (A - 1) * cosw + twoSqrtAalpha);
+    b1 = -2 * A * ((A - 1) + (A + 1) * cosw);
+    b2 = A * ((A + 1) + (A - 1) * cosw - twoSqrtAalpha);
+    a0 = (A + 1) - (A - 1) * cosw + twoSqrtAalpha;
+    a1 = 2 * ((A - 1) - (A + 1) * cosw);
+    a2 = (A + 1) - (A - 1) * cosw - twoSqrtAalpha;
+  }
+  return { b0: b0/a0, b1: b1/a0, b2: b2/a0, a1: a1/a0, a2: a2/a0 };
+}
+
+function evalMagnitude(coeffs, freq, sampleRate) {
+  const w = 2 * Math.PI * freq / sampleRate;
+  const cos1 = Math.cos(w), cos2 = Math.cos(2 * w);
+  const sin1 = Math.sin(w), sin2 = Math.sin(2 * w);
+
+  const numR = coeffs.b0 + coeffs.b1 * cos1 + coeffs.b2 * cos2;
+  const numI = -(coeffs.b1 * sin1 + coeffs.b2 * sin2);
+  const denR = 1 + coeffs.a1 * cos1 + coeffs.a2 * cos2;
+  const denI = -(coeffs.a1 * sin1 + coeffs.a2 * sin2);
+
+  const num = Math.sqrt(numR * numR + numI * numI);
+  const den = Math.sqrt(denR * denR + denI * denI);
+  return num / (den || 1e-20);
+}
+
+// ─── EQ Drawing ───
+const EQ_W = 720, EQ_H = 200;
+const EQ_PAD_L = 28, EQ_PAD_R = 8, EQ_PAD_T = 8, EQ_PAD_B = 18;
+const EQ_PLOT_W = EQ_W - EQ_PAD_L - EQ_PAD_R;
+const EQ_PLOT_H = EQ_H - EQ_PAD_T - EQ_PAD_B;
+
+const FREQ_MARKERS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+const FREQ_LABELS  = ['20','50','100','200','500','1k','2k','5k','10k','20k'];
+const DB_MARKERS = [-12, -6, 0, 6, 12];
+
+function drawEQ(ctx, w, h) {
+  ctx.clearRect(0, 0, w * DPR, h * DPR);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  const eq = fxState.eq;
+
+  // Grid
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < FREQ_MARKERS.length; i++) {
+    const x = EQ_PAD_L + freqToX(FREQ_MARKERS[i], EQ_PLOT_W);
+    ctx.strokeStyle = 'rgba(232, 224, 240, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(x, EQ_PAD_T);
+    ctx.lineTo(x, EQ_PAD_T + EQ_PLOT_H);
+    ctx.stroke();
+    // Label
+    ctx.fillStyle = '#B0A4C0';
+    ctx.font = '8px -apple-system, SF Pro Display, Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(FREQ_LABELS[i], x, EQ_PAD_T + EQ_PLOT_H + 12);
+  }
+
+  for (let i = 0; i < DB_MARKERS.length; i++) {
+    const y = EQ_PAD_T + dbToY(DB_MARKERS[i], EQ_PLOT_H);
+    ctx.strokeStyle = DB_MARKERS[i] === 0 ? 'rgba(232, 224, 240, 0.8)' : 'rgba(232, 224, 240, 0.5)';
+    ctx.lineWidth = DB_MARKERS[i] === 0 ? 0.8 : 0.5;
+    ctx.beginPath();
+    ctx.moveTo(EQ_PAD_L, y);
+    ctx.lineTo(EQ_PAD_L + EQ_PLOT_W, y);
+    ctx.stroke();
+    // Label
+    ctx.fillStyle = '#B0A4C0';
+    ctx.font = '8px -apple-system, SF Pro Display, Inter, system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    const label = DB_MARKERS[i] > 0 ? '+' + DB_MARKERS[i] : '' + DB_MARKERS[i];
+    ctx.fillText(label, EQ_PAD_L - 4, y + 3);
+  }
+
+  // Compute biquad coefficients
+  const lowCoeffs  = computeBiquadCoeffs('lowshelf',  eq.low.freq,  eq.low.gain,  0.707, EQ_SAMPLE_RATE);
+  const midCoeffs  = computeBiquadCoeffs('peak',      eq.mid.freq,  eq.mid.gain,  eq.mid.q, EQ_SAMPLE_RATE);
+  const highCoeffs = computeBiquadCoeffs('highshelf', eq.high.freq, eq.high.gain, 0.707, EQ_SAMPLE_RATE);
+
+  // Compute response curve
+  const zeroY = EQ_PAD_T + dbToY(0, EQ_PLOT_H);
+  const step = 2;
+  const points = [];
+
+  for (let px = 0; px <= EQ_PLOT_W; px += step) {
+    const freq = xToFreq(px, EQ_PLOT_W);
+    const magL = evalMagnitude(lowCoeffs, freq, EQ_SAMPLE_RATE);
+    const magM = evalMagnitude(midCoeffs, freq, EQ_SAMPLE_RATE);
+    const magH = evalMagnitude(highCoeffs, freq, EQ_SAMPLE_RATE);
+    const totalDb = 20 * Math.log10(magL * magM * magH);
+    const clampedDb = clamp(totalDb, EQ_MIN_DB, EQ_MAX_DB);
+    const y = EQ_PAD_T + dbToY(clampedDb, EQ_PLOT_H);
+    points.push({ x: EQ_PAD_L + px, y: y, db: clampedDb });
+  }
+
+  // Fill between curve and 0dB
+  if (points.length > 1) {
+    // Boost fill (above 0dB = below zeroY in screen coords)
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, zeroY);
+    for (const p of points) {
+      ctx.lineTo(p.x, Math.min(p.y, zeroY));
+    }
+    ctx.lineTo(points[points.length - 1].x, zeroY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.08)';
+    ctx.fill();
+
+    // Cut fill (below 0dB = above zeroY in screen coords)
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, zeroY);
+    for (const p of points) {
+      ctx.lineTo(p.x, Math.max(p.y, zeroY));
+    }
+    ctx.lineTo(points[points.length - 1].x, zeroY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.05)';
+    ctx.fill();
+  }
+
+  // Draw curve stroke
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    if (i === 0) ctx.moveTo(points[i].x, points[i].y);
+    else ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.strokeStyle = '#8B5CF6';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Band control points
+  const bands = [
+    { key: 'low',  freq: eq.low.freq,  gain: eq.low.gain,  color: '#A78BFA', activeColor: '#7C3AED' },
+    { key: 'mid',  freq: eq.mid.freq,  gain: eq.mid.gain,  color: '#8B5CF6', activeColor: '#7C3AED' },
+    { key: 'high', freq: eq.high.freq, gain: eq.high.gain, color: '#C4B5FD', activeColor: '#7C3AED' },
+  ];
+
+  for (const band of bands) {
+    const bx = EQ_PAD_L + freqToX(band.freq, EQ_PLOT_W);
+    const by = EQ_PAD_T + dbToY(band.gain, EQ_PLOT_H);
+    const isActive = fxState.dragging === 'eq_' + band.key;
+    const isHovered = fxState.hoveredEqBand === band.key;
+
+    // Glow when active
+    if (isActive || isHovered) {
+      const glowGrad = ctx.createRadialGradient(bx, by, 0, bx, by, 20);
+      glowGrad.addColorStop(0, `rgba(139, 92, 246, 0.15)`);
+      glowGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      ctx.fillStyle = glowGrad;
+      ctx.fillRect(bx - 20, by - 20, 40, 40);
+    }
+
+    // White fill circle
+    ctx.beginPath();
+    ctx.arc(bx, by, isActive ? 9 : 8, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.strokeStyle = isActive || isHovered ? band.activeColor : band.color;
+    ctx.lineWidth = isActive ? 2.5 : 2;
+    ctx.stroke();
+
+    // Inner dot
+    ctx.beginPath();
+    ctx.arc(bx, by, 3, 0, Math.PI * 2);
+    ctx.fillStyle = isActive || isHovered ? band.activeColor : band.color;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════
+// PAGE NAVIGATION
+// ═══════════════════════════════════════════════
+function navigateToPage(newPage, direction) {
+  if (newPage === fxState.currentPage) return;
+  if (newPage < 0 || newPage > 2) return;
+
+  const oldEl = document.getElementById(PAGE_IDS[fxState.currentPage]);
+  const newEl = document.getElementById(PAGE_IDS[newPage]);
+
+  // Determine direction: +1 = going right, -1 = going left
+  const dir = direction || (newPage > fxState.currentPage ? 1 : -1);
+
+  // Exit old page
+  oldEl.classList.remove('active');
+  oldEl.classList.add(dir > 0 ? 'exit-left' : 'exit-right');
+
+  // Prepare new page at opposite side
+  newEl.classList.remove('hidden', 'exit-left', 'exit-right', 'active');
+  newEl.style.transition = 'none';
+  newEl.style.opacity = '0';
+  newEl.style.transform = dir > 0 ? 'translateX(20px)' : 'translateX(-20px)';
+  newEl.style.pointerEvents = 'none';
+
+  // Force reflow
+  void newEl.offsetWidth;
+
+  // Animate in
+  newEl.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+  newEl.style.opacity = '1';
+  newEl.style.transform = 'translateX(0)';
+  newEl.style.pointerEvents = 'auto';
+  newEl.classList.add('active');
+
+  // Clean up old page after transition
+  setTimeout(() => {
+    oldEl.classList.remove('exit-left', 'exit-right');
+    oldEl.classList.add('hidden');
+    oldEl.style.transition = '';
+    newEl.style.transition = '';
+  }, 280);
+
+  fxState.currentPage = newPage;
+  updateNavUI();
+}
+
+function updateNavUI() {
+  document.getElementById('navLabel').textContent = PAGE_NAMES[fxState.currentPage];
+  const dots = document.querySelectorAll('.nav-dot');
+  dots.forEach((dot, i) => {
+    dot.classList.toggle('active', i === fxState.currentPage);
+    dot.classList.toggle('inactive', i !== fxState.currentPage);
+  });
+}
+
+// ═══════════════════════════════════════════════
+// KNOB INTERACTION
+// ═══════════════════════════════════════════════
+const knobMap = {
+  wow:        { state: () => fxState.tape, key: 'wow',        el: 'knobWow',   valEl: 'valWow',   fmt: v => Math.round(v * 100) + '%', def: 0 },
+  saturation: { state: () => fxState.tape, key: 'saturation', el: 'knobSat',   valEl: 'valSat',   fmt: v => Math.round(v * 100) + '%', def: 0 },
+  hiss:       { state: () => fxState.tape, key: 'hiss',       el: 'knobHiss',  valEl: 'valHiss',  fmt: v => Math.round(v * 100) + '%', def: 0 },
+  size:       { state: () => fxState.space,key: 'size',       el: 'knobSize',  valEl: 'valSize',  fmt: v => Math.round(v * 100) + '%', def: 0.3 },
+  decay:      { state: () => fxState.space,key: 'decay',      el: 'knobDecay', valEl: 'valDecay', fmt: v => Math.round(v * 100) + '%', def: 0.4 },
+  tone:       { state: () => fxState.space,key: 'tone',       el: 'knobTone',  valEl: 'valTone',  fmt: v => { const pct = Math.round((v - 0.5) * 200); return (pct >= 0 ? '+' : '') + pct + '%'; }, def: 0.5 },
+  mix:        { state: () => fxState.space,key: 'mix',        el: 'knobMix',   valEl: 'valMix',   fmt: v => Math.round(v * 100) + '%', def: 0 },
+};
+
+function setupKnobInteraction() {
+  document.querySelectorAll('.knob-group').forEach(group => {
+    const knobId = group.dataset.knob;
+    const km = knobMap[knobId];
+    if (!km) return;
+
+    const canvas = document.getElementById(km.el);
+
+    // Hover
+    group.addEventListener('mouseenter', () => { fxState.hoveredKnob = knobId; });
+    group.addEventListener('mouseleave', () => { if (fxState.hoveredKnob === knobId) fxState.hoveredKnob = null; });
+
+    // Drag
+    canvas.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      fxState.dragging = knobId;
+      fxState.dragStartY = e.clientY;
+      fxState.dragStartVal = km.state()[km.key];
+    });
+
+    // Double-click reset
+    canvas.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      km.state()[km.key] = km.def;
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════
+// EQ INTERACTION
+// ═══════════════════════════════════════════════
+const eqBandConfig = {
+  low:  { minFreq: 20,   maxFreq: 500 },
+  mid:  { minFreq: 200,  maxFreq: 8000 },
+  high: { minFreq: 2000, maxFreq: 20000 },
+};
+
+function setupEqInteraction() {
+  const wrapper = document.getElementById('eqWrapper');
+  const canvas = document.getElementById('eqCanvas');
+  const tooltip = document.getElementById('eqTooltip');
+
+  function canvasCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function bandScreenPos(bandKey) {
+    const eq = fxState.eq;
+    const band = eq[bandKey];
+    return {
+      x: EQ_PAD_L + freqToX(band.freq, EQ_PLOT_W),
+      y: EQ_PAD_T + dbToY(band.gain, EQ_PLOT_H),
+    };
+  }
+
+  function hitTestBands(mx, my) {
+    for (const key of ['low', 'mid', 'high']) {
+      const pos = bandScreenPos(key);
+      const dx = mx - pos.x, dy = my - pos.y;
+      if (dx * dx + dy * dy < 14 * 14) return key;
+    }
+    return null;
+  }
+
+  canvas.addEventListener('mousedown', (e) => {
+    const { x, y } = canvasCoords(e);
+    const band = hitTestBands(x, y);
+    if (band) {
+      fxState.dragging = 'eq_' + band;
+      fxState.dragStartX = e.clientX;
+      fxState.dragStartY = e.clientY;
+      fxState.dragStartVal = fxState.eq[band].gain;
+      fxState.dragStartVal2 = fxState.eq[band].freq;
+      e.preventDefault();
+    }
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (fxState.dragging && fxState.dragging.startsWith('eq_')) return;
+    const { x, y } = canvasCoords(e);
+    const band = hitTestBands(x, y);
+    fxState.hoveredEqBand = band;
+    canvas.style.cursor = band ? 'grab' : 'default';
+
+    // Tooltip
+    if (band) {
+      const pos = bandScreenPos(band);
+      const b = fxState.eq[band];
+      const freqStr = b.freq >= 1000 ? (b.freq / 1000).toFixed(1) + 'kHz' : Math.round(b.freq) + 'Hz';
+      const gainStr = (b.gain >= 0 ? '+' : '') + b.gain.toFixed(1) + 'dB';
+      tooltip.textContent = freqStr + '  ' + gainStr;
+      tooltip.classList.add('visible');
+      tooltip.style.left = (pos.x + 14) + 'px';
+      tooltip.style.top = (pos.y - 10) + 'px';
+    } else {
+      tooltip.classList.remove('visible');
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    if (!fxState.dragging || !fxState.dragging.startsWith('eq_')) {
+      fxState.hoveredEqBand = null;
+      tooltip.classList.remove('visible');
+    }
+  });
+
+  // Double-click to reset a band
+  canvas.addEventListener('dblclick', (e) => {
+    const { x, y } = canvasCoords(e);
+    const band = hitTestBands(x, y);
+    if (band) {
+      fxState.eq[band].gain = 0;
+      e.preventDefault();
+    }
+  });
+
+  // Flatten button
+  document.getElementById('flattenBtn').addEventListener('click', () => {
+    fxState.eqFlattening = true;
+  });
+}
+
+// ═══════════════════════════════════════════════
+// GLOBAL MOUSE HANDLING
+// ═══════════════════════════════════════════════
+function setupGlobalMouse() {
+  const tooltip = document.getElementById('eqTooltip');
+
+  window.addEventListener('mousemove', (e) => {
+    if (!fxState.dragging) return;
+
+    if (fxState.dragging.startsWith('eq_')) {
+      const bandKey = fxState.dragging.slice(3);
+      const config = eqBandConfig[bandKey];
+      const dy = fxState.dragStartY - e.clientY;
+      const dx = e.clientX - fxState.dragStartX;
+
+      // Gain from vertical movement
+      const gainSens = 0.12; // dB per pixel
+      let newGain = clamp(fxState.dragStartVal + dy * gainSens, -15, 15);
+      fxState.eq[bandKey].gain = Math.round(newGain * 10) / 10;
+
+      // Frequency from horizontal movement
+      const freqSens = 0.004;
+      const logStart = Math.log10(fxState.dragStartVal2);
+      const logMin = Math.log10(config.minFreq);
+      const logMax = Math.log10(config.maxFreq);
+      const logNew = clamp(logStart + dx * freqSens, logMin, logMax);
+      fxState.eq[bandKey].freq = Math.round(Math.pow(10, logNew));
+
+      // Update tooltip
+      const b = fxState.eq[bandKey];
+      const pos = {
+        x: EQ_PAD_L + freqToX(b.freq, EQ_PLOT_W),
+        y: EQ_PAD_T + dbToY(b.gain, EQ_PLOT_H),
+      };
+      const freqStr = b.freq >= 1000 ? (b.freq / 1000).toFixed(1) + 'kHz' : Math.round(b.freq) + 'Hz';
+      const gainStr = (b.gain >= 0 ? '+' : '') + b.gain.toFixed(1) + 'dB';
+      tooltip.textContent = freqStr + '  ' + gainStr;
+      tooltip.classList.add('visible');
+      tooltip.style.left = (pos.x + 14) + 'px';
+      tooltip.style.top = (pos.y - 10) + 'px';
+
+    } else if (knobMap[fxState.dragging]) {
+      const km = knobMap[fxState.dragging];
+      const dy = fxState.dragStartY - e.clientY;
+      const newVal = clamp(fxState.dragStartVal + dy * 0.005, 0, 1);
+      km.state()[km.key] = newVal;
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (fxState.dragging && fxState.dragging.startsWith('eq_')) {
+      tooltip.classList.remove('visible');
+    }
+    fxState.dragging = null;
+  });
+}
+
+// ═══════════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════════
+let lastTime = 0;
+
+function animate(timestamp) {
+  const dt = (timestamp - lastTime) / 1000;
+  lastTime = timestamp;
+
+  const page = fxState.currentPage;
+
+  // ─── Tape ───
+  if (page === 0) {
+    tapeTime += dt;
+    const tapeCanvas = document.getElementById('tapeMechCanvas');
+    const tapeCtx = tapeCanvas.getContext('2d');
+    drawTapeMechanism(tapeCtx, TAPE_W, TAPE_H, tapeTime);
+
+    // Draw knobs
+    for (const id of ['wow', 'saturation', 'hiss']) {
+      const km = knobMap[id];
+      drawKnob(
+        document.getElementById(km.el),
+        km.state()[km.key],
+        fxState.dragging === id,
+        fxState.hoveredKnob === id,
+        48
+      );
+      document.getElementById(km.valEl).textContent = km.fmt(km.state()[km.key]);
+    }
+  }
+
+  // ─── Space ───
+  if (page === 1) {
+    spaceTime += dt;
+    const spaceCanvas = document.getElementById('spaceCanvas');
+    const spaceCtx = spaceCanvas.getContext('2d');
+    drawSpace(spaceCtx, SPACE_W, SPACE_H, spaceTime);
+
+    for (const id of ['size', 'decay', 'tone', 'mix']) {
+      const km = knobMap[id];
+      drawKnob(
+        document.getElementById(km.el),
+        km.state()[km.key],
+        fxState.dragging === id,
+        fxState.hoveredKnob === id,
+        48
+      );
+      document.getElementById(km.valEl).textContent = km.fmt(km.state()[km.key]);
+    }
+  }
+
+  // ─── EQ ───
+  if (page === 2) {
+    // Flatten animation
+    if (fxState.eqFlattening) {
+      let allFlat = true;
+      for (const key of ['low', 'mid', 'high']) {
+        const g = fxState.eq[key].gain;
+        if (Math.abs(g) > 0.05) {
+          fxState.eq[key].gain = lerp(g, 0, 0.12);
+          allFlat = false;
+        } else {
+          fxState.eq[key].gain = 0;
+        }
+      }
+      if (allFlat) fxState.eqFlattening = false;
+    }
+
+    const eqCanvas = document.getElementById('eqCanvas');
+    const eqCtx = eqCanvas.getContext('2d');
+    drawEQ(eqCtx, EQ_W, EQ_H);
+  }
+
+  // Always redraw active page knobs if dragging
+  if (fxState.dragging && !fxState.dragging.startsWith('eq_') && knobMap[fxState.dragging]) {
+    const km = knobMap[fxState.dragging];
+    drawKnob(document.getElementById(km.el), km.state()[km.key], true, true, 48);
+    document.getElementById(km.valEl).textContent = km.fmt(km.state()[km.key]);
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// ═══════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════
+function init() {
+  // Tape icon
+  drawTapeIcon(document.getElementById('tapeIconCanvas'));
+
+  // Setup canvases
+  setupCanvas(document.getElementById('tapeMechCanvas'), TAPE_W, TAPE_H);
+  const connCanvas = document.getElementById('tapeConnectors');
+  setupCanvas(connCanvas, 300, 18);
+  drawTapeConnectors(connCanvas, 300, 18);
+
+  setupCanvas(document.getElementById('spaceCanvas'), SPACE_W, SPACE_H);
+  setupCanvas(document.getElementById('eqCanvas'), EQ_W, EQ_H);
+
+  // Init particle systems
+  initHissParticles();
+  initSpaceParticles();
+
+  // Setup all knob DPR
+  for (const id of Object.keys(knobMap)) {
+    const km = knobMap[id];
+    const c = document.getElementById(km.el);
+    c.width = 48 * DPR;
+    c.height = 48 * DPR;
+    c.style.width = '48px';
+    c.style.height = '48px';
+  }
+
+  // Navigation events
+  document.getElementById('navPrev').addEventListener('click', () => {
+    navigateToPage((fxState.currentPage - 1 + 3) % 3, -1);
+  });
+  document.getElementById('navNext').addEventListener('click', () => {
+    navigateToPage((fxState.currentPage + 1) % 3, 1);
+  });
+  document.querySelectorAll('.nav-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const target = parseInt(dot.dataset.page);
+      if (target !== fxState.currentPage) {
+        navigateToPage(target, target > fxState.currentPage ? 1 : -1);
+      }
+    });
+  });
+
+  // Subtab visual toggle (no real functionality, just visual)
+  document.getElementById('subtabFx').addEventListener('click', () => {
+    document.getElementById('subtabFx').className = 'subtab active';
+    document.getElementById('subtabLoop').className = 'subtab inactive';
+  });
+  document.getElementById('subtabLoop').addEventListener('click', () => {
+    document.getElementById('subtabLoop').className = 'subtab active';
+    document.getElementById('subtabFx').className = 'subtab inactive';
+  });
+
+  // Setup interactions
+  setupKnobInteraction();
+  setupEqInteraction();
+  setupGlobalMouse();
+
+  // Initial draws
+  for (const id of ['wow', 'saturation', 'hiss']) {
+    const km = knobMap[id];
+    drawKnob(document.getElementById(km.el), km.state()[km.key], false, false, 48);
+  }
+
+  // Start animation
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

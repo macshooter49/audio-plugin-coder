@@ -1,0 +1,2308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=820">
+<title>Terrain v2 — Interactive Mockup</title>
+<style>
+/* ============ RESET & TOKENS ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-main: #F3EFF8;
+  --bg-hero: #EDE8F4;
+  --bg-surface: #FFFFFF;
+  --bg-footer: #F8F5FC;
+  --bg-glass: rgba(255,255,255,0.85);
+  --purple-600: #7C3AED;
+  --purple-500: #8B5CF6;
+  --purple-400: #A78BFA;
+  --border: #E8E0F0;
+  --text-primary: #5B4F70;
+  --text-secondary: #8B7FA0;
+  --text-muted: #A89BBE;
+  --text-dim: #B0A4C0;
+  --mesh-line: rgba(139,92,246,0.25);
+  --mesh-contour: rgba(167,139,250,0.5);
+  --mesh-peak: rgba(124,58,237,0.7);
+}
+
+body {
+  background: #D8D0E4;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#plugin {
+  width: 820px;
+  height: 640px;
+  background: var(--bg-main);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(91,79,112,0.18), 0 2px 8px rgba(91,79,112,0.08);
+  position: relative;
+  user-select: none;
+}
+
+/* ============ HEADER ============ */
+#header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+.brand-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-logo img { display: block; width: 38px; height: 38px; object-fit: contain; }
+
+.brand-name {
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.brand-version {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-left: -2px;
+  padding-top: 3px;
+}
+
+.preset-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.preset-nav-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.1s;
+}
+.preset-nav-btn:hover {
+  border-color: var(--purple-500);
+  color: var(--purple-500);
+}
+
+.preset-name {
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  min-width: 140px;
+  text-align: center;
+  cursor: default;
+  transition: opacity 0.15s;
+}
+
+.preset-grid-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.preset-grid-btn:hover {
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.05);
+}
+.preset-grid-btn.active {
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.1);
+}
+
+/* ============ PRESET BROWSER ============ */
+#preset-browser {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  max-height: 0;
+  overflow: hidden;
+  z-index: 15;
+  transition: max-height 0.2s ease-out;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid transparent;
+}
+#preset-browser.open {
+  max-height: 340px;
+  border-bottom-color: var(--border);
+}
+
+.browser-inner {
+  padding: 12px 16px 16px;
+}
+
+.browser-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.browser-search {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 8px 0 28px;
+  font-size: 11px;
+  background: rgba(255,255,255,0.6);
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+  position: relative;
+}
+.browser-search:focus { border-color: var(--purple-500); }
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+}
+.search-wrap::before {
+  content: '\u2315';
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  color: var(--text-dim);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.browser-cats {
+  display: flex;
+  gap: 4px;
+}
+
+.cat-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.cat-btn:hover { border-color: var(--purple-400); color: var(--purple-500); }
+.cat-btn.active {
+  background: var(--purple-500);
+  color: white;
+  border-color: var(--purple-500);
+}
+
+.browser-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.browser-grid::-webkit-scrollbar { width: 4px; }
+.browser-grid::-webkit-scrollbar-track { background: transparent; }
+.browser-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.preset-card {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.preset-card:hover {
+  border-color: var(--purple-400);
+  background: rgba(139,92,246,0.06);
+}
+.preset-card.selected {
+  border-color: var(--purple-500);
+  background: rgba(139,92,246,0.1);
+}
+
+.preset-card-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preset-card-cat {
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+
+/* ============ HERO ============ */
+#hero {
+  height: 276px;
+  background: var(--bg-hero);
+  position: relative;
+  cursor: crosshair;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+#terrain-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.xy-readout {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--purple-500);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+#hero:hover .xy-readout,
+#hero.dragging .xy-readout { opacity: 1; }
+
+.xy-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.scope-controls-left {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 5;
+}
+
+.scope-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  color: var(--text-secondary);
+  padding: 0;
+}
+.scope-btn:hover {
+  border-color: var(--purple-500);
+  background: rgba(255,255,255,0.8);
+  transform: scale(1.05);
+}
+.scope-btn:active {
+  transform: scale(0.95);
+}
+.scope-btn.flash {
+  background: rgba(139,92,246,0.25);
+  border-color: var(--purple-500);
+}
+.scope-btn canvas { display: block; }
+
+.xy-ctrl-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+.xy-ctrl-btn:hover {
+  border-color: var(--purple-500);
+  background: rgba(255,255,255,0.8);
+}
+.xy-ctrl-btn.active {
+  background: rgba(139,92,246,0.15);
+  border-color: var(--purple-500);
+  color: var(--purple-600);
+}
+
+.crosshair-h, .crosshair-v {
+  position: absolute;
+  background: rgba(139,92,246,0.3);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.crosshair-h { height: 1px; left: 0; right: 0; }
+.crosshair-v { width: 1px; top: 0; bottom: 0; }
+#hero:hover .crosshair-h,
+#hero:hover .crosshair-v,
+#hero.dragging .crosshair-h,
+#hero.dragging .crosshair-v { opacity: 1; }
+
+/* ============ CONTROLS ============ */
+#controls {
+  height: 272px;
+  display: flex;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+
+.control-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px 10px;
+  background: var(--bg-surface);
+  overflow: hidden;
+  transition: flex 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
+}
+.control-section:first-child {
+  border-right: 1px solid var(--border);
+}
+
+/* Minimized: thin vertical tab */
+.control-section.minimized {
+  flex: 0 0 48px;
+  padding: 12px 4px;
+  cursor: pointer;
+  align-items: center;
+}
+.control-section.minimized:hover {
+  background: var(--bg-hero);
+}
+.control-section.minimized .section-header {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  margin-bottom: 0;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+.control-section.minimized .knobs-container {
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  overflow: hidden;
+  flex: 0;
+  /* Fade out IMMEDIATELY before the section shrinks (no delay) */
+  transition: opacity 0.12s 0s cubic-bezier(0.4, 0, 0.2, 1), transform 0.12s 0s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.control-section.minimized .section-icon {
+  transform: rotate(90deg);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: writing-mode 0s, transform 0s, margin 0.35s cubic-bezier(0.4, 0, 0.2, 1), flex 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.section-header:hover .section-label { color: var(--purple-500); }
+
+.section-toggle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--purple-500);
+  flex-shrink: 0;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+.section-toggle.off { background: var(--border); }
+
+.section-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+.section-icon canvas { display: block; }
+
+.section-label {
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: color 0.1s;
+}
+
+.section-collapse-icon {
+  margin-left: auto;
+  font-size: 8px;
+  color: var(--text-dim);
+  opacity: 1;
+  transition: transform 0.15s, opacity 0.15s 0.2s;
+}
+.control-section.minimized .section-collapse-icon {
+  opacity: 0;
+  transition: opacity 0.1s 0s;
+}
+
+.knobs-container {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  align-content: center;
+  gap: 4px 8px;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateY(0);
+  /* Fade + slide in AFTER the section fully expands (0.35s delay) */
+  transition: opacity 0.25s 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.knob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 72px;
+  gap: 2px;
+}
+
+.knob-icon {
+  width: 16px;
+  height: 16px;
+  margin-bottom: 2px;
+}
+.knob-icon canvas { display: block; cursor: pointer; }
+
+.knob-canvas-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  cursor: grab;
+}
+.knob-canvas-wrap:active { cursor: grabbing; }
+.knob-canvas-wrap canvas {
+  display: block;
+  width: 56px;
+  height: 56px;
+}
+
+.knob-value {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 14px;
+  min-height: 14px;
+  white-space: nowrap;
+  transition: text-shadow 0.15s ease, color 0.15s ease;
+}
+.knob-value.glowing {
+  color: var(--purple-500);
+  text-shadow: 0 0 8px rgba(139,92,246,0.5), 0 0 16px rgba(139,92,246,0.25);
+}
+
+.knob-label {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 12px;
+}
+
+/* ============ TOOLTIP ============ */
+#tooltip {
+  position: fixed;
+  z-index: 100;
+  width: 260px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s, transform 0.15s;
+  box-shadow: 0 4px 16px rgba(91,79,112,0.1);
+}
+#tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.tooltip-title {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tooltip-icon { width: 14px; height: 14px; }
+.tooltip-icon canvas { display: block; }
+
+.tooltip-desc {
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.tooltip-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.tooltip-stat {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 9px;
+}
+.tooltip-stat-label { color: var(--text-dim); }
+.tooltip-stat-value { color: var(--text-primary); }
+
+.tooltip-bar-wrap {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+.tooltip-bar {
+  height: 100%;
+  background: var(--purple-500);
+  border-radius: 2px;
+  transition: width 0.2s;
+}
+
+.tooltip-bar-pct {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 8px;
+  color: var(--text-dim);
+  text-align: right;
+  margin-bottom: 8px;
+}
+
+.tooltip-tip {
+  font-size: 9px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-style: italic;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+/* ============ FOOTER ============ */
+#footer {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg-footer);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.output-label {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.output-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.output-icon canvas { display: block; }
+
+.output-slider-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+}
+.output-slider-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--purple-500);
+  border-radius: 3px;
+  transition: width 0.05s;
+}
+.output-slider-thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border: 2px solid var(--purple-500);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  transition: box-shadow 0.1s;
+}
+.output-slider-thumb:hover {
+  box-shadow: 0 0 0 4px rgba(139,92,246,0.1);
+}
+.output-slider-thumb:active {
+  cursor: grabbing;
+  box-shadow: 0 0 0 6px rgba(139,92,246,0.15);
+}
+
+.output-value {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--text-primary);
+  min-width: 60px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.footer-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.master-mix-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.master-mix-label {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.master-mix-knob-wrap {
+  width: 32px;
+  height: 32px;
+  cursor: grab;
+  flex-shrink: 0;
+}
+.master-mix-knob-wrap:active { cursor: grabbing; }
+
+.master-mix-value {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--text-primary);
+  min-width: 42px;
+  text-align: right;
+}
+
+.output-meters {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.meter-channel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.meter-label {
+  font-size: 7px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.meter-bar-wrap {
+  width: 4px;
+  height: 24px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.meter-bar {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background: var(--purple-400);
+  border-radius: 2px;
+  transition: height 0.08s;
+}
+.meter-bar.clip { background: #E55353; }
+
+.meter-rms {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 7px;
+  color: var(--text-dim);
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.footer-brand {
+  font-size: 8px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ============ CONTEXT MENU ============ */
+#context-menu {
+  position: fixed;
+  z-index: 200;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 160px;
+  display: none;
+  box-shadow: 0 4px 16px rgba(91,79,112,0.12);
+}
+
+.ctx-item {
+  padding: 6px 14px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.08s;
+}
+.ctx-item:hover {
+  background: rgba(139,92,246,0.08);
+}
+
+/* ============ ANIMATIONS ============ */
+@keyframes flash-default {
+  0% { box-shadow: 0 0 0 0 rgba(139,92,246,0.3); }
+  100% { box-shadow: 0 0 0 8px rgba(139,92,246,0); }
+}
+</style>
+</head>
+<body>
+
+<div id="plugin">
+  <!-- HEADER -->
+  <div id="header">
+    <div class="brand-area">
+      <div class="brand-logo"><img id="logo-img" src="data:image/png;base64,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" alt="Waves Crate"></div>
+      <span class="brand-name">Terrain</span>
+      <span class="brand-version">v2.0</span>
+    </div>
+    <div class="preset-area">
+      <button class="preset-nav-btn" id="preset-prev">&lsaquo;</button>
+      <span class="preset-name" id="preset-name">Crystal Shimmer</span>
+      <button class="preset-nav-btn" id="preset-next">&rsaquo;</button>
+      <button class="preset-grid-btn" id="preset-grid-btn">
+        <canvas id="grid-icon" width="28" height="28"></canvas>
+      </button>
+    </div>
+  </div>
+
+  <!-- PRESET BROWSER -->
+  <div id="preset-browser">
+    <div class="browser-inner">
+      <div class="browser-top">
+        <div class="search-wrap">
+          <input class="browser-search" type="text" placeholder="Search presets..." id="browser-search">
+        </div>
+        <div class="browser-cats" id="browser-cats"></div>
+      </div>
+      <div class="browser-grid" id="browser-grid"></div>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div id="hero">
+    <canvas id="terrain-canvas"></canvas>
+    <div class="crosshair-h" id="crosshair-h"></div>
+    <div class="crosshair-v" id="crosshair-v"></div>
+    <div class="xy-readout" id="xy-readout">X: 50% Y: 50%</div>
+    <div class="scope-controls-left">
+      <button class="scope-btn" id="randomize-btn" title="Randomize">
+        <canvas id="randomize-icon" width="36" height="36"></canvas>
+      </button>
+    </div>
+    <div class="xy-controls">
+      <button class="xy-ctrl-btn active" id="xy-play" title="Auto">&#9654;</button>
+      <button class="xy-ctrl-btn" id="xy-mode" title="Mode">~</button>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls">
+    <div class="control-section" id="grain-section">
+      <div class="section-header" id="grain-header">
+        <div class="section-toggle" id="grain-toggle"></div>
+        <div class="section-icon"><canvas id="grain-section-icon" width="28" height="28"></canvas></div>
+        <span class="section-label">Grain Engine</span>
+        <span class="section-collapse-icon">&#9662;</span>
+      </div>
+      <div class="knobs-container" id="grain-knobs"></div>
+    </div>
+    <div class="control-section" id="tape-section">
+      <div class="section-header" id="tape-header">
+        <div class="section-toggle" id="tape-toggle"></div>
+        <div class="section-icon"><canvas id="tape-section-icon" width="28" height="28"></canvas></div>
+        <span class="section-label">Tape</span>
+        <span class="section-collapse-icon">&#9662;</span>
+      </div>
+      <div class="knobs-container" id="tape-knobs"></div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div id="footer">
+    <span class="output-label">Output</span>
+    <div class="output-icon"><canvas id="output-icon-canvas" width="32" height="32"></canvas></div>
+    <div class="output-slider-wrap" id="output-slider">
+      <div class="output-slider-fill" id="output-fill"></div>
+      <div class="output-slider-thumb" id="output-thumb"></div>
+    </div>
+    <span class="output-value" id="output-value">0.0 dB</span>
+    <div class="output-meters">
+      <div class="meter-channel">
+        <span class="meter-label">L</span>
+        <div class="meter-bar-wrap"><div class="meter-bar" id="meter-l"></div></div>
+      </div>
+      <div class="meter-channel">
+        <span class="meter-label">R</span>
+        <div class="meter-bar-wrap"><div class="meter-bar" id="meter-r"></div></div>
+      </div>
+    </div>
+    <span class="meter-rms" id="meter-rms">-18 dB</span>
+    <div class="footer-divider"></div>
+    <div class="master-mix-group">
+      <span class="master-mix-label">Mix</span>
+      <div class="master-mix-knob-wrap" id="master-mix-knob">
+        <canvas id="master-mix-canvas" width="64" height="64"></canvas>
+      </div>
+      <span class="master-mix-value" id="master-mix-value">100%</span>
+    </div>
+    <span class="footer-brand">waves crate</span>
+  </div>
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip">
+  <div class="tooltip-header">
+    <span class="tooltip-title" id="tt-title"></span>
+    <div class="tooltip-icon"><canvas id="tt-icon" width="28" height="28"></canvas></div>
+  </div>
+  <div class="tooltip-desc" id="tt-desc"></div>
+  <div class="tooltip-stats" id="tt-stats"></div>
+  <div class="tooltip-bar-wrap"><div class="tooltip-bar" id="tt-bar"></div></div>
+  <div class="tooltip-bar-pct" id="tt-pct"></div>
+  <div class="tooltip-tip" id="tt-tip"></div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="context-menu">
+  <div class="ctx-item" data-action="copy">Copy value</div>
+  <div class="ctx-item" data-action="paste">Paste value</div>
+  <div class="ctx-item" data-action="reset">Reset to default</div>
+  <div class="ctx-item" data-action="midi">MIDI learn</div>
+</div>
+
+<script>
+// ============================================================
+// TERRAIN V2 — Full Interactive Prototype
+// ============================================================
+
+// ---- roundRect polyfill ----
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (typeof r === 'number') r = [r, r, r, r];
+    const [tl, tr, br, bl] = r;
+    this.moveTo(x + tl, y);
+    this.lineTo(x + w - tr, y);
+    this.quadraticCurveTo(x + w, y, x + w, y + tr);
+    this.lineTo(x + w, y + h - br);
+    this.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+    this.lineTo(x + bl, y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - bl);
+    this.lineTo(x, y + tl);
+    this.quadraticCurveTo(x, y, x + tl, y);
+    this.closePath();
+    return this;
+  };
+}
+
+// ---- Perlin Noise ----
+const Perlin = (() => {
+  const perm = new Uint8Array(512);
+  const grad = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  const p = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,
+    69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,
+    203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,
+    165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,
+    92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,
+    89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,
+    226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,
+    182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,
+    43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,
+    97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,
+    107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,
+    138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
+  for (let i = 0; i < 256; i++) { perm[i] = p[i]; perm[i+256] = p[i]; }
+
+  function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function lerp(a, b, t) { return a + t * (b - a); }
+  function dot(g, x, y) { return g[0]*x + g[1]*y; }
+
+  return {
+    noise2D(x, y) {
+      const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
+      const xf = x - Math.floor(x), yf = y - Math.floor(y);
+      const u = fade(xf), v = fade(yf);
+      const aa = perm[perm[xi] + yi], ab = perm[perm[xi] + yi + 1];
+      const ba = perm[perm[xi + 1] + yi], bb = perm[perm[xi + 1] + yi + 1];
+      return lerp(
+        lerp(dot(grad[aa & 7], xf, yf), dot(grad[ba & 7], xf - 1, yf), u),
+        lerp(dot(grad[ab & 7], xf, yf - 1), dot(grad[bb & 7], xf - 1, yf - 1), u),
+        v
+      );
+    }
+  };
+})();
+
+// ---- Parameter Definitions ----
+const PARAMS = {
+  grainSize:   { label: 'SIZE',      section: 'grain', min: 5,   max: 500, default: 80,  unit: 'ms',     desc: 'Controls the length of each grain extracted from the circular buffer.', tip: 'Larger grains create smoother textures. Try 200ms+ for pads.' },
+  density:     { label: 'DENSITY',   section: 'grain', min: 1,   max: 100, default: 20,  unit: 'g/s',    desc: 'Sets the rate at which new grains are spawned per second.', tip: 'Higher density fills gaps. Lower values create rhythmic textures.' },
+  spray:       { label: 'SPRAY',     section: 'grain', min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Randomizes the read position offset for each grain in the buffer.', tip: '40%+ creates lush, unpredictable spread. 0% is perfectly locked.' },
+  pitch:       { label: 'PITCH',     section: 'grain', min: -24, max: 24,  default: 0,   unit: 'st',     desc: 'Shifts the pitch of all grains by semitone increments.', tip: '+12 st = one octave up. Try small values (1-3 st) for subtle detuning.' },
+  drift:       { label: 'DRIFT',     section: 'grain', min: 0,   max: 100, default: 0,   unit: '% prob', desc: 'Probability that a grain will randomly jump to a new pitch state.', tip: 'Low drift (5-15%) adds organic movement. High drift is chaotic.' },
+  mix:         { label: 'MIX',       section: 'tape',  min: 0,   max: 100, default: 50,  unit: '%',      desc: 'Blends between the dry input signal and the wet processed output.', tip: '50:50 is balanced. Use 100% wet for full effect in a send.' },
+  wowFlutter:  { label: 'WOW',       section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Simulates the speed variance of analog tape transport mechanisms.', tip: 'Subtle values (10-20%) add warmth. Higher values sound broken.' },
+  saturation:  { label: 'SATURATION',section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Applies harmonic distortion modeling magnetic tape saturation.', tip: 'Low saturation (20-40%) thickens. High values crush transients.' },
+  hiss:        { label: 'HISS',      section: 'tape',  min: 0,   max: 100, default: 0,   unit: '%',      desc: 'Adds calibrated tape noise from a modeled noise floor.', tip: 'A touch of hiss (5-10%) adds analog character and fills silence.' },
+};
+
+const OUTPUT_PARAM = { min: -24, max: 6, default: 0 };
+
+// ---- State ----
+const state = {
+  params: {},
+  outputGain: 0,
+  masterMix: 100,
+  xyX: 0.5, xyY: 0.5,
+  xyAutoPlay: true,
+  presetIdx: 0,
+  browserOpen: false,
+  browserCat: 'ALL',
+  browserSearch: '',
+  focusedSection: null,
+  sectionEnabled: { grain: true, tape: true },
+  hoveredKnob: null,
+  tooltipTimer: null,
+  draggingKnob: null,
+  draggingOutput: false,
+  dragStartY: 0,
+  dragStartVal: 0,
+  terrainTime: 0,
+  meterL: 0, meterR: 0,
+  rms: -18,
+  clipL: false, clipR: false,
+  copiedValue: null,
+  hoveredHero: false,
+  draggingHero: false,
+};
+
+// Initialize param values
+for (const [id, p] of Object.entries(PARAMS)) {
+  state.params[id] = p.default;
+}
+
+// ---- Factory Presets ----
+const PRESETS = [
+  { name: 'Crystal Shimmer',  cat: 'AMBIENT',   vals: {grainSize:180,density:40,spray:60,pitch:7,drift:10,mix:70,wowFlutter:5,saturation:10,hiss:3} },
+  { name: 'Tape Haze',        cat: 'TAPE',      vals: {grainSize:120,density:25,spray:20,pitch:0,drift:5,mix:60,wowFlutter:35,saturation:55,hiss:12} },
+  { name: 'Grain Storm',      cat: 'EXTREME',   vals: {grainSize:10,density:95,spray:90,pitch:-5,drift:80,mix:85,wowFlutter:20,saturation:70,hiss:8} },
+  { name: 'Dusty Vinyl',      cat: 'TAPE',      vals: {grainSize:200,density:15,spray:10,pitch:0,drift:2,mix:50,wowFlutter:15,saturation:40,hiss:25} },
+  { name: 'Ethereal Pad',     cat: 'AMBIENT',   vals: {grainSize:350,density:30,spray:45,pitch:12,drift:15,mix:80,wowFlutter:8,saturation:5,hiss:2} },
+  { name: 'Stutter Gate',     cat: 'RHYTHMIC',  vals: {grainSize:25,density:60,spray:5,pitch:0,drift:0,mix:90,wowFlutter:0,saturation:30,hiss:0} },
+  { name: 'Pitch Drift',      cat: 'GRAIN',     vals: {grainSize:100,density:35,spray:30,pitch:3,drift:45,mix:65,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Warm Saturation',  cat: 'TAPE',      vals: {grainSize:150,density:20,spray:15,pitch:0,drift:0,mix:50,wowFlutter:10,saturation:65,hiss:8} },
+  { name: 'Noise Floor',      cat: 'TAPE',      vals: {grainSize:80,density:20,spray:0,pitch:0,drift:0,mix:40,wowFlutter:5,saturation:20,hiss:40} },
+  { name: 'Particle Cloud',   cat: 'GRAIN',     vals: {grainSize:40,density:80,spray:70,pitch:5,drift:30,mix:75,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Deep Space',       cat: 'AMBIENT',   vals: {grainSize:400,density:10,spray:80,pitch:-12,drift:20,mix:90,wowFlutter:12,saturation:15,hiss:5} },
+  { name: 'Broken Radio',     cat: 'EXTREME',   vals: {grainSize:15,density:70,spray:95,pitch:-7,drift:90,mix:100,wowFlutter:60,saturation:80,hiss:30} },
+  { name: 'Subtle Texture',   cat: 'GRAIN',     vals: {grainSize:160,density:18,spray:25,pitch:0,drift:8,mix:30,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Lo-Fi Dreams',     cat: 'TAPE',      vals: {grainSize:130,density:22,spray:20,pitch:0,drift:5,mix:55,wowFlutter:25,saturation:45,hiss:18} },
+  { name: 'Frozen Time',      cat: 'AMBIENT',   vals: {grainSize:500,density:8,spray:50,pitch:0,drift:0,mix:85,wowFlutter:3,saturation:8,hiss:1} },
+  { name: 'Pulse Engine',     cat: 'RHYTHMIC',  vals: {grainSize:30,density:50,spray:10,pitch:0,drift:0,mix:80,wowFlutter:0,saturation:45,hiss:0} },
+  { name: 'Micro Grains',     cat: 'GRAIN',     vals: {grainSize:5,density:100,spray:40,pitch:2,drift:15,mix:70,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'Cassette Warble',  cat: 'TAPE',      vals: {grainSize:140,density:20,spray:15,pitch:0,drift:3,mix:50,wowFlutter:55,saturation:35,hiss:15} },
+  { name: 'Quantum Scatter',  cat: 'EXTREME',   vals: {grainSize:20,density:85,spray:100,pitch:-3,drift:70,mix:95,wowFlutter:40,saturation:55,hiss:12} },
+  { name: 'Dawn Chorus',      cat: 'AMBIENT',   vals: {grainSize:250,density:28,spray:55,pitch:5,drift:12,mix:65,wowFlutter:6,saturation:10,hiss:3} },
+  { name: 'Step Sequence',    cat: 'RHYTHMIC',  vals: {grainSize:50,density:45,spray:8,pitch:0,drift:0,mix:75,wowFlutter:0,saturation:20,hiss:0} },
+  { name: 'Thick Glue',       cat: 'GRAIN',     vals: {grainSize:220,density:50,spray:35,pitch:-1,drift:5,mix:60,wowFlutter:0,saturation:0,hiss:0} },
+  { name: 'VHS Memory',       cat: 'TAPE',      vals: {grainSize:160,density:18,spray:25,pitch:0,drift:8,mix:55,wowFlutter:45,saturation:50,hiss:22} },
+  { name: 'Time Stretch',     cat: 'RHYTHMIC',  vals: {grainSize:300,density:12,spray:15,pitch:0,drift:0,mix:80,wowFlutter:0,saturation:10,hiss:0} },
+  { name: 'Event Horizon',    cat: 'EXTREME',   vals: {grainSize:8,density:100,spray:100,pitch:-24,drift:100,mix:100,wowFlutter:70,saturation:90,hiss:35} },
+];
+
+const CATEGORIES = ['ALL','GRAIN','TAPE','AMBIENT','RHYTHMIC','EXTREME'];
+
+// ---- Precision Formatting ----
+function formatValue(id, val) {
+  const p = PARAMS[id];
+  if (!p) return '';
+  switch (id) {
+    case 'grainSize':
+      return val < 100 ? `${Math.round(val)} ms` : `${val.toFixed(1)} ms`;
+    case 'density':
+      return `${Math.round(val)} g/s`;
+    case 'spray': {
+      const offsetMs = (val / 100) * 80;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B1${Math.round(offsetMs)} ms`;
+    }
+    case 'pitch':
+      if (val === 0) return '0 st';
+      return (val > 0 ? '+' : '') + (Number.isInteger(val) ? val : val.toFixed(2)) + ' st';
+    case 'drift':
+      return `${Math.round(val)}% prob`;
+    case 'mix': {
+      const dry = Math.round(100 - val), wet = Math.round(val);
+      if (wet === 0) return '100:0 dry';
+      if (dry === 0) return '0:100 wet';
+      return `${dry}:${wet}`;
+    }
+    case 'wowFlutter': {
+      const rate = 0.5 + (val / 100) * 3.5;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B7 ~${rate.toFixed(1)} Hz`;
+    }
+    case 'saturation': {
+      const dB = (val / 100) * 18;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B7 +${dB.toFixed(1)} dB`;
+    }
+    case 'hiss': {
+      const floor = -72 + (val / 100) * 50;
+      return val === 0 ? '0%' : `${Math.round(val)}% \u00B7 ${Math.round(floor)} dBFS`;
+    }
+    default:
+      return `${Math.round(val)}`;
+  }
+}
+
+function formatOutput(dB) {
+  const sign = dB > 0 ? '+' : dB < 0 ? '' : '';
+  return `${sign}${dB.toFixed(1)} dB`;
+}
+
+// ---- Normalize / Denormalize ----
+function normalize(id, val) {
+  const p = PARAMS[id];
+  return (val - p.min) / (p.max - p.min);
+}
+function denormalize(id, norm) {
+  const p = PARAMS[id];
+  return p.min + norm * (p.max - p.min);
+}
+function normalizeOutput(dB) {
+  return (dB - OUTPUT_PARAM.min) / (OUTPUT_PARAM.max - OUTPUT_PARAM.min);
+}
+function denormalizeOutput(norm) {
+  return OUTPUT_PARAM.min + norm * (OUTPUT_PARAM.max - OUTPUT_PARAM.min);
+}
+
+// ---- Icon Rendering ----
+const DPR = window.devicePixelRatio || 1;
+
+function drawIcon(canvas, type, color) {
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+  ctx.strokeStyle = color || '#B0A4C0';
+  ctx.fillStyle = color || '#B0A4C0';
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const cx = w / 2, cy = h / 2, r = w * 0.38;
+
+  switch (type) {
+    case 'grainSize': { // Hexagonal crystal lattice
+      const s = r * 0.6;
+      for (let i = 0; i < 6; i++) {
+        const a1 = (Math.PI / 3) * i - Math.PI / 6;
+        const a2 = (Math.PI / 3) * ((i + 1) % 6) - Math.PI / 6;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a1) * s, cy + Math.sin(a1) * s);
+        ctx.lineTo(cx + Math.cos(a2) * s, cy + Math.sin(a2) * s);
+        ctx.stroke();
+      }
+      // Inner hex
+      const s2 = s * 0.45;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 6;
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](cx + Math.cos(a) * s2, cy + Math.sin(a) * s2);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    }
+    case 'density': { // Particle cloud (dots)
+      const dots = [[0,0],[0.35,0.2],[-0.3,0.25],[0.2,-0.35],[-0.25,-0.2],[0.4,-0.1],[-0.4,0.05],[0.1,0.4],[-0.15,-0.4],[0.3,0.35],[-0.35,-0.3],[0.05,0.25]];
+      for (const [dx, dy] of dots) {
+        ctx.beginPath();
+        ctx.arc(cx + dx * r * 1.3, cy + dy * r * 1.3, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'spray': { // Diverging light rays
+      const origin = { x: cx - r * 0.5, y: cy };
+      for (let i = -2; i <= 2; i++) {
+        const angle = (i / 2) * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(origin.x, origin.y);
+        ctx.lineTo(origin.x + Math.cos(angle) * r * 2, origin.y + Math.sin(angle) * r * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'pitch': { // Compressed sine wave
+      ctx.beginPath();
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const x = (cx - r) + t * r * 2;
+        const freq = 1.5 + t * 2;
+        const y = cy + Math.sin(t * Math.PI * freq) * r * 0.55;
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](x, y);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'drift': { // Electron orbital paths
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, Math.PI / 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r * 0.85, r * 0.35, -Math.PI / 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'mix': { // Venn diagram
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.28, cy, r * 0.55, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx + r * 0.28, cy, r * 0.55, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'wowFlutter': { // Modulated circle
+      ctx.beginPath();
+      for (let i = 0; i <= 60; i++) {
+        const a = (i / 60) * Math.PI * 2;
+        const mod = r * 0.7 + Math.sin(a * 4) * r * 0.18;
+        const x = cx + Math.cos(a) * mod;
+        const y = cy + Math.sin(a) * mod;
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    }
+    case 'saturation': { // Clipped waveform
+      ctx.beginPath();
+      for (let i = 0; i <= 24; i++) {
+        const t = i / 24;
+        const x = (cx - r) + t * r * 2;
+        let y = Math.sin(t * Math.PI * 2.5) * r * 1.0;
+        y = Math.max(-r * 0.5, Math.min(r * 0.5, y)); // clip
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](x, cy + y);
+      }
+      ctx.stroke();
+      // Clip lines
+      ctx.setLineDash([2, 2]);
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy - r * 0.5);
+      ctx.lineTo(cx + r, cy - r * 0.5);
+      ctx.moveTo(cx - r, cy + r * 0.5);
+      ctx.lineTo(cx + r, cy + r * 0.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'hiss': { // Spectral noise bars
+      const bars = 7;
+      const bw = (r * 2) / (bars * 2 - 1);
+      const heights = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.3];
+      for (let i = 0; i < bars; i++) {
+        const x = cx - r + i * bw * 2;
+        const h = heights[i] * r * 1.4;
+        ctx.fillRect(x, cy + r * 0.7 - h, bw, h);
+      }
+      break;
+    }
+    case 'output': { // Ascending bars
+      const bars = 5;
+      const bw = (r * 1.6) / (bars * 2 - 1);
+      for (let i = 0; i < bars; i++) {
+        const x = cx - r * 0.8 + i * bw * 2;
+        const h = (i + 1) / bars * r * 1.6;
+        ctx.fillRect(x, cy + r * 0.8 - h, bw, h);
+      }
+      break;
+    }
+    case 'logo': { // Waves Crate waveform bars
+      const bars = [0.5, 0.8, 1.0, 0.7, 0.4];
+      const bw = w * 0.1;
+      const gap = w * 0.06;
+      const totalW = bars.length * bw + (bars.length - 1) * gap;
+      const startX = (w - totalW) / 2;
+      for (let i = 0; i < bars.length; i++) {
+        const bh = bars[i] * h * 0.7;
+        const x = startX + i * (bw + gap);
+        const y = (h - bh) / 2;
+        ctx.fillStyle = color || '#8B5CF6';
+        ctx.beginPath();
+        ctx.roundRect(x, y, bw, bh, 1);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'grid': { // 3x3 grid for preset browser button
+      const s = w * 0.22, gap = w * 0.08;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          const x = cx - s * 1.5 - gap + (s + gap) * c;
+          const y = cy - s * 1.5 - gap + (s + gap) * r;
+          ctx.fillStyle = color || '#8B7FA0';
+          ctx.beginPath();
+          ctx.roundRect(x, y, s, s, 1);
+          ctx.fill();
+        }
+      }
+      break;
+    }
+    case 'grainWave': { // Small waveform for section header
+      ctx.beginPath();
+      for (let i = 0; i <= 16; i++) {
+        const t = i / 16;
+        const x = t * w;
+        const y = cy + Math.sin(t * Math.PI * 3 + Date.now() * 0.003) * r * 0.6;
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](x, y);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'tapeReel': { // Cassette reel
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.75, 0, Math.PI * 2);
+      ctx.stroke();
+      const spokes = 3;
+      const rot = Date.now() * 0.002;
+      for (let i = 0; i < spokes; i++) {
+        const a = rot + (Math.PI * 2 / spokes) * i;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.7);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function setupCanvas(canvas, w, h) {
+  canvas.width = w * DPR;
+  canvas.height = h * DPR;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+}
+
+// ---- Knob Rendering ----
+function drawKnob(canvas, normValue, dragging, hover) {
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(DPR, DPR);
+
+  const cx = w / 2, cy = h / 2, radius = 22;
+  const startAngle = 0.75 * Math.PI;
+  const sweep = 1.5 * Math.PI;
+  const endAngle = startAngle + sweep;
+  const activeEnd = startAngle + normValue * sweep;
+
+  // Subtle body gradient
+  const bodyGrad = ctx.createRadialGradient(cx, cy - 4, 0, cx, cy, radius);
+  bodyGrad.addColorStop(0, 'rgba(255,255,255,0.25)');
+  bodyGrad.addColorStop(1, 'rgba(255,255,255,0.05)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius - 4, 0, Math.PI * 2);
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // Active glow when dragging
+  if (dragging) {
+    ctx.shadowColor = 'rgba(139,92,246,0.15)';
+    ctx.shadowBlur = 6;
+  }
+
+  // Track arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, startAngle, endAngle, false);
+  ctx.strokeStyle = '#E8E0F0';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Active arc
+  if (normValue > 0.002) {
+    if (dragging) {
+      ctx.shadowColor = 'rgba(139,92,246,0.15)';
+      ctx.shadowBlur = 6;
+    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, activeEnd, false);
+    ctx.strokeStyle = '#8B5CF6';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // Position dot
+  const dotAngle = activeEnd;
+  const dotX = cx + Math.cos(dotAngle) * radius;
+  const dotY = cy + Math.sin(dotAngle) * radius;
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
+  ctx.fillStyle = hover || dragging ? '#7C3AED' : '#8B5CF6';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ---- Terrain 3D Renderer ----
+const GRID = 32;
+const terrainCanvas = document.getElementById('terrain-canvas');
+let terrainCtx;
+const heightMap = Array.from({ length: GRID }, () => new Float32Array(GRID));
+
+function initTerrain() {
+  const hero = document.getElementById('hero');
+  const w = hero.offsetWidth;
+  const h = hero.offsetHeight;
+  setupCanvas(terrainCanvas, w, h);
+  terrainCtx = terrainCanvas.getContext('2d');
+}
+
+function projectVertex(col, row, height, canvasW, canvasH) {
+  // x: -2 to 2 (left-right), z: 0 (near/bottom) to 1 (far/top)
+  const x = (col / (GRID - 1) - 0.5) * 4;
+  const z = row / (GRID - 1);
+
+  // Perspective: near objects larger, far objects smaller
+  const perspective = 1.0 / (z * 2.8 + 0.7);
+
+  // Screen coordinates
+  const sx = canvasW / 2 + x * perspective * 160;
+  const sy = canvasH * 0.92 - z * canvasH * 0.78 - height * perspective * 70;
+
+  return { sx, sy, depth: z, scale: perspective };
+}
+
+function updateHeightMap(time) {
+  const scroll = time * 0.4;
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      const nx = c / (GRID - 1) * 3.0;
+      const nz = r / (GRID - 1) * 3.0 + scroll;
+
+      // Layer Perlin noise for organic terrain
+      let h = Perlin.noise2D(nx * 1.0, nz * 1.0) * 0.6;
+      h += Perlin.noise2D(nx * 2.3, nz * 2.3) * 0.25;
+      h += Perlin.noise2D(nx * 4.5 + 10, nz * 4.5 + 10) * 0.1;
+
+      // Fake audio reactivity: add sine waves
+      const audioSim = Math.sin(time * 2.0 + c * 0.4) * 0.15 * Math.exp(-Math.abs(c / GRID - 0.5) * 4);
+      h += audioSim;
+
+      // Edge fade
+      const edgeFade = 1 - Math.pow(Math.abs(c / (GRID - 1) - 0.5) * 2, 3);
+      h *= edgeFade;
+
+      heightMap[r][c] = h;
+    }
+  }
+}
+
+function renderTerrain(time) {
+  const ctx = terrainCtx;
+  if (!ctx) return;
+  const cw = terrainCanvas.width / DPR;
+  const ch = terrainCanvas.height / DPR;
+
+  ctx.save();
+  ctx.scale(DPR, DPR);
+  ctx.clearRect(0, 0, cw, ch);
+
+  // Background
+  ctx.fillStyle = '#EDE8F4';
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Faint reference grid on the "floor"
+  ctx.strokeStyle = '#E8E0F0';
+  ctx.lineWidth = 0.5;
+  for (let r = 0; r < GRID; r += 4) {
+    ctx.beginPath();
+    for (let c = 0; c < GRID; c++) {
+      const p = projectVertex(c, r, -0.15, cw, ch);
+      ctx[c === 0 ? 'moveTo' : 'lineTo'](p.sx, p.sy);
+    }
+    ctx.stroke();
+  }
+  for (let c = 0; c < GRID; c += 4) {
+    ctx.beginPath();
+    for (let r = 0; r < GRID; r++) {
+      const p = projectVertex(c, r, -0.15, cw, ch);
+      ctx[r === 0 ? 'moveTo' : 'lineTo'](p.sx, p.sy);
+    }
+    ctx.stroke();
+  }
+
+  updateHeightMap(time);
+
+  // Project all vertices
+  const projected = Array.from({ length: GRID }, () => new Array(GRID));
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      projected[r][c] = projectVertex(c, r, heightMap[r][c], cw, ch);
+    }
+  }
+
+  // Draw mesh lines from back to front (far rows first)
+  for (let r = GRID - 1; r >= 0; r--) {
+    const isContour = (r % 4 === 0);
+    const alpha = isContour ? 0.5 : 0.22;
+    const width = isContour ? 1.2 : 0.8;
+
+    // Horizontal line for this row
+    ctx.strokeStyle = isContour
+      ? `rgba(167,139,250,${alpha})`
+      : `rgba(139,92,246,${alpha})`;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    for (let c = 0; c < GRID; c++) {
+      const p = projected[r][c];
+      ctx[c === 0 ? 'moveTo' : 'lineTo'](p.sx, p.sy);
+    }
+    ctx.stroke();
+
+    // Vertical lines (connect to next row closer to viewer)
+    if (r > 0) {
+      ctx.strokeStyle = `rgba(139,92,246,${alpha * 0.6})`;
+      ctx.lineWidth = width * 0.6;
+      for (let c = 0; c < GRID; c += 2) {
+        const p1 = projected[r][c];
+        const p2 = projected[r - 1][c];
+        ctx.beginPath();
+        ctx.moveTo(p1.sx, p1.sy);
+        ctx.lineTo(p2.sx, p2.sy);
+        ctx.stroke();
+      }
+    }
+
+    // Peak glow on high-amplitude vertices
+    for (let c = 0; c < GRID; c++) {
+      if (heightMap[r][c] > 0.45) {
+        const p = projected[r][c];
+        const intensity = (heightMap[r][c] - 0.45) * 2.5;
+        const clampedI = Math.min(1, intensity);
+        const glowR = 3 + clampedI * 10;
+        const grad = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, glowR);
+        grad.addColorStop(0, `rgba(124,58,237,${0.3 * clampedI})`);
+        grad.addColorStop(1, 'rgba(124,58,237,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, glowR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // XY crosshair dot when hovering/dragging the hero
+  if (state.hoveredHero || state.draggingHero) {
+    const dotX = state.xyX * cw;
+    const dotY = state.xyY * ch;
+    // Outer ring
+    ctx.strokeStyle = 'rgba(139,92,246,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 8, 0, Math.PI * 2);
+    ctx.stroke();
+    // Center dot
+    ctx.fillStyle = 'rgba(139,92,246,0.6)';
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ---- Build UI ----
+function buildKnobs() {
+  const grainContainer = document.getElementById('grain-knobs');
+  const tapeContainer = document.getElementById('tape-knobs');
+
+  for (const [id, p] of Object.entries(PARAMS)) {
+    const group = document.createElement('div');
+    group.className = 'knob-group';
+    group.dataset.param = id;
+
+    // Icon
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'knob-icon';
+    const iconCanvas = document.createElement('canvas');
+    setupCanvas(iconCanvas, 16, 16);
+    drawIcon(iconCanvas, id, '#B0A4C0');
+    iconDiv.appendChild(iconCanvas);
+    group.appendChild(iconDiv);
+
+    // Knob
+    const knobWrap = document.createElement('div');
+    knobWrap.className = 'knob-canvas-wrap';
+    const knobCanvas = document.createElement('canvas');
+    setupCanvas(knobCanvas, 56, 56);
+    knobWrap.appendChild(knobCanvas);
+    group.appendChild(knobWrap);
+
+    // Value
+    const valueEl = document.createElement('div');
+    valueEl.className = 'knob-value';
+    valueEl.textContent = formatValue(id, state.params[id]);
+    group.appendChild(valueEl);
+
+    // Label
+    const labelEl = document.createElement('div');
+    labelEl.className = 'knob-label';
+    labelEl.textContent = p.label;
+    group.appendChild(labelEl);
+
+    // Store references
+    group._knobCanvas = knobCanvas;
+    group._iconCanvas = iconCanvas;
+    group._valueEl = valueEl;
+
+    // Initial render
+    const norm = normalize(id, state.params[id]);
+    drawKnob(knobCanvas, norm, false, false);
+
+    // Events
+    knobWrap.addEventListener('mousedown', (e) => {
+      if (e.button === 2) return;
+      e.preventDefault();
+      state.draggingKnob = id;
+      state.dragStartY = e.clientY;
+      state.dragStartVal = normalize(id, state.params[id]);
+      hideTooltip();
+    });
+
+    knobWrap.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      state.params[id] = p.default;
+      updateKnobDisplay(id);
+      // Flash animation
+      knobWrap.style.animation = 'flash-default 0.3s ease-out';
+      setTimeout(() => knobWrap.style.animation = '', 300);
+    });
+
+    knobWrap.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showContextMenu(e.clientX, e.clientY, id);
+    });
+
+    group.addEventListener('mouseenter', () => {
+      state.hoveredKnob = id;
+      drawIcon(iconCanvas, id, '#8B5CF6');
+      state.tooltipTimer = setTimeout(() => showTooltip(group, id), 300);
+    });
+    group.addEventListener('mouseleave', () => {
+      state.hoveredKnob = null;
+      drawIcon(iconCanvas, id, '#B0A4C0');
+      clearTimeout(state.tooltipTimer);
+      hideTooltip();
+    });
+
+    if (p.section === 'grain') grainContainer.appendChild(group);
+    else tapeContainer.appendChild(group);
+  }
+}
+
+function updateKnobDisplay(id) {
+  const group = document.querySelector(`.knob-group[data-param="${id}"]`);
+  if (!group) return;
+  const norm = normalize(id, state.params[id]);
+  drawKnob(group._knobCanvas, norm, state.draggingKnob === id, state.hoveredKnob === id);
+  group._valueEl.textContent = formatValue(id, state.params[id]);
+  if (state.draggingKnob === id) {
+    group._valueEl.classList.add('glowing');
+  } else {
+    group._valueEl.classList.remove('glowing');
+  }
+}
+
+function updateAllKnobs() {
+  for (const id of Object.keys(PARAMS)) {
+    updateKnobDisplay(id);
+  }
+}
+
+// ---- Tooltip ----
+const tooltipEl = document.getElementById('tooltip');
+function showTooltip(group, id) {
+  if (state.draggingKnob) return;
+  const p = PARAMS[id];
+  const val = state.params[id];
+  const norm = normalize(id, val);
+
+  document.getElementById('tt-title').textContent = p.label;
+  const ttIcon = document.getElementById('tt-icon');
+  setupCanvas(ttIcon, 14, 14);
+  drawIcon(ttIcon, id, '#8B5CF6');
+
+  document.getElementById('tt-desc').textContent = p.desc;
+
+  const statsEl = document.getElementById('tt-stats');
+  statsEl.innerHTML = '';
+  const stats = [
+    { l: 'Range', v: `${p.min} \u2192 ${p.max} ${p.unit}` },
+    { l: 'Default', v: formatValue(id, p.default) },
+    { l: 'Current', v: formatValue(id, val) },
+  ];
+  for (const s of stats) {
+    const row = document.createElement('div');
+    row.className = 'tooltip-stat';
+    row.innerHTML = `<span class="tooltip-stat-label">${s.l}</span><span class="tooltip-stat-value">${s.v}</span>`;
+    statsEl.appendChild(row);
+  }
+
+  document.getElementById('tt-bar').style.width = (norm * 100) + '%';
+  document.getElementById('tt-pct').textContent = (norm * 100).toFixed(1) + '%';
+  document.getElementById('tt-tip').textContent = 'Tip: ' + p.tip;
+
+  // Position
+  const rect = group.getBoundingClientRect();
+  const ttW = 260;
+  let left = rect.left + rect.width / 2 - ttW / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - ttW - 8));
+  tooltipEl.style.left = left + 'px';
+  tooltipEl.style.top = (rect.bottom + 8) + 'px';
+  tooltipEl.classList.add('visible');
+}
+
+function hideTooltip() {
+  tooltipEl.classList.remove('visible');
+}
+
+// ---- Context Menu ----
+const ctxMenu = document.getElementById('context-menu');
+let ctxParam = null;
+
+function showContextMenu(x, y, id) {
+  ctxParam = id;
+  ctxMenu.style.left = x + 'px';
+  ctxMenu.style.top = y + 'px';
+  ctxMenu.style.display = 'block';
+}
+
+document.addEventListener('click', () => { ctxMenu.style.display = 'none'; });
+
+ctxMenu.querySelectorAll('.ctx-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const action = item.dataset.action;
+    if (action === 'copy' && ctxParam) {
+      state.copiedValue = { id: ctxParam, val: state.params[ctxParam] };
+    } else if (action === 'paste' && ctxParam && state.copiedValue) {
+      // Only paste if same param type or compatible
+      state.params[ctxParam] = Math.max(PARAMS[ctxParam].min, Math.min(PARAMS[ctxParam].max, state.copiedValue.val));
+      updateKnobDisplay(ctxParam);
+    } else if (action === 'reset' && ctxParam) {
+      state.params[ctxParam] = PARAMS[ctxParam].default;
+      updateKnobDisplay(ctxParam);
+    }
+    ctxMenu.style.display = 'none';
+  });
+});
+
+// ---- Mouse Drag (global) ----
+document.addEventListener('mousemove', (e) => {
+  // Knob dragging
+  if (state.draggingKnob) {
+    const id = state.draggingKnob;
+    const sensitivity = e.shiftKey ? 800 : 200;
+    const delta = (state.dragStartY - e.clientY) / sensitivity;
+    const newNorm = Math.max(0, Math.min(1, state.dragStartVal + delta));
+    state.params[id] = denormalize(id, newNorm);
+    updateKnobDisplay(id);
+  }
+
+  // Output slider dragging
+  if (state.draggingOutput) {
+    const slider = document.getElementById('output-slider');
+    const rect = slider.getBoundingClientRect();
+    const norm = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    state.outputGain = denormalizeOutput(norm);
+    updateOutputDisplay();
+  }
+
+  // Hero XY
+  if (state.draggingHero) {
+    const hero = document.getElementById('hero');
+    const rect = hero.getBoundingClientRect();
+    state.xyX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    state.xyY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    updateXYReadout();
+    updateCrosshair(e);
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (state.draggingKnob) {
+    const id = state.draggingKnob;
+    state.draggingKnob = null;
+    updateKnobDisplay(id);
+  }
+  state.draggingOutput = false;
+  if (state.draggingHero) {
+    state.draggingHero = false;
+    document.getElementById('hero').classList.remove('dragging');
+  }
+});
+
+// ---- Hero / XY Pad ----
+const heroEl = document.getElementById('hero');
+heroEl.addEventListener('mousedown', (e) => {
+  if (e.target.closest('.xy-controls')) return;
+  state.draggingHero = true;
+  heroEl.classList.add('dragging');
+  const rect = heroEl.getBoundingClientRect();
+  state.xyX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  state.xyY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+  updateXYReadout();
+  updateCrosshair(e);
+});
+
+function updateXYReadout() {
+  const el = document.getElementById('xy-readout');
+  el.textContent = `X: ${Math.round(state.xyX * 100)}%  Y: ${Math.round(state.xyY * 100)}%`;
+}
+
+function updateCrosshair(e) {
+  const hero = document.getElementById('hero');
+  const rect = hero.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  document.getElementById('crosshair-h').style.top = y + 'px';
+  document.getElementById('crosshair-v').style.left = x + 'px';
+}
+
+// XY auto play button
+document.getElementById('xy-play').addEventListener('click', function() {
+  state.xyAutoPlay = !state.xyAutoPlay;
+  this.classList.toggle('active', state.xyAutoPlay);
+});
+
+// ---- Preset Navigation ----
+function loadPreset(idx) {
+  state.presetIdx = idx;
+  const preset = PRESETS[idx];
+  document.getElementById('preset-name').textContent = preset.name;
+  for (const [id, val] of Object.entries(preset.vals)) {
+    state.params[id] = val;
+  }
+  updateAllKnobs();
+  buildPresetGrid();
+}
+
+document.getElementById('preset-prev').addEventListener('click', () => {
+  loadPreset((state.presetIdx - 1 + PRESETS.length) % PRESETS.length);
+});
+document.getElementById('preset-next').addEventListener('click', () => {
+  loadPreset((state.presetIdx + 1) % PRESETS.length);
+});
+
+// ---- Preset Browser ----
+document.getElementById('preset-grid-btn').addEventListener('click', () => {
+  state.browserOpen = !state.browserOpen;
+  document.getElementById('preset-browser').classList.toggle('open', state.browserOpen);
+  document.getElementById('preset-grid-btn').classList.toggle('active', state.browserOpen);
+});
+
+function buildCategoryButtons() {
+  const container = document.getElementById('browser-cats');
+  container.innerHTML = '';
+  for (const cat of CATEGORIES) {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (cat === state.browserCat ? ' active' : '');
+    btn.textContent = cat;
+    btn.addEventListener('click', () => {
+      state.browserCat = cat;
+      buildCategoryButtons();
+      buildPresetGrid();
+    });
+    container.appendChild(btn);
+  }
+}
+
+function buildPresetGrid() {
+  const container = document.getElementById('browser-grid');
+  container.innerHTML = '';
+  const search = state.browserSearch.toLowerCase();
+  const filtered = PRESETS.filter((p, i) => {
+    if (state.browserCat !== 'ALL' && p.cat !== state.browserCat) return false;
+    if (search && !p.name.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  for (let i = 0; i < PRESETS.length; i++) {
+    const p = PRESETS[i];
+    if (state.browserCat !== 'ALL' && p.cat !== state.browserCat) continue;
+    if (search && !p.name.toLowerCase().includes(search)) continue;
+
+    const card = document.createElement('div');
+    card.className = 'preset-card' + (i === state.presetIdx ? ' selected' : '');
+
+    const name = document.createElement('div');
+    name.className = 'preset-card-name';
+    name.textContent = p.name;
+    card.appendChild(name);
+
+    const catBadge = document.createElement('span');
+    catBadge.className = 'preset-card-cat';
+    catBadge.textContent = p.cat;
+    card.appendChild(catBadge);
+
+    card.addEventListener('click', () => loadPreset(i));
+    container.appendChild(card);
+  }
+}
+
+document.getElementById('browser-search').addEventListener('input', (e) => {
+  state.browserSearch = e.target.value;
+  buildPresetGrid();
+});
+
+// ---- Section Focus/Slide ----
+function updateSectionFocus() {
+  const grain = document.getElementById('grain-section');
+  const tape = document.getElementById('tape-section');
+  grain.classList.remove('minimized');
+  tape.classList.remove('minimized');
+  if (state.focusedSection === 'grain') {
+    tape.classList.add('minimized');
+  } else if (state.focusedSection === 'tape') {
+    grain.classList.add('minimized');
+  }
+}
+
+document.getElementById('grain-header').addEventListener('click', (e) => {
+  if (e.target.closest('.section-toggle')) {
+    state.sectionEnabled.grain = !state.sectionEnabled.grain;
+    document.getElementById('grain-toggle').classList.toggle('off', !state.sectionEnabled.grain);
+    return;
+  }
+  state.focusedSection = state.focusedSection === 'grain' ? null : 'grain';
+  updateSectionFocus();
+});
+
+document.getElementById('tape-header').addEventListener('click', (e) => {
+  if (e.target.closest('.section-toggle')) {
+    state.sectionEnabled.tape = !state.sectionEnabled.tape;
+    document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
+    return;
+  }
+  state.focusedSection = state.focusedSection === 'tape' ? null : 'tape';
+  updateSectionFocus();
+});
+
+// ---- Output Gain Slider ----
+function updateOutputDisplay() {
+  const norm = normalizeOutput(state.outputGain);
+  document.getElementById('output-fill').style.width = (norm * 100) + '%';
+  document.getElementById('output-thumb').style.left = (norm * 100) + '%';
+  document.getElementById('output-value').textContent = formatOutput(state.outputGain);
+}
+
+const outputSlider = document.getElementById('output-slider');
+outputSlider.addEventListener('mousedown', (e) => {
+  state.draggingOutput = true;
+  const rect = outputSlider.getBoundingClientRect();
+  const norm = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  state.outputGain = denormalizeOutput(norm);
+  updateOutputDisplay();
+});
+
+// Double-click to reset output
+outputSlider.addEventListener('dblclick', () => {
+  state.outputGain = OUTPUT_PARAM.default;
+  updateOutputDisplay();
+});
+
+// ---- Master Mix Knob ----
+function drawMasterMixKnob() {
+  const c = document.getElementById('master-mix-canvas');
+  const dpr = window.devicePixelRatio || 1;
+  const size = 32;
+  c.width = size * dpr;
+  c.height = size * dpr;
+  c.style.width = size + 'px';
+  c.style.height = size + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const cx = size / 2, cy = size / 2, radius = 13;
+  const startAngle = Math.PI * 0.75;
+  const endAngle = Math.PI * 0.75 + Math.PI * 1.5;
+  const norm = state.masterMix / 100;
+  const valAngle = startAngle + norm * (endAngle - startAngle);
+
+  // Track
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, startAngle, endAngle, false);
+  ctx.strokeStyle = '#E8E0F0';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Active arc
+  if (norm > 0.005) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, valAngle, false);
+    ctx.strokeStyle = '#8B5CF6';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  // Position dot
+  const dotX = cx + Math.cos(valAngle) * radius;
+  const dotY = cy + Math.sin(valAngle) * radius;
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
+  ctx.fillStyle = '#8B5CF6';
+  ctx.fill();
+}
+
+function formatMasterMix(val) {
+  const v = Math.round(val);
+  if (v === 0) return '100:0 dry';
+  if (v === 100) return '0:100 wet';
+  return (100 - v) + ':' + v;
+}
+
+function updateMasterMixDisplay() {
+  drawMasterMixKnob();
+  document.getElementById('master-mix-value').textContent = formatMasterMix(state.masterMix);
+}
+
+// Master mix drag interaction
+const masterMixKnob = document.getElementById('master-mix-knob');
+let draggingMasterMix = false;
+
+masterMixKnob.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  draggingMasterMix = true;
+  state.dragStartY = e.clientY;
+  state.dragStartVal = state.masterMix;
+});
+
+masterMixKnob.addEventListener('dblclick', () => {
+  state.masterMix = 100;
+  updateMasterMixDisplay();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!draggingMasterMix) return;
+  const shift = e.shiftKey ? 800 : 200;
+  const dy = state.dragStartY - e.clientY;
+  const delta = (dy / shift) * 100;
+  state.masterMix = Math.max(0, Math.min(100, state.dragStartVal + delta));
+  updateMasterMixDisplay();
+});
+
+document.addEventListener('mouseup', () => {
+  draggingMasterMix = false;
+});
+
+// ---- Meters (simulated) ----
+function updateMeters(time) {
+  // Simulated bouncing meters
+  const base = 0.3 + Math.sin(time * 1.7) * 0.15 + Math.sin(time * 3.1) * 0.1;
+  const l = Math.max(0, Math.min(1, base + Math.sin(time * 5.3) * 0.1 + Math.random() * 0.05));
+  const r = Math.max(0, Math.min(1, base + Math.cos(time * 4.7) * 0.1 + Math.random() * 0.05));
+  state.meterL = l;
+  state.meterR = r;
+
+  document.getElementById('meter-l').style.height = (l * 100) + '%';
+  document.getElementById('meter-r').style.height = (r * 100) + '%';
+
+  // Clip detection
+  const meterL = document.getElementById('meter-l');
+  const meterR = document.getElementById('meter-r');
+  if (l > 0.95) { meterL.classList.add('clip'); } else { meterL.classList.remove('clip'); }
+  if (r > 0.95) { meterR.classList.add('clip'); } else { meterR.classList.remove('clip'); }
+
+  // RMS
+  const rms = -24 + (l + r) / 2 * 18 + Math.random() * 2;
+  document.getElementById('meter-rms').textContent = Math.round(rms) + ' dB';
+}
+
+// ---- Section Header Icons (animated) ----
+function updateSectionIcons() {
+  const grainIcon = document.getElementById('grain-section-icon');
+  const tapeIcon = document.getElementById('tape-section-icon');
+  setupCanvas(grainIcon, 14, 14);
+  setupCanvas(tapeIcon, 14, 14);
+  const grainColor = state.sectionEnabled.grain ? '#8B5CF6' : '#B0A4C0';
+  const tapeColor = state.sectionEnabled.tape ? '#8B5CF6' : '#B0A4C0';
+  drawIcon(grainIcon, 'grainWave', grainColor);
+  drawIcon(tapeIcon, 'tapeReel', tapeColor);
+}
+
+// ---- Brand Logo ----
+function drawGridIcon() {
+  const c = document.getElementById('grid-icon');
+  setupCanvas(c, 14, 14);
+  drawIcon(c, 'grid', '#8B7FA0');
+}
+
+function drawOutputIcon() {
+  const c = document.getElementById('output-icon-canvas');
+  setupCanvas(c, 16, 16);
+  drawIcon(c, 'output', '#B0A4C0');
+}
+
+function drawRandomizeIcon() {
+  const c = document.getElementById('randomize-icon');
+  const dpr = window.devicePixelRatio || 1;
+  c.width = 18 * dpr;
+  c.height = 18 * dpr;
+  c.style.width = '18px';
+  c.style.height = '18px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const s = 18;
+  // Draw a dice face
+  ctx.strokeStyle = '#8B5CF6';
+  ctx.lineWidth = 1.2;
+  ctx.lineJoin = 'round';
+  // Rounded rect body
+  const r = 2.5, x = 1.5, y = 1.5, w = s - 3, h = s - 3;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+  ctx.stroke();
+  // Dots (5-face pattern)
+  ctx.fillStyle = '#8B5CF6';
+  const dot = 1.4;
+  const cx = s / 2, cy = s / 2;
+  [[cx - 4, cy - 4], [cx + 4, cy - 4], [cx, cy], [cx - 4, cy + 4], [cx + 4, cy + 4]].forEach(([dx, dy]) => {
+    ctx.beginPath();
+    ctx.arc(dx, dy, dot, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ---- Randomize Handler ----
+document.getElementById('randomize-btn').addEventListener('click', function() {
+  const btn = this;
+  btn.classList.add('flash');
+  setTimeout(() => btn.classList.remove('flash'), 300);
+
+  // Randomize all grain engine + tape params
+  for (const [id, p] of Object.entries(PARAMS)) {
+    const range = p.max - p.min;
+    state.params[id] = p.min + Math.random() * range;
+    // Snap to integers for most params
+    if (p.unit !== 'st') {
+      state.params[id] = Math.round(state.params[id]);
+    } else {
+      state.params[id] = Math.round(state.params[id] * 2) / 2; // half-semitone precision
+    }
+  }
+  updateAllKnobs();
+});
+
+// ---- XY Auto Animation ----
+function updateXYAuto(time) {
+  if (state.xyAutoPlay && !state.draggingHero) {
+    state.xyX = 0.5 + Math.sin(time * 0.3) * 0.3;
+    state.xyY = 0.5 + Math.cos(time * 0.23) * 0.25;
+    updateXYReadout();
+  }
+}
+
+// ---- Animation Loop ----
+function animate(timestamp) {
+  const time = timestamp * 0.001;
+  state.terrainTime = time;
+
+  renderTerrain(time);
+  updateMeters(time);
+  updateSectionIcons();
+  updateXYAuto(time);
+
+  requestAnimationFrame(animate);
+}
+
+// ---- Initialize ----
+function init() {
+  initTerrain();
+  drawGridIcon();
+  drawOutputIcon();
+  drawRandomizeIcon();
+  buildKnobs();
+  buildCategoryButtons();
+  buildPresetGrid();
+  loadPreset(0);
+  updateOutputDisplay();
+  updateMasterMixDisplay();
+  requestAnimationFrame(animate);
+}
+
+// Handle resize
+window.addEventListener('resize', () => {
+  initTerrain();
+});
+
+// Start
+init();
+</script>
+</body>
+</html>
