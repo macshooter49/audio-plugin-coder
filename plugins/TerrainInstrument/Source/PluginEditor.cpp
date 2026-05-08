@@ -971,3 +971,124 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     std::memcpy(data.data(), utf8.getAddress(), data.size());
     return juce::WebBrowserComponent::Resource{ std::move(data), juce::String("text/html") };
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// File drag-drop (Task 11) + sample loading
+// ════════════════════════════════════════════════════════════════════════════
+
+bool TerrainInstrumentAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    if (files.isEmpty()) return false;
+    const auto ext = juce::File (files[0]).getFileExtension().toLowerCase();
+    return ext == ".wav" || ext == ".aif" || ext == ".aiff"
+        || ext == ".flac" || ext == ".mp3"
+        || ext == ".terrain" || ext == ".terrainpack";
+}
+
+void TerrainInstrumentAudioProcessorEditor::fileDragEnter (const juce::StringArray&, int, int)
+{
+    if (webView != nullptr)
+        webView->evaluateJavascript ("if (window.onDragHover) window.onDragHover(true);", nullptr);
+}
+
+void TerrainInstrumentAudioProcessorEditor::fileDragExit (const juce::StringArray&)
+{
+    if (webView != nullptr)
+        webView->evaluateJavascript ("if (window.onDragHover) window.onDragHover(false);", nullptr);
+}
+
+void TerrainInstrumentAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
+{
+    if (webView != nullptr)
+        webView->evaluateJavascript ("if (window.onDragHover) window.onDragHover(false);", nullptr);
+
+    if (files.isEmpty()) return;
+    const juce::File f (files[0]);
+    const auto ext = f.getFileExtension().toLowerCase();
+
+    if (ext == ".terrain")     { loadPatch (f);          return; }
+    if (ext == ".terrainpack") { importTerrainPack (f);  return; }
+
+    // Audio file → load as new sample
+    loadSampleAsync (f);
+}
+
+void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& file)
+{
+    currentSampleSourcePath = file.getFullPathName();
+
+    auto& loader = audioProcessor.getSampleLoader();
+    auto& target = audioProcessor.getSampleBuffer();
+
+    if (webView != nullptr)
+        webView->evaluateJavascript (
+            "if (window.onLoadingStarted) window.onLoadingStarted("
+            + juce::JSON::toString (juce::var (file.getFileName())) + ");",
+            nullptr);
+
+    loader.load (
+        file,
+        target,
+        [this] (float progress)
+        {
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    "if (window.onLoadingProgress) window.onLoadingProgress("
+                    + juce::String (progress, 4) + ");",
+                    nullptr);
+        },
+        [this] (tw::SampleLoader::Result r)
+        {
+            if (! r.success)
+            {
+                if (webView != nullptr)
+                    webView->evaluateJavascript (
+                        "if (window.onLoadError) window.onLoadError("
+                        + juce::JSON::toString (juce::var (r.errorMessage)) + ");",
+                        nullptr);
+                return;
+            }
+
+            // Build a JS object literal with peaks + meta and pass to onSampleLoaded.
+            juce::Array<juce::var> minArr, maxArr;
+            minArr.ensureStorageAllocated ((int) r.peaksMin.size());
+            maxArr.ensureStorageAllocated ((int) r.peaksMax.size());
+            for (auto v : r.peaksMin) minArr.add (juce::var (v));
+            for (auto v : r.peaksMax) maxArr.add (juce::var (v));
+
+            juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+            obj->setProperty ("filename",      r.filename);
+            obj->setProperty ("sampleRate",    r.sampleRate);
+            obj->setProperty ("lengthSamples", r.lengthSamples);
+            obj->setProperty ("numChannels",   r.numChannels);
+            obj->setProperty ("peaksMin",      juce::var (minArr));
+            obj->setProperty ("peaksMax",      juce::var (maxArr));
+
+            const auto json = juce::JSON::toString (juce::var (obj.get()), true /*allOnOneLine*/);
+
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    "if (window.onSampleLoaded) window.onSampleLoaded(" + json + ");",
+                    nullptr);
+        });
+}
+
+// ── Stubs (real implementations land in Tasks 18 and 22 of the v0a plan) ────
+
+void TerrainInstrumentAudioProcessorEditor::loadPatch (const juce::File&)
+{
+    // Task 18 (Phase E) — read .terrain JSON, restore APVTS, trigger sample load
+    if (webView != nullptr)
+        webView->evaluateJavascript (
+            "if (window.onLoadError) window.onLoadError('Patch loading lands in v0a Phase E.');",
+            nullptr);
+}
+
+void TerrainInstrumentAudioProcessorEditor::importTerrainPack (const juce::File&)
+{
+    // Task 22 (Phase E) — unzip .terrainpack to User/Patches + User/Samples, then loadPatch
+    if (webView != nullptr)
+        webView->evaluateJavascript (
+            "if (window.onLoadError) window.onLoadError('Pack import lands in v0a Phase E.');",
+            nullptr);
+}

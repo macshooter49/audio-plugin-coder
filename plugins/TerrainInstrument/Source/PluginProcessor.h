@@ -15,6 +15,7 @@
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
 #include "SampleBuffer.h"
+#include "SampleLoader.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -128,6 +129,7 @@ public:
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
     tw::SampleBuffer& getSampleBuffer() noexcept { return sampleBuffer; }
+    tw::SampleLoader& getSampleLoader() noexcept { return sampleLoader; }
 
     // Sampler atomics — public so SamplerVoice can take a reference (audio-thread-safe).
     std::atomic<int>   rootNoteMidi    { 60 };    // default C4
@@ -263,6 +265,7 @@ private:
     juce::Synthesiser synth;
     static constexpr int kNumVoices = 16;
     tw::SampleBuffer sampleBuffer;
+    tw::SampleLoader sampleLoader;
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;

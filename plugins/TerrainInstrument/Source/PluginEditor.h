@@ -7,6 +7,7 @@
 #include "ParameterIDs.hpp"
 
 class TerrainInstrumentAudioProcessorEditor  : public juce::AudioProcessorEditor,
+                                     public juce::FileDragAndDropTarget,
                                      private juce::Timer
 {
 public:
@@ -16,8 +17,22 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    // FileDragAndDropTarget — sample / patch / pack drag-drop
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void filesDropped           (const juce::StringArray& files, int x, int y) override;
+    void fileDragEnter          (const juce::StringArray& files, int x, int y) override;
+    void fileDragExit           (const juce::StringArray& files) override;
+
 private:
     void timerCallback() override;
+
+    // Sample / patch loading helpers (Task 11; loadPatch + importTerrainPack
+    // are stubs implemented in Tasks 18 / 22 of the v0a plan)
+    void loadSampleAsync   (const juce::File& file);
+    void loadPatch         (const juce::File& patchFile);    // Task 18 stub
+    void importTerrainPack (const juce::File& packFile);     // Task 22 stub
+
+    juce::String currentSampleSourcePath;
 
     TerrainInstrumentAudioProcessor& audioProcessor;
 
