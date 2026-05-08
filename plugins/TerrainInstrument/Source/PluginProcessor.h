@@ -11,6 +11,7 @@
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
+#include "SampleBuffer.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -83,6 +84,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
+    tw::SampleBuffer& getSampleBuffer() noexcept { return sampleBuffer; }
 
     // Preset system
     void loadPreset (int index);
@@ -188,6 +190,8 @@ private:
 
     juce::Synthesiser synth;
     static constexpr int kNumVoices = 16;
+
+    tw::SampleBuffer sampleBuffer;
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;
