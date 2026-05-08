@@ -469,6 +469,19 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.delayEnabled.load());
             })
+            // Sample drag-drop bridge (Phase C — Task 11). WKWebView eats native
+            // file drops at the OS level, so the JS side handles dragover/drop and
+            // calls back here with the absolute file path.
+            .withNativeFunction("loadSampleFromPath", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    const juce::File f (args[0].toString());
+                    if (f.existsAsFile()) loadSampleAsync (f);
+                }
+                complete ({});
+            })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
             })
@@ -965,6 +978,48 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
                           .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
     if (settingsFile.existsAsFile() && settingsFile.loadFileAsString().contains("\"dark\""))
         html = html.replace("<html lang=\"en\">", "<html lang=\"en\" data-theme=\"dark\">");
+
+    // Inject JS-side file drag-drop bridge (Phase C — Task 11). WKWebView
+    // intercepts native file drops at the OS level, so we have to handle them
+    // in JS and call back into C++ with the file path.
+    const juce::String dropBridge = R"(
+<script>
+(function(){
+  function getJucePath(file) {
+    if (!file) return '';
+    if (file.path) return file.path;       // macOS WKWebView non-standard
+    if (file.fullPath) return file.fullPath;
+    return '';
+  }
+  document.addEventListener('dragover', function(e){
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (window.onDragHover) window.onDragHover(true);
+  }, true);
+  document.addEventListener('dragleave', function(e){
+    if (e.relatedTarget === null && window.onDragHover) window.onDragHover(false);
+  }, true);
+  document.addEventListener('drop', function(e){
+    e.preventDefault();
+    if (window.onDragHover) window.onDragHover(false);
+    var f = (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
+    if (!f) return;
+    var path = getJucePath(f);
+    if (path && window.__JUCE__ && window.__JUCE__.backend) {
+      var fn = window.juce && window.juce.getNativeFunction
+                 ? window.juce.getNativeFunction('loadSampleFromPath')
+                 : null;
+      if (fn) fn(path);
+      else if (window.__JUCE__.backend.invokeMethod)
+                 window.__JUCE__.backend.invokeMethod('loadSampleFromPath', [path]);
+    } else {
+      console.warn('Terrain: dropped file has no .path (WKWebView quirk). Filename:', f && f.name);
+    }
+  }, true);
+})();
+</script>
+)";
+    html = html.replace ("</body>", dropBridge + "</body>");
 
     auto utf8 = html.toUTF8();
     std::vector<std::byte> data(static_cast<size_t>(utf8.sizeInBytes()));
