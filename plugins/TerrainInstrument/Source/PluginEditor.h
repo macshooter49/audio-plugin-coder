@@ -5,12 +5,12 @@
 #include "PluginProcessor.h"
 #include "ParameterIDs.hpp"
 
-class TerrainAudioProcessorEditor  : public juce::AudioProcessorEditor,
+class TerrainInstrumentAudioProcessorEditor  : public juce::AudioProcessorEditor,
                                      private juce::Timer
 {
 public:
-    TerrainAudioProcessorEditor (TerrainAudioProcessor&);
-    ~TerrainAudioProcessorEditor() override;
+    TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor&);
+    ~TerrainInstrumentAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -18,7 +18,7 @@ public:
 private:
     void timerCallback() override;
 
-    TerrainAudioProcessor& audioProcessor;
+    TerrainInstrumentAudioProcessor& audioProcessor;
 
     // ═══════════════════════════════════════════════════════════════
     // CRITICAL: Member Declaration Order (Prevents DAW Crashes)
@@ -64,7 +64,7 @@ private:
     class CaptureDragStrip : public juce::Component
     {
     public:
-        CaptureDragStrip (TerrainAudioProcessor& p) : processor (p) {}
+        CaptureDragStrip (TerrainInstrumentAudioProcessor& p) : processor (p) {}
 
         void updateState (int exportState, float availSeconds)
         {
@@ -89,7 +89,7 @@ private:
         void mouseUp (const juce::MouseEvent& e) override;
 
     private:
-        TerrainAudioProcessor& processor;
+        TerrainInstrumentAudioProcessor& processor;
         int state = 0;
         float avail = 0.f;
         bool mouseWasDown = false;
@@ -137,5 +137,5 @@ private:
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainInstrumentAudioProcessorEditor)
 };

@@ -2,23 +2,28 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-TerrainAudioProcessor::TerrainAudioProcessor()
+TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     : AudioProcessor (BusesProperties()
                        .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "Parameters", createParameterLayout())
 {
     initializePresets();
+
+    // Register one Sound (always active) and 16 voices.
+    synth.addSound (new tw::SamplerSound());
+    for (int i = 0; i < kNumVoices; ++i)
+        synth.addVoice (new tw::SamplerVoice());
 }
 
-TerrainAudioProcessor::~TerrainAudioProcessor()
+TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 {
     if (captureExportThread && captureExportThread->joinable())
         captureExportThread->join();
 }
 
 //==============================================================================
-void TerrainAudioProcessor::initializePresets()
+void TerrainInstrumentAudioProcessor::initializePresets()
 {
     //                                    grSz   dens  spray pitch  drift  frz    mix    wow    sat   hiss  outGn  mMix xyEn xyMd xySpd  gSync  grEn  tpEn
     presets = {
@@ -67,7 +72,7 @@ void TerrainAudioProcessor::initializePresets()
     loadUserPresetsFromFile();
 }
 
-void TerrainAudioProcessor::loadPreset(int index)
+void TerrainInstrumentAudioProcessor::loadPreset(int index)
 {
     if (index < 0 || index >= static_cast<int>(presets.size()))
         return;
@@ -131,12 +136,12 @@ void TerrainAudioProcessor::loadPreset(int index)
         modulationEngine.updateConfig(ModulationEngine::Config{});  // Clear all LFOs
 }
 
-int TerrainAudioProcessor::getPresetCount() const
+int TerrainInstrumentAudioProcessor::getPresetCount() const
 {
     return static_cast<int>(presets.size());
 }
 
-juce::String TerrainAudioProcessor::getPresetName(int index) const
+juce::String TerrainInstrumentAudioProcessor::getPresetName(int index) const
 {
     if (index < 0 || index >= static_cast<int>(presets.size()))
         return {};
@@ -144,7 +149,7 @@ juce::String TerrainAudioProcessor::getPresetName(int index) const
 }
 
 //==============================================================================
-PresetData TerrainAudioProcessor::captureCurrentParams() const
+PresetData TerrainInstrumentAudioProcessor::captureCurrentParams() const
 {
     PresetData p;
     p.grainSize  = apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load();
@@ -186,7 +191,7 @@ PresetData TerrainAudioProcessor::captureCurrentParams() const
     return p;
 }
 
-int TerrainAudioProcessor::saveNewPreset(const juce::String& name, const juce::String& tag)
+int TerrainInstrumentAudioProcessor::saveNewPreset(const juce::String& name, const juce::String& tag)
 {
     PresetData p = captureCurrentParams();
     p.name = name;
@@ -198,7 +203,7 @@ int TerrainAudioProcessor::saveNewPreset(const juce::String& name, const juce::S
     return newIdx;
 }
 
-void TerrainAudioProcessor::renamePreset(int index, const juce::String& newName)
+void TerrainInstrumentAudioProcessor::renamePreset(int index, const juce::String& newName)
 {
     if (index < 0 || index >= static_cast<int>(presets.size()))
         return;
@@ -206,7 +211,7 @@ void TerrainAudioProcessor::renamePreset(int index, const juce::String& newName)
     saveUserPresetsToFile();
 }
 
-void TerrainAudioProcessor::overwritePreset(int index)
+void TerrainInstrumentAudioProcessor::overwritePreset(int index)
 {
     if (index < 0 || index >= static_cast<int>(presets.size()))
         return;
@@ -218,7 +223,7 @@ void TerrainAudioProcessor::overwritePreset(int index)
     saveUserPresetsToFile();
 }
 
-void TerrainAudioProcessor::deletePreset(int index)
+void TerrainInstrumentAudioProcessor::deletePreset(int index)
 {
     if (index < numFactoryPresets || index >= static_cast<int>(presets.size()))
         return;
@@ -228,14 +233,14 @@ void TerrainAudioProcessor::deletePreset(int index)
     saveUserPresetsToFile();
 }
 
-juce::String TerrainAudioProcessor::getPresetTag(int index) const
+juce::String TerrainInstrumentAudioProcessor::getPresetTag(int index) const
 {
     if (index < 0 || index >= static_cast<int>(presets.size()))
         return {};
     return presets[static_cast<size_t>(index)].tag;
 }
 
-void TerrainAudioProcessor::setPresetTag(int index, const juce::String& tag)
+void TerrainInstrumentAudioProcessor::setPresetTag(int index, const juce::String& tag)
 {
     if (index < numFactoryPresets || index >= static_cast<int>(presets.size()))
         return;
@@ -243,12 +248,12 @@ void TerrainAudioProcessor::setPresetTag(int index, const juce::String& tag)
     saveUserPresetsToFile();
 }
 
-juce::String TerrainAudioProcessor::getCustomTags() const
+juce::String TerrainInstrumentAudioProcessor::getCustomTags() const
 {
     return customTags.joinIntoString(",");
 }
 
-void TerrainAudioProcessor::setCustomTags(const juce::String& commaSeparated)
+void TerrainInstrumentAudioProcessor::setCustomTags(const juce::String& commaSeparated)
 {
     customTags.clear();
     customTags.addTokens(commaSeparated, ",", "");
@@ -257,7 +262,7 @@ void TerrainAudioProcessor::setCustomTags(const juce::String& commaSeparated)
 }
 
 //==============================================================================
-juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
@@ -468,8 +473,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
 }
 
 //==============================================================================
-void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    synth.setCurrentPlaybackSampleRate (sampleRate);
+
     grainEngineL.prepare(sampleRate, samplesPerBlock);
     grainEngineR.prepare(sampleRate, samplesPerBlock);
     tapeProcessorL.prepare(sampleRate, samplesPerBlock);
@@ -564,7 +571,7 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
         apvts.getRawParameterValue(ParameterIDs::EQ_HIGH_GAIN)->load());
 }
 
-void TerrainAudioProcessor::releaseResources()
+void TerrainInstrumentAudioProcessor::releaseResources()
 {
     grainEngineL.reset();
     grainEngineR.reset();
@@ -576,19 +583,17 @@ void TerrainAudioProcessor::releaseResources()
     eqR.reset();
 }
 
-bool TerrainAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool TerrainInstrumentAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
+    // Instrument: only require stereo output; input bus is disabled by the host.
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
      && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
-        return false;
-
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
 
     return true;
 }
 
-void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -596,6 +601,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const auto numChannels = buffer.getNumChannels();
 
     if (numSamples == 0) return;
+
+    // Clear buffer (synth replaces input as the audio source for the FX chain).
+    buffer.clear();
+
+    // Render all voices into the buffer.
+    synth.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
+
+    // Existing FX chain runs from here unchanged (grain → tape → space → eq → loop).
 
     // Clear any extra output channels
     for (auto i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
@@ -933,27 +946,27 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 }
 
 //==============================================================================
-juce::AudioProcessorEditor* TerrainAudioProcessor::createEditor()
+juce::AudioProcessorEditor* TerrainInstrumentAudioProcessor::createEditor()
 {
-    return new TerrainAudioProcessorEditor(*this);
+    return new TerrainInstrumentAudioProcessorEditor(*this);
 }
 
-bool TerrainAudioProcessor::hasEditor() const { return true; }
+bool TerrainInstrumentAudioProcessor::hasEditor() const { return true; }
 
-const juce::String TerrainAudioProcessor::getName() const { return JucePlugin_Name; }
-bool TerrainAudioProcessor::acceptsMidi() const { return false; }
-bool TerrainAudioProcessor::producesMidi() const { return false; }
-bool TerrainAudioProcessor::isMidiEffect() const { return false; }
-double TerrainAudioProcessor::getTailLengthSeconds() const { return 5.0; }
+const juce::String TerrainInstrumentAudioProcessor::getName() const { return JucePlugin_Name; }
+bool TerrainInstrumentAudioProcessor::acceptsMidi() const { return true; }
+bool TerrainInstrumentAudioProcessor::producesMidi() const { return false; }
+bool TerrainInstrumentAudioProcessor::isMidiEffect() const { return false; }
+double TerrainInstrumentAudioProcessor::getTailLengthSeconds() const { return 5.0; }
 
-int TerrainAudioProcessor::getNumPrograms() { return static_cast<int>(presets.size()); }
-int TerrainAudioProcessor::getCurrentProgram() { return currentPresetIndex.load(); }
-void TerrainAudioProcessor::setCurrentProgram (int index) { loadPreset(index); }
-const juce::String TerrainAudioProcessor::getProgramName (int index) { return getPresetName(index); }
-void TerrainAudioProcessor::changeProgramName (int, const juce::String&) {}
+int TerrainInstrumentAudioProcessor::getNumPrograms() { return static_cast<int>(presets.size()); }
+int TerrainInstrumentAudioProcessor::getCurrentProgram() { return currentPresetIndex.load(); }
+void TerrainInstrumentAudioProcessor::setCurrentProgram (int index) { loadPreset(index); }
+const juce::String TerrainInstrumentAudioProcessor::getProgramName (int index) { return getPresetName(index); }
+void TerrainInstrumentAudioProcessor::changeProgramName (int, const juce::String&) {}
 
 //==============================================================================
-void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     // DAW state: parameter values + preset index + XY auto state
     // Presets themselves live on disk only (getUserPresetsFile)
@@ -975,7 +988,7 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     copyXmlToBinary (*xml, destData);
 }
 
-void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
 
@@ -1024,7 +1037,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
 //==============================================================================
 // User Preset File Persistence
 //==============================================================================
-juce::File TerrainAudioProcessor::getUserPresetsFile() const
+juce::File TerrainInstrumentAudioProcessor::getUserPresetsFile() const
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
         .getChildFile("Noizefield")
@@ -1032,7 +1045,7 @@ juce::File TerrainAudioProcessor::getUserPresetsFile() const
         .getChildFile("UserPresets.xml");
 }
 
-void TerrainAudioProcessor::saveUserPresetsToFile()
+void TerrainInstrumentAudioProcessor::saveUserPresetsToFile()
 {
     auto file = getUserPresetsFile();
 
@@ -1104,7 +1117,7 @@ void TerrainAudioProcessor::saveUserPresetsToFile()
     }
 }
 
-void TerrainAudioProcessor::loadUserPresetsFromFile()
+void TerrainInstrumentAudioProcessor::loadUserPresetsFromFile()
 {
     auto file = getUserPresetsFile();
 
@@ -1189,17 +1202,17 @@ void TerrainAudioProcessor::loadUserPresetsFromFile()
 //==============================================================================
 // Rolling Capture Buffer
 //==============================================================================
-float TerrainAudioProcessor::getCaptureAvailableSeconds() const
+float TerrainInstrumentAudioProcessor::getCaptureAvailableSeconds() const
 {
     return captureBuffer.getAvailableSeconds();
 }
 
-juce::String TerrainAudioProcessor::getLastCaptureFilePath() const
+juce::String TerrainInstrumentAudioProcessor::getLastCaptureFilePath() const
 {
     return lastCaptureFilePath;
 }
 
-void TerrainAudioProcessor::exportCapture(int durationSeconds)
+void TerrainInstrumentAudioProcessor::exportCapture(int durationSeconds)
 {
     // CAS: only start if idle (0)
     int expected = 0;
@@ -1287,5 +1300,5 @@ void TerrainAudioProcessor::exportCapture(int durationSeconds)
 //==============================================================================
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new TerrainAudioProcessor();
+    return new TerrainInstrumentAudioProcessor();
 }

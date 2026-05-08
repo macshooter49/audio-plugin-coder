@@ -10,6 +10,7 @@
 #include "RollingCaptureBuffer.h"
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
+#include "SamplerVoice.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -52,11 +53,11 @@ struct PresetData
 };
 
 //==============================================================================
-class TerrainAudioProcessor  : public juce::AudioProcessor
+class TerrainInstrumentAudioProcessor  : public juce::AudioProcessor
 {
 public:
-    TerrainAudioProcessor();
-    ~TerrainAudioProcessor() override;
+    TerrainInstrumentAudioProcessor();
+    ~TerrainInstrumentAudioProcessor() override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -185,6 +186,9 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+    juce::Synthesiser synth;
+    static constexpr int kNumVoices = 16;
+
     // Grain engines (one per channel)
     GrainEngine grainEngineL;
     GrainEngine grainEngineR;
@@ -269,5 +273,5 @@ private:
     void saveUserPresetsToFile();
     void loadUserPresetsFromFile();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainInstrumentAudioProcessor)
 };

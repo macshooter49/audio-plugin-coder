@@ -3,7 +3,7 @@
 #include "BinaryData.h"
 
 //==============================================================================
-TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor& p)
+TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     // Create WebBrowserComponent with all relay options
@@ -491,13 +491,13 @@ TerrainAudioProcessorEditor::TerrainAudioProcessorEditor (TerrainAudioProcessor&
     startTimerHz(60);
 }
 
-TerrainAudioProcessorEditor::~TerrainAudioProcessorEditor()
+TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 {
     stopTimer();
 }
 
 //==============================================================================
-void TerrainAudioProcessorEditor::timerCallback()
+void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
 
@@ -508,7 +508,7 @@ void TerrainAudioProcessorEditor::timerCallback()
     juce::String scopeData;
     scopeData.preallocateBytes(2048);
     scopeData << "[";
-    for (int i = 0; i < TerrainAudioProcessor::SCOPE_SIZE; ++i)
+    for (int i = 0; i < TerrainInstrumentAudioProcessor::SCOPE_SIZE; ++i)
     {
         if (i > 0) scopeData << ",";
         float val = audioProcessor.scopeBuffer[static_cast<size_t>(i)].load(std::memory_order_relaxed);
@@ -632,12 +632,12 @@ void TerrainAudioProcessorEditor::timerCallback()
 }
 
 //==============================================================================
-void TerrainAudioProcessorEditor::paint (juce::Graphics& g)
+void TerrainInstrumentAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
 }
 
-void TerrainAudioProcessorEditor::resized()
+void TerrainInstrumentAudioProcessorEditor::resized()
 {
     auto b = getLocalBounds();
     captureDragStrip.setBounds(b.removeFromBottom(CAPTURE_STRIP_HEIGHT));
@@ -648,7 +648,7 @@ void TerrainAudioProcessorEditor::resized()
 //==============================================================================
 // CaptureDragStrip implementation
 //==============================================================================
-void TerrainAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
+void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
 {
     auto b = getLocalBounds().toFloat();
 
@@ -686,7 +686,7 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
     }
 }
 
-void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDown (const juce::MouseEvent&)
+void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseDown (const juce::MouseEvent&)
 {
     mouseWasDown = true;
     isDragging = false;
@@ -699,7 +699,7 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDown (const juce::Mouse
     }
 }
 
-void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::MouseEvent& e)
+void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::MouseEvent& e)
 {
     if (!mouseWasDown || isDragging) return;
     if (state != 2) return; // only drag when ready
@@ -725,7 +725,7 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::Mouse
     );
 }
 
-void TerrainAudioProcessorEditor::CaptureDragStrip::mouseUp (const juce::MouseEvent&)
+void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseUp (const juce::MouseEvent&)
 {
     if (mouseWasDown && !isDragging && state == 2)
     {
@@ -737,7 +737,7 @@ void TerrainAudioProcessorEditor::CaptureDragStrip::mouseUp (const juce::MouseEv
 }
 
 //==============================================================================
-std::optional<juce::WebBrowserComponent::Resource> TerrainAudioProcessorEditor::getResource (const juce::String& url)
+std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcessorEditor::getResource (const juce::String& url)
 {
     // All JS is inlined into index.html — only one resource to serve
     juce::String html (juce::CharPointer_UTF8 (reinterpret_cast<const char*>(BinaryData::index_html)),
