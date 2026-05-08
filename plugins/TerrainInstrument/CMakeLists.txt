@@ -14,42 +14,48 @@ else()
 endif()
 
 # ── Plugin definition ──
-juce_add_plugin(Terrain
+juce_add_plugin(TerrainInstrument
     COMPANY_NAME "Waves Crate"
-    BUNDLE_ID "com.wavescrate.terrain"
+    BUNDLE_ID "com.wavescrate.terraininstrument"
     PLUGIN_MANUFACTURER_CODE Wvcr
-    PLUGIN_CODE Trrn
+    PLUGIN_CODE Tern
     FORMATS VST3 AU Standalone
     PRODUCT_NAME "Terrain"
+    PLUGIN_NAME "Terrain"
+    DESCRIPTION "Terrain — Sampler / Instrument"
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
     ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Assets/icon.png"
+    IS_SYNTH TRUE
+    NEEDS_MIDI_INPUT TRUE
     NEEDS_WEBVIEW2 ${NEEDS_WEBVIEW2}
     NEEDS_WEB_BROWSER ${NEEDS_WEB_BROWSER}
+    AU_MAIN_TYPE kAudioUnitType_MusicDevice
+    VST3_CATEGORIES Instrument Sampler
 )
 
 # ── Embed web UI files as binary data ──
-juce_add_binary_data(Terrain_WebUI
+juce_add_binary_data(TerrainInstrument_WebUI
     SOURCES
         Source/ui/public/index.html
 )
 
 # ── Source files ──
-target_sources(Terrain
+target_sources(TerrainInstrument
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
 )
 
 # ── Include paths ──
-target_include_directories(Terrain
+target_include_directories(TerrainInstrument
     PRIVATE
         Source
 )
 
 # ── Link libraries ──
-target_link_libraries(Terrain
+target_link_libraries(TerrainInstrument
     PRIVATE
-        Terrain_WebUI
+        TerrainInstrument_WebUI
         juce::juce_audio_basics
         juce::juce_audio_devices
         juce::juce_audio_formats
@@ -70,7 +76,7 @@ target_link_libraries(Terrain
 )
 
 # ── Compile definitions ──
-target_compile_definitions(Terrain
+target_compile_definitions(TerrainInstrument
     PUBLIC
         JUCE_WEB_BROWSER=1
         JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
