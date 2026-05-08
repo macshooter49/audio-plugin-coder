@@ -968,10 +968,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Voices replace plugin input as the source of audio for the FX chain.
     buffer.clear();
     synth.renderNextBlock (buffer, midiMessages, 0, numSamples);
-
-    // Clear any extra output channels
-    for (auto i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
-        buffer.clear(i, 0, numSamples);
+    // (Instrument has no input bus, so no "extra output channels" to clear here —
+    // the voice render already filled the entire output buffer.)
 
     // Read BPM from DAW playhead
     if (auto* playHead = getPlayHead())
