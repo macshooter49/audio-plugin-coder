@@ -38,9 +38,12 @@ namespace tw
             // Task 8 wires the AR release; stopNote without tail-off cuts immediately.
         }
 
-        void pitchWheelMoved (int /*newPitchWheelValue*/) override
+        void pitchWheelMoved (int newPitchWheelValue) override
         {
-            // Task 7 hooks pitch bend in here.
+            // 0..16383 → -1..+1 → ±2 semitones
+            const double normalized = (newPitchWheelValue - 8192) / 8192.0;
+            pitchBendSemis = normalized * 2.0;
+            if (isActive) updatePitchRatio();
         }
 
         void controllerMoved (int, int) override {}
@@ -90,7 +93,7 @@ namespace tw
         void updatePitchRatio()
         {
             const int rootNote = rootNoteParam.load();
-            const double semitones = static_cast<double> (currentNote - rootNote);
+            const double semitones = static_cast<double> (currentNote - rootNote) + pitchBendSemis;
             pitchRatio = std::pow (2.0, semitones / 12.0);
         }
 
@@ -101,6 +104,7 @@ namespace tw
         float  currentVelocity = 0.0f;
         double playhead        = 0.0;
         double pitchRatio      = 1.0;
+        double pitchBendSemis  = 0.0;
         bool   isActive        = false;
     };
 
