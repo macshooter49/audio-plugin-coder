@@ -34,4 +34,10 @@ namespace ParameterIDs
     constexpr char EQ_MID_GAIN[]  = "EQ_MID_GAIN";
     constexpr char EQ_HIGH_FREQ[] = "EQ_HIGH_FREQ";
     constexpr char EQ_HIGH_GAIN[] = "EQ_HIGH_GAIN";
+
+    // Sampler (Terrain Instrument additions — v0a)
+    constexpr char ATTACK_MS[]    = "ATTACK_MS";
+    constexpr char RELEASE_MS[]   = "RELEASE_MS";
+    constexpr char ROOT_NOTE[]    = "ROOT_NOTE";
+    constexpr char SLICE_MODE[]   = "SLICE_MODE";  // 0=PITCH, 1=SLICE (SLICE inert in v0a)
 }

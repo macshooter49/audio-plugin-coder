@@ -13,7 +13,8 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // Register one Sound (always active) and 16 voices.
     synth.addSound (new tw::SamplerSound());
     for (int i = 0; i < kNumVoices; ++i)
-        synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi));
+        synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi,
+                                              attackMsAtomic, releaseMsAtomic));
 
     // === TEMPORARY: hardcoded test sample (replaced by drag-drop loader in Task 10). ===
     // Tries ~/Library/Waves Crate/Terrain/test.wav, falls back to synthesized C4 sine wave.
@@ -515,6 +516,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("dB")));
 
+    // Sampler params (v0a)
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::ATTACK_MS, 1 },
+        "Attack",
+        juce::NormalisableRange<float>(0.0f, 2000.0f, 0.0f, 0.4f),
+        5.0f,
+        juce::AudioParameterFloatAttributes().withLabel("ms")));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::RELEASE_MS, 1 },
+        "Release",
+        juce::NormalisableRange<float>(1.0f, 5000.0f, 0.0f, 0.4f),
+        800.0f,
+        juce::AudioParameterFloatAttributes().withLabel("ms")));
+
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID { ParameterIDs::ROOT_NOTE, 1 },
+        "Root Note",
+        0, 127, 60));
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SLICE_MODE, 1 },
+        "Mode",
+        juce::StringArray { "PITCH", "SLICE" }, 0));
+
     return layout;
 }
 
@@ -647,6 +673,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const auto numChannels = buffer.getNumChannels();
 
     if (numSamples == 0) return;
+
+    // Pull sampler params from APVTS into the lock-free atomics that voices read.
+    rootNoteMidi.store    ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
+    attackMsAtomic.store  (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
+    releaseMsAtomic.store (*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
 
     // Clear buffer (synth replaces input as the audio source for the FX chain).
     buffer.clear();

@@ -12,10 +12,22 @@ namespace tw
     class SamplerVoice : public juce::SynthesiserVoice
     {
     public:
-        SamplerVoice (SampleBuffer& sb, std::atomic<int>& rootNoteRef) noexcept
-            : sample (sb), rootNoteParam (rootNoteRef) {}
+        SamplerVoice (SampleBuffer& sb,
+                      std::atomic<int>&   rootNoteRef,
+                      std::atomic<float>& attackMsRef,
+                      std::atomic<float>& releaseMsRef) noexcept
+            : sample (sb),
+              rootNoteParam (rootNoteRef),
+              attackMsParam (attackMsRef),
+              releaseMsParam (releaseMsRef) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
+
+        void setCurrentPlaybackSampleRate (double sr) override
+        {
+            juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
+            sampleRateForEnv = sr > 0.0 ? sr : 48000.0;
+        }
 
         void startNote (int midiNoteNumber, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
@@ -24,6 +36,16 @@ namespace tw
             currentVelocity = velocity;
             playhead        = 0.0;
             updatePitchRatio();
+
+            // Compute envelope increments from current attack/release in ms.
+            const float attackSec  = juce::jmax (0.0f, attackMsParam.load()  * 0.001f);
+            const float releaseSec = juce::jmax (0.001f, releaseMsParam.load() * 0.001f);
+            attackInc  = attackSec  > 0.0f ? (1.0f / (attackSec  * (float) sampleRateForEnv)) : 1.0f;
+            releaseDec = 1.0f / (releaseSec * (float) sampleRateForEnv);
+
+            envLevel = 0.0f;
+            envStage = (attackInc >= 1.0f) ? EnvStage::Sustaining : EnvStage::Attack;
+            if (envStage == EnvStage::Sustaining) envLevel = 1.0f;
             isActive = true;
         }
 
@@ -31,11 +53,14 @@ namespace tw
         {
             if (! allowTailOff)
             {
+                envStage = EnvStage::Off;
+                envLevel = 0.0f;
                 clearCurrentNote();
                 isActive = false;
                 playhead = 0.0;
+                return;
             }
-            // Task 8 wires the AR release; stopNote without tail-off cuts immediately.
+            envStage = EnvStage::Release;
         }
 
         void pitchWheelMoved (int newPitchWheelValue) override
@@ -51,7 +76,7 @@ namespace tw
         void renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
                               int startSample, int numSamples) override
         {
-            if (! isActive) return;
+            if (! isActive || envStage == EnvStage::Off) return;
 
             auto buf = sample.load();
             if (! buf || buf->getNumSamples() == 0) return;
@@ -71,9 +96,37 @@ namespace tw
             {
                 if (playhead >= static_cast<double> (bufLen - 1))
                 {
+                    // End-of-sample: voice goes silent regardless of env stage.
+                    envStage = EnvStage::Off;
+                    envLevel = 0.0f;
                     clearCurrentNote();
                     isActive = false;
                     return;
+                }
+
+                // Tick the envelope.
+                switch (envStage)
+                {
+                    case EnvStage::Attack:
+                        envLevel += attackInc;
+                        if (envLevel >= 1.0f) { envLevel = 1.0f; envStage = EnvStage::Sustaining; }
+                        break;
+                    case EnvStage::Sustaining:
+                        envLevel = 1.0f;
+                        break;
+                    case EnvStage::Release:
+                        envLevel -= releaseDec;
+                        if (envLevel <= 0.0f)
+                        {
+                            envLevel = 0.0f;
+                            envStage = EnvStage::Off;
+                            clearCurrentNote();
+                            isActive = false;
+                            return;
+                        }
+                        break;
+                    case EnvStage::Off:
+                        return;
                 }
 
                 const auto i0 = static_cast<int> (playhead);
@@ -81,7 +134,7 @@ namespace tw
                 const auto sampleL = inL[i0] + frac * (inL[i0 + 1] - inL[i0]);
                 const auto sampleR = inR[i0] + frac * (inR[i0 + 1] - inR[i0]);
 
-                const auto gain = currentVelocity;
+                const auto gain = currentVelocity * envLevel;
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
@@ -90,6 +143,8 @@ namespace tw
         }
 
     private:
+        enum class EnvStage { Off, Attack, Sustaining, Release };
+
         void updatePitchRatio()
         {
             const int rootNote = rootNoteParam.load();
@@ -97,15 +152,24 @@ namespace tw
             pitchRatio = std::pow (2.0, semitones / 12.0);
         }
 
-        SampleBuffer&     sample;
-        std::atomic<int>& rootNoteParam;
+        SampleBuffer&       sample;
+        std::atomic<int>&   rootNoteParam;
+        std::atomic<float>& attackMsParam;
+        std::atomic<float>& releaseMsParam;
 
-        int    currentNote     = -1;
-        float  currentVelocity = 0.0f;
-        double playhead        = 0.0;
-        double pitchRatio      = 1.0;
-        double pitchBendSemis  = 0.0;
-        bool   isActive        = false;
+        int      currentNote      = -1;
+        float    currentVelocity  = 0.0f;
+        double   playhead         = 0.0;
+        double   pitchRatio       = 1.0;
+        double   pitchBendSemis   = 0.0;
+        bool     isActive         = false;
+
+        // AR envelope (one-shot model — no Decay/Sustain knee, just Attack-then-hold-then-Release).
+        EnvStage envStage         = EnvStage::Off;
+        float    envLevel         = 0.0f;
+        float    attackInc        = 1.0f;
+        float    releaseDec       = 0.001f;
+        double   sampleRateForEnv = 48000.0;
     };
 
     struct SamplerSound : public juce::SynthesiserSound
