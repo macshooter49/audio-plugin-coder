@@ -144,6 +144,14 @@ public:
     // 1 = forward loop (playhead wraps to 0 and keeps playing until note-off).
     std::atomic<int>   sampleLoopMode  { 0 };
 
+    // Path of the most-recently-loaded sample. Editor pushes after each
+    // successful load; processor saves it in getStateInformation so DAW
+    // project save/restore re-loads the same file when the editor opens.
+    // Guarded by a CriticalSection because the editor (message thread) and
+    // the audio thread (during state restore) can both touch it.
+    void setLoadedSamplePath (const juce::String& path);
+    juce::String getLoadedSamplePath() const;
+
     // Preset system
     void loadPreset (int index);
     int getPresetCount() const;
@@ -279,6 +287,11 @@ private:
     static constexpr int kNumVoices = 16;
     tw::SampleBuffer sampleBuffer;
     tw::SampleLoader sampleLoader;
+
+    // Most-recently-loaded sample's absolute path. Persisted across DAW
+    // project save/restore so the editor can re-load on next open.
+    mutable juce::CriticalSection sampleSourcePathLock;
+    juce::String                  loadedSamplePath;
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;

@@ -1511,6 +1511,18 @@ void TerrainInstrumentAudioProcessor::setCurrentProgram (int index) { loadPreset
 const juce::String TerrainInstrumentAudioProcessor::getProgramName (int index) { return getPresetName(index); }
 void TerrainInstrumentAudioProcessor::changeProgramName (int, const juce::String&) {}
 
+void TerrainInstrumentAudioProcessor::setLoadedSamplePath (const juce::String& path)
+{
+    juce::ScopedLock sl (sampleSourcePathLock);
+    loadedSamplePath = path;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getLoadedSamplePath() const
+{
+    juce::ScopedLock sl (sampleSourcePathLock);
+    return loadedSamplePath;
+}
+
 //==============================================================================
 void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
@@ -1533,6 +1545,15 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     state.setProperty("delayEnabled",       delayEnabled.load(),          nullptr);
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
+
+    // Persist the loaded sample's source path so DAW project save/restore
+    // can re-load the same file when the editor re-opens. Empty string if
+    // nothing was loaded yet.
+    {
+        juce::ScopedLock sl (sampleSourcePathLock);
+        if (loadedSamplePath.isNotEmpty())
+            state.setProperty ("sampleSourcePath", loadedSamplePath, nullptr);
+    }
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
@@ -1572,6 +1593,15 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
+
+            // Restore the loaded sample's path. Editor's constructor reads
+            // this and kicks off async reload via loadSampleAsync — audio
+            // thread plays silence until reload completes.
+            {
+                auto path = newState.getProperty ("sampleSourcePath", "").toString();
+                juce::ScopedLock sl (sampleSourcePathLock);
+                loadedSamplePath = path;
+            }
 
             // Reload presets from disk (the single source of truth)
             while (static_cast<int>(presets.size()) > numFactoryPresets)

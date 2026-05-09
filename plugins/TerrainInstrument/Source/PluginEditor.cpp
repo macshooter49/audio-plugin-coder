@@ -764,6 +764,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 
     // Start visualization timer at 60Hz for smooth LFO/mod display
     startTimerHz(60);
+
+    // Auto-reload the previously-loaded sample if the DAW restored a path
+    // via setStateInformation. Deferred via callAsync so the WebView and
+    // hero overlay are fully constructed by the time onLoadingStarted /
+    // onSampleLoaded callbacks fire from the loader.
+    juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safeThis (this);
+    juce::MessageManager::callAsync ([safeThis]
+    {
+        if (safeThis == nullptr) return;
+        const auto storedPath = safeThis->audioProcessor.getLoadedSamplePath();
+        if (storedPath.isEmpty()) return;
+        const juce::File f (storedPath);
+        if (f.existsAsFile()) safeThis->loadSampleAsync (f);
+    });
 }
 
 TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
@@ -1791,6 +1805,8 @@ void TerrainInstrumentAudioProcessorEditor::filesDropped (const juce::StringArra
 void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& file)
 {
     currentSampleSourcePath = file.getFullPathName();
+    // Push to processor so DAW state save captures it (survives project reload).
+    audioProcessor.setLoadedSamplePath (currentSampleSourcePath);
 
     auto& loader = audioProcessor.getSampleLoader();
     auto& target = audioProcessor.getSampleBuffer();
