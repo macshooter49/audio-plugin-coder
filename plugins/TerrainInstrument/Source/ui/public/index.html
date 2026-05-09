@@ -4345,15 +4345,21 @@ const state = {
     hasUndo: false,
   },
   // Randomize scope (per-section toggle + intensity). Session-only, not persisted.
+  // Terrain Instrument defaults (per user 2026-05-08 feedback):
+  //   - tape OFF by default — tape randomization can over-distort even at
+  //     subtle intensity. User must opt in.
+  //   - eq subtle by default — random bell-curve peaks at full ±12 dB can
+  //     produce unmusical resonances. Subtle keeps it tame.
+  //   - everything else: normal (current behavior preserved).
   randomizeConfig: {
     sections: {
-      grain: { on: true, intensity: 'normal' },
-      tape:  { on: true, intensity: 'normal' },
-      june:  { on: true, intensity: 'normal' },
-      delay: { on: true, intensity: 'normal' },
-      space: { on: true, intensity: 'normal' },
-      eq:    { on: true, intensity: 'normal' },
-      lfos:  { on: true, intensity: 'normal' },
+      grain: { on: true,  intensity: 'normal' },
+      tape:  { on: false, intensity: 'subtle' },   // OFF default + subtle if user enables
+      june:  { on: true,  intensity: 'normal' },
+      delay: { on: true,  intensity: 'normal' },
+      space: { on: true,  intensity: 'normal' },
+      eq:    { on: true,  intensity: 'subtle' },   // subtle default
+      lfos:  { on: true,  intensity: 'normal' },
     },
     menuOpen: false,
   },
@@ -9759,6 +9765,16 @@ const _RAND_CAP = {
   chorusAmount:   { subtle: 0.35, normal: 0.55, wild: 0.80 },
   dlyFeedback:    { subtle: 0.45, normal: 0.65, wild: 0.85 },
   loopFeedback:   { subtle: 60,   normal: 80,   wild: 92   },
+  // EQ bell gains: cap so randomize never lands a +12/-12 dB resonance peak
+  // — those produce the harsh "ceiling" frequencies user flagged. Subtle stays
+  // musical (±3 dB), normal allows ±6 dB sculpting, wild lets bigger moves.
+  eqB1Gain:       { subtle: 3,    normal: 6,    wild: 9    },
+  eqB2Gain:       { subtle: 3,    normal: 6,    wild: 9    },
+  eqB3Gain:       { subtle: 3,    normal: 6,    wild: 9    },
+  eqB4Gain:       { subtle: 3,    normal: 6,    wild: 9    },
+  eqB5Gain:       { subtle: 3,    normal: 6,    wild: 9    },
+  eqB6Gain:       { subtle: 3,    normal: 6,    wild: 9    },
+  eqB7Gain:       { subtle: 3,    normal: 6,    wild: 9    },
 };
 
 window.rollScoped = function rollScoped() {
@@ -9957,8 +9973,14 @@ window.rollScoped = function rollScoped() {
   }
 
   // ── 4. JUNE / DELAY enables ──
-  if (sec.june.on && sec.june.intensity !== 'subtle') {
-    const onProb = sec.june.intensity === 'wild' ? 0.50 : 0.60;
+  // Run section enable randomization at ALL intensities (including subtle) so
+  // that a subtle randomize on June actually has a perceivable result. Without
+  // this, if chorus starts disabled, subtle randomize jitters the params but
+  // chorus stays bypassed and user hears nothing change.
+  if (sec.june.on) {
+    const onProb = sec.june.intensity === 'wild' ? 0.50
+                 : sec.june.intensity === 'subtle' ? 0.85   // mostly ON at subtle
+                 : 0.65;
     state.chorusEnabled = coin(onProb);
     if (typeof setChorusEnabledFn === 'function') setChorusEnabledFn(state.chorusEnabled ? 1 : 0);
     const chorusToggle = document.getElementById('chorus-toggle');
