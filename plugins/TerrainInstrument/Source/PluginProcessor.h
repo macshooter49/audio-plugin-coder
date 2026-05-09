@@ -91,6 +91,11 @@ struct PresetData
     float chorusAmount    = 0.0f;
     float chorusWidth     = 0.7f;
     float chorusCharacter = 0.3f;
+    // Tape LOOP transport on/off — independent of tapeEnabled (which gates the
+    // tape FX chain: Delay + Space + Tape Processor). Splitting these lets the
+    // user disable tape effects while keeping the loop running, and vice versa.
+    // Placed at end so existing factory preset literal positions don't shift.
+    float tapeLoopEnabled = 1.f;
     // Category tag (at end so initializer lists work without specifying it)
     juce::String tag;  // e.g. "GRAIN", "TAPE", "AMBIENT", custom
     // Modulation state JSON (LFO configs + assignments, saved per-preset)
@@ -172,6 +177,11 @@ public:
 
     // Tape engine master on/off (synced from JS, captured into presets)
     std::atomic<float> tapeEnabled { 1.f }; // 1 = on, 0 = bypass
+
+    // Tape LOOP transport on/off — independent of tapeEnabled. Toggling tape
+    // FX off no longer freezes the loop transport; users wanted these split
+    // so they can bypass tape effects while the loop keeps playing/recording.
+    std::atomic<float> tapeLoopEnabled { 1.f }; // 1 = on, 0 = bypass loop transport
 
     // EQ panel open/closed UI state (editor-side only, persists via PluginSettings.json)
     std::atomic<float> eqPanelOpen { 0.f };  // editor UI state, persists via PluginSettings.json

@@ -191,6 +191,7 @@ void TerrainInstrumentAudioProcessor::loadPreset(int index)
     // Restore grain engine on/off, tape on/off, and drift link states
     grainEngineEnabled.store(p.grainEngineEnabled);
     tapeEnabled.store(p.tapeEnabled);
+    tapeLoopEnabled.store(p.tapeLoopEnabled);
     setParam(ParameterIDs::TAPE_MACHINE, p.tapeMachine);
     wanderLinked.store(p.wanderLinked);
     tapeLinkEnabled.store(p.tapeLinkEnabled);
@@ -269,6 +270,7 @@ PresetData TerrainInstrumentAudioProcessor::captureCurrentParams() const
     p.grainSyncEnabled = grainSyncEnabled.load();
     p.grainEngineEnabled = grainEngineEnabled.load();
     p.tapeEnabled        = tapeEnabled.load();
+    p.tapeLoopEnabled    = tapeLoopEnabled.load();
     p.tapeMachine        = apvts.getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load();
     p.wanderLinked        = wanderLinked.load();
     p.tapeLinkEnabled    = tapeLinkEnabled.load();
@@ -1059,6 +1061,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     const bool grainOn = grainEngineEnabled.load() > 0.5f;
     const bool tapeOn = tapeEnabled.load() > 0.5f;
+    // Tape loop transport is independent of tape FX (gated separately so
+    // disabling the FX section keeps the loop running and vice versa).
+    const bool tapeLoopOn = tapeLoopEnabled.load() > 0.5f;
     const int tapeMachineIdx = [&]() {
         if (auto* cp = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter(ParameterIDs::TAPE_MACHINE)))
             return cp->getIndex();
@@ -1357,11 +1362,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         // Tape loop (records fully processed signal on first pass,
         // preTapeL/R on overdub to avoid tape effect compounding).
-        // Gated on tapeOn so the loop transport freezes when the section
-        // is toggled off; resumes from the same position on re-enable.
+        // Gated on tapeLoopOn (its own independent flag) — tape FX bypass
+        // no longer freezes the loop transport. Resumes from same position
+        // on re-enable since tapeLoop preserves its internal write head.
         const float preLoopL = wetL;
         const float preLoopR = wetR;
-        if (tapeOn)
+        if (tapeLoopOn)
             tapeLoop.processStereo(wetL, wetR, wantRecord, wantPlay,
                                    loopLengthParam, loopFeedback, loopDegrade,
                                    loopSpeedParam, bpm, isFreeform,
@@ -1511,6 +1517,7 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     state.setProperty("grainSyncEnabled",  grainSyncEnabled.load(),  nullptr);
     state.setProperty("grainEngineEnabled", grainEngineEnabled.load(), nullptr);
     state.setProperty("tapeEnabled",        tapeEnabled.load(),        nullptr);
+    state.setProperty("tapeLoopEnabled",    tapeLoopEnabled.load(),    nullptr);
     state.setProperty("wanderLinked",        wanderLinked.load(),        nullptr);
     state.setProperty("wireSpaceNoise",     wireSpaceNoiseEnabled.load(), nullptr);
     state.setProperty("wireTubeSat",        wireTubeSatEnabled.load(),    nullptr);
@@ -1548,6 +1555,7 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             // Restore grain engine on/off, tape on/off, and drift link states
             grainEngineEnabled.store(static_cast<float>(newState.getProperty("grainEngineEnabled", 1.f)));
             tapeEnabled.store(static_cast<float>(newState.getProperty("tapeEnabled", 1.f)));
+            tapeLoopEnabled.store(static_cast<float>(newState.getProperty("tapeLoopEnabled", 1.f)));
             wanderLinked.store(static_cast<float>(newState.getProperty("wanderLinked", 1.f)));
             wireSpaceNoiseEnabled.store(static_cast<float>(newState.getProperty("wireSpaceNoise", 0.f)));
             wireTubeSatEnabled.store(static_cast<float>(newState.getProperty("wireTubeSat", 0.f)));
@@ -1632,6 +1640,7 @@ void TerrainInstrumentAudioProcessor::saveUserPresetsToFile()
         node.setProperty("grainSyncEnabled",  p.grainSyncEnabled,  nullptr);
         node.setProperty("grainEngineEnabled", p.grainEngineEnabled, nullptr);
         node.setProperty("tapeEnabled",        p.tapeEnabled,        nullptr);
+        node.setProperty("tapeLoopEnabled",    p.tapeLoopEnabled,    nullptr);
         node.setProperty("tapeMachine",        p.tapeMachine,        nullptr);
         node.setProperty("wanderLinked",        p.wanderLinked,        nullptr);
         node.setProperty("tapeLinkEnabled",    p.tapeLinkEnabled,    nullptr);
@@ -1740,6 +1749,7 @@ void TerrainInstrumentAudioProcessor::loadUserPresetsFromFile()
         p.grainSyncEnabled  = static_cast<float>(child.getProperty("grainSyncEnabled",  0.f));
         p.grainEngineEnabled = static_cast<float>(child.getProperty("grainEngineEnabled", 1.f));
         p.tapeEnabled        = static_cast<float>(child.getProperty("tapeEnabled",        1.f));
+        p.tapeLoopEnabled    = static_cast<float>(child.getProperty("tapeLoopEnabled",    1.f));
         p.tapeMachine        = static_cast<float>(child.getProperty("tapeMachine",        0.f));
         p.wanderLinked        = static_cast<float>(child.getProperty("wanderLinked",        1.f));
         p.tapeLinkEnabled    = static_cast<float>(child.getProperty("tapeLinkEnabled",    0.f));

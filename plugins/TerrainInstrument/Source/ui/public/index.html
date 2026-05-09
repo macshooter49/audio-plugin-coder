@@ -3320,10 +3320,13 @@ body {
     </div>
     <div class="control-section" id="tape-section">
       <div class="section-header" id="tape-header">
-        <button class="section-toggle-btn" id="tape-toggle" title="Toggle Tape">
+        <button class="section-toggle-btn" id="tape-toggle" title="Toggle Tape Effects">
           <canvas id="tape-section-icon" width="28" height="28"></canvas>
         </button>
-        <span class="section-label">Tape</span>
+        <button class="section-toggle-btn" id="loop-toggle" title="Toggle Tape Loop" style="display:none">
+          <canvas id="loop-section-icon" width="28" height="28"></canvas>
+        </button>
+        <span class="section-label" id="tape-section-label">Effects</span>
         <div class="tape-subtabs" id="tape-subtabs">
           <button class="tape-subtab active" data-tab="fx">FX</button>
           <button class="tape-subtab" data-tab="loop">LOOP</button>
@@ -4311,7 +4314,7 @@ const state = {
   renamingIdx: -1,
   savePromptOpen: false,
   focusedSection: null,
-  sectionEnabled: { grain: true, tape: true },
+  sectionEnabled: { grain: true, tape: true, tapeLoop: true },
   hoveredKnob: null,
   tooltipTimer: null,
   tooltipLocked: false,
@@ -4494,6 +4497,7 @@ window.updateFeedState = function(active) {
 let setGrainEngineEnabledFn, getGrainEngineEnabledFn;
 let setGrainSyncFn, getGrainSyncFn;
 let setTapeEnabledFn, getTapeEnabledFn;
+let setTapeLoopEnabledFn, getTapeLoopEnabledFn;
 let setEqPanelOpenFn, getEqPanelOpenFn;
 let setTapeMachineFn, getTapeMachineFn;
 let setTapeLoopRecordFn, getTapeLoopRecordFn;
@@ -4572,6 +4576,8 @@ async function initJuceBindings() {
     getGrainSyncFn = window.Juce.getNativeFunction('getGrainSync');
     setTapeEnabledFn = window.Juce.getNativeFunction('setTapeEnabled');
     getTapeEnabledFn = window.Juce.getNativeFunction('getTapeEnabled');
+    setTapeLoopEnabledFn = window.Juce.getNativeFunction('setTapeLoopEnabled');
+    getTapeLoopEnabledFn = window.Juce.getNativeFunction('getTapeLoopEnabled');
     setEqPanelOpenFn = window.Juce.getNativeFunction('setEqPanelOpen');
     getEqPanelOpenFn = window.Juce.getNativeFunction('getEqPanelOpen');
     if (getEqPanelOpenFn) {
@@ -4626,7 +4632,13 @@ async function initJuceBindings() {
     const tapeOn = await getTapeEnabledFn();
     state.sectionEnabled.tape = tapeOn > 0.5;
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
-    document.getElementById('tape-section').classList.toggle('section-disabled', !state.sectionEnabled.tape);
+
+    if (getTapeLoopEnabledFn) {
+      const tapeLoopOn = await getTapeLoopEnabledFn();
+      state.sectionEnabled.tapeLoop = tapeLoopOn > 0.5;
+      document.getElementById('loop-toggle').classList.toggle('off', !state.sectionEnabled.tapeLoop);
+    }
+    if (typeof updateTapeSectionDimmed === 'function') updateTapeSectionDimmed();
 
     const machineIdx = await getTapeMachineFn();
     state.tapeMachine = parseInt(machineIdx) || 0;
@@ -6063,9 +6075,14 @@ const SCOPE_TIPS = {
     tip: 'Tip: Turn off to hear your raw input through just the tape and FX chain.'
   },
   'tape-toggle': {
-    title: 'TAPE ENGINE',
-    desc: 'Enables or bypasses the tape processing section (Wow/Flutter, Saturation, Hiss). When off, the signal skips tape coloring entirely.',
-    tip: 'Tip: Bypass tape to use Terrain as a pure granular processor with Space reverb and EQ.'
+    title: 'EFFECTS',
+    desc: 'Enables or bypasses the tape effects chain (Tape Processor, Space Reverb, Delay, Chorus). When off, signal skips coloring entirely. The tape loop transport is independent — it keeps running.',
+    tip: 'Tip: Bypass effects to use Terrain as a pure granular processor with the loop still playing.'
+  },
+  'loop-toggle': {
+    title: 'TAPE LOOP',
+    desc: 'Enables or bypasses the tape loop transport (record / playback / overdub). When off, the loop transport freezes and resumes from the same position on re-enable. Tape effects are independent.',
+    tip: 'Tip: Toggle the loop off to stop playback without losing recorded content.'
   },
   'settings-btn': {
     title: 'SETTINGS',
@@ -6101,7 +6118,7 @@ function hideScopeTooltip() {
 // Wire up scope + tape transport hover events for tooltips
 ['randomize-btn', 'xy-play', 'xy-mode', 'xy-speed-wrap',
  'btn-record', 'btn-play', 'btn-stop', 'btn-feed', 'btn-undo',
- 'grain-toggle', 'tape-toggle', 'settings-btn'].forEach(id => {
+ 'grain-toggle', 'tape-toggle', 'loop-toggle', 'settings-btn'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
   let timer;
@@ -6347,10 +6364,15 @@ async function syncDeepStateFromCpp() {
     const tapeOn = (await getTapeEnabledFn()) > 0.5;
     state.sectionEnabled.tape = tapeOn;
     const tT = document.getElementById('tape-toggle');
-    const tS = document.getElementById('tape-section');
     if (tT) tT.classList.toggle('off', !tapeOn);
-    if (tS) tS.classList.toggle('section-disabled', !tapeOn);
   }
+  if (getTapeLoopEnabledFn) {
+    const tapeLoopOn = (await getTapeLoopEnabledFn()) > 0.5;
+    state.sectionEnabled.tapeLoop = tapeLoopOn;
+    const lT = document.getElementById('loop-toggle');
+    if (lT) lT.classList.toggle('off', !tapeLoopOn);
+  }
+  if (typeof updateTapeSectionDimmed === 'function') updateTapeSectionDimmed();
   if (getTapeMachineFn) {
     state.tapeMachine = parseInt(await getTapeMachineFn()) || 0;
     if (typeof updateMachineSwitcher === 'function') updateMachineSwitcher();
@@ -6833,15 +6855,31 @@ document.getElementById('grain-header').addEventListener('click', (e) => {
   }
 });
 
+// Dim the tape section based on the active subtab's gate. FX subtab follows
+// tape (effects) flag, LOOP subtab follows tapeLoop flag — so the section
+// dims only for the thing the user is currently looking at.
+function updateTapeSectionDimmed() {
+  const isLoopTab = state.tapeSubTab === 'loop';
+  const dimmed = isLoopTab ? !state.sectionEnabled.tapeLoop : !state.sectionEnabled.tape;
+  const sect = document.getElementById('tape-section');
+  if (sect) sect.classList.toggle('section-disabled', dimmed);
+}
+
 document.getElementById('tape-header').addEventListener('click', (e) => {
   if (e.target.closest('.tape-subtab')) return;
   if (e.target.closest('.fx-nav-arrow') || e.target.closest('.fx-page-label') || e.target.closest('.fx-page-nav')) return;
-  if (e.target.closest('.section-toggle-btn')) {
+  const toggleBtn = e.target.closest('.section-toggle-btn');
+  if (!toggleBtn) return;
+  if (toggleBtn.id === 'tape-toggle') {
     state.sectionEnabled.tape = !state.sectionEnabled.tape;
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
-    document.getElementById('tape-section').classList.toggle('section-disabled', !state.sectionEnabled.tape);
     if (juceMode && setTapeEnabledFn) setTapeEnabledFn(state.sectionEnabled.tape ? 1 : 0);
+  } else if (toggleBtn.id === 'loop-toggle') {
+    state.sectionEnabled.tapeLoop = !state.sectionEnabled.tapeLoop;
+    document.getElementById('loop-toggle').classList.toggle('off', !state.sectionEnabled.tapeLoop);
+    if (juceMode && setTapeLoopEnabledFn) setTapeLoopEnabledFn(state.sectionEnabled.tapeLoop ? 1 : 0);
   }
+  updateTapeSectionDimmed();
 });
 
 // ---- EQ Panel Toggle ----
@@ -8917,6 +8955,16 @@ document.getElementById('tape-subtabs').addEventListener('click', (e) => {
   // Show/hide FX page nav based on active tab
   var fpn = document.getElementById('fxPageNav');
   if (fpn) fpn.style.display = tab === 'fx' ? 'flex' : 'none';
+  // Swap the section-header toggle (tape FX vs loop) and label text. The
+  // header reads "Effects" while on FX subtab and "Tape" while on LOOP.
+  const isFx = tab === 'fx';
+  const tT = document.getElementById('tape-toggle');
+  const lT = document.getElementById('loop-toggle');
+  if (tT) tT.style.display = isFx ? '' : 'none';
+  if (lT) lT.style.display = isFx ? 'none' : '';
+  const lbl = document.getElementById('tape-section-label');
+  if (lbl) lbl.textContent = isFx ? 'Effects' : 'Tape';
+  if (typeof updateTapeSectionDimmed === 'function') updateTapeSectionDimmed();
   // Re-size FX canvases after tab switch
   if (tab === 'fx' && window._fxSizeFn) setTimeout(window._fxSizeFn, 50);
 });
@@ -9425,15 +9473,19 @@ function updateMeters(time) {
 function updateSectionIcons() {
   const grainIcon = document.getElementById('grain-section-icon');
   const tapeIcon = document.getElementById('tape-section-icon');
+  const loopIcon = document.getElementById('loop-section-icon');
   setupCanvas(grainIcon, 20, 20);
   setupCanvas(tapeIcon, 20, 20);
+  if (loopIcon) setupCanvas(loopIcon, 20, 20);
   const _isDark = currentTheme && currentTheme.name === 'dark';
   const onColor = _isDark ? 'rgba(255,255,255,0.92)' : '#8B5CF6';
   const offColor = _isDark ? 'rgba(255,255,255,0.32)' : '#B0A4C0';
   const grainColor = state.sectionEnabled.grain ? onColor : offColor;
   const tapeColor = state.sectionEnabled.tape ? onColor : offColor;
+  const loopColor = state.sectionEnabled.tapeLoop ? onColor : offColor;
   drawIcon(grainIcon, 'grainWave', grainColor);
   drawIcon(tapeIcon, 'tapeReel', tapeColor);
+  if (loopIcon) drawIcon(loopIcon, 'tapeReel', loopColor);
 }
 
 // ---- Brand Logo ----
@@ -9891,7 +9943,7 @@ window.rollScoped = function rollScoped() {
   if (sec.tape.on && sec.tape.intensity !== 'subtle') {
     state.sectionEnabled.tape = coin(sec.tape.intensity === 'wild' ? 0.50 : 0.70);
     document.getElementById('tape-toggle').classList.toggle('off', !state.sectionEnabled.tape);
-    document.getElementById('tape-section').classList.toggle('section-disabled', !state.sectionEnabled.tape);
+    if (typeof updateTapeSectionDimmed === 'function') updateTapeSectionDimmed();
     if (juceMode && setTapeEnabledFn) setTapeEnabledFn(state.sectionEnabled.tape ? 1 : 0);
 
     // speedFreeform belongs to tape conceptually

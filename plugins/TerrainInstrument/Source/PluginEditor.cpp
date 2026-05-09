@@ -217,6 +217,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.tapeEnabled.load());
             })
+            .withNativeFunction("setTapeLoopEnabled", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1)
+                    audioProcessor.tapeLoopEnabled.store(static_cast<float>(args[0]));
+                complete({});
+            })
+            .withNativeFunction("getTapeLoopEnabled", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.tapeLoopEnabled.load());
+            })
             .withNativeFunction("setEqPanelOpen", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
