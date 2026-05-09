@@ -484,6 +484,21 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete ({});
             })
+            .withNativeFunction("setRootNote", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    const int midi = juce::jlimit (0, 127, (int) args[0]);
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::ROOT_NOTE))
+                    {
+                        // AudioParameterInt expects normalised [0..1]
+                        p->setValueNotifyingHost (midi / 127.0f);
+                    }
+                    audioProcessor.rootNoteMidi.store (midi);
+                }
+                complete ({});
+            })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1192,6 +1207,390 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 </script>
 )";
     html = html.replace ("</body>", dropBridge + "</body>");
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Phase D Task 12 — Hero canvas overlay (waveform display + chrome)
+    //
+    // Adds, on top of the existing terrain-canvas mesh:
+    //   - waveform-canvas: edge-to-edge filled-white waveform (Serum style),
+    //     mirror-symmetric around centerline. Driven by peaks JSON pushed
+    //     from C++ on sample load.
+    //   - empty-state label + dimmed mesh until first sample loads
+    //     (continuity moment with FX side per user's brainstorm)
+    //   - drag-hover purple border + dim
+    //   - mode toggle (PITCH ↔ SLICE; SLICE disabled in v0a with tooltip)
+    //   - root-note picker (lower-left, editable in PITCH mode)
+    //
+    // Wired to the JS event hooks already pushed from C++:
+    //   window.onDragHover(active)
+    //   window.onLoadingStarted(filename)
+    //   window.onLoadingProgress(0..1)
+    //   window.onSampleLoaded({ filename, sampleRate, lengthSamples,
+    //                            numChannels, peaksMin[], peaksMax[] })
+    //   window.onLoadError(msg)
+    // ────────────────────────────────────────────────────────────────────────
+    const juce::String heroOverlay = R"(
+<style>
+  /* ─── Waveform canvas (overlay on top of terrain mesh) ─── */
+  #waveform-canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 2;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 600ms ease-out;
+  }
+  #hero.has-sample #waveform-canvas { opacity: 1; }
+
+  /* ─── Terrain mesh: dim to 35% empty state, fully fade on sample load ─── */
+  #hero #terrain-canvas {
+    transition: opacity 600ms ease-out;
+  }
+  #hero.empty-state #terrain-canvas { opacity: 0.35; }
+  #hero.has-sample #terrain-canvas { opacity: 0; pointer-events: none; }
+
+  /* ─── Empty-state label, centered, fades out on first load ─── */
+  #ti-empty-label {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    color: rgba(245, 243, 255, 0.55);
+    font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.25em; text-transform: uppercase;
+    text-align: center;
+    white-space: pre-line;
+    pointer-events: none;
+    transition: opacity 600ms ease-out;
+  }
+  #hero.has-sample #ti-empty-label { opacity: 0; }
+  #hero.has-sample-missing #ti-empty-label {
+    color: #ff6b6b;
+    opacity: 1 !important;
+  }
+
+  /* ─── Drag-hover purple frame ─── */
+  #ti-drop-overlay {
+    position: absolute; inset: 6px;
+    z-index: 4;
+    border: 2px dashed rgba(167, 139, 250, 0.65);
+    border-radius: 6px;
+    background: rgba(139, 92, 246, 0.08);
+    box-shadow: inset 0 0 28px rgba(139, 92, 246, 0.25);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+  #hero.drag-hover #ti-drop-overlay { opacity: 1; }
+
+  /* ─── Mode toggle (PITCH ↔ SLICE), top-center ─── */
+  #ti-mode-toggle {
+    position: absolute; top: 12px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex; gap: 4px;
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(245, 243, 255, 0.28);
+    padding: 4px; border-radius: 6px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .ti-mode-pill {
+    padding: 4px 12px;
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.18em;
+    border-radius: 3px;
+    color: rgba(245, 243, 255, 0.45);
+    cursor: pointer;
+    transition: all 150ms ease;
+    user-select: none;
+  }
+  .ti-mode-pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+  }
+  .ti-mode-pill.disabled {
+    opacity: 0.35; cursor: not-allowed;
+  }
+
+  /* ─── Root-note picker, lower-left ─── */
+  #ti-root-picker {
+    position: absolute; bottom: 12px; left: 12px;
+    z-index: 5;
+    display: inline-flex; gap: 7px; align-items: center;
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(245, 243, 255, 0.28);
+    padding: 5px 11px; border-radius: 6px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 150ms ease;
+  }
+  #ti-root-picker:hover { border-color: rgba(167, 139, 250, 0.65); }
+  #ti-root-picker .ti-root-label {
+    font: 600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.15em;
+    color: rgba(245, 243, 255, 0.45);
+  }
+  #ti-root-picker .ti-root-value {
+    font: 700 11px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.05em;
+    color: #A78BFA;
+    min-width: 26px;
+    text-align: center;
+  }
+</style>
+
+<script>
+(function () {
+  // ── DOM injection inside #hero ────────────────────────────────────────────
+  function injectHeroOverlays () {
+    var hero = document.getElementById('hero');
+    if (!hero) {
+      // Hero not present yet — try again next frame.
+      requestAnimationFrame(injectHeroOverlays);
+      return;
+    }
+    if (document.getElementById('waveform-canvas')) return; // already injected
+
+    // Waveform canvas (placed before all overlays so other UI sits on top)
+    var wave = document.createElement('canvas');
+    wave.id = 'waveform-canvas';
+    hero.insertBefore(wave, hero.firstChild ? hero.firstChild.nextSibling : null);
+
+    // Drag-hover overlay
+    var drop = document.createElement('div');
+    drop.id = 'ti-drop-overlay';
+    hero.appendChild(drop);
+
+    // Empty state label
+    var empty = document.createElement('div');
+    empty.id = 'ti-empty-label';
+    empty.textContent = 'DRAG SAMPLE OR CLICK TO LOAD';
+    hero.appendChild(empty);
+
+    // Mode toggle (PITCH active, SLICE disabled in v0a)
+    var modeWrap = document.createElement('div');
+    modeWrap.id = 'ti-mode-toggle';
+    modeWrap.innerHTML =
+      '<div class="ti-mode-pill active" data-mode="PITCH">PITCH</div>' +
+      '<div class="ti-mode-pill disabled" data-mode="SLICE" title="Slicer coming in v0b">SLICE</div>';
+    hero.appendChild(modeWrap);
+
+    // Root note picker
+    var rootWrap = document.createElement('div');
+    rootWrap.id = 'ti-root-picker';
+    rootWrap.title = 'Root note — click to cycle, shift-click to go down';
+    rootWrap.innerHTML =
+      '<span class="ti-root-label">ROOT</span>' +
+      '<span class="ti-root-value" id="ti-root-value">C4</span>';
+    hero.appendChild(rootWrap);
+
+    // Initial state: empty.
+    hero.classList.add('empty-state');
+
+    wireInteractions();
+    drawWaveform(); // draws nothing initially (no peaks)
+  }
+
+  // ── Note name helpers ─────────────────────────────────────────────────────
+  var NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  function midiToName (m) {
+    if (m == null || isNaN(m)) return '—';
+    m = Math.max(0, Math.min(127, Math.round(m)));
+    var oct = Math.floor(m / 12) - 1;
+    return NOTE_NAMES[m % 12] + oct;
+  }
+
+  // ── Native fn helper (capital J) ──────────────────────────────────────────
+  function getNativeFn (name) {
+    var bridge = window.Juce || window.juce;
+    if (bridge && typeof bridge.getNativeFunction === 'function') {
+      try { return bridge.getNativeFunction(name); } catch (_) {}
+    }
+    return null;
+  }
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  var state = {
+    peaksMin: null,
+    peaksMax: null,
+    progress: 0,    // 0..1 during loading; 1 when fully loaded
+    loading: false,
+    rootNote: 60
+  };
+
+  // ── Waveform drawing ──────────────────────────────────────────────────────
+  function drawWaveform () {
+    var c = document.getElementById('waveform-canvas');
+    if (!c) return;
+    var dpr = window.devicePixelRatio || 1;
+    var rect = c.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    c.width  = Math.round(rect.width * dpr);
+    c.height = Math.round(rect.height * dpr);
+    var ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    if (!state.peaksMin || !state.peaksMax) return;
+
+    var w = rect.width, h = rect.height;
+    var cy = h / 2;
+    var n = state.peaksMin.length;
+    if (n === 0) return;
+    var visibleN = Math.max(1, Math.floor(n * Math.max(0.001, Math.min(1, state.progress))));
+
+    // Filled body (mirrored around centerline)
+    ctx.fillStyle = 'rgba(245, 243, 255, 0.10)';
+    ctx.beginPath();
+    ctx.moveTo(0, cy);
+    var i;
+    for (i = 0; i < visibleN; i++) {
+      var x = (i / Math.max(1, n - 1)) * w;
+      var yMax = cy - state.peaksMax[i] * cy * 0.95;
+      ctx.lineTo(x, yMax);
+    }
+    for (i = visibleN - 1; i >= 0; i--) {
+      var x2 = (i / Math.max(1, n - 1)) * w;
+      var yMin = cy - state.peaksMin[i] * cy * 0.95;
+      ctx.lineTo(x2, yMin);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Top edge stroke
+    ctx.strokeStyle = 'rgba(245, 243, 255, 0.92)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (i = 0; i < visibleN; i++) {
+      var xx = (i / Math.max(1, n - 1)) * w;
+      var ym = cy - state.peaksMax[i] * cy * 0.95;
+      if (i === 0) ctx.moveTo(xx, ym); else ctx.lineTo(xx, ym);
+    }
+    ctx.stroke();
+
+    // Bottom edge stroke
+    ctx.strokeStyle = 'rgba(245, 243, 255, 0.85)';
+    ctx.beginPath();
+    for (i = 0; i < visibleN; i++) {
+      var xx2 = (i / Math.max(1, n - 1)) * w;
+      var ym2 = cy - state.peaksMin[i] * cy * 0.95;
+      if (i === 0) ctx.moveTo(xx2, ym2); else ctx.lineTo(xx2, ym2);
+    }
+    ctx.stroke();
+  }
+
+  // ── Interactions ──────────────────────────────────────────────────────────
+  function wireInteractions () {
+    // Mode toggle: SLICE disabled (toast on click)
+    document.querySelectorAll('#ti-mode-toggle .ti-mode-pill').forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        if (pill.dataset.mode === 'SLICE') {
+          if (typeof showStatus === 'function') showStatus('Slicer coming in v0b', 3000);
+        }
+        // PITCH stays active in v0a; nothing to toggle.
+      });
+    });
+
+    // Root picker: click cycles +1, shift-click cycles -1.
+    var picker = document.getElementById('ti-root-picker');
+    if (picker) {
+      picker.addEventListener('click', function (ev) {
+        var dir = ev.shiftKey ? -1 : 1;
+        state.rootNote = Math.max(0, Math.min(127, state.rootNote + dir));
+        updateRootDisplay();
+        // Push to APVTS via native function so the audio thread sees the change
+        var fn = getNativeFn('setRootNote');
+        if (fn) { try { fn(state.rootNote); } catch (_) {} }
+      });
+    }
+
+    // Repaint on window resize.
+    window.addEventListener('resize', drawWaveform);
+  }
+
+  function updateRootDisplay () {
+    var el = document.getElementById('ti-root-value');
+    if (el) el.textContent = midiToName(state.rootNote);
+  }
+
+  // ── JUCE event hooks (called from C++ via webView->evaluateJavascript) ────
+  window.onDragHover = function (active) {
+    var hero = document.getElementById('hero');
+    if (!hero) return;
+    if (active) hero.classList.add('drag-hover');
+    else hero.classList.remove('drag-hover');
+  };
+
+  window.onLoadingStarted = function (filename) {
+    state.loading = true;
+    state.progress = 0;
+    var hero = document.getElementById('hero');
+    if (hero) {
+      hero.classList.remove('empty-state');
+      hero.classList.remove('has-sample-missing');
+      hero.classList.add('has-sample');
+    }
+    drawWaveform();
+  };
+
+  window.onLoadingProgress = function (p) {
+    state.progress = Math.max(0, Math.min(1, p));
+    drawWaveform();
+  };
+
+  window.onSampleLoaded = function (info) {
+    if (!info) return;
+    state.peaksMin = info.peaksMin || null;
+    state.peaksMax = info.peaksMax || null;
+    state.progress = 1;
+    state.loading = false;
+    var hero = document.getElementById('hero');
+    if (hero) {
+      hero.classList.remove('empty-state');
+      hero.classList.remove('has-sample-missing');
+      hero.classList.add('has-sample');
+    }
+    drawWaveform();
+  };
+
+  window.onLoadError = function (msg) {
+    state.loading = false;
+    if (typeof showStatus === 'function') showStatus(msg || 'Load error', 5000);
+    // If we never had a sample, return to empty state.
+    if (!state.peaksMin) {
+      var hero = document.getElementById('hero');
+      if (hero) {
+        hero.classList.remove('has-sample');
+        hero.classList.add('empty-state');
+      }
+    }
+  };
+
+  // ── Native function hook: setRootNote → APVTS ─────────────────────────────
+  // (Registered on the C++ side as a no-op until later — for now JS keeps a
+  // local rootNote that the audio thread reads via the existing rootNoteMidi
+  // atomic. If the native function exists, it's used; if not, the local
+  // value still drives the JS UI.)
+
+  // Initial render kick after DOM ready (handles mid-page-load injection too).
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectHeroOverlays);
+  } else {
+    injectHeroOverlays();
+  }
+
+  // Helper accessible to other scripts (status pill from drag-drop bridge).
+  window.tiSetRootNote = function (m) {
+    state.rootNote = Math.max(0, Math.min(127, m));
+    updateRootDisplay();
+  };
+})();
+</script>
+)";
+    html = html.replace ("</body>", heroOverlay + "</body>");
 
     auto utf8 = html.toUTF8();
     std::vector<std::byte> data(static_cast<size_t>(utf8.sizeInBytes()));
