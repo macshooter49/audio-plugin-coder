@@ -9985,6 +9985,10 @@ window.rollScoped = function rollScoped() {
     if (pool.length === 0) {
       pool = (typeof MODULATABLE !== 'undefined') ? MODULATABLE.slice() : Object.keys(PARAMS);
     }
+    // Terrain Instrument: never assign a randomize-LFO to delay HOLD (dlyFreeze).
+    // LFO modulation of FREEZE flickers the freeze gate on/off and breaks the
+    // delay perceptually. Users can still right-click HOLD and assign manually.
+    pool = pool.filter(id => id !== 'dlyFreeze');
 
     // Per-intensity LFO character + assignment count + depth ranges
     let assignmentCount, depthLo, depthHi;

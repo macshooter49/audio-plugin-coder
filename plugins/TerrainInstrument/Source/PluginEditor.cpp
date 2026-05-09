@@ -1313,7 +1313,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     opacity: 0.35; cursor: not-allowed;
   }
 
-  /* ─── Root-note picker, lower-left ─── */
+  /* ─── Root-note picker, lower-left — click-hold-vertical-drag ─── */
   #ti-root-picker {
     position: absolute; bottom: 12px; left: 12px;
     z-index: 5;
@@ -1323,11 +1323,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     padding: 5px 11px; border-radius: 6px;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    cursor: pointer;
+    cursor: ns-resize;
     user-select: none;
-    transition: border-color 150ms ease;
+    transition: border-color 150ms ease, background-color 150ms ease;
   }
   #ti-root-picker:hover { border-color: rgba(167, 139, 250, 0.65); }
+  #ti-root-picker.dragging {
+    border-color: rgba(167, 139, 250, 0.95);
+    background: rgba(139, 92, 246, 0.18);
+  }
   #ti-root-picker .ti-root-label {
     font: 600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
     letter-spacing: 0.15em;
@@ -1339,6 +1343,23 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     color: #A78BFA;
     min-width: 26px;
     text-align: center;
+  }
+
+  /* ─── XY readout — relocate to bottom-right (mirror of root picker) ─── */
+  #hero .xy-readout {
+    top: auto !important;
+    bottom: 12px !important;
+    left: auto !important;
+    right: 12px !important;
+    background: rgba(0, 0, 0, 0.42) !important;
+    border: 1px solid rgba(245, 243, 255, 0.28) !important;
+    padding: 5px 11px !important;
+    border-radius: 6px !important;
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+    font: 600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif !important;
+    letter-spacing: 0.12em !important;
+    color: rgba(245, 243, 255, 0.55) !important;
   }
 </style>
 
@@ -1494,17 +1515,51 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
     });
 
-    // Root picker: click cycles +1, shift-click cycles -1.
+    // Root picker: click-hold-vertical-drag (knob style). 8 px = 1 semitone.
+    // Shift-drag = fine (24 px = 1 semitone). Up = pitch up, down = pitch down.
     var picker = document.getElementById('ti-root-picker');
     if (picker) {
-      picker.addEventListener('click', function (ev) {
-        var dir = ev.shiftKey ? -1 : 1;
-        state.rootNote = Math.max(0, Math.min(127, state.rootNote + dir));
+      var dragState = null;
+
+      function onMove (ev) {
+        if (!dragState) return;
+        var dy = dragState.startY - ev.clientY;     // up is positive
+        var pxPerSemi = ev.shiftKey ? 24 : 8;
+        var deltaSemi = Math.round(dy / pxPerSemi);
+        var newRoot = Math.max(0, Math.min(127, dragState.startRoot + deltaSemi));
+        if (newRoot !== state.rootNote) {
+          state.rootNote = newRoot;
+          updateRootDisplay();
+          var fn = getNativeFn('setRootNote');
+          if (fn) { try { fn(state.rootNote); } catch (_) {} }
+        }
+        ev.preventDefault();
+      }
+      function onUp (ev) {
+        if (!dragState) return;
+        picker.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMove, true);
+        document.removeEventListener('mouseup', onUp, true);
+        dragState = null;
+        ev.preventDefault();
+      }
+      picker.addEventListener('mousedown', function (ev) {
+        if (ev.button !== 0) return;
+        dragState = { startY: ev.clientY, startRoot: state.rootNote };
+        picker.classList.add('dragging');
+        document.addEventListener('mousemove', onMove, true);
+        document.addEventListener('mouseup', onUp, true);
+        ev.preventDefault();
+      });
+      // Mousewheel as a quick alternative (1 click = 1 semitone)
+      picker.addEventListener('wheel', function (ev) {
+        var step = (ev.deltaY < 0) ? 1 : -1;
+        state.rootNote = Math.max(0, Math.min(127, state.rootNote + step));
         updateRootDisplay();
-        // Push to APVTS via native function so the audio thread sees the change
         var fn = getNativeFn('setRootNote');
         if (fn) { try { fn(state.rootNote); } catch (_) {} }
-      });
+        ev.preventDefault();
+      }, { passive: false });
     }
 
     // Repaint on window resize.

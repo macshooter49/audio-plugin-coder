@@ -632,21 +632,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::DLY_CHARACTER, 1 },
         "Delay Character",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
-        0.5f,
+        0.0f,                                   // Instrument default 0 (no Moog drift on first load)
         juce::AudioParameterFloatAttributes()));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParameterIDs::DLY_MOD, 1 },
         "Delay Mod Depth",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
-        0.25f,
+        0.0f,                                   // Instrument default 0
         juce::AudioParameterFloatAttributes()));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParameterIDs::DLY_MOD_RATE, 1 },
         "Delay Mod Rate",
         juce::NormalisableRange<float>(0.05f, 8.0f, 0.001f, 0.3f),
-        0.5f,
+        0.05f,                                  // Instrument default at the bottom of the range
         juce::AudioParameterFloatAttributes().withLabel("Hz")));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
