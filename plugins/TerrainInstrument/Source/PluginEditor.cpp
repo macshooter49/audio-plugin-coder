@@ -537,6 +537,220 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete (audioProcessor.sampleLoopMode.load());
             })
+
+            // ────────────────────────────────────────────────────────────
+            // Slicer native fns (v0b)
+            // ────────────────────────────────────────────────────────────
+            .withNativeFunction("setSliceMode", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    const int mode = juce::jlimit (0, 1, (int) args[0]);  // 0=PITCH, 1=SLICE
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SLICE_MODE))
+                        p->setValueNotifyingHost (static_cast<float> (mode));
+                }
+                complete ({});
+            })
+            .withNativeFunction("getSliceMode", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete ((int) *audioProcessor.getAPVTS().getRawParameterValue (ParameterIDs::SLICE_MODE));
+            })
+            .withNativeFunction("getSlicesJson", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.getSlicesJson());
+            })
+            .withNativeFunction("setSlicesJson", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.setSlicesFromJson (args[0].toString());
+                complete ({});
+            })
+            .withNativeFunction("clearSlices", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.replaceSlices ({});
+                complete ({});
+            })
+            .withNativeFunction("autoDetectSlices", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sensitivity 0..1 (default 0.5)
+                const float sensitivity = args.size() > 0
+                                            ? juce::jlimit (0.0f, 1.0f, (float) (double) args[0])
+                                            : 0.5f;
+                auto buf = audioProcessor.getSampleBuffer().load();
+                if (! buf || buf->getNumSamples() < 64)
+                {
+                    complete (juce::var ("no-sample"));
+                    return;
+                }
+                const double sr = audioProcessor.getSampleBuffer().getSampleRate();
+                auto detected = tw::detectTransients (*buf, sr > 0.0 ? sr : 48000.0, sensitivity);
+                audioProcessor.replaceSlices (std::move (detected));
+                complete (audioProcessor.getSlicesJson());
+            })
+            .withNativeFunction("gridSliceSlices", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = number of slices (positive int)
+                const int n = args.size() > 0 ? juce::jlimit (1, 128, (int) args[0]) : 16;
+                auto buf = audioProcessor.getSampleBuffer().load();
+                if (! buf || buf->getNumSamples() < 64)
+                {
+                    complete (juce::var ("no-sample"));
+                    return;
+                }
+                auto grid = tw::makeGridSlices (*buf, n, true);
+                audioProcessor.replaceSlices (std::move (grid));
+                complete (audioProcessor.getSlicesJson());
+            })
+            .withNativeFunction("setSliceSubMode", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    const int sub = juce::jlimit (0, 1, (int) args[0]);  // 0=CHOP, 1=CHROMATIC
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SLICE_SUB_MODE))
+                        p->setValueNotifyingHost (static_cast<float> (sub));
+                }
+                complete ({});
+            })
+            .withNativeFunction("getSliceSubMode", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete ((int) *audioProcessor.getAPVTS().getRawParameterValue (ParameterIDs::SLICE_SUB_MODE));
+            })
+            .withNativeFunction("setActiveSliceIndex", [this](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    const int n = audioProcessor.getNumSlices();
+                    int idx = (int) args[0];
+                    if (n > 0) idx = juce::jlimit (0, n - 1, idx);
+                    else       idx = 0;
+                    audioProcessor.activeSliceIndex.store (idx);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getActiveSliceIndex", [this](const juce::Array<juce::var>&,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.activeSliceIndex.load());
+            })
+            .withNativeFunction("auditionSlice", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.auditionSlice ((int) args[0]);
+                complete ({});
+            })
+            .withNativeFunction("setSliceReverse", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex (int), args[1] = reverse (bool)
+                if (args.size() < 2) { complete ({}); return; }
+                const int idx = (int) args[0];
+                const bool rev = (bool) args[1];
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].reverse = rev;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSlicePitch", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = semitones (-24..+24)
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx = (int) args[0];
+                const float st  = juce::jlimit (-24.0f, 24.0f, (float) (double) args[1]);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].pitchOffsetSemis = st;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("deleteSlice", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Remove slice idx, merging its sample range into the
+                // previous slice (or, if first slice, into the next one).
+                if (args.size() < 1) { complete ({}); return; }
+                const int idx = (int) args[0];
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                if (copy.size() == 1)
+                {
+                    // Last slice — clear list entirely.
+                    copy.clear();
+                }
+                else if (idx == 0)
+                {
+                    copy[1].startSample = copy[0].startSample;
+                    copy.erase (copy.begin());
+                }
+                else
+                {
+                    copy[(size_t) (idx - 1)].endSample = copy[(size_t) idx].endSample;
+                    copy.erase (copy.begin() + idx);
+                }
+                audioProcessor.replaceSlices (std::move (copy));
+                complete (audioProcessor.getSlicesJson());
+            })
+            .withNativeFunction("addMarkerAt", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sample position (int64). Splits whichever slice
+                // contains that position into two; if no slice list yet,
+                // creates [0..pos, pos..end].
+                if (args.size() < 1) { complete ({}); return; }
+                const juce::int64 pos = (juce::int64) (long long) args[0];
+                auto buf = audioProcessor.getSampleBuffer().load();
+                if (! buf || buf->getNumSamples() < 2) { complete ({}); return; }
+                const juce::int64 total = buf->getNumSamples();
+                const juce::int64 snapped = tw::findNearestZeroCrossing (*buf, pos, 384);
+
+                auto cur = audioProcessor.loadSlices();
+                tw::SliceList copy;
+                if (cur && ! cur->empty())
+                {
+                    copy = *cur;
+                    for (size_t i = 0; i < copy.size(); ++i)
+                    {
+                        if (snapped > copy[i].startSample && snapped < copy[i].endSample)
+                        {
+                            tw::Slice newSlice = copy[i];
+                            newSlice.startSample = snapped;
+                            copy[i].endSample    = snapped;
+                            copy.insert (copy.begin() + (long) i + 1, newSlice);
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    if (snapped > 0 && snapped < total)
+                    {
+                        copy.push_back ({ 0,       snapped, false, 0.0f });
+                        copy.push_back ({ snapped, total,   false, 0.0f });
+                    }
+                    else
+                    {
+                        copy.push_back ({ 0, total, false, 0.0f });
+                    }
+                }
+                audioProcessor.replaceSlices (std::move (copy));
+                complete (audioProcessor.getSlicesJson());
+            })
+
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1425,6 +1639,138 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     text-align: center;
   }
 
+  /* ──────────────────────────────────────────────────────────────────
+     SLICER UI (v0b) — top-center floating panel + waveform markers.
+     Visible only when SLICE_MODE = SLICE. Full ghost-glass language so
+     it sits with the bottom strip as one cohesive surface.
+     ────────────────────────────────────────────────────────────────── */
+  #ti-slicer-panel {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 6;
+    display: flex; gap: 8px; align-items: center;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 4px 8px; border-radius: 6px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: opacity 220ms ease;
+    user-select: none;
+  }
+  #ti-slicer-panel.hidden { opacity: 0; pointer-events: none; }
+  .ti-slicer-btn {
+    padding: 4px 11px;
+    font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.16em;
+    border-radius: 3px; cursor: pointer;
+    color: rgba(245,243,255,0.7);
+    background: rgba(255,255,255,0.05);
+    transition: all 140ms ease;
+    display: flex; align-items: center; gap: 5px;
+    user-select: none;
+  }
+  .ti-slicer-btn:hover { background: rgba(167,139,250,0.18); color: white; }
+  .ti-slicer-btn .caret { font-size: 8px; opacity: 0.6; }
+  .ti-slicer-btn.busy { opacity: 0.5; cursor: wait; }
+  .ti-chop-count {
+    padding: 4px 10px;
+    font: 600 10px/1 -apple-system, sans-serif; letter-spacing: 0.16em;
+    color: #A78BFA;
+  }
+  .ti-slicer-divider {
+    width: 1px; height: 14px; background: rgba(245,243,255,0.18); margin: 0 2px;
+  }
+  /* GRID dropdown */
+  #ti-grid-dd {
+    position: absolute; top: 100%; left: 0; margin-top: 4px;
+    background: rgba(20,18,32,0.96); backdrop-filter: blur(10px);
+    border-radius: 5px; padding: 4px;
+    display: none; flex-direction: column; min-width: 70px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10;
+  }
+  #ti-grid-dd.open { display: flex; }
+  #ti-grid-dd .opt {
+    padding: 6px 12px;
+    font: 600 10px/1 sans-serif; letter-spacing: 0.12em;
+    color: rgba(245,243,255,0.7); cursor: pointer; border-radius: 3px;
+  }
+  #ti-grid-dd .opt:hover { background: rgba(139,92,246,0.25); color: white; }
+  .ti-grid-wrap { position: relative; }
+  /* Sub-mode pills (CHOP / CHROMATIC) — match bottom-strip pill language */
+  #ti-submode-toggle { display: flex; gap: 4px; }
+  .ti-submode-pill {
+    padding: 4px 10px;
+    font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.18em;
+    border-radius: 3px; cursor: pointer;
+    color: rgba(245,243,255,0.42);
+    transition: all 150ms ease;
+  }
+  .ti-submode-pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+  }
+
+  /* Slice markers + bodies — drawn on top of the waveform canvas */
+  #ti-slice-overlays {
+    position: absolute; left: 0; right: 0;
+    pointer-events: none;  /* parent doesn't intercept, children re-enable */
+    z-index: 4;
+  }
+  .ti-slice-marker {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(167,139,250,0.45);
+    pointer-events: none;
+  }
+  .ti-slice-marker .ti-slice-label {
+    position: absolute; top: 2px; left: -10px; width: 20px;
+    text-align: center;
+    font: 700 9px/1 sans-serif; letter-spacing: 0.05em;
+    color: #A78BFA;
+    background: rgba(45,37,69,0.8);
+    padding: 2px 0; border-radius: 2px;
+  }
+  .ti-slice-body {
+    position: absolute; top: 0; bottom: 0;
+    pointer-events: auto; cursor: pointer;
+    transition: background 140ms ease;
+  }
+  .ti-slice-body:hover { background: rgba(139,92,246,0.07); }
+  .ti-slice-body.active {
+    background: linear-gradient(180deg,
+      rgba(139,92,246,0.18) 0%,
+      rgba(139,92,246,0.10) 100%);
+    border-left: 1px solid rgba(167,139,250,0.7);
+    border-right: 1px solid rgba(167,139,250,0.7);
+  }
+  .ti-slice-body.dragging { background: rgba(139,92,246,0.22); }
+  .ti-slice-badge {
+    position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,18,32,0.85); backdrop-filter: blur(6px);
+    padding: 3px 7px; border-radius: 3px;
+    font: 600 9px/1 sans-serif; letter-spacing: 0.1em;
+    color: rgba(245,243,255,0.85); white-space: nowrap;
+    pointer-events: none;
+  }
+  .ti-slice-badge .pitch { color: #A78BFA; }
+  .ti-slice-badge .rev   { color: #FFB066; margin-right: 4px; }
+
+  /* Right-click context menu */
+  #ti-slice-ctx {
+    position: absolute; z-index: 20;
+    background: rgba(20,18,32,0.96); backdrop-filter: blur(12px);
+    border-radius: 5px; padding: 4px;
+    min-width: 140px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    display: none;
+  }
+  #ti-slice-ctx.open { display: block; }
+  #ti-slice-ctx .item {
+    padding: 7px 14px;
+    font: 600 10px/1 sans-serif; letter-spacing: 0.10em;
+    color: rgba(245,243,255,0.85); cursor: pointer; border-radius: 3px;
+    user-select: none;
+  }
+  #ti-slice-ctx .item:hover { background: rgba(139,92,246,0.25); color: white; }
+  #ti-slice-ctx .item.danger:hover { background: rgba(255,80,80,0.22); }
+  #ti-slice-ctx .sep { height: 1px; background: rgba(255,255,255,0.06); margin: 3px 6px; }
+
   /* ─── XY readout — relocate to bottom-right (mirror of root picker) ─── */
   #hero .xy-readout {
     top: auto !important;
@@ -1478,12 +1824,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     bottomPills.id = 'ti-bottom-pills';
     hero.appendChild(bottomPills);
 
-    // Mode toggle (PITCH active, SLICE disabled in v0a)
+    // Mode toggle (PITCH / SLICE — both functional as of v0b)
     var modeWrap = document.createElement('div');
     modeWrap.id = 'ti-mode-toggle';
     modeWrap.innerHTML =
       '<div class="ti-mode-pill active" data-mode="PITCH">PITCH</div>' +
-      '<div class="ti-mode-pill disabled" data-mode="SLICE" title="Slicer coming in v0b">SLICE</div>';
+      '<div class="ti-mode-pill" data-mode="SLICE">SLICE</div>';
     bottomPills.appendChild(modeWrap);
 
     // Play-mode toggle (1-SHOT vs forward LOOP)
@@ -1503,6 +1849,46 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       '<span class="ti-root-label">ROOT</span>' +
       '<span class="ti-root-value" id="ti-root-value">C4</span>';
     hero.appendChild(rootWrap);
+
+    // ─── Slicer panel (top-center, only visible when SLICE mode is on) ───
+    var slicerPanel = document.createElement('div');
+    slicerPanel.id = 'ti-slicer-panel';
+    slicerPanel.classList.add('hidden');  // PITCH default
+    slicerPanel.innerHTML =
+      '<div class="ti-slicer-btn" id="ti-auto-btn" title="Auto-detect transients">AUTO</div>' +
+      '<div class="ti-grid-wrap">' +
+        '<div class="ti-slicer-btn" id="ti-grid-btn" title="Equal grid">GRID <span id="ti-grid-n">16</span> <span class="caret">▾</span></div>' +
+        '<div id="ti-grid-dd">' +
+          '<div class="opt" data-n="4">4</div>' +
+          '<div class="opt" data-n="8">8</div>' +
+          '<div class="opt" data-n="16">16</div>' +
+          '<div class="opt" data-n="24">24</div>' +
+          '<div class="opt" data-n="32">32</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ti-slicer-divider"></div>' +
+      '<div class="ti-chop-count" id="ti-chop-count">0 CHOPS</div>' +
+      '<div class="ti-slicer-divider"></div>' +
+      '<div id="ti-submode-toggle">' +
+        '<div class="ti-submode-pill active" data-sub="0">CHOP</div>' +
+        '<div class="ti-submode-pill" data-sub="1">CHROMATIC</div>' +
+      '</div>';
+    hero.appendChild(slicerPanel);
+
+    // Slice marker overlay container (positioned over the waveform).
+    var sliceOverlays = document.createElement('div');
+    sliceOverlays.id = 'ti-slice-overlays';
+    hero.appendChild(sliceOverlays);
+
+    // Right-click context menu (single instance, repositioned on demand).
+    var ctx = document.createElement('div');
+    ctx.id = 'ti-slice-ctx';
+    ctx.innerHTML =
+      '<div class="item" data-act="rev">Reverse</div>' +
+      '<div class="item" data-act="resetPitch">Reset Pitch</div>' +
+      '<div class="sep"></div>' +
+      '<div class="item danger" data-act="del">Delete Chop</div>';
+    hero.appendChild(ctx);
 
     // Initial state: empty.
     hero.classList.add('empty-state');
@@ -1535,7 +1921,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     peaksMax: null,
     progress: 0,    // 0..1 during loading; 1 when fully loaded
     loading: false,
-    rootNote: 60
+    rootNote: 60,
+    // Slicer state
+    sliceMode: 0,           // 0 = PITCH (whole sample), 1 = SLICE
+    sliceSubMode: 0,        // 0 = CHOP, 1 = CHROMATIC
+    slices: [],             // [{start, end, reverse, pitch}, ...]
+    activeSliceIndex: 0,    // active in CHROMATIC sub-mode
+    gridN: 16,              // last grid count used
+    sampleLengthSamples: 0  // total length of loaded sample (for marker positioning)
   };
 
   // ── Waveform drawing ──────────────────────────────────────────────────────
@@ -1599,17 +1992,335 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.stroke();
   }
 
+  // ── Slicer helpers ────────────────────────────────────────────────────────
+  function setSliceModeUI (modeIdx) {
+    state.sliceMode = modeIdx;
+    document.querySelectorAll('#ti-mode-toggle .ti-mode-pill').forEach(function (p) {
+      p.classList.toggle('active', (p.dataset.mode === 'SLICE') === (modeIdx === 1));
+    });
+    var panel = document.getElementById('ti-slicer-panel');
+    if (panel) panel.classList.toggle('hidden', modeIdx !== 1);
+    redrawSliceOverlay();
+  }
+
+  function setSubModeUI (subIdx) {
+    state.sliceSubMode = subIdx;
+    document.querySelectorAll('#ti-submode-toggle .ti-submode-pill').forEach(function (p) {
+      p.classList.toggle('active', parseInt(p.dataset.sub, 10) === subIdx);
+    });
+    redrawSliceOverlay();  // active-slice ring visibility depends on this
+  }
+
+  function updateChopCount () {
+    var el = document.getElementById('ti-chop-count');
+    if (!el) return;
+    var n = state.slices.length;
+    el.textContent = n + (n === 1 ? ' CHOP' : ' CHOPS');
+  }
+
+  // Parse the JSON-encoded slice list returned from C++ and refresh the UI.
+  function applySlicesJson (json) {
+    if (!json || typeof json !== 'string') return;
+    try {
+      var obj = JSON.parse(json);
+      var arr = (obj && obj.slices) ? obj.slices : [];
+      state.slices = arr.map(function (s) {
+        return {
+          start:   parseInt(s.start, 10) || 0,
+          end:     parseInt(s.end,   10) || 0,
+          reverse: !!s.reverse,
+          pitch:   parseFloat(s.pitch) || 0
+        };
+      });
+      // Clamp activeSliceIndex.
+      if (state.activeSliceIndex >= state.slices.length)
+        state.activeSliceIndex = Math.max(0, state.slices.length - 1);
+      updateChopCount();
+      redrawSliceOverlay();
+    } catch (_) {}
+  }
+
+  // Render slice markers + bodies + active overlay on top of the waveform.
+  // Re-runs on slice list change, mode change, sub-mode change, sample change,
+  // active-slice change, and on window resize.
+  function redrawSliceOverlay () {
+    var hero = document.getElementById('hero');
+    var waveCanvas = document.getElementById('waveform-canvas');
+    var overlays = document.getElementById('ti-slice-overlays');
+    if (!hero || !waveCanvas || !overlays) return;
+
+    overlays.innerHTML = '';
+
+    if (state.sliceMode !== 1 || state.slices.length === 0 || state.sampleLengthSamples <= 0) {
+      return;
+    }
+
+    // Position the overlay container exactly over the waveform canvas region.
+    var heroRect  = hero.getBoundingClientRect();
+    var waveRect  = waveCanvas.getBoundingClientRect();
+    overlays.style.top    = (waveRect.top    - heroRect.top)    + 'px';
+    overlays.style.height = waveRect.height + 'px';
+
+    var W = waveRect.width;
+    var totalSamples = state.sampleLengthSamples;
+    var isChromatic  = state.sliceSubMode === 1;
+    var activeIdx    = state.activeSliceIndex;
+
+    state.slices.forEach(function (s, i) {
+      var leftFrac  = s.start / totalSamples;
+      var widthFrac = (s.end - s.start) / totalSamples;
+      var leftPx    = leftFrac  * W;
+      var widthPx   = widthFrac * W;
+      if (widthPx < 1) return;
+
+      // Body (clickable / draggable region)
+      var body = document.createElement('div');
+      body.className = 'ti-slice-body';
+      if (isChromatic && i === activeIdx) body.classList.add('active');
+      body.style.left  = leftPx  + 'px';
+      body.style.width = widthPx + 'px';
+      body.dataset.idx = i;
+      attachSliceGestures(body, i);
+      overlays.appendChild(body);
+
+      // Pitch / reverse badge — always visible; subtle opacity when no offset.
+      var hasOffset = (s.pitch !== 0) || s.reverse;
+      if (hasOffset || (isChromatic && i === activeIdx)) {
+        var badge = document.createElement('div');
+        badge.className = 'ti-slice-badge';
+        badge.style.left = (leftPx + widthPx / 2) + 'px';
+        var pitchTxt = (s.pitch > 0 ? '+' : '') + (s.pitch || 0).toFixed(0) + 'st';
+        badge.innerHTML = (s.reverse ? '<span class="rev">REV</span>' : '') +
+                          '<span class="pitch">' + pitchTxt + '</span>';
+        body.appendChild(badge);
+      }
+
+      // Marker (left edge — index label sits at top)
+      if (i > 0) {  // first slice always starts at 0; no marker line needed
+        var marker = document.createElement('div');
+        marker.className = 'ti-slice-marker';
+        marker.style.left = leftPx + 'px';
+        var label = document.createElement('div');
+        label.className = 'ti-slice-label';
+        label.textContent = (i + 1);
+        marker.appendChild(label);
+        overlays.appendChild(marker);
+      } else {
+        // Slice 1 still shows its label at left edge of waveform.
+        var label0 = document.createElement('div');
+        label0.className = 'ti-slice-label';
+        label0.textContent = '1';
+        label0.style.position = 'absolute';
+        label0.style.left = '4px';
+        label0.style.top = '2px';
+        overlays.appendChild(label0);
+      }
+    });
+  }
+
+  function attachSliceGestures (body, idx) {
+    var dragState = null;
+    var clicked = false;
+
+    body.addEventListener('mousedown', function (ev) {
+      if (ev.button !== 0) return;  // left-click only here
+      ev.stopPropagation();         // don't let the XY pad eat this
+      clicked = true;
+      dragState = { startY: ev.clientY, startX: ev.clientX, idx: idx, fired: false, startPitch: state.slices[idx].pitch || 0 };
+      body.classList.add('dragging');
+      document.addEventListener('mousemove', onSliceMove, true);
+      document.addEventListener('mouseup',   onSliceUp,   true);
+      ev.preventDefault();
+    });
+
+    body.addEventListener('contextmenu', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      openSliceContextMenu(ev, idx);
+    });
+
+    function onSliceMove (ev) {
+      if (!dragState) return;
+      var dy = dragState.startY - ev.clientY;     // up positive
+      var dx = ev.clientX - dragState.startX;
+      // 3px threshold prevents click jitter from triggering pitch drag.
+      if (!dragState.fired && (Math.abs(dy) > 3 || Math.abs(dx) > 3)) dragState.fired = true;
+      if (!dragState.fired) return;
+
+      // 8 px = 1 semitone. Shift = fine (24 px per semi).
+      var pxPerSemi = ev.shiftKey ? 24 : 8;
+      var deltaSemi = Math.round(dy / pxPerSemi);
+      var newPitch = Math.max(-24, Math.min(24, dragState.startPitch + deltaSemi));
+      if (newPitch !== state.slices[dragState.idx].pitch) {
+        state.slices[dragState.idx].pitch = newPitch;
+        var fn = getNativeFn('setSlicePitch');
+        if (fn) { try { fn(dragState.idx, newPitch); } catch (_) {} }
+        redrawSliceOverlay();
+      }
+      ev.preventDefault();
+    }
+
+    function onSliceUp (ev) {
+      document.removeEventListener('mousemove', onSliceMove, true);
+      document.removeEventListener('mouseup',   onSliceUp,   true);
+      body.classList.remove('dragging');
+      // Click (no significant drag): audition (CHOP) or set-active (CHROMATIC).
+      if (clicked && dragState && !dragState.fired) {
+        if (state.sliceSubMode === 1) {
+          // CHROMATIC: set active slice
+          state.activeSliceIndex = dragState.idx;
+          var fnA = getNativeFn('setActiveSliceIndex');
+          if (fnA) { try { fnA(dragState.idx); } catch (_) {} }
+          redrawSliceOverlay();
+        } else {
+          // CHOP: audition
+          var fnB = getNativeFn('auditionSlice');
+          if (fnB) { try { fnB(dragState.idx); } catch (_) {} }
+        }
+      }
+      dragState = null;
+      clicked = false;
+      ev.preventDefault();
+    }
+  }
+
+  function openSliceContextMenu (ev, idx) {
+    var ctx = document.getElementById('ti-slice-ctx');
+    var hero = document.getElementById('hero');
+    if (!ctx || !hero) return;
+    var heroRect = hero.getBoundingClientRect();
+    ctx.style.left = (ev.clientX - heroRect.left) + 'px';
+    ctx.style.top  = (ev.clientY - heroRect.top)  + 'px';
+    ctx.classList.add('open');
+    ctx.dataset.targetIdx = idx;
+  }
+
+  function closeSliceContextMenu () {
+    var ctx = document.getElementById('ti-slice-ctx');
+    if (ctx) ctx.classList.remove('open');
+  }
+
   // ── Interactions ──────────────────────────────────────────────────────────
   function wireInteractions () {
-    // Mode toggle: SLICE disabled (toast on click)
+    // Mode toggle: PITCH / SLICE — both live; switching SLICE shows the slicer panel.
     document.querySelectorAll('#ti-mode-toggle .ti-mode-pill').forEach(function (pill) {
-      pill.addEventListener('click', function () {
-        if (pill.dataset.mode === 'SLICE') {
-          if (typeof showStatus === 'function') showStatus('Slicer coming in v0b', 3000);
-        }
-        // PITCH stays active in v0a; nothing to toggle.
+      pill.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var newMode = (pill.dataset.mode === 'SLICE') ? 1 : 0;
+        if (newMode === state.sliceMode) return;
+        setSliceModeUI(newMode);
+        var fn = getNativeFn('setSliceMode');
+        if (fn) { try { fn(newMode); } catch (_) {} }
       });
     });
+
+    // Slicer panel: AUTO button
+    var autoBtn = document.getElementById('ti-auto-btn');
+    if (autoBtn) {
+      autoBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        autoBtn.classList.add('busy');
+        var fn = getNativeFn('autoDetectSlices');
+        if (!fn) { autoBtn.classList.remove('busy'); return; }
+        try {
+          var res = fn(0.5);  // sensitivity
+          if (res && typeof res.then === 'function') {
+            res.then(function (json) {
+              autoBtn.classList.remove('busy');
+              applySlicesJson(json);
+            }, function () { autoBtn.classList.remove('busy'); });
+          } else {
+            autoBtn.classList.remove('busy');
+            applySlicesJson(res);
+          }
+        } catch (_) { autoBtn.classList.remove('busy'); }
+      });
+    }
+
+    // Slicer panel: GRID button + dropdown
+    var gridBtn = document.getElementById('ti-grid-btn');
+    var gridDd  = document.getElementById('ti-grid-dd');
+    if (gridBtn && gridDd) {
+      gridBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        gridDd.classList.toggle('open');
+      });
+      gridDd.querySelectorAll('.opt').forEach(function (opt) {
+        opt.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          var n = parseInt(opt.dataset.n, 10) || 16;
+          state.gridN = n;
+          var label = document.getElementById('ti-grid-n');
+          if (label) label.textContent = n;
+          gridDd.classList.remove('open');
+          var fn = getNativeFn('gridSliceSlices');
+          if (fn) {
+            try {
+              var r = fn(n);
+              if (r && typeof r.then === 'function') r.then(applySlicesJson);
+              else applySlicesJson(r);
+            } catch (_) {}
+          }
+        });
+      });
+    }
+
+    // Slicer panel: sub-mode pills (CHOP / CHROMATIC)
+    document.querySelectorAll('#ti-submode-toggle .ti-submode-pill').forEach(function (p) {
+      p.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var sub = parseInt(p.dataset.sub, 10) || 0;
+        setSubModeUI(sub);
+        var fn = getNativeFn('setSliceSubMode');
+        if (fn) { try { fn(sub); } catch (_) {} }
+      });
+    });
+
+    // Context menu actions
+    var ctxMenu = document.getElementById('ti-slice-ctx');
+    if (ctxMenu) {
+      ctxMenu.addEventListener('click', function (ev) {
+        var item = ev.target.closest('.item');
+        if (!item) return;
+        var idx = parseInt(ctxMenu.dataset.targetIdx, 10);
+        if (isNaN(idx)) return;
+        var act = item.dataset.act;
+        if (act === 'rev') {
+          if (state.slices[idx]) {
+            state.slices[idx].reverse = !state.slices[idx].reverse;
+            var fnR = getNativeFn('setSliceReverse');
+            if (fnR) { try { fnR(idx, state.slices[idx].reverse); } catch (_) {} }
+            redrawSliceOverlay();
+          }
+        } else if (act === 'resetPitch') {
+          if (state.slices[idx]) {
+            state.slices[idx].pitch = 0;
+            var fnP = getNativeFn('setSlicePitch');
+            if (fnP) { try { fnP(idx, 0); } catch (_) {} }
+            redrawSliceOverlay();
+          }
+        } else if (act === 'del') {
+          var fnD = getNativeFn('deleteSlice');
+          if (fnD) {
+            try {
+              var r = fnD(idx);
+              if (r && typeof r.then === 'function') r.then(applySlicesJson);
+              else applySlicesJson(r);
+            } catch (_) {}
+          }
+        }
+        closeSliceContextMenu();
+      });
+    }
+    // Click anywhere else closes the context menu.
+    document.addEventListener('click', closeSliceContextMenu);
+    // Click outside the GRID dropdown closes it.
+    document.addEventListener('click', function (ev) {
+      var dd = document.getElementById('ti-grid-dd');
+      var gb = document.getElementById('ti-grid-btn');
+      if (dd && gb && !gb.contains(ev.target)) dd.classList.remove('open');
+    });
+
 
     // Play-mode toggle (1-SHOT / LOOP) — writes APVTS via setSampleLoopMode.
     document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (pill) {
@@ -1687,7 +2398,53 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     }
 
     // Repaint on window resize.
-    window.addEventListener('resize', drawWaveform);
+    window.addEventListener('resize', function () {
+      drawWaveform();
+      redrawSliceOverlay();
+    });
+
+    // ── Pull initial slicer state from C++ ────────────────────────────────────
+    // Cover three scenarios cleanly:
+    //   1. Fresh plugin instance: empty list, sub-mode 0, mode PITCH.
+    //   2. Editor close+reopen on same instance: slice list survives.
+    //   3. DAW project reload: slicesJson restored from state info.
+    (function () {
+      var fnSlices = getNativeFn('getSlicesJson');
+      if (fnSlices) {
+        try {
+          var r = fnSlices();
+          if (r && typeof r.then === 'function') r.then(applySlicesJson);
+          else applySlicesJson(r);
+        } catch (_) {}
+      }
+      var fnSub = getNativeFn('getSliceSubMode');
+      if (fnSub) {
+        try {
+          var s = fnSub();
+          if (s && typeof s.then === 'function')
+            s.then(function (v) { setSubModeUI(parseInt(v, 10) || 0); });
+          else setSubModeUI(parseInt(s, 10) || 0);
+        } catch (_) {}
+      }
+      var fnAct = getNativeFn('getActiveSliceIndex');
+      if (fnAct) {
+        try {
+          var a = fnAct();
+          if (a && typeof a.then === 'function')
+            a.then(function (v) { state.activeSliceIndex = parseInt(v, 10) || 0; redrawSliceOverlay(); });
+          else { state.activeSliceIndex = parseInt(a, 10) || 0; redrawSliceOverlay(); }
+        } catch (_) {}
+      }
+      var fnMode = getNativeFn('getSliceMode');
+      if (fnMode) {
+        try {
+          var m = fnMode();
+          if (m && typeof m.then === 'function')
+            m.then(function (v) { setSliceModeUI(parseInt(v, 10) || 0); });
+          else setSliceModeUI(parseInt(m, 10) || 0);
+        } catch (_) {}
+      }
+    })();
 
     // ── Restore cached sample on editor reopen ────────────────────────────────
     // If the processor instance still has a sample loaded (audio buffer hot,
@@ -1749,6 +2506,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     state.peaksMax = info.peaksMax || null;
     state.progress = 1;
     state.loading = false;
+    // Total length in samples — used by redrawSliceOverlay to position markers.
+    // Field name is `lengthSamples` per the C++ payload shape.
+    state.sampleLengthSamples = parseInt(info.lengthSamples, 10) || 0;
     var hero = document.getElementById('hero');
     if (hero) {
       hero.classList.remove('empty-state');
@@ -1756,6 +2516,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       hero.classList.add('has-sample');
     }
     drawWaveform();
+    redrawSliceOverlay();  // re-position markers now that we know sample length
   };
 
   window.onLoadError = function (msg) {
