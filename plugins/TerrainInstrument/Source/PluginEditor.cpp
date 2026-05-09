@@ -511,6 +511,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete ({});
             })
+            .withNativeFunction("getCachedSamplePayload", [this](const juce::Array<juce::var>&,
+                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // JS pulls this on hero-overlay init. Returns the cached
+                // sample payload JSON (filename + peaks + meta) so editor
+                // close/reopen restores the waveform display without a
+                // re-decode. Empty string if no sample loaded yet.
+                complete (audioProcessor.getCachedSamplePayload());
+            })
             .withNativeFunction("setSampleLoopMode", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -765,14 +774,21 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // Start visualization timer at 60Hz for smooth LFO/mod display
     startTimerHz(60);
 
-    // Auto-reload the previously-loaded sample if the DAW restored a path
-    // via setStateInformation. Deferred via callAsync so the WebView and
-    // hero overlay are fully constructed by the time onLoadingStarted /
-    // onSampleLoaded callbacks fire from the loader.
+    // Auto-reload the previously-loaded sample. Two cases:
+    //   1) Cache hit (editor close+reopen, same processor instance): the JS
+    //      side pulls the cached payload via getCachedSamplePayload and
+    //      restores the waveform display instantly. No decode needed —
+    //      audio buffer was never lost. Skip loadSampleAsync here.
+    //   2) Cache miss + path set (DAW project reload, fresh processor): the
+    //      audio buffer is empty, so we must re-decode from disk to repopulate
+    //      it. This also re-pushes the JS payload via the load completion.
     juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safeThis (this);
     juce::MessageManager::callAsync ([safeThis]
     {
         if (safeThis == nullptr) return;
+        // Case 1: cache hit — JS will pull on its own. Nothing for C++ to do.
+        if (safeThis->audioProcessor.getCachedSamplePayload().isNotEmpty()) return;
+        // Case 2: cache empty but path stored — full decode.
         const auto storedPath = safeThis->audioProcessor.getLoadedSamplePath();
         if (storedPath.isEmpty()) return;
         const juce::File f (storedPath);
@@ -1682,6 +1698,29 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     // Repaint on window resize.
     window.addEventListener('resize', drawWaveform);
+
+    // ── Restore cached sample on editor reopen ────────────────────────────────
+    // If the processor instance still has a sample loaded (audio buffer hot,
+    // user just closed and reopened the editor window), pull the cached
+    // payload and dispatch it through onSampleLoaded so the waveform display
+    // returns immediately without a re-decode. Empty result = nothing to
+    // restore (fresh processor / no sample loaded yet).
+    (function () {
+      var fn = getNativeFn('getCachedSamplePayload');
+      if (!fn) return;
+      try {
+        var p = fn();
+        if (p && typeof p.then === 'function') {
+          p.then(function (json) {
+            if (!json || typeof json !== 'string' || json.length === 0) return;
+            try {
+              var payload = JSON.parse(json);
+              if (window.onSampleLoaded) window.onSampleLoaded(payload);
+            } catch (_) {}
+          });
+        }
+      } catch (_) {}
+    })();
   }
 
   function updateRootDisplay () {
@@ -1866,6 +1905,11 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
             obj->setProperty ("peaksMax",      juce::var (maxArr));
 
             const auto json = juce::JSON::toString (juce::var (obj.get()), true /*allOnOneLine*/);
+
+            // Cache the payload so editor close/reopen restores the waveform
+            // display instantly without re-decoding. JS pulls this via the
+            // getCachedSamplePayload native fn during hero-overlay init.
+            audioProcessor.setCachedSamplePayload (json);
 
             if (webView != nullptr)
                 webView->evaluateJavascript (

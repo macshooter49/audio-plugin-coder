@@ -1523,6 +1523,18 @@ juce::String TerrainInstrumentAudioProcessor::getLoadedSamplePath() const
     return loadedSamplePath;
 }
 
+void TerrainInstrumentAudioProcessor::setCachedSamplePayload (const juce::String& jsonPayload)
+{
+    juce::ScopedLock sl (samplePayloadLock);
+    cachedSamplePayloadJson = jsonPayload;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getCachedSamplePayload() const
+{
+    juce::ScopedLock sl (samplePayloadLock);
+    return cachedSamplePayloadJson;
+}
+
 //==============================================================================
 void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {

@@ -152,6 +152,16 @@ public:
     void setLoadedSamplePath (const juce::String& path);
     juce::String getLoadedSamplePath() const;
 
+    // Cached JSON payload for the loaded sample (filename + peaks + meta).
+    // Populated by the editor after each successful load. Survives editor
+    // close/reopen WITHIN the same plugin instance — JS pulls via the
+    // getCachedSamplePayload native fn on hero injection, restoring the
+    // waveform display instantly without re-decoding the file. On DAW
+    // project reload the processor is fresh (cache empty) — falls back to
+    // file-path reload so the audio buffer also re-populates.
+    void setCachedSamplePayload (const juce::String& jsonPayload);
+    juce::String getCachedSamplePayload() const;
+
     // Preset system
     void loadPreset (int index);
     int getPresetCount() const;
@@ -292,6 +302,13 @@ private:
     // project save/restore so the editor can re-load on next open.
     mutable juce::CriticalSection sampleSourcePathLock;
     juce::String                  loadedSamplePath;
+
+    // Cached JS-payload JSON for the currently-loaded sample. Lives only as
+    // long as the processor instance; not persisted to DAW state (would
+    // bloat XML by ~80KB per sample with no win — DAW reload re-decodes
+    // anyway because the audio buffer needs re-populating).
+    mutable juce::CriticalSection samplePayloadLock;
+    juce::String                  cachedSamplePayloadJson;
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;
