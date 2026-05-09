@@ -149,7 +149,20 @@ namespace tw
                 const auto sampleL = inL[i0] + frac * (inL[i0 + 1] - inL[i0]);
                 const auto sampleR = inR[i0] + frac * (inR[i0 + 1] - inR[i0]);
 
-                const auto gain = currentVelocity * envLevel;
+                // Anti-click tail fade for one-shot mode: linear ramp to zero
+                // across the last 256 samples (~5 ms at 48 kHz) so samples
+                // that don't end at zero crossings don't pop on cut-off.
+                // Loop mode wraps so this never triggers there.
+                float tailFade = 1.0f;
+                if (loopMode == 0)
+                {
+                    const double samplesToEnd = endIdx - playhead;
+                    constexpr double kTailLen = 256.0;
+                    if (samplesToEnd < kTailLen)
+                        tailFade = juce::jmax (0.0f, static_cast<float> (samplesToEnd / kTailLen));
+                }
+
+                const auto gain = currentVelocity * envLevel * tailFade;
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
