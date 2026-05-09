@@ -1325,11 +1325,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   #hero.drag-hover #ti-drop-overlay { opacity: 1; }
 
-  /* ─── Mode toggle (PITCH ↔ SLICE), top-center ─── */
-  #ti-mode-toggle {
-    position: absolute; top: 12px; left: 50%;
+  /* ─── Bottom pill cluster: PITCH/SLICE + 1-SHOT/LOOP side-by-side ───
+     Lives in a single flex wrapper at bottom-center so the two pill
+     groups align symmetrically with ROOT (bottom-left) and the XY
+     readout (bottom-right). Top of hero stays clean for the waveform. */
+  #ti-bottom-pills {
+    position: absolute; bottom: 12px; left: 50%;
     transform: translateX(-50%);
     z-index: 5;
+    display: flex; gap: 10px; align-items: center;
+  }
+  #ti-mode-toggle {
+    position: relative;
     display: flex; gap: 4px;
     background: rgba(0, 0, 0, 0.42);
     border: 1px solid rgba(245, 243, 255, 0.28);
@@ -1337,16 +1344,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
-
-  /* ─── Play-mode toggle (1-SHOT ↔ LOOP), under the mode toggle ─── */
   #ti-play-mode-toggle {
-    position: absolute; top: 50px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 5;
+    position: relative;
     display: flex; gap: 4px;
     background: rgba(0, 0, 0, 0.42);
     border: 1px solid rgba(245, 243, 255, 0.28);
-    padding: 3px; border-radius: 5px;
+    padding: 4px; border-radius: 6px;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
@@ -1462,13 +1465,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     empty.textContent = 'DRAG SAMPLE OR CLICK TO LOAD';
     hero.appendChild(empty);
 
+    // Bottom pill cluster — single flex wrapper so PITCH/SLICE and 1-SHOT/LOOP
+    // sit side-by-side at bottom-center of the hero, symmetric with ROOT
+    // (bottom-left) and the XY readout (bottom-right). Top stays clean.
+    var bottomPills = document.createElement('div');
+    bottomPills.id = 'ti-bottom-pills';
+    hero.appendChild(bottomPills);
+
     // Mode toggle (PITCH active, SLICE disabled in v0a)
     var modeWrap = document.createElement('div');
     modeWrap.id = 'ti-mode-toggle';
     modeWrap.innerHTML =
       '<div class="ti-mode-pill active" data-mode="PITCH">PITCH</div>' +
       '<div class="ti-mode-pill disabled" data-mode="SLICE" title="Slicer coming in v0b">SLICE</div>';
-    hero.appendChild(modeWrap);
+    bottomPills.appendChild(modeWrap);
 
     // Play-mode toggle (1-SHOT vs forward LOOP)
     var playWrap = document.createElement('div');
@@ -1477,7 +1487,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     playWrap.innerHTML =
       '<div class="ti-play-pill active" data-play="0">1-SHOT</div>' +
       '<div class="ti-play-pill" data-play="1">LOOP</div>';
-    hero.appendChild(playWrap);
+    bottomPills.appendChild(playWrap);
 
     // Root note picker
     var rootWrap = document.createElement('div');
