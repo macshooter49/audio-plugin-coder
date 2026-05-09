@@ -9,16 +9,35 @@
 
 namespace tw
 {
+    /**
+     * VoiceConfig — set by TerrainSynth on the chosen voice immediately
+     * BEFORE startNote(). Encodes the slice region + reverse + the pitch ratio
+     * to use for this trigger. The voice no longer derives pitch from
+     * (currentNote - rootNote) on its own; the synth dispatcher resolves all
+     * mode-aware logic up front and hands the voice a fully-baked config.
+     *
+     * Defaults reproduce pre-slicer "play whole sample at unity pitch"
+     * behavior, so a voice that didn't get a config (e.g. external MIDI
+     * paths that don't go through TerrainSynth::noteOn) still functions.
+     */
+    struct VoiceConfig
+    {
+        juce::int64 startSample      = 0;        // inclusive
+        juce::int64 endSample        = -1;       // exclusive; -1 sentinel = whole buffer
+        bool        reverse          = false;
+        float       pitchSemitones   = 0.0f;     // semitones from unity (additive with pitch wheel)
+        bool        forceOneShot     = false;    // override LOOP mode for this voice (used for audition)
+    };
+
     class SamplerVoice : public juce::SynthesiserVoice
     {
     public:
         SamplerVoice (SampleBuffer& sb,
-                      std::atomic<int>&   rootNoteRef,
+                      std::atomic<int>&   /*rootNoteRef*/,    // kept for API compat — pitch now comes from VoiceConfig
                       std::atomic<float>& attackMsRef,
                       std::atomic<float>& releaseMsRef,
                       std::atomic<int>&   loopModeRef) noexcept
             : sample (sb),
-              rootNoteParam (rootNoteRef),
               attackMsParam (attackMsRef),
               releaseMsParam (releaseMsRef),
               loopModeParam (loopModeRef) {}
@@ -31,13 +50,39 @@ namespace tw
             sampleRateForEnv = sr > 0.0 ? sr : 48000.0;
         }
 
+        /** Called by TerrainSynth immediately BEFORE startNote(). Latches the
+         *  slice bounds + pitch + reverse for the upcoming trigger. */
+        void prepareForNoteOn (const VoiceConfig& cfg) noexcept
+        {
+            pendingConfig = cfg;
+            pendingConfigValid = true;
+        }
+
         void startNote (int midiNoteNumber, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
             currentNote     = midiNoteNumber;
             currentVelocity = velocity;
-            playhead        = 0.0;
+
+            // Resolve the active config — either the pending one set by
+            // TerrainSynth, or a default that mimics pre-slicer behavior.
+            activeConfig = pendingConfigValid ? pendingConfig : VoiceConfig{};
+            pendingConfigValid = false;
+
             updatePitchRatio();
+
+            // Resolve buffer bounds for this trigger. endSample == -1 means
+            // "whole buffer length, deferred until renderNextBlock since the
+            // sample buffer might not be loaded yet at this instant".
+            playStartIdx = activeConfig.startSample;
+            playEndIdx   = activeConfig.endSample;  // -1 sentinel handled in render
+            reversePlay  = activeConfig.reverse;
+
+            // Initial playhead position depends on direction.
+            if (reversePlay && playEndIdx > 0)
+                playhead = (double) (playEndIdx - 1);
+            else
+                playhead = (double) playStartIdx;
 
             // Compute envelope increments from current attack/release in ms.
             const float attackSec  = juce::jmax (0.0f, attackMsParam.load()  * 0.001f);
@@ -85,7 +130,16 @@ namespace tw
 
             const int    bufLen   = buf->getNumSamples();
             const int    bufChans = buf->getNumChannels();
-            const double pitchInc = pitchRatio;
+
+            // Resolve slice bounds — clamp to actual buffer extents and apply
+            // the -1 sentinel for "use whole buffer".
+            const juce::int64 bStart = juce::jlimit ((juce::int64) 0, (juce::int64) bufLen - 1, playStartIdx);
+            const juce::int64 bEndRaw = (playEndIdx < 0)
+                                          ? (juce::int64) bufLen
+                                          : juce::jlimit (bStart + 1, (juce::int64) bufLen, playEndIdx);
+            const double endIdx   = static_cast<double> (bEndRaw - 1);  // last accessible sample for interpolation
+            const double startIdx = static_cast<double> (bStart);
+            const double pitchInc = pitchRatio;  // always positive — direction is reversePlay
 
             auto* outL = outputBuffer.getWritePointer (0, startSample);
             auto* outR = outputBuffer.getNumChannels() > 1
@@ -94,23 +148,37 @@ namespace tw
             const auto* inL = buf->getReadPointer (0);
             const auto* inR = bufChans > 1 ? buf->getReadPointer (1) : inL;
 
-            const int loopMode = loopModeParam.load();
-            const double endIdx = static_cast<double> (bufLen - 1);
+            // forceOneShot in VoiceConfig overrides the global LOOP param —
+            // used by audition triggers so a clicked-to-preview slice stops
+            // naturally even when the user has LOOP enabled globally.
+            const int loopMode = activeConfig.forceOneShot ? 0 : loopModeParam.load();
 
             for (int i = 0; i < numSamples; ++i)
             {
-                if (playhead >= endIdx)
+                // ── Bounds + loop/wrap handling, direction-aware ────────────
+                const bool atForwardEnd = (! reversePlay) && playhead >= endIdx;
+                const bool atReverseEnd = (  reversePlay) && playhead <= startIdx;
+                if (atForwardEnd || atReverseEnd)
                 {
                     if (loopMode == 1)
                     {
-                        // Forward loop: wrap to start, preserve fractional offset
-                        // so pitch ratio stays consistent across the seam.
-                        playhead = std::fmod (playhead, endIdx);
-                        if (playhead < 0.0) playhead += endIdx;
+                        // Forward-loop in slice space: wrap to the opposite
+                        // boundary, preserving fractional offset so pitch
+                        // ratio stays consistent across the seam.
+                        const double sliceLen = endIdx - startIdx;
+                        if (sliceLen <= 0.0) { envStage = EnvStage::Off; envLevel = 0.0f; clearCurrentNote(); isActive = false; return; }
+                        if (! reversePlay)
+                        {
+                            playhead = startIdx + std::fmod (playhead - startIdx, sliceLen);
+                        }
+                        else
+                        {
+                            playhead = endIdx - std::fmod (endIdx - playhead, sliceLen);
+                        }
                     }
                     else
                     {
-                        // One-shot: voice goes silent regardless of env stage.
+                        // One-shot: voice goes silent.
                         envStage = EnvStage::Off;
                         envLevel = 0.0f;
                         clearCurrentNote();
@@ -119,7 +187,7 @@ namespace tw
                     }
                 }
 
-                // Tick the envelope.
+                // ── Envelope tick ───────────────────────────────────────────
                 switch (envStage)
                 {
                     case EnvStage::Attack:
@@ -144,20 +212,23 @@ namespace tw
                         return;
                 }
 
+                // ── Linear interpolation read ───────────────────────────────
                 const auto i0 = static_cast<int> (playhead);
-                const auto frac = static_cast<float> (playhead - i0);
-                const auto sampleL = inL[i0] + frac * (inL[i0 + 1] - inL[i0]);
-                const auto sampleR = inR[i0] + frac * (inR[i0 + 1] - inR[i0]);
+                const int  i1 = juce::jmin (bufLen - 1, i0 + 1);
+                const auto frac = static_cast<float> (playhead - (double) i0);
+                const auto sampleL = inL[i0] + frac * (inL[i1] - inL[i0]);
+                const auto sampleR = inR[i0] + frac * (inR[i1] - inR[i0]);
 
                 // Anti-click tail fade for one-shot mode: linear ramp to zero
-                // across the last 256 samples (~5 ms at 48 kHz) so samples
-                // that don't end at zero crossings don't pop on cut-off.
-                // Loop mode wraps so this never triggers there.
+                // across the last 256 samples (~5 ms at 48 kHz). Direction
+                // aware — fade as we approach whichever end we're heading to.
                 float tailFade = 1.0f;
                 if (loopMode == 0)
                 {
-                    const double samplesToEnd = endIdx - playhead;
                     constexpr double kTailLen = 256.0;
+                    const double samplesToEnd = reversePlay
+                                                  ? (playhead - startIdx)
+                                                  : (endIdx   - playhead);
                     if (samplesToEnd < kTailLen)
                         tailFade = juce::jmax (0.0f, static_cast<float> (samplesToEnd / kTailLen));
                 }
@@ -166,7 +237,8 @@ namespace tw
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
-                playhead += pitchInc;
+                // Advance — direction-aware.
+                playhead += reversePlay ? -pitchInc : pitchInc;
             }
         }
 
@@ -175,23 +247,30 @@ namespace tw
 
         void updatePitchRatio()
         {
-            const int rootNote = rootNoteParam.load();
-            const double semitones = static_cast<double> (currentNote - rootNote) + pitchBendSemis;
+            const double semitones = (double) activeConfig.pitchSemitones + pitchBendSemis;
             pitchRatio = std::pow (2.0, semitones / 12.0);
         }
 
         SampleBuffer&       sample;
-        std::atomic<int>&   rootNoteParam;
         std::atomic<float>& attackMsParam;
         std::atomic<float>& releaseMsParam;
         std::atomic<int>&   loopModeParam;
 
+        // Voice state
         int      currentNote      = -1;
         float    currentVelocity  = 0.0f;
         double   playhead         = 0.0;
         double   pitchRatio       = 1.0;
         double   pitchBendSemis   = 0.0;
         bool     isActive         = false;
+
+        // Slice playback state — resolved at startNote from pendingConfig.
+        VoiceConfig activeConfig;
+        VoiceConfig pendingConfig;
+        bool        pendingConfigValid = false;
+        juce::int64 playStartIdx = 0;
+        juce::int64 playEndIdx   = -1;
+        bool        reversePlay  = false;
 
         // AR envelope (one-shot model — no Decay/Sustain knee, just Attack-then-hold-then-Release).
         EnvStage envStage         = EnvStage::Off;

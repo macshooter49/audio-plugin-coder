@@ -1,0 +1,152 @@
+// TerrainSynth.h
+// juce::Synthesiser subclass that resolves slice/mode/pitch logic per
+// note-on BEFORE handing off to the voice. The processor populates a
+// SliceContext each block; this subclass reads it under the synth's lock
+// during noteOn.
+#pragma once
+
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include "SamplerVoice.h"
+#include "Slice.h"
+#include <atomic>
+#include <memory>
+
+namespace tw
+{
+    /** Slice playback context — set per-block by the processor. Cheap to copy
+     *  (just a few ints + a shared_ptr to immutable slice data). */
+    struct SliceContext
+    {
+        enum class Mode : int
+        {
+            Whole = 0,             // SLICE_MODE = PITCH: play whole sample, pitched by (note - root)
+            ChopChromaticLayout,   // SLICE_MODE = SLICE & SUB = CHOP: each ascending key triggers next slice
+            ChromaticOneSlice      // SLICE_MODE = SLICE & SUB = CHROMATIC: active slice plays at (note - root + slice.pitch)
+        };
+
+        Mode          mode             = Mode::Whole;
+        int           rootMidiNote     = 60;
+        int           activeSliceIndex = 0;
+        SliceListPtr  slices;          // immutable snapshot, may be null/empty
+    };
+
+    /** Synthesiser that dispatches each MIDI noteOn through slice-aware
+     *  resolution before triggering the chosen voice. */
+    class TerrainSynth : public juce::Synthesiser
+    {
+    public:
+        /** Set from the processor at the top of processBlock. Cheap copy. */
+        void setSliceContext (const SliceContext& ctx) noexcept
+        {
+            // Stored as shared_ptr<const SliceContext> for atomic swap to
+            // avoid taking the synth lock just to update context. The
+            // noteOn override snapshots the pointer once per note.
+            std::atomic_store (&context, std::make_shared<SliceContext> (ctx));
+        }
+
+        /** Audition a single slice once at unity pitch, force-one-shot.
+         *  Bypasses MIDI dispatch — called directly from the audio thread
+         *  (processor's audition queue drain). Channel/note are arbitrary
+         *  internal values picked to never collide with real MIDI input. */
+        void auditionSlice (const Slice& s) noexcept
+        {
+            VoiceConfig vc;
+            vc.startSample    = s.startSample;
+            vc.endSample      = s.endSample;
+            vc.reverse        = s.reverse;
+            vc.pitchSemitones = 0.0f;
+            vc.forceOneShot   = true;
+
+            const juce::ScopedLock sl (lock);
+            if (sounds.size() == 0) return;
+            auto* sound = sounds[0].get();
+            if (sound == nullptr) return;
+            const int channel = 16;   // audition pseudo-channel
+            const int note    = 1;    // arbitrary — only used as a key for findFreeVoice
+
+            if (auto* voice = findFreeVoice (sound, channel, note, true))
+            {
+                if (auto* sv = dynamic_cast<SamplerVoice*> (voice))
+                    sv->prepareForNoteOn (vc);
+                startVoice (voice, sound, channel, note, 1.0f);
+            }
+        }
+
+    protected:
+        void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
+        {
+            auto ctx = std::atomic_load (&context);
+            if (! ctx) ctx = std::make_shared<SliceContext>();
+
+            // Resolve voice config based on mode.
+            VoiceConfig vc;
+            bool        triggerOk = true;
+
+            switch (ctx->mode)
+            {
+                case SliceContext::Mode::Whole:
+                    vc.startSample    = 0;
+                    vc.endSample      = -1;        // sentinel: voice uses full buffer
+                    vc.reverse        = false;
+                    vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote);
+                    break;
+
+                case SliceContext::Mode::ChopChromaticLayout:
+                {
+                    if (! ctx->slices || ctx->slices->empty()) { triggerOk = false; break; }
+                    const int idx = midiNoteNumber - ctx->rootMidiNote;
+                    if (idx < 0 || idx >= (int) ctx->slices->size()) { triggerOk = false; break; }
+                    const auto& s = (*ctx->slices)[(size_t) idx];
+                    vc.startSample    = s.startSample;
+                    vc.endSample      = s.endSample;
+                    vc.reverse        = s.reverse;
+                    vc.pitchSemitones = s.pitchOffsetSemis;
+                    break;
+                }
+
+                case SliceContext::Mode::ChromaticOneSlice:
+                {
+                    if (! ctx->slices || ctx->slices->empty()) { triggerOk = false; break; }
+                    const int sliceIdx = juce::jlimit (0, (int) ctx->slices->size() - 1, ctx->activeSliceIndex);
+                    const auto& s = (*ctx->slices)[(size_t) sliceIdx];
+                    vc.startSample    = s.startSample;
+                    vc.endSample      = s.endSample;
+                    vc.reverse        = s.reverse;
+                    vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + s.pitchOffsetSemis;
+                    break;
+                }
+            }
+
+            if (! triggerOk) return;  // out-of-range key in slice mode = silence
+
+            // Standard synth noteOn dance, but configure the voice between
+            // findFreeVoice and startVoice so the voice has its slice info
+            // ready when startNote() runs.
+            const juce::ScopedLock sl (lock);
+
+            for (auto* sound : sounds)
+            {
+                if (sound->appliesToNote (midiNoteNumber) && sound->appliesToChannel (midiChannel))
+                {
+                    // Stop any voice currently playing the same note (matches base behavior).
+                    for (auto* v : voices)
+                        if (v->getCurrentlyPlayingNote() == midiNoteNumber
+                            && v->isPlayingChannel (midiChannel))
+                            stopVoice (v, 1.0f, true);
+
+                    if (auto* voice = findFreeVoice (sound, midiChannel, midiNoteNumber, isNoteStealingEnabled()))
+                    {
+                        if (auto* sv = dynamic_cast<SamplerVoice*> (voice))
+                            sv->prepareForNoteOn (vc);
+
+                        startVoice (voice, sound, midiChannel, midiNoteNumber, velocity);
+                    }
+                }
+            }
+        }
+
+    private:
+        std::shared_ptr<SliceContext> context;
+    };
+}

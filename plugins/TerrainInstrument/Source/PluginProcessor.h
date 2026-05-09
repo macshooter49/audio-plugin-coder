@@ -16,6 +16,8 @@
 #include "SamplerVoice.h"
 #include "SampleBuffer.h"
 #include "SampleLoader.h"
+#include "Slice.h"
+#include "TerrainSynth.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -143,6 +145,26 @@ public:
     // Sample playback loop mode: 0 = one-shot (envelope releases at end-of-buffer),
     // 1 = forward loop (playhead wraps to 0 and keeps playing until note-off).
     std::atomic<int>   sampleLoopMode  { 0 };
+
+    // ── Slicer state ──────────────────────────────────────────────────────
+    // Slice list — atomic snapshot pointer. UI thread writes via
+    // replaceSlices(); audio thread reads via loadSlices() / readSlices().
+    // The shared_ptr is treated as immutable — never modified after store.
+    void              replaceSlices (tw::SliceList newSlices);
+    tw::SliceListPtr  loadSlices() const;
+    int               getNumSlices() const;
+    juce::String      getSlicesJson() const;
+    void              setSlicesFromJson (const juce::String& json);
+
+    // Active slice index — used in CHROMATIC sub-mode. Atomic so JS push
+    // and audio thread read are race-free.
+    std::atomic<int>  activeSliceIndex { 0 };
+
+    // Audition: trigger a slice once at unity pitch via the synth dispatcher,
+    // bypassing the regular MIDI key mapping. Used for click-to-preview in
+    // the editor. Implemented by injecting a synthetic MIDI note-on/off
+    // pair into the next processBlock.
+    void              auditionSlice (int sliceIndex);
 
     // Path of the most-recently-loaded sample. Editor pushes after each
     // successful load; processor saves it in getStateInformation so DAW
@@ -293,10 +315,24 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     // Sampler engine (Terrain Instrument additions — v0a)
-    juce::Synthesiser synth;
+    // TerrainSynth is a juce::Synthesiser subclass that resolves slice/mode
+    // logic per noteOn before triggering the chosen voice.
+    tw::TerrainSynth synth;
     static constexpr int kNumVoices = 16;
     tw::SampleBuffer sampleBuffer;
     tw::SampleLoader sampleLoader;
+
+    // Slice list — atomic shared_ptr<const vector<Slice>>. UI writes via
+    // std::atomic_store (replaceSlices), audio reads via std::atomic_load.
+    tw::SliceListPtr slicesPtr;  // accessed via std::atomic_load/store
+
+    // Audition queue: pending (sliceIndex, midiNoteEquivalent) pairs that
+    // the editor pushes via auditionSlice(); processBlock injects synthetic
+    // note events into the MIDI buffer. Guarded by a SpinLock — the queue
+    // is only ever written from the message thread and drained on audio.
+    juce::SpinLock                 auditionLock;
+    std::vector<int>               auditionQueue;  // slice indices to audition
+    int                            auditionNoteCounter = 100;  // unique synthetic note numbers (cycles 100..115)
 
     // Most-recently-loaded sample's absolute path. Persisted across DAW
     // project save/restore so the editor can re-load on next open.

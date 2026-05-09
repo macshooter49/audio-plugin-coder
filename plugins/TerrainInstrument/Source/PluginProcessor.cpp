@@ -750,6 +750,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "PITCH", "SLICE" }, 0));
 
     layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SLICE_SUB_MODE, 1 },
+        "Slice Sub-Mode",
+        juce::StringArray { "CHOP", "CHROMATIC" }, 0));
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::SAMPLE_LOOP_MODE, 1 },
         "Sample Loop",
         juce::StringArray { "ONE-SHOT", "LOOP" }, 0));
@@ -923,12 +928,54 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     if (numSamples == 0) return;
 
-    // === Sampler engine (Terrain Instrument v0a) =============================
+    // === Sampler engine (Terrain Instrument v0a + slicer v0b) ================
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
     rootNoteMidi.store    ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
     attackMsAtomic.store  (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
     releaseMsAtomic.store (*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
     sampleLoopMode.store  ((int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE));
+
+    // Build the SliceContext for the synth dispatcher. The slice list is an
+    // immutable shared_ptr snapshot so the audio thread reads without locks.
+    {
+        const int sliceModeIdx    = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
+        const int sliceSubModeIdx = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_SUB_MODE);
+        tw::SliceContext ctx;
+        ctx.rootMidiNote     = rootNoteMidi.load();
+        ctx.activeSliceIndex = activeSliceIndex.load();
+        ctx.slices           = std::atomic_load (&slicesPtr);
+
+        if (sliceModeIdx == 0)
+            ctx.mode = tw::SliceContext::Mode::Whole;
+        else if (sliceSubModeIdx == 1)
+            ctx.mode = tw::SliceContext::Mode::ChromaticOneSlice;
+        else
+            ctx.mode = tw::SliceContext::Mode::ChopChromaticLayout;
+        synth.setSliceContext (ctx);
+    }
+
+    // Drain audition queue — UI-clicked previews of individual slices.
+    // Triggered before renderNextBlock so the audition voice starts within
+    // this block.
+    {
+        std::vector<int> drained;
+        {
+            const juce::SpinLock::ScopedLockType sl (auditionLock);
+            drained.swap (auditionQueue);
+        }
+        if (! drained.empty())
+        {
+            auto sl = std::atomic_load (&slicesPtr);
+            if (sl && ! sl->empty())
+            {
+                for (int idx : drained)
+                {
+                    if (idx >= 0 && idx < (int) sl->size())
+                        synth.auditionSlice ((*sl)[(size_t) idx]);
+                }
+            }
+        }
+    }
 
     // Voices replace plugin input as the source of audio for the FX chain.
     buffer.clear();
@@ -1536,6 +1583,55 @@ juce::String TerrainInstrumentAudioProcessor::getCachedSamplePayload() const
 }
 
 //==============================================================================
+// Slicer state management
+//==============================================================================
+void TerrainInstrumentAudioProcessor::replaceSlices (tw::SliceList newSlices)
+{
+    auto snapshot = std::make_shared<const tw::SliceList> (std::move (newSlices));
+    std::atomic_store (&slicesPtr, tw::SliceListPtr (snapshot));
+
+    // Clamp activeSliceIndex to new range.
+    const int n = (int) snapshot->size();
+    int idx = activeSliceIndex.load();
+    if (n == 0) idx = 0;
+    else if (idx >= n) idx = n - 1;
+    else if (idx < 0) idx = 0;
+    activeSliceIndex.store (idx);
+}
+
+tw::SliceListPtr TerrainInstrumentAudioProcessor::loadSlices() const
+{
+    return std::atomic_load (&slicesPtr);
+}
+
+int TerrainInstrumentAudioProcessor::getNumSlices() const
+{
+    auto p = loadSlices();
+    return p ? (int) p->size() : 0;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getSlicesJson() const
+{
+    auto p = loadSlices();
+    if (! p) return "{\"slices\":[]}";
+    return tw::slicesToJson (*p);
+}
+
+void TerrainInstrumentAudioProcessor::setSlicesFromJson (const juce::String& json)
+{
+    replaceSlices (tw::slicesFromJson (json));
+}
+
+void TerrainInstrumentAudioProcessor::auditionSlice (int sliceIndex)
+{
+    const int n = getNumSlices();
+    if (sliceIndex < 0 || sliceIndex >= n) return;
+
+    const juce::SpinLock::ScopedLockType sl (auditionLock);
+    auditionQueue.push_back (sliceIndex);
+}
+
+//==============================================================================
 void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     // DAW state: parameter values + preset index + XY auto state
@@ -1565,6 +1661,14 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         juce::ScopedLock sl (sampleSourcePathLock);
         if (loadedSamplePath.isNotEmpty())
             state.setProperty ("sampleSourcePath", loadedSamplePath, nullptr);
+    }
+
+    // Slice list (JSON) + active slice index — sub-mode rides in APVTS.
+    {
+        const auto sliceJson = getSlicesJson();
+        if (sliceJson.isNotEmpty() && sliceJson != "{\"slices\":[]}")
+            state.setProperty ("slicesJson", sliceJson, nullptr);
+        state.setProperty ("activeSliceIndex", activeSliceIndex.load(), nullptr);
     }
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
@@ -1613,6 +1717,18 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 auto path = newState.getProperty ("sampleSourcePath", "").toString();
                 juce::ScopedLock sl (sampleSourcePathLock);
                 loadedSamplePath = path;
+            }
+
+            // Restore slice list + active index. Sub-mode comes from APVTS
+            // automatically. Empty list is fine — slicer just behaves like
+            // there are no chops yet.
+            {
+                auto sliceJson = newState.getProperty ("slicesJson", "").toString();
+                if (sliceJson.isNotEmpty())
+                    setSlicesFromJson (sliceJson);
+                else
+                    replaceSlices ({});
+                activeSliceIndex.store ((int) newState.getProperty ("activeSliceIndex", 0));
             }
 
             // Reload presets from disk (the single source of truth)
