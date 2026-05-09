@@ -1042,12 +1042,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     border: 1px solid #A78BFA;
     color: #F5F3FF;
     padding: 10px 18px; border-radius: 8px;
-    font: 600 12px/1.3 -apple-system, BlinkMacSystemFont, sans-serif;
-    letter-spacing: 0.05em;
+    font: 500 11px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.02em;
     opacity: 0; transition: opacity 200ms ease;
     z-index: 99999; pointer-events: none;
-    max-width: 80%;
-    text-align: center;
+    max-width: 90%;
+    text-align: left;
+    word-break: break-all;
+    white-space: pre-wrap;
   }
   .ti-drop-status.visible { opacity: 1; }
 </style>
@@ -1071,8 +1073,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     el._hideTimer = setTimeout(function(){ el.classList.remove('visible'); }, holdMs || 3000);
   }
   function getNativeFn (name) {
-    if (window.juce && typeof window.juce.getNativeFunction === 'function') {
-      try { return window.juce.getNativeFunction(name); } catch (_) {}
+    // V1 page exposes the helper as window.Juce (capital J) — see line ~3945
+    // of the served index.html.  Lowercase window.juce is the JUCE 8 helper
+    // module pattern; not used here. Try both capitalizations defensively.
+    var bridge = window.Juce || window.juce;
+    if (bridge && typeof bridge.getNativeFunction === 'function') {
+      try { return bridge.getNativeFunction(name); } catch (_) {}
     }
     if (window.__JUCE__ && window.__JUCE__.backend && typeof window.__JUCE__.backend.invokeMethod === 'function') {
       return function () {
@@ -1137,7 +1143,40 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     var fnB64 = getNativeFn('loadSampleFromBase64');
     if (!fnB64) {
-      showStatus('Native bridge not ready (no loadSampleFromBase64)', 6000);
+      // Diagnostic dump — figure out which bridge paths exist.
+      var diag = [];
+      diag.push('juce=' + (typeof window.juce));
+      if (window.juce) {
+        diag.push('juce.keys=[' + Object.keys(window.juce).join(',') + ']');
+        diag.push('juce.getNativeFunction=' + typeof window.juce.getNativeFunction);
+      }
+      diag.push('__JUCE__=' + (typeof window.__JUCE__));
+      if (window.__JUCE__) {
+        diag.push('__JUCE__.keys=[' + Object.keys(window.__JUCE__).join(',') + ']');
+        if (window.__JUCE__.backend) {
+          diag.push('backend.keys=[' + Object.keys(window.__JUCE__.backend).join(',') + ']');
+        }
+      }
+      // Try a direct lookup via getNativeFunction with logging
+      if (window.juce && typeof window.juce.getNativeFunction === 'function') {
+        try {
+          var rawResult = window.juce.getNativeFunction('loadSampleFromBase64');
+          diag.push('rawLookup=' + typeof rawResult);
+        } catch (err) {
+          diag.push('rawLookupErr=' + (err && err.message));
+        }
+      }
+      // Also try loadPreset to confirm the bridge generally works
+      if (window.juce && typeof window.juce.getNativeFunction === 'function') {
+        try {
+          var presetFn = window.juce.getNativeFunction('loadPreset');
+          diag.push('loadPresetLookup=' + typeof presetFn);
+        } catch (err) {
+          diag.push('loadPresetErr=' + (err && err.message));
+        }
+      }
+      showStatus(diag.join(' | '), 30000);
+      console.log('Terrain bridge diag:', diag.join(' | '));
       return;
     }
 
