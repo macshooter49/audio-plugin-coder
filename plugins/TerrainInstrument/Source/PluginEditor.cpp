@@ -471,7 +471,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             })
             // Sample drag-drop bridge (Phase C — Task 11). WKWebView eats native
             // file drops at the OS level, so the JS side handles dragover/drop and
-            // calls back here with the absolute file path.
+            // calls back here with the absolute file path (fast path) or the file
+            // bytes as base64 (fallback when file.path isn't available, which is
+            // the common case in modern WKWebView for security reasons).
             .withNativeFunction("loadSampleFromPath", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -481,6 +483,47 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     if (f.existsAsFile()) loadSampleAsync (f);
                 }
                 complete ({});
+            })
+            .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = filename (string),  args[1] = base64-encoded bytes (string)
+                if (args.size() < 2) { complete ({}); return; }
+
+                const auto filename = args[0].toString();
+                const auto b64      = args[1].toString();
+
+                juce::MemoryOutputStream decodedStream;
+                if (! juce::Base64::convertFromBase64 (decodedStream, b64))
+                {
+                    complete (juce::var ("decode-failed"));
+                    return;
+                }
+
+                // Write to a stable temp file so loadSampleAsync can read it.
+                auto tempDir = juce::File::getSpecialLocation (
+                                  juce::File::tempDirectory)
+                                  .getChildFile ("Terrain-Instrument-Drops");
+                tempDir.createDirectory();
+
+                auto safeName = juce::File::createLegalFileName (filename);
+                if (safeName.isEmpty()) safeName = "dropped-sample.wav";
+
+                auto tempFile = tempDir.getNonexistentChildFile (
+                                   safeName.upToLastOccurrenceOf (".", false, false),
+                                   safeName.fromLastOccurrenceOf (".", true, false),
+                                   true);
+                tempFile.replaceWithData (decodedStream.getData(), decodedStream.getDataSize());
+
+                if (tempFile.existsAsFile())
+                {
+                    loadSampleAsync (tempFile);
+                    complete (juce::var ("ok"));
+                }
+                else
+                {
+                    complete (juce::var ("temp-write-failed"));
+                }
             })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
@@ -981,40 +1024,130 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     // Inject JS-side file drag-drop bridge (Phase C — Task 11). WKWebView
     // intercepts native file drops at the OS level, so we have to handle them
-    // in JS and call back into C++ with the file path.
+    // in JS and call back into C++. Two paths:
+    //   1) FAST: file.path (some WKWebView contexts expose it). Works for
+    //      arbitrarily large files since C++ reads the file directly.
+    //   2) FALLBACK: read file as base64 in JS, send to C++. Works everywhere
+    //      but slower for big files. Acceptable up to ~100MB.
+    //
+    // Also injects a temporary status overlay so the user gets visible feedback
+    // (Phase D will replace this with the proper hero canvas drag-hover + loading
+    // states; this is a Phase C diagnostic affordance).
     const juce::String dropBridge = R"(
+<style>
+  .ti-drop-status {
+    position: fixed; left: 50%; bottom: 16px;
+    transform: translateX(-50%);
+    background: rgba(35,35,64,0.95);
+    border: 1px solid #A78BFA;
+    color: #F5F3FF;
+    padding: 10px 18px; border-radius: 8px;
+    font: 600 12px/1.3 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.05em;
+    opacity: 0; transition: opacity 200ms ease;
+    z-index: 99999; pointer-events: none;
+    max-width: 80%;
+    text-align: center;
+  }
+  .ti-drop-status.visible { opacity: 1; }
+</style>
 <script>
 (function(){
-  function getJucePath(file) {
-    if (!file) return '';
-    if (file.path) return file.path;       // macOS WKWebView non-standard
-    if (file.fullPath) return file.fullPath;
-    return '';
+  function ensureStatus () {
+    var el = document.getElementById('ti-drop-status');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ti-drop-status';
+      el.className = 'ti-drop-status';
+      document.body.appendChild(el);
+    }
+    return el;
   }
+  function showStatus (msg, holdMs) {
+    var el = ensureStatus();
+    el.textContent = msg;
+    el.classList.add('visible');
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(function(){ el.classList.remove('visible'); }, holdMs || 3000);
+  }
+  function getNativeFn (name) {
+    if (window.juce && typeof window.juce.getNativeFunction === 'function') {
+      try { return window.juce.getNativeFunction(name); } catch (_) {}
+    }
+    if (window.__JUCE__ && window.__JUCE__.backend && typeof window.__JUCE__.backend.invokeMethod === 'function') {
+      return function () {
+        var argsArr = Array.prototype.slice.call(arguments);
+        return window.__JUCE__.backend.invokeMethod(name, argsArr);
+      };
+    }
+    return null;
+  }
+
+  function readAsBase64 (file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var dataUrl = reader.result || '';
+        var commaIdx = dataUrl.indexOf(',');
+        resolve(commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : '');
+      };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(file);
+    });
+  }
+
   document.addEventListener('dragover', function(e){
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     if (window.onDragHover) window.onDragHover(true);
   }, true);
+
   document.addEventListener('dragleave', function(e){
     if (e.relatedTarget === null && window.onDragHover) window.onDragHover(false);
   }, true);
+
   document.addEventListener('drop', function(e){
     e.preventDefault();
     if (window.onDragHover) window.onDragHover(false);
+
     var f = (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
-    if (!f) return;
-    var path = getJucePath(f);
-    if (path && window.__JUCE__ && window.__JUCE__.backend) {
-      var fn = window.juce && window.juce.getNativeFunction
-                 ? window.juce.getNativeFunction('loadSampleFromPath')
-                 : null;
-      if (fn) fn(path);
-      else if (window.__JUCE__.backend.invokeMethod)
-                 window.__JUCE__.backend.invokeMethod('loadSampleFromPath', [path]);
-    } else {
-      console.warn('Terrain: dropped file has no .path (WKWebView quirk). Filename:', f && f.name);
+    if (!f) { showStatus('Drop: no file payload', 4000); return; }
+
+    showStatus('Loading "' + f.name + '" (' + Math.round(f.size / 1024) + ' KB)…', 8000);
+
+    // Path 1: try fast file.path (most WKWebView contexts strip this for security)
+    var path = f.path || f.fullPath || '';
+    if (path) {
+      var fnPath = getNativeFn('loadSampleFromPath');
+      if (fnPath) {
+        fnPath(path);
+        showStatus('Loaded via path: ' + f.name, 4000);
+        return;
+      }
     }
+
+    // Path 2: bytes fallback. Hard cap matches the 10-min RAM cap (≈230MB
+    // stereo float32 at 48kHz = ~115MB compressed WAV). Bigger files fail
+    // here rather than waste time decoding.
+    var maxBytes = 256 * 1024 * 1024;
+    if (f.size > maxBytes) {
+      showStatus('File too large (' + Math.round(f.size / 1024 / 1024) + ' MB > 256 MB)', 6000);
+      return;
+    }
+
+    var fnB64 = getNativeFn('loadSampleFromBase64');
+    if (!fnB64) {
+      showStatus('Native bridge not ready (no loadSampleFromBase64)', 6000);
+      return;
+    }
+
+    readAsBase64(f).then(function (b64) {
+      if (!b64) { showStatus('Could not encode file bytes', 6000); return; }
+      fnB64(f.name, b64);
+      showStatus('Loaded via bytes: ' + f.name, 4000);
+    }).catch(function (err) {
+      showStatus('Read error: ' + (err && err.message ? err.message : 'unknown'), 6000);
+    });
   }, true);
 })();
 </script>
