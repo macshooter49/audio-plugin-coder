@@ -1351,30 +1351,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     z-index: 5;
     display: flex; gap: 10px; align-items: center;
   }
-  #ti-mode-toggle {
-    position: relative;
-    display: flex; gap: 4px;
-    background: rgba(0, 0, 0, 0.42);
-    border: 1px solid rgba(245, 243, 255, 0.28);
-    padding: 4px; border-radius: 6px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-  }
+  /* Ghost-glass containers — barely-there bg, no border, blur for depth.
+     Active pill gets fill only (no glow ring) so it doesn't "kid-color"
+     the strip. */
+  #ti-mode-toggle,
   #ti-play-mode-toggle {
     position: relative;
     display: flex; gap: 4px;
-    background: rgba(0, 0, 0, 0.42);
-    border: 1px solid rgba(245, 243, 255, 0.28);
-    padding: 4px; border-radius: 6px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: rgba(255, 255, 255, 0.035);
+    padding: 3px; border-radius: 6px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
   .ti-play-pill {
     padding: 3px 9px;
     font: 700 9px/1 -apple-system, BlinkMacSystemFont, sans-serif;
     letter-spacing: 0.16em;
     border-radius: 3px;
-    color: rgba(245, 243, 255, 0.45);
+    color: rgba(245, 243, 255, 0.42);
     cursor: pointer;
     transition: all 150ms ease;
     user-select: none;
@@ -1382,14 +1376,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   .ti-play-pill.active {
     background: linear-gradient(135deg, #8B5CF6, #7C3AED);
     color: white;
-    box-shadow: 0 0 8px rgba(139, 92, 246, 0.45);
   }
   .ti-mode-pill {
     padding: 4px 12px;
     font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
     letter-spacing: 0.18em;
     border-radius: 3px;
-    color: rgba(245, 243, 255, 0.45);
+    color: rgba(245, 243, 255, 0.42);
     cursor: pointer;
     transition: all 150ms ease;
     user-select: none;
@@ -1397,7 +1390,6 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   .ti-mode-pill.active {
     background: linear-gradient(135deg, #8B5CF6, #7C3AED);
     color: white;
-    box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
   }
   .ti-mode-pill.disabled {
     opacity: 0.35; cursor: not-allowed;
@@ -1408,19 +1400,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     position: absolute; bottom: 12px; left: 12px;
     z-index: 5;
     display: inline-flex; gap: 7px; align-items: center;
-    background: rgba(0, 0, 0, 0.42);
-    border: 1px solid rgba(245, 243, 255, 0.28);
+    background: rgba(255, 255, 255, 0.035);
     padding: 5px 11px; border-radius: 6px;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     cursor: ns-resize;
     user-select: none;
-    transition: border-color 150ms ease, background-color 150ms ease;
+    transition: background-color 150ms ease;
   }
-  #ti-root-picker:hover { border-color: rgba(167, 139, 250, 0.65); }
+  #ti-root-picker:hover { background: rgba(255, 255, 255, 0.07); }
   #ti-root-picker.dragging {
-    border-color: rgba(167, 139, 250, 0.95);
-    background: rgba(139, 92, 246, 0.18);
+    background: rgba(139, 92, 246, 0.22);
   }
   #ti-root-picker .ti-root-label {
     font: 600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
@@ -1441,15 +1431,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     bottom: 12px !important;
     left: auto !important;
     right: 12px !important;
-    background: rgba(0, 0, 0, 0.42) !important;
-    border: 1px solid rgba(245, 243, 255, 0.28) !important;
+    background: rgba(255, 255, 255, 0.035) !important;
+    border: none !important;
     padding: 5px 11px !important;
     border-radius: 6px !important;
-    backdrop-filter: blur(6px) !important;
-    -webkit-backdrop-filter: blur(6px) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
     font: 600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif !important;
     letter-spacing: 0.12em !important;
-    color: rgba(245, 243, 255, 0.55) !important;
+    color: rgba(245, 243, 255, 0.5) !important;
   }
 </style>
 

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Terrain Instrument — Hero Pills Cleanup (v6)</title>
+<style>
+  :root {
+    --bg-main:    #ECE8F1;
+    --bg-hero:    #2D2545;
+    --bg-surface: #E8E4EF;
+    --purple-600: #7C3AED;
+    --purple-500: #8B5CF6;
+    --purple-400: #A78BFA;
+    --text-primary: #2A2035;
+  }
+  [data-theme="dark"] {
+    --bg-main:    #1A1A2E;
+    --bg-hero:    #12121F;
+    --bg-surface: #232340;
+    --purple-600: #9B6DFF;
+    --purple-500: #8B5CF6;
+    --purple-400: #B794FF;
+    --text-primary: #E0DCE8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg-main);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--text-primary);
+    padding: 28px;
+    transition: background 200ms;
+  }
+  h1 { margin: 0 0 6px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
+  .sub { margin: 0 0 24px; font-size: 12px; opacity: 0.6; }
+
+  .toolbar {
+    display: flex; gap: 10px; margin-bottom: 28px;
+  }
+  .toolbar button {
+    border: 1px solid var(--purple-500);
+    background: transparent;
+    color: var(--text-primary);
+    padding: 6px 14px; border-radius: 4px;
+    font: 600 11px/1 -apple-system, sans-serif;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+  }
+  .toolbar button.active {
+    background: linear-gradient(135deg, var(--purple-500), var(--purple-600));
+    color: white;
+    border-color: transparent;
+  }
+
+  /* Each variant gets its own faux-hero strip so we see it on the actual hero bg */
+  .variant {
+    margin-bottom: 18px;
+  }
+  .variant-label {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    opacity: 0.65;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .hero {
+    height: 110px;
+    background: var(--bg-hero);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    /* fake waveform shimmer */
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,0.02), transparent 60%),
+      radial-gradient(circle at 30% 50%, rgba(167,139,250,0.08), transparent 50%);
+  }
+  /* shared bottom-strip layout */
+  .strip {
+    position: absolute; bottom: 12px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .strip-center {
+    display: flex; gap: 10px; align-items: center;
+  }
+
+  /* ════════════════════════════════════════════════════════════════ */
+  /* CURRENT (for reference)                                           */
+  /* ════════════════════════════════════════════════════════════════ */
+  .v0 .pill-group {
+    display: flex; gap: 4px;
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(245, 243, 255, 0.28);
+    padding: 4px; border-radius: 6px;
+    backdrop-filter: blur(6px);
+  }
+  .v0 .pill {
+    padding: 4px 12px;
+    font: 700 10px/1 -apple-system, sans-serif;
+    letter-spacing: 0.18em;
+    border-radius: 3px;
+    color: rgba(245, 243, 255, 0.45);
+    cursor: pointer;
+  }
+  .v0 .pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+  }
+  .v0 .root, .v0 .xy {
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(245, 243, 255, 0.28);
+    padding: 5px 11px; border-radius: 6px;
+    font: 600 10px/1 sans-serif;
+    color: rgba(245, 243, 255, 0.55);
+    letter-spacing: 0.12em;
+    backdrop-filter: blur(6px);
+  }
+  .v0 .root .val { color: #A78BFA; margin-left: 7px; font-weight: 700; }
+
+  /* ════════════════════════════════════════════════════════════════ */
+  /* VARIANT A — Pure Float (no containers, no glow)                   */
+  /* ════════════════════════════════════════════════════════════════ */
+  .vA .pill-group { display: flex; gap: 2px; align-items: center; }
+  .vA .pill {
+    padding: 4px 12px;
+    font: 700 10px/1 -apple-system, sans-serif;
+    letter-spacing: 0.18em;
+    border-radius: 3px;
+    color: rgba(245, 243, 255, 0.42);
+    cursor: pointer;
+  }
+  .vA .pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+  }
+  .vA .divider {
+    color: rgba(245, 243, 255, 0.18);
+    font-size: 10px;
+    margin: 0 2px;
+  }
+  .vA .root, .vA .xy {
+    font: 600 10px/1 sans-serif;
+    color: rgba(245, 243, 255, 0.45);
+    letter-spacing: 0.12em;
+  }
+  .vA .root .val { color: #A78BFA; margin-left: 7px; font-weight: 700; }
+
+  /* ════════════════════════════════════════════════════════════════ */
+  /* VARIANT B — Ghost Glass (barely-there container, no border)       */
+  /* ════════════════════════════════════════════════════════════════ */
+  .vB .pill-group {
+    display: flex; gap: 4px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 3px; border-radius: 6px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .vB .pill {
+    padding: 4px 12px;
+    font: 700 10px/1 -apple-system, sans-serif;
+    letter-spacing: 0.18em;
+    border-radius: 3px;
+    color: rgba(245, 243, 255, 0.42);
+    cursor: pointer;
+  }
+  .vB .pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+  }
+  .vB .root, .vB .xy {
+    background: rgba(255, 255, 255, 0.035);
+    padding: 4px 11px; border-radius: 6px;
+    font: 600 10px/1 sans-serif;
+    color: rgba(245, 243, 255, 0.5);
+    letter-spacing: 0.12em;
+    backdrop-filter: blur(8px);
+  }
+  .vB .root .val { color: #A78BFA; margin-left: 7px; font-weight: 700; }
+
+  /* ════════════════════════════════════════════════════════════════ */
+  /* VARIANT C — Frosted Pills (each pill is its own glass tile)       */
+  /* ════════════════════════════════════════════════════════════════ */
+  .vC .pill-group { display: flex; gap: 5px; }
+  .vC .pill {
+    padding: 4px 12px;
+    font: 700 10px/1 -apple-system, sans-serif;
+    letter-spacing: 0.18em;
+    border-radius: 4px;
+    color: rgba(245, 243, 255, 0.45);
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.045);
+    backdrop-filter: blur(8px);
+  }
+  .vC .pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+    backdrop-filter: none;
+  }
+  .vC .root, .vC .xy {
+    background: rgba(255, 255, 255, 0.045);
+    padding: 4px 11px; border-radius: 4px;
+    font: 600 10px/1 sans-serif;
+    color: rgba(245, 243, 255, 0.55);
+    letter-spacing: 0.12em;
+    backdrop-filter: blur(8px);
+  }
+  .vC .root .val { color: #A78BFA; margin-left: 7px; font-weight: 700; }
+
+  /* ════════════════════════════════════════════════════════════════ */
+  /* VARIANT D — Underline Active (no container, active gets a bar)    */
+  /* ════════════════════════════════════════════════════════════════ */
+  .vD .pill-group {
+    display: flex; gap: 4px; align-items: center;
+  }
+  .vD .pill {
+    padding: 5px 12px 3px;
+    font: 700 10px/1 -apple-system, sans-serif;
+    letter-spacing: 0.18em;
+    color: rgba(245, 243, 255, 0.4);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 150ms ease;
+  }
+  .vD .pill.active {
+    color: white;
+    border-bottom-color: var(--purple-400);
+  }
+  .vD .root, .vD .xy {
+    font: 600 10px/1 sans-serif;
+    color: rgba(245, 243, 255, 0.45);
+    letter-spacing: 0.12em;
+  }
+  .vD .root .val { color: #A78BFA; margin-left: 7px; font-weight: 700; }
+</style>
+</head>
+<body>
+  <h1>TERRAIN INSTRUMENT — Hero Pills Cleanup</h1>
+  <p class="sub">Click DARK / LIGHT to swap themes. Hero is always dark, so the pills look the same — but the page bg shifts. Pick the variant that feels most "baked-in / glass / not gray-box".</p>
+
+  <div class="toolbar">
+    <button id="btn-dark" class="active">DARK</button>
+    <button id="btn-light">LIGHT</button>
+  </div>
+
+  <!-- ─── Reference ─── -->
+  <div class="variant v0">
+    <div class="variant-label">CURRENT (for reference) — what you said looks "kid colored"</div>
+    <div class="hero">
+      <div class="strip">
+        <div class="root">ROOT <span class="val">C4</span></div>
+        <div class="strip-center">
+          <div class="pill-group">
+            <div class="pill active">PITCH</div>
+            <div class="pill">SLICE</div>
+          </div>
+          <div class="pill-group">
+            <div class="pill">1-SHOT</div>
+            <div class="pill active">LOOP</div>
+          </div>
+        </div>
+        <div class="xy">XY · 0.50 · 0.50</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── A ─── -->
+  <div class="variant vA">
+    <div class="variant-label">A — PURE FLOAT (no containers, just text + active fill)</div>
+    <div class="hero">
+      <div class="strip">
+        <div class="root">ROOT <span class="val">C4</span></div>
+        <div class="strip-center">
+          <div class="pill-group">
+            <div class="pill active">PITCH</div>
+            <span class="divider">·</span>
+            <div class="pill">SLICE</div>
+          </div>
+          <div class="pill-group" style="margin-left:18px">
+            <div class="pill">1-SHOT</div>
+            <span class="divider">·</span>
+            <div class="pill active">LOOP</div>
+          </div>
+        </div>
+        <div class="xy">XY · 0.50 · 0.50</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── B ─── -->
+  <div class="variant vB">
+    <div class="variant-label">B — GHOST GLASS (faintest bg, no border, blur for depth)</div>
+    <div class="hero">
+      <div class="strip">
+        <div class="root">ROOT <span class="val">C4</span></div>
+        <div class="strip-center">
+          <div class="pill-group">
+            <div class="pill active">PITCH</div>
+            <div class="pill">SLICE</div>
+          </div>
+          <div class="pill-group">
+            <div class="pill">1-SHOT</div>
+            <div class="pill active">LOOP</div>
+          </div>
+        </div>
+        <div class="xy">XY · 0.50 · 0.50</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── C ─── -->
+  <div class="variant vC">
+    <div class="variant-label">C — FROSTED PILLS (each pill is its own glass tile, no parent container)</div>
+    <div class="hero">
+      <div class="strip">
+        <div class="root">ROOT <span class="val">C4</span></div>
+        <div class="strip-center">
+          <div class="pill-group">
+            <div class="pill active">PITCH</div>
+            <div class="pill">SLICE</div>
+          </div>
+          <div class="pill-group">
+            <div class="pill">1-SHOT</div>
+            <div class="pill active">LOOP</div>
+          </div>
+        </div>
+        <div class="xy">XY · 0.50 · 0.50</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── D ─── -->
+  <div class="variant vD">
+    <div class="variant-label">D — UNDERLINE ACTIVE (no fill on active, just a thin purple bar under it)</div>
+    <div class="hero">
+      <div class="strip">
+        <div class="root">ROOT <span class="val">C4</span></div>
+        <div class="strip-center">
+          <div class="pill-group">
+            <div class="pill active">PITCH</div>
+            <div class="pill">SLICE</div>
+          </div>
+          <div class="pill-group" style="margin-left:14px">
+            <div class="pill">1-SHOT</div>
+            <div class="pill active">LOOP</div>
+          </div>
+        </div>
+        <div class="xy">XY · 0.50 · 0.50</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.documentElement.setAttribute('data-theme', 'dark');
+  const dBtn = document.getElementById('btn-dark');
+  const lBtn = document.getElementById('btn-light');
+  dBtn.onclick = () => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    dBtn.classList.add('active'); lBtn.classList.remove('active');
+  };
+  lBtn.onclick = () => {
+    document.documentElement.setAttribute('data-theme', 'light');
+    lBtn.classList.add('active'); dBtn.classList.remove('active');
+  };
+</script>
+</body>
+</html>
