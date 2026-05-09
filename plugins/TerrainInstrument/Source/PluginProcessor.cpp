@@ -1623,9 +1623,13 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
 //==============================================================================
 juce::File TerrainInstrumentAudioProcessor::getUserPresetsFile() const
 {
+    // Separate folder from FX (which writes to Noizefield/Terrain/UserPresets.xml).
+    // Schemas differ — instrument has SAMPLE_LOOP_MODE / ATTACK_MS / RELEASE_MS /
+    // ROOT_NOTE etc. that the FX doesn't know about. If both wrote to the same
+    // file, save-from-one would clobber/merge incompatibly with the other.
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
         .getChildFile("Noizefield")
-        .getChildFile("Terrain")
+        .getChildFile("Terrain Instrument")
         .getChildFile("UserPresets.xml");
 }
 
@@ -1871,17 +1875,21 @@ void TerrainInstrumentAudioProcessor::exportCapture(int durationSeconds)
         return;
     }
 
-    // Build output path: ~/Music/Waves Crate/Terrain/Terrain_Capture_YYYY-MM-DD_HH-MM-SS.wav
+    // Build output path: ~/Music/Waves Crate/Terrain Instrument/Capture_YYYY-MM-DD_HH-MM-SS.wav
+    // Separate folder from FX (~/Music/Waves Crate/Terrain/) so the same
+    // user can run both products without their captures landing in the same
+    // bucket — instrument captures are typically MIDI-recorded sample takes,
+    // FX captures are processed track recordings; users want them separated.
     auto now = juce::Time::getCurrentTime();
     auto timestamp = now.formatted("%Y-%m-%d_%H-%M-%S");
     auto dir = juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                    .getChildFile("Waves Crate")
-                   .getChildFile("Terrain");
+                   .getChildFile("Terrain Instrument");
 
     if (!dir.exists())
         dir.createDirectory();
 
-    auto filePath = dir.getChildFile("Terrain_Capture_" + timestamp + ".wav");
+    auto filePath = dir.getChildFile("Terrain_Instrument_Capture_" + timestamp + ".wav");
 
     captureExportThread = std::make_unique<std::thread>(
         [this, tempL, tempR, copied, sr, filePath]()
