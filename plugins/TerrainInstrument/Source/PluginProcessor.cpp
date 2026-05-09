@@ -924,8 +924,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Voices replace plugin input as the source of audio for the FX chain.
     buffer.clear();
     synth.renderNextBlock (buffer, midiMessages, 0, numSamples);
-    // (Instrument has no input bus, so no "extra output channels" to clear here —
-    // the voice render already filled the entire output buffer.)
+
+    // -6 dB pad on the voice mix before the FX chain. The FX modules
+    // (TapeProcessor saturation, SpaceReverb feedback paths, etc.) were
+    // tuned for plugin-input levels around -12 to -6 dBFS — typical track
+    // signal coming from a DAW. Voice output at velocity=1 + envLevel=1
+    // is a unity-gain (0 dBFS) signal, ~6 dB hotter than the FX expects,
+    // which causes audible distortion at "subtle" tape settings. This pad
+    // brings the gain staging into the FX's design window.
+    constexpr float kVoiceToFxPad = 0.5f; // -6 dB
+    buffer.applyGain (kVoiceToFxPad);
 
     // Read BPM from DAW playhead
     if (auto* playHead = getPlayHead())

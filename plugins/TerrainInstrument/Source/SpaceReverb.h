@@ -96,6 +96,16 @@ public:
             outR = allpassR[i].process(outR);
         }
 
+        // Soft clip the wet output to catch internal Schroeder-loop overshoot
+        // before it hits the dry/wet mix. tanh is transparent at low amplitudes
+        // (linear approximation under ~0.5) and rolls off smoothly above. The
+        // 0.7 pre-gain widens the linear region; the 1/0.7 post-gain undoes it
+        // for unity gain at low levels.
+        constexpr float kSoftClipPre  = 0.7f;
+        constexpr float kSoftClipPost = 1.0f / 0.7f;
+        outL = std::tanh (outL * kSoftClipPre) * kSoftClipPost;
+        outR = std::tanh (outR * kSoftClipPre) * kSoftClipPost;
+
         // Wet/dry mix
         left  = left  * (1.0f - mix) + outL * mix;
         right = right * (1.0f - mix) + outR * mix;

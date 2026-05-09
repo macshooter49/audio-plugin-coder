@@ -9742,15 +9742,23 @@ Object.keys(_RAND_SECTION_PARAMS).forEach(s => {
 
 // Hard caps per intensity for danger params. Always Math.min-clamped after rolling.
 const _RAND_CAP = {
-  saturation:     { subtle: 50,   normal: 70,   wild: 85   },
-  hiss:           { subtle: 40,   normal: 50,   wild: 70   },
-  studioSculpt:   { subtle: 50,   normal: 70,   wild: 85   },
-  studioWeave:    { subtle: 50,   normal: 70,   wild: 85   },
-  wireSaturation: { subtle: 50,   normal: 70,   wild: 85   },
-  wireHiss:       { subtle: 40,   normal: 50,   wild: 70   },
-  chorusAmount:   { subtle: 0.45, normal: 0.60, wild: 0.85 },
-  dlyFeedback:    { subtle: 0.55, normal: 0.70, wild: 0.88 },
-  loopFeedback:   { subtle: 70,   normal: 85,   wild: 95   },
+  // Tightened for Terrain Instrument: voice-mix is hotter than the FX-side
+  // plugin-input was, so tape/saturator stages overload faster. Halving the
+  // subtle ceilings keeps subtle musical; normal/wild reduced ~25% so heavy
+  // settings still hit hard without going to "ear rape" territory (per user
+  // 2026-05-08 feedback).
+  wowFlutter:     { subtle: 25,   normal: 55,   wild: 80   }, // NEW cap
+  saturation:     { subtle: 25,   normal: 55,   wild: 75   },
+  hiss:           { subtle: 20,   normal: 40,   wild: 60   },
+  studioSculpt:   { subtle: 25,   normal: 55,   wild: 75   },
+  studioWeave:    { subtle: 25,   normal: 55,   wild: 75   },
+  studioTilt:     { subtle: 50,   normal: 70,   wild: 90   }, // NEW cap (tilt isn't gain — cap less aggressively)
+  wireWow:        { subtle: 25,   normal: 55,   wild: 80   }, // NEW cap
+  wireSaturation: { subtle: 25,   normal: 55,   wild: 75   },
+  wireHiss:       { subtle: 20,   normal: 40,   wild: 60   },
+  chorusAmount:   { subtle: 0.35, normal: 0.55, wild: 0.80 },
+  dlyFeedback:    { subtle: 0.45, normal: 0.65, wild: 0.85 },
+  loopFeedback:   { subtle: 60,   normal: 80,   wild: 92   },
 };
 
 window.rollScoped = function rollScoped() {
