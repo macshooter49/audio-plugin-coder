@@ -438,7 +438,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 auto f = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                           .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+                           .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
                 complete(f.existsAsFile() ? f.loadFileAsString() : juce::String("{}"));
             })
             .withNativeFunction("saveSettings", [this](const juce::Array<juce::var>& args,
@@ -449,7 +449,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     auto dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
                                  .getChildFile("Waves Crate").getChildFile("Terrain");
                     dir.createDirectory();
-                    dir.getChildFile("PluginSettings.json").replaceWithText(args[0].toString());
+                    dir.getChildFile("InstrumentSettings.json").replaceWithText(args[0].toString());
 
                     // Update capture strip theme
                     auto json = args[0].toString();
@@ -511,6 +511,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete ({});
             })
+            .withNativeFunction("setSampleLoopMode", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    const int mode = juce::jlimit (0, 1, (int) args[0]);
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SAMPLE_LOOP_MODE))
+                        p->setValueNotifyingHost (static_cast<float> (mode));  // Choice: 0=ONE-SHOT, 1=LOOP
+                    audioProcessor.sampleLoopMode.store (mode);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getSampleLoopMode", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.sampleLoopMode.load());
+            })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -566,7 +583,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // Also restore EQ panel open state from same settings file (editor-side UI state)
     {
         auto sf = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                    .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+                    .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
         if (sf.existsAsFile())
         {
             auto contents = sf.loadFileAsString();
@@ -857,7 +874,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
 
         // Push plugin settings (theme) during restore window
         auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                              .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+                              .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
         if (settingsFile.existsAsFile())
         {
             auto sJson = settingsFile.loadFileAsString().replace("\\", "\\\\").replace("'", "\\'");
@@ -1045,7 +1062,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     // Inject saved theme into HTML so the page loads with the correct theme from frame one
     auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                          .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("PluginSettings.json");
+                          .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
     if (settingsFile.existsAsFile() && settingsFile.loadFileAsString().contains("\"dark\""))
         html = html.replace("<html lang=\"en\">", "<html lang=\"en\" data-theme=\"dark\">");
 
@@ -1306,6 +1323,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
+
+  /* ─── Play-mode toggle (1-SHOT ↔ LOOP), under the mode toggle ─── */
+  #ti-play-mode-toggle {
+    position: absolute; top: 50px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex; gap: 4px;
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(245, 243, 255, 0.28);
+    padding: 3px; border-radius: 5px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .ti-play-pill {
+    padding: 3px 9px;
+    font: 700 9px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.16em;
+    border-radius: 3px;
+    color: rgba(245, 243, 255, 0.45);
+    cursor: pointer;
+    transition: all 150ms ease;
+    user-select: none;
+  }
+  .ti-play-pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.45);
+  }
   .ti-mode-pill {
     padding: 4px 12px;
     font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
@@ -1410,6 +1455,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       '<div class="ti-mode-pill active" data-mode="PITCH">PITCH</div>' +
       '<div class="ti-mode-pill disabled" data-mode="SLICE" title="Slicer coming in v0b">SLICE</div>';
     hero.appendChild(modeWrap);
+
+    // Play-mode toggle (1-SHOT vs forward LOOP)
+    var playWrap = document.createElement('div');
+    playWrap.id = 'ti-play-mode-toggle';
+    playWrap.title = 'Sample playback: one-shot or forward loop';
+    playWrap.innerHTML =
+      '<div class="ti-play-pill active" data-play="0">1-SHOT</div>' +
+      '<div class="ti-play-pill" data-play="1">LOOP</div>';
+    hero.appendChild(playWrap);
 
     // Root note picker
     var rootWrap = document.createElement('div');
@@ -1526,6 +1580,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         // PITCH stays active in v0a; nothing to toggle.
       });
     });
+
+    // Play-mode toggle (1-SHOT / LOOP) — writes APVTS via setSampleLoopMode.
+    document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        var mode = parseInt(pill.dataset.play, 10) || 0;
+        document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (p) {
+          p.classList.toggle('active', parseInt(p.dataset.play, 10) === mode);
+        });
+        var setFn = getNativeFn('setSampleLoopMode');
+        if (setFn) { try { setFn(mode); } catch (_) {} }
+      });
+    });
+    // Pull initial state from C++ (in case DAW restored it from session).
+    (function () {
+      var getFn = getNativeFn('getSampleLoopMode');
+      if (!getFn) return;
+      try {
+        var p = getFn();
+        if (p && typeof p.then === 'function') {
+          p.then(function (mode) {
+            var m = parseInt(mode, 10) || 0;
+            document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (q) {
+              q.classList.toggle('active', parseInt(q.dataset.play, 10) === m);
+            });
+          });
+        }
+      } catch (_) {}
+    })();
 
     // Root picker: click-hold-vertical-drag (knob style). 8 px = 1 semitone.
     // Shift-drag = fine (24 px = 1 semitone). Up = pitch up, down = pitch down.

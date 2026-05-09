@@ -140,6 +140,9 @@ public:
     std::atomic<int>   rootNoteMidi    { 60 };    // default C4
     std::atomic<float> attackMsAtomic  { 5.0f };
     std::atomic<float> releaseMsAtomic { 800.0f };
+    // Sample playback loop mode: 0 = one-shot (envelope releases at end-of-buffer),
+    // 1 = forward loop (playhead wraps to 0 and keeps playing until note-off).
+    std::atomic<int>   sampleLoopMode  { 0 };
 
     // Preset system
     void loadPreset (int index);

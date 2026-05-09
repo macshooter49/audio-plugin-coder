@@ -82,8 +82,9 @@ namespace ParameterIDs
     constexpr char CHORUS_CHARACTER[] = "CHORUS_CHARACTER";
 
     // Sampler (Terrain Instrument additions — v0a)
-    constexpr char ATTACK_MS[]    = "ATTACK_MS";
-    constexpr char RELEASE_MS[]   = "RELEASE_MS";
-    constexpr char ROOT_NOTE[]    = "ROOT_NOTE";
-    constexpr char SLICE_MODE[]   = "SLICE_MODE";  // 0=PITCH, 1=SLICE (SLICE inert in v0a)
+    constexpr char ATTACK_MS[]        = "ATTACK_MS";
+    constexpr char RELEASE_MS[]       = "RELEASE_MS";
+    constexpr char ROOT_NOTE[]        = "ROOT_NOTE";
+    constexpr char SLICE_MODE[]       = "SLICE_MODE";       // 0=PITCH, 1=SLICE (SLICE inert in v0a)
+    constexpr char SAMPLE_LOOP_MODE[] = "SAMPLE_LOOP_MODE"; // 0=ONE-SHOT, 1=FORWARD LOOP
 }

@@ -15,11 +15,13 @@ namespace tw
         SamplerVoice (SampleBuffer& sb,
                       std::atomic<int>&   rootNoteRef,
                       std::atomic<float>& attackMsRef,
-                      std::atomic<float>& releaseMsRef) noexcept
+                      std::atomic<float>& releaseMsRef,
+                      std::atomic<int>&   loopModeRef) noexcept
             : sample (sb),
               rootNoteParam (rootNoteRef),
               attackMsParam (attackMsRef),
-              releaseMsParam (releaseMsRef) {}
+              releaseMsParam (releaseMsRef),
+              loopModeParam (loopModeRef) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
@@ -92,16 +94,29 @@ namespace tw
             const auto* inL = buf->getReadPointer (0);
             const auto* inR = bufChans > 1 ? buf->getReadPointer (1) : inL;
 
+            const int loopMode = loopModeParam.load();
+            const double endIdx = static_cast<double> (bufLen - 1);
+
             for (int i = 0; i < numSamples; ++i)
             {
-                if (playhead >= static_cast<double> (bufLen - 1))
+                if (playhead >= endIdx)
                 {
-                    // End-of-sample: voice goes silent regardless of env stage.
-                    envStage = EnvStage::Off;
-                    envLevel = 0.0f;
-                    clearCurrentNote();
-                    isActive = false;
-                    return;
+                    if (loopMode == 1)
+                    {
+                        // Forward loop: wrap to start, preserve fractional offset
+                        // so pitch ratio stays consistent across the seam.
+                        playhead = std::fmod (playhead, endIdx);
+                        if (playhead < 0.0) playhead += endIdx;
+                    }
+                    else
+                    {
+                        // One-shot: voice goes silent regardless of env stage.
+                        envStage = EnvStage::Off;
+                        envLevel = 0.0f;
+                        clearCurrentNote();
+                        isActive = false;
+                        return;
+                    }
                 }
 
                 // Tick the envelope.
@@ -156,6 +171,7 @@ namespace tw
         std::atomic<int>&   rootNoteParam;
         std::atomic<float>& attackMsParam;
         std::atomic<float>& releaseMsParam;
+        std::atomic<int>&   loopModeParam;
 
         int      currentNote      = -1;
         float    currentVelocity  = 0.0f;

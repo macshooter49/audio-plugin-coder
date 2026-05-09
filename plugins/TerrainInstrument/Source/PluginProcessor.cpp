@@ -15,7 +15,8 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     synth.addSound (new tw::SamplerSound());
     for (int i = 0; i < kNumVoices; ++i)
         synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi,
-                                              attackMsAtomic, releaseMsAtomic));
+                                              attackMsAtomic, releaseMsAtomic,
+                                              sampleLoopMode));
     // Sample buffer starts empty. User drags a file in, or the editor opens a
     // file picker. SampleLoader (async) populates the shared buffer when a load
     // completes. Voices read it via the SampleBuffer atomic shared_ptr.
@@ -748,6 +749,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Mode",
         juce::StringArray { "PITCH", "SLICE" }, 0));
 
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SAMPLE_LOOP_MODE, 1 },
+        "Sample Loop",
+        juce::StringArray { "ONE-SHOT", "LOOP" }, 0));
+
     return layout;
 }
 
@@ -922,6 +928,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     rootNoteMidi.store    ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
     attackMsAtomic.store  (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
     releaseMsAtomic.store (*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
+    sampleLoopMode.store  ((int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE));
 
     // Voices replace plugin input as the source of audio for the FX chain.
     buffer.clear();
