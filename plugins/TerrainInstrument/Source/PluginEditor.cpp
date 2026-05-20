@@ -785,6 +785,39 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.replaceSlices (std::move (copy));
                 complete (audioProcessor.getSlicesJson());
             })
+            .withNativeFunction("moveSliceBoundary", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = marker index (>= 1, the boundary between slice[idx-1] and slice[idx]).
+                // args[1] = new sample position (int64).
+                // Snaps to nearest zero crossing within ±384 samples; clamps so neither
+                // adjacent slice can shrink below 64 samples. Returns updated slices JSON.
+                if (args.size() < 2) { complete ({}); return; }
+                const int         idx = (int) args[0];
+                const juce::int64 rawPos = (juce::int64) (long long) args[1];
+
+                auto buf = audioProcessor.getSampleBuffer().load();
+                if (! buf || buf->getNumSamples() < 2) { complete (audioProcessor.getSlicesJson()); return; }
+
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || cur->empty()
+                    || idx <= 0
+                    || idx >= (int) cur->size()) { complete (audioProcessor.getSlicesJson()); return; }
+
+                constexpr juce::int64 kMinSliceLen = 64;
+                const juce::int64 lo = (*cur)[(size_t) (idx - 1)].startSample + kMinSliceLen;
+                const juce::int64 hi = (*cur)[(size_t) idx].endSample - kMinSliceLen;
+                if (hi <= lo) { complete (audioProcessor.getSlicesJson()); return; }
+
+                const juce::int64 clamped = juce::jlimit (lo, hi, rawPos);
+                const juce::int64 snapped = juce::jlimit (lo, hi, tw::findNearestZeroCrossing (*buf, clamped, 384));
+
+                tw::SliceList copy = *cur;
+                copy[(size_t) (idx - 1)].endSample = snapped;
+                copy[(size_t) idx].startSample     = snapped;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete (audioProcessor.getSlicesJson());
+            })
 
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1796,7 +1829,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   .ti-slice-marker {
     position: absolute; top: 0; bottom: 0; width: 1px;
     background: rgba(167,139,250,0.45);
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: ew-resize;
+    transition: background 140ms ease, box-shadow 140ms ease;
+  }
+  /* Invisible wider hit-zone for easier grabbing — visible line stays 1px. */
+  .ti-slice-marker::after {
+    content: '';
+    position: absolute; top: 0; bottom: 0;
+    left: -4px; right: -4px;
+    cursor: ew-resize;
+  }
+  .ti-slice-marker:hover {
+    background: rgba(167,139,250,0.95);
+    box-shadow: 0 0 8px rgba(139,92,246,0.55);
+  }
+  .ti-slice-marker.dragging {
+    background: #C4B5FD;
+    box-shadow: 0 0 12px rgba(139,92,246,0.9);
   }
   .ti-slice-marker .ti-slice-label {
     position: absolute; top: 2px; left: -10px; width: 20px;
@@ -2250,6 +2300,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         label.className = 'ti-slice-label';
         label.textContent = (i + 1);
         marker.appendChild(label);
+        attachMarkerDrag(marker, i);
         overlays.appendChild(marker);
       } else {
         // Slice 1 still shows its label at left edge of waveform.
@@ -2264,6 +2315,64 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     });
   }
 
+  // Drag a marker line horizontally to move the boundary between
+  // slice[i-1] and slice[i]. Live visual updates during drag (no DOM
+  // thrash); on release, send the final position to C++ which snaps to
+  // the nearest zero crossing and clamps to keep neither slice below
+  // 64 samples. C++ returns the authoritative slice list which we apply.
+  function attachMarkerDrag (marker, i) {
+    marker.addEventListener('mousedown', function (ev) {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      var waveCanvas = document.getElementById('waveform-canvas');
+      if (!waveCanvas) return;
+      var waveRect = waveCanvas.getBoundingClientRect();
+      var W = waveRect.width;
+      var total = state.sampleLengthSamples;
+      if (W <= 0 || total <= 0) return;
+
+      var MIN_LEN = 64;
+      var slicePrev = state.slices[i - 1];
+      var sliceNext = state.slices[i];
+      if (!slicePrev || !sliceNext) return;
+      var minSample = slicePrev.start + MIN_LEN;
+      var maxSample = sliceNext.end   - MIN_LEN;
+      if (maxSample <= minSample) return;
+
+      marker.classList.add('dragging');
+      document.body.style.cursor = 'ew-resize';
+
+      function clientXToSample (x) {
+        var frac = (x - waveRect.left) / W;
+        frac = Math.max(0, Math.min(1, frac));
+        var s = Math.round(frac * total);
+        return Math.max(minSample, Math.min(maxSample, s));
+      }
+      function onMove (mev) {
+        var s = clientXToSample(mev.clientX);
+        marker.style.left = ((s / total) * W) + 'px';
+      }
+      function onUp (mev) {
+        document.removeEventListener('mousemove', onMove, true);
+        document.removeEventListener('mouseup',   onUp,   true);
+        document.body.style.cursor = '';
+        marker.classList.remove('dragging');
+        var finalSample = clientXToSample(mev.clientX);
+        var fn = getNativeFn('moveSliceBoundary');
+        if (fn) {
+          fn(i, finalSample).then(applySlicesJson).catch(function(){});
+        } else {
+          state.slices[i - 1] = Object.assign({}, slicePrev, { end: finalSample });
+          state.slices[i]     = Object.assign({}, sliceNext, { start: finalSample });
+          redrawSliceOverlay();
+        }
+      }
+      document.addEventListener('mousemove', onMove, true);
+      document.addEventListener('mouseup',   onUp,   true);
+    });
+  }
+
   function attachSliceGestures (body, idx) {
     var dragState = null;
     var clicked = false;
@@ -2271,12 +2380,30 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     body.addEventListener('mousedown', function (ev) {
       if (ev.button !== 0) return;  // left-click only here
       ev.stopPropagation();         // don't let the XY pad eat this
+      // The second click of a double-click suppresses the audition / pitch-drag
+      // path — the dblclick handler below adds a marker instead. Without this
+      // the user would audition twice on every "add chop" gesture.
+      if (ev.detail >= 2) { ev.preventDefault(); return; }
       clicked = true;
       dragState = { startY: ev.clientY, startX: ev.clientX, idx: idx, fired: false, startPitch: state.slices[idx].pitch || 0 };
       body.classList.add('dragging');
       document.addEventListener('mousemove', onSliceMove, true);
       document.addEventListener('mouseup',   onSliceUp,   true);
       ev.preventDefault();
+    });
+
+    body.addEventListener('dblclick', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var waveCanvas = document.getElementById('waveform-canvas');
+      if (!waveCanvas || state.sampleLengthSamples <= 0) return;
+      var waveRect = waveCanvas.getBoundingClientRect();
+      if (waveRect.width <= 0) return;
+      var frac = (ev.clientX - waveRect.left) / waveRect.width;
+      frac = Math.max(0, Math.min(1, frac));
+      var samplePos = Math.round(frac * state.sampleLengthSamples);
+      var fn = getNativeFn('addMarkerAt');
+      if (fn) fn(samplePos).then(applySlicesJson).catch(function(){});
     });
 
     body.addEventListener('contextmenu', function (ev) {
