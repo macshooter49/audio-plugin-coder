@@ -429,10 +429,40 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 if (args.size() >= 2)
                 {
-                    audioProcessor.xyPadX.store(static_cast<float>(args[0]), std::memory_order_relaxed);
-                    audioProcessor.xyPadY.store(static_cast<float>(args[1]), std::memory_order_relaxed);
+                    // When the pad is disabled, ignore positional writes — the
+                    // mod engine should keep seeing the neutral (0.5, 0.5)
+                    // forced by setXYEnabled. JS gates clicks/drags/auto-play
+                    // too but this is the last line of defense.
+                    if (audioProcessor.xyEnabled.load(std::memory_order_relaxed) > 0.5f)
+                    {
+                        audioProcessor.xyPadX.store(static_cast<float>(args[0]), std::memory_order_relaxed);
+                        audioProcessor.xyPadY.store(static_cast<float>(args[1]), std::memory_order_relaxed);
+                    }
                 }
                 complete({});
+            })
+            .withNativeFunction("setXYEnabled", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                {
+                    const bool on = ((float) args[0]) > 0.5f;
+                    audioProcessor.xyEnabled.store(on ? 1.0f : 0.0f, std::memory_order_relaxed);
+                    if (! on)
+                    {
+                        // Neutralize XY mod source: (0.5 - 0.5) * 2 == 0 for
+                        // both axes, so any XY-targeted mod contributes nothing
+                        // regardless of polarity (bipolar / uni+ / uni-).
+                        audioProcessor.xyPadX.store(0.5f, std::memory_order_relaxed);
+                        audioProcessor.xyPadY.store(0.5f, std::memory_order_relaxed);
+                    }
+                }
+                complete({});
+            })
+            .withNativeFunction("getXYEnabled", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.xyEnabled.load(std::memory_order_relaxed));
             })
             .withNativeFunction("getSettings", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1640,68 +1670,90 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
 
   /* ──────────────────────────────────────────────────────────────────
-     SLICER UI (v0b) — top-center floating panel + waveform markers.
-     Visible only when SLICE_MODE = SLICE. Full ghost-glass language so
-     it sits with the bottom strip as one cohesive surface.
+     SLICER UI (v0c) — bottom-strip pill that opens a pull-up drawer.
+     The bottom strip language stays sacred (PITCH/SLICE, 1-SHOT/LOOP,
+     ROOT, XY readout) — slicer settings live in a self-contained
+     drawer that only appears on click. Pattern is reusable for any
+     future "extra menu" we add to the bottom strip.
      ────────────────────────────────────────────────────────────────── */
-  #ti-slicer-panel {
-    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-    z-index: 6;
-    display: flex; gap: 8px; align-items: center;
-    background: rgba(255, 255, 255, 0.035);
-    padding: 4px 8px; border-radius: 6px;
+  /* The wrapper is the relative anchor for the drawer. Sits inside
+     #ti-bottom-pills as a sibling of the mode + play toggles. */
+  #ti-slices-wrap { position: relative; }
+  /* PITCH mode: hide the SLICES pill entirely so the bottom strip is
+     identical to its pre-slicer look. */
+  #ti-slices-wrap.hidden { display: none; }
+
+  /* The trigger pill — same ghost-glass language as the existing pill
+     clusters, with a subtle "·N" count showing the active chop count. */
+  #ti-slices-btn {
+    padding: 4px 12px;
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.18em;
+    border-radius: 6px;
+    color: rgba(245,243,255,0.6);
+    background: rgba(255,255,255,0.035);
     backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    transition: opacity 220ms ease;
+    cursor: pointer;
+    transition: all 150ms ease;
     user-select: none;
+    display: flex; align-items: center; gap: 6px;
   }
-  #ti-slicer-panel.hidden { opacity: 0; pointer-events: none; }
-  .ti-slicer-btn {
-    padding: 4px 11px;
-    font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.16em;
-    border-radius: 3px; cursor: pointer;
-    color: rgba(245,243,255,0.7);
-    background: rgba(255,255,255,0.05);
-    transition: all 140ms ease;
-    display: flex; align-items: center; gap: 5px;
-    user-select: none;
+  #ti-slices-btn:hover { background: rgba(255,255,255,0.07); color: rgba(245,243,255,0.85); }
+  #ti-slices-btn.open {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
   }
-  .ti-slicer-btn:hover { background: rgba(167,139,250,0.18); color: white; }
-  .ti-slicer-btn .caret { font-size: 8px; opacity: 0.6; }
-  .ti-slicer-btn.busy { opacity: 0.5; cursor: wait; }
-  .ti-chop-count {
-    padding: 4px 10px;
-    font: 600 10px/1 -apple-system, sans-serif; letter-spacing: 0.16em;
+  #ti-slices-btn .ti-slices-count {
     color: #A78BFA;
+    font-weight: 700;
   }
-  .ti-slicer-divider {
-    width: 1px; height: 14px; background: rgba(245,243,255,0.18); margin: 0 2px;
+  #ti-slices-btn.open .ti-slices-count { color: rgba(255,255,255,0.9); }
+
+  /* The drawer — pulls UP from the button, ghost-glass surface. */
+  #ti-slicer-drawer {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%; transform: translateX(-50%);
+    z-index: 6;
+    display: none;          /* hidden by default; .open flips to flex */
+    flex-direction: column; gap: 8px;
+    padding: 10px 12px; border-radius: 8px;
+    background: rgba(20, 18, 32, 0.92);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    user-select: none;
+    white-space: nowrap;
   }
-  /* GRID dropdown */
-  #ti-grid-dd {
-    position: absolute; top: 100%; left: 0; margin-top: 4px;
-    background: rgba(20,18,32,0.96); backdrop-filter: blur(10px);
-    border-radius: 5px; padding: 4px;
-    display: none; flex-direction: column; min-width: 70px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    z-index: 10;
+  #ti-slicer-drawer.open { display: flex; }
+  .ti-drawer-row { display: flex; gap: 4px; align-items: center; justify-content: center; }
+
+  /* GRID pills inline in the drawer — no dropdown, all sizes visible. */
+  .ti-grid-pill {
+    padding: 5px 11px;
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.10em;
+    border-radius: 4px; cursor: pointer;
+    color: rgba(245,243,255,0.55);
+    background: rgba(255,255,255,0.04);
+    transition: all 140ms ease;
+    min-width: 28px; text-align: center;
   }
-  #ti-grid-dd.open { display: flex; }
-  #ti-grid-dd .opt {
-    padding: 6px 12px;
-    font: 600 10px/1 sans-serif; letter-spacing: 0.12em;
-    color: rgba(245,243,255,0.7); cursor: pointer; border-radius: 3px;
+  .ti-grid-pill:hover { background: rgba(167,139,250,0.18); color: white; }
+  .ti-grid-pill.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
   }
-  #ti-grid-dd .opt:hover { background: rgba(139,92,246,0.25); color: white; }
-  .ti-grid-wrap { position: relative; }
-  /* Sub-mode pills (CHOP / CHROMATIC) — match bottom-strip pill language */
+
+  /* Sub-mode pills (CHOP / CHROMATIC) — same bottom-strip pill language. */
   #ti-submode-toggle { display: flex; gap: 4px; }
   .ti-submode-pill {
-    padding: 4px 10px;
+    padding: 5px 12px;
     font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.18em;
-    border-radius: 3px; cursor: pointer;
+    border-radius: 4px; cursor: pointer;
     color: rgba(245,243,255,0.42);
     transition: all 150ms ease;
   }
+  .ti-submode-pill:hover { color: rgba(245,243,255,0.85); }
   .ti-submode-pill.active {
     background: linear-gradient(135deg, #8B5CF6, #7C3AED);
     color: white;
@@ -1786,6 +1838,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     font: 600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif !important;
     letter-spacing: 0.12em !important;
     color: rgba(245, 243, 255, 0.5) !important;
+    /* Must sit ABOVE the slice overlay (z-index 4) so click-to-toggle
+       isn't intercepted by a slice body in SLICE mode. */
+    z-index: 7 !important;
   }
 </style>
 
@@ -1850,30 +1905,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       '<span class="ti-root-value" id="ti-root-value">C4</span>';
     hero.appendChild(rootWrap);
 
-    // ─── Slicer panel (top-center, only visible when SLICE mode is on) ───
-    var slicerPanel = document.createElement('div');
-    slicerPanel.id = 'ti-slicer-panel';
-    slicerPanel.classList.add('hidden');  // PITCH default
-    slicerPanel.innerHTML =
-      '<div class="ti-slicer-btn" id="ti-auto-btn" title="Auto-detect transients">AUTO</div>' +
-      '<div class="ti-grid-wrap">' +
-        '<div class="ti-slicer-btn" id="ti-grid-btn" title="Equal grid">GRID <span id="ti-grid-n">16</span> <span class="caret">▾</span></div>' +
-        '<div id="ti-grid-dd">' +
-          '<div class="opt" data-n="4">4</div>' +
-          '<div class="opt" data-n="8">8</div>' +
-          '<div class="opt" data-n="16">16</div>' +
-          '<div class="opt" data-n="24">24</div>' +
-          '<div class="opt" data-n="32">32</div>' +
-        '</div>' +
+    // ─── SLICES pill + pull-up drawer ────────────────────────────────────
+    // Lives inside the bottom-strip cluster. Pill is the trigger; click
+    // opens a drawer ABOVE it with GRID picker + sub-mode pills. The
+    // pill is only visible in SLICE mode (.hidden in PITCH mode).
+    // Reusable pattern — drop another wrap+pill+drawer into bottomPills
+    // for any future "extra menu" we want.
+    var slicesWrap = document.createElement('div');
+    slicesWrap.id = 'ti-slices-wrap';
+    slicesWrap.classList.add('hidden');  // PITCH default
+    slicesWrap.innerHTML =
+      '<div id="ti-slices-btn" title="Slicer settings">' +
+        '<span class="ti-slices-label">SLICES</span>' +
+        '<span class="ti-slices-count" id="ti-slices-count" style="display:none"></span>' +
       '</div>' +
-      '<div class="ti-slicer-divider"></div>' +
-      '<div class="ti-chop-count" id="ti-chop-count">0 CHOPS</div>' +
-      '<div class="ti-slicer-divider"></div>' +
-      '<div id="ti-submode-toggle">' +
-        '<div class="ti-submode-pill active" data-sub="0">CHOP</div>' +
-        '<div class="ti-submode-pill" data-sub="1">CHROMATIC</div>' +
+      '<div id="ti-slicer-drawer">' +
+        '<div class="ti-drawer-row" id="ti-grid-row">' +
+          '<div class="ti-grid-pill" data-n="4">4</div>' +
+          '<div class="ti-grid-pill" data-n="8">8</div>' +
+          '<div class="ti-grid-pill" data-n="16">16</div>' +
+          '<div class="ti-grid-pill" data-n="24">24</div>' +
+          '<div class="ti-grid-pill" data-n="32">32</div>' +
+        '</div>' +
+        '<div class="ti-drawer-row" id="ti-submode-toggle">' +
+          '<div class="ti-submode-pill active" data-sub="0">CHOP</div>' +
+          '<div class="ti-submode-pill" data-sub="1">CHROMATIC</div>' +
+        '</div>' +
       '</div>';
-    hero.appendChild(slicerPanel);
+    bottomPills.appendChild(slicesWrap);
 
     // Slice marker overlay container (positioned over the waveform).
     var sliceOverlays = document.createElement('div');
@@ -1998,8 +2057,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     document.querySelectorAll('#ti-mode-toggle .ti-mode-pill').forEach(function (p) {
       p.classList.toggle('active', (p.dataset.mode === 'SLICE') === (modeIdx === 1));
     });
-    var panel = document.getElementById('ti-slicer-panel');
-    if (panel) panel.classList.toggle('hidden', modeIdx !== 1);
+    // Show/hide the SLICES pill in the bottom strip; PITCH mode hides
+    // it entirely so the strip is identical to its pre-slicer look.
+    var wrap = document.getElementById('ti-slices-wrap');
+    if (wrap) wrap.classList.toggle('hidden', modeIdx !== 1);
+    // PITCH mode also closes the drawer if it was left open.
+    if (modeIdx !== 1) closeSlicerDrawer();
     redrawSliceOverlay();
   }
 
@@ -2011,11 +2074,42 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     redrawSliceOverlay();  // active-slice ring visibility depends on this
   }
 
+  // Update the SLICES pill label with the current chop count, and
+  // highlight whichever GRID pill matches that count (so the drawer
+  // shows the user what's currently applied without extra state).
   function updateChopCount () {
-    var el = document.getElementById('ti-chop-count');
-    if (!el) return;
     var n = state.slices.length;
-    el.textContent = n + (n === 1 ? ' CHOP' : ' CHOPS');
+    var countEl = document.getElementById('ti-slices-count');
+    if (countEl) {
+      if (n > 0) {
+        countEl.textContent = '· ' + n;  // "· N"
+        countEl.style.display = '';
+      } else {
+        countEl.textContent = '';
+        countEl.style.display = 'none';
+      }
+    }
+    document.querySelectorAll('#ti-grid-row .ti-grid-pill').forEach(function (p) {
+      p.classList.toggle('active', parseInt(p.dataset.n, 10) === n);
+    });
+  }
+
+  function openSlicerDrawer () {
+    var btn = document.getElementById('ti-slices-btn');
+    var dr  = document.getElementById('ti-slicer-drawer');
+    if (btn) btn.classList.add('open');
+    if (dr)  dr.classList.add('open');
+  }
+  function closeSlicerDrawer () {
+    var btn = document.getElementById('ti-slices-btn');
+    var dr  = document.getElementById('ti-slicer-drawer');
+    if (btn) btn.classList.remove('open');
+    if (dr)  dr.classList.remove('open');
+  }
+  function toggleSlicerDrawer () {
+    var dr = document.getElementById('ti-slicer-drawer');
+    if (dr && dr.classList.contains('open')) closeSlicerDrawer();
+    else openSlicerDrawer();
   }
 
   // Parse the JSON-encoded slice list returned from C++ and refresh the UI.
@@ -2055,11 +2149,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       return;
     }
 
-    // Position the overlay container exactly over the waveform canvas region.
-    var heroRect  = hero.getBoundingClientRect();
-    var waveRect  = waveCanvas.getBoundingClientRect();
-    overlays.style.top    = (waveRect.top    - heroRect.top)    + 'px';
-    overlays.style.height = waveRect.height + 'px';
+    // Position the overlay container over the waveform canvas region,
+    // BUT clamp the bottom so slice bodies don't extend over the bottom
+    // strip. Without this clamp the slice body's `top:0; bottom:0`
+    // makes it the full hero height — and any click on the XY readout
+    // (or future bottom-strip elements that sit at z-index < 4) gets
+    // intercepted by the slice body underneath.
+    var heroRect      = hero.getBoundingClientRect();
+    var waveRect      = waveCanvas.getBoundingClientRect();
+    var BOTTOM_RESERVE = 50; // matches bottom strip + breathing room
+    overlays.style.top    = (waveRect.top - heroRect.top) + 'px';
+    overlays.style.height = Math.max(0, waveRect.height - BOTTOM_RESERVE) + 'px';
 
     var W = waveRect.width;
     var totalSamples = state.sampleLengthSamples;
@@ -2214,58 +2314,38 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
     });
 
-    // Slicer panel: AUTO button
-    var autoBtn = document.getElementById('ti-auto-btn');
-    if (autoBtn) {
-      autoBtn.addEventListener('click', function (ev) {
+    // SLICES pill: click toggles the drawer. ev.stopPropagation so the
+    // document-level "click outside drawer" listener below doesn't see
+    // this same click and immediately re-close it.
+    var slicesBtn = document.getElementById('ti-slices-btn');
+    if (slicesBtn) {
+      slicesBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
-        autoBtn.classList.add('busy');
-        var fn = getNativeFn('autoDetectSlices');
-        if (!fn) { autoBtn.classList.remove('busy'); return; }
+        toggleSlicerDrawer();
+      });
+    }
+
+    // GRID pills inside the drawer — apply N chops via gridSliceSlices.
+    // Drawer stays open so the user can A/B different sizes (per their
+    // explicit preference, see /gsd-discuss-phase trail). Active pill
+    // is highlighted by updateChopCount() reading state.slices.length
+    // back from the C++ result.
+    document.querySelectorAll('#ti-grid-row .ti-grid-pill').forEach(function (pill) {
+      pill.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var n = parseInt(pill.dataset.n, 10) || 16;
+        var fn = getNativeFn('gridSliceSlices');
+        if (!fn) return;
         try {
-          var res = fn(0.5);  // sensitivity
-          if (res && typeof res.then === 'function') {
-            res.then(function (json) {
-              autoBtn.classList.remove('busy');
-              applySlicesJson(json);
-            }, function () { autoBtn.classList.remove('busy'); });
-          } else {
-            autoBtn.classList.remove('busy');
-            applySlicesJson(res);
-          }
-        } catch (_) { autoBtn.classList.remove('busy'); }
+          var r = fn(n);
+          if (r && typeof r.then === 'function') r.then(applySlicesJson);
+          else applySlicesJson(r);
+        } catch (_) {}
       });
-    }
+    });
 
-    // Slicer panel: GRID button + dropdown
-    var gridBtn = document.getElementById('ti-grid-btn');
-    var gridDd  = document.getElementById('ti-grid-dd');
-    if (gridBtn && gridDd) {
-      gridBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        gridDd.classList.toggle('open');
-      });
-      gridDd.querySelectorAll('.opt').forEach(function (opt) {
-        opt.addEventListener('click', function (ev) {
-          ev.stopPropagation();
-          var n = parseInt(opt.dataset.n, 10) || 16;
-          state.gridN = n;
-          var label = document.getElementById('ti-grid-n');
-          if (label) label.textContent = n;
-          gridDd.classList.remove('open');
-          var fn = getNativeFn('gridSliceSlices');
-          if (fn) {
-            try {
-              var r = fn(n);
-              if (r && typeof r.then === 'function') r.then(applySlicesJson);
-              else applySlicesJson(r);
-            } catch (_) {}
-          }
-        });
-      });
-    }
-
-    // Slicer panel: sub-mode pills (CHOP / CHROMATIC)
+    // Sub-mode pills (CHOP / CHROMATIC) — selector unchanged from v0b
+    // since #ti-submode-toggle moved into the drawer with the same id.
     document.querySelectorAll('#ti-submode-toggle .ti-submode-pill').forEach(function (p) {
       p.addEventListener('click', function (ev) {
         ev.stopPropagation();
@@ -2314,11 +2394,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     }
     // Click anywhere else closes the context menu.
     document.addEventListener('click', closeSliceContextMenu);
-    // Click outside the GRID dropdown closes it.
+    // Click outside the SLICES drawer closes it. Drawer interactions
+    // already stopPropagation so they don't reach this listener.
     document.addEventListener('click', function (ev) {
-      var dd = document.getElementById('ti-grid-dd');
-      var gb = document.getElementById('ti-grid-btn');
-      if (dd && gb && !gb.contains(ev.target)) dd.classList.remove('open');
+      var dr = document.getElementById('ti-slicer-drawer');
+      if (!dr || !dr.classList.contains('open')) return;
+      var wrap = document.getElementById('ti-slices-wrap');
+      if (wrap && !wrap.contains(ev.target)) closeSlicerDrawer();
     });
 
 

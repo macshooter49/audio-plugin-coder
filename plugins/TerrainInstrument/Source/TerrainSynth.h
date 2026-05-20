@@ -95,8 +95,15 @@ namespace tw
                 case SliceContext::Mode::ChopChromaticLayout:
                 {
                     if (! ctx->slices || ctx->slices->empty()) { triggerOk = false; break; }
-                    const int idx = midiNoteNumber - ctx->rootMidiNote;
-                    if (idx < 0 || idx >= (int) ctx->slices->size()) { triggerOk = false; break; }
+                    // MPC-style: every MIDI key plays a chop, wrapping the
+                    // chop list in BOTH directions from ROOT. ROOT = chop 0,
+                    // ROOT+1 = chop 1, … ROOT+N = chop 0 again. ROOT-1 = last
+                    // chop, ROOT-2 = second-to-last, etc. C++ % is truncated
+                    // toward zero for negatives, so we add N and re-mod to
+                    // get the mathematical (positive) modulus.
+                    const int n = (int) ctx->slices->size();
+                    int idx = (midiNoteNumber - ctx->rootMidiNote) % n;
+                    if (idx < 0) idx += n;
                     const auto& s = (*ctx->slices)[(size_t) idx];
                     vc.startSample    = s.startSample;
                     vc.endSample      = s.endSample;

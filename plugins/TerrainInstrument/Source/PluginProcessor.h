@@ -276,6 +276,13 @@ public:
     std::atomic<float> xyPadX { 0.5f };
     std::atomic<float> xyPadY { 0.5f };
 
+    // XY pad master enable. When 0, the pad ignores clicks/drags (JS gate),
+    // the cross-hair viz hides, the auto-play loop pauses, and XY-as-mod-source
+    // contributions go neutral (we force xyPadX/Y to 0.5 so the mod engine sees
+    // (xy-0.5)*2 == 0 for both axes, regardless of mod polarity). Persisted
+    // via InstrumentSettings.json from the JS side; default ON.
+    std::atomic<float> xyEnabled { 1.0f };
+
     // Modulation state JSON (persisted from JS, survives editor close/reopen + DAW session)
     juce::String modStateJson;
 

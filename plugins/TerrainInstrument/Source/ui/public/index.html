@@ -646,7 +646,10 @@ body {
   color: var(--purple-500);
   opacity: 0;
   transition: opacity 0.15s;
-  pointer-events: none;
+  /* Click-to-toggle XY pad on/off — needs pointer events even when faded
+     out, but in practice you only see it during hero hover anyway. */
+  pointer-events: auto;
+  cursor: pointer;
   background: rgba(255,255,255,0.6);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -655,6 +658,14 @@ body {
 }
 #hero:hover .xy-readout,
 #hero.dragging .xy-readout { opacity: 1; }
+/* When the pad is disabled the readout reads "XY · OFF" and stays visible
+   permanently as a status badge — gives the user a one-click path back on
+   without needing to hover-hunt. Crosshair viz is suppressed and the
+   cursor reverts so the surface no longer signals "draggable". */
+#hero.xy-disabled .xy-readout { opacity: 1; }
+#hero.xy-disabled .crosshair-h,
+#hero.xy-disabled .crosshair-v { opacity: 0 !important; }
+#hero.xy-disabled { cursor: default; }
 
 .xy-controls {
   position: absolute;
@@ -4199,7 +4210,12 @@ function drawSettingsIcon() {
 
 function saveSettings() {
   if (saveSettingsFn) {
-    try { saveSettingsFn(JSON.stringify({ theme: getTheme() })); } catch(e) {}
+    try {
+      saveSettingsFn(JSON.stringify({
+        theme: getTheme(),
+        xyEnabled: state.xyEnabled
+      }));
+    } catch(e) {}
   }
 }
 
@@ -4212,6 +4228,12 @@ function restoreSettings(json) {
       var db = document.getElementById('theme-dark-btn');
       if (lb && db) { lb.classList.toggle('active', s.theme === 'light'); db.classList.toggle('active', s.theme === 'dark'); }
       drawSettingsIcon();
+    }
+    // xyEnabled is the master XY pad gate. Default ON for new users.
+    if (typeof s.xyEnabled === 'boolean') {
+      state.xyEnabled = s.xyEnabled;
+      if (setXYEnabledFn) setXYEnabledFn(state.xyEnabled ? 1 : 0);
+      if (typeof applyXYEnabledUI === 'function') applyXYEnabledUI();
     }
   } catch(e) {}
 }
@@ -4301,6 +4323,7 @@ const state = {
   outputGain: 0,
   masterMix: 100,
   xyX: 0.5, xyY: 0.5,
+  xyEnabled: true,  // master pad on/off — toggle via XY readout click
   xyAutoPlay: true,
   xyAutoMode: 0,    // 0 = chaotic (random), 1 = smooth (sinusoidal)
   xyAutoSpeed: 0.5, // 0-1 normalized speed
@@ -4505,6 +4528,7 @@ let setTapeLoopPlayFn, getTapeLoopPlayFn;
 let clearTapeLoopFn, undoTapeLoopFn, setSpeedFreeformFn, setFeedToGrainFn, setPitchLockedFn;
 let setXYAutoStateFn, getXYAutoStateFn;
 let updateModConfigFn, getModStateFn, setXYPadFn;
+let setXYEnabledFn, getXYEnabledFn;
 let setWireSpaceNoiseFn, getWireSpaceNoiseFn;
 let saveSettingsFn, getSettingsFn;
 let setWireTubeSatFn, getWireTubeSatFn;
@@ -4608,6 +4632,8 @@ async function initJuceBindings() {
     updateModConfigFn = window.Juce.getNativeFunction('updateModConfig');
     getModStateFn = window.Juce.getNativeFunction('getModState');
     setXYPadFn = window.Juce.getNativeFunction('setXYPad');
+    setXYEnabledFn = window.Juce.getNativeFunction('setXYEnabled');
+    getXYEnabledFn = window.Juce.getNativeFunction('getXYEnabled');
 
     // Wire-only mode toggles
     setWireSpaceNoiseFn = window.Juce.getNativeFunction('setWireSpaceNoise');
@@ -6237,6 +6263,14 @@ const heroEl = document.getElementById('hero');
 heroEl.addEventListener('mousedown', (e) => {
   if (e.target.closest('.xy-controls')) return;
   if (e.target.closest('.scope-controls-left')) return;
+  // Bottom-strip pills sit on top of the hero — let their clicks pass
+  // straight through without scrubbing the XY pad. (Slicer pills, mode
+  // toggle, play toggle, ROOT picker, XY readout itself.)
+  if (e.target.closest('#ti-bottom-pills')) return;
+  if (e.target.closest('#ti-root-picker')) return;
+  if (e.target.closest('#xy-readout')) return;
+  // Master XY enable gate. When disabled, clicks/drags do nothing.
+  if (!state.xyEnabled) return;
   state.draggingHero = true;
   heroEl.classList.add('dragging');
   const rect = heroEl.getBoundingClientRect();
@@ -6249,8 +6283,43 @@ heroEl.addEventListener('mousedown', (e) => {
 
 function updateXYReadout() {
   const el = document.getElementById('xy-readout');
+  if (!state.xyEnabled) {
+    el.textContent = 'XY · OFF';
+    return;
+  }
   el.textContent = `X: ${Math.round(state.xyX * 100)}%  Y: ${Math.round(state.xyY * 100)}%`;
 }
+
+// Click the readout to flip the XY pad on/off. Persists via
+// InstrumentSettings.json (saveSettings) so the choice survives plugin
+// reload. Pushes to C++ which neutralises mod-source contributions
+// when off (xyPadX/Y forced to 0.5 → mod source = 0).
+function toggleXYEnabled() {
+  state.xyEnabled = !state.xyEnabled;
+  if (setXYEnabledFn) setXYEnabledFn(state.xyEnabled ? 1 : 0);
+  applyXYEnabledUI();
+  saveSettings();
+}
+
+function applyXYEnabledUI() {
+  heroEl.classList.toggle('xy-disabled', !state.xyEnabled);
+  updateXYReadout();
+  // When disabling, snap UI XY to neutral so the crosshair (if it
+  // re-shows later) and any local readers don't show stale coords.
+  if (!state.xyEnabled) {
+    state.xyX = 0.5; state.xyY = 0.5;
+    document.getElementById('crosshair-h').style.top  = '50%';
+    document.getElementById('crosshair-v').style.left = '50%';
+  }
+}
+
+document.getElementById('xy-readout').addEventListener('mousedown', function (e) {
+  e.stopPropagation();  // don't let the hero pick this up as a drag start
+});
+document.getElementById('xy-readout').addEventListener('click', function (e) {
+  e.stopPropagation();
+  toggleXYEnabled();
+});
 
 // Map XY pad position to grain parameters
 // (Unlinked — custom linking will be added later)
@@ -10202,7 +10271,7 @@ let _chaosTargetY = 0.5;
 
 function updateXYAuto(time) {
   const hero = document.getElementById('hero');
-  if (!state.xyAutoPlay || state.draggingHero) {
+  if (!state.xyEnabled || !state.xyAutoPlay || state.draggingHero) {
     hero.classList.remove('xy-active');
     return;
   }
