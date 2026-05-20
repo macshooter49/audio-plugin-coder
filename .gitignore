@@ -54,3 +54,7 @@ _backups/
 dist/
 # Local worktrees
 .worktrees/
+
+# clangd / IDE tooling
+.cache/
+compile_commands.json
