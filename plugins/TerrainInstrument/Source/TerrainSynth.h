@@ -22,7 +22,8 @@ namespace tw
         {
             Whole = 0,             // SLICE_MODE = PITCH: play whole sample, pitched by (note - root)
             ChopChromaticLayout,   // SLICE_MODE = SLICE & SUB = CHOP: each ascending key triggers next slice
-            ChromaticOneSlice      // SLICE_MODE = SLICE & SUB = CHROMATIC: active slice plays at (note - root + slice.pitch)
+            ChromaticOneSlice,     // SLICE_MODE = SLICE & SUB = CHROMATIC: active slice plays at (note - root + slice.pitch)
+            ChromaticRandom        // SLICE_MODE = SLICE & SUB = RANDOM: each note picks a random no-repeat slice, pitched by (note - root + slice.pitch)
         };
 
         Mode          mode             = Mode::Whole;
@@ -126,6 +127,35 @@ namespace tw
                     vc.sliceIndex     = sliceIdx;
                     break;
                 }
+
+                case SliceContext::Mode::ChromaticRandom:
+                {
+                    if (! ctx->slices || ctx->slices->empty()) { triggerOk = false; break; }
+                    // Pick a random chop that's NOT the same as the previous pick
+                    // (re-pick up to 8 times — expected calls < 2 for any reasonable
+                    // chop count; guaranteed terminating). When there's only one
+                    // chop we just play it; no-repeat is meaningless.
+                    const int n = (int) ctx->slices->size();
+                    const int last = lastRandomIdx.load();
+                    int pick = last;
+                    if (n <= 1)
+                    {
+                        pick = 0;
+                    }
+                    else
+                    {
+                        for (int attempt = 0; attempt < 8 && pick == last; ++attempt)
+                            pick = random.nextInt (n);
+                    }
+                    lastRandomIdx.store (pick);
+                    const auto& s = (*ctx->slices)[(size_t) pick];
+                    vc.startSample    = s.startSample;
+                    vc.endSample      = s.endSample;
+                    vc.reverse        = s.reverse;
+                    vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + s.pitchOffsetSemis;
+                    vc.sliceIndex     = pick;
+                    break;
+                }
             }
 
             if (! triggerOk) return;  // out-of-range key in slice mode = silence
@@ -158,5 +188,13 @@ namespace tw
 
     private:
         std::shared_ptr<SliceContext> context;
+
+        // ── ChromaticRandom state ─────────────────────────────────────────
+        // No-repeat random slice pick. noteOn runs on the audio thread under
+        // the synth lock, so single-threaded access — atomic on lastRandomIdx
+        // is just so a UI snapshot could read it later if we want a "last
+        // played chop" indicator.
+        juce::Random      random;
+        std::atomic<int>  lastRandomIdx { -1 };
     };
 }

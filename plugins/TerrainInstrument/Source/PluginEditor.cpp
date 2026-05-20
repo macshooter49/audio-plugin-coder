@@ -643,7 +643,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 if (args.size() > 0)
                 {
-                    const int sub = juce::jlimit (0, 1, (int) args[0]);  // 0=CHOP, 1=CHROMATIC
+                    const int sub = juce::jlimit (0, 2, (int) args[0]);  // 0=CHOP, 1=CHROMATIC, 2=RANDOM
                     if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SLICE_SUB_MODE))
                         p->setValueNotifyingHost (static_cast<float> (sub));
                 }
@@ -2020,6 +2020,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         '<div class="ti-drawer-row" id="ti-submode-toggle">' +
           '<div class="ti-submode-pill active" data-sub="0">CHOP</div>' +
           '<div class="ti-submode-pill" data-sub="1">CHROMATIC</div>' +
+          '<div class="ti-submode-pill" data-sub="2">RANDOM</div>' +
         '</div>' +
       '</div>';
     bottomPills.appendChild(slicesWrap);
