@@ -1714,13 +1714,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   #ti-slices-btn.open .ti-slices-count { color: rgba(255,255,255,0.9); }
 
-  /* The drawer — pulls UP from the button, ghost-glass surface. */
+  /* The drawer — pulls UP from the button, ghost-glass surface.
+     Always laid out (display:flex) but kept invisible until .open via
+     opacity+transform so it can fade in / out softly instead of snapping. */
   #ti-slicer-drawer {
     position: absolute;
     bottom: calc(100% + 8px);
-    left: 50%; transform: translateX(-50%);
+    left: 50%;
+    transform: translate(-50%, -4px);
     z-index: 6;
-    display: none;          /* hidden by default; .open flips to flex */
+    display: flex;
     flex-direction: column; gap: 8px;
     padding: 10px 12px; border-radius: 8px;
     background: rgba(20, 18, 32, 0.92);
@@ -1728,8 +1731,28 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
     user-select: none;
     white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease, transform 220ms ease;
   }
-  #ti-slicer-drawer.open { display: flex; }
+  #ti-slicer-drawer.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%);
+  }
+
+  /* When the drawer is open, soften the waveform + slice markers so the
+     drawer doesn't look harshly slapped on top. Transition is defined on
+     the BASE selector so the effect fades IN and OUT smoothly. */
+  #waveform-canvas,
+  #ti-slice-overlays {
+    transition: filter 240ms ease, opacity 240ms ease;
+  }
+  #hero.drawer-open #waveform-canvas,
+  #hero.drawer-open #ti-slice-overlays {
+    filter: blur(3px);
+    opacity: 0.32;
+  }
   .ti-drawer-row { display: flex; gap: 4px; align-items: center; justify-content: center; }
 
   /* GRID pills inline in the drawer — no dropdown, all sizes visible. */
@@ -2113,16 +2136,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
 
   function openSlicerDrawer () {
-    var btn = document.getElementById('ti-slices-btn');
-    var dr  = document.getElementById('ti-slicer-drawer');
-    if (btn) btn.classList.add('open');
-    if (dr)  dr.classList.add('open');
+    var btn  = document.getElementById('ti-slices-btn');
+    var dr   = document.getElementById('ti-slicer-drawer');
+    var hero = document.getElementById('hero');
+    if (btn)  btn.classList.add('open');
+    if (dr)   dr.classList.add('open');
+    if (hero) hero.classList.add('drawer-open');
   }
   function closeSlicerDrawer () {
-    var btn = document.getElementById('ti-slices-btn');
-    var dr  = document.getElementById('ti-slicer-drawer');
-    if (btn) btn.classList.remove('open');
-    if (dr)  dr.classList.remove('open');
+    var btn  = document.getElementById('ti-slices-btn');
+    var dr   = document.getElementById('ti-slicer-drawer');
+    var hero = document.getElementById('hero');
+    if (btn)  btn.classList.remove('open');
+    if (dr)   dr.classList.remove('open');
+    if (hero) hero.classList.remove('drawer-open');
   }
   function toggleSlicerDrawer () {
     var dr = document.getElementById('ti-slicer-drawer');
@@ -2687,7 +2714,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     auto utf8 = html.toUTF8();
     std::vector<std::byte> data(static_cast<size_t>(utf8.sizeInBytes()));
     std::memcpy(data.data(), utf8.getAddress(), data.size());
-    return juce::WebBrowserComponent::Resource{ std::move(data), juce::String("text/html") };
+    return juce::WebBrowserComponent::Resource{ std::move(data), juce::String("text/html; charset=utf-8") };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
