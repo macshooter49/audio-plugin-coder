@@ -645,7 +645,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 {
                     const int sub = juce::jlimit (0, 2, (int) args[0]);  // 0=CHOP, 1=CHROMATIC, 2=RANDOM
                     if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SLICE_SUB_MODE))
-                        p->setValueNotifyingHost (static_cast<float> (sub));
+                    {
+                        // setValueNotifyingHost wants a NORMALISED value [0,1], not the
+                        // choice index. With 2 choices the two ranges coincide, but with
+                        // 3+ choices the normalisation must be computed explicitly.
+                        const float norm = p->getNormalisableRange().convertTo0to1 (static_cast<float> (sub));
+                        p->setValueNotifyingHost (norm);
+                    }
                 }
                 complete ({});
             })
@@ -2174,7 +2180,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var countEl = document.getElementById('ti-slices-count');
     if (countEl) {
       if (n > 0) {
-        countEl.textContent = '· ' + n;  // "· N"
+        countEl.textContent = ' ' + n;   // "SLICES 16" — no separator dot (rendered as Â· under Latin-1 fallback and the dot is visual noise anyway)
         countEl.style.display = '';
       } else {
         countEl.textContent = '';
