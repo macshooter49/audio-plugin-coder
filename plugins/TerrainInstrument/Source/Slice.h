@@ -33,7 +33,7 @@ namespace tw
         juce::int64 startSample      = 0;       // inclusive
         juce::int64 endSample        = 0;       // exclusive
         bool        reverse          = false;
-        float       pitchOffsetSemis = 0.0f;    // -24..+24
+        float       pitchOffsetSemis = 0.0f;    // -12..+12 (one octave each way — wider ranges sound chipmunky)
 
         juce::int64 length() const noexcept { return endSample - startSample; }
     };

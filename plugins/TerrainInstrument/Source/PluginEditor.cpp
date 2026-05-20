@@ -707,10 +707,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("setSlicePitch", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // args[0] = sliceIndex, args[1] = semitones (-24..+24)
+                // args[0] = sliceIndex, args[1] = semitones (-12..+12)
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
-                const float st  = juce::jlimit (-24.0f, 24.0f, (float) (double) args[1]);
+                const float st  = juce::jlimit (-12.0f, 12.0f, (float) (double) args[1]);
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -1826,6 +1826,27 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     color: white;
   }
 
+  /* Action buttons inside the drawer — RANDOM OCTAVE etc. Ghost-glass
+     base, fills purple on hover, flashes white on click. */
+  .ti-action-btn {
+    padding: 5px 12px;
+    font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.18em;
+    border-radius: 4px; cursor: pointer;
+    color: rgba(245,243,255,0.78);
+    background: rgba(255,255,255,0.04);
+    transition: background 150ms ease, color 150ms ease, transform 80ms ease;
+    user-select: none;
+  }
+  .ti-action-btn:hover {
+    background: rgba(167,139,250,0.18);
+    color: white;
+  }
+  .ti-action-btn:active {
+    transform: scale(0.97);
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+  }
+
   /* Slice markers + bodies — drawn on top of the waveform canvas */
   #ti-slice-overlays {
     position: absolute; left: 0; right: 0;
@@ -1888,16 +1909,52 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     z-index: -1;
   }
   .ti-slice-body.dragging { background: rgba(139,92,246,0.22); }
-  .ti-slice-badge {
-    position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
-    background: rgba(20,18,32,0.85); backdrop-filter: blur(6px);
-    padding: 3px 7px; border-radius: 3px;
-    font: 600 9px/1 sans-serif; letter-spacing: 0.1em;
-    color: rgba(245,243,255,0.85); white-space: nowrap;
+  /* Inline pitch meter — sits inside the slice body, near the bottom.
+     A horizontal bar centered on a midline (= 0 semitones) that extends
+     right for positive pitch and left for negative. Plus a clean number
+     readout above. Shown only when pitch != 0. */
+  .ti-slice-pitch-meter {
+    position: absolute;
+    left: 4px; right: 4px;
+    bottom: 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    pointer-events: none;
+    user-select: none;
+  }
+  .ti-slice-pitch-num {
+    font: 700 10px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    color: rgba(167,139,250,0.95);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+  }
+  .ti-slice-pitch-bar {
+    position: relative;
+    width: 100%;
+    height: 2px;
+    background: rgba(255,255,255,0.10);
+    border-radius: 1px;
+  }
+  /* Center marker — the 0-semitone reference line. */
+  .ti-slice-pitch-bar::before {
+    content: ''; position: absolute;
+    left: 50%; top: -2px; bottom: -2px;
+    width: 1px; margin-left: -0.5px;
+    background: rgba(255,255,255,0.32);
+  }
+  .ti-slice-pitch-bar-fill {
+    position: absolute; top: 0; bottom: 0;
+    background: #A78BFA;
+    border-radius: 1px;
+    transition: width 90ms ease, left 90ms ease, right 90ms ease;
+  }
+  /* REV badge — tiny tag in the top-left corner when slice plays backwards. */
+  .ti-slice-rev-tag {
+    position: absolute; top: 4px; left: 4px;
+    padding: 1px 4px; border-radius: 2px;
+    font: 700 8px/1 sans-serif; letter-spacing: 0.12em;
+    color: #FFB066;
+    background: rgba(20,18,32,0.7);
     pointer-events: none;
   }
-  .ti-slice-badge .pitch { color: #A78BFA; }
-  .ti-slice-badge .rev   { color: #FFB066; margin-right: 4px; }
 
   /* Right-click context menu */
   #ti-slice-ctx {
@@ -2027,6 +2084,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           '<div class="ti-submode-pill active" data-sub="0">CHOP</div>' +
           '<div class="ti-submode-pill" data-sub="1">CHROMATIC</div>' +
           '<div class="ti-submode-pill" data-sub="2">RANDOM</div>' +
+        '</div>' +
+        '<div class="ti-drawer-row" id="ti-action-row">' +
+          '<div class="ti-action-btn" id="ti-random-oct" title="Random octave per chop — picks -12, 0, or +12 for each">RANDOM OCTAVE</div>' +
         '</div>' +
       '</div>';
     bottomPills.appendChild(slicesWrap);
@@ -2284,18 +2344,39 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       attachSliceGestures(body, i);
       overlays.appendChild(body);
 
-      // Pitch / reverse badge — only shown when the slice has an offset.
-      // No persistent armed-slice indicator in CHROMATIC; the play-glow
-      // is the only purple you ever see.
-      var hasOffset = (s.pitch !== 0) || s.reverse;
-      if (hasOffset) {
-        var badge = document.createElement('div');
-        badge.className = 'ti-slice-badge';
-        badge.style.left = (leftPx + widthPx / 2) + 'px';
-        var pitchTxt = (s.pitch > 0 ? '+' : '') + (s.pitch || 0).toFixed(0) + 'st';
-        badge.innerHTML = (s.reverse ? '<span class="rev">REV</span>' : '') +
-                          '<span class="pitch">' + pitchTxt + '</span>';
-        body.appendChild(badge);
+      // Pitch meter — inline horizontal bar + number, only when pitch != 0.
+      // Bar centers on a 0-semitone midline; fills right for positive,
+      // left for negative, length proportional to |pitch| / 12. Capped at
+      // half the bar width so range ±12 maps cleanly to the edges.
+      if (s.pitch && s.pitch !== 0) {
+        var meter = document.createElement('div');
+        meter.className = 'ti-slice-pitch-meter';
+        var num = document.createElement('div');
+        num.className = 'ti-slice-pitch-num';
+        num.textContent = (s.pitch > 0 ? '+' : '') + (s.pitch | 0);
+        var bar = document.createElement('div');
+        bar.className = 'ti-slice-pitch-bar';
+        var fill = document.createElement('div');
+        fill.className = 'ti-slice-pitch-bar-fill';
+        var pct = Math.min(50, (Math.abs(s.pitch) / 12) * 50);
+        if (s.pitch > 0) {
+          fill.style.left  = '50%';
+          fill.style.width = pct + '%';
+        } else {
+          fill.style.right = '50%';
+          fill.style.width = pct + '%';
+        }
+        bar.appendChild(fill);
+        meter.appendChild(num);
+        meter.appendChild(bar);
+        body.appendChild(meter);
+      }
+      // REV tag — separate from pitch meter, top-left corner.
+      if (s.reverse) {
+        var rev = document.createElement('div');
+        rev.className = 'ti-slice-rev-tag';
+        rev.textContent = 'REV';
+        body.appendChild(rev);
       }
 
       // Marker (left edge — index label sits at top)
@@ -2413,6 +2494,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (fn) fn(samplePos).then(applySlicesJson).catch(function(){});
     });
 
+    // Hover + scroll wheel = adjust pitch ±12 semitones. Step = 1 semitone
+    // per wheel tick. preventDefault stops the WebView from scrolling the
+    // page in the background. passive:false is required for preventDefault
+    // on wheel events in modern browsers.
+    body.addEventListener('wheel', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var cur = state.slices[idx].pitch || 0;
+      // Scroll UP (deltaY < 0) = pitch UP. Matches scroll-as-volume mental model.
+      var sign = ev.deltaY < 0 ? +1 : -1;
+      var next = Math.max(-12, Math.min(12, cur + sign));
+      if (next === cur) return;
+      state.slices[idx] = Object.assign({}, state.slices[idx], { pitch: next });
+      var fn = getNativeFn('setSlicePitch');
+      if (fn) { try { fn(idx, next); } catch (_) {} }
+      redrawSliceOverlay();
+    }, { passive: false });
+
     body.addEventListener('contextmenu', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
@@ -2430,7 +2529,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // 8 px = 1 semitone. Shift = fine (24 px per semi).
       var pxPerSemi = ev.shiftKey ? 24 : 8;
       var deltaSemi = Math.round(dy / pxPerSemi);
-      var newPitch = Math.max(-24, Math.min(24, dragState.startPitch + deltaSemi));
+      var newPitch = Math.max(-12, Math.min(12, dragState.startPitch + deltaSemi));
       if (newPitch !== state.slices[dragState.idx].pitch) {
         state.slices[dragState.idx].pitch = newPitch;
         var fn = getNativeFn('setSlicePitch');
@@ -2524,8 +2623,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
     });
 
-    // Sub-mode pills (CHOP / CHROMATIC) — selector unchanged from v0b
-    // since #ti-submode-toggle moved into the drawer with the same id.
+    // Sub-mode pills (CHOP / CHROMATIC / RANDOM) — selector unchanged
+    // from v0b since #ti-submode-toggle moved into the drawer with the same id.
     document.querySelectorAll('#ti-submode-toggle .ti-submode-pill').forEach(function (p) {
       p.addEventListener('click', function (ev) {
         ev.stopPropagation();
@@ -2535,6 +2634,33 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         if (fn) { try { fn(sub); } catch (_) {} }
       });
     });
+
+    // RANDOM OCTAVE — assign each chop a random pitch from {-12, 0, +12}.
+    // Stacks beautifully with RANDOM sub-mode: random chop selection per
+    // note + random per-chop octave = textural chaos. Sends the whole
+    // updated list via setSlicesJson so it's a single round-trip rather
+    // than N setSlicePitch calls.
+    var randomOctBtn = document.getElementById('ti-random-oct');
+    if (randomOctBtn) {
+      randomOctBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (state.slices.length === 0) return;
+        var CHOICES = [-12, 0, 12];
+        var updated = state.slices.map(function (s) {
+          return {
+            start:   s.start,
+            end:     s.end,
+            reverse: s.reverse,
+            pitch:   CHOICES[Math.floor(Math.random() * 3)]
+          };
+        });
+        var json = JSON.stringify({ slices: updated });
+        var fn = getNativeFn('setSlicesJson');
+        if (fn) { try { fn(json); } catch (_) {} }
+        state.slices = updated;
+        redrawSliceOverlay();
+      });
+    }
 
     // Context menu actions
     var ctxMenu = document.getElementById('ti-slice-ctx');
