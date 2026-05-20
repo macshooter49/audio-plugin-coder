@@ -27,6 +27,7 @@ namespace tw
         bool        reverse          = false;
         float       pitchSemitones   = 0.0f;     // semitones from unity (additive with pitch wheel)
         bool        forceOneShot     = false;    // override LOOP mode for this voice (used for audition)
+        int         sliceIndex       = -1;       // index in the slice list this voice plays; -1 = Whole-mode (no slice)
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -119,6 +120,11 @@ namespace tw
         }
 
         void controllerMoved (int, int) override {}
+
+        // ── Read-only state used by TerrainSynth to publish per-slice glow ──
+        float getEnvelopeLevel() const noexcept { return envLevel; }
+        int   getSliceIndex()    const noexcept { return activeConfig.sliceIndex; }
+        bool  isPlaying()        const noexcept { return isActive && envStage != EnvStage::Off; }
 
         void renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
                               int startSample, int numSamples) override

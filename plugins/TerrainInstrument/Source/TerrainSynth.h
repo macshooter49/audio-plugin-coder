@@ -49,7 +49,7 @@ namespace tw
          *  Bypasses MIDI dispatch — called directly from the audio thread
          *  (processor's audition queue drain). Channel/note are arbitrary
          *  internal values picked to never collide with real MIDI input. */
-        void auditionSlice (const Slice& s) noexcept
+        void auditionSlice (const Slice& s, int sliceIndex) noexcept
         {
             VoiceConfig vc;
             vc.startSample    = s.startSample;
@@ -57,6 +57,7 @@ namespace tw
             vc.reverse        = s.reverse;
             vc.pitchSemitones = 0.0f;
             vc.forceOneShot   = true;
+            vc.sliceIndex     = sliceIndex;
 
             const juce::ScopedLock sl (lock);
             if (sounds.size() == 0) return;
@@ -109,6 +110,7 @@ namespace tw
                     vc.endSample      = s.endSample;
                     vc.reverse        = s.reverse;
                     vc.pitchSemitones = s.pitchOffsetSemis;
+                    vc.sliceIndex     = idx;
                     break;
                 }
 
@@ -121,6 +123,7 @@ namespace tw
                     vc.endSample      = s.endSample;
                     vc.reverse        = s.reverse;
                     vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + s.pitchOffsetSemis;
+                    vc.sliceIndex     = sliceIdx;
                     break;
                 }
             }

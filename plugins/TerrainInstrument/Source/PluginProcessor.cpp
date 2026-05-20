@@ -971,7 +971,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int idx : drained)
                 {
                     if (idx >= 0 && idx < (int) sl->size())
-                        synth.auditionSlice ((*sl)[(size_t) idx]);
+                        synth.auditionSlice ((*sl)[(size_t) idx], idx);
                 }
             }
         }
@@ -980,6 +980,39 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Voices replace plugin input as the source of audio for the FX chain.
     buffer.clear();
     synth.renderNextBlock (buffer, midiMessages, 0, numSamples);
+
+    // ── Update slice play-glow array ──────────────────────────────────
+    // For each glow slot: take the max envelope across voices that are
+    // currently playing that slice; then apply a slow visual decay so
+    // short one-shots fade out instead of snapping to 0 when the voice
+    // dies. Block-rate update (~5-22 ms at 256-1024 samples / 48 kHz)
+    // outpaces the ~16 ms UI poll, so motion stays smooth.
+    {
+        std::array<float, kMaxGlowSlots> blockMax {};
+        for (int v = 0; v < synth.getNumVoices(); ++v)
+        {
+            if (auto* sv = dynamic_cast<tw::SamplerVoice*> (synth.getVoice (v)))
+            {
+                if (! sv->isPlaying()) continue;
+                const int idx = sv->getSliceIndex();
+                if (idx < 0 || idx >= kMaxGlowSlots) continue;
+                const float lvl = sv->getEnvelopeLevel();
+                if (lvl > blockMax[(size_t) idx]) blockMax[(size_t) idx] = lvl;
+            }
+        }
+
+        // Visual decay: full-bright → ~5% in ~200 ms. Per-block coefficient
+        // is exp(-blockSec / tau), tau ≈ 65 ms.
+        const double blockSec = (double) numSamples / juce::jmax (1.0, getSampleRate());
+        const float  decay    = (float) std::exp (-blockSec / 0.065);
+        for (int i = 0; i < kMaxGlowSlots; ++i)
+        {
+            const float live = blockMax[(size_t) i];
+            const float prev = sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed);
+            const float next = juce::jmax (live, prev * decay);
+            sliceGlowLevel[(size_t) i].store (next, std::memory_order_relaxed);
+        }
+    }
 
     // -6 dB pad on the voice mix before the FX chain. The FX modules
     // (TapeProcessor saturation, SpaceReverb feedback paths, etc.) were
@@ -1620,6 +1653,16 @@ juce::String TerrainInstrumentAudioProcessor::getSlicesJson() const
 void TerrainInstrumentAudioProcessor::setSlicesFromJson (const juce::String& json)
 {
     replaceSlices (tw::slicesFromJson (json));
+}
+
+juce::var TerrainInstrumentAudioProcessor::snapshotSliceGlowLevels() const
+{
+    const int n = juce::jmin (getNumSlices(), kMaxGlowSlots);
+    juce::Array<juce::var> arr;
+    arr.ensureStorageAllocated (n);
+    for (int i = 0; i < n; ++i)
+        arr.add ((double) sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed));
+    return juce::var (arr);
 }
 
 void TerrainInstrumentAudioProcessor::auditionSlice (int sliceIndex)

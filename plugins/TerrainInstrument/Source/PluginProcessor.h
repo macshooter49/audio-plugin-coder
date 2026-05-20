@@ -317,6 +317,20 @@ public:
     std::array<std::atomic<float>, SCOPE_SIZE> scopeBuffer {};
     std::atomic<int> scopeWritePos { 0 };
 
+    // ── Slice play-glow ───────────────────────────────────────────────────
+    // Per-slice envelope level for the WebView glow render. Audio thread
+    // writes each block (max envelope across voices firing the same slice,
+    // plus a slow visual decay so short one-shots leave a natural tail).
+    // UI thread polls via snapshotSliceGlowLevels() at ~60 Hz.
+    // Fixed cap — the slicer UI tops out at 32 grid chops; 256 is a safe
+    // upper bound. Indices ≥ kMaxGlowSlots are silently dropped on write.
+    static constexpr int kMaxGlowSlots = 256;
+    std::array<std::atomic<float>, kMaxGlowSlots> sliceGlowLevel {};
+
+    /** Snapshot the current glow levels for the first getNumSlices() slots
+     *  into a juce::var array suitable for returning from a native fn. */
+    juce::var snapshotSliceGlowLevels() const;
+
 private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

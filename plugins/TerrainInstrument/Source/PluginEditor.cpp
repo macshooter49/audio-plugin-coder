@@ -679,6 +679,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     audioProcessor.auditionSlice ((int) args[0]);
                 complete ({});
             })
+            .withNativeFunction("getSliceGlowLevels", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.snapshotSliceGlowLevels());
+            })
             .withNativeFunction("setSliceReverse", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1784,12 +1789,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     transition: background 140ms ease;
   }
   .ti-slice-body:hover { background: rgba(139,92,246,0.07); }
-  .ti-slice-body.active {
-    background: linear-gradient(180deg,
-      rgba(139,92,246,0.18) 0%,
-      rgba(139,92,246,0.10) 100%);
-    border-left: 1px solid rgba(167,139,250,0.7);
-    border-right: 1px solid rgba(167,139,250,0.7);
+  /* Play-glow — driven by --glow-alpha which the JS poll updates per
+     slice from C++. Renders behind the slice body so the click hit area
+     stays clean. No CSS transition: the audio thread is already smoothing
+     the envelope, and a CSS transition on top would chase a moving target
+     and feel laggy. */
+  .ti-slice-body { --glow-alpha: 0; }
+  .ti-slice-body::before {
+    content: '';
+    position: absolute;
+    inset: -10px -6px -10px -6px;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse 60% 78% at 50% 50%,
+      rgba(139,92,246, calc(var(--glow-alpha) * 0.55)) 0%,
+      rgba(139,92,246, calc(var(--glow-alpha) * 0.20)) 55%,
+      rgba(139,92,246, 0) 100%);
+    filter: blur(2px);
+    z-index: -1;
   }
   .ti-slice-body.dragging { background: rgba(139,92,246,0.22); }
   .ti-slice-badge {
@@ -1987,7 +2004,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     slices: [],             // [{start, end, reverse, pitch}, ...]
     activeSliceIndex: 0,    // active in CHROMATIC sub-mode
     gridN: 16,              // last grid count used
-    sampleLengthSamples: 0  // total length of loaded sample (for marker positioning)
+    sampleLengthSamples: 0, // total length of loaded sample (for marker positioning)
+    sliceGlow: new Float32Array(256)  // per-slice glow [0..1], polled from C++ at ~60Hz
   };
 
   // ── Waveform drawing ──────────────────────────────────────────────────────
@@ -2176,16 +2194,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // Body (clickable / draggable region)
       var body = document.createElement('div');
       body.className = 'ti-slice-body';
-      if (isChromatic && i === activeIdx) body.classList.add('active');
       body.style.left  = leftPx  + 'px';
       body.style.width = widthPx + 'px';
       body.dataset.idx = i;
       attachSliceGestures(body, i);
       overlays.appendChild(body);
 
-      // Pitch / reverse badge — always visible; subtle opacity when no offset.
+      // Pitch / reverse badge — only shown when the slice has an offset.
+      // No persistent armed-slice indicator in CHROMATIC; the play-glow
+      // is the only purple you ever see.
       var hasOffset = (s.pitch !== 0) || s.reverse;
-      if (hasOffset || (isChromatic && i === activeIdx)) {
+      if (hasOffset) {
         var badge = document.createElement('div');
         badge.className = 'ti-slice-badge';
         badge.style.left = (leftPx + widthPx / 2) + 'px';
@@ -2619,6 +2638,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // local rootNote that the audio thread reads via the existing rootNoteMidi
   // atomic. If the native function exists, it's used; if not, the local
   // value still drives the JS UI.)
+
+  // ── Slice play-glow polling ───────────────────────────────────────────────
+  // Pulls per-slice envelope levels from C++ at ~60 Hz and writes them onto
+  // each slice body as a CSS custom property (--glow-alpha). The CSS uses
+  // that property to drive a radial-gradient bloom layered behind the body.
+  // Defensive — silently no-ops until the native fn + overlays exist.
+  function pollSliceGlow () {
+    var fn = getNativeFn('getSliceGlowLevels');
+    if (!fn) return;
+    fn().then(function (vals) {
+      if (!vals || !vals.length) return;
+      var n = Math.min(vals.length, state.sliceGlow.length);
+      for (var i = 0; i < n; ++i) state.sliceGlow[i] = vals[i];
+      applySliceGlow();
+    }).catch(function () {});
+  }
+
+  function applySliceGlow () {
+    var overlays = document.getElementById('ti-slice-overlays');
+    if (!overlays) return;
+    var bodies = overlays.querySelectorAll('.ti-slice-body');
+    for (var i = 0; i < bodies.length; ++i) {
+      var g = state.sliceGlow[i] || 0;
+      bodies[i].style.setProperty('--glow-alpha', g.toFixed(3));
+    }
+  }
+
+  setInterval(pollSliceGlow, 16);   // ~60 Hz
 
   // Initial render kick after DOM ready (handles mid-page-load injection too).
   if (document.readyState === 'loading') {
