@@ -299,12 +299,16 @@ body {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
-  max-height: 208px;
+  /* Locked height (was max-height) so the preset browser stays the same
+     size regardless of how many presets are in the selected category —
+     no more ugly collapse when filtering to AMBIENT / RHYTHMIC etc. */
+  height: 208px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  align-content: start;
 }
 /* Hide both scrollbars on the preset grid — trackpad/wheel still scrolls vertically. */
 .browser-grid::-webkit-scrollbar { width: 0; height: 0; display: none; }
