@@ -2026,8 +2026,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   /* When the slicer is active, hide the global uniform-mapping waveform —
      the per-chop canvases above each chop body are now the visual
-     waveform. Without this, two different waveforms would clash. */
-  body.ti-slicer-active #waveform-canvas { opacity: 0; }
+     waveform. !important needed because #hero.has-sample #waveform-canvas
+     already sets opacity:1 with higher specificity than a class-on-body
+     selector. */
+  body.ti-slicer-active #waveform-canvas { opacity: 0 !important; }
   /* Stretch ratio label — visible only when ratio != 1.0; sits above the
      pitch meter (which lives at the bottom-center). Low-contrast monospace. */
   .ti-slice-stretch-label {
