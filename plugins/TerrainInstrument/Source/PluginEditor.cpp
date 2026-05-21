@@ -2180,6 +2180,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       '<div class="item" data-act="rev">Reverse</div>' +
       '<div class="item" data-act="resetPitch">Reset Pitch</div>' +
       '<div class="sep"></div>' +
+      '<div class="item" data-act="warp-none">Warp: None</div>' +
+      '<div class="item" data-act="warp-tones">Warp: Tones</div>' +
+      '<div class="item" data-act="resetStretch">Reset Stretch</div>' +
+      '<div class="sep"></div>' +
       '<div class="item danger" data-act="del">Delete Chop</div>';
     hero.appendChild(ctx);
 
@@ -2877,6 +2881,27 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
             state.slices[idx].pitch = 0;
             var fnP = getNativeFn('setSlicePitch');
             if (fnP) { try { fnP(idx, 0); } catch (_) {} }
+            redrawSliceOverlay();
+          }
+        } else if (act === 'warp-none') {
+          if (state.slices[idx]) {
+            state.slices[idx].warpMode = 0;
+            var fnWN = getNativeFn('setSliceWarpMode');
+            if (fnWN) { try { fnWN(idx, 0); } catch (_) {} }
+            redrawSliceOverlay();
+          }
+        } else if (act === 'warp-tones') {
+          if (state.slices[idx]) {
+            state.slices[idx].warpMode = 2;
+            var fnWT = getNativeFn('setSliceWarpMode');
+            if (fnWT) { try { fnWT(idx, 2); } catch (_) {} }
+            redrawSliceOverlay();
+          }
+        } else if (act === 'resetStretch') {
+          if (state.slices[idx]) {
+            state.slices[idx].stretchRatio = 1.0;
+            var fnRS = getNativeFn('setSliceStretchRatio');
+            if (fnRS) { try { fnRS(idx, 1.0); } catch (_) {} }
             redrawSliceOverlay();
           }
         } else if (act === 'del') {
