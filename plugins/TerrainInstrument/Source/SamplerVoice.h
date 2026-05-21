@@ -362,10 +362,35 @@ namespace tw
             // means we consume FEWER source samples per output sample.
             const int inputLen = juce::jmax (1, (int) std::round ((double) numSamples * srInv));
 
-            // Reserve scratch space large enough for both input read and output
-            // write paths (we need DISTINCT buffers — Signalsmith requires it).
-            ensureWarpScratch (juce::jmax (inputLen, numSamples));
+            // CRITICAL: compute MAX scratch size needed for this entire block
+            // BEFORE caching any data pointers. Earlier code had two separate
+            // ensureWarpScratch calls (one for the main process path, one inside
+            // the prime branch with a typically-larger size). The second call
+            // grew the HeapBlock via realloc, which freed the memory the cached
+            // pointers (scratchInL/R, scratchOutL/R) pointed at — every first
+            // warped block then wrote to freed memory → heap corruption →
+            // host crash. Compute prime length up front and allocate once.
+            int safePrime = 0;
+            if (warpNeedsPrime)
+            {
+                const int primeLen = warp.inputLatency();
+                if (primeLen > 0)
+                {
+                    const int sliceLen = (playEndIdx < 0)
+                                            ? bufLen
+                                            : (int) juce::jlimit ((juce::int64) 0, (juce::int64) bufLen,
+                                                                  playEndIdx - playStartIdx);
+                    safePrime = juce::jmin (primeLen, sliceLen / 2);
+                    safePrime = juce::jmax (0, safePrime);
+                }
+            }
 
+            const int scratchSize = juce::jmax (inputLen, juce::jmax (numSamples, safePrime));
+            ensureWarpScratch (scratchSize);
+
+            // Cache pointers ONLY after the final size is locked in. Anything
+            // that reallocs the HeapBlock after this point would invalidate
+            // these — but nothing in this function does.
             auto* scratchInL  = warpScratchInL.getData();
             auto* scratchInR  = warpScratchInR.getData();
             auto* scratchOutL = warpScratchOutL.getData();
@@ -377,21 +402,10 @@ namespace tw
             if (warpNeedsPrime)
             {
                 warpNeedsPrime = false;
-                const int primeLen = warp.inputLatency();
-                if (primeLen > 0)
+                if (safePrime > 0)
                 {
-                    // Cap prime length to avoid eating the entire chop on short slices.
-                    const int sliceLen = (playEndIdx < 0)
-                                            ? bufLen
-                                            : (int) juce::jlimit ((juce::int64) 0, (juce::int64) bufLen,
-                                                                  playEndIdx - playStartIdx);
-                    const int safePrime = juce::jmin (primeLen, sliceLen / 2);
-                    if (safePrime > 0)
-                    {
-                        ensureWarpScratch (juce::jmax (safePrime, juce::jmax (inputLen, numSamples)));
-                        pullSourceIntoScratch (buf, warpScratchInL.getData(), warpScratchInR.getData(), safePrime);
-                        warp.seek (warpScratchInL.getData(), warpScratchInR.getData(), safePrime);
-                    }
+                    pullSourceIntoScratch (buf, scratchInL, scratchInR, safePrime);
+                    warp.seek            (scratchInL, scratchInR, safePrime);
                 }
             }
 
