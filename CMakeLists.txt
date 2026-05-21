@@ -57,6 +57,16 @@ if(NOT EXISTS "${JUCE_DIR}")
 endif()
 add_subdirectory("${JUCE_DIR}")
 
+# Signalsmith Stretch — header-only MIT spectral time-stretch + pitch-shift
+# library. Their CMakeLists FetchContent's signalsmith-linear (the FFT
+# dependency) at configure time. Used by Terrain Instrument warp modes
+# (TONES / TEXTURE in Phase 1+2).
+set(SIGNALSMITH_STRETCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/_tools/signalsmith-stretch")
+if(NOT EXISTS "${SIGNALSMITH_STRETCH_DIR}/signalsmith-stretch.h")
+    message(FATAL_ERROR "Signalsmith Stretch submodule not initialized at ${SIGNALSMITH_STRETCH_DIR}. Run: git submodule update --init --recursive")
+endif()
+add_subdirectory("${SIGNALSMITH_STRETCH_DIR}")
+
 # Visage is only needed for Visage UI framework plugins
 if(APC_ENABLE_VISAGE)
     if(NOT EXISTS "${VISAGE_DIR}")

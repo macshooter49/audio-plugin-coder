@@ -59,6 +59,7 @@ target_include_directories(TerrainInstrument
 target_link_libraries(TerrainInstrument
     PRIVATE
         TerrainInstrument_WebUI
+        signalsmith-stretch
         juce::juce_audio_basics
         juce::juce_audio_devices
         juce::juce_audio_formats
