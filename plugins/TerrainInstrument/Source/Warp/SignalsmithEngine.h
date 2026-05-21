@@ -53,7 +53,7 @@ namespace tw
 
         void setStretchRatio (float r) noexcept
         {
-            stretchRatio = juce::jlimit (0.25f, 4.0f, r);
+            stretchRatio = juce::jlimit (0.1f, 15.0f, r);
         }
 
         void setPitchSemitones (float semis) noexcept

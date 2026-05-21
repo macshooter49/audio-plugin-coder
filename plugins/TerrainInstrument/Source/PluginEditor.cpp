@@ -741,7 +741,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // args[0] = sliceIndex, args[1] = stretch ratio (0.25..4.0)
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx   = (int) args[0];
-                const float ratio = juce::jlimit (0.25f, 4.0f, (float) (double) args[1]);
+                const float ratio = juce::jlimit (0.1f, 15.0f, (float) (double) args[1]);
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -2009,13 +2009,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     color: white;
     transform: scale(1.08);
   }
-  /* Stretched chop body — render above non-stretched neighbors so visual
-     overlap reads as "this chop's playback bleeds past its source bounds"
-     rather than as a glitchy z-fight. */
+  /* Stretched chop body — subtle inset purple border so visual stretch
+     is reinforced by a slight chrome. No z-index hack needed now that
+     chops use a cumulative layout (no overlap). */
   .ti-slice-body.is-stretched {
-    z-index: 5;
-    box-shadow: 0 0 0 1px rgba(167,139,250,0.25) inset;
+    box-shadow: 0 0 0 1px rgba(167,139,250,0.3) inset;
   }
+  /* Per-chop waveform canvas — sits inside each chop body, renders the
+     chop's source segment scaled to fit the body's visual width. When the
+     chop is stretched, the body grows and so does this canvas, visually
+     stretching the waveform itself (Ableton-style warp). */
+  .ti-slice-waveform {
+    position: absolute;
+    left: 0; top: 0;
+    pointer-events: none;
+  }
+  /* When the slicer is active, hide the global uniform-mapping waveform —
+     the per-chop canvases above each chop body are now the visual
+     waveform. Without this, two different waveforms would clash. */
+  body.ti-slicer-active #waveform-canvas { opacity: 0; }
   /* Stretch ratio label — visible only when ratio != 1.0; sits above the
      pitch meter (which lives at the bottom-center). Low-contrast monospace. */
   .ti-slice-stretch-label {
@@ -2396,8 +2408,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     overlays.innerHTML = '';
 
     if (state.sliceMode !== 1 || state.slices.length === 0 || state.sampleLengthSamples <= 0) {
+      document.body.classList.remove('ti-slicer-active');
       return;
     }
+    document.body.classList.add('ti-slicer-active');
 
     // Position the overlay container over the waveform canvas region,
     // BUT clamp the bottom so slice bodies don't extend over the bottom
@@ -2412,34 +2426,66 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     overlays.style.height = Math.max(0, waveRect.height - BOTTOM_RESERVE) + 'px';
 
     var W = waveRect.width;
+    var H = Math.max(0, waveRect.height - BOTTOM_RESERVE);
     var totalSamples = state.sampleLengthSamples;
     var isChromatic  = state.sliceSubMode === 1;
     var activeIdx    = state.activeSliceIndex;
 
+    // SCALE-TO-FIT CUMULATIVE LAYOUT ──────────────────────────────────────
+    // Each chop's visual width is proportional to (sourceWidth * stretchRatio).
+    // Total chop widths sum to W (the canvas width) — so all chops always
+    // fit, and stretched chops visually dominate proportionally without
+    // overlapping neighbors or extending past the canvas edge. This mirrors
+    // Ableton's clip-warp UX: total clip width constant, internal warp
+    // markers redistribute audio between them.
+    var totalWeight = 0;
+    state.slices.forEach(function (s) {
+      var sr = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
+      totalWeight += Math.max(1, (s.end - s.start)) * sr;
+    });
+    if (totalWeight <= 0) totalWeight = 1;
+
+    var cumulative = 0;
+    var chopLayouts = state.slices.map(function (s, i) {
+      var sr = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
+      var weight = Math.max(1, (s.end - s.start)) * sr;
+      var visualWidth = (weight / totalWeight) * W;
+      var layout = {
+        srcStart: s.start,
+        srcEnd: s.end,
+        stretchRatio: sr,
+        visualLeft: cumulative,
+        visualWidth: visualWidth,
+        isStretched: Math.abs(sr - 1.0) > 0.005
+      };
+      cumulative += visualWidth;
+      return layout;
+    });
+
     state.slices.forEach(function (s, i) {
-      var leftFrac  = s.start / totalSamples;
-      var widthFrac = (s.end - s.start) / totalSamples;
-      var leftPx    = leftFrac  * W;
-      var widthPx   = widthFrac * W;
+      var layout = chopLayouts[i];
+      var leftPx  = layout.visualLeft;
+      var widthPx = layout.visualWidth;
       if (widthPx < 1) return;
 
-      // Visual stretching — chop body grows / shrinks proportional to
-      // stretchRatio, anchored at its left edge. When stretched > 1, the
-      // body extends past the next chop visually (z-index above neighbors
-      // via .is-stretched class). When < 1, leaves a visible gap on the right.
-      // The boundary marker lines stay anchored to source positions.
-      var stretchRatio = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
-      var stretchedWidthPx = widthPx * stretchRatio;
-      var isStretched = Math.abs(stretchRatio - 1.0) > 0.005;
+      var isStretched = layout.isStretched;
 
-      // Body (clickable / draggable region)
+      // Body (clickable / draggable region) sits at its cumulative position.
       var body = document.createElement('div');
       body.className = 'ti-slice-body' + (isStretched ? ' is-stretched' : '');
       body.style.left  = leftPx  + 'px';
-      body.style.width = stretchedWidthPx + 'px';
+      body.style.width = widthPx + 'px';
       body.dataset.idx = i;
       attachSliceGestures(body, i);
       overlays.appendChild(body);
+
+      // Per-chop waveform canvas — renders THIS chop's source segment
+      // scaled to the chop's visualWidth, so the waveform itself visually
+      // stretches with the chop. This is the Ableton-warp visual.
+      var wfCanvas = document.createElement('canvas');
+      wfCanvas.className = 'ti-slice-waveform';
+      body.appendChild(wfCanvas);
+      drawChopWaveform(wfCanvas, widthPx, H, layout.srcStart, layout.srcEnd, totalSamples);
 
       // Pitch meter — inline horizontal bar + number, only when pitch != 0.
       // Bar centers on a 0-semitone midline; fills right for positive,
@@ -2513,11 +2559,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         body.appendChild(sl);
       }
 
-      // Marker (left edge — index label sits at top)
-      if (i > 0) {  // first slice always starts at 0; no marker line needed
+      // Marker (left edge — index label sits at top). In the cumulative
+      // layout, the marker for chop i sits at chop i's visualLeft —
+      // exactly the boundary between chop i-1 and chop i.
+      if (i > 0) {
         var marker = document.createElement('div');
         marker.className = 'ti-slice-marker';
-        marker.style.left = leftPx + 'px';
+        marker.style.left = layout.visualLeft + 'px';
         var label = document.createElement('div');
         label.className = 'ti-slice-label';
         label.textContent = (i + 1);
@@ -2535,6 +2583,78 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         overlays.appendChild(label0);
       }
     });
+  }
+
+  // Render JUST one chop's source-segment waveform into a per-chop canvas,
+  // sized to the chop's visual width. The chop's source range [srcStart,
+  // srcEnd] is mapped onto the full canvas width — so a stretched chop
+  // visually spreads the same audio data over more pixels (the Ableton
+  // warp effect).
+  function drawChopWaveform (canvas, visualWidthCss, visualHeightCss, srcStart, srcEnd, totalSamples) {
+    var peaksMin = state.peaksMin;
+    var peaksMax = state.peaksMax;
+    if (!peaksMin || !peaksMax) return;
+    var n = peaksMin.length;
+    if (n === 0 || visualWidthCss < 1 || visualHeightCss < 1) return;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.max(1, Math.round(visualWidthCss  * dpr));
+    canvas.height = Math.max(1, Math.round(visualHeightCss * dpr));
+    canvas.style.width  = visualWidthCss  + 'px';
+    canvas.style.height = visualHeightCss + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, visualWidthCss, visualHeightCss);
+
+    // Peak index range covering this chop's source bounds.
+    var pStart = Math.floor((srcStart / totalSamples) * n);
+    var pEnd   = Math.ceil ((srcEnd   / totalSamples) * n);
+    pStart = Math.max(0, Math.min(n - 1, pStart));
+    pEnd   = Math.max(pStart + 1, Math.min(n, pEnd));
+    var pCount = pEnd - pStart;
+
+    var w  = visualWidthCss, h = visualHeightCss;
+    var cy = h / 2;
+    var i;
+
+    // Filled body (mirrored around centerline).
+    ctx.fillStyle = 'rgba(245, 243, 255, 0.10)';
+    ctx.beginPath();
+    ctx.moveTo(0, cy);
+    for (i = 0; i < pCount; i++) {
+      var x   = (i / Math.max(1, pCount - 1)) * w;
+      var yMax = cy - peaksMax[pStart + i] * cy * 0.95;
+      ctx.lineTo(x, yMax);
+    }
+    for (i = pCount - 1; i >= 0; i--) {
+      var x2  = (i / Math.max(1, pCount - 1)) * w;
+      var yMin = cy - peaksMin[pStart + i] * cy * 0.95;
+      ctx.lineTo(x2, yMin);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Top edge stroke.
+    ctx.strokeStyle = 'rgba(245, 243, 255, 0.92)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (i = 0; i < pCount; i++) {
+      var xx = (i / Math.max(1, pCount - 1)) * w;
+      var ym = cy - peaksMax[pStart + i] * cy * 0.95;
+      if (i === 0) ctx.moveTo(xx, ym); else ctx.lineTo(xx, ym);
+    }
+    ctx.stroke();
+
+    // Bottom edge stroke.
+    ctx.strokeStyle = 'rgba(245, 243, 255, 0.85)';
+    ctx.beginPath();
+    for (i = 0; i < pCount; i++) {
+      var xx2 = (i / Math.max(1, pCount - 1)) * w;
+      var ym2 = cy - peaksMin[pStart + i] * cy * 0.95;
+      if (i === 0) ctx.moveTo(xx2, ym2); else ctx.lineTo(xx2, ym2);
+    }
+    ctx.stroke();
   }
 
   // Drag a marker line horizontally to move the boundary between
@@ -2581,10 +2701,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     function onMove (mev) {
       var dx = mev.clientX - startX;
-      // 200px drag = 1.0 ratio delta. Outward grows the chop (drag right =
-      // marker visually moves right = the LEFT chop "grows" = ratio up).
-      var delta = dx / 200.0;
-      var newRatio = Math.max(0.25, Math.min(4.0, startRatio + delta));
+      // Exponential drag sensitivity — each 100 px of horizontal drag is
+      // 2x. Reaches 15x (max) in ~390 px right of start; 0.1x (min) in
+      // ~330 px left of start. Linear sensitivity made dramatic stretches
+      // require half-screen drags; exponential gives the user the full
+      // 0.1x..15x range with a comfortable wrist motion.
+      var factor = Math.pow(2, dx / 100.0);
+      var newRatio = Math.max(0.1, Math.min(15.0, startRatio * factor));
       slice.stretchRatio = newRatio;
       var fnR = getNativeFn('setSliceStretchRatio');
       if (fnR) { try { fnR(sliceIdx, newRatio); } catch (_) {} }

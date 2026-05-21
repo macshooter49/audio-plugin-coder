@@ -45,7 +45,7 @@ namespace tw
         bool        reverse          = false;
         float       pitchOffsetSemis = 0.0f;    // -12..+12 (one octave each way — wider ranges sound chipmunky)
         WarpMode    warpMode         = WarpMode::None;   // per-chop warp engine selection
-        float       stretchRatio     = 1.0f;             // clamped 0.25..4.0; ignored when warpMode == None
+        float       stretchRatio     = 1.0f;             // clamped 0.1..15.0; ignored when warpMode == None
 
         juce::int64 length() const noexcept { return endSample - startSample; }
     };
@@ -99,7 +99,7 @@ namespace tw
             s.warpMode         = (wmRaw >= 0 && wmRaw <= 3)
                                     ? static_cast<WarpMode> (wmRaw)
                                     : WarpMode::None;
-            s.stretchRatio     = juce::jlimit (0.25f, 4.0f,
+            s.stretchRatio     = juce::jlimit (0.1f, 15.0f,
                                     (float) (double) e.getProperty ("stretchRatio", 1.0));
 
             if (s.endSample > s.startSample)
