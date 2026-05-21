@@ -311,10 +311,16 @@ namespace tw
 
         /** Pull `count` source samples (linear-interpolated, reverse-aware)
          *  into the destination buffers starting at sample 0. Advances playhead.
-         *  Returns false if the source range is exhausted before count samples
-         *  are read; remaining samples in dst are zeroed. */
+         *
+         *  If `looping` is true and the source range is exhausted, the playhead
+         *  wraps back to the slice start (or end for reverse) and reading
+         *  continues — matching the NONE-mode loop behavior. If `looping` is
+         *  false, returns false when exhausted with remaining samples in dst
+         *  left as zero.
+         */
         bool pullSourceIntoScratch (const juce::AudioBuffer<float>& buf,
-                                    float* dstL, float* dstR, int count)
+                                    float* dstL, float* dstR, int count,
+                                    bool looping)
         {
             const int bufLen   = buf.getNumSamples();
             const int bufChans = buf.getNumChannels();
@@ -325,6 +331,7 @@ namespace tw
             const double endIdx   = static_cast<double> (bEnd - 1);
             const double startIdx = static_cast<double> (bStart);
             const double step     = reversePlay ? -1.0 : 1.0;
+            const double sliceLen = endIdx - startIdx;
 
             const auto* inL = buf.getReadPointer (0);
             const auto* inR = bufChans > 1 ? buf.getReadPointer (1) : inL;
@@ -336,7 +343,22 @@ namespace tw
             {
                 const bool past = reversePlay ? (playhead < startIdx)
                                               : (playhead > endIdx);
-                if (past) return false;
+                if (past)
+                {
+                    if (looping && sliceLen > 0.0)
+                    {
+                        // Wrap the playhead and keep reading — same semantics
+                        // as the NONE-mode forward loop.
+                        if (! reversePlay)
+                            playhead = startIdx + std::fmod (playhead - startIdx, sliceLen);
+                        else
+                            playhead = endIdx - std::fmod (endIdx - playhead, sliceLen);
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
 
                 const auto i0 = (int) playhead;
                 const int  i1 = juce::jlimit (0, bufLen - 1, i0 + (reversePlay ? -1 : 1));
@@ -404,14 +426,24 @@ namespace tw
                 warpNeedsPrime = false;
                 if (safePrime > 0)
                 {
-                    pullSourceIntoScratch (buf, scratchInL, scratchInR, safePrime);
+                    // Prime never loops — we want a clean opening from the
+                    // slice's actual start, not a wrap-mixed prime.
+                    pullSourceIntoScratch (buf, scratchInL, scratchInR, safePrime, /*looping=*/false);
                     warp.seek            (scratchInL, scratchInR, safePrime);
                 }
             }
 
+            // Loop-mode awareness — warped chops respect the global LOOP
+            // toggle the same way NONE-mode chops do. forceOneShot (audition
+            // path) still overrides and plays one-shot regardless.
+            const int  loopMode = activeConfig.forceOneShot ? 0 : loopModeParam.load();
+            const bool looping  = (loopMode == 1);
+
             // Pull source into scratchIn (linear-interp, reverse-aware). Engine
-            // handles pitch + stretch; we feed unity-rate source.
-            const bool exhausted = ! pullSourceIntoScratch (buf, scratchInL, scratchInR, inputLen);
+            // handles pitch + stretch; we feed unity-rate source. In loop mode
+            // the pull wraps internally and always returns true, so endReached
+            // stays false and the voice continues until note-off.
+            const bool exhausted = ! pullSourceIntoScratch (buf, scratchInL, scratchInR, inputLen, looping);
             bool endReached = exhausted;
 
             // Engine reads scratchIn (inputLen samples), writes scratchOut

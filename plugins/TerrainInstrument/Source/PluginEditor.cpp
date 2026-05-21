@@ -2500,11 +2500,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       body.appendChild(wfCanvas);
       drawChopWaveform(wfCanvas, widthPx, H, layout.srcStart, layout.srcEnd, totalSamples);
 
+      // Hide all body overlays (pitch meter, REV tag, warp letter, stretch
+      // label) when the chop is too narrow to fit them legibly. Avoids the
+      // cramped overlap that happens when many chops squeeze the layout or
+      // when one chop is heavily compressed by stretching its neighbors.
+      var SMALL_CHOP_PX = 50;
+      var hideOverlays = widthPx < SMALL_CHOP_PX;
+
       // Pitch meter — inline horizontal bar + number, only when pitch != 0.
       // Bar centers on a 0-semitone midline; fills right for positive,
       // left for negative, length proportional to |pitch| / 12. Capped at
       // half the bar width so range ±12 maps cleanly to the edges.
-      if (s.pitch && s.pitch !== 0) {
+      if (s.pitch && s.pitch !== 0 && !hideOverlays) {
         var meter = document.createElement('div');
         meter.className = 'ti-slice-pitch-meter';
         var num = document.createElement('div');
@@ -2528,7 +2535,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         body.appendChild(meter);
       }
       // REV tag — separate from pitch meter, top-left corner.
-      if (s.reverse) {
+      if (s.reverse && !hideOverlays) {
         var rev = document.createElement('div');
         rev.className = 'ti-slice-rev-tag';
         rev.textContent = 'REV';
@@ -2538,7 +2545,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // Warp mode letter — top-right corner. Visible only when warpMode > 0.
       // Click cycles to next mode (Phase 1 only ships Tones, so the cycle is
       // currently Tones -> None; Phase 2 expands to None -> B -> T -> X).
-      if (s.warpMode && s.warpMode > 0) {
+      if (s.warpMode && s.warpMode > 0 && !hideOverlays) {
         var wl = document.createElement('div');
         wl.className = 'ti-slice-warp-letter';
         var letters = { 1: 'B', 2: 'T', 3: 'X' };
@@ -2568,7 +2575,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       }
 
       // Stretch ratio label — visible only when stretched away from unity.
-      if (s.stretchRatio && Math.abs(s.stretchRatio - 1.0) > 0.005) {
+      if (s.stretchRatio && Math.abs(s.stretchRatio - 1.0) > 0.005 && !hideOverlays) {
         var sl = document.createElement('div');
         sl.className = 'ti-slice-stretch-label';
         sl.textContent = s.stretchRatio.toFixed(2) + 'x';
