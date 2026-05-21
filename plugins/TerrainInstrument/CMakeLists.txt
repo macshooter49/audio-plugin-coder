@@ -47,6 +47,7 @@ target_sources(TerrainInstrument
         Source/ParametricEQ_test.cpp
         Source/MoogDelay_test.cpp
         Source/TerrainChorus_test.cpp
+        Source/Warp/WarpProcessor_test.cpp
 )
 
 # ── Include paths ──
