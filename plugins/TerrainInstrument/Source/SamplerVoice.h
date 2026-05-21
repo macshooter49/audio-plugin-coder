@@ -4,8 +4,11 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "SampleBuffer.h"
+#include "Slice.h"
+#include "Warp/WarpProcessor.h"
 #include <atomic>
 #include <cmath>
+#include <cstring>
 
 namespace tw
 {
@@ -28,6 +31,8 @@ namespace tw
         float       pitchSemitones   = 0.0f;     // semitones from unity (additive with pitch wheel)
         bool        forceOneShot     = false;    // override LOOP mode for this voice (used for audition)
         int         sliceIndex       = -1;       // index in the slice list this voice plays; -1 = Whole-mode (no slice)
+        WarpMode    warpMode         = WarpMode::None;   // per-chop warp engine; None = current resample behavior
+        float       stretchRatio     = 1.0f;             // 0.25..4.0; ignored when warpMode == None
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -49,6 +54,7 @@ namespace tw
         {
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
             sampleRateForEnv = sr > 0.0 ? sr : 48000.0;
+            warp.prepare (sampleRateForEnv, 2, 512);
         }
 
         /** Called by TerrainSynth immediately BEFORE startNote(). Latches the
@@ -95,6 +101,16 @@ namespace tw
             envStage = (attackInc >= 1.0f) ? EnvStage::Sustaining : EnvStage::Attack;
             if (envStage == EnvStage::Sustaining) envLevel = 1.0f;
             isActive = true;
+
+            // Warp engine: select mode + reset state for this trigger. The
+            // dispatcher lazily allocates the underlying spectral engine on
+            // the first non-None setMode, so voices that never warp pay zero
+            // memory / CPU cost.
+            warp.setMode           (activeConfig.warpMode);
+            warp.setStretchRatio   (activeConfig.stretchRatio);
+            warp.setPitchSemitones (activeConfig.pitchSemitones);
+            warp.noteOnReset();
+            outputSamplesSinceTrigger = 0;
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -133,6 +149,15 @@ namespace tw
 
             auto buf = sample.load();
             if (! buf || buf->getNumSamples() == 0) return;
+
+            // Warp branch — entire path lives in renderWarp(). NONE mode
+            // (the vast majority of voices) falls through to the existing
+            // per-sample loop below, behaviorally unchanged.
+            if (activeConfig.warpMode != WarpMode::None)
+            {
+                renderWarp (outputBuffer, *buf, startSample, numSamples);
+                return;
+            }
 
             const int    bufLen   = buf->getNumSamples();
             const int    bufChans = buf->getNumChannels();
@@ -257,6 +282,140 @@ namespace tw
             pitchRatio = std::pow (2.0, semitones / 12.0);
         }
 
+        // ────────────────────────────────────────────────────────────────
+        // Warp branch — only invoked when activeConfig.warpMode != None.
+        //
+        // Phase 1 design notes:
+        //   - One-shot only (loop mode ignored). Voice ends naturally when
+        //     the source playhead reaches the slice end.
+        //   - Reverse supported via reading source backwards into the scratch
+        //     buffer; the warp engine consumes scratch identically either way.
+        //   - Pitch bend ignored on warped voices (v1.1 polish). Only the
+        //     activeConfig.pitchSemitones value, set at startNote, is used.
+        //   - Tail fade: applied to the OUTPUT samples in the last 256-sample
+        //     ramp before the source reaches its end (in source-space, scaled
+        //     by stretchRatio).
+        // ────────────────────────────────────────────────────────────────
+        void ensureWarpScratch (int n)
+        {
+            if (n > warpScratchCapacity)
+            {
+                warpScratchL.realloc ((size_t) n);
+                warpScratchR.realloc ((size_t) n);
+                warpScratchCapacity = n;
+            }
+        }
+
+        void renderWarp (juce::AudioBuffer<float>& outputBuffer,
+                         const juce::AudioBuffer<float>& buf,
+                         int startSample, int numSamples)
+        {
+            const int bufLen   = buf.getNumSamples();
+            const int bufChans = buf.getNumChannels();
+            if (bufLen <= 0 || numSamples <= 0) return;
+
+            // Resolve slice bounds, same sentinel handling as the NONE path.
+            const juce::int64 bStart = juce::jlimit ((juce::int64) 0, (juce::int64) bufLen - 1, playStartIdx);
+            const juce::int64 bEnd   = (playEndIdx < 0)
+                                         ? (juce::int64) bufLen
+                                         : juce::jlimit (bStart + 1, (juce::int64) bufLen, playEndIdx);
+            const double endIdx   = static_cast<double> (bEnd - 1);
+            const double startIdx = static_cast<double> (bStart);
+
+            const double sr = (double) activeConfig.stretchRatio;
+            const double srInv = sr > 0.0001 ? 1.0 / sr : 1.0;  // safety, never div by zero
+
+            // How many source samples we'll consume this block. Stretch ratio > 1
+            // means we consume FEWER source samples per output sample.
+            const int inputLen = juce::jmax (1, (int) std::round ((double) numSamples * srInv));
+            ensureWarpScratch (juce::jmax (inputLen, numSamples));
+
+            auto* scratchL = warpScratchL.getData();
+            auto* scratchR = warpScratchR.getData();
+            std::memset (scratchL, 0, sizeof (float) * (size_t) inputLen);
+            std::memset (scratchR, 0, sizeof (float) * (size_t) inputLen);
+
+            // Linear interpolation read at UNITY rate into scratch (warp engine
+            // handles pitch internally via setPitchSemitones).
+            const auto* inL = buf.getReadPointer (0);
+            const auto* inR = bufChans > 1 ? buf.getReadPointer (1) : inL;
+
+            const double step = reversePlay ? -1.0 : 1.0;
+            bool endReached = false;
+            for (int i = 0; i < inputLen; ++i)
+            {
+                const bool past = reversePlay ? (playhead < startIdx)
+                                              : (playhead > endIdx);
+                if (past) { endReached = true; break; }
+
+                const auto i0 = (int) playhead;
+                const int  i1 = juce::jlimit (0, bufLen - 1, i0 + (reversePlay ? -1 : 1));
+                const float frac = (float) (playhead - (double) i0);
+                const float sL = inL[i0] + frac * (inL[i1] - inL[i0]);
+                const float sR = inR[i0] + frac * (inR[i1] - inR[i0]);
+                scratchL[i] = sL;
+                scratchR[i] = sR;
+                playhead += step;
+            }
+
+            // Engine consumes scratch (inputLen samples), produces numSamples output.
+            warp.process (scratchL, scratchR, scratchL, scratchR, numSamples);
+
+            // Envelope ticks numSamples times this block (output rate).
+            auto* outL = outputBuffer.getWritePointer (0, startSample);
+            auto* outR = outputBuffer.getNumChannels() > 1
+                          ? outputBuffer.getWritePointer (1, startSample) : outL;
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                // Envelope tick — same state machine as NONE path.
+                switch (envStage)
+                {
+                    case EnvStage::Attack:
+                        envLevel += attackInc;
+                        if (envLevel >= 1.0f) { envLevel = 1.0f; envStage = EnvStage::Sustaining; }
+                        break;
+                    case EnvStage::Sustaining: envLevel = 1.0f; break;
+                    case EnvStage::Release:
+                        envLevel -= releaseDec;
+                        if (envLevel <= 0.0f)
+                        {
+                            envLevel = 0.0f;
+                            envStage = EnvStage::Off;
+                            clearCurrentNote();
+                            isActive = false;
+                            return;
+                        }
+                        break;
+                    case EnvStage::Off: return;
+                }
+
+                // Tail fade — last 256 output samples before source-end (or
+                // immediately if we already hit the end this block).
+                float tailFade = 1.0f;
+                if (endReached && i >= numSamples - 256)
+                {
+                    const float ramp = (float) (numSamples - i) / 256.0f;
+                    tailFade = juce::jmax (0.0f, ramp);
+                }
+
+                const float gain = currentVelocity * envLevel * tailFade;
+                outL[i] += scratchL[i] * gain;
+                outR[i] += scratchR[i] * gain;
+            }
+
+            outputSamplesSinceTrigger += numSamples;
+
+            // One-shot end: source consumed past its end, fade-out finished.
+            if (endReached)
+            {
+                envStage = EnvStage::Off;
+                envLevel = 0.0f;
+                clearCurrentNote();
+                isActive = false;
+            }
+        }
+
         SampleBuffer&       sample;
         std::atomic<float>& attackMsParam;
         std::atomic<float>& releaseMsParam;
@@ -277,6 +436,14 @@ namespace tw
         juce::int64 playStartIdx = 0;
         juce::int64 playEndIdx   = -1;
         bool        reversePlay  = false;
+
+        // Warp dispatcher + scratch buffers. Engine is lazily allocated inside
+        // WarpProcessor on the first non-None setMode call; voices that never
+        // warp pay zero memory cost beyond the WarpProcessor itself.
+        WarpProcessor       warp;
+        juce::HeapBlock<float> warpScratchL, warpScratchR;
+        int                 warpScratchCapacity       = 0;
+        int                 outputSamplesSinceTrigger = 0;
 
         // AR envelope (one-shot model — no Decay/Sustain knee, just Attack-then-hold-then-Release).
         EnvStage envStage         = EnvStage::Off;

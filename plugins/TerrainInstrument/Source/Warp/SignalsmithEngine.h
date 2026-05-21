@@ -63,10 +63,17 @@ namespace tw
 
         /** Process numSamples of audio.
          *
-         *  Input + output may alias (signalsmith handles in-place internally via
-         *  its STFT overlap-add buffer). Output is the stretched + pitched audio
-         *  matching numSamples worth of OUTPUT time. Input length is derived
-         *  from the stretch ratio: inputLen = outputLen * stretchRatio.
+         *  Convention: stretchRatio > 1.0 means the chop plays LONGER — output
+         *  duration > input duration. So for a given number of output samples,
+         *  we consume LESS input. Formula: inputLen = outputLen / stretchRatio.
+         *
+         *  Examples:
+         *    stretchRatio = 2.0 → consume 0.5x input per output sample (slower)
+         *    stretchRatio = 0.5 → consume 2.0x input per output sample (faster)
+         *    stretchRatio = 1.0 → transparent (input == output rate)
+         *
+         *  Input + output may alias (signalsmith handles in-place via STFT
+         *  overlap-add buffer).
          */
         void process (const float* inL, const float* inR,
                       float* outL, float* outR, int numSamples)
@@ -79,10 +86,8 @@ namespace tw
             const float* inputs [2]  = { inL, channels == 2 ? inR : inL };
             float*       outputs[2] = { outL, channels == 2 ? outR : outL };
 
-            // Derive input length from desired output + ratio. The library expects
-            // inputSamples to match the audio you've ADVANCED in the source over
-            // this block; outputSamples is what gets written to outputs.
-            const int inputLen = (int) std::round ((double) numSamples * (double) stretchRatio);
+            // inputLen < outputLen when stretchRatio > 1.0 → audio plays longer.
+            const int inputLen = (int) std::round ((double) numSamples / (double) stretchRatio);
 
             stretcher.process (inputs, inputLen, outputs, numSamples);
 

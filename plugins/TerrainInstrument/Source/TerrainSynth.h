@@ -59,6 +59,8 @@ namespace tw
             vc.pitchSemitones = 0.0f;
             vc.forceOneShot   = true;
             vc.sliceIndex     = sliceIndex;
+            vc.warpMode       = s.warpMode;
+            vc.stretchRatio   = s.stretchRatio;
 
             const juce::ScopedLock sl (lock);
             if (sounds.size() == 0) return;
@@ -112,6 +114,8 @@ namespace tw
                     vc.reverse        = s.reverse;
                     vc.pitchSemitones = s.pitchOffsetSemis;
                     vc.sliceIndex     = idx;
+                    vc.warpMode       = s.warpMode;
+                    vc.stretchRatio   = s.stretchRatio;
                     break;
                 }
 
@@ -125,6 +129,8 @@ namespace tw
                     vc.reverse        = s.reverse;
                     vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + s.pitchOffsetSemis;
                     vc.sliceIndex     = sliceIdx;
+                    vc.warpMode       = s.warpMode;
+                    vc.stretchRatio   = s.stretchRatio;
                     break;
                 }
 
@@ -154,6 +160,8 @@ namespace tw
                     vc.reverse        = s.reverse;
                     vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + s.pitchOffsetSemis;
                     vc.sliceIndex     = pick;
+                    vc.warpMode       = s.warpMode;
+                    vc.stretchRatio   = s.stretchRatio;
                     break;
                 }
             }
