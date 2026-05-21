@@ -1,32 +1,31 @@
-// BeatsEngine.h
+// BeatsEngine.h — v3 (no AM, crossfade only at within-beat wraps)
 //
-// Granular stutter time-stretcher for Beats warp mode — v2 (persistent
-// state). The "choppy unique artifacts" north star.
+// Diagnosis of why v2 sounded crackly/robotic/inharmonic:
+//   - v2 applied a Hann window throughout EVERY grain cycle, not just at
+//     wraps. That windowing modulates amplitude at the grain rate (33 Hz
+//     for a 30 ms grain) — i.e., 33 Hz tremolo across all audio, all the
+//     time, even at stretchRatio = 1. Amplitude modulation of a tonal
+//     signal at 33 Hz creates ±33 Hz sidebands around every partial:
+//     those sidebands are exactly the "inharmonic frequencies" the user
+//     heard.
+//   - The window also dipped to zero at every cycle boundary even when
+//     no wrap was happening, creating the periodic "robotic" pulsing.
 //
-// Why v2: the original block-level design tied grain size to the audio
-// block (grainSize = inputLen / G ≈ 5 ms at default settings). That put
-// the wrap frequency at 200 Hz, audibly buzzy / "robotic". Persistent
-// history with a fixed ~30 ms grain pushes the wrap rate down to ~33 Hz
-// — below the audio band — so cycle boundaries don't ring.
-//
-// Algorithm:
-//   - Maintain a circular history buffer of recent input (~4 s of audio).
-//   - Each grain is a fixed-size chunk of history (grainSize samples,
-//     30 ms by default).
-//   - Per output sample: read from (grainAnchor + (phase % grainSize)),
-//     where phase advances at pitchRatio per sample. The mod wraps —
-//     that is the stutter at stretchRatio > 1 (grain repeats), the
-//     partial-skip at stretchRatio < 1 (only part of grain read before
-//     advancing).
-//   - When the grain's output budget (outputsPerGrain = grainSize *
-//     stretchRatio) is exhausted, advance grainAnchor forward by
-//     grainSize in source space and start the next grain.
-//   - Hann fades on the first and last ~6% of each wrap cycle mask the
-//     boundary clicks without creating obvious tremolo dips.
-//
-// Latency: inputLatency() returns grainSize so the voice's seek()
-// priming can pre-fill the history with the chop's opening samples —
-// no silent bootstrap ramp at note-on.
+// v3 fixes:
+//   - NO constant windowing. Reads are clean linear-interp lookups.
+//   - At within-beat wraps (when the loop is about to repeat WITHIN the
+//     same beat — only when stretchRatio > pitchRatio so the loop has
+//     to repeat), a short equal-power cos/sin crossfade with the loop's
+//     opening samples smooths the cycle boundary. Between beats (where
+//     the source is naturally continuous) no crossfade — the audio
+//     advances cleanly.
+//   - stretchRatio + pitchRatio combined into a single outputsPerLoop
+//     formula. At stretchRatio = 1 and pitchRatio = 1 this is exactly
+//     one cycle per beat with sequential reads — bit-identical
+//     pass-through. No artifacts at unity.
+//   - Grain size bumped from 30 ms → 60 ms. Slower wrap rate, more
+//     musical-feeling stutter at higher stretches.
+//   - Crossfade length bumped from ~2 ms → ~10 ms. More gradual.
 //
 // RT-safety: process() is allocation-free.
 //
@@ -48,9 +47,6 @@ namespace tw
             sampleRate = sampleRateHz;
             channels   = juce::jlimit (1, 2, numChannels);
 
-            // Circular history — ~4 s at SR, rounded up to a power of two
-            // so reads can use a bitmask. 32 k samples minimum so even at
-            // very low SR we have enough headroom.
             int target = 1;
             while (target < (int) (sampleRate * 4.0)) target *= 2;
             if (target < 32768) target = 32768;
@@ -60,11 +56,10 @@ namespace tw
             std::memset (historyR.getData(), 0, (size_t) target * sizeof (float));
             historyMask = target - 1;
 
-            // 30 ms grain — wraps at ~33 Hz (sub-audio), Hann fades on
-            // ~6% of each edge. Clamped so we don't go absurdly small at
-            // low SR or absurdly big at high SR.
-            targetGrainSize = juce::jlimit (512, 4096, (int) (sampleRate * 0.030));
-            fadeLen         = juce::jmax (16, targetGrainSize / 16);
+            // 60 ms grain — wraps at ~16 Hz, comfortably sub-audio. 10 ms
+            // crossfade region for soft loop boundaries.
+            targetGrainSize = juce::jlimit (1024, 8192, (int) (sampleRate * 0.060));
+            crossfadeLen    = juce::jlimit (64, 1024, (int) (sampleRate * 0.010));
 
             ready = true;
             reset();
@@ -72,10 +67,10 @@ namespace tw
 
         void reset() noexcept
         {
-            historyWriteIdx   = 0;
-            grainAnchor       = 0;
-            outputsThisGrain  = 0;
-            firstBlockPending = true;
+            historyWriteIdx    = 0;
+            loopAnchor         = 0;
+            outputsThisLoop    = 0;
+            firstBlockPending  = true;
         }
 
         bool isReady()      const noexcept { return ready; }
@@ -91,9 +86,6 @@ namespace tw
             pitchSemitones = juce::jlimit (-24.0f, 24.0f, s);
         }
 
-        // Voice calls this once at note-on with the chop's opening
-        // inputLatency() samples — fills history so the first process()
-        // call has a full grain available immediately.
         void seek (const float* primeL, const float* primeR, int n)
         {
             if (! ready || n <= 0) return;
@@ -110,7 +102,7 @@ namespace tw
                       float* outL, float* outR, int numSamples)
         {
             if (! ready || numSamples <= 0) return;
-            jassert (inL != outL && inR != outR && "Engine requires distinct buffers");
+            jassert (inL != outL && inR != outR);
 
             const int inputLen = juce::jmax (1, (int) std::round (
                 (double) numSamples / (double) stretchRatio));
@@ -125,15 +117,14 @@ namespace tw
                 historyWriteIdx++;
             }
 
-            // Bootstrap — need a full grain of history before producing
-            // output. seek() should have primed this; if not (short chop,
-            // small prime), output silence until enough history.
+            // Bootstrap — wait for a full grain of history (seek priming
+            // should have provided it).
             if (firstBlockPending)
             {
                 if (historyWriteIdx >= targetGrainSize)
                 {
-                    grainAnchor = 0;
-                    outputsThisGrain = 0;
+                    loopAnchor = 0;
+                    outputsThisLoop = 0;
                     firstBlockPending = false;
                 }
                 else
@@ -144,65 +135,95 @@ namespace tw
                 }
             }
 
-            const int outputsPerGrain = juce::jmax (1, (int) std::round (
-                (double) targetGrainSize * (double) stretchRatio));
+            // outputsPerLoop combines stretch and pitch. At unity settings
+            // this equals grainSize → exactly one cycle per beat, reads are
+            // sequential, output = input. Bit-identical pass-through.
+            // At stretchRatio > pitchRatio, outputsPerLoop > grainSize → the
+            // grain wraps inside the beat (stutter). At pitchRatio >
+            // stretchRatio, outputsPerLoop < grainSize → beat advances
+            // mid-grain (chipmunk).
+            const int outputsPerLoop = juce::jmax (1, (int) std::round (
+                (double) targetGrainSize * (double) stretchRatio / pitchRatio));
 
             for (int i = 0; i < numSamples; i++)
             {
-                // Advance to next grain when current grain's output
-                // budget runs out.
-                if (outputsThisGrain >= outputsPerGrain)
+                if (outputsThisLoop >= outputsPerLoop)
                 {
-                    grainAnchor += targetGrainSize;
-                    outputsThisGrain = 0;
+                    loopAnchor += targetGrainSize;
+                    outputsThisLoop = 0;
                 }
 
-                // Phase position within the grain. Advances at pitchRatio
-                // per output sample; modulo wraps for stutter when
-                // stretchRatio > 1 (grain replays) or trims when
-                // stretchRatio < 1 (grain partially read before advance).
-                const double phase = (double) outputsThisGrain * pitchRatio;
-                double phaseWrapped = std::fmod (phase, (double) targetGrainSize);
-                if (phaseWrapped < 0) phaseWrapped += targetGrainSize;
+                const double phase    = (double) outputsThisLoop * pitchRatio;
+                double cyclePos       = std::fmod (phase, (double) targetGrainSize);
+                if (cyclePos < 0) cyclePos += targetGrainSize;
 
-                // Linear-interpolated history read.
-                const int absIdx = grainAnchor + (int) phaseWrapped;
-                const int idx0   = absIdx & historyMask;
-                const int idx1   = (absIdx + 1) & historyMask;
-                const float frac = (float) (phaseWrapped - (int) phaseWrapped);
-                const float sL = historyL[idx0] + frac * (historyL[idx1] - historyL[idx0]);
-                const float sR = historyR[idx0] + frac * (historyR[idx1] - historyR[idx0]);
+                // Look ahead one sample to decide whether the next sample
+                // will wrap within the same beat — only THEN does the
+                // crossfade need to kick in.
+                const double nextPhase    = (double) (outputsThisLoop + 1) * pitchRatio;
+                const double nextCyclePos = std::fmod (nextPhase, (double) targetGrainSize);
+                const bool   willWrap     = nextCyclePos < cyclePos;
+                const bool   stillInBeat  = (outputsThisLoop + 1) < outputsPerLoop;
+                const bool   wrapImminent = willWrap && stillInBeat;
 
-                // Soft Hann edges — small enough to be inaudible at
-                // stretchRatio=1 with pitchRatio=1 (just grain-boundary
-                // rounding) but masks the wrap clicks at higher stretch.
-                const int posInt = (int) phaseWrapped;
-                float winGain = 1.0f;
-                if (posInt < fadeLen)
+                // Main read. idx1 wraps within grain ONLY if we're heading
+                // into a within-beat wrap — otherwise it advances naturally
+                // into the next source sample (which is the next beat at
+                // the end of a beat, giving clean inter-beat continuity).
+                const int pos0 = (int) cyclePos;
+                int pos1;
+                if (wrapImminent)
+                    pos1 = (pos0 + 1) % targetGrainSize;
+                else
+                    pos1 = pos0 + 1;
+
+                const float frac = (float) (cyclePos - pos0);
+                const int idx0 = (loopAnchor + pos0) & historyMask;
+                const int idx1 = (loopAnchor + pos1) & historyMask;
+                float sL = historyL[idx0] + frac * (historyL[idx1] - historyL[idx0]);
+                float sR = historyR[idx0] + frac * (historyR[idx1] - historyR[idx0]);
+
+                // Crossfade with the loop's opening over the last
+                // crossfadeLen samples of a cycle — but only when the wrap
+                // is genuinely a within-beat wrap. Between beats, source
+                // is naturally continuous so no crossfade is needed.
+                if (wrapImminent && pos0 >= targetGrainSize - crossfadeLen)
                 {
-                    const float t = (float) (posInt + 1) / (float) fadeLen;
-                    winGain = 0.5f * (1.0f - std::cos (juce::MathConstants<float>::pi * t));
-                }
-                else if (posInt >= targetGrainSize - fadeLen)
-                {
-                    const float t = (float) (targetGrainSize - posInt) / (float) fadeLen;
-                    winGain = 0.5f * (1.0f - std::cos (juce::MathConstants<float>::pi * t));
+                    // Position the fade-in head reads from at the START of
+                    // the loop, advancing in lockstep with the main head's
+                    // distance into the crossfade region.
+                    const double startCyclePos = cyclePos - (targetGrainSize - crossfadeLen);
+                    const int    sPos0 = (int) startCyclePos;
+                    const int    sPos1 = (sPos0 + 1) % targetGrainSize;
+                    const float  sFrac = (float) (startCyclePos - sPos0);
+                    const int    sIdx0 = (loopAnchor + sPos0) & historyMask;
+                    const int    sIdx1 = (loopAnchor + sPos1) & historyMask;
+                    const float  startL = historyL[sIdx0] + sFrac * (historyL[sIdx1] - historyL[sIdx0]);
+                    const float  startR = historyR[sIdx0] + sFrac * (historyR[sIdx1] - historyR[sIdx0]);
+
+                    const float t = (float) ((cyclePos - (targetGrainSize - crossfadeLen)) / crossfadeLen);
+                    // Equal-power crossfade — cos²+sin²=1 preserves
+                    // perceived loudness across the boundary.
+                    const float a = std::cos (t * juce::MathConstants<float>::halfPi);
+                    const float b = std::sin (t * juce::MathConstants<float>::halfPi);
+                    sL = sL * a + startL * b;
+                    sR = sR * a + startR * b;
                 }
 
-                outL[i] = sL * winGain;
-                outR[i] = sR * winGain;
-                outputsThisGrain++;
+                outL[i] = sL;
+                outR[i] = sR;
+                outputsThisLoop++;
             }
         }
 
     private:
         juce::HeapBlock<float> historyL, historyR;
-        int historyMask       = 0;
-        int historyWriteIdx   = 0;
-        int grainAnchor       = 0;
-        int outputsThisGrain  = 0;
-        int targetGrainSize   = 1440;
-        int fadeLen           = 90;
+        int historyMask        = 0;
+        int historyWriteIdx    = 0;
+        int loopAnchor         = 0;
+        int outputsThisLoop    = 0;
+        int targetGrainSize    = 2880;
+        int crossfadeLen       = 480;
         bool firstBlockPending = true;
 
         double sampleRate     = 48000.0;
