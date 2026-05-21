@@ -2383,11 +2383,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var obj = JSON.parse(json);
       var arr = (obj && obj.slices) ? obj.slices : [];
       state.slices = arr.map(function (s) {
+        // Preserve warp fields across round-trips. Earlier this mapper
+        // dropped warpMode + stretchRatio, so any regular drag that
+        // returned the slice list via moveSliceBoundary would silently
+        // reset the JS-side warp state — the T letter and stretch label
+        // would vanish even though the C++ engine kept stretching. JS
+        // state must mirror C++.
+        var wm = parseInt(s.warpMode, 10);
+        var sr = parseFloat(s.stretchRatio);
         return {
-          start:   parseInt(s.start, 10) || 0,
-          end:     parseInt(s.end,   10) || 0,
-          reverse: !!s.reverse,
-          pitch:   parseFloat(s.pitch) || 0
+          start:        parseInt(s.start, 10) || 0,
+          end:          parseInt(s.end,   10) || 0,
+          reverse:      !!s.reverse,
+          pitch:        parseFloat(s.pitch) || 0,
+          warpMode:     (isFinite(wm) && wm >= 0 && wm <= 3) ? wm : 0,
+          stretchRatio: (isFinite(sr) ? Math.max(0.1, Math.min(15.0, sr)) : 1.0)
         };
       });
       // Clamp activeSliceIndex.
@@ -2676,38 +2686,49 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     return el;
   }
 
-  // Begin a "shift+drag the marker = stretch the LEFT chop" gesture.
-  // Auto-engages Tones if the target chop is currently None so the gesture
-  // always has audible effect. Chop 0 has no draggable marker — for chop 0,
-  // use the right-click 'Warp' submenu (Task 10) to engage stretch.
-  function beginStretchDrag (downEvent, sliceIdx, marker) {
+  // Begin a stretch gesture on `sliceIdx`. Element `target` gets the
+  // visual `dragging` class. Auto-engages Tones the moment the gesture
+  // actually moves (not on mousedown — so a no-movement click can fall
+  // through to options.fallbackClick if provided, used by the body
+  // gesture path to preserve audition / set-active on a plain click).
+  function beginStretchDrag (downEvent, sliceIdx, target, options) {
+    options = options || {};
     var slice = state.slices[sliceIdx];
     if (!slice) return;
 
-    if (!slice.warpMode || slice.warpMode === 0) {
-      slice.warpMode = 2;  // auto-engage Tones
-      var fnM = getNativeFn('setSliceWarpMode');
-      if (fnM) { try { fnM(sliceIdx, 2); } catch (_) {} }
-    }
-
     var startRatio = (typeof slice.stretchRatio === 'number') ? slice.stretchRatio : 1.0;
     var startX     = downEvent.clientX;
-    document.body.style.cursor = 'ew-resize';
-    marker.classList.add('dragging');
+    var moved      = false;
+    var tooltip    = ensureStretchTooltip();
 
-    var tooltip = ensureStretchTooltip();
-    tooltip.textContent = startRatio.toFixed(2) + 'x';
-    tooltip.style.left  = (downEvent.clientX + 14) + 'px';
-    tooltip.style.top   = (downEvent.clientY - 28) + 'px';
-    tooltip.classList.add('visible');
+    function activateStretchVisuals (mev) {
+      moved = true;
+      document.body.style.cursor = 'ew-resize';
+      if (target) target.classList.add('dragging');
+      tooltip.style.display = 'block';
+      tooltip.classList.add('visible');
+      tooltip.textContent = startRatio.toFixed(2) + 'x';
+      tooltip.style.left  = (mev.clientX + 14) + 'px';
+      tooltip.style.top   = (mev.clientY - 28) + 'px';
+      // Auto-engage Tones if currently None — only on actual movement,
+      // so a stray no-drag click on a None chop doesn't silently flip
+      // it into warp mode.
+      if (!slice.warpMode || slice.warpMode === 0) {
+        slice.warpMode = 2;
+        var fnM = getNativeFn('setSliceWarpMode');
+        if (fnM) { try { fnM(sliceIdx, 2); } catch (_) {} }
+      }
+    }
 
     function onMove (mev) {
       var dx = mev.clientX - startX;
-      // Exponential drag sensitivity — each 100 px of horizontal drag is
-      // 2x. Reaches 15x (max) in ~390 px right of start; 0.1x (min) in
-      // ~330 px left of start. Linear sensitivity made dramatic stretches
-      // require half-screen drags; exponential gives the user the full
-      // 0.1x..15x range with a comfortable wrist motion.
+      // 3 px threshold prevents click jitter from triggering stretch
+      // when the user actually intended a plain click (audition).
+      if (!moved && Math.abs(dx) < 3) return;
+      if (!moved) activateStretchVisuals (mev);
+
+      // Exponential drag sensitivity — each 100 px is 2x of startRatio.
+      // Reaches 15x in ~390 px, 0.1x in ~330 px the other way.
       var factor = Math.pow(2, dx / 100.0);
       var newRatio = Math.max(0.1, Math.min(15.0, startRatio * factor));
       slice.stretchRatio = newRatio;
@@ -2724,30 +2745,43 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       document.removeEventListener('mousemove', onMove, true);
       document.removeEventListener('mouseup',   onUp,   true);
       document.body.style.cursor = '';
-      marker.classList.remove('dragging');
+      if (target) target.classList.remove('dragging');
       tooltip.classList.remove('visible');
-      // setTimeout so the fade-out plays before display:none kicks in.
       setTimeout(function () {
         if (!tooltip.classList.contains('visible')) tooltip.style.display = 'none';
       }, 220);
-      tooltip.style.display = 'block';
+
+      // No movement and a fallbackClick was provided — fire it (audition
+      // / set-active for body taps that didn't turn into stretch drags).
+      if (!moved && typeof options.fallbackClick === 'function') {
+        options.fallbackClick();
+      }
     }
     document.addEventListener('mousemove', onMove, true);
     document.addEventListener('mouseup',   onUp,   true);
   }
 
   function attachMarkerDrag (marker, i) {
-    // Hover with shift held: hint the stretch gesture availability.
+    // Hover hint: ew-resize cursor when shift is held OR when the chop
+    // to the left is already in stretch mode (sticky stretch).
     marker.addEventListener('mousemove', function (ev) {
-      marker.style.cursor = ev.shiftKey ? 'ew-resize' : '';
+      var leftChop = state.slices[i - 1];
+      var sticky   = leftChop && leftChop.warpMode && leftChop.warpMode > 0;
+      marker.style.cursor = (ev.shiftKey || sticky) ? 'ew-resize' : '';
     });
     marker.addEventListener('mousedown', function (ev) {
       if (ev.button !== 0) return;
       ev.preventDefault();
       ev.stopPropagation();
 
-      // Shift+drag branch: stretch the LEFT chop instead of moving the boundary.
-      if (ev.shiftKey) {
+      // Stretch branch — entered on shift+drag OR when the LEFT chop is
+      // already warp-engaged. Once a chop is in stretch mode, any drag of
+      // its right-edge marker continues stretching it ("sticky"). User
+      // explicitly exits via right-click Warp:None / Reset Stretch / by
+      // clicking the T letter on the chop body.
+      var leftChop = state.slices[i - 1];
+      var sticky   = leftChop && leftChop.warpMode && leftChop.warpMode > 0;
+      if (ev.shiftKey || sticky) {
         beginStretchDrag(ev, i - 1, marker);
         return;
       }
@@ -2807,10 +2841,35 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     body.addEventListener('mousedown', function (ev) {
       if (ev.button !== 0) return;  // left-click only here
       ev.stopPropagation();         // don't let the XY pad eat this
-      // The second click of a double-click suppresses the audition / pitch-drag
-      // path — the dblclick handler below adds a marker instead. Without this
-      // the user would audition twice on every "add chop" gesture.
       if (ev.detail >= 2) { ev.preventDefault(); return; }
+
+      // Stretch on body — shift+drag OR sticky (this chop already warp-
+      // engaged). The body path is the only way to stretch chop 0 (first)
+      // and chop N-1 (last), since those have no draggable boundary
+      // marker on one side. Mid-chops also support body stretch as a
+      // convenient alternative to grabbing their right-edge marker.
+      // beginStretchDrag uses a movement threshold so a click without
+      // drag still fires fallbackClick (audition / set-active).
+      var slice = state.slices[idx];
+      var sticky = slice && slice.warpMode && slice.warpMode > 0;
+      if (ev.shiftKey || sticky) {
+        ev.preventDefault();
+        beginStretchDrag(ev, idx, body, {
+          fallbackClick: function () {
+            if (state.sliceSubMode === 1) {
+              state.activeSliceIndex = idx;
+              var fnA = getNativeFn('setActiveSliceIndex');
+              if (fnA) { try { fnA(idx); } catch (_) {} }
+              redrawSliceOverlay();
+            } else {
+              var fnB = getNativeFn('auditionSlice');
+              if (fnB) { try { fnB(idx); } catch (_) {} }
+            }
+          }
+        });
+        return;
+      }
+
       clicked = true;
       dragState = { startY: ev.clientY, startX: ev.clientX, idx: idx, fired: false, startPitch: state.slices[idx].pitch || 0 };
       body.classList.add('dragging');
