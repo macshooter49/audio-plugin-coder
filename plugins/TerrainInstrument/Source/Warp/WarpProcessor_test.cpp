@@ -214,4 +214,215 @@ public:
 
 static WarpProcessorTests warpProcessorTests;
 
+// ──────────────────────────────────────────────────────────────────────────
+// BeatsEngine — DIY granular stutter with crossfaded grain wraps
+// ──────────────────────────────────────────────────────────────────────────
+#include "BeatsEngine.h"
+
+class BeatsEngineTests : public juce::UnitTest
+{
+public:
+    BeatsEngineTests() : juce::UnitTest ("BeatsEngine") {}
+
+    void runTest() override
+    {
+        constexpr double SR = 48000.0;
+
+        beginTest ("Constructs and prepares without crash");
+        {
+            tw::BeatsEngine eng;
+            eng.prepare (SR, 2, 512);
+            expect (eng.isReady());
+        }
+
+        // A continuous sinewave is the canonical "if-you-click-i-detect-it"
+        // signal. Per-sample delta of a clean sine peaks at amp*2π*freq/SR,
+        // which for amp=0.25, freq=200Hz, SR=48k is ~0.0065. A click from a
+        // bad wrap snaps from ~0.25 back to ~0 in one sample — delta 0.25 —
+        // well above the 0.05 threshold below.
+        auto runSineCheck = [&] (float stretchRatio, float pitchSemis, float threshold,
+                                 const juce::String& label)
+        {
+            tw::BeatsEngine eng;
+            eng.prepare (SR, 2, 512);
+            eng.reset();
+            eng.setStretchRatio (stretchRatio);
+            eng.setPitchSemitones (pitchSemis);
+
+            const int totalOut = 24000;  // 0.5 sec — covers many grain wraps
+            const double pitchRatio = std::pow (2.0, (double) pitchSemis / 12.0);
+            const int totalIn = juce::jmax (1, (int) std::round (totalOut * pitchRatio / stretchRatio));
+
+            std::vector<float> inL (totalIn), inR (totalIn);
+            for (int i = 0; i < totalIn; ++i)
+            {
+                const float v = 0.25f * std::sin (2.0f * juce::MathConstants<float>::pi * 200.0f * i / (float) SR);
+                inL[i] = v;
+                inR[i] = v;
+            }
+
+            // Prime with one grain (inputLatency) of source so the engine
+            // doesn't gate output on firstBlockPending. This is what
+            // SamplerVoice does at note-on.
+            const int prime = juce::jmin (eng.inputLatency(), totalIn);
+            eng.seek (inL.data(), inR.data(), prime);
+
+            std::vector<float> outL (totalOut), outR (totalOut);
+
+            // Process in fixed blocks of 512.
+            const int block = 512;
+            int outDone = 0;
+            int inPos   = prime;
+            while (outDone < totalOut)
+            {
+                const int outN = juce::jmin (block, totalOut - outDone);
+                const int inN  = juce::jmax (1, (int) std::round (outN * pitchRatio / stretchRatio));
+                const int inAvail = juce::jmin (inN, totalIn - inPos);
+                if (inAvail <= 0) break;  // ran out of input
+                eng.process (inL.data() + inPos, inR.data() + inPos,
+                             outL.data() + outDone, outR.data() + outDone, outN);
+                outDone += outN;
+                inPos   += inAvail;
+            }
+
+            // Skip leading silence (firstBlockPending grace) — find first
+            // sample where |out| > 0.001 then start scanning from there.
+            int scanStart = 0;
+            for (int i = 0; i < outDone; ++i)
+            {
+                if (std::abs (outL[i]) > 0.001f) { scanStart = i; break; }
+            }
+            // Skip a few hundred more samples to clear any first-grain
+            // transient settling.
+            scanStart = juce::jmin (scanStart + 256, outDone);
+
+            float maxDelta = 0.0f;
+            int   worstIdx = -1;
+            for (int i = scanStart + 1; i < outDone; ++i)
+            {
+                const float d = std::abs (outL[i] - outL[i-1]);
+                if (d > maxDelta) { maxDelta = d; worstIdx = i; }
+                expect (std::isfinite (outL[i]), label + ": non-finite sample at " + juce::String (i));
+            }
+
+            expect (maxDelta < threshold,
+                    label + ": max per-sample delta " + juce::String (maxDelta)
+                    + " at sample " + juce::String (worstIdx)
+                    + " exceeds click threshold " + juce::String (threshold));
+        };
+
+        beginTest ("Unity stretch + unity pitch — passthrough (no clicks)");
+        runSineCheck (1.0f, 0.0f, 0.05f, "unity");
+
+        beginTest ("Stretch 2.0, unity pitch — repeated within-beat wraps, smooth");
+        runSineCheck (2.0f, 0.0f, 0.05f, "stretch2");
+
+        beginTest ("Stretch 4.0, unity pitch — many wraps per beat, smooth");
+        runSineCheck (4.0f, 0.0f, 0.05f, "stretch4");
+
+        beginTest ("Unity stretch + pitch up an octave — was broken pre-v5");
+        runSineCheck (1.0f, 12.0f, 0.05f, "pitch+12");
+
+        beginTest ("Stretch 2.0 + pitch up an octave — combined warp, smooth");
+        runSineCheck (2.0f, 12.0f, 0.05f, "stretch2-pitch+12");
+
+        beginTest ("Stretch 2.0 + pitch down an octave — combined warp, smooth");
+        runSineCheck (2.0f, -12.0f, 0.05f, "stretch2-pitch-12");
+
+        beginTest ("Stretch 8.0 + pitch +7 semis — extreme combo, smooth");
+        runSineCheck (8.0f, 7.0f, 0.05f, "stretch8-pitch+7");
+
+        beginTest ("Output is finite at extreme stretch ratios");
+        {
+            for (float r : { 0.1f, 0.5f, 2.0f, 8.0f, 15.0f })
+            {
+                tw::BeatsEngine eng;
+                eng.prepare (SR, 2, 512);
+                eng.reset();
+                eng.setStretchRatio (r);
+
+                constexpr int N = 4096;
+                std::vector<float> inL (N, 0.1f), inR (N, 0.1f);
+                std::vector<float> outL (N), outR (N);
+                eng.seek (inL.data(), inR.data(), juce::jmin (eng.inputLatency(), N));
+                eng.process (inL.data(), inR.data(), outL.data(), outR.data(), N);
+
+                for (int i = 0; i < N; ++i)
+                    expect (std::isfinite (outL[i]) && std::isfinite (outR[i]),
+                            "Non-finite sample at ratio " + juce::String (r));
+            }
+        }
+
+        beginTest ("Reset after process is idempotent and crash-free");
+        {
+            tw::BeatsEngine eng;
+            eng.prepare (SR, 2, 512);
+            eng.setStretchRatio (2.0f);
+            eng.reset();
+            constexpr int N = 1024;
+            std::vector<float> inL (N, 0.1f), inR (N, 0.1f);
+            std::vector<float> outL (N), outR (N);
+            eng.process (inL.data(), inR.data(), outL.data(), outR.data(), N);
+            eng.reset();
+            eng.process (inL.data(), inR.data(), outL.data(), outR.data(), N);
+            expect (true);
+        }
+    }
+};
+
+static BeatsEngineTests beatsEngineTests;
+
+// ──────────────────────────────────────────────────────────────────────────
+// WarpProcessor::sourceSamplesPerBlock — mode-aware input-feed length
+// ──────────────────────────────────────────────────────────────────────────
+class WarpProcessorInputLenTests : public juce::UnitTest
+{
+public:
+    WarpProcessorInputLenTests() : juce::UnitTest ("WarpProcessor::sourceSamplesPerBlock") {}
+
+    void runTest() override
+    {
+        beginTest ("None mode — returns numSamples (unused but defined)");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            expect (wp.sourceSamplesPerBlock (512) >= 1);
+        }
+
+        beginTest ("Tones mode — pitch is irrelevant (Signalsmith handles internally)");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            wp.setMode (tw::WarpMode::Tones);
+            wp.setStretchRatio (2.0f);
+            wp.setPitchSemitones (12.0f);
+            expect (wp.sourceSamplesPerBlock (512) == 256,
+                    "Tones at stretch=2 should consume 512/2=256 source samples regardless of pitch");
+        }
+
+        beginTest ("Beats mode — pitchRatio scales input feed");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            wp.setMode (tw::WarpMode::Beats);
+
+            wp.setStretchRatio (1.0f);
+            wp.setPitchSemitones (0.0f);
+            expect (wp.sourceSamplesPerBlock (512) == 512, "Beats unity = 512");
+
+            wp.setPitchSemitones (12.0f);  // pitchRatio = 2
+            expect (wp.sourceSamplesPerBlock (512) == 1024, "Beats pitch+12 = 2× source per block");
+
+            wp.setPitchSemitones (-12.0f);  // pitchRatio = 0.5
+            expect (wp.sourceSamplesPerBlock (512) == 256, "Beats pitch-12 = 0.5× source per block");
+
+            wp.setStretchRatio (2.0f);
+            wp.setPitchSemitones (12.0f);  // pr=2, sr=2 → 1.0 ratio
+            expect (wp.sourceSamplesPerBlock (512) == 512, "Beats stretch=2 pitch+12 = 512");
+        }
+    }
+};
+
+static WarpProcessorInputLenTests warpProcessorInputLenTests;
+
 #endif  // JUCE_DEBUG

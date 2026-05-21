@@ -23,6 +23,7 @@
 #include "BeatsEngine.h"
 #include <memory>
 #include <cstring>
+#include <cmath>
 
 namespace tw
 {
@@ -141,6 +142,30 @@ namespace tw
             return signalsmithEngine != nullptr || beatsEngine != nullptr;
         }
         WarpMode getMode() const noexcept { return mode; }
+
+        /** How many source samples the caller must fill into the engine's
+         *  input buffer to produce numSamples of output.
+         *
+         *  For Signalsmith (Tones / Texture) pitch is handled spectrally,
+         *  so we only divide by stretchRatio. For BeatsEngine the pitch
+         *  advances cyclePos directly through source, so source-read per
+         *  output sample = pitchRatio / stretchRatio. Feeding only
+         *  numSamples/stretchRatio at pitchRatio>1 starved the history
+         *  buffer (loopAnchor outran writeIdx after a few beats) and
+         *  produced buzz on every chromatic note above the root.
+         *
+         *  WarpMode::None returns numSamples (unused — None bypasses warp
+         *  entirely and reads source directly in SamplerVoice). */
+        int sourceSamplesPerBlock (int numSamples) const noexcept
+        {
+            const double sr = juce::jmax (0.0001, (double) stretchRatio);
+            if (mode == WarpMode::Beats)
+            {
+                const double pr = std::pow (2.0, (double) pitchSemitones / 12.0);
+                return juce::jmax (1, (int) std::round ((double) numSamples * pr / sr));
+            }
+            return juce::jmax (1, (int) std::round ((double) numSamples / sr));
+        }
 
         void process (const float* inL, const float* inR,
                       float* outL, float* outR, int numSamples)

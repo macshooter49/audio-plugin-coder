@@ -377,12 +377,15 @@ namespace tw
             const int bufLen = buf.getNumSamples();
             if (bufLen <= 0 || numSamples <= 0) return;
 
-            const double sr = (double) activeConfig.stretchRatio;
-            const double srInv = sr > 0.0001 ? 1.0 / sr : 1.0;  // safety, never div by zero
-
-            // How many source samples we'll consume this block. Stretch ratio > 1
-            // means we consume FEWER source samples per output sample.
-            const int inputLen = juce::jmax (1, (int) std::round ((double) numSamples * srInv));
+            // Source samples to feed the engine for this block. Beats and
+            // Signalsmith have different formulas (Beats needs pitchRatio
+            // factored in; Signalsmith handles pitch internally) — the
+            // single source of truth is WarpProcessor::sourceSamplesPerBlock.
+            // Computing this locally with the old `numSamples / stretchRatio`
+            // formula starved Beats at pitchRatio > 1 → every chromatic note
+            // above root buzzed because loopAnchor outpaced historyWriteIdx
+            // in the engine's circular history.
+            const int inputLen = juce::jmax (1, warp.sourceSamplesPerBlock (numSamples));
 
             // CRITICAL: compute MAX scratch size needed for this entire block
             // BEFORE caching any data pointers. Earlier code had two separate
