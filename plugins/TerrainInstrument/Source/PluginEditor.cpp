@@ -1986,6 +1986,39 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     background: rgba(20,18,32,0.7);
     pointer-events: none;
   }
+  /* Warp mode letter — top-right corner, opposite REV. Single character
+     (B / T / X). Clickable to cycle modes. Soft-blurred backdrop matches
+     the right-click menu's translucent panel — no purple-on-purple hard
+     edges, per UI cleanliness contract. */
+  .ti-slice-warp-letter {
+    position: absolute; top: 4px; right: 4px;
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 3px;
+    font: 700 9px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    color: #A78BFA;
+    background: rgba(20,18,32,0.55);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+    user-select: none;
+    pointer-events: auto;
+    transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+  }
+  .ti-slice-warp-letter:hover {
+    background: rgba(139,92,246,0.35);
+    color: white;
+    transform: scale(1.08);
+  }
+  /* Stretch ratio label — visible only when ratio != 1.0; sits above the
+     pitch meter (which lives at the bottom-center). Low-contrast monospace. */
+  .ti-slice-stretch-label {
+    position: absolute; left: 4px; bottom: 22px;
+    font: 600 9px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    color: rgba(167,139,250,0.7);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+    pointer-events: none;
+    user-select: none;
+  }
 
   /* Right-click context menu */
   #ti-slice-ctx {
@@ -2408,6 +2441,43 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         rev.className = 'ti-slice-rev-tag';
         rev.textContent = 'REV';
         body.appendChild(rev);
+      }
+
+      // Warp mode letter — top-right corner. Visible only when warpMode > 0.
+      // Click cycles to next mode (Phase 1 only ships Tones, so the cycle is
+      // currently Tones -> None; Phase 2 expands to None -> B -> T -> X).
+      if (s.warpMode && s.warpMode > 0) {
+        var wl = document.createElement('div');
+        wl.className = 'ti-slice-warp-letter';
+        var letters = { 1: 'B', 2: 'T', 3: 'X' };
+        wl.textContent = letters[s.warpMode] || '';
+        wl.title = ({ 1: 'Beats (Phase 2)', 2: 'Tones', 3: 'Texture (Phase 2)' })[s.warpMode] || 'Warp';
+        // Eat mousedown so the body's drag handler doesn't fire.
+        wl.addEventListener('mousedown', function (ev) {
+          if (ev.button !== 0) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+        });
+        wl.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          // Phase 1 cycle: Tones (2) -> None (0).
+          // Phase 2: expand to None(0) -> Beats(1) -> Tones(2) -> Texture(3) -> None.
+          var current = s.warpMode | 0;
+          var next = (current === 2) ? 0 : 2;  // toggle Tones/None for v1.0
+          s.warpMode = next;
+          var fn = getNativeFn('setSliceWarpMode');
+          if (fn) { try { fn(i, next); } catch (_) {} }
+          redrawSliceOverlay();
+        });
+        body.appendChild(wl);
+      }
+
+      // Stretch ratio label — visible only when stretched away from unity.
+      if (s.stretchRatio && Math.abs(s.stretchRatio - 1.0) > 0.005) {
+        var sl = document.createElement('div');
+        sl.className = 'ti-slice-stretch-label';
+        sl.textContent = s.stretchRatio.toFixed(2) + 'x';
+        body.appendChild(sl);
       }
 
       // Marker (left edge — index label sits at top)
