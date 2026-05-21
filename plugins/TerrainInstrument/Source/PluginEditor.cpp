@@ -718,6 +718,37 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.replaceSlices (std::move (copy));
                 complete ({});
             })
+            .withNativeFunction("setSliceWarpMode", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = warp mode enum (0=None, 1=Beats, 2=Tones, 3=Texture)
+                if (args.size() < 2) { complete ({}); return; }
+                const int idx     = (int) args[0];
+                const int modeRaw = (int) args[1];
+                const auto mode   = (modeRaw >= 0 && modeRaw <= 3)
+                                       ? static_cast<tw::WarpMode> (modeRaw)
+                                       : tw::WarpMode::None;
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].warpMode = mode;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSliceStretchRatio", [this](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = stretch ratio (0.25..4.0)
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx   = (int) args[0];
+                const float ratio = juce::jlimit (0.25f, 4.0f, (float) (double) args[1]);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].stretchRatio = ratio;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
             .withNativeFunction("deleteSlice", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
