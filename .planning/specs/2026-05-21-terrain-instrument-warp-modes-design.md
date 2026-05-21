@@ -3,7 +3,7 @@
 **Date:** 2026-05-21
 **Branch:** `feature/terrain-instrument`
 **Checkpoint:** `pre-warp-modes` tag → `b2c50f5`
-**Status:** Awaiting user review before Phase 1
+**Status:** ✅ Reviewed + signed off 2026-05-21 — clear to start Phase 1
 **Research foundations:**
 - Technical: `.planning/research/2026-05-20-warp-modes-research.md`
 - Aesthetic: `.planning/research/2026-05-21-warp-aesthetics-research.md`
@@ -243,11 +243,11 @@ These are the concrete user experiences each mode must produce. Each phase manua
 
 ---
 
-## Optional 4th mode for user decision: `DECAY` (the Basinski door)
+## 4th mode: `DECAY` — deferred to v1.1
 
-**Not in v1.0 approved scope** — flagged for explicit user decision before Phase 4 planning.
+**Decision recorded 2026-05-21:** Defer DECAY to v1.1. Ship the 3 Ableton-shaped modes in v1.0 first, validate them in user hands, then add the Basinski-signature DECAY mode in the next release. v1.0 scope locked at BEATS / TONES / TEXTURE.
 
-### Why it's flagged
+### Why it's worth carrying forward as v1.1 candidate
 
 Research-2 strongly recommends a 4th mode with **no Ableton analog**: a sustained-material-degrades-over-time mode that physically references *Disintegration Loops* — the user's stated sonic north star per memory `terrain-instrument/16-vision-roadmap-2026-05-20.md`.
 
@@ -259,13 +259,9 @@ Long-stretched material progressively loses harmonic content, gains tape-decay c
 
 Research-2 calls this "the move Ableton can't make" — Live's warp modes don't model time-evolving degradation. Combined with chops + grain feedback + Terrain's existing tape FX chain, this would be a Terrain-specific signature pairing naturally with the stated Basinski reference. The user's memory line "this granular has the function no other granular has" maps cleanly onto this mode.
 
-### Cost
+### Cost when implemented
 
-~3–4 extra dev days. Fits as Phase 4 after v1.0 ships.
-
-### Decision
-
-**User: add to v1.0 / defer to v1.1 / scrap?**
+~3–4 extra dev days as a v1.1 feature.
 
 ---
 
@@ -281,7 +277,7 @@ Research-2 calls this "the move Ableton can't make" — Live's warp modes don't 
 
 5. **Boundary-handle hit area** — current boundary handles may be too narrow for reliable shift+click+drag at the user's typical zoom level. May need to widen hit area (visual unchanged) during Phase 1.
 
-6. **The DECAY mode question** — see Optional section above. User decision needed before Phase 4 planning.
+6. **The DECAY mode for v1.1** — see deferred section above. Design has more unknowns than the v1.0 modes; revisit after v1.0 ships.
 
 ---
 
@@ -294,8 +290,8 @@ Research-2 calls this "the move Ableton can't make" — Live's warp modes don't 
 | UI cleanliness rules (blur, soft fades, no purple-on-purple) | ✅ Confirmed earlier turn |
 | Signalsmith Stretch as MIT header-only dep | ✅ Confirmed earlier turn |
 | BPM sync = global toggle (not per-chop) | ✅ Confirmed earlier turn |
-| **Optional 4th mode (DECAY) — add / defer / scrap** | ⏳ **Pending decision** |
-| **Spec doc itself — quick scan for anything wrong** | ⏳ **Pending review** |
+| Optional 4th mode (DECAY) | ✅ Deferred to v1.1 (decision 2026-05-21) |
+| Spec doc reviewed | ✅ User signed off |
 
 ---
 
