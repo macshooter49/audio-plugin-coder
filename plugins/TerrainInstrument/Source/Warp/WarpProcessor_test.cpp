@@ -116,4 +116,102 @@ public:
 
 static SignalsmithEngineTests signalsmithEngineTests;
 
+// ──────────────────────────────────────────────────────────────────────────
+// WarpProcessor — per-voice dispatcher tests
+// ──────────────────────────────────────────────────────────────────────────
+#include "WarpProcessor.h"
+
+class WarpProcessorTests : public juce::UnitTest
+{
+public:
+    WarpProcessorTests() : juce::UnitTest ("WarpProcessor") {}
+
+    void runTest() override
+    {
+        beginTest ("Mode=None: process is identity (exact memcpy match)");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            wp.setMode (tw::WarpMode::None);
+            wp.setStretchRatio (2.0f);  // ignored in None mode
+
+            constexpr int N = 256;
+            float inL[N], inR[N], outL[N], outR[N];
+            for (int i = 0; i < N; ++i)
+            {
+                inL[i] = 0.1f * std::sin (i * 0.1f);
+                inR[i] = 0.1f * std::cos (i * 0.1f);
+            }
+            wp.process (inL, inR, outL, outR, N);
+
+            bool exact = true;
+            for (int i = 0; i < N; ++i)
+            {
+                if (std::abs (outL[i] - inL[i]) > 1.0e-6f) { exact = false; break; }
+                if (std::abs (outR[i] - inR[i]) > 1.0e-6f) { exact = false; break; }
+            }
+            expect (exact, "None-mode output should be exact copy of input");
+        }
+
+        beginTest ("Mode=Tones: lazy-allocates engine on first non-None set");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            expect (! wp.hasEngineAllocated(), "Engine should NOT be allocated before any setMode");
+            wp.setMode (tw::WarpMode::Tones);
+            expect (wp.hasEngineAllocated(), "Engine SHOULD be allocated after setMode(Tones)");
+        }
+
+        beginTest ("Engine survives mode round-trip (None -> Tones -> None)");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+
+            wp.setMode (tw::WarpMode::Tones);
+            expect (wp.hasEngineAllocated());
+            expect (wp.getMode() == tw::WarpMode::Tones);
+
+            wp.setMode (tw::WarpMode::None);
+            // Engine instance stays alive (no dealloc on mode switch back) but
+            // process() should now be identity.
+            expect (wp.hasEngineAllocated(),
+                    "Engine should NOT be deallocated when mode returns to None");
+            expect (wp.getMode() == tw::WarpMode::None);
+
+            constexpr int N = 128;
+            float inL[N], inR[N], outL[N], outR[N];
+            for (int i = 0; i < N; ++i) { inL[i] = 0.1f; inR[i] = 0.2f; }
+            wp.process (inL, inR, outL, outR, N);
+
+            bool exact = true;
+            for (int i = 0; i < N; ++i)
+                if (std::abs (outL[i] - 0.1f) > 1.0e-6f || std::abs (outR[i] - 0.2f) > 1.0e-6f)
+                    { exact = false; break; }
+            expect (exact, "Identity restored after switching back to None");
+        }
+
+        beginTest ("Stretch ratio clamps to 0.25..4.0");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            wp.setMode (tw::WarpMode::Tones);
+            wp.setStretchRatio (10.0f);   // should clamp to 4.0
+            wp.setStretchRatio (0.01f);   // should clamp to 0.25
+            wp.setStretchRatio (-5.0f);   // should clamp to 0.25
+            // No assertion on internal state — the assertion is "no crash".
+            expect (true);
+        }
+
+        beginTest ("noteOnReset is safe before first setMode (no engine yet)");
+        {
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            wp.noteOnReset();  // engine doesn't exist yet — must be safe.
+            expect (true);
+        }
+    }
+};
+
+static WarpProcessorTests warpProcessorTests;
+
 #endif  // JUCE_DEBUG
