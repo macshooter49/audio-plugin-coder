@@ -7,3 +7,6 @@
 [submodule "_tools/JUCE"]
 	path = _tools/JUCE
 	url = https://github.com/juce-framework/JUCE
+[submodule "_tools/signalsmith-stretch"]
+	path = _tools/signalsmith-stretch
+	url = https://github.com/Signalsmith-Audio/signalsmith-stretch.git
