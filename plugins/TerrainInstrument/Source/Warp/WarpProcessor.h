@@ -20,6 +20,7 @@
 #include <juce_core/juce_core.h>
 #include "../Slice.h"
 #include "SignalsmithEngine.h"
+#include "BeatsEngine.h"
 #include <memory>
 #include <cstring>
 
@@ -39,6 +40,8 @@ namespace tw
 
             if (signalsmithEngine)
                 signalsmithEngine->prepare (sampleRate, channels, blockMax);
+            if (beatsEngine)
+                beatsEngine->prepare (sampleRate, channels, blockMax);
         }
 
         void setMode (WarpMode m)
@@ -57,11 +60,21 @@ namespace tw
                 signalsmithEngine->setStretchRatio   (stretchRatio);
                 signalsmithEngine->setPitchSemitones (pitchSemitones);
             }
-            // Beats / Texture engines plug in here in Phase 2. For now, those
-            // modes route through SignalsmithEngine too as a temporary fallback
-            // so the UI works end-to-end before the real engines exist. This
-            // keeps audio thread behavior safe.
-            else if (mode == WarpMode::Beats || mode == WarpMode::Texture)
+            else if (mode == WarpMode::Beats)
+            {
+                if (! beatsEngine)
+                {
+                    beatsEngine = std::make_unique<BeatsEngine>();
+                    if (prepared)
+                        beatsEngine->prepare (sampleRate, channels, blockMax);
+                }
+                beatsEngine->reset();
+                beatsEngine->setStretchRatio   (stretchRatio);
+                beatsEngine->setPitchSemitones (pitchSemitones);
+            }
+            // Texture engine plugs in next. For now, Texture routes through
+            // Signalsmith too as a placeholder so the dispatch is wired.
+            else if (mode == WarpMode::Texture)
             {
                 if (! signalsmithEngine)
                 {
@@ -79,49 +92,82 @@ namespace tw
         {
             stretchRatio = juce::jlimit (0.1f, 15.0f, r);
             if (signalsmithEngine) signalsmithEngine->setStretchRatio (stretchRatio);
+            if (beatsEngine)       beatsEngine      ->setStretchRatio (stretchRatio);
         }
 
         void setPitchSemitones (float semis) noexcept
         {
             pitchSemitones = semis;
             if (signalsmithEngine) signalsmithEngine->setPitchSemitones (semis);
+            if (beatsEngine)       beatsEngine      ->setPitchSemitones (semis);
         }
 
         /** Audio-thread reset; safe to call at every note-on. */
         void noteOnReset() noexcept
         {
             if (signalsmithEngine) signalsmithEngine->reset();
+            if (beatsEngine)       beatsEngine      ->reset();
         }
 
-        /** Returns the engine's input latency in samples. Caller (SamplerVoice)
-         *  uses this to determine how many source samples to feed via seek()
-         *  at note-on for clean output from the first block. 0 if no engine. */
+        /** Returns the active engine's input latency in samples. Caller
+         *  (SamplerVoice) uses this to determine how many source samples to
+         *  feed via seek() at note-on. Beats has 0 latency; only Signalsmith
+         *  needs priming. */
         int inputLatency() const noexcept
         {
-            return signalsmithEngine ? signalsmithEngine->inputLatency() : 0;
+            if (mode == WarpMode::Tones || mode == WarpMode::Texture)
+                return signalsmithEngine ? signalsmithEngine->inputLatency() : 0;
+            if (mode == WarpMode::Beats)
+                return beatsEngine ? beatsEngine->inputLatency() : 0;
+            return 0;
         }
 
-        /** Prime the engine after reset() — proxy to SignalsmithEngine::seek. */
+        /** Prime the active engine after reset(). Only Signalsmith uses it
+         *  meaningfully; Beats::seek is a no-op. */
         void seek (const float* primeL, const float* primeR, int numSamples)
         {
-            if (signalsmithEngine) signalsmithEngine->seek (primeL, primeR, numSamples);
+            if (mode == WarpMode::Tones || mode == WarpMode::Texture)
+            {
+                if (signalsmithEngine) signalsmithEngine->seek (primeL, primeR, numSamples);
+            }
+            else if (mode == WarpMode::Beats)
+            {
+                if (beatsEngine) beatsEngine->seek (primeL, primeR, numSamples);
+            }
         }
 
-        bool hasEngineAllocated() const noexcept { return signalsmithEngine != nullptr; }
+        bool hasEngineAllocated() const noexcept
+        {
+            return signalsmithEngine != nullptr || beatsEngine != nullptr;
+        }
         WarpMode getMode() const noexcept { return mode; }
 
         void process (const float* inL, const float* inR,
                       float* outL, float* outR, int numSamples)
         {
-            if (mode == WarpMode::None || ! signalsmithEngine)
+            // Identity passthrough for None mode (or if the requested
+            // engine isn't allocated yet for some reason — defensive).
+            if (mode == WarpMode::None)
             {
-                // Identity passthrough. memcpy explicitly; output may differ
-                // from input pointer-wise even if values are identical.
                 if (outL != inL) std::memcpy (outL, inL, sizeof (float) * (size_t) numSamples);
                 if (outR != inR) std::memcpy (outR, inR, sizeof (float) * (size_t) numSamples);
                 return;
             }
-            signalsmithEngine->process (inL, inR, outL, outR, numSamples);
+
+            if (mode == WarpMode::Beats && beatsEngine)
+            {
+                beatsEngine->process (inL, inR, outL, outR, numSamples);
+                return;
+            }
+            if (signalsmithEngine)
+            {
+                signalsmithEngine->process (inL, inR, outL, outR, numSamples);
+                return;
+            }
+
+            // No active engine — fall back to identity to avoid silence.
+            if (outL != inL) std::memcpy (outL, inL, sizeof (float) * (size_t) numSamples);
+            if (outR != inR) std::memcpy (outR, inR, sizeof (float) * (size_t) numSamples);
         }
 
     private:
@@ -135,5 +181,6 @@ namespace tw
         bool   prepared   = false;
 
         std::unique_ptr<SignalsmithEngine> signalsmithEngine;
+        std::unique_ptr<BeatsEngine>       beatsEngine;
     };
 }

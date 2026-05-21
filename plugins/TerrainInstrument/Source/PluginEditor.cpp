@@ -2202,6 +2202,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       '<div class="item" data-act="resetPitch">Reset Pitch</div>' +
       '<div class="sep"></div>' +
       '<div class="item" data-act="warp-none">Warp: None</div>' +
+      '<div class="item" data-act="warp-beats">Warp: Beats</div>' +
       '<div class="item" data-act="warp-tones">Warp: Tones</div>' +
       '<div class="item" data-act="resetStretch">Reset Stretch</div>' +
       '<div class="sep"></div>' +
@@ -2551,10 +2552,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         });
         wl.addEventListener('click', function (ev) {
           ev.stopPropagation();
-          // Phase 1 cycle: Tones (2) -> None (0).
-          // Phase 2: expand to None(0) -> Beats(1) -> Tones(2) -> Texture(3) -> None.
+          // 3-way cycle: Beats (1) -> Tones (2) -> None (0) -> Beats ...
+          // Texture lands in the next commit alongside its dedicated engine.
           var current = s.warpMode | 0;
-          var next = (current === 2) ? 0 : 2;  // toggle Tones/None for v1.0
+          var next;
+          if      (current === 1) next = 2;   // Beats   -> Tones
+          else if (current === 2) next = 0;   // Tones   -> None
+          else                    next = 1;   // None    -> Beats
           s.warpMode = next;
           var fn = getNativeFn('setSliceWarpMode');
           if (fn) { try { fn(i, next); } catch (_) {} }
@@ -3088,6 +3092,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
             state.slices[idx].warpMode = 0;
             var fnWN = getNativeFn('setSliceWarpMode');
             if (fnWN) { try { fnWN(idx, 0); } catch (_) {} }
+            redrawSliceOverlay();
+          }
+        } else if (act === 'warp-beats') {
+          if (state.slices[idx]) {
+            state.slices[idx].warpMode = 1;
+            var fnWB = getNativeFn('setSliceWarpMode');
+            if (fnWB) { try { fnWB(idx, 1); } catch (_) {} }
             redrawSliceOverlay();
           }
         } else if (act === 'warp-tones') {
