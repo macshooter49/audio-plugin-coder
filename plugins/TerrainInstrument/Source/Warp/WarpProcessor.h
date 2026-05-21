@@ -93,6 +93,20 @@ namespace tw
             if (signalsmithEngine) signalsmithEngine->reset();
         }
 
+        /** Returns the engine's input latency in samples. Caller (SamplerVoice)
+         *  uses this to determine how many source samples to feed via seek()
+         *  at note-on for clean output from the first block. 0 if no engine. */
+        int inputLatency() const noexcept
+        {
+            return signalsmithEngine ? signalsmithEngine->inputLatency() : 0;
+        }
+
+        /** Prime the engine after reset() — proxy to SignalsmithEngine::seek. */
+        void seek (const float* primeL, const float* primeR, int numSamples)
+        {
+            if (signalsmithEngine) signalsmithEngine->seek (primeL, primeR, numSamples);
+        }
+
         bool hasEngineAllocated() const noexcept { return signalsmithEngine != nullptr; }
         WarpMode getMode() const noexcept { return mode; }
 

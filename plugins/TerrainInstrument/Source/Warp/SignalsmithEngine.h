@@ -61,6 +61,28 @@ namespace tw
             pitchSemitones = juce::jlimit (-24.0f, 24.0f, semis);
         }
 
+        /** Input latency in samples — caller should prime this many input
+         *  samples via seek() at note-on so the first process() call has
+         *  meaningful output. */
+        int inputLatency() const noexcept
+        {
+            return const_cast<signalsmith::stretch::SignalsmithStretch<float>&>(stretcher).inputLatency();
+        }
+
+        /** Prime the engine with input samples after reset(). Call this once
+         *  at note-on with the FIRST inputLatency() source samples so the
+         *  engine's STFT buffer is populated before any process() call. Without
+         *  this, the first outputLatency() samples of output() are silent
+         *  ramp/garbage.
+         *
+         *  Buffers must be distinct from any future process() call buffers. */
+        void seek (const float* primeL, const float* primeR, int numSamples)
+        {
+            if (! ready || numSamples <= 0) return;
+            const float* inputs[2] = { primeL, channels == 2 ? primeR : primeL };
+            stretcher.seek (inputs, numSamples, 1.0f /*playbackRateHint*/);
+        }
+
         /** Process numSamples of audio.
          *
          *  Convention: stretchRatio > 1.0 means the chop plays LONGER — output
@@ -72,13 +94,17 @@ namespace tw
          *    stretchRatio = 0.5 → consume 2.0x input per output sample (faster)
          *    stretchRatio = 1.0 → transparent (input == output rate)
          *
-         *  Input + output may alias (signalsmith handles in-place via STFT
-         *  overlap-add buffer).
+         *  IMPORTANT: input and output buffers MUST be distinct. Per Signalsmith
+         *  API contract: "The input/output buffers cannot be the same." Earlier
+         *  versions of this wrapper aliased input=output and produced silent
+         *  output — that bug is fixed by ensuring SamplerVoice passes separate
+         *  scratch buffer pairs.
          */
         void process (const float* inL, const float* inR,
                       float* outL, float* outR, int numSamples)
         {
             if (! ready || numSamples <= 0) return;
+            jassert (inL != outL && inR != outR && "Signalsmith requires distinct input/output buffers");
 
             stretcher.setTransposeSemitones (pitchSemitones);
 

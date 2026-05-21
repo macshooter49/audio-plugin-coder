@@ -111,6 +111,7 @@ namespace tw
             warp.setPitchSemitones (activeConfig.pitchSemitones);
             warp.noteOnReset();
             outputSamplesSinceTrigger = 0;
+            warpNeedsPrime = (activeConfig.warpMode != WarpMode::None);
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -300,27 +301,59 @@ namespace tw
         {
             if (n > warpScratchCapacity)
             {
-                warpScratchL.realloc ((size_t) n);
-                warpScratchR.realloc ((size_t) n);
+                warpScratchInL .realloc ((size_t) n);
+                warpScratchInR .realloc ((size_t) n);
+                warpScratchOutL.realloc ((size_t) n);
+                warpScratchOutR.realloc ((size_t) n);
                 warpScratchCapacity = n;
             }
         }
 
-        void renderWarp (juce::AudioBuffer<float>& outputBuffer,
-                         const juce::AudioBuffer<float>& buf,
-                         int startSample, int numSamples)
+        /** Pull `count` source samples (linear-interpolated, reverse-aware)
+         *  into the destination buffers starting at sample 0. Advances playhead.
+         *  Returns false if the source range is exhausted before count samples
+         *  are read; remaining samples in dst are zeroed. */
+        bool pullSourceIntoScratch (const juce::AudioBuffer<float>& buf,
+                                    float* dstL, float* dstR, int count)
         {
             const int bufLen   = buf.getNumSamples();
             const int bufChans = buf.getNumChannels();
-            if (bufLen <= 0 || numSamples <= 0) return;
-
-            // Resolve slice bounds, same sentinel handling as the NONE path.
             const juce::int64 bStart = juce::jlimit ((juce::int64) 0, (juce::int64) bufLen - 1, playStartIdx);
             const juce::int64 bEnd   = (playEndIdx < 0)
                                          ? (juce::int64) bufLen
                                          : juce::jlimit (bStart + 1, (juce::int64) bufLen, playEndIdx);
             const double endIdx   = static_cast<double> (bEnd - 1);
             const double startIdx = static_cast<double> (bStart);
+            const double step     = reversePlay ? -1.0 : 1.0;
+
+            const auto* inL = buf.getReadPointer (0);
+            const auto* inR = bufChans > 1 ? buf.getReadPointer (1) : inL;
+
+            std::memset (dstL, 0, sizeof (float) * (size_t) count);
+            std::memset (dstR, 0, sizeof (float) * (size_t) count);
+
+            for (int i = 0; i < count; ++i)
+            {
+                const bool past = reversePlay ? (playhead < startIdx)
+                                              : (playhead > endIdx);
+                if (past) return false;
+
+                const auto i0 = (int) playhead;
+                const int  i1 = juce::jlimit (0, bufLen - 1, i0 + (reversePlay ? -1 : 1));
+                const float frac = (float) (playhead - (double) i0);
+                dstL[i] = inL[i0] + frac * (inL[i1] - inL[i0]);
+                dstR[i] = inR[i0] + frac * (inR[i1] - inR[i0]);
+                playhead += step;
+            }
+            return true;
+        }
+
+        void renderWarp (juce::AudioBuffer<float>& outputBuffer,
+                         const juce::AudioBuffer<float>& buf,
+                         int startSample, int numSamples)
+        {
+            const int bufLen = buf.getNumSamples();
+            if (bufLen <= 0 || numSamples <= 0) return;
 
             const double sr = (double) activeConfig.stretchRatio;
             const double srInv = sr > 0.0001 ? 1.0 / sr : 1.0;  // safety, never div by zero
@@ -328,38 +361,48 @@ namespace tw
             // How many source samples we'll consume this block. Stretch ratio > 1
             // means we consume FEWER source samples per output sample.
             const int inputLen = juce::jmax (1, (int) std::round ((double) numSamples * srInv));
+
+            // Reserve scratch space large enough for both input read and output
+            // write paths (we need DISTINCT buffers — Signalsmith requires it).
             ensureWarpScratch (juce::jmax (inputLen, numSamples));
 
-            auto* scratchL = warpScratchL.getData();
-            auto* scratchR = warpScratchR.getData();
-            std::memset (scratchL, 0, sizeof (float) * (size_t) inputLen);
-            std::memset (scratchR, 0, sizeof (float) * (size_t) inputLen);
+            auto* scratchInL  = warpScratchInL.getData();
+            auto* scratchInR  = warpScratchInR.getData();
+            auto* scratchOutL = warpScratchOutL.getData();
+            auto* scratchOutR = warpScratchOutR.getData();
 
-            // Linear interpolation read at UNITY rate into scratch (warp engine
-            // handles pitch internally via setPitchSemitones).
-            const auto* inL = buf.getReadPointer (0);
-            const auto* inR = bufChans > 1 ? buf.getReadPointer (1) : inL;
-
-            const double step = reversePlay ? -1.0 : 1.0;
-            bool endReached = false;
-            for (int i = 0; i < inputLen; ++i)
+            // One-time seek() priming after note-on. Without this the first
+            // outputLatency() samples of engine output are silent ramp (per
+            // Signalsmith README "Seeking and starting" section).
+            if (warpNeedsPrime)
             {
-                const bool past = reversePlay ? (playhead < startIdx)
-                                              : (playhead > endIdx);
-                if (past) { endReached = true; break; }
-
-                const auto i0 = (int) playhead;
-                const int  i1 = juce::jlimit (0, bufLen - 1, i0 + (reversePlay ? -1 : 1));
-                const float frac = (float) (playhead - (double) i0);
-                const float sL = inL[i0] + frac * (inL[i1] - inL[i0]);
-                const float sR = inR[i0] + frac * (inR[i1] - inR[i0]);
-                scratchL[i] = sL;
-                scratchR[i] = sR;
-                playhead += step;
+                warpNeedsPrime = false;
+                const int primeLen = warp.inputLatency();
+                if (primeLen > 0)
+                {
+                    // Cap prime length to avoid eating the entire chop on short slices.
+                    const int sliceLen = (playEndIdx < 0)
+                                            ? bufLen
+                                            : (int) juce::jlimit ((juce::int64) 0, (juce::int64) bufLen,
+                                                                  playEndIdx - playStartIdx);
+                    const int safePrime = juce::jmin (primeLen, sliceLen / 2);
+                    if (safePrime > 0)
+                    {
+                        ensureWarpScratch (juce::jmax (safePrime, juce::jmax (inputLen, numSamples)));
+                        pullSourceIntoScratch (buf, warpScratchInL.getData(), warpScratchInR.getData(), safePrime);
+                        warp.seek (warpScratchInL.getData(), warpScratchInR.getData(), safePrime);
+                    }
+                }
             }
 
-            // Engine consumes scratch (inputLen samples), produces numSamples output.
-            warp.process (scratchL, scratchR, scratchL, scratchR, numSamples);
+            // Pull source into scratchIn (linear-interp, reverse-aware). Engine
+            // handles pitch + stretch; we feed unity-rate source.
+            const bool exhausted = ! pullSourceIntoScratch (buf, scratchInL, scratchInR, inputLen);
+            bool endReached = exhausted;
+
+            // Engine reads scratchIn (inputLen samples), writes scratchOut
+            // (numSamples). DISTINCT BUFFERS — Signalsmith API requires it.
+            warp.process (scratchInL, scratchInR, scratchOutL, scratchOutR, numSamples);
 
             // Envelope ticks numSamples times this block (output rate).
             auto* outL = outputBuffer.getWritePointer (0, startSample);
@@ -400,8 +443,8 @@ namespace tw
                 }
 
                 const float gain = currentVelocity * envLevel * tailFade;
-                outL[i] += scratchL[i] * gain;
-                outR[i] += scratchR[i] * gain;
+                outL[i] += scratchOutL[i] * gain;
+                outR[i] += scratchOutR[i] * gain;
             }
 
             outputSamplesSinceTrigger += numSamples;
@@ -440,10 +483,13 @@ namespace tw
         // Warp dispatcher + scratch buffers. Engine is lazily allocated inside
         // WarpProcessor on the first non-None setMode call; voices that never
         // warp pay zero memory cost beyond the WarpProcessor itself.
-        WarpProcessor       warp;
-        juce::HeapBlock<float> warpScratchL, warpScratchR;
-        int                 warpScratchCapacity       = 0;
-        int                 outputSamplesSinceTrigger = 0;
+        // Two scratch pairs — Signalsmith requires DISTINCT input/output buffers.
+        WarpProcessor          warp;
+        juce::HeapBlock<float> warpScratchInL,  warpScratchInR;
+        juce::HeapBlock<float> warpScratchOutL, warpScratchOutR;
+        int                    warpScratchCapacity       = 0;
+        int                    outputSamplesSinceTrigger = 0;
+        bool                   warpNeedsPrime            = false;
 
         // AR envelope (one-shot model — no Decay/Sustain knee, just Attack-then-hold-then-Release).
         EnvStage envStage         = EnvStage::Off;
