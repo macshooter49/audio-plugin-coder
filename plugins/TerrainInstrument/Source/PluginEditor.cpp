@@ -2019,6 +2019,19 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     pointer-events: none;
     user-select: none;
   }
+  /* Floating tooltip shown during shift+drag stretch. Matches the right-
+     click menu translucency so we stay coherent. Fades in/out 200ms. */
+  #ti-stretch-tooltip {
+    position: fixed; z-index: 9999; pointer-events: none;
+    padding: 5px 9px; border-radius: 4px;
+    font: 700 11px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    color: white;
+    background: rgba(20,18,32,0.92); backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    display: none; opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  #ti-stretch-tooltip.visible { display: block; opacity: 1; }
 
   /* Right-click context menu */
   #ti-slice-ctx {
@@ -2509,11 +2522,91 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // thrash); on release, send the final position to C++ which snaps to
   // the nearest zero crossing and clamps to keep neither slice below
   // 64 samples. C++ returns the authoritative slice list which we apply.
+  // Singleton floating tooltip for the shift+drag stretch gesture.
+  // Created lazily; reused across gestures.
+  function ensureStretchTooltip () {
+    var el = document.getElementById('ti-stretch-tooltip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ti-stretch-tooltip';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  // Begin a "shift+drag the marker = stretch the LEFT chop" gesture.
+  // Auto-engages Tones if the target chop is currently None so the gesture
+  // always has audible effect. Chop 0 has no draggable marker — for chop 0,
+  // use the right-click 'Warp' submenu (Task 10) to engage stretch.
+  function beginStretchDrag (downEvent, sliceIdx, marker) {
+    var slice = state.slices[sliceIdx];
+    if (!slice) return;
+
+    if (!slice.warpMode || slice.warpMode === 0) {
+      slice.warpMode = 2;  // auto-engage Tones
+      var fnM = getNativeFn('setSliceWarpMode');
+      if (fnM) { try { fnM(sliceIdx, 2); } catch (_) {} }
+    }
+
+    var startRatio = (typeof slice.stretchRatio === 'number') ? slice.stretchRatio : 1.0;
+    var startX     = downEvent.clientX;
+    document.body.style.cursor = 'ew-resize';
+    marker.classList.add('dragging');
+
+    var tooltip = ensureStretchTooltip();
+    tooltip.textContent = startRatio.toFixed(2) + 'x';
+    tooltip.style.left  = (downEvent.clientX + 14) + 'px';
+    tooltip.style.top   = (downEvent.clientY - 28) + 'px';
+    tooltip.classList.add('visible');
+
+    function onMove (mev) {
+      var dx = mev.clientX - startX;
+      // 200px drag = 1.0 ratio delta. Outward grows the chop (drag right =
+      // marker visually moves right = the LEFT chop "grows" = ratio up).
+      var delta = dx / 200.0;
+      var newRatio = Math.max(0.25, Math.min(4.0, startRatio + delta));
+      slice.stretchRatio = newRatio;
+      var fnR = getNativeFn('setSliceStretchRatio');
+      if (fnR) { try { fnR(sliceIdx, newRatio); } catch (_) {} }
+
+      tooltip.textContent = newRatio.toFixed(2) + 'x';
+      tooltip.style.left  = (mev.clientX + 14) + 'px';
+      tooltip.style.top   = (mev.clientY - 28) + 'px';
+
+      redrawSliceOverlay();
+    }
+    function onUp () {
+      document.removeEventListener('mousemove', onMove, true);
+      document.removeEventListener('mouseup',   onUp,   true);
+      document.body.style.cursor = '';
+      marker.classList.remove('dragging');
+      tooltip.classList.remove('visible');
+      // setTimeout so the fade-out plays before display:none kicks in.
+      setTimeout(function () {
+        if (!tooltip.classList.contains('visible')) tooltip.style.display = 'none';
+      }, 220);
+      tooltip.style.display = 'block';
+    }
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup',   onUp,   true);
+  }
+
   function attachMarkerDrag (marker, i) {
+    // Hover with shift held: hint the stretch gesture availability.
+    marker.addEventListener('mousemove', function (ev) {
+      marker.style.cursor = ev.shiftKey ? 'ew-resize' : '';
+    });
     marker.addEventListener('mousedown', function (ev) {
       if (ev.button !== 0) return;
       ev.preventDefault();
       ev.stopPropagation();
+
+      // Shift+drag branch: stretch the LEFT chop instead of moving the boundary.
+      if (ev.shiftKey) {
+        beginStretchDrag(ev, i - 1, marker);
+        return;
+      }
+
       var waveCanvas = document.getElementById('waveform-canvas');
       if (!waveCanvas) return;
       var waveRect = waveCanvas.getBoundingClientRect();
