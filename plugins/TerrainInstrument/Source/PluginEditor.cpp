@@ -1986,12 +1986,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     background: rgba(20,18,32,0.7);
     pointer-events: none;
   }
-  /* Warp mode letter — top-right corner, opposite REV. Single character
-     (B / T / X). Clickable to cycle modes. Soft-blurred backdrop matches
-     the right-click menu's translucent panel — no purple-on-purple hard
-     edges, per UI cleanliness contract. */
+  /* Warp mode letter — bottom-right of chop body, above the pitch meter row.
+     Out of the way of the boundary marker label that sits top-left of the
+     next chop. Single character (B / T / X). Clickable to cycle modes.
+     Soft-blurred backdrop, no purple-on-purple hard edges. */
   .ti-slice-warp-letter {
-    position: absolute; top: 4px; right: 4px;
+    position: absolute; bottom: 24px; right: 4px;
     width: 14px; height: 14px;
     display: flex; align-items: center; justify-content: center;
     border-radius: 3px;
@@ -2008,6 +2008,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     background: rgba(139,92,246,0.35);
     color: white;
     transform: scale(1.08);
+  }
+  /* Stretched chop body — render above non-stretched neighbors so visual
+     overlap reads as "this chop's playback bleeds past its source bounds"
+     rather than as a glitchy z-fight. */
+  .ti-slice-body.is-stretched {
+    z-index: 5;
+    box-shadow: 0 0 0 1px rgba(167,139,250,0.25) inset;
   }
   /* Stretch ratio label — visible only when ratio != 1.0; sits above the
      pitch meter (which lives at the bottom-center). Low-contrast monospace. */
@@ -2416,11 +2423,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var widthPx   = widthFrac * W;
       if (widthPx < 1) return;
 
+      // Visual stretching — chop body grows / shrinks proportional to
+      // stretchRatio, anchored at its left edge. When stretched > 1, the
+      // body extends past the next chop visually (z-index above neighbors
+      // via .is-stretched class). When < 1, leaves a visible gap on the right.
+      // The boundary marker lines stay anchored to source positions.
+      var stretchRatio = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
+      var stretchedWidthPx = widthPx * stretchRatio;
+      var isStretched = Math.abs(stretchRatio - 1.0) > 0.005;
+
       // Body (clickable / draggable region)
       var body = document.createElement('div');
-      body.className = 'ti-slice-body';
+      body.className = 'ti-slice-body' + (isStretched ? ' is-stretched' : '');
       body.style.left  = leftPx  + 'px';
-      body.style.width = widthPx + 'px';
+      body.style.width = stretchedWidthPx + 'px';
       body.dataset.idx = i;
       attachSliceGestures(body, i);
       overlays.appendChild(body);
