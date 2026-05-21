@@ -27,6 +27,16 @@
 
 namespace tw
 {
+    /** Per-chop warp mode. Default None preserves current resample behavior;
+     *  Beats/Tones/Texture activate the warp engines (Phase 1 ships Tones only). */
+    enum class WarpMode : uint8_t
+    {
+        None    = 0,
+        Beats   = 1,
+        Tones   = 2,
+        Texture = 3
+    };
+
     /** A single playable region of the loaded sample, plus its per-region knobs. */
     struct Slice
     {
@@ -34,6 +44,8 @@ namespace tw
         juce::int64 endSample        = 0;       // exclusive
         bool        reverse          = false;
         float       pitchOffsetSemis = 0.0f;    // -12..+12 (one octave each way — wider ranges sound chipmunky)
+        WarpMode    warpMode         = WarpMode::None;   // per-chop warp engine selection
+        float       stretchRatio     = 1.0f;             // clamped 0.25..4.0; ignored when warpMode == None
 
         juce::int64 length() const noexcept { return endSample - startSample; }
     };
@@ -52,10 +64,12 @@ namespace tw
         for (const auto& s : slices)
         {
             juce::DynamicObject::Ptr o = new juce::DynamicObject();
-            o->setProperty ("start",   (juce::int64) s.startSample);
-            o->setProperty ("end",     (juce::int64) s.endSample);
-            o->setProperty ("reverse", s.reverse);
-            o->setProperty ("pitch",   (double) s.pitchOffsetSemis);
+            o->setProperty ("start",        (juce::int64) s.startSample);
+            o->setProperty ("end",          (juce::int64) s.endSample);
+            o->setProperty ("reverse",      s.reverse);
+            o->setProperty ("pitch",        (double) s.pitchOffsetSemis);
+            o->setProperty ("warpMode",     (int) s.warpMode);
+            o->setProperty ("stretchRatio", (double) s.stretchRatio);
             arr.add (juce::var (o.get()));
         }
         obj->setProperty ("slices", arr);
@@ -78,6 +92,16 @@ namespace tw
             s.endSample        = (juce::int64) (long long) e.getProperty ("end",   0);
             s.reverse          =                       (bool) e.getProperty ("reverse", false);
             s.pitchOffsetSemis = (float) (double)            e.getProperty ("pitch",   0.0);
+
+            // Warp fields default to None / 1.0 when absent — old presets are
+            // safe to load.
+            const int wmRaw    = (int) e.getProperty ("warpMode", 0);
+            s.warpMode         = (wmRaw >= 0 && wmRaw <= 3)
+                                    ? static_cast<WarpMode> (wmRaw)
+                                    : WarpMode::None;
+            s.stretchRatio     = juce::jlimit (0.25f, 4.0f,
+                                    (float) (double) e.getProperty ("stretchRatio", 1.0));
+
             if (s.endSample > s.startSample)
                 out.push_back (s);
         }
