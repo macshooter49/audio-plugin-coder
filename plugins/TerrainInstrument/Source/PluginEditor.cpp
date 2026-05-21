@@ -2896,17 +2896,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (fn) fn(samplePos).then(applySlicesJson).catch(function(){});
     });
 
-    // Hover + scroll wheel = adjust pitch ±12 semitones. Step = 1 semitone
-    // per wheel tick. preventDefault stops the WebView from scrolling the
-    // page in the background. passive:false is required for preventDefault
-    // on wheel events in modern browsers.
+    // Hover + scroll wheel = adjust pitch ±12 semitones. Accumulates
+    // deltaY across wheel events and only steps once a threshold is met
+    // — mouse wheel clicks (large deltaY ~100) step instantly, but
+    // trackpad swipes (many small deltaY events) take several events to
+    // accumulate to one semitone. Without this, trackpad scrolling flew
+    // through the entire ±12 range in milliseconds and couldn't be
+    // landed on a target semitone.
+    var pitchScrollAccum = 0;
+    var PITCH_SCROLL_THRESHOLD = 100;  // px of accumulated deltaY per semi
     body.addEventListener('wheel', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
+      // Scroll UP (deltaY < 0) = pitch UP. Negate so positive accum = pitch up.
+      pitchScrollAccum -= ev.deltaY;
+      var steps = (pitchScrollAccum / PITCH_SCROLL_THRESHOLD) | 0;  // integer steps
+      if (steps === 0) return;
+      pitchScrollAccum -= steps * PITCH_SCROLL_THRESHOLD;           // keep remainder
       var cur = state.slices[idx].pitch || 0;
-      // Scroll UP (deltaY < 0) = pitch UP. Matches scroll-as-volume mental model.
-      var sign = ev.deltaY < 0 ? +1 : -1;
-      var next = Math.max(-12, Math.min(12, cur + sign));
+      var next = Math.max(-12, Math.min(12, cur + steps));
       if (next === cur) return;
       state.slices[idx] = Object.assign({}, state.slices[idx], { pitch: next });
       var fn = getNativeFn('setSlicePitch');
