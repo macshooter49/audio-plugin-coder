@@ -35,6 +35,9 @@ namespace tw
         float       stretchRatio     = 1.0f;             // 0.25..4.0; ignored when warpMode == None
         float       attackMs         = -1.0f;            // -1 sentinel = inherit global ATTACK_MS
         float       releaseMs        = -1.0f;            // -1 sentinel = inherit global RELEASE_MS
+        float       decayMs          = 0.0f;             // 0 = no decay phase, jump from attack peak to sustain
+        float       sustainLevel     = 1.0f;             // 0..1; 1.0 = hold at peak (current behavior)
+        float       volume           = 1.0f;             // linear output gain multiplier, 0..1
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -99,14 +102,39 @@ namespace tw
             // (sliceIndex == -1) behave exactly as before.
             const float atkMs  = activeConfig.attackMs  >= 0.0f ? activeConfig.attackMs  : attackMsParam.load();
             const float relMs  = activeConfig.releaseMs >= 0.0f ? activeConfig.releaseMs : releaseMsParam.load();
+            const float decMs  = juce::jmax (0.0f, activeConfig.decayMs);
             const float attackSec  = juce::jmax (0.0f,   atkMs * 0.001f);
             const float releaseSec = juce::jmax (0.001f, relMs * 0.001f);
             attackInc  = attackSec  > 0.0f ? (1.0f / (attackSec  * (float) sampleRateForEnv)) : 1.0f;
             releaseDec = 1.0f / (releaseSec * (float) sampleRateForEnv);
 
+            // Decay covers the descent from peak (1.0) to sustainLevel over
+            // decayMs. When decayMs is 0 or sustainLevel >= 1.0 the decay
+            // phase is skipped — current behavior preserved for legacy slices.
+            sustainTarget = juce::jlimit (0.0f, 1.0f, activeConfig.sustainLevel);
+            const float decaySec = decMs * 0.001f;
+            const float decayDistance = juce::jmax (0.0f, 1.0f - sustainTarget);
+            decayDec = (decaySec > 0.0f && decayDistance > 0.0f)
+                          ? (decayDistance / (decaySec * (float) sampleRateForEnv))
+                          : 0.0f;  // 0 = decay phase will be skipped at runtime
+
+            // Linear per-chop volume multiplier — applied at gain stage so all
+            // env phases (attack, sustain, release) inherit it.
+            voiceGain = juce::jlimit (0.0f, 1.0f, activeConfig.volume);
+
             envLevel = 0.0f;
             envStage = (attackInc >= 1.0f) ? EnvStage::Sustaining : EnvStage::Attack;
-            if (envStage == EnvStage::Sustaining) envLevel = 1.0f;
+            // When attack is instant AND there's a decay phase queued, we
+            // skip Attack but still want to run Decay — handled by the env
+            // tick below since EnvStage::Sustaining will branch to Decay if
+            // we enter with envLevel=1 but sustainTarget<1. Simpler: jump
+            // straight to Decay here.
+            if (envStage == EnvStage::Sustaining)
+            {
+                envLevel = 1.0f;
+                if (decayDec > 0.0f && sustainTarget < 1.0f)
+                    envStage = EnvStage::Decay;
+            }
             isActive = true;
 
             // Warp engine: select mode + reset state for this trigger. The
@@ -158,6 +186,12 @@ namespace tw
             auto buf = sample.load();
             if (! buf || buf->getNumSamples() == 0) return;
 
+            // Cache the host block size so the loop crossfade gate (below
+            // and in pullSourceIntoScratch) can derive its actual firing
+            // rate from samples-consumed-per-block and pick its threshold
+            // correctly across hosts.
+            latestBlockSize = juce::jmax (1, numSamples);
+
             // Warp branch — entire path lives in renderWarp(). NONE mode
             // (the vast majority of voices) falls through to the existing
             // per-sample loop below, behaviorally unchanged.
@@ -195,10 +229,23 @@ namespace tw
 
             // Loop crossfade length (20 ms target, capped to slice/4 so tiny
             // chops still loop without overlap collapse). Equal-power mix
-            // between the main playhead and a leading head reading from the
-            // opposite boundary — kills the click that the abrupt wrap caused,
-            // especially at high pitch where the seam fires every few ms.
-            const double xfadeLen = (loopMode == 1 && sliceLen > 8.0)
+            // between the main playhead and a leading head — masks the
+            // click at the abrupt wrap when the wrap rate is sub-audible.
+            //
+            // v9 gate (2026-05-22): when the loop wrap rate climbs into
+            // audible range (slice short + pitch high), the crossfade
+            // itself becomes a spectral-morph at that rate → comb-filter /
+            // ring-mod sidebands ("clicks" at high pitch on a short slice).
+            // Same family of bug as the v7 boundary-fade-rate gate. Disable
+            // the crossfade above ~20 Hz wrap rate. The bare wrap click is
+            // perceived as a fast pulse and is far less offensive than
+            // tonal sideband distortion.
+            const double loopWrapsPerSec = (loopMode == 1 && sliceLen > 0.0)
+                ? pitchRatio * sampleRateForEnv / sliceLen
+                : 0.0;
+            const bool loopWrapRateSubAudible = loopWrapsPerSec < 20.0;
+            const double xfadeLen = (loopMode == 1 && sliceLen > 8.0
+                                     && loopWrapRateSubAudible)
                                        ? juce::jmin (sliceLen * 0.25,
                                                      0.020 * sampleRateForEnv)
                                        : 0.0;
@@ -243,10 +290,24 @@ namespace tw
                 {
                     case EnvStage::Attack:
                         envLevel += attackInc;
-                        if (envLevel >= 1.0f) { envLevel = 1.0f; envStage = EnvStage::Sustaining; }
+                        if (envLevel >= 1.0f)
+                        {
+                            envLevel = 1.0f;
+                            envStage = (decayDec > 0.0f && sustainTarget < 1.0f)
+                                          ? EnvStage::Decay
+                                          : EnvStage::Sustaining;
+                        }
+                        break;
+                    case EnvStage::Decay:
+                        envLevel -= decayDec;
+                        if (envLevel <= sustainTarget)
+                        {
+                            envLevel = sustainTarget;
+                            envStage = EnvStage::Sustaining;
+                        }
                         break;
                     case EnvStage::Sustaining:
-                        envLevel = 1.0f;
+                        envLevel = sustainTarget;
                         break;
                     case EnvStage::Release:
                         envLevel -= releaseDec;
@@ -320,7 +381,7 @@ namespace tw
                         tailFade = juce::jmax (0.0f, static_cast<float> (samplesToEnd / kTailLen));
                 }
 
-                const auto gain = currentVelocity * envLevel * tailFade;
+                const auto gain = currentVelocity * envLevel * tailFade * voiceGain;
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
@@ -330,7 +391,7 @@ namespace tw
         }
 
     private:
-        enum class EnvStage { Off, Attack, Sustaining, Release };
+        enum class EnvStage { Off, Attack, Decay, Sustaining, Release };
 
         void updatePitchRatio()
         {
@@ -397,7 +458,25 @@ namespace tw
             // Source-level crossfade so the warp engine sees a smooth stream
             // across the loop boundary instead of a one-sample discontinuity.
             // 20 ms target, capped to slice/4. Skipped when not looping.
-            const double xfadeLen = (looping && sliceLen > 8.0)
+            //
+            // v9 gate (2026-05-22): the crossfade fires at the loop wrap
+            // rate, which equals (source samples consumed per sec) / sliceLen
+            // = (count * sampleRate / (blockSize * sliceLen)). When BEATS is
+            // played on short slices at high pitch + low stretch, that rate
+            // climbs into audible range and the crossfade becomes ring-mod
+            // sidebands at the wrap rate (the user's "clicky at stretch<2
+            // + high octaves" symptom). Disable above the audible threshold;
+            // the naked wrap is perceived as a fast pulse, less offensive
+            // than tonal-sideband distortion.
+            const double srcPerSec = (latestBlockSize > 0)
+                ? (double) count * sampleRateForEnv / (double) latestBlockSize
+                : 0.0;
+            const double sourceWrapsPerSec = (looping && sliceLen > 0.0)
+                ? srcPerSec / sliceLen
+                : 0.0;
+            const bool sourceWrapRateSubAudible = sourceWrapsPerSec < 20.0;
+            const double xfadeLen = (looping && sliceLen > 8.0
+                                     && sourceWrapRateSubAudible)
                                        ? juce::jmin (sliceLen * 0.25,
                                                      0.020 * sampleRateForEnv)
                                        : 0.0;
@@ -558,9 +637,23 @@ namespace tw
                 {
                     case EnvStage::Attack:
                         envLevel += attackInc;
-                        if (envLevel >= 1.0f) { envLevel = 1.0f; envStage = EnvStage::Sustaining; }
+                        if (envLevel >= 1.0f)
+                        {
+                            envLevel = 1.0f;
+                            envStage = (decayDec > 0.0f && sustainTarget < 1.0f)
+                                          ? EnvStage::Decay
+                                          : EnvStage::Sustaining;
+                        }
                         break;
-                    case EnvStage::Sustaining: envLevel = 1.0f; break;
+                    case EnvStage::Decay:
+                        envLevel -= decayDec;
+                        if (envLevel <= sustainTarget)
+                        {
+                            envLevel = sustainTarget;
+                            envStage = EnvStage::Sustaining;
+                        }
+                        break;
+                    case EnvStage::Sustaining: envLevel = sustainTarget; break;
                     case EnvStage::Release:
                         envLevel -= releaseDec;
                         if (envLevel <= 0.0f)
@@ -584,7 +677,7 @@ namespace tw
                     tailFade = juce::jmax (0.0f, ramp);
                 }
 
-                const float gain = currentVelocity * envLevel * tailFade;
+                const float gain = currentVelocity * envLevel * tailFade * voiceGain;
                 outL[i] += scratchOutL[i] * gain;
                 outR[i] += scratchOutR[i] * gain;
             }
@@ -633,12 +726,26 @@ namespace tw
         int                    outputSamplesSinceTrigger = 0;
         bool                   warpNeedsPrime            = false;
 
-        // AR envelope (one-shot model — no Decay/Sustain knee, just Attack-then-hold-then-Release).
+        // Full ADSR envelope state — extended from the original AR (Attack /
+        // Sustaining-at-1.0 / Release) model. decayDec drives the descent
+        // from peak to sustainTarget; when 0 or sustainTarget>=1, decay is
+        // skipped at runtime so legacy slices behave identically.
         EnvStage envStage         = EnvStage::Off;
         float    envLevel         = 0.0f;
         float    attackInc        = 1.0f;
+        float    decayDec         = 0.0f;     // 0 = no decay phase
+        float    sustainTarget    = 1.0f;     // env target during Sustaining
         float    releaseDec       = 0.001f;
+        float    voiceGain        = 1.0f;     // per-chop volume multiplier (Slice.volume)
         double   sampleRateForEnv = 48000.0;
+        // Latest numSamples handed to renderNextBlock — used by the loop
+        // crossfade gate to compute the actual loop-wrap rate (loop crossfade
+        // becomes audio-rate AM when sliceLen / (pitchRatio_eff) is short, see
+        // BEATS v9 gotcha in the warp memory). Updated at the top of every
+        // renderNextBlock; reads happen later in pullSourceIntoScratch +
+        // renderNextBlock's NONE branch, both of which run synchronously
+        // within the same call.
+        int      latestBlockSize  = 512;
     };
 
     struct SamplerSound : public juce::SynthesiserSound

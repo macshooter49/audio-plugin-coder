@@ -779,6 +779,49 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.replaceSlices (std::move (copy));
                 complete ({});
             })
+            .withNativeFunction("setSliceDecayMs", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = decay ms (0..2000). No inheritance —
+                // decay is purely per-chop. 0 = skip decay phase (legacy behavior).
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx = (int) args[0];
+                const float ms  = juce::jlimit (0.0f, 2000.0f, (float) (double) args[1]);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].decayMs = ms;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSliceSustain", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = sustain level (0..1, 1.0 = peak held).
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx = (int) args[0];
+                const float lv  = juce::jlimit (0.0f, 1.0f, (float) (double) args[1]);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].sustainLevel = lv;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSliceVolume", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = volume (0..1 linear).
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx = (int) args[0];
+                const float vol = juce::jlimit (0.0f, 1.0f, (float) (double) args[1]);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].volume = vol;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
             .withNativeFunction("deleteSlice", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1983,7 +2026,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     user-select: none;
   }
   .ti-slice-pitch-num {
-    font: 700 10px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     color: rgba(167,139,250,0.95);
     text-shadow: 0 1px 2px rgba(0,0,0,0.55);
   }
@@ -2025,7 +2068,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     width: 14px; height: 14px;
     display: flex; align-items: center; justify-content: center;
     border-radius: 3px;
-    font: 700 9px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    font: 700 9px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     color: #A78BFA;
     background: rgba(20,18,32,0.55);
     backdrop-filter: blur(4px);
@@ -2064,7 +2107,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
      pitch meter (which lives at the bottom-center). Low-contrast monospace. */
   .ti-slice-stretch-label {
     position: absolute; left: 4px; bottom: 22px;
-    font: 600 9px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    font: 600 9px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     color: rgba(167,139,250,0.7);
     text-shadow: 0 1px 2px rgba(0,0,0,0.55);
     pointer-events: none;
@@ -2075,7 +2118,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   #ti-stretch-tooltip {
     position: fixed; z-index: 9999; pointer-events: none;
     padding: 5px 9px; border-radius: 4px;
-    font: 700 11px/1 ui-monospace, 'SF Mono', 'Menlo', monospace;
+    font: 700 11px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     color: white;
     background: rgba(20,18,32,0.92); backdrop-filter: blur(12px);
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
@@ -2084,7 +2127,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   #ti-stretch-tooltip.visible { display: block; opacity: 1; }
 
-  /* ─── Chop overlay (right-click → floating panel) ─────────────────────── */
+  /* ─── Chop overlay (Lab Card v2) — right-click on a chop → floating panel
+     with full ADSR canvas + Volume / Pitch / Stretch emblem-knobs ──────── */
   #ti-chop-backdrop {
     position: fixed; inset: 0; z-index: 4000;
     background: rgba(8,6,16,0.55);
@@ -2100,82 +2144,115 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     left: 50%; top: 50%;
     transform: translate(-50%, -50%) scale(0.97);
     transform-origin: center;
-    width: 360px;
-    background: rgba(28,24,46,0.96);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 12px;
+    width: 400px;
+    background:
+      radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,0.04), transparent 60%),
+      linear-gradient(180deg, #1f1a2e, #15121f);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 4px;
     box-shadow:
-      0 30px 80px rgba(0,0,0,0.55),
-      0 8px 20px rgba(0,0,0,0.35),
-      inset 0 1px 0 rgba(255,255,255,0.04);
-    padding: 18px 18px 14px;
+      0 30px 60px rgba(0,0,0,0.55),
+      0 4px 10px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+    padding: 18px 20px 16px;
     opacity: 0; pointer-events: none;
     transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
                 transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
     color: rgba(245,243,255,0.92);
+    /* Terrain font — unchanged from the rest of the plugin. */
     font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   }
   #ti-chop-panel.open {
     opacity: 1; pointer-events: auto;
     transform: translate(-50%, -50%) scale(1);
   }
+  /* index-card hole-punch + ruled lines (decorative, behind content) */
+  #ti-chop-panel::before {
+    content: '';
+    position: absolute; top: 14px; left: 14px;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.45);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  #ti-chop-panel::after {
+    content: '';
+    position: absolute; inset: 38px 14px 60px 14px; pointer-events: none;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 23px,
+      rgba(245,243,255,0.022) 24px);
+  }
+  /* Kill italics globally inside the panel — Terrain has no italic typography. */
+  #ti-chop-panel em, #ti-chop-panel i { font-style: normal; }
 
-  #ti-chop-panel .ov-header {
-    display: flex; justify-content: space-between; align-items: center;
+  /* header — title perfectly centered, close button anchored to the right */
+  #ti-chop-panel .ov-head {
+    display: flex; justify-content: center; align-items: baseline;
     margin-bottom: 14px;
+    padding: 0 18px;
+    position: relative; z-index: 1;
   }
-  #ti-chop-panel .ov-title {
-    font: 700 10px/1 -apple-system, sans-serif;
-    letter-spacing: 0.22em; color: rgba(245,243,255,0.55);
+  #ti-chop-panel .ov-head .name {
+    display: inline-flex; align-items: baseline;   /* baseline-align CHOP + 03 */
+    font: 700 12px/1 -apple-system, sans-serif; letter-spacing: 0.22em;
+    color: rgba(245,243,255,0.92);
   }
-  #ti-chop-panel .ov-title .num { color: #8b5cf6; margin-left: 6px; }
-  #ti-chop-panel .ov-close {
-    width: 22px; height: 22px; border-radius: 6px;
+  #ti-chop-panel .ov-head .name .num {
+    color: #8b5cf6;
+    font: 600 13px/1 -apple-system, sans-serif;     /* same family — kills the "slanted" look */
+    letter-spacing: 0.04em;
+    margin-left: 8px;
+  }
+  #ti-chop-panel .ov-head .ov-close {
+    position: absolute; right: 14px; top: 50%;
+    transform: translateY(-50%);
+    width: 22px; height: 22px; border-radius: 4px;
     display: grid; place-items: center; cursor: pointer;
-    color: rgba(245,243,255,0.35);
+    color: rgba(245,243,255,0.40);
     transition: background 140ms, color 140ms;
   }
-  #ti-chop-panel .ov-close:hover {
+  #ti-chop-panel .ov-head .ov-close:hover {
     background: rgba(255,255,255,0.05);
     color: rgba(245,243,255,0.92);
   }
 
+  /* mode pills row */
   #ti-chop-panel .ov-modes {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-    margin-bottom: 16px;
+    margin-bottom: 14px; padding-left: 18px;
+    position: relative; z-index: 1;
   }
   #ti-chop-panel .ov-mode {
     position: relative;
+    background: rgba(0,0,0,0.18);
     border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(255,255,255,0.02);
-    border-radius: 8px;
-    padding: 10px 6px 8px;
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    border-radius: 3px;
+    padding: 8px 4px 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
     cursor: pointer; user-select: none;
-    transition: background 140ms ease, border-color 140ms ease;
+    transition: all 160ms ease;
   }
   #ti-chop-panel .ov-mode:hover {
     background: rgba(255,255,255,0.04);
     border-color: rgba(255,255,255,0.10);
   }
   #ti-chop-panel .ov-mode.active {
-    background: linear-gradient(180deg, rgba(139,92,246,0.20), rgba(139,92,246,0.06));
     border-color: rgba(139,92,246,0.55);
-    box-shadow: 0 0 18px rgba(139,92,246,0.20), inset 0 1px 0 rgba(255,255,255,0.07);
+    background: rgba(139,92,246,0.10);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 14px rgba(139,92,246,0.18);
   }
   #ti-chop-panel .ov-mode .emblem {
-    width: 28px; height: 22px;
     display: grid; place-items: center;
-    color: rgba(245,243,255,0.55);
-    transition: color 160ms ease;
+    color: rgba(245,243,255,0.40); transition: color 160ms;
   }
   #ti-chop-panel .ov-mode.active .emblem { color: #8b5cf6; }
-  #ti-chop-panel .ov-mode .lbl {
+  #ti-chop-panel .ov-mode .nm {
     font: 700 9px/1 -apple-system; letter-spacing: 0.20em;
-    color: rgba(245,243,255,0.35);
-    transition: color 160ms ease;
+    color: rgba(245,243,255,0.40); transition: color 160ms;
   }
-  #ti-chop-panel .ov-mode.active .lbl { color: rgba(245,243,255,0.92); }
+  #ti-chop-panel .ov-mode.active .nm { color: rgba(245,243,255,0.92); }
   #ti-chop-panel .ov-mode.soon { opacity: 0.45; cursor: not-allowed; }
   #ti-chop-panel .ov-mode.soon::after {
     content: 'soon';
@@ -2184,69 +2261,138 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     color: #f59e0b; opacity: 0.85;
   }
 
-  #ti-chop-panel .ov-row {
-    display: grid; grid-template-columns: 70px 1fr 56px;
-    align-items: center; gap: 12px;
-    padding: 7px 0;
+  /* ADSR envelope canvas — the centrepiece */
+  #ti-chop-panel .ov-env {
+    margin: 0 0 14px 18px;
+    height: 168px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent 70%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 3px;
+    position: relative; z-index: 1;
+    overflow: hidden;
   }
-  #ti-chop-panel .ov-row .name {
-    font: 700 10px/1 -apple-system; letter-spacing: 0.20em;
-    color: rgba(245,243,255,0.55);
-  }
-  #ti-chop-panel .ov-row .val {
-    font: 600 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
-    color: rgba(245,243,255,0.92); text-align: right; letter-spacing: 0.03em;
-  }
-  #ti-chop-panel .ov-row .bar {
-    height: 4px; border-radius: 999px;
-    background: rgba(255,255,255,0.07);
-    position: relative; cursor: pointer;
-  }
-  #ti-chop-panel .ov-row .bar .fill {
-    position: absolute; left: 0; top: 0; bottom: 0;
-    background: linear-gradient(90deg, #8b5cf6, #b388ff);
-    border-radius: 999px;
-    box-shadow: 0 0 12px rgba(139,92,246,0.55);
-  }
-  #ti-chop-panel .ov-row .bar .knob-dot {
-    position: absolute; top: 50%;
-    width: 10px; height: 10px; border-radius: 50%;
-    background: white;
-    box-shadow: 0 0 8px rgba(139,92,246,0.7);
-    transform: translate(-50%, -50%);
+  #ti-chop-panel .ov-env-svg {
+    position: absolute; inset: 14px 14px 12px 14px;
+    width: calc(100% - 28px); height: calc(100% - 26px);
     pointer-events: none;
   }
-  #ti-chop-panel .ov-row.warp-only { display: none; }
-  #ti-chop-panel[data-warp="beats"]    .ov-row.warp-only,
-  #ti-chop-panel[data-warp="tones"]    .ov-row.warp-only,
-  #ti-chop-panel[data-warp="texture"]  .ov-row.warp-only { display: grid; }
+  #ti-chop-panel .ov-env-fill { fill: rgba(139,92,246,0.12); stroke: none; }
+  #ti-chop-panel .ov-env-line {
+    fill: none; stroke: #8b5cf6; stroke-width: 1.6;
+    stroke-linejoin: round; stroke-linecap: round;
+    filter: drop-shadow(0 0 5px rgba(139,92,246,0.45));
+  }
+  /* draggable handles — solid filled purple, sit centered on the envelope line */
+  #ti-chop-panel .ov-env-handle {
+    position: absolute;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #8b5cf6;
+    border: none;
+    box-shadow: 0 0 7px rgba(139,92,246,0.55);
+    transform: translate(-50%, -50%);
+    cursor: grab; z-index: 2;
+    transition: box-shadow 140ms, transform 140ms;
+  }
+  #ti-chop-panel .ov-env-handle:hover {
+    box-shadow: 0 0 12px rgba(139,92,246,0.85);
+    background: #a78bfa;
+  }
+  #ti-chop-panel .ov-env-handle:active,
+  #ti-chop-panel .ov-env-handle.dragging { cursor: grabbing; }
 
-  #ti-chop-panel .ov-divider {
-    height: 1px; background: rgba(255,255,255,0.06); margin: 12px -2px;
+  /* three emblem controls — Volume / Pitch / Stretch. No text labels. */
+  #ti-chop-panel .ov-ctrls {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    padding: 0 0 0 18px; margin-bottom: 14px;
+    position: relative; z-index: 1;
   }
+  #ti-chop-panel .ov-ctrl {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 12px;
+    background: rgba(0,0,0,0.22);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 3px;
+    cursor: ns-resize;
+    transition: border-color 140ms, background 140ms;
+  }
+  #ti-chop-panel .ov-ctrl:hover {
+    background: rgba(0,0,0,0.34);
+    border-color: rgba(255,255,255,0.10);
+  }
+  #ti-chop-panel .ov-ctrl:hover .ov-emblem { animation-play-state: paused; }
+  #ti-chop-panel .ov-ctrl .ov-emblem {
+    color: #8b5cf6; flex-shrink: 0;
+  }
+  #ti-chop-panel .ov-ctrl .ov-val {
+    font: 600 12px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    font-variant-numeric: tabular-nums;   /* fixed-width digits — no column shift on value change */
+    white-space: nowrap;                  /* "+12 st" never wraps onto two lines */
+    color: rgba(245,243,255,0.92); letter-spacing: 0.02em;
+  }
+  /* Stretch ctrl stays in the 3-column grid for symmetry — when warp=none
+     it grays out and ignores pointer events rather than disappearing. */
+  #ti-chop-panel[data-warp="none"] .ov-ctrl.warp-only {
+    opacity: 0.30; cursor: not-allowed; pointer-events: none;
+  }
+
+  /* idle animations — subtle motion, paused on hover */
+  @keyframes ti-vol-pulse-1 { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.92); } }
+  @keyframes ti-vol-pulse-2 { 0%,100% { transform: scaleY(1); } 35% { transform: scaleY(0.95); } 70% { transform: scaleY(0.90); } }
+  @keyframes ti-vol-pulse-3 { 0%,100% { transform: scaleY(1); } 45% { transform: scaleY(0.93); } }
+  @keyframes ti-vol-pulse-4 { 0%,100% { transform: scaleY(1); } 60% { transform: scaleY(0.94); } }
+  #ti-chop-panel .ov-emblem-vol .bar {
+    transform-origin: bottom;
+    animation-duration: 2.4s;
+    animation-iteration-count: infinite;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  #ti-chop-panel .ov-emblem-vol .bar:nth-child(1) { animation-name: ti-vol-pulse-1; }
+  #ti-chop-panel .ov-emblem-vol .bar:nth-child(2) { animation-name: ti-vol-pulse-2; animation-delay: 0.3s; }
+  #ti-chop-panel .ov-emblem-vol .bar:nth-child(3) { animation-name: ti-vol-pulse-3; animation-delay: 0.6s; }
+  #ti-chop-panel .ov-emblem-vol .bar:nth-child(4) { animation-name: ti-vol-pulse-4; animation-delay: 0.9s; }
+  /* Tuning-fork prong vibration — subtle, static (NOT value-driven). */
+  @keyframes ti-fork-vibrate-l {
+    0%, 100% { transform: translateX(0); }
+    50%      { transform: translateX(-0.4px); }
+  }
+  @keyframes ti-fork-vibrate-r {
+    0%, 100% { transform: translateX(0); }
+    50%      { transform: translateX(0.4px); }
+  }
+  #ti-chop-panel .ov-emblem-pitch .prong-l {
+    transform-origin: 11px 11px;
+    animation: ti-fork-vibrate-l 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  #ti-chop-panel .ov-emblem-pitch .prong-r {
+    transform-origin: 11px 11px;
+    animation: ti-fork-vibrate-r 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes ti-stretch-breathe {
+    0%,100% { transform: scaleX(1); }
+    50%     { transform: scaleX(1.06); }
+  }
+  #ti-chop-panel .ov-emblem-stretch .group {
+    transform-origin: center;
+    animation: ti-stretch-breathe 3.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* action row — small icon+label combos */
   #ti-chop-panel .ov-actions {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-    margin-top: 4px;
+    display: flex; justify-content: space-between; align-items: center;
+    padding-left: 18px;
+    position: relative; z-index: 1;
   }
+  #ti-chop-panel .ov-actions .group { display: flex; gap: 14px; }
   #ti-chop-panel .ov-act {
-    padding: 9px 10px;
-    font: 600 10px/1 -apple-system; letter-spacing: 0.16em;
-    color: rgba(245,243,255,0.55); text-align: center;
-    border-radius: 7px; cursor: pointer; user-select: none;
-    background: rgba(255,255,255,0.025);
-    border: 1px solid rgba(255,255,255,0.05);
-    transition: background 140ms, color 140ms, border-color 140ms;
+    display: flex; align-items: center; gap: 7px;
+    font: 700 9px/1 -apple-system; letter-spacing: 0.18em;
+    color: rgba(245,243,255,0.40);
+    cursor: pointer; user-select: none;
+    text-transform: uppercase;
+    transition: color 140ms;
   }
-  #ti-chop-panel .ov-act:hover {
-    background: rgba(255,255,255,0.05);
-    color: rgba(245,243,255,0.92);
-  }
-  #ti-chop-panel .ov-act.danger:hover {
-    background: rgba(244,63,94,0.15);
-    color: #f43f5e;
-    border-color: rgba(244,63,94,0.35);
-  }
-  #ti-chop-panel[data-warp="none"] .ov-act.warp-only { display: none; }
+  #ti-chop-panel .ov-act:hover { color: rgba(245,243,255,0.92); }
+  #ti-chop-panel .ov-act.danger:hover { color: #f43f5e; }
 
   /* ─── XY readout — relocate to bottom-right (mirror of root picker) ─── */
   #hero .xy-readout {
@@ -2381,60 +2527,97 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     panel.setAttribute('aria-label', 'Chop settings');
     panel.setAttribute('data-warp', 'none');
     panel.innerHTML =
-      '<div class="ov-header">' +
-        '<div class="ov-title">CHOP <span class="num" id="ti-chop-num">01</span></div>' +
+      // header — CHOP title centered, close button anchored top-right
+      '<div class="ov-head">' +
+        '<div class="name">CHOP<span class="num" id="ti-chop-num">01</span></div>' +
         '<div class="ov-close" id="ti-chop-close" title="Close">' +
           '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>' +
         '</div>' +
       '</div>' +
+      // mode pills
       '<div class="ov-modes">' +
         '<div class="ov-mode" data-mode="0">' +
           '<div class="emblem"><svg width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 L20 7"/></svg></div>' +
-          '<div class="lbl">NONE</div>' +
+          '<div class="nm">NONE</div>' +
         '</div>' +
         '<div class="ov-mode" data-mode="1">' +
           '<div class="emblem"><svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12 V5"/><path d="M8 13 V8"/><path d="M13 11 V4"/><path d="M18 12 V7"/></svg></div>' +
-          '<div class="lbl">BEATS</div>' +
+          '<div class="nm">BEATS</div>' +
         '</div>' +
         '<div class="ov-mode" data-mode="2">' +
           '<div class="emblem"><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg></div>' +
-          '<div class="lbl">TONES</div>' +
+          '<div class="nm">TONES</div>' +
         '</div>' +
         '<div class="ov-mode soon" data-mode="3">' +
           '<div class="emblem"><svg width="22" height="16" viewBox="0 0 22 16" fill="currentColor"><circle cx="3" cy="9" r="1.2"/><circle cx="7" cy="4" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="15" cy="3" r="1.2"/><circle cx="18" cy="11" r="1.2"/><circle cx="20" cy="6" r="1.2"/></svg></div>' +
-          '<div class="lbl">TEXTURE</div>' +
+          '<div class="nm">TEXTURE</div>' +
         '</div>' +
       '</div>' +
-      '<div class="ov-section">' +
-        '<div class="ov-row" data-row="attack">' +
-          '<div class="name">ATTACK</div>' +
-          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
-          '<div class="val">— ms</div>' +
+      // ADSR envelope canvas: SVG path + 4 absolute-positioned handles.
+      // Handles carry no numeric tooltips — the curve shape IS the readout.
+      '<div class="ov-env" id="ti-env">' +
+        '<svg class="ov-env-svg" id="ti-env-svg" viewBox="0 0 332 142" preserveAspectRatio="none">' +
+          '<path class="ov-env-fill" id="ti-env-fill" d=""/>' +
+          '<path class="ov-env-line" id="ti-env-line" d=""/>' +
+        '</svg>' +
+        '<div class="ov-env-handle" data-h="A"></div>' +
+        '<div class="ov-env-handle" data-h="D"></div>' +
+        '<div class="ov-env-handle" data-h="S"></div>' +
+        '<div class="ov-env-handle" data-h="R"></div>' +
+      '</div>' +
+      // 3 emblem-knob controls (Volume / Pitch / Stretch) — no labels, glyph + value only.
+      // Stretch is hidden when warp = none.
+      '<div class="ov-ctrls">' +
+        '<div class="ov-ctrl" data-ctrl="volume" title="volume — drag vertically">' +
+          '<svg class="ov-emblem ov-emblem-vol" width="22" height="20" viewBox="0 0 22 20" fill="currentColor" stroke="none">' +
+            '<rect class="bar" x="2"  y="6" width="3" height="12" rx="1"/>' +
+            '<rect class="bar" x="7"  y="2" width="3" height="16" rx="1"/>' +
+            '<rect class="bar" x="12" y="4" width="3" height="14" rx="1"/>' +
+            '<rect class="bar" x="17" y="8" width="3" height="10" rx="1"/>' +
+          '</svg>' +
+          '<div class="ov-val">100%</div>' +
         '</div>' +
-        '<div class="ov-row" data-row="release">' +
-          '<div class="name">RELEASE</div>' +
-          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
-          '<div class="val">— ms</div>' +
+        '<div class="ov-ctrl" data-ctrl="pitch" title="pitch — drag vertically">' +
+          // Tuning fork — matches the existing grain-engine PITCH emblem in
+          // Terrain FX (forkW=0.35r, forkH=1.2r, handle+base dot). Prongs
+          // vibrate gently as an idle animation, but the glyph is static
+          // with respect to value so the layout never shifts.
+          '<svg class="ov-emblem ov-emblem-pitch" width="22" height="20" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">' +
+            '<path class="prong-l" d="M 8 3 Q 7.2 7 11 11"/>' +
+            '<path class="prong-r" d="M 14 3 Q 14.8 7 11 11"/>' +
+            '<line x1="11" y1="11" x2="11" y2="17"/>' +
+            '<circle cx="11" cy="18" r="1.4" fill="currentColor" stroke="none"/>' +
+          '</svg>' +
+          '<div class="ov-val">+0 st</div>' +
+        '</div>' +
+        '<div class="ov-ctrl warp-only" data-ctrl="stretch" title="stretch — drag vertically">' +
+          '<svg class="ov-emblem ov-emblem-stretch" width="22" height="20" viewBox="0 0 22 20" fill="currentColor" stroke="none">' +
+            '<g class="group">' +
+              '<rect x="2"  y="4" width="2" height="12" rx="0.8"/>' +
+              '<rect x="7"  y="4" width="2" height="12" rx="0.8"/>' +
+              '<rect x="13" y="4" width="2" height="12" rx="0.8"/>' +
+              '<rect x="18" y="4" width="2" height="12" rx="0.8"/>' +
+            '</g>' +
+          '</svg>' +
+          '<div class="ov-val">1.00×</div>' +
         '</div>' +
       '</div>' +
-      '<div class="ov-section">' +
-        '<div class="ov-row" data-row="pitch">' +
-          '<div class="name">PITCH</div>' +
-          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
-          '<div class="val">+0 st</div>' +
-        '</div>' +
-        '<div class="ov-row warp-only" data-row="stretch">' +
-          '<div class="name">STRETCH</div>' +
-          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
-          '<div class="val">1.00×</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="ov-divider"></div>' +
+      // actions
       '<div class="ov-actions">' +
-        '<div class="ov-act" data-act="rev">REVERSE</div>' +
-        '<div class="ov-act" data-act="resetPitch">RESET PITCH</div>' +
-        '<div class="ov-act warp-only" data-act="resetStretch">RESET STRETCH</div>' +
-        '<div class="ov-act danger" data-act="del">DELETE</div>' +
+        '<div class="group">' +
+          '<div class="ov-act" data-act="rev">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 L 4 9 L 9 4"/><path d="M4 9 H 16 A 4 4 0 0 1 20 13 V 20"/></svg>' +
+            'REVERSE' +
+          '</div>' +
+          '<div class="ov-act" data-act="resetPitch">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 A 9 9 0 1 0 6 5"/><path d="M3 3 V 8 H 8"/></svg>' +
+            'RESET' +
+          '</div>' +
+          '<div class="ov-act danger" data-act="del">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 5 L 19 19 M 19 5 L 5 19"/></svg>' +
+            'DELETE' +
+          '</div>' +
+        '</div>' +
       '</div>';
     document.body.appendChild(panel);
 
@@ -2624,6 +2807,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         // Per-chop ADSR — same inheritance sentinel as C++. -1 = follow global.
         var am = parseFloat(s.attackMs);
         var rm = parseFloat(s.releaseMs);
+        // Full ADSR additions (always concrete, no inheritance sentinel).
+        var dm = parseFloat(s.decayMs);
+        var sl = parseFloat(s.sustainLevel);
+        var vl = parseFloat(s.volume);
         return {
           start:        parseInt(s.start, 10) || 0,
           end:          parseInt(s.end,   10) || 0,
@@ -2632,7 +2819,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           warpMode:     (isFinite(wm) && wm >= 0 && wm <= 3) ? wm : 0,
           stretchRatio: (isFinite(sr) ? Math.max(0.1, Math.min(15.0, sr)) : 1.0),
           attackMs:     isFinite(am) ? am : -1,
-          releaseMs:    isFinite(rm) ? rm : -1
+          releaseMs:    isFinite(rm) ? rm : -1,
+          decayMs:      isFinite(dm) ? Math.max(0,  Math.min(2000, dm)) : 0,
+          sustainLevel: isFinite(sl) ? Math.max(0,  Math.min(1,    sl)) : 1,
+          volume:       isFinite(vl) ? Math.max(0,  Math.min(1,    vl)) : 1
         };
       });
       // Clamp activeSliceIndex.
@@ -2697,16 +2887,30 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // overlapping neighbors or extending past the canvas edge. This mirrors
     // Ableton's clip-warp UX: total clip width constant, internal warp
     // markers redistribute audio between them.
+    // Stretch only counts visually when warp is engaged. Right-clicking a
+    // chop and choosing Warp: None used to leave the chop visually stretched
+    // (because the cumulative-layout used the stored stretchRatio regardless
+    // of warpMode) — user reported the body still looked chopped and the
+    // "2.16x" label still showed. Resolve by reading the EFFECTIVE stretch
+    // ratio: stored value when warp engaged, 1.0 when None. stretchRatio
+    // stays in slice state so re-enabling warp restores the previous value.
+    function effectiveSr (s) {
+      var wm = (typeof s.warpMode === 'number') ? s.warpMode : 0;
+      if (!wm) return 1.0;
+      var sr = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
+      return sr;
+    }
+
     var totalWeight = 0;
     state.slices.forEach(function (s) {
-      var sr = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
+      var sr = effectiveSr(s);
       totalWeight += Math.max(1, (s.end - s.start)) * sr;
     });
     if (totalWeight <= 0) totalWeight = 1;
 
     var cumulative = 0;
     var chopLayouts = state.slices.map(function (s, i) {
-      var sr = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
+      var sr = effectiveSr(s);
       var weight = Math.max(1, (s.end - s.start)) * sr;
       var visualWidth = (weight / totalWeight) * W;
       var layout = {
@@ -2828,8 +3032,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         body.appendChild(wl);
       }
 
-      // Stretch ratio label — visible only when stretched away from unity.
-      if (s.stretchRatio && Math.abs(s.stretchRatio - 1.0) > 0.005 && !hideOverlays) {
+      // Stretch ratio label — visible only when WARP is engaged AND stretched
+      // away from unity. Gating on s.warpMode > 0 (in addition to ratio) so
+      // right-click → Warp: None instantly hides the label even if the
+      // user previously stretched the chop. The stretch value is preserved
+      // in slice state so re-engaging Tones/Beats restores the visual.
+      if (s.warpMode > 0
+          && s.stretchRatio && Math.abs(s.stretchRatio - 1.0) > 0.005
+          && !hideOverlays) {
         var sl = document.createElement('div');
         sl.className = 'ti-slice-stretch-label';
         sl.textContent = s.stretchRatio.toFixed(2) + 'x';
@@ -3294,17 +3504,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     }
   }
 
-  // ── Chop overlay (replaces old #ti-slice-ctx) ─────────────────────────────
+  // ╔══════════════════════════════════════════════════════════════════════╗
+  // ║  Chop overlay — Lab Card v2                                          ║
+  // ║  Full ADSR canvas with 4 draggable handles, plus 3 emblem-knobs      ║
+  // ║  (Volume / Pitch / Stretch). NO slider bars, NO text labels on       ║
+  // ║  parameter controls. Drag emblems vertically to change value.        ║
+  // ╚══════════════════════════════════════════════════════════════════════╝
+
   // APVTS defaults for global Attack/Release — used to populate the per-chop
-  // sliders when the chop has the inheritance sentinel (-1). If the user has
-  // moved the global knob the chop will still show this baseline, which is
-  // close enough for v1 — the chop captures its own value the moment the
-  // user drags the slider, breaking the dependency.
+  // values when the chop has the inheritance sentinel (-1). If user has moved
+  // the global knob, the chop will still show this baseline until they drag.
   var GLOBAL_ATTACK_DEFAULT  = 5.0;
   var GLOBAL_RELEASE_DEFAULT = 800.0;
 
-  // Skew-aware normalize/denormalize so the slider feels like the global
-  // ATTACK/RELEASE knobs in Terrain Effects (most travel covers small ms).
+  // ADSR canvas geometry (matches the SVG viewBox in the DOM).
+  var ENV_VB_W       = 332;
+  var ENV_VB_H       = 142;
+  var ENV_PEAK_Y     = 10;       // y at envelope peak (top)
+  var ENV_BASE_Y     = 132;      // y at envelope baseline
+  var ENV_ATTACK_W   = 60;       // px allocated to attack zone at maxAttackMs
+  var ENV_DECAY_W    = 60;       // px allocated to decay zone at maxDecayMs
+  var ENV_PLATEAU_W  = 80;       // fixed visual width of sustain plateau
+  var ENV_RELEASE_W  = 120;      // px allocated to release zone at maxReleaseMs
+  // SVG element is inset 14 14 12 14 inside the .ov-env container.
+  var ENV_INSET_L    = 14;
+  var ENV_INSET_T    = 14;
+
+  // Skew-aware normalize/denormalize so the envelope zones feel like the
+  // global ATTACK/RELEASE knobs (most travel covers small ms).
   function denormSkew (t, min, max, skew) {
     t = Math.max(0, Math.min(1, t));
     return min + (max - min) * Math.pow(t, 1.0 / skew);
@@ -3314,48 +3541,132 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     return Math.pow((v - min) / Math.max(1e-9, max - min), skew);
   }
 
-  // Per-row range descriptors (must match the native-fn clamps).
-  var OV_ROWS = {
-    attack:  { min: 0.0,  max: 2000.0, skew: 0.4, unit: 'ms', step: 1 },
-    release: { min: 1.0,  max: 5000.0, skew: 0.4, unit: 'ms', step: 1 },
-    pitch:   { min: -12,  max: 12,     skew: 1.0, unit: 'st', step: 1 },
-    stretch: { min: 0.1,  max: 15.0,   skew: 0.35, unit: '×',  step: 0.01 }
+  // Per-control range descriptors.
+  var OV_RANGES = {
+    attack:  { min: 0.0,  max: 2000.0, skew: 0.4 },
+    decay:   { min: 0.0,  max: 2000.0, skew: 0.4 },
+    sustain: { min: 0.0,  max: 1.0,    skew: 1.0 },
+    release: { min: 1.0,  max: 5000.0, skew: 0.4 },
+    volume:  { min: 0.0,  max: 1.0,    skew: 1.0 },
+    pitch:   { min: -12,  max: 12,     skew: 1.0 },
+    stretch: { min: 0.1,  max: 15.0,   skew: 0.35 }
   };
 
-  function fmtRowValue (key, v) {
-    if (key === 'pitch') {
-      var s = Math.round(v);
-      return (s >= 0 ? '+' : '') + s + ' st';
-    }
-    if (key === 'stretch') return v.toFixed(2) + '×';
-    return Math.round(v) + ' ms';
-  }
-
-  function rowValueFromState (idx, key) {
+  // Pull the current value for a control out of the slice state, applying
+  // inheritance fallbacks for attack/release.
+  function ovValueFromState (idx, key) {
     var s = state.slices[idx];
     if (!s) return null;
-    if (key === 'pitch')   return Number(s.pitch   || 0);
+    if (key === 'attack')  return (s.attackMs  == null || s.attackMs  < 0) ? GLOBAL_ATTACK_DEFAULT  : Number(s.attackMs);
+    if (key === 'decay')   return Number(s.decayMs      || 0);
+    if (key === 'sustain') return s.sustainLevel == null ? 1.0 : Number(s.sustainLevel);
+    if (key === 'release') return (s.releaseMs == null || s.releaseMs < 0) ? GLOBAL_RELEASE_DEFAULT : Number(s.releaseMs);
+    if (key === 'volume')  return s.volume == null ? 1.0 : Number(s.volume);
+    if (key === 'pitch')   return Number(s.pitch || 0);
     if (key === 'stretch') return Number(s.stretchRatio || 1.0);
-    if (key === 'attack') {
-      var a = (s.attackMs == null || s.attackMs < 0) ? GLOBAL_ATTACK_DEFAULT : s.attackMs;
-      return Number(a);
-    }
-    if (key === 'release') {
-      var r = (s.releaseMs == null || s.releaseMs < 0) ? GLOBAL_RELEASE_DEFAULT : s.releaseMs;
-      return Number(r);
-    }
     return null;
   }
 
-  function setRowVisual (rowEl, key, v) {
-    var r = OV_ROWS[key];
-    var t = normSkew(v, r.min, r.max, r.skew);
-    rowEl.querySelector('.fill').style.width   = (t * 100).toFixed(2) + '%';
-    rowEl.querySelector('.knob-dot').style.left = (t * 100).toFixed(2) + '%';
-    rowEl.querySelector('.val').textContent     = fmtRowValue(key, v);
+  // Compute the four envelope handle positions (in SVG viewBox coords) from
+  // the current chop's A / D / S / R values.
+  function ovEnvelopePoints (idx) {
+    var a  = ovValueFromState(idx, 'attack');
+    var d  = ovValueFromState(idx, 'decay');
+    var sv = ovValueFromState(idx, 'sustain');
+    var r  = ovValueFromState(idx, 'release');
+    var aT = normSkew(a, OV_RANGES.attack.min,  OV_RANGES.attack.max,  OV_RANGES.attack.skew);
+    var dT = normSkew(d, OV_RANGES.decay.min,   OV_RANGES.decay.max,   OV_RANGES.decay.skew);
+    var rT = normSkew(r, OV_RANGES.release.min, OV_RANGES.release.max, OV_RANGES.release.skew);
+    var aPx = aT * ENV_ATTACK_W;
+    var dPx = dT * ENV_DECAY_W;
+    var rPx = rT * ENV_RELEASE_W;
+    var sustainY = ENV_BASE_Y - sv * (ENV_BASE_Y - ENV_PEAK_Y);
+    var xA = aPx;
+    var xD = xA + dPx;
+    var xS = xD + ENV_PLATEAU_W * 0.5;
+    var xPlateauEnd = xD + ENV_PLATEAU_W;
+    var xR = xPlateauEnd + rPx;
+    return {
+      A: { x: xA, y: ENV_PEAK_Y, val: a, ms: a },
+      D: { x: xD, y: sustainY, val: d, ms: d },
+      S: { x: xS, y: sustainY, val: sv },
+      R: { x: xR, y: ENV_BASE_Y, val: r, ms: r },
+      sustainY: sustainY,
+      xPlateauEnd: xPlateauEnd
+    };
   }
 
-  function ensureChopOverlayWired () {
+  function fmtMs (ms)   { return Math.round(ms) + ' ms'; }
+  function fmtPct (v)   { return Math.round(v * 100) + '%'; }
+  function fmtPitch (v) { var s = Math.round(v); return (s >= 0 ? '+' : '') + s + ' st'; }
+  function fmtStretch(v){ return v.toFixed(2) + '×'; }
+
+  // Redraw envelope path + reposition the 4 handles + update tooltips.
+  function ovRedrawEnvelope (idx) {
+    var panel = document.getElementById('ti-chop-panel');
+    var env   = document.getElementById('ti-env');
+    if (!panel || !env) return;
+    var pts = ovEnvelopePoints(idx);
+
+    // Envelope path: baseline → attack peak → decay end → plateau → release → baseline
+    var d = 'M 0 ' + ENV_BASE_Y +
+            ' L ' + pts.A.x + ' ' + pts.A.y +
+            ' L ' + pts.D.x + ' ' + pts.D.y +
+            ' L ' + pts.xPlateauEnd + ' ' + pts.sustainY +
+            ' L ' + pts.R.x + ' ' + pts.R.y +
+            ' L ' + ENV_VB_W + ' ' + ENV_BASE_Y;
+    var dFill = d + ' Z';
+    document.getElementById('ti-env-line').setAttribute('d', d);
+    document.getElementById('ti-env-fill').setAttribute('d', dFill);
+
+    // Position handles using OFFSET coords (not getBoundingClientRect) so
+    // values stay correct during the panel's CSS open transition — transforms
+    // don't affect offsetLeft/offsetTop/offsetWidth/offsetHeight.
+    //
+    // Two coordinate spaces collide here:
+    //   - SVG.offsetLeft is from .ov-env's BORDER-box (offsetParent convention)
+    //   - handle.style.left is from .ov-env's PADDING-box (CSS abs-positioning)
+    // → subtract the env container's border width to align them, otherwise
+    //   handles sit 1 px off the curve (off in any warp mode, masked at the
+    //   default envelope shape where handles cluster at the corners).
+    var svg = document.getElementById('ti-env-svg');
+    var cs = getComputedStyle(env);
+    var bl = parseFloat(cs.borderLeftWidth) || 0;
+    var bt = parseFloat(cs.borderTopWidth)  || 0;
+    var svgX0 = svg.offsetLeft - bl;
+    var svgY0 = svg.offsetTop  - bt;
+    var sx = svg.offsetWidth  / ENV_VB_W;
+    var sy = svg.offsetHeight / ENV_VB_H;
+    var handles = panel.querySelectorAll('.ov-env-handle');
+    handles.forEach(function (h) {
+      var which = h.dataset.h;
+      var p = pts[which];
+      if (!p) return;
+      h.style.left = (svgX0 + p.x * sx) + 'px';
+      h.style.top  = (svgY0 + p.y * sy) + 'px';
+    });
+  }
+
+  // Emblem-knob value readouts. Glyph shapes are deliberately STATIC vs the
+  // value — only the numeric text changes. Idle CSS animations (volume bars,
+  // fork prongs, stretch breath) keep the panel feeling alive without
+  // shifting the layout when the value changes width (e.g. "+12 st" vs "+0").
+  function ovRedrawEmblems (idx) {
+    var s = state.slices[idx];
+    if (!s) return;
+    var panel = document.getElementById('ti-chop-panel');
+    panel.querySelectorAll('.ov-ctrl').forEach(function (ctrl) {
+      var key = ctrl.dataset.ctrl;
+      var v = ovValueFromState(idx, key);
+      var valEl = ctrl.querySelector('.ov-val');
+      if (!valEl) return;
+      if      (key === 'volume')  valEl.textContent = fmtPct(v);
+      else if (key === 'pitch')   valEl.textContent = fmtPitch(v);
+      else if (key === 'stretch') valEl.textContent = fmtStretch(v);
+    });
+  }
+
+  function ovEnsureWired () {
     var panel = document.getElementById('ti-chop-panel');
     if (!panel || panel.dataset.wired === '1') return;
     panel.dataset.wired = '1';
@@ -3367,7 +3678,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (ev.key === 'Escape' && panel.classList.contains('open')) closeChopOverlay();
     });
 
-    // Mode pills
+    // Mode pill clicks.
     panel.querySelectorAll('.ov-mode').forEach(function (el) {
       el.addEventListener('click', function () {
         if (el.classList.contains('soon')) return;
@@ -3377,59 +3688,118 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         state.slices[idx].warpMode = mode;
         var fn = getNativeFn('setSliceWarpMode');
         if (fn) { try { fn(idx, mode); } catch (_) {} }
-        applyOverlayState(idx);
+        ovApplyState(idx);
         redrawSliceOverlay();
       });
     });
 
-    // Slider rows — single drag handler, route per-row by data-row.
-    panel.querySelectorAll('.ov-row').forEach(function (rowEl) {
-      var bar = rowEl.querySelector('.bar');
-      var key = rowEl.dataset.row;
-      var range = OV_ROWS[key];
-      if (!bar || !range) return;
-      bar.addEventListener('mousedown', function (e) {
-        function commit (clientX) {
+    // ENV handle drag — each handle controls one envelope parameter.
+    // A: drag X = attack ms.  D: drag X = decay ms (relative to A).
+    // S: drag Y = sustain level.  R: drag X = release ms (after plateau).
+    panel.querySelectorAll('.ov-env-handle').forEach(function (h) {
+      var which = h.dataset.h;
+      h.addEventListener('mousedown', function (e) {
+        h.classList.add('dragging');
+        var svg = document.getElementById('ti-env-svg');
+        function move (ev) {
           var idx = parseInt(panel.dataset.targetIdx, 10);
           if (isNaN(idx) || !state.slices[idx]) return;
-          var rect = bar.getBoundingClientRect();
-          var t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-          var v = denormSkew(t, range.min, range.max, range.skew);
-          if (range.step >= 1) v = Math.round(v);
-          // Update local mirror + send native fn for this row.
-          if (key === 'attack') {
-            state.slices[idx].attackMs = v;
-            var fnA = getNativeFn('setSliceAttackMs');
-            if (fnA) { try { fnA(idx, v); } catch (_) {} }
-          } else if (key === 'release') {
-            state.slices[idx].releaseMs = v;
-            var fnR = getNativeFn('setSliceReleaseMs');
-            if (fnR) { try { fnR(idx, v); } catch (_) {} }
-          } else if (key === 'pitch') {
-            state.slices[idx].pitch = v;
-            var fnP = getNativeFn('setSlicePitch');
-            if (fnP) { try { fnP(idx, v); } catch (_) {} }
-          } else if (key === 'stretch') {
-            state.slices[idx].stretchRatio = v;
-            var fnS = getNativeFn('setSliceStretchRatio');
-            if (fnS) { try { fnS(idx, v); } catch (_) {} }
+          var rect = svg.getBoundingClientRect();
+          // convert pointer to SVG-viewBox space
+          var vx = (ev.clientX - rect.left) / Math.max(1, rect.width)  * ENV_VB_W;
+          var vy = (ev.clientY - rect.top ) / Math.max(1, rect.height) * ENV_VB_H;
+          if (which === 'A') {
+            var t = Math.max(0, Math.min(1, vx / ENV_ATTACK_W));
+            var ms = denormSkew(t, OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
+            state.slices[idx].attackMs = ms;
+            var fn = getNativeFn('setSliceAttackMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
+          } else if (which === 'D') {
+            // D's x = A.x + decayPx → decayPx = vx - aPx
+            var aT = normSkew(state.slices[idx].attackMs >= 0 ? state.slices[idx].attackMs : GLOBAL_ATTACK_DEFAULT,
+                              OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
+            var aPx = aT * ENV_ATTACK_W;
+            var dPx = Math.max(0, Math.min(ENV_DECAY_W, vx - aPx));
+            var dT = dPx / ENV_DECAY_W;
+            var ms = denormSkew(dT, OV_RANGES.decay.min, OV_RANGES.decay.max, OV_RANGES.decay.skew);
+            state.slices[idx].decayMs = ms;
+            var fn = getNativeFn('setSliceDecayMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
+          } else if (which === 'S') {
+            // map vy [PEAK..BASE] → level [1..0]
+            var lvl = 1.0 - (vy - ENV_PEAK_Y) / (ENV_BASE_Y - ENV_PEAK_Y);
+            lvl = Math.max(0, Math.min(1, lvl));
+            state.slices[idx].sustainLevel = lvl;
+            var fn = getNativeFn('setSliceSustain'); if (fn) { try { fn(idx, lvl); } catch (_) {} }
+          } else if (which === 'R') {
+            // R's x = plateauEnd + releasePx → releasePx = vx - plateauEnd
+            var aT2 = normSkew(state.slices[idx].attackMs >= 0 ? state.slices[idx].attackMs : GLOBAL_ATTACK_DEFAULT,
+                               OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
+            var dT2 = normSkew(state.slices[idx].decayMs || 0,
+                               OV_RANGES.decay.min, OV_RANGES.decay.max, OV_RANGES.decay.skew);
+            var plateauEnd = aT2 * ENV_ATTACK_W + dT2 * ENV_DECAY_W + ENV_PLATEAU_W;
+            var rPx = Math.max(0, Math.min(ENV_RELEASE_W, vx - plateauEnd));
+            var rT = rPx / ENV_RELEASE_W;
+            var ms = denormSkew(rT, OV_RANGES.release.min, OV_RANGES.release.max, OV_RANGES.release.skew);
+            state.slices[idx].releaseMs = ms;
+            var fn = getNativeFn('setSliceReleaseMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
           }
-          setRowVisual(rowEl, key, v);
-          // Stretch tweak needs the chop's visualWidth to follow — apply that
-          // by redrawing the overlay (cumulative layout reads stretchRatio).
-          if (key === 'stretch' || key === 'pitch') redrawSliceOverlay();
+          ovRedrawEnvelope(idx);
         }
-        commit(e.clientX);
-        function onMove (ev) { commit(ev.clientX); ev.preventDefault(); }
-        function onUp ()      { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-        e.preventDefault();
-        e.stopPropagation();
+        function up () {
+          h.classList.remove('dragging');
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+        e.preventDefault(); e.stopPropagation();
       });
     });
 
-    // Action buttons
+    // Emblem-knob ctrl drag (vertical) — Volume / Pitch / Stretch.
+    // Drag 200 px = full range. Skew-aware so small Y deltas at low values
+    // feel as responsive as the knob arc range.
+    panel.querySelectorAll('.ov-ctrl').forEach(function (ctrl) {
+      var key = ctrl.dataset.ctrl;
+      var range = OV_RANGES[key];
+      if (!range) return;
+      ctrl.addEventListener('mousedown', function (e) {
+        var startY = e.clientY;
+        var startV = ovValueFromState(parseInt(panel.dataset.targetIdx, 10), key);
+        if (startV == null) return;
+        var startT = normSkew(startV, range.min, range.max, range.skew);
+        function move (ev) {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          var deltaY = startY - ev.clientY;     // up = positive
+          var deltaT = deltaY / 200.0;           // 200 px = full range
+          var t = Math.max(0, Math.min(1, startT + deltaT));
+          var v = denormSkew(t, range.min, range.max, range.skew);
+          if (key === 'pitch') v = Math.round(v);
+          if (key === 'volume') {
+            state.slices[idx].volume = v;
+            var fn = getNativeFn('setSliceVolume'); if (fn) { try { fn(idx, v); } catch (_) {} }
+          } else if (key === 'pitch') {
+            state.slices[idx].pitch = v;
+            var fn = getNativeFn('setSlicePitch'); if (fn) { try { fn(idx, v); } catch (_) {} }
+            redrawSliceOverlay();
+          } else if (key === 'stretch') {
+            state.slices[idx].stretchRatio = v;
+            var fn = getNativeFn('setSliceStretchRatio'); if (fn) { try { fn(idx, v); } catch (_) {} }
+            redrawSliceOverlay();
+          }
+          ovRedrawEmblems(idx);
+        }
+        function up () {
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+        e.preventDefault();
+      });
+    });
+
+    // Action buttons (reverse / reset / delete).
     panel.querySelectorAll('.ov-act').forEach(function (el) {
       el.addEventListener('click', function () {
         var idx = parseInt(panel.dataset.targetIdx, 10);
@@ -3437,20 +3807,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         var act = el.dataset.act;
         if (act === 'rev') {
           state.slices[idx].reverse = !state.slices[idx].reverse;
-          var fnR = getNativeFn('setSliceReverse');
-          if (fnR) { try { fnR(idx, state.slices[idx].reverse); } catch (_) {} }
+          var fn = getNativeFn('setSliceReverse');
+          if (fn) { try { fn(idx, state.slices[idx].reverse); } catch (_) {} }
           redrawSliceOverlay();
         } else if (act === 'resetPitch') {
           state.slices[idx].pitch = 0;
-          var fnP = getNativeFn('setSlicePitch');
-          if (fnP) { try { fnP(idx, 0); } catch (_) {} }
-          applyOverlayState(idx);
-          redrawSliceOverlay();
-        } else if (act === 'resetStretch') {
-          state.slices[idx].stretchRatio = 1.0;
-          var fnS = getNativeFn('setSliceStretchRatio');
-          if (fnS) { try { fnS(idx, 1.0); } catch (_) {} }
-          applyOverlayState(idx);
+          var fn = getNativeFn('setSlicePitch');
+          if (fn) { try { fn(idx, 0); } catch (_) {} }
+          ovApplyState(idx);
           redrawSliceOverlay();
         } else if (act === 'del') {
           var fnD = getNativeFn('deleteSlice');
@@ -3465,9 +3829,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         }
       });
     });
+
+    // Reposition handles when the panel size changes (e.g. on open).
+    window.addEventListener('resize', function () {
+      var idx = parseInt(panel.dataset.targetIdx, 10);
+      if (!isNaN(idx) && state.slices[idx]) ovRedrawEnvelope(idx);
+    });
   }
 
-  function applyOverlayState (idx) {
+  function ovApplyState (idx) {
     var panel = document.getElementById('ti-chop-panel');
     if (!panel) return;
     var s = state.slices[idx];
@@ -3476,7 +3846,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var numEl = document.getElementById('ti-chop-num');
     if (numEl) numEl.textContent = (idx + 1 < 10 ? '0' : '') + (idx + 1);
 
-    // Mode pill highlight + warp-only visibility
+    // Mode pill highlight + warp-only visibility.
     var mode = Number(s.warpMode || 0);
     var modeName = ['none','beats','tones','texture'][mode] || 'none';
     panel.setAttribute('data-warp', modeName);
@@ -3484,21 +3854,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       el.classList.toggle('active', parseInt(el.dataset.mode, 10) === mode);
     });
 
-    // Row visuals
-    panel.querySelectorAll('.ov-row').forEach(function (rowEl) {
-      var key = rowEl.dataset.row;
-      var v = rowValueFromState(idx, key);
-      if (v == null) return;
-      setRowVisual(rowEl, key, v);
-    });
+    ovRedrawEnvelope(idx);
+    ovRedrawEmblems(idx);
   }
 
   function openChopOverlay (idx) {
     if (!state.slices[idx]) return;
-    ensureChopOverlayWired();
-    applyOverlayState(idx);
+    ovEnsureWired();
     document.getElementById('ti-chop-backdrop').classList.add('open');
     document.getElementById('ti-chop-panel').classList.add('open');
+    // Apply state AFTER opening so getBoundingClientRect returns real sizes.
+    requestAnimationFrame(function () { ovApplyState(idx); });
   }
 
   function closeChopOverlay () {
