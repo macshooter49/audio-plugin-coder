@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Terrain Instrument — Chop overlay design directions v8</title>
+<style>
+  :root {
+    --bg-deep:     #14111f;
+    --bg-page:     #100d1c;
+    --bg-surface:  #1c1830;
+    --bg-elev:     #221b3a;
+    --bg-soft:     #2a2245;
+    --bg-warm:     #1f1a2e;
+    --line:        rgba(255,255,255,0.06);
+    --line-soft:   rgba(255,255,255,0.10);
+    --text:        rgba(245,243,255,0.92);
+    --text-dim:    rgba(245,243,255,0.55);
+    --text-mute:   rgba(245,243,255,0.35);
+    --text-faint:  rgba(245,243,255,0.22);
+    --accent:      #8b5cf6;
+    --accent-soft: rgba(139,92,246,0.22);
+    --accent-line: rgba(139,92,246,0.55);
+    --accent-glow: rgba(139,92,246,0.35);
+    --danger:      #f43f5e;
+  }
+
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg-page);
+    color: var(--text);
+    font: 500 13px/1.55 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    padding: 56px 24px 96px;
+  }
+
+  /* ── page chrome / variant frames ────────────────────────────────────── */
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  .intro {
+    margin-bottom: 56px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .intro h1 {
+    margin: 0 0 8px;
+    font: 300 28px/1.2 'Iowan Old Style', 'Palatino', 'Georgia', serif;
+    letter-spacing: 0.01em;
+    color: var(--text);
+  }
+  .intro p { margin: 6px 0; color: var(--text-dim); max-width: 720px; }
+  .intro em { color: var(--accent); font-style: normal; font-weight: 600; }
+
+  .variants {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+  }
+  @media (max-width: 1180px) { .variants { grid-template-columns: 1fr; } }
+
+  .variant {
+    background: var(--bg-surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 24px 22px 28px;
+    position: relative;
+  }
+  .variant h2 {
+    margin: 0 0 4px;
+    font: 400 17px/1.1 'Iowan Old Style', 'Palatino', 'Georgia', serif;
+    color: var(--text);
+    letter-spacing: 0.005em;
+  }
+  .variant h2 .tag {
+    display: inline-block; margin-left: 6px;
+    font: 600 9px/1 -apple-system; letter-spacing: 0.20em;
+    color: var(--accent); text-transform: uppercase;
+    transform: translateY(-2px);
+  }
+  .variant .why {
+    color: var(--text-dim); font-size: 12px; margin: 6px 0 18px;
+  }
+  .variant .why ul {
+    margin: 4px 0 0 0; padding: 0; list-style: none;
+  }
+  .variant .why li {
+    margin-bottom: 3px; padding-left: 14px; position: relative;
+  }
+  .variant .why li::before {
+    content: ''; position: absolute; left: 0; top: 8px;
+    width: 8px; height: 1px; background: var(--accent);
+  }
+  .variant .stage {
+    height: 460px;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    background:
+      radial-gradient(120% 80% at 50% 30%, #1a1730 0%, #100d1c 70%);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* common chop label form (used in headers) */
+  .roman { font: 400 20px/1 'Iowan Old Style', 'Palatino', 'Georgia', serif; letter-spacing: 0.04em; }
+
+  /* ╔══════════════════════════════════════════════════════════════════════╗
+     ║  VARIANT A — Atelier                                                ║
+     ║  LESE Hikari-meets-Terrain. Arc-knobs with morphing glyphs inside.  ║
+     ║  Single accent (Terrain purple) on tonal grayscale.                 ║
+     ║  Sentence-case throughout. Drag emblem = change value.              ║
+     ╚══════════════════════════════════════════════════════════════════════╝ */
+  .panel-a {
+    width: 360px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.018), rgba(0,0,0,0.06)),
+      var(--bg-elev);
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.55),
+      0 8px 20px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+    padding: 20px 22px 18px;
+  }
+  .pa-head {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pa-head .label { color: var(--text-mute); font-size: 11px; letter-spacing: 0.04em; }
+  .pa-head .name { color: var(--text); font-size: 22px;
+                    font: 400 22px/1 'Iowan Old Style', 'Palatino', serif; }
+  .pa-head .name .num { color: var(--accent); margin-left: 2px; }
+  .pa-head .preview {
+    width: 96px; height: 28px;
+    border: 1px solid var(--line); border-radius: 4px;
+    background:
+      linear-gradient(90deg,
+        transparent 0%, transparent 8%,
+        rgba(139,92,246,0.45) 8%, rgba(139,92,246,0.45) 9%,
+        transparent 9%, transparent 18%,
+        rgba(139,92,246,0.55) 18%, rgba(139,92,246,0.55) 19%,
+        transparent 19%, transparent 30%,
+        rgba(139,92,246,0.85) 30%, rgba(139,92,246,0.85) 31%,
+        transparent 31%, transparent 38%,
+        rgba(139,92,246,0.65) 38%, rgba(139,92,246,0.65) 39%,
+        transparent 39%, transparent 52%,
+        rgba(139,92,246,0.45) 52%, rgba(139,92,246,0.45) 53%,
+        transparent 53%);
+    background-position: center;
+    background-size: 100% 60%;
+    background-repeat: no-repeat;
+  }
+  .pa-modes {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    margin-bottom: 22px;
+  }
+  .pa-mode {
+    background: rgba(255,255,255,0.018);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 11px 6px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    cursor: pointer;
+    transition: all 160ms ease;
+  }
+  .pa-mode:hover { background: rgba(255,255,255,0.04); }
+  .pa-mode.on {
+    background: linear-gradient(180deg, rgba(139,92,246,0.22), rgba(139,92,246,0.06));
+    border-color: var(--accent-line);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 0 18px rgba(139,92,246,0.18);
+  }
+  .pa-mode svg { color: var(--text-mute); transition: color 160ms; }
+  .pa-mode.on svg { color: var(--accent); }
+  .pa-mode .nm {
+    font: 500 11px/1 -apple-system;
+    color: var(--text-mute);
+  }
+  .pa-mode.on .nm { color: var(--text); }
+
+  /* arc-knob row */
+  .pa-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    margin-bottom: 16px;
+  }
+  .pa-knob {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 0;
+    cursor: ns-resize;
+  }
+  .pa-knob .arc-host { position: relative; width: 64px; height: 64px; }
+  .pa-knob .arc-host svg { display: block; }
+  .pa-knob .glyph {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    color: var(--text);
+  }
+  .pa-knob .val {
+    font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+    color: var(--text); letter-spacing: 0.02em;
+  }
+  .pa-knob .lbl {
+    font: 500 10px/1 -apple-system;
+    color: var(--text-mute);
+  }
+
+  .pa-divider { height: 1px; background: var(--line); margin: 6px 0 14px; }
+  .pa-foot { display: flex; justify-content: space-between; align-items: center; }
+  .pa-actions { display: flex; gap: 7px; }
+  .pa-act {
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.05);
+    color: var(--text-mute);
+    cursor: pointer;
+    transition: all 140ms;
+  }
+  .pa-act:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .pa-act.danger:hover { background: rgba(244,63,94,0.15); color: var(--danger); border-color: rgba(244,63,94,0.35); }
+  .pa-foot .of {
+    font: 500 10px/1 -apple-system;
+    color: var(--text-faint); letter-spacing: 0.08em;
+  }
+
+  /* ╔══════════════════════════════════════════════════════════════════════╗
+     ║  VARIANT B — Lab Card                                               ║
+     ║  Sound-design notebook entry. Envelope drawn as a real ADSR shape.  ║
+     ║  Two draggable handles on the curve (attack peak + release tail).   ║
+     ║  Pitch + stretch as small dial-glyphs. Hand-drafted feel.           ║
+     ╚══════════════════════════════════════════════════════════════════════╝ */
+  .panel-b {
+    width: 360px;
+    background:
+      radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,0.04), transparent 60%),
+      linear-gradient(180deg, #1f1a2e, #15121f);
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;       /* sharp corners — looks like a card, not an app */
+    box-shadow:
+      0 30px 60px rgba(0,0,0,0.55),
+      0 4px 10px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+    padding: 18px 18px 14px;
+    position: relative;
+  }
+  /* hole-punch on top-left so it really reads as an index card */
+  .panel-b::before {
+    content: '';
+    position: absolute; top: 14px; left: 14px;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.45);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  /* faint horizontal rule lines, top-to-bottom — notebook ruled paper */
+  .panel-b::after {
+    content: '';
+    position: absolute; inset: 38px 14px 50px 14px; pointer-events: none;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 23px,
+      rgba(245,243,255,0.025) 24px
+    );
+  }
+  .pb-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 16px; padding-left: 22px;
+  }
+  .pb-head .title {
+    font: 400 18px/1 'Iowan Old Style', 'Palatino', 'Georgia', serif;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+  .pb-head .title em {
+    color: var(--accent); font-style: italic; margin-left: 6px;
+    font-size: 0.85em;
+  }
+  .pb-head .stamp {
+    font: 600 9px/1 -apple-system;
+    letter-spacing: 0.20em; color: var(--text-faint);
+    padding: 4px 8px; border: 1px dashed var(--line-soft); border-radius: 3px;
+  }
+  .pb-modes {
+    display: flex; gap: 6px; margin-bottom: 16px; padding-left: 22px;
+    position: relative; z-index: 1;
+  }
+  .pb-mode {
+    flex: 1;
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: rgba(0,0,0,0.18);
+    color: var(--text-mute);
+    font: 500 11px/1 'Iowan Old Style', 'Palatino', 'Georgia', serif;
+    cursor: pointer;
+  }
+  .pb-mode svg { color: currentColor; }
+  .pb-mode.on {
+    border-color: var(--accent-line);
+    background: rgba(139,92,246,0.10);
+    color: var(--text);
+  }
+  .pb-mode.on svg { color: var(--accent); }
+  .pb-canvas {
+    position: relative; z-index: 1;
+    margin: 0 16px 12px;
+    height: 140px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.02), transparent 70%);
+    padding: 8px 10px;
+  }
+  .pb-canvas .axis {
+    position: absolute; left: 10px; right: 10px; bottom: 10px;
+    height: 1px; background: var(--line-soft);
+  }
+  .pb-canvas .env-svg { width: 100%; height: 100%; }
+  .pb-handle {
+    position: absolute; width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #fff; border: 2px solid var(--accent);
+    box-shadow: 0 0 14px var(--accent-glow);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+  }
+  .pb-handle .h-lbl {
+    position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+    font: 500 10px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+    color: var(--text-dim); white-space: nowrap;
+  }
+  .pb-tail {
+    padding-left: 22px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    position: relative; z-index: 1; margin-bottom: 14px;
+  }
+  .pb-tail .pill {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: rgba(0,0,0,0.22);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    cursor: ns-resize;
+  }
+  .pb-tail .pill .gl { width: 22px; height: 22px; color: var(--accent); }
+  .pb-tail .pill .info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .pb-tail .pill .v {
+    font: 500 12px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+    color: var(--text); letter-spacing: 0.02em;
+  }
+  .pb-tail .pill .k {
+    font: 500 9px/1 -apple-system;
+    color: var(--text-mute); letter-spacing: 0.10em;
+  }
+  .pb-actions {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-left: 22px;
+    position: relative; z-index: 1;
+  }
+  .pb-actions .left { display: flex; gap: 14px; }
+  .pb-actions .left .a {
+    display: flex; align-items: center; gap: 6px;
+    font: 500 10px/1 -apple-system;
+    color: var(--text-mute);
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .pb-actions .left .a:hover { color: var(--text); }
+  .pb-actions .left .a.danger:hover { color: var(--danger); }
+
+  /* ╔══════════════════════════════════════════════════════════════════════╗
+     ║  VARIANT C — Constellation                                          ║
+     ║  Orbital layout. Chop at center, modes orbit, parameters as         ║
+     ║  satellite arcs. Most experimental but visually instantly readable. ║
+     ╚══════════════════════════════════════════════════════════════════════╝ */
+  .panel-c {
+    width: 360px; height: 380px;
+    background:
+      radial-gradient(60% 50% at 50% 50%, rgba(139,92,246,0.07), transparent 70%),
+      linear-gradient(180deg, #1c1830 0%, #14111f 100%);
+    border: 1px solid var(--line-soft);
+    border-radius: 18px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.55),
+      0 8px 20px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    position: relative;
+    overflow: hidden;
+  }
+  .pc-head {
+    position: absolute; top: 14px; left: 16px; right: 16px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    z-index: 3;
+  }
+  .pc-head .name {
+    font: 400 16px/1 'Iowan Old Style', 'Palatino', 'Georgia', serif;
+    color: var(--text);
+  }
+  .pc-head .name em { color: var(--accent); font-style: italic; margin-left: 4px; }
+  .pc-head .of {
+    font: 500 9px/1 -apple-system;
+    letter-spacing: 0.18em; color: var(--text-faint);
+  }
+  .pc-orbit { position: absolute; inset: 0; display: grid; place-items: center; }
+  /* the central chop */
+  .pc-core {
+    width: 86px; height: 86px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 35%, rgba(139,92,246,0.45), rgba(139,92,246,0.05) 70%),
+      var(--bg-deep);
+    border: 1px solid var(--accent-line);
+    box-shadow:
+      0 0 32px rgba(139,92,246,0.30),
+      inset 0 0 18px rgba(139,92,246,0.18);
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .pc-core .ring-1, .pc-core .ring-2 {
+    position: absolute; border-radius: 50%; border: 1px dashed rgba(139,92,246,0.20);
+  }
+  .pc-core .ring-1 { inset: -28px; }
+  .pc-core .ring-2 { inset: -56px; opacity: 0.6; }
+  .pc-core .wf {
+    width: 56px; height: 56px;
+  }
+  .pc-modes-ring { position: absolute; inset: 60px; pointer-events: none; }
+  .pc-mode {
+    position: absolute; width: 50px; height: 50px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: rgba(20,17,31,0.85);
+    border: 1px solid var(--line-soft);
+    display: grid; place-items: center;
+    color: var(--text-mute);
+    pointer-events: auto;
+    cursor: pointer;
+    transition: all 200ms;
+  }
+  .pc-mode:hover { color: var(--text); border-color: rgba(255,255,255,0.20); }
+  .pc-mode.on {
+    background: linear-gradient(180deg, rgba(139,92,246,0.40), rgba(139,92,246,0.12));
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 22px rgba(139,92,246,0.30);
+  }
+  .pc-mode .nm {
+    position: absolute; top: 100%; margin-top: 4px;
+    font: 500 9px/1 -apple-system;
+    letter-spacing: 0.12em; color: var(--text-mute);
+    white-space: nowrap;
+  }
+  .pc-mode.on .nm { color: var(--text); }
+  /* satellite arc-knobs in the corners */
+  .pc-knob {
+    position: absolute; width: 76px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    cursor: ns-resize;
+  }
+  .pc-knob svg { display: block; }
+  .pc-knob .glyph {
+    position: absolute; left: 50%; top: 32px; transform: translate(-50%, -50%);
+    color: var(--text); pointer-events: none;
+  }
+  .pc-knob .v {
+    font: 500 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+    color: var(--text);
+  }
+  .pc-knob .l {
+    font: 500 9px/1 -apple-system;
+    color: var(--text-mute); letter-spacing: 0.10em;
+  }
+  .pc-actions {
+    position: absolute; bottom: 12px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 8px;
+    z-index: 3;
+  }
+  .pc-act {
+    width: 28px; height: 28px; border-radius: 8px;
+    display: grid; place-items: center;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--line);
+    color: var(--text-mute); cursor: pointer;
+    backdrop-filter: blur(8px);
+  }
+  .pc-act:hover { color: var(--text); }
+  .pc-act.danger:hover { color: var(--danger); border-color: rgba(244,63,94,0.35); }
+
+  /* ── shared knob arc styles ─────────────────────────────────────────── */
+  .arc-track  { fill: none; stroke: rgba(255,255,255,0.10); stroke-width: 3; stroke-linecap: round; }
+  .arc-fill   { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
+                filter: drop-shadow(0 0 6px rgba(139,92,246,0.40)); }
+  .arc-fill-soft   { fill: none; stroke: rgba(139,92,246,0.85); stroke-width: 2.5; stroke-linecap: round; }
+  .arc-track-soft  { fill: none; stroke: rgba(255,255,255,0.10); stroke-width: 2.5; stroke-linecap: round; }
+
+  /* glyph stroke uniformly */
+  .gly { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+
+  /* ── label below all variants ───────────────────────────────────────── */
+  .legend {
+    margin-top: 64px;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.02);
+  }
+  .legend h3 {
+    margin: 0 0 12px;
+    font: 600 11px/1 -apple-system; letter-spacing: 0.20em; color: var(--text-mute);
+    text-transform: uppercase;
+  }
+  .legend p { margin: 0; color: var(--text-dim); font-size: 12px; max-width: 880px; }
+  .legend p + p { margin-top: 8px; }
+  .legend kbd {
+    font: 500 11px/1 ui-monospace, Menlo, monospace;
+    color: var(--accent); padding: 1px 5px;
+    background: rgba(139,92,246,0.10); border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="intro">
+    <h1>Chop overlay — three directions</h1>
+    <p>The v7 panel reads too generic — uppercase letter-spaced labels, white-dot sliders, monospace pseudo-data. Those are the AI-app-shell trifecta. LESE's language (Eigen / Strum / Hikari) does the opposite: <em>arc-knobs with custom glyphs inside, sentence-case labels, one accent on tonal grayscale, illustrated/engineered feel</em>. Each direction below keeps the v7 idea you liked — floating modal, mode emblems, per-chop ADSR — but rebuilds the visual language so it doesn't look like every other AI-built panel on the planet.</p>
+    <p>Core move shared by all three: <em>the emblems ARE the knobs</em>. Drag vertically on a glyph to change its value, scroll-wheel works too, the thin arc around it shows where you are in the range. No more slider bars.</p>
+  </div>
+
+  <div class="variants">
+
+    <!-- ╔══════════════ VARIANT A — Atelier ════════════════════════════╗ -->
+    <div class="variant">
+      <h2>Atelier <span class="tag">recommended</span></h2>
+      <div class="why">Closest match to LESE Hikari's visual language inside Terrain's purple palette. Sentence-case, soft panel, single accent, 270° arc knobs.
+        <ul>
+          <li>Familiar layout (mode row → knob row → actions) — low cognitive load</li>
+          <li>Knob arc = position in range; centre glyph morphs as you drag</li>
+          <li>Drop-in upgrade — same panel size, same hierarchy as v7</li>
+        </ul>
+      </div>
+      <div class="stage">
+
+        <div class="panel-a">
+
+          <div class="pa-head">
+            <div>
+              <div class="label">Chop</div>
+              <div class="name">three<span class="num">.</span></div>
+            </div>
+            <div class="preview" title="waveform snapshot of this chop"></div>
+          </div>
+
+          <div class="pa-modes">
+            <div class="pa-mode">
+              <svg width="22" height="14" viewBox="0 0 22 14"><path class="gly" d="M2 7 L20 7"/></svg>
+              <div class="nm">None</div>
+            </div>
+            <div class="pa-mode on">
+              <svg width="22" height="16" viewBox="0 0 22 16"><path class="gly" d="M3 12 V5"/><path class="gly" d="M8 13 V8"/><path class="gly" d="M13 11 V4"/><path class="gly" d="M18 12 V7"/></svg>
+              <div class="nm">Beats</div>
+            </div>
+            <div class="pa-mode">
+              <svg width="24" height="14" viewBox="0 0 24 14"><path class="gly" d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg>
+              <div class="nm">Tones</div>
+            </div>
+            <div class="pa-mode">
+              <svg width="22" height="16" viewBox="0 0 22 16" fill="currentColor" stroke="none"><circle cx="3" cy="9" r="1.2"/><circle cx="7" cy="4" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="15" cy="3" r="1.2"/><circle cx="18" cy="11" r="1.2"/><circle cx="20" cy="6" r="1.2"/></svg>
+              <div class="nm">Texture</div>
+            </div>
+          </div>
+
+          <div class="pa-row">
+
+            <!-- ATTACK arc-knob (12% fill) -->
+            <div class="pa-knob">
+              <div class="arc-host">
+                <svg width="64" height="64" viewBox="0 0 64 64">
+                  <path class="arc-track" d="M14.95 49.05 A 24 24 0 1 1 49.05 49.05"/>
+                  <path class="arc-fill"  d="M14.95 49.05 A 24 24 0 0 1 11.7 35"/>
+                </svg>
+                <div class="glyph">
+                  <svg width="22" height="18" viewBox="0 0 22 18">
+                    <path class="gly" d="M2 16 C 4 16, 7 4, 11 4 L 20 4"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="val">4 ms</div>
+              <div class="lbl">attack</div>
+            </div>
+
+            <!-- RELEASE arc-knob (38%) -->
+            <div class="pa-knob">
+              <div class="arc-host">
+                <svg width="64" height="64" viewBox="0 0 64 64">
+                  <path class="arc-track" d="M14.95 49.05 A 24 24 0 1 1 49.05 49.05"/>
+                  <path class="arc-fill"  d="M14.95 49.05 A 24 24 0 1 1 53.5 18"/>
+                </svg>
+                <div class="glyph">
+                  <svg width="22" height="18" viewBox="0 0 22 18">
+                    <path class="gly" d="M2 4 L 6 4 C 11 4, 14 16, 20 16"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="val">180 ms</div>
+              <div class="lbl">release</div>
+            </div>
+
+            <!-- PITCH arc-knob (50%, center) -->
+            <div class="pa-knob">
+              <div class="arc-host">
+                <svg width="64" height="64" viewBox="0 0 64 64">
+                  <path class="arc-track" d="M14.95 49.05 A 24 24 0 1 1 49.05 49.05"/>
+                  <path class="arc-fill"  d="M14.95 49.05 A 24 24 0 1 1 32 8"/>
+                </svg>
+                <div class="glyph">
+                  <svg width="20" height="20" viewBox="0 0 20 20">
+                    <path class="gly" d="M10 2 V 18"/>
+                    <path class="gly" d="M6 6 H 14"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="val">+0 st</div>
+              <div class="lbl">pitch</div>
+            </div>
+
+            <!-- STRETCH arc-knob (35%) -->
+            <div class="pa-knob">
+              <div class="arc-host">
+                <svg width="64" height="64" viewBox="0 0 64 64">
+                  <path class="arc-track" d="M14.95 49.05 A 24 24 0 1 1 49.05 49.05"/>
+                  <path class="arc-fill"  d="M14.95 49.05 A 24 24 0 1 1 56 30"/>
+                </svg>
+                <div class="glyph">
+                  <svg width="22" height="14" viewBox="0 0 22 14">
+                    <path class="gly" d="M2 7 Q 4 2, 6 7 T 10 7 T 14 7 T 18 7 T 22 7"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="val">1.50×</div>
+              <div class="lbl">stretch</div>
+            </div>
+
+          </div>
+
+          <div class="pa-divider"></div>
+
+          <div class="pa-foot">
+            <div class="pa-actions">
+              <div class="pa-act" title="Reverse">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path class="gly" d="M9 14 L 4 9 L 9 4"/><path class="gly" d="M4 9 H 16 A 4 4 0 0 1 20 13 V 20"/></svg>
+              </div>
+              <div class="pa-act" title="Reset">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path class="gly" d="M3 12 A 9 9 0 1 0 6 5"/><path class="gly" d="M3 3 V 8 H 8"/></svg>
+              </div>
+              <div class="pa-act danger" title="Delete">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path class="gly" d="M5 5 L 19 19 M 19 5 L 5 19"/></svg>
+              </div>
+            </div>
+            <div class="of">iii / viii</div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ╔══════════════ VARIANT B — Lab Card ═══════════════════════════╗ -->
+    <div class="variant">
+      <h2>Lab Card <span class="tag">most distinctive</span></h2>
+      <div class="why">The envelope is drawn as an actual ADSR curve you reshape by dragging two handles. Notebook-card aesthetic — hole punch, ruled lines, serif numerals, dashed stamps.
+        <ul>
+          <li>Envelope is the most central control — show it as a real shape, not two numbers</li>
+          <li>Reads like a sound designer's index card, not a settings dialog</li>
+          <li>Bigger visual swing — clearly "not Claude"</li>
+        </ul>
+      </div>
+      <div class="stage">
+
+        <div class="panel-b">
+
+          <div class="pb-head">
+            <div class="title">Chop <em>iii</em></div>
+            <div class="stamp">slice 03 / 08</div>
+          </div>
+
+          <div class="pb-modes">
+            <div class="pb-mode"><svg width="14" height="10" viewBox="0 0 22 14"><path class="gly" d="M2 7 L20 7"/></svg> None</div>
+            <div class="pb-mode on"><svg width="14" height="12" viewBox="0 0 22 16"><path class="gly" d="M3 12 V5"/><path class="gly" d="M8 13 V8"/><path class="gly" d="M13 11 V4"/><path class="gly" d="M18 12 V7"/></svg> Beats</div>
+            <div class="pb-mode"><svg width="16" height="10" viewBox="0 0 24 14"><path class="gly" d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg> Tones</div>
+            <div class="pb-mode"><svg width="14" height="12" viewBox="0 0 22 16" fill="currentColor" stroke="none"><circle cx="3" cy="9" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="18" cy="11" r="1.2"/></svg> Texture</div>
+          </div>
+
+          <!-- ADSR canvas -->
+          <div class="pb-canvas">
+            <svg class="env-svg" viewBox="0 0 320 124" preserveAspectRatio="none">
+              <!-- ruled gridlines -->
+              <line x1="0"   y1="62" x2="320" y2="62" stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 4"/>
+              <!-- envelope curve: attack ramp (sharp) → sustain → release fall (medium) -->
+              <path d="M 0 120 L 22 14 L 92 14 L 215 116 L 320 120" fill="none"
+                    stroke="rgba(139,92,246,0.85)" stroke-width="1.8"
+                    style="filter: drop-shadow(0 0 6px rgba(139,92,246,0.45))"/>
+              <!-- fill under the envelope -->
+              <path d="M 0 120 L 22 14 L 92 14 L 215 116 L 320 120 Z"
+                    fill="rgba(139,92,246,0.10)" stroke="none"/>
+              <!-- baseline -->
+              <line x1="0" y1="120" x2="320" y2="120" stroke="rgba(255,255,255,0.10)"/>
+            </svg>
+            <!-- handles: attack peak + release tail -->
+            <div class="pb-handle" style="left:7%; top:14%;">
+              <div class="h-lbl">attack 4ms</div>
+            </div>
+            <div class="pb-handle" style="left:67%; top:90%;">
+              <div class="h-lbl">release 180ms</div>
+            </div>
+          </div>
+
+          <div class="pb-tail">
+            <div class="pill">
+              <svg class="gl" viewBox="0 0 24 24" fill="none">
+                <path class="gly" d="M12 4 V 20"/><path class="gly" d="M8 8 H 16"/><path class="gly" d="M9 16 H 15"/>
+              </svg>
+              <div class="info"><div class="v">+0 st</div><div class="k">pitch</div></div>
+            </div>
+            <div class="pill">
+              <svg class="gl" viewBox="0 0 24 24" fill="none">
+                <path class="gly" d="M3 12 Q 6 4, 9 12 T 15 12 T 21 12"/>
+              </svg>
+              <div class="info"><div class="v">1.50×</div><div class="k">stretch</div></div>
+            </div>
+          </div>
+
+          <div class="pb-actions">
+            <div class="left">
+              <div class="a"><svg width="11" height="11" viewBox="0 0 24 24"><path class="gly" d="M9 14 L 4 9 L 9 4"/><path class="gly" d="M4 9 H 16 A 4 4 0 0 1 20 13 V 20"/></svg> reverse</div>
+              <div class="a"><svg width="11" height="11" viewBox="0 0 24 24"><path class="gly" d="M3 12 A 9 9 0 1 0 6 5"/><path class="gly" d="M3 3 V 8 H 8"/></svg> reset</div>
+              <div class="a danger"><svg width="11" height="11" viewBox="0 0 24 24"><path class="gly" d="M5 5 L 19 19 M 19 5 L 5 19"/></svg> delete</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ╔══════════════ VARIANT C — Constellation ══════════════════════╗ -->
+    <div class="variant">
+      <h2>Constellation <span class="tag">most radical</span></h2>
+      <div class="why">Orbital layout — chop at center, modes orbit as planets, parameters as satellite knobs. Reads instantly as "this is a chop with these modes" before any reading happens.
+        <ul>
+          <li>Spatial mental model — mode is a direction, not a list item</li>
+          <li>Centre core can show the chop's actual waveform shape</li>
+          <li>Riskier — non-standard so users have to learn the layout</li>
+        </ul>
+      </div>
+      <div class="stage">
+
+        <div class="panel-c">
+
+          <div class="pc-head">
+            <div class="name">Chop <em>iii</em></div>
+            <div class="of">iii / viii</div>
+          </div>
+
+          <!-- four mode satellites: positioned absolutely on compass points -->
+          <!-- N=None, E=Beats, S=Tones, W=Texture; on = active (Beats here) -->
+          <div class="pc-mode"     style="left:50%; top:108px;">
+            <svg width="20" height="12" viewBox="0 0 22 14"><path class="gly" d="M2 7 L20 7"/></svg>
+            <div class="nm">none</div>
+          </div>
+          <div class="pc-mode on"  style="left:280px; top:190px;">
+            <svg width="20" height="14" viewBox="0 0 22 16"><path class="gly" d="M3 12 V5"/><path class="gly" d="M8 13 V8"/><path class="gly" d="M13 11 V4"/><path class="gly" d="M18 12 V7"/></svg>
+            <div class="nm">beats</div>
+          </div>
+          <div class="pc-mode"     style="left:50%; top:272px;">
+            <svg width="22" height="12" viewBox="0 0 24 14"><path class="gly" d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg>
+            <div class="nm">tones</div>
+          </div>
+          <div class="pc-mode"     style="left:80px; top:190px;">
+            <svg width="20" height="14" viewBox="0 0 22 16" fill="currentColor" stroke="none"><circle cx="3" cy="9" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="18" cy="11" r="1.2"/></svg>
+            <div class="nm">texture</div>
+          </div>
+
+          <!-- centre chop core -->
+          <div class="pc-orbit">
+            <div class="pc-core">
+              <div class="ring-1"></div>
+              <div class="ring-2"></div>
+              <svg class="wf" viewBox="0 0 56 56">
+                <path class="gly" stroke="rgba(245,243,255,0.85)" stroke-width="1.4"
+                  d="M4 28
+                     L 8 24 L 11 30 L 14 22 L 17 32 L 20 24
+                     L 24 26 L 28 18 L 32 32 L 36 24
+                     L 40 28 L 44 22 L 47 30 L 50 26 L 52 28"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- four corner satellite knobs (Attack/Release/Pitch/Stretch) -->
+          <div class="pc-knob" style="left:14px;  top:96px;">
+            <svg width="68" height="56" viewBox="0 0 68 56">
+              <path class="arc-track-soft" d="M10 50 A 24 24 0 1 1 58 50"/>
+              <path class="arc-fill-soft"  d="M10 50 A 24 24 0 0 1 8.2 38"/>
+            </svg>
+            <div class="glyph" style="top:24px;">
+              <svg width="18" height="14"  viewBox="0 0 22 18"><path class="gly" d="M2 16 C 4 16, 7 4, 11 4 L 20 4"/></svg>
+            </div>
+            <div class="v">4 ms</div>
+            <div class="l">attack</div>
+          </div>
+
+          <div class="pc-knob" style="right:14px; top:96px;">
+            <svg width="68" height="56" viewBox="0 0 68 56">
+              <path class="arc-track-soft" d="M10 50 A 24 24 0 1 1 58 50"/>
+              <path class="arc-fill-soft"  d="M10 50 A 24 24 0 1 1 56 14"/>
+            </svg>
+            <div class="glyph" style="top:24px;">
+              <svg width="18" height="14" viewBox="0 0 22 18"><path class="gly" d="M2 4 L 6 4 C 11 4, 14 16, 20 16"/></svg>
+            </div>
+            <div class="v">180 ms</div>
+            <div class="l">release</div>
+          </div>
+
+          <div class="pc-knob" style="left:14px;  bottom:62px;">
+            <svg width="68" height="56" viewBox="0 0 68 56">
+              <path class="arc-track-soft" d="M10 50 A 24 24 0 1 1 58 50"/>
+              <path class="arc-fill-soft"  d="M10 50 A 24 24 0 1 1 34 6"/>
+            </svg>
+            <div class="glyph" style="top:24px;">
+              <svg width="16" height="16" viewBox="0 0 20 20"><path class="gly" d="M10 2 V 18"/><path class="gly" d="M6 6 H 14"/></svg>
+            </div>
+            <div class="v">+0 st</div>
+            <div class="l">pitch</div>
+          </div>
+
+          <div class="pc-knob" style="right:14px; bottom:62px;">
+            <svg width="68" height="56" viewBox="0 0 68 56">
+              <path class="arc-track-soft" d="M10 50 A 24 24 0 1 1 58 50"/>
+              <path class="arc-fill-soft"  d="M10 50 A 24 24 0 1 1 58 30"/>
+            </svg>
+            <div class="glyph" style="top:24px;">
+              <svg width="20" height="12" viewBox="0 0 22 14"><path class="gly" d="M2 7 Q 4 2, 6 7 T 10 7 T 14 7 T 18 7 T 22 7"/></svg>
+            </div>
+            <div class="v">1.50×</div>
+            <div class="l">stretch</div>
+          </div>
+
+          <div class="pc-actions">
+            <div class="pc-act" title="reverse"><svg width="11" height="11" viewBox="0 0 24 24"><path class="gly" d="M9 14 L 4 9 L 9 4"/><path class="gly" d="M4 9 H 16 A 4 4 0 0 1 20 13 V 20"/></svg></div>
+            <div class="pc-act" title="reset"><svg width="11" height="11" viewBox="0 0 24 24"><path class="gly" d="M3 12 A 9 9 0 1 0 6 5"/><path class="gly" d="M3 3 V 8 H 8"/></svg></div>
+            <div class="pc-act danger" title="delete"><svg width="11" height="11" viewBox="0 0 24 24"><path class="gly" d="M5 5 L 19 19 M 19 5 L 5 19"/></svg></div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <h3>What changed across all three</h3>
+    <p><em style="color:var(--accent); font-style:normal; font-weight:600;">No more sliders.</em> Each parameter glyph IS the knob: <kbd>drag vertically</kbd> or <kbd>scroll wheel</kbd> to change value. The thin arc around the glyph shows where you are in the range. Hover surfaces the tooltip you already have for the rest of the UI.</p>
+    <p><em style="color:var(--accent); font-style:normal; font-weight:600;">Sentence-case labels.</em> "attack" not "ATTACK", "chop iii" not "CHOP 03". This single change kills more of the "AI" feel than any other tweak.</p>
+    <p><em style="color:var(--accent); font-style:normal; font-weight:600;">Single accent on tonal grayscale.</em> Terrain purple does all the work — no extra greens / pinks / oranges. The danger state on the delete action is the only exception.</p>
+    <p><em style="color:var(--accent); font-style:normal; font-weight:600;">Serif touches.</em> Roman numerals + a soft serif for the chop number ("Iowan Old Style") read drafted rather than rendered. Every number stays monospaced — that's still Terrain.</p>
+    <p>If you pick Atelier I can wire it in tomorrow; Lab Card needs ~½ day extra for the envelope-curve interaction; Constellation needs an extra ½ day to redesign the layout math.</p>
+  </div>
+
+</div>
+</body>
+</html>

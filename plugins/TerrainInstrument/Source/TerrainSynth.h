@@ -63,6 +63,9 @@ namespace tw
             vc.stretchRatio   = s.stretchRatio;
             vc.attackMs       = s.attackMs;
             vc.releaseMs      = s.releaseMs;
+            vc.decayMs        = s.decayMs;
+            vc.sustainLevel   = s.sustainLevel;
+            vc.volume         = s.volume;
 
             const juce::ScopedLock sl (lock);
             if (sounds.size() == 0) return;
@@ -120,6 +123,9 @@ namespace tw
                     vc.stretchRatio   = s.stretchRatio;
                     vc.attackMs       = s.attackMs;
                     vc.releaseMs      = s.releaseMs;
+                    vc.decayMs        = s.decayMs;
+                    vc.sustainLevel   = s.sustainLevel;
+                    vc.volume         = s.volume;
                     break;
                 }
 
@@ -137,6 +143,9 @@ namespace tw
                     vc.stretchRatio   = s.stretchRatio;
                     vc.attackMs       = s.attackMs;
                     vc.releaseMs      = s.releaseMs;
+                    vc.decayMs        = s.decayMs;
+                    vc.sustainLevel   = s.sustainLevel;
+                    vc.volume         = s.volume;
                     break;
                 }
 
@@ -170,6 +179,9 @@ namespace tw
                     vc.stretchRatio   = s.stretchRatio;
                     vc.attackMs       = s.attackMs;
                     vc.releaseMs      = s.releaseMs;
+                    vc.decayMs        = s.decayMs;
+                    vc.sustainLevel   = s.sustainLevel;
+                    vc.volume         = s.volume;
                     break;
                 }
             }

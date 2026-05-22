@@ -2307,13 +2307,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     position: relative; z-index: 1;
   }
   #ti-chop-panel .ov-ctrl {
-    display: flex; align-items: center; gap: 12px;
-    padding: 9px 12px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px;
     background: rgba(0,0,0,0.22);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 3px;
     cursor: ns-resize;
     transition: border-color 140ms, background 140ms;
+    /* min-width:0 + overflow:hidden = grid columns stay locked at 1fr no
+       matter how wide the value text is. Without this, "15.00×" pushes the
+       stretch column wider than its siblings and shifts the emblem. */
+    min-width: 0;
+    overflow: hidden;
   }
   #ti-chop-panel .ov-ctrl:hover {
     background: rgba(0,0,0,0.34);
@@ -2328,6 +2333,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     font-variant-numeric: tabular-nums;   /* fixed-width digits — no column shift on value change */
     white-space: nowrap;                  /* "+12 st" never wraps onto two lines */
     color: rgba(245,243,255,0.92); letter-spacing: 0.02em;
+    flex: 1; min-width: 0;                /* fill remaining ctrl space, allow shrinking under tight columns */
+    text-align: right;                    /* value hugs the right edge — emblem stays fixed on the left */
   }
   /* Stretch ctrl stays in the 3-column grid for symmetry — when warp=none
      it grays out and ignores pointer events rather than disappearing. */
@@ -2336,20 +2343,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
 
   /* idle animations — subtle motion, paused on hover */
-  @keyframes ti-vol-pulse-1 { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.92); } }
-  @keyframes ti-vol-pulse-2 { 0%,100% { transform: scaleY(1); } 35% { transform: scaleY(0.95); } 70% { transform: scaleY(0.90); } }
-  @keyframes ti-vol-pulse-3 { 0%,100% { transform: scaleY(1); } 45% { transform: scaleY(0.93); } }
-  @keyframes ti-vol-pulse-4 { 0%,100% { transform: scaleY(1); } 60% { transform: scaleY(0.94); } }
-  #ti-chop-panel .ov-emblem-vol .bar {
-    transform-origin: bottom;
-    animation-duration: 2.4s;
-    animation-iteration-count: infinite;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  /* Speaker sound waves gently breathe outward — opacity + tiny x-shift so
+     the speaker reads as "playing audio" without ever shifting layout. */
+  @keyframes ti-vol-wave {
+    0%, 100% { opacity: 0.65; transform: translateX(0); }
+    50%      { opacity: 1.0;  transform: translateX(0.4px); }
   }
-  #ti-chop-panel .ov-emblem-vol .bar:nth-child(1) { animation-name: ti-vol-pulse-1; }
-  #ti-chop-panel .ov-emblem-vol .bar:nth-child(2) { animation-name: ti-vol-pulse-2; animation-delay: 0.3s; }
-  #ti-chop-panel .ov-emblem-vol .bar:nth-child(3) { animation-name: ti-vol-pulse-3; animation-delay: 0.6s; }
-  #ti-chop-panel .ov-emblem-vol .bar:nth-child(4) { animation-name: ti-vol-pulse-4; animation-delay: 0.9s; }
+  #ti-chop-panel .ov-emblem-vol .wave {
+    animation: ti-vol-wave 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    transform-origin: left center;
+  }
+  #ti-chop-panel .ov-emblem-vol .wave-2 { animation-delay: 0.35s; }
   /* Tuning-fork prong vibration — subtle, static (NOT value-driven). */
   @keyframes ti-fork-vibrate-l {
     0%, 100% { transform: translateX(0); }
@@ -2569,11 +2573,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // Stretch is hidden when warp = none.
       '<div class="ov-ctrls">' +
         '<div class="ov-ctrl" data-ctrl="volume" title="volume — drag vertically">' +
-          '<svg class="ov-emblem ov-emblem-vol" width="22" height="20" viewBox="0 0 22 20" fill="currentColor" stroke="none">' +
-            '<rect class="bar" x="2"  y="6" width="3" height="12" rx="1"/>' +
-            '<rect class="bar" x="7"  y="2" width="3" height="16" rx="1"/>' +
-            '<rect class="bar" x="12" y="4" width="3" height="14" rx="1"/>' +
-            '<rect class="bar" x="17" y="8" width="3" height="10" rx="1"/>' +
+          // Classic speaker + sound-wave arcs — universal "volume" language,
+          // visually distinct from the stretch emblem's vertical bars. Waves
+          // gently pulse outward as the idle animation (NOT value-driven).
+          '<svg class="ov-emblem ov-emblem-vol" width="22" height="20" viewBox="0 0 22 20">' +
+            '<rect x="2" y="7" width="3" height="6" fill="currentColor"/>' +
+            '<path d="M 5 7 L 10 3 L 10 17 L 5 13 Z" fill="currentColor"/>' +
+            '<path class="wave wave-1" d="M 12.5 7.5 Q 14.5 10 12.5 12.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+            '<path class="wave wave-2" d="M 15.5 5 Q 18.5 10 15.5 15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
           '</svg>' +
           '<div class="ov-val">100%</div>' +
         '</div>' +
@@ -2599,7 +2606,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
               '<rect x="18" y="4" width="2" height="12" rx="0.8"/>' +
             '</g>' +
           '</svg>' +
-          '<div class="ov-val">1.00×</div>' +
+          '<div class="ov-val">1.00</div>' +
         '</div>' +
       '</div>' +
       // actions
@@ -3599,7 +3606,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   function fmtMs (ms)   { return Math.round(ms) + ' ms'; }
   function fmtPct (v)   { return Math.round(v * 100) + '%'; }
   function fmtPitch (v) { var s = Math.round(v); return (s >= 0 ? '+' : '') + s + ' st'; }
-  function fmtStretch(v){ return v.toFixed(2) + '×'; }
+  // Drop the unit suffix entirely — the accordion emblem already reads as
+  // "stretch", and the multiplication-sign glyph mojibake'd in the WebView
+  // (showed up as "A + macron + extras" at small sizes). Just the number.
+  function fmtStretch(v){ return v.toFixed(2); }
 
   // Redraw envelope path + reposition the 4 handles + update tooltips.
   function ovRedrawEnvelope (idx) {
@@ -3619,31 +3629,30 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     document.getElementById('ti-env-line').setAttribute('d', d);
     document.getElementById('ti-env-fill').setAttribute('d', dFill);
 
-    // Position handles using OFFSET coords (not getBoundingClientRect) so
-    // values stay correct during the panel's CSS open transition — transforms
-    // don't affect offsetLeft/offsetTop/offsetWidth/offsetHeight.
+    // Position handles using the ENV CONTAINER's HTML metrics — NOT the SVG's
+    // offset properties. SVGSVGElement does not expose HTMLElement.offsetLeft
+    // / offsetWidth / offsetHeight; in WKWebView they return 0/undefined,
+    // which collapsed every handle to the top-left corner.
     //
-    // Two coordinate spaces collide here:
-    //   - SVG.offsetLeft is from .ov-env's BORDER-box (offsetParent convention)
-    //   - handle.style.left is from .ov-env's PADDING-box (CSS abs-positioning)
-    // → subtract the env container's border width to align them, otherwise
-    //   handles sit 1 px off the curve (off in any warp mode, masked at the
-    //   default envelope shape where handles cluster at the corners).
-    var svg = document.getElementById('ti-env-svg');
-    var cs = getComputedStyle(env);
-    var bl = parseFloat(cs.borderLeftWidth) || 0;
-    var bt = parseFloat(cs.borderTopWidth)  || 0;
-    var svgX0 = svg.offsetLeft - bl;
-    var svgY0 = svg.offsetTop  - bt;
-    var sx = svg.offsetWidth  / ENV_VB_W;
-    var sy = svg.offsetHeight / ENV_VB_H;
+    // .ov-env has padding:0, so its clientWidth/clientHeight equal its
+    // content-box. CSS absolute-positioning measures style.left/top from the
+    // offsetParent's PADDING-BOX — the same origin the SVG's `inset: 14 14
+    // 12 14` uses. So both share the coordinate space: add the hardcoded
+    // inset (14 left / 14 top) to viewBox coords and the math just works,
+    // regardless of border width, regardless of any open-transition transform.
+    var contentW = env.clientWidth;
+    var contentH = env.clientHeight;
+    var svgW = contentW - 28;   // 14 left + 14 right inset
+    var svgH = contentH - 26;   // 14 top  + 12 bottom inset
+    var sx = svgW / ENV_VB_W;
+    var sy = svgH / ENV_VB_H;
     var handles = panel.querySelectorAll('.ov-env-handle');
     handles.forEach(function (h) {
       var which = h.dataset.h;
       var p = pts[which];
       if (!p) return;
-      h.style.left = (svgX0 + p.x * sx) + 'px';
-      h.style.top  = (svgY0 + p.y * sy) + 'px';
+      h.style.left = (14 + p.x * sx) + 'px';
+      h.style.top  = (14 + p.y * sy) + 'px';
     });
   }
 

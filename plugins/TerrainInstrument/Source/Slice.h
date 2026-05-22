@@ -47,12 +47,25 @@ namespace tw
         WarpMode    warpMode         = WarpMode::None;   // per-chop warp engine selection
         float       stretchRatio     = 1.0f;             // clamped 0.1..15.0; ignored when warpMode == None
 
-        // Per-chop envelope. -1.0f sentinel = "inherit the global ATTACK_MS /
-        // RELEASE_MS param" so legacy presets behave identically. Any value
-        // >= 0 wins over the global at note-on. UI sliders capture a concrete
-        // value the first time they are moved.
+        // Per-chop envelope. -1.0f sentinel on attackMs/releaseMs = "inherit
+        // the global ATTACK_MS / RELEASE_MS param" so legacy presets behave
+        // identically. Any value >= 0 wins over the global at note-on. UI
+        // sliders capture a concrete value the first time they are moved.
+        //
+        // decayMs + sustainLevel are pure per-chop fields (no global
+        // counterpart). Defaults reproduce pre-ADSR behavior — decay=0 means
+        // "no decay phase, jump from attack peak straight to sustain";
+        // sustain=1.0 means "hold at peak" (same as the old Attack→Sustaining
+        // path).
+        //
+        // volume is a linear per-chop level multiplier on the audio output.
+        // 1.0 = unity (current behavior), 0.0 = silent. Default 1.0 keeps
+        // legacy presets at the same loudness.
         float       attackMs         = -1.0f;
         float       releaseMs        = -1.0f;
+        float       decayMs          = 0.0f;
+        float       sustainLevel     = 1.0f;
+        float       volume           = 1.0f;
 
         juce::int64 length() const noexcept { return endSample - startSample; }
     };
@@ -79,6 +92,9 @@ namespace tw
             o->setProperty ("stretchRatio", (double) s.stretchRatio);
             o->setProperty ("attackMs",     (double) s.attackMs);
             o->setProperty ("releaseMs",    (double) s.releaseMs);
+            o->setProperty ("decayMs",      (double) s.decayMs);
+            o->setProperty ("sustainLevel", (double) s.sustainLevel);
+            o->setProperty ("volume",       (double) s.volume);
             arr.add (juce::var (o.get()));
         }
         obj->setProperty ("slices", arr);
@@ -118,6 +134,15 @@ namespace tw
             const double relRaw = (double) e.getProperty ("releaseMs", -1.0);
             s.attackMs  = atkRaw < 0.0 ? -1.0f : juce::jlimit (0.0f,    2000.0f, (float) atkRaw);
             s.releaseMs = relRaw < 0.0 ? -1.0f : juce::jlimit (1.0f,    5000.0f, (float) relRaw);
+
+            // Full-ADSR additions — defaults reproduce pre-ADSR behavior so
+            // legacy presets are unaffected.
+            s.decayMs       = juce::jlimit (0.0f,  2000.0f,
+                                    (float) (double) e.getProperty ("decayMs",      0.0));
+            s.sustainLevel  = juce::jlimit (0.0f,  1.0f,
+                                    (float) (double) e.getProperty ("sustainLevel", 1.0));
+            s.volume        = juce::jlimit (0.0f,  1.0f,
+                                    (float) (double) e.getProperty ("volume",       1.0));
 
             if (s.endSample > s.startSample)
                 out.push_back (s);
