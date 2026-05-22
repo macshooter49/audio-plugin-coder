@@ -2229,8 +2229,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     background: rgba(0,0,0,0.18);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 3px;
-    padding: 8px 4px 6px;
-    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    /* Emblem-only buttons (label removed) — symmetric padding for a
+       square-ish symbol cell rather than the tall portrait the labeled
+       version had. */
+    padding: 12px 6px;
+    display: flex; align-items: center; justify-content: center;
     cursor: pointer; user-select: none;
     transition: all 160ms ease;
   }
@@ -2245,21 +2248,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   #ti-chop-panel .ov-mode .emblem {
     display: grid; place-items: center;
-    color: rgba(245,243,255,0.40); transition: color 160ms;
+    color: rgba(245,243,255,0.55); transition: color 160ms;
   }
+  #ti-chop-panel .ov-mode:hover .emblem { color: rgba(245,243,255,0.85); }
   #ti-chop-panel .ov-mode.active .emblem { color: #8b5cf6; }
-  #ti-chop-panel .ov-mode .nm {
-    font: 700 9px/1 -apple-system; letter-spacing: 0.20em;
-    color: rgba(245,243,255,0.40); transition: color 160ms;
-  }
-  #ti-chop-panel .ov-mode.active .nm { color: rgba(245,243,255,0.92); }
-  #ti-chop-panel .ov-mode.soon { opacity: 0.45; cursor: not-allowed; }
-  #ti-chop-panel .ov-mode.soon::after {
-    content: 'soon';
-    position: absolute; top: 4px; right: 6px;
-    font: 700 7px/1 -apple-system; letter-spacing: 0.18em;
-    color: #f59e0b; opacity: 0.85;
-  }
 
   /* ADSR envelope canvas — the centrepiece */
   #ti-chop-panel .ov-env {
@@ -2538,23 +2530,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>' +
         '</div>' +
       '</div>' +
-      // mode pills
+      // Mode pills — emblem-only (no text labels). Hover surfaces the mode
+      // name via `title` for discoverability; otherwise the visuals speak
+      // for themselves. SVG sizes bumped ~1.7× to fill the cell now that
+      // the label row is gone, so buttons read as a clean symbol grid.
       '<div class="ov-modes">' +
-        '<div class="ov-mode" data-mode="0">' +
-          '<div class="emblem"><svg width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 L20 7"/></svg></div>' +
-          '<div class="nm">NONE</div>' +
+        '<div class="ov-mode" data-mode="0" title="None">' +
+          '<div class="emblem"><svg width="36" height="22" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 L20 7"/></svg></div>' +
         '</div>' +
-        '<div class="ov-mode" data-mode="1">' +
-          '<div class="emblem"><svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12 V5"/><path d="M8 13 V8"/><path d="M13 11 V4"/><path d="M18 12 V7"/></svg></div>' +
-          '<div class="nm">BEATS</div>' +
+        '<div class="ov-mode" data-mode="1" title="Beats">' +
+          '<div class="emblem"><svg width="36" height="26" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12 V5"/><path d="M8 13 V8"/><path d="M13 11 V4"/><path d="M18 12 V7"/></svg></div>' +
         '</div>' +
-        '<div class="ov-mode" data-mode="2">' +
-          '<div class="emblem"><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg></div>' +
-          '<div class="nm">TONES</div>' +
+        '<div class="ov-mode" data-mode="2" title="Tones">' +
+          '<div class="emblem"><svg width="40" height="22" viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg></div>' +
         '</div>' +
-        '<div class="ov-mode soon" data-mode="3">' +
-          '<div class="emblem"><svg width="22" height="16" viewBox="0 0 22 16" fill="currentColor"><circle cx="3" cy="9" r="1.2"/><circle cx="7" cy="4" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="15" cy="3" r="1.2"/><circle cx="18" cy="11" r="1.2"/><circle cx="20" cy="6" r="1.2"/></svg></div>' +
-          '<div class="nm">TEXTURE</div>' +
+        '<div class="ov-mode" data-mode="3" title="Texture">' +
+          '<div class="emblem"><svg width="36" height="26" viewBox="0 0 22 16" fill="currentColor"><circle cx="3" cy="9" r="1.2"/><circle cx="7" cy="4" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="15" cy="3" r="1.2"/><circle cx="18" cy="11" r="1.2"/><circle cx="20" cy="6" r="1.2"/></svg></div>' +
         '</div>' +
       '</div>' +
       // ADSR envelope canvas: SVG path + 4 absolute-positioned handles.
@@ -3948,6 +3939,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // note + random per-chop octave = textural chaos. Sends the whole
     // updated list via setSlicesJson so it's a single round-trip rather
     // than N setSlicePitch calls.
+    //
+    // CRITICAL: spread the existing slice with Object.assign so every field
+    // survives the round-trip (warpMode, stretchRatio, attackMs, releaseMs,
+    // decayMs, sustainLevel, volume, …). Earlier the handler explicitly
+    // copied only {start, end, reverse, pitch} and the C++ side rebuilt the
+    // slice with defaults for everything else — a single Random Octave
+    // click wiped Tones/Beats markers and reset stretchRatio to 1.0 on
+    // every chop. Same family of bug as the existing "applySlicesJson must
+    // preserve ALL Slice fields" gotcha but in the JS→C++ direction.
     var randomOctBtn = document.getElementById('ti-random-oct');
     if (randomOctBtn) {
       randomOctBtn.addEventListener('click', function (ev) {
@@ -3955,12 +3955,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         if (state.slices.length === 0) return;
         var CHOICES = [-12, 0, 12];
         var updated = state.slices.map(function (s) {
-          return {
-            start:   s.start,
-            end:     s.end,
-            reverse: s.reverse,
-            pitch:   CHOICES[Math.floor(Math.random() * 3)]
-          };
+          return Object.assign({}, s, {
+            pitch: CHOICES[Math.floor(Math.random() * 3)]
+          });
         });
         var json = JSON.stringify({ slices: updated });
         var fn = getNativeFn('setSlicesJson');
