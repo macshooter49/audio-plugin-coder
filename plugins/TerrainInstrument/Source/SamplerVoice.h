@@ -60,6 +60,9 @@ namespace tw
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
             sampleRateForEnv = sr > 0.0 ? sr : 48000.0;
             warp.prepare (sampleRateForEnv, 2, 512);
+            // ~64 ms cross-block tail fade — generous enough for Signalsmith's
+            // STFT pipeline to fully drain at extreme stretch ratios.
+            warpTailFadeTotal = juce::jmax (1024, (int) (sampleRateForEnv * 0.064));
         }
 
         /** Called by TerrainSynth immediately BEFORE startNote(). Latches the
@@ -147,6 +150,8 @@ namespace tw
             warp.noteOnReset();
             outputSamplesSinceTrigger = 0;
             warpNeedsPrime = (activeConfig.warpMode != WarpMode::None);
+            warpTailFadeRemaining = 0;
+            warpTailFadeStarted   = false;
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -639,10 +644,33 @@ namespace tw
             // the pull wraps internally and always returns true, so endReached
             // stays false and the voice continues until note-off.
             const bool exhausted = ! pullSourceIntoScratch (buf, scratchInL, scratchInR, inputLen, looping);
-            bool endReached = exhausted;
+
+            // Cross-block tail fade (v3 of warp declick). The single-block
+            // 5–21 ms fade I had before couldn't actually cover Signalsmith's
+            // ~50 ms STFT pipeline at high stretch — it got clamped to
+            // numSamples (one host block, ~10 ms at typical settings) so
+            // most of the Signalsmith buffer got cut off → residual click.
+            //
+            // New flow: when exhausted fires for the first time, START the
+            // tail fade counter. Subsequent blocks keep processing zero-padded
+            // scratchIn (Signalsmith flushes its buffer) and the counter
+            // decrements per OUTPUT sample. When the counter reaches 0 the
+            // voice finally terminates. Duration is 3072 samples (~64 ms at
+            // 48 k) — generous enough for Signalsmith's STFT to drain even
+            // at extreme stretch ratios.
+            const bool justExhausted = exhausted && warpTailFadeRemaining == 0
+                                        && ! warpTailFadeStarted;
+            if (justExhausted)
+            {
+                warpTailFadeRemaining = warpTailFadeTotal;
+                warpTailFadeStarted   = true;
+            }
+            const bool fadingThisBlock = warpTailFadeRemaining > 0;
 
             // Engine reads scratchIn (inputLen samples), writes scratchOut
             // (numSamples). DISTINCT BUFFERS — Signalsmith API requires it.
+            // We KEEP calling process() during tail fade so the engine can
+            // flush its internal buffer naturally.
             warp.process (scratchInL, scratchInR, scratchOutL, scratchOutR, numSamples);
 
             // Envelope ticks numSamples times this block (output rate).
@@ -688,21 +716,17 @@ namespace tw
                     case EnvStage::Off: return;
                 }
 
-                // Tail fade — last ~21 ms output samples before source-end.
-                // Bumped from 256 → 1024 samples (~5 ms → ~21 ms) because at
-                // high stretchRatio in Tones / Texture, Signalsmith has
-                // significant buffered audio still in its STFT pipeline when
-                // the source exhausts. A 5 ms ramp left that buffered content
-                // visibly cut off → click at slice end on long-stretched
-                // chops. 21 ms gives the engine room to flush smoothly before
-                // the voice terminates. Capped to numSamples so the fade
-                // can always complete within the final block.
+                // Cross-block tail fade ramp. While warpTailFadeRemaining > 0
+                // we scale the engine output by remaining / total — that
+                // ramps from 1.0 → 0.0 smoothly across however many blocks
+                // it takes to consume the full warpTailFadeTotal. Voice
+                // terminates after the counter hits 0 (see below).
                 float tailFade = 1.0f;
-                const int kTailLen = juce::jmin (numSamples, 1024);
-                if (endReached && i >= numSamples - kTailLen)
+                if (warpTailFadeRemaining > 0)
                 {
-                    const float ramp = (float) (numSamples - i) / (float) kTailLen;
-                    tailFade = juce::jmax (0.0f, ramp);
+                    tailFade = (float) warpTailFadeRemaining
+                             / (float) juce::jmax (1, warpTailFadeTotal);
+                    --warpTailFadeRemaining;
                 }
 
                 const float gain = currentVelocity * envLevel * tailFade * voiceGain;
@@ -712,8 +736,10 @@ namespace tw
 
             outputSamplesSinceTrigger += numSamples;
 
-            // One-shot end: source consumed past its end, fade-out finished.
-            if (endReached)
+            // Terminate ONLY when the cross-block tail fade is fully drained.
+            // If exhausted but the fade is still in progress, we leave the
+            // voice alive so subsequent blocks can keep flushing the engine.
+            if (fadingThisBlock && warpTailFadeRemaining == 0)
             {
                 envStage = EnvStage::Off;
                 envLevel = 0.0f;
@@ -774,6 +800,14 @@ namespace tw
         // renderNextBlock's NONE branch, both of which run synchronously
         // within the same call.
         int      latestBlockSize  = 512;
+        // Cross-block tail fade for the warp path. When source exhausts
+        // we don't terminate the voice immediately — Signalsmith has up
+        // to ~50 ms buffered in its STFT pipeline that needs to drain.
+        // Counter starts at warpTailFadeTotal and decrements once per
+        // OUTPUT sample. Voice terminates when it hits 0.
+        int      warpTailFadeTotal     = 3072;  // ~64 ms @ 48 k — set in prepare
+        int      warpTailFadeRemaining = 0;
+        bool     warpTailFadeStarted   = false;
     };
 
     struct SamplerSound : public juce::SynthesiserSound
