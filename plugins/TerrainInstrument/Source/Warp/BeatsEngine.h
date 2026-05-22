@@ -1,9 +1,27 @@
-// BeatsEngine.h — v6 (heavier de-clicking — larger grain + longer xfade + boundary fade)
+// BeatsEngine.h — v7 (high-octave de-roboticizer — gate the boundary fade)
 //
-// v5 fixed the two structural bugs that were producing audible clicks
-// (broadened the crossfade gate so it actually ran across its full window,
-// and corrected SamplerVoice's source-feed length so pitchRatio>1 didn't
-// starve the history). v6 turns the dial further:
+// v6 introduced a 2 ms Hann fade-in + fade-out at every beat boundary to
+// mask the source-position discontinuity that occurs when loopAnchor
+// advances and cyclePos resets to 0. At low pitchRatio that fade runs at
+// the beat rate (sampleRate * pitchRatio / (grainSize * stretchRatio))
+// which is 5–10 Hz — sub-audible, perceived as benign tremolo, and it
+// actually masks the slow boundary click.
+//
+// At HIGH pitchRatio the beat rate climbs INTO audible range. At pitch
+// shift +12 semis (pitchRatio=2) the beat rate is 20 Hz; at +24 semis
+// (pitchRatio=4, the clamp) it's 40 Hz. The boundary fade then becomes
+// AM at the beat rate, producing inharmonic sidebands (±beatRate around
+// every spectral component) — classic ring-mod "robotic" character that
+// the user reported at C4–C7 on a 48-key keyboard. The trapezoid envelope
+// also has harmonics at 80, 120, 160 Hz which add more sidebands.
+//
+// v7 fix: gate the boundary fade on beat rate. Apply only when the beat
+// rate is sub-audible (outputsPerLoop > sampleRate / 20 = beat duration
+// > 50 ms). Above that, beatFadeLen = 0 → no AM, no fade — we accept the
+// slight boundary click as the lesser evil. The v6 "fade-in only after
+// first beat" rule is preserved (chop attack stays sharp at note-on).
+//
+// v6 changes preserved:
 //
 // 1. Wrap rate halved: grain 60 ms → 100 ms (wrap rate 16 Hz → ~10 Hz).
 //    Fewer wraps per second = fewer perceptual click events per second.
@@ -162,12 +180,19 @@ namespace tw
             const double effLoopLen     = (double) (targetGrainSize - crossfadeLen);
             const double crossfadeBegin = (double) (targetGrainSize - crossfadeLen);
 
-            // Cap the boundary fade in cases where the beat itself is shorter
-            // than 4 × boundaryFadeLen (otherwise the fade-out and fade-in
-            // overlap and we lose audible content). Stays at the configured
-            // 2 ms in normal use.
-            const int beatFadeLen = juce::jmin (boundaryFadeLen,
-                                                juce::jmax (1, outputsPerLoop / 4));
+            // v7: only apply the boundary fade when the beat rate is
+            // sub-audible. Above ~20 Hz the fade itself is AM modulation
+            // and produces inharmonic sidebands — user reported "robotic"
+            // at C4–C7 (pitchRatio approaches 4, beat rate hits 40 Hz).
+            // Below the threshold the fade is benign tremolo and helps
+            // mask the slow boundary click. The configured 2 ms is also
+            // capped to outputsPerLoop / 4 so the fade-out and fade-in
+            // don't overlap on very short beats.
+            const bool beatRateSubAudio =
+                outputsPerLoop > (int) (sampleRate * 0.050);  // > 50 ms beat → < 20 Hz
+            const int beatFadeLen = beatRateSubAudio
+                ? juce::jmin (boundaryFadeLen, juce::jmax (1, outputsPerLoop / 4))
+                : 0;
 
             for (int i = 0; i < numSamples; i++)
             {
