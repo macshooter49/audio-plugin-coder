@@ -37,7 +37,7 @@ namespace tw
         float       releaseMs        = -1.0f;            // -1 sentinel = inherit global RELEASE_MS
         float       decayMs          = 0.0f;             // 0 = no decay phase, jump from attack peak to sustain
         float       sustainLevel     = 1.0f;             // 0..1; 1.0 = hold at peak (current behavior)
-        float       volume           = 1.0f;             // linear output gain multiplier, 0..1
+        float       volume           = 1.0f;             // linear gain multiplier, 0..2 (1.0=unity, 2.0=+6 dB boost)
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -120,7 +120,7 @@ namespace tw
 
             // Linear per-chop volume multiplier — applied at gain stage so all
             // env phases (attack, sustain, release) inherit it.
-            voiceGain = juce::jlimit (0.0f, 1.0f, activeConfig.volume);
+            voiceGain = juce::jlimit (0.0f, 2.0f, activeConfig.volume);
 
             envLevel = 0.0f;
             envStage = (attackInc >= 1.0f) ? EnvStage::Sustaining : EnvStage::Attack;
@@ -688,12 +688,20 @@ namespace tw
                     case EnvStage::Off: return;
                 }
 
-                // Tail fade — last 256 output samples before source-end (or
-                // immediately if we already hit the end this block).
+                // Tail fade — last ~21 ms output samples before source-end.
+                // Bumped from 256 → 1024 samples (~5 ms → ~21 ms) because at
+                // high stretchRatio in Tones / Texture, Signalsmith has
+                // significant buffered audio still in its STFT pipeline when
+                // the source exhausts. A 5 ms ramp left that buffered content
+                // visibly cut off → click at slice end on long-stretched
+                // chops. 21 ms gives the engine room to flush smoothly before
+                // the voice terminates. Capped to numSamples so the fade
+                // can always complete within the final block.
                 float tailFade = 1.0f;
-                if (endReached && i >= numSamples - 256)
+                const int kTailLen = juce::jmin (numSamples, 1024);
+                if (endReached && i >= numSamples - kTailLen)
                 {
-                    const float ramp = (float) (numSamples - i) / 256.0f;
+                    const float ramp = (float) (numSamples - i) / (float) kTailLen;
                     tailFade = juce::jmax (0.0f, ramp);
                 }
 
