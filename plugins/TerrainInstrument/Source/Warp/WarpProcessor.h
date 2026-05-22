@@ -21,6 +21,7 @@
 #include "../Slice.h"
 #include "SignalsmithEngine.h"
 #include "BeatsEngine.h"
+#include "TextureEngine.h"
 #include <memory>
 #include <cstring>
 #include <cmath>
@@ -43,6 +44,8 @@ namespace tw
                 signalsmithEngine->prepare (sampleRate, channels, blockMax);
             if (beatsEngine)
                 beatsEngine->prepare (sampleRate, channels, blockMax);
+            if (textureEngine)
+                textureEngine->prepare (sampleRate, channels, blockMax);
         }
 
         void setMode (WarpMode m)
@@ -73,19 +76,20 @@ namespace tw
                 beatsEngine->setStretchRatio   (stretchRatio);
                 beatsEngine->setPitchSemitones (pitchSemitones);
             }
-            // Texture engine plugs in next. For now, Texture routes through
-            // Signalsmith too as a placeholder so the dispatch is wired.
+            // Texture: lazily-allocated TextureEngine wrapping Signalsmith
+            // with periodic pitch jitter for the "Flux" / glitch character
+            // (Ableton Texture analog). Distinct from Tones' smooth stretch.
             else if (mode == WarpMode::Texture)
             {
-                if (! signalsmithEngine)
+                if (! textureEngine)
                 {
-                    signalsmithEngine = std::make_unique<SignalsmithEngine>();
+                    textureEngine = std::make_unique<TextureEngine>();
                     if (prepared)
-                        signalsmithEngine->prepare (sampleRate, channels, blockMax);
+                        textureEngine->prepare (sampleRate, channels, blockMax);
                 }
-                signalsmithEngine->reset();
-                signalsmithEngine->setStretchRatio   (stretchRatio);
-                signalsmithEngine->setPitchSemitones (pitchSemitones);
+                textureEngine->reset();
+                textureEngine->setStretchRatio   (stretchRatio);
+                textureEngine->setPitchSemitones (pitchSemitones);
             }
         }
 
@@ -94,6 +98,7 @@ namespace tw
             stretchRatio = juce::jlimit (0.1f, 15.0f, r);
             if (signalsmithEngine) signalsmithEngine->setStretchRatio (stretchRatio);
             if (beatsEngine)       beatsEngine      ->setStretchRatio (stretchRatio);
+            if (textureEngine)     textureEngine    ->setStretchRatio (stretchRatio);
         }
 
         void setPitchSemitones (float semis) noexcept
@@ -101,6 +106,7 @@ namespace tw
             pitchSemitones = semis;
             if (signalsmithEngine) signalsmithEngine->setPitchSemitones (semis);
             if (beatsEngine)       beatsEngine      ->setPitchSemitones (semis);
+            if (textureEngine)     textureEngine    ->setPitchSemitones (semis);
         }
 
         /** Audio-thread reset; safe to call at every note-on. */
@@ -108,6 +114,7 @@ namespace tw
         {
             if (signalsmithEngine) signalsmithEngine->reset();
             if (beatsEngine)       beatsEngine      ->reset();
+            if (textureEngine)     textureEngine    ->reset();
         }
 
         /** Returns the active engine's input latency in samples. Caller
@@ -116,20 +123,27 @@ namespace tw
          *  needs priming. */
         int inputLatency() const noexcept
         {
-            if (mode == WarpMode::Tones || mode == WarpMode::Texture)
+            if (mode == WarpMode::Tones)
                 return signalsmithEngine ? signalsmithEngine->inputLatency() : 0;
+            if (mode == WarpMode::Texture)
+                return textureEngine ? textureEngine->inputLatency() : 0;
             if (mode == WarpMode::Beats)
                 return beatsEngine ? beatsEngine->inputLatency() : 0;
             return 0;
         }
 
-        /** Prime the active engine after reset(). Only Signalsmith uses it
-         *  meaningfully; Beats::seek is a no-op. */
+        /** Prime the active engine after reset(). Only Signalsmith-backed
+         *  engines (Tones + Texture) need meaningful priming; Beats::seek
+         *  is a no-op. */
         void seek (const float* primeL, const float* primeR, int numSamples)
         {
-            if (mode == WarpMode::Tones || mode == WarpMode::Texture)
+            if (mode == WarpMode::Tones)
             {
                 if (signalsmithEngine) signalsmithEngine->seek (primeL, primeR, numSamples);
+            }
+            else if (mode == WarpMode::Texture)
+            {
+                if (textureEngine) textureEngine->seek (primeL, primeR, numSamples);
             }
             else if (mode == WarpMode::Beats)
             {
@@ -139,7 +153,9 @@ namespace tw
 
         bool hasEngineAllocated() const noexcept
         {
-            return signalsmithEngine != nullptr || beatsEngine != nullptr;
+            return signalsmithEngine != nullptr
+                || beatsEngine       != nullptr
+                || textureEngine     != nullptr;
         }
         WarpMode getMode() const noexcept { return mode; }
 
@@ -202,6 +218,11 @@ namespace tw
                 beatsEngine->process (inL, inR, outL, outR, numSamples);
                 return;
             }
+            if (mode == WarpMode::Texture && textureEngine)
+            {
+                textureEngine->process (inL, inR, outL, outR, numSamples);
+                return;
+            }
             if (signalsmithEngine)
             {
                 signalsmithEngine->process (inL, inR, outL, outR, numSamples);
@@ -225,5 +246,6 @@ namespace tw
 
         std::unique_ptr<SignalsmithEngine> signalsmithEngine;
         std::unique_ptr<BeatsEngine>       beatsEngine;
+        std::unique_ptr<TextureEngine>     textureEngine;
     };
 }
