@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Terrain Instrument — Chop Overlay v7 mockup</title>
+<style>
+  /* ─── tokens (Lunar Haze dark, matches plugin) ───────────────────────── */
+  :root {
+    --bg-deep:     #14111f;
+    --bg-surface:  #232340;
+    --bg-elev:     #2a2a4a;
+    --line:        rgba(255,255,255,0.06);
+    --text:        rgba(245,243,255,0.92);
+    --text-dim:    rgba(245,243,255,0.55);
+    --text-mute:   rgba(245,243,255,0.35);
+    --accent:      #8b5cf6;
+    --accent-soft: rgba(139,92,246,0.22);
+    --accent-line: rgba(139,92,246,0.55);
+    --teal:        #2dd4bf;
+    --amber:       #f59e0b;
+    --rose:        #f43f5e;
+    --danger:      #ff6171;
+  }
+
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: radial-gradient(120% 80% at 50% 30%, #1a1730 0%, #100d1c 70%);
+    color: var(--text);
+    font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ─── mock plugin chrome behind overlay (just for context) ───────────── */
+  .stage {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+  }
+  .stage .topbar {
+    height: 56px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; padding: 0 22px;
+    color: var(--text-dim); letter-spacing: 0.18em; font: 600 11px/1 -apple-system, sans-serif;
+  }
+  .stage .waveform {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background:
+      linear-gradient(180deg, transparent 49%, rgba(245,243,255,0.08) 50%, transparent 51%),
+      repeating-linear-gradient(90deg, rgba(245,243,255,0.04) 0 1px, transparent 1px 60px);
+    position: relative;
+  }
+  .stage .chops {
+    position: absolute; inset: 18% 8% 18% 8%;
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px;
+  }
+  .stage .chop {
+    border: 1px solid rgba(245,243,255,0.10);
+    background: linear-gradient(180deg, rgba(139,92,246,0.06), rgba(139,92,246,0.02));
+    border-radius: 6px;
+    position: relative;
+  }
+  .stage .chop.selected {
+    border-color: var(--accent-line);
+    background: linear-gradient(180deg, rgba(139,92,246,0.18), rgba(139,92,246,0.06));
+    box-shadow: 0 0 22px rgba(139,92,246,0.25);
+  }
+  .stage .chop .num {
+    position: absolute; top: 6px; left: 8px;
+    font: 600 10px/1 -apple-system; letter-spacing: 0.12em; color: var(--text-mute);
+  }
+  .stage .chop.selected .num { color: var(--text); }
+  .stage .footer {
+    height: 72px; border-top: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    color: var(--text-mute); letter-spacing: 0.14em; font: 600 11px/1 -apple-system;
+  }
+  .stage .pill {
+    padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.025);
+  }
+
+  /* ─── backdrop ─────────────────────────────────────────────────────────── */
+  .ov-backdrop {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(8,6,16,0.55);
+    backdrop-filter: blur(14px) saturate(115%);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    opacity: 0; pointer-events: none;
+    transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ov-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  /* ─── panel ────────────────────────────────────────────────────────────── */
+  .ov-panel {
+    position: fixed; z-index: 1001;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(0.97);
+    transform-origin: center;
+    width: 360px;
+    background: rgba(28,24,46,0.96);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.55),
+      0 8px 20px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    padding: 18px 18px 14px;
+    opacity: 0;
+    transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ov-backdrop.open + .ov-panel,
+  .ov-panel.open {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .ov-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
+  }
+  .ov-title {
+    font: 700 10px/1 -apple-system, sans-serif;
+    letter-spacing: 0.22em; color: var(--text-dim);
+  }
+  .ov-title .num {
+    color: var(--accent); margin-left: 6px;
+  }
+  .ov-close {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: grid; place-items: center; cursor: pointer;
+    color: var(--text-mute);
+    transition: background 140ms, color 140ms;
+  }
+  .ov-close:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+
+  /* ─── mode grid ────────────────────────────────────────────────────────── */
+  .ov-modes {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    margin-bottom: 16px;
+  }
+  .ov-mode {
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+    padding: 10px 6px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+  }
+  .ov-mode:hover {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.10);
+  }
+  .ov-mode.active {
+    background: linear-gradient(180deg, rgba(139,92,246,0.20), rgba(139,92,246,0.06));
+    border-color: var(--accent-line);
+    box-shadow: 0 0 18px rgba(139,92,246,0.20), inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  .ov-mode .emblem {
+    width: 28px; height: 22px;
+    display: grid; place-items: center;
+    color: var(--text-dim);
+    transition: color 160ms ease;
+  }
+  .ov-mode.active .emblem { color: var(--accent); }
+  .ov-mode .lbl {
+    font: 700 9px/1 -apple-system; letter-spacing: 0.20em;
+    color: var(--text-mute);
+    transition: color 160ms ease;
+  }
+  .ov-mode.active .lbl { color: var(--text); }
+
+  /* TEXTURE marked as "soon" — disabled visual */
+  .ov-mode.soon { opacity: 0.45; cursor: not-allowed; }
+  .ov-mode.soon::after {
+    content: 'soon';
+    position: absolute; transform: translate(20px,-22px);
+    font: 700 7px/1 -apple-system; letter-spacing: 0.18em;
+    color: var(--amber); opacity: 0.8;
+  }
+
+  /* ─── controls section ─────────────────────────────────────────────────── */
+  .ov-section { margin-bottom: 12px; }
+  .ov-row {
+    display: grid; grid-template-columns: 70px 1fr 44px;
+    align-items: center; gap: 12px;
+    padding: 7px 0;
+  }
+  .ov-row .name {
+    font: 700 10px/1 -apple-system; letter-spacing: 0.20em;
+    color: var(--text-dim);
+  }
+  .ov-row .val {
+    font: 600 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+    color: var(--text); text-align: right; letter-spacing: 0.03em;
+  }
+  .ov-row .bar {
+    height: 4px; border-radius: 999px;
+    background: rgba(255,255,255,0.07);
+    position: relative; cursor: pointer;
+  }
+  .ov-row .bar .fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, var(--accent), #b388ff);
+    border-radius: 999px;
+    box-shadow: 0 0 12px rgba(139,92,246,0.55);
+  }
+  .ov-row .bar .knob-dot {
+    position: absolute; top: 50%;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: white;
+    box-shadow: 0 0 8px rgba(139,92,246,0.7);
+    transform: translate(-50%, -50%);
+  }
+
+  .ov-divider {
+    height: 1px; background: var(--line); margin: 12px -2px;
+  }
+
+  /* ─── footer actions ───────────────────────────────────────────────────── */
+  .ov-actions {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    margin-top: 4px;
+  }
+  .ov-act {
+    padding: 9px 10px;
+    font: 600 10px/1 -apple-system; letter-spacing: 0.16em;
+    color: var(--text-dim); text-align: center;
+    border-radius: 7px; cursor: pointer;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: background 140ms, color 140ms, border-color 140ms;
+  }
+  .ov-act:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .ov-act.danger:hover {
+    background: rgba(244,63,94,0.15);
+    color: var(--danger);
+    border-color: rgba(244,63,94,0.35);
+  }
+
+  /* ─── stretch row only visible when warp != none ──────────────────────── */
+  .ov-row.warp-only { display: none; }
+  body[data-warp="beats"]  .ov-row.warp-only,
+  body[data-warp="tones"]  .ov-row.warp-only,
+  body[data-warp="texture"] .ov-row.warp-only { display: grid; }
+
+  /* ─── floating hint at viewport-edge safety ───────────────────────────── */
+  .edge-tag {
+    position: fixed; left: 12px; bottom: 10px; z-index: 1100;
+    font: 600 9px/1 -apple-system; letter-spacing: 0.18em; color: var(--text-mute);
+  }
+</style>
+</head>
+<body data-warp="beats">
+
+<!-- ── mock plugin behind overlay ────────────────────────────────────── -->
+<div class="stage">
+  <div class="topbar">TERRAIN&nbsp;&nbsp;·&nbsp;&nbsp;v1 instrument preview</div>
+  <div class="waveform">
+    <div class="chops">
+      <div class="chop"><div class="num">01</div></div>
+      <div class="chop"><div class="num">02</div></div>
+      <div class="chop selected"><div class="num">03</div></div>
+      <div class="chop"><div class="num">04</div></div>
+      <div class="chop"><div class="num">05</div></div>
+      <div class="chop"><div class="num">06</div></div>
+      <div class="chop"><div class="num">07</div></div>
+      <div class="chop"><div class="num">08</div></div>
+    </div>
+  </div>
+  <div class="footer">
+    <div class="pill">PITCH</div>
+    <div class="pill">SLICE</div>
+    <div class="pill">LOOP</div>
+    <div class="pill">ROOT C4</div>
+  </div>
+</div>
+
+<!-- ── backdrop + panel ──────────────────────────────────────────────── -->
+<div id="backdrop" class="ov-backdrop open"></div>
+<div id="panel" class="ov-panel open" role="dialog" aria-label="Chop settings">
+
+  <div class="ov-header">
+    <div class="ov-title">CHOP <span class="num">03</span></div>
+    <div class="ov-close" id="closeBtn" title="Close">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <path d="M5 5 L19 19 M19 5 L5 19"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- mode picker with emblems -->
+  <div class="ov-modes">
+
+    <div class="ov-mode" data-mode="none">
+      <div class="emblem">
+        <!-- NONE: simple horizontal line, no warping -->
+        <svg width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M2 7 L20 7"/>
+        </svg>
+      </div>
+      <div class="lbl">NONE</div>
+    </div>
+
+    <div class="ov-mode active" data-mode="beats">
+      <div class="emblem">
+        <!-- BEATS: stuttered grain bars -->
+        <svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M3 12 V5"/>
+          <path d="M8 13 V8"/>
+          <path d="M13 11 V4"/>
+          <path d="M18 12 V7"/>
+        </svg>
+      </div>
+      <div class="lbl">BEATS</div>
+    </div>
+
+    <div class="ov-mode" data-mode="tones">
+      <div class="emblem">
+        <!-- TONES: smooth sine -->
+        <svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/>
+        </svg>
+      </div>
+      <div class="lbl">TONES</div>
+    </div>
+
+    <div class="ov-mode soon" data-mode="texture">
+      <div class="emblem">
+        <!-- TEXTURE: scattered dots (chaos / jitter) -->
+        <svg width="22" height="16" viewBox="0 0 22 16" fill="currentColor">
+          <circle cx="3"  cy="9"  r="1.2"/>
+          <circle cx="7"  cy="4"  r="1.2"/>
+          <circle cx="9"  cy="12" r="1.2"/>
+          <circle cx="13" cy="7"  r="1.2"/>
+          <circle cx="15" cy="3"  r="1.2"/>
+          <circle cx="18" cy="11" r="1.2"/>
+          <circle cx="20" cy="6"  r="1.2"/>
+        </svg>
+      </div>
+      <div class="lbl">TEXTURE</div>
+    </div>
+
+  </div>
+
+  <!-- envelope -->
+  <div class="ov-section">
+    <div class="ov-row">
+      <div class="name">ATTACK</div>
+      <div class="bar" data-param="attack">
+        <div class="fill" style="width:8%"></div>
+        <div class="knob-dot" style="left:8%"></div>
+      </div>
+      <div class="val">4 ms</div>
+    </div>
+    <div class="ov-row">
+      <div class="name">RELEASE</div>
+      <div class="bar" data-param="release">
+        <div class="fill" style="width:38%"></div>
+        <div class="knob-dot" style="left:38%"></div>
+      </div>
+      <div class="val">180 ms</div>
+    </div>
+  </div>
+
+  <!-- pitch + stretch -->
+  <div class="ov-section">
+    <div class="ov-row">
+      <div class="name">PITCH</div>
+      <div class="bar" data-param="pitch">
+        <div class="fill" style="width:50%"></div>
+        <div class="knob-dot" style="left:50%"></div>
+      </div>
+      <div class="val">+0 st</div>
+    </div>
+    <div class="ov-row warp-only">
+      <div class="name">STRETCH</div>
+      <div class="bar" data-param="stretch">
+        <div class="fill" style="width:35%"></div>
+        <div class="knob-dot" style="left:35%"></div>
+      </div>
+      <div class="val">1.50×</div>
+    </div>
+  </div>
+
+  <div class="ov-divider"></div>
+
+  <!-- footer actions -->
+  <div class="ov-actions">
+    <div class="ov-act">REVERSE</div>
+    <div class="ov-act">RESET PITCH</div>
+    <div class="ov-act warp-only">RESET STRETCH</div>
+    <div class="ov-act danger">DELETE</div>
+  </div>
+
+</div>
+
+<div class="edge-tag">click outside or press esc → fade out · sits above whole UI</div>
+
+<script>
+  // Click mode pills to switch warp emblem + show/hide stretch row.
+  document.querySelectorAll('.ov-mode').forEach(function(el){
+    el.addEventListener('click', function(){
+      if (el.classList.contains('soon')) return;
+      document.querySelectorAll('.ov-mode').forEach(function(x){ x.classList.remove('active'); });
+      el.classList.add('active');
+      document.body.setAttribute('data-warp', el.dataset.mode);
+    });
+  });
+
+  // Bar drag (just for mockup feel)
+  document.querySelectorAll('.ov-row .bar').forEach(function(bar){
+    bar.addEventListener('mousedown', function(e){
+      function move(ev){
+        var r = bar.getBoundingClientRect();
+        var t = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        bar.querySelector('.fill').style.width = (t*100).toFixed(1) + '%';
+        bar.querySelector('.knob-dot').style.left = (t*100).toFixed(1) + '%';
+      }
+      function up(){ window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); }
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+      move(e);
+    });
+  });
+
+  // Close / re-open
+  function close(){
+    document.getElementById('backdrop').classList.remove('open');
+    document.getElementById('panel').classList.remove('open');
+  }
+  function open(){
+    document.getElementById('backdrop').classList.add('open');
+    document.getElementById('panel').classList.add('open');
+  }
+  document.getElementById('closeBtn').addEventListener('click', close);
+  document.getElementById('backdrop').addEventListener('click', close);
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') close();
+    if (e.key === 'o' || e.key === 'O') open();
+  });
+</script>
+</body>
+</html>

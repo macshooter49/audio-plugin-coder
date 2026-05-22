@@ -61,6 +61,8 @@ namespace tw
             vc.sliceIndex     = sliceIndex;
             vc.warpMode       = s.warpMode;
             vc.stretchRatio   = s.stretchRatio;
+            vc.attackMs       = s.attackMs;
+            vc.releaseMs      = s.releaseMs;
 
             const juce::ScopedLock sl (lock);
             if (sounds.size() == 0) return;
@@ -116,6 +118,8 @@ namespace tw
                     vc.sliceIndex     = idx;
                     vc.warpMode       = s.warpMode;
                     vc.stretchRatio   = s.stretchRatio;
+                    vc.attackMs       = s.attackMs;
+                    vc.releaseMs      = s.releaseMs;
                     break;
                 }
 
@@ -131,6 +135,8 @@ namespace tw
                     vc.sliceIndex     = sliceIdx;
                     vc.warpMode       = s.warpMode;
                     vc.stretchRatio   = s.stretchRatio;
+                    vc.attackMs       = s.attackMs;
+                    vc.releaseMs      = s.releaseMs;
                     break;
                 }
 
@@ -162,6 +168,8 @@ namespace tw
                     vc.sliceIndex     = pick;
                     vc.warpMode       = s.warpMode;
                     vc.stretchRatio   = s.stretchRatio;
+                    vc.attackMs       = s.attackMs;
+                    vc.releaseMs      = s.releaseMs;
                     break;
                 }
             }

@@ -33,6 +33,8 @@ namespace tw
         int         sliceIndex       = -1;       // index in the slice list this voice plays; -1 = Whole-mode (no slice)
         WarpMode    warpMode         = WarpMode::None;   // per-chop warp engine; None = current resample behavior
         float       stretchRatio     = 1.0f;             // 0.25..4.0; ignored when warpMode == None
+        float       attackMs         = -1.0f;            // -1 sentinel = inherit global ATTACK_MS
+        float       releaseMs        = -1.0f;            // -1 sentinel = inherit global RELEASE_MS
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -92,8 +94,13 @@ namespace tw
                 playhead = (double) playStartIdx;
 
             // Compute envelope increments from current attack/release in ms.
-            const float attackSec  = juce::jmax (0.0f, attackMsParam.load()  * 0.001f);
-            const float releaseSec = juce::jmax (0.001f, releaseMsParam.load() * 0.001f);
+            // Per-chop override wins when >= 0; otherwise fall back to the
+            // global APVTS param — so legacy presets and Whole-mode triggers
+            // (sliceIndex == -1) behave exactly as before.
+            const float atkMs  = activeConfig.attackMs  >= 0.0f ? activeConfig.attackMs  : attackMsParam.load();
+            const float relMs  = activeConfig.releaseMs >= 0.0f ? activeConfig.releaseMs : releaseMsParam.load();
+            const float attackSec  = juce::jmax (0.0f,   atkMs * 0.001f);
+            const float releaseSec = juce::jmax (0.001f, relMs * 0.001f);
             attackInc  = attackSec  > 0.0f ? (1.0f / (attackSec  * (float) sampleRateForEnv)) : 1.0f;
             releaseDec = 1.0f / (releaseSec * (float) sampleRateForEnv);
 
@@ -171,6 +178,7 @@ namespace tw
                                           : juce::jlimit (bStart + 1, (juce::int64) bufLen, playEndIdx);
             const double endIdx   = static_cast<double> (bEndRaw - 1);  // last accessible sample for interpolation
             const double startIdx = static_cast<double> (bStart);
+            const double sliceLen = endIdx - startIdx;
             const double pitchInc = pitchRatio;  // always positive — direction is reversePlay
 
             auto* outL = outputBuffer.getWritePointer (0, startSample);
@@ -185,6 +193,16 @@ namespace tw
             // naturally even when the user has LOOP enabled globally.
             const int loopMode = activeConfig.forceOneShot ? 0 : loopModeParam.load();
 
+            // Loop crossfade length (20 ms target, capped to slice/4 so tiny
+            // chops still loop without overlap collapse). Equal-power mix
+            // between the main playhead and a leading head reading from the
+            // opposite boundary — kills the click that the abrupt wrap caused,
+            // especially at high pitch where the seam fires every few ms.
+            const double xfadeLen = (loopMode == 1 && sliceLen > 8.0)
+                                       ? juce::jmin (sliceLen * 0.25,
+                                                     0.020 * sampleRateForEnv)
+                                       : 0.0;
+
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── Bounds + loop/wrap handling, direction-aware ────────────
@@ -194,18 +212,19 @@ namespace tw
                 {
                     if (loopMode == 1)
                     {
-                        // Forward-loop in slice space: wrap to the opposite
-                        // boundary, preserving fractional offset so pitch
-                        // ratio stays consistent across the seam.
-                        const double sliceLen = endIdx - startIdx;
                         if (sliceLen <= 0.0) { envStage = EnvStage::Off; envLevel = 0.0f; clearCurrentNote(); isActive = false; return; }
+                        // Wrap and skip past the crossfade region so the next
+                        // samples pick up exactly where the leading head left
+                        // off — the seam is bit-continuous with the fade-in.
                         if (! reversePlay)
                         {
-                            playhead = startIdx + std::fmod (playhead - startIdx, sliceLen);
+                            playhead = startIdx + xfadeLen
+                                       + std::fmod (playhead - endIdx, sliceLen);
                         }
                         else
                         {
-                            playhead = endIdx - std::fmod (endIdx - playhead, sliceLen);
+                            playhead = endIdx - xfadeLen
+                                       - std::fmod (startIdx - playhead, sliceLen);
                         }
                     }
                     else
@@ -248,16 +267,52 @@ namespace tw
                 const auto i0 = static_cast<int> (playhead);
                 const int  i1 = juce::jmin (bufLen - 1, i0 + 1);
                 const auto frac = static_cast<float> (playhead - (double) i0);
-                const auto sampleL = inL[i0] + frac * (inL[i1] - inL[i0]);
-                const auto sampleR = inR[i0] + frac * (inR[i1] - inR[i0]);
+                auto sampleL = inL[i0] + frac * (inL[i1] - inL[i0]);
+                auto sampleR = inR[i0] + frac * (inR[i1] - inR[i0]);
 
-                // Anti-click tail fade for one-shot mode: linear ramp to zero
-                // across the last 256 samples (~5 ms at 48 kHz). Direction
-                // aware — fade as we approach whichever end we're heading to.
+                // ── Loop-mode equal-power crossfade ──────────────────────────
+                // In the last xfadeLen samples before the wrap boundary, mix
+                // in a leading head reading from the opposite boundary. By the
+                // time playhead reaches endIdx the main weight is 0 and the
+                // leading sample fully covers the seam — wrap then jumps the
+                // playhead by xfadeLen so the post-wrap read continues exactly
+                // where the leading was.
+                if (xfadeLen > 0.0)
+                {
+                    const double samplesToEnd = reversePlay
+                                                  ? (playhead - startIdx)
+                                                  : (endIdx   - playhead);
+                    if (samplesToEnd < xfadeLen)
+                    {
+                        const double leadOffset = xfadeLen - samplesToEnd;
+                        const double leadPos = reversePlay
+                                                  ? (endIdx - leadOffset)
+                                                  : (startIdx + leadOffset);
+                        const auto li0 = juce::jlimit (0, bufLen - 1, static_cast<int> (leadPos));
+                        const int  li1 = juce::jlimit (0, bufLen - 1, li0 + 1);
+                        const auto lfrac = static_cast<float> (leadPos - (double) li0);
+                        const auto leadL = inL[li0] + lfrac * (inL[li1] - inL[li0]);
+                        const auto leadR = inR[li0] + lfrac * (inR[li1] - inR[li0]);
+
+                        // Equal-power: at samplesToEnd=xfadeLen→main only, at
+                        // samplesToEnd=0→lead only. Uses sin/cos for ~3 dB hump
+                        // at the midpoint that masks correlated source content.
+                        const float t = static_cast<float> (1.0 - samplesToEnd / xfadeLen);
+                        const float mainGain = std::cos (t * juce::MathConstants<float>::halfPi);
+                        const float leadGain = std::sin (t * juce::MathConstants<float>::halfPi);
+                        sampleL = sampleL * mainGain + leadL * leadGain;
+                        sampleR = sampleR * mainGain + leadR * leadGain;
+                    }
+                }
+
+                // Anti-click tail fade for one-shot mode: ~10 ms ramp to zero
+                // before the slice end. Direction aware — fade as we approach
+                // whichever end we're heading to.
                 float tailFade = 1.0f;
                 if (loopMode == 0)
                 {
-                    constexpr double kTailLen = 256.0;
+                    const double kTailLen = juce::jmin (sliceLen * 0.5,
+                                                         0.010 * sampleRateForEnv);
                     const double samplesToEnd = reversePlay
                                                   ? (playhead - startIdx)
                                                   : (endIdx   - playhead);
@@ -339,6 +394,14 @@ namespace tw
             std::memset (dstL, 0, sizeof (float) * (size_t) count);
             std::memset (dstR, 0, sizeof (float) * (size_t) count);
 
+            // Source-level crossfade so the warp engine sees a smooth stream
+            // across the loop boundary instead of a one-sample discontinuity.
+            // 20 ms target, capped to slice/4. Skipped when not looping.
+            const double xfadeLen = (looping && sliceLen > 8.0)
+                                       ? juce::jmin (sliceLen * 0.25,
+                                                     0.020 * sampleRateForEnv)
+                                       : 0.0;
+
             for (int i = 0; i < count; ++i)
             {
                 const bool past = reversePlay ? (playhead < startIdx)
@@ -347,12 +410,15 @@ namespace tw
                 {
                     if (looping && sliceLen > 0.0)
                     {
-                        // Wrap the playhead and keep reading — same semantics
-                        // as the NONE-mode forward loop.
+                        // Wrap and skip past the crossfade region so the next
+                        // source samples pick up where the leading head left
+                        // off — engine sees a bit-continuous stream.
                         if (! reversePlay)
-                            playhead = startIdx + std::fmod (playhead - startIdx, sliceLen);
+                            playhead = startIdx + xfadeLen
+                                       + std::fmod (playhead - endIdx, sliceLen);
                         else
-                            playhead = endIdx - std::fmod (endIdx - playhead, sliceLen);
+                            playhead = endIdx - xfadeLen
+                                       - std::fmod (startIdx - playhead, sliceLen);
                     }
                     else
                     {
@@ -363,8 +429,35 @@ namespace tw
                 const auto i0 = (int) playhead;
                 const int  i1 = juce::jlimit (0, bufLen - 1, i0 + (reversePlay ? -1 : 1));
                 const float frac = (float) (playhead - (double) i0);
-                dstL[i] = inL[i0] + frac * (inL[i1] - inL[i0]);
-                dstR[i] = inR[i0] + frac * (inR[i1] - inR[i0]);
+                float s_L = inL[i0] + frac * (inL[i1] - inL[i0]);
+                float s_R = inR[i0] + frac * (inR[i1] - inR[i0]);
+
+                if (xfadeLen > 0.0)
+                {
+                    const double samplesToEnd = reversePlay
+                                                  ? (playhead - startIdx)
+                                                  : (endIdx   - playhead);
+                    if (samplesToEnd < xfadeLen)
+                    {
+                        const double leadOffset = xfadeLen - samplesToEnd;
+                        const double leadPos = reversePlay
+                                                  ? (endIdx - leadOffset)
+                                                  : (startIdx + leadOffset);
+                        const auto li0 = juce::jlimit (0, bufLen - 1, static_cast<int> (leadPos));
+                        const int  li1 = juce::jlimit (0, bufLen - 1, li0 + 1);
+                        const float lfrac = static_cast<float> (leadPos - (double) li0);
+                        const float leadL = inL[li0] + lfrac * (inL[li1] - inL[li0]);
+                        const float leadR = inR[li0] + lfrac * (inR[li1] - inR[li0]);
+                        const float t = static_cast<float> (1.0 - samplesToEnd / xfadeLen);
+                        const float mainGain = std::cos (t * juce::MathConstants<float>::halfPi);
+                        const float leadGain = std::sin (t * juce::MathConstants<float>::halfPi);
+                        s_L = s_L * mainGain + leadL * leadGain;
+                        s_R = s_R * mainGain + leadR * leadGain;
+                    }
+                }
+
+                dstL[i] = s_L;
+                dstR[i] = s_R;
                 playhead += step;
             }
             return true;

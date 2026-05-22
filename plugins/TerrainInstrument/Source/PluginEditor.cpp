@@ -749,6 +749,36 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.replaceSlices (std::move (copy));
                 complete ({});
             })
+            .withNativeFunction("setSliceAttackMs", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = attack ms (>=0) or -1 to inherit global
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx = (int) args[0];
+                const float raw = (float) (double) args[1];
+                const float ms  = raw < 0.0f ? -1.0f : juce::jlimit (0.0f, 2000.0f, raw);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].attackMs = ms;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSliceReleaseMs", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = release ms (>=1) or -1 to inherit global
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx = (int) args[0];
+                const float raw = (float) (double) args[1];
+                const float ms  = raw < 0.0f ? -1.0f : juce::jlimit (1.0f, 5000.0f, raw);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].releaseMs = ms;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
             .withNativeFunction("deleteSlice", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2054,25 +2084,169 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   #ti-stretch-tooltip.visible { display: block; opacity: 1; }
 
-  /* Right-click context menu */
-  #ti-slice-ctx {
-    position: absolute; z-index: 20;
-    background: rgba(20,18,32,0.96); backdrop-filter: blur(12px);
-    border-radius: 5px; padding: 4px;
-    min-width: 140px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    display: none;
+  /* ─── Chop overlay (right-click → floating panel) ─────────────────────── */
+  #ti-chop-backdrop {
+    position: fixed; inset: 0; z-index: 4000;
+    background: rgba(8,6,16,0.55);
+    backdrop-filter: blur(14px) saturate(115%);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    opacity: 0; pointer-events: none;
+    transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  #ti-slice-ctx.open { display: block; }
-  #ti-slice-ctx .item {
-    padding: 7px 14px;
-    font: 600 10px/1 sans-serif; letter-spacing: 0.10em;
-    color: rgba(245,243,255,0.85); cursor: pointer; border-radius: 3px;
-    user-select: none;
+  #ti-chop-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  #ti-chop-panel {
+    position: fixed; z-index: 4001;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(0.97);
+    transform-origin: center;
+    width: 360px;
+    background: rgba(28,24,46,0.96);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.55),
+      0 8px 20px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    padding: 18px 18px 14px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+    color: rgba(245,243,255,0.92);
+    font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   }
-  #ti-slice-ctx .item:hover { background: rgba(139,92,246,0.25); color: white; }
-  #ti-slice-ctx .item.danger:hover { background: rgba(255,80,80,0.22); }
-  #ti-slice-ctx .sep { height: 1px; background: rgba(255,255,255,0.06); margin: 3px 6px; }
+  #ti-chop-panel.open {
+    opacity: 1; pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  #ti-chop-panel .ov-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
+  }
+  #ti-chop-panel .ov-title {
+    font: 700 10px/1 -apple-system, sans-serif;
+    letter-spacing: 0.22em; color: rgba(245,243,255,0.55);
+  }
+  #ti-chop-panel .ov-title .num { color: #8b5cf6; margin-left: 6px; }
+  #ti-chop-panel .ov-close {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: grid; place-items: center; cursor: pointer;
+    color: rgba(245,243,255,0.35);
+    transition: background 140ms, color 140ms;
+  }
+  #ti-chop-panel .ov-close:hover {
+    background: rgba(255,255,255,0.05);
+    color: rgba(245,243,255,0.92);
+  }
+
+  #ti-chop-panel .ov-modes {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    margin-bottom: 16px;
+  }
+  #ti-chop-panel .ov-mode {
+    position: relative;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+    padding: 10px 6px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    cursor: pointer; user-select: none;
+    transition: background 140ms ease, border-color 140ms ease;
+  }
+  #ti-chop-panel .ov-mode:hover {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.10);
+  }
+  #ti-chop-panel .ov-mode.active {
+    background: linear-gradient(180deg, rgba(139,92,246,0.20), rgba(139,92,246,0.06));
+    border-color: rgba(139,92,246,0.55);
+    box-shadow: 0 0 18px rgba(139,92,246,0.20), inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  #ti-chop-panel .ov-mode .emblem {
+    width: 28px; height: 22px;
+    display: grid; place-items: center;
+    color: rgba(245,243,255,0.55);
+    transition: color 160ms ease;
+  }
+  #ti-chop-panel .ov-mode.active .emblem { color: #8b5cf6; }
+  #ti-chop-panel .ov-mode .lbl {
+    font: 700 9px/1 -apple-system; letter-spacing: 0.20em;
+    color: rgba(245,243,255,0.35);
+    transition: color 160ms ease;
+  }
+  #ti-chop-panel .ov-mode.active .lbl { color: rgba(245,243,255,0.92); }
+  #ti-chop-panel .ov-mode.soon { opacity: 0.45; cursor: not-allowed; }
+  #ti-chop-panel .ov-mode.soon::after {
+    content: 'soon';
+    position: absolute; top: 4px; right: 6px;
+    font: 700 7px/1 -apple-system; letter-spacing: 0.18em;
+    color: #f59e0b; opacity: 0.85;
+  }
+
+  #ti-chop-panel .ov-row {
+    display: grid; grid-template-columns: 70px 1fr 56px;
+    align-items: center; gap: 12px;
+    padding: 7px 0;
+  }
+  #ti-chop-panel .ov-row .name {
+    font: 700 10px/1 -apple-system; letter-spacing: 0.20em;
+    color: rgba(245,243,255,0.55);
+  }
+  #ti-chop-panel .ov-row .val {
+    font: 600 11px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+    color: rgba(245,243,255,0.92); text-align: right; letter-spacing: 0.03em;
+  }
+  #ti-chop-panel .ov-row .bar {
+    height: 4px; border-radius: 999px;
+    background: rgba(255,255,255,0.07);
+    position: relative; cursor: pointer;
+  }
+  #ti-chop-panel .ov-row .bar .fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, #8b5cf6, #b388ff);
+    border-radius: 999px;
+    box-shadow: 0 0 12px rgba(139,92,246,0.55);
+  }
+  #ti-chop-panel .ov-row .bar .knob-dot {
+    position: absolute; top: 50%;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: white;
+    box-shadow: 0 0 8px rgba(139,92,246,0.7);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  #ti-chop-panel .ov-row.warp-only { display: none; }
+  #ti-chop-panel[data-warp="beats"]    .ov-row.warp-only,
+  #ti-chop-panel[data-warp="tones"]    .ov-row.warp-only,
+  #ti-chop-panel[data-warp="texture"]  .ov-row.warp-only { display: grid; }
+
+  #ti-chop-panel .ov-divider {
+    height: 1px; background: rgba(255,255,255,0.06); margin: 12px -2px;
+  }
+  #ti-chop-panel .ov-actions {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    margin-top: 4px;
+  }
+  #ti-chop-panel .ov-act {
+    padding: 9px 10px;
+    font: 600 10px/1 -apple-system; letter-spacing: 0.16em;
+    color: rgba(245,243,255,0.55); text-align: center;
+    border-radius: 7px; cursor: pointer; user-select: none;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: background 140ms, color 140ms, border-color 140ms;
+  }
+  #ti-chop-panel .ov-act:hover {
+    background: rgba(255,255,255,0.05);
+    color: rgba(245,243,255,0.92);
+  }
+  #ti-chop-panel .ov-act.danger:hover {
+    background: rgba(244,63,94,0.15);
+    color: #f43f5e;
+    border-color: rgba(244,63,94,0.35);
+  }
+  #ti-chop-panel[data-warp="none"] .ov-act.warp-only { display: none; }
 
   /* ─── XY readout — relocate to bottom-right (mirror of root picker) ─── */
   #hero .xy-readout {
@@ -2194,20 +2368,75 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     sliceOverlays.id = 'ti-slice-overlays';
     hero.appendChild(sliceOverlays);
 
-    // Right-click context menu (single instance, repositioned on demand).
-    var ctx = document.createElement('div');
-    ctx.id = 'ti-slice-ctx';
-    ctx.innerHTML =
-      '<div class="item" data-act="rev">Reverse</div>' +
-      '<div class="item" data-act="resetPitch">Reset Pitch</div>' +
-      '<div class="sep"></div>' +
-      '<div class="item" data-act="warp-none">Warp: None</div>' +
-      '<div class="item" data-act="warp-beats">Warp: Beats</div>' +
-      '<div class="item" data-act="warp-tones">Warp: Tones</div>' +
-      '<div class="item" data-act="resetStretch">Reset Stretch</div>' +
-      '<div class="sep"></div>' +
-      '<div class="item danger" data-act="del">Delete Chop</div>';
-    hero.appendChild(ctx);
+    // Floating chop overlay (replaces the old cramped context menu —
+    // panel sits over the whole UI in a fixed-position layer so it never
+    // clips at the canvas edges and reads like the Effects modulation menu).
+    var backdrop = document.createElement('div');
+    backdrop.id = 'ti-chop-backdrop';
+    document.body.appendChild(backdrop);
+
+    var panel = document.createElement('div');
+    panel.id = 'ti-chop-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Chop settings');
+    panel.setAttribute('data-warp', 'none');
+    panel.innerHTML =
+      '<div class="ov-header">' +
+        '<div class="ov-title">CHOP <span class="num" id="ti-chop-num">01</span></div>' +
+        '<div class="ov-close" id="ti-chop-close" title="Close">' +
+          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5 L19 19 M19 5 L5 19"/></svg>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ov-modes">' +
+        '<div class="ov-mode" data-mode="0">' +
+          '<div class="emblem"><svg width="22" height="14" viewBox="0 0 22 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 L20 7"/></svg></div>' +
+          '<div class="lbl">NONE</div>' +
+        '</div>' +
+        '<div class="ov-mode" data-mode="1">' +
+          '<div class="emblem"><svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12 V5"/><path d="M8 13 V8"/><path d="M13 11 V4"/><path d="M18 12 V7"/></svg></div>' +
+          '<div class="lbl">BEATS</div>' +
+        '</div>' +
+        '<div class="ov-mode" data-mode="2">' +
+          '<div class="emblem"><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7 C5 1, 8 1, 12 7 S19 13, 22 7"/></svg></div>' +
+          '<div class="lbl">TONES</div>' +
+        '</div>' +
+        '<div class="ov-mode soon" data-mode="3">' +
+          '<div class="emblem"><svg width="22" height="16" viewBox="0 0 22 16" fill="currentColor"><circle cx="3" cy="9" r="1.2"/><circle cx="7" cy="4" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="15" cy="3" r="1.2"/><circle cx="18" cy="11" r="1.2"/><circle cx="20" cy="6" r="1.2"/></svg></div>' +
+          '<div class="lbl">TEXTURE</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ov-section">' +
+        '<div class="ov-row" data-row="attack">' +
+          '<div class="name">ATTACK</div>' +
+          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
+          '<div class="val">— ms</div>' +
+        '</div>' +
+        '<div class="ov-row" data-row="release">' +
+          '<div class="name">RELEASE</div>' +
+          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
+          '<div class="val">— ms</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ov-section">' +
+        '<div class="ov-row" data-row="pitch">' +
+          '<div class="name">PITCH</div>' +
+          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
+          '<div class="val">+0 st</div>' +
+        '</div>' +
+        '<div class="ov-row warp-only" data-row="stretch">' +
+          '<div class="name">STRETCH</div>' +
+          '<div class="bar"><div class="fill"></div><div class="knob-dot"></div></div>' +
+          '<div class="val">1.00×</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ov-divider"></div>' +
+      '<div class="ov-actions">' +
+        '<div class="ov-act" data-act="rev">REVERSE</div>' +
+        '<div class="ov-act" data-act="resetPitch">RESET PITCH</div>' +
+        '<div class="ov-act warp-only" data-act="resetStretch">RESET STRETCH</div>' +
+        '<div class="ov-act danger" data-act="del">DELETE</div>' +
+      '</div>';
+    document.body.appendChild(panel);
 
     // Initial state: empty.
     hero.classList.add('empty-state');
@@ -2392,13 +2621,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         // state must mirror C++.
         var wm = parseInt(s.warpMode, 10);
         var sr = parseFloat(s.stretchRatio);
+        // Per-chop ADSR — same inheritance sentinel as C++. -1 = follow global.
+        var am = parseFloat(s.attackMs);
+        var rm = parseFloat(s.releaseMs);
         return {
           start:        parseInt(s.start, 10) || 0,
           end:          parseInt(s.end,   10) || 0,
           reverse:      !!s.reverse,
           pitch:        parseFloat(s.pitch) || 0,
           warpMode:     (isFinite(wm) && wm >= 0 && wm <= 3) ? wm : 0,
-          stretchRatio: (isFinite(sr) ? Math.max(0.1, Math.min(15.0, sr)) : 1.0)
+          stretchRatio: (isFinite(sr) ? Math.max(0.1, Math.min(15.0, sr)) : 1.0),
+          attackMs:     isFinite(am) ? am : -1,
+          releaseMs:    isFinite(rm) ? rm : -1
         };
       });
       // Clamp activeSliceIndex.
@@ -3060,21 +3294,223 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     }
   }
 
-  function openSliceContextMenu (ev, idx) {
-    var ctx = document.getElementById('ti-slice-ctx');
-    var hero = document.getElementById('hero');
-    if (!ctx || !hero) return;
-    var heroRect = hero.getBoundingClientRect();
-    ctx.style.left = (ev.clientX - heroRect.left) + 'px';
-    ctx.style.top  = (ev.clientY - heroRect.top)  + 'px';
-    ctx.classList.add('open');
-    ctx.dataset.targetIdx = idx;
+  // ── Chop overlay (replaces old #ti-slice-ctx) ─────────────────────────────
+  // APVTS defaults for global Attack/Release — used to populate the per-chop
+  // sliders when the chop has the inheritance sentinel (-1). If the user has
+  // moved the global knob the chop will still show this baseline, which is
+  // close enough for v1 — the chop captures its own value the moment the
+  // user drags the slider, breaking the dependency.
+  var GLOBAL_ATTACK_DEFAULT  = 5.0;
+  var GLOBAL_RELEASE_DEFAULT = 800.0;
+
+  // Skew-aware normalize/denormalize so the slider feels like the global
+  // ATTACK/RELEASE knobs in Terrain Effects (most travel covers small ms).
+  function denormSkew (t, min, max, skew) {
+    t = Math.max(0, Math.min(1, t));
+    return min + (max - min) * Math.pow(t, 1.0 / skew);
+  }
+  function normSkew (v, min, max, skew) {
+    v = Math.max(min, Math.min(max, v));
+    return Math.pow((v - min) / Math.max(1e-9, max - min), skew);
   }
 
-  function closeSliceContextMenu () {
-    var ctx = document.getElementById('ti-slice-ctx');
-    if (ctx) ctx.classList.remove('open');
+  // Per-row range descriptors (must match the native-fn clamps).
+  var OV_ROWS = {
+    attack:  { min: 0.0,  max: 2000.0, skew: 0.4, unit: 'ms', step: 1 },
+    release: { min: 1.0,  max: 5000.0, skew: 0.4, unit: 'ms', step: 1 },
+    pitch:   { min: -12,  max: 12,     skew: 1.0, unit: 'st', step: 1 },
+    stretch: { min: 0.1,  max: 15.0,   skew: 0.35, unit: '×',  step: 0.01 }
+  };
+
+  function fmtRowValue (key, v) {
+    if (key === 'pitch') {
+      var s = Math.round(v);
+      return (s >= 0 ? '+' : '') + s + ' st';
+    }
+    if (key === 'stretch') return v.toFixed(2) + '×';
+    return Math.round(v) + ' ms';
   }
+
+  function rowValueFromState (idx, key) {
+    var s = state.slices[idx];
+    if (!s) return null;
+    if (key === 'pitch')   return Number(s.pitch   || 0);
+    if (key === 'stretch') return Number(s.stretchRatio || 1.0);
+    if (key === 'attack') {
+      var a = (s.attackMs == null || s.attackMs < 0) ? GLOBAL_ATTACK_DEFAULT : s.attackMs;
+      return Number(a);
+    }
+    if (key === 'release') {
+      var r = (s.releaseMs == null || s.releaseMs < 0) ? GLOBAL_RELEASE_DEFAULT : s.releaseMs;
+      return Number(r);
+    }
+    return null;
+  }
+
+  function setRowVisual (rowEl, key, v) {
+    var r = OV_ROWS[key];
+    var t = normSkew(v, r.min, r.max, r.skew);
+    rowEl.querySelector('.fill').style.width   = (t * 100).toFixed(2) + '%';
+    rowEl.querySelector('.knob-dot').style.left = (t * 100).toFixed(2) + '%';
+    rowEl.querySelector('.val').textContent     = fmtRowValue(key, v);
+  }
+
+  function ensureChopOverlayWired () {
+    var panel = document.getElementById('ti-chop-panel');
+    if (!panel || panel.dataset.wired === '1') return;
+    panel.dataset.wired = '1';
+
+    var backdrop = document.getElementById('ti-chop-backdrop');
+    backdrop.addEventListener('click', closeChopOverlay);
+    document.getElementById('ti-chop-close').addEventListener('click', closeChopOverlay);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && panel.classList.contains('open')) closeChopOverlay();
+    });
+
+    // Mode pills
+    panel.querySelectorAll('.ov-mode').forEach(function (el) {
+      el.addEventListener('click', function () {
+        if (el.classList.contains('soon')) return;
+        var idx = parseInt(panel.dataset.targetIdx, 10);
+        if (isNaN(idx) || !state.slices[idx]) return;
+        var mode = parseInt(el.dataset.mode, 10) || 0;
+        state.slices[idx].warpMode = mode;
+        var fn = getNativeFn('setSliceWarpMode');
+        if (fn) { try { fn(idx, mode); } catch (_) {} }
+        applyOverlayState(idx);
+        redrawSliceOverlay();
+      });
+    });
+
+    // Slider rows — single drag handler, route per-row by data-row.
+    panel.querySelectorAll('.ov-row').forEach(function (rowEl) {
+      var bar = rowEl.querySelector('.bar');
+      var key = rowEl.dataset.row;
+      var range = OV_ROWS[key];
+      if (!bar || !range) return;
+      bar.addEventListener('mousedown', function (e) {
+        function commit (clientX) {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          var rect = bar.getBoundingClientRect();
+          var t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          var v = denormSkew(t, range.min, range.max, range.skew);
+          if (range.step >= 1) v = Math.round(v);
+          // Update local mirror + send native fn for this row.
+          if (key === 'attack') {
+            state.slices[idx].attackMs = v;
+            var fnA = getNativeFn('setSliceAttackMs');
+            if (fnA) { try { fnA(idx, v); } catch (_) {} }
+          } else if (key === 'release') {
+            state.slices[idx].releaseMs = v;
+            var fnR = getNativeFn('setSliceReleaseMs');
+            if (fnR) { try { fnR(idx, v); } catch (_) {} }
+          } else if (key === 'pitch') {
+            state.slices[idx].pitch = v;
+            var fnP = getNativeFn('setSlicePitch');
+            if (fnP) { try { fnP(idx, v); } catch (_) {} }
+          } else if (key === 'stretch') {
+            state.slices[idx].stretchRatio = v;
+            var fnS = getNativeFn('setSliceStretchRatio');
+            if (fnS) { try { fnS(idx, v); } catch (_) {} }
+          }
+          setRowVisual(rowEl, key, v);
+          // Stretch tweak needs the chop's visualWidth to follow — apply that
+          // by redrawing the overlay (cumulative layout reads stretchRatio).
+          if (key === 'stretch' || key === 'pitch') redrawSliceOverlay();
+        }
+        commit(e.clientX);
+        function onMove (ev) { commit(ev.clientX); ev.preventDefault(); }
+        function onUp ()      { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+
+    // Action buttons
+    panel.querySelectorAll('.ov-act').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var idx = parseInt(panel.dataset.targetIdx, 10);
+        if (isNaN(idx) || !state.slices[idx]) return;
+        var act = el.dataset.act;
+        if (act === 'rev') {
+          state.slices[idx].reverse = !state.slices[idx].reverse;
+          var fnR = getNativeFn('setSliceReverse');
+          if (fnR) { try { fnR(idx, state.slices[idx].reverse); } catch (_) {} }
+          redrawSliceOverlay();
+        } else if (act === 'resetPitch') {
+          state.slices[idx].pitch = 0;
+          var fnP = getNativeFn('setSlicePitch');
+          if (fnP) { try { fnP(idx, 0); } catch (_) {} }
+          applyOverlayState(idx);
+          redrawSliceOverlay();
+        } else if (act === 'resetStretch') {
+          state.slices[idx].stretchRatio = 1.0;
+          var fnS = getNativeFn('setSliceStretchRatio');
+          if (fnS) { try { fnS(idx, 1.0); } catch (_) {} }
+          applyOverlayState(idx);
+          redrawSliceOverlay();
+        } else if (act === 'del') {
+          var fnD = getNativeFn('deleteSlice');
+          if (fnD) {
+            try {
+              var r = fnD(idx);
+              if (r && typeof r.then === 'function') r.then(applySlicesJson);
+              else applySlicesJson(r);
+            } catch (_) {}
+          }
+          closeChopOverlay();
+        }
+      });
+    });
+  }
+
+  function applyOverlayState (idx) {
+    var panel = document.getElementById('ti-chop-panel');
+    if (!panel) return;
+    var s = state.slices[idx];
+    if (!s) return;
+    panel.dataset.targetIdx = idx;
+    var numEl = document.getElementById('ti-chop-num');
+    if (numEl) numEl.textContent = (idx + 1 < 10 ? '0' : '') + (idx + 1);
+
+    // Mode pill highlight + warp-only visibility
+    var mode = Number(s.warpMode || 0);
+    var modeName = ['none','beats','tones','texture'][mode] || 'none';
+    panel.setAttribute('data-warp', modeName);
+    panel.querySelectorAll('.ov-mode').forEach(function (el) {
+      el.classList.toggle('active', parseInt(el.dataset.mode, 10) === mode);
+    });
+
+    // Row visuals
+    panel.querySelectorAll('.ov-row').forEach(function (rowEl) {
+      var key = rowEl.dataset.row;
+      var v = rowValueFromState(idx, key);
+      if (v == null) return;
+      setRowVisual(rowEl, key, v);
+    });
+  }
+
+  function openChopOverlay (idx) {
+    if (!state.slices[idx]) return;
+    ensureChopOverlayWired();
+    applyOverlayState(idx);
+    document.getElementById('ti-chop-backdrop').classList.add('open');
+    document.getElementById('ti-chop-panel').classList.add('open');
+  }
+
+  function closeChopOverlay () {
+    var bd = document.getElementById('ti-chop-backdrop');
+    var pn = document.getElementById('ti-chop-panel');
+    if (bd) bd.classList.remove('open');
+    if (pn) pn.classList.remove('open');
+  }
+
+  // Legacy aliases — older call sites still reference these names.
+  function openSliceContextMenu (ev, idx) { openChopOverlay(idx); }
+  function closeSliceContextMenu ()       { closeChopOverlay(); }
 
   // ── Interactions ──────────────────────────────────────────────────────────
   function wireInteractions () {
@@ -3159,72 +3595,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
     }
 
-    // Context menu actions
-    var ctxMenu = document.getElementById('ti-slice-ctx');
-    if (ctxMenu) {
-      ctxMenu.addEventListener('click', function (ev) {
-        var item = ev.target.closest('.item');
-        if (!item) return;
-        var idx = parseInt(ctxMenu.dataset.targetIdx, 10);
-        if (isNaN(idx)) return;
-        var act = item.dataset.act;
-        if (act === 'rev') {
-          if (state.slices[idx]) {
-            state.slices[idx].reverse = !state.slices[idx].reverse;
-            var fnR = getNativeFn('setSliceReverse');
-            if (fnR) { try { fnR(idx, state.slices[idx].reverse); } catch (_) {} }
-            redrawSliceOverlay();
-          }
-        } else if (act === 'resetPitch') {
-          if (state.slices[idx]) {
-            state.slices[idx].pitch = 0;
-            var fnP = getNativeFn('setSlicePitch');
-            if (fnP) { try { fnP(idx, 0); } catch (_) {} }
-            redrawSliceOverlay();
-          }
-        } else if (act === 'warp-none') {
-          if (state.slices[idx]) {
-            state.slices[idx].warpMode = 0;
-            var fnWN = getNativeFn('setSliceWarpMode');
-            if (fnWN) { try { fnWN(idx, 0); } catch (_) {} }
-            redrawSliceOverlay();
-          }
-        } else if (act === 'warp-beats') {
-          if (state.slices[idx]) {
-            state.slices[idx].warpMode = 1;
-            var fnWB = getNativeFn('setSliceWarpMode');
-            if (fnWB) { try { fnWB(idx, 1); } catch (_) {} }
-            redrawSliceOverlay();
-          }
-        } else if (act === 'warp-tones') {
-          if (state.slices[idx]) {
-            state.slices[idx].warpMode = 2;
-            var fnWT = getNativeFn('setSliceWarpMode');
-            if (fnWT) { try { fnWT(idx, 2); } catch (_) {} }
-            redrawSliceOverlay();
-          }
-        } else if (act === 'resetStretch') {
-          if (state.slices[idx]) {
-            state.slices[idx].stretchRatio = 1.0;
-            var fnRS = getNativeFn('setSliceStretchRatio');
-            if (fnRS) { try { fnRS(idx, 1.0); } catch (_) {} }
-            redrawSliceOverlay();
-          }
-        } else if (act === 'del') {
-          var fnD = getNativeFn('deleteSlice');
-          if (fnD) {
-            try {
-              var r = fnD(idx);
-              if (r && typeof r.then === 'function') r.then(applySlicesJson);
-              else applySlicesJson(r);
-            } catch (_) {}
-          }
-        }
-        closeSliceContextMenu();
-      });
-    }
-    // Click anywhere else closes the context menu.
-    document.addEventListener('click', closeSliceContextMenu);
+    // Chop overlay wires its own actions on first open (ensureChopOverlayWired).
+    // No legacy ctx-menu handler needed here.
     // Click outside the SLICES drawer closes it. Drawer interactions
     // already stopPropagation so they don't reach this listener.
     document.addEventListener('click', function (ev) {

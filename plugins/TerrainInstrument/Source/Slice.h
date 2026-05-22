@@ -47,6 +47,13 @@ namespace tw
         WarpMode    warpMode         = WarpMode::None;   // per-chop warp engine selection
         float       stretchRatio     = 1.0f;             // clamped 0.1..15.0; ignored when warpMode == None
 
+        // Per-chop envelope. -1.0f sentinel = "inherit the global ATTACK_MS /
+        // RELEASE_MS param" so legacy presets behave identically. Any value
+        // >= 0 wins over the global at note-on. UI sliders capture a concrete
+        // value the first time they are moved.
+        float       attackMs         = -1.0f;
+        float       releaseMs        = -1.0f;
+
         juce::int64 length() const noexcept { return endSample - startSample; }
     };
 
@@ -70,6 +77,8 @@ namespace tw
             o->setProperty ("pitch",        (double) s.pitchOffsetSemis);
             o->setProperty ("warpMode",     (int) s.warpMode);
             o->setProperty ("stretchRatio", (double) s.stretchRatio);
+            o->setProperty ("attackMs",     (double) s.attackMs);
+            o->setProperty ("releaseMs",    (double) s.releaseMs);
             arr.add (juce::var (o.get()));
         }
         obj->setProperty ("slices", arr);
@@ -101,6 +110,14 @@ namespace tw
                                     : WarpMode::None;
             s.stretchRatio     = juce::jlimit (0.1f, 15.0f,
                                     (float) (double) e.getProperty ("stretchRatio", 1.0));
+
+            // Per-chop envelope (added after warp shipped). Sentinel -1 means
+            // "inherit the global ATTACK_MS / RELEASE_MS". Range clamps match
+            // the global APVTS schema so JSON typos can't escape the bounds.
+            const double atkRaw = (double) e.getProperty ("attackMs",  -1.0);
+            const double relRaw = (double) e.getProperty ("releaseMs", -1.0);
+            s.attackMs  = atkRaw < 0.0 ? -1.0f : juce::jlimit (0.0f,    2000.0f, (float) atkRaw);
+            s.releaseMs = relRaw < 0.0 ? -1.0f : juce::jlimit (1.0f,    5000.0f, (float) relRaw);
 
             if (s.endSample > s.startSample)
                 out.push_back (s);
