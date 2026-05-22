@@ -2440,6 +2440,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     var W = waveRect.width;
     var H = Math.max(0, waveRect.height - BOTTOM_RESERVE);
+    // Per-chop waveform canvas uses the FULL hero height (not the reduced
+    // body height) so its centerline matches the PITCH-mode waveform's
+    // centerline (heroHeight/2). The body/markers still use H (with the
+    // 50 px reserve so they don't intercept the bottom strip), but the
+    // <canvas> child of each body is allowed to overflow downward by
+    // BOTTOM_RESERVE — pointer-events:none on the canvas means the
+    // overflow doesn't steal clicks, and the bottom-pills z-index (5) sits
+    // above the slice overlay (z-index 4) so the overflowed canvas is
+    // visually covered by the bottom strip. User asked: "we should just
+    // keep it at the same position as the pitch and just add the warp
+    // markers" — this gives that exact behavior.
+    var H_canvas = waveRect.height;
     var totalSamples = state.sampleLengthSamples;
     var isChromatic  = state.sliceSubMode === 1;
     var activeIdx    = state.activeSliceIndex;
@@ -2474,6 +2486,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       cumulative += visualWidth;
       return layout;
     });
+    // Expose to gesture handlers so cursor↔source mapping respects the
+    // cumulative/weighted layout (otherwise drags use uniform mapping and
+    // markers snap-back after commit because the new layout placement
+    // disagrees with where the cursor said the marker was). Also store
+    // the current waveform-canvas pixel width — used by predictMarkerVisualX
+    // to simulate the post-commit layout in real time.
+    state.chopLayouts        = chopLayouts;
+    state.waveformPixelWidth = W;
 
     state.slices.forEach(function (s, i) {
       var layout = chopLayouts[i];
@@ -2498,7 +2518,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var wfCanvas = document.createElement('canvas');
       wfCanvas.className = 'ti-slice-waveform';
       body.appendChild(wfCanvas);
-      drawChopWaveform(wfCanvas, widthPx, H, layout.srcStart, layout.srcEnd, totalSamples);
+      drawChopWaveform(wfCanvas, widthPx, H_canvas, layout.srcStart, layout.srcEnd, totalSamples);
 
       // Hide all body overlays (pitch meter, REV tag, warp letter, stretch
       // label) when the chop is too narrow to fit them legibly. Avoids the
@@ -2772,27 +2792,82 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     document.addEventListener('mouseup',   onUp,   true);
   }
 
+  // Reverse-map a clientX coordinate into a source sample using the
+  // CURRENT cumulative chop layout. Walks chopLayouts to find which chop
+  // contains the cursor's x, then interpolates within that chop's source
+  // range proportional to the cursor's position in the chop's visualWidth.
+  //
+  // Without this, gesture handlers used uniform `frac = (x-left)/W → sample
+  // = frac*total` which is wrong when chops are stretched (pixels-per-
+  // source-sample is non-uniform). That mismatch produced the marker
+  // snap-back: drag mapped cursor X to one sample, applySlicesJson then
+  // re-rendered the marker at the SAME-sample's true cumulative-layout X,
+  // which is a different visual position.
+  function clientXToSourceSample (clientX, waveRectLeft, W) {
+    var x = clientX - waveRectLeft;
+    if (W <= 0) return 0;
+    if (x < 0) x = 0;
+    if (x > W) x = W;
+
+    var layouts = state.chopLayouts;
+    if (!layouts || layouts.length === 0) {
+      return Math.round((x / W) * state.sampleLengthSamples);
+    }
+    for (var i = 0; i < layouts.length; i++) {
+      var L = layouts[i];
+      var right = L.visualLeft + L.visualWidth;
+      if (x < right || i === layouts.length - 1) {
+        var localX   = Math.max(0, x - L.visualLeft);
+        var localFrac = L.visualWidth > 0 ? Math.min(1, localX / L.visualWidth) : 0;
+        var srcLen   = L.srcEnd - L.srcStart;
+        return Math.round(L.srcStart + localFrac * srcLen);
+      }
+    }
+    return layouts[layouts.length - 1].srcEnd;
+  }
+
+  // Predict where marker `markerIdx` (boundary between chop markerIdx-1 and
+  // chop markerIdx) will visually land after applySlicesJson commits the
+  // new boundary at `sampleAtBoundary`. Simulates the cumulative layout
+  // with the moved boundary so the marker tracks the cursor without
+  // snap-back at release.
+  function predictMarkerVisualX (sampleAtBoundary, markerIdx, W) {
+    var totalWeight = 0;
+    var weights = new Array(state.slices.length);
+    for (var i = 0; i < state.slices.length; i++) {
+      var s = state.slices[i];
+      var sStart = (i === markerIdx)     ? sampleAtBoundary : s.start;
+      var sEnd   = (i === markerIdx - 1) ? sampleAtBoundary : s.end;
+      var sr = (typeof s.stretchRatio === 'number') ? s.stretchRatio : 1.0;
+      var w = Math.max(1, (sEnd - sStart)) * sr;
+      weights[i] = w;
+      totalWeight += w;
+    }
+    if (totalWeight <= 0) totalWeight = 1;
+    var cumulative = 0;
+    for (var j = 0; j < markerIdx; j++) cumulative += (weights[j] / totalWeight) * W;
+    return cumulative;
+  }
+
   function attachMarkerDrag (marker, i) {
-    // Hover hint: ew-resize cursor when shift is held OR when the chop
-    // to the left is already in stretch mode (sticky stretch).
+    // Hover hint: ew-resize cursor when shift is held (stretch left chop).
+    // Plain drag = boundary move (works for ALL chops, including warped —
+    // user reported "sticky stretch" was making non-warped markers feel
+    // locked when adjacent to warped chops).
     marker.addEventListener('mousemove', function (ev) {
-      var leftChop = state.slices[i - 1];
-      var sticky   = leftChop && leftChop.warpMode && leftChop.warpMode > 0;
-      marker.style.cursor = (ev.shiftKey || sticky) ? 'ew-resize' : '';
+      marker.style.cursor = ev.shiftKey ? 'ew-resize' : '';
     });
     marker.addEventListener('mousedown', function (ev) {
       if (ev.button !== 0) return;
       ev.preventDefault();
       ev.stopPropagation();
 
-      // Stretch branch — entered on shift+drag OR when the LEFT chop is
-      // already warp-engaged. Once a chop is in stretch mode, any drag of
-      // its right-edge marker continues stretching it ("sticky"). User
-      // explicitly exits via right-click Warp:None / Reset Stretch / by
-      // clicking the T letter on the chop body.
-      var leftChop = state.slices[i - 1];
-      var sticky   = leftChop && leftChop.warpMode && leftChop.warpMode > 0;
-      if (ev.shiftKey || sticky) {
+      // STRETCH BRANCH — only shift+drag now. The previous "sticky" path
+      // (any drag on a warped chop's right marker = stretch) made boundary
+      // movement feel locked next to warped chops because plain drag was
+      // hijacked. Stretch now always requires the explicit shift modifier.
+      // Bodies still have their own sticky stretch (separate gesture).
+      if (ev.shiftKey) {
         beginStretchDrag(ev, i - 1, marker);
         return;
       }
@@ -2815,22 +2890,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       marker.classList.add('dragging');
       document.body.style.cursor = 'ew-resize';
 
-      function clientXToSample (x) {
-        var frac = (x - waveRect.left) / W;
-        frac = Math.max(0, Math.min(1, frac));
-        var s = Math.round(frac * total);
+      function cursorToSample (x) {
+        var s = clientXToSourceSample(x, waveRect.left, W);
         return Math.max(minSample, Math.min(maxSample, s));
       }
       function onMove (mev) {
-        var s = clientXToSample(mev.clientX);
-        marker.style.left = ((s / total) * W) + 'px';
+        var s = cursorToSample(mev.clientX);
+        // Predict the post-commit visual position so the marker tracks
+        // the cursor accurately through the cumulative layout. Without
+        // this, the marker visually sticks to its OLD cumulative-X during
+        // drag and then snaps to its NEW position on release because the
+        // surrounding totalWeight has shifted.
+        marker.style.left = predictMarkerVisualX(s, i, W) + 'px';
       }
       function onUp (mev) {
         document.removeEventListener('mousemove', onMove, true);
         document.removeEventListener('mouseup',   onUp,   true);
         document.body.style.cursor = '';
         marker.classList.remove('dragging');
-        var finalSample = clientXToSample(mev.clientX);
+        var finalSample = cursorToSample(mev.clientX);
         var fn = getNativeFn('moveSliceBoundary');
         if (fn) {
           fn(i, finalSample).then(applySlicesJson).catch(function(){});
@@ -2896,9 +2974,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (!waveCanvas || state.sampleLengthSamples <= 0) return;
       var waveRect = waveCanvas.getBoundingClientRect();
       if (waveRect.width <= 0) return;
-      var frac = (ev.clientX - waveRect.left) / waveRect.width;
-      frac = Math.max(0, Math.min(1, frac));
-      var samplePos = Math.round(frac * state.sampleLengthSamples);
+      // Use the cumulative-layout-aware mapping. Previously this used
+      // uniform `frac = (clientX - left) / W * total`, which placed new
+      // markers at the wrong source position when the surrounding chops
+      // were stretched — user reported "places it in a random spot."
+      var samplePos = clientXToSourceSample(ev.clientX, waveRect.left, waveRect.width);
       var fn = getNativeFn('addMarkerAt');
       if (fn) fn(samplePos).then(applySlicesJson).catch(function(){});
     });
