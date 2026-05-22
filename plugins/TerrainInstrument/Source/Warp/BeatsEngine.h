@@ -1,55 +1,44 @@
-// BeatsEngine.h — v5 (broadened crossfade gate — kills per-wrap clicks)
+// BeatsEngine.h — v6 (heavier de-clicking — larger grain + longer xfade + boundary fade)
 //
-// Diagnosis of remaining clicks in v4:
-//   v4 reset cyclePos to crossfadeLen after wrap (fixing v3's structural
-//   backward jump), but the crossfade itself never actually ran across
-//   its 25 ms window. The gate read:
-//       if (wrapImminent && cyclePos >= crossfadeBegin)
-//   where `wrapImminent = (nextCyclePos < cyclePos)`. At unity pitchRatio
-//   (cyclePos += 1 per sample) the wrap condition `cyclePos + 1 >= grainSize`
-//   is true only on the single last sample before wrap. So the gate
-//   intersected to ~1 sample even though the inner math used a `t` that
-//   ran 0..1 across the entire crossfadeLen-wide region. The "crossfade"
-//   was effectively a 1-sample hard switch with t≈1 (output = start head
-//   alone), producing an audible jump from source[grainSize-2] to
-//   source[crossfadeLen-1] every wrap. At higher stretch the wrap rate
-//   was 16–77 Hz → buzzy clicking.
+// v5 fixed the two structural bugs that were producing audible clicks
+// (broadened the crossfade gate so it actually ran across its full window,
+// and corrected SamplerVoice's source-feed length so pitchRatio>1 didn't
+// starve the history). v6 turns the dial further:
 //
-// v5 fix (this file):
-//   - Crossfade gate now `inCrossfadeRegion && wrapWithinBeat`:
-//       inCrossfadeRegion = cyclePos >= crossfadeBegin           (~25 ms tail)
-//       wrapWithinBeat    = samplesToWrap   < samplesToBeatEnd   (not preempted by beat boundary)
-//     The crossfade now actually runs across its full window, producing
-//     a smooth equal-power blend instead of a 1-sample snap.
-//   - pos1 wrap (the within-grain interp pair wrap) still fires only when
-//     pos0+1 would step off the grain — but is gated by the same
-//     doCrossfade so beat-boundary samples keep the historic "read into
-//     next beat" interp behavior (partial smoothing of beat boundary).
+// 1. Wrap rate halved: grain 60 ms → 100 ms (wrap rate 16 Hz → ~10 Hz).
+//    Fewer wraps per second = fewer perceptual click events per second.
+//    Effective loop after the first cycle's plain opening is 50 ms.
 //
-// Companion fix in SamplerVoice::renderWarp (v5):
-//   - The input feed length had been computed `numSamples / stretchRatio`
-//     which is correct for Signalsmith (handles pitch internally) but
-//     starved BeatsEngine at pitchRatio > 1 — Beats advances cyclePos
-//     through source at `pitchRatio` per output sample, so it consumes
-//     grainSize source samples per beat regardless of pitch. With the
-//     old formula, historyWriteIdx advanced by grainSize/pitchRatio per
-//     beat while loopAnchor advanced by grainSize, so loopAnchor outran
-//     the write head after a few beats. The engine then read stale
-//     circular-buffer data → buzz / artifacts on any chromatic note
-//     above the root.
-//   - WarpProcessor now exposes `sourceSamplesPerBlock(numSamples)` which
-//     returns the right input length per mode. For Beats that's
-//     `numSamples * pitchRatio / stretchRatio`.
+// 2. Crossfade doubled: 25 ms → 50 ms. The longer fade-in delay means the
+//    start head's transient at source[0] enters at much lower amplitude
+//    per sample (b'(0) is still π/2 but t=1/crossfadeLen halves, so b at
+//    sample 1 halves). Transient re-fire is much less prominent.
 //
-// Still-known artifact: beat-boundary discontinuity once per beat (much
-// slower than per-grain wraps, typically 1–8 Hz). To fully smooth it we'd
-// need to pre-buffer the next grain to crossfade across the boundary —
-// deferred to v6 (raises inputLatency by crossfadeLen ≈ 25 ms).
+// 3. Beat-boundary fade-in/out: 2 ms Hann fade-out at the last samples of
+//    every beat and 2 ms fade-in at the start of every beat *after the
+//    first*. The total ~4 ms output-amplitude dip at the boundary masks
+//    the loopAnchor-advance source-position discontinuity that v5 could
+//    not address. We deliberately skip the fade-in on the FIRST beat so
+//    the chop's note-on attack stays sharp.
 //
-// At stretchRatio=1.0 with pitchRatio=1.0 the engine is still bit-identical
-// passthrough — cyclePos sweeps 0..grainSize-1 sequentially, no within-beat
-// wrap, no crossfade, beat boundary reset is exactly one sample after the
-// last grain sample.
+// 4. Start-head transient softener: when the start head is at
+//    startCyclePos < innerFadeLen (≈1 ms), multiply its read by a fade-in
+//    factor. This further suppresses a sharp source[0] transient (kick
+//    hit, snare attack) from re-firing on every grain wrap. Doesn't
+//    affect cycle 1's plain opening read because that's done via the
+//    main head, not the start head.
+//
+// v6 keeps the v5 architecture intact:
+//   - Post-wrap cyclePos resets to crossfadeLen (the start head's last
+//     position is source[crossfadeLen-1]; main resumes at
+//     source[crossfadeLen] — continuous).
+//   - Crossfade gate: inCrossfadeRegion && wrapWithinBeat. The gate spans
+//     the full crossfadeLen tail.
+//   - Per-mode source-feed math lives in WarpProcessor::sourceSamplesPerBlock.
+//
+// Unity stretchRatio + unity pitchRatio is still bit-identical passthrough
+// EXCEPT for the boundary fade (2 ms output dip every grain at the beat
+// boundary). For passthrough use the user should set warpMode = None.
 //
 // RT-safety: process() is allocation-free.
 //
@@ -80,13 +69,17 @@ namespace tw
             std::memset (historyR.getData(), 0, (size_t) target * sizeof (float));
             historyMask = target - 1;
 
-            // 60 ms grain — wraps at ~16 Hz, sub-audio. Crossfade tail is
-            // 25 ms ("extreme X fade" the user asked for); in v5's gate it
-            // actually runs across the full 25 ms instead of collapsing to
-            // a single sample.
-            targetGrainSize = juce::jlimit (1024, 8192, (int) (sampleRate * 0.060));
+            // v6: 100 ms grain → wrap rate ≈ 10 Hz (was 16 Hz at 60 ms).
+            // crossfadeLen 50 ms → effective loop = grainSize - crossfadeLen = 50 ms.
+            targetGrainSize = juce::jlimit (1024, 8192, (int) (sampleRate * 0.100));
             crossfadeLen    = juce::jlimit (64,   targetGrainSize / 2 - 1,
-                                            (int) (sampleRate * 0.025));
+                                            (int) (sampleRate * 0.050));
+
+            // v6 boundary smoothing windows (caller-block-fixed, not pitch-scaled):
+            //   boundaryFadeLen = 2 ms → ~4 ms amplitude dip at each beat boundary
+            //   innerFadeLen    = 1 ms → softens start-head transient at source[0]
+            boundaryFadeLen = juce::jmax (16, (int) (sampleRate * 0.002));
+            innerFadeLen    = juce::jmax (8,  (int) (sampleRate * 0.001));
 
             ready = true;
             reset();
@@ -99,6 +92,7 @@ namespace tw
             outputsThisLoop    = 0;
             cyclePos           = 0.0;
             firstBlockPending  = true;
+            beatCount          = 0;
         }
 
         bool isReady()      const noexcept { return ready; }
@@ -134,13 +128,6 @@ namespace tw
 
             const double pitchRatio = std::pow (2.0, (double) pitchSemitones / 12.0);
 
-            // SamplerVoice now feeds the right number of source samples per
-            // block via WarpProcessor::sourceSamplesPerBlock — for Beats
-            // that's numSamples * pitchRatio / stretchRatio. We can't easily
-            // recover that here because we don't know the caller's numSamples
-            // contract, so we just write what we were given (matches the
-            // contract: pullSourceIntoScratch wrote `inputLen` samples to
-            // inL/inR up to its return value).
             const int inputLen = juce::jmax (1, (int) std::round (
                 (double) numSamples * pitchRatio / (double) stretchRatio));
 
@@ -160,6 +147,7 @@ namespace tw
                     outputsThisLoop = 0;
                     cyclePos = 0.0;
                     firstBlockPending = false;
+                    beatCount = 0;
                 }
                 else
                 {
@@ -174,31 +162,24 @@ namespace tw
             const double effLoopLen     = (double) (targetGrainSize - crossfadeLen);
             const double crossfadeBegin = (double) (targetGrainSize - crossfadeLen);
 
+            // Cap the boundary fade in cases where the beat itself is shorter
+            // than 4 × boundaryFadeLen (otherwise the fade-out and fade-in
+            // overlap and we lose audible content). Stays at the configured
+            // 2 ms in normal use.
+            const int beatFadeLen = juce::jmin (boundaryFadeLen,
+                                                juce::jmax (1, outputsPerLoop / 4));
+
             for (int i = 0; i < numSamples; i++)
             {
                 if (outputsThisLoop >= outputsPerLoop)
                 {
                     loopAnchor += targetGrainSize;
                     outputsThisLoop = 0;
-                    cyclePos = 0.0;  // Fresh cycle at each new beat
+                    cyclePos = 0.0;
+                    beatCount++;
                 }
 
-                // Crossfade detector — fires across the FULL crossfadeLen
-                // tail of every cycle whose wrap lands within the current
-                // beat. v4 gated this on `wrapImminent` (the single sample
-                // before wrap) which collapsed the 25 ms taper to 1 sample
-                // and produced a hard switch — see file header.
-                //
-                // samplesToWrap: how many OUTPUT samples until cyclePos
-                //                hits grainSize, computed at the current
-                //                pitchRatio (cyclePos advances per sample
-                //                at pitchRatio).
-                // samplesToBeatEnd: how many output samples remain in this
-                //                   beat. If the beat ends first, the
-                //                   beat-boundary handler fires and the
-                //                   in-grain wrap is preempted — skip the
-                //                   crossfade so we don't smear into a
-                //                   stale fade-in head.
+                // Crossfade detector (v5 — broadened gate, full crossfadeLen tail).
                 const double remGrain = (double) targetGrainSize - cyclePos;
                 const int samplesToWrap    = (int) std::ceil (remGrain / pitchRatio);
                 const int samplesToBeatEnd = outputsPerLoop - outputsThisLoop;
@@ -206,11 +187,7 @@ namespace tw
                 const bool inCrossfadeRegion = cyclePos >= crossfadeBegin;
                 const bool doCrossfade     = wrapWithinBeat && inCrossfadeRegion;
 
-                // Main read at loopAnchor + cyclePos with within-grain wrap
-                // for idx1 ONLY at the very last sample of a within-beat
-                // wrap. Outside the crossfade region, the natural advance
-                // into the next sample (including across beat boundaries)
-                // is preserved.
+                // Main read.
                 const int pos0 = (int) cyclePos;
                 int pos1;
                 if (doCrossfade && pos0 + 1 >= targetGrainSize)
@@ -225,21 +202,29 @@ namespace tw
 
                 if (doCrossfade)
                 {
-                    // Start head reads source[0..crossfadeLen-1] of the
-                    // current grain. Advances in lockstep with the main
-                    // head (startCyclePos = cyclePos - crossfadeBegin, same
-                    // per-sample increment). At wrap, the main head will
-                    // resume at cyclePos = crossfadeLen exactly where the
-                    // start head's last position (source[crossfadeLen - 1])
-                    // ended — continuous.
-                    const double startCyclePos = cyclePos - crossfadeBegin;  // 0..crossfadeLen
+                    // Start head (reading current grain's [0..crossfadeLen) so the
+                    // wrap is continuous at the algorithm boundary).
+                    const double startCyclePos = cyclePos - crossfadeBegin;
                     const int    sPos0 = (int) startCyclePos;
                     const int    sPos1 = sPos0 + 1;  // < crossfadeLen < grainSize/2 — always in grain
                     const float  sFrac = (float) (startCyclePos - sPos0);
                     const int    sIdx0 = (loopAnchor + sPos0) & historyMask;
                     const int    sIdx1 = (loopAnchor + sPos1) & historyMask;
-                    const float  startL = historyL[sIdx0] + sFrac * (historyL[sIdx1] - historyL[sIdx0]);
-                    const float  startR = historyR[sIdx0] + sFrac * (historyR[sIdx1] - historyR[sIdx0]);
+                    float startL = historyL[sIdx0] + sFrac * (historyL[sIdx1] - historyL[sIdx0]);
+                    float startR = historyR[sIdx0] + sFrac * (historyR[sIdx1] - historyR[sIdx0]);
+
+                    // v6 start-head transient softener: apply a 1 ms fade-in to
+                    // the start head's read at source[0..innerFadeLen]. Suppresses
+                    // sharp source[0] transients (kick/snare attack) from re-firing
+                    // at every grain wrap. Doesn't affect the main head, so cycle
+                    // 1's plain opening is untouched.
+                    if (startCyclePos < (double) innerFadeLen)
+                    {
+                        const float ts = (float) (startCyclePos / (double) innerFadeLen);
+                        const float gateGain = std::sin (ts * juce::MathConstants<float>::halfPi);
+                        startL *= gateGain;
+                        startR *= gateGain;
+                    }
 
                     const float t = juce::jlimit (0.0f, 1.0f,
                         (float) ((cyclePos - crossfadeBegin) / (double) crossfadeLen));
@@ -249,12 +234,24 @@ namespace tw
                     sR = sR * a + startR * b;
                 }
 
-                outL[i] = sL;
-                outR[i] = sR;
+                // v6 beat-boundary fade. Fade-in only applies for beats AFTER the
+                // first (beatCount > 0) so the chop's note-on attack stays sharp.
+                float beatFade = 1.0f;
+                if (beatCount > 0 && outputsThisLoop < beatFadeLen)
+                {
+                    const float tin = (float) outputsThisLoop / (float) beatFadeLen;
+                    beatFade *= std::sin (tin * juce::MathConstants<float>::halfPi);
+                }
+                const int samplesUntilBeatEnd = outputsPerLoop - outputsThisLoop - 1;
+                if (samplesUntilBeatEnd < beatFadeLen)
+                {
+                    const float tout = (float) samplesUntilBeatEnd / (float) beatFadeLen;
+                    beatFade *= std::sin (tout * juce::MathConstants<float>::halfPi);
+                }
 
-                // Advance cycle position. Wrap from grainSize back to
-                // crossfadeLen so the main read continues smoothly from
-                // where the start head was at end of crossfade.
+                outL[i] = sL * beatFade;
+                outR[i] = sR * beatFade;
+
                 cyclePos += pitchRatio;
                 if (cyclePos >= targetGrainSize)
                     cyclePos -= effLoopLen;
@@ -269,10 +266,13 @@ namespace tw
         int historyWriteIdx    = 0;
         int loopAnchor         = 0;
         int outputsThisLoop    = 0;
-        int targetGrainSize    = 2880;
-        int crossfadeLen       = 1200;
+        int targetGrainSize    = 4800;   // v6: 100 ms @ 48k
+        int crossfadeLen       = 2400;   // v6: 50 ms @ 48k
+        int boundaryFadeLen    = 96;     // v6: ~2 ms @ 48k
+        int innerFadeLen       = 48;     // v6: ~1 ms @ 48k
         double cyclePos        = 0.0;
         bool firstBlockPending = true;
+        int  beatCount         = 0;      // 0 during first beat; >0 after first boundary
 
         double sampleRate     = 48000.0;
         int    channels       = 2;
