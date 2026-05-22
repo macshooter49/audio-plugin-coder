@@ -152,7 +152,24 @@ namespace tw
          *  output sample = pitchRatio / stretchRatio. Feeding only
          *  numSamples/stretchRatio at pitchRatio>1 starved the history
          *  buffer (loopAnchor outran writeIdx after a few beats) and
-         *  produced buzz on every chromatic note above the root.
+         *  produced buzz on every chromatic note above the root (v5).
+         *
+         *  v8 (2026-05-22): clamp pitchSemitones to BeatsEngine's internal
+         *  ±24 range BEFORE computing the source-feed length. Without
+         *  this clamp the SamplerVoice playhead advances at the unclamped
+         *  rate (pow(2, +72/12) = 64x at C9; pow(2, +96/12) = 256x at
+         *  C10) while BeatsEngine only writes the clamped-rate count
+         *  (4x max) into its history. Between blocks the playhead has
+         *  jumped by the unclamped delta — BeatsEngine sees a source
+         *  stream with discontinuities at the block rate (~94 Hz at
+         *  SR=48k, numSamples=512), and those discontinuities AM the
+         *  output as ±94/±188/±282 Hz sidebands. Same family of bug as
+         *  the v7 boundary-fade-rate issue but in a different code path.
+         *  Clamp matches BeatsEngine's clamp → playhead advances at the
+         *  rate BeatsEngine actually reads → contiguous source → no AM.
+         *  The pitch already plateaus at ±24 semis above root (because
+         *  BeatsEngine clamps internally); this fix just stops the
+         *  unclamped path from creating block-rate artifacts on top.
          *
          *  WarpMode::None returns numSamples (unused — None bypasses warp
          *  entirely and reads source directly in SamplerVoice). */
@@ -161,7 +178,8 @@ namespace tw
             const double sr = juce::jmax (0.0001, (double) stretchRatio);
             if (mode == WarpMode::Beats)
             {
-                const double pr = std::pow (2.0, (double) pitchSemitones / 12.0);
+                const double clampedSemis = juce::jlimit (-24.0, 24.0, (double) pitchSemitones);
+                const double pr = std::pow (2.0, clampedSemis / 12.0);
                 return juce::jmax (1, (int) std::round ((double) numSamples * pr / sr));
             }
             return juce::jmax (1, (int) std::round ((double) numSamples / sr));

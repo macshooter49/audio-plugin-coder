@@ -420,6 +420,34 @@ public:
             wp.setPitchSemitones (12.0f);  // pr=2, sr=2 → 1.0 ratio
             expect (wp.sourceSamplesPerBlock (512) == 512, "Beats stretch=2 pitch+12 = 512");
         }
+
+        beginTest ("Beats mode — extreme pitch clamps to ±24 (v8 high-octave fix)");
+        {
+            // BeatsEngine clamps pitchSemitones to ±24 internally. The
+            // source-feed length must match — otherwise the playhead races
+            // past the engine's read rate, jumps source position between
+            // blocks, and produces block-rate AM (the C8–C10 "robotic"
+            // artifact users reported). Clamp boundary tests:
+            tw::WarpProcessor wp;
+            wp.prepare (48000.0, 2, 512);
+            wp.setMode (tw::WarpMode::Beats);
+            wp.setStretchRatio (1.0f);
+
+            wp.setPitchSemitones (24.0f);   // clamp boundary (pitchRatio = 4)
+            expect (wp.sourceSamplesPerBlock (512) == 2048, "Beats pitch+24 = 4× source");
+
+            wp.setPitchSemitones (72.0f);   // C9-ish; would be pow(2,6)=64× without clamp
+            expect (wp.sourceSamplesPerBlock (512) == 2048,
+                    "Beats pitch+72 must clamp to +24 (else block-rate AM)");
+
+            wp.setPitchSemitones (96.0f);   // C10-ish; would be 256× without clamp
+            expect (wp.sourceSamplesPerBlock (512) == 2048,
+                    "Beats pitch+96 must clamp to +24");
+
+            wp.setPitchSemitones (-72.0f);  // mirror clamp at the low end
+            expect (wp.sourceSamplesPerBlock (512) == 128,
+                    "Beats pitch-72 must clamp to -24 (pitchRatio = 0.25)");
+        }
     }
 };
 
