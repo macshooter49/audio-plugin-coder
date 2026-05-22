@@ -59,8 +59,10 @@ namespace tw
         // path).
         //
         // volume is a linear per-chop level multiplier on the audio output.
-        // 1.0 = unity (current behavior), 0.0 = silent. Default 1.0 keeps
-        // legacy presets at the same loudness.
+        // 1.0 = unity (current behavior), 0.0 = silent, 2.0 = +6 dB boost.
+        // The boost path is intentional — quiet one-shot tails have the worst
+        // noise-floor SNR, so users want to crank individual chops without
+        // touching the master. Default 1.0 keeps legacy presets identical.
         float       attackMs         = -1.0f;
         float       releaseMs        = -1.0f;
         float       decayMs          = 0.0f;
@@ -141,7 +143,7 @@ namespace tw
                                     (float) (double) e.getProperty ("decayMs",      0.0));
             s.sustainLevel  = juce::jlimit (0.0f,  1.0f,
                                     (float) (double) e.getProperty ("sustainLevel", 1.0));
-            s.volume        = juce::jlimit (0.0f,  1.0f,
+            s.volume        = juce::jlimit (0.0f,  2.0f,
                                     (float) (double) e.getProperty ("volume",       1.0));
 
             if (s.endSample > s.startSample)

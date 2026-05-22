@@ -811,10 +811,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("setSliceVolume", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // args[0] = sliceIndex, args[1] = volume (0..1 linear).
+                // args[0] = sliceIndex, args[1] = volume (0..2 linear; 1=unity, 2=+6 dB boost).
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
-                const float vol = juce::jlimit (0.0f, 1.0f, (float) (double) args[1]);
+                const float vol = juce::jlimit (0.0f, 2.0f, (float) (double) args[1]);
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -2820,7 +2820,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           releaseMs:    isFinite(rm) ? rm : -1,
           decayMs:      isFinite(dm) ? Math.max(0,  Math.min(2000, dm)) : 0,
           sustainLevel: isFinite(sl) ? Math.max(0,  Math.min(1,    sl)) : 1,
-          volume:       isFinite(vl) ? Math.max(0,  Math.min(1,    vl)) : 1
+          volume:       isFinite(vl) ? Math.max(0,  Math.min(2,    vl)) : 1
         };
       });
       // Clamp activeSliceIndex.
@@ -3545,7 +3545,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     decay:   { min: 0.0,  max: 2000.0, skew: 0.4 },
     sustain: { min: 0.0,  max: 1.0,    skew: 1.0 },
     release: { min: 1.0,  max: 5000.0, skew: 0.4 },
-    volume:  { min: 0.0,  max: 1.0,    skew: 1.0 },
+    volume:  { min: 0.0,  max: 2.0,    skew: 1.0 },
     pitch:   { min: -12,  max: 12,     skew: 1.0 },
     stretch: { min: 0.1,  max: 15.0,   skew: 0.35 }
   };
@@ -3753,6 +3753,30 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         document.addEventListener('mouseup', up);
         e.preventDefault(); e.stopPropagation();
       });
+      // Double-click → reset this envelope parameter to its default.
+      h.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          if (which === 'A') {
+            state.slices[idx].attackMs = -1;
+            var fn = getNativeFn('setSliceAttackMs'); if (fn) { try { fn(idx, -1); } catch (_) {} }
+          } else if (which === 'D') {
+            state.slices[idx].decayMs = 0;
+            var fn = getNativeFn('setSliceDecayMs');  if (fn) { try { fn(idx, 0); } catch (_) {} }
+          } else if (which === 'S') {
+            state.slices[idx].sustainLevel = 1.0;
+            var fn = getNativeFn('setSliceSustain');  if (fn) { try { fn(idx, 1.0); } catch (_) {} }
+          } else if (which === 'R') {
+            state.slices[idx].releaseMs = -1;
+            var fn = getNativeFn('setSliceReleaseMs');if (fn) { try { fn(idx, -1); } catch (_) {} }
+          }
+          requestAnimationFrame(function () {
+            try { if (state.slices[idx]) ovRedrawEnvelope(idx); } catch (_) {}
+          });
+        } catch (_) {}
+      });
     });
 
     // Emblem-knob ctrl drag (vertical) — Volume / Pitch / Stretch.
@@ -3797,36 +3821,89 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         document.addEventListener('mouseup', up);
         e.preventDefault();
       });
+      // Double-click → reset this emblem-knob to its default.
+      ctrl.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          if (key === 'volume') {
+            state.slices[idx].volume = 1.0;
+            var fn = getNativeFn('setSliceVolume'); if (fn) { try { fn(idx, 1.0); } catch (_) {} }
+          } else if (key === 'pitch') {
+            state.slices[idx].pitch = 0;
+            var fn = getNativeFn('setSlicePitch');  if (fn) { try { fn(idx, 0); } catch (_) {} }
+          } else if (key === 'stretch') {
+            state.slices[idx].stretchRatio = 1.0;
+            var fn = getNativeFn('setSliceStretchRatio'); if (fn) { try { fn(idx, 1.0); } catch (_) {} }
+          }
+          requestAnimationFrame(function () {
+            try {
+              if (!state.slices[idx]) return;
+              ovRedrawEmblems(idx);
+              if (key === 'pitch' || key === 'stretch') redrawSliceOverlay();
+            } catch (_) {}
+          });
+        } catch (_) {}
+      });
     });
 
-    // Action buttons (reverse / reset / delete).
+    // Action buttons (reverse / reset / delete) — defense-hardened.
+    // Each branch is wrapped so any JS exception can't tear the panel down
+    // mid-state, and the click event is consumed so it can't bubble back to
+    // any sibling handler (e.g. the slicer canvas underneath). Redraws are
+    // deferred to the next frame so the native fn's slice-list swap settles
+    // before the hero canvas reads the new state.
     panel.querySelectorAll('.ov-act').forEach(function (el) {
-      el.addEventListener('click', function () {
-        var idx = parseInt(panel.dataset.targetIdx, 10);
-        if (isNaN(idx) || !state.slices[idx]) return;
-        var act = el.dataset.act;
-        if (act === 'rev') {
-          state.slices[idx].reverse = !state.slices[idx].reverse;
-          var fn = getNativeFn('setSliceReverse');
-          if (fn) { try { fn(idx, state.slices[idx].reverse); } catch (_) {} }
-          redrawSliceOverlay();
-        } else if (act === 'resetPitch') {
-          state.slices[idx].pitch = 0;
-          var fn = getNativeFn('setSlicePitch');
-          if (fn) { try { fn(idx, 0); } catch (_) {} }
-          ovApplyState(idx);
-          redrawSliceOverlay();
-        } else if (act === 'del') {
-          var fnD = getNativeFn('deleteSlice');
-          if (fnD) {
-            try {
-              var r = fnD(idx);
-              if (r && typeof r.then === 'function') r.then(applySlicesJson);
-              else applySlicesJson(r);
-            } catch (_) {}
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          var act = el.dataset.act;
+
+          if (act === 'rev') {
+            var nextRev = !state.slices[idx].reverse;
+            state.slices[idx].reverse = nextRev;
+            var fnR = getNativeFn('setSliceReverse');
+            if (fnR) { try { fnR(idx, nextRev); } catch (_) {} }
+            requestAnimationFrame(function () { try { redrawSliceOverlay(); } catch (_) {} });
           }
-          closeChopOverlay();
-        }
+          else if (act === 'resetPitch') {
+            state.slices[idx].pitch = 0;
+            var fnP = getNativeFn('setSlicePitch');
+            if (fnP) { try { fnP(idx, 0); } catch (_) {} }
+            requestAnimationFrame(function () {
+              try {
+                if (!state.slices[idx]) return;
+                ovApplyState(idx);
+                redrawSliceOverlay();
+              } catch (_) {}
+            });
+          }
+          else if (act === 'del') {
+            // Snapshot idx + close panel BEFORE calling delete. After delete
+            // the slice index no longer points at the same chop (could be a
+            // different chop or out of range entirely), and any deferred
+            // handler that re-reads state.slices[idx] could crash.
+            var delIdx = idx;
+            closeChopOverlay();
+            var fnD = getNativeFn('deleteSlice');
+            if (fnD) {
+              try {
+                var r = fnD(delIdx);
+                if (r && typeof r.then === 'function') {
+                  r.then(function (json) {
+                    try { applySlicesJson(json); } catch (_) {}
+                  }, function () {});
+                } else if (typeof r === 'string') {
+                  applySlicesJson(r);
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (_) { /* swallow — better silent than crashed host */ }
       });
     });
 
