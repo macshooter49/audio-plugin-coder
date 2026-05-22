@@ -227,28 +227,38 @@ namespace tw
             // naturally even when the user has LOOP enabled globally.
             const int loopMode = activeConfig.forceOneShot ? 0 : loopModeParam.load();
 
-            // Loop crossfade length (20 ms target, capped to slice/4 so tiny
-            // chops still loop without overlap collapse). Equal-power mix
-            // between the main playhead and a leading head — masks the
-            // click at the abrupt wrap when the wrap rate is sub-audible.
+            // Loop crossfade length — equal-power mix between the main
+            // playhead and a leading head, masks the click at the abrupt
+            // wrap.
             //
-            // v9 gate (2026-05-22): when the loop wrap rate climbs into
-            // audible range (slice short + pitch high), the crossfade
-            // itself becomes a spectral-morph at that rate → comb-filter /
-            // ring-mod sidebands ("clicks" at high pitch on a short slice).
-            // Same family of bug as the v7 boundary-fade-rate gate. Disable
-            // the crossfade above ~20 Hz wrap rate. The bare wrap click is
-            // perceived as a fast pulse and is far less offensive than
-            // tonal sideband distortion.
+            // v10 (2026-05-22): scale the fade duration with the wrap rate
+            // so the AM modulation index stays bounded. v9 used a binary
+            // gate (full 20 ms below 20 Hz, OFF above), but at the very
+            // highest octaves the bare wrap still produces a hard
+            // 1-sample step at the wrap rate — that step's harmonic
+            // amplitude is ~0 dB at the fundamental, audible as a click
+            // train ("higher octave = clickier again"). The scaled
+            // approach keeps SOME fade active at high rates so we trade
+            // hard 0 dB step harmonics for soft −16 dB AM sidebands.
+            //
+            // Formula: fade ≈ period × 0.10 holds AM index ≈ 0.16
+            // (sidebands at −16 dB) regardless of rate. Capped at 20 ms
+            // at low rates (no need for more) and at sliceLen / 4 (so
+            // overlap doesn't collapse on tiny chops).
             const double loopWrapsPerSec = (loopMode == 1 && sliceLen > 0.0)
                 ? pitchRatio * sampleRateForEnv / sliceLen
                 : 0.0;
-            const bool loopWrapRateSubAudible = loopWrapsPerSec < 20.0;
-            const double xfadeLen = (loopMode == 1 && sliceLen > 8.0
-                                     && loopWrapRateSubAudible)
-                                       ? juce::jmin (sliceLen * 0.25,
-                                                     0.020 * sampleRateForEnv)
-                                       : 0.0;
+            double xfadeLen = 0.0;
+            if (loopMode == 1 && sliceLen > 8.0)
+            {
+                double xfadeTarget = 0.020 * sampleRateForEnv;
+                if (loopWrapsPerSec > 5.0)
+                {
+                    const double periodSamples = sampleRateForEnv / loopWrapsPerSec;
+                    xfadeTarget = juce::jmin (xfadeTarget, periodSamples * 0.10);
+                }
+                xfadeLen = juce::jmin (sliceLen * 0.25, xfadeTarget);
+            }
 
             for (int i = 0; i < numSamples; ++i)
             {
@@ -457,29 +467,39 @@ namespace tw
 
             // Source-level crossfade so the warp engine sees a smooth stream
             // across the loop boundary instead of a one-sample discontinuity.
-            // 20 ms target, capped to slice/4. Skipped when not looping.
             //
-            // v9 gate (2026-05-22): the crossfade fires at the loop wrap
-            // rate, which equals (source samples consumed per sec) / sliceLen
-            // = (count * sampleRate / (blockSize * sliceLen)). When BEATS is
-            // played on short slices at high pitch + low stretch, that rate
-            // climbs into audible range and the crossfade becomes ring-mod
-            // sidebands at the wrap rate (the user's "clicky at stretch<2
-            // + high octaves" symptom). Disable above the audible threshold;
-            // the naked wrap is perceived as a fast pulse, less offensive
-            // than tonal-sideband distortion.
+            // v10 (2026-05-22): scale the fade duration with the wrap rate
+            // so the AM modulation index stays bounded (~0.16 → −16 dB
+            // sidebands) at any rate. Without scaling, v9 disabled the
+            // fade entirely above 20 Hz and the bare wrap produced hard
+            // 0 dB step harmonics at the wrap rate — audible as a click
+            // train at the highest octaves on short slices. The scaled
+            // approach keeps a tiny fade alive (e.g. 0.5 ms at 200 Hz
+            // wrap rate) so the wrap is a soft AM modulation instead of
+            // a hard step. Same fix is mirrored in renderNextBlock's
+            // NONE-mode loop.
+            //
+            // Wrap rate proxy: count source samples per block × block
+            // rate / sliceLen. Block rate ≈ sampleRate / latestBlockSize
+            // (cached at top of renderNextBlock so the gate is host-
+            // independent across block sizes).
             const double srcPerSec = (latestBlockSize > 0)
                 ? (double) count * sampleRateForEnv / (double) latestBlockSize
                 : 0.0;
             const double sourceWrapsPerSec = (looping && sliceLen > 0.0)
                 ? srcPerSec / sliceLen
                 : 0.0;
-            const bool sourceWrapRateSubAudible = sourceWrapsPerSec < 20.0;
-            const double xfadeLen = (looping && sliceLen > 8.0
-                                     && sourceWrapRateSubAudible)
-                                       ? juce::jmin (sliceLen * 0.25,
-                                                     0.020 * sampleRateForEnv)
-                                       : 0.0;
+            double xfadeLen = 0.0;
+            if (looping && sliceLen > 8.0)
+            {
+                double xfadeTarget = 0.020 * sampleRateForEnv;
+                if (sourceWrapsPerSec > 5.0)
+                {
+                    const double periodSamples = sampleRateForEnv / sourceWrapsPerSec;
+                    xfadeTarget = juce::jmin (xfadeTarget, periodSamples * 0.10);
+                }
+                xfadeLen = juce::jmin (sliceLen * 0.25, xfadeTarget);
+            }
 
             for (int i = 0; i < count; ++i)
             {
