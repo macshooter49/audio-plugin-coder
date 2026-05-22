@@ -1,3 +1,31 @@
+// BeatsEngine.h — v11 (skip-aware boundary fade; replaces v7 rate-gate)
+//
+// v11 (2026-05-22): the v7 binary rate-gate ("disable boundary fade above
+// 20 Hz beat rate") was correct for the C4–C7 ring-mod scenario at
+// stretchRatio=1 (where the boundary IS continuous and a fade just adds
+// AM with nothing to mask) but wrong at stretchRatio < 1 — there the
+// boundary has a REAL source-position skip (3360 source samples at
+// stretchRatio=0.30) and a bare boundary becomes a hard step click at
+// the beat rate. User: "at 0.30 it's damn near unusable, it's still
+// clicking."
+//
+// v11 replaces the rate gate with a skip-aware gate. cyclePos at the
+// final sample of each beat is computed analytically from the engine
+// parameters; the boundary skip is then `grainSize - cyclePos_last -
+// pitchRatio`. Skip ≈ 0 → no fade (preserves v7's "no AM at clean
+// boundary" intent). Skip > 0 → apply a v10-style constant-depth scaled
+// fade so AM sidebands stay at ~−16 dB regardless of beat rate. At
+// extreme rates the fade gets sub-millisecond but stays alive, trading
+// hard 0-dB step harmonics for soft −16 dB AM sidebands.
+//
+// At stretchRatio=0.30 the boundary skip click is replaced with a
+// smooth amplitude dip at the beat rate — still a perceptible rhythmic
+// modulation (the "BEATS at low stretch is fundamentally a skip-based
+// algorithm" character is intrinsic and not removable without rewriting
+// the engine), but FAR less offensive than the broadband step click.
+//
+// Earlier versions kept for reference:
+//
 // BeatsEngine.h — v7 (high-octave de-roboticizer — gate the boundary fade)
 //
 // v6 introduced a 2 ms Hann fade-in + fade-out at every beat boundary to
@@ -180,19 +208,58 @@ namespace tw
             const double effLoopLen     = (double) (targetGrainSize - crossfadeLen);
             const double crossfadeBegin = (double) (targetGrainSize - crossfadeLen);
 
-            // v7: only apply the boundary fade when the beat rate is
-            // sub-audible. Above ~20 Hz the fade itself is AM modulation
-            // and produces inharmonic sidebands — user reported "robotic"
-            // at C4–C7 (pitchRatio approaches 4, beat rate hits 40 Hz).
-            // Below the threshold the fade is benign tremolo and helps
-            // mask the slow boundary click. The configured 2 ms is also
-            // capped to outputsPerLoop / 4 so the fade-out and fade-in
-            // don't overlap on very short beats.
-            const bool beatRateSubAudio =
-                outputsPerLoop > (int) (sampleRate * 0.050);  // > 50 ms beat → < 20 Hz
-            const int beatFadeLen = beatRateSubAudio
-                ? juce::jmin (boundaryFadeLen, juce::jmax (1, outputsPerLoop / 4))
-                : 0;
+            // v11 boundary-fade decision — skip-aware + v10 constant-depth scaling.
+            //
+            // The v7 rate gate ("disable above 20 Hz beat rate") fixed the C4–C7
+            // ring-mod (fade AM at audible beat rate when the boundary itself
+            // was CONTINUOUS at stretchRatio=1 with NO skip to mask). But it
+            // left bare-step clicks at stretchRatio < 1, where each beat
+            // boundary jumps forward `grainSize - cyclePos_last - pitchRatio`
+            // source samples (3360 at stretchRatio=0.30). User: "at 0.30 it's
+            // damn near unusable... it's still clicking."
+            //
+            // Compute the analytical cyclePos at the final sample of each beat:
+            //   - If `(outputsPerLoop-1) × pitchRatio < grainSize` → no wraps,
+            //     cyclePos_last = that linear advance.
+            //   - Else → cyclePos_last = (finalAdvance - k × effLoopLen) for
+            //     the wrap count k that places cyclePos in [crossfadeLen, grainSize).
+            //
+            // Then boundarySkip = grainSize - cyclePos_last - pitchRatio. Skip ≈ 0
+            // means the boundary is naturally continuous (stretchRatio=1, integer
+            // multiples) — no fade needed, the v7 "no AM at clean boundary"
+            // intent is preserved. Skip > pitchRatio×2 means there's a real
+            // discontinuity to mask — apply a v10-style constant-depth fade
+            // (period × 0.10 capped at boundaryFadeLen) so AM sidebands stay
+            // around −16 dB regardless of how fast the beat rate climbs. At
+            // high beat rates the fade gets short (sub-millisecond) but stays
+            // alive; at sub-audio rates it tops out at the configured 2 ms.
+            const double finalAdvance =
+                (double) (outputsPerLoop - 1) * pitchRatio;
+            double cyclePosLast;
+            if (finalAdvance < (double) targetGrainSize)
+            {
+                cyclePosLast = finalAdvance;
+            }
+            else
+            {
+                const double afterFirstWrap = finalAdvance - (double) targetGrainSize;
+                const double wrapsAfterFirst = std::floor (afterFirstWrap / effLoopLen) + 1.0;
+                cyclePosLast = finalAdvance - wrapsAfterFirst * effLoopLen;
+            }
+            const double boundarySkipSamples =
+                (double) targetGrainSize - cyclePosLast - pitchRatio;
+            const bool boundaryContinuous = boundarySkipSamples < pitchRatio * 2.0 + 1.0;
+
+            int beatFadeLen = 0;
+            if (! boundaryContinuous)
+            {
+                double fadeTarget = (double) boundaryFadeLen;  // ≤ 2 ms baseline cap
+                const double beatPeriod = (double) outputsPerLoop;
+                if (beatPeriod < sampleRate / 5.0)            // > 5 Hz beat rate
+                    fadeTarget = juce::jmin (fadeTarget, beatPeriod * 0.10);
+                beatFadeLen = juce::jmax (1, (int) std::round (
+                    juce::jmin (fadeTarget, (double) outputsPerLoop / 4.0)));
+            }
 
             for (int i = 0; i < numSamples; i++)
             {
