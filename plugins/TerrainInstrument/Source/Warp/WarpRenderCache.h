@@ -90,12 +90,24 @@ public:
     void setSliceBounds (int sliceIndex, int startSample, int endSample)
     {
         std::lock_guard<std::mutex> lock (map_);
+        // Only drop cache entries when the bounds actually changed.
+        // Unconditional erasure was racing with in-flight prewarm() renders:
+        // the worker would finish and publish its result, but a subsequent
+        // replaceSlices() call would re-invoke setSliceBounds() with the SAME
+        // bounds and erase the freshly-populated entry — causing a permanent
+        // cache-miss-every-note on Warp+Scan chops.
+        auto existing = sliceBounds_.find (sliceIndex);
+        const bool boundsChanged = (existing == sliceBounds_.end())
+                                   || (existing->second.start != startSample)
+                                   || (existing->second.end   != endSample);
         sliceBounds_[sliceIndex] = { startSample, endSample };
-        // Bounds change makes existing renders stale — drop entries for this slice.
-        for (auto it = entries_.begin(); it != entries_.end(); )
+        if (boundsChanged)
         {
-            if (it->first.sliceIndex == sliceIndex) it = entries_.erase (it);
-            else                                    ++it;
+            for (auto it = entries_.begin(); it != entries_.end(); )
+            {
+                if (it->first.sliceIndex == sliceIndex) it = entries_.erase (it);
+                else                                    ++it;
+            }
         }
     }
 

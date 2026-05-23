@@ -1675,13 +1675,18 @@ void TerrainInstrumentAudioProcessor::replaceSlices (tw::SliceList newSlices)
 
     // Push fresh slice bounds into the warp cache so prewarm() callers
     // that fire shortly after (e.g. setSliceScanEnabled native fn) have
-    // valid bounds for the new layout. Also invalidate stale cache entries
-    // for slices whose bounds just changed.
+    // valid bounds for the new layout.
+    //
+    // NOTE: do NOT call invalidateSlice() here. setSliceBounds() already
+    // drops cache entries whose bounds changed (the only mutation that
+    // makes a cached render stale). Calling invalidateSlice()
+    // unconditionally was discarding renders-in-flight triggered by the
+    // immediately-preceding prewarm() call in setSliceScanEnabled — the
+    // race caused a cache-miss-every-note loop on Warp+Scan chops.
     for (int i = 0; i < n; ++i)
     {
         const auto& s = (*snapshot)[(size_t) i];
         synth.warpCache.setSliceBounds (i, s.startSample, s.endSample);
-        synth.warpCache.invalidateSlice (i);
     }
 }
 
