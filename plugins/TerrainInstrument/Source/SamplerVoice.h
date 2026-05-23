@@ -803,7 +803,8 @@ namespace tw
                 {
                     const double oldDirSign = reversePlay ? +1.0 : -1.0;
                     const double oldPos     = playhead
-                                             + oldDirSign * (1.0 - turnaroundFadeT)
+                                             + oldDirSign * static_cast<double> (scanRateLive)
+                                               * (1.0 - turnaroundFadeT)
                                                * turnaroundLenSamples;
                     const auto oi0 = juce::jlimit (0, cacheLen - 1, static_cast<int> (oldPos));
                     const int  oi1 = juce::jlimit (0, cacheLen - 1, oi0 + 1);
