@@ -352,7 +352,7 @@ namespace tw
             // voice with independent base differentiation per chop.
             if (scanActive && modEngine != nullptr)
             {
-                scanRateLive   = juce::jlimit (0.1f, 4.0f,
+                scanRateLive   = juce::jlimit (0.1f, 8.0f,
                                      modEngine->getModulatedValue (ModulationEngine::pActiveChopScanRate,
                                                                     activeConfig.scanRate));
                 scanWindowLive = juce::jlimit (0.05f, 1.0f,
@@ -379,12 +379,22 @@ namespace tw
                     if (scanActive)
                     {
                         // Ping-pong boundary flip. Arm turnaroundFadeT for the
-                        // 8ms crossfade (Task 6 consumes it). Clamp playhead to
-                        // the effective edge for the new direction so the very
-                        // next sample read is within bounds.
+                        // 16ms crossfade (Task 6 consumes it). Clamp playhead to
+                        // the effective edge for the new direction, then advance
+                        // one step into the new direction so the NEXT iteration's
+                        // boundary check doesn't immediately re-fire (pre-fix:
+                        // the `continue` here skipped the advance at the bottom
+                        // of the loop, leaving playhead exactly at the boundary
+                        // → next iteration's atForwardEnd / atReverseEnd both
+                        // true → back-to-back flips produced a 1-sample
+                        // oscillation → audible click on every ping-pong turn).
                         reversePlay     = ! reversePlay;
                         turnaroundFadeT = 1.0;
                         playhead        = reversePlay ? effSliceEnd : effSliceStart;
+                        // Step one sample into the new direction so the next
+                        // boundary check starts strictly inside the window.
+                        const double scanAdvancePost = scanActive ? (double) scanRateLive : 1.0;
+                        playhead += (reversePlay ? -pitchInc : pitchInc) * scanAdvancePost;
                         continue;  // skip wrap/stop logic for scan voices
                     }
 
@@ -462,11 +472,13 @@ namespace tw
                 auto sampleL = inL[i0] + frac * (inL[i1] - inL[i0]);
                 auto sampleR = inR[i0] + frac * (inR[i1] - inR[i0]);
 
-                // ── Scan turnaround crossfade (8ms equal-power) ──────────────
+                // ── Scan turnaround crossfade (16ms equal-power) ─────────────
                 // At each direction flip we briefly blend two reads: the "old
                 // direction" (continuing past the boundary as if no flip
                 // happened) and the "new direction" (post-flip). Equal-power
-                // cos/sin blend masks the discontinuity.
+                // cos/sin blend masks the discontinuity. Extended from 8ms
+                // to 16ms — gives more headroom for the waveform to converge
+                // across materials with slow-moving content near the boundary.
                 //
                 // turnaroundFadeT is armed to 1.0 at the flip (in the boundary
                 // handler above) and decrements toward 0 here.  The blend
@@ -475,7 +487,7 @@ namespace tw
                 //   t=1 → 100% new direction (fully transitioned)
                 if (turnaroundFadeT > 0.0)
                 {
-                    constexpr double turnaroundLenMs = 8.0;
+                    constexpr double turnaroundLenMs = 16.0;
                     const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
                     const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
 
@@ -760,7 +772,7 @@ namespace tw
             if (playhead < effSliceStart) playhead = effSliceStart;
             if (playhead > effSliceEnd)   playhead = effSliceEnd;
 
-            constexpr double turnaroundLenMs = 8.0;
+            constexpr double turnaroundLenMs = 16.0;  // extended from 8ms for smoother turnarounds
             const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
             const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
 
@@ -774,6 +786,11 @@ namespace tw
                     reversePlay     = ! reversePlay;
                     turnaroundFadeT = 1.0;
                     playhead        = reversePlay ? effSliceEnd : effSliceStart;
+                    // Advance one step in the new direction so the next
+                    // iteration's boundary check starts strictly inside the
+                    // window (matching the fix applied to the NONE-mode path).
+                    playhead += (reversePlay ? -1.0 : 1.0)
+                                * static_cast<double> (scanRateLive) * pitchRatio;
                 }
 
                 // Envelope tick (same state machine as NONE and renderWarp paths).
@@ -822,13 +839,17 @@ namespace tw
                 auto sampleL = cL[i0] + frac * (cL[i1] - cL[i0]);
                 auto sampleR = cR[i0] + frac * (cR[i1] - cR[i0]);
 
-                // Turnaround crossfade (8ms equal-power, mirroring Tasks 5-7 but
+                // Turnaround crossfade (16ms equal-power, mirroring Tasks 5-7 but
                 // reading from the cache buffer instead of the source buffer).
+                // oldPos includes pitchRatio so the old-direction projection
+                // tracks the true pre-flip advance rate (scanRateLive * pitchRatio
+                // per sample, same as the main advance below).
                 if (turnaroundFadeT > 0.0)
                 {
                     const double oldDirSign = reversePlay ? +1.0 : -1.0;
                     const double oldPos     = playhead
                                              + oldDirSign * static_cast<double> (scanRateLive)
+                                               * pitchRatio
                                                * (1.0 - turnaroundFadeT)
                                                * turnaroundLenSamples;
                     const auto oi0 = juce::jlimit (0, cacheLen - 1, static_cast<int> (oldPos));
@@ -851,9 +872,13 @@ namespace tw
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
-                // Advance — cache is at target stretch, so scanRateLive drives
-                // pure motion (no pitch artifact from rate changes).
-                playhead += (reversePlay ? -1.0 : 1.0) * static_cast<double> (scanRateLive);
+                // Advance — cache is at target stretch; pitchRatio applies MIDI
+                // pitch offset as a speed multiplier through the pre-stretched
+                // cache (cache is pitched at root; different MIDI notes adjust
+                // the playback rate through it → correct chromatic transposition
+                // without re-running the warp engine per note).
+                playhead += (reversePlay ? -1.0 : 1.0)
+                            * static_cast<double> (scanRateLive) * pitchRatio;
             }
         }
 
