@@ -767,6 +767,42 @@ public:
             cache.invalidateSource (12345);
             expect (true);  // reached without crash
         }
+
+        beginTest ("Prewarm produces a ready entry within reasonable time");
+        {
+            constexpr int sourceLen = 48000;  // 1 sec @ 48 kHz
+            std::vector<float> srcL (sourceLen), srcR (sourceLen);
+            juce::Random r;
+            for (int i = 0; i < sourceLen; ++i)
+            {
+                srcL[i] = r.nextFloat() * 0.5f - 0.25f;
+                srcR[i] = srcL[i];
+            }
+
+            tw::WarpRenderCache cache;
+            cache.setSource (srcL.data(), srcR.data(), sourceLen);
+            cache.setSampleRate (48000.0);
+            cache.setSliceBounds (0, /*startSample*/ 0, /*endSample*/ sourceLen);
+
+            tw::WarpRenderCache::Key k {
+                /*sliceIndex*/      0,
+                /*sourceVersionId*/ 1,
+                /*stretchRatio*/    2.0f,
+                /*warpMode*/        tw::WarpMode::Tones
+            };
+            cache.prewarm (k);
+
+            // Block-wait up to 5 sec for ready
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            while (! cache.isReady (k) && (juce::Time::getMillisecondCounterHiRes() - start) < 5000.0)
+                juce::Thread::sleep (10);
+
+            expect (cache.isReady (k));
+            const auto* buf = cache.get (k);
+            expect (buf != nullptr);
+            expectGreaterThan (buf->getNumSamples(), 0);
+            expectEquals      (buf->getNumChannels(), 2);
+        }
     }
 };
 

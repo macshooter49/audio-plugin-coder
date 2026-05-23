@@ -174,6 +174,15 @@ public:
     void setLoadedSamplePath (const juce::String& path);
     juce::String getLoadedSamplePath() const;
 
+    /** Monotonic version counter — increments each time a new sample is loaded
+     *  into sampleBuffer. Used as the sourceVersionId field of WarpRenderCache::Key
+     *  so that cache entries from a previous sample are never served for a new one.
+     *  Default = 0 (no sample loaded). Bump happens in loadSampleAsync completion
+     *  callback (message thread only), so no atomic needed — but atomic<int> keeps
+     *  it trivially safe if the audio thread ever reads it for a future key build.
+     */
+    int getSourceVersionId() const noexcept { return sourceVersionId_.load (std::memory_order_relaxed); }
+
     // Cached JSON payload for the loaded sample (filename + peaks + meta).
     // Populated by the editor after each successful load. Survives editor
     // close/reopen WITHIN the same plugin instance — JS pulls via the
@@ -331,14 +340,18 @@ public:
      *  into a juce::var array suitable for returning from a native fn. */
     juce::var snapshotSliceGlowLevels() const;
 
+    // Sampler engine — promoted to public so PluginEditor can reach
+    // synth.warpCache (warp-cache prewarm + setSource from sample-load
+    // path). Keeping the rest of the processor state encapsulated.
+    tw::TerrainSynth synth;
+
+    // Source version counter — public so the editor can bump it from the
+    // sample-load callback (keys the warp cache so stale entries never hit).
+    std::atomic<int> sourceVersionId_ { 0 };
+
 private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-
-    // Sampler engine (Terrain Instrument additions — v0a)
-    // TerrainSynth is a juce::Synthesiser subclass that resolves slice/mode
-    // logic per noteOn before triggering the chosen voice.
-    tw::TerrainSynth synth;
     static constexpr int kNumVoices = 16;
     tw::SampleBuffer sampleBuffer;
     tw::SampleLoader sampleLoader;
@@ -460,6 +473,14 @@ private:
     bool prevProcessBlockRecording = false; // Track recording transitions for auto-disabling feed
     bool prevFeedActive = false; // Track feed mode transitions for grain buffer clearing
     bool prevTapeOn = true; // Track tape-section toggle transitions for filter-state reset on re-enable
+
+    // ── Per-chop FX independence capture bus ────────────────────────────
+    // SamplerVoices whose chop has fxIndependent=true redirect their output
+    // into this buffer instead of the synth's main output. The bus skips the
+    // entire global FX chain and is added directly to the master at the end
+    // of processBlock — clean signal. Allocated to host block size in
+    // prepareToPlay; pointer pushed onto every voice each processBlock.
+    juce::AudioBuffer<float> indyCaptureBus;
 
     // Rolling capture buffer
     RollingCaptureBuffer captureBuffer;

@@ -9,6 +9,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "SamplerVoice.h"
 #include "Slice.h"
+#include "Warp/WarpRenderCache.h"
 #include <atomic>
 #include <memory>
 
@@ -37,6 +38,21 @@ namespace tw
     class TerrainSynth : public juce::Synthesiser
     {
     public:
+        /** Pre-rendered warp cache for scan mode. Public so the processor can
+         *  call setSource() / setSliceBounds() / prewarm() directly. */
+        WarpRenderCache warpCache;
+
+        /** Push the indy-FX capture buffer pointer onto every SamplerVoice
+         *  so voices whose chop has fxIndependent=true can redirect their
+         *  output away from the main synth buffer. Pass nullptr to disable.
+         *  Called from PluginProcessor::processBlock each block. */
+        void setIndyTargetBufferForVoices (juce::AudioBuffer<float>* buf) noexcept
+        {
+            for (int i = 0; i < getNumVoices(); ++i)
+                if (auto* sv = dynamic_cast<SamplerVoice*> (getVoice (i)))
+                    sv->setIndyTargetBuffer (buf);
+        }
+
         /** Set from the processor at the top of processBlock. Cheap copy. */
         void setSliceContext (const SliceContext& ctx) noexcept
         {
@@ -69,6 +85,13 @@ namespace tw
             vc.scanEnabled    = s.scanEnabled;
             vc.scanRate       = s.scanRate;
             vc.scanWindow     = s.scanWindow;
+            vc.fxIndependent  = s.fxIndependent;
+            vc.fxGrain        = s.fxGrain;
+            vc.fxTapeMachine  = s.fxTapeMachine;
+            vc.fxSpace        = s.fxSpace;
+            vc.fxDelay        = s.fxDelay;
+            vc.fxEq           = s.fxEq;
+            vc.fxJune         = s.fxJune;
 
             const juce::ScopedLock sl (lock);
             if (sounds.size() == 0) return;
@@ -132,6 +155,13 @@ namespace tw
                     vc.scanEnabled    = s.scanEnabled;
                     vc.scanRate       = s.scanRate;
                     vc.scanWindow     = s.scanWindow;
+            vc.fxIndependent  = s.fxIndependent;
+            vc.fxGrain        = s.fxGrain;
+            vc.fxTapeMachine  = s.fxTapeMachine;
+            vc.fxSpace        = s.fxSpace;
+            vc.fxDelay        = s.fxDelay;
+            vc.fxEq           = s.fxEq;
+            vc.fxJune         = s.fxJune;
                     break;
                 }
 
@@ -155,6 +185,13 @@ namespace tw
                     vc.scanEnabled    = s.scanEnabled;
                     vc.scanRate       = s.scanRate;
                     vc.scanWindow     = s.scanWindow;
+            vc.fxIndependent  = s.fxIndependent;
+            vc.fxGrain        = s.fxGrain;
+            vc.fxTapeMachine  = s.fxTapeMachine;
+            vc.fxSpace        = s.fxSpace;
+            vc.fxDelay        = s.fxDelay;
+            vc.fxEq           = s.fxEq;
+            vc.fxJune         = s.fxJune;
                     break;
                 }
 
@@ -194,6 +231,13 @@ namespace tw
                     vc.scanEnabled    = s.scanEnabled;
                     vc.scanRate       = s.scanRate;
                     vc.scanWindow     = s.scanWindow;
+            vc.fxIndependent  = s.fxIndependent;
+            vc.fxGrain        = s.fxGrain;
+            vc.fxTapeMachine  = s.fxTapeMachine;
+            vc.fxSpace        = s.fxSpace;
+            vc.fxDelay        = s.fxDelay;
+            vc.fxEq           = s.fxEq;
+            vc.fxJune         = s.fxJune;
                     break;
                 }
             }

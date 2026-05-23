@@ -82,6 +82,24 @@ namespace tw
         float scanRate    = 1.0f;   // 0.1..4.0, exponential curve, 1.0 = natural ping-pong
         float scanWindow  = 1.0f;   // 0.05..1.0, default = full slice (mod-only, no manual UI)
 
+        // ── Per-chop FX independence ────────────────────────────────────────
+        // fxIndependent OFF (default) = voice flows through the global FX
+        // chain exactly as today — zero behavioral change for legacy presets
+        // and the default workflow.
+        // fxIndependent ON = voice detaches from global; only the FX flags
+        // below decide what processing it gets. fxTapeMachine is a 4-state
+        // enum (0=off, 1=Studio, 2=Cassette, 3=Wire). The other 5 are bool
+        // on/off. The mask is REMEMBERED while fxIndependent is OFF so that
+        // toggling back ON restores the user's selection (Serum's modular-
+        // layer pattern).
+        bool    fxIndependent  = false;
+        bool    fxGrain        = false;
+        int     fxTapeMachine  = 0;     // 0=off, 1=Studio, 2=Cassette, 3=Wire
+        bool    fxSpace        = false;
+        bool    fxDelay        = false;
+        bool    fxEq           = false;
+        bool    fxJune         = false;
+
         juce::int64 length() const noexcept { return endSample - startSample; }
     };
 
@@ -113,6 +131,13 @@ namespace tw
             o->setProperty ("scanEnabled",  s.scanEnabled);
             o->setProperty ("scanRate",     (double) s.scanRate);
             o->setProperty ("scanWindow",   (double) s.scanWindow);
+            o->setProperty ("fxIndependent", s.fxIndependent);
+            o->setProperty ("fxGrain",      s.fxGrain);
+            o->setProperty ("fxTapeMachine",(int) s.fxTapeMachine);
+            o->setProperty ("fxSpace",      s.fxSpace);
+            o->setProperty ("fxDelay",      s.fxDelay);
+            o->setProperty ("fxEq",         s.fxEq);
+            o->setProperty ("fxJune",       s.fxJune);
             arr.add (juce::var (o.get()));
         }
         obj->setProperty ("slices", arr);
@@ -173,6 +198,18 @@ namespace tw
             if (s.scanRate < 0.05f) s.scanRate = 1.0f;                        // legacy → restore default
             s.scanWindow  = (float) (double) e.getProperty ("scanWindow", 0.0);
             if (s.scanWindow < 0.04f) s.scanWindow = 1.0f;                    // legacy → restore default
+
+            // Per-chop FX independence (added 2026-05-23). Legacy presets
+            // without these keys default to inheriting/clean — identical
+            // playback to before the feature shipped.
+            s.fxIndependent = (bool) e.getProperty ("fxIndependent", false);
+            s.fxGrain       = (bool) e.getProperty ("fxGrain",       false);
+            const int tmRaw = (int) e.getProperty ("fxTapeMachine",  0);
+            s.fxTapeMachine = (tmRaw >= 0 && tmRaw <= 3) ? tmRaw : 0;
+            s.fxSpace       = (bool) e.getProperty ("fxSpace",       false);
+            s.fxDelay       = (bool) e.getProperty ("fxDelay",       false);
+            s.fxEq          = (bool) e.getProperty ("fxEq",          false);
+            s.fxJune        = (bool) e.getProperty ("fxJune",        false);
 
             if (s.endSample > s.startSample)
                 out.push_back (s);

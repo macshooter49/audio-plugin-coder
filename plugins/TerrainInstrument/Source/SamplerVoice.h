@@ -44,6 +44,20 @@ namespace tw
         bool  scanEnabled = false;   // ping-pong scan within the slice
         float scanRate    = 1.0f;    // playback rate multiplier for scan (base; mod applied in Task 7)
         float scanWindow  = 1.0f;    // fraction of slice covered by ping-pong (0..1)
+
+        // ── Per-chop FX independence ─────────────────────────────────────────
+        // fxIndependent=false → voice flows through global FX chain (current).
+        // fxIndependent=true  → processor reads the flags below to route this
+        // voice through per-FX bus(es), or to the dry master if all flags are
+        // off. The other flags are REMEMBERED while independent is off so
+        // toggling back on restores the user's selection.
+        bool  fxIndependent = false;
+        bool  fxGrain       = false;
+        int   fxTapeMachine = 0;     // 0=off, 1=Studio, 2=Cassette, 3=Wire
+        bool  fxSpace       = false;
+        bool  fxDelay       = false;
+        bool  fxEq          = false;
+        bool  fxJune        = false;
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -203,10 +217,27 @@ namespace tw
         double getPlayhead()    const noexcept { return playhead; }
 #endif
 
-        void renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
+        // ── FX independence: PluginProcessor sets this pointer per block so
+        // voices whose chop is fxIndependent capture their output into a
+        // separate "indy" bus instead of the global FX chain. NULL = no
+        // routing (current behavior — voice writes to the passed buffer). */
+        void setIndyTargetBuffer (juce::AudioBuffer<float>* buf) noexcept { indyTargetBuffer = buf; }
+
+        void renderNextBlock (juce::AudioBuffer<float>& passedBuffer,
                               int startSample, int numSamples) override
         {
             if (! isActive || envStage == EnvStage::Off) return;
+
+            // FX-independence redirect — when this voice's chop is detached
+            // from the global FX chain, its output goes to the indy capture
+            // bus instead of the synth's main buffer. The local `outputBuffer`
+            // reference shadows the parameter so the entire render body below
+            // (NONE path + renderWarp) writes to the correct destination
+            // without any per-line conditionals.
+            juce::AudioBuffer<float>& outputBuffer
+                = (activeConfig.fxIndependent && indyTargetBuffer != nullptr)
+                    ? *indyTargetBuffer
+                    : passedBuffer;
 
             auto buf = sample.load();
             if (! buf || buf->getNumSamples() == 0) return;
@@ -904,6 +935,11 @@ namespace tw
         float    releaseDec       = 0.001f;
         float    voiceGain        = 1.0f;     // per-chop volume multiplier (Slice.volume)
         double   sampleRateForEnv = 48000.0;
+        // FX-independence target — when non-null and the active chop has
+        // fxIndependent=true, render writes to this buffer instead of the
+        // synth's main output. Set by PluginProcessor each processBlock via
+        // TerrainSynth::setIndyTargetBufferForVoices.
+        juce::AudioBuffer<float>* indyTargetBuffer = nullptr;
         // Latest numSamples handed to renderNextBlock — used by the loop
         // crossfade gate to compute the actual loop-wrap rate (loop crossfade
         // becomes audio-rate AM when sliceLen / (pitchRatio_eff) is short, see

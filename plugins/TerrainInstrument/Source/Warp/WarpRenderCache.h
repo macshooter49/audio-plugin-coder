@@ -12,16 +12,15 @@
 //   - The map structure itself is mutex-protected (std::mutex). Audio
 //     thread takes the mutex briefly for the lookup, but the buffer
 //     pointer it returns is stable for the lifetime of that entry.
-//   - Population (in Task 10) happens on a worker thread.
+//   - Population happens on a juce::Thread worker launched by prewarm().
 //
 // Memory cap: 16 entries x ~3 MB worst case = ~50 MB ceiling.
-//
-// This is the SKELETON: prewarm() is a stub until Task 10 adds the
-// background-render scheduler.
 
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_core/juce_core.h>
 #include "../Slice.h"
+#include "WarpProcessor.h"
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -67,16 +66,42 @@ public:
         }
     };
 
+    // ── Source / config setters (called from TerrainSynth / processor) ────────
+
+    /** Set the source sample pointers. NOT owned — caller keeps the source
+     *  buffer alive for the lifetime of the cache. Also clears all cached
+     *  entries (source changed → all renders stale).
+     */
+    void setSource (const float* L, const float* R, int len)
+    {
+        std::lock_guard<std::mutex> lock (map_);
+        sourceL_   = L;
+        sourceR_   = R;
+        sourceLen_ = len;
+        entries_.clear();
+    }
+
+    /** Set the sample rate used for warp engine config in prewarm renders. */
+    void setSampleRate (double sr) noexcept { sampleRate_ = sr; }
+
+    /** Push slice bounds for a sliceIndex (called when slice layout changes).
+     *  Required by prewarm() to know what region of the source to render.
+     */
+    void setSliceBounds (int sliceIndex, int startSample, int endSample)
+    {
+        std::lock_guard<std::mutex> lock (map_);
+        sliceBounds_[sliceIndex] = { startSample, endSample };
+    }
+
+    // ── Read API (audio-thread safe) ──────────────────────────────────────────
+
     /** Lookup. Returns the rendered buffer if ready, else nullptr.
      *  Safe to call from the audio thread.
      *
      *  LIFETIME CONTRACT: the returned pointer is valid only while no
-     *  invalidateSlice() / invalidateSource() call runs concurrently.
-     *  Callers must ensure invalidation cannot race with buffer access —
+     *  invalidateSlice() / invalidateSource() / setSource() call runs concurrently.
      *  v1 satisfies this because invalidation only fires at non-realtime
-     *  boundaries (sample load, slice mutation from UI). If you add a
-     *  realtime invalidation path, switch the return type to shared_ptr
-     *  or snapshot-id to avoid TOCTOU.
+     *  boundaries (sample load, slice mutation from UI).
      */
     const juce::AudioBuffer<float>* get (const Key& k) const
     {
@@ -93,14 +118,65 @@ public:
         return get (k) != nullptr;
     }
 
-    /** Schedule a background render. NO-OP in Task 8 — Task 10 wires the
-     *  background scheduler. Stub here so the API surface is in place.
+    // ── Background scheduler ──────────────────────────────────────────────────
+
+    /** Schedule a background render. Idempotent — if the key already exists
+     *  in the map (either ready or in-flight), this is a no-op.
+     *
+     *  Called from: UI thread (setSliceScanEnabled native fn) or message thread.
+     *  Thread safety: the entry slot is claimed under map_ before spawning the
+     *  worker, so concurrent prewarm() calls for the same key are harmless.
      */
-    void prewarm (const Key& /*k*/)
+    void prewarm (const Key& k)
     {
-        // TODO(Task 10): launch worker thread to call WarpProcessor::renderFullSlice
-        //                then publish via ready.store(true).
+        // Claim the slot before launching the worker. The Entry exists with
+        // ready=false until the worker publishes.
+        {
+            std::lock_guard<std::mutex> lock (map_);
+            if (entries_.find (k) != entries_.end()) return;  // already in flight or ready
+            entries_[k] = std::make_unique<Entry>();
+        }
+
+        // Snapshot the bits the worker needs (avoids stale capture).
+        const float* L = sourceL_;
+        const float* R = sourceR_;
+        SliceBounds  bounds;
+        {
+            std::lock_guard<std::mutex> lock (map_);
+            auto it = sliceBounds_.find (k.sliceIndex);
+            if (it != sliceBounds_.end()) bounds = it->second;
+        }
+        const double sr = sampleRate_;
+
+        if (L == nullptr || R == nullptr || bounds.end <= bounds.start)
+        {
+            // No source / no bounds — leave the entry with ready=false forever.
+            // Subsequent prewarm() calls will see the entry and no-op, so this
+            // is a one-time abort. Caller gets a cache miss → falls through to
+            // whatever fallback SamplerVoice uses.
+            return;
+        }
+
+        juce::Thread::launch ([this, k, L, R, bounds, sr]()
+        {
+            const int sliceLen = bounds.end - bounds.start;
+            auto buffer = WarpProcessor::renderFullSlice (
+                L + bounds.start, R + bounds.start,
+                sliceLen, k.stretchRatio, k.warpMode, sr);
+
+            std::lock_guard<std::mutex> lock (map_);
+            auto it = entries_.find (k);
+            if (it != entries_.end())
+            {
+                it->second->buffer = std::make_unique<juce::AudioBuffer<float>> (std::move (buffer));
+                it->second->ready.store (true, std::memory_order_release);
+            }
+            // If the entry was erased mid-render (e.g. setSource() cleared the map),
+            // the rendered buffer is discarded here — no harm done.
+        });
     }
+
+    // ── Invalidation ──────────────────────────────────────────────────────────
 
     /** Drop all cache entries for the given slice (called on slice mutation). */
     void invalidateSlice (int sliceIndex)
@@ -131,8 +207,17 @@ private:
         std::atomic<bool> ready { false };
     };
 
+    struct SliceBounds { int start = 0; int end = 0; };
+
     mutable std::mutex map_;
     std::unordered_map<Key, std::unique_ptr<Entry>, KeyHash> entries_;
+    std::unordered_map<int, SliceBounds>                     sliceBounds_;
+
+    // Source pointers — NOT owned; set by setSource().
+    const float* sourceL_   = nullptr;
+    const float* sourceR_   = nullptr;
+    int          sourceLen_ = 0;
+    double       sampleRate_ = 48000.0;
 };
 
 }  // namespace tw

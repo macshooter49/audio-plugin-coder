@@ -776,6 +776,12 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     moogDelay.prepare(sampleRate, samplesPerBlock);
     terrainChorus.prepare (sampleRate, samplesPerBlock);
 
+    // Per-chop FX independence capture bus — stereo, sized to the host block.
+    // Voices write here when their chop has fxIndependent=true; the bus is
+    // added directly to master output, bypassing the entire global FX chain.
+    indyCaptureBus.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);
+    indyCaptureBus.clear();
+
     smoothedChorusAmount.reset    (sampleRate, 0.02);
     smoothedChorusWidth.reset     (sampleRate, 0.02);
     smoothedChorusCharacter.reset (sampleRate, 0.05);  // CHARACTER changes more dramatically
@@ -981,7 +987,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // Voices replace plugin input as the source of audio for the FX chain.
     buffer.clear();
+
+    // ── Per-chop FX independence routing ────────────────────────────────
+    // Voices whose chop has fxIndependent=true redirect their output to
+    // indyCaptureBus (bypasses the global FX chain entirely). All others
+    // write into `buffer` as before and flow through the chain. We add
+    // the indy bus back at the END of processBlock as a clean signal.
+    if (indyCaptureBus.getNumSamples() < numSamples)
+        indyCaptureBus.setSize (2, numSamples, false, true, true);
+    indyCaptureBus.clear (0, numSamples);
+    synth.setIndyTargetBufferForVoices (&indyCaptureBus);
+
     synth.renderNextBlock (buffer, midiMessages, 0, numSamples);
+
+    // Detach the pointer right after render so nothing else (e.g. audition
+    // queued for next block) writes to it inadvertently.
+    synth.setIndyTargetBufferForVoices (nullptr);
 
     // ── Update slice play-glow array ──────────────────────────────────
     // For each glow slot: take the max envelope across voices that are
@@ -1145,6 +1166,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Per-sample processing
     auto* leftChannel  = buffer.getWritePointer(0);
     auto* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
+
+    // Per-chop FX-independent capture bus — these are the voices whose
+    // chops have fxIndependent=true. They wrote into indyCaptureBus instead
+    // of `buffer`, so they bypass the global FX chain entirely. Added back
+    // at master after gain, before the soft-clipper, regardless of master
+    // mix (clean signal always audible).
+    const float* indyL = indyCaptureBus.getReadPointer (0);
+    const float* indyR = (indyCaptureBus.getNumChannels() > 1)
+                            ? indyCaptureBus.getReadPointer (1)
+                            : indyL;
 
     int scopePos = scopeWritePos.load();
 
@@ -1535,6 +1566,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             rightChannel[i] = outR;
         }
 
+        // Add indy-FX-independent voices (dry signal, master-mix-independent,
+        // gained with the master). Soft-clipper below applies to the sum so
+        // these voices still benefit from the DAC ceiling.
+        leftChannel[i] += indyL[i] * outputGain;
+        if (rightChannel != nullptr)
+            rightChannel[i] += indyR[i] * outputGain;
+
         // Master soft-clipper — DAC protection net at -0.3 dBFS.
         // Symmetric tanh: transparent below ~0.4, smooth roll-off, output bounded to (-c, c).
         constexpr float kMasterCeiling = 0.96605f; // 10^(-0.3 / 20)
@@ -1632,6 +1670,17 @@ void TerrainInstrumentAudioProcessor::replaceSlices (tw::SliceList newSlices)
     else if (idx >= n) idx = n - 1;
     else if (idx < 0) idx = 0;
     activeSliceIndex.store (idx);
+
+    // Push fresh slice bounds into the warp cache so prewarm() callers
+    // that fire shortly after (e.g. setSliceScanEnabled native fn) have
+    // valid bounds for the new layout. Also invalidate stale cache entries
+    // for slices whose bounds just changed.
+    for (int i = 0; i < n; ++i)
+    {
+        const auto& s = (*snapshot)[(size_t) i];
+        synth.warpCache.setSliceBounds (i, s.startSample, s.endSample);
+        synth.warpCache.invalidateSlice (i);
+    }
 }
 
 tw::SliceListPtr TerrainInstrumentAudioProcessor::loadSlices() const

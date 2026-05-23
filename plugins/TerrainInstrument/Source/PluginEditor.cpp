@@ -822,6 +822,56 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.replaceSlices (std::move (copy));
                 complete ({});
             })
+            // ─── Per-chop FX independence (Mark 2) ──────────────────────────
+            // setSliceFxIndependent(idx, bool) — detaches chop from global chain.
+            // setSliceFxBool(idx, "grain"|"space"|"delay"|"eq"|"june", bool)
+            // setSliceFxTapeMachine(idx, int 0-3) — 0=off, 1=Studio, 2=Cassette, 3=Wire
+            .withNativeFunction("setSliceFxIndependent", [this](const juce::Array<juce::var>& args,
+                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() < 2) { complete ({}); return; }
+                const int  idx = (int) args[0];
+                const bool on  = (bool) args[1];
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].fxIndependent = on;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSliceFxBool", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() < 3) { complete ({}); return; }
+                const int          idx   = (int) args[0];
+                const juce::String name  = args[1].toString();
+                const bool         on    = (bool) args[2];
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                auto& s = copy[(size_t) idx];
+                if      (name == "grain") s.fxGrain = on;
+                else if (name == "space") s.fxSpace = on;
+                else if (name == "delay") s.fxDelay = on;
+                else if (name == "eq")    s.fxEq    = on;
+                else if (name == "june")  s.fxJune  = on;
+                else                      { complete ({}); return; }  // unknown name → no-op
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSliceFxTapeMachine", [this](const juce::Array<juce::var>& args,
+                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() < 2) { complete ({}); return; }
+                const int idx = (int) args[0];
+                const int m   = juce::jlimit (0, 3, (int) args[1]);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].fxTapeMachine = m;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
             .withNativeFunction("setSliceScanEnabled", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -833,7 +883,22 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
                 copy[(size_t) idx].scanEnabled = enabled;
+                const tw::WarpMode wm = copy[(size_t) idx].warpMode;
+                const float sr       = copy[(size_t) idx].stretchRatio;
                 audioProcessor.replaceSlices (std::move (copy));
+
+                // If scan is being turned ON for a chop that has a warp mode,
+                // schedule a background pre-render so the cache is warm by the
+                // time the first note triggers scan playback.
+                if (enabled && wm != tw::WarpMode::None)
+                {
+                    tw::WarpRenderCache::Key k;
+                    k.sliceIndex      = idx;
+                    k.sourceVersionId = audioProcessor.getSourceVersionId();
+                    k.stretchRatio    = sr;
+                    k.warpMode        = wm;
+                    audioProcessor.synth.warpCache.prewarm (k);
+                }
                 complete ({});
             })
             .withNativeFunction("setSliceScanRate", [this](const juce::Array<juce::var>& args,
@@ -2144,10 +2209,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
      already sets opacity:1 with higher specificity than a class-on-body
      selector. */
   body.ti-slicer-active #waveform-canvas { opacity: 0 !important; }
-  /* Stretch ratio label — visible only when ratio != 1.0; sits above the
-     pitch meter (which lives at the bottom-center). Low-contrast monospace. */
+  /* Stretch ratio label — visible only when ratio != 1.0. Bottom-aligned
+     with the R letter (bottom-right at bottom:26px) and the warp letter's
+     text baseline so the bottom-corner badges read as one symmetric row. */
   .ti-slice-stretch-label {
-    position: absolute; left: 4px; bottom: 22px;
+    position: absolute; left: 4px; bottom: 26px;
     font: 600 9px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     color: rgba(167,139,250,0.7);
     text-shadow: 0 1px 2px rgba(0,0,0,0.55);
@@ -2413,6 +2479,73 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     animation: ti-stretch-breathe 3.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
+  /* ─── FX section (Mark 2) — per-chop FX independence ──────────────────
+     INDEPENDENT off (default) = chop follows the global FX chain; chips
+     dim to ~35% and ignore clicks. INDEPENDENT on = chop detached, chips
+     become interactive; user re-enables the engines they want. */
+  #ti-chop-panel .ov-fx {
+    padding: 10px 0 0 18px; margin-bottom: 12px;
+    position: relative; z-index: 1;
+    border-top: 1px solid var(--line, rgba(255,255,255,0.06));
+  }
+  #ti-chop-panel .ov-fx-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  #ti-chop-panel .ov-fx-header .lbl {
+    font: 700 9px/1 -apple-system; letter-spacing: 0.22em;
+    color: rgba(245,243,255,0.40); text-transform: uppercase;
+  }
+  #ti-chop-panel .ov-fx-header .meta {
+    margin-left: auto;
+    font: 500 9px/1 -apple-system; letter-spacing: 0.10em;
+    color: rgba(245,243,255,0.25);
+  }
+  /* INDEPENDENT pill — uses same vertical padding as FX chips so heights line up exactly */
+  #ti-chop-panel .ov-indy {
+    padding: 7px 11px;
+    font: 700 9px/1 -apple-system; letter-spacing: 0.18em;
+    color: rgba(245,243,255,0.40); text-transform: uppercase;
+    background: rgba(0,0,0,0.22);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
+    cursor: pointer; user-select: none;
+    transition: all 160ms ease;
+  }
+  #ti-chop-panel .ov-indy:hover { background: rgba(255,255,255,0.04); color: rgba(245,243,255,0.92); }
+  #ti-chop-panel .ov-indy.on {
+    background: linear-gradient(135deg, #8b5cf6, #7C3AED);
+    color: white; border-color: #8b5cf6;
+    box-shadow: 0 0 12px rgba(139,92,246,0.40);
+  }
+  /* 6 FX chips in a 3-column × 2-row grid */
+  #ti-chop-panel .ov-fx-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  }
+  #ti-chop-panel .ov-fx-chip {
+    padding: 7px 6px;
+    font: 700 9px/1 -apple-system; letter-spacing: 0.18em;
+    color: rgba(245,243,255,0.40); text-transform: uppercase;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
+    text-align: center; cursor: pointer; user-select: none;
+    transition: all 160ms ease;
+    white-space: nowrap; overflow: hidden;
+  }
+  #ti-chop-panel .ov-fx-chip:hover {
+    background: rgba(255,255,255,0.04); color: rgba(245,243,255,0.92);
+    border-color: rgba(255,255,255,0.10);
+  }
+  #ti-chop-panel .ov-fx-chip.on {
+    background: rgba(139,92,246,0.18);
+    color: rgba(245,243,255,0.92); border-color: rgba(139,92,246,0.55);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  #ti-chop-panel .ov-fx-chip .sub {
+    color: #a78bfa; margin-left: 4px;
+  }
+  /* Inheriting state: dim and disable the chip grid */
+  #ti-chop-panel .ov-fx.inheriting .ov-fx-grid { opacity: 0.30; pointer-events: none; }
+
   /* action row — small icon+label combos */
   #ti-chop-panel .ov-actions {
     display: flex; justify-content: space-between; align-items: center;
@@ -2644,6 +2777,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           '<div class="ov-val">1.00</div>' +
         '</div>' +
       '</div>' +
+      // ─── FX section (Mark 2 — per-chop FX independence) ──────────────
+      // Header: small "FX" label + INDEPENDENT toggle pill + meta tag-line.
+      // Grid: 6 chips below — Grain / Tape (4-state) / Space / Delay / Eq / June.
+      // Grayed when INDEPENDENT is off (chop is inheriting the global chain).
+      '<div class="ov-fx" id="ti-fx-section">' +
+        '<div class="ov-fx-header">' +
+          '<span class="lbl">FX</span>' +
+          '<div class="ov-indy" id="ti-fx-indy">INDEPENDENT</div>' +
+          '<span class="meta" id="ti-fx-meta">following global chain</span>' +
+        '</div>' +
+        '<div class="ov-fx-grid">' +
+          '<div class="ov-fx-chip" data-fx="grain">GRAIN</div>' +
+          '<div class="ov-fx-chip" data-fx="tape" id="ti-fx-tape">TAPE</div>' +
+          '<div class="ov-fx-chip" data-fx="space">SPACE</div>' +
+          '<div class="ov-fx-chip" data-fx="delay">DELAY</div>' +
+          '<div class="ov-fx-chip" data-fx="eq">EQ</div>' +
+          '<div class="ov-fx-chip" data-fx="june">JUNE</div>' +
+        '</div>' +
+      '</div>' +
       // actions
       '<div class="ov-actions">' +
         '<div class="group">' +
@@ -2859,6 +3011,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         var scEn = !!s.scanEnabled;
         var scRt = parseFloat(s.scanRate);
         var scWn = parseFloat(s.scanWindow);
+        // Per-chop FX independence (Mark 2). All default to false / 0 so
+        // legacy presets without these keys load as inheriting/clean.
+        var tm = parseInt(s.fxTapeMachine, 10);
         return {
           start:        parseInt(s.start, 10) || 0,
           end:          parseInt(s.end,   10) || 0,
@@ -2873,7 +3028,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           volume:       isFinite(vl) ? Math.max(0,  Math.min(2,    vl)) : 1,
           scanEnabled:  scEn,
           scanRate:     (isFinite(scRt) && scRt >= 0.05) ? Math.max(0.1, Math.min(4.0, scRt)) : 1.0,
-          scanWindow:   (isFinite(scWn) && scWn >= 0.04) ? Math.max(0.05, Math.min(1.0, scWn)) : 1.0
+          scanWindow:   (isFinite(scWn) && scWn >= 0.04) ? Math.max(0.05, Math.min(1.0, scWn)) : 1.0,
+          fxIndependent: !!s.fxIndependent,
+          fxGrain:       !!s.fxGrain,
+          fxTapeMachine: (isFinite(tm) && tm >= 0 && tm <= 3) ? tm : 0,
+          fxSpace:       !!s.fxSpace,
+          fxDelay:       !!s.fxDelay,
+          fxEq:          !!s.fxEq,
+          fxJune:        !!s.fxJune
         };
       });
       // Clamp activeSliceIndex.
@@ -3972,6 +4134,101 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var idx = parseInt(panel.dataset.targetIdx, 10);
       if (!isNaN(idx) && state.slices[idx]) ovRedrawEnvelope(idx);
     });
+
+    // ── FX section (Mark 2) ────────────────────────────────────────────
+    // INDEPENDENT pill: toggles fxIndependent. Per-FX state is preserved
+    // underneath, so flipping off → on restores the user's last selection.
+    var indyEl = document.getElementById('ti-fx-indy');
+    if (indyEl) {
+      indyEl.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          var on = !state.slices[idx].fxIndependent;
+          state.slices[idx].fxIndependent = on;
+          var fn = getNativeFn('setSliceFxIndependent');
+          if (fn) { try { fn(idx, on); } catch (_) {} }
+          ovRedrawFx(idx);
+        } catch (_) {}
+      });
+    }
+    // FX chips: GRAIN/SPACE/DELAY/EQ/JUNE toggle a bool; TAPE cycles
+    // OFF → STU → CAS → WIR → OFF on each click.
+    panel.querySelectorAll('.ov-fx-chip').forEach(function (chip) {
+      chip.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          var s = state.slices[idx];
+          if (!s.fxIndependent) return;   // chip is grayed in inherit mode
+          var fx = chip.dataset.fx;
+          if (fx === 'tape') {
+            var next = ((Number(s.fxTapeMachine) || 0) + 1) % 4;
+            s.fxTapeMachine = next;
+            var fnT = getNativeFn('setSliceFxTapeMachine');
+            if (fnT) { try { fnT(idx, next); } catch (_) {} }
+          } else {
+            var key = 'fx' + fx.charAt(0).toUpperCase() + fx.slice(1);
+            var nextOn = !s[key];
+            s[key] = nextOn;
+            var fnB = getNativeFn('setSliceFxBool');
+            if (fnB) { try { fnB(idx, fx, nextOn); } catch (_) {} }
+          }
+          ovRedrawFx(idx);
+        } catch (_) {}
+      });
+    });
+  }
+
+  // Render the FX section from current chop state. Called from ovApplyState
+  // on open + after every FX click.
+  function ovRedrawFx (idx) {
+    var panel = document.getElementById('ti-chop-panel');
+    var section = document.getElementById('ti-fx-section');
+    if (!panel || !section) return;
+    var s = state.slices[idx];
+    if (!s) return;
+
+    var indyOn = !!s.fxIndependent;
+    section.classList.toggle('inheriting', !indyOn);
+
+    var indyEl = document.getElementById('ti-fx-indy');
+    if (indyEl) indyEl.classList.toggle('on', indyOn);
+
+    // Tag-line: explain the current mode + count active FX when independent.
+    var meta = document.getElementById('ti-fx-meta');
+    if (meta) {
+      if (!indyOn) {
+        meta.textContent = 'following global chain';
+      } else {
+        var n = (s.fxGrain ? 1 : 0) + (s.fxTapeMachine > 0 ? 1 : 0)
+              + (s.fxSpace ? 1 : 0) + (s.fxDelay ? 1 : 0)
+              + (s.fxEq    ? 1 : 0) + (s.fxJune  ? 1 : 0);
+        meta.textContent = n === 0 ? 'detached · clean signal'
+                                   : (n + ' engine' + (n === 1 ? '' : 's') + ' active');
+      }
+    }
+
+    // Per-chip on/off + TAPE sub-machine label.
+    var TAPE_NAMES = ['', 'STU', 'CAS', 'WIR'];
+    panel.querySelectorAll('.ov-fx-chip').forEach(function (chip) {
+      var fx = chip.dataset.fx;
+      var on = false;
+      var label = chip.dataset.fx.toUpperCase();
+      if (fx === 'tape') {
+        var tm = Number(s.fxTapeMachine) || 0;
+        on = tm > 0;
+        chip.innerHTML = on
+            ? 'TAPE<span class="sub">·' + TAPE_NAMES[tm] + '</span>'
+            : 'TAPE';
+      } else {
+        var key = 'fx' + fx.charAt(0).toUpperCase() + fx.slice(1);
+        on = !!s[key];
+      }
+      chip.classList.toggle('on', on);
+    });
   }
 
   function ovApplyState (idx) {
@@ -3993,6 +4250,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     ovRedrawEnvelope(idx);
     ovRedrawEmblems(idx);
+    ovRedrawFx(idx);
   }
 
   function openChopOverlay (idx) {
@@ -4487,6 +4745,23 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
             // display instantly without re-decoding. JS pulls this via the
             // getCachedSamplePayload native fn during hero-overlay init.
             audioProcessor.setCachedSamplePayload (json);
+
+            // Bump the source version counter so WarpRenderCache entries from
+            // any previous sample are never matched against the new one. Then
+            // push the new source pointers + sample rate into the warp cache
+            // so prewarm() calls can start immediately after this load.
+            audioProcessor.sourceVersionId_.fetch_add (1, std::memory_order_relaxed);
+            {
+                auto buf = audioProcessor.getSampleBuffer().load();
+                if (buf && buf->getNumSamples() > 0 && buf->getNumChannels() >= 2)
+                {
+                    audioProcessor.synth.warpCache.setSource (
+                        buf->getReadPointer (0),
+                        buf->getReadPointer (1),
+                        buf->getNumSamples());
+                    audioProcessor.synth.warpCache.setSampleRate (r.sampleRate);
+                }
+            }
 
             if (webView != nullptr)
                 webView->evaluateJavascript (
