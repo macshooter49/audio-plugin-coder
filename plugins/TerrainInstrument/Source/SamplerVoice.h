@@ -496,7 +496,15 @@ namespace tw
                 //   t=1 → 100% new direction (fully transitioned)
                 if (turnaroundFadeT > 0.0)
                 {
-                    constexpr double turnaroundLenMs = 28.0;
+                    // Bug A fix: scale turnaround window by 1/pitchInc so the
+                    // oldPos projection doesn't race to the boundary at high MIDI
+                    // pitches (pitchInc=4 at +2 octaves → old 28ms window projected
+                    // 4× further → immediate reflection → asymmetric click).
+                    // At root pitch (pitchInc=1) the window is unchanged at 28ms.
+                    // At 2 octaves up (pitchInc=4) it shrinks to 7ms — still
+                    // enough to taper the transient, and click amplitude at that
+                    // rate is already small due to high flip frequency.
+                    const double turnaroundLenMs = 28.0 / juce::jmax (1.0, pitchInc);
                     const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
                     const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
 
@@ -823,7 +831,10 @@ namespace tw
             if (playhead < effSliceStart) playhead = effSliceStart;
             if (playhead > effSliceEnd)   playhead = effSliceEnd;
 
-            constexpr double turnaroundLenMs = 28.0;  // extended from 16ms for smoother turnarounds
+            // Bug A fix (cache path): scale turnaround window by 1/pitchRatio so
+            // oldPos projection stays within bounds at high MIDI pitches.
+            // pitchRatio in the cache path plays the same role as pitchInc in NONE.
+            const double turnaroundLenMs = 28.0 / juce::jmax (1.0, pitchRatio);
             const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
             const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
 
