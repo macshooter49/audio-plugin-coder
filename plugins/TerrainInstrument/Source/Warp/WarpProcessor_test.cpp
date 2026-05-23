@@ -734,4 +734,42 @@ public:
 
 static ScanTurnaroundCrossfadeTests scanTurnaroundCrossfadeTests;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WarpRenderCache — skeleton: lookup-before-populate + invalidation API
+// (Task 8, Mark 1.5 scan mode)
+// ─────────────────────────────────────────────────────────────────────────────
+#include "WarpRenderCache.h"
+
+class WarpRenderCacheTests : public juce::UnitTest
+{
+public:
+    WarpRenderCacheTests() : juce::UnitTest ("WarpRenderCache") {}
+
+    void runTest() override
+    {
+        beginTest ("Lookup before populate returns nullptr");
+        {
+            tw::WarpRenderCache cache;
+            tw::WarpRenderCache::Key k {
+                /*sliceIndex*/      0,
+                /*sourceVersionId*/ 1,
+                /*stretchRatio*/    2.0f,
+                /*warpMode*/        tw::WarpMode::Tones
+            };
+            expect (cache.get (k) == nullptr);
+            expect (! cache.isReady (k));
+        }
+
+        beginTest ("invalidateSlice on empty cache is no-op (doesn't crash)");
+        {
+            tw::WarpRenderCache cache;
+            cache.invalidateSlice (5);
+            cache.invalidateSource (12345);
+            expect (true);  // reached without crash
+        }
+    }
+};
+
+static WarpRenderCacheTests warpRenderCacheTests;
+
 #endif  // JUCE_DEBUG
