@@ -2856,7 +2856,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         // Scan mode fields (Task 2 — must be extracted here or the C++ → JS
         // round-trip silently overwrites any JS-side knob writes; see the
         // WebSliderRelay gotcha in project memory).
-        var scEn = s.scanEnabled === true;
+        var scEn = !!s.scanEnabled;
         var scRt = parseFloat(s.scanRate);
         var scWn = parseFloat(s.scanWindow);
         return {
