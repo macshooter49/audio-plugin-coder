@@ -2402,6 +2402,51 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   #ti-chop-panel .rate-display .rate-value { color: rgba(245,243,255,0.92); font-weight: 600; }
   #ti-chop-panel .rate-display.dim .rate-value { color: rgba(245,243,255,0.30); }
+  /* Mod ring: active LFO assignment on activeChopScanRate */
+  #ti-chop-panel .rate-display.mod-active .rate-value {
+    text-shadow: 0 0 5px rgba(168, 136, 255, 0.8);
+  }
+  #ti-chop-panel .rate-display.mod-active .rate-label {
+    color: rgba(168, 136, 255, 0.7);
+    transition: color 200ms ease;
+  }
+
+  /* ── Chop right-click context menu ─────────────────────────────────────── */
+  #ti-chop-ctx-menu {
+    background: #1e1a30;
+    border: 1px solid rgba(168, 136, 255, 0.35);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+    padding: 4px 0;
+    min-width: 160px;
+    font: 500 11px/1 -apple-system;
+    color: rgba(245,243,255,0.88);
+    user-select: none;
+  }
+  #ti-chop-ctx-menu .ctx-item {
+    padding: 7px 14px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  #ti-chop-ctx-menu .ctx-item:hover {
+    background: rgba(168, 136, 255, 0.18);
+  }
+  #ti-chop-ctx-menu .ctx-item.ctx-checked {
+    color: rgba(168, 136, 255, 1.0);
+  }
+  #ti-chop-ctx-menu .ctx-sep {
+    height: 1px;
+    background: rgba(255,255,255,0.07);
+    margin: 3px 0;
+  }
+  #ti-chop-ctx-menu .ctx-header {
+    padding: 5px 14px 3px;
+    font: 700 9px/1 -apple-system;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: rgba(245,243,255,0.35);
+    cursor: default;
+  }
 
   /* ADSR envelope canvas — the centrepiece */
   #ti-chop-panel .ov-env {
@@ -2892,6 +2937,90 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     }
     return null;
   }
+
+  // ── JS PARAMS metadata + MODULATABLE list ────────────────────────────────
+  // These entries mirror the C++ ModulationEngine ParamIndex enum (same order).
+  // Used by the mod panel to populate the target dropdown and by updateModRings()
+  // to decorate UI elements when an LFO is assigned to a param.
+  var PARAMS = {
+    grainSize:          { label: 'Grain Size',    section: 'grain',  min: 5,    max: 500,   default: 60,  unit: 'ms', desc: 'Grain length.', tip: '' },
+    density:            { label: 'Density',        section: 'grain',  min: 1,    max: 100,   default: 50,  unit: '',   desc: 'Grains per second.', tip: '' },
+    spray:              { label: 'Spray',          section: 'grain',  min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Randomise grain start position.', tip: '' },
+    pitch:              { label: 'Pitch',          section: 'grain',  min: -12,  max: 12,    default: 0,   unit: 'st', desc: 'Grain pitch shift.', tip: '' },
+    freeze:             { label: 'Freeze',         section: 'grain',  min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Freeze grain playhead.', tip: '' },
+    wander:             { label: 'Wander',         section: 'grain',  min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Grain position wander.', tip: '' },
+    grainFilter:        { label: 'Filter',         section: 'grain',  min: 0,    max: 100,   default: 100, unit: '',   desc: 'Grain filter cutoff.', tip: '' },
+    mix:                { label: 'Mix',            section: 'grain',  min: 0,    max: 100,   default: 50,  unit: '%',  desc: 'Dry/wet mix.', tip: '' },
+    wowFlutter:         { label: 'Wow/Flutter',    section: 'tape',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Tape wow and flutter depth.', tip: '' },
+    saturation:         { label: 'Saturation',     section: 'tape',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Tape saturation.', tip: '' },
+    hiss:               { label: 'Hiss',           section: 'tape',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Tape hiss level.', tip: '' },
+    loopFeedback:       { label: 'Loop Feedback',  section: 'loop',   min: 0,    max: 100,   default: 50,  unit: '',   desc: 'Loop feedback level.', tip: '' },
+    loopDegrade:        { label: 'Loop Degrade',   section: 'loop',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Loop degrade amount.', tip: '' },
+    loopSpeed:          { label: 'Loop Speed',     section: 'loop',   min: 0,    max: 9,     default: 4,   unit: '',   desc: 'Tape loop speed.', tip: '' },
+    spaceSize:          { label: 'Space Size',     section: 'space',  min: 0,    max: 100,   default: 50,  unit: '',   desc: 'Reverb room size.', tip: '' },
+    spaceDecay:         { label: 'Space Decay',    section: 'space',  min: 0,    max: 100,   default: 50,  unit: '',   desc: 'Reverb decay time.', tip: '' },
+    spaceTone:          { label: 'Space Tone',     section: 'space',  min: 0,    max: 100,   default: 50,  unit: '',   desc: 'Reverb tone.', tip: '' },
+    spaceMix:           { label: 'Space Mix',      section: 'space',  min: 0,    max: 100,   default: 0,   unit: '%',  desc: 'Reverb wet/dry.', tip: '' },
+    wireWow:            { label: 'Wire Wow',       section: 'wire',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Wire wow depth.', tip: '' },
+    wireSaturation:     { label: 'Wire Sat',       section: 'wire',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Wire saturation.', tip: '' },
+    wireHiss:           { label: 'Wire Hiss',      section: 'wire',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Wire hiss level.', tip: '' },
+    activeChopScanRate: {
+      label: 'Scan Rate', section: 'scan',
+      min: 0.1, max: 4.0, default: 1.0,
+      unit: 'x', desc: "Active chop's scan rate (ping-pong speed).", tip: ''
+    },
+    activeChopScanWindow: {
+      label: 'Scan Window', section: 'scan',
+      min: 0.05, max: 1.0, default: 1.0,
+      unit: '', desc: "Active chop's scan window (narrows ping-pong range).", tip: ''
+    }
+  };
+
+  // Ordered list — index must match C++ ModulationEngine::ParamIndex enum.
+  // EQ bands are not individually listed here to keep the dropdown manageable;
+  // add them when the mod panel gains EQ target support.
+  var MODULATABLE = [
+    'grainSize', 'density', 'spray', 'pitch', 'freeze', 'wander',
+    'grainFilter', 'mix',
+    'wowFlutter', 'saturation', 'hiss',
+    'loopFeedback', 'loopDegrade', 'loopSpeed',
+    'spaceSize', 'spaceDecay', 'spaceTone', 'spaceMix',
+    'wireWow', 'wireSaturation', 'wireHiss',
+    'activeChopScanRate', 'activeChopScanWindow'
+  ];
+
+  // ── Mod-state mirror (kept by restoreModState / updateModConfig calls) ────
+  // Allows JS to know which params have LFO assignments without parsing JSON.
+  var _modAssignments = [];  // [{source, target (string), depth, enabled}, ...]
+
+  function _refreshModRings () {
+    // Light up the RATE display when activeChopScanRate has an active assignment.
+    var rateDisplay = document.getElementById('rate-display');
+    if (rateDisplay) {
+      var scanRateAssigned = _modAssignments.some(function (a) {
+        return a.target === 'activeChopScanRate' && a.enabled && a.depth !== 0;
+      });
+      rateDisplay.classList.toggle('mod-active', scanRateAssigned);
+    }
+  }
+
+  // Called by C++ timer every tick until page signals ready.
+  window.restoreModState = function (jsonStr) {
+    try {
+      var cfg = JSON.parse(jsonStr);
+      _modAssignments = (cfg.assignments || []);
+      _refreshModRings();
+    } catch (_) {}
+  };
+
+  // Called by C++ at ~60 Hz with LFO values; refresh rings here too.
+  window.updateLFOOutputs = function (lfo0, lfo1, lfo2, ph0, ph1, ph2) {
+    // Rings are driven by assignment existence, not LFO values —
+    // but refresh on each tick so opening the overlay always shows
+    // the correct state.
+    _refreshModRings();
+    // (lfo values available for future waveform preview: lfo0, lfo1, lfo2)
+  };
 
   // ── State ─────────────────────────────────────────────────────────────────
   var state = {
@@ -4390,9 +4519,122 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     if (pn) pn.classList.remove('open');
   }
 
-  // Legacy aliases — older call sites still reference these names.
-  function openSliceContextMenu (ev, idx) { openChopOverlay(idx); }
-  function closeSliceContextMenu ()       { closeChopOverlay(); }
+  // ── Chop right-click context menu ─────────────────────────────────────────
+  // Shows a small floating menu with:
+  //   • Scan: On/Off toggle
+  //   • Scan Rate submenu presets (0.5× / 1.0× / 2.0× / 4.0×)
+  //   • Open Editor (opens the full chop overlay)
+  // Dismisses on click-outside or any item selection.
+
+  var _ctxMenuDismiss = null;  // teardown fn from last open menu
+
+  function _setScanRate (idx, rate) {
+    if (!state.slices[idx]) return;
+    state.slices[idx].scanRate = rate;
+    ovRedrawScan(idx);
+    var fn = getNativeFn('setSliceScanRate');
+    if (fn) { try { fn(idx, rate); } catch (_) {} }
+  }
+
+  function openSliceContextMenu (ev, idx) {
+    // Dismiss any existing menu first.
+    if (_ctxMenuDismiss) { _ctxMenuDismiss(); _ctxMenuDismiss = null; }
+
+    var slice = state.slices[idx];
+    if (!slice) { openChopOverlay(idx); return; }
+
+    var menu = document.createElement('div');
+    menu.id = 'ti-chop-ctx-menu';
+    var scanOn = !!slice.scanEnabled;
+    var currentRate = (typeof slice.scanRate === 'number' && slice.scanRate > 0) ? slice.scanRate : 1.0;
+
+    var ratePresets = [
+      { label: '0.5\xd7  slow drone', rate: 0.5  },
+      { label: '1.0\xd7  natural',    rate: 1.0  },
+      { label: '2.0\xd7  fast',       rate: 2.0  },
+      { label: '4.0\xd7  scrub',      rate: 4.0  }
+    ];
+
+    function makeItem (label, cb, checked) {
+      var el = document.createElement('div');
+      el.className = 'ctx-item' + (checked ? ' ctx-checked' : '');
+      el.textContent = label;
+      el.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      el.addEventListener('click', function () { cb(); dismiss(); });
+      return el;
+    }
+
+    function makeSep () {
+      var s = document.createElement('div');
+      s.className = 'ctx-sep';
+      return s;
+    }
+
+    // Scan toggle
+    menu.appendChild(makeItem(scanOn ? '✓  Scan' : '   Scan', function () {
+      var newEnabled = !slice.scanEnabled;
+      slice.scanEnabled = newEnabled;
+      ovRedrawScan(idx);
+      var fn = getNativeFn('setSliceScanEnabled');
+      if (fn) { try { fn(idx, newEnabled); } catch (_) {} }
+    }, scanOn));
+
+    menu.appendChild(makeSep());
+
+    // Scan Rate header (non-clickable label)
+    var rateHeader = document.createElement('div');
+    rateHeader.className = 'ctx-header';
+    rateHeader.textContent = 'SCAN RATE';
+    menu.appendChild(rateHeader);
+
+    ratePresets.forEach(function (p) {
+      var isActive = Math.abs(currentRate - p.rate) < 0.05;
+      (function (rate) {
+        menu.appendChild(makeItem(p.label, function () {
+          _setScanRate(idx, rate);
+        }, isActive));
+      }(p.rate));
+    });
+
+    menu.appendChild(makeSep());
+
+    // Open full overlay
+    menu.appendChild(makeItem('Edit Chop…', function () {
+      openChopOverlay(idx);
+    }, false));
+
+    // Position near cursor, clamp to viewport.
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var x = ev.clientX + 4, y = ev.clientY + 4;
+    menu.style.cssText = 'position:fixed;z-index:9999;visibility:hidden;';
+    document.body.appendChild(menu);
+    var mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.visibility = '';
+    if (x + mw > vw - 4) x = Math.max(4, vw - mw - 4);
+    if (y + mh > vh - 4) y = Math.max(4, vh - mh - 4);
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+
+    function dismiss () {
+      if (menu.parentNode) menu.parentNode.removeChild(menu);
+      document.removeEventListener('mousedown', onOutside, true);
+      _ctxMenuDismiss = null;
+    }
+    function onOutside (e) {
+      if (!menu.contains(e.target)) dismiss();
+    }
+    // Small delay so the same click that opened the menu doesn't close it.
+    setTimeout(function () {
+      document.addEventListener('mousedown', onOutside, true);
+    }, 10);
+
+    _ctxMenuDismiss = dismiss;
+  }
+
+  function closeSliceContextMenu () {
+    if (_ctxMenuDismiss) { _ctxMenuDismiss(); _ctxMenuDismiss = null; }
+    closeChopOverlay();
+  }
 
   // ── Interactions ──────────────────────────────────────────────────────────
   function wireInteractions () {
