@@ -165,6 +165,10 @@ namespace tw
             // Scan mode (Mark 1.5). Missing keys → defaults (off / 1.0 / 1.0)
             // so legacy presets load identically.
             s.scanEnabled = (bool) e.getProperty ("scanEnabled", false);       // missing → false
+            // Sentinel-restore for legacy JSON: a missing key yields 0.0, which is
+            // below the valid minimum for both fields — that's the trigger to restore
+            // the spec default of 1.0. Per-field thresholds sit just below each
+            // field's valid minimum (scanRate min 0.1, scanWindow min 0.05).
             s.scanRate    = (float) (double) e.getProperty ("scanRate", 0.0);  // missing → 0.0
             if (s.scanRate < 0.05f) s.scanRate = 1.0f;                        // legacy → restore default
             s.scanWindow  = (float) (double) e.getProperty ("scanWindow", 0.0);
