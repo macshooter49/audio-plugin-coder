@@ -543,7 +543,10 @@ namespace tw
                 // leading sample fully covers the seam — wrap then jumps the
                 // playhead by xfadeLen so the post-wrap read continues exactly
                 // where the leading was.
-                if (xfadeLen > 0.0)
+                // Bypassed when scanActive — scan owns its own 28ms Hann
+                // turnaround fade; the loop xfade fires on top → double-fade
+                // clicks. Scan voices use only the turnaround path above.
+                if (xfadeLen > 0.0 && !scanActive)
                 {
                     const double samplesToEnd = reversePlay
                                                   ? (playhead - startIdx)
@@ -574,8 +577,11 @@ namespace tw
                 // Anti-click tail fade for one-shot mode: ~10 ms ramp to zero
                 // before the slice end. Direction aware — fade as we approach
                 // whichever end we're heading to.
+                // Bypassed when scanActive — scan ping-pongs and never reaches
+                // the slice end in one-shot fashion; applying this fade would
+                // ramp the held note to silence mid-scan.
                 float tailFade = 1.0f;
-                if (loopMode == 0)
+                if (loopMode == 0 && !scanActive)
                 {
                     const double kTailLen = juce::jmin (sliceLen * 0.5,
                                                          0.010 * sampleRateForEnv);

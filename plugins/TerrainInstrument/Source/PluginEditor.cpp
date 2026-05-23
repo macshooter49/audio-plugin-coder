@@ -2082,7 +2082,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     position: absolute; left: 0; right: 0; top: 0; bottom: 0;
     width: 100%; height: 100%;
     pointer-events: none;
-    z-index: -1;  /* below all other elements — prevents appearing above lab card overlay (different stacking contexts) */
+    z-index: 1;  /* inside #ti-slice-overlays — above chop bodies (z-index 0) but below markers */
     display: none;  /* hidden until slicer mode active */
   }
   body.ti-slicer-active #ti-scan-viz-canvas {
@@ -2760,11 +2760,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     sliceOverlays.id = 'ti-slice-overlays';
     hero.appendChild(sliceOverlays);
 
-    // Scan-line viz canvas — same bounds as ti-slice-overlays, drawn by
-    // pollScanViz() at ~30 Hz. pointer-events:none so slice gestures still work.
+    // Scan-line viz canvas — child of sliceOverlays so it shares the same
+    // stacking context as the chop markers. Preserved across redrawSliceOverlay
+    // rebuilds via the detach/reattach pattern in that function.
     var scanVizCanvas = document.createElement('canvas');
     scanVizCanvas.id = 'ti-scan-viz-canvas';
-    hero.appendChild(scanVizCanvas);
+    sliceOverlays.appendChild(scanVizCanvas);
 
     // Floating chop overlay (replaces the old cramped context menu —
     // panel sits over the whole UI in a fixed-position layer so it never
@@ -3226,7 +3227,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var overlays = document.getElementById('ti-slice-overlays');
     if (!hero || !waveCanvas || !overlays) return;
 
+    // Preserve the scan canvas across innerHTML wipe — it lives inside
+    // overlays but must survive every marker rebuild.
+    var scanCanvas = document.getElementById('ti-scan-viz-canvas');
+    if (scanCanvas && scanCanvas.parentNode === overlays) overlays.removeChild(scanCanvas);
     overlays.innerHTML = '';
+    if (scanCanvas) overlays.appendChild(scanCanvas);
 
     if (state.sliceMode !== 1 || state.slices.length === 0 || state.sampleLengthSamples <= 0) {
       document.body.classList.remove('ti-slicer-active');
