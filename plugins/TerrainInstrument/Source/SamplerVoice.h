@@ -220,24 +220,14 @@ namespace tw
         float getScanWindowLive() const noexcept { return scanWindowLive; }
 
         /** Returns playhead position normalized to [0, 1] within the slice bounds.
-         *  For non-scan voices this is always 0. For cache-reading scan voices,
-         *  playhead is in cache-buffer coordinates [0, cacheLen); we normalize
-         *  to [0,1] using playStartIdx / playEndIdx which are set to 0 / cacheLen
-         *  by renderOnset() so the math is identical. Occasional torn reads on
-         *  the UI thread produce at most one frame of visual jitter — acceptable.
+         *  Written from BOTH render paths (NONE and cache) each sample via a
+         *  lock-free atomic so the viz always reads the correct coordinate space
+         *  regardless of which path is active. Without the atomic, cache-path
+         *  voices produced garbage (cache coords != source coords) → viz frozen.
          */
         float getScanPositionNormalized() const noexcept
         {
-            if (! scanActive) return 0.0f;
-            const double pos   = playhead;
-            const double start = static_cast<double> (playStartIdx);
-            const double end   = (playEndIdx > playStartIdx)
-                                     ? static_cast<double> (playEndIdx)
-                                     : start + 1.0;
-            const double span  = end - start;
-            if (span <= 0.0) return 0.0f;
-            return juce::jlimit (0.0f, 1.0f,
-                                 static_cast<float> ((pos - start) / span));
+            return juce::jlimit (0.0f, 1.0f, scanPositionNorm_.load (std::memory_order_acquire));
         }
 
 #if JUCE_DEBUG
@@ -484,46 +474,60 @@ namespace tw
                 auto sampleL = inL[i0] + frac * (inL[i1] - inL[i0]);
                 auto sampleR = inR[i0] + frac * (inR[i1] - inR[i0]);
 
-                // ── Scan turnaround crossfade (16ms equal-power) ─────────────
+                // ── Scan turnaround crossfade (28ms Hann-window) ─────────────
                 // At each direction flip we briefly blend two reads: the "old
                 // direction" (continuing past the boundary as if no flip
-                // happened) and the "new direction" (post-flip). Equal-power
-                // cos/sin blend masks the discontinuity. Extended from 8ms
-                // to 16ms — gives more headroom for the waveform to converge
-                // across materials with slow-moving content near the boundary.
+                // happened) and the "new direction" (post-flip).
                 //
-                // turnaroundFadeT is armed to 1.0 at the flip (in the boundary
-                // handler above) and decrements toward 0 here.  The blend
-                // parameter t = 1 - turnaroundFadeT sweeps 0 → 1:
+                // Three improvements over the original 16ms equal-power blend:
+                // 1. oldPos is REFLECTED at slice boundaries so we always read
+                //    valid slice audio instead of clamping into adjacent content.
+                // 2. Extended to 28ms — wider window disperses the discontinuity
+                //    energy further in time, reducing perceived click amplitude.
+                // 3. Hann-window taper (sum=1 constant-amplitude) instead of
+                //    cos/sin equal-power (sum peaks at sqrt(2)≈+3 dB at t=0.5).
+                //    Both reads are CORRELATED (same slice after reflection), so
+                //    Hann's constant-amplitude taper sounds cleaner than the
+                //    equal-power dip+hump. cos/sin is correct for uncorrelated
+                //    sources; Hann is correct for correlated.
+                //
+                // turnaroundFadeT is armed to 1.0 at the flip and decrements to 0.
                 //   t=0 → 100% old direction (first sample after flip)
                 //   t=1 → 100% new direction (fully transitioned)
                 if (turnaroundFadeT > 0.0)
                 {
-                    constexpr double turnaroundLenMs = 16.0;
+                    constexpr double turnaroundLenMs = 28.0;
                     const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
                     const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
 
-                    // Old-direction read: simulate where the playhead would be
-                    // if we hadn't flipped — i.e., continuing PAST the boundary
-                    // in the pre-flip direction. pre-flip direction is opposite
-                    // of current reversePlay (which was just toggled).
-                    // Use scanAdvance so the projection matches the actual per-step
-                    // advance used in the main loop (1.0 at scanRate>=1, scanRate at <1).
+                    // Old-direction read: project where the playhead would be
+                    // if we hadn't flipped. Pre-flip direction is opposite of
+                    // current reversePlay (which was toggled at the boundary).
                     const double oldDirSign  = reversePlay ? +1.0 : -1.0;
                     const double xScanAdv    = (scanActive && scanRateLive < 1.0f) ? (double) scanRateLive : 1.0;
-                    const double oldPos = playhead
-                                         + oldDirSign * pitchInc * xScanAdv
-                                           * (1.0 - turnaroundFadeT)
-                                           * turnaroundLenSamples;
+                    double oldPos = playhead
+                                    + oldDirSign * pitchInc * xScanAdv
+                                      * (1.0 - turnaroundFadeT)
+                                      * turnaroundLenSamples;
+
+                    // Reflect oldPos at slice boundaries so we read valid slice
+                    // audio throughout the entire fade (never stepping outside
+                    // into adjacent slice content). Belt-and-suspenders clamp
+                    // handles pathologically short slices.
+                    if (oldPos > effSliceEnd)   oldPos = effSliceEnd   - (oldPos - effSliceEnd);
+                    if (oldPos < effSliceStart) oldPos = effSliceStart + (effSliceStart - oldPos);
+                    oldPos = juce::jlimit (effSliceStart, effSliceEnd, oldPos);
+
                     const auto oi0 = juce::jlimit (0, bufLen - 1, static_cast<int> (oldPos));
                     const int  oi1 = juce::jlimit (0, bufLen - 1, oi0 + 1);
                     const auto ofrac = static_cast<float> (oldPos - (double) oi0);
                     const auto oldL = inL[oi0] + ofrac * (inL[oi1] - inL[oi0]);
                     const auto oldR = inR[oi0] + ofrac * (inR[oi1] - inR[oi0]);
 
+                    // Hann-window taper: sum = 1.0 throughout (constant amplitude).
                     const float t = static_cast<float> (1.0 - turnaroundFadeT);  // 0 → 1 across fade
-                    const float oldGain = std::cos (t * juce::MathConstants<float>::halfPi);
-                    const float newGain = std::sin (t * juce::MathConstants<float>::halfPi);
+                    const float oldGain = 0.5f * (1.0f + std::cos (t * juce::MathConstants<float>::pi));  // 1 at t=0, 0 at t=1
+                    const float newGain = 0.5f * (1.0f - std::cos (t * juce::MathConstants<float>::pi));  // 0 at t=0, 1 at t=1
 
                     sampleL = oldL * oldGain + sampleL * newGain;
                     sampleR = oldR * oldGain + sampleR * newGain;
@@ -585,6 +589,13 @@ namespace tw
                 const auto gain = currentVelocity * envLevel * tailFade * voiceGain;
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
+
+                // Update unified scan viz position (Bug B fix). Written here in
+                // the NONE path so the viz getter just reads the atomic without
+                // needing to know which render path is active.
+                if (scanActive && sliceLen > 0.0)
+                    scanPositionNorm_.store (static_cast<float> ((playhead - startIdx) / sliceLen),
+                                            std::memory_order_release);
 
                 // Advance — direction-aware. Pitch-decoupling: at scanRate >= 1.0
                 // we advance at the native pitch rate (no varispeed shift) — the
@@ -798,7 +809,7 @@ namespace tw
             if (playhead < effSliceStart) playhead = effSliceStart;
             if (playhead > effSliceEnd)   playhead = effSliceEnd;
 
-            constexpr double turnaroundLenMs = 16.0;  // extended from 8ms for smoother turnarounds
+            constexpr double turnaroundLenMs = 28.0;  // extended from 16ms for smoother turnarounds
             const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
             const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
 
@@ -866,29 +877,35 @@ namespace tw
                 auto sampleL = cL[i0] + frac * (cL[i1] - cL[i0]);
                 auto sampleR = cR[i0] + frac * (cR[i1] - cR[i0]);
 
-                // Turnaround crossfade (16ms equal-power, mirroring Tasks 5-7 but
-                // reading from the cache buffer instead of the source buffer).
-                // oldPos includes pitchRatio so the old-direction projection
-                // tracks the true pre-flip advance rate. Use rateMul (not scanRateLive
-                // raw) so the projection matches the pitch-decoupled advance below:
-                // 1.0 * pitchRatio at scanRate>=1, scanRateLive * pitchRatio at <1.
+                // Turnaround crossfade (28ms Hann-window, mirroring NONE path fix):
+                // reflect + extend + Hann taper (same three improvements as
+                // the NONE path — see that comment block for full rationale).
+                // In cache coords: effSliceStart/End = 0+margin / cacheLen-1-margin.
                 if (turnaroundFadeT > 0.0)
                 {
                     const double rateMul    = (scanRateLive >= 1.0f) ? 1.0 : static_cast<double> (scanRateLive);
                     const double oldDirSign = reversePlay ? +1.0 : -1.0;
-                    const double oldPos     = playhead
+                    double oldPos           = playhead
                                              + oldDirSign * pitchRatio * rateMul
                                                * (1.0 - turnaroundFadeT)
                                                * turnaroundLenSamples;
+
+                    // Reflect at cache scan bounds so we never step outside the
+                    // valid region (same logic as the NONE path reflection).
+                    if (oldPos > effSliceEnd)   oldPos = effSliceEnd   - (oldPos - effSliceEnd);
+                    if (oldPos < effSliceStart) oldPos = effSliceStart + (effSliceStart - oldPos);
+                    oldPos = juce::jlimit (effSliceStart, effSliceEnd, oldPos);
+
                     const auto oi0 = juce::jlimit (0, cacheLen - 1, static_cast<int> (oldPos));
                     const int  oi1 = juce::jlimit (0, cacheLen - 1, oi0 + 1);
                     const auto ofrac = static_cast<float> (oldPos - static_cast<double> (oi0));
                     const auto oldL = cL[oi0] + ofrac * (cL[oi1] - cL[oi0]);
                     const auto oldR = cR[oi0] + ofrac * (cR[oi1] - cR[oi0]);
 
+                    // Hann-window taper: constant-amplitude sum (correlated sources).
                     const float t       = static_cast<float> (1.0 - turnaroundFadeT);
-                    const float oldGain = std::cos (t * juce::MathConstants<float>::halfPi);
-                    const float newGain = std::sin (t * juce::MathConstants<float>::halfPi);
+                    const float oldGain = 0.5f * (1.0f + std::cos (t * juce::MathConstants<float>::pi));
+                    const float newGain = 0.5f * (1.0f - std::cos (t * juce::MathConstants<float>::pi));
                     sampleL = oldL * oldGain + sampleL * newGain;
                     sampleR = oldR * oldGain + sampleR * newGain;
 
@@ -899,6 +916,13 @@ namespace tw
                 const float gain = currentVelocity * envLevel * voiceGain;
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
+
+                // Update unified scan viz position (Bug B fix — cache path).
+                // Cache represents the full stretched slice: position within cache
+                // = position within slice for display purposes.
+                if (cacheLen > 1)
+                    scanPositionNorm_.store (static_cast<float> (playhead / static_cast<double> (cacheLen - 1)),
+                                            std::memory_order_release);
 
                 // Advance — cache is at target stretch; pitchRatio applies MIDI
                 // pitch offset as a speed multiplier through the pre-stretched
@@ -1149,7 +1173,12 @@ namespace tw
         bool   scanActive       = false;   // mirrors activeConfig.scanEnabled, captured at startNote
         float  scanRateLive     = 1.0f;    // resolved per-block with mod applied (Task 7)
         float  scanWindowLive   = 1.0f;    // resolved per-block with mod applied (Task 7)
-        double turnaroundFadeT  = 0.0;     // 1.0 → 0.0 over 8ms; Task 6 consumes
+        double turnaroundFadeT  = 0.0;     // 1.0 → 0.0 over 28ms; Task 6 consumes
+        // Unified normalized scan position — written from BOTH NONE and cache
+        // render paths each sample (audio thread), read by viz poll (UI thread).
+        // Lock-free atomic avoids data races; torn reads produce at most one
+        // frame of jitter, which is imperceptible.
+        mutable std::atomic<float> scanPositionNorm_ { 0.0f };
 
         // Warp dispatcher + scratch buffers. Engine is lazily allocated inside
         // WarpProcessor on the first non-None setMode call; voices that never
