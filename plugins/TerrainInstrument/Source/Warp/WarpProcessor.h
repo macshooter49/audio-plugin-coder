@@ -253,15 +253,26 @@ namespace tw
                                                           WarpMode mode,
                                                           double sampleRate)
         {
+            // Bug B fix: BEATS at stretchRatio < 1 produces skip-based compression
+            // whose artefacts the scan ping-pong amplifies into audible jitter.
+            // For cache pre-rendering, clamp BEATS stretchRatio to >= 1.0 so the
+            // cached buffer is never shorter than the source slice. The scan voice
+            // then reads a full-length (or stretched) cache — stable regardless of
+            // the knob position. Trade-off: BEATS < 1 "skip pulse" character is not
+            // represented in the cache; the scan plays at native timing. This is
+            // preferred over the alternative (jittery/broken scan at rate < 1).
+            const float cacheStretchRatio = (mode == WarpMode::Beats)
+                                                ? juce::jmax (1.0f, stretchRatio)
+                                                : stretchRatio;
+
             // Use a temp WarpProcessor configured for this slice. Static method →
             // doesn't depend on any per-voice state of the caller.
             WarpProcessor tempWarp;
             tempWarp.prepare (sampleRate, /*channels*/ 2, /*blockSize*/ 512);
             tempWarp.setMode (mode);
-            tempWarp.setStretchRatio (stretchRatio);
+            tempWarp.setStretchRatio (cacheStretchRatio);  // Bug B: use clamped ratio
             tempWarp.setPitchSemitones (0.0f);
-
-            const int outputLen = (int) std::ceil ((double) sliceLen * (double) stretchRatio);
+            const int outputLen = (int) std::ceil ((double) sliceLen * (double) cacheStretchRatio);
             juce::AudioBuffer<float> out (2, outputLen);
             out.clear();
 
