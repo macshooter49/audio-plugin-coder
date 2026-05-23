@@ -6,6 +6,7 @@
 #include "SampleBuffer.h"
 #include "Slice.h"
 #include "Warp/WarpProcessor.h"
+#include "ModulationEngine.h"
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -52,11 +53,13 @@ namespace tw
                       std::atomic<int>&   /*rootNoteRef*/,    // kept for API compat — pitch now comes from VoiceConfig
                       std::atomic<float>& attackMsRef,
                       std::atomic<float>& releaseMsRef,
-                      std::atomic<int>&   loopModeRef) noexcept
+                      std::atomic<int>&   loopModeRef,
+                      ModulationEngine*   me = nullptr) noexcept
             : sample (sb),
               attackMsParam (attackMsRef),
               releaseMsParam (releaseMsRef),
-              loopModeParam (loopModeRef) {}
+              loopModeParam (loopModeRef),
+              modEngine (me) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
@@ -282,6 +285,21 @@ namespace tw
                 xfadeLen = juce::jmin (sliceLen * 0.25, xfadeTarget);
             }
 
+            // ── Resolve scan rate + window with modulation applied ───────────
+            // Per-block dispatch: voice asks mod engine for the modulated
+            // value of "Active Chop Scan Rate" / "Window", applied on top of
+            // its own per-slice base. Same LFO drives every active scan-on
+            // voice with independent base differentiation per chop.
+            if (scanActive && modEngine != nullptr)
+            {
+                scanRateLive   = juce::jlimit (0.1f, 4.0f,
+                                     modEngine->getModulatedValue (ModulationEngine::pActiveChopScanRate,
+                                                                    activeConfig.scanRate));
+                scanWindowLive = juce::jlimit (0.05f, 1.0f,
+                                     modEngine->getModulatedValue (ModulationEngine::pActiveChopScanWindow,
+                                                                    activeConfig.scanWindow));
+            }
+
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── Bounds + loop/wrap handling, direction-aware ────────────
@@ -481,8 +499,12 @@ namespace tw
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
-                // Advance — direction-aware.
-                playhead += reversePlay ? -pitchInc : pitchInc;
+                // Advance — direction-aware. When scan is active, scale the
+                // step by scanRateLive so varispeed pitch-shift is produced
+                // at Warp:None (documented behaviour). At scanRate=1.0 the
+                // multiplier is unity — natural ping-pong unchanged.
+                const double scanAdvance = scanActive ? (double) scanRateLive : 1.0;
+                playhead += (reversePlay ? -pitchInc : pitchInc) * scanAdvance;
             }
         }
 
@@ -850,10 +872,13 @@ namespace tw
         juce::int64 playEndIdx   = -1;
         bool        reversePlay  = false;
 
+        // ── Modulation engine reference (Task 7) ────────────────────────────
+        ModulationEngine* modEngine = nullptr;   // non-owning; set at construction via PluginProcessor
+
         // ── Scan state (Mark 1.5) ────────────────────────────────────────────
         bool   scanActive       = false;   // mirrors activeConfig.scanEnabled, captured at startNote
-        float  scanRateLive     = 1.0f;    // base for now; Task 7 wires mod
-        float  scanWindowLive   = 1.0f;    // base for now; Task 7 wires mod
+        float  scanRateLive     = 1.0f;    // resolved per-block with mod applied (Task 7)
+        float  scanWindowLive   = 1.0f;    // resolved per-block with mod applied (Task 7)
         double turnaroundFadeT  = 0.0;     // 1.0 → 0.0 over 8ms; Task 6 consumes
 
         // Warp dispatcher + scratch buffers. Engine is lazily allocated inside

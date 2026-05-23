@@ -16,7 +16,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     for (int i = 0; i < kNumVoices; ++i)
         synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi,
                                               attackMsAtomic, releaseMsAtomic,
-                                              sampleLoopMode));
+                                              sampleLoopMode, &modulationEngine));
     // Sample buffer starts empty. User drags a file in, or the editor opens a
     // file picker. SampleLoader (async) populates the shared buffer when a load
     // completes. Voices read it via the SampleBuffer atomic shared_ptr.
