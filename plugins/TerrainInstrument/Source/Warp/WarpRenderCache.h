@@ -44,7 +44,10 @@ public:
         {
             return sliceIndex      == o.sliceIndex
                 && sourceVersionId == o.sourceVersionId
-                && stretchRatio    == o.stretchRatio
+                // Intentional exact-float equality: cache keys must be bit-identical to hit.
+                // Do NOT replace with epsilon compare — that would silently merge distinct
+                // renders for stretchRatios that look "close enough".
+                && stretchRatio    == o.stretchRatio   // NOLINT(clang-diagnostic-float-equal)
                 && warpMode        == o.warpMode;
         }
     };
@@ -66,6 +69,14 @@ public:
 
     /** Lookup. Returns the rendered buffer if ready, else nullptr.
      *  Safe to call from the audio thread.
+     *
+     *  LIFETIME CONTRACT: the returned pointer is valid only while no
+     *  invalidateSlice() / invalidateSource() call runs concurrently.
+     *  Callers must ensure invalidation cannot race with buffer access —
+     *  v1 satisfies this because invalidation only fires at non-realtime
+     *  boundaries (sample load, slice mutation from UI). If you add a
+     *  realtime invalidation path, switch the return type to shared_ptr
+     *  or snapshot-id to avoid TOCTOU.
      */
     const juce::AudioBuffer<float>* get (const Key& k) const
     {
