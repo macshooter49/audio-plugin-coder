@@ -2050,14 +2050,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     border-radius: 1px;
     transition: width 90ms ease, left 90ms ease, right 90ms ease;
   }
-  /* REV badge — tiny tag in the top-left corner when slice plays backwards. */
-  .ti-slice-rev-tag {
-    position: absolute; top: 4px; left: 4px;
-    padding: 1px 4px; border-radius: 2px;
-    font: 700 8px/1 sans-serif; letter-spacing: 0.12em;
-    color: #FFB066;
-    background: rgba(20,18,32,0.7);
+  /* Reverse letter — bare "R" at bottom-right of chop body. Deliberately
+     unboxed so it reads as a status mark, not a clickable target (the boxed
+     warp letter T/B/X is interactive; R isn't). Sits to the left of the
+     warp letter when present, else hugs the corner. Same hide-when-narrow
+     gate as the other body overlays. */
+  .ti-slice-rev-letter {
+    position: absolute; bottom: 26px;
+    font: 700 9px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    color: rgba(167,139,250,0.55);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.55);
     pointer-events: none;
+    user-select: none;
   }
   /* Warp mode letter — bottom-right of chop body, above the pitch meter row.
      Out of the way of the boundary marker label that sits top-left of the
@@ -2990,11 +2994,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         meter.appendChild(bar);
         body.appendChild(meter);
       }
-      // REV tag — separate from pitch meter, top-left corner.
+      // Reverse letter — bottom-right of chop body, sits next to the warp
+      // letter (T/B/X) when present. Same width as the warp letter (14px) so
+      // they line up visually. Pushed left by 18px (14 + 4 gap) when a warp
+      // letter is also being rendered, otherwise hugs the right corner.
       if (s.reverse && !hideOverlays) {
         var rev = document.createElement('div');
-        rev.className = 'ti-slice-rev-tag';
-        rev.textContent = 'REV';
+        rev.className = 'ti-slice-rev-letter';
+        rev.textContent = 'R';
+        rev.title = 'Reversed playback';
+        // Sit a few px to the left of the warp letter (T/B/X is at right:4px
+        // and 14px wide → R's right edge at ~22px puts it just past T's left).
+        rev.style.right = (s.warpMode && s.warpMode > 0) ? '22px' : '6px';
         body.appendChild(rev);
       }
 

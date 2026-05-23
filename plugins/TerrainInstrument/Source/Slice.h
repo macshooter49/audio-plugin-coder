@@ -63,10 +63,18 @@ namespace tw
         // The boost path is intentional — quiet one-shot tails have the worst
         // noise-floor SNR, so users want to crank individual chops without
         // touching the master. Default 1.0 keeps legacy presets identical.
-        float       attackMs         = -1.0f;
-        float       releaseMs        = -1.0f;
-        float       decayMs          = 0.0f;
-        float       sustainLevel     = 1.0f;
+        //
+        // ADSR defaults give NEW chops a visually-spread envelope shape (so
+        // the A/D/S/R handles in the overlay don't stack at one corner) AND
+        // soften one-shot click artifacts via the 30 ms attack + 800 ms
+        // release. Legacy presets are unaffected because slicesFromJson uses
+        // explicit fallbacks (-1, 0, 1.0) on its getProperty calls — only
+        // in-code construction (gridSliceSlices, detectTransients,
+        // addMarkerAt-from-empty) inherits these struct defaults.
+        float       attackMs         = 30.0f;
+        float       releaseMs        = 800.0f;
+        float       decayMs          = 300.0f;
+        float       sustainLevel     = 0.7f;
         float       volume           = 1.0f;
 
         juce::int64 length() const noexcept { return endSample - startSample; }
