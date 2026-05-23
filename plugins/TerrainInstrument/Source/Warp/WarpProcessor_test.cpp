@@ -772,4 +772,104 @@ public:
 
 static WarpRenderCacheTests warpRenderCacheTests;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WarpProcessor::renderFullSlice — one-shot static render for scan cache
+// (Task 9, Mark 1.5 scan mode)
+// ─────────────────────────────────────────────────────────────────────────────
+class RenderFullSliceTests : public juce::UnitTest
+{
+public:
+    RenderFullSliceTests() : juce::UnitTest ("WarpProcessor::renderFullSlice") {}
+
+    void runTest() override
+    {
+        beginTest ("renderFullSlice produces correct output length (Tones, stretch=2)");
+        {
+            constexpr int sliceLen = 1000;
+            std::vector<float> srcL (sliceLen), srcR (sliceLen);
+            for (int i = 0; i < sliceLen; ++i)
+            {
+                srcL[i] = std::sin (i * 0.01f);
+                srcR[i] = srcL[i];
+            }
+
+            auto buf = tw::WarpProcessor::renderFullSlice (
+                srcL.data(), srcR.data(), sliceLen,
+                /*stretchRatio*/ 2.0f, tw::WarpMode::Tones, 48000.0);
+
+            const int expected = (int) std::ceil (sliceLen * 2.0);
+            expectEquals (buf.getNumSamples(), expected,
+                          "Output length should be ceil(sliceLen × stretchRatio)");
+            expectEquals (buf.getNumChannels(), 2,
+                          "Output should be stereo");
+        }
+
+        beginTest ("renderFullSlice output is finite (Tones, stretch=2)");
+        {
+            constexpr int sliceLen = 1000;
+            std::vector<float> srcL (sliceLen), srcR (sliceLen);
+            for (int i = 0; i < sliceLen; ++i)
+            {
+                srcL[i] = std::sin (i * 0.01f);
+                srcR[i] = srcL[i];
+            }
+
+            auto buf = tw::WarpProcessor::renderFullSlice (
+                srcL.data(), srcR.data(), sliceLen,
+                2.0f, tw::WarpMode::Tones, 48000.0);
+
+            bool allFinite = true;
+            for (int i = 0; i < buf.getNumSamples(); ++i)
+            {
+                if (! std::isfinite (buf.getSample (0, i))
+                    || ! std::isfinite (buf.getSample (1, i)))
+                {
+                    allFinite = false;
+                    break;
+                }
+            }
+            expect (allFinite, "renderFullSlice output should contain only finite samples");
+        }
+
+        beginTest ("renderFullSlice correct length for Beats mode (stretch=3)");
+        {
+            constexpr int sliceLen = 512;
+            std::vector<float> srcL (sliceLen, 0.1f), srcR (sliceLen, 0.1f);
+
+            auto buf = tw::WarpProcessor::renderFullSlice (
+                srcL.data(), srcR.data(), sliceLen,
+                3.0f, tw::WarpMode::Beats, 48000.0);
+
+            const int expected = (int) std::ceil (sliceLen * 3.0);
+            expectEquals (buf.getNumSamples(), expected,
+                          "Beats mode output length should be ceil(sliceLen × stretchRatio)");
+            expectEquals (buf.getNumChannels(), 2);
+        }
+
+        beginTest ("renderFullSlice does not mutate caller WarpProcessor state");
+        {
+            // Create a caller WarpProcessor in a known state. After calling
+            // renderFullSlice, the caller's mode and stretch should be unchanged.
+            tw::WarpProcessor caller;
+            caller.prepare (48000.0, 2, 512);
+            caller.setMode (tw::WarpMode::Tones);
+            caller.setStretchRatio (1.5f);
+
+            constexpr int sliceLen = 256;
+            std::vector<float> srcL (sliceLen, 0.1f), srcR (sliceLen, 0.1f);
+
+            // renderFullSlice is static — uses a local temp WarpProcessor.
+            auto buf = tw::WarpProcessor::renderFullSlice (
+                srcL.data(), srcR.data(), sliceLen,
+                4.0f, tw::WarpMode::Beats, 48000.0);
+
+            // Caller mode should still be Tones, not mutated by the static call.
+            expect (caller.getMode() == tw::WarpMode::Tones,
+                    "renderFullSlice must not mutate the caller's WarpMode");
+        }
+    }
+};
+
+static RenderFullSliceTests renderFullSliceTests;
+
 #endif  // JUCE_DEBUG

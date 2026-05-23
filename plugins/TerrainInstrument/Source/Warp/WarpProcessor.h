@@ -234,6 +234,74 @@ namespace tw
             if (outR != inR) std::memcpy (outR, inR, sizeof (float) * (size_t) numSamples);
         }
 
+        /** Render the full slice with the given mode/stretch in one shot. Used by
+         *  WarpRenderCache for Scan-mode pre-rendering.
+         *
+         *  Allocates the output buffer internally. NOT REALTIME-SAFE — call from
+         *  a worker thread (e.g. from WarpRenderCache::prewarm). Does NOT mutate
+         *  this WarpProcessor instance; uses a temporary local WarpProcessor so
+         *  the caller's voice-pipeline state isn't disturbed.
+         *
+         *  Returns a stereo buffer of length ceil(sliceLen × stretchRatio).
+         *  Pitch is intentionally NOT applied — the scan voice handles pitch
+         *  separately. We just want the time-stretched output.
+         */
+        static juce::AudioBuffer<float> renderFullSlice (const float* sourceL,
+                                                          const float* sourceR,
+                                                          int sliceLen,
+                                                          float stretchRatio,
+                                                          WarpMode mode,
+                                                          double sampleRate)
+        {
+            // Use a temp WarpProcessor configured for this slice. Static method →
+            // doesn't depend on any per-voice state of the caller.
+            WarpProcessor tempWarp;
+            tempWarp.prepare (sampleRate, /*channels*/ 2, /*blockSize*/ 512);
+            tempWarp.setMode (mode);
+            tempWarp.setStretchRatio (stretchRatio);
+            tempWarp.setPitchSemitones (0.0f);
+
+            const int outputLen = (int) std::ceil ((double) sliceLen * (double) stretchRatio);
+            juce::AudioBuffer<float> out (2, outputLen);
+            out.clear();
+
+            // Prime by seeking the engine — feeds inputLatency() samples of warm-up.
+            const int primeLen = juce::jmin (sliceLen, tempWarp.inputLatency());
+            if (primeLen > 0)
+                tempWarp.seek (sourceL, sourceR, primeLen);
+
+            // Render block-by-block. Pull source forward sequentially.
+            constexpr int blockSize = 512;
+            juce::AudioBuffer<float> scratchIn (2, blockSize);
+            int sourcePos = 0;
+            int outputPos = 0;
+
+            while (outputPos < outputLen)
+            {
+                const int outThisBlock = juce::jmin (blockSize, outputLen - outputPos);
+                const int inThisBlock  = juce::jmax (1, tempWarp.sourceSamplesPerBlock (outThisBlock));
+                const int safeIn       = juce::jmin (inThisBlock, blockSize);
+
+                // Fill scratchIn from source, clamping to last sample at slice end.
+                for (int i = 0; i < safeIn; ++i)
+                {
+                    const int srcIdx = juce::jlimit (0, sliceLen - 1, sourcePos + i);
+                    scratchIn.setSample (0, i, sourceL[srcIdx]);
+                    scratchIn.setSample (1, i, sourceR[srcIdx]);
+                }
+                sourcePos += safeIn;
+
+                tempWarp.process (scratchIn.getReadPointer (0),
+                                  scratchIn.getReadPointer (1),
+                                  out.getWritePointer (0) + outputPos,
+                                  out.getWritePointer (1) + outputPos,
+                                  outThisBlock);
+                outputPos += outThisBlock;
+            }
+
+            return out;
+        }
+
     private:
         WarpMode mode           = WarpMode::None;
         float    stretchRatio   = 1.0f;
