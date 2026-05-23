@@ -4265,22 +4265,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         } catch (_) {}
       });
     }
-    window.addEventListener('mousemove', function (e) {
-      if (!scanRateDragStart) return;
-      try {
-        var idx = parseInt(panel.dataset.targetIdx, 10);
-        if (isNaN(idx) || !state.slices[idx]) { scanRateDragStart = null; return; }
-        var dy = scanRateDragStart.y - e.clientY;
-        var newRate = Math.max(0.1, Math.min(4.0,
-            scanRateDragStart.baseRate * Math.pow(2, dy / 100)));
-        state.slices[idx].scanRate = newRate;
-        var rv = document.getElementById('rate-value');
-        if (rv) rv.textContent = newRate.toFixed(2) + '\xd7';
-        var fn = getNativeFn('setSliceScanRate');
-        if (fn) { try { fn(idx, newRate); } catch (_) {} }
-      } catch (_) {}
-    });
-    window.addEventListener('mouseup', function () { scanRateDragStart = null; });
+    if (!panel._scanWindowListenersAttached) {
+      panel._scanWindowListenersAttached = true;
+      window.addEventListener('mousemove', function (e) {
+        if (!scanRateDragStart) return;
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) { scanRateDragStart = null; return; }
+          var dy = scanRateDragStart.y - e.clientY;
+          var newRate = Math.max(0.1, Math.min(4.0,
+              scanRateDragStart.baseRate * Math.pow(2, dy / 100)));
+          state.slices[idx].scanRate = newRate;
+          var rv = document.getElementById('rate-value');
+          if (rv) rv.textContent = newRate.toFixed(2) + '\xd7';
+          var fn = getNativeFn('setSliceScanRate');
+          if (fn) { try { fn(idx, newRate); } catch (_) {} }
+        } catch (_) {}
+      });
+      window.addEventListener('mouseup', function () { scanRateDragStart = null; });
+    }
   }
 
   // Render the FX section from current chop state. Called from ovApplyState
