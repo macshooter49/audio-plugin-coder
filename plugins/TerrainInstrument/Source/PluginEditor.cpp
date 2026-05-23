@@ -2569,21 +2569,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     border-top: 1px solid var(--line, rgba(255,255,255,0.06));
   }
   #ti-chop-panel .ov-fx-header {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: stretch;
     margin-bottom: 10px;
   }
-  #ti-chop-panel .ov-fx-header .lbl {
-    font: 700 9px/1 -apple-system; letter-spacing: 0.22em;
-    color: rgba(245,243,255,0.40); text-transform: uppercase;
-  }
-  #ti-chop-panel .ov-fx-header .meta {
-    margin-left: auto;
-    font: 500 9px/1 -apple-system; letter-spacing: 0.10em;
-    color: rgba(245,243,255,0.25);
-  }
-  /* INDEPENDENT pill — uses same vertical padding as FX chips so heights line up exactly */
+  /* INDEPENDENT pill — full-width row, same height as the VOL/PITCH/STRETCH knob pills above */
   #ti-chop-panel .ov-indy {
-    padding: 7px 11px;
+    flex: 1;
+    padding: 9px 10px;
+    display: flex; align-items: center; justify-content: center;
     font: 700 9px/1 -apple-system; letter-spacing: 0.18em;
     color: rgba(245,243,255,0.40); text-transform: uppercase;
     background: rgba(0,0,0,0.22);
@@ -2879,9 +2872,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // Grayed when INDEPENDENT is off (chop is inheriting the global chain).
       '<div class="ov-fx" id="ti-fx-section">' +
         '<div class="ov-fx-header">' +
-          '<span class="lbl">FX</span>' +
           '<div class="ov-indy" id="ti-fx-indy">INDEPENDENT</div>' +
-          '<span class="meta" id="ti-fx-meta">following global chain</span>' +
         '</div>' +
         '<div class="ov-fx-grid">' +
           '<div class="ov-fx-chip" data-fx="grain">GRAIN</div>' +
@@ -4427,20 +4418,6 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     var indyEl = document.getElementById('ti-fx-indy');
     if (indyEl) indyEl.classList.toggle('on', indyOn);
-
-    // Tag-line: explain the current mode + count active FX when independent.
-    var meta = document.getElementById('ti-fx-meta');
-    if (meta) {
-      if (!indyOn) {
-        meta.textContent = 'following global chain';
-      } else {
-        var n = (s.fxGrain ? 1 : 0) + (s.fxTapeMachine > 0 ? 1 : 0)
-              + (s.fxSpace ? 1 : 0) + (s.fxDelay ? 1 : 0)
-              + (s.fxEq    ? 1 : 0) + (s.fxJune  ? 1 : 0);
-        meta.textContent = n === 0 ? 'detached · clean signal'
-                                   : (n + ' engine' + (n === 1 ? '' : 's') + ' active');
-      }
-    }
 
     // Per-chip on/off + TAPE sub-machine label.
     var TAPE_NAMES = ['', 'STU', 'CAS', 'WIR'];
