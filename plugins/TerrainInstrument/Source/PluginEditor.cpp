@@ -3731,8 +3731,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       marker.classList.add('dragging');
       document.body.style.cursor = 'ew-resize';
 
+      // Bug D fix: compute the visual clientX of the marker's boundary edge
+      // (its left CSS position + waveRect.left). The cursor may be anywhere
+      // INSIDE the marker div at mousedown — offset all subsequent X reads
+      // by the difference so the boundary doesn't jump on first move.
+      // This eliminates the offset reported at high slice counts (many narrow
+      // markers → cursor often lands off-center from the boundary edge).
+      var markerEdgeClientX = waveRect.left + parseFloat(marker.style.left || '0');
+      var clickOffset = ev.clientX - markerEdgeClientX;  // px cursor is right of edge
+
       function cursorToSample (x) {
-        var s = clientXToSourceSample(x, waveRect.left, W);
+        var s = clientXToSourceSample(x - clickOffset, waveRect.left, W);
         return Math.max(minSample, Math.min(maxSample, s));
       }
       function onMove (mev) {
@@ -4940,12 +4949,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
                 // If jump > 0.3 of full range, it's a wrap or flip — skip velocity.
                 if (Math.abs(dPos) < 0.3) {
                   var rawVel = dPos / dt;
-                  // EMA smooth: blend 30% new reading into running estimate.
-                  entry.velocity = (entry.velocity === 0)
-                    ? rawVel
-                    : 0.7 * entry.velocity + 0.3 * rawVel;
+                  // Bug C — direction-flip damping: when the sign of velocity flips
+                  // (ping-pong turnaround), snap velocity to zero immediately instead
+                  // of EMA-blending through zero. This prevents the interpolator from
+                  // "coasting" past the boundary in the old direction for one poll
+                  // interval, which produced the overshooting jitter at direction flips.
+                  var prevSign = entry.velocity > 0 ? 1 : (entry.velocity < 0 ? -1 : 0);
+                  var newSign  = rawVel  > 0 ? 1 : (rawVel  < 0 ? -1 : 0);
+                  if (prevSign !== 0 && newSign !== 0 && prevSign !== newSign) {
+                    // Direction flipped — use raw velocity directly; no EMA blend.
+                    entry.velocity = rawVel;
+                  } else {
+                    // Same direction — EMA smooth: blend 30% new reading into estimate.
+                    entry.velocity = (entry.velocity === 0)
+                      ? rawVel
+                      : 0.7 * entry.velocity + 0.3 * rawVel;
+                  }
                 } else {
-                  entry.velocity = 0;  // reset on discontinuity
+                  entry.velocity = 0;  // reset on large discontinuity (wrap / flip missed by EMA)
                 }
               }
             } else {
@@ -5074,7 +5095,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
   // Start the rAF draw loop once, and keep the slower C++ poll running too.
   requestAnimationFrame(tickScanViz);
-  setInterval(pollScanViz, 33);   // ~30 Hz truth updates from C++
+  setInterval(pollScanViz, 16);   // ~60 Hz truth updates from C++ (Bug C: halved lag at direction flips)
 
   // Initial render kick after DOM ready (handles mid-page-load injection too).
   if (document.readyState === 'loading') {
