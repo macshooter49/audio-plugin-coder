@@ -91,6 +91,12 @@ public:
     {
         std::lock_guard<std::mutex> lock (map_);
         sliceBounds_[sliceIndex] = { startSample, endSample };
+        // Bounds change makes existing renders stale — drop entries for this slice.
+        for (auto it = entries_.begin(); it != entries_.end(); )
+        {
+            if (it->first.sliceIndex == sliceIndex) it = entries_.erase (it);
+            else                                    ++it;
+        }
     }
 
     // ── Read API (audio-thread safe) ──────────────────────────────────────────
