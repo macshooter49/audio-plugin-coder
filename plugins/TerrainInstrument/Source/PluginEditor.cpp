@@ -2360,6 +2360,49 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   #ti-chop-panel .ov-mode:hover .emblem { color: rgba(245,243,255,0.85); }
   #ti-chop-panel .ov-mode.active .emblem { color: #8b5cf6; }
 
+  /* MOTION row — between mode emblems and ADSR, holds SCAN pill + RATE display */
+  #ti-chop-panel .motion-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px;
+    background: rgba(80, 60, 130, 0.18);
+    border: 1px solid rgba(140, 100, 220, 0.18);
+    border-radius: 8px;
+    margin: 0 0 14px 18px;
+    height: 28px;
+    box-sizing: border-box;
+    position: relative; z-index: 1;
+  }
+  #ti-chop-panel .motion-label {
+    font: 700 9px/1 -apple-system; letter-spacing: 1.5px;
+    color: rgba(245,243,255,0.55); text-transform: uppercase;
+  }
+  #ti-chop-panel .scan-pill {
+    display: inline-flex; align-items: center;
+    height: 18px; padding: 0 10px;
+    background: rgba(140, 100, 220, 0.28);
+    border: 1px solid rgba(168, 136, 255, 0.5);
+    border-radius: 10px;
+    font: 700 9px/1 -apple-system; letter-spacing: 1.5px; text-transform: uppercase;
+    color: #fff; cursor: pointer; user-select: none;
+    transition: all 160ms ease;
+  }
+  #ti-chop-panel .scan-pill.off {
+    background: rgba(80, 60, 130, 0.12);
+    border-color: rgba(140, 100, 220, 0.2);
+    opacity: 0.55;
+  }
+  #ti-chop-panel .rate-display {
+    margin-left: auto; display: inline-flex; align-items: baseline; gap: 6px;
+    cursor: ns-resize; user-select: none; font: 500 10px/1 -apple-system;
+  }
+  #ti-chop-panel .rate-display.dim { cursor: default; }
+  #ti-chop-panel .rate-display .rate-label {
+    font: 700 9px/1 -apple-system; letter-spacing: 1.5px; text-transform: uppercase;
+    color: rgba(245,243,255,0.45);
+  }
+  #ti-chop-panel .rate-display .rate-value { color: rgba(245,243,255,0.92); font-weight: 600; }
+  #ti-chop-panel .rate-display.dim .rate-value { color: rgba(245,243,255,0.30); }
+
   /* ADSR envelope canvas — the centrepiece */
   #ti-chop-panel .ov-env {
     margin: 0 0 14px 18px;
@@ -2724,6 +2767,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         '<div class="ov-mode" data-mode="3" title="Texture">' +
           '<div class="emblem"><svg width="36" height="26" viewBox="0 0 22 16" fill="currentColor"><circle cx="3" cy="9" r="1.2"/><circle cx="7" cy="4" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="13" cy="7" r="1.2"/><circle cx="15" cy="3" r="1.2"/><circle cx="18" cy="11" r="1.2"/><circle cx="20" cy="6" r="1.2"/></svg></div>' +
         '</div>' +
+      '</div>' +
+      // MOTION row — SCAN on/off pill + RATE vertical-drag display.
+      // Lives between the mode emblems and the ADSR canvas (Layout C).
+      '<div class="motion-row">' +
+        '<span class="motion-label">MOTION</span>' +
+        '<span class="scan-pill off" id="scan-pill">SCAN OFF</span>' +
+        '<span class="rate-display dim" id="rate-display">' +
+          '<span class="rate-label">RATE</span>' +
+          '<span class="rate-value" id="rate-value">1.00\xd7</span>' +
+        '</span>' +
       '</div>' +
       // ADSR envelope canvas: SVG path + 4 absolute-positioned handles.
       // Handles carry no numeric tooltips — the curve shape IS the readout.
@@ -4180,6 +4233,54 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         } catch (_) {}
       });
     });
+
+    // ── MOTION row — SCAN pill click ───────────────────────────────────────
+    var scanPillEl = document.getElementById('scan-pill');
+    if (scanPillEl) {
+      scanPillEl.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          var newEnabled = !state.slices[idx].scanEnabled;
+          state.slices[idx].scanEnabled = newEnabled;
+          ovRedrawScan(idx);
+          var fn = getNativeFn('setSliceScanEnabled');
+          if (fn) { try { fn(idx, newEnabled); } catch (_) {} }
+        } catch (_) {}
+      });
+    }
+
+    // RATE display — vertical drag, exponential: 100px up = 2× base rate.
+    var scanRateDragStart = null;
+    var rateDisplayEl = document.getElementById('rate-display');
+    if (rateDisplayEl) {
+      rateDisplayEl.addEventListener('mousedown', function (e) {
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx) || !state.slices[idx]) return;
+          if (!state.slices[idx].scanEnabled) return;   // no drag when scan is off
+          scanRateDragStart = { y: e.clientY, baseRate: state.slices[idx].scanRate || 1.0 };
+          e.preventDefault();
+        } catch (_) {}
+      });
+    }
+    window.addEventListener('mousemove', function (e) {
+      if (!scanRateDragStart) return;
+      try {
+        var idx = parseInt(panel.dataset.targetIdx, 10);
+        if (isNaN(idx) || !state.slices[idx]) { scanRateDragStart = null; return; }
+        var dy = scanRateDragStart.y - e.clientY;
+        var newRate = Math.max(0.1, Math.min(4.0,
+            scanRateDragStart.baseRate * Math.pow(2, dy / 100)));
+        state.slices[idx].scanRate = newRate;
+        var rv = document.getElementById('rate-value');
+        if (rv) rv.textContent = newRate.toFixed(2) + '\xd7';
+        var fn = getNativeFn('setSliceScanRate');
+        if (fn) { try { fn(idx, newRate); } catch (_) {} }
+      } catch (_) {}
+    });
+    window.addEventListener('mouseup', function () { scanRateDragStart = null; });
   }
 
   // Render the FX section from current chop state. Called from ovApplyState
@@ -4231,6 +4332,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     });
   }
 
+  // ── MOTION row (scan UI) ──────────────────────────────────────────────────
+  function ovRedrawScan (idx) {
+    var scanPill    = document.getElementById('scan-pill');
+    var rateDisplay = document.getElementById('rate-display');
+    var rateValue   = document.getElementById('rate-value');
+    if (!scanPill || !rateDisplay || !rateValue) return;
+    var s = state.slices[idx];
+    if (!s) return;
+    var on   = !!s.scanEnabled;
+    var rate = (typeof s.scanRate === 'number' && s.scanRate > 0.05) ? s.scanRate : 1.0;
+    scanPill.classList.toggle('off', !on);
+    scanPill.textContent = on ? 'SCAN ON' : 'SCAN OFF';
+    rateDisplay.classList.toggle('dim', !on);
+    rateValue.textContent = rate.toFixed(2) + '\xd7';
+  }
+
   function ovApplyState (idx) {
     var panel = document.getElementById('ti-chop-panel');
     if (!panel) return;
@@ -4251,6 +4368,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ovRedrawEnvelope(idx);
     ovRedrawEmblems(idx);
     ovRedrawFx(idx);
+    ovRedrawScan(idx);
   }
 
   function openChopOverlay (idx) {
