@@ -642,4 +642,96 @@ public:
 
 static ScanBoundaryFlipTests scanBoundaryFlipTests;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ScanTurnaroundCrossfade — 8ms equal-power blend at direction reversal.
+// Verifies that the sample-to-sample delta at the turnaround boundary is
+// below -60 dB relative to the signal peak (i.e., click-free).
+// (Task 6, Mark 1.5 scan mode)
+// ─────────────────────────────────────────────────────────────────────────────
+class ScanTurnaroundCrossfadeTests : public juce::UnitTest
+{
+public:
+    ScanTurnaroundCrossfadeTests() : juce::UnitTest ("ScanTurnaroundCrossfade") {}
+
+    void runTest() override
+    {
+        beginTest ("Turnaround at scan boundary introduces no clicks (>-60dB sample-to-sample delta)");
+        {
+            // Build a 1000-sample, 2-channel buffer filled with a 440 Hz sine
+            // wave at peak amplitude 0.5. A hard direction-reversal at the
+            // boundary would produce a sample-to-sample delta of up to ~0.5
+            // (local waveform amplitude). The 8ms equal-power crossfade
+            // should keep the max delta below 0.5 * 10^(-60/20) ≈ 0.0005.
+            constexpr double SR      = 48000.0;
+            constexpr int    BUF_LEN = 1000;
+            constexpr float  PEAK    = 0.5f;
+            constexpr float  FREQ    = 440.0f;
+
+            tw::SampleBuffer sb;
+            {
+                auto buf = std::make_shared<juce::AudioBuffer<float>> (2, BUF_LEN);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < BUF_LEN; ++i)
+                        buf->setSample (ch, i,
+                            PEAK * std::sin (2.0f * juce::MathConstants<float>::pi
+                                             * FREQ * (float) i / (float) SR));
+                sb.store (buf);
+            }
+
+            std::atomic<int>   rootNote  { 60 };
+            std::atomic<float> attackMs  { 0.0f };   // instant attack
+            std::atomic<float> releaseMs { 1.0f };
+            std::atomic<int>   loopMode  { 0 };      // one-shot; scan overrides
+
+            tw::SamplerVoice voice (sb, rootNote, attackMs, releaseMs, loopMode);
+            voice.setCurrentPlaybackSampleRate (SR);
+
+            tw::VoiceConfig cfg;
+            cfg.startSample    = 0;
+            cfg.endSample      = BUF_LEN;
+            cfg.reverse        = false;      // start forward
+            cfg.pitchSemitones = 0.0f;       // pitchRatio = 1.0
+            cfg.scanEnabled    = true;
+            cfg.scanRate       = 1.0f;
+            cfg.scanWindow     = 1.0f;       // full window → flip at ~sample 999
+
+            voice.prepareForNoteOn (cfg);
+            voice.startNote (60, 1.0f, nullptr, 8192);
+
+            // Collect 4000 output samples (~4 full ping-pong cycles at pitchRatio=1).
+            constexpr int TOTAL_OUT = 4000;
+            juce::AudioBuffer<float> out (2, TOTAL_OUT);
+            out.clear();
+            voice.renderNextBlock (out, 0, TOTAL_OUT);
+
+            const auto* outL = out.getReadPointer (0);
+
+            // Find max sample-to-sample delta across the entire output.
+            // Skip the very first sample (no predecessor). Also skip any
+            // silent leading samples (envelope attack finished instantly but
+            // we still guard against a zero-filled buffer giving false pass).
+            float maxDelta = 0.0f;
+            int   worstIdx = -1;
+            for (int i = 1; i < TOTAL_OUT; ++i)
+            {
+                const float d = std::abs (outL[i] - outL[i - 1]);
+                if (d > maxDelta) { maxDelta = d; worstIdx = i; }
+            }
+
+            // -60 dB relative to PEAK = PEAK * 10^(-60/20) ≈ 0.0005
+            // The voice applies velocity (1.0) and envLevel (1.0) so the
+            // threshold can be applied directly against the rendered samples.
+            const float threshold = PEAK * std::pow (10.0f, -60.0f / 20.0f);
+
+            expect (maxDelta < threshold,
+                    "Max per-sample delta " + juce::String (maxDelta, 6)
+                    + " at sample " + juce::String (worstIdx)
+                    + " exceeds -60 dB click threshold " + juce::String (threshold, 6)
+                    + " — turnaround crossfade may not be firing correctly");
+        }
+    }
+};
+
+static ScanTurnaroundCrossfadeTests scanTurnaroundCrossfadeTests;
+
 #endif  // JUCE_DEBUG

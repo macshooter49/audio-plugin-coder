@@ -384,6 +384,49 @@ namespace tw
                 auto sampleL = inL[i0] + frac * (inL[i1] - inL[i0]);
                 auto sampleR = inR[i0] + frac * (inR[i1] - inR[i0]);
 
+                // ── Scan turnaround crossfade (8ms equal-power) ──────────────
+                // At each direction flip we briefly blend two reads: the "old
+                // direction" (continuing past the boundary as if no flip
+                // happened) and the "new direction" (post-flip). Equal-power
+                // cos/sin blend masks the discontinuity.
+                //
+                // turnaroundFadeT is armed to 1.0 at the flip (in the boundary
+                // handler above) and decrements toward 0 here.  The blend
+                // parameter t = 1 - turnaroundFadeT sweeps 0 → 1:
+                //   t=0 → 100% old direction (first sample after flip)
+                //   t=1 → 100% new direction (fully transitioned)
+                if (turnaroundFadeT > 0.0)
+                {
+                    constexpr double turnaroundLenMs = 8.0;
+                    const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
+                    const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
+
+                    // Old-direction read: simulate where the playhead would be
+                    // if we hadn't flipped — i.e., continuing PAST the boundary
+                    // in the pre-flip direction. pre-flip direction is opposite
+                    // of current reversePlay (which was just toggled).
+                    const double oldDirSign = reversePlay ? +1.0 : -1.0;
+                    const double oldPos = playhead
+                                         + oldDirSign * pitchInc
+                                           * (1.0 - turnaroundFadeT)
+                                           * turnaroundLenSamples;
+                    const auto oi0 = juce::jlimit (0, bufLen - 1, static_cast<int> (oldPos));
+                    const int  oi1 = juce::jlimit (0, bufLen - 1, oi0 + 1);
+                    const auto ofrac = static_cast<float> (oldPos - (double) oi0);
+                    const auto oldL = inL[oi0] + ofrac * (inL[oi1] - inL[oi0]);
+                    const auto oldR = inR[oi0] + ofrac * (inR[oi1] - inR[oi0]);
+
+                    const float t = static_cast<float> (1.0 - turnaroundFadeT);  // 0 → 1 across fade
+                    const float oldGain = std::cos (t * juce::MathConstants<float>::halfPi);
+                    const float newGain = std::sin (t * juce::MathConstants<float>::halfPi);
+
+                    sampleL = oldL * oldGain + sampleL * newGain;
+                    sampleR = oldR * oldGain + sampleR * newGain;
+
+                    turnaroundFadeT -= decrement;
+                    if (turnaroundFadeT < 0.0) turnaroundFadeT = 0.0;
+                }
+
                 // ── Loop-mode equal-power crossfade ──────────────────────────
                 // In the last xfadeLen samples before the wrap boundary, mix
                 // in a leading head reading from the opposite boundary. By the
