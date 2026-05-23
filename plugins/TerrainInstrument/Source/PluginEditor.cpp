@@ -822,6 +822,34 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.replaceSlices (std::move (copy));
                 complete ({});
             })
+            .withNativeFunction("setSliceScanEnabled", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = scanEnabled (bool).
+                if (args.size() < 2) { complete ({}); return; }
+                const int  idx     = (int) args[0];
+                const bool enabled = (bool) args[1];
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].scanEnabled = enabled;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
+            .withNativeFunction("setSliceScanRate", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = sliceIndex, args[1] = scanRate (0.1..4.0 × normal speed).
+                if (args.size() < 2) { complete ({}); return; }
+                const int   idx  = (int) args[0];
+                const float rate = juce::jlimit (0.1f, 4.0f, (float) (double) args[1]);
+                auto cur = audioProcessor.loadSlices();
+                if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
+                tw::SliceList copy = *cur;
+                copy[(size_t) idx].scanRate = rate;
+                audioProcessor.replaceSlices (std::move (copy));
+                complete ({});
+            })
             .withNativeFunction("deleteSlice", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1930,7 +1958,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     color: white;
   }
 
-  /* Action buttons inside the drawer — RANDOM OCTAVE etc. Ghost-glass
+  /* Action buttons inside the drawer — RANDOM:5TH/7TH/OCT etc. Ghost-glass
      base, fills purple on hover, flashes white on click. */
   .ti-action-btn {
     padding: 5px 12px;
@@ -1949,6 +1977,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     transform: scale(0.97);
     background: linear-gradient(135deg, #8B5CF6, #7C3AED);
     color: white;
+  }
+  /* Prefix label inline with the action buttons — "RANDOM:" before the
+     5TH/7TH/OCT triplet. Tonal grayscale (not boxed) so it reads as a
+     label, not a tappable button. */
+  .ti-action-label {
+    padding: 5px 4px 5px 8px;
+    font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.18em;
+    color: rgba(245,243,255,0.55);
+    user-select: none;
   }
 
   /* Slice markers + bodies — drawn on top of the waveform canvas */
@@ -2504,7 +2541,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           '<div class="ti-submode-pill" data-sub="2">RANDOM</div>' +
         '</div>' +
         '<div class="ti-drawer-row" id="ti-action-row">' +
-          '<div class="ti-action-btn" id="ti-random-oct" title="Random octave per chop — picks -12, 0, or +12 for each">RANDOM OCTAVE</div>' +
+          '<span class="ti-action-label">RANDOM:</span>' +
+          '<div class="ti-action-btn" data-rand="5"  title="Random 5th per chop — picks -7, 0, or +7 semitones">5TH</div>' +
+          '<div class="ti-action-btn" data-rand="7"  title="Random b7 per chop — picks -10, 0, or +10 semitones">7TH</div>' +
+          '<div class="ti-action-btn" data-rand="12" title="Random octave per chop — picks -12, 0, or +12 semitones">OCT</div>' +
         '</div>' +
       '</div>';
     bottomPills.appendChild(slicesWrap);
@@ -2813,6 +2853,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         var dm = parseFloat(s.decayMs);
         var sl = parseFloat(s.sustainLevel);
         var vl = parseFloat(s.volume);
+        // Scan mode fields (Task 2 — must be extracted here or the C++ → JS
+        // round-trip silently overwrites any JS-side knob writes; see the
+        // WebSliderRelay gotcha in project memory).
+        var scEn = s.scanEnabled === true;
+        var scRt = parseFloat(s.scanRate);
+        var scWn = parseFloat(s.scanWindow);
         return {
           start:        parseInt(s.start, 10) || 0,
           end:          parseInt(s.end,   10) || 0,
@@ -2824,7 +2870,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           releaseMs:    isFinite(rm) ? rm : -1,
           decayMs:      isFinite(dm) ? Math.max(0,  Math.min(2000, dm)) : 0,
           sustainLevel: isFinite(sl) ? Math.max(0,  Math.min(1,    sl)) : 1,
-          volume:       isFinite(vl) ? Math.max(0,  Math.min(2,    vl)) : 1
+          volume:       isFinite(vl) ? Math.max(0,  Math.min(2,    vl)) : 1,
+          scanEnabled:  scEn,
+          scanRate:     (isFinite(scRt) && scRt >= 0.05) ? Math.max(0.1, Math.min(4.0, scRt)) : 1.0,
+          scanWindow:   (isFinite(scWn) && scWn >= 0.04) ? Math.max(0.05, Math.min(1.0, scWn)) : 1.0
         };
       });
       // Clamp activeSliceIndex.
@@ -4022,38 +4071,42 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
     });
 
-    // RANDOM OCTAVE — assign each chop a random pitch from {-12, 0, +12}.
-    // Stacks beautifully with RANDOM sub-mode: random chop selection per
-    // note + random per-chop octave = textural chaos. Sends the whole
-    // updated list via setSlicesJson so it's a single round-trip rather
-    // than N setSlicePitch calls.
+    // RANDOM: 5TH / 7TH / OCT — assign each chop a random pitch from a
+    // 3-element ± interval set. Stacks beautifully with RANDOM sub-mode:
+    // random chop selection per note + random per-chop voicing = chord-ish
+    // textures from a single sample. Sends the whole updated list via
+    // setSlicesJson so it's one round-trip instead of N setSlicePitch calls.
     //
     // CRITICAL: spread the existing slice with Object.assign so every field
     // survives the round-trip (warpMode, stretchRatio, attackMs, releaseMs,
-    // decayMs, sustainLevel, volume, …). Earlier the handler explicitly
-    // copied only {start, end, reverse, pitch} and the C++ side rebuilt the
-    // slice with defaults for everything else — a single Random Octave
-    // click wiped Tones/Beats markers and reset stretchRatio to 1.0 on
-    // every chop. Same family of bug as the existing "applySlicesJson must
-    // preserve ALL Slice fields" gotcha but in the JS→C++ direction.
-    var randomOctBtn = document.getElementById('ti-random-oct');
-    if (randomOctBtn) {
-      randomOctBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        if (state.slices.length === 0) return;
-        var CHOICES = [-12, 0, 12];
-        var updated = state.slices.map(function (s) {
-          return Object.assign({}, s, {
-            pitch: CHOICES[Math.floor(Math.random() * 3)]
-          });
+    // decayMs, sustainLevel, volume, scanEnabled/scanRate/scanWindow, …).
+    // Earlier the handler explicitly copied only {start, end, reverse,
+    // pitch} and the C++ side rebuilt the slice with defaults for everything
+    // else — a single Random Octave click wiped Tones/Beats markers and
+    // reset stretchRatio to 1.0 on every chop. Same family of bug as the
+    // existing "applySlicesJson must preserve ALL Slice fields" gotcha but
+    // in the JS→C++ direction.
+    function applyRandomInterval (semitones) {
+      if (state.slices.length === 0) return;
+      var CHOICES = [-semitones, 0, semitones];
+      var updated = state.slices.map(function (s) {
+        return Object.assign({}, s, {
+          pitch: CHOICES[Math.floor(Math.random() * 3)]
         });
-        var json = JSON.stringify({ slices: updated });
-        var fn = getNativeFn('setSlicesJson');
-        if (fn) { try { fn(json); } catch (_) {} }
-        state.slices = updated;
-        redrawSliceOverlay();
       });
+      var json = JSON.stringify({ slices: updated });
+      var fn = getNativeFn('setSlicesJson');
+      if (fn) { try { fn(json); } catch (_) {} }
+      state.slices = updated;
+      redrawSliceOverlay();
     }
+    document.querySelectorAll('#ti-action-row .ti-action-btn[data-rand]').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var n = parseInt(btn.dataset.rand, 10);
+        if (!isNaN(n) && n > 0) applyRandomInterval(n);
+      });
+    });
 
     // Chop overlay wires its own actions on first open (ensureChopOverlayWired).
     // No legacy ctx-menu handler needed here.
