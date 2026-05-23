@@ -83,8 +83,8 @@ namespace tw
             vc.decayMs        = s.decayMs;
             vc.sustainLevel   = s.sustainLevel;
             vc.volume         = s.volume;
-            vc.scanEnabled    = s.scanEnabled;
-            vc.scanRate       = s.scanRate;
+            vc.scanEnabled    = false;  // audition is fire-and-forget; scan would loop forever — override slice setting
+            vc.scanRate       = s.scanRate;    // kept for state cleanliness
             vc.scanWindow     = s.scanWindow;
             vc.fxIndependent  = s.fxIndependent;
             vc.fxGrain        = s.fxGrain;
