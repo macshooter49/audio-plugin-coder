@@ -367,8 +367,19 @@ namespace tw
                 // to the scan-window region (centred in the slice). This
                 // computation is repeated per-sample to allow live mod updates
                 // in Task 7 without needing to cache derived values.
+                //
+                // Pitch-decoupling (Mark 1.5 fix): when scanRate >= 1.0 we
+                // additionally narrow the effective range by 1/scanRate so
+                // the ping-pong completes faster without reading the source at
+                // a non-native rate (which would shift pitch). At scanRate < 1.0
+                // we keep the full window and let the advance-scaling below
+                // carry the slower/drone character (varispeed-down, deliberate).
                 const double windowSpan        = scanActive ? (sliceLen * (double) scanWindowLive) : sliceLen;
-                const double margin            = scanActive ? ((sliceLen - windowSpan) * 0.5) : 0.0;
+                const double rateScaledSpan    = (scanActive && scanRateLive > 1.0f)
+                                                     ? windowSpan / (double) scanRateLive
+                                                     : windowSpan;
+                const double rateMargin        = (windowSpan - rateScaledSpan) * 0.5;
+                const double margin            = (scanActive ? ((sliceLen - windowSpan) * 0.5) : 0.0) + rateMargin;
                 const double effSliceStart     = startIdx + margin;
                 const double effSliceEnd       = endIdx   - margin;
 
@@ -393,7 +404,8 @@ namespace tw
                         playhead        = reversePlay ? effSliceEnd : effSliceStart;
                         // Step one sample into the new direction so the next
                         // boundary check starts strictly inside the window.
-                        const double scanAdvancePost = scanActive ? (double) scanRateLive : 1.0;
+                        // Use same pitch-decoupled formula as the main advance.
+                        const double scanAdvancePost = scanRateLive >= 1.0f ? 1.0 : (double) scanRateLive;
                         playhead += (reversePlay ? -pitchInc : pitchInc) * scanAdvancePost;
                         continue;  // skip wrap/stop logic for scan voices
                     }
@@ -495,9 +507,12 @@ namespace tw
                     // if we hadn't flipped — i.e., continuing PAST the boundary
                     // in the pre-flip direction. pre-flip direction is opposite
                     // of current reversePlay (which was just toggled).
-                    const double oldDirSign = reversePlay ? +1.0 : -1.0;
+                    // Use scanAdvance so the projection matches the actual per-step
+                    // advance used in the main loop (1.0 at scanRate>=1, scanRate at <1).
+                    const double oldDirSign  = reversePlay ? +1.0 : -1.0;
+                    const double xScanAdv    = (scanActive && scanRateLive < 1.0f) ? (double) scanRateLive : 1.0;
                     const double oldPos = playhead
-                                         + oldDirSign * pitchInc
+                                         + oldDirSign * pitchInc * xScanAdv
                                            * (1.0 - turnaroundFadeT)
                                            * turnaroundLenSamples;
                     const auto oi0 = juce::jlimit (0, bufLen - 1, static_cast<int> (oldPos));
@@ -571,11 +586,14 @@ namespace tw
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
-                // Advance — direction-aware. When scan is active, scale the
-                // step by scanRateLive so varispeed pitch-shift is produced
-                // at Warp:None (documented behaviour). At scanRate=1.0 the
-                // multiplier is unity — natural ping-pong unchanged.
-                const double scanAdvance = scanActive ? (double) scanRateLive : 1.0;
+                // Advance — direction-aware. Pitch-decoupling: at scanRate >= 1.0
+                // we advance at the native pitch rate (no varispeed shift) — the
+                // faster cycle is achieved by the narrowed effSliceEnd/Start above.
+                // At scanRate < 1.0 we scale the advance by scanRate to give the
+                // slow-drone / varispeed-down character the user liked at low rates.
+                const double scanAdvance = scanActive
+                    ? (scanRateLive >= 1.0f ? 1.0 : (double) scanRateLive)
+                    : 1.0;
                 playhead += (reversePlay ? -pitchInc : pitchInc) * scanAdvance;
             }
         }
@@ -760,11 +778,19 @@ namespace tw
                          ? outputBuffer.getWritePointer (1, startSample) : outL;
 
             // Scan-window bounds within the cache (cache IS the stretched slice).
+            // Pitch-decoupling (Mark 1.5 fix): same range-narrowing as NONE path.
+            // At scanRate >= 1.0 the effective range is reduced by 1/scanRate so the
+            // cycle completes faster WITHOUT reading the cache at a non-native rate.
+            // At scanRate < 1.0 the full window is used and advance is scaled instead.
             const double startIdx  = 0.0;
             const double endIdx    = static_cast<double> (cacheLen - 1);
             const double sliceLen  = endIdx - startIdx;
             const double windowSpan      = sliceLen * static_cast<double> (scanWindowLive);
-            const double margin          = (sliceLen - windowSpan) * 0.5;
+            const double rateScaledSpan  = (scanRateLive > 1.0f)
+                                               ? windowSpan / static_cast<double> (scanRateLive)
+                                               : windowSpan;
+            const double rateMargin      = (windowSpan - rateScaledSpan) * 0.5;
+            const double margin          = (sliceLen - windowSpan) * 0.5 + rateMargin;
             const double effSliceStart   = startIdx + margin;
             const double effSliceEnd     = endIdx   - margin;
 
@@ -789,8 +815,9 @@ namespace tw
                     // Advance one step in the new direction so the next
                     // iteration's boundary check starts strictly inside the
                     // window (matching the fix applied to the NONE-mode path).
-                    playhead += (reversePlay ? -1.0 : 1.0)
-                                * static_cast<double> (scanRateLive) * pitchRatio;
+                    // Use pitch-decoupled rateMul: 1.0 at scanRate>=1, scanRate at <1.
+                    const double rateMulPost = (scanRateLive >= 1.0f) ? 1.0 : static_cast<double> (scanRateLive);
+                    playhead += (reversePlay ? -1.0 : 1.0) * pitchRatio * rateMulPost;
                 }
 
                 // Envelope tick (same state machine as NONE and renderWarp paths).
@@ -842,14 +869,15 @@ namespace tw
                 // Turnaround crossfade (16ms equal-power, mirroring Tasks 5-7 but
                 // reading from the cache buffer instead of the source buffer).
                 // oldPos includes pitchRatio so the old-direction projection
-                // tracks the true pre-flip advance rate (scanRateLive * pitchRatio
-                // per sample, same as the main advance below).
+                // tracks the true pre-flip advance rate. Use rateMul (not scanRateLive
+                // raw) so the projection matches the pitch-decoupled advance below:
+                // 1.0 * pitchRatio at scanRate>=1, scanRateLive * pitchRatio at <1.
                 if (turnaroundFadeT > 0.0)
                 {
+                    const double rateMul    = (scanRateLive >= 1.0f) ? 1.0 : static_cast<double> (scanRateLive);
                     const double oldDirSign = reversePlay ? +1.0 : -1.0;
                     const double oldPos     = playhead
-                                             + oldDirSign * static_cast<double> (scanRateLive)
-                                               * pitchRatio
+                                             + oldDirSign * pitchRatio * rateMul
                                                * (1.0 - turnaroundFadeT)
                                                * turnaroundLenSamples;
                     const auto oi0 = juce::jlimit (0, cacheLen - 1, static_cast<int> (oldPos));
@@ -877,8 +905,12 @@ namespace tw
                 // cache (cache is pitched at root; different MIDI notes adjust
                 // the playback rate through it → correct chromatic transposition
                 // without re-running the warp engine per note).
-                playhead += (reversePlay ? -1.0 : 1.0)
-                            * static_cast<double> (scanRateLive) * pitchRatio;
+                //
+                // Pitch-decoupling: at scanRate >= 1.0 advance by pitchRatio only
+                // (native rate, no pitch shift). At scanRate < 1.0 scale by scanRate
+                // for the slow-drone / varispeed-down character at low rates.
+                const double rateMul = (scanRateLive >= 1.0f) ? 1.0 : static_cast<double> (scanRateLive);
+                playhead += (reversePlay ? -1.0 : 1.0) * pitchRatio * rateMul;
             }
         }
 
