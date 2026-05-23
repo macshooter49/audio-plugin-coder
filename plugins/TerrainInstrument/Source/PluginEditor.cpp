@@ -2082,7 +2082,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     position: absolute; left: 0; right: 0; top: 0; bottom: 0;
     width: 100%; height: 100%;
     pointer-events: none;
-    z-index: 5;  /* above slice markers */
+    z-index: 2;  /* same layer as chop markers — below lab card overlay (4000+) */
     display: none;  /* hidden until slicer mode active */
   }
   body.ti-slicer-active #ti-scan-viz-canvas {
@@ -4071,6 +4071,19 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (ev.key === 'Escape' && panel.classList.contains('open')) closeChopOverlay();
     });
 
+    // Click-outside dismiss: close on mousedown anywhere outside the panel so
+    // the user only needs one click (the same click that closes also reaches
+    // whatever UI element they tapped — backdrop pointer-events won't block it).
+    if (!window._tiChopClickOutsideWired) {
+      window._tiChopClickOutsideWired = true;
+      document.addEventListener('mousedown', function (ev) {
+        var pn = document.getElementById('ti-chop-panel');
+        if (!pn || !pn.classList.contains('open')) return;
+        if (pn.contains(ev.target)) return;  // inside panel — do nothing
+        closeChopOverlay();
+      }, true /* capture phase — fires before backdrop swallows it */);
+    }
+
     // Mode pill clicks.
     panel.querySelectorAll('.ov-mode').forEach(function (el) {
       el.addEventListener('click', function () {
@@ -5034,9 +5047,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (entry.truth && (entry.truth.winEnd - entry.truth.winStart) < 0.99) {
         var wx  = chopX + entry.truth.winStart * chopW;
         var ww  = (entry.truth.winEnd - entry.truth.winStart) * chopW;
-        ctx.fillStyle = 'rgba(168, 136, 255, ' + (0.08 * op).toFixed(3) + ')';
+        ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.04 * op).toFixed(3) + ')';
         ctx.fillRect(wx, 0, ww, H);
-        ctx.strokeStyle = 'rgba(168, 136, 255, ' + (0.4 * op).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.25 * op).toFixed(3) + ')';
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
@@ -5046,9 +5059,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         ctx.setLineDash([]);
       }
 
-      // Scan line — 1.5px solid Terrain purple, faded by opacity.
+      // Scan line — 1.5px white at 70% peak opacity (no more purple-on-purple).
       var lineX = chopX + entry.predictedPos * chopW;
-      ctx.fillStyle = 'rgba(200, 168, 255, ' + op.toFixed(3) + ')';
+      ctx.fillStyle = 'rgba(255, 255, 255, ' + (op * 0.7).toFixed(3) + ')';
       ctx.fillRect(Math.floor(lineX) - 0.75, 0, 1.5, H);
     }
   }
