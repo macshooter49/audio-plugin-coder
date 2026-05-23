@@ -145,7 +145,7 @@ public:
         // Wire machine (3 entries: wireWow, wireSaturation, wireHiss) — 0-100 like cassette
         100.0f, 100.0f, 100.0f,
         // Scan mode (2 entries: activeChopScanRate, activeChopScanWindow)
-        4.0f, 1.0f
+        8.0f, 1.0f
     };
 
     //==============================================================================

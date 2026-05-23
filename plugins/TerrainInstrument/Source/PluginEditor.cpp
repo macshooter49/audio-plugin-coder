@@ -904,10 +904,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("setSliceScanRate", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // args[0] = sliceIndex, args[1] = scanRate (0.1..4.0 × normal speed).
+                // args[0] = sliceIndex, args[1] = scanRate (0.1..8.0 × normal speed).
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx  = (int) args[0];
-                const float rate = juce::jlimit (0.1f, 4.0f, (float) (double) args[1]);
+                const float rate = juce::jlimit (0.1f, 8.0f, (float) (double) args[1]);
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -2964,7 +2964,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     wireHiss:           { label: 'Wire Hiss',      section: 'wire',   min: 0,    max: 100,   default: 0,   unit: '',   desc: 'Wire hiss level.', tip: '' },
     activeChopScanRate: {
       label: 'Scan Rate', section: 'scan',
-      min: 0.1, max: 4.0, default: 1.0,
+      min: 0.1, max: 8.0, default: 1.0,
       unit: 'x', desc: "Active chop's scan rate (ping-pong speed).", tip: ''
     },
     activeChopScanWindow: {
@@ -3207,7 +3207,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           sustainLevel: isFinite(sl) ? Math.max(0,  Math.min(1,    sl)) : 1,
           volume:       isFinite(vl) ? Math.max(0,  Math.min(2,    vl)) : 1,
           scanEnabled:  scEn,
-          scanRate:     (isFinite(scRt) && scRt >= 0.05) ? Math.max(0.1, Math.min(4.0, scRt)) : 1.0,
+          scanRate:     (isFinite(scRt) && scRt >= 0.05) ? Math.max(0.1, Math.min(8.0, scRt)) : 1.0,
           scanWindow:   (isFinite(scWn) && scWn >= 0.04) ? Math.max(0.05, Math.min(1.0, scWn)) : 1.0,
           fxIndependent: !!s.fxIndependent,
           fxGrain:       !!s.fxGrain,
@@ -4400,7 +4400,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           var idx = parseInt(panel.dataset.targetIdx, 10);
           if (isNaN(idx) || !state.slices[idx]) { scanRateDragStart = null; return; }
           var dy = scanRateDragStart.y - e.clientY;
-          var newRate = Math.max(0.1, Math.min(4.0,
+          var newRate = Math.max(0.1, Math.min(8.0,
               scanRateDragStart.baseRate * Math.pow(2, dy / 100)));
           state.slices[idx].scanRate = newRate;
           var rv = document.getElementById('rate-value');
