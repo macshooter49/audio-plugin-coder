@@ -4873,60 +4873,94 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // ── Scan-line viz polling ─────────────────────────────────────────────────
   // Draws a 1.5px purple line on each scan-active chop while a note is
   // sounding. Also draws a faint window-highlight + dashed borders when
-  // scanWindow < 1.0 (narrowed via mod). Runs at ~30 Hz (33 ms interval).
+  // scanWindow < 1.0 (narrowed via mod).
   //
-  // Design: a single <canvas id="ti-scan-viz-canvas"> sits over the slice
-  // overlays (z-index 5, pointer-events:none). Each poll cycle, we:
-  //   1. Pull scan position + window bounds from C++ for each scan-enabled slice
-  //   2. Clear the canvas and redraw all active scan lines in one pass
+  // Architecture (two-loop):
+  //   pollScanViz() fires at ~30 Hz (33 ms setInterval) — fetches truth from C++
+  //     and stores per-slice truth + inferred velocity.
+  //   tickScanViz() runs at display refresh rate (rAF) — interpolates visual
+  //     position between polls and lerps opacity for fade in/out.
   //
-  // chopLayouts / waveformPixelWidth are set by redrawSliceOverlay() and
-  // describe the cumulative pixel layout of each chop on the waveform canvas.
-  var _scanState = [];  // array indexed by slice → { pos: float, winStart, winEnd } or null
+  // Per-slice entry in _scanInterp[idx]:
+  //   truth        — last values from C++ { pos, winStart, winEnd, timestamp }
+  //   predictedPos — interpolated draw position [0..1]
+  //   velocity     — dPos/ms (EMA-smoothed), used to extrapolate between polls
+  //   opacity      — current draw opacity [0..1], lerps toward opacityTarget
+  //   opacityTarget— 1.0 when voice active, 0.0 when silent
+  //
+  // chopLayouts / waveformPixelWidth are set by redrawSliceOverlay().
 
+  var _scanInterp = {};  // keyed by slice index (string)
+
+  // Poll: fetch truth from C++ and update velocity estimate.
   function pollScanViz () {
     var getScanPos    = getNativeFn('getScanPosition');
     var getScanBounds = getNativeFn('getScanWindowBounds');
     if (!getScanPos || !getScanBounds) return;
     if (!state.slices || state.slices.length === 0) {
-      _scanState = [];
-      drawScanViz();
+      _scanInterp = {};
       return;
     }
-    // Fire all polls concurrently; once all resolve draw the frame.
+    var now = performance.now();
     var n = state.slices.length;
-    var pending = n;
-    var results = new Array(n);
-    function onComplete () {
-      if (--pending === 0) {
-        _scanState = results;
-        drawScanViz();
-      }
-    }
     for (var i = 0; i < n; ++i) {
       (function (idx) {
         var s = state.slices[idx];
+        var key = '' + idx;
         if (!s || !s.scanEnabled) {
-          results[idx] = null;
-          onComplete();
+          // Mark as inactive (let opacity lerp to 0 in rAF loop).
+          if (_scanInterp[key]) {
+            _scanInterp[key].opacityTarget = 0.0;
+            _scanInterp[key].truth = null;
+          }
           return;
         }
+        // Ensure entry exists.
+        if (!_scanInterp[key]) {
+          _scanInterp[key] = {
+            truth:         null,
+            predictedPos:  0,
+            velocity:      0,
+            opacity:       0.0,
+            opacityTarget: 0.0
+          };
+        }
+        var entry = _scanInterp[key];
         var posPromise    = getScanPos(idx);
         var boundsPromise = getScanBounds(idx);
-        // Both resolve independently — gate draw on both.
         var posVal = null, boundsVal = null, gotPos = false, gotBounds = false;
         function tryMerge () {
           if (!gotPos || !gotBounds) return;
-          if (typeof posVal !== 'number' || posVal < 0) {
-            results[idx] = null;
+          var active = (typeof posVal === 'number' && posVal >= 0);
+          entry.opacityTarget = active ? 1.0 : 0.0;
+          if (active) {
+            var winStart = (boundsVal && typeof boundsVal.start === 'number') ? boundsVal.start : 0;
+            var winEnd   = (boundsVal && typeof boundsVal.end   === 'number') ? boundsVal.end   : 1;
+            // Compute velocity from previous truth (ignore flips / wraps).
+            if (entry.truth && entry.truth.pos >= 0) {
+              var dt = now - entry.truth.timestamp;
+              if (dt > 0) {
+                var dPos = posVal - entry.truth.pos;
+                // If jump > 0.3 of full range, it's a wrap or flip — skip velocity.
+                if (Math.abs(dPos) < 0.3) {
+                  var rawVel = dPos / dt;
+                  // EMA smooth: blend 30% new reading into running estimate.
+                  entry.velocity = (entry.velocity === 0)
+                    ? rawVel
+                    : 0.7 * entry.velocity + 0.3 * rawVel;
+                } else {
+                  entry.velocity = 0;  // reset on discontinuity
+                }
+              }
+            } else {
+              entry.velocity = 0;
+            }
+            entry.truth = { pos: posVal, winStart: winStart, winEnd: winEnd, timestamp: now };
+            entry.predictedPos = posVal;  // rAF loop will extrapolate from here
           } else {
-            results[idx] = {
-              pos:      posVal,
-              winStart: (boundsVal && typeof boundsVal.start === 'number') ? boundsVal.start : 0,
-              winEnd:   (boundsVal && typeof boundsVal.end   === 'number') ? boundsVal.end   : 1
-            };
+            entry.truth    = null;
+            entry.velocity = 0;
           }
-          onComplete();
         }
         posPromise.then(function (v) {
           posVal = (typeof v === 'number') ? v : -1;
@@ -4940,6 +4974,34 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         }).catch(function () { boundsVal = null; gotBounds = true; tryMerge(); });
       })(i);
     }
+  }
+
+  // rAF loop: interpolate position, lerp opacity, then draw.
+  var _scanRafId = null;
+  function tickScanViz () {
+    var now = performance.now();
+    var keys = Object.keys(_scanInterp);
+    for (var k = 0; k < keys.length; ++k) {
+      var key   = keys[k];
+      var entry = _scanInterp[key];
+      // Opacity lerp — ~100ms fade (0.15 at 60 fps ≈ 9 frames to 75%).
+      var diff = entry.opacityTarget - entry.opacity;
+      entry.opacity += diff * 0.15;
+      if (entry.opacity < 0.005 && entry.opacityTarget === 0.0) entry.opacity = 0.0;
+      if (entry.opacity > 0.995 && entry.opacityTarget === 1.0) entry.opacity = 1.0;
+      // Position extrapolation.
+      if (entry.truth && entry.truth.pos >= 0 && entry.velocity !== 0) {
+        var dt = now - entry.truth.timestamp;
+        var pred = entry.truth.pos + entry.velocity * dt;
+        // Clamp to window bounds.
+        var lo = entry.truth.winStart;
+        var hi = entry.truth.winEnd;
+        pred = Math.max(lo, Math.min(hi, pred));
+        entry.predictedPos = pred;
+      }
+    }
+    drawScanViz();
+    _scanRafId = requestAnimationFrame(tickScanViz);
   }
 
   function drawScanViz () {
@@ -4978,23 +5040,26 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
-    var n = Math.min(_scanState.length, layouts.length);
+    var n = layouts.length;
     for (var i = 0; i < n; ++i) {
-      var st = _scanState[i];
-      if (!st) continue;  // no active scan voice on this slice
+      var key   = '' + i;
+      var entry = _scanInterp[key];
+      if (!entry || entry.opacity < 0.005) continue;  // nothing to draw
 
       var layout = layouts[i];
-      var chopX = layout.visualLeft;
-      var chopW = layout.visualWidth;
+      var chopX  = layout.visualLeft;
+      var chopW  = layout.visualWidth;
       if (chopW < 1) continue;
 
-      // Window highlight — only when narrowed (winEnd - winStart < ~full)
-      if (st.winEnd - st.winStart < 0.99) {
-        var wx  = chopX + st.winStart * chopW;
-        var ww  = (st.winEnd - st.winStart) * chopW;
-        ctx.fillStyle = 'rgba(168, 136, 255, 0.08)';
+      var op = entry.opacity;  // [0..1]
+
+      // Window highlight — only when narrowed (winEnd - winStart < ~full).
+      if (entry.truth && (entry.truth.winEnd - entry.truth.winStart) < 0.99) {
+        var wx  = chopX + entry.truth.winStart * chopW;
+        var ww  = (entry.truth.winEnd - entry.truth.winStart) * chopW;
+        ctx.fillStyle = 'rgba(168, 136, 255, ' + (0.08 * op).toFixed(3) + ')';
         ctx.fillRect(wx, 0, ww, H);
-        ctx.strokeStyle = 'rgba(168, 136, 255, 0.4)';
+        ctx.strokeStyle = 'rgba(168, 136, 255, ' + (0.4 * op).toFixed(3) + ')';
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
@@ -5004,14 +5069,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         ctx.setLineDash([]);
       }
 
-      // Scan line — 1.5px solid Terrain purple
-      var lineX = chopX + st.pos * chopW;
-      ctx.fillStyle = '#c8a8ff';
+      // Scan line — 1.5px solid Terrain purple, faded by opacity.
+      var lineX = chopX + entry.predictedPos * chopW;
+      ctx.fillStyle = 'rgba(200, 168, 255, ' + op.toFixed(3) + ')';
       ctx.fillRect(Math.floor(lineX) - 0.75, 0, 1.5, H);
     }
   }
 
-  setInterval(pollScanViz, 33);   // ~30 Hz
+  // Start the rAF draw loop once, and keep the slower C++ poll running too.
+  requestAnimationFrame(tickScanViz);
+  setInterval(pollScanViz, 33);   // ~30 Hz truth updates from C++
 
   // Initial render kick after DOM ready (handles mid-page-load injection too).
   if (document.readyState === 'loading') {
