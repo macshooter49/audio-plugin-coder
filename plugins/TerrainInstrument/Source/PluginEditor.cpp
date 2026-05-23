@@ -2082,7 +2082,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     position: absolute; left: 0; right: 0; top: 0; bottom: 0;
     width: 100%; height: 100%;
     pointer-events: none;
-    z-index: 2;  /* same layer as chop markers — below lab card overlay (4000+) */
+    z-index: -1;  /* below all other elements — prevents appearing above lab card overlay (different stacking contexts) */
     display: none;  /* hidden until slicer mode active */
   }
   body.ti-slicer-active #ti-scan-viz-canvas {

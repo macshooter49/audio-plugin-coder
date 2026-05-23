@@ -593,9 +593,17 @@ namespace tw
                 // Update unified scan viz position (Bug B fix). Written here in
                 // the NONE path so the viz getter just reads the atomic without
                 // needing to know which render path is active.
-                if (scanActive && sliceLen > 0.0)
-                    scanPositionNorm_.store (static_cast<float> ((playhead - startIdx) / sliceLen),
-                                            std::memory_order_release);
+                // Normalize to the EFFECTIVE scan range so the viz line sweeps the
+                // full chop body regardless of how narrow effSliceStart/effSliceEnd are.
+                if (scanActive)
+                {
+                    const double effRange = effSliceEnd - effSliceStart;
+                    if (effRange > 0.0)
+                        scanPositionNorm_.store (
+                            juce::jlimit (0.0f, 1.0f,
+                                static_cast<float> ((playhead - effSliceStart) / effRange)),
+                            std::memory_order_release);
+                }
 
                 // Advance — direction-aware. Pitch-decoupling: at scanRate >= 1.0
                 // we advance at the native pitch rate (no varispeed shift) — the
@@ -918,11 +926,17 @@ namespace tw
                 outR[i] += sampleR * gain;
 
                 // Update unified scan viz position (Bug B fix — cache path).
-                // Cache represents the full stretched slice: position within cache
-                // = position within slice for display purposes.
-                if (cacheLen > 1)
-                    scanPositionNorm_.store (static_cast<float> (playhead / static_cast<double> (cacheLen - 1)),
-                                            std::memory_order_release);
+                // Normalize to the EFFECTIVE scan range so the viz sweeps the full
+                // chop body even though the audio playhead covers only the narrowed
+                // [effSliceStart, effSliceEnd] window within the cache.
+                {
+                    const double effRange = effSliceEnd - effSliceStart;
+                    if (effRange > 0.0)
+                        scanPositionNorm_.store (
+                            juce::jlimit (0.0f, 1.0f,
+                                static_cast<float> ((playhead - effSliceStart) / effRange)),
+                            std::memory_order_release);
+                }
 
                 // Advance — cache is at target stretch; pitchRatio applies MIDI
                 // pitch offset as a speed multiplier through the pre-stretched
