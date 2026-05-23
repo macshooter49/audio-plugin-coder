@@ -10,6 +10,7 @@
 #if JUCE_DEBUG
 
 #include "SignalsmithEngine.h"
+#include "../Slice.h"
 #include <vector>
 #include <cmath>
 
@@ -452,5 +453,68 @@ public:
 };
 
 static WarpProcessorInputLenTests warpProcessorInputLenTests;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice scan-mode data model: defaults + JSON roundtrip + legacy loading
+// (Task 1, Mark 1.5 scan mode)
+// ─────────────────────────────────────────────────────────────────────────────
+class SliceScanRoundtripTests : public juce::UnitTest
+{
+public:
+    SliceScanRoundtripTests() : juce::UnitTest ("SliceScanRoundtrip") {}
+
+    void runTest() override
+    {
+        beginTest ("Scan fields default to off / 1.0 / 1.0");
+        {
+            tw::Slice s;
+            expect (! s.scanEnabled);
+            expectWithinAbsoluteError (s.scanRate,   1.0f, 1.0e-6f);
+            expectWithinAbsoluteError (s.scanWindow, 1.0f, 1.0e-6f);
+        }
+
+        beginTest ("Scan fields survive JSON roundtrip");
+        {
+            std::vector<tw::Slice> in;
+            tw::Slice s;
+            s.startSample  = 0;
+            s.endSample    = 1000;
+            s.scanEnabled  = true;
+            s.scanRate     = 2.5f;
+            s.scanWindow   = 0.4f;
+            in.push_back (s);
+
+            auto json = tw::slicesToJson (in);
+            auto out  = tw::slicesFromJson (json);
+
+            expectEquals ((int) out.size(), 1);
+            expect (out[0].scanEnabled);
+            expectWithinAbsoluteError (out[0].scanRate,   2.5f, 1.0e-6f);
+            expectWithinAbsoluteError (out[0].scanWindow, 0.4f, 1.0e-6f);
+        }
+
+        beginTest ("Legacy JSON (no scan fields) loads with defaults");
+        {
+            // Build JSON in the format slicesToJson uses — object with "slices"
+            // array — but omitting the scan keys to simulate a legacy preset.
+            juce::DynamicObject::Ptr root = new juce::DynamicObject();
+            juce::Array<juce::var> arr;
+            juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+            obj->setProperty ("start", (juce::int64) 0);
+            obj->setProperty ("end",   (juce::int64) 1000);
+            arr.add (juce::var (obj.get()));
+            root->setProperty ("slices", arr);
+            auto json = juce::JSON::toString (juce::var (root.get()));
+
+            auto out = tw::slicesFromJson (json);
+            expectEquals ((int) out.size(), 1);
+            expect (! out[0].scanEnabled);
+            expectWithinAbsoluteError (out[0].scanRate,   1.0f, 1.0e-6f);
+            expectWithinAbsoluteError (out[0].scanWindow, 1.0f, 1.0e-6f);
+        }
+    }
+};
+
+static SliceScanRoundtripTests sliceScanRoundtripTests;
 
 #endif  // JUCE_DEBUG

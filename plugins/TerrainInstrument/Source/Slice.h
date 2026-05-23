@@ -77,6 +77,11 @@ namespace tw
         float       sustainLevel     = 0.7f;
         float       volume           = 1.0f;
 
+        // ── Scan mode (Mark 1.5, spec 2026-05-23) ────────────────────────────
+        bool  scanEnabled = false;  // legacy presets default-off
+        float scanRate    = 1.0f;   // 0.1..4.0, exponential curve, 1.0 = natural ping-pong
+        float scanWindow  = 1.0f;   // 0.05..1.0, default = full slice (mod-only, no manual UI)
+
         juce::int64 length() const noexcept { return endSample - startSample; }
     };
 
@@ -105,6 +110,9 @@ namespace tw
             o->setProperty ("decayMs",      (double) s.decayMs);
             o->setProperty ("sustainLevel", (double) s.sustainLevel);
             o->setProperty ("volume",       (double) s.volume);
+            o->setProperty ("scanEnabled",  s.scanEnabled);
+            o->setProperty ("scanRate",     (double) s.scanRate);
+            o->setProperty ("scanWindow",   (double) s.scanWindow);
             arr.add (juce::var (o.get()));
         }
         obj->setProperty ("slices", arr);
@@ -153,6 +161,14 @@ namespace tw
                                     (float) (double) e.getProperty ("sustainLevel", 1.0));
             s.volume        = juce::jlimit (0.0f,  2.0f,
                                     (float) (double) e.getProperty ("volume",       1.0));
+
+            // Scan mode (Mark 1.5). Missing keys → defaults (off / 1.0 / 1.0)
+            // so legacy presets load identically.
+            s.scanEnabled = (bool) e.getProperty ("scanEnabled", false);       // missing → false
+            s.scanRate    = (float) (double) e.getProperty ("scanRate", 0.0);  // missing → 0.0
+            if (s.scanRate < 0.05f) s.scanRate = 1.0f;                        // legacy → restore default
+            s.scanWindow  = (float) (double) e.getProperty ("scanWindow", 0.0);
+            if (s.scanWindow < 0.04f) s.scanWindow = 1.0f;                    // legacy → restore default
 
             if (s.endSample > s.startSample)
                 out.push_back (s);
