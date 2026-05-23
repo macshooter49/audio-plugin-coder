@@ -2440,43 +2440,6 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     transition: color 200ms ease;
   }
 
-  /* ── Chop right-click context menu ─────────────────────────────────────── */
-  #ti-chop-ctx-menu {
-    background: #1e1a30;
-    border: 1px solid rgba(168, 136, 255, 0.35);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.55);
-    padding: 4px 0;
-    min-width: 160px;
-    font: 500 11px/1 -apple-system;
-    color: rgba(245,243,255,0.88);
-    user-select: none;
-  }
-  #ti-chop-ctx-menu .ctx-item {
-    padding: 7px 14px;
-    cursor: pointer;
-    letter-spacing: 0.02em;
-  }
-  #ti-chop-ctx-menu .ctx-item:hover {
-    background: rgba(168, 136, 255, 0.18);
-  }
-  #ti-chop-ctx-menu .ctx-item.ctx-checked {
-    color: rgba(168, 136, 255, 1.0);
-  }
-  #ti-chop-ctx-menu .ctx-sep {
-    height: 1px;
-    background: rgba(255,255,255,0.07);
-    margin: 3px 0;
-  }
-  #ti-chop-ctx-menu .ctx-header {
-    padding: 5px 14px 3px;
-    font: 700 9px/1 -apple-system;
-    letter-spacing: 1.4px;
-    text-transform: uppercase;
-    color: rgba(245,243,255,0.35);
-    cursor: default;
-  }
-
   /* ADSR envelope canvas — the centrepiece */
   #ti-chop-panel .ov-env {
     margin: 0 0 14px 18px;
@@ -4554,122 +4517,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     if (pn) pn.classList.remove('open');
   }
 
-  // ── Chop right-click context menu ─────────────────────────────────────────
-  // Shows a small floating menu with:
-  //   • Scan: On/Off toggle
-  //   • Scan Rate submenu presets (0.5× / 1.0× / 2.0× / 4.0×)
-  //   • Open Editor (opens the full chop overlay)
-  // Dismisses on click-outside or any item selection.
-
-  var _ctxMenuDismiss = null;  // teardown fn from last open menu
-
-  function _setScanRate (idx, rate) {
-    if (!state.slices[idx]) return;
-    state.slices[idx].scanRate = rate;
-    ovRedrawScan(idx);
-    var fn = getNativeFn('setSliceScanRate');
-    if (fn) { try { fn(idx, rate); } catch (_) {} }
-  }
-
-  function openSliceContextMenu (ev, idx) {
-    // Dismiss any existing menu first.
-    if (_ctxMenuDismiss) { _ctxMenuDismiss(); _ctxMenuDismiss = null; }
-
-    var slice = state.slices[idx];
-    if (!slice) { openChopOverlay(idx); return; }
-
-    var menu = document.createElement('div');
-    menu.id = 'ti-chop-ctx-menu';
-    var scanOn = !!slice.scanEnabled;
-    var currentRate = (typeof slice.scanRate === 'number' && slice.scanRate > 0) ? slice.scanRate : 1.0;
-
-    var ratePresets = [
-      { label: '0.5\xd7  slow drone', rate: 0.5  },
-      { label: '1.0\xd7  natural',    rate: 1.0  },
-      { label: '2.0\xd7  fast',       rate: 2.0  },
-      { label: '4.0\xd7  scrub',      rate: 4.0  }
-    ];
-
-    function makeItem (label, cb, checked) {
-      var el = document.createElement('div');
-      el.className = 'ctx-item' + (checked ? ' ctx-checked' : '');
-      el.textContent = label;
-      el.addEventListener('mousedown', function (e) { e.stopPropagation(); });
-      el.addEventListener('click', function () { cb(); dismiss(); });
-      return el;
-    }
-
-    function makeSep () {
-      var s = document.createElement('div');
-      s.className = 'ctx-sep';
-      return s;
-    }
-
-    // Scan toggle
-    menu.appendChild(makeItem(scanOn ? '✓  Scan' : '   Scan', function () {
-      var newEnabled = !slice.scanEnabled;
-      slice.scanEnabled = newEnabled;
-      ovRedrawScan(idx);
-      var fn = getNativeFn('setSliceScanEnabled');
-      if (fn) { try { fn(idx, newEnabled); } catch (_) {} }
-    }, scanOn));
-
-    menu.appendChild(makeSep());
-
-    // Scan Rate header (non-clickable label)
-    var rateHeader = document.createElement('div');
-    rateHeader.className = 'ctx-header';
-    rateHeader.textContent = 'SCAN RATE';
-    menu.appendChild(rateHeader);
-
-    ratePresets.forEach(function (p) {
-      var isActive = Math.abs(currentRate - p.rate) < 0.05;
-      (function (rate) {
-        menu.appendChild(makeItem(p.label, function () {
-          _setScanRate(idx, rate);
-        }, isActive));
-      }(p.rate));
-    });
-
-    menu.appendChild(makeSep());
-
-    // Open full overlay
-    menu.appendChild(makeItem('Edit Chop…', function () {
-      openChopOverlay(idx);
-    }, false));
-
-    // Position near cursor, clamp to viewport.
-    var vw = window.innerWidth, vh = window.innerHeight;
-    var x = ev.clientX + 4, y = ev.clientY + 4;
-    menu.style.cssText = 'position:fixed;z-index:9999;visibility:hidden;';
-    document.body.appendChild(menu);
-    var mw = menu.offsetWidth, mh = menu.offsetHeight;
-    menu.style.visibility = '';
-    if (x + mw > vw - 4) x = Math.max(4, vw - mw - 4);
-    if (y + mh > vh - 4) y = Math.max(4, vh - mh - 4);
-    menu.style.left = x + 'px';
-    menu.style.top  = y + 'px';
-
-    function dismiss () {
-      if (menu.parentNode) menu.parentNode.removeChild(menu);
-      document.removeEventListener('mousedown', onOutside, true);
-      _ctxMenuDismiss = null;
-    }
-    function onOutside (e) {
-      if (!menu.contains(e.target)) dismiss();
-    }
-    // Small delay so the same click that opened the menu doesn't close it.
-    setTimeout(function () {
-      document.addEventListener('mousedown', onOutside, true);
-    }, 10);
-
-    _ctxMenuDismiss = dismiss;
-  }
-
-  function closeSliceContextMenu () {
-    if (_ctxMenuDismiss) { _ctxMenuDismiss(); _ctxMenuDismiss = null; }
-    closeChopOverlay();
-  }
+  // Legacy aliases — older call sites still reference these names.
+  function openSliceContextMenu (ev, idx) { openChopOverlay(idx); }
+  function closeSliceContextMenu ()       { closeChopOverlay(); }
 
   // ── Interactions ──────────────────────────────────────────────────────────
   function wireInteractions () {
