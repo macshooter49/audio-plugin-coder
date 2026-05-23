@@ -57,6 +57,9 @@ public:
         pWireWow,
         pWireSaturation,
         pWireHiss,
+        // Scan mode targets — appended at END to preserve all existing saved-project indices
+        pActiveChopScanRate,
+        pActiveChopScanWindow,
         pNumParams
     };
 
@@ -118,7 +121,9 @@ public:
         // Chorus (3 entries: amount, width, character)
         0.0f, 0.0f, 0.0f,
         // Wire machine (3 entries: wireWow, wireSaturation, wireHiss) — 0-100 like cassette
-        0.0f, 0.0f, 0.0f
+        0.0f, 0.0f, 0.0f,
+        // Scan mode (2 entries: activeChopScanRate, activeChopScanWindow)
+        0.1f, 0.05f
     };
     static constexpr float paramMax[pNumParams] = {
         500.0f, 100.0f, 100.0f, 12.0f, 100.0f, 100.0f, 100.0f, 100.0f,  // grainSize..mix
@@ -138,7 +143,9 @@ public:
         // Chorus (3 entries: amount, width, character)
         1.0f, 1.0f, 1.0f,
         // Wire machine (3 entries: wireWow, wireSaturation, wireHiss) — 0-100 like cassette
-        100.0f, 100.0f, 100.0f
+        100.0f, 100.0f, 100.0f,
+        // Scan mode (2 entries: activeChopScanRate, activeChopScanWindow)
+        4.0f, 1.0f
     };
 
     //==============================================================================
@@ -470,7 +477,8 @@ private:
             "dlyTime", "dlyFeedback", "dlyTone", "dlyCharacter",
             "dlyMod", "dlyModRate", "dlyMix", "dlyDuck", "dlyFreeze",
             "chorusAmount", "chorusWidth", "chorusCharacter",
-            "wireWow", "wireSaturation", "wireHiss"
+            "wireWow", "wireSaturation", "wireHiss",
+            "activeChopScanRate", "activeChopScanWindow"
         };
         for (int i = 0; i < pNumParams; i++)
             if (name == names[i]) return i;
@@ -496,7 +504,8 @@ private:
             "dlyTime", "dlyFeedback", "dlyTone", "dlyCharacter",
             "dlyMod", "dlyModRate", "dlyMix", "dlyDuck", "dlyFreeze",
             "chorusAmount", "chorusWidth", "chorusCharacter",
-            "wireWow", "wireSaturation", "wireHiss"
+            "wireWow", "wireSaturation", "wireHiss",
+            "activeChopScanRate", "activeChopScanWindow"
         };
         if (idx >= 0 && idx < pNumParams) return names[idx];
         return "grainSize";
