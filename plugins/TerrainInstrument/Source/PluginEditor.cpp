@@ -1022,6 +1022,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 complete (audioProcessor.getSlicesJson());
             })
 
+            .withNativeFunction("getScanPosition", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int sliceIndex = args.size() > 0 ? (int) args[0] : -1;
+                const float pos = audioProcessor.getScanPosition (sliceIndex);
+                complete (juce::var ((double) pos));
+            })
+            .withNativeFunction("getScanWindowBounds", [this](const juce::Array<juce::var>& args,
+                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int sliceIndex = args.size() > 0 ? (int) args[0] : -1;
+                const auto b = audioProcessor.getScanWindowBounds (sliceIndex);
+                auto* obj = new juce::DynamicObject();
+                obj->setProperty ("start", (double) b.startNorm);
+                obj->setProperty ("end",   (double) b.endNorm);
+                complete (juce::var (obj));
+            })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2059,6 +2076,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     pointer-events: none;  /* parent doesn't intercept, children re-enable */
     z-index: 4;
   }
+  /* Scan-line viz canvas — same size as ti-slice-overlays, drawn by
+     pollScanViz() at ~30 Hz. pointer-events:none so clicks pass through. */
+  #ti-scan-viz-canvas {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 5;  /* above slice markers */
+    display: none;  /* hidden until slicer mode active */
+  }
+  body.ti-slicer-active #ti-scan-viz-canvas {
+    display: block;
+  }
   .ti-slice-marker {
     position: absolute; top: 0; bottom: 0; width: 1px;
     background: rgba(167,139,250,0.45);
@@ -2774,6 +2803,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var sliceOverlays = document.createElement('div');
     sliceOverlays.id = 'ti-slice-overlays';
     hero.appendChild(sliceOverlays);
+
+    // Scan-line viz canvas — same bounds as ti-slice-overlays, drawn by
+    // pollScanViz() at ~30 Hz. pointer-events:none so slice gestures still work.
+    var scanVizCanvas = document.createElement('canvas');
+    scanVizCanvas.id = 'ti-scan-viz-canvas';
+    hero.appendChild(scanVizCanvas);
 
     // Floating chop overlay (replaces the old cramped context menu —
     // panel sits over the whole UI in a fixed-position layer so it never
@@ -4984,6 +5019,149 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
 
   setInterval(pollSliceGlow, 16);   // ~60 Hz
+
+  // ── Scan-line viz polling ─────────────────────────────────────────────────
+  // Draws a 1.5px purple line on each scan-active chop while a note is
+  // sounding. Also draws a faint window-highlight + dashed borders when
+  // scanWindow < 1.0 (narrowed via mod). Runs at ~30 Hz (33 ms interval).
+  //
+  // Design: a single <canvas id="ti-scan-viz-canvas"> sits over the slice
+  // overlays (z-index 5, pointer-events:none). Each poll cycle, we:
+  //   1. Pull scan position + window bounds from C++ for each scan-enabled slice
+  //   2. Clear the canvas and redraw all active scan lines in one pass
+  //
+  // chopLayouts / waveformPixelWidth are set by redrawSliceOverlay() and
+  // describe the cumulative pixel layout of each chop on the waveform canvas.
+  var _scanState = [];  // array indexed by slice → { pos: float, winStart, winEnd } or null
+
+  function pollScanViz () {
+    var getScanPos    = getNativeFn('getScanPosition');
+    var getScanBounds = getNativeFn('getScanWindowBounds');
+    if (!getScanPos || !getScanBounds) return;
+    if (!state.slices || state.slices.length === 0) {
+      _scanState = [];
+      drawScanViz();
+      return;
+    }
+    // Fire all polls concurrently; once all resolve draw the frame.
+    var n = state.slices.length;
+    var pending = n;
+    var results = new Array(n);
+    function onComplete () {
+      if (--pending === 0) {
+        _scanState = results;
+        drawScanViz();
+      }
+    }
+    for (var i = 0; i < n; ++i) {
+      (function (idx) {
+        var s = state.slices[idx];
+        if (!s || !s.scanEnabled) {
+          results[idx] = null;
+          onComplete();
+          return;
+        }
+        var posPromise    = getScanPos(idx);
+        var boundsPromise = getScanBounds(idx);
+        // Both resolve independently — gate draw on both.
+        var posVal = null, boundsVal = null, gotPos = false, gotBounds = false;
+        function tryMerge () {
+          if (!gotPos || !gotBounds) return;
+          if (typeof posVal !== 'number' || posVal < 0) {
+            results[idx] = null;
+          } else {
+            results[idx] = {
+              pos:      posVal,
+              winStart: (boundsVal && typeof boundsVal.start === 'number') ? boundsVal.start : 0,
+              winEnd:   (boundsVal && typeof boundsVal.end   === 'number') ? boundsVal.end   : 1
+            };
+          }
+          onComplete();
+        }
+        posPromise.then(function (v) {
+          posVal = (typeof v === 'number') ? v : -1;
+          gotPos = true;
+          tryMerge();
+        }).catch(function () { posVal = -1; gotPos = true; tryMerge(); });
+        boundsPromise.then(function (v) {
+          boundsVal = v;
+          gotBounds = true;
+          tryMerge();
+        }).catch(function () { boundsVal = null; gotBounds = true; tryMerge(); });
+      })(i);
+    }
+  }
+
+  function drawScanViz () {
+    var canvas = document.getElementById('ti-scan-viz-canvas');
+    if (!canvas) return;
+
+    // Size canvas to match the waveform canvas bounds (same as ti-slice-overlays).
+    var waveCanvas = document.getElementById('waveform-canvas');
+    if (!waveCanvas) return;
+    var layouts = state.chopLayouts;
+    if (!layouts || layouts.length === 0) {
+      var ctx0 = canvas.getContext('2d');
+      var dpr0 = window.devicePixelRatio || 1;
+      canvas.width  = Math.max(1, Math.round(canvas.offsetWidth  * dpr0));
+      canvas.height = Math.max(1, Math.round(canvas.offsetHeight * dpr0));
+      ctx0.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    var dpr = window.devicePixelRatio || 1;
+    var W   = state.waveformPixelWidth || canvas.offsetWidth;
+    var waveRect = waveCanvas.getBoundingClientRect();
+    var BOTTOM_RESERVE = 50;
+    var H = Math.max(0, waveRect.height - BOTTOM_RESERVE);
+
+    var cW = Math.max(1, Math.round(W   * dpr));
+    var cH = Math.max(1, Math.round(H   * dpr));
+    if (canvas.width !== cW || canvas.height !== cH) {
+      canvas.width  = cW;
+      canvas.height = cH;
+      canvas.style.width  = W + 'px';
+      canvas.style.height = H + 'px';
+    }
+
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    var n = Math.min(_scanState.length, layouts.length);
+    for (var i = 0; i < n; ++i) {
+      var st = _scanState[i];
+      if (!st) continue;  // no active scan voice on this slice
+
+      var layout = layouts[i];
+      var chopX = layout.visualLeft;
+      var chopW = layout.visualWidth;
+      if (chopW < 1) continue;
+
+      // Window highlight — only when narrowed (winEnd - winStart < ~full)
+      if (st.winEnd - st.winStart < 0.99) {
+        var wx  = chopX + st.winStart * chopW;
+        var ww  = (st.winEnd - st.winStart) * chopW;
+        ctx.fillStyle = 'rgba(168, 136, 255, 0.08)';
+        ctx.fillRect(wx, 0, ww, H);
+        ctx.strokeStyle = 'rgba(168, 136, 255, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(wx,      0); ctx.lineTo(wx,      H);
+        ctx.moveTo(wx + ww, 0); ctx.lineTo(wx + ww, H);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Scan line — 1.5px solid Terrain purple
+      var lineX = chopX + st.pos * chopW;
+      ctx.fillStyle = '#c8a8ff';
+      ctx.fillRect(Math.floor(lineX) - 0.75, 0, 1.5, H);
+    }
+  }
+
+  setInterval(pollScanViz, 33);   // ~30 Hz
 
   // Initial render kick after DOM ready (handles mid-page-load injection too).
   if (document.readyState === 'loading') {

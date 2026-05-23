@@ -215,6 +215,31 @@ namespace tw
         int   getSliceIndex()    const noexcept { return activeConfig.sliceIndex; }
         bool  isPlaying()        const noexcept { return isActive && envStage != EnvStage::Off; }
 
+        // ── Scan-viz polling getters (called from UI thread — read-only) ──────
+        bool  isScanActive()      const noexcept { return scanActive; }
+        float getScanWindowLive() const noexcept { return scanWindowLive; }
+
+        /** Returns playhead position normalized to [0, 1] within the slice bounds.
+         *  For non-scan voices this is always 0. For cache-reading scan voices,
+         *  playhead is in cache-buffer coordinates [0, cacheLen); we normalize
+         *  to [0,1] using playStartIdx / playEndIdx which are set to 0 / cacheLen
+         *  by renderOnset() so the math is identical. Occasional torn reads on
+         *  the UI thread produce at most one frame of visual jitter — acceptable.
+         */
+        float getScanPositionNormalized() const noexcept
+        {
+            if (! scanActive) return 0.0f;
+            const double pos   = playhead;
+            const double start = static_cast<double> (playStartIdx);
+            const double end   = (playEndIdx > playStartIdx)
+                                     ? static_cast<double> (playEndIdx)
+                                     : start + 1.0;
+            const double span  = end - start;
+            if (span <= 0.0) return 0.0f;
+            return juce::jlimit (0.0f, 1.0f,
+                                 static_cast<float> ((pos - start) / span));
+        }
+
 #if JUCE_DEBUG
         // Test-only accessors for scan-mode unit tests (Task 5).
         bool   getReversePlay() const noexcept { return reversePlay; }

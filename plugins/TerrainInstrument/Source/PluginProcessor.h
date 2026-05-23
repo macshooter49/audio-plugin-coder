@@ -156,6 +156,19 @@ public:
     juce::String      getSlicesJson() const;
     void              setSlicesFromJson (const juce::String& json);
 
+    // ── Scan-viz polling API (UI thread only) ─────────────────────────────
+    /** Returns normalized [0,1] scan-playhead position for the given slice index.
+     *  Returns -1.0f if no active scan-on voice is playing on this slice.
+     *  Safe to call from the UI thread (read-only walk of voice list). */
+    float getScanPosition (int sliceIndex) const noexcept;
+
+    struct ScanWindowBounds { float startNorm = 0.0f; float endNorm = 1.0f; };
+
+    /** Returns the live scan-window bounds for the given slice.
+     *  If scanWindow == 1.0, returns {0.0, 1.0}.
+     *  Returns {0.0, 1.0} if no scan-on voice is sounding on this slice. */
+    ScanWindowBounds getScanWindowBounds (int sliceIndex) const noexcept;
+
     // Active slice index — used in CHROMATIC sub-mode. Atomic so JS push
     // and audio thread read are race-free.
     std::atomic<int>  activeSliceIndex { 0 };

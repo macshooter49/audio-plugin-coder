@@ -1718,6 +1718,43 @@ juce::var TerrainInstrumentAudioProcessor::snapshotSliceGlowLevels() const
     return juce::var (arr);
 }
 
+float TerrainInstrumentAudioProcessor::getScanPosition (int sliceIndex) const noexcept
+{
+    for (int i = 0; i < synth.getNumVoices(); ++i)
+    {
+        if (auto* v = dynamic_cast<const tw::SamplerVoice*> (synth.getVoice (i)))
+        {
+            if (v->isPlaying()
+                && v->getSliceIndex() == sliceIndex
+                && v->isScanActive())
+            {
+                return v->getScanPositionNormalized();
+            }
+        }
+    }
+    return -1.0f;
+}
+
+TerrainInstrumentAudioProcessor::ScanWindowBounds
+TerrainInstrumentAudioProcessor::getScanWindowBounds (int sliceIndex) const noexcept
+{
+    for (int i = 0; i < synth.getNumVoices(); ++i)
+    {
+        if (auto* v = dynamic_cast<const tw::SamplerVoice*> (synth.getVoice (i)))
+        {
+            if (v->isPlaying()
+                && v->getSliceIndex() == sliceIndex
+                && v->isScanActive())
+            {
+                const float window = v->getScanWindowLive();
+                const float margin = (1.0f - window) * 0.5f;
+                return { margin, 1.0f - margin };
+            }
+        }
+    }
+    return { 0.0f, 1.0f };
+}
+
 void TerrainInstrumentAudioProcessor::auditionSlice (int sliceIndex)
 {
     const int n = getNumSlices();
