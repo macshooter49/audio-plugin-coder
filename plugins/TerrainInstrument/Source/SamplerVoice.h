@@ -38,6 +38,11 @@ namespace tw
         float       decayMs          = 0.0f;             // 0 = no decay phase, jump from attack peak to sustain
         float       sustainLevel     = 1.0f;             // 0..1; 1.0 = hold at peak (current behavior)
         float       volume           = 1.0f;             // linear gain multiplier, 0..2 (1.0=unity, 2.0=+6 dB boost)
+
+        // ── Scan mode (Mark 1.5) ─────────────────────────────────────────────
+        bool  scanEnabled = false;   // ping-pong scan within the slice
+        float scanRate    = 1.0f;    // playback rate multiplier for scan (base; mod applied in Task 7)
+        float scanWindow  = 1.0f;    // fraction of slice covered by ping-pong (0..1)
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -152,6 +157,12 @@ namespace tw
             warpNeedsPrime = (activeConfig.warpMode != WarpMode::None);
             warpTailFadeRemaining = 0;
             warpTailFadeStarted   = false;
+
+            // Latch scan state — base values only; mod resolved per-block in Task 7.
+            scanActive      = activeConfig.scanEnabled;
+            scanRateLive    = activeConfig.scanRate;
+            scanWindowLive  = activeConfig.scanWindow;
+            turnaroundFadeT = 0.0;
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -182,6 +193,12 @@ namespace tw
         float getEnvelopeLevel() const noexcept { return envLevel; }
         int   getSliceIndex()    const noexcept { return activeConfig.sliceIndex; }
         bool  isPlaying()        const noexcept { return isActive && envStage != EnvStage::Off; }
+
+#if JUCE_DEBUG
+        // Test-only accessors for scan-mode unit tests (Task 5).
+        bool   getReversePlay() const noexcept { return reversePlay; }
+        double getPlayhead()    const noexcept { return playhead; }
+#endif
 
         void renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
                               int startSample, int numSamples) override
@@ -268,10 +285,31 @@ namespace tw
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── Bounds + loop/wrap handling, direction-aware ────────────
-                const bool atForwardEnd = (! reversePlay) && playhead >= endIdx;
-                const bool atReverseEnd = (  reversePlay) && playhead <= startIdx;
+                // When scan is active, effective playback bounds are narrowed
+                // to the scan-window region (centred in the slice). This
+                // computation is repeated per-sample to allow live mod updates
+                // in Task 7 without needing to cache derived values.
+                const double windowSpan        = scanActive ? (sliceLen * (double) scanWindowLive) : sliceLen;
+                const double margin            = scanActive ? ((sliceLen - windowSpan) * 0.5) : 0.0;
+                const double effSliceStart     = startIdx + margin;
+                const double effSliceEnd       = endIdx   - margin;
+
+                const bool atForwardEnd = (! reversePlay) && playhead >= effSliceEnd;
+                const bool atReverseEnd = (  reversePlay) && playhead <= effSliceStart;
                 if (atForwardEnd || atReverseEnd)
                 {
+                    if (scanActive)
+                    {
+                        // Ping-pong boundary flip. Arm turnaroundFadeT for the
+                        // 8ms crossfade (Task 6 consumes it). Clamp playhead to
+                        // the effective edge for the new direction so the very
+                        // next sample read is within bounds.
+                        reversePlay     = ! reversePlay;
+                        turnaroundFadeT = 1.0;
+                        playhead        = reversePlay ? effSliceEnd : effSliceStart;
+                        continue;  // skip wrap/stop logic for scan voices
+                    }
+
                     if (loopMode == 1)
                     {
                         if (sliceLen <= 0.0) { envStage = EnvStage::Off; envLevel = 0.0f; clearCurrentNote(); isActive = false; return; }
@@ -768,6 +806,12 @@ namespace tw
         juce::int64 playStartIdx = 0;
         juce::int64 playEndIdx   = -1;
         bool        reversePlay  = false;
+
+        // ── Scan state (Mark 1.5) ────────────────────────────────────────────
+        bool   scanActive       = false;   // mirrors activeConfig.scanEnabled, captured at startNote
+        float  scanRateLive     = 1.0f;    // base for now; Task 7 wires mod
+        float  scanWindowLive   = 1.0f;    // base for now; Task 7 wires mod
+        double turnaroundFadeT  = 0.0;     // 1.0 → 0.0 over 8ms; Task 6 consumes
 
         // Warp dispatcher + scratch buffers. Engine is lazily allocated inside
         // WarpProcessor on the first non-None setMode call; voices that never

@@ -66,6 +66,9 @@ namespace tw
             vc.decayMs        = s.decayMs;
             vc.sustainLevel   = s.sustainLevel;
             vc.volume         = s.volume;
+            vc.scanEnabled    = s.scanEnabled;
+            vc.scanRate       = s.scanRate;
+            vc.scanWindow     = s.scanWindow;
 
             const juce::ScopedLock sl (lock);
             if (sounds.size() == 0) return;
@@ -126,6 +129,9 @@ namespace tw
                     vc.decayMs        = s.decayMs;
                     vc.sustainLevel   = s.sustainLevel;
                     vc.volume         = s.volume;
+                    vc.scanEnabled    = s.scanEnabled;
+                    vc.scanRate       = s.scanRate;
+                    vc.scanWindow     = s.scanWindow;
                     break;
                 }
 
@@ -146,6 +152,9 @@ namespace tw
                     vc.decayMs        = s.decayMs;
                     vc.sustainLevel   = s.sustainLevel;
                     vc.volume         = s.volume;
+                    vc.scanEnabled    = s.scanEnabled;
+                    vc.scanRate       = s.scanRate;
+                    vc.scanWindow     = s.scanWindow;
                     break;
                 }
 
@@ -182,6 +191,9 @@ namespace tw
                     vc.decayMs        = s.decayMs;
                     vc.sustainLevel   = s.sustainLevel;
                     vc.volume         = s.volume;
+                    vc.scanEnabled    = s.scanEnabled;
+                    vc.scanRate       = s.scanRate;
+                    vc.scanWindow     = s.scanWindow;
                     break;
                 }
             }

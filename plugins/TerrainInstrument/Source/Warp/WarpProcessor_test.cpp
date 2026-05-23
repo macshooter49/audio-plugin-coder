@@ -517,4 +517,129 @@ public:
 
 static SliceScanRoundtripTests sliceScanRoundtripTests;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ScanBoundaryFlip — Warp:None ping-pong direction flip at effective window
+// edges. Requires SamplerVoice; constructed with a minimal in-memory
+// SampleBuffer holding a 1000-sample DC signal.
+// (Task 5, Mark 1.5 scan mode)
+// ─────────────────────────────────────────────────────────────────────────────
+#include "../SamplerVoice.h"
+
+class ScanBoundaryFlipTests : public juce::UnitTest
+{
+public:
+    ScanBoundaryFlipTests() : juce::UnitTest ("ScanBoundaryFlip") {}
+
+    // Build a SamplerVoice with a 1000-sample 2-ch DC=0.1 buffer at 48kHz.
+    // Returns the voice via out-param so callers own it (no heap needed since
+    // the voice + atomics live on the test stack via unique_ptrs).
+    struct Harness
+    {
+        tw::SampleBuffer                sb;
+        std::atomic<int>                rootNote    { 60 };
+        std::atomic<float>              attackMs    { 0.0f };   // instant attack
+        std::atomic<float>              releaseMs   { 1.0f };
+        std::atomic<int>                loopMode    { 0 };      // one-shot default
+        std::unique_ptr<tw::SamplerVoice> voice;
+
+        Harness()
+        {
+            // 1000-sample, 2-channel buffer filled with DC 0.1f
+            auto buf = std::make_shared<juce::AudioBuffer<float>> (2, 1000);
+            buf->clear();
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 1000; ++i)
+                    buf->setSample (ch, i, 0.1f);
+            sb.store (buf);
+
+            voice = std::make_unique<tw::SamplerVoice> (
+                sb, rootNote, attackMs, releaseMs, loopMode);
+            voice->setCurrentPlaybackSampleRate (48000.0);
+        }
+
+        // Trigger a note with the given VoiceConfig.
+        void triggerNote (const tw::VoiceConfig& cfg)
+        {
+            voice->prepareForNoteOn (cfg);
+            // SynthesiserVoice::startNote needs a SynthesiserSound* — pass
+            // nullptr since SamplerVoice::canPlaySound always returns true.
+            voice->startNote (60, 1.0f, nullptr, 8192);
+        }
+
+        // Render n samples into a throw-away stereo buffer.
+        void render (int n)
+        {
+            juce::AudioBuffer<float> out (2, n);
+            out.clear();
+            voice->renderNextBlock (out, 0, n);
+        }
+    };
+
+    void runTest() override
+    {
+        beginTest ("Direction flips at scan-window end (Warp:None, window=1.0)");
+        {
+            Harness h;
+            tw::VoiceConfig cfg;
+            cfg.startSample  = 0;
+            cfg.endSample    = 1000;
+            cfg.reverse      = false;     // start forward
+            cfg.pitchSemitones = 0.0f;    // pitchRatio = 1.0
+            cfg.scanEnabled  = true;
+            cfg.scanRate     = 1.0f;
+            cfg.scanWindow   = 1.0f;      // full window → flip at sample 999
+
+            h.triggerNote (cfg);
+
+            // Initial direction must be forward.
+            expect (! h.voice->getReversePlay(), "Initial direction should be forward");
+            // Playhead must start at 0.
+            expectWithinAbsoluteError (h.voice->getPlayhead(), 0.0, 1.0,
+                                       "Playhead should start near sample 0");
+
+            // Drive 1100 samples — guaranteed to hit the forward end at
+            // ~sample 999 and flip to reverse.
+            h.render (1100);
+
+            expect (h.voice->getReversePlay(),
+                    "reversePlay must flip to true after hitting the forward scan boundary");
+        }
+
+        beginTest ("scanWindow=0.4 narrows the ping-pong range");
+        {
+            // Slice: 0..1000. scanWindow=0.4 → effective range [300, 700].
+            // Drive 5 blocks of 512 samples (2560 total). Playhead must never
+            // stray outside [299, 701] (small float tolerance).
+            Harness h;
+            h.loopMode.store (0);  // one-shot default — scan overrides anyway
+            tw::VoiceConfig cfg;
+            cfg.startSample    = 0;
+            cfg.endSample      = 1000;
+            cfg.reverse        = false;
+            cfg.pitchSemitones = 0.0f;
+            cfg.scanEnabled    = true;
+            cfg.scanRate       = 1.0f;
+            cfg.scanWindow     = 0.4f;   // window = 400 samples → [300, 700]
+
+            h.triggerNote (cfg);
+
+            bool outOfBounds = false;
+            for (int block = 0; block < 5; ++block)
+            {
+                h.render (512);
+                const double ph = h.voice->getPlayhead();
+                // Allow ±2 sample slop for the playhead-clamp-on-flip logic.
+                if (ph < 298.0 || ph > 702.0)
+                    outOfBounds = true;
+            }
+
+            expect (! outOfBounds,
+                    "Playhead must stay within effective scan window [300, 700]"
+                    " (scanWindow=0.4 on 1000-sample slice)");
+        }
+    }
+};
+
+static ScanBoundaryFlipTests scanBoundaryFlipTests;
+
 #endif  // JUCE_DEBUG
