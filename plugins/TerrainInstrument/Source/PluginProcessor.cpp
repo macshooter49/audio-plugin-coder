@@ -16,7 +16,8 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     for (int i = 0; i < kNumVoices; ++i)
         synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi,
                                               attackMsAtomic, releaseMsAtomic,
-                                              sampleLoopMode, &modulationEngine));
+                                              sampleLoopMode, &modulationEngine,
+                                              &synth.warpCache));
     // Sample buffer starts empty. User drags a file in, or the editor opens a
     // file picker. SampleLoader (async) populates the shared buffer when a load
     // completes. Voices read it via the SampleBuffer atomic shared_ptr.
@@ -949,6 +950,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         tw::SliceContext ctx;
         ctx.rootMidiNote     = rootNoteMidi.load();
         ctx.activeSliceIndex = activeSliceIndex.load();
+        ctx.sourceVersionId  = getSourceVersionId();
         ctx.slices           = std::atomic_load (&slicesPtr);
 
         if (sliceModeIdx == 0)

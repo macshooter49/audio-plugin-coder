@@ -6,6 +6,7 @@
 #include "SampleBuffer.h"
 #include "Slice.h"
 #include "Warp/WarpProcessor.h"
+#include "Warp/WarpRenderCache.h"
 #include "ModulationEngine.h"
 #include <atomic>
 #include <cmath>
@@ -32,6 +33,7 @@ namespace tw
         float       pitchSemitones   = 0.0f;     // semitones from unity (additive with pitch wheel)
         bool        forceOneShot     = false;    // override LOOP mode for this voice (used for audition)
         int         sliceIndex       = -1;       // index in the slice list this voice plays; -1 = Whole-mode (no slice)
+        int         sourceVersionId  = 0;        // monotonic; matches WarpRenderCache::Key::sourceVersionId
         WarpMode    warpMode         = WarpMode::None;   // per-chop warp engine; None = current resample behavior
         float       stretchRatio     = 1.0f;             // 0.25..4.0; ignored when warpMode == None
         float       attackMs         = -1.0f;            // -1 sentinel = inherit global ATTACK_MS
@@ -68,12 +70,14 @@ namespace tw
                       std::atomic<float>& attackMsRef,
                       std::atomic<float>& releaseMsRef,
                       std::atomic<int>&   loopModeRef,
-                      ModulationEngine*   me = nullptr) noexcept
+                      ModulationEngine*   me = nullptr,
+                      WarpRenderCache*    wc = nullptr) noexcept
             : sample (sb),
               attackMsParam (attackMsRef),
               releaseMsParam (releaseMsRef),
               loopModeParam (loopModeRef),
-              modEngine (me) {}
+              modEngine (me),
+              warpCache_ (wc) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
@@ -701,12 +705,161 @@ namespace tw
             return true;
         }
 
+        // ── Task 11: read pre-rendered cache for scan + warp (non-None) mode. ──
+        // Cache is at target stretch → scanRateLive controls pure motion through
+        // the cache (no pitch artifact). Ping-pong and envelope are replicated
+        // from the NONE-mode scan path (Tasks 5-7). The warp engine is NOT run.
+        void renderScanFromCache (const juce::AudioBuffer<float>& cache,
+                                  juce::AudioBuffer<float>& outputBuffer,
+                                  int startSample, int numSamples)
+        {
+            const int cacheLen = cache.getNumSamples();
+            if (cacheLen < 2) return;
+
+            const auto* cL = cache.getReadPointer (0);
+            const auto* cR = cache.getNumChannels() > 1 ? cache.getReadPointer (1) : cL;
+            auto* outL = outputBuffer.getWritePointer (0, startSample);
+            auto* outR = outputBuffer.getNumChannels() > 1
+                         ? outputBuffer.getWritePointer (1, startSample) : outL;
+
+            // Scan-window bounds within the cache (cache IS the stretched slice).
+            const double startIdx  = 0.0;
+            const double endIdx    = static_cast<double> (cacheLen - 1);
+            const double sliceLen  = endIdx - startIdx;
+            const double windowSpan      = sliceLen * static_cast<double> (scanWindowLive);
+            const double margin          = (sliceLen - windowSpan) * 0.5;
+            const double effSliceStart   = startIdx + margin;
+            const double effSliceEnd     = endIdx   - margin;
+
+            // Snap playhead into bounds if it drifted (e.g. from a pre-cache-miss block).
+            if (playhead < effSliceStart) playhead = effSliceStart;
+            if (playhead > effSliceEnd)   playhead = effSliceEnd;
+
+            constexpr double turnaroundLenMs = 8.0;
+            const double turnaroundLenSamples = turnaroundLenMs * 0.001 * sampleRateForEnv;
+            const double decrement = 1.0 / juce::jmax (1.0, turnaroundLenSamples);
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                // Boundary check + ping-pong flip.
+                const bool atForwardEnd = (! reversePlay) && playhead >= effSliceEnd;
+                const bool atReverseEnd = (  reversePlay) && playhead <= effSliceStart;
+                if (atForwardEnd || atReverseEnd)
+                {
+                    reversePlay     = ! reversePlay;
+                    turnaroundFadeT = 1.0;
+                    playhead        = reversePlay ? effSliceEnd : effSliceStart;
+                }
+
+                // Envelope tick (same state machine as NONE and renderWarp paths).
+                switch (envStage)
+                {
+                    case EnvStage::Attack:
+                        envLevel += attackInc;
+                        if (envLevel >= 1.0f)
+                        {
+                            envLevel = 1.0f;
+                            envStage = (decayDec > 0.0f && sustainTarget < 1.0f)
+                                          ? EnvStage::Decay
+                                          : EnvStage::Sustaining;
+                        }
+                        break;
+                    case EnvStage::Decay:
+                        envLevel -= decayDec;
+                        if (envLevel <= sustainTarget)
+                        {
+                            envLevel = sustainTarget;
+                            envStage = EnvStage::Sustaining;
+                        }
+                        break;
+                    case EnvStage::Sustaining:
+                        envLevel = sustainTarget;
+                        break;
+                    case EnvStage::Release:
+                        envLevel -= releaseDec;
+                        if (envLevel <= 0.0f)
+                        {
+                            envLevel = 0.0f;
+                            envStage = EnvStage::Off;
+                            clearCurrentNote();
+                            isActive = false;
+                            return;
+                        }
+                        break;
+                    case EnvStage::Off:
+                        return;
+                }
+
+                // Linear interpolation read from cache.
+                const auto i0   = juce::jlimit (0, cacheLen - 1, static_cast<int> (playhead));
+                const int  i1   = juce::jmin   (cacheLen - 1, i0 + 1);
+                const auto frac = static_cast<float> (playhead - static_cast<double> (i0));
+                auto sampleL = cL[i0] + frac * (cL[i1] - cL[i0]);
+                auto sampleR = cR[i0] + frac * (cR[i1] - cR[i0]);
+
+                // Turnaround crossfade (8ms equal-power, mirroring Tasks 5-7 but
+                // reading from the cache buffer instead of the source buffer).
+                if (turnaroundFadeT > 0.0)
+                {
+                    const double oldDirSign = reversePlay ? +1.0 : -1.0;
+                    const double oldPos     = playhead
+                                             + oldDirSign * (1.0 - turnaroundFadeT)
+                                               * turnaroundLenSamples;
+                    const auto oi0 = juce::jlimit (0, cacheLen - 1, static_cast<int> (oldPos));
+                    const int  oi1 = juce::jlimit (0, cacheLen - 1, oi0 + 1);
+                    const auto ofrac = static_cast<float> (oldPos - static_cast<double> (oi0));
+                    const auto oldL = cL[oi0] + ofrac * (cL[oi1] - cL[oi0]);
+                    const auto oldR = cR[oi0] + ofrac * (cR[oi1] - cR[oi0]);
+
+                    const float t       = static_cast<float> (1.0 - turnaroundFadeT);
+                    const float oldGain = std::cos (t * juce::MathConstants<float>::halfPi);
+                    const float newGain = std::sin (t * juce::MathConstants<float>::halfPi);
+                    sampleL = oldL * oldGain + sampleL * newGain;
+                    sampleR = oldR * oldGain + sampleR * newGain;
+
+                    turnaroundFadeT -= decrement;
+                    if (turnaroundFadeT < 0.0) turnaroundFadeT = 0.0;
+                }
+
+                const float gain = currentVelocity * envLevel * voiceGain;
+                outL[i] += sampleL * gain;
+                outR[i] += sampleR * gain;
+
+                // Advance — cache is at target stretch, so scanRateLive drives
+                // pure motion (no pitch artifact from rate changes).
+                playhead += (reversePlay ? -1.0 : 1.0) * static_cast<double> (scanRateLive);
+            }
+        }
+
         void renderWarp (juce::AudioBuffer<float>& outputBuffer,
                          const juce::AudioBuffer<float>& buf,
                          int startSample, int numSamples)
         {
             const int bufLen = buf.getNumSamples();
             if (bufLen <= 0 || numSamples <= 0) return;
+
+            // ── Task 11: Scan + Warp:Other path → read from cache ─────────────
+            // Warp:None + Scan is handled in renderNextBlock's NONE loop (Tasks 5-7).
+            if (scanActive && warpCache_ != nullptr)
+            {
+                WarpRenderCache::Key key {
+                    activeConfig.sliceIndex,
+                    activeConfig.sourceVersionId,
+                    activeConfig.stretchRatio,
+                    activeConfig.warpMode
+                };
+                const auto* cached = warpCache_->get (key);
+                if (cached != nullptr)
+                {
+                    renderScanFromCache (*cached, outputBuffer, startSample, numSamples);
+                    return;
+                }
+                // Cache miss → request prewarm, emit a silent block. Subsequent
+                // blocks will see the populated cache entry and start reading.
+                warpCache_->prewarm (key);
+                return;
+            }
+            // warpCache_ == null → fall through to live warp path (degraded but no crash).
 
             // Source samples to feed the engine for this block. Beats and
             // Signalsmith have different formulas (Beats needs pitchRatio
@@ -904,7 +1057,10 @@ namespace tw
         bool        reversePlay  = false;
 
         // ── Modulation engine reference (Task 7) ────────────────────────────
-        ModulationEngine* modEngine = nullptr;   // non-owning; set at construction via PluginProcessor
+        ModulationEngine* modEngine  = nullptr;  // non-owning; set at construction via PluginProcessor
+
+        // ── Warp render cache reference (Task 11) ───────────────────────────
+        WarpRenderCache*  warpCache_ = nullptr;  // non-owning; set at construction via PluginProcessor
 
         // ── Scan state (Mark 1.5) ────────────────────────────────────────────
         bool   scanActive       = false;   // mirrors activeConfig.scanEnabled, captured at startNote

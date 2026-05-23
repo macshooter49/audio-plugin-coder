@@ -30,6 +30,7 @@ namespace tw
         Mode          mode             = Mode::Whole;
         int           rootMidiNote     = 60;
         int           activeSliceIndex = 0;
+        int           sourceVersionId  = 0;   // from PluginProcessor::getSourceVersionId()
         SliceListPtr  slices;          // immutable snapshot, may be null/empty
     };
 
@@ -243,6 +244,9 @@ namespace tw
             }
 
             if (! triggerOk) return;  // out-of-range key in slice mode = silence
+
+            // Stamp the source version so the cache key is fully specified.
+            vc.sourceVersionId = ctx->sourceVersionId;
 
             // Standard synth noteOn dance, but configure the voice between
             // findFreeVoice and startVoice so the voice has its slice info
