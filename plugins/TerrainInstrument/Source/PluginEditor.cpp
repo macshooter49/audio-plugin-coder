@@ -2164,9 +2164,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     width: 100%; height: 100%;
     pointer-events: none;
     z-index: 1;  /* inside #ti-slice-overlays — above chop bodies (z-index 0) but below markers */
-    display: none;  /* hidden until slicer mode active */
-  }
-  body.ti-slicer-active #ti-scan-viz-canvas {
+    /* Always visible — drawScanViz() clears when no voice is scanning,
+       so an idle canvas is just transparent. Previously gated on
+       body.ti-slicer-active which hid the pitch-mode scan line. */
     display: block;
   }
   .ti-slice-marker {
@@ -2272,7 +2272,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   .ti-slice-pitch-num {
     font: 700 10px/1 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     color: rgba(167,139,250,0.95);
-    text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+    /* Dark pill background so +12 / -12 stays readable on top of loud
+       waveforms (peak-scale can't push the wave fully clear of the bottom
+       label zone without making it tiny — see state.peakScale doc). */
+    background: rgba(15, 10, 30, 0.85);
+    padding: 1px 5px;
+    border-radius: 3px;
   }
   .ti-slice-pitch-bar {
     position: relative;
@@ -3167,6 +3172,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   var state = {
     peaksMin: null,
     peaksMax: null,
+    // Visual-only display gain. 1.0 = native amplitude (peak fills 95% of half-height).
+    // Recomputed on sample load: loud samples (peak > 0.80) scale DOWN so peak hits 80%
+    // of half-height, leaving ~20% top + bottom clearance for the dice button / chop
+    // number labels / bottom button strip. Quiet samples (peak <= 0.80) keep peakScale=1.0
+    // so one-shots and dynamic samples render at full native amplitude.
+    peakScale: 1.0,
     progress: 0,    // 0..1 during loading; 1 when fully loaded
     loading: false,
     rootNote: 60,
@@ -3265,6 +3276,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var n = state.peaksMin.length;
     if (n === 0) return;
     var visibleN = Math.max(1, Math.floor(n * Math.max(0.001, Math.min(1, state.progress))));
+    // Display gain — 0.95 = fixed top/bottom margin; peakScale = peak-aware shrink for
+    // loud samples (1.0 = no change). Quiet samples keep full visual amplitude.
+    var vGain = cy * 0.95 * (state.peakScale || 1.0);
 
     // Filled body (mirrored around centerline)
     ctx.fillStyle = 'rgba(245, 243, 255, 0.10)';
@@ -3273,12 +3287,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var i;
     for (i = 0; i < visibleN; i++) {
       var x = (i / Math.max(1, n - 1)) * w;
-      var yMax = cy - state.peaksMax[i] * cy * 0.95;
+      var yMax = cy - state.peaksMax[i] * vGain;
       ctx.lineTo(x, yMax);
     }
     for (i = visibleN - 1; i >= 0; i--) {
       var x2 = (i / Math.max(1, n - 1)) * w;
-      var yMin = cy - state.peaksMin[i] * cy * 0.95;
+      var yMin = cy - state.peaksMin[i] * vGain;
       ctx.lineTo(x2, yMin);
     }
     ctx.closePath();
@@ -3290,7 +3304,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.beginPath();
     for (i = 0; i < visibleN; i++) {
       var xx = (i / Math.max(1, n - 1)) * w;
-      var ym = cy - state.peaksMax[i] * cy * 0.95;
+      var ym = cy - state.peaksMax[i] * vGain;
       if (i === 0) ctx.moveTo(xx, ym); else ctx.lineTo(xx, ym);
     }
     ctx.stroke();
@@ -3300,7 +3314,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.beginPath();
     for (i = 0; i < visibleN; i++) {
       var xx2 = (i / Math.max(1, n - 1)) * w;
-      var ym2 = cy - state.peaksMin[i] * cy * 0.95;
+      var ym2 = cy - state.peaksMin[i] * vGain;
       if (i === 0) ctx.moveTo(xx2, ym2); else ctx.lineTo(xx2, ym2);
     }
     ctx.stroke();
@@ -3713,12 +3727,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // Position the overlay over the waveform in PITCH mode (the SLICE path
     // sets top/height after the early return we added; PITCH mode doesn't go
     // through that block so we set it here to give markers the right area).
+    // Overlays keeps the BOTTOM_RES2 safe zone so markers stay above the
+    // bottom button row; the dim divs override with the full wave height so
+    // the gray-out visually covers the full waveform (bottom buttons sit at
+    // z-index 5 so they cover the dim below them naturally).
     var hero = document.getElementById('hero');
     var waveCanvas = document.getElementById('waveform-canvas');
+    var BOTTOM_RES2 = 50;
+    var fullWaveHeightPx = 0;
     if (hero && waveCanvas) {
       var heroRect2 = hero.getBoundingClientRect();
       var waveRect2 = waveCanvas.getBoundingClientRect();
-      var BOTTOM_RES2 = 50;
+      fullWaveHeightPx = waveRect2.height;
       overlays.style.top    = (waveRect2.top - heroRect2.top) + 'px';
       overlays.style.height = Math.max(0, waveRect2.height - BOTTOM_RES2) + 'px';
     }
@@ -3745,12 +3765,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var endEl   = makeMarker('ti-pitch-bound-end',   endNorm);
 
     // Bug C — gray-out regions outside [IN, OUT].
+    // Always create both dim divs (even at width=0) so live drag updates
+    // can resize them without needing a full overlay rebuild. The CSS sets
+    // top:0/bottom:0; we override `height` so the dim spans the full wave
+    // canvas height (not the reduced overlays height), keeping the bottom
+    // of the waveform covered. Bottom-strip buttons (z-index 5) sit above
+    // the dim (z-index 2) so the dim is naturally hidden behind them.
     function makeDim (leftPx, widthPx) {
-      if (widthPx < 1) return;
       var d = document.createElement('div');
       d.className = 'ti-pitch-bound-dim';
-      d.style.left  = leftPx + 'px';
-      d.style.width = widthPx + 'px';
+      d.style.left   = Math.max(0, leftPx) + 'px';
+      d.style.width  = Math.max(0, widthPx) + 'px';
+      if (fullWaveHeightPx > 0) {
+        d.style.top    = '0px';
+        d.style.height = fullWaveHeightPx + 'px';
+      }
       overlays.appendChild(d);
     }
     makeDim(0,            startNorm * W);               // left of IN
@@ -3858,6 +3887,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var w  = visualWidthCss, h = visualHeightCss;
     var cy = h / 2;
     var i;
+    // Match drawWaveform — peak-aware display gain so loud chops don't slam into the
+    // chop number row / dice button / bottom strip.
+    var vGain = cy * 0.95 * (state.peakScale || 1.0);
 
     // Filled body (mirrored around centerline).
     ctx.fillStyle = 'rgba(245, 243, 255, 0.10)';
@@ -3865,12 +3897,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.moveTo(0, cy);
     for (i = 0; i < pCount; i++) {
       var x   = (i / Math.max(1, pCount - 1)) * w;
-      var yMax = cy - peaksMax[pStart + i] * cy * 0.95;
+      var yMax = cy - peaksMax[pStart + i] * vGain;
       ctx.lineTo(x, yMax);
     }
     for (i = pCount - 1; i >= 0; i--) {
       var x2  = (i / Math.max(1, pCount - 1)) * w;
-      var yMin = cy - peaksMin[pStart + i] * cy * 0.95;
+      var yMin = cy - peaksMin[pStart + i] * vGain;
       ctx.lineTo(x2, yMin);
     }
     ctx.closePath();
@@ -3882,7 +3914,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.beginPath();
     for (i = 0; i < pCount; i++) {
       var xx = (i / Math.max(1, pCount - 1)) * w;
-      var ym = cy - peaksMax[pStart + i] * cy * 0.95;
+      var ym = cy - peaksMax[pStart + i] * vGain;
       if (i === 0) ctx.moveTo(xx, ym); else ctx.lineTo(xx, ym);
     }
     ctx.stroke();
@@ -3892,7 +3924,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.beginPath();
     for (i = 0; i < pCount; i++) {
       var xx2 = (i / Math.max(1, pCount - 1)) * w;
-      var ym2 = cy - peaksMin[pStart + i] * cy * 0.95;
+      var ym2 = cy - peaksMin[pStart + i] * vGain;
       if (i === 0) ctx.moveTo(xx2, ym2); else ctx.lineTo(xx2, ym2);
     }
     ctx.stroke();
@@ -5255,6 +5287,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     if (!info) return;
     state.peaksMin = info.peaksMin || null;
     state.peaksMax = info.peaksMax || null;
+    // Recompute peak-aware display scale. Loud samples (peak > 0.80) scale down so the
+    // waveform doesn't slam into the dice/randomize/help buttons or the chop number row.
+    // Quiet samples render at peakScale=1.0 (native amplitude) — see state.peakScale doc.
+    state.peakScale = 1.0;
+    if (state.peaksMin && state.peaksMax && state.peaksMin.length === state.peaksMax.length) {
+      var maxAbs = 0;
+      var n = state.peaksMin.length;
+      for (var pi = 0; pi < n; ++pi) {
+        var a = state.peaksMax[pi]; if (a < 0) a = -a;
+        var b = state.peaksMin[pi]; if (b < 0) b = -b;
+        if (a > maxAbs) maxAbs = a;
+        if (b > maxAbs) maxAbs = b;
+      }
+      var CEILING = 0.70;
+      if (maxAbs > CEILING) state.peakScale = CEILING / maxAbs;
+    }
     state.progress = 1;
     state.loading = false;
     // Total length in samples — used by redrawSliceOverlay to position markers.
