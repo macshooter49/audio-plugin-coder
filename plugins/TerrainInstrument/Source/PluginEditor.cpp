@@ -951,6 +951,26 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.replaceSlices (std::move (copy));
                 complete ({});
             })
+            .withNativeFunction("setPitchSliceBounds", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = startSample (int64), args[1] = endSample (int64).
+                // Clamps to [0, sampleLen] and enforces end > start.
+                if (args.size() >= 2)
+                {
+                    const juce::int64 sampleLen = (juce::int64) audioProcessor.getSampleBuffer().getNumSamples();
+                    if (sampleLen > 0)
+                    {
+                        const juce::int64 rawStart = (juce::int64)(double) args[0];
+                        const juce::int64 rawEnd   = (juce::int64)(double) args[1];
+                        const juce::int64 cs = juce::jlimit ((juce::int64) 0, sampleLen - 1, rawStart);
+                        const juce::int64 ce = juce::jlimit (cs + 1,       sampleLen,        rawEnd);
+                        audioProcessor.pitchModeSlice.startSample = cs;
+                        audioProcessor.pitchModeSlice.endSample   = ce;
+                    }
+                }
+                complete ({});
+            })
             .withNativeFunction("deleteSlice", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2179,6 +2199,44 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     background: rgba(45,37,69,0.8);
     padding: 2px 0; border-radius: 2px;
   }
+  /* ── Pitch-mode IN / OUT bound markers ──────────────────────────────── */
+  .ti-pitch-bound-marker {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: rgba(168,136,255,0.55);
+    cursor: ew-resize;
+    z-index: 3;
+    pointer-events: auto;
+    transition: background 120ms ease, box-shadow 120ms ease;
+  }
+  /* Wider invisible hit-zone for easier grabbing */
+  .ti-pitch-bound-marker::before {
+    content: '';
+    position: absolute; top: 0; bottom: 0;
+    left: -6px; width: 14px;
+    cursor: ew-resize;
+  }
+  .ti-pitch-bound-marker:hover {
+    background: rgba(168,136,255,0.9);
+    box-shadow: 0 0 8px rgba(168,136,255,0.6);
+  }
+  .ti-pitch-bound-marker.dragging {
+    background: #C4B5FD;
+    box-shadow: 0 0 14px rgba(196,181,253,0.85);
+  }
+  .ti-pitch-bound-label {
+    position: absolute;
+    top: 2px;
+    font: 700 8px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.08em;
+    color: rgba(196,181,253,0.95);
+    background: rgba(20,18,32,0.82);
+    padding: 2px 4px;
+    border-radius: 2px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .ti-pitch-bound-start .ti-pitch-bound-label { left: 4px; }
+  .ti-pitch-bound-end   .ti-pitch-bound-label { right: 4px; transform: translateX(100%); }
   .ti-slice-body {
     position: absolute; top: 0; bottom: 0;
     pointer-events: auto; cursor: pointer;
@@ -3088,6 +3146,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // Default pitchModeSlice — mirrors Slice struct defaults.
   function makePitchModeSliceDefault() {
     return {
+      startSample: 0,
+      endSample: 0,   // 0 = "not yet set" — treated as full sample in renderPitchBoundMarkers
       reverse: false,
       pitch: 0,
       warpMode: 0,
@@ -3148,7 +3208,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var vl = parseFloat(s.volume);
       var scRt = parseFloat(s.scanRate);
       var scWn = parseFloat(s.scanWindow);
+      var ssRaw = parseInt(s.startSample, 10);
+      var seRaw = parseInt(s.endSample,   10);
       state.pitchModeSlice = {
+        startSample:  isFinite(ssRaw) && ssRaw >= 0 ? ssRaw : 0,
+        endSample:    isFinite(seRaw) && seRaw >  0 ? seRaw : 0,
         reverse:      !!s.reverse,
         pitch:        parseFloat(s.pitch) || 0,
         warpMode:     (isFinite(wm) && wm >= 0 && wm <= 3) ? wm : 0,
@@ -3174,8 +3238,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     if (!fn) return;
     try {
       var r = fn();
-      if (r && typeof r.then === 'function') r.then(applyPitchSliceJson);
-      else applyPitchSliceJson(r);
+      if (r && typeof r.then === 'function') {
+        r.then(function (json) {
+          applyPitchSliceJson(json);
+          // Re-render pitch markers with updated startSample/endSample from C++.
+          if (state.sliceMode === 0) redrawSliceOverlay();
+        });
+      } else {
+        applyPitchSliceJson(r);
+        if (state.sliceMode === 0) redrawSliceOverlay();
+      }
     } catch (_) {}
   }
 
@@ -3386,6 +3458,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
     if (state.sliceMode !== 1 || state.slices.length === 0 || state.sampleLengthSamples <= 0) {
       document.body.classList.remove('ti-slicer-active');
+      // In PITCH mode, draw in/out bound markers if a sample is loaded.
+      if (state.sliceMode === 0 && state.sampleLengthSamples > 0) renderPitchBoundMarkers(overlays);
       return;
     }
     document.body.classList.add('ti-slicer-active');
@@ -3617,6 +3691,125 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         overlays.appendChild(label0);
       }
     });
+  }
+
+  // ── Pitch-mode IN/OUT bound markers ───────────────────────────────────────
+  // Renders two draggable markers (IN / OUT) on the waveform overlay when
+  // PITCH mode is active. Called by redrawSliceOverlay() with the overlays
+  // container already cleared. pitchModeSlice.startSample / endSample drive
+  // the positions; default endSample=0 means "full sample" (uses sampleLen).
+  //
+  // Drag state is module-level so both mousemove/mouseup share it reliably.
+  var _pitchBoundDrag = null;   // { which:'start'|'end', overlayRect, W }
+
+  function renderPitchBoundMarkers (overlays) {
+    if (!overlays) overlays = document.getElementById('ti-slice-overlays');
+    if (!overlays) return;
+
+    // Remove any stale markers left from a previous call
+    overlays.querySelectorAll('.ti-pitch-bound-marker').forEach(function(el) { el.remove(); });
+
+    var totalSamples = state.sampleLengthSamples;
+    if (totalSamples <= 0) return;
+
+    var ps = state.pitchModeSlice;
+    if (!ps) return;
+
+    // Position the overlay over the waveform in PITCH mode (the SLICE path
+    // sets top/height after the early return we added; PITCH mode doesn't go
+    // through that block so we set it here to give markers the right area).
+    var hero = document.getElementById('hero');
+    var waveCanvas = document.getElementById('waveform-canvas');
+    if (hero && waveCanvas) {
+      var heroRect2 = hero.getBoundingClientRect();
+      var waveRect2 = waveCanvas.getBoundingClientRect();
+      var BOTTOM_RES2 = 50;
+      overlays.style.top    = (waveRect2.top - heroRect2.top) + 'px';
+      overlays.style.height = Math.max(0, waveRect2.height - BOTTOM_RES2) + 'px';
+    }
+
+    // Resolve effective bounds — endSample=0 means "not yet set, use full sample".
+    var startS = ps.startSample || 0;
+    var endS   = (ps.endSample && ps.endSample > 0) ? ps.endSample : totalSamples;
+
+    var W = overlays.clientWidth;
+    if (W <= 0) return;
+
+    var startNorm = Math.max(0, Math.min(1, startS / totalSamples));
+    var endNorm   = Math.max(0, Math.min(1, endS   / totalSamples));
+
+    function makeMarker (cls, norm, label) {
+      var el = document.createElement('div');
+      el.className = 'ti-pitch-bound-marker ' + cls;
+      el.style.left = (norm * W) + 'px';
+      var lbl = document.createElement('span');
+      lbl.className = 'ti-pitch-bound-label';
+      lbl.textContent = label;
+      el.appendChild(lbl);
+      overlays.appendChild(el);
+      return el;
+    }
+
+    var startEl = makeMarker('ti-pitch-bound-start', startNorm, 'IN');
+    var endEl   = makeMarker('ti-pitch-bound-end',   endNorm,   'OUT');
+
+    // Attach mousedown on each marker to begin drag.
+    function onMarkerMousedown (which, el) {
+      return function (ev) {
+        if (state.sampleLengthSamples <= 0) return;
+        el.classList.add('dragging');
+        _pitchBoundDrag = {
+          which: which,
+          overlayRect: overlays.getBoundingClientRect(),
+          W: overlays.clientWidth,
+          el: el
+        };
+        ev.preventDefault();
+        ev.stopPropagation();
+      };
+    }
+    startEl.addEventListener('mousedown', onMarkerMousedown('start', startEl));
+    endEl.addEventListener(  'mousedown', onMarkerMousedown('end',   endEl));
+
+    // Wire global drag handlers once — guard against double-wiring.
+    if (!window._tiPitchBoundDragWired) {
+      window._tiPitchBoundDragWired = true;
+
+      window.addEventListener('mousemove', function (ev) {
+        if (!_pitchBoundDrag) return;
+        var d = _pitchBoundDrag;
+        var x = ev.clientX - d.overlayRect.left;
+        var norm = Math.max(0, Math.min(1, x / d.W));
+        var samplePos = Math.round(norm * state.sampleLengthSamples);
+
+        var ps2 = state.pitchModeSlice;
+        var curEnd   = (ps2.endSample   && ps2.endSample   > 0) ? ps2.endSample   : state.sampleLengthSamples;
+        var curStart = ps2.startSample || 0;
+
+        if (d.which === 'start') {
+          ps2.startSample = Math.max(0, Math.min(samplePos, curEnd - 1));
+        } else {
+          ps2.endSample = Math.max(curStart + 1, Math.min(samplePos, state.sampleLengthSamples));
+        }
+
+        // Update marker visual position live (avoid full redraw for speed).
+        var newNorm = (d.which === 'start')
+          ? ps2.startSample / state.sampleLengthSamples
+          : ps2.endSample   / state.sampleLengthSamples;
+        d.el.style.left = (newNorm * d.W) + 'px';
+
+        // Push to C++.
+        var fn = window.Juce && window.Juce.getNativeFunction
+          ? window.Juce.getNativeFunction('setPitchSliceBounds') : null;
+        if (fn) { try { fn(ps2.startSample, ps2.endSample); } catch(_){} }
+      });
+
+      window.addEventListener('mouseup', function () {
+        if (_pitchBoundDrag && _pitchBoundDrag.el)
+          _pitchBoundDrag.el.classList.remove('dragging');
+        _pitchBoundDrag = null;
+      });
+    }
   }
 
   // Render JUST one chop's source-segment waveform into a per-chop canvas,

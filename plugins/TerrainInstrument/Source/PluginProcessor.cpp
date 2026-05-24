@@ -1730,6 +1730,8 @@ juce::String TerrainInstrumentAudioProcessor::getPitchSliceJson() const
     // a consistent schema with no special-casing on the network boundary.
     juce::DynamicObject::Ptr obj = new juce::DynamicObject();
     const auto& s = pitchModeSlice;
+    obj->setProperty ("startSample",  (juce::int64) s.startSample);
+    obj->setProperty ("endSample",    (juce::int64) s.endSample);
     obj->setProperty ("reverse",      s.reverse);
     obj->setProperty ("pitch",        (double) s.pitchOffsetSemis);
     obj->setProperty ("warpMode",     (int) s.warpMode);
@@ -1935,6 +1937,16 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                         float scWn = (float)(double) pv.getProperty ("scanWindow", 0.0);
                         ps.scanRate     = (scRt < 0.05f) ? 1.0f : juce::jlimit (0.1f, 8.0f,  scRt);
                         ps.scanWindow   = (scWn < 0.04f) ? 1.0f : juce::jlimit (0.05f, 1.0f, scWn);
+                        // Restore pitch-mode in/out bounds if serialised.
+                        // If absent (old state), leave as-is — sample load
+                        // will overwrite with [0, sampleLen] anyway.
+                        const juce::int64 savedStart = (juce::int64)(double) pv.getProperty ("startSample", (juce::int64)-1);
+                        const juce::int64 savedEnd   = (juce::int64)(double) pv.getProperty ("endSample",   (juce::int64)-1);
+                        if (savedStart >= 0 && savedEnd > savedStart)
+                        {
+                            ps.startSample = savedStart;
+                            ps.endSample   = savedEnd;
+                        }
                     }
                 }
             }
