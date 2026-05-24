@@ -2111,7 +2111,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   #ti-fade-value {
     font: 600 10px/1 -apple-system, sans-serif;
-    color: rgba(245,243,255,0.65); min-width: 26px; text-align: right;
+    color: rgba(245,243,255,0.65); min-width: 52px; text-align: right;
+    display: inline-block; font-variant-numeric: tabular-nums;
   }
 
   /* Slice markers + bodies — drawn on top of the waveform canvas */
