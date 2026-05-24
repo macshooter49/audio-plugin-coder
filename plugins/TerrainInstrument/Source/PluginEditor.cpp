@@ -2201,8 +2201,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   /* ── Pitch-mode IN / OUT bound markers ──────────────────────────────── */
   .ti-pitch-bound-marker {
-    position: absolute; top: 0; bottom: 0; width: 2px;
-    background: rgba(168,136,255,0.55);
+    position: absolute; top: 0; bottom: 0; width: 1.5px;
+    background: rgba(255,255,255,0.70);
     cursor: ew-resize;
     z-index: 3;
     pointer-events: auto;
@@ -2216,27 +2216,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     cursor: ew-resize;
   }
   .ti-pitch-bound-marker:hover {
-    background: rgba(168,136,255,0.9);
-    box-shadow: 0 0 8px rgba(168,136,255,0.6);
+    background: rgba(255,255,255,0.95);
+    box-shadow: 0 0 6px rgba(255,255,255,0.5);
   }
   .ti-pitch-bound-marker.dragging {
-    background: #C4B5FD;
-    box-shadow: 0 0 14px rgba(196,181,253,0.85);
+    background: #FFFFFF;
+    box-shadow: 0 0 10px rgba(255,255,255,0.75);
   }
-  .ti-pitch-bound-label {
-    position: absolute;
-    top: 2px;
-    font: 700 8px/1 -apple-system, BlinkMacSystemFont, sans-serif;
-    letter-spacing: 0.08em;
-    color: rgba(196,181,253,0.95);
-    background: rgba(20,18,32,0.82);
-    padding: 2px 4px;
-    border-radius: 2px;
+  /* .ti-pitch-bound-label intentionally empty — labels removed (Bug B) */
+  /* ── Dimmer overlay for regions outside IN/OUT ───────────────────────── */
+  .ti-pitch-bound-dim {
+    position: absolute; top: 0; bottom: 0;
+    background: rgba(10, 8, 24, 0.55);
     pointer-events: none;
-    white-space: nowrap;
+    z-index: 2;
   }
-  .ti-pitch-bound-start .ti-pitch-bound-label { left: 4px; }
-  .ti-pitch-bound-end   .ti-pitch-bound-label { right: 4px; transform: translateX(100%); }
   .ti-slice-body {
     position: absolute; top: 0; bottom: 0;
     pointer-events: auto; cursor: pointer;
@@ -3706,8 +3700,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     if (!overlays) overlays = document.getElementById('ti-slice-overlays');
     if (!overlays) return;
 
-    // Remove any stale markers left from a previous call
+    // Remove any stale markers and dimmers left from a previous call
     overlays.querySelectorAll('.ti-pitch-bound-marker').forEach(function(el) { el.remove(); });
+    overlays.querySelectorAll('.ti-pitch-bound-dim').forEach(function(el) { el.remove(); });;
 
     var totalSamples = state.sampleLengthSamples;
     if (totalSamples <= 0) return;
@@ -3738,20 +3733,28 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var startNorm = Math.max(0, Math.min(1, startS / totalSamples));
     var endNorm   = Math.max(0, Math.min(1, endS   / totalSamples));
 
-    function makeMarker (cls, norm, label) {
+    function makeMarker (cls, norm) {
       var el = document.createElement('div');
       el.className = 'ti-pitch-bound-marker ' + cls;
       el.style.left = (norm * W) + 'px';
-      var lbl = document.createElement('span');
-      lbl.className = 'ti-pitch-bound-label';
-      lbl.textContent = label;
-      el.appendChild(lbl);
       overlays.appendChild(el);
       return el;
     }
 
-    var startEl = makeMarker('ti-pitch-bound-start', startNorm, 'IN');
-    var endEl   = makeMarker('ti-pitch-bound-end',   endNorm,   'OUT');
+    var startEl = makeMarker('ti-pitch-bound-start', startNorm);
+    var endEl   = makeMarker('ti-pitch-bound-end',   endNorm);
+
+    // Bug C — gray-out regions outside [IN, OUT].
+    function makeDim (leftPx, widthPx) {
+      if (widthPx < 1) return;
+      var d = document.createElement('div');
+      d.className = 'ti-pitch-bound-dim';
+      d.style.left  = leftPx + 'px';
+      d.style.width = widthPx + 'px';
+      overlays.appendChild(d);
+    }
+    makeDim(0,            startNorm * W);               // left of IN
+    makeDim(endNorm * W,  (1.0 - endNorm) * W);         // right of OUT
 
     // Attach mousedown on each marker to begin drag.
     function onMarkerMousedown (which, el) {
@@ -3797,6 +3800,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           ? ps2.startSample / state.sampleLengthSamples
           : ps2.endSample   / state.sampleLengthSamples;
         d.el.style.left = (newNorm * d.W) + 'px';
+
+        // Update dimmers live during drag.
+        var curStartNorm = ps2.startSample / state.sampleLengthSamples;
+        var curEndNorm   = ((ps2.endSample && ps2.endSample > 0)
+                              ? ps2.endSample : state.sampleLengthSamples) / state.sampleLengthSamples;
+        var dims = overlays.querySelectorAll('.ti-pitch-bound-dim');
+        if (dims.length === 2) {
+          dims[0].style.width = (curStartNorm * d.W) + 'px';
+          dims[1].style.left  = (curEndNorm * d.W) + 'px';
+          dims[1].style.width = ((1.0 - curEndNorm) * d.W) + 'px';
+        }
 
         // Push to C++.
         var fn = window.Juce && window.Juce.getNativeFunction
@@ -5334,11 +5348,69 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var getScanPos    = getNativeFn('getScanPosition');
     var getScanBounds = getNativeFn('getScanWindowBounds');
     if (!getScanPos || !getScanBounds) return;
+    var now = performance.now();
+
+    // Bug D — pitch mode scan viz: poll sliceIndex=-1 when in Whole-sample mode.
+    if (state.sliceMode === 0) {
+      var ps = state.pitchModeSlice;
+      var pitchScanEnabled = ps && ps.scanEnabled;
+      var pitchKey = 'pitch';
+      if (!pitchScanEnabled) {
+        if (_scanInterp[pitchKey]) {
+          _scanInterp[pitchKey].opacityTarget = 0.0;
+          _scanInterp[pitchKey].truth = null;
+        }
+      } else {
+        if (!_scanInterp[pitchKey]) {
+          _scanInterp[pitchKey] = { truth: null, predictedPos: 0, velocity: 0, opacity: 0.0, opacityTarget: 0.0 };
+        }
+        var pEntry = _scanInterp[pitchKey];
+        var pPosPromise    = getScanPos(-1);
+        var pBoundsPromise = getScanBounds(-1);
+        var pPosVal = null, pBoundsVal = null, pGotPos = false, pGotBounds = false;
+        function tryMergePitch () {
+          if (!pGotPos || !pGotBounds) return;
+          var active = (typeof pPosVal === 'number' && pPosVal >= 0);
+          pEntry.opacityTarget = active ? 1.0 : 0.0;
+          if (active) {
+            var winStart = (pBoundsVal && typeof pBoundsVal.start === 'number') ? pBoundsVal.start : 0;
+            var winEnd   = (pBoundsVal && typeof pBoundsVal.end   === 'number') ? pBoundsVal.end   : 1;
+            if (pEntry.truth && pEntry.truth.pos >= 0) {
+              var dt = now - pEntry.truth.timestamp;
+              if (dt > 0) {
+                var dPos = pPosVal - pEntry.truth.pos;
+                if (Math.abs(dPos) < 0.3) {
+                  var rawVel = dPos / dt;
+                  var prevSign = pEntry.velocity > 0 ? 1 : (pEntry.velocity < 0 ? -1 : 0);
+                  var newSign  = rawVel  > 0 ? 1 : (rawVel  < 0 ? -1 : 0);
+                  if (prevSign !== 0 && newSign !== 0 && prevSign !== newSign) {
+                    pEntry.velocity = rawVel;
+                  } else {
+                    pEntry.velocity = (pEntry.velocity === 0) ? rawVel : 0.7 * pEntry.velocity + 0.3 * rawVel;
+                  }
+                } else { pEntry.velocity = 0; }
+              }
+            } else { pEntry.velocity = 0; }
+            pEntry.truth = { pos: pPosVal, winStart: winStart, winEnd: winEnd, timestamp: now };
+            pEntry.predictedPos = pPosVal;
+          } else {
+            pEntry.truth = null; pEntry.velocity = 0;
+          }
+        }
+        pPosPromise.then(function (v) {
+          pPosVal = (typeof v === 'number') ? v : -1; pGotPos = true; tryMergePitch();
+        }).catch(function () { pPosVal = -1; pGotPos = true; tryMergePitch(); });
+        pBoundsPromise.then(function (v) {
+          pBoundsVal = v; pGotBounds = true; tryMergePitch();
+        }).catch(function () { pBoundsVal = null; pGotBounds = true; tryMergePitch(); });
+      }
+      return;  // In pitch mode, don't poll slice array
+    }
+
     if (!state.slices || state.slices.length === 0) {
       _scanInterp = {};
       return;
     }
-    var now = performance.now();
     var n = state.slices.length;
     for (var i = 0; i < n; ++i) {
       (function (idx) {
@@ -5461,7 +5533,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var waveCanvas = document.getElementById('waveform-canvas');
     if (!waveCanvas) return;
     var layouts = state.chopLayouts;
-    if (!layouts || layouts.length === 0) {
+    // In pitch mode (sliceMode===0) layouts is empty — don't return early, we
+    // still need to draw the pitch-mode scan line below the layout loop.
+    var isPitchMode = (state.sliceMode === 0);
+    if ((!layouts || layouts.length === 0) && !isPitchMode) {
       var ctx0 = canvas.getContext('2d');
       var dpr0 = window.devicePixelRatio || 1;
       canvas.width  = Math.max(1, Math.round(canvas.offsetWidth  * dpr0));
@@ -5522,6 +5597,23 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var lineX = chopX + entry.predictedPos * chopW;
       ctx.fillStyle = 'rgba(255, 255, 255, ' + (op * 0.7).toFixed(3) + ')';
       ctx.fillRect(Math.floor(lineX) - 0.75, 0, 1.5, H);
+    }
+
+    // Bug D — pitch mode scan line: draw over the full-width waveform in Whole mode.
+    if (state.sliceMode === 0) {
+      var pitchEntry = _scanInterp['pitch'];
+      if (pitchEntry && pitchEntry.opacity >= 0.005) {
+        var ps = state.pitchModeSlice;
+        var totalS = state.sampleLengthSamples || 1;
+        var inNorm  = ps ? Math.max(0, Math.min(1, (ps.startSample || 0) / totalS)) : 0;
+        var outNorm = ps ? Math.max(0, Math.min(1, ((ps.endSample && ps.endSample > 0) ? ps.endSample : totalS) / totalS)) : 1;
+        var rangeW  = (outNorm - inNorm) * W;
+        // predictedPos is 0..1 within the scan window, which is within [inNorm..outNorm].
+        // Map to absolute pixel: start of IN range + predictedPos * range width.
+        var scanPixel = inNorm * W + pitchEntry.predictedPos * rangeW;
+        ctx.fillStyle = 'rgba(255, 255, 255, ' + (pitchEntry.opacity * 0.7).toFixed(3) + ')';
+        ctx.fillRect(Math.floor(scanPixel) - 0.75, 0, 1.5, H);
+      }
     }
   }
 

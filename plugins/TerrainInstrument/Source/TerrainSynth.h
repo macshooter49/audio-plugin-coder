@@ -126,8 +126,11 @@ namespace tw
                 case SliceContext::Mode::Whole:
                 {
                     const auto& ps    = ctx->pitchModeSlice;
-                    vc.startSample    = 0;           // always spans full sample in pitch mode
-                    vc.endSample      = -1;          // sentinel: voice uses full buffer
+                    // Wire IN/OUT bounds from pitchModeSlice so the voice actually
+                    // plays within the user-defined region.  endSample==0 means
+                    // "not yet set" (JS default) so fall back to sentinel -1 (full).
+                    vc.startSample    = ps.startSample;
+                    vc.endSample      = (ps.endSample > 0) ? ps.endSample : (juce::int64) -1;
                     vc.reverse        = ps.reverse;
                     vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + ps.pitchOffsetSemis;
                     vc.sliceIndex     = -1;          // sentinel: pitch-mode virtual slice
