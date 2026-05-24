@@ -59,6 +59,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(chorusAmountRelay)
             .withOptionsFrom(chorusWidthRelay)
             .withOptionsFrom(chorusCharacterRelay)
+            .withOptionsFrom(chopFadeRelay)
             .withOptionsFrom(eqRelays[0])  .withOptionsFrom(eqRelays[1])  .withOptionsFrom(eqRelays[2])  .withOptionsFrom(eqRelays[3])  .withOptionsFrom(eqRelays[4])
             .withOptionsFrom(eqRelays[5])  .withOptionsFrom(eqRelays[6])  .withOptionsFrom(eqRelays[7])  .withOptionsFrom(eqRelays[8])  .withOptionsFrom(eqRelays[9])
             .withOptionsFrom(eqRelays[10]) .withOptionsFrom(eqRelays[11]) .withOptionsFrom(eqRelays[12]) .withOptionsFrom(eqRelays[13]) .withOptionsFrom(eqRelays[14])
@@ -566,6 +567,25 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 complete (audioProcessor.sampleLoopMode.load());
+            })
+            .withNativeFunction("setChopFadeMs", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // JS sends a float ms value (0..50). Write to APVTS so it's
+                // automatable and persisted; chopFadeMsAtomic is synced from
+                // APVTS each processBlock so no separate store needed here.
+                if (args.size() > 0)
+                {
+                    const float ms = juce::jlimit (0.0f, 50.0f, (float) args[0]);
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::CHOP_FADE_MS))
+                        p->setValueNotifyingHost (p->getNormalisableRange().convertTo0to1 (ms));
+                }
+                complete ({});
+            })
+            .withNativeFunction("getChopFadeMs", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.chopFadeMsAtomic.load());
             })
 
             // ────────────────────────────────────────────────────────────
@@ -1242,6 +1262,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 
     chorusCharacterAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::CHORUS_CHARACTER), chorusCharacterRelay, nullptr);
+
+    chopFadeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::CHOP_FADE_MS), chopFadeRelay, nullptr);
 
     // Parametric EQ — bind each of the 35 EQ APVTS params to its relay so JS
     // setNormalisedValue() actually writes through to APVTS. The order MUST
@@ -2070,6 +2093,27 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     user-select: none;
   }
 
+  /* Chop Fade row — compact slider in the slicer drawer */
+  #ti-fade-row {
+    display: flex; align-items: center; gap: 6px;
+  }
+  #ti-fade-row .ti-action-label { padding-left: 0; }
+  #ti-fade-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 80px; height: 3px;
+    background: rgba(139,92,246,0.35);
+    border-radius: 2px; outline: none; cursor: pointer;
+    accent-color: #8B5CF6;
+  }
+  #ti-fade-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 10px;
+    border-radius: 50%; background: #8B5CF6; cursor: pointer;
+  }
+  #ti-fade-value {
+    font: 600 10px/1 -apple-system, sans-serif;
+    color: rgba(245,243,255,0.65); min-width: 26px; text-align: right;
+  }
+
   /* Slice markers + bodies — drawn on top of the waveform canvas */
   #ti-slice-overlays {
     position: absolute; left: 0; right: 0;
@@ -2753,6 +2797,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           '<div class="ti-action-btn" data-rand="7"  title="Random b7 per chop — picks -10, 0, or +10 semitones">7TH</div>' +
           '<div class="ti-action-btn" data-rand="12" title="Random octave per chop — picks -12, 0, or +12 semitones">OCT</div>' +
         '</div>' +
+        '<div class="ti-drawer-row" id="ti-fade-row">' +
+          '<span class="ti-action-label" title="Anti-click fade at slice boundaries">FADE:</span>' +
+          '<input type="range" id="ti-fade-slider" min="0" max="50" step="0.1" value="5" title="Chop Fade 0-50ms">' +
+          '<span id="ti-fade-value">5ms</span>' +
+        '</div>' +
       '</div>';
     bottomPills.appendChild(slicesWrap);
 
@@ -2964,6 +3013,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       label: 'Scan Window', section: 'scan',
       min: 0.05, max: 1.0, default: 1.0,
       unit: '', desc: "Active chop's scan window (narrows ping-pong range).", tip: ''
+    },
+    chopFadeMs: {
+      label: 'Chop Fade', section: 'slice',
+      min: 0, max: 50, default: 5,
+      unit: 'ms', desc: 'Anti-click fade-in/out at slice boundaries.', tip: ''
     }
   };
 
@@ -4658,6 +4712,38 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           });
         }
       } catch (_) {}
+    })();
+
+    // FADE slider — anti-click fade at slice boundaries (CHOP_FADE_MS).
+    // Writes to APVTS via setChopFadeMs native fn; reads initial value back on load.
+    (function () {
+      var slider = document.getElementById('ti-fade-slider');
+      var label  = document.getElementById('ti-fade-value');
+      if (!slider || !label) return;
+
+      function applyFade (ms) {
+        var v = parseFloat(ms) || 0;
+        label.textContent = v.toFixed(v < 10 ? 1 : 0) + 'ms';
+        var fn = getNativeFn('setChopFadeMs');
+        if (fn) { try { fn(v); } catch (_) {} }
+      }
+
+      slider.addEventListener('input', function () { applyFade(slider.value); });
+
+      // Restore initial value from C++.
+      var getFn = getNativeFn('getChopFadeMs');
+      if (getFn) {
+        try {
+          var p = getFn();
+          if (p && typeof p.then === 'function') {
+            p.then(function (ms) {
+              var v = parseFloat(ms) || 5;
+              slider.value = v;
+              label.textContent = v.toFixed(v < 10 ? 1 : 0) + 'ms';
+            });
+          }
+        } catch (_) {}
+      }
     })();
 
     // Root picker: click-hold-vertical-drag (knob style). 8 px = 1 semitone.

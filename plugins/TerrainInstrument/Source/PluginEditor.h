@@ -90,6 +90,7 @@ private:
     juce::WebSliderRelay chorusAmountRelay    { ParameterIDs::CHORUS_AMOUNT };
     juce::WebSliderRelay chorusWidthRelay     { ParameterIDs::CHORUS_WIDTH };
     juce::WebSliderRelay chorusCharacterRelay { ParameterIDs::CHORUS_CHARACTER };
+    juce::WebSliderRelay chopFadeRelay        { ParameterIDs::CHOP_FADE_MS };
     // Parametric EQ — 37 relays bridging WebView ↔ APVTS for EQ_MASTER_BYPASS,
     // HP/LP (freq/slope/bypass), 7 bands × (freq/gain/Q/bypass), and the two
     // UI-only filter-mode flags (EQ_B1_HP_MODE / EQ_B7_LP_MODE).
@@ -196,6 +197,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> chorusAmountAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> chorusWidthAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> chorusCharacterAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> chopFadeAttachment;
     // Parametric EQ attachments — bind APVTS params to the eqRelays above.
     std::array<std::unique_ptr<juce::WebSliderParameterAttachment>, NUM_EQ_RELAYS> eqAttachments;
 

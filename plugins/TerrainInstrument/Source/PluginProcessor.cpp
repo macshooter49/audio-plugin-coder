@@ -17,7 +17,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
         synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi,
                                               attackMsAtomic, releaseMsAtomic,
                                               sampleLoopMode, &modulationEngine,
-                                              &synth.warpCache));
+                                              &synth.warpCache, &chopFadeMsAtomic));
     // Sample buffer starts empty. User drags a file in, or the editor opens a
     // file picker. SampleLoader (async) populates the shared buffer when a load
     // completes. Voices read it via the SampleBuffer atomic shared_ptr.
@@ -760,6 +760,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Sample Loop",
         juce::StringArray { "ONE-SHOT", "LOOP" }, 0));
 
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParameterIDs::CHOP_FADE_MS, 1 },
+        "Chop Fade",
+        juce::NormalisableRange<float>(0.0f, 50.0f, 0.1f),
+        5.0f,
+        juce::AudioParameterFloatAttributes().withLabel("ms")));
+
     return layout;
 }
 
@@ -937,10 +944,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // === Sampler engine (Terrain Instrument v0a + slicer v0b) ================
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
-    rootNoteMidi.store    ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
-    attackMsAtomic.store  (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
-    releaseMsAtomic.store (*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
-    sampleLoopMode.store  ((int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE));
+    rootNoteMidi.store      ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
+    attackMsAtomic.store    (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
+    releaseMsAtomic.store   (*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
+    sampleLoopMode.store    ((int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE));
+    chopFadeMsAtomic.store  (*apvts.getRawParameterValue (ParameterIDs::CHOP_FADE_MS));
 
     // Build the SliceContext for the synth dispatcher. The slice list is an
     // immutable shared_ptr snapshot so the audio thread reads without locks.

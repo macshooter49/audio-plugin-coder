@@ -71,13 +71,15 @@ namespace tw
                       std::atomic<float>& releaseMsRef,
                       std::atomic<int>&   loopModeRef,
                       ModulationEngine*   me = nullptr,
-                      WarpRenderCache*    wc = nullptr) noexcept
+                      WarpRenderCache*    wc = nullptr,
+                      std::atomic<float>* chopFadeRef = nullptr) noexcept
             : sample (sb),
               attackMsParam (attackMsRef),
               releaseMsParam (releaseMsRef),
               loopModeParam (loopModeRef),
               modEngine (me),
-              warpCache_ (wc) {}
+              warpCache_ (wc),
+              chopFadeMsParam_ (chopFadeRef) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
@@ -600,7 +602,24 @@ namespace tw
                         tailFade = juce::jmax (0.0f, static_cast<float> (samplesToEnd / kTailLen));
                 }
 
-                const auto gain = currentVelocity * envLevel * tailFade * voiceGain;
+                // ── Chop fade: fade-in at slice start + fade-out at slice end ──
+                // Applied in both loop and one-shot mode — composes with tailFade
+                // (tailFade is 1.0 in loop mode so they don't conflict).
+                float chopFade = 1.0f;
+                if (chopFadeMsParam_ != nullptr)
+                {
+                    const double chopFadeSamples = (double)(chopFadeMsParam_->load()) * 0.001 * sampleRateForEnv;
+                    if (chopFadeSamples > 0.0)
+                    {
+                        const double distFromStart = playhead - effSliceStart;
+                        const double distFromEnd   = effSliceEnd - playhead;
+                        const double fadeIn  = juce::jlimit (0.0, 1.0, distFromStart / chopFadeSamples);
+                        const double fadeOut = juce::jlimit (0.0, 1.0, distFromEnd   / chopFadeSamples);
+                        chopFade = (float) juce::jmin (fadeIn, fadeOut);
+                    }
+                }
+
+                const auto gain = currentVelocity * envLevel * tailFade * chopFade * voiceGain;
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
@@ -938,7 +957,22 @@ namespace tw
                     if (turnaroundFadeT < 0.0) turnaroundFadeT = 0.0;
                 }
 
-                const float gain = currentVelocity * envLevel * voiceGain;
+                // ── Chop fade in cache path (mirrors NONE path) ─────────────
+                float chopFade = 1.0f;
+                if (chopFadeMsParam_ != nullptr)
+                {
+                    const double chopFadeSamples = (double)(chopFadeMsParam_->load()) * 0.001 * sampleRateForEnv;
+                    if (chopFadeSamples > 0.0)
+                    {
+                        const double distFromStart = playhead - effSliceStart;
+                        const double distFromEnd   = effSliceEnd - playhead;
+                        const double fadeIn  = juce::jlimit (0.0, 1.0, distFromStart / chopFadeSamples);
+                        const double fadeOut = juce::jlimit (0.0, 1.0, distFromEnd   / chopFadeSamples);
+                        chopFade = (float) juce::jmin (fadeIn, fadeOut);
+                    }
+                }
+
+                const float gain = currentVelocity * envLevel * chopFade * voiceGain;
                 outL[i] += sampleL * gain;
                 outR[i] += sampleR * gain;
 
@@ -1199,6 +1233,9 @@ namespace tw
 
         // ── Warp render cache reference (Task 11) ───────────────────────────
         WarpRenderCache*  warpCache_ = nullptr;  // non-owning; set at construction via PluginProcessor
+
+        // ── Chop fade parameter (anti-click ramp at slice boundaries) ────────
+        std::atomic<float>* chopFadeMsParam_ = nullptr;  // non-owning; points to PluginProcessor::chopFadeMsAtomic
 
         // ── Scan state (Mark 1.5) ────────────────────────────────────────────
         bool   scanActive       = false;   // mirrors activeConfig.scanEnabled, captured at startNote

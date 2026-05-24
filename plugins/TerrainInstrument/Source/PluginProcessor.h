@@ -139,9 +139,10 @@ public:
     tw::SampleLoader& getSampleLoader() noexcept { return sampleLoader; }
 
     // Sampler atomics — public so SamplerVoice can take a reference (audio-thread-safe).
-    std::atomic<int>   rootNoteMidi    { 60 };    // default C4
-    std::atomic<float> attackMsAtomic  { 5.0f };
-    std::atomic<float> releaseMsAtomic { 800.0f };
+    std::atomic<int>   rootNoteMidi      { 60 };    // default C4
+    std::atomic<float> attackMsAtomic    { 5.0f };
+    std::atomic<float> releaseMsAtomic   { 800.0f };
+    std::atomic<float> chopFadeMsAtomic  { 5.0f };  // CHOP_FADE_MS: anti-click ramp at slice boundaries
     // Sample playback loop mode: 0 = one-shot (envelope releases at end-of-buffer),
     // 1 = forward loop (playhead wraps to 0 and keeps playing until note-off).
     std::atomic<int>   sampleLoopMode  { 0 };
