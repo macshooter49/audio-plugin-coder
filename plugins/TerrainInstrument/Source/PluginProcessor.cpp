@@ -960,6 +960,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         ctx.activeSliceIndex = activeSliceIndex.load();
         ctx.sourceVersionId  = getSourceVersionId();
         ctx.slices           = std::atomic_load (&slicesPtr);
+        ctx.pitchModeSlice   = pitchModeSlice;   // copy-by-value snapshot for audio thread
 
         if (sliceModeIdx == 0)
             ctx.mode = tw::SliceContext::Mode::Whole;
@@ -1723,6 +1724,27 @@ void TerrainInstrumentAudioProcessor::setSlicesFromJson (const juce::String& jso
     replaceSlices (tw::slicesFromJson (json));
 }
 
+juce::String TerrainInstrumentAudioProcessor::getPitchSliceJson() const
+{
+    // Serialise pitchModeSlice as a single-element object so JS can use
+    // a consistent schema with no special-casing on the network boundary.
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    const auto& s = pitchModeSlice;
+    obj->setProperty ("reverse",      s.reverse);
+    obj->setProperty ("pitch",        (double) s.pitchOffsetSemis);
+    obj->setProperty ("warpMode",     (int) s.warpMode);
+    obj->setProperty ("stretchRatio", (double) s.stretchRatio);
+    obj->setProperty ("attackMs",     (double) s.attackMs);
+    obj->setProperty ("releaseMs",    (double) s.releaseMs);
+    obj->setProperty ("decayMs",      (double) s.decayMs);
+    obj->setProperty ("sustainLevel", (double) s.sustainLevel);
+    obj->setProperty ("volume",       (double) s.volume);
+    obj->setProperty ("scanEnabled",  s.scanEnabled);
+    obj->setProperty ("scanRate",     (double) s.scanRate);
+    obj->setProperty ("scanWindow",   (double) s.scanWindow);
+    return juce::JSON::toString (juce::var (obj.get()), true);
+}
+
 juce::var TerrainInstrumentAudioProcessor::snapshotSliceGlowLevels() const
 {
     const int n = juce::jmin (getNumSlices(), kMaxGlowSlots);
@@ -1817,6 +1839,8 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         if (sliceJson.isNotEmpty() && sliceJson != "{\"slices\":[]}")
             state.setProperty ("slicesJson", sliceJson, nullptr);
         state.setProperty ("activeSliceIndex", activeSliceIndex.load(), nullptr);
+        // Pitch-mode virtual slice — preserve warp/ADSR/scan/reverse across DAW save.
+        state.setProperty ("pitchSliceJson", getPitchSliceJson(), nullptr);
     }
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
@@ -1877,6 +1901,42 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 else
                     replaceSlices ({});
                 activeSliceIndex.store ((int) newState.getProperty ("activeSliceIndex", 0));
+
+                // Restore pitch-mode virtual slice. Missing key = fresh instance →
+                // pitchModeSlice keeps its zero-initialised defaults (safe).
+                auto psJson = newState.getProperty ("pitchSliceJson", "").toString();
+                if (psJson.isNotEmpty())
+                {
+                    auto pv = juce::JSON::parse (psJson);
+                    if (pv.isObject())
+                    {
+                        auto& ps = pitchModeSlice;
+                        ps.reverse          = (bool) pv.getProperty ("reverse", false);
+                        ps.pitchOffsetSemis = juce::jlimit (-12.0f, 12.0f,
+                                                (float)(double) pv.getProperty ("pitch", 0.0));
+                        const int wmRaw = (int) pv.getProperty ("warpMode", 0);
+                        ps.warpMode     = (wmRaw >= 0 && wmRaw <= 3)
+                                            ? static_cast<tw::WarpMode> (wmRaw)
+                                            : tw::WarpMode::None;
+                        ps.stretchRatio = juce::jlimit (0.1f, 15.0f,
+                                            (float)(double) pv.getProperty ("stretchRatio", 1.0));
+                        const double atkRaw = (double) pv.getProperty ("attackMs",  -1.0);
+                        const double relRaw = (double) pv.getProperty ("releaseMs", -1.0);
+                        ps.attackMs     = atkRaw < 0.0 ? -1.0f : juce::jlimit (0.0f, 2000.0f, (float) atkRaw);
+                        ps.releaseMs    = relRaw < 0.0 ? -1.0f : juce::jlimit (1.0f, 5000.0f, (float) relRaw);
+                        ps.decayMs      = juce::jlimit (0.0f, 2000.0f,
+                                            (float)(double) pv.getProperty ("decayMs",      0.0));
+                        ps.sustainLevel = juce::jlimit (0.0f, 1.0f,
+                                            (float)(double) pv.getProperty ("sustainLevel", 1.0));
+                        ps.volume       = juce::jlimit (0.0f, 2.0f,
+                                            (float)(double) pv.getProperty ("volume",       1.0));
+                        ps.scanEnabled  = (bool) pv.getProperty ("scanEnabled", false);
+                        float scRt = (float)(double) pv.getProperty ("scanRate",   0.0);
+                        float scWn = (float)(double) pv.getProperty ("scanWindow", 0.0);
+                        ps.scanRate     = (scRt < 0.05f) ? 1.0f : juce::jlimit (0.1f, 8.0f,  scRt);
+                        ps.scanWindow   = (scWn < 0.04f) ? 1.0f : juce::jlimit (0.05f, 1.0f, scWn);
+                    }
+                }
             }
 
             // Reload presets from disk (the single source of truth)

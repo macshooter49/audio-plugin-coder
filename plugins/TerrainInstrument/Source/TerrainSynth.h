@@ -33,6 +33,7 @@ namespace tw
         int           activeSliceIndex = 0;
         int           sourceVersionId  = 0;   // from PluginProcessor::getSourceVersionId()
         SliceListPtr  slices;          // immutable snapshot, may be null/empty
+        Slice         pitchModeSlice;  // virtual single slice for Mode::Whole; spans whole sample by default
     };
 
     /** Synthesiser that dispatches each MIDI noteOn through slice-aware
@@ -123,11 +124,27 @@ namespace tw
             switch (ctx->mode)
             {
                 case SliceContext::Mode::Whole:
-                    vc.startSample    = 0;
-                    vc.endSample      = -1;        // sentinel: voice uses full buffer
-                    vc.reverse        = false;
-                    vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote);
+                {
+                    const auto& ps    = ctx->pitchModeSlice;
+                    vc.startSample    = 0;           // always spans full sample in pitch mode
+                    vc.endSample      = -1;          // sentinel: voice uses full buffer
+                    vc.reverse        = ps.reverse;
+                    vc.pitchSemitones = (float) (midiNoteNumber - ctx->rootMidiNote) + ps.pitchOffsetSemis;
+                    vc.sliceIndex     = -1;          // sentinel: pitch-mode virtual slice
+                    vc.warpMode       = ps.warpMode;
+                    vc.stretchRatio   = ps.stretchRatio;
+                    vc.attackMs       = ps.attackMs;
+                    vc.releaseMs      = ps.releaseMs;
+                    vc.decayMs        = ps.decayMs;
+                    vc.sustainLevel   = ps.sustainLevel;
+                    vc.volume         = ps.volume;
+                    vc.scanEnabled    = ps.scanEnabled;
+                    vc.scanRate       = ps.scanRate;
+                    vc.scanWindow     = ps.scanWindow;
+                    // FX independence not supported for pitch mode virtual slice
+                    vc.fxIndependent  = false;
                     break;
+                }
 
                 case SliceContext::Mode::ChopChromaticLayout:
                 {

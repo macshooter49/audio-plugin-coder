@@ -612,6 +612,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete (audioProcessor.getSlicesJson());
             })
+            .withNativeFunction("getPitchSliceJson", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.getPitchSliceJson());
+            })
             .withNativeFunction("setSlicesJson", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -713,10 +718,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("setSliceReverse", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // args[0] = sliceIndex (int), args[1] = reverse (bool)
+                // args[0] = sliceIndex (int, -1 = pitch-mode virtual slice), args[1] = reverse (bool)
                 if (args.size() < 2) { complete ({}); return; }
                 const int idx = (int) args[0];
                 const bool rev = (bool) args[1];
+                if (idx == -1) { audioProcessor.pitchModeSlice.reverse = rev; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -731,6 +737,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float st  = juce::jlimit (-12.0f, 12.0f, (float) (double) args[1]);
+                if (idx == -1) { audioProcessor.pitchModeSlice.pitchOffsetSemis = st; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -748,6 +755,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const auto mode   = (modeRaw >= 0 && modeRaw <= 3)
                                        ? static_cast<tw::WarpMode> (modeRaw)
                                        : tw::WarpMode::None;
+                if (idx == -1) { audioProcessor.pitchModeSlice.warpMode = mode; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -758,10 +766,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("setSliceStretchRatio", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // args[0] = sliceIndex, args[1] = stretch ratio (0.25..4.0)
+                // args[0] = sliceIndex, args[1] = stretch ratio (0.1..15.0)
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx   = (int) args[0];
                 const float ratio = juce::jlimit (0.1f, 15.0f, (float) (double) args[1]);
+                if (idx == -1) { audioProcessor.pitchModeSlice.stretchRatio = ratio; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -777,6 +786,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int   idx = (int) args[0];
                 const float raw = (float) (double) args[1];
                 const float ms  = raw < 0.0f ? -1.0f : juce::jlimit (0.0f, 2000.0f, raw);
+                if (idx == -1) { audioProcessor.pitchModeSlice.attackMs = ms; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -792,6 +802,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int   idx = (int) args[0];
                 const float raw = (float) (double) args[1];
                 const float ms  = raw < 0.0f ? -1.0f : juce::jlimit (1.0f, 5000.0f, raw);
+                if (idx == -1) { audioProcessor.pitchModeSlice.releaseMs = ms; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -807,6 +818,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float ms  = juce::jlimit (0.0f, 2000.0f, (float) (double) args[1]);
+                if (idx == -1) { audioProcessor.pitchModeSlice.decayMs = ms; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -821,6 +833,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float lv  = juce::jlimit (0.0f, 1.0f, (float) (double) args[1]);
+                if (idx == -1) { audioProcessor.pitchModeSlice.sustainLevel = lv; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -835,6 +848,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float vol = juce::jlimit (0.0f, 2.0f, (float) (double) args[1]);
+                if (idx == -1) { audioProcessor.pitchModeSlice.volume = vol; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -899,6 +913,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int  idx     = (int) args[0];
                 const bool enabled = (bool) args[1];
+                if (idx == -1) { audioProcessor.pitchModeSlice.scanEnabled = enabled; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -928,6 +943,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx  = (int) args[0];
                 const float rate = juce::jlimit (0.1f, 8.0f, (float) (double) args[1]);
+                if (idx == -1) { audioProcessor.pitchModeSlice.scanRate = rate; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -3069,6 +3085,31 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   };
 
   // ── State ─────────────────────────────────────────────────────────────────
+  // Default pitchModeSlice — mirrors Slice struct defaults.
+  function makePitchModeSliceDefault() {
+    return {
+      reverse: false,
+      pitch: 0,
+      warpMode: 0,
+      stretchRatio: 1.0,
+      attackMs: 30.0,
+      releaseMs: 800.0,
+      decayMs: 300.0,
+      sustainLevel: 0.7,
+      volume: 1.0,
+      scanEnabled: false,
+      scanRate: 1.0,
+      scanWindow: 1.0,
+      fxIndependent: false,
+      fxGrain: false,
+      fxTapeMachine: 0,
+      fxSpace: false,
+      fxDelay: false,
+      fxEq: false,
+      fxJune: false
+    };
+  }
+
   var state = {
     peaksMin: null,
     peaksMax: null,
@@ -3082,8 +3123,61 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     activeSliceIndex: 0,    // active in CHROMATIC sub-mode
     gridN: 16,              // last grid count used
     sampleLengthSamples: 0, // total length of loaded sample (for marker positioning)
-    sliceGlow: new Float32Array(256)  // per-slice glow [0..1], polled from C++ at ~60Hz
+    sliceGlow: new Float32Array(256),  // per-slice glow [0..1], polled from C++ at ~60Hz
+    pitchModeSlice: makePitchModeSliceDefault()  // virtual slice for PITCH mode
   };
+
+  // ── Pitch-mode slice helpers ───────────────────────────────────────────────
+  // Returns state.pitchModeSlice for idx==-1, state.slices[idx] otherwise.
+  function getSliceData (idx) {
+    return idx === -1 ? state.pitchModeSlice : state.slices[idx];
+  }
+
+  // Apply a pitchSlice JSON object (from getPitchSliceJson native fn) into state.
+  function applyPitchSliceJson (json) {
+    if (!json || typeof json !== 'string') return;
+    try {
+      var s = JSON.parse(json);
+      if (!s || typeof s !== 'object') return;
+      var wm = parseInt(s.warpMode, 10);
+      var sr = parseFloat(s.stretchRatio);
+      var am = parseFloat(s.attackMs);
+      var rm = parseFloat(s.releaseMs);
+      var dm = parseFloat(s.decayMs);
+      var sl = parseFloat(s.sustainLevel);
+      var vl = parseFloat(s.volume);
+      var scRt = parseFloat(s.scanRate);
+      var scWn = parseFloat(s.scanWindow);
+      state.pitchModeSlice = {
+        reverse:      !!s.reverse,
+        pitch:        parseFloat(s.pitch) || 0,
+        warpMode:     (isFinite(wm) && wm >= 0 && wm <= 3) ? wm : 0,
+        stretchRatio: isFinite(sr) ? Math.max(0.1, Math.min(15.0, sr)) : 1.0,
+        attackMs:     isFinite(am) ? am : -1,
+        releaseMs:    isFinite(rm) ? rm : -1,
+        decayMs:      isFinite(dm) ? Math.max(0, Math.min(2000, dm)) : 0,
+        sustainLevel: isFinite(sl) ? Math.max(0, Math.min(1, sl)) : 1,
+        volume:       isFinite(vl) ? Math.max(0, Math.min(2, vl)) : 1,
+        scanEnabled:  !!s.scanEnabled,
+        scanRate:     (isFinite(scRt) && scRt >= 0.05) ? Math.max(0.1, Math.min(8.0, scRt)) : 1.0,
+        scanWindow:   (isFinite(scWn) && scWn >= 0.04) ? Math.max(0.05, Math.min(1.0, scWn)) : 1.0,
+        fxIndependent: false,
+        fxGrain: false, fxTapeMachine: 0,
+        fxSpace: false, fxDelay: false, fxEq: false, fxJune: false
+      };
+    } catch (_) {}
+  }
+
+  // Pull pitchModeSlice from C++ and refresh. Called after sample load and on init.
+  function syncPitchSliceFromCpp () {
+    var fn = getNativeFn('getPitchSliceJson');
+    if (!fn) return;
+    try {
+      var r = fn();
+      if (r && typeof r.then === 'function') r.then(applyPitchSliceJson);
+      else applyPitchSliceJson(r);
+    } catch (_) {}
+  }
 
   // ── Waveform drawing ──────────────────────────────────────────────────────
   function drawWaveform () {
@@ -4016,8 +4110,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
   // Pull the current value for a control out of the slice state, applying
   // inheritance fallbacks for attack/release.
+  // idx == -1 reads from state.pitchModeSlice (pitch mode virtual slice).
   function ovValueFromState (idx, key) {
-    var s = state.slices[idx];
+    var s = getSliceData(idx);
     if (!s) return null;
     if (key === 'attack')  return (s.attackMs  == null || s.attackMs  < 0) ? GLOBAL_ATTACK_DEFAULT  : Number(s.attackMs);
     if (key === 'decay')   return Number(s.decayMs      || 0);
@@ -4116,7 +4211,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // fork prongs, stretch breath) keep the panel feeling alive without
   // shifting the layout when the value changes width (e.g. "+12 st" vs "+0").
   function ovRedrawEmblems (idx) {
-    var s = state.slices[idx];
+    var s = getSliceData(idx);
     if (!s) return;
     var panel = document.getElementById('ti-chop-panel');
     panel.querySelectorAll('.ov-ctrl').forEach(function (ctrl) {
@@ -4160,9 +4255,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       el.addEventListener('click', function () {
         if (el.classList.contains('soon')) return;
         var idx = parseInt(panel.dataset.targetIdx, 10);
-        if (isNaN(idx) || !state.slices[idx]) return;
+        if (isNaN(idx)) return;
+        var s = getSliceData(idx); if (!s) return;
         var mode = parseInt(el.dataset.mode, 10) || 0;
-        state.slices[idx].warpMode = mode;
+        s.warpMode = mode;
         var fn = getNativeFn('setSliceWarpMode');
         if (fn) { try { fn(idx, mode); } catch (_) {} }
         ovApplyState(idx);
@@ -4180,7 +4276,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         var svg = document.getElementById('ti-env-svg');
         function move (ev) {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
+          if (isNaN(idx)) return;
+          var s = getSliceData(idx); if (!s) return;
           var rect = svg.getBoundingClientRect();
           // convert pointer to SVG-viewBox space
           var vx = (ev.clientX - rect.left) / Math.max(1, rect.width)  * ENV_VB_W;
@@ -4188,35 +4285,35 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           if (which === 'A') {
             var t = Math.max(0, Math.min(1, vx / ENV_ATTACK_W));
             var ms = denormSkew(t, OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
-            state.slices[idx].attackMs = ms;
+            s.attackMs = ms;
             var fn = getNativeFn('setSliceAttackMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
           } else if (which === 'D') {
             // D's x = A.x + decayPx → decayPx = vx - aPx
-            var aT = normSkew(state.slices[idx].attackMs >= 0 ? state.slices[idx].attackMs : GLOBAL_ATTACK_DEFAULT,
+            var aT = normSkew(s.attackMs >= 0 ? s.attackMs : GLOBAL_ATTACK_DEFAULT,
                               OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
             var aPx = aT * ENV_ATTACK_W;
             var dPx = Math.max(0, Math.min(ENV_DECAY_W, vx - aPx));
             var dT = dPx / ENV_DECAY_W;
             var ms = denormSkew(dT, OV_RANGES.decay.min, OV_RANGES.decay.max, OV_RANGES.decay.skew);
-            state.slices[idx].decayMs = ms;
+            s.decayMs = ms;
             var fn = getNativeFn('setSliceDecayMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
           } else if (which === 'S') {
             // map vy [PEAK..BASE] → level [1..0]
             var lvl = 1.0 - (vy - ENV_PEAK_Y) / (ENV_BASE_Y - ENV_PEAK_Y);
             lvl = Math.max(0, Math.min(1, lvl));
-            state.slices[idx].sustainLevel = lvl;
+            s.sustainLevel = lvl;
             var fn = getNativeFn('setSliceSustain'); if (fn) { try { fn(idx, lvl); } catch (_) {} }
           } else if (which === 'R') {
             // R's x = plateauEnd + releasePx → releasePx = vx - plateauEnd
-            var aT2 = normSkew(state.slices[idx].attackMs >= 0 ? state.slices[idx].attackMs : GLOBAL_ATTACK_DEFAULT,
+            var aT2 = normSkew(s.attackMs >= 0 ? s.attackMs : GLOBAL_ATTACK_DEFAULT,
                                OV_RANGES.attack.min, OV_RANGES.attack.max, OV_RANGES.attack.skew);
-            var dT2 = normSkew(state.slices[idx].decayMs || 0,
+            var dT2 = normSkew(s.decayMs || 0,
                                OV_RANGES.decay.min, OV_RANGES.decay.max, OV_RANGES.decay.skew);
             var plateauEnd = aT2 * ENV_ATTACK_W + dT2 * ENV_DECAY_W + ENV_PLATEAU_W;
             var rPx = Math.max(0, Math.min(ENV_RELEASE_W, vx - plateauEnd));
             var rT = rPx / ENV_RELEASE_W;
             var ms = denormSkew(rT, OV_RANGES.release.min, OV_RANGES.release.max, OV_RANGES.release.skew);
-            state.slices[idx].releaseMs = ms;
+            s.releaseMs = ms;
             var fn = getNativeFn('setSliceReleaseMs'); if (fn) { try { fn(idx, ms); } catch (_) {} }
           }
           ovRedrawEnvelope(idx);
@@ -4235,22 +4332,23 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         e.preventDefault(); e.stopPropagation();
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
+          if (isNaN(idx)) return;
+          var s = getSliceData(idx); if (!s) return;
           if (which === 'A') {
-            state.slices[idx].attackMs = -1;
+            s.attackMs = -1;
             var fn = getNativeFn('setSliceAttackMs'); if (fn) { try { fn(idx, -1); } catch (_) {} }
           } else if (which === 'D') {
-            state.slices[idx].decayMs = 0;
+            s.decayMs = 0;
             var fn = getNativeFn('setSliceDecayMs');  if (fn) { try { fn(idx, 0); } catch (_) {} }
           } else if (which === 'S') {
-            state.slices[idx].sustainLevel = 1.0;
+            s.sustainLevel = 1.0;
             var fn = getNativeFn('setSliceSustain');  if (fn) { try { fn(idx, 1.0); } catch (_) {} }
           } else if (which === 'R') {
-            state.slices[idx].releaseMs = -1;
+            s.releaseMs = -1;
             var fn = getNativeFn('setSliceReleaseMs');if (fn) { try { fn(idx, -1); } catch (_) {} }
           }
           requestAnimationFrame(function () {
-            try { if (state.slices[idx]) ovRedrawEnvelope(idx); } catch (_) {}
+            try { if (getSliceData(idx)) ovRedrawEnvelope(idx); } catch (_) {}
           });
         } catch (_) {}
       });
@@ -4270,21 +4368,22 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         var startT = normSkew(startV, range.min, range.max, range.skew);
         function move (ev) {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
+          if (isNaN(idx)) return;
+          var s2 = getSliceData(idx); if (!s2) return;
           var deltaY = startY - ev.clientY;     // up = positive
           var deltaT = deltaY / 200.0;           // 200 px = full range
           var t = Math.max(0, Math.min(1, startT + deltaT));
           var v = denormSkew(t, range.min, range.max, range.skew);
           if (key === 'pitch') v = Math.round(v);
           if (key === 'volume') {
-            state.slices[idx].volume = v;
+            s2.volume = v;
             var fn = getNativeFn('setSliceVolume'); if (fn) { try { fn(idx, v); } catch (_) {} }
           } else if (key === 'pitch') {
-            state.slices[idx].pitch = v;
+            s2.pitch = v;
             var fn = getNativeFn('setSlicePitch'); if (fn) { try { fn(idx, v); } catch (_) {} }
             redrawSliceOverlay();
           } else if (key === 'stretch') {
-            state.slices[idx].stretchRatio = v;
+            s2.stretchRatio = v;
             var fn = getNativeFn('setSliceStretchRatio'); if (fn) { try { fn(idx, v); } catch (_) {} }
             redrawSliceOverlay();
           }
@@ -4303,20 +4402,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         e.preventDefault(); e.stopPropagation();
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
+          if (isNaN(idx)) return;
+          var s2 = getSliceData(idx); if (!s2) return;
           if (key === 'volume') {
-            state.slices[idx].volume = 1.0;
+            s2.volume = 1.0;
             var fn = getNativeFn('setSliceVolume'); if (fn) { try { fn(idx, 1.0); } catch (_) {} }
           } else if (key === 'pitch') {
-            state.slices[idx].pitch = 0;
+            s2.pitch = 0;
             var fn = getNativeFn('setSlicePitch');  if (fn) { try { fn(idx, 0); } catch (_) {} }
           } else if (key === 'stretch') {
-            state.slices[idx].stretchRatio = 1.0;
+            s2.stretchRatio = 1.0;
             var fn = getNativeFn('setSliceStretchRatio'); if (fn) { try { fn(idx, 1.0); } catch (_) {} }
           }
           requestAnimationFrame(function () {
             try {
-              if (!state.slices[idx]) return;
+              if (!getSliceData(idx)) return;
               ovRedrawEmblems(idx);
               if (key === 'pitch' || key === 'stretch') redrawSliceOverlay();
             } catch (_) {}
@@ -4337,23 +4437,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         e.stopPropagation();
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
+          if (isNaN(idx)) return;
+          var sa = getSliceData(idx); if (!sa) return;
           var act = el.dataset.act;
 
           if (act === 'rev') {
-            var nextRev = !state.slices[idx].reverse;
-            state.slices[idx].reverse = nextRev;
+            var nextRev = !sa.reverse;
+            sa.reverse = nextRev;
             var fnR = getNativeFn('setSliceReverse');
             if (fnR) { try { fnR(idx, nextRev); } catch (_) {} }
             requestAnimationFrame(function () { try { redrawSliceOverlay(); } catch (_) {} });
           }
           else if (act === 'resetPitch') {
-            state.slices[idx].pitch = 0;
+            sa.pitch = 0;
             var fnP = getNativeFn('setSlicePitch');
             if (fnP) { try { fnP(idx, 0); } catch (_) {} }
             requestAnimationFrame(function () {
               try {
-                if (!state.slices[idx]) return;
+                if (!getSliceData(idx)) return;
                 ovApplyState(idx);
                 redrawSliceOverlay();
               } catch (_) {}
@@ -4387,7 +4488,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // Reposition handles when the panel size changes (e.g. on open).
     window.addEventListener('resize', function () {
       var idx = parseInt(panel.dataset.targetIdx, 10);
-      if (!isNaN(idx) && state.slices[idx]) ovRedrawEnvelope(idx);
+      if (!isNaN(idx) && getSliceData(idx)) ovRedrawEnvelope(idx);
     });
 
     // ── FX section (Mark 2) ────────────────────────────────────────────
@@ -4399,9 +4500,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         ev.stopPropagation();
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
-          var on = !state.slices[idx].fxIndependent;
-          state.slices[idx].fxIndependent = on;
+          if (isNaN(idx)) return;
+          if (idx === -1) return;  // FX independence not available in pitch mode
+          var sf = getSliceData(idx); if (!sf) return;
+          var on = !sf.fxIndependent;
+          sf.fxIndependent = on;
           var fn = getNativeFn('setSliceFxIndependent');
           if (fn) { try { fn(idx, on); } catch (_) {} }
           ovRedrawFx(idx);
@@ -4415,8 +4518,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         ev.stopPropagation();
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
-          var s = state.slices[idx];
+          if (isNaN(idx) || idx === -1) return;  // FX chips not in pitch mode
+          var s = getSliceData(idx); if (!s) return;
           if (!s.fxIndependent) return;   // chip is grayed in inherit mode
           var fx = chip.dataset.fx;
           if (fx === 'tape') {
@@ -4443,9 +4546,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         ev.stopPropagation();
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
-          var newEnabled = !state.slices[idx].scanEnabled;
-          state.slices[idx].scanEnabled = newEnabled;
+          if (isNaN(idx)) return;
+          var ss = getSliceData(idx); if (!ss) return;
+          var newEnabled = !ss.scanEnabled;
+          ss.scanEnabled = newEnabled;
           ovRedrawScan(idx);
           var fn = getNativeFn('setSliceScanEnabled');
           if (fn) { try { fn(idx, newEnabled); } catch (_) {} }
@@ -4460,9 +4564,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       rateDisplayEl.addEventListener('mousedown', function (e) {
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) return;
-          if (!state.slices[idx].scanEnabled) return;   // no drag when scan is off
-          scanRateDragStart = { y: e.clientY, baseRate: state.slices[idx].scanRate || 1.0 };
+          if (isNaN(idx)) return;
+          var ss = getSliceData(idx); if (!ss) return;
+          if (!ss.scanEnabled) return;   // no drag when scan is off
+          scanRateDragStart = { y: e.clientY, baseRate: ss.scanRate || 1.0 };
           e.preventDefault();
         } catch (_) {}
       });
@@ -4473,11 +4578,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         if (!scanRateDragStart) return;
         try {
           var idx = parseInt(panel.dataset.targetIdx, 10);
-          if (isNaN(idx) || !state.slices[idx]) { scanRateDragStart = null; return; }
+          if (isNaN(idx)) { scanRateDragStart = null; return; }
+          var ss = getSliceData(idx);
+          if (!ss) { scanRateDragStart = null; return; }
           var dy = scanRateDragStart.y - e.clientY;
           var newRate = Math.max(0.1, Math.min(8.0,
               scanRateDragStart.baseRate * Math.pow(2, dy / 100)));
-          state.slices[idx].scanRate = newRate;
+          ss.scanRate = newRate;
           var rv = document.getElementById('rate-value');
           if (rv) rv.textContent = newRate.toFixed(2) + '\xd7';
           var fn = getNativeFn('setSliceScanRate');
@@ -4494,7 +4601,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var panel = document.getElementById('ti-chop-panel');
     var section = document.getElementById('ti-fx-section');
     if (!panel || !section) return;
-    var s = state.slices[idx];
+    var s = getSliceData(idx);
     if (!s) return;
 
     var indyOn = !!s.fxIndependent;
@@ -4529,7 +4636,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var rateDisplay = document.getElementById('rate-display');
     var rateValue   = document.getElementById('rate-value');
     if (!scanPill || !rateDisplay || !rateValue) return;
-    var s = state.slices[idx];
+    var s = getSliceData(idx);
     if (!s) return;
     var on   = !!s.scanEnabled;
     var rate = (typeof s.scanRate === 'number' && s.scanRate > 0.05) ? s.scanRate : 1.0;
@@ -4542,11 +4649,28 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   function ovApplyState (idx) {
     var panel = document.getElementById('ti-chop-panel');
     if (!panel) return;
-    var s = state.slices[idx];
+    var s = getSliceData(idx);
     if (!s) return;
     panel.dataset.targetIdx = idx;
     var numEl = document.getElementById('ti-chop-num');
-    if (numEl) numEl.textContent = (idx + 1 < 10 ? '0' : '') + (idx + 1);
+    if (idx === -1) {
+      // PITCH MODE: replace "CHOP NN" title with "PITCH MODE"
+      var nameEl = numEl ? numEl.parentElement : null;
+      if (nameEl) nameEl.innerHTML = 'PITCH MODE';
+      // Hide DELETE button, show REVERSE and RESET
+      var delEl = panel.querySelector('.ov-act.danger[data-act="del"]');
+      if (delEl) delEl.style.display = 'none';
+    } else {
+      // Restore normal CHOP header
+      var nameEl2 = numEl ? numEl.parentElement : document.querySelector('.ov-head .name');
+      if (nameEl2 && !document.getElementById('ti-chop-num')) {
+        nameEl2.innerHTML = 'CHOP<span class="num" id="ti-chop-num">01</span>';
+      }
+      var freshNumEl = document.getElementById('ti-chop-num');
+      if (freshNumEl) freshNumEl.textContent = (idx + 1 < 10 ? '0' : '') + (idx + 1);
+      var delEl2 = panel.querySelector('.ov-act.danger[data-act="del"]');
+      if (delEl2) delEl2.style.display = '';
+    }
 
     // Mode pill highlight + warp-only visibility.
     var mode = Number(s.warpMode || 0);
@@ -4563,7 +4687,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
 
   function openChopOverlay (idx) {
-    if (!state.slices[idx]) return;
+    // idx === -1 = pitch-mode virtual slice; regular idx guards state.slices array.
+    if (idx !== -1 && !state.slices[idx]) return;
+    if (idx === -1 && !state.pitchModeSlice) return;
     ovEnsureWired();
     document.getElementById('ti-chop-backdrop').classList.add('open');
     document.getElementById('ti-chop-panel').classList.add('open');
@@ -4686,6 +4812,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (wrap && !wrap.contains(ev.target)) closeSlicerDrawer();
     });
 
+    // PITCH MODE right-click on waveform → open lab card for the virtual slice.
+    // Only fires when sliceMode === 0 (PITCH) and a sample is loaded.
+    // Slice-mode chop bodies already have their own contextmenu handlers
+    // that stopPropagation, so this document-level handler only fires in PITCH mode.
+    document.addEventListener('contextmenu', function (ev) {
+      if (state.sliceMode !== 0) return;   // SLICE mode has per-chop handlers
+      if (state.sampleLengthSamples <= 0) return;  // no sample loaded
+      var waveCanvas = document.getElementById('waveform-canvas');
+      if (!waveCanvas) return;
+      var waveRect = waveCanvas.getBoundingClientRect();
+      // Check click is inside the waveform area
+      if (ev.clientX < waveRect.left || ev.clientX > waveRect.right) return;
+      if (ev.clientY < waveRect.top  || ev.clientY > waveRect.bottom) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      openChopOverlay(-1);
+    });
+
 
     // Play-mode toggle (1-SHOT / LOOP) — writes APVTS via setSampleLoopMode.
     document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (pill) {
@@ -4806,6 +4950,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     //   2. Editor close+reopen on same instance: slice list survives.
     //   3. DAW project reload: slicesJson restored from state info.
     (function () {
+      // Restore pitch-mode virtual slice from C++ (DAW save/restore or editor reopen).
+      syncPitchSliceFromCpp();
+
       var fnSlices = getNativeFn('getSlicesJson');
       if (fnSlices) {
         try {
@@ -4914,6 +5061,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     }
     drawWaveform();
     redrawSliceOverlay();  // re-position markers now that we know sample length
+    // Sync pitch-mode virtual slice bounds from C++ after new sample load.
+    // C++ has already reset startSample/endSample; we pull the preserved
+    // warp/ADSR/scan fields so JS state stays in sync.
+    syncPitchSliceFromCpp();
   };
 
   window.onLoadError = function (msg) {
@@ -5308,6 +5459,12 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
             // display instantly without re-decoding. JS pulls this via the
             // getCachedSamplePayload native fn during hero-overlay init.
             audioProcessor.setCachedSamplePayload (json);
+
+            // Reset pitchModeSlice bounds to cover the full new sample.
+            // Preserve user-edited warp/ADSR/scan settings — only the
+            // sample-position fields change.
+            audioProcessor.pitchModeSlice.startSample = 0;
+            audioProcessor.pitchModeSlice.endSample   = (juce::int64) r.lengthSamples;
 
             // Bump the source version counter so WarpRenderCache entries from
             // any previous sample are never matched against the new one. Then

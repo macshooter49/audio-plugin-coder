@@ -157,6 +157,15 @@ public:
     juce::String      getSlicesJson() const;
     void              setSlicesFromJson (const juce::String& json);
 
+    // ── Pitch-mode virtual slice ───────────────────────────────────────────
+    // When SLICE_MODE == 0 (PITCH), the whole sample is played as a single
+    // chromatic one-shot. This virtual slice carries per-chop features
+    // (warp, ADSR, scan, reverse, volume) editable via the lab card UI.
+    // Access is message-thread only (read + write from JS native fns and
+    // state-info callbacks). The audio thread reads a copy via SliceContext.
+    tw::Slice         pitchModeSlice;
+    juce::String      getPitchSliceJson() const;
+
     // ── Scan-viz polling API (UI thread only) ─────────────────────────────
     /** Returns normalized [0,1] scan-playhead position for the given slice index.
      *  Returns -1.0f if no active scan-on voice is playing on this slice.
