@@ -643,7 +643,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 if (args.size() > 0)
                 {
-                    const int sub = juce::jlimit (0, 2, (int) args[0]);  // 0=CHOP, 1=CHROMATIC, 2=RANDOM
+                    const int sub = juce::jlimit (0, 3, (int) args[0]);  // 0=CHOP, 1=CHROMATIC, 2=RANDOM, 3=LAYER
                     if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SLICE_SUB_MODE))
                     {
                         // setValueNotifyingHost wants a NORMALISED value [0,1], not the
@@ -2745,6 +2745,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           '<div class="ti-submode-pill active" data-sub="0">CHOP</div>' +
           '<div class="ti-submode-pill" data-sub="1">CHROMATIC</div>' +
           '<div class="ti-submode-pill" data-sub="2">RANDOM</div>' +
+          '<div class="ti-submode-pill" data-sub="3">LAYER</div>' +
         '</div>' +
         '<div class="ti-drawer-row" id="ti-action-row">' +
           '<span class="ti-action-label">RANDOM:</span>' +
@@ -3021,7 +3022,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     rootNote: 60,
     // Slicer state
     sliceMode: 0,           // 0 = PITCH (whole sample), 1 = SLICE
-    sliceSubMode: 0,        // 0 = CHOP, 1 = CHROMATIC
+    sliceSubMode: 0,        // 0 = CHOP, 1 = CHROMATIC, 2 = RANDOM, 3 = LAYER
     slices: [],             // [{start, end, reverse, pitch}, ...]
     activeSliceIndex: 0,    // active in CHROMATIC sub-mode
     gridN: 16,              // last grid count used

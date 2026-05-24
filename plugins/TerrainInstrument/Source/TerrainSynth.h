@@ -24,7 +24,8 @@ namespace tw
             Whole = 0,             // SLICE_MODE = PITCH: play whole sample, pitched by (note - root)
             ChopChromaticLayout,   // SLICE_MODE = SLICE & SUB = CHOP: each ascending key triggers next slice
             ChromaticOneSlice,     // SLICE_MODE = SLICE & SUB = CHROMATIC: active slice plays at (note - root + slice.pitch)
-            ChromaticRandom        // SLICE_MODE = SLICE & SUB = RANDOM: each note picks a random no-repeat slice, pitched by (note - root + slice.pitch)
+            ChromaticRandom,       // SLICE_MODE = SLICE & SUB = RANDOM: each note picks a random no-repeat slice, pitched by (note - root + slice.pitch)
+            Layer                  // SLICE_MODE = SLICE & SUB = LAYER: every note fires ALL slices simultaneously, each pitched by (note - root + slice.pitch)
         };
 
         Mode          mode             = Mode::Whole;
@@ -240,6 +241,68 @@ namespace tw
             vc.fxEq           = s.fxEq;
             vc.fxJune         = s.fxJune;
                     break;
+                }
+
+                case SliceContext::Mode::Layer:
+                {
+                    // LAYER: fire one voice per slice simultaneously, all transposed
+                    // by (midiNote - rootMidiNote). Each voice keeps its own per-slice
+                    // properties (scan, warp, ADSR, volume, reverse, pitch offset, FX).
+                    if (! ctx->slices || ctx->slices->empty()) { triggerOk = false; break; }
+
+                    const float semisFromRoot = (float) (midiNoteNumber - ctx->rootMidiNote);
+                    const juce::ScopedLock sl (lock);
+
+                    for (auto* sound : sounds)
+                    {
+                        if (! sound->appliesToNote (midiNoteNumber) || ! sound->appliesToChannel (midiChannel))
+                            continue;
+
+                        // Stop any voice already playing this note (avoids stale legato voices).
+                        for (auto* v : voices)
+                            if (v->getCurrentlyPlayingNote() == midiNoteNumber
+                                && v->isPlayingChannel (midiChannel))
+                                stopVoice (v, 1.0f, true);
+
+                        const int numSlices = (int) ctx->slices->size();
+                        for (int sliceIdx = 0; sliceIdx < numSlices; ++sliceIdx)
+                        {
+                            const auto& s = (*ctx->slices)[(size_t) sliceIdx];
+                            VoiceConfig lvc;
+                            lvc.startSample    = s.startSample;
+                            lvc.endSample      = s.endSample;
+                            lvc.reverse        = s.reverse;
+                            lvc.pitchSemitones = semisFromRoot + s.pitchOffsetSemis;
+                            lvc.sliceIndex     = sliceIdx;
+                            lvc.warpMode       = s.warpMode;
+                            lvc.stretchRatio   = s.stretchRatio;
+                            lvc.attackMs       = s.attackMs;
+                            lvc.releaseMs      = s.releaseMs;
+                            lvc.decayMs        = s.decayMs;
+                            lvc.sustainLevel   = s.sustainLevel;
+                            lvc.volume         = s.volume;
+                            lvc.scanEnabled    = s.scanEnabled;
+                            lvc.scanRate       = s.scanRate;
+                            lvc.scanWindow     = s.scanWindow;
+                            lvc.forceOneShot   = false;
+                            lvc.fxIndependent  = s.fxIndependent;
+                            lvc.fxGrain        = s.fxGrain;
+                            lvc.fxTapeMachine  = s.fxTapeMachine;
+                            lvc.fxSpace        = s.fxSpace;
+                            lvc.fxDelay        = s.fxDelay;
+                            lvc.fxEq           = s.fxEq;
+                            lvc.fxJune         = s.fxJune;
+                            lvc.sourceVersionId = ctx->sourceVersionId;
+
+                            if (auto* voice = findFreeVoice (sound, midiChannel, midiNoteNumber, isNoteStealingEnabled()))
+                            {
+                                if (auto* sv = dynamic_cast<SamplerVoice*> (voice))
+                                    sv->prepareForNoteOn (lvc);
+                                startVoice (voice, sound, midiChannel, midiNoteNumber, velocity);
+                            }
+                        }
+                    }
+                    return;  // already dispatched + locked — skip the standard dance below
                 }
             }
 

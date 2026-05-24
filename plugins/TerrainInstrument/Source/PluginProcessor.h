@@ -365,7 +365,7 @@ public:
 private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-    static constexpr int kNumVoices = 16;
+    static constexpr int kNumVoices = 32;  // bumped 16→32 for LAYER mode headroom (4 slices × 8 keys)
     tw::SampleBuffer sampleBuffer;
     tw::SampleLoader sampleLoader;
 

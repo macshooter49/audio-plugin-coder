@@ -753,7 +753,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::SLICE_SUB_MODE, 1 },
         "Slice Sub-Mode",
-        juce::StringArray { "CHOP", "CHROMATIC", "RANDOM" }, 0));
+        juce::StringArray { "CHOP", "CHROMATIC", "RANDOM", "LAYER" }, 0));
 
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::SAMPLE_LOOP_MODE, 1 },
@@ -955,6 +955,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         if (sliceModeIdx == 0)
             ctx.mode = tw::SliceContext::Mode::Whole;
+        else if (sliceSubModeIdx == 3)
+            ctx.mode = tw::SliceContext::Mode::Layer;
         else if (sliceSubModeIdx == 2)
             ctx.mode = tw::SliceContext::Mode::ChromaticRandom;
         else if (sliceSubModeIdx == 1)
