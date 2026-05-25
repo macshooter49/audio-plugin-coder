@@ -2970,7 +2970,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       '<div class="motion-row">' +
         '<span class="motion-label">MOTION</span>' +
         '<span class="scan-pill off" id="scan-pill">SCAN OFF</span>' +
-        '<span class="rate-display dim" id="rate-display">' +
+        '<span class="rate-display dim" id="rate-display" ' +
+              'title="Drag vertically to set scan rate. Rates &lt; 1.0 drop pitch (varispeed character). ' +
+                     'For pitch-locked slow scan, set warp mode to TONES with stretch ratio = 1 / rate ' +
+                     '(e.g. rate 0.5 + stretch 2.0).">' +
           '<span class="rate-label">RATE</span>' +
           '<span class="rate-value" id="rate-value">1.00\xd7</span>' +
         '</span>' +
@@ -4907,6 +4910,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           e.preventDefault();
         } catch (_) {}
       });
+      // Double-click → reset scan rate to default (1.00x). Matches the
+      // pattern used by ADSR handles + VOL/PITCH/STRETCH emblem-knobs.
+      rateDisplayEl.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        try {
+          var idx = parseInt(panel.dataset.targetIdx, 10);
+          if (isNaN(idx)) return;
+          var ss = getSliceData(idx); if (!ss) return;
+          ss.scanRate = 1.0;
+          var rv = document.getElementById('rate-value');
+          if (rv) rv.textContent = '1.00\xd7';
+          var fn = getNativeFn('setSliceScanRate');
+          if (fn) { try { fn(idx, 1.0); } catch (_) {} }
+        } catch (_) {}
+      });
     }
     if (!panel._scanWindowListenersAttached) {
       panel._scanWindowListenersAttached = true;
@@ -5293,6 +5311,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       }
 
       slider.addEventListener('input', function () { applyFade(slider.value); });
+      // Double-click → reset FADE to its default (5ms). Matches the
+      // reset-to-default convention used elsewhere in the lab card.
+      slider.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        slider.value = 5;
+        applyFade(5);
+      });
 
       // Restore initial value from C++.
       var getFn = getNativeFn('getChopFadeMs');
@@ -5355,6 +5380,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         if (fn) { try { fn(state.rootNote); } catch (_) {} }
         ev.preventDefault();
       }, { passive: false });
+      // Double-click → reset root note to C4 (MIDI 60). Standard reset
+      // convention applied to the root picker for consistency.
+      picker.addEventListener('dblclick', function (ev) {
+        ev.preventDefault(); ev.stopPropagation();
+        state.rootNote = 60;
+        updateRootDisplay();
+        var fn = getNativeFn('setRootNote');
+        if (fn) { try { fn(60); } catch (_) {} }
+      });
     }
 
     // Repaint on window resize.
