@@ -961,6 +961,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         ctx.sourceVersionId  = getSourceVersionId();
         ctx.slices           = std::atomic_load (&slicesPtr);
         ctx.pitchModeSlice   = pitchModeSlice;   // copy-by-value snapshot for audio thread
+        ctx.holdMode         = holdMode.load (std::memory_order_relaxed);
 
         if (sliceModeIdx == 0)
             ctx.mode = tw::SliceContext::Mode::Whole;

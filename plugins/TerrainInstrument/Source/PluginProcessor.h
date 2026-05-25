@@ -166,6 +166,15 @@ public:
     tw::Slice         pitchModeSlice;
     juce::String      getPitchSliceJson() const;
 
+    // ── HOLD mode (Mark 1.5) ───────────────────────────────────────────────
+    // When true, voices ignore MIDI note-off (with tail-off allowed) and play
+    // their chop to natural completion (1-shot exhaustion / loop boundary).
+    // MPC/FL "latch" feel. Toggled by clicking the CHOP submode pill a second
+    // time (cycle: CHOP → HOLD → CHOP). Read into SliceContext.holdMode at the
+    // top of processBlock; captured into each VoiceConfig at startNote so
+    // toggling mid-playback doesn't retroactively change in-flight voices.
+    std::atomic<bool> holdMode { false };
+
     // ── Scan-viz polling API (UI thread only) ─────────────────────────────
     /** Returns normalized [0,1] scan-playhead position for the given slice index.
      *  Returns -1.0f if no active scan-on voice is playing on this slice.

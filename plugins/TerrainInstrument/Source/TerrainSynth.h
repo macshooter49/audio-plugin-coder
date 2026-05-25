@@ -34,6 +34,11 @@ namespace tw
         int           sourceVersionId  = 0;   // from PluginProcessor::getSourceVersionId()
         SliceListPtr  slices;          // immutable snapshot, may be null/empty
         Slice         pitchModeSlice;  // virtual single slice for Mode::Whole; spans whole sample by default
+        // HOLD mode — when true, voices ignore note-off and play to natural end.
+        // MPC/FL "latch" feel — single key tap fires the chop through. Captured
+        // into each VoiceConfig at startNote so toggling holdMode mid-playback
+        // doesn't retroactively change in-flight voices.
+        bool          holdMode         = false;
     };
 
     /** Synthesiser that dispatches each MIDI noteOn through slice-aware
@@ -312,6 +317,7 @@ namespace tw
                             lvc.fxDelay        = s.fxDelay;
                             lvc.fxEq           = s.fxEq;
                             lvc.fxJune         = s.fxJune;
+                            lvc.holdMode       = ctx->holdMode;
                             lvc.sourceVersionId = ctx->sourceVersionId;
 
                             if (auto* voice = findFreeVoice (sound, midiChannel, midiNoteNumber, isNoteStealingEnabled()))
@@ -330,6 +336,9 @@ namespace tw
 
             // Stamp the source version so the cache key is fully specified.
             vc.sourceVersionId = ctx->sourceVersionId;
+            // HOLD mode applies to all single-voice modes (Whole, Chop, Chromatic,
+            // ChromaticRandom). Layer dispatch handles its own lvc.holdMode above.
+            vc.holdMode        = ctx->holdMode;
 
             // Standard synth noteOn dance, but configure the voice between
             // findFreeVoice and startVoice so the voice has its slice info

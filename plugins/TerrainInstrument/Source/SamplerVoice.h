@@ -60,6 +60,14 @@ namespace tw
         bool  fxDelay       = false;
         bool  fxEq          = false;
         bool  fxJune        = false;
+
+        // ── HOLD mode (Mark 1.5 final) ───────────────────────────────────────
+        // When true, the voice IGNORES MIDI note-off (with allowTailOff) and
+        // plays to natural completion (1-shot exhaustion / loop boundary).
+        // MPC/FL "latch" feel — single key tap fires the chop through to end.
+        // Captured at startNote so toggling holdMode mid-playback doesn't
+        // retroactively change in-flight voices.
+        bool  holdMode      = false;
     };
 
     class SamplerVoice : public juce::SynthesiserVoice
@@ -192,6 +200,8 @@ namespace tw
         {
             if (! allowTailOff)
             {
+                // Hard-stop (voice stealing) always wins — HOLD mode can't keep
+                // an unwanted voice alive when JUCE needs the voice slot back.
                 envStage = EnvStage::Off;
                 envLevel = 0.0f;
                 clearCurrentNote();
@@ -199,6 +209,12 @@ namespace tw
                 playhead = 0.0;
                 return;
             }
+            // HOLD mode (Mark 1.5): MPC/FL "latch" — single key tap plays the
+            // chop through to natural completion. Ignore note-off; the voice
+            // will end naturally via 1-shot exhaustion (renderNextBlock clears
+            // its own note when playhead leaves the slice / tail-fade drains)
+            // or stay in LOOP forever until user retriggers or stops the host.
+            if (activeConfig.holdMode) return;
             envStage = EnvStage::Release;
         }
 
