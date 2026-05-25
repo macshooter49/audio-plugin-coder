@@ -993,7 +993,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int idx : drained)
                 {
                     if (idx >= 0 && idx < (int) sl->size())
-                        synth.auditionSlice ((*sl)[(size_t) idx], idx);
+                        synth.auditionSlice ((*sl)[(size_t) idx], idx, getSourceVersionId());
                 }
             }
         }
@@ -1844,6 +1844,9 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         state.setProperty ("activeSliceIndex", activeSliceIndex.load(), nullptr);
         // Pitch-mode virtual slice — preserve warp/ADSR/scan/reverse across DAW save.
         state.setProperty ("pitchSliceJson", getPitchSliceJson(), nullptr);
+        // HOLD mode (Mark 1.5 final). Persists across DAW save and editor reload
+        // so users don't lose latch state when reopening a project.
+        state.setProperty ("holdMode", (bool) holdMode.load(), nullptr);
     }
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
@@ -1954,6 +1957,12 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                         }
                     }
                 }
+
+                // HOLD mode — restored last so it can't be cleared by a subsequent
+                // pitchSliceJson restore that fails. Missing property defaults to
+                // false (safe — matches "fresh instance" behavior).
+                holdMode.store ((bool) newState.getProperty ("holdMode", false),
+                                std::memory_order_relaxed);
             }
 
             // Reload presets from disk (the single source of truth)

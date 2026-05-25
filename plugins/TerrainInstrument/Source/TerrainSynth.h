@@ -74,7 +74,7 @@ namespace tw
          *  Bypasses MIDI dispatch — called directly from the audio thread
          *  (processor's audition queue drain). Channel/note are arbitrary
          *  internal values picked to never collide with real MIDI input. */
-        void auditionSlice (const Slice& s, int sliceIndex) noexcept
+        void auditionSlice (const Slice& s, int sliceIndex, int sourceVersionId) noexcept
         {
             VoiceConfig vc;
             vc.startSample    = s.startSample;
@@ -83,6 +83,10 @@ namespace tw
             vc.pitchSemitones = 0.0f;
             vc.forceOneShot   = true;
             vc.sliceIndex     = sliceIndex;
+            // Stamp source version so warp+audition hits the cache instead of
+            // every preview running the live warp path (or worse, getting a
+            // cache key mismatch and falling through). Audit finding #5.
+            vc.sourceVersionId = sourceVersionId;
             vc.warpMode       = s.warpMode;
             vc.stretchRatio   = s.stretchRatio;
             vc.attackMs       = s.attackMs;
@@ -100,6 +104,7 @@ namespace tw
             vc.fxDelay        = s.fxDelay;
             vc.fxEq           = s.fxEq;
             vc.fxJune         = s.fxJune;
+            vc.holdMode       = false;   // audition NEVER latches — explicit for clarity
 
             const juce::ScopedLock sl (lock);
             if (sounds.size() == 0) return;
@@ -284,10 +289,18 @@ namespace tw
                             continue;
 
                         // Stop any voice already playing this note (avoids stale legato voices).
+                        // HOLD-latched voices are hard-cut on same-key retrigger so they
+                        // don't ignore the soft tail-off and leak the voice pool — see
+                        // SamplerVoice::isHoldLatched + audit finding #1.
                         for (auto* v : voices)
                             if (v->getCurrentlyPlayingNote() == midiNoteNumber
                                 && v->isPlayingChannel (midiChannel))
-                                stopVoice (v, 1.0f, true);
+                            {
+                                bool tailOff = true;
+                                if (auto* sv = dynamic_cast<SamplerVoice*> (v))
+                                    if (sv->isHoldLatched()) tailOff = false;
+                                stopVoice (v, 1.0f, tailOff);
+                            }
 
                         const int numSlices = (int) ctx->slices->size();
                         for (int sliceIdx = 0; sliceIdx < numSlices; ++sliceIdx)
@@ -350,10 +363,19 @@ namespace tw
                 if (sound->appliesToNote (midiNoteNumber) && sound->appliesToChannel (midiChannel))
                 {
                     // Stop any voice currently playing the same note (matches base behavior).
+                    // HOLD-latched voices are hard-cut on same-key retrigger — without
+                    // this, HOLD's stopNote ignores allowTailOff=true and the old voice
+                    // keeps playing alongside the new one, leaking the 32-voice pool on
+                    // repeated key taps (audit finding #1, user repro confirmed).
                     for (auto* v : voices)
                         if (v->getCurrentlyPlayingNote() == midiNoteNumber
                             && v->isPlayingChannel (midiChannel))
-                            stopVoice (v, 1.0f, true);
+                        {
+                            bool tailOff = true;
+                            if (auto* sv = dynamic_cast<SamplerVoice*> (v))
+                                if (sv->isHoldLatched()) tailOff = false;
+                            stopVoice (v, 1.0f, tailOff);
+                        }
 
                     if (auto* voice = findFreeVoice (sound, midiChannel, midiNoteNumber, isNoteStealingEnabled()))
                     {

@@ -231,6 +231,12 @@ namespace tw
         // ── Read-only state used by TerrainSynth to publish per-slice glow ──
         float getEnvelopeLevel() const noexcept { return envLevel; }
         int   getSliceIndex()    const noexcept { return activeConfig.sliceIndex; }
+
+        /** True if this voice is actively playing and was started with HOLD mode.
+         *  Used by TerrainSynth to force allowTailOff=false on same-key retrigger
+         *  so a held voice gets hard-cut instead of leaking the pool when the
+         *  user taps the same MIDI key repeatedly. */
+        bool  isHoldLatched()    const noexcept { return isActive && activeConfig.holdMode; }
         bool  isPlaying()        const noexcept { return isActive && envStage != EnvStage::Off; }
 
         // ── Scan-viz polling getters (called from UI thread — read-only) ──────

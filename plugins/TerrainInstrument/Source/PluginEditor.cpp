@@ -947,6 +947,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     audioProcessor.holdMode.store ((bool) args[0], std::memory_order_relaxed);
                 complete ({});
             })
+            .withNativeFunction("getHoldMode", [this](const juce::Array<juce::var>&,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // JS init pulls this on editor open so the CHOP pill label /
+                // .hold-active class can be restored to match the persisted state.
+                complete (juce::var ((bool) audioProcessor.holdMode.load (std::memory_order_relaxed)));
+            })
             .withNativeFunction("setSliceScanRate", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -3215,6 +3222,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     sliceSubMode: 0,        // 0 = CHOP, 1 = CHROMATIC, 2 = RANDOM, 3 = LAYER
     holdMode: false,        // CHOP pill double-tap toggle. true = voices ignore
                             // note-off, play chop to natural end (MPC/FL latch).
+                            // CONSTRAINTS: only allowed when sampleLoopMode === 0
+                            // (1-SHOT) AND sliceMode === 1 (SLICE) AND sliceSubMode
+                            // === 0 (CHOP). Switching to LOOP / PITCH / any other
+                            // submode auto-clears HOLD. LOOP+HOLD = forever loop
+                            // (intentionally blocked).
+    sampleLoopMode: 0,      // 0 = 1-SHOT, 1 = LOOP. Mirror of C++ atomic,
+                            // synced via getSampleLoopMode on init + each click.
     slices: [],             // [{start, end, reverse, pitch}, ...]
     activeSliceIndex: 0,    // active in CHROMATIC sub-mode
     gridN: 16,              // last grid count used
@@ -3354,6 +3368,19 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // ── Slicer helpers ────────────────────────────────────────────────────────
   function setSliceModeUI (modeIdx) {
     state.sliceMode = modeIdx;
+    // HOLD is a slice-mode CHOP-submode feature; leaving slice mode (i.e.
+    // entering PITCH) auto-clears it. See state.holdMode for the full
+    // constraint table.
+    if (modeIdx !== 1 && state.holdMode) {
+      state.holdMode = false;
+      var chopPill = document.querySelector('#ti-submode-toggle .ti-submode-pill[data-sub="0"]');
+      if (chopPill) {
+        chopPill.textContent = 'CHOP';
+        chopPill.classList.remove('hold-active');
+      }
+      var holdFn = getNativeFn('setHoldMode');
+      if (holdFn) { try { holdFn(false); } catch (_) {} }
+    }
     document.querySelectorAll('#ti-mode-toggle .ti-mode-pill').forEach(function (p) {
       p.classList.toggle('active', (p.dataset.mode === 'SLICE') === (modeIdx === 1));
     });
@@ -5065,7 +5092,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           if (fn) { try { fn(!!val); } catch (_) {} }
         };
         // CHOP pill click while CHOP is already the active sub-mode → toggle HOLD.
+        // CONSTRAINT (user 2026-05-25): HOLD only allowed in 1-SHOT mode. Clicking
+        // CHOP while in LOOP is a no-op — LOOP+HOLD = infinite loop, explicitly
+        // blocked by design. User must switch to 1-SHOT first.
         if (sub === 0 && state.sliceSubMode === 0) {
+          if (state.sampleLoopMode !== 0 && !state.holdMode) {
+            // In LOOP mode: silently refuse to enter HOLD. (If HOLD is already
+            // active we still allow disabling it, but the LOOP toggle handler
+            // also auto-clears HOLD when LOOP is selected, so this branch is
+            // unreachable in practice — defense in depth.)
+            return;
+          }
           state.holdMode = !state.holdMode;
           p.textContent = state.holdMode ? 'HOLD' : 'CHOP';
           p.classList.toggle('hold-active', state.holdMode);
@@ -5156,12 +5193,27 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
 
     // Play-mode toggle (1-SHOT / LOOP) — writes APVTS via setSampleLoopMode.
+    // Switching to LOOP auto-disables HOLD (LOOP+HOLD = infinite loop, blocked
+    // by design per user clarification 2026-05-25). Mirrors state.sampleLoopMode
+    // so the CHOP pill HOLD activation can gate on 1-SHOT.
     document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (pill) {
       pill.addEventListener('click', function () {
         var mode = parseInt(pill.dataset.play, 10) || 0;
+        state.sampleLoopMode = mode;
         document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (p) {
           p.classList.toggle('active', parseInt(p.dataset.play, 10) === mode);
         });
+        // Auto-clear HOLD when switching to LOOP — HOLD can only live in 1-SHOT.
+        if (mode === 1 && state.holdMode) {
+          state.holdMode = false;
+          var chopPill = document.querySelector('#ti-submode-toggle .ti-submode-pill[data-sub="0"]');
+          if (chopPill) {
+            chopPill.textContent = 'CHOP';
+            chopPill.classList.remove('hold-active');
+          }
+          var holdFn = getNativeFn('setHoldMode');
+          if (holdFn) { try { holdFn(false); } catch (_) {} }
+        }
         var setFn = getNativeFn('setSampleLoopMode');
         if (setFn) { try { setFn(mode); } catch (_) {} }
       });
@@ -5175,9 +5227,38 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         if (p && typeof p.then === 'function') {
           p.then(function (mode) {
             var m = parseInt(mode, 10) || 0;
+            state.sampleLoopMode = m;
             document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (q) {
               q.classList.toggle('active', parseInt(q.dataset.play, 10) === m);
             });
+          });
+        }
+      } catch (_) {}
+    })();
+    // Pull HOLD mode from C++ on init so the CHOP pill label + .hold-active
+    // class are restored after editor close/reopen or DAW project reload.
+    // Gated on 1-SHOT (sampleLoopMode === 0) for symmetry with the LOOP+HOLD
+    // block; if the persisted state is somehow HOLD + LOOP (e.g. saved in an
+    // old build), force HOLD off and push the correction back to C++.
+    (function () {
+      var getFn = getNativeFn('getHoldMode');
+      if (!getFn) return;
+      try {
+        var p = getFn();
+        if (p && typeof p.then === 'function') {
+          p.then(function (enabled) {
+            var on = !!enabled;
+            if (on && state.sampleLoopMode !== 0) on = false;  // safety
+            state.holdMode = on;
+            var chopPill = document.querySelector('#ti-submode-toggle .ti-submode-pill[data-sub="0"]');
+            if (chopPill) {
+              chopPill.textContent = on ? 'HOLD' : 'CHOP';
+              chopPill.classList.toggle('hold-active', on);
+            }
+            if (!enabled !== !on) {
+              var setFn = getNativeFn('setHoldMode');
+              if (setFn) { try { setFn(on); } catch (_) {} }
+            }
           });
         }
       } catch (_) {}
@@ -5904,12 +5985,16 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
             audioProcessor.sourceVersionId_.fetch_add (1, std::memory_order_relaxed);
             {
                 auto buf = audioProcessor.getSampleBuffer().load();
-                if (buf && buf->getNumSamples() > 0 && buf->getNumChannels() >= 2)
+                // Mono fallback: duplicate channel 0 into both L/R cache sources so
+                // warp engines have something to read. Previous guard demanded
+                // numChannels>=2 → mono samples silently bypassed warp cache wiring
+                // → warp+scan combo path emitted silent blocks (audit finding #4).
+                if (buf && buf->getNumSamples() > 0 && buf->getNumChannels() >= 1)
                 {
-                    audioProcessor.synth.warpCache.setSource (
-                        buf->getReadPointer (0),
-                        buf->getReadPointer (1),
-                        buf->getNumSamples());
+                    const float* L = buf->getReadPointer (0);
+                    const float* R = (buf->getNumChannels() >= 2)
+                                       ? buf->getReadPointer (1) : L;
+                    audioProcessor.synth.warpCache.setSource (L, R, buf->getNumSamples());
                     audioProcessor.synth.warpCache.setSampleRate (r.sampleRate);
                 }
             }
