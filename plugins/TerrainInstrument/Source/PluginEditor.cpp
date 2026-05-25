@@ -936,6 +936,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete ({});
             })
+            .withNativeFunction("setHoldMode", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // args[0] = enabled (bool). HOLD mode = voices ignore note-off
+                // and play the chop to natural completion (MPC/FL latch feel).
+                // Captured into VoiceConfig at startNote so in-flight voices
+                // are unaffected by mid-playback toggles.
+                if (args.size() >= 1)
+                    audioProcessor.holdMode.store ((bool) args[0], std::memory_order_relaxed);
+                complete ({});
+            })
             .withNativeFunction("setSliceScanRate", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2104,6 +2115,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     background: linear-gradient(135deg, #8B5CF6, #7C3AED);
     color: white;
   }
+  /* HOLD state on the CHOP pill — amber gradient + soft glow so the user can
+     see at a glance that note-off is being ignored. Inherits .active styling
+     via class stacking; this rule wins on background/box-shadow. */
+  .ti-submode-pill.hold-active {
+    background: linear-gradient(135deg, #F59E0B, #D97706);
+    color: white;
+    box-shadow: 0 0 8px rgba(245,158,11,0.45);
+  }
 
   /* Action buttons inside the drawer — RANDOM:5TH/7TH/OCT etc. Ghost-glass
      base, fills purple on hover, flashes white on click. */
@@ -3194,6 +3213,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // Slicer state
     sliceMode: 0,           // 0 = PITCH (whole sample), 1 = SLICE
     sliceSubMode: 0,        // 0 = CHOP, 1 = CHROMATIC, 2 = RANDOM, 3 = LAYER
+    holdMode: false,        // CHOP pill double-tap toggle. true = voices ignore
+                            // note-off, play chop to natural end (MPC/FL latch).
     slices: [],             // [{start, end, reverse, pitch}, ...]
     activeSliceIndex: 0,    // active in CHROMATIC sub-mode
     gridN: 16,              // last grid count used
@@ -3401,6 +3422,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     try {
       var obj = JSON.parse(json);
       var arr = (obj && obj.slices) ? obj.slices : [];
+      // Snapshot OLD slice bounds before overwriting, so we can detect which
+      // chops had their start/end change and reset the scan-viz interpolator
+      // for just those chops. Without this, a marker drag leaves the previous
+      // chop's scan position cached and the white scan line draws at the OLD
+      // chop's position multiplied by the NEW chop width, appearing "stuck."
+      var _oldBounds = (state.slices || []).map(function (s) {
+        return { start: s ? s.start : -1, end: s ? s.end : -1 };
+      });
       state.slices = arr.map(function (s) {
         // Preserve warp fields across round-trips. Earlier this mapper
         // dropped warpMode + stretchRatio, so any regular drag that
@@ -3453,6 +3482,23 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // Clamp activeSliceIndex.
       if (state.activeSliceIndex >= state.slices.length)
         state.activeSliceIndex = Math.max(0, state.slices.length - 1);
+      // Scan-viz reset: for each chop whose bounds changed, drop the cached
+      // _scanInterp entry so the next 60Hz poll repopulates from C++ against
+      // the new chop layout. Without this the white scan line stays at the
+      // pre-drag position until the user replays the chop. Voice activeConfig
+      // is frozen at startNote so the AUDIO still completes the old range —
+      // visual just clears so it isn't misleading.
+      for (var _si = 0; _si < state.slices.length; ++_si) {
+        var _ob = _oldBounds[_si];
+        var _nb = state.slices[_si];
+        if (!_ob || _ob.start !== _nb.start || _ob.end !== _nb.end) {
+          if (_scanInterp[_si]) {
+            _scanInterp[_si].truth         = null;
+            _scanInterp[_si].velocity      = 0;
+            _scanInterp[_si].opacityTarget = 0;
+          }
+        }
+      }
       updateChopCount();
       redrawSliceOverlay();
     } catch (_) {}
@@ -5001,12 +5047,41 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
     });
 
-    // Sub-mode pills (CHOP / CHROMATIC / RANDOM) — selector unchanged
+    // Sub-mode pills (CHOP / CHROMATIC / RANDOM / LAYER) — selector unchanged
     // from v0b since #ti-submode-toggle moved into the drawer with the same id.
+    //
+    // Special-case for CHOP pill (data-sub="0"): clicking the pill while CHOP
+    // is already active TOGGLES holdMode. Cycle is CHOP → HOLD → CHOP. The
+    // pill label flips between "CHOP" and "HOLD" to reflect the current state.
+    // Selecting any other submode pill auto-disables hold (keeps the meaning
+    // tied to the CHOP pill specifically). MPC/FL "latch" feel — see C++
+    // SamplerVoice::stopNote for the audio behavior.
     document.querySelectorAll('#ti-submode-toggle .ti-submode-pill').forEach(function (p) {
       p.addEventListener('click', function (ev) {
         ev.stopPropagation();
         var sub = parseInt(p.dataset.sub, 10) || 0;
+        var pushHold = function (val) {
+          var fn = getNativeFn('setHoldMode');
+          if (fn) { try { fn(!!val); } catch (_) {} }
+        };
+        // CHOP pill click while CHOP is already the active sub-mode → toggle HOLD.
+        if (sub === 0 && state.sliceSubMode === 0) {
+          state.holdMode = !state.holdMode;
+          p.textContent = state.holdMode ? 'HOLD' : 'CHOP';
+          p.classList.toggle('hold-active', state.holdMode);
+          pushHold(state.holdMode);
+          return;
+        }
+        // Switching to a different submode disables HOLD and restores CHOP label.
+        if (state.holdMode) {
+          state.holdMode = false;
+          pushHold(false);
+        }
+        var chopPill = document.querySelector('#ti-submode-toggle .ti-submode-pill[data-sub="0"]');
+        if (chopPill) {
+          chopPill.textContent = 'CHOP';
+          chopPill.classList.remove('hold-active');
+        }
         setSubModeUI(sub);
         var fn = getNativeFn('setSliceSubMode');
         if (fn) { try { fn(sub); } catch (_) {} }
