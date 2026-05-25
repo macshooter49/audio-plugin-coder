@@ -194,6 +194,12 @@ namespace tw
             scanRateLive    = activeConfig.scanRate;
             scanWindowLive  = activeConfig.scanWindow;
             turnaroundFadeT = 0.0;
+            // One-time scan-window playhead alignment. Consumed in the NONE-path
+            // render's first iteration after startIdx/endIdx + scanRateLive are
+            // available. Without this, playhead starts at sliceStart (outside the
+            // narrowed window at scanRate > 1.0) and the user hears multi-second
+            // pre-scan silence on long slices at high rates.
+            needsScanPlayheadSnap = activeConfig.scanEnabled;
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -372,6 +378,36 @@ namespace tw
                 scanWindowLive = juce::jlimit (0.05f, 1.0f,
                                      modEngine->getModulatedValue (ModulationEngine::pActiveChopScanWindow,
                                                                     activeConfig.scanWindow));
+            }
+
+            // One-time scan playhead alignment at note-on (NONE-path bug fix).
+            // At scanRate > 1.0 the effective scan window narrows to a centered
+            // region of the slice (e.g. 1/8 of sliceLen at 8x). startNote sets
+            // playhead to sliceStart — OUTSIDE that narrowed window — and the
+            // ping-pong boundary check below doesn't fire because the playhead
+            // is between start and effSliceEnd. The playhead has to TRAVEL at
+            // native pitch from sliceStart all the way to effSliceStart before
+            // the scan cycle begins (~3s of seemingly silent / wrong-content
+            // playback on a long slice at 8x). Snap playhead into the effective
+            // window once per note-on so scan is audible from the first sample.
+            // The cache path (renderScanFromCache) already snaps per-block at
+            // SamplerVoice.h:871-873; this brings the NONE path in line.
+            if (needsScanPlayheadSnap && scanActive)
+            {
+                const double sliceLenSnap = endIdx - startIdx;
+                if (sliceLenSnap > 0.0)
+                {
+                    const double winSpanSnap  = sliceLenSnap * (double) scanWindowLive;
+                    const double rateSpanSnap = scanRateLive > 1.0f
+                                                  ? winSpanSnap / (double) scanRateLive
+                                                  : winSpanSnap;
+                    const double marginSnap   = (sliceLenSnap - rateSpanSnap) * 0.5;
+                    const double effStartSnap = startIdx + marginSnap;
+                    const double effEndSnap   = endIdx   - marginSnap;
+                    if (effEndSnap > effStartSnap)
+                        playhead = reversePlay ? (effEndSnap - 1.0) : effStartSnap;
+                    needsScanPlayheadSnap = false;
+                }
             }
 
             for (int i = 0; i < numSamples; ++i)
@@ -1264,6 +1300,9 @@ namespace tw
         float  scanRateLive     = 1.0f;    // resolved per-block with mod applied (Task 7)
         float  scanWindowLive   = 1.0f;    // resolved per-block with mod applied (Task 7)
         double turnaroundFadeT  = 0.0;     // 1.0 → 0.0 over 28ms; Task 6 consumes
+        bool   needsScanPlayheadSnap = false; // one-time playhead alignment at note-on
+                                              // for NONE-path scan voices — see startNote
+                                              // comment + render-loop snap block
         // Unified normalized scan position — written from BOTH NONE and cache
         // render paths each sample (audio thread), read by viz poll (UI thread).
         // Lock-free atomic avoids data races; torn reads produce at most one
