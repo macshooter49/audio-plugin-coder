@@ -967,6 +967,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         const juce::int64 ce = juce::jlimit (cs + 1,       sampleLen,        rawEnd);
                         audioProcessor.pitchModeSlice.startSample = cs;
                         audioProcessor.pitchModeSlice.endSample   = ce;
+                        // Register bounds with WarpRenderCache under the pitch-mode
+                        // sentinel sliceIndex=-1 so that warp+scan in pitch mode
+                        // can populate cache entries. Without this, the cache
+                        // worker sees bounds.end <= bounds.start and silently
+                        // aborts → silent audio block forever.
+                        audioProcessor.synth.warpCache.setSliceBounds (-1, (int) cs, (int) ce);
                     }
                 }
                 complete ({});
@@ -2163,11 +2169,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     position: absolute; left: 0; right: 0; top: 0; bottom: 0;
     width: 100%; height: 100%;
     pointer-events: none;
-    z-index: 1;  /* inside #ti-slice-overlays — above chop bodies (z-index 0) but below markers */
+    /* Bumped from z=1 to z=4 (above markers at z=3) so the scan line is
+       guaranteed to paint over per-chop waveform canvases and slice markers.
+       At z=1 the line was technically above auto-z chop bodies but could be
+       hidden by other overlay strata. */
+    z-index: 4;
     /* Always visible — drawScanViz() clears when no voice is scanning,
-       so an idle canvas is just transparent. Previously gated on
-       body.ti-slicer-active which hid the pitch-mode scan line. */
-    display: block;
+       so an idle canvas is just transparent. !important to defeat any
+       inherited cascade if ti-slicer-active toggling races with paint. */
+    display: block !important;
   }
   .ti-slice-marker {
     position: absolute; top: 0; bottom: 0; width: 1px;
@@ -5569,7 +5579,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         entry.predictedPos = pred;
       }
     }
-    drawScanViz();
+    // Wrap drawScanViz in try/catch so a thrown exception (e.g. layouts
+    // undefined, see drawScanViz comments) cannot prevent the next rAF
+    // from being scheduled. Previously a single throw here killed the
+    // entire scan-viz loop for the life of the editor session.
+    try { drawScanViz(); } catch (_) {}
     _scanRafId = requestAnimationFrame(tickScanViz);
   }
 
@@ -5612,7 +5626,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
-    var n = layouts.length;
+    // Guard against state.chopLayouts being undefined — happens whenever
+    // the editor opens in PITCH mode, because redrawSliceOverlay's slice
+    // path (which populates chopLayouts) never runs. Without this guard,
+    // `layouts.length` throws TypeError, tickScanViz doesn't schedule its
+    // next rAF, and the entire scan-viz loop dies permanently — every
+    // subsequent slice/pitch mode entry shows no scan line at all.
+    var n = (layouts && layouts.length) ? layouts.length : 0;
     for (var i = 0; i < n; ++i) {
       var key   = '' + i;
       var entry = _scanInterp[key];
@@ -5798,6 +5818,9 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
             // sample-position fields change.
             audioProcessor.pitchModeSlice.startSample = 0;
             audioProcessor.pitchModeSlice.endSample   = (juce::int64) r.lengthSamples;
+            // Register with WarpRenderCache (sliceIndex=-1) — see the
+            // setPitchSliceBounds native fn comment for the rationale.
+            audioProcessor.synth.warpCache.setSliceBounds (-1, 0, (int) r.lengthSamples);
 
             // Bump the source version counter so WarpRenderCache entries from
             // any previous sample are never matched against the new one. Then

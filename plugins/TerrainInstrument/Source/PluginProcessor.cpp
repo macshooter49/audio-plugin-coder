@@ -1946,6 +1946,10 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                         {
                             ps.startSample = savedStart;
                             ps.endSample   = savedEnd;
+                            // Register restored bounds with the WarpRenderCache
+                            // under sliceIndex=-1 (pitch-mode sentinel) so warp+scan
+                            // in pitch mode has valid bounds after state reload.
+                            synth.warpCache.setSliceBounds (-1, (int) savedStart, (int) savedEnd);
                         }
                     }
                 }
