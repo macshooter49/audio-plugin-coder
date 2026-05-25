@@ -3368,6 +3368,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // ── Slicer helpers ────────────────────────────────────────────────────────
   function setSliceModeUI (modeIdx) {
     state.sliceMode = modeIdx;
+    // Switching to PITCH mode: fade out any lingering numeric scan-viz
+    // entries from the prior slice-mode session so they don't ghost on
+    // the pitch waveform. drawScanViz's slice-mode loop is already gated
+    // on !isPitchMode (defense in depth), but clearing opacityTarget here
+    // ensures clean state if the user toggles back to SLICE later.
+    if (modeIdx !== 1) {
+      Object.keys(_scanInterp).forEach(function (k) {
+        if (k !== 'pitch' && _scanInterp[k]) {
+          _scanInterp[k].opacityTarget = 0;
+          _scanInterp[k].truth         = null;
+          _scanInterp[k].velocity      = 0;
+        }
+      });
+    }
     // HOLD is a slice-mode CHOP-submode feature; leaving slice mode (i.e.
     // entering PITCH) auto-clears it. See state.holdMode for the full
     // constraint table.
@@ -5788,7 +5802,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // `layouts.length` throws TypeError, tickScanViz doesn't schedule its
     // next rAF, and the entire scan-viz loop dies permanently — every
     // subsequent slice/pitch mode entry shows no scan line at all.
-    var n = (layouts && layouts.length) ? layouts.length : 0;
+    //
+    // Also: when in pitch mode, SKIP the slice-mode loop entirely. Stale
+    // _scanInterp numeric entries from a prior slice-mode session keep
+    // their opacity until the fade lerp finishes, and chopLayouts isn't
+    // cleared on mode switch — without this guard, the old chop scan line
+    // renders as a ghost vertical bar on top of the pitch-mode waveform
+    // until opacity fades to 0. User-visible bug 2026-05-25.
+    var n = (!isPitchMode && layouts && layouts.length) ? layouts.length : 0;
     for (var i = 0; i < n; ++i) {
       var key   = '' + i;
       var entry = _scanInterp[key];
