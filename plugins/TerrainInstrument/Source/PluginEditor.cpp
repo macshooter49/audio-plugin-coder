@@ -1847,6 +1847,62 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       showStatus('Read error: ' + (err && err.message ? err.message : 'unknown'), 6000);
     });
   }, true);
+
+  // ─── Click-to-load: opens native file picker when the empty hero is clicked.
+  // Reuses the same byte-bridge pipeline as drag-drop. Fires on left-click
+  // OR right-click of the empty hero area only (ignored once a sample is loaded
+  // so the right-click lab-card menu still works on chops).
+  var pickerInput = document.createElement('input');
+  pickerInput.type = 'file';
+  pickerInput.accept = 'audio/*,.wav,.aif,.aiff,.flac,.mp3,.ogg,.m4a';
+  pickerInput.style.display = 'none';
+  document.body.appendChild(pickerInput);
+
+  function loadPickedFile (f) {
+    if (!f) return;
+    showStatus('Loading "' + f.name + '" (' + Math.round(f.size / 1024) + ' KB)…', 8000);
+
+    var path = f.path || f.fullPath || '';
+    if (path) {
+      var fnPath = getNativeFn('loadSampleFromPath');
+      if (fnPath) { fnPath(path); showStatus('Loaded via path: ' + f.name, 4000); return; }
+    }
+
+    var maxBytes = 256 * 1024 * 1024;
+    if (f.size > maxBytes) {
+      showStatus('File too large (' + Math.round(f.size / 1024 / 1024) + ' MB > 256 MB)', 6000);
+      return;
+    }
+
+    var fnB64 = getNativeFn('loadSampleFromBase64');
+    if (!fnB64) { showStatus('No native bridge available for click-to-load', 6000); return; }
+
+    readAsBase64(f).then(function (b64) {
+      if (!b64) { showStatus('Could not encode file bytes', 6000); return; }
+      fnB64(f.name, b64);
+      showStatus('Loaded via bytes: ' + f.name, 4000);
+    }).catch(function (err) {
+      showStatus('Read error: ' + (err && err.message ? err.message : 'unknown'), 6000);
+    });
+  }
+
+  pickerInput.addEventListener('change', function () {
+    if (pickerInput.files && pickerInput.files[0]) loadPickedFile(pickerInput.files[0]);
+    pickerInput.value = '';  // reset so re-selecting the same file works
+  });
+
+  function maybeOpenPicker (e) {
+    var hero = document.getElementById('hero');
+    if (!hero || !hero.classList.contains('empty-state')) return;
+    // Don't hijack clicks on interactive overlays (pills, buttons, dropdowns)
+    var t = e.target;
+    if (t && t.closest && t.closest('button, .ti-mode-pill, .ti-play-pill, #ti-root-picker, #ti-bottom-pills, #ti-slice-controls, #ti-xy-readout, #ti-slices-pill, #ti-slices-drawer')) return;
+    e.preventDefault();
+    pickerInput.click();
+  }
+
+  document.addEventListener('click', maybeOpenPicker, true);
+  document.addEventListener('contextmenu', maybeOpenPicker, true);
 })();
 </script>
 )";
