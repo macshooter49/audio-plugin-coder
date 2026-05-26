@@ -703,6 +703,19 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete (audioProcessor.activeSliceIndex.load());
             })
+            .withNativeFunction("isAnyVoicePlaying", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mark 2 layer-pad lit-up indicator. Walks the voice pool and
+                // returns true if any SamplerVoice is currently rendering. Used
+                // by the A/B/C/D layer pads to light "A" when sound is playing.
+                // Once B/C/D become real layers, this expands to per-layer state.
+                bool any = false;
+                for (int i = 0; i < audioProcessor.synth.getNumVoices(); ++i)
+                    if (auto* sv = dynamic_cast<tw::SamplerVoice*> (audioProcessor.synth.getVoice (i)))
+                        if (sv->isPlaying()) { any = true; break; }
+                complete (any);
+            })
             .withNativeFunction("auditionSlice", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1896,7 +1909,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     if (!hero || !hero.classList.contains('empty-state')) return;
     // Don't hijack clicks on interactive overlays (pills, buttons, dropdowns)
     var t = e.target;
-    if (t && t.closest && t.closest('button, .ti-mode-pill, .ti-play-pill, #ti-root-picker, #ti-bottom-pills, #ti-slice-controls, #ti-xy-readout, #ti-slices-pill, #ti-slices-drawer')) return;
+    if (t && t.closest && t.closest('button, .ti-mode-pill, .ti-play-pill, .ti-layer-pad, .ti-seq-play, .ti-seq-sync, .ti-seq-pill, .ti-bpm-display, #ti-root-picker, #ti-bottom-pills, #ti-layer-pads, #ti-top-right-cluster, #ti-bottom-right-cluster, #ti-slice-controls, #ti-xy-readout, #ti-slices-pill, #ti-slices-drawer')) return;
     e.preventDefault();
     pickerInput.click();
   }
@@ -2065,6 +2078,167 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     min-width: 26px;
     text-align: center;
   }
+
+  /* ─── Layer pads (A/B/C/D) — Mark 2 placeholders for sampler layers.
+     Sits to the right of ROOT in the bottom-left zone. A is the active layer
+     (current single sampler), B/C/D are dimmed placeholders until the Mark 2
+     layer-architecture DSP lands. A lights up briefly while any voice is
+     sounding via #ti-layer-pads polling. */
+  #ti-layer-pads {
+    position: absolute; bottom: 12px; left: 70px;
+    z-index: 5;
+    display: flex; gap: 3px; align-items: center;
+  }
+  .ti-layer-pad {
+    width: 22px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.06em;
+    color: rgba(245, 243, 255, 0.55);
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .ti-layer-pad:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(245, 243, 255, 0.85);
+  }
+  .ti-layer-pad.active {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    color: white;
+    border-color: transparent;
+  }
+  .ti-layer-pad.placeholder {
+    opacity: 0.42;
+    border-style: dashed;
+    cursor: default;
+  }
+  .ti-layer-pad.placeholder:hover {
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(245, 243, 255, 0.55);
+  }
+  /* Subtle background tint when a voice is sounding — no glow, just a fill bump */
+  .ti-layer-pad.playing {
+    background: rgba(167, 139, 250, 0.28);
+    border-color: rgba(167, 139, 250, 0.55);
+  }
+  .ti-layer-pad.active.playing {
+    background: linear-gradient(135deg, #A78BFA, #8B5CF6);
+  }
+
+  /* ─── Sequencer transport (TOP-RIGHT) + BPM/SEQ (BOTTOM-RIGHT) ─────────
+     Mark 2 placeholders for the sequencer chrome. Inert v1, will wire when
+     the sequencer DSP lands. Sits in the slots vacated by the removed XY
+     controls (top-right) and XY readout (bottom-right). */
+  #ti-top-right-cluster {
+    position: absolute; top: 14px; right: 14px;
+    z-index: 5;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .ti-seq-play {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 50%;
+    color: rgba(245, 243, 255, 0.75);
+    cursor: pointer;
+    padding: 0;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .ti-seq-play:hover {
+    background: rgba(139, 92, 246, 0.18);
+    color: white;
+    border-color: rgba(139, 92, 246, 0.45);
+  }
+  .ti-seq-play svg { margin-left: 1px; /* optical centering of triangle */ }
+  .ti-seq-sync {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.035);
+    border-radius: 6px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 150ms ease;
+  }
+  .ti-seq-sync:hover { background: rgba(255, 255, 255, 0.07); }
+  .ti-seq-sync.active .ti-sync-dot {
+    background: #8B5CF6;
+    box-shadow: 0 0 4px rgba(139, 92, 246, 0.6);
+  }
+  .ti-sync-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+    transition: background-color 150ms ease, box-shadow 150ms ease;
+  }
+  .ti-sync-label {
+    font: 700 9px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.15em;
+    color: rgba(245, 243, 255, 0.55);
+  }
+
+  #ti-bottom-right-cluster {
+    position: absolute; bottom: 12px; right: 12px;
+    z-index: 5;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .ti-seq-pill {
+    padding: 5px 11px;
+    background: rgba(255, 255, 255, 0.035);
+    border: none;
+    border-radius: 6px;
+    color: rgba(245, 243, 255, 0.55);
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  .ti-seq-pill:hover {
+    background: rgba(139, 92, 246, 0.18);
+    color: white;
+  }
+  .ti-bpm-display {
+    display: flex; align-items: center; gap: 5px;
+    padding: 5px 11px;
+    background: rgba(255, 255, 255, 0.035);
+    border-radius: 6px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    user-select: none;
+  }
+  .ti-bpm-value {
+    font: 700 11px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.05em;
+    color: #A78BFA;
+    min-width: 24px;
+    text-align: right;
+  }
+  .ti-bpm-label {
+    font: 600 9px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.18em;
+    color: rgba(245, 243, 255, 0.45);
+  }
+  .ti-bpm-lock {
+    display: flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px;
+    color: rgba(167, 139, 250, 0.7);
+    cursor: pointer;
+    transition: color 150ms ease;
+    margin-left: 2px;
+  }
+  .ti-bpm-lock:hover { color: #A78BFA; }
 
   /* ──────────────────────────────────────────────────────────────────
      SLICER UI (v0c) — bottom-strip pill that opens a pull-up drawer.
@@ -2866,6 +3040,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
        isn't intercepted by a slice body in SLICE mode. */
     z-index: 7 !important;
   }
+
+  /* ─── XY pad UI hidden in Terrain Instrument (2026-05-26) ─────────────────
+     XY modulation isn't in the instrument's product scope — all modulation
+     lives in the MOD section. We keep the underlying XY DOM nodes intact
+     (13+ JS references would break if we deleted them) and just hide them
+     visually. The hero-corner cluster (xy-play / xy-mode / xy-speed) is now
+     reserved for the Mark 2 sequencer's transport / mode controls. */
+  #hero .xy-readout,
+  #hero .xy-controls {
+    display: none !important;
+  }
 </style>
 
 <script>
@@ -2925,9 +3110,56 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     rootWrap.id = 'ti-root-picker';
     rootWrap.title = 'Root note — click to cycle, shift-click to go down';
     rootWrap.innerHTML =
-      '<span class="ti-root-label">ROOT</span>' +
       '<span class="ti-root-value" id="ti-root-value">C4</span>';
     hero.appendChild(rootWrap);
+
+    // ─── A/B/C/D layer pads (Mark 2 placeholders) ─────────────────────────
+    // Visual chrome for the four sampler layers (A/B/C/D) that will land in
+    // the Mark 2 layer-architecture phase. A is shown as active by default
+    // (current single sampler is conceptually layer A); B/C/D are dimmed
+    // placeholders. The A pad lights up briefly while any voice is sounding,
+    // wired via the isAnyVoicePlaying native function below.
+    var layerPads = document.createElement('div');
+    layerPads.id = 'ti-layer-pads';
+    layerPads.innerHTML =
+      '<div class="ti-layer-pad active" data-layer="A" title="Layer A — active">A</div>' +
+      '<div class="ti-layer-pad placeholder" data-layer="B" title="Layer B — coming in Mark 2">B</div>' +
+      '<div class="ti-layer-pad placeholder" data-layer="C" title="Layer C — coming in Mark 2">C</div>' +
+      '<div class="ti-layer-pad placeholder" data-layer="D" title="Layer D — coming in Mark 2">D</div>';
+    hero.appendChild(layerPads);
+
+    // ─── Sequencer transport (TOP-RIGHT) — Mark 2 placeholders ───────────
+    // Play button + SYNC toggle. Inert v1 — wired with the sequencer DSP.
+    var topRight = document.createElement('div');
+    topRight.id = 'ti-top-right-cluster';
+    topRight.innerHTML =
+      '<button class="ti-seq-play" id="ti-seq-play" title="Sequencer play — coming in Mark 2">' +
+        '<svg viewBox="0 0 12 12" width="10" height="10"><path d="M3 2 L10 6 L3 10 Z" fill="currentColor"/></svg>' +
+      '</button>' +
+      '<div class="ti-seq-sync" id="ti-seq-sync" title="DAW transport sync — coming in Mark 2">' +
+        '<span class="ti-sync-dot"></span>' +
+        '<span class="ti-sync-label">SYNC</span>' +
+      '</div>';
+    hero.appendChild(topRight);
+
+    // ─── SEQ pill + BPM display (BOTTOM-RIGHT) — Mark 2 placeholders ────
+    // SEQ opens the sequencer menu (reverse / triplets / time-sigs / etc).
+    // BPM shows current tempo with a lock for DAW-sync toggle.
+    var bottomRight = document.createElement('div');
+    bottomRight.id = 'ti-bottom-right-cluster';
+    bottomRight.innerHTML =
+      '<button class="ti-seq-pill" id="ti-seq-pill" title="Sequencer settings — coming in Mark 2">SEQ</button>' +
+      '<div class="ti-bpm-display" id="ti-bpm-display" title="Tempo — click lock to toggle DAW sync, coming in Mark 2">' +
+        '<span class="ti-bpm-value">120</span>' +
+        '<span class="ti-bpm-label">BPM</span>' +
+        '<span class="ti-bpm-lock" id="ti-bpm-lock">' +
+          '<svg viewBox="0 0 10 12" width="8" height="10">' +
+            '<rect x="1.5" y="5" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1" fill="none"/>' +
+            '<path d="M3 5 V3.5 C3 2.4 3.9 1.5 5 1.5 C6.1 1.5 7 2.4 7 3.5 V5" stroke="currentColor" stroke-width="1" fill="none"/>' +
+          '</svg>' +
+        '</span>' +
+      '</div>';
+    hero.appendChild(bottomRight);
 
     // ─── SLICES pill + pull-up drawer ────────────────────────────────────
     // Lives inside the bottom-strip cluster. Pill is the trigger; click
@@ -5625,6 +5857,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       for (var i = 0; i < n; ++i) state.sliceGlow[i] = vals[i];
       applySliceGlow();
     }).catch(function () {});
+
+    // A-layer-pad "playing" indicator. Works in both slice + pitch mode
+    // (glow levels miss the pitch-mode virtual slice). Updates when any
+    // SamplerVoice is active. Stub for the Mark 2 per-layer voice routing.
+    var padFn = getNativeFn('isAnyVoicePlaying');
+    if (padFn) {
+      padFn().then(function (any) {
+        var padA = document.querySelector('#ti-layer-pads .ti-layer-pad[data-layer="A"]');
+        if (!padA) return;
+        if (any) padA.classList.add('playing'); else padA.classList.remove('playing');
+      }).catch(function () {});
+    }
   }
 
   function applySliceGlow () {
