@@ -25,8 +25,8 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // Mark 2 layers: label each layer with its 0-3 index for self-identification.
     // LayerState's default constructor already wires its synth + voices using
     // its own atomics, so no further per-layer construction is needed here yet.
-    for (int i = 0; i < 4; ++i)
-        layers[(size_t) i].layerIndex = i;
+    for (size_t i = 0; i < layers.size(); ++i)
+        layers[i].layerIndex = static_cast<int>(i);
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
