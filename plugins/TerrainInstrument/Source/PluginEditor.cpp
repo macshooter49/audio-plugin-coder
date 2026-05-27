@@ -724,6 +724,57 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 idx = juce::jlimit (0, 3, idx);
                 complete (audioProcessor.layers[(size_t) idx].hasSample());
             })
+            // Mark 2 Phase 1 Task 10: per-layer mixer native fns (vol / mute / solo).
+            // No APVTS — atomics only. processBlock already applies the mixer math.
+            .withNativeFunction("getLayerVolume", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                int idx = juce::jlimit (0, 3, (args.size() > 0) ? (int) args[0] : 0);
+                complete (audioProcessor.layers[(size_t) idx].volume.load());
+            })
+            .withNativeFunction("setLayerVolume", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    int idx  = juce::jlimit (0, 3, (int) args[0]);
+                    float v  = juce::jlimit (0.0f, 2.0f, (float) (double) args[1]);
+                    audioProcessor.layers[(size_t) idx].volume.store (v);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getLayerMute", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                int idx = juce::jlimit (0, 3, (args.size() > 0) ? (int) args[0] : 0);
+                complete (audioProcessor.layers[(size_t) idx].mute.load());
+            })
+            .withNativeFunction("setLayerMute", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    int idx = juce::jlimit (0, 3, (int) args[0]);
+                    audioProcessor.layers[(size_t) idx].mute.store ((bool) args[1]);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getLayerSolo", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                int idx = juce::jlimit (0, 3, (args.size() > 0) ? (int) args[0] : 0);
+                complete (audioProcessor.layers[(size_t) idx].solo.load());
+            })
+            .withNativeFunction("setLayerSolo", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    int idx = juce::jlimit (0, 3, (int) args[0]);
+                    audioProcessor.layers[(size_t) idx].solo.store ((bool) args[1]);
+                }
+                complete ({});
+            })
             .withNativeFunction("isAnyVoicePlaying", [this](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
