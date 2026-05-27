@@ -790,6 +790,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         if (sv->isPlaying()) { any = true; break; }
                 complete (any);
             })
+            .withNativeFunction("getLayerVoiceActivity", [this](const juce::Array<juce::var>&,
+                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mark 2 Phase 1 task 11: per-layer voice activity for A/B/C/D pad indicators.
+                // Returns 4-element bool array — true if that layer has at least one playing voice.
+                juce::Array<juce::var> result;
+                for (size_t li = 0; li < audioProcessor.layers.size(); ++li)
+                {
+                    auto& layer = audioProcessor.layers[li];
+                    bool any = false;
+                    for (int v = 0; v < layer.synth.getNumVoices(); ++v)
+                        if (auto* sv = dynamic_cast<tw::SamplerVoice*> (layer.synth.getVoice (v)))
+                            if (sv->isPlaying()) { any = true; break; }
+                    result.add (any);
+                }
+                complete (result);
+            })
             .withNativeFunction("auditionSlice", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5932,15 +5949,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       applySliceGlow();
     }).catch(function () {});
 
-    // A-layer-pad "playing" indicator. Works in both slice + pitch mode
-    // (glow levels miss the pitch-mode virtual slice). Updates when any
-    // SamplerVoice is active. Stub for the Mark 2 per-layer voice routing.
-    var padFn = getNativeFn('isAnyVoicePlaying');
-    if (padFn) {
-      padFn().then(function (any) {
-        var padA = document.querySelector('#ti-layer-pads .ti-layer-pad[data-layer="A"]');
-        if (!padA) return;
-        if (any) padA.classList.add('playing'); else padA.classList.remove('playing');
+    // Per-layer .playing indicator — each A/B/C/D pad lights up independently.
+    // Mark 2 Phase 1 task 11: uses getLayerVoiceActivity (4-element bool array).
+    var actFn = getNativeFn('getLayerVoiceActivity');
+    if (actFn) {
+      actFn().then(function (arr) {
+        if (!arr || arr.length !== 4) return;
+        var pads = document.querySelectorAll('#ti-layer-pads .ti-layer-pad');
+        for (var i = 0; i < pads.length && i < 4; ++i) {
+          if (arr[i]) pads[i].classList.add('playing');
+          else        pads[i].classList.remove('playing');
+        }
       }).catch(function () {});
     }
   }
