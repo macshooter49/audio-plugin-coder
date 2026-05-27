@@ -54,8 +54,8 @@ namespace tw
         // ── Slicer state ──────────────────────────────────────────────────────
         SliceListPtr  currentSlices;        // atomic snapshot — write from UI, read from audio
         Slice         pitchModeSlice;       // virtual whole-sample slice for PITCH mode
-        int           activeSliceIndex = 0; // which chop is "active" in ChromaticOneSlice mode
-        std::array<float, kMaxGlowSlots> sliceGlowLevel {};  // per-slice envelope glow
+        std::atomic<int> activeSliceIndex { 0 }; // which chop is "active" in ChromaticOneSlice mode
+        std::array<std::atomic<float>, kMaxGlowSlots> sliceGlowLevel {};  // per-slice envelope glow
 
         // ── Synth ─────────────────────────────────────────────────────────────
         TerrainSynth synth;
