@@ -17,16 +17,18 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     for (size_t i = 0; i < layers.size(); ++i)
         layers[i].layerIndex = static_cast<int>(i);
 
-    // Wire modulation engine into layer 0's voices (the only active layer in Phase 1).
+    // Phase 1 task 9: wire modulationEngine into ALL layers' voices (was layer 0 only).
     // LayerState constructor passes nullptr for ModulationEngine; we patch it here.
     // Note: SamplerVoice stores a pointer to the engine so this is safe as long as
     // the engine outlives the voices (processor owns both, destruction is LIFO).
-    // TODO Task 9: wire modulationEngine into layers[1..3] voices here when
-    // those layers activate. Phase 1 only layer[0] is rendered, so other
-    // layers' voices keep their nullptr engine (safe — voice code null-checks).
-    for (int i = 0; i < layers[0].synth.getNumVoices(); ++i)
-        if (auto* sv = dynamic_cast<tw::SamplerVoice*> (layers[0].synth.getVoice (i)))
-            sv->setModulationEngine (&modulationEngine);
+    for (auto& layer : layers)
+    {
+        for (int v = 0; v < layer.synth.getNumVoices(); ++v)
+        {
+            if (auto* sv = dynamic_cast<tw::SamplerVoice*> (layer.synth.getVoice (v)))
+                sv->setModulationEngine (&modulationEngine);
+        }
+    }
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
@@ -958,49 +960,48 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // === Sampler engine (Terrain Instrument v0a + slicer v0b) ================
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
-    // Task 5: route through layers[editingLayer] instead of singleton fields.
-    // TODO Task 9: when layers 1-3 activate, this push must broadcast to ALL
-    // active layers (or move these params into per-layer APVTS trees) so
-    // stale/zero values don't leak into their voices.
+    // Phase 1 task 9: APVTS is global — broadcast every block to ALL layers so
+    // their voices have live values. Per-layer APVTS is a future Phase refactor.
     {
-        const size_t el = (size_t) editingLayer.load();
-        layers[el].rootMidiNote.store   ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
-        layers[el].attackMsAtomic.store (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
-        layers[el].releaseMsAtomic.store(*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
-        layers[el].sampleLoopMode.store ((int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE));
-        layers[el].chopFadeMs.store     (*apvts.getRawParameterValue (ParameterIDs::CHOP_FADE_MS));
+        const int   rootMidi   = (int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE);
+        const float attackMs   = *apvts.getRawParameterValue (ParameterIDs::ATTACK_MS);
+        const float releaseMs  = *apvts.getRawParameterValue (ParameterIDs::RELEASE_MS);
+        const int   loopMode   = (int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE);
+        const float chopFadeMs = *apvts.getRawParameterValue (ParameterIDs::CHOP_FADE_MS);
+
+        for (auto& layer : layers)
+        {
+            layer.rootMidiNote.store   (rootMidi);
+            layer.attackMsAtomic.store (attackMs);
+            layer.releaseMsAtomic.store(releaseMs);
+            layer.sampleLoopMode.store (loopMode);
+            layer.chopFadeMs.store     (chopFadeMs);
+        }
     }
 
-    // Build the SliceContext for the synth dispatcher. The slice list is an
-    // immutable shared_ptr snapshot so the audio thread reads without locks.
-    // Task 5: routes through layers[editingLayer] for all slice/pitch-mode state.
-    // Task 9 will build per-layer contexts when layers B/C/D are populated.
+    // Phase 1 task 9: read the APVTS-global mode selectors once per block.
+    // ctx.mode is sourced from APVTS (globally consistent for Phase 1). All other
+    // ctx fields are sourced per-layer from each layer's own atomics.
     const int sliceModeIdx_blk    = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
     const int sliceSubModeIdx_blk = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_SUB_MODE);
     const size_t elIdx = (size_t) editingLayer.load();
-    tw::SliceContext sharedCtx;
-    sharedCtx.rootMidiNote     = layers[elIdx].rootMidiNote.load();
-    sharedCtx.activeSliceIndex = layers[elIdx].activeSliceIndex.load();
-    sharedCtx.sourceVersionId  = getSourceVersionId();
-    sharedCtx.slices           = std::atomic_load (&layers[elIdx].currentSlices);
-    sharedCtx.pitchModeSlice   = layers[elIdx].pitchModeSlice;   // copy-by-value snapshot for audio thread
-    sharedCtx.holdMode         = holdMode.load (std::memory_order_relaxed);
 
+    // Derive the shared Mode enum from APVTS once so we don't repeat the if-chain per layer.
+    tw::SliceContext::Mode globalMode;
     if (sliceModeIdx_blk == 0)
-        sharedCtx.mode = tw::SliceContext::Mode::Whole;
+        globalMode = tw::SliceContext::Mode::Whole;
     else if (sliceSubModeIdx_blk == 3)
-        sharedCtx.mode = tw::SliceContext::Mode::Layer;
+        globalMode = tw::SliceContext::Mode::Layer;
     else if (sliceSubModeIdx_blk == 2)
-        sharedCtx.mode = tw::SliceContext::Mode::ChromaticRandom;
+        globalMode = tw::SliceContext::Mode::ChromaticRandom;
     else if (sliceSubModeIdx_blk == 1)
-        sharedCtx.mode = tw::SliceContext::Mode::ChromaticOneSlice;
+        globalMode = tw::SliceContext::Mode::ChromaticOneSlice;
     else
-        sharedCtx.mode = tw::SliceContext::Mode::ChopChromaticLayout;
+        globalMode = tw::SliceContext::Mode::ChopChromaticLayout;
 
     // Drain audition queue — UI-clicked previews of individual slices.
     // Triggered before renderNextBlock so the audition voice starts within
-    // this block.
-    // Task 5: uses layers[editingLayer].currentSlices + layers[editingLayer].synth.
+    // this block. Dispatches to the currently-editing layer's synth.
     {
         std::vector<int> drained;
         {
@@ -1032,10 +1033,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         indyCaptureBus.setSize (2, numSamples, false, true, true);
     indyCaptureBus.clear (0, numSamples);
 
-    // ── Mark 2 task 4: render each populated layer into its own scratch buffer,
-    // then sum (with vol/mute/solo) into master `buffer`. Only layers[0] has
-    // audio in Phase 1, so output is identical to Mark 1.5 baseline.
-    // Tasks 9-10 will generalize to all 4 layers with independent MIDI/slice contexts.
+    // ── Mark 2 task 4 / task 9: render each populated layer into its own scratch
+    // buffer, then sum (with vol/mute/solo) into master `buffer`.
+    // Task 9 complete: each layer now receives its own per-layer SliceContext.
     buffer.clear();   // master starts silent; we sum each layer into it below
 
     {
@@ -1049,16 +1049,26 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             auto& layer = layers[li];
 
-            // Skip layers that have no sample loaded (layers 1-3 in Phase 1).
+            // Skip layers that have no sample loaded.
             if (! layer.hasSample())               continue;
             // Skip muted and non-solo layers.
             if (layer.mute.load())                 continue;
             if (anySolo && ! layer.solo.load())    continue;
 
-            // Push the ctx into this layer's synth.
-            // Phase 1: all layers share the processor-level ctx (only layers[0]
-            // actually gets here anyway). Task 9 will build per-layer contexts.
-            layer.synth.setSliceContext (sharedCtx);
+            // Build per-layer SliceContext. Per-layer fields sourced from each
+            // layer's own atomics; ctx.mode uses APVTS globals (Phase 1 constraint:
+            // per-layer APVTS is a future refactor — all layers share the same mode).
+            {
+                tw::SliceContext ctx;
+                ctx.mode             = globalMode;
+                ctx.rootMidiNote     = layer.rootMidiNote.load();
+                ctx.activeSliceIndex = layer.activeSliceIndex.load();
+                ctx.sourceVersionId  = getSourceVersionId();
+                ctx.slices           = std::atomic_load (&layer.currentSlices);
+                ctx.pitchModeSlice   = layer.pitchModeSlice;   // copy-by-value snapshot
+                ctx.holdMode         = holdMode.load (std::memory_order_relaxed);
+                layer.synth.setSliceContext (ctx);
+            }
 
             // Indy bus routing — Phase 1: only layers[0] feeds the shared indy bus.
             // Other layers would get nullptr (skip routing) if they ever reached here.
