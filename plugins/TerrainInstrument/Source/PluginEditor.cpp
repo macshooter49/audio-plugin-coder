@@ -6437,12 +6437,15 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
 
             // Task 8: dispatch sample load into the currently-editing layer so
             // clicking a pad and dragging a file always loads into the right slot.
+            // Task 12: also persist the full path in layers[li].sourcePath so
+            // V2 preset save can round-trip the file reference per-layer.
             {
                 const size_t li = (size_t) audioProcessor.editingLayer.load();
                 auto buf = audioProcessor.getSampleBuffer().load();
                 audioProcessor.layers[li].sampleBuffer.setSampleRate (r.sampleRate);
                 audioProcessor.layers[li].sampleBuffer.store (buf);
                 audioProcessor.layers[li].sourceFileName = r.filename;
+                audioProcessor.layers[li].sourcePath     = currentSampleSourcePath;
             }
 
             // Build a JS object literal with peaks + meta and pass to onSampleLoaded.

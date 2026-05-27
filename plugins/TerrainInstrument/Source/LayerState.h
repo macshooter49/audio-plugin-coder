@@ -63,6 +63,7 @@ namespace tw
         // ── Identity ──────────────────────────────────────────────────────────
         int          layerIndex    = 0;     // assigned post-construction (0=A,1=B,2=C,3=D)
         juce::String sourceFileName;        // display name of the loaded sample
+        juce::String sourcePath;            // full filesystem path — used by V2 preset save/restore
 
         // ── Constructor ───────────────────────────────────────────────────────
         // Adds one SamplerSound (so the synth has a valid sound list) then

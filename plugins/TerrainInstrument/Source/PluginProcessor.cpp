@@ -1903,49 +1903,104 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
 
-    // Persist the loaded sample's source path so DAW project save/restore
-    // can re-load the same file when the editor re-opens. Empty string if
-    // nothing was loaded yet.
-    {
-        juce::ScopedLock sl (sampleSourcePathLock);
-        if (loadedSamplePath.isNotEmpty())
-            state.setProperty ("sampleSourcePath", loadedSamplePath, nullptr);
-    }
+    // ── V2 format marker ─────────────────────────────────────────────────────
+    // Task 12: introduce version=2 and editingLayer so Task 13 (setStateInformation)
+    // can distinguish V1 blobs (no "version" property) from V2 blobs.
+    state.setProperty ("version",      2,                   nullptr);
+    state.setProperty ("editingLayer", editingLayer.load(), nullptr);
 
-    // Slice list (JSON) + active slice index — sub-mode rides in APVTS.
-    // Task 8: explicitly reads layers[0] (layer A) so a mid-session pad switch
-    // cannot corrupt the saved state. Tasks 12-13 will introduce 4-layer format.
+    // ── V2: per-layer state node array ───────────────────────────────────────
+    // Helper lambda — serialises a pitchModeSlice into the same JSON string
+    // format that V1 used, so Task 13 can reuse the identical parse path
+    // when restoring per-layer pitchModeSlice from V2.
+    auto pitchSliceToJson = [] (const tw::Slice& s) -> juce::String
     {
-        // Slices — read layers[0].currentSlices directly, bypassing editingLayer wrapper.
+        juce::DynamicObject::Ptr pObj = new juce::DynamicObject();
+        pObj->setProperty ("startSample",  (juce::int64) s.startSample);
+        pObj->setProperty ("endSample",    (juce::int64) s.endSample);
+        pObj->setProperty ("reverse",      s.reverse);
+        pObj->setProperty ("pitch",        (double) s.pitchOffsetSemis);
+        pObj->setProperty ("warpMode",     (int) s.warpMode);
+        pObj->setProperty ("stretchRatio", (double) s.stretchRatio);
+        pObj->setProperty ("attackMs",     (double) s.attackMs);
+        pObj->setProperty ("releaseMs",    (double) s.releaseMs);
+        pObj->setProperty ("decayMs",      (double) s.decayMs);
+        pObj->setProperty ("sustainLevel", (double) s.sustainLevel);
+        pObj->setProperty ("volume",       (double) s.volume);
+        pObj->setProperty ("scanEnabled",  s.scanEnabled);
+        pObj->setProperty ("scanRate",     (double) s.scanRate);
+        pObj->setProperty ("scanWindow",   (double) s.scanWindow);
+        return juce::JSON::toString (juce::var (pObj.get()), true);
+    };
+
+    juce::ValueTree layersTree ("layers");
+    for (size_t li = 0; li < layers.size(); ++li)
+    {
+        const auto& L = layers[li];
+
+        juce::ValueTree layerNode ("layer");
+        layerNode.setProperty ("index",            (int) li,                    nullptr);
+        layerNode.setProperty ("sourcePath",       L.sourcePath,                nullptr);
+        layerNode.setProperty ("sourceFileName",   L.sourceFileName,            nullptr);
+        layerNode.setProperty ("activeSliceIndex", L.activeSliceIndex.load(),   nullptr);
+        layerNode.setProperty ("rootMidiNote",     L.rootMidiNote.load(),       nullptr);
+        layerNode.setProperty ("sliceMode",        L.sliceMode.load(),          nullptr);
+        layerNode.setProperty ("playMode",         L.playMode.load(),           nullptr);
+        layerNode.setProperty ("sliceCount",       L.sliceCount.load(),         nullptr);
+        layerNode.setProperty ("chopFadeMs",       L.chopFadeMs.load(),         nullptr);
+        layerNode.setProperty ("volume",           L.volume.load(),             nullptr);
+        layerNode.setProperty ("mute",             (bool) L.mute.load(),        nullptr);
+        layerNode.setProperty ("solo",             (bool) L.solo.load(),        nullptr);
+
+        // slicesJson — same JSON format as V1 (slicesToJson produces
+        // {"slices":[...]}), so Task 13's parse path is identical.
+        const auto layerSlices = std::atomic_load (&L.currentSlices);
+        const auto sliceJson = layerSlices ? tw::slicesToJson (*layerSlices)
+                                           : juce::String ("{\"slices\":[]}");
+        layerNode.setProperty ("slicesJson", sliceJson, nullptr);
+
+        // pitchSliceJson — same JSON format as V1.
+        layerNode.setProperty ("pitchSliceJson", pitchSliceToJson (L.pitchModeSlice), nullptr);
+
+        layersTree.addChild (layerNode, -1, nullptr);
+    }
+    state.addChild (layersTree, -1, nullptr);
+
+    // ── V1 root-level properties — KEPT for backward compat ──────────────────
+    // These duplicate the layer-A data so that:
+    //   (a) An older build that loads a V2 blob via the pre-Task-13 setStateInformation
+    //       still finds sampleSourcePath / slicesJson / pitchSliceJson / holdMode at
+    //       the root and restores layer A correctly (no crash, partial restore).
+    //   (b) Task 13 migration code can detect V1 vs V2 by checking "version".
+    //
+    // When Task 13 is complete, the V1 root-level read path will be replaced by
+    // the V2 layers[] parse path. The V1 properties can be removed from saves
+    // once there are no V1 users left.
+    {
+        // Full path for the V1 sample-path restore path (layers[0] only).
+        if (layers[0].sourcePath.isNotEmpty())
+            state.setProperty ("sampleSourcePath", layers[0].sourcePath, nullptr);
+        else
+        {
+            // Fallback: processor-level singleton (unchanged for pure-V1 instances
+            // that never went through Task 12's editor path).
+            juce::ScopedLock sl (sampleSourcePathLock);
+            if (loadedSamplePath.isNotEmpty())
+                state.setProperty ("sampleSourcePath", loadedSamplePath, nullptr);
+        }
+
+        // V1 slicesJson / activeSliceIndex from layer A (same data as layersTree[0]).
         const auto layerASlices = std::atomic_load (&layers[0].currentSlices);
-        const auto sliceJson = layerASlices ? tw::slicesToJson (*layerASlices) : juce::String ("{\"slices\":[]}");
+        const auto sliceJson = layerASlices ? tw::slicesToJson (*layerASlices)
+                                            : juce::String ("{\"slices\":[]}");
         if (sliceJson.isNotEmpty() && sliceJson != "{\"slices\":[]}")
             state.setProperty ("slicesJson", sliceJson, nullptr);
         state.setProperty ("activeSliceIndex", layers[0].activeSliceIndex.load(), nullptr);
 
-        // Pitch-mode virtual slice — read layers[0].pitchModeSlice directly.
-        {
-            const auto& s = layers[0].pitchModeSlice;
-            juce::DynamicObject::Ptr pObj = new juce::DynamicObject();
-            pObj->setProperty ("startSample",  (juce::int64) s.startSample);
-            pObj->setProperty ("endSample",    (juce::int64) s.endSample);
-            pObj->setProperty ("reverse",      s.reverse);
-            pObj->setProperty ("pitch",        (double) s.pitchOffsetSemis);
-            pObj->setProperty ("warpMode",     (int) s.warpMode);
-            pObj->setProperty ("stretchRatio", (double) s.stretchRatio);
-            pObj->setProperty ("attackMs",     (double) s.attackMs);
-            pObj->setProperty ("releaseMs",    (double) s.releaseMs);
-            pObj->setProperty ("decayMs",      (double) s.decayMs);
-            pObj->setProperty ("sustainLevel", (double) s.sustainLevel);
-            pObj->setProperty ("volume",       (double) s.volume);
-            pObj->setProperty ("scanEnabled",  s.scanEnabled);
-            pObj->setProperty ("scanRate",     (double) s.scanRate);
-            pObj->setProperty ("scanWindow",   (double) s.scanWindow);
-            state.setProperty ("pitchSliceJson", juce::JSON::toString (juce::var (pObj.get()), true), nullptr);
-        }
+        // V1 pitchSliceJson from layer A.
+        state.setProperty ("pitchSliceJson", pitchSliceToJson (layers[0].pitchModeSlice), nullptr);
 
-        // HOLD mode (Mark 1.5 final). Persists across DAW save and editor reload
-        // so users don't lose latch state when reopening a project.
+        // HOLD mode — global (not yet per-layer).
         state.setProperty ("holdMode", (bool) holdMode.load(), nullptr);
     }
 
