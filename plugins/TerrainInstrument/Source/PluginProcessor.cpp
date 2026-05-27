@@ -21,6 +21,9 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // LayerState constructor passes nullptr for ModulationEngine; we patch it here.
     // Note: SamplerVoice stores a pointer to the engine so this is safe as long as
     // the engine outlives the voices (processor owns both, destruction is LIFO).
+    // TODO Task 9: wire modulationEngine into layers[1..3] voices here when
+    // those layers activate. Phase 1 only layer[0] is rendered, so other
+    // layers' voices keep their nullptr engine (safe — voice code null-checks).
     for (int i = 0; i < layers[0].synth.getNumVoices(); ++i)
         if (auto* sv = dynamic_cast<tw::SamplerVoice*> (layers[0].synth.getVoice (i)))
             sv->setModulationEngine (&modulationEngine);
@@ -956,6 +959,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // === Sampler engine (Terrain Instrument v0a + slicer v0b) ================
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
     // Task 5: route through layers[editingLayer] instead of singleton fields.
+    // TODO Task 9: when layers 1-3 activate, this push must broadcast to ALL
+    // active layers (or move these params into per-layer APVTS trees) so
+    // stale/zero values don't leak into their voices.
     {
         const size_t el = (size_t) editingLayer.load();
         layers[el].rootMidiNote.store   ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
@@ -1900,11 +1906,17 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // Task 5: reads from layers[0] explicitly (V1 format, layer-A-specific).
     // TODO Tasks 12-13: replace with full 4-layer state serialisation.
     {
+        // TODO Task 12: route this through layers[0] explicitly. Currently goes through
+        // editingLayer (=0 in Phase 1) — would silently serialize wrong layer if user
+        // switches editing target before Save once Task 6 lands.
         const auto sliceJson = getSlicesJson();   // delegates to layers[editingLayer] (=0 in Phase 1)
         if (sliceJson.isNotEmpty() && sliceJson != "{\"slices\":[]}")
             state.setProperty ("slicesJson", sliceJson, nullptr);
         state.setProperty ("activeSliceIndex", layers[0].activeSliceIndex.load(), nullptr);
         // Pitch-mode virtual slice — preserve warp/ADSR/scan/reverse across DAW save.
+        // TODO Task 12: route this through layers[0] explicitly. Currently goes through
+        // editingLayer (=0 in Phase 1) — would silently serialize wrong layer if user
+        // switches editing target before Save once Task 6 lands.
         state.setProperty ("pitchSliceJson", getPitchSliceJson(), nullptr);
         // HOLD mode (Mark 1.5 final). Persists across DAW save and editor reload
         // so users don't lose latch state when reopening a project.
