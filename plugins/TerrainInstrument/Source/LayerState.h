@@ -19,6 +19,7 @@
 #include <memory>
 #include "SampleBuffer.h"
 #include "Slice.h"
+#include "TerrainConstants.h"
 #include "TerrainSynth.h"
 #include "SamplerVoice.h"
 
@@ -26,9 +27,6 @@ namespace tw
 {
     struct LayerState
     {
-        // ── Glow-slot constant (matches PluginProcessor kMaxGlowSlots) ────────
-        static constexpr int kMaxGlowSlots = 256;
-
         // ── Sample storage ────────────────────────────────────────────────────
         SampleBuffer sampleBuffer;
 
@@ -52,10 +50,12 @@ namespace tw
         std::atomic<bool>  solo   { false };
 
         // ── Slicer state ──────────────────────────────────────────────────────
-        SliceListPtr  currentSlices;        // atomic snapshot — write from UI, read from audio
+        // Access via std::atomic_store / std::atomic_load on shared_ptr — see
+        // PluginProcessor::replaceSlices for the write pattern. DO NOT assign directly.
+        SliceListPtr currentSlices;
         Slice         pitchModeSlice;       // virtual whole-sample slice for PITCH mode
         std::atomic<int> activeSliceIndex { 0 }; // which chop is "active" in ChromaticOneSlice mode
-        std::array<std::atomic<float>, kMaxGlowSlots> sliceGlowLevel {};  // per-slice envelope glow
+        std::array<std::atomic<float>, tw::kMaxGlowSlots> sliceGlowLevel {};  // per-slice envelope glow
 
         // ── Synth ─────────────────────────────────────────────────────────────
         TerrainSynth synth;

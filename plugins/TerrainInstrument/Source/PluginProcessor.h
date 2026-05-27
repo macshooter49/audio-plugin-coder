@@ -18,6 +18,7 @@
 #include "SampleLoader.h"
 #include "Slice.h"
 #include "TerrainSynth.h"
+#include "TerrainConstants.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -364,9 +365,8 @@ public:
     // plus a slow visual decay so short one-shots leave a natural tail).
     // UI thread polls via snapshotSliceGlowLevels() at ~60 Hz.
     // Fixed cap — the slicer UI tops out at 32 grid chops; 256 is a safe
-    // upper bound. Indices ≥ kMaxGlowSlots are silently dropped on write.
-    static constexpr int kMaxGlowSlots = 256;
-    std::array<std::atomic<float>, kMaxGlowSlots> sliceGlowLevel {};
+    // upper bound. Indices ≥ tw::kMaxGlowSlots are silently dropped on write.
+    std::array<std::atomic<float>, tw::kMaxGlowSlots> sliceGlowLevel {};
 
     /** Snapshot the current glow levels for the first getNumSlices() slots
      *  into a juce::var array suitable for returning from a native fn. */

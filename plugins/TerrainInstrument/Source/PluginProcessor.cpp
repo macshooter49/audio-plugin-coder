@@ -1025,14 +1025,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // dies. Block-rate update (~5-22 ms at 256-1024 samples / 48 kHz)
     // outpaces the ~16 ms UI poll, so motion stays smooth.
     {
-        std::array<float, kMaxGlowSlots> blockMax {};
+        std::array<float, tw::kMaxGlowSlots> blockMax {};
         for (int v = 0; v < synth.getNumVoices(); ++v)
         {
             if (auto* sv = dynamic_cast<tw::SamplerVoice*> (synth.getVoice (v)))
             {
                 if (! sv->isPlaying()) continue;
                 const int idx = sv->getSliceIndex();
-                if (idx < 0 || idx >= kMaxGlowSlots) continue;
+                if (idx < 0 || idx >= tw::kMaxGlowSlots) continue;
                 const float lvl = sv->getEnvelopeLevel();
                 if (lvl > blockMax[(size_t) idx]) blockMax[(size_t) idx] = lvl;
             }
@@ -1042,7 +1042,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // is exp(-blockSec / tau), tau ≈ 65 ms.
         const double blockSec = (double) numSamples / juce::jmax (1.0, getSampleRate());
         const float  decay    = (float) std::exp (-blockSec / 0.065);
-        for (int i = 0; i < kMaxGlowSlots; ++i)
+        for (int i = 0; i < tw::kMaxGlowSlots; ++i)
         {
             const float live = blockMax[(size_t) i];
             const float prev = sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed);
@@ -1750,7 +1750,7 @@ juce::String TerrainInstrumentAudioProcessor::getPitchSliceJson() const
 
 juce::var TerrainInstrumentAudioProcessor::snapshotSliceGlowLevels() const
 {
-    const int n = juce::jmin (getNumSlices(), kMaxGlowSlots);
+    const int n = juce::jmin (getNumSlices(), tw::kMaxGlowSlots);
     juce::Array<juce::var> arr;
     arr.ensureStorageAllocated (n);
     for (int i = 0; i < n; ++i)
