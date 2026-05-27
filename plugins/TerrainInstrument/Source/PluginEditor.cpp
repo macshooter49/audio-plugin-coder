@@ -2219,10 +2219,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     user-select: none;
   }
   .ti-bpm-value {
-    font: 700 11px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+    font: 700 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
     letter-spacing: 0.05em;
     color: #A78BFA;
-    min-width: 24px;
+    min-width: 22px;
     text-align: right;
   }
   .ti-bpm-label {
@@ -2232,7 +2232,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
   .ti-bpm-lock {
     display: flex; align-items: center; justify-content: center;
-    width: 14px; height: 14px;
+    width: 11px; height: 11px;
     color: rgba(167, 139, 250, 0.7);
     cursor: pointer;
     transition: color 150ms ease;
@@ -3153,9 +3153,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         '<span class="ti-bpm-value">120</span>' +
         '<span class="ti-bpm-label">BPM</span>' +
         '<span class="ti-bpm-lock" id="ti-bpm-lock">' +
-          '<svg viewBox="0 0 10 12" width="8" height="10">' +
-            '<rect x="1.5" y="5" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1" fill="none"/>' +
-            '<path d="M3 5 V3.5 C3 2.4 3.9 1.5 5 1.5 C6.1 1.5 7 2.4 7 3.5 V5" stroke="currentColor" stroke-width="1" fill="none"/>' +
+          '<svg viewBox="0 0 10 12" width="7" height="9">' +
+            '<rect x="1.5" y="5" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>' +
+            '<path d="M3 5 V3.5 C3 2.4 3.9 1.5 5 1.5 C6.1 1.5 7 2.4 7 3.5 V5" stroke="currentColor" stroke-width="1.2" fill="none"/>' +
           '</svg>' +
         '</span>' +
       '</div>';
@@ -6300,6 +6300,21 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
                         + juce::JSON::toString (juce::var (r.errorMessage)) + ");",
                         nullptr);
                 return;
+            }
+
+            // Mark 2: mirror singleton load into layers[0] (parallel write — Task 3).
+            // The SampleLoader has already atomically stored the buffer into the
+            // singleton sampleBuffer; we grab that same shared_ptr and store it
+            // into layers[0] so both point to the same decoded data without a copy.
+            // Task 8 will replace this with editingLayer dispatch; for now always layer 0.
+            {
+                auto buf = audioProcessor.getSampleBuffer().load();
+                audioProcessor.layers[0].sampleBuffer.setSampleRate (r.sampleRate);
+                audioProcessor.layers[0].sampleBuffer.store (buf);
+                audioProcessor.layers[0].sourceFileName = r.filename;
+                DBG ("[Mark2] singleton samples=" << audioProcessor.getSampleBuffer().getNumSamples()
+                     << " | layers[0] samples=" << audioProcessor.layers[0].sampleBuffer.getNumSamples()
+                     << " | file=" << audioProcessor.layers[0].sourceFileName);
             }
 
             // Build a JS object literal with peaks + meta and pass to onSampleLoaded.
