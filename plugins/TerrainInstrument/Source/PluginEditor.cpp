@@ -715,6 +715,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete ({});
             })
+            .withNativeFunction("getLayerHasSample", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mark 2 Phase 1 Task 7: per-layer empty-state polling.
+                // Optional arg = layer index 0..3; default to editingLayer.
+                int idx = (args.size() > 0) ? (int) args[0] : audioProcessor.editingLayer.load();
+                idx = juce::jlimit (0, 3, idx);
+                complete (audioProcessor.layers[(size_t) idx].hasSample());
+            })
             .withNativeFunction("isAnyVoicePlaying", [this](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5896,6 +5905,24 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
 
   setInterval(pollSliceGlow, 16);   // ~60 Hz
+
+  // ── Per-layer empty-state prompt polling (Mark 2 Phase 1 Task 7) ─────────
+  // Polls ~10 Hz — slow is fine, only changes on layer-switch or sample-load.
+  // When the editing layer has no sample, #hero gets 'empty-state' so the
+  // "DRAG SAMPLE OR CLICK TO LOAD" prompt appears. When it has a sample, the
+  // class is removed and the waveform is shown instead.
+  function pollLayerEmptyState () {
+    var fn = getNativeFn('getLayerHasSample');
+    if (!fn) return;
+    fn().then(function (has) {
+      var hero = document.getElementById('hero');
+      if (!hero) return;
+      if (has) hero.classList.remove('empty-state');
+      else     hero.classList.add('empty-state');
+    }).catch(function () {});
+  }
+
+  setInterval(pollLayerEmptyState, 100);  // 10 Hz
 
   // ── Scan-line viz polling ─────────────────────────────────────────────────
   // Draws a 1.5px purple line on each scan-active chop while a note is
