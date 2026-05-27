@@ -522,5 +522,15 @@ private:
     void saveUserPresetsToFile();
     void loadUserPresetsFromFile();
 
+    // ── Preset load helpers (Task 13) ────────────────────────────────────────
+    // Split from setStateInformation so V1 and V2 blobs follow separate paths.
+    // Both helpers clear ALL 4 layers first, then populate their respective sets.
+    void loadV1State (const juce::ValueTree& loaded);
+    void loadV2State (const juce::ValueTree& loaded);
+    // Parses a pitchSliceJson string into a LayerState's pitchModeSlice.
+    // Centralises the deserialization logic shared by V1 and V2 paths.
+    static void applyPitchSliceJson (const juce::String& psJson,
+                                     tw::LayerState& layer);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainInstrumentAudioProcessor)
 };

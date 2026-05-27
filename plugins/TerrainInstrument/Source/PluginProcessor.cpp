@@ -2043,86 +2043,28 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
 
-            // Restore the loaded sample's path. Editor's constructor reads
-            // this and kicks off async reload via loadSampleAsync — audio
-            // thread plays silence until reload completes.
+            // ── Task 13: V1 / V2 branching ────────────────────────────────────
+            // V2 blobs (saved by Task 12) carry version=2 and a "layers" child tree.
+            // V1 blobs (saved by pre-Task-12 builds) have no "version" property and
+            // carry the sample state at the root level (sampleSourcePath, slicesJson,
+            // pitchSliceJson, activeSliceIndex).
+            const int version = (int) newState.getProperty ("version", 1);
+
+            if (version >= 2)
             {
-                auto path = newState.getProperty ("sampleSourcePath", "").toString();
-                juce::ScopedLock sl (sampleSourcePathLock);
-                loadedSamplePath = path;
+                loadV2State (newState);
+                // Restore editingLayer from V2 blob (clamped to 0..3).
+                editingLayer.store (juce::jlimit (0, 3, (int) newState.getProperty ("editingLayer", 0)));
+            }
+            else
+            {
+                loadV1State (newState);
+                editingLayer.store (0);
             }
 
-            // Restore slice list + active index. Sub-mode comes from APVTS
-            // automatically. Empty list is fine — slicer just behaves like
-            // there are no chops yet.
-            // Task 5: restores into layers[0] explicitly (V1 format).
-            // TODO Tasks 12-13: replace with full 4-layer state deserialisation.
-            {
-                auto sliceJson = newState.getProperty ("slicesJson", "").toString();
-                if (sliceJson.isNotEmpty())
-                    setSlicesFromJson (sliceJson);
-                else
-                    replaceSlices ({});
-                layers[0].activeSliceIndex.store ((int) newState.getProperty ("activeSliceIndex", 0));
-
-                // Restore pitch-mode virtual slice. Missing key = fresh instance →
-                // pitchModeSlice keeps its zero-initialised defaults (safe).
-                auto psJson = newState.getProperty ("pitchSliceJson", "").toString();
-                if (psJson.isNotEmpty())
-                {
-                    auto pv = juce::JSON::parse (psJson);
-                    if (pv.isObject())
-                    {
-                        // Task 5: write into layers[0].pitchModeSlice explicitly (V1 format).
-                        auto& ps = layers[0].pitchModeSlice;
-                        ps.reverse          = (bool) pv.getProperty ("reverse", false);
-                        ps.pitchOffsetSemis = juce::jlimit (-12.0f, 12.0f,
-                                                (float)(double) pv.getProperty ("pitch", 0.0));
-                        const int wmRaw = (int) pv.getProperty ("warpMode", 0);
-                        ps.warpMode     = (wmRaw >= 0 && wmRaw <= 3)
-                                            ? static_cast<tw::WarpMode> (wmRaw)
-                                            : tw::WarpMode::None;
-                        ps.stretchRatio = juce::jlimit (0.1f, 15.0f,
-                                            (float)(double) pv.getProperty ("stretchRatio", 1.0));
-                        const double atkRaw = (double) pv.getProperty ("attackMs",  -1.0);
-                        const double relRaw = (double) pv.getProperty ("releaseMs", -1.0);
-                        ps.attackMs     = atkRaw < 0.0 ? -1.0f : juce::jlimit (0.0f, 2000.0f, (float) atkRaw);
-                        ps.releaseMs    = relRaw < 0.0 ? -1.0f : juce::jlimit (1.0f, 5000.0f, (float) relRaw);
-                        ps.decayMs      = juce::jlimit (0.0f, 2000.0f,
-                                            (float)(double) pv.getProperty ("decayMs",      0.0));
-                        ps.sustainLevel = juce::jlimit (0.0f, 1.0f,
-                                            (float)(double) pv.getProperty ("sustainLevel", 1.0));
-                        ps.volume       = juce::jlimit (0.0f, 2.0f,
-                                            (float)(double) pv.getProperty ("volume",       1.0));
-                        ps.scanEnabled  = (bool) pv.getProperty ("scanEnabled", false);
-                        float scRt = (float)(double) pv.getProperty ("scanRate",   0.0);
-                        float scWn = (float)(double) pv.getProperty ("scanWindow", 0.0);
-                        ps.scanRate     = (scRt < 0.05f) ? 1.0f : juce::jlimit (0.1f, 8.0f,  scRt);
-                        ps.scanWindow   = (scWn < 0.04f) ? 1.0f : juce::jlimit (0.05f, 1.0f, scWn);
-                        // Restore pitch-mode in/out bounds if serialised.
-                        // If absent (old state), leave as-is — sample load
-                        // will overwrite with [0, sampleLen] anyway.
-                        const juce::int64 savedStart = (juce::int64)(double) pv.getProperty ("startSample", (juce::int64)-1);
-                        const juce::int64 savedEnd   = (juce::int64)(double) pv.getProperty ("endSample",   (juce::int64)-1);
-                        if (savedStart >= 0 && savedEnd > savedStart)
-                        {
-                            ps.startSample = savedStart;
-                            ps.endSample   = savedEnd;
-                            // Register restored bounds with the WarpRenderCache
-                            // under sliceIndex=-1 (pitch-mode sentinel) so warp+scan
-                            // in pitch mode has valid bounds after state reload.
-                            // Task 5: route through layers[0].synth.warpCache (V1 format).
-                            layers[0].synth.warpCache.setSliceBounds (-1, (int) savedStart, (int) savedEnd);
-                        }
-                    }
-                }
-
-                // HOLD mode — restored last so it can't be cleared by a subsequent
-                // pitchSliceJson restore that fails. Missing property defaults to
-                // false (safe — matches "fresh instance" behavior).
-                holdMode.store ((bool) newState.getProperty ("holdMode", false),
-                                std::memory_order_relaxed);
-            }
+            // HOLD mode — global (not yet per-layer). Applies to both V1 and V2.
+            holdMode.store ((bool) newState.getProperty ("holdMode", false),
+                            std::memory_order_relaxed);
 
             // Reload presets from disk (the single source of truth)
             while (static_cast<int>(presets.size()) > numFactoryPresets)
@@ -2136,6 +2078,196 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
 
             apvts.replaceState (newState);
         }
+    }
+}
+
+// ── Task 13: pitchSliceJson → LayerState helper ───────────────────────────────
+// Shared by loadV1State and loadV2State.  Reads the JSON string produced by the
+// pitchSliceToJson lambda in getStateInformation and writes the fields into the
+// provided LayerState's pitchModeSlice.  No-op if the string is empty or invalid.
+/*static*/ void TerrainInstrumentAudioProcessor::applyPitchSliceJson (
+        const juce::String& psJson, tw::LayerState& layer)
+{
+    if (psJson.isEmpty()) return;
+
+    auto pv = juce::JSON::parse (psJson);
+    if (! pv.isObject()) return;
+
+    auto& ps = layer.pitchModeSlice;
+    ps.reverse          = (bool) pv.getProperty ("reverse", false);
+    ps.pitchOffsetSemis = juce::jlimit (-12.0f, 12.0f,
+                              (float)(double) pv.getProperty ("pitch", 0.0));
+    const int wmRaw     = (int) pv.getProperty ("warpMode", 0);
+    ps.warpMode         = (wmRaw >= 0 && wmRaw <= 3)
+                              ? static_cast<tw::WarpMode> (wmRaw)
+                              : tw::WarpMode::None;
+    ps.stretchRatio     = juce::jlimit (0.1f, 15.0f,
+                              (float)(double) pv.getProperty ("stretchRatio", 1.0));
+    const double atkRaw = (double) pv.getProperty ("attackMs",  -1.0);
+    const double relRaw = (double) pv.getProperty ("releaseMs", -1.0);
+    ps.attackMs         = atkRaw < 0.0 ? -1.0f : juce::jlimit (0.0f, 2000.0f, (float) atkRaw);
+    ps.releaseMs        = relRaw < 0.0 ? -1.0f : juce::jlimit (1.0f, 5000.0f, (float) relRaw);
+    ps.decayMs          = juce::jlimit (0.0f, 2000.0f,
+                              (float)(double) pv.getProperty ("decayMs",      0.0));
+    ps.sustainLevel     = juce::jlimit (0.0f, 1.0f,
+                              (float)(double) pv.getProperty ("sustainLevel", 1.0));
+    ps.volume           = juce::jlimit (0.0f, 2.0f,
+                              (float)(double) pv.getProperty ("volume",       1.0));
+    ps.scanEnabled      = (bool) pv.getProperty ("scanEnabled", false);
+    float scRt = (float)(double) pv.getProperty ("scanRate",   0.0);
+    float scWn = (float)(double) pv.getProperty ("scanWindow", 0.0);
+    ps.scanRate         = (scRt < 0.05f) ? 1.0f : juce::jlimit (0.1f, 8.0f,  scRt);
+    ps.scanWindow       = (scWn < 0.04f) ? 1.0f : juce::jlimit (0.05f, 1.0f, scWn);
+
+    // Restore pitch-mode in/out bounds if serialised.  If absent (old state),
+    // leave as-is — a subsequent sample file load will overwrite with [0, N].
+    const juce::int64 savedStart = (juce::int64)(double) pv.getProperty ("startSample", (juce::int64)-1);
+    const juce::int64 savedEnd   = (juce::int64)(double) pv.getProperty ("endSample",   (juce::int64)-1);
+    if (savedStart >= 0 && savedEnd > savedStart)
+    {
+        ps.startSample = savedStart;
+        ps.endSample   = savedEnd;
+        // Register restored bounds with the WarpRenderCache under sliceIndex=-1
+        // (pitch-mode sentinel) so warp+scan in pitch mode has valid bounds
+        // immediately after state reload without waiting for a file load.
+        layer.synth.warpCache.setSliceBounds (-1, (int) savedStart, (int) savedEnd);
+    }
+}
+
+// ── Task 13: V1 state loader ──────────────────────────────────────────────────
+// Reads the pre-Mark-2 blob layout: single sample at the root level.
+// Populates layers[0]; clears layers[1..3] so they show as empty.
+void TerrainInstrumentAudioProcessor::loadV1State (const juce::ValueTree& loaded)
+{
+    // Clear all 4 layers first so layers[1..3] show as empty after a V1 load.
+    for (auto& L : layers)
+    {
+        L.sourceFileName = juce::String();
+        L.sourcePath     = juce::String();
+        // Drop the sample buffer (atomic store of nullptr).
+        L.sampleBuffer.store (tw::SampleBuffer::BufferPtr{});
+        // Drop slice list.
+        std::atomic_store (&L.currentSlices, tw::SliceListPtr{});
+        // Reset pitchModeSlice to default-constructed state.
+        L.pitchModeSlice = tw::Slice{};
+        L.activeSliceIndex.store (0);
+        L.volume.store (1.0f);
+        L.mute.store   (false);
+        L.solo.store   (false);
+    }
+
+    // ── Populate layer A (index 0) from root-level V1 properties ─────────────
+    auto& A = layers[0];
+
+    // V1 stored the path under "sampleSourcePath" at the root.
+    A.sourcePath     = loaded.getProperty ("sampleSourcePath", "").toString();
+    A.sourceFileName = loaded.getProperty ("sourceFileName",   "").toString();
+
+    // Persist the path via the legacy singleton so the editor constructor's
+    // V1 reload path (getLoadedSamplePath → loadSampleAsync for layer 0) fires.
+    {
+        juce::ScopedLock sl (sampleSourcePathLock);
+        loadedSamplePath = A.sourcePath;
+    }
+
+    // Slices.
+    const juce::String sliceJson = loaded.getProperty ("slicesJson", "").toString();
+    if (sliceJson.isNotEmpty())
+    {
+        auto sl = std::make_shared<const tw::SliceList> (tw::slicesFromJson (sliceJson));
+        std::atomic_store (&A.currentSlices, tw::SliceListPtr (sl));
+
+        // Push slice bounds into the warp cache (same as replaceSlices does,
+        // but writing directly to layer[0] instead of routing through editingLayer).
+        for (int i = 0; i < (int) sl->size(); ++i)
+        {
+            const auto& s = (*sl)[(size_t) i];
+            A.synth.warpCache.setSliceBounds (i, (int) s.startSample, (int) s.endSample);
+        }
+    }
+
+    A.activeSliceIndex.store ((int) loaded.getProperty ("activeSliceIndex", 0));
+
+    // pitchModeSlice — uses the shared helper.
+    applyPitchSliceJson (loaded.getProperty ("pitchSliceJson", "").toString(), A);
+
+    // Mode/play/count come via APVTS (already replaced by the caller).
+}
+
+// ── Task 13: V2 state loader ──────────────────────────────────────────────────
+// Reads the Task-12 blob layout: 4-layer "layers" child tree.
+// Populates all 4 layers.  Falls back to loadV1State if the tree is absent.
+void TerrainInstrumentAudioProcessor::loadV2State (const juce::ValueTree& loaded)
+{
+    auto layersTree = loaded.getChildWithName ("layers");
+    if (! layersTree.isValid())
+    {
+        // Defensive: V2 marker set but no layers tree (shouldn't happen with
+        // Task-12-saved blobs, but protect against partial writes).
+        loadV1State (loaded);
+        return;
+    }
+
+    // Clear all 4 layers first so empty layer nodes leave those layers visually
+    // empty (no ghost sample state from a previous load).
+    for (auto& L : layers)
+    {
+        L.sourceFileName = juce::String();
+        L.sourcePath     = juce::String();
+        L.sampleBuffer.store (nullptr);
+        std::atomic_store (&L.currentSlices, tw::SliceListPtr{});
+        L.pitchModeSlice = tw::Slice{};
+        L.activeSliceIndex.store (0);
+        L.volume.store (1.0f);
+        L.mute.store   (false);
+        L.solo.store   (false);
+    }
+
+    for (int i = 0; i < layersTree.getNumChildren(); ++i)
+    {
+        auto layerNode = layersTree.getChild (i);
+        const int idx  = (int) layerNode.getProperty ("index", i);
+        if (idx < 0 || idx > 3) continue;
+
+        auto& L = layers[(size_t) idx];
+
+        L.sourceFileName = layerNode.getProperty ("sourceFileName", "").toString();
+        L.sourcePath     = layerNode.getProperty ("sourcePath",     "").toString();
+        L.activeSliceIndex.store ((int) layerNode.getProperty ("activeSliceIndex", 0));
+        L.rootMidiNote.store     ((int) layerNode.getProperty ("rootMidiNote", 60));
+        L.sliceMode.store        ((int) layerNode.getProperty ("sliceMode",    0));
+        L.playMode.store         ((int) layerNode.getProperty ("playMode",     0));
+        L.sliceCount.store       ((int) layerNode.getProperty ("sliceCount",   4));
+        L.chopFadeMs.store ((float)(double) layerNode.getProperty ("chopFadeMs", 5.0));
+        L.volume.store     ((float)(double) layerNode.getProperty ("volume",     1.0));
+        L.mute.store  ((bool) layerNode.getProperty ("mute",  false));
+        L.solo.store  ((bool) layerNode.getProperty ("solo",  false));
+
+        // Slices — same JSON format as V1 (slicesToJson/slicesFromJson).
+        const juce::String sliceJson = layerNode.getProperty ("slicesJson", "").toString();
+        if (sliceJson.isNotEmpty())
+        {
+            auto sl = std::make_shared<const tw::SliceList> (tw::slicesFromJson (sliceJson));
+            std::atomic_store (&L.currentSlices, tw::SliceListPtr (sl));
+
+            // Push slice bounds into this layer's warp cache.
+            for (int si = 0; si < (int) sl->size(); ++si)
+            {
+                const auto& s = (*sl)[(size_t) si];
+                L.synth.warpCache.setSliceBounds (si, (int) s.startSample, (int) s.endSample);
+            }
+        }
+
+        // pitchModeSlice — shared helper.
+        applyPitchSliceJson (layerNode.getProperty ("pitchSliceJson", "").toString(), L);
+    }
+
+    // Keep the legacy loadedSamplePath in sync with layer 0's path so the
+    // editor constructor's existing V1 reload path fires for layer 0.  The
+    // editor constructor's V2 path (added in the same task) handles layers 1-3.
+    {
+        juce::ScopedLock sl (sampleSourcePathLock);
+        loadedSamplePath = layers[0].sourcePath;
     }
 }
 

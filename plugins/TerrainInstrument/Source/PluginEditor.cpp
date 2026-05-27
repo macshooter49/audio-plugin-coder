@@ -1463,25 +1463,46 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // Start visualization timer at 60Hz for smooth LFO/mod display
     startTimerHz(60);
 
-    // Auto-reload the previously-loaded sample. Two cases:
-    //   1) Cache hit (editor close+reopen, same processor instance): the JS
-    //      side pulls the cached payload via getCachedSamplePayload and
-    //      restores the waveform display instantly. No decode needed —
-    //      audio buffer was never lost. Skip loadSampleAsync here.
-    //   2) Cache miss + path set (DAW project reload, fresh processor): the
-    //      audio buffer is empty, so we must re-decode from disk to repopulate
-    //      it. This also re-pushes the JS payload via the load completion.
+    // Auto-reload the previously-loaded sample(s).
+    //
+    // Case 1 — cache hit (editor close+reopen, same processor instance):
+    //   JS pulls the cached payload via getCachedSamplePayload and restores the
+    //   waveform for the *currently editing* layer instantly. No decode needed —
+    //   the audio buffers in all 4 layers were never released.
+    //
+    // Case 2 — cache miss + path set (DAW project reload, fresh processor):
+    //   Audio buffers are empty; we must re-decode from disk.  For V1 presets
+    //   only layers[0] has a path; for V2 presets any of the 4 layers may have
+    //   one.  We iterate all 4 and fire an async decode for every non-empty path
+    //   that does not already have a loaded buffer.  loadSampleIntoLayer targets
+    //   the correct layer index without touching editingLayer.
     juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safeThis (this);
     juce::MessageManager::callAsync ([safeThis]
     {
         if (safeThis == nullptr) return;
-        // Case 1: cache hit — JS will pull on its own. Nothing for C++ to do.
-        if (safeThis->audioProcessor.getCachedSamplePayload().isNotEmpty()) return;
-        // Case 2: cache empty but path stored — full decode.
-        const auto storedPath = safeThis->audioProcessor.getLoadedSamplePath();
-        if (storedPath.isEmpty()) return;
-        const juce::File f (storedPath);
-        if (f.existsAsFile()) safeThis->loadSampleAsync (f);
+
+        // Case 1: cache hit for the currently-editing layer → JS handles display.
+        // We still need to reload audio buffers for the other layers, so don't
+        // bail out entirely — fall through and check all 4 layers below.
+        // (The cache only holds the waveform display payload for ONE layer at a
+        // time; audio buffers for all layers are either live or need reloading.)
+
+        for (int li = 0; li < 4; ++li)
+        {
+            auto& L = safeThis->audioProcessor.layers[(size_t) li];
+
+            // If the audio buffer is already populated, nothing to do for this layer.
+            if (L.hasSample()) continue;
+
+            const juce::String path = L.sourcePath;
+            if (path.isEmpty()) continue;
+
+            const juce::File f (path);
+            if (! f.existsAsFile()) continue;
+
+            // Fire the per-layer async decode.
+            safeThis->loadSampleIntoLayer (f, li);
+        }
     });
 }
 
@@ -6499,6 +6520,112 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
                     audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSampleRate (r.sampleRate);
                 }
             }
+
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    "if (window.onSampleLoaded) window.onSampleLoaded(" + json + ");",
+                    nullptr);
+        });
+}
+
+// ── Task 13: per-layer sample reload ─────────────────────────────────────────
+// Identical to loadSampleAsync but targets a FIXED layer index (layerIdx) rather
+// than whatever editingLayer is at callback time.  Used by the editor constructor
+// to reload all 4 layers after a V2 DAW project restore.
+//
+// Key difference from loadSampleAsync:
+//   - Does NOT call setLoadedSamplePath — that singleton is the V1 "layer 0"
+//     path and is already set by setStateInformation / loadV2State.
+//   - Does NOT fire the JS onSampleLoaded callback for non-editing layers
+//     (only the currently-editing layer drives the visible waveform display).
+//   - DOES cache the payload when reloading the currently-editing layer so
+//     that subsequent editor reopen (Case 1) still works for that layer.
+void TerrainInstrumentAudioProcessorEditor::loadSampleIntoLayer (const juce::File& file,
+                                                                  int layerIdx)
+{
+    if (layerIdx < 0 || layerIdx > 3) return;
+
+    auto& loader = audioProcessor.getSampleLoader();
+    auto& target = audioProcessor.layers[(size_t) layerIdx].sampleBuffer;
+
+    const bool isEditingLayer = (layerIdx == audioProcessor.editingLayer.load());
+
+    if (isEditingLayer && webView != nullptr)
+        webView->evaluateJavascript (
+            "if (window.onLoadingStarted) window.onLoadingStarted("
+            + juce::JSON::toString (juce::var (file.getFileName())) + ");",
+            nullptr);
+
+    loader.load (
+        file,
+        target,
+        [this, isEditingLayer] (float progress)
+        {
+            if (isEditingLayer && webView != nullptr)
+                webView->evaluateJavascript (
+                    "if (window.onLoadingProgress) window.onLoadingProgress("
+                    + juce::String (progress, 4) + ");",
+                    nullptr);
+        },
+        [this, layerIdx, isEditingLayer] (tw::SampleLoader::Result r)
+        {
+            if (! r.success) return;  // Non-editing layer errors: silent skip (no UI to show).
+
+            // Persist filename + path into the layer state.
+            {
+                auto& L = audioProcessor.layers[(size_t) layerIdx];
+                auto buf = L.sampleBuffer.load();
+                L.sampleBuffer.setSampleRate (r.sampleRate);
+                L.sampleBuffer.store (buf);
+                L.sourceFileName = r.filename;
+                // sourcePath is already set by setStateInformation — don't overwrite.
+            }
+
+            // Wire up the WarpRenderCache for this layer.
+            audioProcessor.sourceVersionId_.fetch_add (1, std::memory_order_relaxed);
+            {
+                auto& L  = audioProcessor.layers[(size_t) layerIdx];
+                auto  buf = L.sampleBuffer.load();
+                if (buf && buf->getNumSamples() > 0 && buf->getNumChannels() >= 1)
+                {
+                    const float* Lp = buf->getReadPointer (0);
+                    const float* Rp = (buf->getNumChannels() >= 2)
+                                        ? buf->getReadPointer (1) : Lp;
+                    L.synth.warpCache.setSource (Lp, Rp, buf->getNumSamples());
+                    L.synth.warpCache.setSampleRate (r.sampleRate);
+                }
+                // Restore pitchModeSlice sample bounds now that we know the real length.
+                // Only overwrite if the restored slice didn't already have valid bounds
+                // (applyPitchSliceJson sets them if serialised; otherwise they're 0/0).
+                if (L.pitchModeSlice.endSample <= L.pitchModeSlice.startSample)
+                {
+                    L.pitchModeSlice.startSample = 0;
+                    L.pitchModeSlice.endSample   = (juce::int64) r.lengthSamples;
+                }
+                L.synth.warpCache.setSliceBounds (-1,
+                    (int) L.pitchModeSlice.startSample,
+                    (int) L.pitchModeSlice.endSample);
+            }
+
+            // Push the JS payload only for the layer the UI is currently showing.
+            if (! isEditingLayer) return;
+
+            juce::Array<juce::var> minArr, maxArr;
+            minArr.ensureStorageAllocated ((int) r.peaksMin.size());
+            maxArr.ensureStorageAllocated ((int) r.peaksMax.size());
+            for (auto v : r.peaksMin) minArr.add (juce::var (v));
+            for (auto v : r.peaksMax) maxArr.add (juce::var (v));
+
+            juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+            obj->setProperty ("filename",      r.filename);
+            obj->setProperty ("sampleRate",    r.sampleRate);
+            obj->setProperty ("lengthSamples", r.lengthSamples);
+            obj->setProperty ("numChannels",   r.numChannels);
+            obj->setProperty ("peaksMin",      juce::var (minArr));
+            obj->setProperty ("peaksMax",      juce::var (maxArr));
+
+            const auto json = juce::JSON::toString (juce::var (obj.get()), true);
+            audioProcessor.setCachedSamplePayload (json);
 
             if (webView != nullptr)
                 webView->evaluateJavascript (
