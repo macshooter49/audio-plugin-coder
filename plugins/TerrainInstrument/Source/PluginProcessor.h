@@ -19,6 +19,7 @@
 #include "Slice.h"
 #include "TerrainSynth.h"
 #include "TerrainConstants.h"
+#include "LayerState.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -380,6 +381,13 @@ public:
     // Source version counter — public so the editor can bump it from the
     // sample-load callback (keys the warp cache so stale entries never hit).
     std::atomic<int> sourceVersionId_ { 0 };
+
+    // ── Mark 2 layers (A/B/C/D) — see LayerState.h ──────────────────────────
+    // Phase 1 task 2: array declared and constructed; not yet wired into the
+    // audio path (that's task 3/4). editingLayer tracks which layer the UI
+    // is currently targeting (0..3 = A/B/C/D).
+    std::array<tw::LayerState, 4> layers;
+    std::atomic<int> editingLayer { 0 };
 
 private:
     juce::AudioProcessorValueTreeState apvts;

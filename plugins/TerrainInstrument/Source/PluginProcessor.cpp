@@ -21,6 +21,12 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // Sample buffer starts empty. User drags a file in, or the editor opens a
     // file picker. SampleLoader (async) populates the shared buffer when a load
     // completes. Voices read it via the SampleBuffer atomic shared_ptr.
+
+    // Mark 2 layers: label each layer with its 0-3 index for self-identification.
+    // LayerState's default constructor already wires its synth + voices using
+    // its own atomics, so no further per-layer construction is needed here yet.
+    for (int i = 0; i < 4; ++i)
+        layers[(size_t) i].layerIndex = i;
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
