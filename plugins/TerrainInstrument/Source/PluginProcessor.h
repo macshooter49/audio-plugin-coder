@@ -211,15 +211,16 @@ public:
      */
     int getSourceVersionId() const noexcept { return sourceVersionId_.load (std::memory_order_relaxed); }
 
-    // Cached JSON payload for the loaded sample (filename + peaks + meta).
-    // Populated by the editor after each successful load. Survives editor
-    // close/reopen WITHIN the same plugin instance — JS pulls via the
-    // getCachedSamplePayload native fn on hero injection, restoring the
-    // waveform display instantly without re-decoding the file. On DAW
-    // project reload the processor is fresh (cache empty) — falls back to
-    // file-path reload so the audio buffer also re-populates.
-    void setCachedSamplePayload (const juce::String& jsonPayload);
-    juce::String getCachedSamplePayload() const;
+    // Cached JSON payload for each layer's loaded sample (filename + peaks + meta).
+    // Per-layer as of Mark 2 Phase 1 editor-reopen fix: each pad load caches its
+    // own payload so close/reopen restores ALL 4 layers' waveforms, not just the
+    // editing one. Populated by the editor after each successful load.
+    // layerIdx = -1 (default) means "use the currently-editing layer".
+    void setCachedSamplePayload (const juce::String& jsonPayload, int layerIdx = -1);
+    juce::String getCachedSamplePayload (int layerIdx = -1) const;
+    // Snapshot of all 4 layer payloads (empty strings for layers with no sample).
+    // Used by the getAllLayerPayloads native fn to hydrate JS mirrors on editor open.
+    std::array<juce::String, 4> getAllLayerPayloads() const;
 
     // Preset system
     void loadPreset (int index);
@@ -396,12 +397,13 @@ private:
     mutable juce::CriticalSection sampleSourcePathLock;
     juce::String                  loadedSamplePath;
 
-    // Cached JS-payload JSON for the currently-loaded sample. Lives only as
-    // long as the processor instance; not persisted to DAW state (would
-    // bloat XML by ~80KB per sample with no win — DAW reload re-decodes
-    // anyway because the audio buffer needs re-populating).
-    mutable juce::CriticalSection samplePayloadLock;
-    juce::String                  cachedSamplePayloadJson;
+    // Per-layer cached JS-payload JSON for each loaded sample (Mark 2 Phase 1).
+    // Index 0..3 = layers A/B/C/D. Empty string for layers with no sample.
+    // Lives only as long as the processor instance; not persisted to DAW state
+    // (would bloat XML by ~80KB × 4 with no win — DAW reload re-decodes anyway
+    // because the audio buffers need re-populating).
+    mutable juce::CriticalSection             samplePayloadLock;
+    std::array<juce::String, 4>               cachedLayerPayloads;
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;

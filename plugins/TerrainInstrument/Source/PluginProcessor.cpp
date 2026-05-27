@@ -979,25 +979,25 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
     }
 
-    // Phase 1 task 9: read the APVTS-global mode selectors once per block.
-    // ctx.mode is sourced from APVTS (globally consistent for Phase 1). All other
-    // ctx fields are sourced per-layer from each layer's own atomics.
-    const int sliceModeIdx_blk    = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
+    // Mark 2 Phase 1 audio-fix: sliceMode is now per-layer (read from
+    // layer.sliceMode inside the layer loop below). sliceSubMode is still
+    // global for Phase 1 — only matters when 2+ layers are simultaneously
+    // in SLICE mode with different sub-modes (edge case to address later).
     const int sliceSubModeIdx_blk = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_SUB_MODE);
     const size_t elIdx = (size_t) editingLayer.load();
 
-    // Derive the shared Mode enum from APVTS once so we don't repeat the if-chain per layer.
-    tw::SliceContext::Mode globalMode;
-    if (sliceModeIdx_blk == 0)
-        globalMode = tw::SliceContext::Mode::Whole;
-    else if (sliceSubModeIdx_blk == 3)
-        globalMode = tw::SliceContext::Mode::Layer;
-    else if (sliceSubModeIdx_blk == 2)
-        globalMode = tw::SliceContext::Mode::ChromaticRandom;
-    else if (sliceSubModeIdx_blk == 1)
-        globalMode = tw::SliceContext::Mode::ChromaticOneSlice;
-    else
-        globalMode = tw::SliceContext::Mode::ChopChromaticLayout;
+    // Helper: derive the SliceContext::Mode enum from a per-layer slice mode +
+    // the (still-global) slice sub-mode. PITCH (layerSliceMode==0) always
+    // resolves to Whole regardless of sub-mode; SLICE (==1) picks the variant
+    // based on the global sub-mode selector.
+    auto modeFromLayer = [sliceSubModeIdx_blk] (int layerSliceMode) -> tw::SliceContext::Mode
+    {
+        if (layerSliceMode == 0)               return tw::SliceContext::Mode::Whole;
+        if (sliceSubModeIdx_blk == 3)          return tw::SliceContext::Mode::Layer;
+        if (sliceSubModeIdx_blk == 2)          return tw::SliceContext::Mode::ChromaticRandom;
+        if (sliceSubModeIdx_blk == 1)          return tw::SliceContext::Mode::ChromaticOneSlice;
+        return tw::SliceContext::Mode::ChopChromaticLayout;
+    };
 
     // Drain audition queue — UI-clicked previews of individual slices.
     // Triggered before renderNextBlock so the audition voice starts within
@@ -1055,12 +1055,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (layer.mute.load())                 continue;
             if (anySolo && ! layer.solo.load())    continue;
 
-            // Build per-layer SliceContext. Per-layer fields sourced from each
-            // layer's own atomics; ctx.mode uses APVTS globals (Phase 1 constraint:
-            // per-layer APVTS is a future refactor — all layers share the same mode).
+            // Build per-layer SliceContext. ctx.mode is now sourced from each
+            // layer's own sliceMode atomic (Mark 2 Phase 1 audio-fix) so layers
+            // can independently choose PITCH vs SLICE. sliceSubMode is still
+            // global — when 2+ layers are simultaneously in SLICE the most
+            // recent sub-mode click wins for all of them.
             {
                 tw::SliceContext ctx;
-                ctx.mode             = globalMode;
+                ctx.mode             = modeFromLayer (layer.sliceMode.load());
                 ctx.rootMidiNote     = layer.rootMidiNote.load();
                 ctx.activeSliceIndex = layer.activeSliceIndex.load();
                 ctx.sourceVersionId  = getSourceVersionId();
@@ -1721,16 +1723,26 @@ juce::String TerrainInstrumentAudioProcessor::getLoadedSamplePath() const
     return loadedSamplePath;
 }
 
-void TerrainInstrumentAudioProcessor::setCachedSamplePayload (const juce::String& jsonPayload)
+void TerrainInstrumentAudioProcessor::setCachedSamplePayload (const juce::String& jsonPayload, int layerIdx)
 {
+    if (layerIdx < 0)         layerIdx = editingLayer.load();
+    if (layerIdx < 0 || layerIdx > 3) return;
     juce::ScopedLock sl (samplePayloadLock);
-    cachedSamplePayloadJson = jsonPayload;
+    cachedLayerPayloads[(size_t) layerIdx] = jsonPayload;
 }
 
-juce::String TerrainInstrumentAudioProcessor::getCachedSamplePayload() const
+juce::String TerrainInstrumentAudioProcessor::getCachedSamplePayload (int layerIdx) const
+{
+    if (layerIdx < 0)         layerIdx = editingLayer.load();
+    if (layerIdx < 0 || layerIdx > 3) return {};
+    juce::ScopedLock sl (samplePayloadLock);
+    return cachedLayerPayloads[(size_t) layerIdx];
+}
+
+std::array<juce::String, 4> TerrainInstrumentAudioProcessor::getAllLayerPayloads() const
 {
     juce::ScopedLock sl (samplePayloadLock);
-    return cachedSamplePayloadJson;
+    return cachedLayerPayloads;   // returns a copy under the lock
 }
 
 //==============================================================================
@@ -2077,6 +2089,17 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             currentPresetIndex.store(presetIdx);
 
             apvts.replaceState (newState);
+
+            // Mark 2 Phase 1 audio-fix: V1 backward-compat. V1 presets carry
+            // sliceMode only in APVTS (global). Engine now reads from per-layer
+            // layer.sliceMode atomic. Seed layers[0].sliceMode from the freshly
+            // loaded APVTS value so V1 presets keep their SLICE/PITCH selection.
+            // V2 presets already populated layer.sliceMode per-layer in loadV2State.
+            if (version < 2)
+            {
+                const int v1Mode = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
+                layers[0].sliceMode.store (v1Mode);
+            }
         }
     }
 }

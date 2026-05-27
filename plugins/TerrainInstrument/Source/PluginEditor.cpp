@@ -546,10 +546,65 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // JS pulls this on hero-overlay init. Returns the cached
-                // sample payload JSON (filename + peaks + meta) so editor
-                // close/reopen restores the waveform display without a
-                // re-decode. Empty string if no sample loaded yet.
+                // sample payload JSON (filename + peaks + meta) for the
+                // CURRENTLY EDITING layer. Editor close/reopen uses this to
+                // restore the visible waveform without a re-decode.
+                // Empty string if no sample loaded yet.
                 complete (audioProcessor.getCachedSamplePayload());
+            })
+            .withNativeFunction("getEditingLayerIdx", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mark 2 Phase 1 editor-reopen fix: JS pulls this so the
+                // A/B/C/D .active pad class and state.editingLayerIdx mirror
+                // are restored on every fresh editor open.
+                complete (audioProcessor.editingLayer.load());
+            })
+            .withNativeFunction("getAllLayerPayloads", [this](const juce::Array<juce::var>&,
+                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mark 2 Phase 1 editor-reopen fix: returns one rich payload
+                // per layer so JS can hydrate state.layerStates[] for all 4
+                // pads on every editor open. Each entry is either:
+                //   - an empty object {} → no sample loaded
+                //   - { filename, sampleRate, lengthSamples, numChannels,
+                //       peaksMin, peaksMax,
+                //       sliceMode, sampleLoopMode, rootMidiNote, activeSliceIndex }
+                //
+                // The peaks/meta fields come from the per-layer cached payload
+                // (populated by loadSampleAsync / loadSampleIntoLayer); the
+                // mode/root atomics are read fresh at call time so they reflect
+                // the very latest user edits even if those happened after the
+                // sample originally loaded.
+                const auto cached = audioProcessor.getAllLayerPayloads();
+                juce::Array<juce::var> out;
+                out.ensureStorageAllocated (4);
+                for (int i = 0; i < 4; ++i)
+                {
+                    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                    if (cached[(size_t) i].isNotEmpty())
+                    {
+                        // Parse the cached peaks-payload and copy every top-level
+                        // property over to the output object.
+                        auto parsed = juce::JSON::parse (cached[(size_t) i]);
+                        if (auto* src = parsed.getDynamicObject())
+                        {
+                            const auto& props = src->getProperties();
+                            for (int p = 0; p < props.size(); ++p)
+                                obj->setProperty (props.getName (p), props.getValueAt (p));
+                        }
+                        // Merge in the per-layer mode atomics.
+                        const auto& L = audioProcessor.layers[(size_t) i];
+                        obj->setProperty ("sliceMode",        L.sliceMode.load());
+                        obj->setProperty ("sampleLoopMode",   L.sampleLoopMode.load());
+                        obj->setProperty ("rootMidiNote",     L.rootMidiNote.load());
+                        obj->setProperty ("activeSliceIndex", L.activeSliceIndex.load());
+                    }
+                    // Empty layers fall through with no properties set —
+                    // JS treats absence of filename/peaks as "no sample".
+                    out.add (juce::var (obj.get()));
+                }
+                complete (juce::var (out));
             })
             .withNativeFunction("setSampleLoopMode", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -597,6 +652,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() > 0)
                 {
                     const int mode = juce::jlimit (0, 1, (int) args[0]);  // 0=PITCH, 1=SLICE
+                    // Mark 2 Phase 1 audio-fix: sliceMode is now per-layer.
+                    // Engine reads from layer[editingLayer].sliceMode in processBlock,
+                    // so writing here is the source of truth for that layer's mode.
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()]
+                                  .sliceMode.store (mode);
+                    // Keep APVTS in sync so DAW automation, host displays, and V1
+                    // preset save format all still see a sensible value. The engine
+                    // no longer reads this; it tracks the editing layer's mode.
                     if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SLICE_MODE))
                         p->setValueNotifyingHost (static_cast<float> (mode));
                 }
@@ -605,7 +668,46 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("getSliceMode", [this](const juce::Array<juce::var>&,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete ((int) *audioProcessor.getAPVTS().getRawParameterValue (ParameterIDs::SLICE_MODE));
+                // Per-layer: read the editing layer's atomic (source of truth post-Phase-1-audio-fix).
+                complete (audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()]
+                                        .sliceMode.load());
+            })
+            .withNativeFunction("clearEditingLayer", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mark 2 Phase 1: PITCH-mode double-click "unload" gesture.
+                // Drops the editing layer's sample + slices + pitch-mode config
+                // so the layer returns to the empty drag-prompt state. Other
+                // layers and this layer's mode/root/loop pill settings are
+                // preserved — only data clears, so a follow-up drop reuses them.
+                const size_t el = (size_t) audioProcessor.editingLayer.load();
+                auto& L = audioProcessor.layers[el];
+
+                // Stop voices first so they don't dereference the buffer we're
+                // dropping. allowTailOff=true gives a graceful release (no pop).
+                L.synth.allNotesOff (0 /* all channels */, true /* allowTailOff */);
+
+                // Drop the audio data + per-layer slice state.
+                L.sampleBuffer.store (tw::SampleBuffer::BufferPtr{});
+                std::atomic_store (&L.currentSlices, tw::SliceListPtr{});
+                L.pitchModeSlice = tw::Slice{};
+                L.activeSliceIndex.store (0);
+                L.sourceFileName = juce::String();
+                L.sourcePath     = juce::String();
+
+                // Bump source version so voices invalidate any cached pointers
+                // and the warp cache stops being read.
+                audioProcessor.sourceVersionId_.fetch_add (1, std::memory_order_relaxed);
+
+                // Drop the editor-reopen payload cache for this layer.
+                audioProcessor.setCachedSamplePayload (juce::String(), (int) el);
+
+                // If clearing layer 0, also wipe the legacy single sample path
+                // so DAW close+reopen doesn't trigger a V1-fallback file reload.
+                if (el == 0)
+                    audioProcessor.setLoadedSamplePath (juce::String());
+
+                complete ({});
             })
             .withNativeFunction("getSlicesJson", [this](const juce::Array<juce::var>&,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -3637,7 +3739,211 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     gridN: 16,              // last grid count used
     sampleLengthSamples: 0, // total length of loaded sample (for marker positioning)
     sliceGlow: new Float32Array(256),  // per-slice glow [0..1], polled from C++ at ~60Hz
-    pitchModeSlice: makePitchModeSliceDefault()  // virtual slice for PITCH mode
+    pitchModeSlice: makePitchModeSliceDefault(),  // virtual slice for PITCH mode
+    // Mark 2 Phase 1 visual-fix: per-layer JS mirrors.
+    //   editingLayerIdx mirrors the C++ editingLayer atomic.
+    //   layerStates[i] = null when layer i has never been populated (fresh).
+    //     Otherwise: snapshot object produced by snapshotCurrentLayer().
+    //   On pad click → snapshot leaving layer, restore entering layer.
+    //   On sample-load → write to layerStates[editingLayerIdx] so the load
+    //     populates the mirror naturally. Non-editing-layer loads (V2 preset
+    //     migration) populate via window.onLayerSampleMirror.
+    editingLayerIdx: 0,
+    layerStates: [null, null, null, null]
+  };
+
+  // ── Per-layer state mirror helpers (Mark 2 Phase 1 visual fix) ────────────
+  // Per-layer fields that snapshot/restore on pad click. Sample-load fields
+  // (peaksMin/peaksMax) are immutable after load so shared refs are safe.
+  // Slice list contains mutable objects → deep-copy on snapshot.
+  function snapshotCurrentLayer () {
+    return {
+      peaksMin: state.peaksMin,
+      peaksMax: state.peaksMax,
+      peakScale: state.peakScale,
+      sampleLengthSamples: state.sampleLengthSamples,
+      rootNote: state.rootNote,
+      sliceMode: state.sliceMode,
+      sliceSubMode: state.sliceSubMode,
+      holdMode: state.holdMode,
+      sampleLoopMode: state.sampleLoopMode,
+      slices: state.slices.map(function (s) { return Object.assign({}, s); }),
+      activeSliceIndex: state.activeSliceIndex,
+      gridN: state.gridN,
+      pitchModeSlice: Object.assign({}, state.pitchModeSlice)
+    };
+  }
+
+  // Restore JS state.* from a snapshot. null = fresh layer (factory defaults).
+  function restoreLayerSnapshot (snap) {
+    if (snap) {
+      state.peaksMin            = snap.peaksMin;
+      state.peaksMax            = snap.peaksMax;
+      state.peakScale           = snap.peakScale;
+      state.sampleLengthSamples = snap.sampleLengthSamples;
+      state.rootNote            = snap.rootNote;
+      state.sliceMode           = snap.sliceMode;
+      state.sliceSubMode        = snap.sliceSubMode;
+      state.holdMode            = snap.holdMode;
+      state.sampleLoopMode      = snap.sampleLoopMode;
+      state.slices              = snap.slices.map(function (s) { return Object.assign({}, s); });
+      state.activeSliceIndex    = snap.activeSliceIndex;
+      state.gridN               = snap.gridN;
+      state.pitchModeSlice      = Object.assign({}, snap.pitchModeSlice);
+    } else {
+      // Fresh layer — match initial state.* defaults so empty-state prompt shows.
+      state.peaksMin            = null;
+      state.peaksMax            = null;
+      state.peakScale           = 1.0;
+      state.sampleLengthSamples = 0;
+      state.rootNote            = 60;
+      state.sliceMode           = 0;
+      state.sliceSubMode        = 0;
+      state.holdMode            = false;
+      state.sampleLoopMode      = 0;
+      state.slices              = [];
+      state.activeSliceIndex    = 0;
+      state.gridN               = 16;
+      state.pitchModeSlice      = makePitchModeSliceDefault();
+    }
+  }
+
+  // Re-render every per-layer UI surface from current state.*. Called by
+  // switchEditingLayer after restoring the snapshot.
+  function applyLayerStateToUI () {
+    // Mode pill (PITCH / SLICE). setSliceModeUI also handles HOLD auto-clear,
+    // SLICES drawer visibility, and redrawSliceOverlay().
+    if (typeof setSliceModeUI === 'function') setSliceModeUI(state.sliceMode);
+    // Sub-mode pill (CHOP / CHROMATIC / RANDOM / LAYER).
+    if (typeof setSubModeUI === 'function') setSubModeUI(state.sliceSubMode);
+    // 1-SHOT / LOOP pill.
+    var loopMode = state.sampleLoopMode;
+    document.querySelectorAll('#ti-play-mode-toggle .ti-play-pill').forEach(function (p) {
+      p.classList.toggle('active', parseInt(p.dataset.play, 10) === loopMode);
+    });
+    // HOLD pill label + .hold-active class (CHOP pill doubles as HOLD).
+    var chopPill = document.querySelector('#ti-submode-toggle .ti-submode-pill[data-sub="0"]');
+    if (chopPill) {
+      chopPill.textContent = state.holdMode ? 'HOLD' : 'CHOP';
+      chopPill.classList.toggle('hold-active', !!state.holdMode);
+    }
+    if (typeof updateRootDisplay === 'function') updateRootDisplay();
+    if (typeof drawWaveform === 'function') drawWaveform();
+    if (typeof redrawSliceOverlay === 'function') redrawSliceOverlay();
+  }
+
+  // Public: switch the editing layer. Called by the A/B/C/D pad click handler.
+  // Snapshot leaving layer → flip C++ atomic → restore entering layer → render.
+  window.switchEditingLayer = function (newIdx) {
+    newIdx = Math.max(0, Math.min(3, parseInt(newIdx, 10) || 0));
+    if (newIdx === state.editingLayerIdx) return;
+
+    // Snapshot the layer we are leaving (overwrites any stale mirror).
+    state.layerStates[state.editingLayerIdx] = snapshotCurrentLayer();
+
+    // Flip the C++ editingLayer atomic so native fn routing follows the UI.
+    var fn = getNativeFn('setEditingLayer');
+    if (fn) { try { fn(newIdx); } catch (_) {} }
+    state.editingLayerIdx = newIdx;
+
+    // Restore the target layer's mirror (or defaults if never populated).
+    restoreLayerSnapshot(state.layerStates[newIdx]);
+
+    // #hero CSS class management — fixes the has-sample / empty-state war.
+    // The 10Hz pollLayerEmptyState would catch this eventually, but doing it
+    // synchronously here avoids a visible flash of the wrong waveform.
+    var hero = document.getElementById('hero');
+    if (hero) {
+      hero.classList.remove('drag-hover');
+      hero.classList.remove('has-sample-missing');
+      var hasSample = !!(state.peaksMin && state.peaksMin.length);
+      hero.classList.toggle('has-sample', hasSample);
+      hero.classList.toggle('empty-state', !hasSample);
+    }
+
+    // Re-render every per-layer surface from the restored state.
+    applyLayerStateToUI();
+
+    // C++ per-layer pitchModeSlice is the source of truth for warp/scan/ADSR
+    // bounds (per-layer atomics). Re-pull it so JS mirror matches engine.
+    if (typeof syncPitchSliceFromCpp === 'function') syncPitchSliceFromCpp();
+
+    // C++ per-layer slice list is the source of truth for SLICE-mode chops.
+    // Mirror only carries factory-default empty slices on first pad-touch;
+    // pull from C++ so the chop overlay + lab cards reflect the layer's data.
+    // getSlicesJson routes through editingLayer in C++ which we just flipped.
+    var fnSlices = getNativeFn('getSlicesJson');
+    if (fnSlices) {
+      try {
+        var r = fnSlices();
+        if (r && typeof r.then === 'function') r.then(applySlicesJson);
+        else applySlicesJson(r);
+      } catch (_) {}
+    }
+  };
+
+  // Receives sample peaks for ANY layer (editing or non-editing) so:
+  //   1. V2 preset migration populates all 4 mirrors at load time
+  //      (loadSampleIntoLayer fires this for each layer with peaks + meta only).
+  //   2. Editor reopen populates all 4 mirrors from the per-layer cache
+  //      (getAllLayerPayloads fires this with peaks + meta + mode atomics).
+  // The `info` payload's mode/root fields are OPTIONAL — when present they
+  // override the factory defaults so the mirror reflects the layer's true
+  // current state (path 2 above). When absent, defaults are used (path 1).
+  // Editing-layer loads ALSO fire onSampleLoaded (which updates state.*
+  // directly); this callback only writes to the mirror array.
+  window.onLayerSampleMirror = function (layerIdx, info) {
+    layerIdx = Math.max(0, Math.min(3, parseInt(layerIdx, 10) || 0));
+    if (!info) return;
+    // Treat empty-object / no-filename payloads as "layer has no sample".
+    // getAllLayerPayloads emits an empty object {} for unloaded layers.
+    var hasSample = !!(info.peaksMin && info.peaksMax && info.lengthSamples);
+    if (!hasSample) {
+      state.layerStates[layerIdx] = null;
+      return;
+    }
+    // Helper: parse a numeric field from info with a fallback default.
+    function num (key, dflt) {
+      var v = parseFloat(info[key]);
+      return isFinite(v) ? v : dflt;
+    }
+    function intf (key, dflt) {
+      var v = parseInt(info[key], 10);
+      return isFinite(v) ? v : dflt;
+    }
+    state.layerStates[layerIdx] = {
+      peaksMin: info.peaksMin || null,
+      peaksMax: info.peaksMax || null,
+      peakScale: (function () {
+        // Replicate peakScale computation from onSampleLoaded so mirrored
+        // non-editing layers render at the correct scale when later visited.
+        var ps = 1.0;
+        var mn = info.peaksMin, mx = info.peaksMax;
+        if (mn && mx && mn.length === mx.length) {
+          var maxAbs = 0;
+          for (var i = 0; i < mn.length; ++i) {
+            var a = mx[i]; if (a < 0) a = -a;
+            var b = mn[i]; if (b < 0) b = -b;
+            if (a > maxAbs) maxAbs = a;
+            if (b > maxAbs) maxAbs = b;
+          }
+          if (maxAbs > 0.70) ps = 0.70 / maxAbs;
+        }
+        return ps;
+      })(),
+      sampleLengthSamples: intf('lengthSamples', 0),
+      // Mode/root atomics: take from rich payload if present (editor reopen),
+      // else fall back to factory defaults (mid-session load path).
+      rootNote:           intf('rootMidiNote',     60),
+      sliceMode:          intf('sliceMode',        0),
+      sliceSubMode:       0,        // JS-only state; not in C++ payload
+      holdMode:           false,    // global atomic; restored separately
+      sampleLoopMode:     intf('sampleLoopMode',   0),
+      slices:             [],       // hydrated by switchEditingLayer via getSlicesJson
+      activeSliceIndex:   intf('activeSliceIndex', 0),
+      gridN:              16,
+      pitchModeSlice:     makePitchModeSliceDefault()
+    };
   };
 
   // ── Pitch-mode slice helpers ───────────────────────────────────────────────
@@ -5843,27 +6149,94 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       }
     })();
 
-    // ── Restore cached sample on editor reopen ────────────────────────────────
-    // If the processor instance still has a sample loaded (audio buffer hot,
-    // user just closed and reopened the editor window), pull the cached
-    // payload and dispatch it through onSampleLoaded so the waveform display
-    // returns immediately without a re-decode. Empty result = nothing to
-    // restore (fresh processor / no sample loaded yet).
+    // ── Restore ALL layer state on editor reopen (Mark 2 Phase 1 fix) ─────────
+    // The processor survives editor close/reopen with all 4 layer atomics +
+    // sample buffers intact. We hydrate JS state from C++ in this order:
+    //   1. Pull editingLayer idx → set state.editingLayerIdx + .active pad
+    //   2. Pull all 4 cached payloads via getAllLayerPayloads (rich format:
+    //      peaks + meta + sliceMode + sampleLoopMode + rootMidiNote + activeSliceIndex).
+    //   3. For each populated layer, dispatch onLayerSampleMirror so the
+    //      state.layerStates[] entry is built and a future pad-click can
+    //      restore the layer's UI.
+    //   4. For the editing layer specifically, ALSO dispatch onSampleLoaded so
+    //      the visible state.* is fully populated and the waveform renders.
+    //   5. Apply the editing layer's per-layer UI surfaces (mode pills, ROOT,
+    //      sample-loop pill) from the just-populated state.*.
+    //   6. Pull the editing layer's pitch slice + slices from C++ (these still
+    //      live in per-layer C++ state and aren't shipped in the payload).
     (function () {
-      var fn = getNativeFn('getCachedSamplePayload');
-      if (!fn) return;
-      try {
-        var p = fn();
-        if (p && typeof p.then === 'function') {
-          p.then(function (json) {
-            if (!json || typeof json !== 'string' || json.length === 0) return;
-            try {
-              var payload = JSON.parse(json);
-              if (window.onSampleLoaded) window.onSampleLoaded(payload);
-            } catch (_) {}
-          });
+      var elFn = getNativeFn('getEditingLayerIdx');
+      var loadFn = getNativeFn('getAllLayerPayloads');
+      if (!elFn || !loadFn) {
+        // Fallback for backward compat: pull only the editing layer's payload
+        // via the legacy single-payload native fn.
+        var legacy = getNativeFn('getCachedSamplePayload');
+        if (!legacy) return;
+        try {
+          var p = legacy();
+          if (p && typeof p.then === 'function') {
+            p.then(function (json) {
+              if (!json || typeof json !== 'string' || json.length === 0) return;
+              try { if (window.onSampleLoaded) window.onSampleLoaded(JSON.parse(json)); } catch (_) {}
+            });
+          }
+        } catch (_) {}
+        return;
+      }
+
+      // Step 1: read editingLayer + set state + .active pad class.
+      var p1 = elFn();
+      var p2 = loadFn();
+      Promise.all([
+        (p1 && typeof p1.then === 'function') ? p1 : Promise.resolve(p1),
+        (p2 && typeof p2.then === 'function') ? p2 : Promise.resolve(p2)
+      ]).then(function (results) {
+        var elIdx = Math.max(0, Math.min(3, parseInt(results[0], 10) || 0));
+        var payloads = results[1];
+        state.editingLayerIdx = elIdx;
+        // .active pad class
+        var pads = document.querySelectorAll('#ti-layer-pads .ti-layer-pad');
+        for (var i = 0; i < pads.length && i < 4; ++i) {
+          pads[i].classList.toggle('active', i === elIdx);
         }
-      } catch (_) {}
+
+        // Step 2-3: dispatch onLayerSampleMirror for each layer.
+        if (payloads && payloads.length) {
+          for (var j = 0; j < 4 && j < payloads.length; ++j) {
+            if (window.onLayerSampleMirror) window.onLayerSampleMirror(j, payloads[j]);
+          }
+        }
+
+        // Step 4-5: editing layer drives the visible UI.
+        var elMirror = state.layerStates[elIdx];
+        if (elMirror) {
+          // onSampleLoaded populates state.* (peaks, peakScale, length) and
+          // triggers drawWaveform + redrawSliceOverlay + syncPitchSliceFromCpp.
+          if (window.onSampleLoaded) window.onSampleLoaded({
+            filename:      '',
+            sampleRate:    0,
+            lengthSamples: elMirror.sampleLengthSamples,
+            numChannels:   2,
+            peaksMin:      elMirror.peaksMin,
+            peaksMax:      elMirror.peaksMax
+          });
+          // Also restore the mode/root state.* from the mirror so the pills
+          // show the right values (onSampleLoaded above doesn't touch these).
+          state.rootNote       = elMirror.rootNote;
+          state.sliceMode      = elMirror.sliceMode;
+          state.sampleLoopMode = elMirror.sampleLoopMode;
+          state.activeSliceIndex = elMirror.activeSliceIndex;
+          if (typeof applyLayerStateToUI === 'function') applyLayerStateToUI();
+        } else {
+          // Editing layer had no sample → make sure #hero shows empty-state.
+          var hero = document.getElementById('hero');
+          if (hero) {
+            hero.classList.remove('has-sample');
+            hero.classList.remove('has-sample-missing');
+            hero.classList.add('empty-state');
+          }
+        }
+      }).catch(function () {});
     })();
   }
 
@@ -5934,6 +6307,9 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // C++ has already reset startSample/endSample; we pull the preserved
     // warp/ADSR/scan fields so JS state stays in sync.
     syncPitchSliceFromCpp();
+    // Mark 2 Phase 1 visual-fix: persist this load into the per-layer mirror
+    // so a later pad click swap → swap-back preserves the loaded sample.
+    state.layerStates[state.editingLayerIdx] = snapshotCurrentLayer();
   };
 
   window.onLoadError = function (msg) {
@@ -6339,10 +6715,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     injectHeroOverlays();
   }
 
-  // ── Mark 2 Phase 1 Task 6: A/B/C/D pad clicks switch editingLayer ────────
+  // ── Mark 2 Phase 1 Task 6 (visual-fix update): A/B/C/D pad clicks ────────
   // Event delegation on document — works even if pads re-inject. The
   // existing click-to-load handler (maybeOpenPicker) already skips
   // #ti-layer-pads in its closest() guard, so there is no conflict.
+  //
+  // switchEditingLayer() handles the C++ atomic flip, snapshot/restore of
+  // per-layer JS mirrors, and a full UI re-render. The .active pad lighting
+  // is purely cosmetic and stays here so it updates instantly on click.
   document.addEventListener('click', function (e) {
     var pad = e.target && e.target.closest && e.target.closest('#ti-layer-pads .ti-layer-pad');
     if (!pad) return;
@@ -6356,9 +6736,61 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     for (var i = 0; i < pads.length; ++i) pads[i].classList.remove('active');
     pad.classList.add('active');
 
-    // Inform C++ processor which layer is being edited
-    var fn = getNativeFn('setEditingLayer');
-    if (fn) fn(idx);
+    // Snapshot leaving layer → flip C++ atomic → restore entering layer →
+    // re-render. No-op if user clicks the already-active pad.
+    if (typeof window.switchEditingLayer === 'function') {
+      window.switchEditingLayer(idx);
+    }
+  });
+
+  // ── PITCH-mode double-click on waveform → unload editing layer's sample ──
+  // User-requested gesture: in PITCH mode, double-click the waveform to wipe
+  // the loaded sample on the currently-viewed layer (returns to drag-prompt).
+  // SLICE mode keeps its existing behavior — slice-body dblclick adds a chop
+  // marker (different element, no conflict). Other layers untouched. Mode /
+  // root / 1-SHOT settings preserved so the next sample drop reuses them.
+  document.addEventListener('dblclick', function (e) {
+    if (state.sliceMode !== 0) return;                          // PITCH only
+    var hero = document.getElementById('hero');
+    if (!hero || !hero.classList.contains('has-sample')) return; // nothing to clear
+    var waveCanvas = document.getElementById('waveform-canvas');
+    if (!waveCanvas) return;
+    // Only react when the click landed on the canvas itself (or a descendant) —
+    // not pads, pills, or other chrome inside #hero.
+    if (e.target !== waveCanvas && !waveCanvas.contains(e.target)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // 1. Tell C++ to drop the layer's audio + slices + cache + warp state.
+    var fn = getNativeFn('clearEditingLayer');
+    if (fn) { try { fn(); } catch (_) {} }
+
+    // 2. Reset JS state.* per-layer DATA fields. Mode / root / loop pill
+    //    settings are intentionally preserved — see header comment.
+    state.peaksMin            = null;
+    state.peaksMax            = null;
+    state.peakScale           = 1.0;
+    state.sampleLengthSamples = 0;
+    state.slices              = [];
+    state.activeSliceIndex    = 0;
+    state.pitchModeSlice      = makePitchModeSliceDefault();
+
+    // 3. Mark this layer's mirror as fresh-empty so a future pad-switch sees
+    //    "no sample" and restores empty-state correctly.
+    state.layerStates[state.editingLayerIdx] = null;
+
+    // 4. Flip the hero DOM to empty-state (the 10Hz poller would catch this
+    //    eventually; doing it synchronously avoids a visible 100ms flash of
+    //    the cleared waveform).
+    hero.classList.remove('has-sample');
+    hero.classList.remove('has-sample-missing');
+    hero.classList.remove('drag-hover');
+    hero.classList.add('empty-state');
+
+    // 5. Repaint so the canvas + slice overlay clear immediately.
+    if (typeof drawWaveform === 'function') drawWaveform();
+    if (typeof redrawSliceOverlay === 'function') redrawSliceOverlay();
   });
 
   // Helper accessible to other scripts (status pill from drag-drop bridge).
@@ -6607,9 +7039,10 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleIntoLayer (const juce::Fil
                     (int) L.pitchModeSlice.endSample);
             }
 
-            // Push the JS payload only for the layer the UI is currently showing.
-            if (! isEditingLayer) return;
-
+            // Build the JS payload for BOTH the editing-layer callback
+            // (drives the visible waveform) and the per-layer mirror callback
+            // (populates state.layerStates[layerIdx] so a future pad switch
+            // restores this layer's peaks/length without a re-load).
             juce::Array<juce::var> minArr, maxArr;
             minArr.ensureStorageAllocated ((int) r.peaksMin.size());
             maxArr.ensureStorageAllocated ((int) r.peaksMax.size());
@@ -6625,7 +7058,25 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleIntoLayer (const juce::Fil
             obj->setProperty ("peaksMax",      juce::var (maxArr));
 
             const auto json = juce::JSON::toString (juce::var (obj.get()), true);
-            audioProcessor.setCachedSamplePayload (json);
+
+            // Cache this layer's payload so editor close/reopen restores
+            // every populated layer's waveform — not just the editing one.
+            // Required for V2 preset migration where all 4 layers can carry samples.
+            audioProcessor.setCachedSamplePayload (json, layerIdx);
+
+            // Always populate the per-layer JS mirror — required so V2 preset
+            // migration leaves all 4 layers' UIs ready for instant pad-switch.
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    "if (window.onLayerSampleMirror) window.onLayerSampleMirror("
+                    + juce::String (layerIdx) + ", " + json + ");",
+                    nullptr);
+
+            // The editing-layer load also drives the visible UI directly
+            // (onSampleLoaded resets peakScale, fires drawWaveform, etc., and
+            // its trailing snapshotCurrentLayer overwrites the mirror above
+            // with the fully-computed snapshot — which is what we want).
+            if (! isEditingLayer) return;
 
             if (webView != nullptr)
                 webView->evaluateJavascript (
