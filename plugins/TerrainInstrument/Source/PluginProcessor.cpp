@@ -781,6 +781,15 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
 {
     synth.setCurrentPlaybackSampleRate (sampleRate);
 
+    // Mark 2 task 4: prep per-layer scratch buffers and per-layer synth rates.
+    // Each layer synth renders into its own scratch buffer in processBlock,
+    // then the results are summed (with mixer math) into the master `buffer`.
+    for (auto& buf : layerScratch)
+        buf.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);
+
+    for (auto& layer : layers)
+        layer.synth.setCurrentPlaybackSampleRate (sampleRate);
+
     grainEngineL.prepare(sampleRate, samplesPerBlock);
     grainEngineR.prepare(sampleRate, samplesPerBlock);
     tapeProcessorL.prepare(sampleRate, samplesPerBlock);
@@ -958,29 +967,33 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // Build the SliceContext for the synth dispatcher. The slice list is an
     // immutable shared_ptr snapshot so the audio thread reads without locks.
-    {
-        const int sliceModeIdx    = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
-        const int sliceSubModeIdx = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_SUB_MODE);
-        tw::SliceContext ctx;
-        ctx.rootMidiNote     = rootNoteMidi.load();
-        ctx.activeSliceIndex = activeSliceIndex.load();
-        ctx.sourceVersionId  = getSourceVersionId();
-        ctx.slices           = std::atomic_load (&slicesPtr);
-        ctx.pitchModeSlice   = pitchModeSlice;   // copy-by-value snapshot for audio thread
-        ctx.holdMode         = holdMode.load (std::memory_order_relaxed);
+    // NOTE: ctx assembly still uses processor-level singleton fields (slicesPtr,
+    // pitchModeSlice, rootNoteMidi, etc.) because those are the live data sources
+    // in Phase 1. Task 9 will route these per-layer when layers B/C/D are populated.
+    const int sliceModeIdx_blk    = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
+    const int sliceSubModeIdx_blk = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_SUB_MODE);
+    tw::SliceContext sharedCtx;
+    sharedCtx.rootMidiNote     = rootNoteMidi.load();
+    sharedCtx.activeSliceIndex = activeSliceIndex.load();
+    sharedCtx.sourceVersionId  = getSourceVersionId();
+    sharedCtx.slices           = std::atomic_load (&slicesPtr);
+    sharedCtx.pitchModeSlice   = pitchModeSlice;   // copy-by-value snapshot for audio thread
+    sharedCtx.holdMode         = holdMode.load (std::memory_order_relaxed);
 
-        if (sliceModeIdx == 0)
-            ctx.mode = tw::SliceContext::Mode::Whole;
-        else if (sliceSubModeIdx == 3)
-            ctx.mode = tw::SliceContext::Mode::Layer;
-        else if (sliceSubModeIdx == 2)
-            ctx.mode = tw::SliceContext::Mode::ChromaticRandom;
-        else if (sliceSubModeIdx == 1)
-            ctx.mode = tw::SliceContext::Mode::ChromaticOneSlice;
-        else
-            ctx.mode = tw::SliceContext::Mode::ChopChromaticLayout;
-        synth.setSliceContext (ctx);
-    }
+    if (sliceModeIdx_blk == 0)
+        sharedCtx.mode = tw::SliceContext::Mode::Whole;
+    else if (sliceSubModeIdx_blk == 3)
+        sharedCtx.mode = tw::SliceContext::Mode::Layer;
+    else if (sliceSubModeIdx_blk == 2)
+        sharedCtx.mode = tw::SliceContext::Mode::ChromaticRandom;
+    else if (sliceSubModeIdx_blk == 1)
+        sharedCtx.mode = tw::SliceContext::Mode::ChromaticOneSlice;
+    else
+        sharedCtx.mode = tw::SliceContext::Mode::ChopChromaticLayout;
+
+    // Also push the same ctx onto the singleton synth so Task 5's deletion of
+    // the singleton render path doesn't require re-threading this first.
+    synth.setSliceContext (sharedCtx);
 
     // Drain audition queue — UI-clicked previews of individual slices.
     // Triggered before renderNextBlock so the audition voice starts within
@@ -999,14 +1012,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int idx : drained)
                 {
                     if (idx >= 0 && idx < (int) sl->size())
-                        synth.auditionSlice ((*sl)[(size_t) idx], idx, getSourceVersionId());
+                    {
+                        // Route audition through layers[0] synth (matches the audio render path).
+                        layers[0].synth.auditionSlice ((*sl)[(size_t) idx], idx, getSourceVersionId());
+                    }
                 }
             }
         }
     }
-
-    // Voices replace plugin input as the source of audio for the FX chain.
-    buffer.clear();
 
     // ── Per-chop FX independence routing ────────────────────────────────
     // Voices whose chop has fxIndependent=true redirect their output to
@@ -1016,44 +1029,89 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     if (indyCaptureBus.getNumSamples() < numSamples)
         indyCaptureBus.setSize (2, numSamples, false, true, true);
     indyCaptureBus.clear (0, numSamples);
-    synth.setIndyTargetBufferForVoices (&indyCaptureBus);
 
-    synth.renderNextBlock (buffer, midiMessages, 0, numSamples);
+    // ── Mark 2 task 4: render each populated layer into its own scratch buffer,
+    // then sum (with vol/mute/solo) into master `buffer`. Only layers[0] has
+    // audio in Phase 1, so output is identical to Mark 1.5 baseline.
+    // Tasks 9-10 will generalize to all 4 layers with independent MIDI/slice contexts.
+    buffer.clear();   // master starts silent; we sum each layer into it below
 
-    // Detach the pointer right after render so nothing else (e.g. audition
-    // queued for next block) writes to it inadvertently.
-    synth.setIndyTargetBufferForVoices (nullptr);
-
-    // ── Update slice play-glow array ──────────────────────────────────
-    // For each glow slot: take the max envelope across voices that are
-    // currently playing that slice; then apply a slow visual decay so
-    // short one-shots fade out instead of snapping to 0 when the voice
-    // dies. Block-rate update (~5-22 ms at 256-1024 samples / 48 kHz)
-    // outpaces the ~16 ms UI poll, so motion stays smooth.
     {
-        std::array<float, tw::kMaxGlowSlots> blockMax {};
-        for (int v = 0; v < synth.getNumVoices(); ++v)
-        {
-            if (auto* sv = dynamic_cast<tw::SamplerVoice*> (synth.getVoice (v)))
-            {
-                if (! sv->isPlaying()) continue;
-                const int idx = sv->getSliceIndex();
-                if (idx < 0 || idx >= tw::kMaxGlowSlots) continue;
-                const float lvl = sv->getEnvelopeLevel();
-                if (lvl > blockMax[(size_t) idx]) blockMax[(size_t) idx] = lvl;
-            }
-        }
+        const bool anySolo = std::any_of (layers.begin(), layers.end(),
+                                           [](const tw::LayerState& l){ return l.solo.load(); });
 
-        // Visual decay: full-bright → ~5% in ~200 ms. Per-block coefficient
-        // is exp(-blockSec / tau), tau ≈ 65 ms.
         const double blockSec = (double) numSamples / juce::jmax (1.0, getSampleRate());
         const float  decay    = (float) std::exp (-blockSec / 0.065);
-        for (int i = 0; i < tw::kMaxGlowSlots; ++i)
+
+        for (size_t li = 0; li < layers.size(); ++li)
         {
-            const float live = blockMax[(size_t) i];
-            const float prev = sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed);
-            const float next = juce::jmax (live, prev * decay);
-            sliceGlowLevel[(size_t) i].store (next, std::memory_order_relaxed);
+            auto& layer = layers[li];
+
+            // Skip layers that have no sample loaded (layers 1-3 in Phase 1).
+            if (! layer.hasSample())               continue;
+            // Skip muted and non-solo layers.
+            if (layer.mute.load())                 continue;
+            if (anySolo && ! layer.solo.load())    continue;
+
+            // Push the ctx into this layer's synth.
+            // Phase 1: all layers share the processor-level ctx (only layers[0]
+            // actually gets here anyway). Task 9 will build per-layer contexts.
+            layer.synth.setSliceContext (sharedCtx);
+
+            // Indy bus routing — Phase 1: only layers[0] feeds the shared indy bus.
+            // Other layers would get nullptr (skip routing) if they ever reached here.
+            if (li == 0)
+                layer.synth.setIndyTargetBufferForVoices (&indyCaptureBus);
+
+            // Render this layer's voices into the per-layer scratch buffer.
+            auto& scratch = layerScratch[li];
+            scratch.clear();
+            layer.synth.renderNextBlock (scratch, midiMessages, 0, numSamples);
+
+            // Detach indy pointer immediately after render.
+            if (li == 0)
+                layer.synth.setIndyTargetBufferForVoices (nullptr);
+
+            // Per-layer glow update: walk this layer's voices, write into this
+            // layer's sliceGlowLevel. Task 8 will reroute snapshotSliceGlowLevels
+            // to read from layers[editingLayer] instead of the singleton.
+            {
+                std::array<float, tw::kMaxGlowSlots> blockMax {};
+                for (int v = 0; v < layer.synth.getNumVoices(); ++v)
+                {
+                    if (auto* sv = dynamic_cast<tw::SamplerVoice*> (layer.synth.getVoice (v)))
+                    {
+                        if (! sv->isPlaying()) continue;
+                        const int idx = sv->getSliceIndex();
+                        if (idx < 0 || idx >= tw::kMaxGlowSlots) continue;
+                        const float lvl = sv->getEnvelopeLevel();
+                        if (lvl > blockMax[(size_t) idx]) blockMax[(size_t) idx] = lvl;
+                    }
+                }
+                for (int i = 0; i < tw::kMaxGlowSlots; ++i)
+                {
+                    float prev = layer.sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed);
+                    float next = juce::jmax (blockMax[(size_t) i], prev * decay);
+                    layer.sliceGlowLevel[(size_t) i].store (next, std::memory_order_relaxed);
+                }
+
+                // Also keep the processor-level singleton glow in sync so that
+                // snapshotSliceGlowLevels() (which reads sliceGlowLevel, not
+                // layers[*].sliceGlowLevel) continues to work until Task 8 reroutes it.
+                if (li == 0)
+                {
+                    for (int i = 0; i < tw::kMaxGlowSlots; ++i)
+                    {
+                        float layerVal = layer.sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed);
+                        sliceGlowLevel[(size_t) i].store (layerVal, std::memory_order_relaxed);
+                    }
+                }
+            }
+
+            // Sum this layer into the master buffer with per-layer gain.
+            const float g = layer.volume.load();
+            buffer.addFrom (0, 0, scratch, 0, 0, numSamples, g);
+            buffer.addFrom (1, 0, scratch, 1, 0, numSamples, g);
         }
     }
 

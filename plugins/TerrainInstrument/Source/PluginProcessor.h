@@ -389,6 +389,11 @@ public:
     std::array<tw::LayerState, 4> layers;
     std::atomic<int> editingLayer { 0 };
 
+    // Mark 2 task 4: per-layer scratch buffers for the 4 layer synths to render
+    // into, summed (with vol/mute/solo) into the master `buffer` in processBlock.
+    // Sized in prepareToPlay to (2 channels, samplesPerBlock).
+    std::array<juce::AudioBuffer<float>, 4> layerScratch;
+
 private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
