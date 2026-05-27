@@ -6365,19 +6365,14 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
                 return;
             }
 
-            // Mark 2: mirror singleton load into layers[0] (parallel write — Task 3).
-            // The SampleLoader has already atomically stored the buffer into the
-            // singleton sampleBuffer; we grab that same shared_ptr and store it
-            // into layers[0] so both point to the same decoded data without a copy.
-            // Task 8 will replace this with editingLayer dispatch; for now always layer 0.
+            // Task 8: dispatch sample load into the currently-editing layer so
+            // clicking a pad and dragging a file always loads into the right slot.
             {
+                const size_t li = (size_t) audioProcessor.editingLayer.load();
                 auto buf = audioProcessor.getSampleBuffer().load();
-                audioProcessor.layers[0].sampleBuffer.setSampleRate (r.sampleRate);
-                audioProcessor.layers[0].sampleBuffer.store (buf);
-                audioProcessor.layers[0].sourceFileName = r.filename;
-                DBG ("[Mark2] singleton samples=" << audioProcessor.getSampleBuffer().getNumSamples()
-                     << " | layers[0] samples=" << audioProcessor.layers[0].sampleBuffer.getNumSamples()
-                     << " | file=" << audioProcessor.layers[0].sourceFileName);
+                audioProcessor.layers[li].sampleBuffer.setSampleRate (r.sampleRate);
+                audioProcessor.layers[li].sampleBuffer.store (buf);
+                audioProcessor.layers[li].sourceFileName = r.filename;
             }
 
             // Build a JS object literal with peaks + meta and pass to onSampleLoaded.

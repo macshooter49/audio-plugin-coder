@@ -1903,21 +1903,37 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     }
 
     // Slice list (JSON) + active slice index — sub-mode rides in APVTS.
-    // Task 5: reads from layers[0] explicitly (V1 format, layer-A-specific).
-    // TODO Tasks 12-13: replace with full 4-layer state serialisation.
+    // Task 8: explicitly reads layers[0] (layer A) so a mid-session pad switch
+    // cannot corrupt the saved state. Tasks 12-13 will introduce 4-layer format.
     {
-        // TODO Task 12: route this through layers[0] explicitly. Currently goes through
-        // editingLayer (=0 in Phase 1) — would silently serialize wrong layer if user
-        // switches editing target before Save once Task 6 lands.
-        const auto sliceJson = getSlicesJson();   // delegates to layers[editingLayer] (=0 in Phase 1)
+        // Slices — read layers[0].currentSlices directly, bypassing editingLayer wrapper.
+        const auto layerASlices = std::atomic_load (&layers[0].currentSlices);
+        const auto sliceJson = layerASlices ? tw::slicesToJson (*layerASlices) : juce::String ("{\"slices\":[]}");
         if (sliceJson.isNotEmpty() && sliceJson != "{\"slices\":[]}")
             state.setProperty ("slicesJson", sliceJson, nullptr);
         state.setProperty ("activeSliceIndex", layers[0].activeSliceIndex.load(), nullptr);
-        // Pitch-mode virtual slice — preserve warp/ADSR/scan/reverse across DAW save.
-        // TODO Task 12: route this through layers[0] explicitly. Currently goes through
-        // editingLayer (=0 in Phase 1) — would silently serialize wrong layer if user
-        // switches editing target before Save once Task 6 lands.
-        state.setProperty ("pitchSliceJson", getPitchSliceJson(), nullptr);
+
+        // Pitch-mode virtual slice — read layers[0].pitchModeSlice directly.
+        {
+            const auto& s = layers[0].pitchModeSlice;
+            juce::DynamicObject::Ptr pObj = new juce::DynamicObject();
+            pObj->setProperty ("startSample",  (juce::int64) s.startSample);
+            pObj->setProperty ("endSample",    (juce::int64) s.endSample);
+            pObj->setProperty ("reverse",      s.reverse);
+            pObj->setProperty ("pitch",        (double) s.pitchOffsetSemis);
+            pObj->setProperty ("warpMode",     (int) s.warpMode);
+            pObj->setProperty ("stretchRatio", (double) s.stretchRatio);
+            pObj->setProperty ("attackMs",     (double) s.attackMs);
+            pObj->setProperty ("releaseMs",    (double) s.releaseMs);
+            pObj->setProperty ("decayMs",      (double) s.decayMs);
+            pObj->setProperty ("sustainLevel", (double) s.sustainLevel);
+            pObj->setProperty ("volume",       (double) s.volume);
+            pObj->setProperty ("scanEnabled",  s.scanEnabled);
+            pObj->setProperty ("scanRate",     (double) s.scanRate);
+            pObj->setProperty ("scanWindow",   (double) s.scanWindow);
+            state.setProperty ("pitchSliceJson", juce::JSON::toString (juce::var (pObj.get()), true), nullptr);
+        }
+
         // HOLD mode (Mark 1.5 final). Persists across DAW save and editor reload
         // so users don't lose latch state when reopening a project.
         state.setProperty ("holdMode", (bool) holdMode.load(), nullptr);
