@@ -11,22 +11,19 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
 {
     initializePresets();
 
-    // === Sampler engine wiring (Terrain Instrument v0a) ======================
-    synth.addSound (new tw::SamplerSound());
-    for (int i = 0; i < kNumVoices; ++i)
-        synth.addVoice (new tw::SamplerVoice (sampleBuffer, rootNoteMidi,
-                                              attackMsAtomic, releaseMsAtomic,
-                                              sampleLoopMode, &modulationEngine,
-                                              &synth.warpCache, &chopFadeMsAtomic));
-    // Sample buffer starts empty. User drags a file in, or the editor opens a
-    // file picker. SampleLoader (async) populates the shared buffer when a load
-    // completes. Voices read it via the SampleBuffer atomic shared_ptr.
-
-    // Mark 2 layers: label each layer with its 0-3 index for self-identification.
-    // LayerState's default constructor already wires its synth + voices using
-    // its own atomics, so no further per-layer construction is needed here yet.
+    // === Sampler engine wiring — Task 5: singleton synth removed. Each layer's
+    // synth is wired in LayerState's constructor using that layer's own atomics.
+    // Label each layer with its 0-3 index for self-identification.
     for (size_t i = 0; i < layers.size(); ++i)
         layers[i].layerIndex = static_cast<int>(i);
+
+    // Wire modulation engine into layer 0's voices (the only active layer in Phase 1).
+    // LayerState constructor passes nullptr for ModulationEngine; we patch it here.
+    // Note: SamplerVoice stores a pointer to the engine so this is safe as long as
+    // the engine outlives the voices (processor owns both, destruction is LIFO).
+    for (int i = 0; i < layers[0].synth.getNumVoices(); ++i)
+        if (auto* sv = dynamic_cast<tw::SamplerVoice*> (layers[0].synth.getVoice (i)))
+            sv->setModulationEngine (&modulationEngine);
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
@@ -779,8 +776,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
 //==============================================================================
 void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    synth.setCurrentPlaybackSampleRate (sampleRate);
-
+    // Task 5: singleton synth removed. Prep all layer synths instead.
     // Mark 2 task 4: prep per-layer scratch buffers and per-layer synth rates.
     // Each layer synth renders into its own scratch buffer in processBlock,
     // then the results are summed (with mixer math) into the master `buffer`.
@@ -959,25 +955,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // === Sampler engine (Terrain Instrument v0a + slicer v0b) ================
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
-    rootNoteMidi.store      ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
-    attackMsAtomic.store    (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
-    releaseMsAtomic.store   (*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
-    sampleLoopMode.store    ((int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE));
-    chopFadeMsAtomic.store  (*apvts.getRawParameterValue (ParameterIDs::CHOP_FADE_MS));
+    // Task 5: route through layers[editingLayer] instead of singleton fields.
+    {
+        const size_t el = (size_t) editingLayer.load();
+        layers[el].rootMidiNote.store   ((int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE));
+        layers[el].attackMsAtomic.store (*apvts.getRawParameterValue (ParameterIDs::ATTACK_MS));
+        layers[el].releaseMsAtomic.store(*apvts.getRawParameterValue (ParameterIDs::RELEASE_MS));
+        layers[el].sampleLoopMode.store ((int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE));
+        layers[el].chopFadeMs.store     (*apvts.getRawParameterValue (ParameterIDs::CHOP_FADE_MS));
+    }
 
     // Build the SliceContext for the synth dispatcher. The slice list is an
     // immutable shared_ptr snapshot so the audio thread reads without locks.
-    // NOTE: ctx assembly still uses processor-level singleton fields (slicesPtr,
-    // pitchModeSlice, rootNoteMidi, etc.) because those are the live data sources
-    // in Phase 1. Task 9 will route these per-layer when layers B/C/D are populated.
+    // Task 5: routes through layers[editingLayer] for all slice/pitch-mode state.
+    // Task 9 will build per-layer contexts when layers B/C/D are populated.
     const int sliceModeIdx_blk    = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
     const int sliceSubModeIdx_blk = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_SUB_MODE);
+    const size_t elIdx = (size_t) editingLayer.load();
     tw::SliceContext sharedCtx;
-    sharedCtx.rootMidiNote     = rootNoteMidi.load();
-    sharedCtx.activeSliceIndex = activeSliceIndex.load();
+    sharedCtx.rootMidiNote     = layers[elIdx].rootMidiNote.load();
+    sharedCtx.activeSliceIndex = layers[elIdx].activeSliceIndex.load();
     sharedCtx.sourceVersionId  = getSourceVersionId();
-    sharedCtx.slices           = std::atomic_load (&slicesPtr);
-    sharedCtx.pitchModeSlice   = pitchModeSlice;   // copy-by-value snapshot for audio thread
+    sharedCtx.slices           = std::atomic_load (&layers[elIdx].currentSlices);
+    sharedCtx.pitchModeSlice   = layers[elIdx].pitchModeSlice;   // copy-by-value snapshot for audio thread
     sharedCtx.holdMode         = holdMode.load (std::memory_order_relaxed);
 
     if (sliceModeIdx_blk == 0)
@@ -991,13 +991,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     else
         sharedCtx.mode = tw::SliceContext::Mode::ChopChromaticLayout;
 
-    // Also push the same ctx onto the singleton synth so Task 5's deletion of
-    // the singleton render path doesn't require re-threading this first.
-    synth.setSliceContext (sharedCtx);
-
     // Drain audition queue — UI-clicked previews of individual slices.
     // Triggered before renderNextBlock so the audition voice starts within
     // this block.
+    // Task 5: uses layers[editingLayer].currentSlices + layers[editingLayer].synth.
     {
         std::vector<int> drained;
         {
@@ -1006,15 +1003,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
         if (! drained.empty())
         {
-            auto sl = std::atomic_load (&slicesPtr);
+            auto sl = std::atomic_load (&layers[elIdx].currentSlices);
             if (sl && ! sl->empty())
             {
                 for (int idx : drained)
                 {
                     if (idx >= 0 && idx < (int) sl->size())
                     {
-                        // Route audition through layers[0] synth (matches the audio render path).
-                        layers[0].synth.auditionSlice ((*sl)[(size_t) idx], idx, getSourceVersionId());
+                        layers[elIdx].synth.auditionSlice ((*sl)[(size_t) idx], idx, getSourceVersionId());
                     }
                 }
             }
@@ -1073,8 +1069,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 layer.synth.setIndyTargetBufferForVoices (nullptr);
 
             // Per-layer glow update: walk this layer's voices, write into this
-            // layer's sliceGlowLevel. Task 8 will reroute snapshotSliceGlowLevels
-            // to read from layers[editingLayer] instead of the singleton.
+            // layer's sliceGlowLevel. snapshotSliceGlowLevels() reads directly
+            // from layers[editingLayer].sliceGlowLevel (Task 5 — singleton removed).
             {
                 std::array<float, tw::kMaxGlowSlots> blockMax {};
                 for (int v = 0; v < layer.synth.getNumVoices(); ++v)
@@ -1093,18 +1089,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     float prev = layer.sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed);
                     float next = juce::jmax (blockMax[(size_t) i], prev * decay);
                     layer.sliceGlowLevel[(size_t) i].store (next, std::memory_order_relaxed);
-                }
-
-                // Also keep the processor-level singleton glow in sync so that
-                // snapshotSliceGlowLevels() (which reads sliceGlowLevel, not
-                // layers[*].sliceGlowLevel) continues to work until Task 8 reroutes it.
-                if (li == 0)
-                {
-                    for (int i = 0; i < tw::kMaxGlowSlots; ++i)
-                    {
-                        float layerVal = layer.sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed);
-                        sliceGlowLevel[(size_t) i].store (layerVal, std::memory_order_relaxed);
-                    }
                 }
             }
 
@@ -1738,16 +1722,18 @@ juce::String TerrainInstrumentAudioProcessor::getCachedSamplePayload() const
 //==============================================================================
 void TerrainInstrumentAudioProcessor::replaceSlices (tw::SliceList newSlices)
 {
+    // Task 5: routes through layers[editingLayer] instead of singleton slicesPtr/activeSliceIndex/synth.
+    const size_t el = (size_t) editingLayer.load();
     auto snapshot = std::make_shared<const tw::SliceList> (std::move (newSlices));
-    std::atomic_store (&slicesPtr, tw::SliceListPtr (snapshot));
+    std::atomic_store (&layers[el].currentSlices, tw::SliceListPtr (snapshot));
 
     // Clamp activeSliceIndex to new range.
     const int n = (int) snapshot->size();
-    int idx = activeSliceIndex.load();
+    int idx = layers[el].activeSliceIndex.load();
     if (n == 0) idx = 0;
     else if (idx >= n) idx = n - 1;
     else if (idx < 0) idx = 0;
-    activeSliceIndex.store (idx);
+    layers[el].activeSliceIndex.store (idx);
 
     // Push fresh slice bounds into the warp cache so prewarm() callers
     // that fire shortly after (e.g. setSliceScanEnabled native fn) have
@@ -1762,13 +1748,15 @@ void TerrainInstrumentAudioProcessor::replaceSlices (tw::SliceList newSlices)
     for (int i = 0; i < n; ++i)
     {
         const auto& s = (*snapshot)[(size_t) i];
-        synth.warpCache.setSliceBounds (i, s.startSample, s.endSample);
+        layers[el].synth.warpCache.setSliceBounds (i, s.startSample, s.endSample);
     }
 }
 
 tw::SliceListPtr TerrainInstrumentAudioProcessor::loadSlices() const
 {
-    return std::atomic_load (&slicesPtr);
+    // Task 5: routes through layers[editingLayer].currentSlices.
+    const size_t el = (size_t) editingLayer.load();
+    return std::atomic_load (&layers[el].currentSlices);
 }
 
 int TerrainInstrumentAudioProcessor::getNumSlices() const
@@ -1793,8 +1781,10 @@ juce::String TerrainInstrumentAudioProcessor::getPitchSliceJson() const
 {
     // Serialise pitchModeSlice as a single-element object so JS can use
     // a consistent schema with no special-casing on the network boundary.
+    // Task 5: routes through layers[editingLayer].pitchModeSlice.
     juce::DynamicObject::Ptr obj = new juce::DynamicObject();
-    const auto& s = pitchModeSlice;
+    const size_t el = (size_t) editingLayer.load();
+    const auto& s = layers[el].pitchModeSlice;
     obj->setProperty ("startSample",  (juce::int64) s.startSample);
     obj->setProperty ("endSample",    (juce::int64) s.endSample);
     obj->setProperty ("reverse",      s.reverse);
@@ -1814,19 +1804,23 @@ juce::String TerrainInstrumentAudioProcessor::getPitchSliceJson() const
 
 juce::var TerrainInstrumentAudioProcessor::snapshotSliceGlowLevels() const
 {
+    // Task 5: reads from layers[editingLayer].sliceGlowLevel (singleton removed).
+    const size_t el = (size_t) editingLayer.load();
     const int n = juce::jmin (getNumSlices(), tw::kMaxGlowSlots);
     juce::Array<juce::var> arr;
     arr.ensureStorageAllocated (n);
     for (int i = 0; i < n; ++i)
-        arr.add ((double) sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed));
+        arr.add ((double) layers[el].sliceGlowLevel[(size_t) i].load (std::memory_order_relaxed));
     return juce::var (arr);
 }
 
 float TerrainInstrumentAudioProcessor::getScanPosition (int sliceIndex) const noexcept
 {
-    for (int i = 0; i < synth.getNumVoices(); ++i)
+    // Task 5: routes through layers[editingLayer].synth.
+    const size_t el = (size_t) editingLayer.load();
+    for (int i = 0; i < layers[el].synth.getNumVoices(); ++i)
     {
-        if (auto* v = dynamic_cast<const tw::SamplerVoice*> (synth.getVoice (i)))
+        if (auto* v = dynamic_cast<const tw::SamplerVoice*> (layers[el].synth.getVoice (i)))
         {
             if (v->isPlaying()
                 && v->getSliceIndex() == sliceIndex
@@ -1842,9 +1836,11 @@ float TerrainInstrumentAudioProcessor::getScanPosition (int sliceIndex) const no
 TerrainInstrumentAudioProcessor::ScanWindowBounds
 TerrainInstrumentAudioProcessor::getScanWindowBounds (int sliceIndex) const noexcept
 {
-    for (int i = 0; i < synth.getNumVoices(); ++i)
+    // Task 5: routes through layers[editingLayer].synth.
+    const size_t el = (size_t) editingLayer.load();
+    for (int i = 0; i < layers[el].synth.getNumVoices(); ++i)
     {
-        if (auto* v = dynamic_cast<const tw::SamplerVoice*> (synth.getVoice (i)))
+        if (auto* v = dynamic_cast<const tw::SamplerVoice*> (layers[el].synth.getVoice (i)))
         {
             if (v->isPlaying()
                 && v->getSliceIndex() == sliceIndex
@@ -1901,11 +1897,13 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     }
 
     // Slice list (JSON) + active slice index — sub-mode rides in APVTS.
+    // Task 5: reads from layers[0] explicitly (V1 format, layer-A-specific).
+    // TODO Tasks 12-13: replace with full 4-layer state serialisation.
     {
-        const auto sliceJson = getSlicesJson();
+        const auto sliceJson = getSlicesJson();   // delegates to layers[editingLayer] (=0 in Phase 1)
         if (sliceJson.isNotEmpty() && sliceJson != "{\"slices\":[]}")
             state.setProperty ("slicesJson", sliceJson, nullptr);
-        state.setProperty ("activeSliceIndex", activeSliceIndex.load(), nullptr);
+        state.setProperty ("activeSliceIndex", layers[0].activeSliceIndex.load(), nullptr);
         // Pitch-mode virtual slice — preserve warp/ADSR/scan/reverse across DAW save.
         state.setProperty ("pitchSliceJson", getPitchSliceJson(), nullptr);
         // HOLD mode (Mark 1.5 final). Persists across DAW save and editor reload
@@ -1964,13 +1962,15 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             // Restore slice list + active index. Sub-mode comes from APVTS
             // automatically. Empty list is fine — slicer just behaves like
             // there are no chops yet.
+            // Task 5: restores into layers[0] explicitly (V1 format).
+            // TODO Tasks 12-13: replace with full 4-layer state deserialisation.
             {
                 auto sliceJson = newState.getProperty ("slicesJson", "").toString();
                 if (sliceJson.isNotEmpty())
                     setSlicesFromJson (sliceJson);
                 else
                     replaceSlices ({});
-                activeSliceIndex.store ((int) newState.getProperty ("activeSliceIndex", 0));
+                layers[0].activeSliceIndex.store ((int) newState.getProperty ("activeSliceIndex", 0));
 
                 // Restore pitch-mode virtual slice. Missing key = fresh instance →
                 // pitchModeSlice keeps its zero-initialised defaults (safe).
@@ -1980,7 +1980,8 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                     auto pv = juce::JSON::parse (psJson);
                     if (pv.isObject())
                     {
-                        auto& ps = pitchModeSlice;
+                        // Task 5: write into layers[0].pitchModeSlice explicitly (V1 format).
+                        auto& ps = layers[0].pitchModeSlice;
                         ps.reverse          = (bool) pv.getProperty ("reverse", false);
                         ps.pitchOffsetSemis = juce::jlimit (-12.0f, 12.0f,
                                                 (float)(double) pv.getProperty ("pitch", 0.0));
@@ -2017,7 +2018,8 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                             // Register restored bounds with the WarpRenderCache
                             // under sliceIndex=-1 (pitch-mode sentinel) so warp+scan
                             // in pitch mode has valid bounds after state reload.
-                            synth.warpCache.setSliceBounds (-1, (int) savedStart, (int) savedEnd);
+                            // Task 5: route through layers[0].synth.warpCache (V1 format).
+                            layers[0].synth.warpCache.setSliceBounds (-1, (int) savedStart, (int) savedEnd);
                         }
                     }
                 }

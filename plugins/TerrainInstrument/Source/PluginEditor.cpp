@@ -538,7 +538,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         // AudioParameterInt expects normalised [0..1]
                         p->setValueNotifyingHost (midi / 127.0f);
                     }
-                    audioProcessor.rootNoteMidi.store (midi);
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].rootMidiNote.store (midi);
                 }
                 complete ({});
             })
@@ -559,14 +559,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     const int mode = juce::jlimit (0, 1, (int) args[0]);
                     if (auto* p = audioProcessor.getAPVTS().getParameter (ParameterIDs::SAMPLE_LOOP_MODE))
                         p->setValueNotifyingHost (static_cast<float> (mode));  // Choice: 0=ONE-SHOT, 1=LOOP
-                    audioProcessor.sampleLoopMode.store (mode);
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].sampleLoopMode.store (mode);
                 }
                 complete ({});
             })
             .withNativeFunction("getSampleLoopMode", [this](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (audioProcessor.sampleLoopMode.load());
+                complete (audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].sampleLoopMode.load());
             })
             .withNativeFunction("setChopFadeMs", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -585,7 +585,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("getChopFadeMs", [this](const juce::Array<juce::var>&,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (audioProcessor.chopFadeMsAtomic.load());
+                complete (audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].chopFadeMs.load());
             })
 
             // ────────────────────────────────────────────────────────────
@@ -694,14 +694,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     int idx = (int) args[0];
                     if (n > 0) idx = juce::jlimit (0, n - 1, idx);
                     else       idx = 0;
-                    audioProcessor.activeSliceIndex.store (idx);
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].activeSliceIndex.store (idx);
                 }
                 complete ({});
             })
             .withNativeFunction("getActiveSliceIndex", [this](const juce::Array<juce::var>&,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (audioProcessor.activeSliceIndex.load());
+                complete (audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].activeSliceIndex.load());
             })
             .withNativeFunction("isAnyVoicePlaying", [this](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -710,9 +710,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // returns true if any SamplerVoice is currently rendering. Used
                 // by the A/B/C/D layer pads to light "A" when sound is playing.
                 // Once B/C/D become real layers, this expands to per-layer state.
+                // Task 5: routes through layers[editingLayer].synth.
                 bool any = false;
-                for (int i = 0; i < audioProcessor.synth.getNumVoices(); ++i)
-                    if (auto* sv = dynamic_cast<tw::SamplerVoice*> (audioProcessor.synth.getVoice (i)))
+                const size_t el = (size_t) audioProcessor.editingLayer.load();
+                for (int i = 0; i < audioProcessor.layers[el].synth.getNumVoices(); ++i)
+                    if (auto* sv = dynamic_cast<tw::SamplerVoice*> (audioProcessor.layers[el].synth.getVoice (i)))
                         if (sv->isPlaying()) { any = true; break; }
                 complete (any);
             })
@@ -735,7 +737,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int idx = (int) args[0];
                 const bool rev = (bool) args[1];
-                if (idx == -1) { audioProcessor.pitchModeSlice.reverse = rev; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.reverse = rev; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -750,7 +752,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float st  = juce::jlimit (-12.0f, 12.0f, (float) (double) args[1]);
-                if (idx == -1) { audioProcessor.pitchModeSlice.pitchOffsetSemis = st; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.pitchOffsetSemis = st; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -768,7 +770,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const auto mode   = (modeRaw >= 0 && modeRaw <= 3)
                                        ? static_cast<tw::WarpMode> (modeRaw)
                                        : tw::WarpMode::None;
-                if (idx == -1) { audioProcessor.pitchModeSlice.warpMode = mode; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.warpMode = mode; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -783,7 +785,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx   = (int) args[0];
                 const float ratio = juce::jlimit (0.1f, 15.0f, (float) (double) args[1]);
-                if (idx == -1) { audioProcessor.pitchModeSlice.stretchRatio = ratio; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.stretchRatio = ratio; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -799,7 +801,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int   idx = (int) args[0];
                 const float raw = (float) (double) args[1];
                 const float ms  = raw < 0.0f ? -1.0f : juce::jlimit (0.0f, 2000.0f, raw);
-                if (idx == -1) { audioProcessor.pitchModeSlice.attackMs = ms; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.attackMs = ms; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -815,7 +817,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int   idx = (int) args[0];
                 const float raw = (float) (double) args[1];
                 const float ms  = raw < 0.0f ? -1.0f : juce::jlimit (1.0f, 5000.0f, raw);
-                if (idx == -1) { audioProcessor.pitchModeSlice.releaseMs = ms; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.releaseMs = ms; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -831,7 +833,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float ms  = juce::jlimit (0.0f, 2000.0f, (float) (double) args[1]);
-                if (idx == -1) { audioProcessor.pitchModeSlice.decayMs = ms; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.decayMs = ms; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -846,7 +848,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float lv  = juce::jlimit (0.0f, 1.0f, (float) (double) args[1]);
-                if (idx == -1) { audioProcessor.pitchModeSlice.sustainLevel = lv; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.sustainLevel = lv; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -861,7 +863,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx = (int) args[0];
                 const float vol = juce::jlimit (0.0f, 2.0f, (float) (double) args[1]);
-                if (idx == -1) { audioProcessor.pitchModeSlice.volume = vol; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.volume = vol; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -926,7 +928,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int  idx     = (int) args[0];
                 const bool enabled = (bool) args[1];
-                if (idx == -1) { audioProcessor.pitchModeSlice.scanEnabled = enabled; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.scanEnabled = enabled; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -945,7 +947,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     k.sourceVersionId = audioProcessor.getSourceVersionId();
                     k.stretchRatio    = sr;
                     k.warpMode        = wm;
-                    audioProcessor.synth.warpCache.prewarm (k);
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.prewarm (k);
                 }
                 complete ({});
             })
@@ -974,7 +976,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() < 2) { complete ({}); return; }
                 const int   idx  = (int) args[0];
                 const float rate = juce::jlimit (0.1f, 8.0f, (float) (double) args[1]);
-                if (idx == -1) { audioProcessor.pitchModeSlice.scanRate = rate; complete ({}); return; }
+                if (idx == -1) { audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.scanRate = rate; complete ({}); return; }
                 auto cur = audioProcessor.loadSlices();
                 if (! cur || idx < 0 || idx >= (int) cur->size()) { complete ({}); return; }
                 tw::SliceList copy = *cur;
@@ -996,14 +998,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         const juce::int64 rawEnd   = (juce::int64)(double) args[1];
                         const juce::int64 cs = juce::jlimit ((juce::int64) 0, sampleLen - 1, rawStart);
                         const juce::int64 ce = juce::jlimit (cs + 1,       sampleLen,        rawEnd);
-                        audioProcessor.pitchModeSlice.startSample = cs;
-                        audioProcessor.pitchModeSlice.endSample   = ce;
+                        audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.startSample = cs;
+                        audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.endSample   = ce;
                         // Register bounds with WarpRenderCache under the pitch-mode
                         // sentinel sliceIndex=-1 so that warp+scan in pitch mode
                         // can populate cache entries. Without this, the cache
                         // worker sees bounds.end <= bounds.start and silently
                         // aborts → silent audio block forever.
-                        audioProcessor.synth.warpCache.setSliceBounds (-1, (int) cs, (int) ce);
+                        audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSliceBounds (-1, (int) cs, (int) ce);
                     }
                 }
                 complete ({});
@@ -6342,11 +6344,11 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
             // Reset pitchModeSlice bounds to cover the full new sample.
             // Preserve user-edited warp/ADSR/scan settings — only the
             // sample-position fields change.
-            audioProcessor.pitchModeSlice.startSample = 0;
-            audioProcessor.pitchModeSlice.endSample   = (juce::int64) r.lengthSamples;
+            audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.startSample = 0;
+            audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.endSample   = (juce::int64) r.lengthSamples;
             // Register with WarpRenderCache (sliceIndex=-1) — see the
             // setPitchSliceBounds native fn comment for the rationale.
-            audioProcessor.synth.warpCache.setSliceBounds (-1, 0, (int) r.lengthSamples);
+            audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSliceBounds (-1, 0, (int) r.lengthSamples);
 
             // Bump the source version counter so WarpRenderCache entries from
             // any previous sample are never matched against the new one. Then
@@ -6364,8 +6366,8 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
                     const float* L = buf->getReadPointer (0);
                     const float* R = (buf->getNumChannels() >= 2)
                                        ? buf->getReadPointer (1) : L;
-                    audioProcessor.synth.warpCache.setSource (L, R, buf->getNumSamples());
-                    audioProcessor.synth.warpCache.setSampleRate (r.sampleRate);
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSource (L, R, buf->getNumSamples());
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSampleRate (r.sampleRate);
                 }
             }
 

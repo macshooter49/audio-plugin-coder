@@ -91,6 +91,12 @@ namespace tw
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
+        /** Post-construction wiring — lets LayerState wire in the processor's
+         *  ModulationEngine after the voice is constructed (LayerState ctor
+         *  passes nullptr since it doesn't own the engine). Message-thread only;
+         *  must be called before prepareToPlay. */
+        void setModulationEngine (ModulationEngine* me) noexcept { modEngine = me; }
+
         void setCurrentPlaybackSampleRate (double sr) override
         {
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);

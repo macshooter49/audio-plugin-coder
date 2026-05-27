@@ -137,22 +137,16 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
-    tw::SampleBuffer& getSampleBuffer() noexcept { return sampleBuffer; }
+    /** Returns the sample buffer for the currently-editing layer.
+     *  Task 5: routes through layers[editingLayer] instead of the old singleton. */
+    tw::SampleBuffer& getSampleBuffer() noexcept { return layers[(size_t) editingLayer.load()].sampleBuffer; }
     tw::SampleLoader& getSampleLoader() noexcept { return sampleLoader; }
-
-    // Sampler atomics — public so SamplerVoice can take a reference (audio-thread-safe).
-    std::atomic<int>   rootNoteMidi      { 60 };    // default C4
-    std::atomic<float> attackMsAtomic    { 5.0f };
-    std::atomic<float> releaseMsAtomic   { 800.0f };
-    std::atomic<float> chopFadeMsAtomic  { 5.0f };  // CHOP_FADE_MS: anti-click ramp at slice boundaries
-    // Sample playback loop mode: 0 = one-shot (envelope releases at end-of-buffer),
-    // 1 = forward loop (playhead wraps to 0 and keeps playing until note-off).
-    std::atomic<int>   sampleLoopMode  { 0 };
 
     // ── Slicer state ──────────────────────────────────────────────────────
     // Slice list — atomic snapshot pointer. UI thread writes via
     // replaceSlices(); audio thread reads via loadSlices() / readSlices().
     // The shared_ptr is treated as immutable — never modified after store.
+    // Task 5: routes through layers[editingLayer].currentSlices.
     void              replaceSlices (tw::SliceList newSlices);
     tw::SliceListPtr  loadSlices() const;
     int               getNumSlices() const;
@@ -165,7 +159,7 @@ public:
     // (warp, ADSR, scan, reverse, volume) editable via the lab card UI.
     // Access is message-thread only (read + write from JS native fns and
     // state-info callbacks). The audio thread reads a copy via SliceContext.
-    tw::Slice         pitchModeSlice;
+    // Task 5: owned by LayerState; the processor delegates to layers[editingLayer].
     juce::String      getPitchSliceJson() const;
 
     // ── HOLD mode (Mark 1.5) ───────────────────────────────────────────────
@@ -192,7 +186,7 @@ public:
 
     // Active slice index — used in CHROMATIC sub-mode. Atomic so JS push
     // and audio thread read are race-free.
-    std::atomic<int>  activeSliceIndex { 0 };
+    // Task 5: owned by LayerState; route via layers[editingLayer].activeSliceIndex.
 
     // Audition: trigger a slice once at unity pitch via the synth dispatcher,
     // bypassing the regular MIDI key mapping. Used for click-to-preview in
@@ -360,23 +354,10 @@ public:
     std::array<std::atomic<float>, SCOPE_SIZE> scopeBuffer {};
     std::atomic<int> scopeWritePos { 0 };
 
-    // ── Slice play-glow ───────────────────────────────────────────────────
-    // Per-slice envelope level for the WebView glow render. Audio thread
-    // writes each block (max envelope across voices firing the same slice,
-    // plus a slow visual decay so short one-shots leave a natural tail).
-    // UI thread polls via snapshotSliceGlowLevels() at ~60 Hz.
-    // Fixed cap — the slicer UI tops out at 32 grid chops; 256 is a safe
-    // upper bound. Indices ≥ tw::kMaxGlowSlots are silently dropped on write.
-    std::array<std::atomic<float>, tw::kMaxGlowSlots> sliceGlowLevel {};
-
     /** Snapshot the current glow levels for the first getNumSlices() slots
-     *  into a juce::var array suitable for returning from a native fn. */
+     *  into a juce::var array suitable for returning from a native fn.
+     *  Task 5: reads from layers[editingLayer].sliceGlowLevel. */
     juce::var snapshotSliceGlowLevels() const;
-
-    // Sampler engine — promoted to public so PluginEditor can reach
-    // synth.warpCache (warp-cache prewarm + setSource from sample-load
-    // path). Keeping the rest of the processor state encapsulated.
-    tw::TerrainSynth synth;
 
     // Source version counter — public so the editor can bump it from the
     // sample-load callback (keys the warp cache so stale entries never hit).
@@ -398,12 +379,9 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     static constexpr int kNumVoices = 32;  // bumped 16→32 for LAYER mode headroom (4 slices × 8 keys)
-    tw::SampleBuffer sampleBuffer;
+    // sampleBuffer removed in Task 5 — owned by LayerState. Access via layers[editingLayer].sampleBuffer.
     tw::SampleLoader sampleLoader;
-
-    // Slice list — atomic shared_ptr<const vector<Slice>>. UI writes via
-    // std::atomic_store (replaceSlices), audio reads via std::atomic_load.
-    tw::SliceListPtr slicesPtr;  // accessed via std::atomic_load/store
+    // slicesPtr removed in Task 5 — owned by LayerState as currentSlices. Access via layers[editingLayer].currentSlices.
 
     // Audition queue: pending (sliceIndex, midiNoteEquivalent) pairs that
     // the editor pushes via auditionSlice(); processBlock injects synthetic
