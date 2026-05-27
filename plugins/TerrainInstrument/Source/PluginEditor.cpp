@@ -703,6 +703,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete (audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].activeSliceIndex.load());
             })
+            .withNativeFunction("setEditingLayer", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mark 2 Phase 1 Task 6: JS pad click switches editingLayer.
+                // Clamps to [0,3] — only 4 layers (A/B/C/D) exist.
+                if (args.size() > 0)
+                {
+                    int idx = juce::jlimit (0, 3, (int) args[0]);
+                    audioProcessor.editingLayer.store (idx);
+                }
+                complete ({});
+            })
             .withNativeFunction("isAnyVoicePlaying", [this](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -3124,10 +3136,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var layerPads = document.createElement('div');
     layerPads.id = 'ti-layer-pads';
     layerPads.innerHTML =
-      '<div class="ti-layer-pad active" data-layer="A" title="Layer A — active">A</div>' +
-      '<div class="ti-layer-pad placeholder" data-layer="B" title="Layer B — coming in Mark 2">B</div>' +
-      '<div class="ti-layer-pad placeholder" data-layer="C" title="Layer C — coming in Mark 2">C</div>' +
-      '<div class="ti-layer-pad placeholder" data-layer="D" title="Layer D — coming in Mark 2">D</div>';
+      '<div class="ti-layer-pad active" data-layer="A" data-layer-idx="0" title="Layer A">A</div>' +
+      '<div class="ti-layer-pad"        data-layer="B" data-layer-idx="1" title="Layer B">B</div>' +
+      '<div class="ti-layer-pad"        data-layer="C" data-layer-idx="2" title="Layer C">C</div>' +
+      '<div class="ti-layer-pad"        data-layer="D" data-layer-idx="3" title="Layer D">D</div>';
     hero.appendChild(layerPads);
 
     // ─── Sequencer transport (TOP-RIGHT) — Mark 2 placeholders ───────────
@@ -6208,6 +6220,28 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   } else {
     injectHeroOverlays();
   }
+
+  // ── Mark 2 Phase 1 Task 6: A/B/C/D pad clicks switch editingLayer ────────
+  // Event delegation on document — works even if pads re-inject. The
+  // existing click-to-load handler (maybeOpenPicker) already skips
+  // #ti-layer-pads in its closest() guard, so there is no conflict.
+  document.addEventListener('click', function (e) {
+    var pad = e.target && e.target.closest && e.target.closest('#ti-layer-pads .ti-layer-pad');
+    if (!pad) return;
+    var idxStr = pad.getAttribute('data-layer-idx');
+    if (idxStr == null) return;
+    var idx = parseInt(idxStr, 10);
+    if (!isFinite(idx) || idx < 0 || idx > 3) return;
+
+    // Visual: exactly one pad holds .active at a time
+    var pads = document.querySelectorAll('#ti-layer-pads .ti-layer-pad');
+    for (var i = 0; i < pads.length; ++i) pads[i].classList.remove('active');
+    pad.classList.add('active');
+
+    // Inform C++ processor which layer is being edited
+    var fn = getNativeFn('setEditingLayer');
+    if (fn) fn(idx);
+  });
 
   // Helper accessible to other scripts (status pill from drag-drop bridge).
   window.tiSetRootNote = function (m) {
