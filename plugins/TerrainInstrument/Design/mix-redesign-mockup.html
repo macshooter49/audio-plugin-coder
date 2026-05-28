@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Terrain — Mix Page Redesign Mockup</title>
+<style>
+  /* ===== Terrain theme vars (copied from index.html) ===== */
+  :root {
+    --bg-main: #ECE8F1;
+    --bg-hero: #2D2545;
+    --bg-surface: #E8E4EF;
+    --bg-glass: rgba(224,218,234,0.85);
+    --bg-card: #E0DAE6;
+    --bg-card-hover: #D8D2DE;
+    --knob-body: #E8E4EF;
+    --knob-track: rgba(124,92,191,0.16);
+    --purple-600: #7C3AED;
+    --purple-500: #8B5CF6;
+    --purple-400: #A78BFA;
+    --border: rgba(124,92,191,0.14);
+    --border-strong: rgba(124,92,191,0.24);
+    --text-primary: #2A2035;
+    --text-secondary: #5C5068;
+    --text-muted: #8A7F96;
+    --text-dim: #A89BBE;
+  }
+  [data-theme="dark"] {
+    --bg-main: #1A1A2E;
+    --bg-hero: #12121F;
+    --bg-surface: #232340;
+    --bg-glass: rgba(26,26,46,0.85);
+    --bg-card: #2A2A48;
+    --bg-card-hover: #33335C;
+    --knob-body: #2E2E4A;
+    --knob-track: rgba(150,150,200,0.18);
+    --purple-600: #9B6DFF;
+    --purple-500: #8B5CF6;
+    --purple-400: #B794FF;
+    --border: rgba(120,120,170,0.18);
+    --border-strong: rgba(140,140,190,0.30);
+    --text-primary: #E0DCE8;
+    --text-secondary: #9B93B0;
+    --text-muted: #6B6080;
+    --text-dim: #504870;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px;
+    background: var(--bg-main);
+    font-family: -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--text-primary);
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+  }
+  .toggle-row { display: flex; gap: 10px; align-items: center; }
+  .toggle-btn {
+    padding: 7px 16px; border-radius: 20px; cursor: pointer;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-secondary); font-weight: 600; font-size: 12px;
+    font-family: inherit; letter-spacing: 0.5px;
+  }
+  .toggle-btn.active { background: var(--purple-500); color: #fff; border-color: var(--purple-500); }
+  .caption { color: var(--text-muted); font-size: 12px; letter-spacing: 0.3px; }
+
+  /* ===== Mix panel — 820 wide, the bottom-half footprint ===== */
+  #mix-panel {
+    width: 820px; height: 272px;
+    display: flex; flex-direction: row;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  /* LEFT — channel strips. Generous air, soft glass cards, no grid. */
+  #mix-strips {
+    display: flex; flex-direction: row; gap: 12px;
+    padding: 16px 14px; width: 50%;
+    box-sizing: border-box;
+  }
+  .strip {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 10px; padding: 12px 6px 11px;
+    border-radius: 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .strip-head {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 13px; font-weight: 600; letter-spacing: 1px;
+    color: var(--text-primary);
+  }
+  .strip-head .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--border-strong);
+  }
+  .strip.playing .strip-head .dot {
+    background: var(--purple-500); box-shadow: 0 0 7px var(--purple-400);
+  }
+
+  /* Arc knob — thin ring + purple arc, like the tape machine knobs */
+  .knob {
+    --val: 0.5;       /* 0..1 */
+    --sweep: 270;     /* degrees of travel */
+    width: 30px; height: 30px; border-radius: 50%;
+    position: relative; cursor: pointer; flex-shrink: 0;
+    background: conic-gradient(from 225deg,
+      var(--purple-500) 0deg,
+      var(--purple-500) calc(var(--val) * var(--sweep) * 1deg),
+      var(--knob-track) calc(var(--val) * var(--sweep) * 1deg),
+      var(--knob-track) calc(var(--sweep) * 1deg),
+      transparent calc(var(--sweep) * 1deg));
+    -webkit-mask: radial-gradient(closest-side, transparent 66%, #000 67%);
+            mask: radial-gradient(closest-side, transparent 66%, #000 67%);
+  }
+  .knob.sm { width: 26px; height: 26px; }
+  .ctrl { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .ctrl-label { font-size: 8px; letter-spacing: 0.8px; color: var(--text-muted); text-transform: uppercase; }
+
+  /* Fader + meter — thin track, soft fill, circle handle. NO ticks, NO segments. */
+  .fader-zone { flex: 1; display: flex; flex-direction: row; gap: 7px; align-items: stretch; justify-content: center; min-height: 96px; }
+  .fader {
+    position: relative; width: 4px; border-radius: 2px;
+    background: var(--knob-track); cursor: pointer;
+  }
+  .fader-fill {
+    position: absolute; left: 0; right: 0; bottom: 0; border-radius: 2px;
+    background: linear-gradient(to top, var(--purple-600), var(--purple-400));
+  }
+  .fader-handle {
+    position: absolute; left: 50%; width: 15px; height: 15px; border-radius: 50%;
+    transform: translate(-50%, 50%);
+    background: var(--bg-card);
+    border: 2px solid var(--purple-500);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  }
+  .meter {
+    position: relative; width: 3px; border-radius: 2px;
+    background: var(--knob-track); overflow: hidden;
+  }
+  .meter-fill {
+    position: absolute; left: 0; right: 0; bottom: 0; border-radius: 2px;
+    background: linear-gradient(to top, #34d399, #4ade80 65%, #a3e635 90%, #facc15 99%);
+    box-shadow: 0 0 5px rgba(74,222,128,0.45);
+  }
+
+  /* M / S — small outlined pills */
+  .ms-row { display: flex; gap: 5px; }
+  .ms-btn {
+    width: 22px; height: 19px; border-radius: 7px;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-muted); font-size: 9px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+  }
+  .ms-btn.m.active { background: var(--text-secondary); color: var(--bg-surface); border-color: var(--text-secondary); }
+  .ms-btn.s.active { background: var(--purple-500); color: #fff; border-color: var(--purple-500); }
+
+  /* divider */
+  .v-divider { width: 1px; background: var(--border); align-self: stretch; margin: 14px 0; }
+
+  /* RIGHT — trigger + stems, soft and minimal */
+  #mix-right { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px 14px; }
+  .card {
+    border-radius: 14px; padding: 12px 13px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .pill-row { display: flex; gap: 6px; }
+  .pill {
+    flex: 1; padding: 6px 4px; border-radius: 9px; text-align: center;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-secondary); font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.6px; cursor: pointer; font-family: inherit;
+  }
+  .pill.active { background: var(--purple-500); color: #fff; border-color: var(--purple-500); box-shadow: 0 0 10px rgba(139,92,246,0.35); }
+  .ctx { margin-top: 11px; font-size: 11px; color: var(--text-secondary); min-height: 60px; }
+  .ctx .hint { color: var(--text-muted); font-size: 10.5px; margin-bottom: 9px; }
+  .layer-chips { display: flex; gap: 7px; }
+  .chip {
+    width: 30px; height: 24px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-dim); font-weight: 700; font-size: 11px;
+  }
+  .chip.lit { background: var(--purple-500); color: #fff; border-color: var(--purple-500); }
+
+  .stem-head { font-size: 10px; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 10px; font-weight: 600; }
+  .stem-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .stem-pill {
+    flex: 1; padding: 8px 4px; border-radius: 9px; text-align: center;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-secondary); font-weight: 700; font-size: 11px;
+    cursor: pointer; font-family: inherit;
+  }
+  .stem-pill:hover { border-color: var(--purple-500); color: var(--text-primary); }
+  .stem-actions { display: flex; gap: 6px; align-items: center; }
+  .export-all {
+    flex: 2; padding: 8px; border-radius: 9px; text-align: center;
+    border: 1px solid var(--purple-500); background: transparent;
+    color: var(--purple-500); font-weight: 700; font-size: 10.5px; letter-spacing: 0.5px;
+    cursor: pointer; font-family: inherit;
+  }
+  .export-all:hover { background: var(--purple-500); color: #fff; }
+  .reveal {
+    flex: 1; padding: 8px; border-radius: 9px; text-align: center;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-secondary); font-weight: 700; font-size: 10px;
+    cursor: pointer; font-family: inherit;
+  }
+  .src-row { display: flex; gap: 6px; align-items: center; margin-top: 9px; font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.5px; }
+  .src-pill {
+    padding: 4px 12px; border-radius: 7px;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-secondary); font-weight: 700; font-size: 9.5px; cursor: pointer;
+  }
+  .src-pill.active { background: var(--purple-500); color: #fff; border-color: var(--purple-500); }
+
+  /* velocity bar variant (shown in alt) */
+  .vel-bar { position: relative; height: 30px; border-radius: 8px; overflow: hidden; background: var(--knob-track); margin-top: 4px; }
+  .vel-zone { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; }
+</style>
+</head>
+<body data-theme="dark">
+  <div class="toggle-row">
+    <span class="caption">Theme:</span>
+    <button class="toggle-btn" data-theme-set="dark">DARK</button>
+    <button class="toggle-btn" data-theme-set="light">LIGHT</button>
+    <span class="caption" style="margin-left:16px">Right-panel:</span>
+    <button class="toggle-btn active" data-ctx-set="layer">LAYER</button>
+    <button class="toggle-btn" data-ctx-set="vel">VELOCITY</button>
+  </div>
+
+  <div id="mix-panel">
+    <!-- LEFT: 4 strips -->
+    <div id="mix-strips">
+      <!-- strip template repeated; A is "playing" -->
+      <div class="strip playing">
+        <div class="strip-head">A <span class="dot"></span></div>
+        <div class="ctrl"><div class="knob" style="--val:0.5"></div><div class="ctrl-label">pan</div></div>
+        <div class="fader-zone">
+          <div class="fader"><div class="fader-fill" style="height:62%"></div><div class="fader-handle" style="bottom:62%"></div></div>
+          <div class="meter"><div class="meter-fill" style="height:54%"></div></div>
+        </div>
+        <div class="ctrl"><div class="knob sm" style="--val:0.2"></div><div class="ctrl-label">jit</div></div>
+        <div class="ms-row"><button class="ms-btn m">M</button><button class="ms-btn s active">S</button></div>
+      </div>
+      <div class="strip">
+        <div class="strip-head">B <span class="dot"></span></div>
+        <div class="ctrl"><div class="knob" style="--val:0.35"></div><div class="ctrl-label">pan</div></div>
+        <div class="fader-zone">
+          <div class="fader"><div class="fader-fill" style="height:48%"></div><div class="fader-handle" style="bottom:48%"></div></div>
+          <div class="meter"><div class="meter-fill" style="height:30%"></div></div>
+        </div>
+        <div class="ctrl"><div class="knob sm" style="--val:0"></div><div class="ctrl-label">jit</div></div>
+        <div class="ms-row"><button class="ms-btn m">M</button><button class="ms-btn s">S</button></div>
+      </div>
+      <div class="strip">
+        <div class="strip-head">C <span class="dot"></span></div>
+        <div class="ctrl"><div class="knob" style="--val:0.65"></div><div class="ctrl-label">pan</div></div>
+        <div class="fader-zone">
+          <div class="fader"><div class="fader-fill" style="height:55%"></div><div class="fader-handle" style="bottom:55%"></div></div>
+          <div class="meter"><div class="meter-fill" style="height:12%"></div></div>
+        </div>
+        <div class="ctrl"><div class="knob sm" style="--val:0.4"></div><div class="ctrl-label">jit</div></div>
+        <div class="ms-row"><button class="ms-btn m active">M</button><button class="ms-btn s">S</button></div>
+      </div>
+      <div class="strip">
+        <div class="strip-head">D <span class="dot"></span></div>
+        <div class="ctrl"><div class="knob" style="--val:0.5"></div><div class="ctrl-label">pan</div></div>
+        <div class="fader-zone">
+          <div class="fader"><div class="fader-fill" style="height:40%"></div><div class="fader-handle" style="bottom:40%"></div></div>
+          <div class="meter"><div class="meter-fill" style="height:0%"></div></div>
+        </div>
+        <div class="ctrl"><div class="knob sm" style="--val:0"></div><div class="ctrl-label">jit</div></div>
+        <div class="ms-row"><button class="ms-btn m">M</button><button class="ms-btn s">S</button></div>
+      </div>
+    </div>
+
+    <div class="v-divider"></div>
+
+    <!-- RIGHT: trigger + stems -->
+    <div id="mix-right">
+      <div class="card">
+        <div class="pill-row">
+          <div class="pill active">LAYER</div>
+          <div class="pill">RR</div>
+          <div class="pill">RANDOM</div>
+          <div class="pill">KEYTRK</div>
+          <div class="pill">VEL</div>
+        </div>
+        <div class="ctx" id="ctx-layer">
+          <div class="hint">All populated layers fire together.</div>
+          <div class="layer-chips">
+            <div class="chip lit">A</div><div class="chip lit">B</div><div class="chip">C</div><div class="chip">D</div>
+          </div>
+        </div>
+        <div class="ctx" id="ctx-vel" style="display:none">
+          <div class="hint">Drag handles to set per-layer velocity zones (0&ndash;127).</div>
+          <div class="vel-bar">
+            <div class="vel-zone" style="left:0;width:25%;background:rgba(139,92,246,0.30)">A</div>
+            <div class="vel-zone" style="left:25%;width:25%;background:rgba(139,92,246,0.45)">B</div>
+            <div class="vel-zone" style="left:50%;width:25%;background:rgba(139,92,246,0.60)">C</div>
+            <div class="vel-zone" style="left:75%;width:25%;background:rgba(139,92,246,0.78)">D</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="stem-head">STEMS &mdash; 1 min rolling &middot; drag to DAW</div>
+        <div class="stem-row">
+          <div class="stem-pill">A</div><div class="stem-pill">B</div><div class="stem-pill">C</div><div class="stem-pill">D</div>
+        </div>
+        <div class="stem-actions">
+          <div class="export-all">EXPORT ALL 4</div>
+          <div class="reveal">REVEAL</div>
+        </div>
+        <div class="src-row">
+          <span>SOURCE</span>
+          <div class="src-pill active">DRY</div>
+          <div class="src-pill">MIX</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="caption">Mockup &mdash; Mix page redesigned to Terrain's identity: soft glass tiles, arc knobs, outlined pills, breathing room, no grid. Toggle theme + right-panel above.</div>
+
+<script>
+  document.querySelectorAll('[data-theme-set]').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.body.setAttribute('data-theme', b.dataset.themeSet);
+      document.querySelectorAll('[data-theme-set]').forEach(function(x){ x.classList.toggle('active', x===b); });
+    });
+  });
+  document.querySelectorAll('[data-ctx-set]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var v = b.dataset.ctxSet;
+      document.getElementById('ctx-layer').style.display = (v==='layer')?'block':'none';
+      document.getElementById('ctx-vel').style.display = (v==='vel')?'block':'none';
+      document.querySelectorAll('[data-ctx-set]').forEach(function(x){ x.classList.toggle('active', x===b); });
+    });
+  });
+  // set dark active by default in the toggle row
+  document.querySelector('[data-theme-set="dark"]').classList.add('active');
+</script>
+</body>
+</html>

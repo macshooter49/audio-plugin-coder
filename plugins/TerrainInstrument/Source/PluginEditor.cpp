@@ -7022,89 +7022,80 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (document.getElementById('mix-panel-styles')) return;
       var style = document.createElement('style');
       style.id = 'mix-panel-styles';
-      // Theme-aware + glass. All colors come from the Terrain theme vars so the
-      // panel adapts to light/dark (dark keeps its look; light loses the harsh
-      // black slabs). Glass = translucent card bg + backdrop-blur. A faint mesh
-      // grid + fader tick marks give the "technical" vibe.
+      // Terrain identity (signed-off mockup): soft glass tiles, arc knobs,
+      // thin faders w/ circle handle, GREEN meters, outlined pills, breathing
+      // room. No grid, no tick marks, no segmented LEDs. Theme-var driven so
+      // light + dark both read clean ("scientific minimalism").
       style.textContent = ''
         + '#mix-panel{display:none;width:820px;height:272px;flex-shrink:0;'
-        +   'border-top:1px solid var(--border-strong);z-index:15;'
+        +   'border-top:1px solid var(--border);z-index:15;'
         +   'position:relative;flex-direction:row;color:var(--text-primary);'
-        +   'background:'
-        +     'repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 40px),'
-        +     'var(--bg-glass);'
-        +   '-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);}'
+        +   'background:var(--bg-surface);}'
         + '#mix-panel.open{display:flex;}'
         + '#mix-strips{display:flex;flex-direction:row;align-items:stretch;'
-        +   'padding:12px 10px;gap:8px;width:50%;'
-        +   'border-right:1px solid var(--border);box-sizing:border-box;}'
+        +   'padding:16px 14px;gap:12px;width:50%;box-sizing:border-box;}'
         + '.mix-strip{flex:1;display:flex;flex-direction:column;align-items:center;'
-        +   'justify-content:space-between;border-radius:7px;'
-        +   'background:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.05)),var(--bg-card);'
-        +   'border:1px solid var(--border);'
-        +   'box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 1px 3px rgba(0,0,0,0.12);'
-        +   'padding:8px 4px;gap:4px;min-width:0;color:var(--text-primary);}'
-        + '.mix-strip-header{font-weight:700;font-size:13px;display:flex;'
-        +   'align-items:center;gap:6px;letter-spacing:0.5px;}'
-        + '.mix-strip-header .play-dot{width:6px;height:6px;border-radius:50%;'
+        +   'gap:10px;padding:12px 6px 11px;border-radius:14px;'
+        +   'background:var(--bg-card);border:1px solid var(--border);'
+        +   'box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);'
+        +   'min-width:0;color:var(--text-primary);}'
+        + '.mix-strip-header{font-weight:600;font-size:13px;display:flex;'
+        +   'align-items:center;gap:5px;letter-spacing:1px;}'
+        + '.mix-strip-header .play-dot{width:5px;height:5px;border-radius:50%;'
         +   'background:var(--border-strong);transition:background 0.1s;}'
         + '.mix-strip.playing .mix-strip-header .play-dot{'
         +   'background:var(--purple-500);box-shadow:0 0 7px var(--purple-400);}'
-        + '.mix-strip-knob{width:26px;height:26px;border-radius:50%;'
-        +   'background:radial-gradient(circle at 50% 35%,rgba(255,255,255,0.14),transparent 65%),var(--knob-body);'
-        +   'border:1px solid var(--border-strong);cursor:pointer;'
+        // Arc knob — thin ring + purple arc swept by --val (0..1), masked center.
+        + '.mix-strip-knob{width:30px;height:30px;border-radius:50%;cursor:pointer;'
         +   'position:relative;flex-shrink:0;'
-        +   'box-shadow:inset 0 1px 1px rgba(255,255,255,0.12),0 1px 2px rgba(0,0,0,0.18);}'
-        + '.mix-strip-knob::after{content:"";position:absolute;'
-        +   'top:3px;left:50%;width:2px;height:9px;border-radius:1px;'
-        +   'background:var(--purple-500);'
-        +   'transform-origin:50% 10px;'
-        +   'transform:translateX(-50%) rotate(var(--rot,0deg));}'
-        + '.mix-strip-knob-label{font-size:8px;letter-spacing:0.6px;'
-        +   'color:var(--text-muted);text-transform:uppercase;'
-        +   'margin-top:-2px;}'
+        +   'background:conic-gradient(from 225deg,'
+        +     'var(--purple-500) 0deg,'
+        +     'var(--purple-500) calc(var(--val,0.5) * 270deg),'
+        +     'var(--knob-track) calc(var(--val,0.5) * 270deg),'
+        +     'var(--knob-track) 270deg,'
+        +     'transparent 270deg);'
+        +   '-webkit-mask:radial-gradient(closest-side,transparent 66%,#000 67%);'
+        +   'mask:radial-gradient(closest-side,transparent 66%,#000 67%);}'
+        + '.mix-strip-knob[data-fn="jitter"]{width:26px;height:26px;}'
+        + '.mix-strip-knob-label{font-size:8px;letter-spacing:0.8px;'
+        +   'color:var(--text-muted);text-transform:uppercase;margin-top:-4px;}'
         + '.mix-strip-fader-meter{flex:1;display:flex;flex-direction:row;'
-        +   'align-items:stretch;justify-content:center;gap:3px;width:100%;'
-        +   'min-height:90px;padding:4px 0;}'
-        // Fader track: recessed groove + tick marks (the "ticker" grid lines).
-        + '.mix-strip-fader{position:relative;width:14px;height:100%;'
-        +   'border-radius:3px;cursor:pointer;'
-        +   'background:'
-        +     'repeating-linear-gradient(0deg,var(--mesh-line) 0 1px,transparent 1px 9px),'
-        +     'var(--knob-track);'
-        +   'box-shadow:inset 0 0 2px rgba(0,0,0,0.3);}'
-        + '.mix-strip-fader-cap{position:absolute;width:20px;height:11px;'
-        +   'left:-3px;border-radius:2px;'
-        +   'background:linear-gradient(180deg,var(--purple-400),var(--purple-600));'
-        +   'box-shadow:0 0 6px var(--purple-400),0 1px 2px rgba(0,0,0,0.3);'
-        +   'transform:translateY(-50%);top:50%;}'
-        // Segmented LED meter — repeating mask cuts the fill into LED bands.
-        + '.mix-strip-meter{width:5px;border-radius:2px;overflow:hidden;'
-        +   'background:var(--knob-track);'
-        +   'box-shadow:inset 0 0 2px rgba(0,0,0,0.3);'
-        +   'display:flex;flex-direction:column-reverse;}'
-        + '.mix-strip-meter-fill{width:100%;'
-        +   'background:linear-gradient(to top,#3ad17a 0%,#9bd94a 55%,#facc15 78%,#ef4444 96%);'
-        +   '-webkit-mask:repeating-linear-gradient(to top,#000 0 3px,transparent 3px 4.5px);'
-        +   'mask:repeating-linear-gradient(to top,#000 0 3px,transparent 3px 4.5px);'
+        +   'align-items:stretch;justify-content:center;gap:7px;width:100%;'
+        +   'min-height:92px;}'
+        // Thin fader: track + bottom-up fill + circle handle (no ticks).
+        + '.mix-strip-fader{position:relative;width:4px;border-radius:2px;'
+        +   'background:var(--knob-track);cursor:pointer;}'
+        + '.mix-strip-fader-fill{position:absolute;left:0;right:0;bottom:0;'
+        +   'border-radius:2px;background:linear-gradient(to top,var(--purple-600),var(--purple-400));}'
+        + '.mix-strip-fader-handle{position:absolute;left:50%;width:15px;height:15px;'
+        +   'border-radius:50%;transform:translate(-50%,50%);'
+        +   'background:var(--bg-card);border:2px solid var(--purple-500);'
+        +   'box-shadow:0 1px 4px rgba(0,0,0,0.25);}'
+        // GREEN meter — smooth fill, no segments, soft glow.
+        + '.mix-strip-meter{position:relative;width:3px;border-radius:2px;'
+        +   'background:var(--knob-track);overflow:hidden;}'
+        + '.mix-strip-meter-fill{position:absolute;left:0;right:0;bottom:0;'
+        +   'border-radius:2px;'
+        +   'background:linear-gradient(to top,#34d399,#4ade80 65%,#a3e635 90%,#facc15 99%);'
+        +   'box-shadow:0 0 5px rgba(74,222,128,0.45);'
         +   'transition:height 0.04s linear;}'
-        + '.mix-strip-buttons{display:flex;flex-direction:row;gap:3px;}'
-        + '.mix-strip-btn{width:22px;height:18px;font-size:9px;font-weight:700;'
-        +   'border:1px solid var(--border-strong);background:var(--bg-card);'
-        +   'color:var(--text-secondary);border-radius:3px;cursor:pointer;'
+        // M / S outlined pills.
+        + '.mix-strip-buttons{display:flex;flex-direction:row;gap:5px;}'
+        + '.mix-strip-btn{width:22px;height:19px;font-size:9px;font-weight:700;'
+        +   'border:1px solid var(--border-strong);background:transparent;'
+        +   'color:var(--text-muted);border-radius:7px;cursor:pointer;'
         +   'padding:0;font-family:inherit;}'
         + '.mix-strip-btn:hover{border-color:var(--purple-500);}'
-        + '.mix-strip-btn.active[data-fn="mute"]{background:#ef4444;color:#fff;border-color:#ef4444;}'
-        + '.mix-strip-btn.active[data-fn="solo"]{background:#facc15;color:#1a1a1a;border-color:#facc15;}'
-        + '#mix-right{flex:1;display:flex;flex-direction:column;padding:12px;'
-        +   'gap:10px;box-sizing:border-box;}'
-        + '#mix-trigger-area,#mix-stem-area{border-radius:7px;'
-        +   'background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0.04)),var(--bg-card);'
-        +   'border:1px solid var(--border);'
-        +   'box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);'
-        +   'padding:10px;color:var(--text-secondary);font-size:11px;'
+        + '.mix-strip-btn.active[data-fn="mute"]{background:var(--text-secondary);color:var(--bg-surface);border-color:var(--text-secondary);}'
+        + '.mix-strip-btn.active[data-fn="solo"]{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
+        + '#mix-right{flex:1;display:flex;flex-direction:column;padding:16px 14px;'
+        +   'gap:12px;box-sizing:border-box;}'
+        + '#mix-trigger-area,#mix-stem-area{border-radius:14px;'
+        +   'background:var(--bg-card);border:1px solid var(--border);'
+        +   'box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);'
+        +   'padding:12px 13px;color:var(--text-secondary);font-size:11px;'
         +   'box-sizing:border-box;}'
-        + '#mix-trigger-area{flex:1.4;}'
+        + '#mix-trigger-area{flex:1.3;}'
         + '#mix-stem-area{flex:1;}'
         ;
       document.head.appendChild(style);
@@ -7127,15 +7118,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         strip.setAttribute('data-layer', String(i));
         strip.innerHTML = ''
           + '<div class="mix-strip-header">' + letter + ' <span class="play-dot"></span></div>'
-          + '<div class="mix-strip-knob" data-fn="pan" title="Pan ' + letter + ' (drag, dbl-click resets)"></div>'
+          + '<div class="mix-strip-knob" data-fn="pan" title="Pan ' + letter + ' - drag, dbl-click resets"></div>'
           + '<div class="mix-strip-knob-label">PAN</div>'
           + '<div class="mix-strip-fader-meter">'
-          +   '<div class="mix-strip-fader"><div class="mix-strip-fader-cap"></div></div>'
+          +   '<div class="mix-strip-fader"><div class="mix-strip-fader-fill"></div><div class="mix-strip-fader-handle"></div></div>'
           +   '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" data-channel="l" style="height:0%"></div></div>'
           +   '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" data-channel="r" style="height:0%"></div></div>'
           + '</div>'
-          + '<div class="mix-strip-knob" data-fn="jitter" title="Pitch Jitter ' + letter + ' (cents, dbl-click resets)"></div>'
-          + '<div class="mix-strip-knob-label">JITTER</div>'
+          + '<div class="mix-strip-knob" data-fn="jitter" title="Pitch Jitter ' + letter + ' - drag, dbl-click resets"></div>'
+          + '<div class="mix-strip-knob-label">JIT</div>'
           + '<div class="mix-strip-buttons">'
           +   '<button class="mix-strip-btn" data-fn="mute">M</button>'
           +   '<button class="mix-strip-btn" data-fn="solo">S</button>'
@@ -7162,9 +7153,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       }
     }
 
-    function setPanVisual (knob, p)     { knob.style.setProperty('--rot', (p * 135) + 'deg'); }
-    function setJitterVisual (knob, c)  { knob.style.setProperty('--rot', ((c / 100) * 270 - 135) + 'deg'); }
-    function setFaderVisual (cap, vol)  { cap.style.top = ((1.0 - vol / 2.0) * 100) + '%'; }
+    // Arc knobs use --val (0..1) sweeping the conic-gradient ring.
+    function setPanVisual (knob, p)     { knob.style.setProperty('--val', String((p + 1) / 2)); }   // -1..1 -> 0..1
+    function setJitterVisual (knob, c)  { knob.style.setProperty('--val', String(c / 100)); }        // 0..100 -> 0..1
+    // Fader: vol 0..2 -> 0..100% of travel. Sets fill height + handle bottom.
+    function setFaderVisual (fader, vol) {
+      var pct = (vol / 2.0) * 100;
+      var f = fader.querySelector('.mix-strip-fader-fill');
+      var h = fader.querySelector('.mix-strip-fader-handle');
+      if (f) f.style.height = pct + '%';
+      if (h) h.style.bottom = pct + '%';
+    }
 
     function wireStrips () {
       document.querySelectorAll('.mix-strip').forEach(function (strip) {
@@ -7172,8 +7171,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
         // ── Fader (vertical drag, 0..2 linear gain) ──
         var fader = strip.querySelector('.mix-strip-fader');
-        var cap   = strip.querySelector('.mix-strip-fader-cap');
-        setFaderVisual(cap, 1.0);
+        setFaderVisual(fader, 1.0);
         fader.addEventListener('mousedown', function (ev) {
           ev.preventDefault();
           var rect = fader.getBoundingClientRect();
@@ -7181,7 +7179,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
             var rel = (e.clientY - rect.top) / rect.height;
             rel = Math.max(0, Math.min(1, rel));
             var vol = (1.0 - rel) * 2.0;
-            cap.style.top = (rel * 100) + '%';
+            setFaderVisual(fader, vol);
             var fn = getNativeFn('setLayerVolume');
             if (fn) { try { fn(idx, vol); } catch (_) {} }
           }
@@ -7195,7 +7193,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         });
         fader.addEventListener('dblclick', function (ev) {
           ev.preventDefault();
-          setFaderVisual(cap, 1.0);
+          setFaderVisual(fader, 1.0);
           var fn = getNativeFn('setLayerVolume');
           if (fn) { try { fn(idx, 1.0); } catch (_) {} }
         });
@@ -7279,7 +7277,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     function restoreStripsFromCpp () {
       document.querySelectorAll('.mix-strip').forEach(function (strip) {
         var idx = parseInt(strip.getAttribute('data-layer'), 10);
-        var cap = strip.querySelector('.mix-strip-fader-cap');
+        var fader      = strip.querySelector('.mix-strip-fader');
         var panKnob    = strip.querySelector('.mix-strip-knob[data-fn="pan"]');
         var jitterKnob = strip.querySelector('.mix-strip-knob[data-fn="jitter"]');
         var muteBtn    = strip.querySelector('[data-fn="mute"]');
@@ -7290,7 +7288,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           else then(p);
         }
         var volFn = getNativeFn('getLayerVolume');
-        if (volFn) { try { unwrap(volFn(idx), function (v) { setFaderVisual(cap, (typeof v === 'number' ? v : 1.0)); }); } catch (_) {} }
+        if (volFn) { try { unwrap(volFn(idx), function (v) { setFaderVisual(fader, (typeof v === 'number' ? v : 1.0)); }); } catch (_) {} }
         var panFn = getNativeFn('getLayerPan');
         if (panFn) { try { unwrap(panFn(idx), function (v) { setPanVisual(panKnob, (typeof v === 'number' ? v : 0)); }); } catch (_) {} }
         var jFn = getNativeFn('getLayerPitchJitter');
@@ -7381,14 +7379,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var s = document.createElement('style');
       s.id = 'mix-trigger-styles';
       s.textContent = ''
-        + '#trigger-pills{display:flex;gap:4px;margin-bottom:8px;}'
-        + '.trigger-pill{flex:1;padding:5px 4px;font-size:10px;font-weight:700;'
-        +   'letter-spacing:0.5px;background:var(--bg-card);color:var(--text-secondary);'
-        +   'border:1px solid var(--border-strong);border-radius:4px;cursor:pointer;'
+        + '#trigger-pills{display:flex;gap:6px;margin-bottom:10px;}'
+        + '.trigger-pill{flex:1;padding:6px 4px;font-size:9.5px;font-weight:700;'
+        +   'letter-spacing:0.6px;background:transparent;color:var(--text-secondary);'
+        +   'border:1px solid var(--border-strong);border-radius:9px;cursor:pointer;'
         +   'font-family:inherit;}'
         + '.trigger-pill:hover{border-color:var(--purple-500);}'
         + '.trigger-pill.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);'
-        +   'box-shadow:0 0 8px var(--purple-400);}'
+        +   'box-shadow:0 0 10px rgba(139,92,246,0.35);}'
         + '#trigger-context{position:relative;font-size:11px;'
         +   'color:var(--text-secondary);}'
         + '.trigger-panel{display:none;}'
@@ -7429,8 +7427,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   'text-align:right;}'
         + '.solo-checkboxes{display:flex;gap:8px;}'
         + '.solo-cb{flex:1;padding:8px;font-weight:700;font-size:13px;'
-        +   'background:var(--bg-card);color:var(--text-muted);border:2px solid var(--border-strong);'
-        +   'border-radius:4px;cursor:pointer;text-align:center;'
+        +   'background:transparent;color:var(--text-muted);border:1px solid var(--border-strong);'
+        +   'border-radius:9px;cursor:pointer;text-align:center;'
         +   'font-family:inherit;transition:all 0.15s;}'
         + '.solo-cb:hover{border-color:var(--purple-500);}'
         + '.solo-cb.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
@@ -7806,26 +7804,25 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   'font-weight:700;}'
         + '.stem-buttons{display:flex;gap:4px;}'
         + '.stem-btn{flex:1;padding:8px 4px;font-size:11px;font-weight:700;'
-        +   'background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border-strong);'
-        +   'border-radius:4px;cursor:pointer;font-family:inherit;'
+        +   'background:transparent;color:var(--text-secondary);border:1px solid var(--border-strong);'
+        +   'border-radius:9px;cursor:pointer;font-family:inherit;'
         +   'transition:all 0.15s;}'
-        + '.stem-btn:hover{border-color:var(--purple-500);background:var(--bg-card-hover);}'
+        + '.stem-btn:hover{border-color:var(--purple-500);color:var(--text-primary);}'
         + '.stem-btn.exporting{background:var(--purple-500);color:#fff;border-color:var(--purple-500);'
         +   'box-shadow:0 0 8px var(--purple-400);}'
-        + '.stem-all-row{display:flex;gap:4px;}'
-        + '#stem-export-all{flex:2;padding:8px;font-size:11px;font-weight:700;'
-        +   'background:linear-gradient(180deg,var(--purple-400),var(--purple-600));'
-        +   'color:#fff;border:none;border-radius:4px;'
-        +   'cursor:pointer;font-family:inherit;}'
-        + '#stem-export-all:hover{filter:brightness(1.1);}'
-        + '#stem-reveal{flex:1;padding:8px;font-size:10px;font-weight:700;'
+        + '.stem-all-row{display:flex;gap:6px;}'
+        + '#stem-export-all{flex:2;padding:8px;font-size:10.5px;font-weight:700;letter-spacing:0.5px;'
         +   'background:transparent;color:var(--purple-500);border:1px solid var(--purple-500);'
-        +   'border-radius:4px;cursor:pointer;font-family:inherit;}'
-        + '.stem-source-row{display:flex;gap:4px;align-items:center;'
-        +   'font-size:10px;letter-spacing:0.4px;color:var(--text-secondary);}'
-        + '.stem-source-pill{padding:4px 10px;border:1px solid var(--border-strong);'
-        +   'background:var(--bg-card);color:var(--text-secondary);border-radius:3px;'
-        +   'cursor:pointer;font-weight:700;font-family:inherit;font-size:10px;}'
+        +   'border-radius:9px;cursor:pointer;font-family:inherit;}'
+        + '#stem-export-all:hover{background:var(--purple-500);color:#fff;}'
+        + '#stem-reveal{flex:1;padding:8px;font-size:10px;font-weight:700;'
+        +   'background:transparent;color:var(--text-secondary);border:1px solid var(--border-strong);'
+        +   'border-radius:9px;cursor:pointer;font-family:inherit;}'
+        + '.stem-source-row{display:flex;gap:6px;align-items:center;'
+        +   'font-size:9.5px;letter-spacing:0.5px;color:var(--text-muted);margin-top:9px;}'
+        + '.stem-source-pill{padding:4px 12px;border:1px solid var(--border-strong);'
+        +   'background:transparent;color:var(--text-secondary);border-radius:7px;'
+        +   'cursor:pointer;font-weight:700;font-family:inherit;font-size:9.5px;}'
         + '.stem-source-pill.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
         + '.stem-status{font-size:9px;color:var(--text-muted);'
         +   'font-style:italic;min-height:11px;}'
