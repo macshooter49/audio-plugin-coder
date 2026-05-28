@@ -80,14 +80,16 @@ namespace tw
                       std::atomic<int>&   loopModeRef,
                       ModulationEngine*   me = nullptr,
                       WarpRenderCache*    wc = nullptr,
-                      std::atomic<float>* chopFadeRef = nullptr) noexcept
+                      std::atomic<float>* chopFadeRef = nullptr,
+                      std::atomic<float>* pitchJitterCentsRef = nullptr) noexcept
             : sample (sb),
               attackMsParam (attackMsRef),
               releaseMsParam (releaseMsRef),
               loopModeParam (loopModeRef),
               modEngine (me),
               warpCache_ (wc),
-              chopFadeMsParam_ (chopFadeRef) {}
+              chopFadeMsParam_ (chopFadeRef),
+              pitchJitterCentsParam_ (pitchJitterCentsRef) {}
 
         bool canPlaySound (juce::SynthesiserSound*) override { return true; }
 
@@ -181,6 +183,22 @@ namespace tw
                     envStage = EnvStage::Decay;
             }
             isActive = true;
+
+            // Mix page Phase B: per-layer pitch jitter. Adds ±N cents random
+            // offset (where N = layer's pitchJitterCents) to the voice's
+            // semitone pitch — KILLS the phasing artifacts that happen when
+            // stacking identical layer copies. Sampled once at startNote so
+            // the offset is stable for the voice's lifetime; juce::Random's
+            // system instance is thread-local and realtime-safe.
+            if (pitchJitterCentsParam_ != nullptr)
+            {
+                const float jitterCents = pitchJitterCentsParam_->load();
+                if (jitterCents > 0.0f)
+                {
+                    const float r = juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
+                    activeConfig.pitchSemitones += (r * jitterCents) * 0.01f;  // cents → semitones
+                }
+            }
 
             // Warp engine: select mode + reset state for this trigger. The
             // dispatcher lazily allocates the underlying spectral engine on
@@ -1300,6 +1318,7 @@ namespace tw
 
         // ── Chop fade parameter (anti-click ramp at slice boundaries) ────────
         std::atomic<float>* chopFadeMsParam_ = nullptr;  // non-owning; points to PluginProcessor::chopFadeMsAtomic
+        std::atomic<float>* pitchJitterCentsParam_ = nullptr;  // non-owning; points to LayerState::pitchJitterCents (Mix page Phase B)
 
         // ── Scan state (Mark 1.5) ────────────────────────────────────────────
         bool   scanActive       = false;   // mirrors activeConfig.scanEnabled, captured at startNote

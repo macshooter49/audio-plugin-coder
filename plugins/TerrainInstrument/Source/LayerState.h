@@ -101,7 +101,8 @@ namespace tw
                     sampleLoopMode,
                     nullptr,                     // ModulationEngine — wired by processor
                     &synth.warpCache,            // WarpRenderCache from this layer's synth
-                    &chopFadeMs));
+                    &chopFadeMs,
+                    &pitchJitterCents));         // Mix page Phase B per-layer jitter
             }
         }
 

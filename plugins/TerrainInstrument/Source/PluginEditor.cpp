@@ -2323,7 +2323,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     //                            numChannels, peaksMin[], peaksMax[] })
     //   window.onLoadError(msg)
     // ────────────────────────────────────────────────────────────────────────
-    const juce::String heroOverlay = R"(
+    const juce::String heroOverlay = R"TIHX(
 <style>
   /* ─── Waveform canvas (overlay on top of terrain mesh) ─── */
   #waveform-canvas {
@@ -6965,9 +6965,363 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     state.rootNote = Math.max(0, Math.min(127, m));
     updateRootDisplay();
   };
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Mix page Phase B — 4 channel strips (LEFT half of bottom panel)
+  // Phase C will fill #mix-trigger-area with the 5-pill trigger row.
+  // Phase D will fill #mix-stem-area with the stem capture controls.
+  // ════════════════════════════════════════════════════════════════════════
+  (function setupMixPage () {
+    function injectMixPanelStyles () {
+      if (document.getElementById('mix-panel-styles')) return;
+      var style = document.createElement('style');
+      style.id = 'mix-panel-styles';
+      style.textContent = ''
+        + '#mix-panel{display:none;width:820px;height:272px;flex-shrink:0;'
+        +   'border-top:1px solid var(--border);background:var(--bg-surface);'
+        +   'z-index:15;position:relative;flex-direction:row;}'
+        + '#mix-panel.open{display:flex;}'
+        + '#mix-strips{display:flex;flex-direction:row;align-items:stretch;'
+        +   'padding:12px 10px;gap:8px;width:50%;'
+        +   'border-right:1px solid var(--border);box-sizing:border-box;}'
+        + '.mix-strip{flex:1;display:flex;flex-direction:column;align-items:center;'
+        +   'justify-content:space-between;background:rgba(255,255,255,0.03);'
+        +   'border:1px solid rgba(255,255,255,0.06);border-radius:6px;'
+        +   'padding:8px 4px;gap:4px;min-width:0;color:var(--text-primary);}'
+        + '.mix-strip-header{font-weight:700;font-size:13px;display:flex;'
+        +   'align-items:center;gap:6px;letter-spacing:0.5px;}'
+        + '.mix-strip-header .play-dot{width:6px;height:6px;border-radius:50%;'
+        +   'background:rgba(255,255,255,0.2);transition:background 0.1s;}'
+        + '.mix-strip.playing .mix-strip-header .play-dot{'
+        +   'background:#8B5CF6;box-shadow:0 0 6px rgba(139,92,246,0.5);}'
+        + '.mix-strip-knob{width:26px;height:26px;border-radius:50%;'
+        +   'background:#2a2a3e;border:1px solid #3a3a4e;cursor:pointer;'
+        +   'position:relative;flex-shrink:0;}'
+        + '.mix-strip-knob::after{content:"";position:absolute;'
+        +   'top:3px;left:50%;width:2px;height:9px;background:#8B5CF6;'
+        +   'transform-origin:50% 10px;'
+        +   'transform:translateX(-50%) rotate(var(--rot,0deg));}'
+        + '.mix-strip-knob-label{font-size:8px;letter-spacing:0.5px;'
+        +   'color:var(--text-secondary);text-transform:uppercase;'
+        +   'margin-top:-2px;}'
+        + '.mix-strip-fader-meter{flex:1;display:flex;flex-direction:row;'
+        +   'align-items:stretch;justify-content:center;gap:3px;width:100%;'
+        +   'min-height:90px;padding:4px 0;}'
+        + '.mix-strip-fader{position:relative;width:14px;height:100%;'
+        +   'background:#1a1a2e;border-radius:3px;cursor:pointer;}'
+        + '.mix-strip-fader-cap{position:absolute;width:18px;height:10px;'
+        +   'left:-2px;background:#8B5CF6;border-radius:2px;'
+        +   'box-shadow:0 0 4px rgba(139,92,246,0.4);'
+        +   'transform:translateY(-50%);top:50%;}'
+        + '.mix-strip-meter{width:4px;background:#1a1a2e;border-radius:2px;'
+        +   'overflow:hidden;display:flex;flex-direction:column-reverse;}'
+        + '.mix-strip-meter-fill{width:100%;'
+        +   'background:linear-gradient(to top,#4ade80 0%,#facc15 70%,#ef4444 95%);'
+        +   'transition:height 0.05s linear;}'
+        + '.mix-strip-buttons{display:flex;flex-direction:row;gap:3px;}'
+        + '.mix-strip-btn{width:22px;height:18px;font-size:9px;font-weight:700;'
+        +   'border:1px solid #3a3a4e;background:#2a2a3e;'
+        +   'color:var(--text-secondary);border-radius:3px;cursor:pointer;'
+        +   'padding:0;font-family:inherit;}'
+        + '.mix-strip-btn:hover{border-color:#8B5CF6;}'
+        + '.mix-strip-btn.active[data-fn="mute"]{background:#ef4444;color:#fff;border-color:#ef4444;}'
+        + '.mix-strip-btn.active[data-fn="solo"]{background:#facc15;color:#000;border-color:#facc15;}'
+        + '#mix-right{flex:1;display:flex;flex-direction:column;padding:12px;'
+        +   'gap:10px;box-sizing:border-box;}'
+        + '#mix-trigger-area,#mix-stem-area{background:rgba(255,255,255,0.03);'
+        +   'border:1px solid rgba(255,255,255,0.06);border-radius:6px;'
+        +   'padding:10px;color:var(--text-secondary);font-size:11px;'
+        +   'box-sizing:border-box;}'
+        + '#mix-trigger-area{flex:1.4;}'
+        + '#mix-stem-area{flex:1;}'
+        ;
+      document.head.appendChild(style);
+    }
+
+    function buildMixPanel () {
+      if (document.getElementById('mix-panel')) return;
+      var panel = document.createElement('div');
+      panel.id = 'mix-panel';
+
+      var strips = document.createElement('div');
+      strips.id = 'mix-strips';
+      panel.appendChild(strips);
+
+      var letters = ['A', 'B', 'C', 'D'];
+      for (var i = 0; i < 4; ++i) {
+        var letter = letters[i];
+        var strip = document.createElement('div');
+        strip.className = 'mix-strip';
+        strip.setAttribute('data-layer', String(i));
+        strip.innerHTML = ''
+          + '<div class="mix-strip-header">' + letter + ' <span class="play-dot"></span></div>'
+          + '<div class="mix-strip-knob" data-fn="pan" title="Pan ' + letter + ' (drag, dbl-click resets)"></div>'
+          + '<div class="mix-strip-knob-label">PAN</div>'
+          + '<div class="mix-strip-fader-meter">'
+          +   '<div class="mix-strip-fader"><div class="mix-strip-fader-cap"></div></div>'
+          +   '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" data-channel="l" style="height:0%"></div></div>'
+          +   '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" data-channel="r" style="height:0%"></div></div>'
+          + '</div>'
+          + '<div class="mix-strip-knob" data-fn="jitter" title="Pitch Jitter ' + letter + ' (cents, dbl-click resets)"></div>'
+          + '<div class="mix-strip-knob-label">JITTER</div>'
+          + '<div class="mix-strip-buttons">'
+          +   '<button class="mix-strip-btn" data-fn="mute">M</button>'
+          +   '<button class="mix-strip-btn" data-fn="solo">S</button>'
+          + '</div>'
+          ;
+        strips.appendChild(strip);
+      }
+
+      var right = document.createElement('div');
+      right.id = 'mix-right';
+      right.innerHTML = ''
+        + '<div id="mix-trigger-area">(trigger mode controls — Phase C)</div>'
+        + '<div id="mix-stem-area">(stem capture — Phase D)</div>'
+        ;
+      panel.appendChild(right);
+
+      // Insert as a sibling of #mod-panel so it lives in the same DOM flow
+      // (both panels swap with #controls via display:none/flex).
+      var modPanel = document.getElementById('mod-panel');
+      if (modPanel && modPanel.parentNode) {
+        modPanel.parentNode.insertBefore(panel, modPanel.nextSibling);
+      } else {
+        document.body.appendChild(panel);
+      }
+    }
+
+    function setPanVisual (knob, p)     { knob.style.setProperty('--rot', (p * 135) + 'deg'); }
+    function setJitterVisual (knob, c)  { knob.style.setProperty('--rot', ((c / 100) * 270 - 135) + 'deg'); }
+    function setFaderVisual (cap, vol)  { cap.style.top = ((1.0 - vol / 2.0) * 100) + '%'; }
+
+    function wireStrips () {
+      document.querySelectorAll('.mix-strip').forEach(function (strip) {
+        var idx = parseInt(strip.getAttribute('data-layer'), 10);
+
+        // ── Fader (vertical drag, 0..2 linear gain) ──
+        var fader = strip.querySelector('.mix-strip-fader');
+        var cap   = strip.querySelector('.mix-strip-fader-cap');
+        setFaderVisual(cap, 1.0);
+        fader.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          var rect = fader.getBoundingClientRect();
+          function onMove (e) {
+            var rel = (e.clientY - rect.top) / rect.height;
+            rel = Math.max(0, Math.min(1, rel));
+            var vol = (1.0 - rel) * 2.0;
+            cap.style.top = (rel * 100) + '%';
+            var fn = getNativeFn('setLayerVolume');
+            if (fn) { try { fn(idx, vol); } catch (_) {} }
+          }
+          function onUp () {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          }
+          onMove(ev);
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+        fader.addEventListener('dblclick', function (ev) {
+          ev.preventDefault();
+          setFaderVisual(cap, 1.0);
+          var fn = getNativeFn('setLayerVolume');
+          if (fn) { try { fn(idx, 1.0); } catch (_) {} }
+        });
+
+        // ── Pan knob (vertical drag → ±1, dbl-click resets to 0) ──
+        var panKnob = strip.querySelector('.mix-strip-knob[data-fn="pan"]');
+        var panState = { v: 0 };
+        panKnob.addEventListener('dblclick', function (ev) {
+          ev.preventDefault();
+          panState.v = 0;
+          setPanVisual(panKnob, 0);
+          var fn = getNativeFn('setLayerPan');
+          if (fn) { try { fn(idx, 0); } catch (_) {} }
+        });
+        panKnob.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          var startY = ev.clientY;
+          var startV = panState.v;
+          function onMove (e) {
+            var v = Math.max(-1, Math.min(1, startV + (startY - e.clientY) / 100));
+            panState.v = v;
+            setPanVisual(panKnob, v);
+            var fn = getNativeFn('setLayerPan');
+            if (fn) { try { fn(idx, v); } catch (_) {} }
+          }
+          function onUp () {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+
+        // ── Pitch jitter knob (vertical drag → 0..100 cents) ──
+        var jitterKnob = strip.querySelector('.mix-strip-knob[data-fn="jitter"]');
+        var jitterState = { v: 0 };
+        jitterKnob.addEventListener('dblclick', function (ev) {
+          ev.preventDefault();
+          jitterState.v = 0;
+          setJitterVisual(jitterKnob, 0);
+          var fn = getNativeFn('setLayerPitchJitter');
+          if (fn) { try { fn(idx, 0); } catch (_) {} }
+        });
+        jitterKnob.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          var startY = ev.clientY;
+          var startV = jitterState.v;
+          function onMove (e) {
+            var v = Math.max(0, Math.min(100, startV + (startY - e.clientY) / 2));
+            jitterState.v = v;
+            setJitterVisual(jitterKnob, v);
+            var fn = getNativeFn('setLayerPitchJitter');
+            if (fn) { try { fn(idx, v); } catch (_) {} }
+          }
+          function onUp () {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+
+        // ── M / S buttons ──
+        strip.querySelector('[data-fn="mute"]').addEventListener('click', function (ev) {
+          var btn = ev.currentTarget;
+          var active = ! btn.classList.contains('active');
+          btn.classList.toggle('active', active);
+          var fn = getNativeFn('setLayerMute');
+          if (fn) { try { fn(idx, active); } catch (_) {} }
+        });
+        strip.querySelector('[data-fn="solo"]').addEventListener('click', function (ev) {
+          var btn = ev.currentTarget;
+          var active = ! btn.classList.contains('active');
+          btn.classList.toggle('active', active);
+          var fn = getNativeFn('setLayerSolo');
+          if (fn) { try { fn(idx, active); } catch (_) {} }
+        });
+      });
+    }
+
+    function restoreStripsFromCpp () {
+      document.querySelectorAll('.mix-strip').forEach(function (strip) {
+        var idx = parseInt(strip.getAttribute('data-layer'), 10);
+        var cap = strip.querySelector('.mix-strip-fader-cap');
+        var panKnob    = strip.querySelector('.mix-strip-knob[data-fn="pan"]');
+        var jitterKnob = strip.querySelector('.mix-strip-knob[data-fn="jitter"]');
+        var muteBtn    = strip.querySelector('[data-fn="mute"]');
+        var soloBtn    = strip.querySelector('[data-fn="solo"]');
+
+        function unwrap (p, then) {
+          if (p && typeof p.then === 'function') p.then(then).catch(function () {});
+          else then(p);
+        }
+        var volFn = getNativeFn('getLayerVolume');
+        if (volFn) { try { unwrap(volFn(idx), function (v) { setFaderVisual(cap, (typeof v === 'number' ? v : 1.0)); }); } catch (_) {} }
+        var panFn = getNativeFn('getLayerPan');
+        if (panFn) { try { unwrap(panFn(idx), function (v) { setPanVisual(panKnob, (typeof v === 'number' ? v : 0)); }); } catch (_) {} }
+        var jFn = getNativeFn('getLayerPitchJitter');
+        if (jFn)  { try { unwrap(jFn(idx),   function (v) { setJitterVisual(jitterKnob, (typeof v === 'number' ? v : 0)); }); } catch (_) {} }
+        var mFn = getNativeFn('getLayerMute');
+        if (mFn)  { try { unwrap(mFn(idx),   function (m) { muteBtn.classList.toggle('active', !!m); }); } catch (_) {} }
+        var sFn = getNativeFn('getLayerSolo');
+        if (sFn)  { try { unwrap(sFn(idx),   function (s) { soloBtn.classList.toggle('active', !!s); }); } catch (_) {} }
+      });
+    }
+
+    function pollMixMeters () {
+      var panel = document.getElementById('mix-panel');
+      if (! panel || ! panel.classList.contains('open')) return;
+      var fn = getNativeFn('getLayerPeakLevels');
+      if (! fn) return;
+      try {
+        fn().then(function (arr) {
+          if (! arr || arr.length < 4) return;
+          for (var i = 0; i < 4; ++i) {
+            var strip = document.querySelector('.mix-strip[data-layer="' + i + '"]');
+            if (! strip) continue;
+            var l = (arr[i] && arr[i].l) || 0;
+            var r = (arr[i] && arr[i].r) || 0;
+            var mL = strip.querySelector('.mix-strip-meter-fill[data-channel="l"]');
+            var mR = strip.querySelector('.mix-strip-meter-fill[data-channel="r"]');
+            if (mL) mL.style.height = (Math.min(1, l) * 100) + '%';
+            if (mR) mR.style.height = (Math.min(1, r) * 100) + '%';
+          }
+        }).catch(function () {});
+      } catch (_) {}
+    }
+
+    function pollStripsPlayingDots () {
+      var panel = document.getElementById('mix-panel');
+      if (! panel || ! panel.classList.contains('open')) return;
+      var fn = getNativeFn('getLayerVoiceActivity');
+      if (! fn) return;
+      try {
+        fn().then(function (arr) {
+          if (! arr || arr.length < 4) return;
+          for (var i = 0; i < 4; ++i) {
+            var strip = document.querySelector('.mix-strip[data-layer="' + i + '"]');
+            if (strip) strip.classList.toggle('playing', !! arr[i]);
+          }
+        }).catch(function () {});
+      } catch (_) {}
+    }
+
+    function setupMixPillWiring () {
+      var mixBtn = document.getElementById('mix-btn');
+      var panel  = document.getElementById('mix-panel');
+      if (! mixBtn || ! panel) return;
+
+      mixBtn.addEventListener('click', function () {
+        var willOpen = ! panel.classList.contains('open');
+        // Close other panels first (existing setActivePanel handles eq/dly/mod).
+        if (willOpen && typeof setActivePanel === 'function') setActivePanel(null);
+        panel.classList.toggle('open', willOpen);
+        mixBtn.classList.toggle('active', willOpen);
+        var ctrls = document.getElementById('controls');
+        if (ctrls) ctrls.style.display = willOpen ? 'none' : '';
+        if (willOpen) restoreStripsFromCpp();
+      });
+
+      // When EQ/DLY/MOD pills are clicked, also close the Mix panel.
+      ['eq-btn', 'delay-btn', 'mod-btn'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (! el) return;
+        el.addEventListener('click', function () {
+          if (panel.classList.contains('open')) {
+            panel.classList.remove('open');
+            mixBtn.classList.remove('active');
+            var ctrls = document.getElementById('controls');
+            if (ctrls) ctrls.style.display = '';
+          }
+        });
+      });
+    }
+
+    function init () {
+      if (! document.getElementById('mix-btn')) {
+        // index.html mod-buttons not yet in DOM — retry next frame.
+        requestAnimationFrame(init);
+        return;
+      }
+      injectMixPanelStyles();
+      buildMixPanel();
+      wireStrips();
+      setupMixPillWiring();
+      setInterval(pollMixMeters, 33);            // ~30 Hz strip meters
+      setInterval(pollStripsPlayingDots, 100);   // 10 Hz play-dot indicator
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  })();
 })();
 </script>
-)";
+)TIHX";
     html = html.replace ("</body>", heroOverlay + "</body>");
 
     auto utf8 = html.toUTF8();
