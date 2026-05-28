@@ -1085,8 +1085,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // stems exported, JS calls revealStemsFolder to open Finder.
                 if (args.size() < 1) { complete (juce::var (juce::String())); return; }
                 const int idx = juce::jlimit (0, 3, (int) args[0]);
-                const auto destFolder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                                          .getChildFile ("Terrain Instrument Stems");
+                const auto destFolder = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                                          .getChildFile ("Waves Crate").getChildFile ("Terrain Instrument").getChildFile ("Stems");
                 const auto written = audioProcessor.exportStemToFile (idx, destFolder);
                 complete (juce::var (written.getFullPathName()));
             })
@@ -1095,8 +1095,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // Writes all 4 layer stems to ~/Documents/Terrain Instrument Stems/.
                 // Returns an array of file path strings (empty string for failures).
-                const auto destFolder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                                          .getChildFile ("Terrain Instrument Stems");
+                const auto destFolder = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                                          .getChildFile ("Waves Crate").getChildFile ("Terrain Instrument").getChildFile ("Stems");
                 juce::Array<juce::var> out;
                 for (int i = 0; i < 4; ++i)
                 {
@@ -1109,11 +1109,39 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // Opens the stems folder in Finder/Explorer for the user.
-                const auto destFolder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                                          .getChildFile ("Terrain Instrument Stems");
+                const auto destFolder = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                                          .getChildFile ("Waves Crate").getChildFile ("Terrain Instrument").getChildFile ("Stems");
                 if (! destFolder.exists()) destFolder.createDirectory();
                 destFolder.revealToUser();
                 complete ({});
+            })
+            .withNativeFunction("dragStem", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Click-and-drag stem to the DAW. JS calls this when it detects a
+                // drag gesture on a stem button (idx 0..3 = single layer, -1 = all 4).
+                // Exports the rolling stem(s) to WAV in the Music folder, then starts
+                // an OS file drag via performExternalDragDropOfFiles. NOTE: starting an
+                // external drag from a WebView-originated event is best-effort on macOS;
+                // the click-to-folder path is the guaranteed fallback.
+                const int idx = (args.size() > 0) ? (int) args[0] : -1;
+                const auto destFolder = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                                          .getChildFile ("Waves Crate").getChildFile ("Terrain Instrument").getChildFile ("Stems");
+                juce::StringArray paths;
+                auto addLayer = [&] (int li)
+                {
+                    if (li < 0 || li > 3) return;
+                    if (! audioProcessor.layers[(size_t) li].hasSample()) return;
+                    const auto f = audioProcessor.exportStemToFile (li, destFolder);
+                    if (f.existsAsFile()) paths.add (f.getFullPathName());
+                };
+                if (idx >= 0) addLayer (idx);
+                else          for (int i = 0; i < 4; ++i) addLayer (i);
+
+                if (! paths.isEmpty())
+                    juce::DragAndDropContainer::performExternalDragDropOfFiles (paths, false, this, nullptr);
+
+                complete (juce::var (paths.size()));
             })
             .withNativeFunction("auditionSlice", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -7011,6 +7039,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     state.rootNote = Math.max(0, Math.min(127, m));
     updateRootDisplay();
   };
+)TIHX")
+      + juce::String (R"TIHX(
 
   // ════════════════════════════════════════════════════════════════════════
   // Mix page Phase B — 4 channel strips (LEFT half of bottom panel)
@@ -7076,8 +7106,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   'background:var(--knob-track);overflow:hidden;}'
         + '.mix-strip-meter-fill{position:absolute;left:0;right:0;bottom:0;'
         +   'border-radius:2px;'
-        +   'background:linear-gradient(to top,#34d399,#4ade80 65%,#a3e635 90%,#facc15 99%);'
-        +   'box-shadow:0 0 5px rgba(74,222,128,0.45);'
+        +   'background:linear-gradient(to top,rgba(255,255,255,0.75),#ffffff);'
+        +   'box-shadow:0 0 6px rgba(255,255,255,0.55);'
         +   'transition:height 0.04s linear;}'
         // M / S outlined pills.
         + '.mix-strip-buttons{display:flex;flex-direction:row;gap:5px;}'
@@ -7873,44 +7903,72 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       return (i >= 0) ? s.substring(i + 1) : s;
     }
 
-    function wireStemArea () {
-      // Per-layer export buttons
-      document.querySelectorAll('.stem-btn').forEach(function (btn) {
-        var idx = parseInt(btn.getAttribute('data-layer'), 10);
-        btn.addEventListener('click', function () {
-          var fn = getNativeFn('exportStem');
-          if (! fn) return;
-          flashStemBtn(btn);
-          try {
-            var r = fn(idx);
-            var apply = function (path) {
-              if (path && path.length) setStemStatus('Exported ' + basename(path));
-              else setStemStatus('Export failed for layer ' + 'ABCD'[idx]);
-            };
-            if (r && typeof r.then === 'function') r.then(apply).catch(function () { setStemStatus('Export error'); });
-            else apply(r);
-          } catch (_) { setStemStatus('Export error'); }
-        });
-      });
-
-      // Export all 4
-      var allBtn = document.getElementById('stem-export-all');
-      if (allBtn) allBtn.addEventListener('click', function () {
-        var fn = getNativeFn('exportAllStems');
-        if (! fn) return;
-        flashStemBtn(allBtn);
+    // Click = export to the Music folder. Drag = drag-out to the DAW (calls the
+    // dragStem native fn which fires performExternalDragDropOfFiles). idx -1 = all 4.
+    function stemClickExport (idx) {
+      if (idx < 0) {
+        var fnA = getNativeFn('exportAllStems');
+        if (! fnA) return;
         try {
-          var r = fn();
-          var apply = function (arr) {
-            var n = (arr && arr.length) ? arr.length : 0;
-            var ok = 0;
+          var r = fnA();
+          var ap = function (arr) {
+            var n = (arr && arr.length) ? arr.length : 0, ok = 0;
             for (var i = 0; i < n; ++i) if (arr[i] && String(arr[i]).length) ok++;
-            setStemStatus('Exported ' + ok + ' / 4 stems');
+            setStemStatus('Exported ' + ok + ' / 4 stems to Music folder');
           };
-          if (r && typeof r.then === 'function') r.then(apply).catch(function () { setStemStatus('Export error'); });
-          else apply(r);
+          if (r && typeof r.then === 'function') r.then(ap).catch(function () { setStemStatus('Export error'); });
+          else ap(r);
         } catch (_) { setStemStatus('Export error'); }
+      } else {
+        var fnE = getNativeFn('exportStem');
+        if (! fnE) return;
+        try {
+          var r2 = fnE(idx);
+          var ap2 = function (p) {
+            if (p && p.length) setStemStatus('Exported ' + basename(p));
+            else setStemStatus('Layer ' + 'ABCD'[idx] + ' has no audio yet');
+          };
+          if (r2 && typeof r2.then === 'function') r2.then(ap2).catch(function () { setStemStatus('Export error'); });
+          else ap2(r2);
+        } catch (_) { setStemStatus('Export error'); }
+      }
+    }
+
+    function attachStemDrag (btn, idx, isAll) {
+      btn.addEventListener('mousedown', function (ev) {
+        ev.preventDefault();
+        var sx = ev.clientX, sy = ev.clientY, dragged = false;
+        function cleanup () {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        }
+        function onMove (e) {
+          if (dragged) return;
+          var dx = e.clientX - sx, dy = e.clientY - sy;
+          if (dx * dx + dy * dy > 36) {        // ~6px threshold = drag intent
+            dragged = true;
+            flashStemBtn(btn);
+            setStemStatus(isAll ? 'Dragging all stems to DAW...' : 'Dragging stem ' + 'ABCD'[idx] + ' to DAW...');
+            var fn = getNativeFn('dragStem');
+            if (fn) { try { fn(isAll ? -1 : idx); } catch (_) {} }
+            cleanup();
+          }
+        }
+        function onUp () {
+          if (! dragged) { flashStemBtn(btn); stemClickExport(isAll ? -1 : idx); }
+          cleanup();
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
       });
+    }
+
+    function wireStemArea () {
+      document.querySelectorAll('.stem-btn').forEach(function (btn) {
+        attachStemDrag(btn, parseInt(btn.getAttribute('data-layer'), 10), false);
+      });
+      var allBtn = document.getElementById('stem-export-all');
+      if (allBtn) attachStemDrag(allBtn, -1, true);
 
       // Reveal folder
       var revealBtn = document.getElementById('stem-reveal');

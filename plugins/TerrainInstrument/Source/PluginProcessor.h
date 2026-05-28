@@ -399,7 +399,10 @@ public:
     // Race-safe enough for v1: audio thread writes at writeIndex, UI thread
     // reads the whole buffer + writeIndex on export; one-sample tear at the
     // wrap boundary is inaudible.
-    static constexpr int kStemSeconds = 60;  // 1 min rolling history per layer
+    static constexpr int kStemSeconds = 600;  // 10 min rolling history per layer (user request)
+    // NOTE: 600s x 4 layers x stereo x float32 @ 48k ~= 921 MB allocated in
+    // prepareToPlay. Heavy but user-accepted. If RAM becomes an issue, switch
+    // to int16 storage (halves it) or lazy per-layer allocation on sample load.
     struct StemBuffer
     {
         juce::AudioBuffer<float> ring;
