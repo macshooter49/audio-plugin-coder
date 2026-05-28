@@ -7281,7 +7281,10 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         mixBtn.classList.toggle('active', willOpen);
         var ctrls = document.getElementById('controls');
         if (ctrls) ctrls.style.display = willOpen ? 'none' : '';
-        if (willOpen) restoreStripsFromCpp();
+        if (willOpen) {
+          restoreStripsFromCpp();
+          pullTriggerStateFromCpp();
+        }
       });
 
       // When EQ/DLY/MOD pills are clicked, also close the Mix panel.
@@ -7299,6 +7302,418 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
     }
 
+    // ── Phase C: trigger-mode pills + contextual control area ──────────────
+    function injectTriggerStyles () {
+      if (document.getElementById('mix-trigger-styles')) return;
+      var s = document.createElement('style');
+      s.id = 'mix-trigger-styles';
+      s.textContent = ''
+        + '#trigger-pills{display:flex;gap:4px;margin-bottom:8px;}'
+        + '.trigger-pill{flex:1;padding:5px 4px;font-size:10px;font-weight:700;'
+        +   'letter-spacing:0.5px;background:#2a2a3e;color:var(--text-secondary);'
+        +   'border:1px solid #3a3a4e;border-radius:4px;cursor:pointer;'
+        +   'font-family:inherit;}'
+        + '.trigger-pill:hover{border-color:#8B5CF6;}'
+        + '.trigger-pill.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
+        + '#trigger-context{position:relative;font-size:11px;'
+        +   'color:var(--text-secondary);}'
+        + '.trigger-panel{display:none;}'
+        + '#trigger-context[data-mode="0"] .trigger-panel[data-panel="layer"]{display:block;}'
+        + '#trigger-context[data-mode="1"] .trigger-panel[data-panel="rr"]{display:block;}'
+        + '#trigger-context[data-mode="2"] .trigger-panel[data-panel="random"]{display:block;}'
+        + '#trigger-context[data-mode="3"] .trigger-panel[data-panel="solo"]{display:block;}'
+        + '#trigger-context[data-mode="4"] .trigger-panel[data-panel="velocity"]{display:block;}'
+        + '.trigger-panel{padding:4px 0;}'
+        + '.layer-status-dots{display:flex;gap:6px;margin-top:6px;}'
+        + '.layer-status-dot{padding:3px 8px;border-radius:3px;font-weight:700;'
+        +   'background:#2a2a3e;color:#666;font-size:11px;}'
+        + '.layer-status-dot.lit{background:#8B5CF6;color:#fff;}'
+        + '.trigger-btn{padding:4px 8px;font-size:10px;font-weight:700;'
+        +   'letter-spacing:0.4px;background:#2a2a3e;color:var(--text-secondary);'
+        +   'border:1px solid #3a3a4e;border-radius:3px;cursor:pointer;'
+        +   'font-family:inherit;margin-right:6px;}'
+        + '.trigger-btn:hover{border-color:#8B5CF6;}'
+        + '.trigger-btn.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
+        + '.trigger-toggle{display:inline-flex;align-items:center;gap:4px;'
+        +   'font-size:10px;letter-spacing:0.4px;cursor:pointer;}'
+        + '.trigger-toggle input{margin:0;}'
+        + '.rr-pos-row{margin-top:8px;display:flex;gap:6px;align-items:center;}'
+        + '.rr-pos-row span{font-size:10px;letter-spacing:0.4px;}'
+        + '.rr-pos-dot{padding:2px 6px;border-radius:3px;background:#2a2a3e;'
+        +   'color:#666;font-weight:700;font-size:11px;}'
+        + '.rr-pos-dot.lit{background:#8B5CF6;color:#fff;}'
+        + '.prob-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;}'
+        + '.prob-letter{width:14px;font-weight:700;font-size:11px;color:#fff;}'
+        + '.prob-slider{flex:1;height:8px;background:#1a1a2e;border-radius:4px;'
+        +   'position:relative;cursor:pointer;overflow:hidden;}'
+        + '.prob-fill{position:absolute;left:0;top:0;bottom:0;background:#8B5CF6;'
+        +   'border-radius:4px;transition:width 0.05s linear;}'
+        + '.prob-value{width:32px;font-size:10px;color:var(--text-secondary);'
+        +   'text-align:right;}'
+        + '.solo-checkboxes{display:flex;gap:8px;}'
+        + '.solo-cb{flex:1;padding:8px;font-weight:700;font-size:13px;'
+        +   'background:#2a2a3e;color:#666;border:2px solid #3a3a4e;'
+        +   'border-radius:4px;cursor:pointer;text-align:center;'
+        +   'font-family:inherit;transition:all 0.15s;}'
+        + '.solo-cb:hover{border-color:#8B5CF6;}'
+        + '.solo-cb.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
+        + '#velocity-bar{position:relative;height:32px;background:#1a1a2e;'
+        +   'border-radius:4px;margin-bottom:8px;overflow:hidden;}'
+        + '.vel-zone{position:absolute;top:0;bottom:0;display:flex;'
+        +   'align-items:center;justify-content:center;font-size:11px;'
+        +   'font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}'
+        + '.vel-zone[data-layer="0"]{background:rgba(74,222,128,0.5);}'
+        + '.vel-zone[data-layer="1"]{background:rgba(250,204,21,0.5);}'
+        + '.vel-zone[data-layer="2"]{background:rgba(139,92,246,0.55);}'
+        + '.vel-zone[data-layer="3"]{background:rgba(239,68,68,0.5);}'
+        + '.vel-handle{position:absolute;top:0;bottom:0;width:4px;'
+        +   'background:#fff;cursor:ew-resize;transform:translateX(-50%);'
+        +   'box-shadow:0 0 4px rgba(255,255,255,0.5);z-index:2;}'
+        + '.vel-handle:hover{background:#8B5CF6;}'
+        ;
+      document.head.appendChild(s);
+    }
+
+    function buildTriggerArea () {
+      var area = document.getElementById('mix-trigger-area');
+      if (! area) return;
+      area.innerHTML = ''
+        + '<div id="trigger-pills">'
+        +   '<button class="trigger-pill" data-val="0">LAYER</button>'
+        +   '<button class="trigger-pill" data-val="1">RR</button>'
+        +   '<button class="trigger-pill" data-val="2">RANDOM</button>'
+        +   '<button class="trigger-pill" data-val="3">SOLO</button>'
+        +   '<button class="trigger-pill" data-val="4">VEL</button>'
+        + '</div>'
+        + '<div id="trigger-context" data-mode="0">'
+        +   '<div class="trigger-panel" data-panel="layer">'
+        +     '<div>All populated layers fire together.</div>'
+        +     '<div class="layer-status-dots" id="layer-status-dots">'
+        +       '<span class="layer-status-dot" data-layer="0">A</span>'
+        +       '<span class="layer-status-dot" data-layer="1">B</span>'
+        +       '<span class="layer-status-dot" data-layer="2">C</span>'
+        +       '<span class="layer-status-dot" data-layer="3">D</span>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="trigger-panel" data-panel="rr">'
+        +     '<div>Cycling A → B → C → D (skips empty layers).</div>'
+        +     '<div class="rr-pos-row">'
+        +       '<button class="trigger-btn" id="rr-reset-btn">RESET TO A</button>'
+        +       '<label class="trigger-toggle">'
+        +         '<input type="checkbox" id="rr-sync-cb"> SYNC TO BAR'
+        +       '</label>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="trigger-panel" data-panel="random">'
+        +     '<div style="margin-bottom:6px;">Weighted random per note. 0% = never; 100% = always eligible.</div>'
+        +     '<div class="prob-row"><div class="prob-letter">A</div>'
+        +       '<div class="prob-slider" data-layer="0"><div class="prob-fill"></div></div>'
+        +       '<div class="prob-value" data-layer="0">25%</div></div>'
+        +     '<div class="prob-row"><div class="prob-letter">B</div>'
+        +       '<div class="prob-slider" data-layer="1"><div class="prob-fill"></div></div>'
+        +       '<div class="prob-value" data-layer="1">25%</div></div>'
+        +     '<div class="prob-row"><div class="prob-letter">C</div>'
+        +       '<div class="prob-slider" data-layer="2"><div class="prob-fill"></div></div>'
+        +       '<div class="prob-value" data-layer="2">25%</div></div>'
+        +     '<div class="prob-row"><div class="prob-letter">D</div>'
+        +       '<div class="prob-slider" data-layer="3"><div class="prob-fill"></div></div>'
+        +       '<div class="prob-value" data-layer="3">25%</div></div>'
+        +     '<button class="trigger-btn" id="random-uniform-btn" style="margin-top:6px;">RESET TO UNIFORM</button>'
+        +   '</div>'
+        +   '<div class="trigger-panel" data-panel="solo">'
+        +     '<div style="margin-bottom:6px;">Click letters to choose which layers fire. 0 selected = silence.</div>'
+        +     '<div class="solo-checkboxes">'
+        +       '<button class="solo-cb" data-layer="0">A</button>'
+        +       '<button class="solo-cb" data-layer="1">B</button>'
+        +       '<button class="solo-cb" data-layer="2">C</button>'
+        +       '<button class="solo-cb" data-layer="3">D</button>'
+        +     '</div>'
+        +   '</div>'
+        +   '<div class="trigger-panel" data-panel="velocity">'
+        +     '<div style="margin-bottom:6px;">Drag handles to set per-layer velocity zones (0..127).</div>'
+        +     '<div id="velocity-bar">'
+        +       '<div class="vel-zone" data-layer="0">A</div>'
+        +       '<div class="vel-zone" data-layer="1">B</div>'
+        +       '<div class="vel-zone" data-layer="2">C</div>'
+        +       '<div class="vel-zone" data-layer="3">D</div>'
+        +       '<div class="vel-handle" data-h="0"></div>'
+        +       '<div class="vel-handle" data-h="1"></div>'
+        +       '<div class="vel-handle" data-h="2"></div>'
+        +     '</div>'
+        +     '<button class="trigger-btn" id="velocity-reset-btn">RESET ZONES</button>'
+        +   '</div>'
+        + '</div>'
+        ;
+    }
+
+    function setTriggerMode (val) {
+      val = Math.max(0, Math.min(4, parseInt(val, 10) || 0));
+      var ctx = document.getElementById('trigger-context');
+      if (ctx) ctx.setAttribute('data-mode', String(val));
+      document.querySelectorAll('.trigger-pill').forEach(function (p) {
+        p.classList.toggle('active', parseInt(p.getAttribute('data-val'), 10) === val);
+      });
+      var fn = getNativeFn('setTriggerMode');
+      if (fn) { try { fn(val); } catch (_) {} }
+    }
+
+    function pullLayerStatusDots () {
+      // Light up dots for layers that have a sample.
+      for (var i = 0; i < 4; ++i) {
+        (function (idx) {
+          var fn = getNativeFn('getLayerHasSample');
+          if (! fn) return;
+          try {
+            var r = fn(idx);
+            var apply = function (has) {
+              var dot = document.querySelector('.layer-status-dot[data-layer="' + idx + '"]');
+              if (dot) dot.classList.toggle('lit', !! has);
+            };
+            if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+            else apply(r);
+          } catch (_) {}
+        })(i);
+      }
+    }
+
+    function wireProbSliders () {
+      document.querySelectorAll('.prob-slider').forEach(function (sl) {
+        var idx  = parseInt(sl.getAttribute('data-layer'), 10);
+        var fill = sl.querySelector('.prob-fill');
+        var val  = document.querySelector('.prob-value[data-layer="' + idx + '"]');
+        function setVisual (p01) {
+          fill.style.width = (p01 * 100) + '%';
+          if (val) val.textContent = Math.round(p01 * 100) + '%';
+        }
+        function setFromX (clientX) {
+          var rect = sl.getBoundingClientRect();
+          var rel = (clientX - rect.left) / rect.width;
+          rel = Math.max(0, Math.min(1, rel));
+          setVisual(rel);
+          var fn = getNativeFn('setLayerProbabilityWeight');
+          if (fn) { try { fn(idx, rel); } catch (_) {} }
+        }
+        sl.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          setFromX(ev.clientX);
+          function onMove (e) { setFromX(e.clientX); }
+          function onUp () {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+        sl._setVisual = setVisual;   // for restore
+      });
+    }
+
+    function wireSoloCheckboxes () {
+      document.querySelectorAll('.solo-cb').forEach(function (cb) {
+        var idx = parseInt(cb.getAttribute('data-layer'), 10);
+        cb.addEventListener('click', function () {
+          var active = ! cb.classList.contains('active');
+          cb.classList.toggle('active', active);
+          var fn = getNativeFn('setLayerSoloSelected');
+          if (fn) { try { fn(idx, active); } catch (_) {} }
+        });
+      });
+    }
+
+    // Velocity zones: 4 layers covering 0-127 with 3 handles between them.
+    // Drag a handle to resize neighboring zones (non-overlapping, contiguous).
+    function paintVelocityZones (zones) {
+      // zones = [{min, max}, {min, max}, {min, max}, {min, max}]
+      // Each zone's visual: left = min/127 * 100%, width = (max-min+1)/127 * 100%
+      for (var i = 0; i < 4; ++i) {
+        var z = document.querySelector('.vel-zone[data-layer="' + i + '"]');
+        if (! z) continue;
+        var leftPct  = (zones[i].min / 127) * 100;
+        var widthPct = ((zones[i].max - zones[i].min + 1) / 127) * 100;
+        z.style.left  = leftPct  + '%';
+        z.style.width = widthPct + '%';
+      }
+      // Handles at boundaries between zones 0/1, 1/2, 2/3.
+      for (var h = 0; h < 3; ++h) {
+        var handle = document.querySelector('.vel-handle[data-h="' + h + '"]');
+        if (! handle) continue;
+        // Boundary at zones[h].max + 1 (= zones[h+1].min)
+        var boundaryPct = ((zones[h].max + 1) / 127) * 100;
+        handle.style.left = boundaryPct + '%';
+      }
+    }
+
+    function wireVelocityBar () {
+      var bar = document.getElementById('velocity-bar');
+      if (! bar) return;
+      // Read current zones, paint, then wire drag.
+      var fn = getNativeFn('getAllVelocityZones');
+      var zones = [{min: 0, max: 31}, {min: 32, max: 63}, {min: 64, max: 95}, {min: 96, max: 127}];
+      function apply (arr) {
+        if (arr && arr.length === 4) {
+          for (var i = 0; i < 4; ++i) {
+            zones[i] = { min: arr[i].min, max: arr[i].max };
+          }
+        }
+        paintVelocityZones(zones);
+      }
+      if (fn) {
+        try {
+          var r = fn();
+          if (r && typeof r.then === 'function') r.then(apply).catch(function () { apply(); });
+          else apply(r);
+        } catch (_) { apply(); }
+      } else { apply(); }
+
+      function pushZones () {
+        var setFn = getNativeFn('setLayerVelocityZone');
+        if (! setFn) return;
+        for (var i = 0; i < 4; ++i) {
+          try { setFn(i, zones[i].min, zones[i].max); } catch (_) {}
+        }
+      }
+
+      document.querySelectorAll('.vel-handle').forEach(function (handle) {
+        var h = parseInt(handle.getAttribute('data-h'), 10);  // 0, 1, or 2
+        handle.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          var rect = bar.getBoundingClientRect();
+          function onMove (e) {
+            var rel = (e.clientX - rect.left) / rect.width;
+            rel = Math.max(0, Math.min(1, rel));
+            var v = Math.round(rel * 127);
+            // Keep boundaries strictly increasing — clamp to neighbors.
+            if (h === 0) v = Math.max(0, Math.min(zones[1].max,  v));
+            if (h === 1) v = Math.max(zones[0].min + 1, Math.min(zones[2].max,  v));
+            if (h === 2) v = Math.max(zones[1].min + 1, Math.min(127, v));
+            // Resize neighboring zones around this boundary.
+            zones[h].max     = v - 1;
+            zones[h + 1].min = v;
+            paintVelocityZones(zones);
+          }
+          function onUp () {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            pushZones();
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+      });
+
+      // Reset zones → even quarters.
+      var resetBtn = document.getElementById('velocity-reset-btn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+          zones[0] = {min: 0,  max: 31};
+          zones[1] = {min: 32, max: 63};
+          zones[2] = {min: 64, max: 95};
+          zones[3] = {min: 96, max: 127};
+          paintVelocityZones(zones);
+          pushZones();
+        });
+      }
+    }
+
+    function wireTriggerArea () {
+      // Pills
+      document.querySelectorAll('.trigger-pill').forEach(function (p) {
+        p.addEventListener('click', function () {
+          setTriggerMode(parseInt(p.getAttribute('data-val'), 10));
+        });
+      });
+      // RR controls
+      var rrReset = document.getElementById('rr-reset-btn');
+      if (rrReset) rrReset.addEventListener('click', function () {
+        var fn = getNativeFn('resetRoundRobin');
+        if (fn) { try { fn(); } catch (_) {} }
+      });
+      var rrSync = document.getElementById('rr-sync-cb');
+      if (rrSync) rrSync.addEventListener('change', function () {
+        var fn = getNativeFn('setRrSyncToBar');
+        if (fn) { try { fn(rrSync.checked); } catch (_) {} }
+      });
+      // RANDOM controls
+      wireProbSliders();
+      var randUniform = document.getElementById('random-uniform-btn');
+      if (randUniform) randUniform.addEventListener('click', function () {
+        for (var i = 0; i < 4; ++i) {
+          var fn = getNativeFn('setLayerProbabilityWeight');
+          if (fn) { try { fn(i, 0.25); } catch (_) {} }
+          var sl = document.querySelector('.prob-slider[data-layer="' + i + '"]');
+          if (sl && sl._setVisual) sl._setVisual(0.25);
+        }
+      });
+      // SOLO controls
+      wireSoloCheckboxes();
+      // VELOCITY controls
+      wireVelocityBar();
+    }
+
+    function pullTriggerStateFromCpp () {
+      // Trigger mode
+      var modeFn = getNativeFn('getTriggerMode');
+      if (modeFn) {
+        try {
+          var r = modeFn();
+          var apply = function (v) {
+            var n = (typeof v === 'number') ? v : (parseInt(v, 10) || 0);
+            setTriggerMode(n);
+          };
+          if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+          else apply(r);
+        } catch (_) {}
+      }
+      // RR sync
+      var syncFn = getNativeFn('getRrSyncToBar');
+      if (syncFn) {
+        try {
+          var r = syncFn();
+          var apply = function (v) {
+            var cb = document.getElementById('rr-sync-cb');
+            if (cb) cb.checked = !! v;
+          };
+          if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+          else apply(r);
+        } catch (_) {}
+      }
+      // Probability weights
+      for (var i = 0; i < 4; ++i) {
+        (function (idx) {
+          var fn = getNativeFn('getLayerProbabilityWeight');
+          if (! fn) return;
+          try {
+            var r = fn(idx);
+            var apply = function (v) {
+              var sl = document.querySelector('.prob-slider[data-layer="' + idx + '"]');
+              if (sl && sl._setVisual) sl._setVisual(typeof v === 'number' ? v : 0.25);
+            };
+            if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+            else apply(r);
+          } catch (_) {}
+        })(i);
+      }
+      // SOLO selected
+      for (var j = 0; j < 4; ++j) {
+        (function (idx) {
+          var fn = getNativeFn('getLayerSoloSelected');
+          if (! fn) return;
+          try {
+            var r = fn(idx);
+            var apply = function (v) {
+              var cb = document.querySelector('.solo-cb[data-layer="' + idx + '"]');
+              if (cb) cb.classList.toggle('active', !! v);
+            };
+            if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+            else apply(r);
+          } catch (_) {}
+        })(j);
+      }
+      // VELOCITY zones — handled inside wireVelocityBar's initial paint.
+      // Layer status dots (LAYER mode)
+      pullLayerStatusDots();
+    }
+
     function init () {
       if (! document.getElementById('mix-btn')) {
         // index.html mod-buttons not yet in DOM — retry next frame.
@@ -7306,11 +7721,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         return;
       }
       injectMixPanelStyles();
+      injectTriggerStyles();
       buildMixPanel();
+      buildTriggerArea();
       wireStrips();
+      wireTriggerArea();
       setupMixPillWiring();
       setInterval(pollMixMeters, 33);            // ~30 Hz strip meters
       setInterval(pollStripsPlayingDots, 100);   // 10 Hz play-dot indicator
+      setInterval(pullLayerStatusDots, 250);     // 4 Hz layer-populated dots (LAYER mode)
     }
 
     if (document.readyState === 'loading') {
