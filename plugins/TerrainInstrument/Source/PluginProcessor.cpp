@@ -17,6 +17,16 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     for (size_t i = 0; i < layers.size(); ++i)
         layers[i].layerIndex = static_cast<int>(i);
 
+    // Mix page Phase A: seed each layer's default VELOCITY zone to even quarters
+    // (0-31 / 32-63 / 64-95 / 96-127). Users can drag the boundary handles in
+    // the Mix page's VELOCITY-mode UI; this just gives a sensible starting point
+    // so the first time a user selects VELOCITY mode each layer already responds
+    // to its own slice of the 0-127 range.
+    layers[0].velocityZoneMin.store (0);    layers[0].velocityZoneMax.store (31);
+    layers[1].velocityZoneMin.store (32);   layers[1].velocityZoneMax.store (63);
+    layers[2].velocityZoneMin.store (64);   layers[2].velocityZoneMax.store (95);
+    layers[3].velocityZoneMin.store (96);   layers[3].velocityZoneMax.store (127);
+
     // Phase 1 task 9: wire modulationEngine into ALL layers' voices (was layer 0 only).
     // LayerState constructor passes nullptr for ModulationEngine; we patch it here.
     // Note: SamplerVoice stores a pointer to the engine so this is safe as long as
@@ -962,11 +972,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
     // Phase 1 task 9: APVTS is global — broadcast every block to ALL layers so
     // their voices have live values. Per-layer APVTS is a future Phase refactor.
+    //
+    // Mark 2 Phase 1 audio-fix (LOOP per-layer): sampleLoopMode REMOVED from
+    // this broadcast — it's now per-layer (atomic written by setSampleLoopMode
+    // native fn directly, V1 preset compat handled in setStateInformation).
+    // Without this, switching LOOP on layer A also forced B/C/D into LOOP.
     {
         const int   rootMidi   = (int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE);
         const float attackMs   = *apvts.getRawParameterValue (ParameterIDs::ATTACK_MS);
         const float releaseMs  = *apvts.getRawParameterValue (ParameterIDs::RELEASE_MS);
-        const int   loopMode   = (int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE);
         const float chopFadeMs = *apvts.getRawParameterValue (ParameterIDs::CHOP_FADE_MS);
 
         for (auto& layer : layers)
@@ -974,7 +988,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             layer.rootMidiNote.store   (rootMidi);
             layer.attackMsAtomic.store (attackMs);
             layer.releaseMsAtomic.store(releaseMs);
-            layer.sampleLoopMode.store (loopMode);
             layer.chopFadeMs.store     (chopFadeMs);
         }
     }
@@ -1033,6 +1046,121 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         indyCaptureBus.setSize (2, numSamples, false, true, true);
     indyCaptureBus.clear (0, numSamples);
 
+    // ── Mix page Phase 2: MIDI dispatch filter (trigger modes) ───────────
+    // Walks midiMessages once and builds 4 per-layer MIDI buffers based on
+    // the active triggerMode. Non-note-on events (note-off, CC, pitch-bend,
+    // aftertouch) go to ALL layers so voices already in flight can be
+    // turned off / modulated correctly.
+    //
+    // For note-ons, the picker decides which layer(s) receive the event:
+    //   LAYER     → all populated layers
+    //   RR        → one layer at roundRobinPos (skip empties, advance)
+    //   RANDOM    → one layer picked via weighted random over probabilityWeight
+    //   SOLO      → all layers with soloSelected=true (subset)
+    //   VELOCITY  → one layer whose [velocityZoneMin..Max] contains note vel
+    //
+    // After this block, per-layer renderNextBlock uses perLayerMidi[li]
+    // instead of the shared midiMessages.
+    std::array<juce::MidiBuffer, 4> perLayerMidi;
+    {
+        const int  tmode = triggerMode.load();
+        const auto isPopulated = [this] (int li) {
+            return li >= 0 && li < 4 && layers[(size_t) li].hasSample();
+        };
+
+        for (const auto event : midiMessages)
+        {
+            const auto msg = event.getMessage();
+            const int  pos = event.samplePosition;
+
+            if (! msg.isNoteOn())
+            {
+                // Non-note-on events broadcast to all layers (note-offs, CC, pitch-bend,
+                // aftertouch). Layers that didn't receive the corresponding note-on
+                // simply have nothing to turn off — JUCE Synthesiser handles gracefully.
+                for (auto& buf : perLayerMidi)
+                    buf.addEvent (msg, pos);
+                continue;
+            }
+
+            // ── Note-on routing per trigger mode ──
+            const int vel = msg.getVelocity();
+
+            if (tmode == 0)
+            {
+                // LAYER — all populated layers fire (current Phase 1 behavior).
+                for (int li = 0; li < 4; ++li)
+                    if (isPopulated (li))
+                        perLayerMidi[(size_t) li].addEvent (msg, pos);
+            }
+            else if (tmode == 1)
+            {
+                // ROUND-ROBIN — fire next populated layer, advance cursor (skip empties).
+                int cur = roundRobinPos.load();
+                int picked = -1;
+                for (int attempts = 0; attempts < 4; ++attempts)
+                {
+                    if (isPopulated (cur)) { picked = cur; break; }
+                    cur = (cur + 1) % 4;
+                }
+                if (picked >= 0)
+                {
+                    perLayerMidi[(size_t) picked].addEvent (msg, pos);
+                    roundRobinPos.store ((picked + 1) % 4);
+                }
+            }
+            else if (tmode == 2)
+            {
+                // RANDOM — weighted pick over populated layers' probabilityWeight.
+                // weights renormalized over the populated set so empty layers can't win.
+                float total = 0.0f;
+                for (int li = 0; li < 4; ++li)
+                    if (isPopulated (li))
+                        total += juce::jmax (0.0f, layers[(size_t) li].probabilityWeight.load());
+
+                if (total > 1.0e-6f)
+                {
+                    float r = triggerRandom.nextFloat() * total;
+                    int picked = -1;
+                    for (int li = 0; li < 4; ++li)
+                    {
+                        if (! isPopulated (li)) continue;
+                        const float w = juce::jmax (0.0f, layers[(size_t) li].probabilityWeight.load());
+                        if (r < w) { picked = li; break; }
+                        r -= w;
+                    }
+                    if (picked >= 0)
+                        perLayerMidi[(size_t) picked].addEvent (msg, pos);
+                }
+                // total == 0 → no eligible layers, drop the note (predictable silence).
+            }
+            else if (tmode == 3)
+            {
+                // SOLO — multi-select. Layers with soloSelected=true fire.
+                // 0 checked = nothing plays (predictable per spec).
+                for (int li = 0; li < 4; ++li)
+                    if (isPopulated (li) && layers[(size_t) li].soloSelected.load())
+                        perLayerMidi[(size_t) li].addEvent (msg, pos);
+            }
+            else if (tmode == 4)
+            {
+                // VELOCITY — fire the layer whose zone contains this velocity.
+                // First match wins (zones are enforced contiguous + non-overlapping by UI).
+                for (int li = 0; li < 4; ++li)
+                {
+                    if (! isPopulated (li)) continue;
+                    const int lo = layers[(size_t) li].velocityZoneMin.load();
+                    const int hi = layers[(size_t) li].velocityZoneMax.load();
+                    if (vel >= lo && vel <= hi)
+                    {
+                        perLayerMidi[(size_t) li].addEvent (msg, pos);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // ── Mark 2 task 4 / task 9: render each populated layer into its own scratch
     // buffer, then sum (with vol/mute/solo) into master `buffer`.
     // Task 9 complete: each layer now receives its own per-layer SliceContext.
@@ -1078,9 +1206,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 layer.synth.setIndyTargetBufferForVoices (&indyCaptureBus);
 
             // Render this layer's voices into the per-layer scratch buffer.
+            // Mix page Phase 2: each layer now sees a FILTERED midi buffer
+            // (perLayerMidi[li] built above by the trigger-mode dispatcher).
+            // In LAYER mode this is identical to the old broadcast behavior;
+            // in RR/RANDOM/SOLO/VELOCITY modes only the picked layer(s) see
+            // each note-on, while non-note-on events still broadcast to all.
             auto& scratch = layerScratch[li];
             scratch.clear();
-            layer.synth.renderNextBlock (scratch, midiMessages, 0, numSamples);
+            layer.synth.renderNextBlock (scratch, perLayerMidi[li], 0, numSamples);
 
             // Detach indy pointer immediately after render.
             if (li == 0)
@@ -1110,10 +1243,31 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
             }
 
-            // Sum this layer into the master buffer with per-layer gain.
-            const float g = layer.volume.load();
-            buffer.addFrom (0, 0, scratch, 0, 0, numSamples, g);
-            buffer.addFrom (1, 0, scratch, 1, 0, numSamples, g);
+            // Sum this layer into the master buffer with per-layer gain + pan.
+            // Equal-power pan: panAngle = (panNorm + 1) * π/4 → leftGain = cos,
+            // rightGain = sin. Center (panNorm=0) gives 0.707/0.707 (constant
+            // perceived power across the pan range). pre-clamped to [-1, +1].
+            const float g    = layer.volume.load();
+            const float pn   = juce::jlimit (-1.0f, 1.0f, layer.pan.load());
+            const float ang  = (pn + 1.0f) * (juce::MathConstants<float>::pi * 0.25f);
+            const float gL   = g * std::cos (ang);
+            const float gR   = g * std::sin (ang);
+            buffer.addFrom (0, 0, scratch, 0, 0, numSamples, gL);
+            buffer.addFrom (1, 0, scratch, 1, 0, numSamples, gR);
+
+            // Per-layer post-volume peak meter — feeds the channel-strip meter
+            // widget. Capture peak BEFORE summing (so the strip meter reads the
+            // layer's own level, not what's left after stronger layers dominate).
+            // ~30 Hz UI polling so block-max is plenty fine-grained.
+            {
+                const float peakL = scratch.getMagnitude (0, 0, numSamples) * std::abs (gL);
+                const float peakR = scratch.getMagnitude (1, 0, numSamples) * std::abs (gR);
+                // Peak hold: keep max of (this block, decayed prior).
+                const float prevL = layer.peakLevelL.load (std::memory_order_relaxed);
+                const float prevR = layer.peakLevelR.load (std::memory_order_relaxed);
+                layer.peakLevelL.store (juce::jmax (peakL, prevL * decay), std::memory_order_relaxed);
+                layer.peakLevelR.store (juce::jmax (peakR, prevR * decay), std::memory_order_relaxed);
+            }
         }
     }
 
@@ -1920,6 +2074,10 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // can distinguish V1 blobs (no "version" property) from V2 blobs.
     state.setProperty ("version",      2,                   nullptr);
     state.setProperty ("editingLayer", editingLayer.load(), nullptr);
+    // Mix page Phase 2: global trigger-mode state at the root level.
+    state.setProperty ("triggerMode",     triggerMode.load(),     nullptr);
+    state.setProperty ("rrSyncToBar",     (bool) rrSyncToBar.load(), nullptr);
+    state.setProperty ("stemSourceMode",  stemSourceMode.load(),  nullptr);
 
     // ── V2: per-layer state node array ───────────────────────────────────────
     // Helper lambda — serialises a pitchModeSlice into the same JSON string
@@ -1963,6 +2121,13 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         layerNode.setProperty ("volume",           L.volume.load(),             nullptr);
         layerNode.setProperty ("mute",             (bool) L.mute.load(),        nullptr);
         layerNode.setProperty ("solo",             (bool) L.solo.load(),        nullptr);
+        // Mix page Phase 2: per-layer creative-routing + mixer fields.
+        layerNode.setProperty ("pan",              (double) L.pan.load(),               nullptr);
+        layerNode.setProperty ("pitchJitterCents", (double) L.pitchJitterCents.load(),  nullptr);
+        layerNode.setProperty ("probabilityWeight",(double) L.probabilityWeight.load(), nullptr);
+        layerNode.setProperty ("soloSelected",     (bool)   L.soloSelected.load(),      nullptr);
+        layerNode.setProperty ("velocityZoneMin",  L.velocityZoneMin.load(),            nullptr);
+        layerNode.setProperty ("velocityZoneMax",  L.velocityZoneMax.load(),            nullptr);
 
         // slicesJson — same JSON format as V1 (slicesToJson produces
         // {"slices":[...]}), so Task 13's parse path is identical.
@@ -2067,6 +2232,12 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 loadV2State (newState);
                 // Restore editingLayer from V2 blob (clamped to 0..3).
                 editingLayer.store (juce::jlimit (0, 3, (int) newState.getProperty ("editingLayer", 0)));
+                // Mix page Phase 2: global trigger-mode state. Defaults to LAYER mode
+                // (and DRY stems / RR-not-bar-synced) if absent so V2 blobs from
+                // pre-Phase-2 builds open cleanly into the new feature defaults.
+                triggerMode.store    (juce::jlimit (0, 4, (int) newState.getProperty ("triggerMode",    0)));
+                rrSyncToBar.store    ((bool) newState.getProperty ("rrSyncToBar",  false));
+                stemSourceMode.store (juce::jlimit (0, 1, (int) newState.getProperty ("stemSourceMode", 0)));
             }
             else
             {
@@ -2091,14 +2262,17 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             apvts.replaceState (newState);
 
             // Mark 2 Phase 1 audio-fix: V1 backward-compat. V1 presets carry
-            // sliceMode only in APVTS (global). Engine now reads from per-layer
-            // layer.sliceMode atomic. Seed layers[0].sliceMode from the freshly
-            // loaded APVTS value so V1 presets keep their SLICE/PITCH selection.
-            // V2 presets already populated layer.sliceMode per-layer in loadV2State.
+            // sliceMode and sampleLoopMode only in APVTS (global). Engine now
+            // reads from per-layer atomics. Seed layers[0] from the freshly
+            // loaded APVTS values so V1 presets keep their SLICE/PITCH and
+            // 1-SHOT/LOOP selections. V2 presets already populated per-layer
+            // in loadV2State.
             if (version < 2)
             {
-                const int v1Mode = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
-                layers[0].sliceMode.store (v1Mode);
+                const int v1SliceMode = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
+                const int v1LoopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE);
+                layers[0].sliceMode.store      (v1SliceMode);
+                layers[0].sampleLoopMode.store (v1LoopMode);
             }
         }
     }
@@ -2265,6 +2439,17 @@ void TerrainInstrumentAudioProcessor::loadV2State (const juce::ValueTree& loaded
         L.volume.store     ((float)(double) layerNode.getProperty ("volume",     1.0));
         L.mute.store  ((bool) layerNode.getProperty ("mute",  false));
         L.solo.store  ((bool) layerNode.getProperty ("solo",  false));
+        // Mix page Phase 2: per-layer creative-routing + mixer fields.
+        // Defaults match LayerState defaults so pre-Phase-2 V2 blobs open clean.
+        // Velocity zone default per-layer index: even quarters (matches processor seed).
+        const int dvzMin = (idx == 0 ? 0  : idx == 1 ? 32 : idx == 2 ? 64 : 96);
+        const int dvzMax = (idx == 0 ? 31 : idx == 1 ? 63 : idx == 2 ? 95 : 127);
+        L.pan.store               ((float)(double) layerNode.getProperty ("pan",               0.0));
+        L.pitchJitterCents.store  ((float)(double) layerNode.getProperty ("pitchJitterCents",  0.0));
+        L.probabilityWeight.store ((float)(double) layerNode.getProperty ("probabilityWeight", 0.25));
+        L.soloSelected.store      ((bool)          layerNode.getProperty ("soloSelected",      false));
+        L.velocityZoneMin.store   ((int)           layerNode.getProperty ("velocityZoneMin",   dvzMin));
+        L.velocityZoneMax.store   ((int)           layerNode.getProperty ("velocityZoneMax",   dvzMax));
 
         // Slices — same JSON format as V1 (slicesToJson/slicesFromJson).
         const juce::String sliceJson = layerNode.getProperty ("slicesJson", "").toString();

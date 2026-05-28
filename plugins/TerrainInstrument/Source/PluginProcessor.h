@@ -376,6 +376,22 @@ public:
     // Sized in prepareToPlay to (2 channels, samplesPerBlock).
     std::array<juce::AudioBuffer<float>, 4> layerScratch;
 
+    // ── Mix page Phase 2: trigger-mode state ──────────────────────────────────
+    // triggerMode picks how MIDI notes are dispatched across the 4 layers:
+    //   0 = LAYER         (all populated layers fire — current Phase 1 behavior)
+    //   1 = ROUND-ROBIN   (one layer per note, cycles A→B→C→D, skips empties)
+    //   2 = RANDOM        (one layer per note, weighted by probabilityWeight)
+    //   3 = SOLO          (only layers with soloSelected=true fire)
+    //   4 = VELOCITY      (one layer per note, picked by velocityZone match)
+    std::atomic<int>  triggerMode    { 0 };
+    std::atomic<int>  roundRobinPos  { 0 };   // cursor for RR (0..3)
+    std::atomic<bool> rrSyncToBar    { false };
+    // Stem source: 0 = DRY (pre volume/pan), 1 = MIX (post volume/pan, pre shared FX).
+    std::atomic<int>  stemSourceMode { 0 };
+
+    // PRNG for the RANDOM trigger picker. juce::Random::nextFloat is realtime-safe.
+    juce::Random      triggerRandom;
+
 private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

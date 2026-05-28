@@ -46,8 +46,25 @@ namespace tw
 
         // ── Mixer ─────────────────────────────────────────────────────────────
         std::atomic<float> volume { 1.0f };   // linear gain, 0..2
+        std::atomic<float> pan    { 0.0f };   // -1.0 = full L, +1.0 = full R, 0 = center
         std::atomic<bool>  mute   { false };
-        std::atomic<bool>  solo   { false };
+        std::atomic<bool>  solo   { false };  // strip-level solo (mixer mute-others)
+
+        // ── Mix page — trigger-mode + creative routing (Phase 2) ──────────────
+        // probabilityWeight feeds the RANDOM trigger mode's weighted picker.
+        // soloSelected feeds the SOLO trigger mode's multi-select checkbox.
+        // velocityZoneMin/Max define the VELOCITY trigger mode's range for this layer.
+        // pitchJitterCents adds ±cents random per-voice pitch offset to thicken stacks.
+        std::atomic<float> probabilityWeight { 0.25f }; // 0..1, default uniform
+        std::atomic<bool>  soloSelected      { false }; // multi-select for SOLO mode
+        std::atomic<int>   velocityZoneMin   { 0   };   // 0..127 inclusive (default seeded by processor)
+        std::atomic<int>   velocityZoneMax   { 127 };   // 0..127 inclusive
+        std::atomic<float> pitchJitterCents  { 0.0f };  // 0..100 cents random
+
+        // ── Meters — post-volume peak per channel for the strip meter widget ──
+        // Audio thread writes after summing into master; UI polls at ~30 Hz.
+        std::atomic<float> peakLevelL { 0.0f };
+        std::atomic<float> peakLevelR { 0.0f };
 
         // ── Slicer state ──────────────────────────────────────────────────────
         // Access via std::atomic_store / std::atomic_load on shared_ptr — see

@@ -909,6 +909,173 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete (result);
             })
+            // ────────────────────────────────────────────────────────────────
+            // Mix page Phase 2 (Phase A engine wiring) — native fns for the
+            // 4 channel strips, the 5 trigger modes, and the stem capture toggle.
+            // Stem-buffer drag fns (beginStemDrag / beginAllStemsDrag) land in
+            // Phase D once the rolling stem buffers exist.
+            // ────────────────────────────────────────────────────────────────
+            .withNativeFunction("setTriggerMode", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.triggerMode.store (juce::jlimit (0, 4, (int) args[0]));
+                complete ({});
+            })
+            .withNativeFunction("getTriggerMode", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.triggerMode.load());
+            })
+            .withNativeFunction("setRrSyncToBar", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.rrSyncToBar.store ((bool) args[0]);
+                complete ({});
+            })
+            .withNativeFunction("getRrSyncToBar", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.rrSyncToBar.load());
+            })
+            .withNativeFunction("resetRoundRobin", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.roundRobinPos.store (0);
+                complete ({});
+            })
+            .withNativeFunction("setStemSourceMode", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Accepts 0 (DRY) or 1 (MIX); strings "DRY"/"MIX" also accepted for JS convenience.
+                if (args.size() > 0)
+                {
+                    int v = 0;
+                    if (args[0].isInt() || args[0].isDouble())      v = juce::jlimit (0, 1, (int) args[0]);
+                    else if (args[0].toString().equalsIgnoreCase ("MIX")) v = 1;
+                    audioProcessor.stemSourceMode.store (v);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getStemSourceMode", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.stemSourceMode.load());
+            })
+            .withNativeFunction("setLayerPan", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    const int   li = juce::jlimit (0, 3, (int) args[0]);
+                    const float p  = juce::jlimit (-1.0f, 1.0f, (float) (double) args[1]);
+                    audioProcessor.layers[(size_t) li].pan.store (p);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getLayerPan", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                  : audioProcessor.editingLayer.load();
+                complete ((double) audioProcessor.layers[(size_t) li].pan.load());
+            })
+            .withNativeFunction("setLayerPitchJitter", [this](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    const int   li = juce::jlimit (0, 3, (int) args[0]);
+                    const float c  = juce::jlimit (0.0f, 100.0f, (float) (double) args[1]);
+                    audioProcessor.layers[(size_t) li].pitchJitterCents.store (c);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getLayerPitchJitter", [this](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                  : audioProcessor.editingLayer.load();
+                complete ((double) audioProcessor.layers[(size_t) li].pitchJitterCents.load());
+            })
+            .withNativeFunction("setLayerProbabilityWeight", [this](const juce::Array<juce::var>& args,
+                                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    const int   li = juce::jlimit (0, 3, (int) args[0]);
+                    const float w  = juce::jlimit (0.0f, 1.0f, (float) (double) args[1]);
+                    audioProcessor.layers[(size_t) li].probabilityWeight.store (w);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getLayerProbabilityWeight", [this](const juce::Array<juce::var>& args,
+                                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                  : audioProcessor.editingLayer.load();
+                complete ((double) audioProcessor.layers[(size_t) li].probabilityWeight.load());
+            })
+            .withNativeFunction("setLayerSoloSelected", [this](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    const int  li = juce::jlimit (0, 3, (int) args[0]);
+                    const bool s  = (bool) args[1];
+                    audioProcessor.layers[(size_t) li].soloSelected.store (s);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getLayerSoloSelected", [this](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
+                                                  : audioProcessor.editingLayer.load();
+                complete (audioProcessor.layers[(size_t) li].soloSelected.load());
+            })
+            .withNativeFunction("setLayerVelocityZone", [this](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 3)
+                {
+                    const int li  = juce::jlimit (0, 3,   (int) args[0]);
+                    const int lo  = juce::jlimit (0, 127, (int) args[1]);
+                    const int hi  = juce::jlimit (lo, 127, (int) args[2]);
+                    audioProcessor.layers[(size_t) li].velocityZoneMin.store (lo);
+                    audioProcessor.layers[(size_t) li].velocityZoneMax.store (hi);
+                }
+                complete ({});
+            })
+            .withNativeFunction("getAllVelocityZones", [this](const juce::Array<juce::var>&,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Returns array of {min, max} per layer in A→D order.
+                juce::Array<juce::var> out;
+                for (size_t li = 0; li < audioProcessor.layers.size(); ++li)
+                {
+                    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                    obj->setProperty ("min", audioProcessor.layers[li].velocityZoneMin.load());
+                    obj->setProperty ("max", audioProcessor.layers[li].velocityZoneMax.load());
+                    out.add (juce::var (obj.get()));
+                }
+                complete (juce::var (out));
+            })
+            .withNativeFunction("getLayerPeakLevels", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Returns array of {l, r} per layer in A→D order for the strip meters.
+                juce::Array<juce::var> out;
+                for (size_t li = 0; li < audioProcessor.layers.size(); ++li)
+                {
+                    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                    obj->setProperty ("l", (double) audioProcessor.layers[li].peakLevelL.load());
+                    obj->setProperty ("r", (double) audioProcessor.layers[li].peakLevelR.load());
+                    out.add (juce::var (obj.get()));
+                }
+                complete (juce::var (out));
+            })
             .withNativeFunction("auditionSlice", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
