@@ -814,6 +814,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // Voices write here when their chop has fxIndependent=true; the bus is
     // added directly to master output, bypassing the entire global FX chain.
     indyCaptureBus.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);
+
+    // Mix page Phase D: allocate per-layer rolling stem buffers (~92 MB at 48k).
+    allocateStemBuffers (sampleRate);
     indyCaptureBus.clear();
 
     smoothedChorusAmount.reset    (sampleRate, 0.02);
@@ -1242,6 +1245,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     layer.sliceGlowLevel[(size_t) i].store (next, std::memory_order_relaxed);
                 }
             }
+
+            // Mix page Phase D: write to this layer's rolling stem buffer.
+            // DRY = raw layerScratch (just synth output before mix). MIX = post
+            // volume/pan applied (computed below). We capture DRY now so it's
+            // available regardless of which mode the user picks at export time;
+            // the MIX path snapshots after the mixer math.
+            // (For v1 we just capture DRY always; the stemSourceMode toggle
+            // gates which version the EXPORT writes. Two-buffer-per-layer
+            // would double RAM — instead we apply mix at export when needed.)
+            writeToStemBuffer ((int) li, scratch.getReadPointer (0), scratch.getReadPointer (1), numSamples);
 
             // Sum this layer into the master buffer with per-layer gain + pan.
             // Equal-power pan: panAngle = (panNorm + 1) * π/4 → leftGain = cos,
@@ -1875,6 +1888,97 @@ juce::String TerrainInstrumentAudioProcessor::getLoadedSamplePath() const
 {
     juce::ScopedLock sl (sampleSourcePathLock);
     return loadedSamplePath;
+}
+
+// ── Mix page Phase D: rolling stem buffers ───────────────────────────────────
+
+void TerrainInstrumentAudioProcessor::allocateStemBuffers (double sampleRate)
+{
+    const int totalSamples = juce::jmax (1, (int) (sampleRate * (double) kStemSeconds));
+    for (auto& s : stemBuffers)
+    {
+        s.ring.setSize (2, totalSamples, false, true, true);
+        s.ring.clear();
+        s.totalSize = totalSamples;
+        s.writeIndex.store (0, std::memory_order_relaxed);
+    }
+}
+
+void TerrainInstrumentAudioProcessor::writeToStemBuffer (int layerIdx,
+                                                          const float* L,
+                                                          const float* R,
+                                                          int numSamples)
+{
+    if (layerIdx < 0 || layerIdx > 3 || numSamples <= 0) return;
+    auto& s = stemBuffers[(size_t) layerIdx];
+    if (s.totalSize <= 0) return;
+
+    int w = s.writeIndex.load (std::memory_order_relaxed);
+    auto* destL = s.ring.getWritePointer (0);
+    auto* destR = s.ring.getWritePointer (1);
+    for (int i = 0; i < numSamples; ++i)
+    {
+        destL[w] = L[i];
+        destR[w] = R[i];
+        if (++w >= s.totalSize) w = 0;
+    }
+    s.writeIndex.store (w, std::memory_order_relaxed);
+}
+
+juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, const juce::File& dest)
+{
+    if (layerIdx < 0 || layerIdx > 3) return {};
+    auto& s = stemBuffers[(size_t) layerIdx];
+    if (s.totalSize <= 0) return {};
+
+    // Snapshot current write position. Audio thread may continue writing during
+    // the unwrap loop below — at most one sample tear at the wrap boundary,
+    // inaudible in practice.
+    const int writeIdx = s.writeIndex.load (std::memory_order_relaxed);
+
+    // Apply stem-source-mode: DRY = raw ring, MIX = ring × per-layer volume + pan.
+    const int   mode = stemSourceMode.load();
+    const float vol  = layers[(size_t) layerIdx].volume.load();
+    const float pn   = juce::jlimit (-1.0f, 1.0f, layers[(size_t) layerIdx].pan.load());
+    const float ang  = (pn + 1.0f) * (juce::MathConstants<float>::pi * 0.25f);
+    const float gL   = (mode == 1) ? vol * std::cos (ang) : 1.0f;
+    const float gR   = (mode == 1) ? vol * std::sin (ang) : 1.0f;
+
+    // Unwrap the ring into a contiguous playback-order buffer.
+    // Oldest sample is at writeIdx (about to be overwritten next),
+    // newest is at writeIdx-1 mod totalSize.
+    juce::AudioBuffer<float> out (2, s.totalSize);
+    const auto* srcL = s.ring.getReadPointer (0);
+    const auto* srcR = s.ring.getReadPointer (1);
+    auto* dstL = out.getWritePointer (0);
+    auto* dstR = out.getWritePointer (1);
+    int srcIdx = writeIdx;
+    for (int i = 0; i < s.totalSize; ++i)
+    {
+        dstL[i] = srcL[srcIdx] * gL;
+        dstR[i] = srcR[srcIdx] * gR;
+        if (++srcIdx >= s.totalSize) srcIdx = 0;
+    }
+
+    // Filename: Stem-<A/B/C/D>-YYYYMMDD-HHMMSS-{DRY|MIX}.wav
+    const auto letter    = juce::String::charToString ((juce_wchar)('A' + layerIdx));
+    const auto timestamp = juce::Time::getCurrentTime().formatted ("%Y%m%d-%H%M%S");
+    const auto suffix    = (mode == 1) ? juce::String("-MIX") : juce::String("-DRY");
+    const auto file      = dest.getChildFile ("Stem-" + letter + "-" + timestamp + suffix + ".wav");
+
+    if (! dest.exists()) dest.createDirectory();
+
+    const double sr = getSampleRate() > 0 ? getSampleRate() : 48000.0;
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::FileOutputStream> stream (file.createOutputStream());
+    if (stream == nullptr || ! stream->openedOk()) return {};
+    std::unique_ptr<juce::AudioFormatWriter> writer (wav.createWriterFor (
+        stream.get(), sr, 2 /*channels*/, 24 /*bit depth*/, {}, 0));
+    if (writer == nullptr) return {};
+    stream.release();  // writer takes ownership
+    writer->writeFromAudioSampleBuffer (out, 0, s.totalSize);
+    // writer destructor finalizes the WAV chunks on scope exit
+    return file;
 }
 
 void TerrainInstrumentAudioProcessor::setCachedSamplePayload (const juce::String& jsonPayload, int layerIdx)

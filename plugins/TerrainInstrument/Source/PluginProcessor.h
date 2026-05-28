@@ -392,6 +392,27 @@ public:
     // PRNG for the RANDOM trigger picker. juce::Random::nextFloat is realtime-safe.
     juce::Random      triggerRandom;
 
+    // ── Mix page Phase D: per-layer rolling stem buffers ──────────────────────
+    // 1 minute @ session SR per layer, stereo float32. Total ~92 MB at 48kHz.
+    // Always allocated (in prepareToPlay) so capture is "alive" from session
+    // start; user clicks STEM A/B/C/D button → snapshot the ring as a WAV.
+    // Race-safe enough for v1: audio thread writes at writeIndex, UI thread
+    // reads the whole buffer + writeIndex on export; one-sample tear at the
+    // wrap boundary is inaudible.
+    static constexpr int kStemSeconds = 60;  // 1 min rolling history per layer
+    struct StemBuffer
+    {
+        juce::AudioBuffer<float> ring;
+        std::atomic<int>         writeIndex { 0 };
+        int                      totalSize  { 0 };  // ring.getNumSamples()
+    };
+    std::array<StemBuffer, 4> stemBuffers;
+    void allocateStemBuffers (double sampleRate);
+    void writeToStemBuffer (int layerIdx, const float* L, const float* R, int numSamples);
+    // Export. layerIdx in [0..3] = single stem. dest is the chosen folder.
+    // Returns the written file path; empty if export failed.
+    juce::File exportStemToFile (int layerIdx, const juce::File& dest);
+
 private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

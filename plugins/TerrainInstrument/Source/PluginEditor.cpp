@@ -1076,6 +1076,45 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 }
                 complete (juce::var (out));
             })
+            .withNativeFunction("exportStem", [this](const juce::Array<juce::var>& args,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Mix page Phase D: writes the layer's rolling stem buffer to a
+                // timestamped WAV in ~/Documents/Terrain Instrument Stems/.
+                // Returns the file path string (empty on failure). After all
+                // stems exported, JS calls revealStemsFolder to open Finder.
+                if (args.size() < 1) { complete (juce::var (juce::String())); return; }
+                const int idx = juce::jlimit (0, 3, (int) args[0]);
+                const auto destFolder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                          .getChildFile ("Terrain Instrument Stems");
+                const auto written = audioProcessor.exportStemToFile (idx, destFolder);
+                complete (juce::var (written.getFullPathName()));
+            })
+            .withNativeFunction("exportAllStems", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Writes all 4 layer stems to ~/Documents/Terrain Instrument Stems/.
+                // Returns an array of file path strings (empty string for failures).
+                const auto destFolder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                          .getChildFile ("Terrain Instrument Stems");
+                juce::Array<juce::var> out;
+                for (int i = 0; i < 4; ++i)
+                {
+                    const auto written = audioProcessor.exportStemToFile (i, destFolder);
+                    out.add (written.getFullPathName());
+                }
+                complete (juce::var (out));
+            })
+            .withNativeFunction("revealStemsFolder", [this](const juce::Array<juce::var>&,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Opens the stems folder in Finder/Explorer for the user.
+                const auto destFolder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                          .getChildFile ("Terrain Instrument Stems");
+                if (! destFolder.exists()) destFolder.createDirectory();
+                destFolder.revealToUser();
+                complete ({});
+            })
             .withNativeFunction("auditionSlice", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -7284,6 +7323,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         if (willOpen) {
           restoreStripsFromCpp();
           pullTriggerStateFromCpp();
+          pullStemStateFromCpp();
         }
       });
 
@@ -7714,6 +7754,160 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       pullLayerStatusDots();
     }
 
+    // ── Phase D: stem capture area ─────────────────────────────────────────
+    function injectStemStyles () {
+      if (document.getElementById('mix-stem-styles')) return;
+      var s = document.createElement('style');
+      s.id = 'mix-stem-styles';
+      s.textContent = ''
+        + '#mix-stem-area{display:flex;flex-direction:column;gap:6px;}'
+        + '.stem-header{font-size:11px;letter-spacing:0.5px;color:var(--text-secondary);'
+        +   'font-weight:700;}'
+        + '.stem-buttons{display:flex;gap:4px;}'
+        + '.stem-btn{flex:1;padding:8px 4px;font-size:11px;font-weight:700;'
+        +   'background:#2a2a3e;color:#fff;border:1px solid #3a3a4e;'
+        +   'border-radius:4px;cursor:pointer;font-family:inherit;'
+        +   'transition:all 0.15s;}'
+        + '.stem-btn:hover{border-color:#8B5CF6;background:#3a3a4e;}'
+        + '.stem-btn.exporting{background:#8B5CF6;border-color:#8B5CF6;}'
+        + '.stem-all-row{display:flex;gap:4px;}'
+        + '#stem-export-all{flex:2;padding:8px;font-size:11px;font-weight:700;'
+        +   'background:#8B5CF6;color:#fff;border:none;border-radius:4px;'
+        +   'cursor:pointer;font-family:inherit;}'
+        + '#stem-export-all:hover{background:#a78bfa;}'
+        + '#stem-reveal{flex:1;padding:8px;font-size:10px;font-weight:700;'
+        +   'background:transparent;color:#8B5CF6;border:1px solid #8B5CF6;'
+        +   'border-radius:4px;cursor:pointer;font-family:inherit;}'
+        + '.stem-source-row{display:flex;gap:4px;align-items:center;'
+        +   'font-size:10px;letter-spacing:0.4px;}'
+        + '.stem-source-pill{padding:4px 10px;border:1px solid #3a3a4e;'
+        +   'background:#2a2a3e;color:var(--text-secondary);border-radius:3px;'
+        +   'cursor:pointer;font-weight:700;font-family:inherit;font-size:10px;}'
+        + '.stem-source-pill.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
+        + '.stem-status{font-size:9px;color:var(--text-secondary);'
+        +   'font-style:italic;min-height:11px;}'
+        ;
+      document.head.appendChild(s);
+    }
+
+    function buildStemArea () {
+      var area = document.getElementById('mix-stem-area');
+      if (! area) return;
+      area.innerHTML = ''
+        + '<div class="stem-header">STEMS — 1 min rolling, exports to ~/Documents/Terrain Instrument Stems/</div>'
+        + '<div class="stem-buttons">'
+        +   '<button class="stem-btn" data-layer="0">A</button>'
+        +   '<button class="stem-btn" data-layer="1">B</button>'
+        +   '<button class="stem-btn" data-layer="2">C</button>'
+        +   '<button class="stem-btn" data-layer="3">D</button>'
+        + '</div>'
+        + '<div class="stem-all-row">'
+        +   '<button id="stem-export-all">EXPORT ALL 4</button>'
+        +   '<button id="stem-reveal">REVEAL FOLDER</button>'
+        + '</div>'
+        + '<div class="stem-source-row">'
+        +   '<span>SOURCE:</span>'
+        +   '<button class="stem-source-pill active" data-val="0">DRY</button>'
+        +   '<button class="stem-source-pill" data-val="1">MIX</button>'
+        + '</div>'
+        + '<div class="stem-status" id="stem-status">&nbsp;</div>'
+        ;
+    }
+
+    function setStemStatus (msg) {
+      var el = document.getElementById('stem-status');
+      if (el) el.textContent = msg || '';
+    }
+
+    function flashStemBtn (btn) {
+      if (! btn) return;
+      btn.classList.add('exporting');
+      setTimeout(function () { btn.classList.remove('exporting'); }, 800);
+    }
+
+    function basename (path) {
+      if (! path) return '';
+      var s = String(path);
+      var i = s.lastIndexOf('/');
+      if (i < 0) i = s.lastIndexOf('\\');
+      return (i >= 0) ? s.substring(i + 1) : s;
+    }
+
+    function wireStemArea () {
+      // Per-layer export buttons
+      document.querySelectorAll('.stem-btn').forEach(function (btn) {
+        var idx = parseInt(btn.getAttribute('data-layer'), 10);
+        btn.addEventListener('click', function () {
+          var fn = getNativeFn('exportStem');
+          if (! fn) return;
+          flashStemBtn(btn);
+          try {
+            var r = fn(idx);
+            var apply = function (path) {
+              if (path && path.length) setStemStatus('Exported ' + basename(path));
+              else setStemStatus('Export failed for layer ' + 'ABCD'[idx]);
+            };
+            if (r && typeof r.then === 'function') r.then(apply).catch(function () { setStemStatus('Export error'); });
+            else apply(r);
+          } catch (_) { setStemStatus('Export error'); }
+        });
+      });
+
+      // Export all 4
+      var allBtn = document.getElementById('stem-export-all');
+      if (allBtn) allBtn.addEventListener('click', function () {
+        var fn = getNativeFn('exportAllStems');
+        if (! fn) return;
+        flashStemBtn(allBtn);
+        try {
+          var r = fn();
+          var apply = function (arr) {
+            var n = (arr && arr.length) ? arr.length : 0;
+            var ok = 0;
+            for (var i = 0; i < n; ++i) if (arr[i] && String(arr[i]).length) ok++;
+            setStemStatus('Exported ' + ok + ' / 4 stems');
+          };
+          if (r && typeof r.then === 'function') r.then(apply).catch(function () { setStemStatus('Export error'); });
+          else apply(r);
+        } catch (_) { setStemStatus('Export error'); }
+      });
+
+      // Reveal folder
+      var revealBtn = document.getElementById('stem-reveal');
+      if (revealBtn) revealBtn.addEventListener('click', function () {
+        var fn = getNativeFn('revealStemsFolder');
+        if (fn) { try { fn(); } catch (_) {} }
+      });
+
+      // DRY / MIX source pills
+      document.querySelectorAll('.stem-source-pill').forEach(function (pill) {
+        pill.addEventListener('click', function () {
+          var val = parseInt(pill.getAttribute('data-val'), 10);
+          document.querySelectorAll('.stem-source-pill').forEach(function (p) {
+            p.classList.toggle('active', parseInt(p.getAttribute('data-val'), 10) === val);
+          });
+          var fn = getNativeFn('setStemSourceMode');
+          if (fn) { try { fn(val); } catch (_) {} }
+        });
+      });
+    }
+
+    function pullStemStateFromCpp () {
+      var fn = getNativeFn('getStemSourceMode');
+      if (! fn) return;
+      try {
+        var r = fn();
+        var apply = function (v) {
+          var val = (typeof v === 'number') ? v : (parseInt(v, 10) || 0);
+          document.querySelectorAll('.stem-source-pill').forEach(function (p) {
+            p.classList.toggle('active', parseInt(p.getAttribute('data-val'), 10) === val);
+          });
+        };
+        if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+        else apply(r);
+      } catch (_) {}
+    }
+
     function init () {
       if (! document.getElementById('mix-btn')) {
         // index.html mod-buttons not yet in DOM — retry next frame.
@@ -7722,10 +7916,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       }
       injectMixPanelStyles();
       injectTriggerStyles();
+      injectStemStyles();
       buildMixPanel();
       buildTriggerArea();
+      buildStemArea();
       wireStrips();
       wireTriggerArea();
+      wireStemArea();
       setupMixPillWiring();
       setInterval(pollMixMeters, 33);            // ~30 Hz strip meters
       setInterval(pollStripsPlayingDots, 100);   // 10 Hz play-dot indicator
