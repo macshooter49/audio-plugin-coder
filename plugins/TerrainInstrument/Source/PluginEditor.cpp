@@ -2362,7 +2362,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     //                            numChannels, peaksMin[], peaksMax[] })
     //   window.onLoadError(msg)
     // ────────────────────────────────────────────────────────────────────────
-    const juce::String heroOverlay = R"TIHX(
+    // NOTE: split into 4 runtime-concatenated raw-string pieces. A single
+    // literal of the full ~245KB exceeds the toolchain's embeddable string
+    // length and silently drops its tail (Phase D stem UI went missing).
+    // Each piece stays well under 64KB; juce::String + rejoins at runtime.
+    const juce::String heroOverlay = juce::String (R"TIHX(
 <style>
   /* ─── Waveform canvas (overlay on top of terrain mesh) ─── */
   #waveform-canvas {
@@ -3773,7 +3777,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         '</div>' +
       '</div>';
     document.body.appendChild(panel);
-
+)TIHX")
+      + juce::String (R"TIHX(
     // Initial state: empty.
     hero.classList.add('empty-state');
 
@@ -5140,7 +5145,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // markers → cursor often lands off-center from the boundary edge).
       var markerEdgeClientX = waveRect.left + parseFloat(marker.style.left || '0');
       var clickOffset = ev.clientX - markerEdgeClientX;  // px cursor is right of edge
-
+)TIHX")
+      + juce::String (R"TIHX(
       function cursorToSample (x) {
         var s = clientXToSourceSample(x - clickOffset, waveRect.left, W);
         return Math.max(minSample, Math.min(maxSample, s));
@@ -6475,7 +6481,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     state.progress = Math.max(0, Math.min(1, p));
     drawWaveform();
   };
-
+)TIHX")
+      + juce::String (R"TIHX(
   window.onSampleLoaded = function (info) {
     if (!info) return;
     state.peaksMin = info.peaksMin || null;
@@ -7015,60 +7022,86 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (document.getElementById('mix-panel-styles')) return;
       var style = document.createElement('style');
       style.id = 'mix-panel-styles';
+      // Theme-aware + glass. All colors come from the Terrain theme vars so the
+      // panel adapts to light/dark (dark keeps its look; light loses the harsh
+      // black slabs). Glass = translucent card bg + backdrop-blur. A faint mesh
+      // grid + fader tick marks give the "technical" vibe.
       style.textContent = ''
         + '#mix-panel{display:none;width:820px;height:272px;flex-shrink:0;'
-        +   'border-top:1px solid var(--border);background:var(--bg-surface);'
-        +   'z-index:15;position:relative;flex-direction:row;}'
+        +   'border-top:1px solid var(--border-strong);z-index:15;'
+        +   'position:relative;flex-direction:row;color:var(--text-primary);'
+        +   'background:'
+        +     'repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 40px),'
+        +     'var(--bg-glass);'
+        +   '-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);}'
         + '#mix-panel.open{display:flex;}'
         + '#mix-strips{display:flex;flex-direction:row;align-items:stretch;'
         +   'padding:12px 10px;gap:8px;width:50%;'
         +   'border-right:1px solid var(--border);box-sizing:border-box;}'
         + '.mix-strip{flex:1;display:flex;flex-direction:column;align-items:center;'
-        +   'justify-content:space-between;background:rgba(255,255,255,0.03);'
-        +   'border:1px solid rgba(255,255,255,0.06);border-radius:6px;'
+        +   'justify-content:space-between;border-radius:7px;'
+        +   'background:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.05)),var(--bg-card);'
+        +   'border:1px solid var(--border);'
+        +   'box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 1px 3px rgba(0,0,0,0.12);'
         +   'padding:8px 4px;gap:4px;min-width:0;color:var(--text-primary);}'
         + '.mix-strip-header{font-weight:700;font-size:13px;display:flex;'
         +   'align-items:center;gap:6px;letter-spacing:0.5px;}'
         + '.mix-strip-header .play-dot{width:6px;height:6px;border-radius:50%;'
-        +   'background:rgba(255,255,255,0.2);transition:background 0.1s;}'
+        +   'background:var(--border-strong);transition:background 0.1s;}'
         + '.mix-strip.playing .mix-strip-header .play-dot{'
-        +   'background:#8B5CF6;box-shadow:0 0 6px rgba(139,92,246,0.5);}'
+        +   'background:var(--purple-500);box-shadow:0 0 7px var(--purple-400);}'
         + '.mix-strip-knob{width:26px;height:26px;border-radius:50%;'
-        +   'background:#2a2a3e;border:1px solid #3a3a4e;cursor:pointer;'
-        +   'position:relative;flex-shrink:0;}'
+        +   'background:radial-gradient(circle at 50% 35%,rgba(255,255,255,0.14),transparent 65%),var(--knob-body);'
+        +   'border:1px solid var(--border-strong);cursor:pointer;'
+        +   'position:relative;flex-shrink:0;'
+        +   'box-shadow:inset 0 1px 1px rgba(255,255,255,0.12),0 1px 2px rgba(0,0,0,0.18);}'
         + '.mix-strip-knob::after{content:"";position:absolute;'
-        +   'top:3px;left:50%;width:2px;height:9px;background:#8B5CF6;'
+        +   'top:3px;left:50%;width:2px;height:9px;border-radius:1px;'
+        +   'background:var(--purple-500);'
         +   'transform-origin:50% 10px;'
         +   'transform:translateX(-50%) rotate(var(--rot,0deg));}'
-        + '.mix-strip-knob-label{font-size:8px;letter-spacing:0.5px;'
-        +   'color:var(--text-secondary);text-transform:uppercase;'
+        + '.mix-strip-knob-label{font-size:8px;letter-spacing:0.6px;'
+        +   'color:var(--text-muted);text-transform:uppercase;'
         +   'margin-top:-2px;}'
         + '.mix-strip-fader-meter{flex:1;display:flex;flex-direction:row;'
         +   'align-items:stretch;justify-content:center;gap:3px;width:100%;'
         +   'min-height:90px;padding:4px 0;}'
+        // Fader track: recessed groove + tick marks (the "ticker" grid lines).
         + '.mix-strip-fader{position:relative;width:14px;height:100%;'
-        +   'background:#1a1a2e;border-radius:3px;cursor:pointer;}'
-        + '.mix-strip-fader-cap{position:absolute;width:18px;height:10px;'
-        +   'left:-2px;background:#8B5CF6;border-radius:2px;'
-        +   'box-shadow:0 0 4px rgba(139,92,246,0.4);'
+        +   'border-radius:3px;cursor:pointer;'
+        +   'background:'
+        +     'repeating-linear-gradient(0deg,var(--mesh-line) 0 1px,transparent 1px 9px),'
+        +     'var(--knob-track);'
+        +   'box-shadow:inset 0 0 2px rgba(0,0,0,0.3);}'
+        + '.mix-strip-fader-cap{position:absolute;width:20px;height:11px;'
+        +   'left:-3px;border-radius:2px;'
+        +   'background:linear-gradient(180deg,var(--purple-400),var(--purple-600));'
+        +   'box-shadow:0 0 6px var(--purple-400),0 1px 2px rgba(0,0,0,0.3);'
         +   'transform:translateY(-50%);top:50%;}'
-        + '.mix-strip-meter{width:4px;background:#1a1a2e;border-radius:2px;'
-        +   'overflow:hidden;display:flex;flex-direction:column-reverse;}'
+        // Segmented LED meter — repeating mask cuts the fill into LED bands.
+        + '.mix-strip-meter{width:5px;border-radius:2px;overflow:hidden;'
+        +   'background:var(--knob-track);'
+        +   'box-shadow:inset 0 0 2px rgba(0,0,0,0.3);'
+        +   'display:flex;flex-direction:column-reverse;}'
         + '.mix-strip-meter-fill{width:100%;'
-        +   'background:linear-gradient(to top,#4ade80 0%,#facc15 70%,#ef4444 95%);'
-        +   'transition:height 0.05s linear;}'
+        +   'background:linear-gradient(to top,#3ad17a 0%,#9bd94a 55%,#facc15 78%,#ef4444 96%);'
+        +   '-webkit-mask:repeating-linear-gradient(to top,#000 0 3px,transparent 3px 4.5px);'
+        +   'mask:repeating-linear-gradient(to top,#000 0 3px,transparent 3px 4.5px);'
+        +   'transition:height 0.04s linear;}'
         + '.mix-strip-buttons{display:flex;flex-direction:row;gap:3px;}'
         + '.mix-strip-btn{width:22px;height:18px;font-size:9px;font-weight:700;'
-        +   'border:1px solid #3a3a4e;background:#2a2a3e;'
+        +   'border:1px solid var(--border-strong);background:var(--bg-card);'
         +   'color:var(--text-secondary);border-radius:3px;cursor:pointer;'
         +   'padding:0;font-family:inherit;}'
-        + '.mix-strip-btn:hover{border-color:#8B5CF6;}'
+        + '.mix-strip-btn:hover{border-color:var(--purple-500);}'
         + '.mix-strip-btn.active[data-fn="mute"]{background:#ef4444;color:#fff;border-color:#ef4444;}'
-        + '.mix-strip-btn.active[data-fn="solo"]{background:#facc15;color:#000;border-color:#facc15;}'
+        + '.mix-strip-btn.active[data-fn="solo"]{background:#facc15;color:#1a1a1a;border-color:#facc15;}'
         + '#mix-right{flex:1;display:flex;flex-direction:column;padding:12px;'
         +   'gap:10px;box-sizing:border-box;}'
-        + '#mix-trigger-area,#mix-stem-area{background:rgba(255,255,255,0.03);'
-        +   'border:1px solid rgba(255,255,255,0.06);border-radius:6px;'
+        + '#mix-trigger-area,#mix-stem-area{border-radius:7px;'
+        +   'background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0.04)),var(--bg-card);'
+        +   'border:1px solid var(--border);'
+        +   'box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);'
         +   'padding:10px;color:var(--text-secondary);font-size:11px;'
         +   'box-sizing:border-box;}'
         + '#mix-trigger-area{flex:1.4;}'
@@ -7114,8 +7147,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var right = document.createElement('div');
       right.id = 'mix-right';
       right.innerHTML = ''
-        + '<div id="mix-trigger-area">(trigger mode controls — Phase C)</div>'
-        + '<div id="mix-stem-area">(stem capture — Phase D)</div>'
+        + '<div id="mix-trigger-area"></div>'
+        + '<div id="mix-stem-area"></div>'
         ;
       panel.appendChild(right);
 
@@ -7350,11 +7383,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       s.textContent = ''
         + '#trigger-pills{display:flex;gap:4px;margin-bottom:8px;}'
         + '.trigger-pill{flex:1;padding:5px 4px;font-size:10px;font-weight:700;'
-        +   'letter-spacing:0.5px;background:#2a2a3e;color:var(--text-secondary);'
-        +   'border:1px solid #3a3a4e;border-radius:4px;cursor:pointer;'
+        +   'letter-spacing:0.5px;background:var(--bg-card);color:var(--text-secondary);'
+        +   'border:1px solid var(--border-strong);border-radius:4px;cursor:pointer;'
         +   'font-family:inherit;}'
-        + '.trigger-pill:hover{border-color:#8B5CF6;}'
-        + '.trigger-pill.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
+        + '.trigger-pill:hover{border-color:var(--purple-500);}'
+        + '.trigger-pill.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);'
+        +   'box-shadow:0 0 8px var(--purple-400);}'
         + '#trigger-context{position:relative;font-size:11px;'
         +   'color:var(--text-secondary);}'
         + '.trigger-panel{display:none;}'
@@ -7366,50 +7400,57 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         + '.trigger-panel{padding:4px 0;}'
         + '.layer-status-dots{display:flex;gap:6px;margin-top:6px;}'
         + '.layer-status-dot{padding:3px 8px;border-radius:3px;font-weight:700;'
-        +   'background:#2a2a3e;color:#666;font-size:11px;}'
-        + '.layer-status-dot.lit{background:#8B5CF6;color:#fff;}'
+        +   'background:var(--bg-card);color:var(--text-muted);font-size:11px;'
+        +   'border:1px solid var(--border);}'
+        + '.layer-status-dot.lit{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
         + '.trigger-btn{padding:4px 8px;font-size:10px;font-weight:700;'
-        +   'letter-spacing:0.4px;background:#2a2a3e;color:var(--text-secondary);'
-        +   'border:1px solid #3a3a4e;border-radius:3px;cursor:pointer;'
+        +   'letter-spacing:0.4px;background:var(--bg-card);color:var(--text-secondary);'
+        +   'border:1px solid var(--border-strong);border-radius:3px;cursor:pointer;'
         +   'font-family:inherit;margin-right:6px;}'
-        + '.trigger-btn:hover{border-color:#8B5CF6;}'
-        + '.trigger-btn.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
+        + '.trigger-btn:hover{border-color:var(--purple-500);}'
+        + '.trigger-btn.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
         + '.trigger-toggle{display:inline-flex;align-items:center;gap:4px;'
         +   'font-size:10px;letter-spacing:0.4px;cursor:pointer;}'
-        + '.trigger-toggle input{margin:0;}'
+        + '.trigger-toggle input{margin:0;accent-color:var(--purple-500);}'
         + '.rr-pos-row{margin-top:8px;display:flex;gap:6px;align-items:center;}'
         + '.rr-pos-row span{font-size:10px;letter-spacing:0.4px;}'
-        + '.rr-pos-dot{padding:2px 6px;border-radius:3px;background:#2a2a3e;'
-        +   'color:#666;font-weight:700;font-size:11px;}'
-        + '.rr-pos-dot.lit{background:#8B5CF6;color:#fff;}'
         + '.prob-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;}'
-        + '.prob-letter{width:14px;font-weight:700;font-size:11px;color:#fff;}'
-        + '.prob-slider{flex:1;height:8px;background:#1a1a2e;border-radius:4px;'
-        +   'position:relative;cursor:pointer;overflow:hidden;}'
-        + '.prob-fill{position:absolute;left:0;top:0;bottom:0;background:#8B5CF6;'
+        + '.prob-letter{width:14px;font-weight:700;font-size:11px;color:var(--text-primary);}'
+        + '.prob-slider{flex:1;height:9px;border-radius:4px;'
+        +   'position:relative;cursor:pointer;overflow:hidden;'
+        +   'background:'
+        +     'repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 12px),'
+        +     'var(--knob-track);'
+        +   'box-shadow:inset 0 0 2px rgba(0,0,0,0.25);}'
+        + '.prob-fill{position:absolute;left:0;top:0;bottom:0;'
+        +   'background:linear-gradient(90deg,var(--purple-600),var(--purple-400));'
         +   'border-radius:4px;transition:width 0.05s linear;}'
         + '.prob-value{width:32px;font-size:10px;color:var(--text-secondary);'
         +   'text-align:right;}'
         + '.solo-checkboxes{display:flex;gap:8px;}'
         + '.solo-cb{flex:1;padding:8px;font-weight:700;font-size:13px;'
-        +   'background:#2a2a3e;color:#666;border:2px solid #3a3a4e;'
+        +   'background:var(--bg-card);color:var(--text-muted);border:2px solid var(--border-strong);'
         +   'border-radius:4px;cursor:pointer;text-align:center;'
         +   'font-family:inherit;transition:all 0.15s;}'
-        + '.solo-cb:hover{border-color:#8B5CF6;}'
-        + '.solo-cb.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
-        + '#velocity-bar{position:relative;height:32px;background:#1a1a2e;'
-        +   'border-radius:4px;margin-bottom:8px;overflow:hidden;}'
+        + '.solo-cb:hover{border-color:var(--purple-500);}'
+        + '.solo-cb.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
+        + '#velocity-bar{position:relative;height:34px;border-radius:4px;'
+        +   'margin-bottom:8px;overflow:hidden;'
+        +   'background:'
+        +     'repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 16px),'
+        +     'var(--knob-track);'
+        +   'box-shadow:inset 0 0 3px rgba(0,0,0,0.25);}'
         + '.vel-zone{position:absolute;top:0;bottom:0;display:flex;'
         +   'align-items:center;justify-content:center;font-size:11px;'
         +   'font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}'
-        + '.vel-zone[data-layer="0"]{background:rgba(74,222,128,0.5);}'
-        + '.vel-zone[data-layer="1"]{background:rgba(250,204,21,0.5);}'
-        + '.vel-zone[data-layer="2"]{background:rgba(139,92,246,0.55);}'
-        + '.vel-zone[data-layer="3"]{background:rgba(239,68,68,0.5);}'
+        + '.vel-zone[data-layer="0"]{background:rgba(74,222,128,0.45);}'
+        + '.vel-zone[data-layer="1"]{background:rgba(250,204,21,0.45);}'
+        + '.vel-zone[data-layer="2"]{background:rgba(139,92,246,0.5);}'
+        + '.vel-zone[data-layer="3"]{background:rgba(239,68,68,0.45);}'
         + '.vel-handle{position:absolute;top:0;bottom:0;width:4px;'
-        +   'background:#fff;cursor:ew-resize;transform:translateX(-50%);'
-        +   'box-shadow:0 0 4px rgba(255,255,255,0.5);z-index:2;}'
-        + '.vel-handle:hover{background:#8B5CF6;}'
+        +   'background:var(--text-primary);cursor:ew-resize;transform:translateX(-50%);'
+        +   'box-shadow:0 0 4px rgba(0,0,0,0.4);z-index:2;}'
+        + '.vel-handle:hover{background:var(--purple-500);}'
         ;
       document.head.appendChild(s);
     }
@@ -7436,7 +7477,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +     '</div>'
         +   '</div>'
         +   '<div class="trigger-panel" data-panel="rr">'
-        +     '<div>Cycling A → B → C → D (skips empty layers).</div>'
+        +     '<div>Cycling A &rarr; B &rarr; C &rarr; D (skips empty layers).</div>'
         +     '<div class="rr-pos-row">'
         +       '<button class="trigger-btn" id="rr-reset-btn">RESET TO A</button>'
         +       '<label class="trigger-toggle">'
@@ -7765,26 +7806,28 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   'font-weight:700;}'
         + '.stem-buttons{display:flex;gap:4px;}'
         + '.stem-btn{flex:1;padding:8px 4px;font-size:11px;font-weight:700;'
-        +   'background:#2a2a3e;color:#fff;border:1px solid #3a3a4e;'
+        +   'background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border-strong);'
         +   'border-radius:4px;cursor:pointer;font-family:inherit;'
         +   'transition:all 0.15s;}'
-        + '.stem-btn:hover{border-color:#8B5CF6;background:#3a3a4e;}'
-        + '.stem-btn.exporting{background:#8B5CF6;border-color:#8B5CF6;}'
+        + '.stem-btn:hover{border-color:var(--purple-500);background:var(--bg-card-hover);}'
+        + '.stem-btn.exporting{background:var(--purple-500);color:#fff;border-color:var(--purple-500);'
+        +   'box-shadow:0 0 8px var(--purple-400);}'
         + '.stem-all-row{display:flex;gap:4px;}'
         + '#stem-export-all{flex:2;padding:8px;font-size:11px;font-weight:700;'
-        +   'background:#8B5CF6;color:#fff;border:none;border-radius:4px;'
+        +   'background:linear-gradient(180deg,var(--purple-400),var(--purple-600));'
+        +   'color:#fff;border:none;border-radius:4px;'
         +   'cursor:pointer;font-family:inherit;}'
-        + '#stem-export-all:hover{background:#a78bfa;}'
+        + '#stem-export-all:hover{filter:brightness(1.1);}'
         + '#stem-reveal{flex:1;padding:8px;font-size:10px;font-weight:700;'
-        +   'background:transparent;color:#8B5CF6;border:1px solid #8B5CF6;'
+        +   'background:transparent;color:var(--purple-500);border:1px solid var(--purple-500);'
         +   'border-radius:4px;cursor:pointer;font-family:inherit;}'
         + '.stem-source-row{display:flex;gap:4px;align-items:center;'
-        +   'font-size:10px;letter-spacing:0.4px;}'
-        + '.stem-source-pill{padding:4px 10px;border:1px solid #3a3a4e;'
-        +   'background:#2a2a3e;color:var(--text-secondary);border-radius:3px;'
+        +   'font-size:10px;letter-spacing:0.4px;color:var(--text-secondary);}'
+        + '.stem-source-pill{padding:4px 10px;border:1px solid var(--border-strong);'
+        +   'background:var(--bg-card);color:var(--text-secondary);border-radius:3px;'
         +   'cursor:pointer;font-weight:700;font-family:inherit;font-size:10px;}'
-        + '.stem-source-pill.active{background:#8B5CF6;color:#fff;border-color:#8B5CF6;}'
-        + '.stem-status{font-size:9px;color:var(--text-secondary);'
+        + '.stem-source-pill.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
+        + '.stem-status{font-size:9px;color:var(--text-muted);'
         +   'font-style:italic;min-height:11px;}'
         ;
       document.head.appendChild(s);
@@ -7794,7 +7837,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var area = document.getElementById('mix-stem-area');
       if (! area) return;
       area.innerHTML = ''
-        + '<div class="stem-header">STEMS — 1 min rolling, exports to ~/Documents/Terrain Instrument Stems/</div>'
+        + '<div class="stem-header">STEMS &mdash; 1 min rolling, exports to ~/Documents/Terrain Instrument Stems/</div>'
         + '<div class="stem-buttons">'
         +   '<button class="stem-btn" data-layer="0">A</button>'
         +   '<button class="stem-btn" data-layer="1">B</button>'
@@ -7937,7 +7980,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   })();
 })();
 </script>
-)TIHX";
+)TIHX");
     html = html.replace ("</body>", heroOverlay + "</body>");
 
     auto utf8 = html.toUTF8();

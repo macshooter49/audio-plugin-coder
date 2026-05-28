@@ -1180,11 +1180,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             auto& layer = layers[li];
 
-            // Skip layers that have no sample loaded.
+            // Skip layers that have no sample loaded (no voices possible).
             if (! layer.hasSample())               continue;
-            // Skip muted and non-solo layers.
-            if (layer.mute.load())                 continue;
-            if (anySolo && ! layer.solo.load())    continue;
+
+            // Mix page audio-fix: mute/solo gate the SUMMING, NOT the render.
+            // We must still call renderNextBlock on every populated layer so its
+            // voices process note-offs even when the layer is silenced. Without
+            // this, a voice playing on a layer that gets muted or solo-excluded
+            // mid-note never receives its note-off and sticks forever — this was
+            // the "infinite scan" bug (solo layer A on the mixer while layer C
+            // has a scan voice in flight → C is skipped → its scan never ends).
+            const bool audible = ! layer.mute.load()
+                               && (! anySolo || layer.solo.load());
 
             // Build per-layer SliceContext. ctx.mode is now sourced from each
             // layer's own sliceMode atomic (Mark 2 Phase 1 audio-fix) so layers
@@ -1265,21 +1272,32 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float ang  = (pn + 1.0f) * (juce::MathConstants<float>::pi * 0.25f);
             const float gL   = g * std::cos (ang);
             const float gR   = g * std::sin (ang);
-            buffer.addFrom (0, 0, scratch, 0, 0, numSamples, gL);
-            buffer.addFrom (1, 0, scratch, 1, 0, numSamples, gR);
-
-            // Per-layer post-volume peak meter — feeds the channel-strip meter
-            // widget. Capture peak BEFORE summing (so the strip meter reads the
-            // layer's own level, not what's left after stronger layers dominate).
-            // ~30 Hz UI polling so block-max is plenty fine-grained.
+            // Only AUDIBLE layers contribute to the master mix. Muted / solo-
+            // excluded layers still rendered above (so their voices release),
+            // they just don't sum here.
+            if (audible)
             {
-                const float peakL = scratch.getMagnitude (0, 0, numSamples) * std::abs (gL);
-                const float peakR = scratch.getMagnitude (1, 0, numSamples) * std::abs (gR);
-                // Peak hold: keep max of (this block, decayed prior).
+                buffer.addFrom (0, 0, scratch, 0, 0, numSamples, gL);
+                buffer.addFrom (1, 0, scratch, 1, 0, numSamples, gR);
+            }
+
+            // Per-layer peak meter — feeds the channel-strip meter widget.
+            // Visual gain: the raw magnitude reads low for typical samples, so
+            // the strip meters barely moved. Apply a perceptual sqrt curve +
+            // ~6 dB makeup so the LED bars are lively and responsive (user
+            // wanted "4K 60fps interactive" levels) while still clipping at 1.0.
+            // Muted layers report 0 (meter goes dark, matching what you hear).
+            {
+                const float rawL = audible ? scratch.getMagnitude (0, 0, numSamples) * std::abs (gL) : 0.0f;
+                const float rawR = audible ? scratch.getMagnitude (1, 0, numSamples) * std::abs (gR) : 0.0f;
+                // Perceptual curve: sqrt expands low levels, ×1.6 makeup, clamp.
+                const float visL = juce::jmin (1.0f, std::sqrt (rawL) * 1.6f);
+                const float visR = juce::jmin (1.0f, std::sqrt (rawR) * 1.6f);
+                // Fast attack (instant), slower decay for readable peaks.
                 const float prevL = layer.peakLevelL.load (std::memory_order_relaxed);
                 const float prevR = layer.peakLevelR.load (std::memory_order_relaxed);
-                layer.peakLevelL.store (juce::jmax (peakL, prevL * decay), std::memory_order_relaxed);
-                layer.peakLevelR.store (juce::jmax (peakR, prevR * decay), std::memory_order_relaxed);
+                layer.peakLevelL.store (juce::jmax (visL, prevL * decay), std::memory_order_relaxed);
+                layer.peakLevelR.store (juce::jmax (visR, prevR * decay), std::memory_order_relaxed);
             }
         }
     }
@@ -1961,7 +1979,7 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
     }
 
     // Filename: Stem-<A/B/C/D>-YYYYMMDD-HHMMSS-{DRY|MIX}.wav
-    const auto letter    = juce::String::charToString ((juce_wchar)('A' + layerIdx));
+    const auto letter    = juce::String::charToString ((juce::juce_wchar)('A' + layerIdx));
     const auto timestamp = juce::Time::getCurrentTime().formatted ("%Y%m%d-%H%M%S");
     const auto suffix    = (mode == 1) ? juce::String("-MIX") : juce::String("-DRY");
     const auto file      = dest.getChildFile ("Stem-" + letter + "-" + timestamp + suffix + ".wav");
