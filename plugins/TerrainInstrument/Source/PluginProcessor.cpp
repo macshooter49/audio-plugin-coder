@@ -1911,6 +1911,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     captureBuffer.writeBlock(leftChannel,
         numChannels > 1 ? rightChannel : nullptr, numSamples);
 
+    // Capture the post-FX master into the masterFx ring (in lockstep with the
+    // per-layer DRY rings). WET stem export uses energy-ratio attribution
+    // against this ring so each layer's WET file carries its proportional
+    // share of the shared FX processing.
+    writeToMasterFxRing (leftChannel,
+                         numChannels > 1 ? rightChannel : leftChannel,
+                         numSamples);
+
     // Sync transport state back (auto-stop may have changed wantRecord/wantPlay)
     tapeLoopRecording.store(wantRecord ? 1.f : 0.f);
     tapeLoopPlaying.store(wantPlay ? 1.f : 0.f);
@@ -1974,8 +1982,37 @@ void TerrainInstrumentAudioProcessor::allocateStemBuffers (double sampleRate)
         s.ring.setSize (2, totalSamples, false, true, true);
         s.ring.clear();
         s.totalSize = totalSamples;
-        s.writeIndex.store (0, std::memory_order_relaxed);
+        s.writeIndex.store     (0, std::memory_order_relaxed);
+        s.samplesWritten.store (0, std::memory_order_relaxed);
     }
+    masterFxBuffer.ring.setSize (2, totalSamples, false, true, true);
+    masterFxBuffer.ring.clear();
+    masterFxBuffer.totalSize = totalSamples;
+    masterFxBuffer.writeIndex.store     (0, std::memory_order_relaxed);
+    masterFxBuffer.samplesWritten.store (0, std::memory_order_relaxed);
+}
+
+void TerrainInstrumentAudioProcessor::writeToMasterFxRing (const float* L,
+                                                            const float* R,
+                                                            int numSamples)
+{
+    if (numSamples <= 0) return;
+    auto& s = masterFxBuffer;
+    if (s.totalSize <= 0) return;
+
+    int w = s.writeIndex.load (std::memory_order_relaxed);
+    auto* destL = s.ring.getWritePointer (0);
+    auto* destR = s.ring.getWritePointer (1);
+    for (int i = 0; i < numSamples; ++i)
+    {
+        destL[w] = L[i];
+        destR[w] = R[i];
+        if (++w >= s.totalSize) w = 0;
+    }
+    s.writeIndex.store (w, std::memory_order_relaxed);
+    const int prev = s.samplesWritten.load (std::memory_order_relaxed);
+    s.samplesWritten.store (juce::jmin (s.totalSize, prev + numSamples),
+                             std::memory_order_relaxed);
 }
 
 void TerrainInstrumentAudioProcessor::writeToStemBuffer (int layerIdx,
@@ -2024,6 +2061,9 @@ void TerrainInstrumentAudioProcessor::clearStemBuffers()
         s.samplesWritten.store (0, std::memory_order_relaxed);
         stemCaptureLevel[(size_t) i].store (0.0f, std::memory_order_relaxed);
     }
+    if (masterFxBuffer.totalSize > 0) masterFxBuffer.ring.clear();
+    masterFxBuffer.writeIndex.store     (0, std::memory_order_relaxed);
+    masterFxBuffer.samplesWritten.store (0, std::memory_order_relaxed);
 }
 
 juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, const juce::File& dest)
@@ -2043,41 +2083,62 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
     // inaudible in practice.
     const int writeIdx = s.writeIndex.load (std::memory_order_relaxed);
 
-    // Apply stem-source-mode: DRY = raw ring, MIX = ring × per-layer volume + pan.
-    const int   mode = stemSourceMode.load();
-    const float vol  = layers[(size_t) layerIdx].volume.load();
-    const float pn   = juce::jlimit (-1.0f, 1.0f, layers[(size_t) layerIdx].pan.load());
-    const float ang  = (pn + 1.0f) * (juce::MathConstants<float>::pi * 0.25f);
-    const float gL   = (mode == 1) ? vol * std::cos (ang) : 1.0f;
-    const float gR   = (mode == 1) ? vol * std::sin (ang) : 1.0f;
-
+    const int  mode     = stemSourceMode.load();
     const bool ringFull = (captured >= s.totalSize);
     const int  outLen   = ringFull ? s.totalSize : captured;
 
     juce::AudioBuffer<float> out (2, outLen);
-    const auto* srcL = s.ring.getReadPointer (0);
-    const auto* srcR = s.ring.getReadPointer (1);
     auto* dstL = out.getWritePointer (0);
     auto* dstR = out.getWritePointer (1);
 
-    if (ringFull)
+    if (mode == 0)   // DRY — raw per-layer ring, no gain.
     {
-        // Full rolling: oldest at writeIdx, wrap around.
-        int srcIdx = writeIdx;
-        for (int i = 0; i < outLen; ++i)
+        const auto* srcL = s.ring.getReadPointer (0);
+        const auto* srcR = s.ring.getReadPointer (1);
+        if (ringFull)
         {
-            dstL[i] = srcL[srcIdx] * gL;
-            dstR[i] = srcR[srcIdx] * gR;
-            if (++srcIdx >= s.totalSize) srcIdx = 0;
+            int srcIdx = writeIdx;
+            for (int i = 0; i < outLen; ++i)
+            {
+                dstL[i] = srcL[srcIdx];
+                dstR[i] = srcR[srcIdx];
+                if (++srcIdx >= s.totalSize) srcIdx = 0;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < outLen; ++i) { dstL[i] = srcL[i]; dstR[i] = srcR[i]; }
         }
     }
-    else
+    else             // WET — attribute the post-FX master ring back to this layer
+                     // by per-sample energy ratio (computed from all 4 dry rings
+                     // weighted by each layer's volume). Sum of the 4 layers'
+                     // WET stems == the master FX output.
     {
-        // Pre-wrap: audio lives at indices [0..captured-1] in chronological order.
+        const auto* mL = masterFxBuffer.ring.getReadPointer (0);
+        const auto* mR = masterFxBuffer.ring.getReadPointer (1);
+        const float* dryL[4]; const float* dryR[4];
+        float        vol[4];
+        for (int j = 0; j < 4; ++j)
+        {
+            dryL[j] = stemBuffers[(size_t) j].ring.getReadPointer (0);
+            dryR[j] = stemBuffers[(size_t) j].ring.getReadPointer (1);
+            vol[j]  = juce::jmax (0.0f, layers[(size_t) j].volume.load());
+        }
+        constexpr float kEps = 1.0e-7f;
         for (int i = 0; i < outLen; ++i)
         {
-            dstL[i] = srcL[i] * gL;
-            dstR[i] = srcR[i] * gR;
+            const int srcIdx = ringFull ? ((writeIdx + i) % s.totalSize) : i;
+            float total = kEps;
+            float strengths[4];
+            for (int j = 0; j < 4; ++j)
+            {
+                strengths[j] = (std::abs (dryL[j][srcIdx]) + std::abs (dryR[j][srcIdx])) * vol[j];
+                total       += strengths[j];
+            }
+            const float ratio = strengths[layerIdx] / total;
+            dstL[i] = mL[srcIdx] * ratio;
+            dstR[i] = mR[srcIdx] * ratio;
         }
     }
 

@@ -423,8 +423,13 @@ public:
         int                      totalSize  { 0 };  // ring.getNumSamples()
     };
     std::array<StemBuffer, 4> stemBuffers;
+    // 5th ring: post-FX master output (the final mixed-through-effects signal).
+    // Captured in lockstep with the layer rings. WET stem export uses
+    // per-sample energy ratios to attribute master_fx back to each layer.
+    StemBuffer masterFxBuffer;
     void allocateStemBuffers (double sampleRate);
     void writeToStemBuffer (int layerIdx, const float* L, const float* R, int numSamples);
+    void writeToMasterFxRing (const float* L, const float* R, int numSamples);
     // Export. layerIdx in [0..3] = single stem. dest is the chosen folder.
     // Returns the written file path; empty if export failed.
     juce::File exportStemToFile (int layerIdx, const juce::File& dest);

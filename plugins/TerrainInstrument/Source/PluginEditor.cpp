@@ -7202,7 +7202,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         // INSIDE the panel; stem area keeps its natural height + stays fully
         // visible. Panel overflow:hidden is the hard guard against footer bleed.
         + '#mix-trigger-area{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;}'
-        + '#mix-stem-area{flex:0 0 auto;}'
+        + '#mix-stem-area{flex:0 0 auto;padding-top:5px;}'
         // Slightly-transparent box tints, per theme (panel shows through).
         + '[data-theme="dark"] .mix-strip,'
         + '[data-theme="dark"] #mix-trigger-area,'
