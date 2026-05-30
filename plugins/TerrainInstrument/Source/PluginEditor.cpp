@@ -945,6 +945,35 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.roundRobinPos.store (0);
                 complete ({});
             })
+            .withNativeFunction("getRoundRobinPos", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.roundRobinPos.load());
+            })
+            .withNativeFunction("setRrShuffle", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.rrShuffle.store ((bool) args[0]);
+                complete ({});
+            })
+            .withNativeFunction("getRrShuffle", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (audioProcessor.rrShuffle.load());
+            })
+            .withNativeFunction("setLayerMorph", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.layerMorph.store (juce::jlimit (0.0f, 1.0f, (float)(double) args[0]));
+                complete ({});
+            })
+            .withNativeFunction("getLayerMorph", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete ((double) audioProcessor.layerMorph.load());
+            })
             .withNativeFunction("setStemSourceMode", [this](const juce::Array<juce::var>& args,
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -962,6 +991,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 complete (audioProcessor.stemSourceMode.load());
+            })
+            .withNativeFunction("getStemCaptureLevels", [this](const juce::Array<juce::var>&,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::Array<juce::var> out;
+                for (int i = 0; i < 4; ++i)
+                    out.add ((double) audioProcessor.stemCaptureLevel[(size_t) i].load (std::memory_order_relaxed));
+                complete (juce::var (out));
+            })
+            .withNativeFunction("clearStemBuffers", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.clearStemBuffers();
+                complete ({});
             })
             .withNativeFunction("setLayerPan", [this](const juce::Array<juce::var>& args,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1017,23 +1060,32 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                   : audioProcessor.editingLayer.load();
                 complete ((double) audioProcessor.layers[(size_t) li].probabilityWeight.load());
             })
-            .withNativeFunction("setLayerSoloSelected", [this](const juce::Array<juce::var>& args,
+            .withNativeFunction("setLayerKeyZone", [this](const juce::Array<juce::var>& args,
                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                if (args.size() >= 2)
+                if (args.size() >= 3)
                 {
-                    const int  li = juce::jlimit (0, 3, (int) args[0]);
-                    const bool s  = (bool) args[1];
-                    audioProcessor.layers[(size_t) li].soloSelected.store (s);
+                    const int li = juce::jlimit (0, 3,   (int) args[0]);
+                    const int lo = juce::jlimit (0, 127, (int) args[1]);
+                    const int hi = juce::jlimit (lo, 127, (int) args[2]);
+                    audioProcessor.layers[(size_t) li].keyZoneMin.store (lo);
+                    audioProcessor.layers[(size_t) li].keyZoneMax.store (hi);
                 }
                 complete ({});
             })
-            .withNativeFunction("getLayerSoloSelected", [this](const juce::Array<juce::var>& args,
+            .withNativeFunction("getAllKeyZones", [this](const juce::Array<juce::var>&,
                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                const int li = (args.size() > 0) ? juce::jlimit (0, 3, (int) args[0])
-                                                  : audioProcessor.editingLayer.load();
-                complete (audioProcessor.layers[(size_t) li].soloSelected.load());
+                // Returns array of {min, max} per layer in A→D order.
+                juce::Array<juce::var> out;
+                for (size_t li = 0; li < audioProcessor.layers.size(); ++li)
+                {
+                    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                    obj->setProperty ("min", audioProcessor.layers[li].keyZoneMin.load());
+                    obj->setProperty ("max", audioProcessor.layers[li].keyZoneMax.load());
+                    out.add (juce::var (obj.get()));
+                }
+                complete (juce::var (out));
             })
             .withNativeFunction("setLayerVelocityZone", [this](const juce::Array<juce::var>& args,
                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -2967,11 +3019,12 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     inset: -10px -6px -10px -6px;
     pointer-events: none;
     background: radial-gradient(
-      ellipse 60% 78% at 50% 50%,
-      rgba(139,92,246, calc(var(--glow-alpha) * 0.55)) 0%,
-      rgba(139,92,246, calc(var(--glow-alpha) * 0.20)) 55%,
-      rgba(139,92,246, 0) 100%);
-    filter: blur(2px);
+      ellipse 58% 70% at 50% 48%,
+      rgba(139,92,246, calc(var(--glow-alpha) * 0.50)) 0%,
+      rgba(139,92,246, calc(var(--glow-alpha) * 0.28)) 38%,
+      rgba(139,92,246, calc(var(--glow-alpha) * 0.10)) 66%,
+      rgba(139,92,246, 0) 88%);
+    filter: blur(7px);
     z-index: -1;
   }
   .ti-slice-body.dragging { background: rgba(139,92,246,0.22); }
@@ -3913,12 +3966,16 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   };
 
   // Called by C++ at ~60 Hz with LFO values; refresh rings here too.
+  // index.html already defines window.updateLFOOutputs to push the live LFO
+  // values into the global modState (drives the LFO dots + assigned-knob
+  // modulation in updateModulation). This heroOverlay runs AFTER index.html,
+  // so we must DELEGATE to that base handler instead of clobbering it —
+  // otherwise modState.lfoOutputs stays [0,0,0] and all modulation freezes.
+  var _terrainBaseUpdateLFO = window.updateLFOOutputs;
   window.updateLFOOutputs = function (lfo0, lfo1, lfo2, ph0, ph1, ph2) {
-    // Rings are driven by assignment existence, not LFO values —
-    // but refresh on each tick so opening the overlay always shows
-    // the correct state.
+    if (typeof _terrainBaseUpdateLFO === 'function')
+      _terrainBaseUpdateLFO (lfo0, lfo1, lfo2, ph0, ph1, ph2);
     _refreshModRings();
-    // (lfo values available for future waveform preview: lfo0, lfo1, lfo2)
   };
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -6996,9 +7053,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     if (!hero || !hero.classList.contains('has-sample')) return; // nothing to clear
     var waveCanvas = document.getElementById('waveform-canvas');
     if (!waveCanvas) return;
-    // Only react when the click landed on the canvas itself (or a descendant) —
-    // not pads, pills, or other chrome inside #hero.
-    if (e.target !== waveCanvas && !waveCanvas.contains(e.target)) return;
+    // React anywhere in the waveform zone. In PITCH mode a full-width
+    // .ti-slice-body (pointer-events:auto) sits OVER the canvas and would
+    // otherwise swallow the dblclick — so accept the slice-overlay / scan-viz
+    // layers too. Pads / pills / buttons live outside these, so they're excluded.
+    var inWave = (e.target === waveCanvas) || waveCanvas.contains(e.target)
+              || (e.target.closest && e.target.closest('#ti-slice-overlays, #ti-scan-viz-canvas'));
+    if (! inWave) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -7060,7 +7121,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         + '#mix-panel{display:none;width:820px;height:272px;flex-shrink:0;'
         +   'border-top:1px solid var(--border);z-index:15;'
         +   'position:relative;flex-direction:row;color:var(--text-primary);'
-        +   'background:var(--bg-surface);}'
+        +   'background:var(--bg-surface);overflow:hidden;}'
         + '#mix-panel.open{display:flex;}'
         + '#mix-strips{display:flex;flex-direction:row;align-items:stretch;'
         +   'padding:11px 12px;gap:9px;width:50%;box-sizing:border-box;}'
@@ -7075,8 +7136,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   'align-items:center;gap:5px;letter-spacing:1px;}'
         + '.mix-strip-header .play-dot{width:5px;height:5px;border-radius:50%;'
         +   'background:var(--border-strong);transition:background 0.1s;}'
+        // Playing dot: purple on light theme, white on dark theme (per-theme contrast).
         + '.mix-strip.playing .mix-strip-header .play-dot{'
         +   'background:var(--purple-500);box-shadow:0 0 7px var(--purple-400);}'
+        + '[data-theme="dark"] .mix-strip.playing .mix-strip-header .play-dot{'
+        +   'background:#fff;box-shadow:0 0 8px rgba(255,255,255,0.65);}'
         // Arc knob — thin ring + purple arc swept by --val (0..1), masked center.
         + '.mix-strip-knob{width:25px;height:25px;border-radius:50%;cursor:pointer;'
         +   'position:relative;flex-shrink:0;'
@@ -7103,14 +7167,18 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   'border-radius:50%;transform:translate(-50%,50%);'
         +   'background:var(--bg-card);border:2px solid var(--purple-500);'
         +   'box-shadow:0 1px 4px rgba(0,0,0,0.25);}'
-        // GREEN meter — smooth fill, no segments, soft glow.
+        // Meter — smooth fill, no segments, soft glow. Purple on light theme
+        // (white-on-white is invisible), white on dark theme.
         + '.mix-strip-meter{position:relative;width:3px;border-radius:2px;'
         +   'background:var(--knob-track);overflow:hidden;}'
         + '.mix-strip-meter-fill{position:absolute;left:0;right:0;bottom:0;'
         +   'border-radius:2px;'
-        +   'background:linear-gradient(to top,rgba(255,255,255,0.75),#ffffff);'
-        +   'box-shadow:0 0 6px rgba(255,255,255,0.55);'
+        +   'background:linear-gradient(to top,var(--purple-600),var(--purple-400));'
+        +   'box-shadow:0 0 6px rgba(139,92,246,0.5);'
         +   'transition:height 0.04s linear;}'
+        + '[data-theme="dark"] .mix-strip-meter-fill{'
+        +   'background:linear-gradient(to top,rgba(255,255,255,0.75),#ffffff);'
+        +   'box-shadow:0 0 6px rgba(255,255,255,0.55);}'
         // M / S outlined pills.
         + '.mix-strip-buttons{display:flex;flex-direction:row;gap:5px;}'
         + '.mix-strip-btn{width:20px;height:16px;font-size:8.5px;font-weight:700;'
@@ -7121,14 +7189,20 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         + '.mix-strip-btn.active[data-fn="mute"]{background:var(--text-secondary);color:var(--bg-surface);border-color:var(--text-secondary);}'
         + '.mix-strip-btn.active[data-fn="solo"]{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
         + '#mix-right{flex:1;display:flex;flex-direction:column;padding:11px 12px;'
-        +   'gap:9px;box-sizing:border-box;}'
+        +   'gap:7px;box-sizing:border-box;}'
         + '#mix-trigger-area,#mix-stem-area{border-radius:13px;'
         +   'background:rgba(124,92,191,0.05);border:1px solid var(--border);'
         +   'box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);'
-        +   'padding:11px 12px;color:var(--text-secondary);font-size:11px;'
+        +   'padding:9px 12px;color:var(--text-secondary);font-size:11px;'
         +   'box-sizing:border-box;}'
-        + '#mix-trigger-area{flex:1.3;}'
-        + '#mix-stem-area{flex:1;}'
+        // No bottom padding for the trigger tile — KEYTRACK / VEL bars (and the
+        // LAYER morph / RR controls / RANDOM last row) sit flush with the bottom edge.
+        + '#mix-trigger-area{padding-bottom:0;}'
+        // Trigger area absorbs leftover height and clips tall modes (RANDOM/VEL)
+        // INSIDE the panel; stem area keeps its natural height + stays fully
+        // visible. Panel overflow:hidden is the hard guard against footer bleed.
+        + '#mix-trigger-area{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;}'
+        + '#mix-stem-area{flex:0 0 auto;}'
         // Slightly-transparent box tints, per theme (panel shows through).
         + '[data-theme="dark"] .mix-strip,'
         + '[data-theme="dark"] #mix-trigger-area,'
@@ -7415,7 +7489,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var s = document.createElement('style');
       s.id = 'mix-trigger-styles';
       s.textContent = ''
-        + '#trigger-pills{display:flex;gap:6px;margin-bottom:10px;}'
+        + '#trigger-pills{display:flex;gap:6px;margin-bottom:7px;}'
         + '.trigger-pill{flex:1;padding:6px 4px;font-size:9.5px;font-weight:700;'
         +   'letter-spacing:0.6px;background:transparent;color:var(--text-secondary);'
         +   'border:1px solid var(--border-strong);border-radius:9px;cursor:pointer;'
@@ -7424,20 +7498,47 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         + '.trigger-pill.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);'
         +   'box-shadow:0 0 10px rgba(139,92,246,0.35);}'
         + '#trigger-context{position:relative;font-size:11px;'
-        +   'color:var(--text-secondary);}'
+        +   'color:var(--text-secondary);flex:1;min-height:0;display:flex;flex-direction:column;}'
         + '.trigger-panel{display:none;}'
         + '#trigger-context[data-mode="0"] .trigger-panel[data-panel="layer"]{display:block;}'
         + '#trigger-context[data-mode="1"] .trigger-panel[data-panel="rr"]{display:block;}'
         + '#trigger-context[data-mode="2"] .trigger-panel[data-panel="random"]{display:block;}'
-        + '#trigger-context[data-mode="3"] .trigger-panel[data-panel="solo"]{display:block;}'
-        + '#trigger-context[data-mode="4"] .trigger-panel[data-panel="velocity"]{display:block;}'
-        + '.trigger-panel{padding:4px 0;}'
-        + '.layer-status-dots{display:flex;gap:6px;margin-top:6px;}'
-        + '.layer-status-dot{padding:3px 8px;border-radius:3px;font-weight:700;'
-        +   'background:var(--bg-card);color:var(--text-muted);font-size:11px;'
-        +   'border:1px solid var(--border);}'
+        // KEYTRACK / VEL panels fill the trigger context vertically so the bar
+        // can grow into the empty space below it.
+        + '#trigger-context[data-mode="3"] .trigger-panel[data-panel="keytrack"]{display:flex;flex-direction:column;flex:1;min-height:0;}'
+        + '#trigger-context[data-mode="4"] .trigger-panel[data-panel="velocity"]{display:flex;flex-direction:column;flex:1;min-height:0;}'
+        + '.trigger-panel{padding:2px 0 0 0;}'
+        // Hints hidden — the controls are self-explanatory (user will demo in video).
+        + '.trigger-hint{display:none;}'
+        // Dots span the full width (flex:1 each) so the row reads balanced.
+        + '.layer-status-dots{display:flex;gap:6px;margin-top:5px;}'
+        + '.layer-status-dot{flex:1;text-align:center;padding:4px 0;border-radius:6px;'
+        +   'font-weight:700;background:var(--bg-card);color:var(--text-muted);'
+        +   'font-size:11px;border:1px solid var(--border);}'
         + '.layer-status-dot.lit{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
-        + '.trigger-btn{padding:4px 8px;font-size:10px;font-weight:700;'
+        // RR next-to-fire highlight — purple fill, white text, no glow.
+        + '.layer-status-dot.next{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
+        // RR control row — edge-balanced: RESET left, SHUFFLE center, SYNC right.
+        + '.rr-controls{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;}'
+        // LAYER MORPH — full-width control; blend focus travels A..D.
+        + '.layer-morph{margin-top:11px;}'
+        + '.morph-track{position:relative;height:10px;border-radius:5px;background:var(--knob-track);'
+        +   'box-shadow:inset 0 0 2px rgba(0,0,0,0.25);cursor:pointer;}'
+        + '.morph-fill{position:absolute;inset:0;border-radius:5px;opacity:0.45;'
+        +   'background:linear-gradient(90deg,var(--purple-600),var(--purple-400),var(--purple-600));}'
+        + '.morph-handle{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;'
+        +   'transform:translate(-50%,-50%);background:var(--bg-card);border:2px solid var(--purple-500);'
+        +   'box-shadow:0 1px 5px rgba(0,0,0,0.3);}'
+        // Dark theme: white-ice slider (per user) — light theme stays purple.
+        + '[data-theme="dark"] .morph-fill{opacity:0.7;'
+        +   'background:linear-gradient(90deg,rgba(255,255,255,0.35),rgba(255,255,255,0.95),rgba(255,255,255,0.35));}'
+        + '[data-theme="dark"] .morph-handle{border-color:#fff;}'
+        + '.morph-stops{display:flex;justify-content:space-between;margin-top:5px;}'
+        + '.morph-stops span{width:20px;text-align:center;font-weight:700;font-size:11px;'
+        +   'color:var(--text-muted);transition:color 0.08s,text-shadow 0.08s,opacity 0.08s;}'
+        + '.morph-label{text-align:center;font-size:8px;letter-spacing:2px;text-transform:uppercase;'
+        +   'color:var(--text-muted);margin-top:3px;}'
+        + '.trigger-btn{padding:3px 8px;font-size:10px;font-weight:700;'
         +   'letter-spacing:0.4px;background:var(--bg-card);color:var(--text-secondary);'
         +   'border:1px solid var(--border-strong);border-radius:3px;cursor:pointer;'
         +   'font-family:inherit;margin-right:6px;}'
@@ -7446,41 +7547,49 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         + '.trigger-toggle{display:inline-flex;align-items:center;gap:4px;'
         +   'font-size:10px;letter-spacing:0.4px;cursor:pointer;}'
         + '.trigger-toggle input{margin:0;accent-color:var(--purple-500);}'
-        + '.rr-pos-row{margin-top:8px;display:flex;gap:6px;align-items:center;}'
+        + '.rr-pos-row{margin-top:6px;display:flex;gap:6px;align-items:center;}'
         + '.rr-pos-row span{font-size:10px;letter-spacing:0.4px;}'
-        + '.prob-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;}'
+        + '.prob-row{display:flex;align-items:center;gap:6px;margin-bottom:1px;}'
         + '.prob-letter{width:14px;font-weight:700;font-size:11px;color:var(--text-primary);}'
-        + '.prob-slider{flex:1;height:9px;border-radius:4px;'
+        + '.prob-slider{flex:1;height:8px;border-radius:4px;'
         +   'position:relative;cursor:pointer;overflow:hidden;'
-        +   'background:'
-        +     'repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 12px),'
-        +     'var(--knob-track);'
+        +   'background:var(--knob-track);'
         +   'box-shadow:inset 0 0 2px rgba(0,0,0,0.25);}'
+        // No CSS transition on the fill — it lags behind the cursor during drag.
         + '.prob-fill{position:absolute;left:0;top:0;bottom:0;'
         +   'background:linear-gradient(90deg,var(--purple-600),var(--purple-400));'
-        +   'border-radius:4px;transition:width 0.05s linear;}'
+        +   'border-radius:4px;}'
         + '.prob-value{width:32px;font-size:10px;color:var(--text-secondary);'
         +   'text-align:right;}'
-        + '.solo-checkboxes{display:flex;gap:8px;}'
-        + '.solo-cb{flex:1;padding:8px;font-weight:700;font-size:13px;'
-        +   'background:transparent;color:var(--text-muted);border:1px solid var(--border-strong);'
-        +   'border-radius:9px;cursor:pointer;text-align:center;'
-        +   'font-family:inherit;transition:all 0.15s;}'
-        + '.solo-cb:hover{border-color:var(--purple-500);}'
-        + '.solo-cb.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
-        + '#velocity-bar{position:relative;height:34px;border-radius:4px;'
-        +   'margin-bottom:8px;overflow:hidden;'
-        +   'background:'
-        +     'repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 16px),'
-        +     'var(--knob-track);'
+        + '#keytrack-bar{position:relative;flex:1;min-height:30px;max-height:55px;border-radius:4px;'
+        +   'margin-bottom:0;overflow:hidden;'
+        +   'background:var(--knob-track);'
+        +   'box-shadow:inset 0 0 3px rgba(0,0,0,0.25);}'
+        + '.kt-zone{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;'
+        +   'align-items:center;justify-content:center;font-size:11px;line-height:1.1;'
+        +   'font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);overflow:hidden;}'
+        + '.kt-zone .kt-range{font-size:7px;font-weight:600;opacity:0.85;letter-spacing:0;}'
+        // Terrain palette — cool progression A→D, ice through purple.
+        + '.kt-zone[data-layer="0"]{background:linear-gradient(135deg,rgba(199,222,255,0.55),rgba(167,189,255,0.5));}'
+        + '.kt-zone[data-layer="1"]{background:linear-gradient(135deg,rgba(190,162,250,0.55),rgba(167,139,250,0.5));}'
+        + '.kt-zone[data-layer="2"]{background:linear-gradient(135deg,rgba(139,92,246,0.6),rgba(124,58,237,0.55));}'
+        + '.kt-zone[data-layer="3"]{background:linear-gradient(135deg,rgba(99,52,196,0.65),rgba(67,30,138,0.6));}'
+        + '.kt-handle{position:absolute;top:0;bottom:0;width:4px;'
+        +   'background:var(--text-primary);cursor:ew-resize;transform:translateX(-50%);'
+        +   'box-shadow:0 0 4px rgba(0,0,0,0.4);z-index:2;}'
+        + '.kt-handle:hover{background:var(--purple-500);}'
+        + '#velocity-bar{position:relative;flex:1;min-height:30px;max-height:55px;border-radius:4px;'
+        +   'margin-bottom:0;overflow:hidden;'
+        +   'background:var(--knob-track);'
         +   'box-shadow:inset 0 0 3px rgba(0,0,0,0.25);}'
         + '.vel-zone{position:absolute;top:0;bottom:0;display:flex;'
         +   'align-items:center;justify-content:center;font-size:11px;'
         +   'font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}'
-        + '.vel-zone[data-layer="0"]{background:rgba(74,222,128,0.45);}'
-        + '.vel-zone[data-layer="1"]{background:rgba(250,204,21,0.45);}'
-        + '.vel-zone[data-layer="2"]{background:rgba(139,92,246,0.5);}'
-        + '.vel-zone[data-layer="3"]{background:rgba(239,68,68,0.45);}'
+        // Terrain palette — cool progression A→D, ice through purple.
+        + '.vel-zone[data-layer="0"]{background:linear-gradient(135deg,rgba(199,222,255,0.55),rgba(167,189,255,0.5));}'
+        + '.vel-zone[data-layer="1"]{background:linear-gradient(135deg,rgba(190,162,250,0.55),rgba(167,139,250,0.5));}'
+        + '.vel-zone[data-layer="2"]{background:linear-gradient(135deg,rgba(139,92,246,0.6),rgba(124,58,237,0.55));}'
+        + '.vel-zone[data-layer="3"]{background:linear-gradient(135deg,rgba(99,52,196,0.65),rgba(67,30,138,0.6));}'
         + '.vel-handle{position:absolute;top:0;bottom:0;width:4px;'
         +   'background:var(--text-primary);cursor:ew-resize;transform:translateX(-50%);'
         +   'box-shadow:0 0 4px rgba(0,0,0,0.4);z-index:2;}'
@@ -7497,30 +7606,41 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   '<button class="trigger-pill" data-val="0">LAYER</button>'
         +   '<button class="trigger-pill" data-val="1">RR</button>'
         +   '<button class="trigger-pill" data-val="2">RANDOM</button>'
-        +   '<button class="trigger-pill" data-val="3">SOLO</button>'
+        +   '<button class="trigger-pill" data-val="3">KEYTRK</button>'
         +   '<button class="trigger-pill" data-val="4">VEL</button>'
         + '</div>'
         + '<div id="trigger-context" data-mode="0">'
         +   '<div class="trigger-panel" data-panel="layer">'
-        +     '<div>All populated layers fire together.</div>'
+        +     '<div class="trigger-hint" style="text-align:center;">All populated layers fire together</div>'
         +     '<div class="layer-status-dots" id="layer-status-dots">'
         +       '<span class="layer-status-dot" data-layer="0">A</span>'
         +       '<span class="layer-status-dot" data-layer="1">B</span>'
         +       '<span class="layer-status-dot" data-layer="2">C</span>'
         +       '<span class="layer-status-dot" data-layer="3">D</span>'
         +     '</div>'
+        +     '<div class="layer-morph">'
+        +       '<div class="morph-track" id="morph-track">'
+        +         '<div class="morph-fill"></div>'
+        +         '<div class="morph-handle" id="morph-handle" style="left:50%"></div>'
+        +       '</div>'
+        +     '</div>'
         +   '</div>'
         +   '<div class="trigger-panel" data-panel="rr">'
-        +     '<div>Cycling A &rarr; B &rarr; C &rarr; D (skips empty layers).</div>'
-        +     '<div class="rr-pos-row">'
-        +       '<button class="trigger-btn" id="rr-reset-btn">RESET TO A</button>'
-        +       '<label class="trigger-toggle">'
-        +         '<input type="checkbox" id="rr-sync-cb"> SYNC TO BAR'
-        +       '</label>'
+        +     '<div class="trigger-hint" style="text-align:center;">Cycling A &rarr; B &rarr; C &rarr; D &middot; skips empty</div>'
+        +     '<div class="layer-status-dots" id="rr-dots">'
+        +       '<span class="layer-status-dot" data-layer="0">A</span>'
+        +       '<span class="layer-status-dot" data-layer="1">B</span>'
+        +       '<span class="layer-status-dot" data-layer="2">C</span>'
+        +       '<span class="layer-status-dot" data-layer="3">D</span>'
+        +     '</div>'
+        +     '<div class="rr-controls">'
+        +       '<button class="trigger-btn" id="rr-reset-btn" style="margin:0;">RESET TO A</button>'
+        +       '<label class="trigger-toggle"><input type="checkbox" id="rr-shuffle-cb"> SHUFFLE</label>'
+        +       '<label class="trigger-toggle"><input type="checkbox" id="rr-sync-cb"> SYNC</label>'
         +     '</div>'
         +   '</div>'
         +   '<div class="trigger-panel" data-panel="random">'
-        +     '<div style="margin-bottom:6px;">Weighted random per note. 0% = never; 100% = always eligible.</div>'
+        +     '<div class="trigger-hint">Weighted random &middot; dbl-click resets</div>'
         +     '<div class="prob-row"><div class="prob-letter">A</div>'
         +       '<div class="prob-slider" data-layer="0"><div class="prob-fill"></div></div>'
         +       '<div class="prob-value" data-layer="0">25%</div></div>'
@@ -7533,19 +7653,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +     '<div class="prob-row"><div class="prob-letter">D</div>'
         +       '<div class="prob-slider" data-layer="3"><div class="prob-fill"></div></div>'
         +       '<div class="prob-value" data-layer="3">25%</div></div>'
-        +     '<button class="trigger-btn" id="random-uniform-btn" style="margin-top:6px;">RESET TO UNIFORM</button>'
         +   '</div>'
-        +   '<div class="trigger-panel" data-panel="solo">'
-        +     '<div style="margin-bottom:6px;">Click letters to choose which layers fire. 0 selected = silence.</div>'
-        +     '<div class="solo-checkboxes">'
-        +       '<button class="solo-cb" data-layer="0">A</button>'
-        +       '<button class="solo-cb" data-layer="1">B</button>'
-        +       '<button class="solo-cb" data-layer="2">C</button>'
-        +       '<button class="solo-cb" data-layer="3">D</button>'
+        +   '<div class="trigger-panel" data-panel="keytrack">'
+        +     '<div class="trigger-hint">Key range per layer &middot; dbl-click resets</div>'
+        +     '<div id="keytrack-bar">'
+        +       '<div class="kt-zone" data-layer="0"><span>A</span><span class="kt-range"></span></div>'
+        +       '<div class="kt-zone" data-layer="1"><span>B</span><span class="kt-range"></span></div>'
+        +       '<div class="kt-zone" data-layer="2"><span>C</span><span class="kt-range"></span></div>'
+        +       '<div class="kt-zone" data-layer="3"><span>D</span><span class="kt-range"></span></div>'
+        +       '<div class="kt-handle" data-h="0"></div>'
+        +       '<div class="kt-handle" data-h="1"></div>'
+        +       '<div class="kt-handle" data-h="2"></div>'
         +     '</div>'
         +   '</div>'
         +   '<div class="trigger-panel" data-panel="velocity">'
-        +     '<div style="margin-bottom:6px;">Drag handles to set per-layer velocity zones (0..127).</div>'
+        +     '<div class="trigger-hint">Velocity per layer &middot; dbl-click resets</div>'
         +     '<div id="velocity-bar">'
         +       '<div class="vel-zone" data-layer="0">A</div>'
         +       '<div class="vel-zone" data-layer="1">B</div>'
@@ -7555,7 +7677,6 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +       '<div class="vel-handle" data-h="1"></div>'
         +       '<div class="vel-handle" data-h="2"></div>'
         +     '</div>'
-        +     '<button class="trigger-btn" id="velocity-reset-btn">RESET ZONES</button>'
         +   '</div>'
         + '</div>'
         ;
@@ -7591,6 +7712,42 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       }
     }
 
+    // LAYER MORPH — full-width blend that travels A..D. Light each stop by
+    // proximity so you see the blend move through the layers.
+    function paintMorph (p) {
+      // Handle travels aligned under the A..D dots above (their centers sit at
+      // ~12.5%..87.5%), so the dots double as the morph's labels.
+      var handle = document.getElementById('morph-handle');
+      if (handle) handle.style.left = (12.5 + p * 75) + '%';
+    }
+
+    function wireLayerMorph () {
+      var track = document.getElementById('morph-track');
+      if (! track) return;
+      function fromX (clientX) {
+        var rect = track.getBoundingClientRect();
+        var p = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        paintMorph(p);
+        var fn = getNativeFn('setLayerMorph');
+        if (fn) { try { fn(p); } catch (_) {} }
+      }
+      track.addEventListener('mousedown', function (ev) {
+        ev.preventDefault();
+        fromX(ev.clientX);
+        function mv (e) { fromX(e.clientX); }
+        function up () { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); }
+        document.addEventListener('mousemove', mv);
+        document.addEventListener('mouseup', up);
+      });
+      // Hydrate from C++.
+      var gfn = getNativeFn('getLayerMorph');
+      var apply = function (v) { paintMorph((typeof v === 'number') ? v : 0.5); };
+      if (gfn) {
+        try { var r = gfn(); if (r && typeof r.then === 'function') r.then(apply).catch(function () { apply(0.5); }); else apply(r); }
+        catch (_) { apply(0.5); }
+      } else { apply(0.5); }
+    }
+
     function wireProbSliders () {
       document.querySelectorAll('.prob-slider').forEach(function (sl) {
         var idx  = parseInt(sl.getAttribute('data-layer'), 10);
@@ -7619,19 +7776,110 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           document.addEventListener('mousemove', onMove);
           document.addEventListener('mouseup', onUp);
         });
+        // Double-click any slider → reset ALL weights to uniform (25% each).
+        sl.addEventListener('dblclick', function () {
+          for (var i = 0; i < 4; ++i) {
+            var fn = getNativeFn('setLayerProbabilityWeight');
+            if (fn) { try { fn(i, 0.25); } catch (_) {} }
+            var s2 = document.querySelector('.prob-slider[data-layer="' + i + '"]');
+            if (s2 && s2._setVisual) s2._setVisual(0.25);
+          }
+        });
         sl._setVisual = setVisual;   // for restore
       });
     }
 
-    function wireSoloCheckboxes () {
-      document.querySelectorAll('.solo-cb').forEach(function (cb) {
-        var idx = parseInt(cb.getAttribute('data-layer'), 10);
-        cb.addEventListener('click', function () {
-          var active = ! cb.classList.contains('active');
-          cb.classList.toggle('active', active);
-          var fn = getNativeFn('setLayerSoloSelected');
-          if (fn) { try { fn(idx, active); } catch (_) {} }
+    // Keyboard split (KEYTRACK): 4 layers covering MIDI notes 0-127 with 3 handles
+    // between them. Drag a handle to resize neighboring zones (non-overlapping,
+    // contiguous). Mirrors the VELOCITY bar but on the note axis with note labels.
+    function midiToNoteName (n) {
+      var names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      n = Math.max(0, Math.min(127, Math.round(n)));
+      return names[n % 12] + (Math.floor(n / 12) - 1);
+    }
+
+    function paintKeytrackZones (zones) {
+      for (var i = 0; i < 4; ++i) {
+        var z = document.querySelector('.kt-zone[data-layer="' + i + '"]');
+        if (! z) continue;
+        var leftPct  = (zones[i].min / 127) * 100;
+        var widthPct = ((zones[i].max - zones[i].min + 1) / 127) * 100;
+        z.style.left  = leftPct  + '%';
+        z.style.width = widthPct + '%';
+        var rng = z.querySelector('.kt-range');
+        if (rng) rng.textContent = midiToNoteName(zones[i].min) + '-' + midiToNoteName(zones[i].max);
+      }
+      for (var h = 0; h < 3; ++h) {
+        var handle = document.querySelector('.kt-handle[data-h="' + h + '"]');
+        if (! handle) continue;
+        var boundaryPct = ((zones[h].max + 1) / 127) * 100;
+        handle.style.left = boundaryPct + '%';
+      }
+    }
+
+    function wireKeytrackBar () {
+      var bar = document.getElementById('keytrack-bar');
+      if (! bar) return;
+      var fn = getNativeFn('getAllKeyZones');
+      var zones = [{min: 0, max: 31}, {min: 32, max: 63}, {min: 64, max: 95}, {min: 96, max: 127}];
+      function apply (arr) {
+        if (arr && arr.length === 4) {
+          for (var i = 0; i < 4; ++i) {
+            zones[i] = { min: arr[i].min, max: arr[i].max };
+          }
+        }
+        paintKeytrackZones(zones);
+      }
+      if (fn) {
+        try {
+          var r = fn();
+          if (r && typeof r.then === 'function') r.then(apply).catch(function () { apply(); });
+          else apply(r);
+        } catch (_) { apply(); }
+      } else { apply(); }
+
+      function pushZones () {
+        var setFn = getNativeFn('setLayerKeyZone');
+        if (! setFn) return;
+        for (var i = 0; i < 4; ++i) {
+          try { setFn(i, zones[i].min, zones[i].max); } catch (_) {}
+        }
+      }
+
+      document.querySelectorAll('.kt-handle').forEach(function (handle) {
+        var h = parseInt(handle.getAttribute('data-h'), 10);  // 0, 1, or 2
+        handle.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          var rect = bar.getBoundingClientRect();
+          function onMove (e) {
+            var rel = (e.clientX - rect.left) / rect.width;
+            rel = Math.max(0, Math.min(1, rel));
+            var v = Math.round(rel * 127);
+            if (h === 0) v = Math.max(0, Math.min(zones[1].max,  v));
+            if (h === 1) v = Math.max(zones[0].min + 1, Math.min(zones[2].max,  v));
+            if (h === 2) v = Math.max(zones[1].min + 1, Math.min(127, v));
+            zones[h].max     = v - 1;
+            zones[h + 1].min = v;
+            paintKeytrackZones(zones);
+          }
+          function onUp () {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            pushZones();
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
         });
+      });
+
+      // Double-click the bar → reset zones to an even split.
+      bar.addEventListener('dblclick', function () {
+        zones[0] = {min: 0,  max: 31};
+        zones[1] = {min: 32, max: 63};
+        zones[2] = {min: 64, max: 95};
+        zones[3] = {min: 96, max: 127};
+        paintKeytrackZones(zones);
+        pushZones();
       });
     }
 
@@ -7716,18 +7964,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         });
       });
 
-      // Reset zones → even quarters.
-      var resetBtn = document.getElementById('velocity-reset-btn');
-      if (resetBtn) {
-        resetBtn.addEventListener('click', function () {
-          zones[0] = {min: 0,  max: 31};
-          zones[1] = {min: 32, max: 63};
-          zones[2] = {min: 64, max: 95};
-          zones[3] = {min: 96, max: 127};
-          paintVelocityZones(zones);
-          pushZones();
-        });
-      }
+      // Double-click the bar → reset zones to an even split.
+      bar.addEventListener('dblclick', function () {
+        zones[0] = {min: 0,  max: 31};
+        zones[1] = {min: 32, max: 63};
+        zones[2] = {min: 64, max: 95};
+        zones[3] = {min: 96, max: 127};
+        paintVelocityZones(zones);
+        pushZones();
+      });
     }
 
     function wireTriggerArea () {
@@ -7748,19 +7993,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         var fn = getNativeFn('setRrSyncToBar');
         if (fn) { try { fn(rrSync.checked); } catch (_) {} }
       });
-      // RANDOM controls
-      wireProbSliders();
-      var randUniform = document.getElementById('random-uniform-btn');
-      if (randUniform) randUniform.addEventListener('click', function () {
-        for (var i = 0; i < 4; ++i) {
-          var fn = getNativeFn('setLayerProbabilityWeight');
-          if (fn) { try { fn(i, 0.25); } catch (_) {} }
-          var sl = document.querySelector('.prob-slider[data-layer="' + i + '"]');
-          if (sl && sl._setVisual) sl._setVisual(0.25);
-        }
+      var rrShuf = document.getElementById('rr-shuffle-cb');
+      if (rrShuf) rrShuf.addEventListener('change', function () {
+        var fn = getNativeFn('setRrShuffle');
+        if (fn) { try { fn(rrShuf.checked); } catch (_) {} }
       });
-      // SOLO controls
-      wireSoloCheckboxes();
+      // LAYER controls
+      wireLayerMorph();
+      // RANDOM controls (reset is now double-click on any slider)
+      wireProbSliders();
+      // KEYTRACK controls
+      wireKeytrackBar();
       // VELOCITY controls
       wireVelocityBar();
     }
@@ -7792,6 +8035,19 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           else apply(r);
         } catch (_) {}
       }
+      // RR shuffle
+      var shufFn = getNativeFn('getRrShuffle');
+      if (shufFn) {
+        try {
+          var r = shufFn();
+          var apply = function (v) {
+            var cb = document.getElementById('rr-shuffle-cb');
+            if (cb) cb.checked = !! v;
+          };
+          if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+          else apply(r);
+        } catch (_) {}
+      }
       // Probability weights
       for (var i = 0; i < 4; ++i) {
         (function (idx) {
@@ -7808,23 +8064,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           } catch (_) {}
         })(i);
       }
-      // SOLO selected
-      for (var j = 0; j < 4; ++j) {
-        (function (idx) {
-          var fn = getNativeFn('getLayerSoloSelected');
-          if (! fn) return;
-          try {
-            var r = fn(idx);
-            var apply = function (v) {
-              var cb = document.querySelector('.solo-cb[data-layer="' + idx + '"]');
-              if (cb) cb.classList.toggle('active', !! v);
-            };
-            if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
-            else apply(r);
-          } catch (_) {}
-        })(j);
-      }
-      // VELOCITY zones — handled inside wireVelocityBar's initial paint.
+      // KEYTRACK + VELOCITY zones — handled inside wireKeytrackBar / wireVelocityBar
+      // initial paint (they fetch getAllKeyZones / getAllVelocityZones on open).
       // Layer status dots (LAYER mode)
       pullLayerStatusDots();
     }
@@ -7835,11 +8076,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var s = document.createElement('style');
       s.id = 'mix-stem-styles';
       s.textContent = ''
-        + '#mix-stem-area{display:flex;flex-direction:column;gap:6px;}'
-        + '.stem-header{font-size:11px;letter-spacing:0.5px;color:var(--text-secondary);'
-        +   'font-weight:700;}'
+        + '#mix-stem-area{display:flex;flex-direction:column;gap:3px;}'
+        // Match the "Grain Engine" / "Effects" section-label look: low-opacity,
+        // uppercase, wide tracking — a quiet section marker, not a busy caption.
+        + '.stem-header{font-size:9px;letter-spacing:2px;text-transform:uppercase;'
+        +   'color:var(--text-muted);font-weight:500;}'
         + '.stem-buttons{display:flex;gap:4px;}'
-        + '.stem-btn{flex:1;padding:8px 4px;font-size:11px;font-weight:700;'
+        + '.stem-btn{flex:1;padding:5px 4px;font-size:11px;font-weight:700;'
         +   'background:transparent;color:var(--text-secondary);border:1px solid var(--border-strong);'
         +   'border-radius:9px;cursor:pointer;font-family:inherit;'
         +   'transition:all 0.15s;}'
@@ -7847,19 +8090,41 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         + '.stem-btn.exporting{background:var(--purple-500);color:#fff;border-color:var(--purple-500);'
         +   'box-shadow:0 0 8px var(--purple-400);}'
         + '.stem-all-row{display:flex;gap:6px;}'
-        + '#stem-export-all{flex:2;padding:8px;font-size:10.5px;font-weight:700;letter-spacing:0.5px;'
+        + '#stem-export-all{flex:2;padding:5px;font-size:10.5px;font-weight:700;letter-spacing:0.5px;'
         +   'background:transparent;color:var(--purple-500);border:1px solid var(--purple-500);'
         +   'border-radius:9px;cursor:pointer;font-family:inherit;}'
         + '#stem-export-all:hover{background:var(--purple-500);color:#fff;}'
-        + '#stem-reveal{flex:1;padding:8px;font-size:10px;font-weight:700;'
+        + '#stem-reveal{flex:1;padding:5px;font-size:10px;font-weight:700;'
         +   'background:transparent;color:var(--text-secondary);border:1px solid var(--border-strong);'
         +   'border-radius:9px;cursor:pointer;font-family:inherit;}'
+        // Edge-balanced row: DRY/WET group left, live A/B/C/D capture meters right.
         + '.stem-source-row{display:flex;gap:6px;align-items:center;'
-        +   'font-size:9.5px;letter-spacing:0.5px;color:var(--text-muted);margin-top:9px;}'
+        +   'justify-content:space-between;'
+        +   'font-size:9.5px;letter-spacing:0.5px;color:var(--text-muted);margin-top:5px;}'
+        + '.stem-source-group{display:flex;gap:6px;}'
         + '.stem-source-pill{padding:4px 12px;border:1px solid var(--border-strong);'
         +   'background:transparent;color:var(--text-secondary);border-radius:7px;'
         +   'cursor:pointer;font-weight:700;font-family:inherit;font-size:9.5px;}'
         + '.stem-source-pill.active{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
+        // CLEAR — action button (no persistent active state); flashes purple on click.
+        + '.stem-clear-btn{padding:4px 12px;border:1px solid var(--border-strong);'
+        +   'background:transparent;color:var(--text-secondary);border-radius:7px;'
+        +   'cursor:pointer;font-weight:700;font-family:inherit;font-size:9.5px;'
+        +   'transition:background 0.12s,color 0.12s,border-color 0.12s;}'
+        + '.stem-clear-btn:hover{border-color:var(--purple-500);color:var(--text-primary);}'
+        + '.stem-clear-btn.flash{background:var(--purple-500);color:#fff;border-color:var(--purple-500);}'
+        // Live capture meters — purple on light, white on dark (matches strip meters).
+        + '.stem-cap-meters{display:flex;gap:7px;align-items:center;}'
+        + '.stem-cap-meter{display:flex;align-items:center;gap:4px;}'
+        + '.stem-cap-meter-label{font-size:9px;font-weight:700;color:var(--text-muted);width:8px;text-align:center;}'
+        + '.stem-cap-meter-bar{position:relative;width:32px;height:5px;border-radius:3px;'
+        +   'background:var(--knob-track);overflow:hidden;}'
+        + '.stem-cap-meter-fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;'
+        +   'background:linear-gradient(90deg,var(--purple-400),var(--purple-600));'
+        +   'box-shadow:0 0 5px rgba(139,92,246,0.5);transition:width 0.05s linear;}'
+        + '[data-theme="dark"] .stem-cap-meter-fill{'
+        +   'background:linear-gradient(90deg,rgba(255,255,255,0.5),#fff);'
+        +   'box-shadow:0 0 5px rgba(255,255,255,0.55);}'
         + '.stem-status{font-size:9px;color:var(--text-muted);'
         +   'font-style:italic;min-height:11px;}'
         ;
@@ -7870,7 +8135,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       var area = document.getElementById('mix-stem-area');
       if (! area) return;
       area.innerHTML = ''
-        + '<div class="stem-header">STEMS &mdash; 1 min rolling, exports to ~/Documents/Terrain Instrument Stems/</div>'
+        + '<div class="stem-header">STEMS</div>'
         + '<div class="stem-buttons">'
         +   '<button class="stem-btn" data-layer="0">A</button>'
         +   '<button class="stem-btn" data-layer="1">B</button>'
@@ -7882,9 +8147,17 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +   '<button id="stem-reveal">REVEAL FOLDER</button>'
         + '</div>'
         + '<div class="stem-source-row">'
-        +   '<span>SOURCE:</span>'
-        +   '<button class="stem-source-pill active" data-val="0">DRY</button>'
-        +   '<button class="stem-source-pill" data-val="1">MIX</button>'
+        +   '<div class="stem-source-group">'
+        +     '<button class="stem-source-pill active" data-val="0">DRY</button>'
+        +     '<button class="stem-source-pill" data-val="1">WET</button>'
+        +   '</div>'
+        +   '<button class="stem-clear-btn" id="stem-clear" title="Clear the rolling stem buffer for all 4 layers">CLEAR</button>'
+        +   '<div class="stem-cap-meters" id="stem-cap-meters">'
+        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">A</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="0" style="width:0%"></div></div></div>'
+        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">B</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="1" style="width:0%"></div></div></div>'
+        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">C</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="2" style="width:0%"></div></div></div>'
+        +     '<div class="stem-cap-meter"><span class="stem-cap-meter-label">D</span><div class="stem-cap-meter-bar"><div class="stem-cap-meter-fill" data-layer="3" style="width:0%"></div></div></div>'
+        +   '</div>'
         + '</div>'
         + '<div class="stem-status" id="stem-status">&nbsp;</div>'
         ;
@@ -7994,6 +8267,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           if (fn) { try { fn(val); } catch (_) {} }
         });
       });
+      // CLEAR — wipes all 4 rolling buffers + flashes for feedback.
+      var clearBtn = document.getElementById('stem-clear');
+      if (clearBtn) clearBtn.addEventListener('click', function () {
+        clearBtn.classList.add('flash');
+        setTimeout(function () { clearBtn.classList.remove('flash'); }, 200);
+        var fn = getNativeFn('clearStemBuffers');
+        if (fn) { try { fn(); } catch (_) {} }
+      });
     }
 
     function pullStemStateFromCpp () {
@@ -8010,6 +8291,49 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
         else apply(r);
       } catch (_) {}
+    }
+
+    // Live capture meters — polled at ~30Hz only while the Mix panel is open.
+    function pollStemCaptureMeters () {
+      var panel = document.getElementById('mix-panel');
+      if (! panel || ! panel.classList.contains('open')) return;
+      var fn = getNativeFn('getStemCaptureLevels');
+      if (! fn) return;
+      try {
+        var r = fn();
+        var apply = function (arr) {
+          if (! arr || ! arr.length) return;
+          for (var i = 0; i < 4; ++i) {
+            var v = (typeof arr[i] === 'number') ? arr[i] : 0;
+            // Perceptual curve so quiet signals still register visibly.
+            var w = Math.min(1, Math.sqrt(v) * 1.4) * 100;
+            var fill = document.querySelector('.stem-cap-meter-fill[data-layer="' + i + '"]');
+            if (fill) fill.style.width = w.toFixed(1) + '%';
+          }
+        };
+        if (r && typeof r.then === 'function') r.then(apply).catch(function () {});
+        else apply(r);
+      } catch (_) {}
+    }
+
+    // Live RR position dots — only polls while the Mix panel is open AND RR mode
+    // is selected, so it's idle the rest of the time.
+    function pollRrDots () {
+      var panel = document.getElementById('mix-panel');
+      if (! panel || ! panel.classList.contains('open')) return;
+      var ctx = document.getElementById('trigger-context');
+      if (! ctx || ctx.getAttribute('data-mode') !== '1') return;
+      var cont = document.getElementById('rr-dots');
+      if (! cont) return;
+      // Only the cursor (next-to-fire) lights up — it travels as the engine cycles.
+      var pf = getNativeFn('getRoundRobinPos');
+      if (pf) {
+        try {
+          var r = pf();
+          var ap = function (pos) { var p = (typeof pos === 'number') ? pos : 0; for (var i = 0; i < 4; ++i) { var d = cont.children[i]; if (d) d.classList.toggle('next', i === p); } };
+          if (r && typeof r.then === 'function') r.then(ap).catch(function(){}); else ap(r);
+        } catch (_) {}
+      }
     }
 
     function init () {
@@ -8031,6 +8355,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       setInterval(pollMixMeters, 33);            // ~30 Hz strip meters
       setInterval(pollStripsPlayingDots, 100);   // 10 Hz play-dot indicator
       setInterval(pullLayerStatusDots, 250);     // 4 Hz layer-populated dots (LAYER mode)
+      setInterval(pollRrDots, 50);               // ~20 Hz RR position dots (RR mode only)
+      setInterval(pollStemCaptureMeters, 33);    // ~30 Hz stem capture meters
     }
 
     if (document.readyState === 'loading') {

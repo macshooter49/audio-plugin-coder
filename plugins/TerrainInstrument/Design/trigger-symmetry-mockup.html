@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Terrain Instrument — trigger panel symmetry</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg-main:#ECE8F1; --bg-surface:#E8E4EF; --bg-card:#E0DAE6; --knob-track:rgba(124,92,191,0.15);
+  --purple-600:#7C3AED; --purple-500:#8B5CF6; --purple-400:#A78BFA;
+  --border:rgba(124,92,191,0.12); --border-strong:rgba(124,92,191,0.20);
+  --text-primary:#2A2035; --text-secondary:#5C5068; --text-muted:#8A7F96;
+}
+[data-theme="dark"] {
+  --bg-main:#1A1A2E; --bg-surface:#232340; --bg-card:#2A2A48; --knob-track:rgba(100,100,150,0.3);
+  --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.5); --border-strong:rgba(88,88,128,0.5);
+  --text-primary:#E0DCE8; --text-secondary:#9B93B0; --text-muted:#6B6080;
+}
+body { background:#3a3a44; font-family:-apple-system,'SF Pro Display','Inter',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased; padding:26px; color:#ddd; }
+.toolbar { display:flex; gap:10px; margin-bottom:18px; align-items:center; flex-wrap:wrap; }
+.toolbar button { padding:7px 14px; border-radius:7px; border:1px solid #666; background:#2a2a32; color:#ddd; cursor:pointer; font:600 12px inherit; }
+.toolbar button.on { background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.lane { display:flex; gap:26px; flex-wrap:wrap; }
+.col { }
+.col h3 { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#9b8fc0; margin-bottom:8px; }
+
+/* trigger box at the real right-column width (~390px) */
+.tbox { width:390px; background:var(--bg-surface); border-radius:13px; padding:14px; color:var(--text-secondary); }
+.tile { background:rgba(124,92,191,0.05); border:1px solid var(--border); border-radius:13px; padding:12px; }
+[data-theme="dark"] .tile { background:rgba(255,255,255,0.05); }
+
+.pills { display:flex; gap:6px; margin-bottom:9px; }
+.pill { flex:1; padding:6px 4px; font:700 9.5px inherit; letter-spacing:0.6px; background:transparent;
+  color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; text-align:center; }
+.pill.active { background:var(--purple-500); color:#fff; border-color:var(--purple-500); box-shadow:0 0 10px rgba(139,92,246,0.35); }
+.hint { font-size:9px; letter-spacing:0.3px; color:var(--text-muted); margin-bottom:9px; }
+
+/* ── shared balanced bits ── */
+.dots-row { display:flex; justify-content:space-between; gap:6px; }
+.dot { flex:1; text-align:center; padding:4px 0; border-radius:6px; font:700 11px inherit;
+  background:var(--bg-card); color:var(--text-muted); border:1px solid var(--border); }
+.dot.lit { background:var(--purple-500); color:#fff; border-color:var(--purple-500); box-shadow:0 0 8px var(--purple-400); }
+.dot.next { border-color:var(--purple-400); color:var(--text-primary); box-shadow:0 0 6px var(--purple-400); }
+
+/* ── MORPH control (full width, travels A→B→C→D) ── */
+.morph { margin-top:11px; }
+.morph-track { position:relative; height:10px; border-radius:5px; background:var(--knob-track);
+  box-shadow:inset 0 0 2px rgba(0,0,0,0.25); cursor:pointer; }
+.morph-fill { position:absolute; inset:0; border-radius:5px; opacity:0.5;
+  background:linear-gradient(90deg,var(--purple-600),var(--purple-400),var(--purple-600)); }
+.morph-handle { position:absolute; top:50%; width:16px; height:16px; border-radius:50%; transform:translate(-50%,-50%);
+  background:var(--bg-card); border:2px solid var(--purple-500); box-shadow:0 1px 5px rgba(0,0,0,0.3); }
+.morph-stops { display:flex; justify-content:space-between; margin-top:5px; }
+.morph-stops span { font:700 11px inherit; color:var(--text-muted); width:20px; text-align:center; transition:color .08s, text-shadow .08s; }
+.morph-label { text-align:center; font:600 8px inherit; letter-spacing:2px; color:var(--text-muted); text-transform:uppercase; margin-top:3px; }
+
+/* ── RR balanced rows ── */
+.edge-row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; }
+.tbtn { padding:5px 12px; font:700 10px inherit; letter-spacing:0.4px; background:var(--bg-card);
+  color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:7px; cursor:pointer; }
+.tbtn.active { background:var(--purple-500); color:#fff; border-color:var(--purple-500); }
+.toggle { display:inline-flex; align-items:center; gap:5px; font:10px inherit; letter-spacing:0.4px; }
+.toggle input { accent-color:var(--purple-500); }
+.center-row { display:flex; justify-content:center; margin-top:10px; }
+
+.note { width:390px; font-size:11px; color:#bdb6cf; line-height:1.5; margin-top:6px; }
+.note b { color:#fff; }
+</style>
+</head>
+<body data-theme="dark">
+
+<div class="toolbar">
+  <button id="themeBtn" onclick="toggleTheme()">◐ Dark</button>
+  <span style="opacity:.6;font-size:11px;">Showing: balanced / symmetric layouts. Drag the MORPH handle to see it travel A→B→C→D.</span>
+</div>
+
+<div class="lane">
+  <!-- LAYER -->
+  <div class="col">
+    <h3>LAYER — symmetric</h3>
+    <div class="tbox">
+      <div class="tile">
+        <div class="pills">
+          <span class="pill active">LAYER</span><span class="pill">RR</span><span class="pill">RANDOM</span><span class="pill">KEYTRK</span><span class="pill">VEL</span>
+        </div>
+        <div class="hint" style="text-align:center;">All populated layers fire together &middot; stacked</div>
+        <div class="dots-row">
+          <div class="dot lit">A</div><div class="dot lit">B</div><div class="dot lit">C</div><div class="dot">D</div>
+        </div>
+        <div class="morph">
+          <div class="morph-track" id="mtrack">
+            <div class="morph-fill"></div>
+            <div class="morph-handle" id="mhandle" style="left:0%"></div>
+          </div>
+          <div class="morph-stops" id="mstops"><span>A</span><span>B</span><span>C</span><span>D</span></div>
+          <div class="morph-label">Morph — blend travels across the stack</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">Dots now span edge-to-edge (A left … D right). The <b>full-width MORPH</b> fills the rest and is symmetric by design — A on the far left, D on the far right, handle travels through B & C (watch the letters light up as it passes).</div>
+  </div>
+
+  <!-- RR -->
+  <div class="col">
+    <h3>RR — symmetric</h3>
+    <div class="tbox">
+      <div class="tile">
+        <div class="pills">
+          <span class="pill">LAYER</span><span class="pill active">RR</span><span class="pill">RANDOM</span><span class="pill">KEYTRK</span><span class="pill">VEL</span>
+        </div>
+        <div class="hint" style="text-align:center;">Cycling A &rarr; B &rarr; C &rarr; D &middot; skips empty</div>
+        <div class="dots-row">
+          <div class="dot next">A</div><div class="dot">B</div><div class="dot">C</div><div class="dot">D</div>
+        </div>
+        <div class="edge-row">
+          <button class="tbtn">RESET TO A</button>
+          <label class="toggle"><input type="checkbox"> SHUFFLE</label>
+          <label class="toggle"><input type="checkbox"> SYNC</label>
+        </div>
+      </div>
+    </div>
+    <div class="note">Live <b>position dots</b> (the next-to-fire one glows, cycles as you play) fill the top and add real info. The control row is <b>edge-balanced</b>: RESET on the left, SYNC on the right, SHUFFLE centered — no more left-clump.</div>
+  </div>
+</div>
+
+<div class="note" style="width:806px;margin-top:20px;">
+  RANDOM / KEYTRACK / VELOCITY already use full-width sliders &amp; zone bars, so they're symmetric as-is. This template makes <b>all 5 modes consistent</b>: hint centered on top → a full-width row of dots → a full-width primary control or edge-balanced buttons. Nothing hugs one side.
+</div>
+
+<script>
+function toggleTheme(){ var d=document.body.getAttribute('data-theme')==='dark'; document.body.setAttribute('data-theme',d?'light':'dark'); document.getElementById('themeBtn').textContent=d?'◑ Light':'◐ Dark'; }
+// Morph handle drag + travel-through-all visualization
+(function(){
+  var track=document.getElementById('mtrack'), handle=document.getElementById('mhandle'), stops=document.getElementById('mstops').children;
+  function paint(p){ // p 0..1
+    handle.style.left=(p*100)+'%';
+    // light each stop by proximity (A=0, B=.333, C=.667, D=1)
+    for(var i=0;i<4;i++){ var sp=i/3; var d=Math.abs(p-sp); var k=Math.max(0,1-d*3);
+      stops[i].style.color = k>0.05 ? 'var(--purple-400)' : 'var(--text-muted)';
+      stops[i].style.textShadow = k>0.05 ? '0 0 '+(8*k).toFixed(1)+'px var(--purple-400)' : 'none';
+      stops[i].style.opacity = (0.55+0.45*k).toFixed(2);
+    }
+  }
+  paint(0);
+  function fromX(x){ var r=track.getBoundingClientRect(); var p=Math.max(0,Math.min(1,(x-r.left)/r.width)); paint(p); }
+  track.addEventListener('mousedown',function(e){ fromX(e.clientX); function mv(ev){fromX(ev.clientX);} function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);} document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
+})();
+</script>
+</body>
+</html>

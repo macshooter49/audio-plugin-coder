@@ -52,11 +52,12 @@ namespace tw
 
         // ── Mix page — trigger-mode + creative routing (Phase 2) ──────────────
         // probabilityWeight feeds the RANDOM trigger mode's weighted picker.
-        // soloSelected feeds the SOLO trigger mode's multi-select checkbox.
+        // keyZoneMin/Max define the KEYTRACK trigger mode's MIDI note range for this layer.
         // velocityZoneMin/Max define the VELOCITY trigger mode's range for this layer.
         // pitchJitterCents adds ±cents random per-voice pitch offset to thicken stacks.
         std::atomic<float> probabilityWeight { 0.25f }; // 0..1, default uniform
-        std::atomic<bool>  soloSelected      { false }; // multi-select for SOLO mode
+        std::atomic<int>   keyZoneMin        { 0   };   // 0..127 MIDI note (default seeded by processor)
+        std::atomic<int>   keyZoneMax        { 127 };   // 0..127 MIDI note
         std::atomic<int>   velocityZoneMin   { 0   };   // 0..127 inclusive (default seeded by processor)
         std::atomic<int>   velocityZoneMax   { 127 };   // 0..127 inclusive
         std::atomic<float> pitchJitterCents  { 0.0f };  // 0..100 cents random

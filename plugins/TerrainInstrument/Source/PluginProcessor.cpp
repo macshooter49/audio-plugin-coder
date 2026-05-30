@@ -27,6 +27,14 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     layers[2].velocityZoneMin.store (64);   layers[2].velocityZoneMax.store (95);
     layers[3].velocityZoneMin.store (96);   layers[3].velocityZoneMax.store (127);
 
+    // KEYTRACK trigger mode: seed each layer's default key zone to even quarters
+    // of the MIDI note range (0-31 / 32-63 / 64-95 / 96-127) — a sensible keyboard
+    // split so KEYTRACK responds immediately. Users drag the handles in the UI.
+    layers[0].keyZoneMin.store (0);    layers[0].keyZoneMax.store (31);
+    layers[1].keyZoneMin.store (32);   layers[1].keyZoneMax.store (63);
+    layers[2].keyZoneMin.store (64);   layers[2].keyZoneMax.store (95);
+    layers[3].keyZoneMin.store (96);   layers[3].keyZoneMax.store (127);
+
     // Phase 1 task 9: wire modulationEngine into ALL layers' voices (was layer 0 only).
     // LayerState constructor passes nullptr for ModulationEngine; we patch it here.
     // Note: SamplerVoice stores a pointer to the engine so this is safe as long as
@@ -1059,7 +1067,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //   LAYER     → all populated layers
     //   RR        → one layer at roundRobinPos (skip empties, advance)
     //   RANDOM    → one layer picked via weighted random over probabilityWeight
-    //   SOLO      → all layers with soloSelected=true (subset)
+    //   KEYTRACK  → one layer whose [keyZoneMin..Max] contains the note number
     //   VELOCITY  → one layer whose [velocityZoneMin..Max] contains note vel
     //
     // After this block, per-layer renderNextBlock uses perLayerMidi[li]
@@ -1098,18 +1106,44 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
             else if (tmode == 1)
             {
-                // ROUND-ROBIN — fire next populated layer, advance cursor (skip empties).
-                int cur = roundRobinPos.load();
+                // ROUND-ROBIN — one layer per note. SHUFFLE = random non-repeating
+                // populated layer; otherwise sequential A→B→C→D (skip empties).
                 int picked = -1;
-                for (int attempts = 0; attempts < 4; ++attempts)
+                if (rrShuffle.load())
                 {
-                    if (isPopulated (cur)) { picked = cur; break; }
-                    cur = (cur + 1) % 4;
+                    int pops[4]; int n = 0;
+                    for (int li = 0; li < 4; ++li) if (isPopulated (li)) pops[n++] = li;
+                    if (n == 1) picked = pops[0];
+                    else if (n > 1)
+                    {
+                        for (int attempts = 0; attempts < 8 && picked < 0; ++attempts)
+                        {
+                            int cand = pops[juce::jlimit (0, n - 1, (int) (triggerRandom.nextFloat() * (float) n))];
+                            if (cand != lastRrLayer) picked = cand;
+                        }
+                        if (picked < 0) picked = pops[0];
+                    }
+                    if (picked >= 0)
+                    {
+                        perLayerMidi[(size_t) picked].addEvent (msg, pos);
+                        lastRrLayer = picked;
+                        roundRobinPos.store (picked);            // dot shows last-played
+                    }
                 }
-                if (picked >= 0)
+                else
                 {
-                    perLayerMidi[(size_t) picked].addEvent (msg, pos);
-                    roundRobinPos.store ((picked + 1) % 4);
+                    int cur = roundRobinPos.load();
+                    for (int attempts = 0; attempts < 4; ++attempts)
+                    {
+                        if (isPopulated (cur)) { picked = cur; break; }
+                        cur = (cur + 1) % 4;
+                    }
+                    if (picked >= 0)
+                    {
+                        perLayerMidi[(size_t) picked].addEvent (msg, pos);
+                        lastRrLayer = picked;
+                        roundRobinPos.store ((picked + 1) % 4);  // cursor + dot show next
+                    }
                 }
             }
             else if (tmode == 2)
@@ -1139,11 +1173,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
             else if (tmode == 3)
             {
-                // SOLO — multi-select. Layers with soloSelected=true fire.
-                // 0 checked = nothing plays (predictable per spec).
+                // KEYTRACK — keyboard split. Fire the layer whose key zone contains
+                // this note number. First match wins (zones enforced contiguous +
+                // non-overlapping by UI). No match → drop the note.
+                const int note = msg.getNoteNumber();
                 for (int li = 0; li < 4; ++li)
-                    if (isPopulated (li) && layers[(size_t) li].soloSelected.load())
+                {
+                    if (! isPopulated (li)) continue;
+                    const int lo = layers[(size_t) li].keyZoneMin.load();
+                    const int hi = layers[(size_t) li].keyZoneMax.load();
+                    if (note >= lo && note <= hi)
+                    {
                         perLayerMidi[(size_t) li].addEvent (msg, pos);
+                        break;
+                    }
+                }
             }
             else if (tmode == 4)
             {
@@ -1175,6 +1219,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         const double blockSec = (double) numSamples / juce::jmax (1.0, getSampleRate());
         const float  decay    = (float) std::exp (-blockSec / 0.065);
+
+        // LAYER-mode MORPH precompute: map the morph focus across POPULATED layers
+        // only, so a single loaded layer stays full and the blend travels just over
+        // what's actually loaded. morphPos is in populated-index units (0..popCount-1).
+        const bool layerMode = (triggerMode.load() == 0);
+        int popCount = 0; int popIdx[4] = { -1, -1, -1, -1 };
+        for (int i = 0; i < 4; ++i) if (layers[(size_t) i].hasSample()) popIdx[i] = popCount++;
+        const float morphPos = layerMorph.load() * (float) juce::jmax (1, popCount - 1);
 
         for (size_t li = 0; li < layers.size(); ++li)
         {
@@ -1267,7 +1319,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // Equal-power pan: panAngle = (panNorm + 1) * π/4 → leftGain = cos,
             // rightGain = sin. Center (panNorm=0) gives 0.707/0.707 (constant
             // perceived power across the pan range). pre-clamped to [-1, +1].
-            const float g    = layer.volume.load();
+            float morphGain = 1.0f;
+            if (layerMode && popCount > 1 && popIdx[(int) li] >= 0)
+                morphGain = juce::jlimit (0.0f, 1.0f,
+                                          1.0f - std::abs ((float) popIdx[(int) li] - morphPos) / 2.0f);
+            const float g    = layer.volume.load() * morphGain;
             const float pn   = juce::jlimit (-1.0f, 1.0f, layer.pan.load());
             const float ang  = (pn + 1.0f) * (juce::MathConstants<float>::pi * 0.25f);
             const float gL   = g * std::cos (ang);
@@ -1931,6 +1987,17 @@ void TerrainInstrumentAudioProcessor::writeToStemBuffer (int layerIdx,
     auto& s = stemBuffers[(size_t) layerIdx];
     if (s.totalSize <= 0) return;
 
+    // Live capture-level meter: decaying peak of what's being written. Read by
+    // the UI at ~30Hz to drive the 4 mini-meters on the stem row.
+    {
+        float peak = 0.0f;
+        for (int i = 0; i < numSamples; ++i)
+            peak = juce::jmax (peak, std::abs (L[i]), std::abs (R[i]));
+        const float prev = stemCaptureLevel[(size_t) layerIdx].load (std::memory_order_relaxed);
+        stemCaptureLevel[(size_t) layerIdx].store (juce::jmax (peak, prev * 0.92f),
+                                                    std::memory_order_relaxed);
+    }
+
     int w = s.writeIndex.load (std::memory_order_relaxed);
     auto* destL = s.ring.getWritePointer (0);
     auto* destR = s.ring.getWritePointer (1);
@@ -1941,6 +2008,22 @@ void TerrainInstrumentAudioProcessor::writeToStemBuffer (int layerIdx,
         if (++w >= s.totalSize) w = 0;
     }
     s.writeIndex.store (w, std::memory_order_relaxed);
+    // Saturate samplesWritten at totalSize so we know when the ring is fully populated.
+    const int prev = s.samplesWritten.load (std::memory_order_relaxed);
+    s.samplesWritten.store (juce::jmin (s.totalSize, prev + numSamples),
+                             std::memory_order_relaxed);
+}
+
+void TerrainInstrumentAudioProcessor::clearStemBuffers()
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        auto& s = stemBuffers[(size_t) i];
+        if (s.totalSize > 0) s.ring.clear();
+        s.writeIndex.store     (0, std::memory_order_relaxed);
+        s.samplesWritten.store (0, std::memory_order_relaxed);
+        stemCaptureLevel[(size_t) i].store (0.0f, std::memory_order_relaxed);
+    }
 }
 
 juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, const juce::File& dest)
@@ -1948,6 +2031,12 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
     if (layerIdx < 0 || layerIdx > 3) return {};
     auto& s = stemBuffers[(size_t) layerIdx];
     if (s.totalSize <= 0) return {};
+
+    // Only export what's actually been captured. Below totalSize, the ring
+    // hasn't wrapped yet — audio sits chronologically at [0..captured-1] and
+    // we skip the silent tail. Once captured == totalSize, full rolling unwrap.
+    const int captured = s.samplesWritten.load (std::memory_order_relaxed);
+    if (captured <= 0) return {};                       // nothing recorded yet
 
     // Snapshot current write position. Audio thread may continue writing during
     // the unwrap loop below — at most one sample tear at the wrap boundary,
@@ -1962,26 +2051,40 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
     const float gL   = (mode == 1) ? vol * std::cos (ang) : 1.0f;
     const float gR   = (mode == 1) ? vol * std::sin (ang) : 1.0f;
 
-    // Unwrap the ring into a contiguous playback-order buffer.
-    // Oldest sample is at writeIdx (about to be overwritten next),
-    // newest is at writeIdx-1 mod totalSize.
-    juce::AudioBuffer<float> out (2, s.totalSize);
+    const bool ringFull = (captured >= s.totalSize);
+    const int  outLen   = ringFull ? s.totalSize : captured;
+
+    juce::AudioBuffer<float> out (2, outLen);
     const auto* srcL = s.ring.getReadPointer (0);
     const auto* srcR = s.ring.getReadPointer (1);
     auto* dstL = out.getWritePointer (0);
     auto* dstR = out.getWritePointer (1);
-    int srcIdx = writeIdx;
-    for (int i = 0; i < s.totalSize; ++i)
+
+    if (ringFull)
     {
-        dstL[i] = srcL[srcIdx] * gL;
-        dstR[i] = srcR[srcIdx] * gR;
-        if (++srcIdx >= s.totalSize) srcIdx = 0;
+        // Full rolling: oldest at writeIdx, wrap around.
+        int srcIdx = writeIdx;
+        for (int i = 0; i < outLen; ++i)
+        {
+            dstL[i] = srcL[srcIdx] * gL;
+            dstR[i] = srcR[srcIdx] * gR;
+            if (++srcIdx >= s.totalSize) srcIdx = 0;
+        }
+    }
+    else
+    {
+        // Pre-wrap: audio lives at indices [0..captured-1] in chronological order.
+        for (int i = 0; i < outLen; ++i)
+        {
+            dstL[i] = srcL[i] * gL;
+            dstR[i] = srcR[i] * gR;
+        }
     }
 
     // Filename: Stem-<A/B/C/D>-YYYYMMDD-HHMMSS-{DRY|MIX}.wav
     const auto letter    = juce::String::charToString ((juce::juce_wchar)('A' + layerIdx));
     const auto timestamp = juce::Time::getCurrentTime().formatted ("%Y%m%d-%H%M%S");
-    const auto suffix    = (mode == 1) ? juce::String("-MIX") : juce::String("-DRY");
+    const auto suffix    = (mode == 1) ? juce::String("-WET") : juce::String("-DRY");
     const auto file      = dest.getChildFile ("Stem-" + letter + "-" + timestamp + suffix + ".wav");
 
     if (! dest.exists()) dest.createDirectory();
@@ -1994,7 +2097,7 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
         stream.get(), sr, 2 /*channels*/, 24 /*bit depth*/, {}, 0));
     if (writer == nullptr) return {};
     stream.release();  // writer takes ownership
-    writer->writeFromAudioSampleBuffer (out, 0, s.totalSize);
+    writer->writeFromAudioSampleBuffer (out, 0, outLen);
     // writer destructor finalizes the WAV chunks on scope exit
     return file;
 }
@@ -2199,6 +2302,8 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // Mix page Phase 2: global trigger-mode state at the root level.
     state.setProperty ("triggerMode",     triggerMode.load(),     nullptr);
     state.setProperty ("rrSyncToBar",     (bool) rrSyncToBar.load(), nullptr);
+    state.setProperty ("rrShuffle",       (bool) rrShuffle.load(), nullptr);
+    state.setProperty ("layerMorph",      (double) layerMorph.load(), nullptr);
     state.setProperty ("stemSourceMode",  stemSourceMode.load(),  nullptr);
 
     // ── V2: per-layer state node array ───────────────────────────────────────
@@ -2247,7 +2352,8 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         layerNode.setProperty ("pan",              (double) L.pan.load(),               nullptr);
         layerNode.setProperty ("pitchJitterCents", (double) L.pitchJitterCents.load(),  nullptr);
         layerNode.setProperty ("probabilityWeight",(double) L.probabilityWeight.load(), nullptr);
-        layerNode.setProperty ("soloSelected",     (bool)   L.soloSelected.load(),      nullptr);
+        layerNode.setProperty ("keyZoneMin",       L.keyZoneMin.load(),                 nullptr);
+        layerNode.setProperty ("keyZoneMax",       L.keyZoneMax.load(),                 nullptr);
         layerNode.setProperty ("velocityZoneMin",  L.velocityZoneMin.load(),            nullptr);
         layerNode.setProperty ("velocityZoneMax",  L.velocityZoneMax.load(),            nullptr);
 
@@ -2359,6 +2465,8 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 // pre-Phase-2 builds open cleanly into the new feature defaults.
                 triggerMode.store    (juce::jlimit (0, 4, (int) newState.getProperty ("triggerMode",    0)));
                 rrSyncToBar.store    ((bool) newState.getProperty ("rrSyncToBar",  false));
+                rrShuffle.store      ((bool) newState.getProperty ("rrShuffle",    false));
+                layerMorph.store     (juce::jlimit (0.0f, 1.0f, (float)(double) newState.getProperty ("layerMorph", 0.5)));
                 stemSourceMode.store (juce::jlimit (0, 1, (int) newState.getProperty ("stemSourceMode", 0)));
             }
             else
@@ -2563,13 +2671,14 @@ void TerrainInstrumentAudioProcessor::loadV2State (const juce::ValueTree& loaded
         L.solo.store  ((bool) layerNode.getProperty ("solo",  false));
         // Mix page Phase 2: per-layer creative-routing + mixer fields.
         // Defaults match LayerState defaults so pre-Phase-2 V2 blobs open clean.
-        // Velocity zone default per-layer index: even quarters (matches processor seed).
+        // Velocity + key zone defaults per-layer index: even quarters (matches processor seed).
         const int dvzMin = (idx == 0 ? 0  : idx == 1 ? 32 : idx == 2 ? 64 : 96);
         const int dvzMax = (idx == 0 ? 31 : idx == 1 ? 63 : idx == 2 ? 95 : 127);
         L.pan.store               ((float)(double) layerNode.getProperty ("pan",               0.0));
         L.pitchJitterCents.store  ((float)(double) layerNode.getProperty ("pitchJitterCents",  0.0));
         L.probabilityWeight.store ((float)(double) layerNode.getProperty ("probabilityWeight", 0.25));
-        L.soloSelected.store      ((bool)          layerNode.getProperty ("soloSelected",      false));
+        L.keyZoneMin.store        ((int)           layerNode.getProperty ("keyZoneMin",        dvzMin));
+        L.keyZoneMax.store        ((int)           layerNode.getProperty ("keyZoneMax",        dvzMax));
         L.velocityZoneMin.store   ((int)           layerNode.getProperty ("velocityZoneMin",   dvzMin));
         L.velocityZoneMax.store   ((int)           layerNode.getProperty ("velocityZoneMax",   dvzMax));
 

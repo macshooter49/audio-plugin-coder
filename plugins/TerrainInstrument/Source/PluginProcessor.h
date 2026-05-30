@@ -381,13 +381,21 @@ public:
     //   0 = LAYER         (all populated layers fire — current Phase 1 behavior)
     //   1 = ROUND-ROBIN   (one layer per note, cycles A→B→C→D, skips empties)
     //   2 = RANDOM        (one layer per note, weighted by probabilityWeight)
-    //   3 = SOLO          (only layers with soloSelected=true fire)
+    //   3 = KEYTRACK      (one layer per note, picked by keyZone match)
     //   4 = VELOCITY      (one layer per note, picked by velocityZone match)
     std::atomic<int>  triggerMode    { 0 };
     std::atomic<int>  roundRobinPos  { 0 };   // cursor for RR (0..3)
     std::atomic<bool> rrSyncToBar    { false };
+    std::atomic<bool> rrShuffle      { false }; // RR: random non-repeating order
+    int               lastRrLayer    { -1 };    // audio-thread: last layer RR fired (shuffle anti-repeat)
+    // LAYER-mode MORPH: 0..1 travels a blend focus across the populated layers.
+    // 0.5 (default) keeps all audible with B/C forward; sweep isolates toward A or D.
+    std::atomic<float> layerMorph    { 0.5f };
     // Stem source: 0 = DRY (pre volume/pan), 1 = MIX (post volume/pan, pre shared FX).
     std::atomic<int>  stemSourceMode { 0 };
+    // Live "what's being written to the buffer" level per layer, decaying peak
+    // (audio thread writes, UI polls ~30Hz). Drives the 4 mini-meters on the stem row.
+    std::atomic<float> stemCaptureLevel[4] = { {0.0f}, {0.0f}, {0.0f}, {0.0f} };
 
     // PRNG for the RANDOM trigger picker. juce::Random::nextFloat is realtime-safe.
     juce::Random      triggerRandom;
@@ -406,7 +414,12 @@ public:
     struct StemBuffer
     {
         juce::AudioBuffer<float> ring;
-        std::atomic<int>         writeIndex { 0 };
+        std::atomic<int>         writeIndex     { 0 };
+        // Cumulative samples written since the buffer started or was last CLEARed.
+        // Saturates at totalSize — once it reaches totalSize, the ring is "full"
+        // and exports unwrap the full 10-min rolling window; below totalSize, the
+        // export only writes the actual captured portion (no silent pad).
+        std::atomic<int>         samplesWritten { 0 };
         int                      totalSize  { 0 };  // ring.getNumSamples()
     };
     std::array<StemBuffer, 4> stemBuffers;
@@ -415,6 +428,9 @@ public:
     // Export. layerIdx in [0..3] = single stem. dest is the chosen folder.
     // Returns the written file path; empty if export failed.
     juce::File exportStemToFile (int layerIdx, const juce::File& dest);
+    // CLEAR — zero all 4 rolling buffers + reset write cursors so the next
+    // capture starts fresh (user-triggered button).
+    void clearStemBuffers();
 
 private:
     juce::AudioProcessorValueTreeState apvts;

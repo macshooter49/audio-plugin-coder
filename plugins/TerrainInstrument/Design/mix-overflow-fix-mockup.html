@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Terrain Instrument — Mix panel overflow fix</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-main: #ECE8F1; --bg-hero: #2D2545; --bg-surface: #E8E4EF; --bg-footer: #E5E1EC;
+  --bg-glass: rgba(224,218,234,0.88); --bg-card: #E0DAE6; --bg-card-hover: #D8D2DE;
+  --knob-body: #E8E4EF; --knob-track: rgba(124,92,191,0.15);
+  --purple-600: #7C3AED; --purple-500: #8B5CF6; --purple-400: #A78BFA;
+  --border: rgba(124,92,191,0.12); --border-strong: rgba(124,92,191,0.20);
+  --text-primary: #2A2035; --text-secondary: #5C5068; --text-muted: #8A7F96; --text-dim: #A89BBE;
+  --mesh-line: rgba(139,92,246,0.25);
+}
+[data-theme="dark"] {
+  --bg-main: #1A1A2E; --bg-hero: #12121F; --bg-surface: #232340; --bg-footer: #1E1E36;
+  --bg-glass: rgba(26,26,46,0.9); --bg-card: #2A2A48; --bg-card-hover: #33335C;
+  --knob-body: #2E2E4A; --knob-track: rgba(100,100,150,0.3);
+  --purple-600: #9B6DFF; --purple-500: #8B5CF6; --purple-400: #B794FF;
+  --border: rgba(58,58,88,0.5); --border-strong: rgba(88,88,128,0.5);
+  --text-primary: #E0DCE8; --text-secondary: #9B93B0; --text-muted: #6B6080; --text-dim: #504870;
+  --mesh-line: rgba(139,92,246,0.25);
+}
+
+body { background:#3a3a44; font-family:-apple-system,'SF Pro Display','Inter',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased; padding:24px; color:#ddd; }
+.toolbar { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+.toolbar button { padding:7px 14px; border-radius:7px; border:1px solid #666; background:#2a2a32;
+  color:#ddd; cursor:pointer; font-family:inherit; font-size:12px; font-weight:600; }
+.toolbar button.on { background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.toolbar .grp { display:flex; gap:6px; padding:4px 8px; border:1px solid #555; border-radius:9px; }
+.toolbar .lbl { font-size:11px; opacity:.7; align-self:center; }
+
+/* ── 820×640 body simulation (overflow hidden, like the real plugin window) ── */
+#frame { width:820px; height:640px; background:var(--bg-main); overflow:hidden;
+  display:flex; flex-direction:column; border-radius:8px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5); position:relative; }
+#hero-spacer { height:320px; flex-shrink:0; background:var(--bg-hero); color:#9b8fc0;
+  display:flex; align-items:center; justify-content:center; font-size:13px; letter-spacing:1px; }
+
+/* ════════════ MIX PANEL (copied from PluginEditor.cpp) ════════════ */
+#mix-panel { display:flex; width:820px; height:272px; flex-shrink:0;
+  border-top:1px solid var(--border); z-index:15; position:relative;
+  flex-direction:row; color:var(--text-primary); background:var(--bg-surface); }
+/* === THE FIX: clip overflow so nothing can ever paint onto the footer === */
+body.fixed #mix-panel { overflow:hidden; }
+
+#mix-strips { display:flex; flex-direction:row; align-items:stretch;
+  padding:11px 12px; gap:9px; width:50%; box-sizing:border-box; }
+.mix-strip { flex:1; display:flex; flex-direction:column; align-items:center;
+  gap:6px; padding:9px 4px 8px; border-radius:13px;
+  background:rgba(124,92,191,0.06); border:1px solid var(--border);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.05); min-width:0; color:var(--text-primary); }
+.mix-strip-header { font-weight:600; font-size:12px; display:flex; align-items:center; gap:5px; letter-spacing:1px; }
+.mix-strip-header .play-dot { width:5px; height:5px; border-radius:50%; background:var(--border-strong); }
+.mix-strip.playing .mix-strip-header .play-dot { background:var(--purple-500); box-shadow:0 0 7px var(--purple-400); }
+.mix-strip-knob { width:25px; height:25px; border-radius:50%; cursor:pointer; position:relative; flex-shrink:0;
+  background:conic-gradient(from 225deg, var(--purple-500) 0deg, var(--purple-500) calc(var(--val,0.5) * 270deg),
+    var(--knob-track) calc(var(--val,0.5) * 270deg), var(--knob-track) 270deg, transparent 270deg);
+  -webkit-mask:radial-gradient(closest-side,transparent 66%,#000 67%); }
+.mix-strip-knob[data-fn="jitter"] { width:21px; height:21px; }
+.mix-strip-knob-label { font-size:7.5px; letter-spacing:0.8px; color:var(--text-muted); text-transform:uppercase; margin-top:-3px; }
+.mix-strip-fader-meter { flex:1; display:flex; flex-direction:row; align-items:stretch; justify-content:center; gap:7px; width:100%; min-height:48px; }
+.mix-strip-fader { position:relative; width:4px; border-radius:2px; background:var(--knob-track); cursor:pointer; }
+.mix-strip-fader-fill { position:absolute; left:0; right:0; bottom:0; border-radius:2px; background:linear-gradient(to top,var(--purple-600),var(--purple-400)); }
+.mix-strip-fader-handle { position:absolute; left:50%; width:15px; height:15px; border-radius:50%; transform:translate(-50%,50%);
+  background:var(--bg-card); border:2px solid var(--purple-500); box-shadow:0 1px 4px rgba(0,0,0,0.25); }
+.mix-strip-meter { position:relative; width:3px; border-radius:2px; background:var(--knob-track); overflow:hidden; }
+.mix-strip-meter-fill { position:absolute; left:0; right:0; bottom:0; border-radius:2px;
+  background:linear-gradient(to top,rgba(255,255,255,0.75),#ffffff); box-shadow:0 0 6px rgba(255,255,255,0.55); }
+.mix-strip-buttons { display:flex; flex-direction:row; gap:5px; }
+.mix-strip-btn { width:20px; height:16px; font-size:8.5px; font-weight:700; border:1px solid var(--border-strong);
+  background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; padding:0; font-family:inherit; }
+.mix-strip-btn.active[data-fn="solo"] { background:var(--purple-500); color:#fff; border-color:var(--purple-500); }
+
+#mix-right { flex:1; display:flex; flex-direction:column; padding:11px 12px; gap:9px; box-sizing:border-box; }
+body.fixed #mix-right { gap:7px; }
+#mix-trigger-area, #mix-stem-area { border-radius:13px; background:rgba(124,92,191,0.05); border:1px solid var(--border);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04); padding:11px 12px; color:var(--text-secondary); font-size:11px; box-sizing:border-box; }
+#mix-trigger-area { flex:1.3; }
+#mix-stem-area { flex:1; }
+/* FIX: stem area takes only the height it needs; trigger area absorbs the rest and clips tall modes */
+body.fixed #mix-trigger-area { flex:1 1 auto; min-height:0; overflow:hidden; padding:9px 12px; }
+body.fixed #mix-stem-area { flex:0 0 auto; padding:9px 12px; }
+[data-theme="dark"] .mix-strip,
+[data-theme="dark"] #mix-trigger-area,
+[data-theme="dark"] #mix-stem-area { background:rgba(255,255,255,0.05); }
+
+/* ── trigger area (copied) ── */
+#trigger-pills { display:flex; gap:6px; margin-bottom:10px; }
+body.fixed #trigger-pills { margin-bottom:7px; }
+.trigger-pill { flex:1; padding:6px 4px; font-size:9.5px; font-weight:700; letter-spacing:0.6px;
+  background:transparent; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; cursor:pointer; font-family:inherit; }
+.trigger-pill.active { background:var(--purple-500); color:#fff; border-color:var(--purple-500); box-shadow:0 0 10px rgba(139,92,246,0.35); }
+#trigger-context { position:relative; font-size:11px; color:var(--text-secondary); }
+.trigger-panel { display:none; padding:4px 0; }
+body.fixed .trigger-panel { padding:2px 0; }
+#trigger-context[data-mode="0"] .trigger-panel[data-panel="layer"],
+#trigger-context[data-mode="1"] .trigger-panel[data-panel="rr"],
+#trigger-context[data-mode="2"] .trigger-panel[data-panel="random"],
+#trigger-context[data-mode="3"] .trigger-panel[data-panel="solo"],
+#trigger-context[data-mode="4"] .trigger-panel[data-panel="velocity"] { display:block; }
+.layer-status-dots { display:flex; gap:6px; margin-top:6px; }
+.layer-status-dot { padding:3px 8px; border-radius:3px; font-weight:700; background:var(--bg-card); color:var(--text-muted); font-size:11px; border:1px solid var(--border); }
+.layer-status-dot.lit { background:var(--purple-500); color:#fff; border-color:var(--purple-500); }
+.trigger-btn { padding:4px 8px; font-size:10px; font-weight:700; letter-spacing:0.4px; background:var(--bg-card);
+  color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; font-family:inherit; margin-right:6px; }
+.trigger-btn.active { background:var(--purple-500); color:#fff; border-color:var(--purple-500); }
+.trigger-toggle { display:inline-flex; align-items:center; gap:4px; font-size:10px; letter-spacing:0.4px; cursor:pointer; }
+.trigger-toggle input { margin:0; accent-color:var(--purple-500); }
+.rr-pos-row { margin-top:8px; display:flex; gap:6px; align-items:center; }
+.rr-pos-row span { font-size:10px; letter-spacing:0.4px; }
+.prob-row { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+.prob-letter { width:14px; font-weight:700; font-size:11px; color:var(--text-primary); }
+.prob-slider { flex:1; height:9px; border-radius:4px; position:relative; cursor:pointer; overflow:hidden;
+  background:repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 12px), var(--knob-track); box-shadow:inset 0 0 2px rgba(0,0,0,0.25); }
+.prob-fill { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg,var(--purple-600),var(--purple-400)); border-radius:4px; }
+.prob-value { width:32px; font-size:10px; color:var(--text-secondary); text-align:right; }
+.solo-checkboxes { display:flex; gap:8px; }
+.solo-cb { flex:1; padding:8px; font-weight:700; font-size:13px; background:transparent; color:var(--text-muted);
+  border:1px solid var(--border-strong); border-radius:9px; cursor:pointer; text-align:center; font-family:inherit; }
+.solo-cb.active { background:var(--purple-500); color:#fff; border-color:var(--purple-500); }
+#velocity-bar { position:relative; height:34px; border-radius:4px; margin-bottom:8px; overflow:hidden;
+  background:repeating-linear-gradient(90deg,var(--mesh-line) 0 1px,transparent 1px 16px), var(--knob-track); box-shadow:inset 0 0 3px rgba(0,0,0,0.25); }
+.vel-zone { position:absolute; top:0; bottom:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
+.vel-zone[data-layer="0"]{background:rgba(74,222,128,0.45);} .vel-zone[data-layer="1"]{background:rgba(250,204,21,0.45);}
+.vel-zone[data-layer="2"]{background:rgba(139,92,246,0.5);} .vel-zone[data-layer="3"]{background:rgba(239,68,68,0.45);}
+.vel-handle { position:absolute; top:0; bottom:0; width:4px; background:var(--text-primary); cursor:ew-resize; transform:translateX(-50%); box-shadow:0 0 4px rgba(0,0,0,0.4); z-index:2; }
+
+/* ── stem area (copied) ── */
+#mix-stem-area { display:flex; flex-direction:column; gap:6px; }
+body.fixed #mix-stem-area { gap:4px; }
+.stem-header { font-size:11px; letter-spacing:0.5px; color:var(--text-secondary); font-weight:700; }
+.stem-header .long { display:inline; } .stem-header .short { display:none; }
+body.fixed .stem-header .long { display:none; } body.fixed .stem-header .short { display:inline; }
+.stem-buttons { display:flex; gap:4px; }
+.stem-btn { flex:1; padding:8px 4px; font-size:11px; font-weight:700; background:transparent; color:var(--text-secondary);
+  border:1px solid var(--border-strong); border-radius:9px; cursor:pointer; font-family:inherit; }
+body.fixed .stem-btn { padding:6px 4px; }
+.stem-all-row { display:flex; gap:6px; }
+#stem-export-all { flex:2; padding:8px; font-size:10.5px; font-weight:700; letter-spacing:0.5px; background:transparent;
+  color:var(--purple-500); border:1px solid var(--purple-500); border-radius:9px; cursor:pointer; font-family:inherit; }
+body.fixed #stem-export-all { padding:6px; }
+#stem-reveal { flex:1; padding:8px; font-size:10px; font-weight:700; background:transparent; color:var(--text-secondary);
+  border:1px solid var(--border-strong); border-radius:9px; cursor:pointer; font-family:inherit; }
+body.fixed #stem-reveal { padding:6px; }
+.stem-source-row { display:flex; gap:6px; align-items:center; font-size:9.5px; letter-spacing:0.5px; color:var(--text-muted); margin-top:9px; }
+body.fixed .stem-source-row { margin-top:5px; }
+.stem-source-pill { padding:4px 12px; border:1px solid var(--border-strong); background:transparent; color:var(--text-secondary);
+  border-radius:7px; cursor:pointer; font-weight:700; font-family:inherit; font-size:9.5px; }
+.stem-source-pill.active { background:var(--purple-500); color:#fff; border-color:var(--purple-500); }
+.stem-status { font-size:9px; color:var(--text-muted); font-style:italic; min-height:11px; }
+
+/* ── footer (copied) — this is what was getting bled onto ── */
+#footer { height:48px; display:flex; align-items:center; padding:0 16px; background:var(--bg-surface);
+  border-top:1px solid var(--border); flex-shrink:0; gap:12px; }
+.output-label { font-size:9px; font-weight:500; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-secondary); }
+.output-slider-wrap { flex:1; height:6px; background:var(--border); border-radius:3px; position:relative; }
+.output-slider-fill { position:absolute; left:0; top:0; height:100%; width:62%; background:var(--purple-500); border-radius:3px; }
+.output-value, .meter-rms { font-size:10px; color:var(--text-secondary); }
+.footer-divider { width:1px; height:24px; background:var(--border-strong); }
+.master-mix-label { font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-secondary); }
+.master-mix-knob { width:24px; height:24px; border-radius:50%; border:2px solid var(--purple-500); }
+.master-mix-value { font-size:10px; color:var(--text-secondary); }
+.footer-brand { font-size:11px; font-style:italic; color:var(--text-muted); margin-left:auto; }
+</style>
+</head>
+<body class="fixed" data-theme="dark">
+
+<div class="toolbar">
+  <button id="theme-btn" onclick="toggleTheme()">◐ Dark mode</button>
+  <button id="fix-btn" class="on" onclick="toggleFix()">FIXED ✓ (click to see BROKEN)</button>
+  <span class="lbl">Trigger mode:</span>
+  <div class="grp">
+    <button class="modebtn on" data-m="0" onclick="setMode(0)">LAYER</button>
+    <button class="modebtn" data-m="1" onclick="setMode(1)">RR</button>
+    <button class="modebtn" data-m="2" onclick="setMode(2)">RANDOM</button>
+    <button class="modebtn" data-m="3" onclick="setMode(3)">SOLO</button>
+    <button class="modebtn" data-m="4" onclick="setMode(4)">VEL</button>
+  </div>
+</div>
+
+<div id="frame">
+  <div id="hero-spacer">( header 44px + hero 276px — not the focus )</div>
+
+  <div id="mix-panel">
+    <!-- LEFT: 4 channel strips -->
+    <div id="mix-strips"></div>
+    <!-- RIGHT: trigger + stem -->
+    <div id="mix-right">
+      <div id="mix-trigger-area">
+        <div id="trigger-pills">
+          <button class="trigger-pill active" data-val="0">LAYER</button>
+          <button class="trigger-pill" data-val="1">RR</button>
+          <button class="trigger-pill" data-val="2">RANDOM</button>
+          <button class="trigger-pill" data-val="3">SOLO</button>
+          <button class="trigger-pill" data-val="4">VEL</button>
+        </div>
+        <div id="trigger-context" data-mode="0">
+          <div class="trigger-panel" data-panel="layer">
+            <div>All populated layers fire together.</div>
+            <div class="layer-status-dots">
+              <span class="layer-status-dot lit" data-layer="0">A</span>
+              <span class="layer-status-dot lit" data-layer="1">B</span>
+              <span class="layer-status-dot" data-layer="2">C</span>
+              <span class="layer-status-dot" data-layer="3">D</span>
+            </div>
+          </div>
+          <div class="trigger-panel" data-panel="rr">
+            <div>Cycling A &rarr; B &rarr; C &rarr; D (skips empty layers).</div>
+            <div class="rr-pos-row">
+              <button class="trigger-btn">RESET TO A</button>
+              <label class="trigger-toggle"><input type="checkbox"> SYNC TO BAR</label>
+            </div>
+          </div>
+          <div class="trigger-panel" data-panel="random">
+            <div style="margin-bottom:6px;">Weighted random per note. 0% = never; 100% = always eligible.</div>
+            <div class="prob-row"><div class="prob-letter">A</div><div class="prob-slider"><div class="prob-fill" style="width:25%"></div></div><div class="prob-value">25%</div></div>
+            <div class="prob-row"><div class="prob-letter">B</div><div class="prob-slider"><div class="prob-fill" style="width:25%"></div></div><div class="prob-value">25%</div></div>
+            <div class="prob-row"><div class="prob-letter">C</div><div class="prob-slider"><div class="prob-fill" style="width:25%"></div></div><div class="prob-value">25%</div></div>
+            <div class="prob-row"><div class="prob-letter">D</div><div class="prob-slider"><div class="prob-fill" style="width:25%"></div></div><div class="prob-value">25%</div></div>
+            <button class="trigger-btn" style="margin-top:6px;">RESET TO UNIFORM</button>
+          </div>
+          <div class="trigger-panel" data-panel="solo">
+            <div style="margin-bottom:6px;">Click letters to choose which layers fire. 0 selected = silence.</div>
+            <div class="solo-checkboxes">
+              <button class="solo-cb active" data-layer="0">A</button>
+              <button class="solo-cb" data-layer="1">B</button>
+              <button class="solo-cb" data-layer="2">C</button>
+              <button class="solo-cb active" data-layer="3">D</button>
+            </div>
+          </div>
+          <div class="trigger-panel" data-panel="velocity">
+            <div style="margin-bottom:6px;">Drag handles to set per-layer velocity zones (0..127).</div>
+            <div id="velocity-bar">
+              <div class="vel-zone" data-layer="0" style="left:0;width:25%">A</div>
+              <div class="vel-zone" data-layer="1" style="left:25%;width:25%">B</div>
+              <div class="vel-zone" data-layer="2" style="left:50%;width:25%">C</div>
+              <div class="vel-zone" data-layer="3" style="left:75%;width:25%">D</div>
+              <div class="vel-handle" style="left:25%"></div>
+              <div class="vel-handle" style="left:50%"></div>
+              <div class="vel-handle" style="left:75%"></div>
+            </div>
+            <button class="trigger-btn">RESET ZONES</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="mix-stem-area">
+        <div class="stem-header">
+          <span class="long">STEMS &mdash; 1 min rolling, exports to ~/Documents/Terrain Instrument Stems/</span>
+          <span class="short">STEMS &mdash; 10 min rolling &middot; click = save, drag = DAW</span>
+        </div>
+        <div class="stem-buttons">
+          <button class="stem-btn">A</button><button class="stem-btn">B</button>
+          <button class="stem-btn">C</button><button class="stem-btn">D</button>
+        </div>
+        <div class="stem-all-row">
+          <button id="stem-export-all">EXPORT ALL 4</button>
+          <button id="stem-reveal">REVEAL FOLDER</button>
+        </div>
+        <div class="stem-source-row">
+          <span>SOURCE:</span>
+          <button class="stem-source-pill active">DRY</button>
+          <button class="stem-source-pill">MIX</button>
+        </div>
+        <div class="stem-status">Dragging stem B to DAW&hellip;</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="footer">
+    <span class="output-label">Output</span>
+    <div class="output-slider-wrap"><div class="output-slider-fill"></div></div>
+    <span class="output-value">+0.0 dB</span>
+    <span class="meter-rms">-17 dB</span>
+    <div class="footer-divider"></div>
+    <span class="master-mix-label">Mix</span>
+    <div class="master-mix-knob"></div>
+    <span class="master-mix-value">0:100 wet</span>
+    <span class="footer-brand">waves crate</span>
+  </div>
+</div>
+
+<script>
+// Build the 4 channel strips
+var strips = document.getElementById('mix-strips');
+['A','B','C','D'].forEach(function (L, i) {
+  var d = document.createElement('div');
+  d.className = 'mix-strip' + (i < 2 ? ' playing' : '');
+  d.innerHTML =
+    '<div class="mix-strip-header">' + L + ' <span class="play-dot"></span></div>' +
+    '<div class="mix-strip-knob" data-fn="pan" style="--val:0.5"></div>' +
+    '<div class="mix-strip-knob-label">PAN</div>' +
+    '<div class="mix-strip-fader-meter">' +
+      '<div class="mix-strip-fader" style="height:100%"><div class="mix-strip-fader-fill" style="height:70%"></div><div class="mix-strip-fader-handle" style="bottom:70%"></div></div>' +
+      '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" style="height:' + (i<2?55:0) + '%"></div></div>' +
+      '<div class="mix-strip-meter"><div class="mix-strip-meter-fill" style="height:' + (i<2?48:0) + '%"></div></div>' +
+    '</div>' +
+    '<div class="mix-strip-knob" data-fn="jitter" style="--val:0.2"></div>' +
+    '<div class="mix-strip-knob-label">JIT</div>' +
+    '<div class="mix-strip-buttons"><button class="mix-strip-btn" data-fn="mute">M</button><button class="mix-strip-btn" data-fn="solo">S</button></div>';
+  strips.appendChild(d);
+});
+
+function setMode (m) {
+  document.getElementById('trigger-context').setAttribute('data-mode', String(m));
+  document.querySelectorAll('.trigger-pill').forEach(function (p) { p.classList.toggle('active', +p.dataset.val === m); });
+  document.querySelectorAll('.modebtn').forEach(function (b) { b.classList.toggle('on', +b.dataset.m === m); });
+}
+function toggleTheme () {
+  var d = document.body.getAttribute('data-theme') === 'dark';
+  document.body.setAttribute('data-theme', d ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = d ? '◑ Light mode' : '◐ Dark mode';
+}
+function toggleFix () {
+  var on = document.body.classList.toggle('fixed');
+  var b = document.getElementById('fix-btn');
+  b.classList.toggle('on', on);
+  b.textContent = on ? 'FIXED ✓ (click to see BROKEN)' : 'BROKEN ✗ (click to see FIXED)';
+}
+</script>
+</body>
+</html>
