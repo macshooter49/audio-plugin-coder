@@ -8,6 +8,7 @@
 #include "Warp/WarpProcessor.h"
 #include "Warp/WarpRenderCache.h"
 #include "ModulationEngine.h"
+#include "FxMask.h"
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -295,6 +296,25 @@ namespace tw
         // separate "indy" bus instead of the global FX chain. NULL = no
         // routing (current behavior — voice writes to the passed buffer). */
         void setIndyTargetBuffer (juce::AudioBuffer<float>* buf) noexcept { indyTargetBuffer = buf; }
+
+        /** True iff the slice this voice is playing has fxIndependent set. Read
+         *  from the latched activeConfig — stable for the voice's lifetime, set
+         *  at startNote. */
+        bool isFxIndependent() const noexcept { return activeConfig.fxIndependent; }
+
+        /** Packed FX-chip mask for this voice's slice (see FxMask.h bit layout).
+         *  Used by the processor each block to OR with other indy voices' masks
+         *  to compute the shared indy chain's bypass mask. */
+        std::uint8_t packFxMask() const noexcept
+        {
+            return tw::fxmask::packMask (
+                activeConfig.fxGrain,
+                activeConfig.fxTapeMachine,
+                activeConfig.fxSpace,
+                activeConfig.fxDelay,
+                activeConfig.fxEq,
+                activeConfig.fxJune);
+        }
 
         void renderNextBlock (juce::AudioBuffer<float>& passedBuffer,
                               int startSample, int numSamples) override
