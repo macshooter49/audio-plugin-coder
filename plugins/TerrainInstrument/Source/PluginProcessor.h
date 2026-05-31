@@ -20,6 +20,7 @@
 #include "TerrainSynth.h"
 #include "TerrainConstants.h"
 #include "LayerState.h"
+#include "IndyFxChain.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -568,10 +569,25 @@ private:
     // prepareToPlay; pointer pushed onto every voice each processBlock.
     juce::AudioBuffer<float> indyCaptureBus;
 
+    // Per-chop FX-independence (option 1: shared chain). After layers
+    // render, the processor ORs all currently-playing indy voices' masks
+    // into activeIndyMask, then runs indyChain.processInto(indyCaptureBus,
+    // indySumBuffer, numSamples) BEFORE the per-sample master loop. The
+    // loop reads indySumBuffer per sample and adds it to leftChannel /
+    // rightChannel at the same spot the old indy add-back lived.
+    tw::IndyFxChain          indyChain;
+    juce::AudioBuffer<float> indySumBuffer;
+
     // Rolling capture buffer
     RollingCaptureBuffer captureBuffer;
     std::unique_ptr<std::thread> captureExportThread;
     juce::String lastCaptureFilePath;
+
+    /** Snapshots APVTS-driven FX parameter values into a IndyFxChain::
+     *  ParamTargets struct. Reads only atomics + dynamic_cast lookups —
+     *  RT-safe. Scaling conventions match the global chain (see lessons
+     *  baked-in section of the implementation plan). */
+    tw::IndyFxChain::ParamTargets snapshotFxParamTargets() const noexcept;
 
     // Presets
     void initializePresets();

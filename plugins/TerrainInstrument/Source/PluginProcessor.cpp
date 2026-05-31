@@ -823,6 +823,14 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // added directly to master output, bypassing the entire global FX chain.
     indyCaptureBus.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);
 
+    // Per-chop FX-independence (option 1): prepare the shared indy chain
+    // and allocate its output sum buffer. The chain processes
+    // indyCaptureBus into indySumBuffer once per block; the per-sample
+    // master loop reads indySumBuffer and mixes it in.
+    indyChain.prepare (sampleRate, samplesPerBlock);
+    indySumBuffer.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);
+    indySumBuffer.clear();
+
     // Mix page Phase D: allocate per-layer rolling stem buffers (~92 MB at 48k).
     allocateStemBuffers (sampleRate);
     indyCaptureBus.clear();
@@ -1488,15 +1496,36 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     auto* leftChannel  = buffer.getWritePointer(0);
     auto* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
 
-    // Per-chop FX-independent capture bus — these are the voices whose
-    // chops have fxIndependent=true. They wrote into indyCaptureBus instead
-    // of `buffer`, so they bypass the global FX chain entirely. Added back
-    // at master after gain, before the soft-clipper, regardless of master
-    // mix (clean signal always audible).
-    const float* indyL = indyCaptureBus.getReadPointer (0);
-    const float* indyR = (indyCaptureBus.getNumChannels() > 1)
-                            ? indyCaptureBus.getReadPointer (1)
-                            : indyL;
+    // ── Per-chop FX-independence (option 1): aggregate active indy masks ─
+    // Walk all voices across all 4 layers. For each voice that's currently
+    // playing AND has fxIndependent latched at startNote, OR its packed
+    // chip mask into activeIndyMask. The indy chain runs once below with
+    // this aggregate mask driving per-module bypass.
+    std::uint8_t activeIndyMask = 0;
+    for (auto& layer : layers)
+    {
+        auto& synth = layer.synth;
+        for (int v = 0; v < synth.getNumVoices(); ++v)
+        {
+            if (auto* sv = dynamic_cast<tw::SamplerVoice*> (synth.getVoice (v)))
+            {
+                if (sv->isPlaying() && sv->isFxIndependent())
+                    activeIndyMask |= sv->packFxMask();
+            }
+        }
+    }
+
+    // ── Run the indy chain into indySumBuffer ───────────────────────────
+    // Grow + clear the sum buffer for this block; snapshot APVTS into
+    // ParamTargets; run the chain on indyCaptureBus (which holds whatever
+    // the indy voices wrote during layer.synth.renderNextBlock above).
+    if (indySumBuffer.getNumSamples() < numSamples)
+        indySumBuffer.setSize (2, numSamples, false, true, true);
+    indySumBuffer.clear (0, numSamples);
+
+    indyChain.setMask (activeIndyMask);
+    indyChain.setParamTargets (snapshotFxParamTargets());
+    indyChain.processInto (indyCaptureBus, indySumBuffer, numSamples);
 
     int scopePos = scopeWritePos.load();
 
@@ -1887,12 +1916,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             rightChannel[i] = outR;
         }
 
-        // Add indy-FX-independent voices (dry signal, master-mix-independent,
-        // gained with the master). Soft-clipper below applies to the sum so
-        // these voices still benefit from the DAC ceiling.
-        leftChannel[i] += indyL[i] * outputGain;
+        // Per-chop FX-independence (option 1): read the indy chain's output
+        // (which already processed indyCaptureBus through the enabled FX per
+        // activeIndyMask above) and mix into master. Same spot as the old
+        // indy add-back so master volume + soft-clipper still apply.
+        leftChannel[i] += indySumBuffer.getSample (0, i) * outputGain;
         if (rightChannel != nullptr)
-            rightChannel[i] += indyR[i] * outputGain;
+            rightChannel[i] += indySumBuffer.getSample (1, i) * outputGain;
 
         // Master soft-clipper — DAC protection net at -0.3 dBFS.
         // Symmetric tanh: transparent below ~0.4, smooth roll-off, output bounded to (-c, c).
@@ -3085,6 +3115,98 @@ void TerrainInstrumentAudioProcessor::exportCapture(int durationSeconds)
             lastCaptureFilePath = outFile.getFullPathName();
             captureExportState.store(2); // ready
         });
+}
+
+//==============================================================================
+// Per-chop FX-independence (option 1): snapshots APVTS parameters into a
+// IndyFxChain::ParamTargets struct so the shared indy chain uses the same
+// values as the global chain. Scaling conventions match the global chain's
+// per-sample loop exactly (see baked-in lessons in the implementation plan).
+tw::IndyFxChain::ParamTargets
+TerrainInstrumentAudioProcessor::snapshotFxParamTargets() const noexcept
+{
+    tw::IndyFxChain::ParamTargets t;
+
+    // Grain — density / spray are RAW (matching global chain's per-sample loop)
+    t.grainSize = apvts.getRawParameterValue (ParameterIDs::GRAIN_SIZE)->load();
+    t.density   = apvts.getRawParameterValue (ParameterIDs::DENSITY)->load();
+    t.spray     = apvts.getRawParameterValue (ParameterIDs::SPRAY)->load();
+    t.pitch     = apvts.getRawParameterValue (ParameterIDs::PITCH)->load();
+    t.wander01  = apvts.getRawParameterValue (ParameterIDs::WANDER)->load() * 0.01f;
+    // Freeze uses the global chain's concave curve: pow(raw * 0.01f, 1.5f).
+    {
+        const float raw = apvts.getRawParameterValue (ParameterIDs::FREEZE)->load() * 0.01f;
+        t.freeze01 = std::pow (raw, 1.5f);
+    }
+    t.mix = apvts.getRawParameterValue (ParameterIDs::MIX)->load();
+
+    // Tape (cassette params *0.01f to match global chain per-sample scaling)
+    t.wowFlutter01 = apvts.getRawParameterValue (ParameterIDs::WOW_FLUTTER)->load() * 0.01f;
+    t.saturation01 = apvts.getRawParameterValue (ParameterIDs::SATURATION)->load() * 0.01f;
+    t.hiss01       = apvts.getRawParameterValue (ParameterIDs::HISS)->load() * 0.01f;
+    // Studio sculpt/weave/tilt: global chain computes sculptAmt = raw*0.01f,
+    // then passes sculptAmt to tapeProcessor. IndyFxChain passes these directly
+    // to tapeL.processSample in the same argument position — must match.
+    t.studioSculpt = apvts.getRawParameterValue (ParameterIDs::STUDIO_SCULPT)->load() * 0.01f;
+    t.studioWeave  = apvts.getRawParameterValue (ParameterIDs::STUDIO_WEAVE)->load() * 0.01f;
+    t.studioTilt   = apvts.getRawParameterValue (ParameterIDs::STUDIO_TILT)->load() * 0.01f;
+    // Wire wow/sat/hiss: global chain uses wireWowAmt = raw*0.01f.
+    // IndyFxChain passes these in the same wire argument position.
+    t.wireWow  = apvts.getRawParameterValue (ParameterIDs::WIRE_WOW)->load() * 0.01f;
+    t.wireSat  = apvts.getRawParameterValue (ParameterIDs::WIRE_SATURATION)->load() * 0.01f;
+    t.wireHiss = apvts.getRawParameterValue (ParameterIDs::WIRE_HISS)->load() * 0.01f;
+    t.wireSpaceNoise = wireSpaceNoiseEnabled.load() > 0.5f;
+    t.wireTubeSat    = wireTubeSatEnabled.load() > 0.5f;
+
+    // Space
+    t.spaceSize  = apvts.getRawParameterValue (ParameterIDs::SPACE_SIZE)->load();
+    t.spaceDecay = apvts.getRawParameterValue (ParameterIDs::SPACE_DECAY)->load();
+    t.spaceTone  = apvts.getRawParameterValue (ParameterIDs::SPACE_TONE)->load();
+    t.spaceMix   = apvts.getRawParameterValue (ParameterIDs::SPACE_MIX)->load();
+
+    // Delay (MoogDelay::Params field names verified from MoogDelay.h)
+    t.dlyTime       = apvts.getRawParameterValue (ParameterIDs::DLY_TIME)->load();
+    t.dlyFeedback   = apvts.getRawParameterValue (ParameterIDs::DLY_FEEDBACK)->load();
+    t.dlyTone       = apvts.getRawParameterValue (ParameterIDs::DLY_TONE)->load();
+    t.dlyCharacter  = apvts.getRawParameterValue (ParameterIDs::DLY_CHARACTER)->load();
+    t.dlyMod        = apvts.getRawParameterValue (ParameterIDs::DLY_MOD)->load();
+    t.dlyModRate    = apvts.getRawParameterValue (ParameterIDs::DLY_MOD_RATE)->load();
+    t.dlyModWave    = (int) apvts.getRawParameterValue (ParameterIDs::DLY_MOD_WAVE)->load();
+    t.dlyMix        = apvts.getRawParameterValue (ParameterIDs::DLY_MIX)->load();
+    t.dlyDuck       = apvts.getRawParameterValue (ParameterIDs::DLY_DUCK)->load();
+    t.dlyPitch      = (int) apvts.getRawParameterValue (ParameterIDs::DLY_PITCH)->load();
+    t.dlyWidth      = (int) apvts.getRawParameterValue (ParameterIDs::DLY_WIDTH)->load();
+    t.dlyFreezeHeld = apvts.getRawParameterValue (ParameterIDs::DLY_FREEZE)->load() > 0.5f;
+
+    // June (chorus)
+    t.chAmount    = apvts.getRawParameterValue (ParameterIDs::CHORUS_AMOUNT)->load();
+    t.chWidth     = apvts.getRawParameterValue (ParameterIDs::CHORUS_WIDTH)->load();
+    t.chCharacter = apvts.getRawParameterValue (ParameterIDs::CHORUS_CHARACTER)->load();
+
+    // EQ — bypass args are bool
+    t.eqMasterBypass = apvts.getRawParameterValue (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
+    t.eqHpFreq   = apvts.getRawParameterValue (ParameterIDs::EQ_HP_FREQ)->load();
+    if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_HP_SLOPE)))
+        t.eqHpSlope = p->getIndex();
+    t.eqHpBypass = apvts.getRawParameterValue (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
+    t.eqLpFreq   = apvts.getRawParameterValue (ParameterIDs::EQ_LP_FREQ)->load();
+    if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_LP_SLOPE)))
+        t.eqLpSlope = p->getIndex();
+    t.eqLpBypass = apvts.getRawParameterValue (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
+
+    static const char* freqIds[7] { ParameterIDs::EQ_B1_FREQ, ParameterIDs::EQ_B2_FREQ, ParameterIDs::EQ_B3_FREQ, ParameterIDs::EQ_B4_FREQ, ParameterIDs::EQ_B5_FREQ, ParameterIDs::EQ_B6_FREQ, ParameterIDs::EQ_B7_FREQ };
+    static const char* gainIds[7] { ParameterIDs::EQ_B1_GAIN, ParameterIDs::EQ_B2_GAIN, ParameterIDs::EQ_B3_GAIN, ParameterIDs::EQ_B4_GAIN, ParameterIDs::EQ_B5_GAIN, ParameterIDs::EQ_B6_GAIN, ParameterIDs::EQ_B7_GAIN };
+    static const char* qIds[7]    { ParameterIDs::EQ_B1_Q,    ParameterIDs::EQ_B2_Q,    ParameterIDs::EQ_B3_Q,    ParameterIDs::EQ_B4_Q,    ParameterIDs::EQ_B5_Q,    ParameterIDs::EQ_B6_Q,    ParameterIDs::EQ_B7_Q };
+    static const char* bypIds[7]  { ParameterIDs::EQ_B1_BYPASS, ParameterIDs::EQ_B2_BYPASS, ParameterIDs::EQ_B3_BYPASS, ParameterIDs::EQ_B4_BYPASS, ParameterIDs::EQ_B5_BYPASS, ParameterIDs::EQ_B6_BYPASS, ParameterIDs::EQ_B7_BYPASS };
+    for (int b = 0; b < 7; ++b)
+    {
+        t.bandFreq[b]   = apvts.getRawParameterValue (freqIds[b])->load();
+        t.bandGain[b]   = apvts.getRawParameterValue (gainIds[b])->load();
+        t.bandQ[b]      = apvts.getRawParameterValue (qIds[b])->load();
+        t.bandBypass[b] = apvts.getRawParameterValue (bypIds[b])->load() > 0.5f;
+    }
+
+    return t;
 }
 
 //==============================================================================
