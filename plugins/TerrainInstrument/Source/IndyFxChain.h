@@ -102,6 +102,9 @@ namespace tw
         };
 
         // ── Setup ─────────────────────────────────────────────────────────────
+        // Must be called from prepareToPlay, NOT from processBlock — the
+        // wrapped FX modules allocate buffers here (e.g. MoogDelay::prepare
+        // does bufferL/R.assign), which is not real-time safe.
         void prepare (double sr, int blockSize)
         {
             grainL.prepare (sr, blockSize);
