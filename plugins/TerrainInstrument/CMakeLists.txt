@@ -48,6 +48,7 @@ target_sources(TerrainInstrument
         Source/TerrainChorus_test.cpp
         Source/Warp/WarpProcessor_test.cpp
         Source/LayerState_test.cpp
+        Source/FxMask_test.cpp
 )
 
 # ── Include paths ──
