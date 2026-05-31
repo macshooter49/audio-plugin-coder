@@ -3158,11 +3158,13 @@ TerrainInstrumentAudioProcessor::snapshotFxParamTargets() const noexcept
     t.wireSpaceNoise = wireSpaceNoiseEnabled.load() > 0.5f;
     t.wireTubeSat    = wireTubeSatEnabled.load() > 0.5f;
 
-    // Space
-    t.spaceSize  = apvts.getRawParameterValue (ParameterIDs::SPACE_SIZE)->load();
-    t.spaceDecay = apvts.getRawParameterValue (ParameterIDs::SPACE_DECAY)->load();
-    t.spaceTone  = apvts.getRawParameterValue (ParameterIDs::SPACE_TONE)->load();
-    t.spaceMix   = apvts.getRawParameterValue (ParameterIDs::SPACE_MIX)->load();
+    // Space — global chain scales ALL FOUR by * 0.01f (see PluginProcessor.cpp
+    // lines 1663-1666). Passing raw 0..100 values causes SpaceReverb to silence
+    // / NaN out at typical user knob settings.
+    t.spaceSize  = apvts.getRawParameterValue (ParameterIDs::SPACE_SIZE)->load() * 0.01f;
+    t.spaceDecay = apvts.getRawParameterValue (ParameterIDs::SPACE_DECAY)->load() * 0.01f;
+    t.spaceTone  = apvts.getRawParameterValue (ParameterIDs::SPACE_TONE)->load() * 0.01f;
+    t.spaceMix   = apvts.getRawParameterValue (ParameterIDs::SPACE_MIX)->load() * 0.01f;
 
     // Delay (MoogDelay::Params field names verified from MoogDelay.h)
     t.dlyTime       = apvts.getRawParameterValue (ParameterIDs::DLY_TIME)->load();
