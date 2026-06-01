@@ -50,6 +50,7 @@ target_sources(TerrainInstrument
         Source/LayerState_test.cpp
         Source/FxMask_test.cpp
         Source/IndyFxChain_test.cpp
+        Source/SynthVoice_test.cpp
 )
 
 # ── Include paths ──
