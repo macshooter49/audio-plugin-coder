@@ -184,6 +184,27 @@ public:
                     juce::String ("base=") + juce::String (base)
                     + " up1oct=" + juce::String (up));
         }
+
+        beginTest ("Wavetable lookup: SynthVoice with sine table produces output");
+        {
+            tw::Wavetable sineTable = tw::Wavetable::makeSine();
+            tw::SynthVoice v;
+            v.setCurrentPlaybackSampleRate (48000.0);
+            v.prepareToPlay (48000.0, 1024, 2);
+            v.setAmpEnvelopeParameters (1.0f, 1.0f, 1.0f, 1.0f);
+            v.setFilterParameters (20000.0f, 0.0f);
+            v.setLevel (1.0f); v.setPan (0.0f);
+            v.setWavetable (&sineTable);
+            v.setWavetableFrame (0.0f);
+            tw::SynthSound s;
+            v.startNote (69, 1.0f, &s, 8192);
+
+            juce::AudioBuffer<float> buf (2, 512);
+            buf.clear();
+            v.renderNextBlock (buf, 0, 512);
+            const float rms = buf.getRMSLevel (0, 0, 512);
+            expect (rms > 0.05f, juce::String ("sine wavetable RMS=") + juce::String (rms));
+        }
     }
 };
 

@@ -7,6 +7,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include "Wavetable.h"
 #include <atomic>
 #include <cmath>
 
@@ -104,6 +105,20 @@ namespace tw
                 updatePhaseIncrementFromMidi (currentMidiNote_);
         }
 
+        /** Set which wavetable this voice reads from. Pointer is borrowed —
+         *  caller (PluginProcessor) guarantees lifetime ≥ voice lifetime
+         *  (WavetableBank lives for the entire plugin instance). */
+        void setWavetable (const tw::Wavetable* wt) noexcept
+        {
+            currentWavetable_ = wt;
+        }
+
+        /** Set frame position 0..1 within the current wavetable. */
+        void setWavetableFrame (float pos) noexcept
+        {
+            framePos_ = juce::jlimit (0.0f, 1.0f, pos);
+        }
+
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
@@ -146,8 +161,20 @@ namespace tw
 
             for (int i = 0; i < numSamples; ++i)
             {
-                float s = static_cast<float> (2.0 * phase_ - 1.0);
-                s -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
+                // Wavetable lookup (Phase 2A): bilinear interpolation across
+                // frames + within-frame phase. Falls back to PolyBLEP saw when
+                // no wavetable is set (defensive — should never trigger after
+                // PluginProcessor's per-block setWavetable).
+                float s;
+                if (currentWavetable_ != nullptr)
+                {
+                    s = currentWavetable_->lookup (framePos_, (float) phase_);
+                }
+                else
+                {
+                    s = static_cast<float> (2.0 * phase_ - 1.0);
+                    s -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
+                }
 
                 const float env = ampEnv_.getNextSample();
                 mono[i] = s * currentVelocity_ * env;
@@ -231,5 +258,8 @@ namespace tw
         int   octOffset_   = 0;
         int   semiOffset_  = 0;
         float centsOffset_ = 0.0f;
+
+        const tw::Wavetable* currentWavetable_ = nullptr;
+        float                framePos_         = 0.0f;
     };
 }
