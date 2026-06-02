@@ -446,11 +446,11 @@ private:
 
     // ── Synth section (Phase 1 MPV — see Design/v1-syn-spec.md) ──────────
     // Parallel pipeline beside the 4 layers. juce::Synthesiser owns 8
-    // SynthVoices + 1 SynthSound. Renders into synthScratch_ each block,
+    // SynthVoices + 1 SynthSound. Renders into synthScratch each block,
     // summed into the master `buffer` before the FX chain.
     static constexpr int kSynthVoiceCount = 8;
-    juce::Synthesiser           synthEngine_;
-    juce::AudioBuffer<float>    synthScratch_;
+    juce::Synthesiser           synthEngine;
+    juce::AudioBuffer<float>    synthScratch;
     // sampleBuffer removed in Task 5 — owned by LayerState. Access via layers[editingLayer].sampleBuffer.
     tw::SampleLoader sampleLoader;
     // slicesPtr removed in Task 5 — owned by LayerState as currentSlices. Access via layers[editingLayer].currentSlices.

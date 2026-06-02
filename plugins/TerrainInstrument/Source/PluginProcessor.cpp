@@ -49,9 +49,9 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     }
 
     // Synth engine — Phase 1 MPV (one SynthSound + kSynthVoiceCount voices)
-    synthEngine_.addSound (new tw::SynthSound());
+    synthEngine.addSound (new tw::SynthSound());
     for (int i = 0; i < kSynthVoiceCount; ++i)
-        synthEngine_.addVoice (new tw::SynthVoice());
+        synthEngine.addVoice (new tw::SynthVoice());
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
@@ -884,11 +884,11 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
         layer.synth.setCurrentPlaybackSampleRate (sampleRate);
 
     // Synth scratch buffer + per-voice DSP prep.
-    synthScratch_.setSize (2, samplesPerBlock, false, true, true);
-    synthEngine_.setCurrentPlaybackSampleRate (sampleRate);
-    for (int i = 0; i < synthEngine_.getNumVoices(); ++i)
+    synthScratch.setSize (2, samplesPerBlock, false, true, true);
+    synthEngine.setCurrentPlaybackSampleRate (sampleRate);
+    for (int i = 0; i < synthEngine.getNumVoices(); ++i)
     {
-        if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine_.getVoice (i)))
+        if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
             sv->prepareToPlay (sampleRate, samplesPerBlock, 2);
     }
 
@@ -1465,9 +1465,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float ampS    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_S);
         const float ampR    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_R);
 
-        for (int i = 0; i < synthEngine_.getNumVoices(); ++i)
+        for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
-            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine_.getVoice (i)))
+            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
             {
                 sv->setTuning                 (oct, semi, cent);
                 sv->setLevel                  (lvl);
@@ -1481,14 +1481,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Synth renders into its own scratch (broadcast midiMessages unfiltered —
     // the trigger-mode dispatcher above gates the LAYERS only, the synth
     // is a parallel pipeline that always receives the host's MIDI).
-    if (synthScratch_.getNumSamples() < numSamples)
-        synthScratch_.setSize (2, numSamples, false, true, true);
-    synthScratch_.clear();
-    synthEngine_.renderNextBlock (synthScratch_, midiMessages, 0, numSamples);
+    if (synthScratch.getNumSamples() < numSamples)
+        synthScratch.setSize (2, numSamples, false, true, true);
+    synthScratch.clear();
+    synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples);
 
     // Sum synth into master buffer (flows through the master FX chain below).
     for (int ch = 0; ch < buffer.getNumChannels() && ch < 2; ++ch)
-        buffer.addFrom (ch, 0, synthScratch_, ch, 0, numSamples);
+        buffer.addFrom (ch, 0, synthScratch, ch, 0, numSamples);
 
     // -6 dB pad on the voice mix before the FX chain. The FX modules
     // (TapeProcessor saturation, SpaceReverb feedback paths, etc.) were
