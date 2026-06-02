@@ -63,7 +63,8 @@ namespace tw
 
         /** Called from PluginProcessor::prepareToPlay. Sizes filter + caches
          *  block-size for the per-block AudioBlock view. Phase 9: always stereo
-         *  (2 channels) so OSC A + OSC B can be panned independently. */
+         *  (2 channels) so OSC A + OSC B can be panned independently.
+         *  Phase 8a: also prepares per-channel HORIZON high-shelf filters. */
         void prepareToPlay (double sr, int samplesPerBlock, int /*numChannels*/) noexcept
         {
             setCurrentPlaybackSampleRate (sr);
@@ -74,6 +75,18 @@ namespace tw
             filter_.prepare (spec);
             filter_.setMode (juce::dsp::LadderFilterMode::LPF24);
             filter_.reset();
+
+            // Phase 8a — HORIZON shelves (one per stereo channel, mono spec)
+            juce::dsp::ProcessSpec monoSpec;
+            monoSpec.sampleRate       = sr;
+            monoSpec.maximumBlockSize = (juce::uint32) samplesPerBlock;
+            monoSpec.numChannels      = 1;
+            horizonShelfL_.prepare (monoSpec);
+            horizonShelfR_.prepare (monoSpec);
+            horizonShelfL_.reset();
+            horizonShelfR_.reset();
+            *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (sr, 2500.0f, 0.7071f, 1.0f);
+            *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (sr, 2500.0f, 0.7071f, 1.0f);
         }
 
         /** Cutoff in Hz (20..20000), resonance 0..1. Called per block from
@@ -184,6 +197,23 @@ namespace tw
             engineB_ = static_cast<Engine> (clamped);
         }
 
+        // ── Phase 8a — Unison + EROSION + HORIZON setters ─────────────────
+
+        /** Set extra unison detune + pan offset on this voice. Called by
+         *  UnisonSynth::noteOn before startVoice so each stack member has a
+         *  unique position in the chorus spread. */
+        void setUnisonOffsets (float detuneCents, float panOffset) noexcept
+        {
+            unisonDetuneCents_ = detuneCents;
+            unisonPanOffset_   = juce::jlimit (-1.0f, 1.0f, panOffset);
+        }
+
+        /** EROSION amount 0..1 (set per-block from APVTS SYN_EROSION/100). */
+        void setErosionAmount (float a) noexcept { erosionAmount_ = juce::jlimit (0.0f, 1.0f, a); }
+
+        /** HORIZON tilt -1..+1 (set per-block from APVTS SYN_HORIZON/100). */
+        void setHorizonAmount (float h) noexcept { horizonAmount_ = juce::jlimit (-1.0f, 1.0f, h); }
+
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
@@ -194,12 +224,23 @@ namespace tw
             modPhase_        = 0.0;      // Phase 3 — FM modulator reset
             noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
             syncPhase_       = 0.0;      // Phase 2C SYNC reset (good hygiene)
-            updatePhaseIncrementFromMidi (midiNote);
             // OSC B resets (Phase 9)
             phaseB_          = 0.0;
             modPhaseB_       = 0.0;
             noiseLpZB_       = 0.0f;
             syncPhaseB_      = 0.0;
+
+            // Phase 8a — EROSION: randomize rate + initial phase per voice/note combination
+            // Hash voice pointer XOR midiNote for decorrelated drift across voices
+            const std::uint32_t hash = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
+                                       ^ static_cast<std::uint32_t> (midiNote * 2654435761u);
+            const float r1 = static_cast<float> (hash & 0xFFFF)         / 65535.0f;  // 0..1
+            const float r2 = static_cast<float> ((hash >> 16) & 0xFFFF) / 65535.0f;  // 0..1
+            erosionRate_         = 0.3f + r1 * 0.4f;  // 0.3..0.7 Hz
+            erosionPhase_        = r2;                 // random initial phase
+            currentErosionCents_ = 0.0f;
+
+            updatePhaseIncrementFromMidi (midiNote);
             updatePhaseIncrementBFromMidi (midiNote);
             playing_         = true;
             ampEnv_.reset();
@@ -234,6 +275,30 @@ namespace tw
             scratch_.clear();
             auto* scratchL = scratch_.getWritePointer (0);
             auto* scratchR = scratch_.getWritePointer (1);
+
+            // Phase 8a — Compute this block's EROSION drift (slow sine LFO, per-voice)
+            {
+                constexpr double pi2 = 6.2831853071795865;
+                currentErosionCents_ = std::sin (static_cast<float> (pi2 * erosionPhase_))
+                                       * erosionAmount_ * 2.0f;   // max ±2 cents
+                erosionPhase_ += static_cast<float> (erosionRate_ * numSamples / sampleRate_);
+                if (erosionPhase_ >= 1.0f) erosionPhase_ -= std::floor (erosionPhase_);
+            }
+            // Re-derive phaseIncrements with updated erosion drift
+            updatePhaseIncrementFromMidi  (currentMidiNote_);
+            updatePhaseIncrementBFromMidi (currentMidiNote_);
+
+            // Phase 8a — HORIZON: per-note tilt depending on midiNote and amount.
+            // midiNote 60 = neutral; lower notes get high-shelf cut (warmer),
+            // higher notes get high-shelf boost (airier).
+            {
+                const float horizonTilt = horizonAmount_ * (currentMidiNote_ - 60) / 60.0f;
+                const float shelfGain   = std::pow (2.0f, horizonTilt * 0.5f);  // ±~3 dB at extremes
+                *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
+                    sampleRate_, 2500.0f, 0.7071f, shelfGain);
+                *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
+                    sampleRate_, 2500.0f, 0.7071f, shelfGain);
+            }
 
             for (int i = 0; i < numSamples; ++i)
             {
@@ -421,6 +486,33 @@ namespace tw
             juce::dsp::ProcessContextReplacing<float> ctx (sub);
             filter_.process (ctx);
 
+            // Phase 8a — Apply unison pan offset (post-filter, pre-HORIZON).
+            // unisonPanOffset_ is in -1..+1; rebalance L/R amplitudes with
+            // equal-power panning (sqrt(2) normalised so centre = unity).
+            if (std::abs (unisonPanOffset_) > 0.001f)
+            {
+                const float panAngle = (unisonPanOffset_ + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
+                const float gainL = std::cos (panAngle) * 1.4142f;
+                const float gainR = std::sin (panAngle) * 1.4142f;
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    scratchL[i] *= gainL;
+                    scratchR[i] *= gainR;
+                }
+            }
+
+            // Phase 8a — HORIZON tilt filter (per-channel high-shelf).
+            {
+                float* chL = scratch_.getWritePointer (0);
+                float* chR = scratch_.getWritePointer (1);
+                juce::dsp::AudioBlock<float> blockL (&chL, 1, 0, (size_t) numSamples);
+                juce::dsp::ProcessContextReplacing<float> ctxL (blockL);
+                horizonShelfL_.process (ctxL);
+                juce::dsp::AudioBlock<float> blockR (&chR, 1, 0, (size_t) numSamples);
+                juce::dsp::ProcessContextReplacing<float> ctxR (blockR);
+                horizonShelfR_.process (ctxR);
+            }
+
             // Sum filtered stereo scratch into output.
             auto* L = out.getWritePointer (0, startSample);
             auto* R = out.getNumChannels() > 1
@@ -445,7 +537,9 @@ namespace tw
                   static_cast<double> (midiNote - 69)
                 + static_cast<double> (octOffset_) * 12.0
                 + static_cast<double> (semiOffset_)
-                + static_cast<double> (centsOffset_) * 0.01;
+                + static_cast<double> (centsOffset_)       * 0.01
+                + static_cast<double> (unisonDetuneCents_) * 0.01   // Phase 8a
+                + static_cast<double> (currentErosionCents_) * 0.01; // Phase 8a
             const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
             phaseIncrement_ = hz / sampleRate_;
         }
@@ -457,7 +551,9 @@ namespace tw
                   static_cast<double> (midiNote - 69)
                 + static_cast<double> (octOffsetB_) * 12.0
                 + static_cast<double> (semiOffsetB_)
-                + static_cast<double> (centsOffsetB_) * 0.01;
+                + static_cast<double> (centsOffsetB_)      * 0.01
+                + static_cast<double> (unisonDetuneCents_) * 0.01   // Phase 8a
+                + static_cast<double> (currentErosionCents_) * 0.01; // Phase 8a
             const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
             phaseIncrementB_ = hz / sampleRate_;
         }
@@ -551,5 +647,20 @@ namespace tw
                                          reinterpret_cast<std::uintptr_t> (this));
         float  noiseLpZB_       = 0.0f;
         double modPhaseB_       = 0.0;
+
+        // ── Phase 8a — Unison offset (set per-voice by UnisonSynth on noteOn) ─
+        float unisonDetuneCents_ = 0.0f;  // additional cents for OSC A + OSC B pitch
+        float unisonPanOffset_   = 0.0f;  // -1..+1 applied after filter, pre-HORIZON
+
+        // Phase 8a — EROSION state (per-voice slow LFO wobbles pitch ±2 cents max)
+        float erosionAmount_       = 0.0f;  // 0..1 from SYN_EROSION/100
+        float erosionRate_         = 0.5f;  // sub-1Hz, randomized per voice in startNote
+        float erosionPhase_        = 0.0f;  // 0..1, advances per block
+        float currentErosionCents_ = 0.0f;  // cached this-block drift value
+
+        // Phase 8a — HORIZON tilt filter (per-voice high-shelf, gain depends on midiNote * horizon)
+        float horizonAmount_   = 0.0f;  // -1..+1 from SYN_HORIZON/100
+        juce::dsp::IIR::Filter<float> horizonShelfL_;
+        juce::dsp::IIR::Filter<float> horizonShelfR_;
     };
 }

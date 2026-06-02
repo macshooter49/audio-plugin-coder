@@ -110,6 +110,61 @@ struct PresetData
 };
 
 //==============================================================================
+/** Subclassed juce::Synthesiser that allocates N voices per noteOn (UNISON),
+ *  each with its own detune + pan offset. Phase 8a. */
+class UnisonSynth : public juce::Synthesiser
+{
+public:
+    void setUnisonState (int count, float spread) noexcept
+    {
+        unisonCount_  = juce::jlimit (1, 8, count);
+        unisonSpread_ = juce::jlimit (0.0f, 1.0f, spread);
+    }
+
+    void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
+    {
+        const juce::ScopedLock sl (lock);
+        for (int u = 0; u < unisonCount_; ++u)
+        {
+            const float detuneCents = computeDetune (u, unisonCount_, unisonSpread_);
+            const float panOffset   = computePan    (u, unisonCount_, unisonSpread_);
+
+            for (auto* sound : sounds)
+            {
+                if (sound->appliesToNote (midiNoteNumber) && sound->appliesToChannel (midiChannel))
+                {
+                    auto* voice = findFreeVoice (sound, midiChannel, midiNoteNumber, isNoteStealingEnabled());
+                    if (voice != nullptr)
+                    {
+                        if (auto* tv = dynamic_cast<tw::SynthVoice*> (voice))
+                            tv->setUnisonOffsets (detuneCents, panOffset);
+                        startVoice (voice, sound, midiChannel, midiNoteNumber, velocity);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+private:
+    static float computeDetune (int u, int total, float spread) noexcept
+    {
+        if (total <= 1) return 0.0f;
+        const float t = (static_cast<float> (u) / static_cast<float> (total - 1)) * 2.0f - 1.0f;
+        return t * spread * 25.0f;  // max ±25 cents at spread=1.0
+    }
+    static float computePan (int u, int total, float spread) noexcept
+    {
+        if (total <= 1) return 0.0f;
+        const float t = (static_cast<float> (u) / static_cast<float> (total - 1)) * 2.0f - 1.0f;
+        return t * spread;  // max ±1.0 at spread=1.0
+    }
+
+    int   unisonCount_  = 1;
+    float unisonSpread_ = 0.0f;
+};
+
+//==============================================================================
 class TerrainInstrumentAudioProcessor  : public juce::AudioProcessor
 {
 public:
@@ -450,7 +505,7 @@ private:
     // SynthVoices + 1 SynthSound. Renders into synthScratch each block,
     // summed into the master `buffer` before the FX chain.
     static constexpr int kSynthVoiceCount = 8;
-    juce::Synthesiser           synthEngine;
+    UnisonSynth                 synthEngine;   // Phase 8a: was juce::Synthesiser
     juce::AudioBuffer<float>    synthScratch;
 
     // ── Synth wavetable bank (Phase 2A) ──────────────────────────────────

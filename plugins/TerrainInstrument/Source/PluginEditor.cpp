@@ -93,6 +93,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBWtFrameRelay)
             .withOptionsFrom(synOscBWarpModeRelay)
             .withOptionsFrom(synOscBWarpAmountRelay)
+            .withOptionsFrom(synVoicesRelay)
+            .withOptionsFrom(synUnisonRelay)
+            .withOptionsFrom(synSpreadRelay)
+            .withOptionsFrom(synErosionRelay)
+            .withOptionsFrom(synHorizonRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1965,6 +1970,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscBWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP_AMOUNT),
         synOscBWarpAmountRelay, nullptr);
+
+    // Synth section — Phase 8a (Voice settings + flagship features)
+    synVoicesAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_VOICES),
+        synVoicesRelay, nullptr);
+    synUnisonAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_UNISON),
+        synUnisonRelay, nullptr);
+    synSpreadAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_SPREAD),
+        synSpreadRelay, nullptr);
+    synErosionAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_EROSION),
+        synErosionRelay, nullptr);
+    synHorizonAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_HORIZON),
+        synHorizonRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

@@ -147,6 +147,13 @@ private:
     juce::WebSliderRelay synOscBWarpModeRelay   { ParameterIDs::SYN_OSC_B_WARP_MODE };
     juce::WebSliderRelay synOscBWarpAmountRelay { ParameterIDs::SYN_OSC_B_WARP_AMOUNT };
 
+    // Synth section — Phase 8a (Voice settings + flagship features)
+    juce::WebSliderRelay synVoicesRelay  { ParameterIDs::SYN_VOICES };
+    juce::WebSliderRelay synUnisonRelay  { ParameterIDs::SYN_UNISON };
+    juce::WebSliderRelay synSpreadRelay  { ParameterIDs::SYN_SPREAD };
+    juce::WebSliderRelay synErosionRelay { ParameterIDs::SYN_EROSION };
+    juce::WebSliderRelay synHorizonRelay { ParameterIDs::SYN_HORIZON };
+
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
@@ -273,6 +280,13 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWtFrameAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpAmountAttachment;
+
+    // Synth section — Phase 8a (Voice settings + flagship features)
+    std::unique_ptr<juce::WebSliderParameterAttachment> synVoicesAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synUnisonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synSpreadAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synErosionAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synHorizonAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady

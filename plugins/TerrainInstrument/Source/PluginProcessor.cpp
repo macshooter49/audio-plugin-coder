@@ -947,6 +947,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC B Warp Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
+    // ── Synth section — Phase 8a (Voice settings + flagship features) ────
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_VOICES, 1 },
+        "Synth Voices", 1, 16, 8));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_UNISON, 1 },
+        "Synth Unison", 1, 8, 1));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_SPREAD, 1 },
+        "Synth Spread",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 30.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_EROSION, 1 },
+        "Synth Erosion",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_HORIZON, 1 },
+        "Synth Horizon",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+
     return layout;
 }
 
@@ -1588,6 +1608,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWavetableFrameB        (wtFrameB);
                 sv->setWarpB                  (warpModeB, warpAmountB);
                 sv->setEngineB                (engineIdxB);
+            }
+        }
+
+        // Phase 8a — Voice settings (UNISON+SPREAD→UnisonSynth) + EROSION + HORIZON per voice
+        const int   unisonCount = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_UNISON);
+        const float spreadPct   =       *apvts.getRawParameterValue (ParameterIDs::SYN_SPREAD);
+        const float erosionPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_EROSION);
+        const float horizonPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_HORIZON);
+        synthEngine.setUnisonState (unisonCount, spreadPct / 100.0f);
+
+        for (int i = 0; i < synthEngine.getNumVoices(); ++i)
+        {
+            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+            {
+                sv->setErosionAmount (erosionPct  / 100.0f);
+                sv->setHorizonAmount (horizonPct  / 100.0f);
             }
         }
     }

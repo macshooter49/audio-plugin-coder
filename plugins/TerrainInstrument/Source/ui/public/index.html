@@ -3501,6 +3501,10 @@ body {
 #syn-panel .voice-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 6px; }
 #syn-panel .voice-row svg { width: 11px; height: 11px; color: var(--text-primary); }
 #syn-panel .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
+/* Phase 8a — draggable voice rows */
+#syn-panel .voice-row[data-syn-row] { cursor: ns-resize; transition: background 0.12s ease; border-radius: 4px; padding: 1px 4px; }
+#syn-panel .voice-row[data-syn-row]:hover { background: rgba(139,92,246,0.10); }
+#syn-panel .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
 </style>
 </head>
 <body>
@@ -4064,6 +4068,14 @@ body {
     <symbol id="ic-chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
       <polyline points="2,4 5,7 8,4"/>
     </symbol>
+    <!-- Phase 8a icons -->
+    <symbol id="ic-erosion" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
+      <polyline points="1,7 2.5,4 4,7 5.5,4 7,7 8.5,4 10,7 11,5.5"/>
+    </symbol>
+    <symbol id="ic-horizon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
+      <line x1="1" y1="8" x2="11" y2="8"/>
+      <circle cx="6" cy="5" r="2" fill="currentColor" stroke="none"/>
+    </symbol>
   </defs>
 </svg>
 
@@ -4448,9 +4460,11 @@ body {
           <div class="ribbon-divider"></div>
 
           <div class="voice-meta">
-            <div class="voice-row"><svg><use href="#ic-voices"/></svg><span>VOICES</span><b>8</b></div>
-            <div class="voice-row"><svg><use href="#ic-unison"/></svg><span>UNISON</span><b>3</b></div>
-            <div class="voice-row"><svg><use href="#ic-spread"/></svg><span>SPREAD</span><b>42</b></div>
+            <div class="voice-row" data-syn-row="SYN_VOICES"><svg><use href="#ic-voices"/></svg><span>VOICES</span><b>8</b></div>
+            <div class="voice-row" data-syn-row="SYN_UNISON"><svg><use href="#ic-unison"/></svg><span>UNISON</span><b>1</b></div>
+            <div class="voice-row" data-syn-row="SYN_SPREAD"><svg><use href="#ic-spread"/></svg><span>SPREAD</span><b>30</b></div>
+            <div class="voice-row" data-syn-row="SYN_EROSION"><svg><use href="#ic-erosion"/></svg><span>EROSION</span><b>0</b></div>
+            <div class="voice-row" data-syn-row="SYN_HORIZON"><svg><use href="#ic-horizon"/></svg><span>HORIZON</span><b>0</b></div>
           </div>
         </div>
 
@@ -8357,6 +8371,93 @@ setTimeout(function wireSynControls () {
         });
       }
     } catch (eOscB) { console.warn('[SYN-osc-b] mirror init failed', eOscB); }
+
+    // Phase 8a — Voice meta rows: draggable + APVTS-synced
+    try {
+      const voiceRows = document.querySelectorAll('#syn-panel .voice-row[data-syn-row]');
+      voiceRows.forEach(function(rowEl) {
+        try {
+          const paramId = rowEl.dataset.synRow;
+          if (!paramId || !window.Juce || !window.Juce.getSliderState) return;
+          const state = window.Juce.getSliderState(paramId);
+          if (!state) {
+            console.warn('[SYN-voice-row] no SliderState for', paramId);
+            return;
+          }
+          const valueEl = rowEl.querySelector('b');
+          if (!valueEl) return;
+
+          // Format display value per param
+          const formatValue = function(scaled) {
+            if (paramId === 'SYN_VOICES' || paramId === 'SYN_UNISON') return String(Math.round(scaled));
+            if (paramId === 'SYN_HORIZON') return Math.round(scaled).toString();
+            return String(Math.round(scaled));
+          };
+
+          const refreshDisplay = function() {
+            try {
+              const scaled = state.getScaledValue ? state.getScaledValue() : 0;
+              valueEl.textContent = formatValue(scaled);
+            } catch (e) { console.warn('[SYN-voice-row] refresh failed for', paramId, e); }
+          };
+          refreshDisplay();
+
+          // Drag handler
+          let dragStartY = 0;
+          let dragStartN = 0;
+          let dragging = false;
+          const onMove = function(ev) {
+            if (!dragging) return;
+            const dy = dragStartY - ev.clientY;
+            const newN = Math.max(0, Math.min(1, dragStartN + dy / 150));
+            try { state.setNormalisedValue(newN); } catch (e) {}
+            refreshDisplay();
+          };
+          const onUp = function() {
+            dragging = false;
+            rowEl.classList.remove('dragging');
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+          };
+          rowEl.addEventListener('pointerdown', function(ev) {
+            try {
+              dragging = true;
+              dragStartY = ev.clientY;
+              dragStartN = state.getNormalisedValue ? state.getNormalisedValue() : 0;
+              rowEl.classList.add('dragging');
+              if (rowEl.setPointerCapture) rowEl.setPointerCapture(ev.pointerId);
+              document.addEventListener('pointermove', onMove);
+              document.addEventListener('pointerup', onUp);
+              ev.preventDefault();
+            } catch (e) { console.warn('[SYN-voice-row] pointerdown failed for', paramId, e); }
+          });
+
+          // Reverse-sync from APVTS
+          if (state.valueChangedEvent && state.valueChangedEvent.addListener) {
+            state.valueChangedEvent.addListener(refreshDisplay);
+          }
+
+          // Double-click to reset to default
+          rowEl.addEventListener('dblclick', function(ev) {
+            try {
+              const defaults = {
+                SYN_VOICES:  (8 - 1) / (16 - 1),  // 8 in [1,16] → normalised
+                SYN_UNISON:  0.0,                  // 1 in [1,8] → norm 0
+                SYN_SPREAD:  0.3,                  // 30 in [0,100]
+                SYN_EROSION: 0.0,
+                SYN_HORIZON: 0.5,                  // 0 in [-100,100]
+              };
+              const defaultN = defaults[paramId];
+              if (typeof defaultN === 'number') {
+                state.setNormalisedValue(defaultN);
+                refreshDisplay();
+              }
+              ev.preventDefault();
+            } catch (e) { console.warn('[SYN-voice-row] dblclick reset failed for', paramId, e); }
+          });
+        } catch (perRow) { console.warn('[SYN-voice-row] per-row failed', perRow); }
+      });
+    } catch (eRows) { console.warn('[SYN-voice-row] init failed', eRows); }
 
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
