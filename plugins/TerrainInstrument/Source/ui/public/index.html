@@ -3121,19 +3121,18 @@ body {
   --text-dim:      #6E6580;
   --line-bright:   #ECE8F2;
 
-  /* Panel positioning — mirrors #delay-panel architecture */
+  /* Panel positioning — full content area below 44px header, relative to #plugin */
   position: absolute;
-  top: 88px;         /* below header + tab nav */
-  left: 14px;
-  right: 14px;
-  bottom: 14px;
+  top: 44px;         /* exactly below the header */
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: var(--bg-main);
   color: var(--text-primary);
   font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 200;
-  z-index: 40;
-  overflow: auto;
-  border-radius: 8px;
+  z-index: 30;
+  overflow: hidden;
 }
 #syn-panel.hidden { display: none; }
 
