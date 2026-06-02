@@ -872,7 +872,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WT_PRESET, 1 },
         "Synth OSC A WT Preset",
         juce::StringArray { "Prophet Saw", "Jupiter PWM", "Moog Sqr",
-                            "OB-X Saw", "CS-80 Brass", "Juno Str" },
+                            "OB-X Saw", "CS-80 Brass", "Juno Str",
+                            "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
+                            "Choir A->O", "Whisper", "Vowel Morph",
+                            "Bowed Metal", "Glass Harmonics", "Railroad",
+                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD" },
         0));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
