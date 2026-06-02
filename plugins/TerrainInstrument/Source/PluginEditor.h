@@ -112,6 +112,21 @@ private:
         juce::WebSliderRelay { ParameterIDs::EQ_B7_FREQ }, juce::WebSliderRelay { ParameterIDs::EQ_B7_GAIN }, juce::WebSliderRelay { ParameterIDs::EQ_B7_Q }, juce::WebSliderRelay { ParameterIDs::EQ_B7_BYPASS },
         juce::WebSliderRelay { ParameterIDs::EQ_B1_HP_MODE }, juce::WebSliderRelay { ParameterIDs::EQ_B7_LP_MODE },
     }};
+
+    // Synth section — Phase 1 (MPV)
+    juce::WebSliderRelay synOscAEngineRelay   { ParameterIDs::SYN_OSC_A_ENGINE };
+    juce::WebSliderRelay synOscAOctRelay      { ParameterIDs::SYN_OSC_A_OCT };
+    juce::WebSliderRelay synOscASemiRelay     { ParameterIDs::SYN_OSC_A_SEMI };
+    juce::WebSliderRelay synOscACentRelay     { ParameterIDs::SYN_OSC_A_CENT };
+    juce::WebSliderRelay synOscALevelRelay    { ParameterIDs::SYN_OSC_A_LEVEL };
+    juce::WebSliderRelay synOscAPanRelay      { ParameterIDs::SYN_OSC_A_PAN };
+    juce::WebSliderRelay synFilter1CutRelay   { ParameterIDs::SYN_FILTER1_CUT };
+    juce::WebSliderRelay synFilter1ResRelay   { ParameterIDs::SYN_FILTER1_RES };
+    juce::WebSliderRelay synEnvAmpARelay      { ParameterIDs::SYN_ENV_AMP_A };
+    juce::WebSliderRelay synEnvAmpDRelay      { ParameterIDs::SYN_ENV_AMP_D };
+    juce::WebSliderRelay synEnvAmpSRelay      { ParameterIDs::SYN_ENV_AMP_S };
+    juce::WebSliderRelay synEnvAmpRRelay      { ParameterIDs::SYN_ENV_AMP_R };
+
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
@@ -204,6 +219,20 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> chopFadeAttachment;
     // Parametric EQ attachments — bind APVTS params to the eqRelays above.
     std::array<std::unique_ptr<juce::WebSliderParameterAttachment>, NUM_EQ_RELAYS> eqAttachments;
+
+    // Synth section — Phase 1 (MPV)
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAEngineAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAOctAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASemiAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscACentAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscALevelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAPanAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1CutAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1ResAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpAAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpDAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpSAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpRAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady
