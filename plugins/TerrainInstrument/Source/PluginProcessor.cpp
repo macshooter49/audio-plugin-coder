@@ -1478,6 +1478,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float ampD    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_D);
         const float ampS    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_S);
         const float ampR    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_R);
+        // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
+        const int            wtPreset = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_PRESET);
+        const float          wtFrame  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_FRAME);
+        const tw::Wavetable* wt       = wavetableBank.getTable (wtPreset);
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -1488,6 +1492,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setPan                    (pan);
                 sv->setFilterParameters       (cut, res);
                 sv->setAmpEnvelopeParameters  (ampA, ampD, ampS, ampR);
+                sv->setWavetable              (wt);
+                sv->setWavetableFrame         (wtFrame);
             }
         }
     }

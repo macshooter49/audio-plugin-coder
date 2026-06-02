@@ -22,6 +22,7 @@
 #include "LayerState.h"
 #include "IndyFxChain.h"
 #include "SynthVoice.h"
+#include "WavetableBank.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -451,6 +452,12 @@ private:
     static constexpr int kSynthVoiceCount = 8;
     juce::Synthesiser           synthEngine;
     juce::AudioBuffer<float>    synthScratch;
+
+    // ── Synth wavetable bank (Phase 2A) ──────────────────────────────────
+    // Owns the 6 iconic analog tables, constructed at startup (~750KB RAM).
+    // SynthVoices hold const Wavetable* pointers into this bank; bank
+    // outlives all voices (member-of-processor lifetime).
+    tw::WavetableBank           wavetableBank;
     // sampleBuffer removed in Task 5 — owned by LayerState. Access via layers[editingLayer].sampleBuffer.
     tw::SampleLoader sampleLoader;
     // slicesPtr removed in Task 5 — owned by LayerState as currentSlices. Access via layers[editingLayer].currentSlices.
