@@ -3920,12 +3920,12 @@ body {
             <div class="device-label">OSC · A</div>
             <div class="device-corner">WAVETABLE&nbsp;&nbsp;12 / 256</div>
             <div class="engine-pills">
-              <div class="eng act"><svg><use href="#ic-wt"/></svg></div>
-              <div class="eng"><svg><use href="#ic-samp"/></svg></div>
-              <div class="eng"><svg><use href="#ic-gran"/></svg></div>
-              <div class="eng"><svg><use href="#ic-spec"/></svg></div>
-              <div class="eng"><svg><use href="#ic-fm"/></svg></div>
-              <div class="eng"><svg><use href="#ic-noise"/></svg></div>
+              <div class="eng act" data-eng-idx="0"><svg><use href="#ic-wt"/></svg></div>
+              <div class="eng" data-eng-idx="1"><svg><use href="#ic-samp"/></svg></div>
+              <div class="eng" data-eng-idx="2"><svg><use href="#ic-gran"/></svg></div>
+              <div class="eng" data-eng-idx="3"><svg><use href="#ic-spec"/></svg></div>
+              <div class="eng" data-eng-idx="4"><svg><use href="#ic-fm"/></svg></div>
+              <div class="eng" data-eng-idx="5"><svg><use href="#ic-noise"/></svg></div>
             </div>
             <div class="osc-display">
               <div class="osc-wave">
@@ -7859,6 +7859,65 @@ setTimeout(function wireSynControls () {
         }
       });
     } catch (eKnobs) { console.warn ('[SYN-knob] interactive knob wiring failed', eKnobs); }
+
+    // Phase 4 T6 — OSC A engine pill clicks → SYN_OSC_A_ENGINE APVTS.
+    // The mockup has 6 .eng pills (no .txt class) in #syn-panel .engine-pills.
+    // Each has a data-eng-idx attribute (0..5). Clicking sets the engine; the
+    // .act class moves to the clicked pill. APVTS reverse-syncs (DAW automation
+    // / preset load) update .act based on the param's current value.
+    // OSC B pills have class .eng.txt — the :not(.txt) guard ensures we only
+    // wire OSC A's icon pills, never OSC B's text pills.
+    try {
+      const enginePills = document.querySelectorAll ('#syn-panel .engine-pills .eng[data-eng-idx]');
+      if (enginePills.length === 6 && window.Juce && window.Juce.getSliderState) {
+        const engineState = window.Juce.getSliderState ('SYN_OSC_A_ENGINE');
+        if (engineState) {
+          const setActPill = (idx) => {
+            enginePills.forEach ((p, i) => {
+              if (i === idx) p.classList.add ('act');
+              else           p.classList.remove ('act');
+            });
+          };
+
+          // Initial highlight from current APVTS value.
+          try {
+            const initialIdx = engineState.getScaledValue
+              ? Math.round (engineState.getScaledValue ())
+              : 0;
+            setActPill (Math.max (0, Math.min (5, initialIdx)));
+          } catch (e) { console.warn ('[SYN-engine] initial pill highlight failed', e); }
+
+          // Click handler — write the pill's index to APVTS.
+          enginePills.forEach ((p, idx) => {
+            p.style.cursor = 'pointer';
+            p.addEventListener ('click', () => {
+              try {
+                // 6 choices → setNormalisedValue with idx / 5 (normalised in [0, 1]).
+                engineState.setNormalisedValue (idx / 5);
+                setActPill (idx);
+              } catch (e) { console.warn ('[SYN-engine] pill click failed for idx', idx, e); }
+            });
+          });
+
+          // Reverse-sync (DAW automation, preset load).
+          if (engineState.valueChangedEvent && engineState.valueChangedEvent.addListener) {
+            engineState.valueChangedEvent.addListener (() => {
+              try {
+                const v = engineState.getScaledValue
+                  ? Math.round (engineState.getScaledValue ())
+                  : 0;
+                setActPill (Math.max (0, Math.min (5, v)));
+              } catch (e) { console.warn ('[SYN-engine] reverse-sync failed', e); }
+            });
+          }
+        } else {
+          console.warn ('[SYN-engine] no SliderState for SYN_OSC_A_ENGINE');
+        }
+      } else if (enginePills.length !== 6) {
+        console.warn ('[SYN-engine] expected 6 .eng[data-eng-idx] pills, found', enginePills.length);
+      }
+    } catch (ePills) { console.warn ('[SYN-engine] OSC A pill wiring failed', ePills); }
+
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
   }
