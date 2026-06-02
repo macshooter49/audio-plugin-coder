@@ -3168,7 +3168,7 @@ body {
 /* ── device card ── */
 #syn-panel .device {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 13px; padding: 10px 14px 16px; position: relative; overflow: hidden;
+  border-radius: 13px; padding: 10px 14px 12px; position: relative; overflow: hidden;
 }
 #syn-panel .device-label {
   position: absolute; top: 9px; left: 14px;
@@ -3306,7 +3306,7 @@ body {
 
 /* ── OSC + CROSS column ── */
 #syn-panel .row-osc { display: grid; grid-template-columns: 1fr 104px 1fr; gap: 12px; }
-#syn-panel .osc { display: flex; flex-direction: column; gap: 10px; padding-top: 22px; }
+#syn-panel .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; }
 #syn-panel .osc-display {
   flex: 1; background: var(--bg-hero); border: 1px solid var(--border);
   border-radius: 8px; position: relative; overflow: hidden; min-height: 28px;
@@ -3326,10 +3326,10 @@ body {
 #syn-panel .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
 #syn-panel .knob { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 #syn-panel .knob-ring {
-  width: 30px; height: 30px; border-radius: 50%;
+  width: 26px; height: 26px; border-radius: 50%;
   background: conic-gradient(from 225deg, var(--purple-500) 0deg 200deg, var(--knob-track) 200deg 270deg, transparent 270deg);
-  -webkit-mask: radial-gradient(circle, transparent 9px, black 10px);
-          mask: radial-gradient(circle, transparent 9px, black 10px);
+  -webkit-mask: radial-gradient(circle, transparent 8px, black 9px);
+          mask: radial-gradient(circle, transparent 8px, black 9px);
 }
 #syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; }
 
