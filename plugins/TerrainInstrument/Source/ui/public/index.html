@@ -7308,6 +7308,31 @@ setTimeout(function wireSynControls () {
         console.warn ('[SYN] per-element wire failed', perElement);
       }
     });
+
+    // Phase 3 — visual dim of WAVETABLE selector when engine != WT.
+    // WAVETABLE only applies to engine 0 (WT). For NOISE/FM/SAMP/GRAN/SPEC
+    // the dropdown is irrelevant; show that visually by reducing opacity +
+    // disabling pointer events. (Underlying SYN_OSC_A_WT_PRESET param is
+    // not muted — DAW automation still works — only the UI affordance is
+    // dimmed so users don't think it controls the active engine's sound.)
+    try {
+      const engineEl = document.querySelector ('[data-syn="SYN_OSC_A_ENGINE"]');
+      const wtEl     = document.querySelector ('[data-syn="SYN_OSC_A_WT_PRESET"]');
+      if (engineEl && wtEl) {
+        const applyEngineDim = () => {
+          try {
+            const v = parseInt (engineEl.value, 10);
+            const isWT = (v === 0);
+            wtEl.style.opacity        = isWT ? '1' : '0.35';
+            wtEl.style.pointerEvents  = isWT ? 'auto' : 'none';
+            wtEl.title                = isWT ? '' : 'WAVETABLE preset (only for WT engine)';
+          } catch (e) { console.warn ('[SYN] engine dim apply failed', e); }
+        };
+        applyEngineDim ();
+        engineEl.addEventListener ('change', applyEngineDim);
+        engineEl.addEventListener ('input',  applyEngineDim);
+      }
+    } catch (eDim) { console.warn ('[SYN] engine-dim wiring failed', eDim); }
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
   }
