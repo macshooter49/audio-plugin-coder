@@ -266,8 +266,28 @@ namespace tw
                         break;
                     }
                     case Engine::FM:
-                        s = 0.0f;  // implemented in Task 8
+                    {
+                        // 2-op FM. FRAME = modulator ratio (0..1 mapped to
+                        // 0.25× .. 8× the carrier frequency, log-ish).
+                        // WARP AMT = modulation depth in radians (0..1 →
+                        // 0..2π). Carrier is sin(2π·phase_ + depth·sin(2π·modPhase_)).
+                        const double ratio   = 0.25 + std::pow (32.0, (double) framePos_) * 0.234375;
+                        // Range: pow(32,0)*0.234 = 0.234, +0.25 → 0.484 at frame 0.
+                        // pow(32,1)*0.234 = 7.5, +0.25 → 7.75 at frame 1.
+                        // Good musical range covering classic DX algorithms.
+                        const double modInc  = phaseIncrement_ * ratio;
+                        const double depth   = (double) warpAmount_ * 6.2831853071795865; // 2π
+                        const double pi2     = 6.2831853071795865;
+
+                        const double modOut  = std::sin (pi2 * modPhase_);
+                        s = static_cast<float> (std::sin (pi2 * phase_ + depth * modOut));
+
+                        modPhase_ += modInc;
+                        if (modPhase_ >= 1.0) modPhase_ -= std::floor (modPhase_);
+                        phase_    += phaseIncrement_;
+                        if (phase_ >= 1.0) phase_ -= 1.0;
                         break;
+                    }
 
                     case Engine::SAMP:
                     case Engine::GRAN:
