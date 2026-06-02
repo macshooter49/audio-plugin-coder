@@ -238,12 +238,32 @@ namespace tw
                     }
 
                     case Engine::NOISE:
+                    {
+                        // xorshift32 step
+                        noiseState_ ^= noiseState_ << 13;
+                        noiseState_ ^= noiseState_ >> 17;
+                        noiseState_ ^= noiseState_ << 5;
+                        // Map to -1..+1
+                        const float white = static_cast<float> (static_cast<int32_t> (noiseState_))
+                                          * (1.0f / 2147483648.0f);
+
+                        // One-pole low-pass for "color" — FRAME=0 (alpha~1) lets
+                        // most of the white through (bright); FRAME=1 (alpha~0.02)
+                        // heavily smooths (dark/brown-ish). Equivalent to a -6 dB
+                        // RC LP at f_c = sampleRate * alpha / (2π·(1-alpha)).
+                        const float alpha = 1.0f - 0.98f * framePos_;  // 1.0 → 0.02
+                        noiseLpZ_ += alpha * (white - noiseLpZ_);
+
+                        // Tanh saturation driven by WARP AMT (0 = clean, 1 = squashed).
+                        const float drive = 1.0f + 8.0f * warpAmount_;
+                        s = std::tanh (noiseLpZ_ * drive);
+                        // Pre-emphasize a bit so heavy LP-then-drive doesn't kill level.
+                        s *= 1.0f + 0.5f * framePos_;
+                        // Phase_ accumulator NOT advanced — NOISE is pitchless.
+                        break;
+                    }
                     case Engine::FM:
-                        // Implemented in Tasks 4-7 / 8-12. For Task 2's checkpoint,
-                        // these fall through to silence (s = 0). The phase_
-                        // accumulator advances ONLY for WT — NOISE doesn't need it
-                        // and FM uses its own phase. Filled in by later tasks.
-                        s = 0.0f;
+                        s = 0.0f;  // implemented in Task 8
                         break;
 
                     case Engine::SAMP:
