@@ -885,6 +885,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
 
+    // ── Synth section — Phase 2C (Warp modes) ────────────────────────────
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_MODE, 1 },
+        "Synth OSC A Warp Mode",
+        juce::StringArray { "NONE", "BEND", "SYNC", "FORMANT" },
+        0));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_AMOUNT, 1 },
+        "Synth OSC A Warp Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+
     return layout;
 }
 
@@ -1486,6 +1499,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int            wtPreset = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_PRESET);
         const float          wtFrame  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_FRAME);
         const tw::Wavetable* wt       = wavetableBank.getTable (wtPreset);
+        // Phase 2C — warp mode + amount
+        const int   warpMode   = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_MODE);
+        const float warpAmount =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -1498,6 +1514,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setAmpEnvelopeParameters  (ampA, ampD, ampS, ampR);
                 sv->setWavetable              (wt);
                 sv->setWavetableFrame         (wtFrame);
+                sv->setWarp                   (warpMode, warpAmount);
             }
         }
     }

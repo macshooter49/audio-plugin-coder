@@ -119,6 +119,15 @@ namespace tw
             framePos_ = juce::jlimit (0.0f, 1.0f, pos);
         }
 
+        /** Phase 2C — Warp mode (0=NONE, 1=BEND, 2=SYNC, 3=FORMANT) +
+         *  amount 0..1. Applied to phase BEFORE wavetable lookup, so warp
+         *  composes cleanly with any wavetable choice. */
+        void setWarp (int mode, float amount) noexcept
+        {
+            warpMode_   = juce::jlimit (0, 3, mode);
+            warpAmount_ = juce::jlimit (0.0f, 1.0f, amount);
+        }
+
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
@@ -161,14 +170,45 @@ namespace tw
 
             for (int i = 0; i < numSamples; ++i)
             {
-                // Wavetable lookup (Phase 2A): bilinear interpolation across
-                // frames + within-frame phase. Falls back to PolyBLEP saw when
-                // no wavetable is set (defensive — should never trigger after
-                // PluginProcessor's per-block setWavetable).
+                // Wavetable lookup (Phase 2A) + warp (Phase 2C).
+                // Warp transforms the phase BEFORE the wavetable read, so
+                // BEND/SYNC/FORMANT compose with any wavetable choice.
+                // Falls back to PolyBLEP saw when no wavetable is set.
                 float s;
                 if (currentWavetable_ != nullptr)
                 {
-                    s = currentWavetable_->lookup (framePos_, (float) phase_);
+                    // Warp transform on phase (0..1).
+                    double warpedPhase = phase_;
+                    switch (warpMode_)
+                    {
+                        case 1:  // BEND — Casio CZ-style phase distortion
+                        {
+                            const double pi2 = 2.0 * 3.14159265358979323846;
+                            warpedPhase = phase_ + (double) warpAmount_ * 0.5 * std::sin (pi2 * phase_);
+                            warpedPhase -= std::floor (warpedPhase);
+                            break;
+                        }
+                        case 2:  // SYNC — virtual hard-sync; slave runs at master pitch * (1 + amt*4)
+                        {
+                            const double syncRatio = 1.0 + (double) warpAmount_ * 4.0;
+                            syncPhase_ += phaseIncrement_ * syncRatio;
+                            // Master wrap → slave reset (detect master crossing 0).
+                            if (phase_ < phaseIncrement_) syncPhase_ = 0.0;
+                            if (syncPhase_ >= 1.0) syncPhase_ -= std::floor (syncPhase_);
+                            warpedPhase = syncPhase_;
+                            break;
+                        }
+                        case 3:  // FORMANT — shift wavetable formant peak by scaling lookup phase
+                        {
+                            warpedPhase = phase_ * (1.0 + (double) warpAmount_ * 2.0);
+                            warpedPhase -= std::floor (warpedPhase);
+                            break;
+                        }
+                        case 0:  // NONE
+                        default:
+                            break;
+                    }
+                    s = currentWavetable_->lookup (framePos_, (float) warpedPhase);
                 }
                 else
                 {
@@ -261,5 +301,10 @@ namespace tw
 
         const tw::Wavetable* currentWavetable_ = nullptr;
         float                framePos_         = 0.0f;
+
+        // Phase 2C — Warp state.
+        int                  warpMode_         = 0;     // 0=NONE,1=BEND,2=SYNC,3=FORMANT
+        float                warpAmount_       = 0.0f;  // 0..1
+        double               syncPhase_        = 0.0;   // virtual slave-oscillator phase for SYNC mode
     };
 }

@@ -81,6 +81,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synEnvAmpRRelay)
             .withOptionsFrom(synOscAWtPresetRelay)
             .withOptionsFrom(synOscAWtFrameRelay)
+            .withOptionsFrom(synOscAWarpModeRelay)
+            .withOptionsFrom(synOscAWarpAmountRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1912,6 +1914,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscAWtFrameAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WT_FRAME),
         synOscAWtFrameRelay, nullptr);
+
+    // Phase 2C — warp mode + amount
+    synOscAWarpModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP_MODE),
+        synOscAWarpModeRelay, nullptr);
+
+    synOscAWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP_AMOUNT),
+        synOscAWarpAmountRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

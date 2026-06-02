@@ -3122,7 +3122,7 @@ body {
 
 #syn-panel .syn-row {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);  /* Phase 2A: WAVETABLE + FRAME added to OSC row */
+  grid-template-columns: repeat(10, 1fr);  /* Phase 2C: WARP MODE + AMOUNT added to OSC row */
   gap: 12px;
   background: var(--bg-card, #2A2A48);
   border-radius: 6px;
@@ -3724,6 +3724,19 @@ body {
         <div class="syn-knob-group">
           <span class="syn-knob-label">FRAME</span>
           <input type="range" min="0" max="1" step="0.001" value="0" data-syn="SYN_OSC_A_WT_FRAME" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">WARP</span>
+          <select data-syn="SYN_OSC_A_WARP_MODE">
+            <option value="0">NONE</option>
+            <option value="1">BEND</option>
+            <option value="2">SYNC</option>
+            <option value="3">FORMANT</option>
+          </select>
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">WARP AMT</span>
+          <input type="range" min="0" max="1" step="0.001" value="0" data-syn="SYN_OSC_A_WARP_AMOUNT" />
         </div>
       </div>
 
@@ -4493,6 +4506,8 @@ const PARAMS = {
   synEnvAmpR:      { label: 'AMP R',  section: 'synth', min: 1, max: 10000, default: 200,     unit: 'ms', desc: 'AMP envelope release' },
   synOscAWtPreset: { label: 'WAVETABLE', section: 'synth', min: 0, max: 5, default: 0, unit: '', desc: 'OSC A wavetable preset' },
   synOscAWtFrame:  { label: 'FRAME',     section: 'synth', min: 0, max: 1, default: 0, unit: '', desc: 'OSC A wavetable frame position' },
+  synOscAWarpMode:   { label: 'WARP',     section: 'synth', min: 0, max: 3, default: 0, unit: '', desc: 'OSC A warp mode (NONE/BEND/SYNC/FORMANT)' },
+  synOscAWarpAmount: { label: 'WARP AMT', section: 'synth', min: 0, max: 1, default: 0, unit: '', desc: 'OSC A warp amount' },
 };
 
 const OUTPUT_PARAM = { min: -12, max: 12, default: 0 };
