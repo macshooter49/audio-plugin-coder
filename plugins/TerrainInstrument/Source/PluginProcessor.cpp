@@ -47,6 +47,11 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
                 sv->setModulationEngine (&modulationEngine);
         }
     }
+
+    // Synth engine — Phase 1 MPV (one SynthSound + kSynthVoiceCount voices)
+    synthEngine_.addSound (new tw::SynthSound());
+    for (int i = 0; i < kSynthVoiceCount; ++i)
+        synthEngine_.addVoice (new tw::SynthVoice());
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
@@ -878,6 +883,15 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     for (auto& layer : layers)
         layer.synth.setCurrentPlaybackSampleRate (sampleRate);
 
+    // Synth scratch buffer + per-voice DSP prep.
+    synthScratch_.setSize (2, samplesPerBlock, false, true, true);
+    synthEngine_.setCurrentPlaybackSampleRate (sampleRate);
+    for (int i = 0; i < synthEngine_.getNumVoices(); ++i)
+    {
+        if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine_.getVoice (i)))
+            sv->prepareToPlay (sampleRate, samplesPerBlock, 2);
+    }
+
     grainEngineL.prepare(sampleRate, samplesPerBlock);
     grainEngineR.prepare(sampleRate, samplesPerBlock);
     tapeProcessorL.prepare(sampleRate, samplesPerBlock);
@@ -1434,6 +1448,47 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
         }
     }
+
+    // ── Synth section render (Phase 1 MPV) ──────────────────────────────
+    // Push current SYN_* APVTS values onto every SynthVoice each block
+    // — same pattern as the per-layer atomic broadcast above.
+    {
+        const int   oct     = (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_OCT);
+        const int   semi    = (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SEMI);
+        const float cent    =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_CENT);
+        const float lvl     =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_LEVEL);
+        const float pan     =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_PAN);
+        const float cut     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_CUT);
+        const float res     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_RES);
+        const float ampA    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_A);
+        const float ampD    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_D);
+        const float ampS    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_S);
+        const float ampR    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_R);
+
+        for (int i = 0; i < synthEngine_.getNumVoices(); ++i)
+        {
+            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine_.getVoice (i)))
+            {
+                sv->setTuning                 (oct, semi, cent);
+                sv->setLevel                  (lvl);
+                sv->setPan                    (pan);
+                sv->setFilterParameters       (cut, res);
+                sv->setAmpEnvelopeParameters  (ampA, ampD, ampS, ampR);
+            }
+        }
+    }
+
+    // Synth renders into its own scratch (broadcast midiMessages unfiltered —
+    // the trigger-mode dispatcher above gates the LAYERS only, the synth
+    // is a parallel pipeline that always receives the host's MIDI).
+    if (synthScratch_.getNumSamples() < numSamples)
+        synthScratch_.setSize (2, numSamples, false, true, true);
+    synthScratch_.clear();
+    synthEngine_.renderNextBlock (synthScratch_, midiMessages, 0, numSamples);
+
+    // Sum synth into master buffer (flows through the master FX chain below).
+    for (int ch = 0; ch < buffer.getNumChannels() && ch < 2; ++ch)
+        buffer.addFrom (ch, 0, synthScratch_, ch, 0, numSamples);
 
     // -6 dB pad on the voice mix before the FX chain. The FX modules
     // (TapeProcessor saturation, SpaceReverb feedback paths, etc.) were

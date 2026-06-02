@@ -21,6 +21,7 @@
 #include "TerrainConstants.h"
 #include "LayerState.h"
 #include "IndyFxChain.h"
+#include "SynthVoice.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -442,6 +443,14 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     static constexpr int kNumVoices = 32;  // bumped 16→32 for LAYER mode headroom (4 slices × 8 keys)
+
+    // ── Synth section (Phase 1 MPV — see Design/v1-syn-spec.md) ──────────
+    // Parallel pipeline beside the 4 layers. juce::Synthesiser owns 8
+    // SynthVoices + 1 SynthSound. Renders into synthScratch_ each block,
+    // summed into the master `buffer` before the FX chain.
+    static constexpr int kSynthVoiceCount = 8;
+    juce::Synthesiser           synthEngine_;
+    juce::AudioBuffer<float>    synthScratch_;
     // sampleBuffer removed in Task 5 — owned by LayerState. Access via layers[editingLayer].sampleBuffer.
     tw::SampleLoader sampleLoader;
     // slicesPtr removed in Task 5 — owned by LayerState as currentSlices. Access via layers[editingLayer].currentSlices.
