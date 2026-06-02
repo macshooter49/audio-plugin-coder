@@ -92,14 +92,25 @@ namespace tw
             panR_ = std::sin (angle);
         }
 
+        /** Octave (-3..+3), semitone (-12..+12), cents (-100..+100). Applied
+         *  on top of the MIDI note when computing the next note-on frequency.
+         *  Updates current note pitch live if a note is already playing. */
+        void setTuning (int oct, int semi, float cent) noexcept
+        {
+            octOffset_   = oct;
+            semiOffset_  = semi;
+            centsOffset_ = cent;
+            if (playing_)
+                updatePhaseIncrementFromMidi (currentMidiNote_);
+        }
+
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
             phase_           = 0.0;
-            const double hz  = 440.0 * std::pow (2.0, (midiNote - 69) / 12.0);
-            phaseIncrement_  = hz / sampleRate_;
+            updatePhaseIncrementFromMidi (midiNote);
             playing_         = true;
             ampEnv_.reset();
             ampEnv_.noteOn();
@@ -171,6 +182,17 @@ namespace tw
         }
 
     private:
+        void updatePhaseIncrementFromMidi (int midiNote) noexcept
+        {
+            const double semitones =
+                  static_cast<double> (midiNote - 69)
+                + static_cast<double> (octOffset_) * 12.0
+                + static_cast<double> (semiOffset_)
+                + static_cast<double> (centsOffset_) * 0.01;
+            const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
+            phaseIncrement_ = hz / sampleRate_;
+        }
+
         // Standard PolyBLEP residual — subtract from the naive saw at the
         // discontinuity to suppress alias harmonics above Nyquist. Public
         // domain reference: Välimäki & Huovilainen, "Antialiasing Oscillators
@@ -205,5 +227,9 @@ namespace tw
         float                          level_ = 0.7f;
         float                          panL_  = 0.7071f;  // cos(pi/4)
         float                          panR_  = 0.7071f;  // sin(pi/4)
+
+        int   octOffset_   = 0;
+        int   semiOffset_  = 0;
+        float centsOffset_ = 0.0f;
     };
 }

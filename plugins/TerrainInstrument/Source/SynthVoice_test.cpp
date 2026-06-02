@@ -155,6 +155,35 @@ public:
             expect (rms (+1.0f, 1) > 0.05f, "pan=+1 R should be loud");
             expect (rms (+1.0f, 0) < 0.005f, "pan=+1 L should be near silent");
         }
+
+        beginTest ("Tuning: oct=+1 doubles fundamental frequency");
+        {
+            auto zc = [] (int oct, int semi, float cent)
+            {
+                tw::SynthVoice v;
+                v.setCurrentPlaybackSampleRate (48000.0);
+                v.prepareToPlay (48000.0, 512, 2);
+                v.setAmpEnvelopeParameters (1.0f, 1.0f, 1.0f, 1.0f);
+                v.setFilterParameters (20000.0f, 0.0f);
+                v.setLevel (1.0f); v.setPan (0.0f);
+                v.setTuning (oct, semi, cent);
+                tw::SynthSound s;
+                v.startNote (69, 1.0f, &s, 8192);  // A4 = 440 Hz nominal
+                juce::AudioBuffer<float> buf (2, 512);
+                buf.clear();
+                v.renderNextBlock (buf, 0, 512);
+                const auto* L = buf.getReadPointer (0);
+                int count = 0;
+                for (int i = 1; i < 512; ++i)
+                    if ((L[i] >= 0.0f) != (L[i - 1] >= 0.0f)) ++count;
+                return count;
+            };
+            const int base = zc (0, 0, 0.0f);
+            const int up   = zc (1, 0, 0.0f);   // +1 oct → ~2× crossings
+            expect (up >= (int)(base * 1.7) && up <= (int)(base * 2.3),
+                    juce::String ("base=") + juce::String (base)
+                    + " up1oct=" + juce::String (up));
+        }
     }
 };
 
