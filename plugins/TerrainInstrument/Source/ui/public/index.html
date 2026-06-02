@@ -3121,12 +3121,12 @@ body {
   --text-dim:      #6E6580;
   --line-bright:   #ECE8F2;
 
-  /* Panel positioning — full content area below 44px header, relative to #plugin */
+  /* Panel positioning — content area between 44px header and 26px native capture strip */
   position: absolute;
   top: 44px;         /* exactly below the header */
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: 26px;      /* leave room for native JUCE capture strip overlay */
   background: var(--bg-main);
   color: var(--text-primary);
   font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -3135,6 +3135,28 @@ body {
   overflow: hidden;
 }
 #syn-panel.hidden { display: none; }
+
+/* ── page tab nav (ported from v12 mockup, skipped in T1) ── */
+#syn-panel .ti-tabs {
+  display: flex; align-items: center; gap: 26px;
+  padding: 6px 18px 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#syn-panel .ti-tab {
+  font-size: 11px; font-weight: 300; letter-spacing: 2.4px;
+  color: var(--text-secondary); padding: 6px 0 8px;
+  position: relative; cursor: pointer;
+}
+#syn-panel .ti-tab.act { color: #FFFFFF; }
+#syn-panel .ti-tab.act::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 1px; background: var(--purple-400);
+}
+#syn-panel .ti-tabs .ti-tab-spacer { flex: 1; }
+#syn-panel .ti-tab-meta {
+  font-size: 9px; color: var(--text-muted); letter-spacing: 1.6px; font-weight: 200;
+}
 
 /* ── .ti-syn-page grid ── */
 #syn-panel .ti-syn-page {
@@ -3146,7 +3168,7 @@ body {
 /* ── device card ── */
 #syn-panel .device {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 13px; padding: 10px 14px; position: relative; overflow: hidden;
+  border-radius: 13px; padding: 10px 14px 16px; position: relative; overflow: hidden;
 }
 #syn-panel .device-label {
   position: absolute; top: 9px; left: 14px;
@@ -3323,7 +3345,7 @@ body {
 #syn-panel .patch-hint { font-size: 8px; color: var(--text-muted); letter-spacing: 1.4px; padding: 4px 0 0; text-align: center; }
 
 /* ── RIBBON row (fixed 138px) ── */
-#syn-panel .ribbon-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 13px; display: grid; grid-template-columns: 1fr 1px 110px; gap: 12px; padding: 10px 14px; position: relative; }
+#syn-panel .ribbon-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 13px; display: grid; grid-template-columns: 1fr 1px 110px; gap: 12px; padding: 10px 14px 16px; position: relative; }
 #syn-panel .ribbon-device { display: flex; flex-direction: column; position: relative; gap: 7px; padding-top: 20px; }
 #syn-panel .ribbon-label { position: absolute; top: 6px; left: 0; font-size: 9px; font-weight: 300; letter-spacing: 2px; color: var(--text-secondary); }
 #syn-panel .ribbon-cs80 { position: absolute; top: 6px; right: 0; font-size: 8px; color: var(--text-muted); letter-spacing: 2px; font-weight: 200; }
@@ -3911,6 +3933,12 @@ body {
 
     <!-- SYNTH PAGE 1 (Phase 1 MPV — see Design/v1-syn-spec.md) -->
     <div id="syn-panel" class="hidden">
+      <div class="ti-tabs">
+        <div class="ti-tab act">1</div>
+        <div class="ti-tab">2</div>
+        <div class="ti-tab-spacer"></div>
+        <div class="ti-tab-meta">SYNTH</div>
+      </div>
       <div class="ti-syn-page">
 
         <!-- Row 1: OSC A · CROSS · OSC B -->
