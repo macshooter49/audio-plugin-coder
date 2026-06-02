@@ -3688,13 +3688,37 @@ body {
         </div>
         <div class="syn-knob-group">
           <span class="syn-knob-label">WAVETABLE</span>
-          <select data-syn="SYN_OSC_A_WT_PRESET">
-            <option value="0">Prophet Saw</option>
-            <option value="1">Jupiter PWM</option>
-            <option value="2">Moog Sqr</option>
-            <option value="3">OB-X Saw</option>
-            <option value="4">CS-80 Brass</option>
-            <option value="5">Juno Str</option>
+          <select data-syn="SYN_OSC_A_WT_PRESET" id="syn-wt-select">
+            <optgroup label="Analog">
+              <option value="0">Prophet Saw</option>
+              <option value="1">Jupiter PWM</option>
+              <option value="2">Moog Sqr</option>
+              <option value="3">OB-X Saw</option>
+              <option value="4">CS-80 Brass</option>
+              <option value="5">Juno Str</option>
+            </optgroup>
+            <optgroup label="Digital">
+              <option value="6">PPG Wave</option>
+              <option value="7">DX7 EP</option>
+              <option value="8">D-50 Bell</option>
+              <option value="9">M1 Piano</option>
+            </optgroup>
+            <optgroup label="Vocal">
+              <option value="10">Choir A→O</option>
+              <option value="11">Whisper</option>
+              <option value="12">Vowel Morph</option>
+            </optgroup>
+            <optgroup label="Metallic">
+              <option value="13">Bowed Metal</option>
+              <option value="14">Glass Harmonics</option>
+              <option value="15">Railroad</option>
+            </optgroup>
+            <optgroup label="Experimental">
+              <option value="16">Dustbowl</option>
+              <option value="17">Static Evolve</option>
+              <option value="18">Spectral Drift</option>
+              <option value="19">Serum HD</option>
+            </optgroup>
           </select>
         </div>
         <div class="syn-knob-group">
