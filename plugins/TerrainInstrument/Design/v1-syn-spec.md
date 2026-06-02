@@ -473,20 +473,25 @@ The Phase 2A/B/C controls SHIP FUNCTIONALLY but DO NOT match their intended v12 
    - **3 SHIPPED 2026-06-02** (tag `mark-2-synth-phase-3-osc-a-engines`): Engine dispatch in `tw::SynthVoice::renderNextBlock` via `switch (engine_)`. NOISE engine (xorshift32 white + one-pole LP "color" via FRAME knob + tanh "drive" via WARP AMT). FM engine (2-op stack — modulator ratio via FRAME knob 0.25×..8×, modulation depth via WARP AMT 0..2π). SAMP / GRAN / SPEC ship as silent stubs (labelled "(soon)" in the dropdown) — engine selection wires through to the dispatch switch, but those arms render zero pending future phases. WAVETABLE dropdown dims when engine != WT (visual hint only — APVTS param remains automatable). No new APVTS params, no new widgets: FRAME + WARP AMT are repurposed per-engine. OSC B chassis split to its own focused phase. Per-engine right-click categorized browsers also deferred (current WAVETABLE `<select>` covers the WT engine; NOISE/FM use FRAME+WARP AMT controls instead of preset browsers; SAMP/GRAN/SPEC will get browsers when their DSP lands).
    - **3.5 (deferred):** OSC B chassis — mirror of OSC A (12 new SYN_OSC_B_* APVTS + relays + UI + dual-osc render in SynthVoice + simple A+B sum). Will be its own phase before cross-mod work in Phase 8.
 
-4. **Phase 4 — FLOW glide engine**
-   Implement ANCHOR / TRAIL / CASCADE / DUST allocators. Wire TIME / SHAPE / SCATTER. Add TRAJ + MORPH (the innovations).
+4. **Phase 4 — SYN page UI buildout (pivot)** ✅ SHIPPED 2026-06-02 (tag `mark-2-synth-phase-4-syn-page-ui`)
+   User pivoted mid-day after seeing Serum 2's UI density: "build the UI first, every region needs to be in place even if audio isn't wired." Wholesale ported the locked v12 mockup HTML+CSS into the production `#syn-panel`. Now all 8 mockup devices are visible filling the content area below the header (820×596): OSC A (with 6 engine icon pills + wavetable display + 5 knobs), CROSS (A→B/SYNC/FM/RING/MIX), OSC B (text engine pills), FILTER 1/2 (toggle + dropdown + curve + 4 knobs), FLOW (4 mode tiles ANCHOR/TRAIL/CASCADE/DUST + trajectory viz + 5 mini-knobs), ENVELOPES (4 tabs + ADSR canvas), MODULATION (3 LFO tiles + patchbay 5/32 routes), RIBBON (CS-80 strip + mode dropdown + 4 mini-knobs), VOICE META (VOICES/UNISON/SPREAD). Interactive controls wired this phase: **OSC A** engine pills (6 click targets driving SYN_OSC_A_ENGINE), OCT/SEMI/CENT/LEVEL/PAN knobs (drag-to-change via conic-gradient + pointer-capture); **FILTER 1** CUT/RES knobs. **All other regions render as visual placeholders** (audio comes in Phases 5+). Previously-wired controls (WT_PRESET, WT_FRAME, WARP_MODE, WARP_AMOUNT, AMP A/D/S/R) moved into a hidden `#syn-hidden-controls` div so DAW automation / preset / MIDI learn continues to work for those params until their visible knobs land. Built on top of Phase 3's 6 working engines — WT/FM/NOISE all still audible through the new UI. 6 commits, ~600 net lines added to `index.html`.
 
-5. **Phase 5 — Mod matrix + LFOs + per-voice mod**
-   Extend `ModulationEngine.h` with `SYN_*` targets. Wire 3 LFOs + 4 envelopes + drag-to-assign UX.
+5. **Phase 5 — FLOW glide engine** (was Phase 4 pre-pivot)
+   Implement ANCHOR / TRAIL / CASCADE / DUST allocators. Wire TIME / SHAPE / SCATTER. Add TRAJ + MORPH (the innovations). UI placeholders shipped in Phase 4 — wire audio + click handlers on the 4 mode tiles + the 5 mini-knobs. Add `SYN_FLOW_*` APVTS params (already defined in this spec).
 
-6. **Phase 6 — Multi-filter + filter envelope**
-   Add 3-5 filter types initially, then expand to the full 25+. Wire filter env.
+6. **Phase 6 — Mod matrix + LFOs + per-voice mod** (was Phase 5 pre-pivot)
+   Extend `ModulationEngine.h` with `SYN_*` targets. Wire 3 LFOs + 4 envelopes + drag-to-assign UX. UI placeholders (LFO tiles, patchbay rows, ENVELOPES tabs/canvas) shipped in Phase 4.
 
-7. **Phase 7 — Ribbon + voice settings (VOICES/UNISON/SPREAD)**
+7. **Phase 7 — Multi-filter + filter envelope** (was Phase 6 pre-pivot)
+   Add 3-5 filter types initially, then expand to the full 25+. Wire filter env. UI placeholders (FILTER 1/2 toggle, type dropdown, response curve) shipped in Phase 4.
 
-8. **Phase 8 — Cross-mod (SYNC/FM/RING/MIX)**
+8. **Phase 8 — Ribbon + voice settings (VOICES/UNISON/SPREAD)** (was Phase 7 pre-pivot)
+   UI placeholders shipped in Phase 4.
 
-(Phases 9+ live on Page 2 — Analog Character, SUB+NOISE, line LFOs, spectral, etc.)
+9. **Phase 9 — Cross-mod (SYNC/FM/RING/MIX) + OSC B chassis** (was Phase 8 + 3.5 pre-pivot)
+   OSC B chassis (12 new SYN_OSC_B_* APVTS + dual-osc render in SynthVoice + A+B sum) lands here. Cross-mod uses the CROSS device UI placeholders shipped in Phase 4.
+
+(Phases 10+ live on Page 2 — Analog Character, SUB+NOISE, line LFOs, spectral, etc.)
 
 ---
 
