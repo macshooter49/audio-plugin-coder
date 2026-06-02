@@ -51,6 +51,7 @@ target_sources(TerrainInstrument
         Source/FxMask_test.cpp
         Source/IndyFxChain_test.cpp
         Source/SynthVoice_test.cpp
+        Source/Wavetable_test.cpp
 )
 
 # ── Include paths ──
