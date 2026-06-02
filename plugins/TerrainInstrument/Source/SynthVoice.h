@@ -35,15 +35,81 @@ namespace tw
             return dynamic_cast<SynthSound*> (s) != nullptr;
         }
 
-        void startNote (int /*midiNote*/, float /*velocity*/,
-                        juce::SynthesiserSound*, int /*pitchWheelPos*/) override {}
-        void stopNote (float /*velocity*/, bool /*allowTailOff*/) override
+        void setCurrentPlaybackSampleRate (double sr) override
         {
+            juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
+            sampleRate_ = (sr > 0.0) ? sr : 48000.0;
+        }
+
+        void startNote (int midiNote, float velocity,
+                        juce::SynthesiserSound*, int /*pitchWheelPos*/) override
+        {
+            currentMidiNote_ = midiNote;
+            currentVelocity_ = velocity;
+            phase_           = 0.0;
+            const double hz  = 440.0 * std::pow (2.0, (midiNote - 69) / 12.0);
+            phaseIncrement_  = hz / sampleRate_;
+            playing_         = true;
+        }
+
+        void stopNote (float, bool /*allowTailOff*/) override
+        {
+            playing_ = false;
             clearCurrentNote();
         }
+
         void pitchWheelMoved (int) override {}
         void controllerMoved (int, int) override {}
-        void renderNextBlock (juce::AudioBuffer<float>& /*outputBuffer*/,
-                              int /*startSample*/, int /*numSamples*/) override {}
+
+        void renderNextBlock (juce::AudioBuffer<float>& out,
+                              int startSample, int numSamples) override
+        {
+            if (! playing_) return;
+
+            auto* L = out.getWritePointer (0, startSample);
+            auto* R = out.getNumChannels() > 1
+                          ? out.getWritePointer (1, startSample) : L;
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                // Naive saw in [-1, +1] driven by phase_ in [0, 1).
+                float s = static_cast<float> (2.0 * phase_ - 1.0);
+                s -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
+
+                const float g = currentVelocity_;
+                L[i] += s * g;
+                R[i] += s * g;
+
+                phase_ += phaseIncrement_;
+                if (phase_ >= 1.0) phase_ -= 1.0;
+            }
+        }
+
+    private:
+        // Standard PolyBLEP residual — subtract from the naive saw at the
+        // discontinuity to suppress alias harmonics above Nyquist. Public
+        // domain reference: Välimäki & Huovilainen, "Antialiasing Oscillators
+        // in Subtractive Synthesis," IEEE SP Mag 2007.
+        static double polyBlep (double t, double dt) noexcept
+        {
+            if (t < dt)
+            {
+                t /= dt;
+                return t + t - t * t - 1.0;
+            }
+            if (t > 1.0 - dt)
+            {
+                t = (t - 1.0) / dt;
+                return t * t + t + t + 1.0;
+            }
+            return 0.0;
+        }
+
+        double sampleRate_      = 48000.0;
+        double phase_           = 0.0;
+        double phaseIncrement_  = 0.0;
+        int    currentMidiNote_ = 60;
+        float  currentVelocity_ = 1.0f;
+        bool   playing_         = false;
     };
 }
