@@ -867,6 +867,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f),
         200.0f));
 
+    // ── Synth section — Phase 2A (Wavetable foundation) ──────────────────
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_WT_PRESET, 1 },
+        "Synth OSC A WT Preset",
+        juce::StringArray { "Prophet Saw", "Jupiter PWM", "Moog Sqr",
+                            "OB-X Saw", "CS-80 Brass", "Juno Str" },
+        0));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_WT_FRAME, 1 },
+        "Synth OSC A WT Frame",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+
     return layout;
 }
 
