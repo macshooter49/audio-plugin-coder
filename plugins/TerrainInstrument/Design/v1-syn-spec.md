@@ -465,11 +465,13 @@ The Phase 2A/B/C controls SHIP FUNCTIONALLY but DO NOT match their intended v12 
 | FRAME | `<input range>` slider in OSC row | Implicit — corner label "WAVETABLE 12 / 256" shows it; knob may be modulation-only |
 | WARP MODE | `<select>` in OSC row | **Not yet designated** — needs explicit slot. Candidates: right-click overlay extras, dedicated "engine controls" row, or modulation-only |
 | WARP AMOUNT | `<input range>` slider in OSC row | **Not yet designated** — same as WARP MODE |
+| FRAME / WARP AMT (per-engine semantics) | Repurposed: NOISE=color/drive, FM=ratio/depth, WT=frame/warp | Mockup didn't anticipate per-engine semantics. Per user "ship functional, polish later" framing — knob labels stay generic ("FRAME", "WARP AMT") for now; future polish: contextual labels that swap per engine, OR per-engine right-click browsers that expose dedicated controls. |
 
 **Rule going forward:** every new control added in Phase 3+ MUST be anchored to a specific v12 mockup region BEFORE adding the widget. If the mockup doesn't have a slot for the control, either propose where it goes (and update the spec) or fold the function into modulation matrix only.
 
-3. **Phase 3 — Multi-engine OSC chassis**
-   Add SAMP / GRAN / SPEC / FM / NOISE engines. SAMP reuses the existing sampler infrastructure from `SamplerVoice.h`.
+3. **Phase 3 — Multi-engine OSC chassis (OSC A)**
+   - **3 SHIPPED 2026-06-02** (tag `mark-2-synth-phase-3-osc-a-engines`): Engine dispatch in `tw::SynthVoice::renderNextBlock` via `switch (engine_)`. NOISE engine (xorshift32 white + one-pole LP "color" via FRAME knob + tanh "drive" via WARP AMT). FM engine (2-op stack — modulator ratio via FRAME knob 0.25×..8×, modulation depth via WARP AMT 0..2π). SAMP / GRAN / SPEC ship as silent stubs (labelled "(soon)" in the dropdown) — engine selection wires through to the dispatch switch, but those arms render zero pending future phases. WAVETABLE dropdown dims when engine != WT (visual hint only — APVTS param remains automatable). No new APVTS params, no new widgets: FRAME + WARP AMT are repurposed per-engine. OSC B chassis split to its own focused phase. Per-engine right-click categorized browsers also deferred (current WAVETABLE `<select>` covers the WT engine; NOISE/FM use FRAME+WARP AMT controls instead of preset browsers; SAMP/GRAN/SPEC will get browsers when their DSP lands).
+   - **3.5 (deferred):** OSC B chassis — mirror of OSC A (12 new SYN_OSC_B_* APVTS + relays + UI + dual-osc render in SynthVoice + simple A+B sum). Will be its own phase before cross-mod work in Phase 8.
 
 4. **Phase 4 — FLOW glide engine**
    Implement ANCHOR / TRAIL / CASCADE / DUST allocators. Wire TIME / SHAPE / SCATTER. Add TRAJ + MORPH (the innovations).
