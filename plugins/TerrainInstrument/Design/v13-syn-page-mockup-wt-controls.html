@@ -1,0 +1,1067 @@
+<h2>SYN page — v13 (wavetable engine controls: preset dropdown + FRAME + WARP placements)</h2>
+<p class="subtitle">v12 mockup unchanged everywhere except the OSC · A device. New corner row shows the live wavetable engine controls: clickable preset name (drops a regular HTML select), inline FRAME readout, clickable WARP mode pill, WARP AMT mini-knob. The wavetable display itself stays purely visual (no right-click, no drag — that's saved for "something else"). Three variant proposals shown in the COMPARISON panel below the SYN page — scroll down to see them side-by-side. <strong>RECOMMENDED: Variant A</strong> (live above, full inline corner row).</p>
+
+<style>
+  .ti-mockup {
+    --bg-main: #1A1A2E;
+    --bg-hero: #12121F;
+    --bg-surface: #232340;
+    --bg-card: #2A2A48;
+    --bg-card-2: #252340;
+    --knob-track: rgba(120,118,160,0.35);
+    --purple-600: #9B6DFF;
+    --purple-500: #8B5CF6;
+    --purple-400: #B794FF;
+    --border: rgba(58,58,88,0.55);
+    --border-strong: rgba(140,130,180,0.45);   /* brighter */
+    --text-primary: #ECE8F2;                    /* brighter base white */
+    --text-secondary: #C5BFD2;                  /* lifted from C8C2D2 */
+    --text-muted: #908599;                      /* lifted from 6B6080 */
+    --text-dim: #6E6580;
+    --line-bright: #ECE8F2;                     /* waveform / curve color */
+
+    width: 820px; height: 640px; margin: 0 auto;
+    background: var(--bg-main); color: var(--text-primary);
+    font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 200;
+    border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+
+  .ti-header {
+    height: 44px; background: var(--bg-surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 14px; gap: 10px; flex-shrink: 0;
+  }
+  .ti-brand { font-size: 13px; font-weight: 300; letter-spacing: 1.4px; color: var(--text-primary); }
+  .ti-brand-v { font-size: 9px; color: var(--text-dim); margin-left: 4px; font-weight: 300; }
+  .ti-preset { flex: 1; text-align: center; font-size: 11px; color: var(--text-primary); letter-spacing: 0.6px; font-weight: 300; }
+  .ti-pill {
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--text-secondary); font-size: 10px; font-weight: 300; letter-spacing: 1.1px;
+    padding: 5px 11px; border-radius: 999px;
+  }
+  .ti-pill.active { background: var(--purple-500); color: #FFFFFF; border-color: var(--purple-500); }
+
+  .ti-tabs {
+    display: flex; align-items: center; gap: 26px;
+    padding: 6px 18px 0;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ti-tab {
+    font-size: 11px; font-weight: 300; letter-spacing: 2.4px;
+    color: var(--text-secondary); padding: 6px 0 8px;
+    position: relative; cursor: pointer;
+  }
+  .ti-tab.act { color: #FFFFFF; }
+  .ti-tab.act::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--purple-400); }
+  .ti-tabs .ti-tab-spacer { flex: 1; }
+  .ti-tab-meta { font-size: 9px; color: var(--text-muted); letter-spacing: 1.6px; font-weight: 200; }
+
+  /* Rows: ribbon gets a fat 138 fixed row this time so it can't be eaten */
+  .ti-syn-page {
+    flex: 1; padding: 12px 14px;
+    display: grid; grid-template-rows: 140px 140px 96px 138px; gap: 12px;
+    background: radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main);
+  }
+
+  .device {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 13px; padding: 10px 14px; position: relative; overflow: hidden;
+  }
+  .device-label {
+    position: absolute; top: 9px; left: 14px;
+    font-size: 9px; font-weight: 300; letter-spacing: 2px;
+    color: var(--text-secondary);                /* brighter than muted */
+    text-transform: uppercase;
+  }
+  .device-corner {
+    position: absolute; top: 9px; right: 14px;
+    font-size: 9px; color: var(--text-secondary); letter-spacing: 1.4px; font-weight: 200;
+  }
+
+  /* ===== ENGINE PILLS — bright inactive, SOLID PURPLE + WHITE active ===== */
+  .engine-pills { display: flex; gap: 5px; }
+  .eng {
+    flex: 1; height: 32px; border: 1px solid var(--border-strong); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-primary);                  /* bright */
+    position: relative;
+  }
+  .eng svg { width: 22px; height: 22px; }
+  .eng.act {
+    background: var(--purple-500);
+    border-color: var(--purple-500);
+    color: #FFFFFF;
+  }
+  .eng.txt { font-size: 10px; letter-spacing: 1.4px; font-weight: 300; }
+
+  /* OSC + CROSS column */
+  .row-osc { display: grid; grid-template-columns: 1fr 104px 1fr; gap: 12px; }
+  .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; }
+  .osc-display {
+    flex: 1; background: var(--bg-hero); border: 1px solid var(--border);
+    border-radius: 8px; position: relative; overflow: hidden; min-height: 28px;
+  }
+  .osc-display::before, .osc-display::after {
+    content: ''; position: absolute; width: 7px; height: 7px;
+    border: 1px solid rgba(236,232,242,0.22);
+  }
+  .osc-display::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
+  .osc-display::after { bottom: 4px; right: 4px; border-left: none; border-top: none; }
+  .osc-wave { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .osc-wave svg { width: 92%; height: 78%; }
+  .osc-rclick {
+    position: absolute; bottom: 4px; right: 6px;
+    font-size: 7.5px; letter-spacing: 1.2px; color: var(--text-muted); font-weight: 200;
+  }
+  .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
+  .knob { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .knob-ring {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: conic-gradient(from 225deg, var(--purple-500) 0deg 200deg, var(--knob-track) 200deg 270deg, transparent 270deg);
+    -webkit-mask: radial-gradient(circle, transparent 9px, black 10px);
+            mask: radial-gradient(circle, transparent 9px, black 10px);
+  }
+  .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; }
+
+  /* CROSS — symmetric grid alignment with knobs below */
+  .cross {
+    background: var(--bg-card-2); border: 1px solid var(--border-strong);
+    border-radius: 11px;
+    padding: 8px;
+    display: grid; grid-template-rows: 22px 28px 1fr; gap: 7px;
+    position: relative;
+  }
+  .cross-dir {
+    display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center;
+    gap: 2px;
+  }
+  .cross-dir .ab {
+    height: 22px; border: 1px solid var(--border-strong);
+    border-radius: 5px; display: flex; align-items: center; justify-content: center;
+    font-size: 9.5px; letter-spacing: 1.2px; color: var(--text-primary); font-weight: 300;
+  }
+  .cross-dir .ab.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+  .cross-dir .arr { color: var(--purple-400); font-size: 11px; text-align: center; font-weight: 200; }
+  .cross-sync {
+    width: 100%; height: 28px; border: 1px solid var(--border-strong);
+    border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    font-size: 10.5px; letter-spacing: 1.8px; color: var(--text-primary);
+    font-weight: 300;
+  }
+  .cross-sync.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+  .cross-knobs {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+    align-items: center; justify-items: center;
+  }
+  .cross-knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .cross-knob .knob-ring { width: 24px; height: 24px; -webkit-mask: radial-gradient(circle, transparent 7.5px, black 8.5px); mask: radial-gradient(circle, transparent 7.5px, black 8.5px); }
+  .cross-knob .knob-label { font-size: 7.5px; letter-spacing: 0.6px; color: var(--text-primary); }
+
+  /* FILTER + FLOW */
+  .row-filter-vl { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
+  .filter { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; }
+  /* Filter 1/2 toggle — symmetric pills */
+  .filter-toggle {
+    position: absolute; top: 6px; right: 14px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .filter-toggle .ft-pill {
+    width: 22px; height: 18px; border: 1px solid var(--border-strong);
+    border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--text-primary); font-weight: 300; letter-spacing: 0.4px;
+  }
+  .filter-toggle .ft-pill.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+  .dd-trigger {
+    height: 24px; padding: 0 10px;
+    background: var(--bg-hero); border: 1px solid var(--border-strong);
+    border-radius: 6px; display: flex; align-items: center; gap: 8px;
+    font-size: 9.5px; letter-spacing: 1.8px; color: var(--text-primary); font-weight: 300;
+  }
+  .dd-trigger svg.dd-chev { width: 9px; height: 9px; margin-left: auto; color: var(--text-secondary); }
+  .filter-display { flex: 1; background: var(--bg-hero); border: 1px solid var(--border); border-radius: 8px; position: relative; min-height: 28px; }
+  .filter-display svg { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); }
+  .filter-knobs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+
+  .flow { display: grid; grid-template-columns: 1fr 188px; gap: 12px; padding-top: 22px; }
+  .flow-modes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 7px; }
+  .flow-mode {
+    border: 1px solid var(--border-strong); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-primary); position: relative;
+    min-height: 42px;
+  }
+  .flow-mode svg { width: 38px; height: 38px; color: var(--text-primary); }
+  .flow-mode.act {
+    background: var(--purple-500);
+    border-color: var(--purple-500); color: #FFFFFF;
+  }
+  .flow-mode.act svg { color: #FFFFFF; }
+  .flow-vis { background: var(--bg-hero); border: 1px solid var(--border); border-radius: 8px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+  .flow-vis::before, .flow-vis::after { content: ''; position: absolute; width: 7px; height: 7px; border: 1px solid rgba(236,232,242,0.22); }
+  .flow-vis::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
+  .flow-vis::after { bottom: 4px; right: 4px; border-left: none; border-top: none; }
+  .flow-vis > svg { flex: 1; width: 100%; }
+  .vis-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 3px 8px 5px; border-top: 1px solid var(--border); }
+  .vis-knob { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .vis-knob .knob-ring { width: 22px; height: 22px; -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px); }
+  .vis-knob .knob-label { font-size: 7px; color: var(--text-primary); }
+
+  .row-env-mod { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
+  .envs { display: flex; flex-direction: column; gap: 5px; padding-top: 22px; }
+  .env-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
+  .env-tab { flex: 1; padding: 3px 0 5px; font-size: 9px; letter-spacing: 1.8px; text-align: center; color: var(--text-secondary); font-weight: 300; position: relative; }
+  .env-tab.act { color: #FFFFFF; }
+  .env-tab.act::after { content: ''; position: absolute; left: 15%; right: 15%; bottom: -1px; height: 1px; background: var(--purple-400); }
+  .env-canvas { flex: 1; background: var(--bg-hero); border: 1px solid var(--border); border-radius: 6px; position: relative; overflow: hidden; cursor: grab; }
+  .env-canvas::before, .env-canvas::after { content: ''; position: absolute; width: 6px; height: 6px; border: 1px solid rgba(236,232,242,0.22); }
+  .env-canvas::before { top: 3px; left: 3px; border-right: none; border-bottom: none; }
+  .env-canvas::after { bottom: 3px; right: 3px; border-left: none; border-top: none; }
+  .env-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .mod { padding-top: 22px; display: grid; grid-template-columns: 156px 1fr; gap: 12px; }
+  .lfo-stack { display: flex; flex-direction: column; gap: 5px; }
+  .lfo-tile { background: var(--bg-hero); border: 1px solid var(--border); border-radius: 7px; padding: 3px 8px; display: grid; grid-template-columns: 18px 1fr 56px; align-items: center; gap: 8px; height: 20px; }
+  .lfo-tag { font-size: 9px; font-weight: 400; color: #FFFFFF; letter-spacing: 1.2px; }
+  .lfo-shape { height: 13px; opacity: 1; }
+  .lfo-rate {
+    font-size: 8.5px; color: var(--text-primary); letter-spacing: 1px; font-weight: 300;
+    display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  }
+  .lfo-rate svg.dd-chev { width: 7px; height: 7px; color: var(--text-secondary); }
+  .patchbay { background: var(--bg-hero); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .patch-row { display: grid; grid-template-columns: 32px 1fr 52px 30px; align-items: center; gap: 6px; font-size: 9px; letter-spacing: 0.6px; color: var(--text-primary); font-weight: 200; padding: 1px 0; border-bottom: 1px dashed var(--border); }
+  .patch-row:last-child { border-bottom: none; }
+  .patch-src { color: #FFFFFF; font-weight: 400; letter-spacing: 1.2px; background: var(--purple-500); border-radius: 3px; text-align: center; padding: 1px 0; }
+  .patch-amt { height: 4px; background: var(--knob-track); border-radius: 2px; position: relative; }
+  .patch-amt.pos::after, .patch-amt.neg::after { content: ''; position: absolute; top: 0; bottom: 0; background: var(--purple-400); border-radius: 2px; }
+  .patch-amt.pos::after { left: 50%; width: 32%; }
+  .patch-amt.neg::after { right: 50%; width: 22%; }
+  .patch-val { font-size: 9px; color: var(--text-primary); text-align: right; letter-spacing: 0.6px; font-weight: 300; }
+  .patch-hint { font-size: 8px; color: var(--text-muted); letter-spacing: 1.4px; padding: 4px 0 0; text-align: center; }
+
+  /* RIBBON — fixed 138px row */
+  .ribbon-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 13px; display: grid; grid-template-columns: 1fr 1px 110px; gap: 12px; padding: 10px 14px; position: relative; }
+  .ribbon-device { display: flex; flex-direction: column; position: relative; gap: 7px; padding-top: 20px; }
+  .ribbon-label { position: absolute; top: 6px; left: 0; font-size: 9px; font-weight: 300; letter-spacing: 2px; color: var(--text-secondary); }
+  .ribbon-cs80 { position: absolute; top: 6px; right: 0; font-size: 8px; color: var(--text-muted); letter-spacing: 2px; font-weight: 200; }
+  .ribbon-strip { position: relative; background: linear-gradient(90deg, rgba(139,92,246,0.04) 0%, rgba(139,92,246,0.08) 50%, rgba(139,92,246,0.04) 100%), var(--bg-hero); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; height: 44px; }
+  .ribbon-strip::before, .ribbon-strip::after { content: ''; position: absolute; width: 6px; height: 6px; border: 1px solid rgba(236,232,242,0.22); }
+  .ribbon-strip::before { top: 3px; left: 3px; border-right: none; border-bottom: none; }
+  .ribbon-strip::after { bottom: 3px; right: 3px; border-left: none; border-top: none; }
+  .ribbon-strip svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ribbon-controls { display: grid; grid-template-columns: 180px 1fr 1fr 1fr 1fr; gap: 14px; align-items: center; }
+  .ribbon-mode-dd { height: 24px; padding: 0 10px; background: var(--purple-500); border: 1px solid var(--purple-500); border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 9.5px; letter-spacing: 1.6px; color: #FFFFFF; font-weight: 300; }
+  .ribbon-mode-dd svg.dd-chev { width: 9px; height: 9px; margin-left: auto; color: #FFFFFF; }
+  .ribbon-mini-knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .ribbon-mini-knob .knob-ring { width: 26px; height: 26px; -webkit-mask: radial-gradient(circle, transparent 8px, black 9px); mask: radial-gradient(circle, transparent 8px, black 9px); }
+  .ribbon-mini-knob .knob-label { font-size: 8px; letter-spacing: 1.4px; color: var(--text-primary); font-weight: 300; }
+  .ribbon-divider { background: var(--border); }
+  .voice-meta { padding-top: 4px; display: flex; flex-direction: column; gap: 8px; font-size: 9px; color: var(--text-secondary); letter-spacing: 1px; font-weight: 200; }
+  .voice-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 6px; }
+  .voice-row svg { width: 11px; height: 11px; color: var(--text-primary); }
+  .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
+
+  /* PREVIEW PANELS */
+  .ti-notes { margin: 28px auto 0; max-width: 820px; font-size: 13px; line-height: 1.6; color: #ccc; font-weight: 300; }
+  .ti-notes h4 { color: #fff; margin: 20px 0 6px; font-size: 13px; font-weight: 400; letter-spacing: 0.3px; }
+  .ti-notes ul { margin: 4px 0 0 18px; padding: 0; }
+  .ti-notes li { margin-bottom: 4px; }
+
+  .preview-card {
+    background: #2A2A48; border: 1px solid rgba(58,58,88,0.55); border-radius: 12px;
+    padding: 18px; max-width: 820px; margin: 12px auto 0;
+    font-family: "SF Pro Display", system-ui, sans-serif; font-weight: 200; color: #ECE8F2;
+  }
+  .preview-card h5 { margin: 0 0 12px; font-size: 9px; font-weight: 300; letter-spacing: 2px; color: #C5BFD2; text-transform: uppercase; }
+  .preview-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+  .preview-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .dd-open { background: #12121F; border: 1px solid rgba(140,130,180,0.45); border-radius: 8px; padding: 4px 0; }
+  .dd-section { padding: 6px 12px 2px; font-size: 8px; color: #908599; letter-spacing: 2.2px; text-transform: uppercase; font-weight: 300; }
+  .dd-item { padding: 5px 12px; font-size: 9.5px; letter-spacing: 1.2px; color: #ECE8F2; display: flex; align-items: center; gap: 8px; font-weight: 300; }
+  .dd-item.act { color: #FFFFFF; background: #8B5CF6; }
+  .dd-item small { color: #908599; font-size: 7.5px; letter-spacing: 1px; margin-left: auto; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ic-wt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+      <path d="M3 8 Q7 4, 12 8 T21 8"/>
+      <path d="M3 12 Q7 8, 12 12 T21 12" opacity="0.55"/>
+      <path d="M3 16 Q7 12, 12 16 T21 16" opacity="0.28"/>
+    </symbol>
+    <symbol id="ic-samp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 5 L4 19 M4 5 L7 5 M4 19 L7 19 M20 5 L20 19 M20 5 L17 5 M20 19 L17 19"/>
+      <polyline points="7,12 9,8 11,15 13,10 15,15 17,9 19,12" stroke-width="1.3"/>
+    </symbol>
+    <symbol id="ic-gran" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="7" cy="7" r="1.4"/><circle cx="12" cy="5" r="1.4"/><circle cx="17" cy="7" r="1.4"/>
+      <circle cx="9" cy="11" r="1.4"/><circle cx="15" cy="11" r="1.4"/><circle cx="12" cy="15" r="1.4"/>
+      <circle cx="7" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/><circle cx="12" cy="19" r="1.4"/>
+    </symbol>
+    <symbol id="ic-spec" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="3.5"  y="14" width="2.2" height="6" rx="0.5"/>
+      <rect x="7.6"  y="10" width="2.2" height="10" rx="0.5"/>
+      <rect x="11.7" y="5"  width="2.2" height="15" rx="0.5"/>
+      <rect x="15.8" y="11" width="2.2" height="9" rx="0.5"/>
+      <rect x="19.9" y="8"  width="2.2" height="12" rx="0.5"/>
+    </symbol>
+    <symbol id="ic-fm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="9" cy="12" r="6"/>
+      <circle cx="15" cy="12" r="3"/>
+    </symbol>
+    <symbol id="ic-noise" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="miter">
+      <polyline points="3,12 5,6 7,16 9,8 11,17 13,9 15,15 17,7 19,16 21,11"/>
+    </symbol>
+
+    <symbol id="ic-anchor" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+      <circle cx="16" cy="28" r="4.5" fill="currentColor"/>
+      <circle cx="32" cy="28" r="4.5" fill="currentColor"/>
+      <path d="M19,25 Q24,15 29,25"/>
+    </symbol>
+    <symbol id="ic-trail" viewBox="0 0 48 48" fill="currentColor">
+      <circle cx="8" cy="24" r="2.4" opacity="0.22"/>
+      <circle cx="18" cy="24" r="2.9" opacity="0.45"/>
+      <circle cx="28" cy="24" r="3.4" opacity="0.72"/>
+      <circle cx="38" cy="24" r="3.8"/>
+    </symbol>
+    <symbol id="ic-cascade" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6,10 16,10 16,20 26,20 26,30 36,30 36,40 42,40"/>
+    </symbol>
+    <symbol id="ic-dust" viewBox="0 0 48 48" fill="currentColor">
+      <circle cx="9" cy="12" r="2.6"/><circle cx="36" cy="9" r="2"/>
+      <circle cx="22" cy="20" r="2.8"/><circle cx="41" cy="25" r="1.7"/>
+      <circle cx="12" cy="30" r="2.3"/><circle cx="28" cy="38" r="2.5"/>
+      <circle cx="38" cy="40" r="1.5"/>
+    </symbol>
+
+    <symbol id="ic-voices" viewBox="0 0 12 12" fill="currentColor">
+      <circle cx="3" cy="4" r="1.3"/><circle cx="9" cy="4" r="1.3"/>
+      <circle cx="3" cy="9" r="1.3"/><circle cx="9" cy="9" r="1.3"/>
+    </symbol>
+    <symbol id="ic-unison" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1">
+      <line x1="3" y1="2" x2="3" y2="10"/>
+      <line x1="6" y1="2" x2="6" y2="10"/>
+      <line x1="9" y1="2" x2="9" y2="10"/>
+    </symbol>
+    <symbol id="ic-spread" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">
+      <line x1="2" y1="6" x2="10" y2="6"/>
+      <polyline points="3,4 1,6 3,8"/>
+      <polyline points="9,4 11,6 9,8"/>
+    </symbol>
+    <symbol id="ic-chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+      <polyline points="2,4 5,7 8,4"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="ti-mockup">
+  <div class="ti-header">
+    <div><span class="ti-brand">TERRAIN</span><span class="ti-brand-v">V1</span></div>
+    <div class="ti-preset">Init Synth</div>
+    <button class="ti-pill active">SYN</button>
+    <button class="ti-pill">MIX</button>
+    <button class="ti-pill">DLY</button>
+    <button class="ti-pill">EQ</button>
+    <button class="ti-pill">MOD</button>
+    <button class="ti-pill" style="font-size:13px; padding: 4px 8px;">⚙</button>
+  </div>
+
+  <div class="ti-tabs">
+    <div class="ti-tab act">1</div>
+    <div class="ti-tab">2</div>
+    <div class="ti-tab-spacer"></div>
+    <div class="ti-tab-meta">SYNTH</div>
+  </div>
+
+  <div class="ti-syn-page">
+
+    <div class="row-osc">
+
+      <div class="device osc">
+        <div class="device-label">OSC · A</div>
+        <!-- v13: new wavetable corner row replaces the static "WAVETABLE 12 / 256" label. -->
+        <div style="
+          position: absolute; top: 6px; right: 14px;
+          display: flex; align-items: center; gap: 12px;
+          font-size: 9.5px; letter-spacing: 0.8px; font-weight: 300;
+          color: var(--text-secondary);
+        ">
+          <!-- (1) Preset name — click opens HTML select w/ 5 optgroups, 20 wavetables -->
+          <div style="
+            display: flex; align-items: center; gap: 6px;
+            color: var(--text-primary); cursor: pointer;
+            padding: 2px 6px; border-radius: 4px;
+            background: rgba(139,92,246,0.10);
+          ">
+            <span>Prophet Saw</span>
+            <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+              <polyline points="2,4 5,7 8,4"/>
+            </svg>
+          </div>
+          <!-- (2) FRAME readout — label + value, paired -->
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="color: var(--text-muted); font-size: 8px; letter-spacing: 1.4px;">FRAME</span>
+            <span style="color: var(--text-primary);">0.34</span>
+          </div>
+          <!-- (3) WARP mode — click cycles or opens 4-option select -->
+          <div style="
+            display: flex; align-items: center; gap: 5px;
+            color: var(--text-primary); cursor: pointer;
+            padding: 2px 7px; border: 1px solid var(--border-strong); border-radius: 4px;
+          ">
+            <span style="font-size: 8px; letter-spacing: 1.4px; color: var(--text-muted);">WARP</span>
+            <span>NONE</span>
+            <svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+              <polyline points="2,4 5,7 8,4"/>
+            </svg>
+          </div>
+          <!-- (4) WARP AMT mini-knob (16px, conic-gradient) + numeric readout -->
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <div style="
+              width: 16px; height: 16px; border-radius: 50%;
+              background: conic-gradient(from 225deg, var(--purple-500) 0deg 60deg, var(--knob-track) 60deg 270deg, transparent 270deg);
+              -webkit-mask: radial-gradient(circle, transparent 5px, black 6px);
+              mask: radial-gradient(circle, transparent 5px, black 6px);
+            "></div>
+            <span style="color: var(--text-primary); font-size: 9px;">0.30</span>
+          </div>
+        </div>
+        <div class="engine-pills">
+          <div class="eng act"><svg><use href="#ic-wt"/></svg></div>
+          <div class="eng"><svg><use href="#ic-samp"/></svg></div>
+          <div class="eng"><svg><use href="#ic-gran"/></svg></div>
+          <div class="eng"><svg><use href="#ic-spec"/></svg></div>
+          <div class="eng"><svg><use href="#ic-fm"/></svg></div>
+          <div class="eng"><svg><use href="#ic-noise"/></svg></div>
+        </div>
+        <div class="osc-display">
+          <div class="osc-wave">
+            <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+              <path d="M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
+            </svg>
+          </div>
+        </div>
+        <div class="osc-knobs">
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+        </div>
+      </div>
+
+      <div class="cross">
+        <div class="cross-dir">
+          <div class="ab act">A</div>
+          <div class="arr">→</div>
+          <div class="ab">B</div>
+        </div>
+        <div class="cross-sync act">SYNC</div>
+        <div class="cross-knobs">
+          <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">FM</div></div>
+          <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">RING</div></div>
+          <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">MIX</div></div>
+        </div>
+      </div>
+
+      <div class="device osc">
+        <div class="device-label">OSC · B</div>
+        <div class="device-corner">SAMPLE</div>
+        <div class="engine-pills">
+          <div class="eng txt">WT</div>
+          <div class="eng txt act">SAMP</div>
+          <div class="eng txt">GRAN</div>
+          <div class="eng txt">SPEC</div>
+          <div class="eng txt">FM</div>
+          <div class="eng txt">NOISE</div>
+        </div>
+        <div class="osc-display">
+          <div class="osc-wave">
+            <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+              <path d="M0,30 L4,22 L8,38 L14,18 L20,42 L26,12 L32,48 L40,8 L46,52 L54,20 L62,40 L70,16 L78,44 L88,30 L96,30 L108,30 L120,28 L132,34 L144,30 L156,32 L168,28 L180,30 L200,30" stroke="#ECE8F2" stroke-width="0.95" fill="none"/>
+            </svg>
+          </div>
+        </div>
+        <div class="osc-knobs">
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row-filter-vl">
+      <div class="device filter">
+        <div class="device-label">FILTER</div>
+        <div class="filter-toggle">
+          <div class="ft-pill act">1</div>
+          <div class="ft-pill">2</div>
+        </div>
+        <div class="dd-trigger"><span>LADDER LP · 24</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+        <div class="filter-display">
+          <svg viewBox="0 0 280 60" preserveAspectRatio="none">
+            <path d="M0,40 L120,40 Q150,40 165,18 Q180,2 220,55 L280,58" stroke="#ECE8F2" stroke-width="1.3" fill="none"/>
+            <line x1="165" y1="0" x2="165" y2="60" stroke="rgba(139,92,246,0.45)" stroke-width="0.6" stroke-dasharray="2,3"/>
+          </svg>
+        </div>
+        <div class="filter-knobs">
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">CUT</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">RES</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">DRV</div></div>
+          <div class="knob"><div class="knob-ring"></div><div class="knob-label">ENV</div></div>
+        </div>
+      </div>
+
+      <div class="device flow">
+        <div class="device-label">FLOW</div>
+        <div class="device-corner" style="color: var(--purple-400)">TERRAIN</div>
+        <div class="flow-modes">
+          <div class="flow-mode act"><svg><use href="#ic-anchor"/></svg></div>
+          <div class="flow-mode"><svg><use href="#ic-trail"/></svg></div>
+          <div class="flow-mode"><svg><use href="#ic-cascade"/></svg></div>
+          <div class="flow-mode"><svg><use href="#ic-dust"/></svg></div>
+        </div>
+        <div class="flow-vis">
+          <svg viewBox="0 0 188 70" preserveAspectRatio="xMidYMid meet">
+            <g stroke="rgba(236,232,242,0.4)" stroke-width="0.5" stroke-dasharray="1.5,2">
+              <line x1="32" y1="6" x2="32" y2="64"/>
+              <line x1="156" y1="6" x2="156" y2="64"/>
+            </g>
+            <g fill="#ECE8F2">
+              <circle cx="32" cy="18" r="2"/><circle cx="32" cy="34" r="2"/><circle cx="32" cy="50" r="2"/>
+            </g>
+            <g fill="#ECE8F2">
+              <circle cx="156" cy="22" r="2"/><circle cx="156" cy="36" r="2"/><circle cx="156" cy="56" r="2"/>
+            </g>
+            <g stroke="#B794FF" stroke-width="1" fill="none">
+              <path d="M34,18 Q94,18 154,22"/>
+              <path d="M34,34 Q94,34 154,36"/>
+              <path d="M34,50 Q94,52 154,56"/>
+            </g>
+          </svg>
+          <div class="vis-knobs">
+            <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">TIME</div></div>
+            <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">SHAPE</div></div>
+            <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">SCATTER</div></div>
+            <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">TRAJ</div></div>
+            <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">MORPH</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row-env-mod">
+      <div class="device envs">
+        <div class="device-label">ENVELOPES</div>
+        <div class="env-tabs">
+          <div class="env-tab act">AMP</div>
+          <div class="env-tab">FLT</div>
+          <div class="env-tab">PITCH</div>
+          <div class="env-tab">MOD</div>
+        </div>
+        <div class="env-canvas">
+          <svg viewBox="0 0 280 60" preserveAspectRatio="none">
+            <g stroke="rgba(236,232,242,0.07)" stroke-width="0.4">
+              <line x1="70" y1="0" x2="70" y2="60"/>
+              <line x1="140" y1="0" x2="140" y2="60"/>
+              <line x1="210" y1="0" x2="210" y2="60"/>
+            </g>
+            <path d="M5,55 L50,4 L110,22 L210,22 L265,55" stroke="#ECE8F2" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+            <path d="M5,55 L50,4 L110,22 L210,22 L265,55 L265,58 L5,58 Z" fill="#ECE8F2" opacity="0.10"/>
+            <line x1="0" y1="55" x2="280" y2="55" stroke="rgba(236,232,242,0.2)" stroke-width="0.4" stroke-dasharray="2,3"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="device mod">
+        <div class="device-label">MODULATION</div>
+        <div class="device-corner">5 / 32 ROUTES</div>
+        <div class="lfo-stack">
+          <div class="lfo-tile">
+            <div class="lfo-tag">L1</div>
+            <svg class="lfo-shape" viewBox="0 0 100 16" preserveAspectRatio="none"><path d="M0,8 Q12.5,0 25,8 T50,8 T75,8 T100,8" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
+            <div class="lfo-rate"><span>1 / 4</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+          </div>
+          <div class="lfo-tile">
+            <div class="lfo-tag">L2</div>
+            <svg class="lfo-shape" viewBox="0 0 100 16" preserveAspectRatio="none"><path d="M0,16 L25,0 L50,16 L75,0 L100,16" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
+            <div class="lfo-rate"><span>2 bar</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+          </div>
+          <div class="lfo-tile">
+            <div class="lfo-tag">L3</div>
+            <svg class="lfo-shape" viewBox="0 0 100 16" preserveAspectRatio="none"><polyline points="0,12 12,12 12,4 30,4 30,14 50,14 50,2 70,2 70,11 88,11 88,5 100,5" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
+            <div class="lfo-rate"><span>FREE</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+          </div>
+        </div>
+        <div class="patchbay">
+          <div class="patch-row"><div class="patch-src">L1</div><div>→ OSC A · WAVE</div><div class="patch-amt pos"></div><div class="patch-val">+32%</div></div>
+          <div class="patch-row"><div class="patch-src">L2</div><div>→ FILTER · CUT</div><div class="patch-amt pos"></div><div class="patch-val">+18%</div></div>
+          <div class="patch-row"><div class="patch-src">L3</div><div>→ FLOW · TIME</div><div class="patch-amt neg"></div><div class="patch-val">−22%</div></div>
+          <div class="patch-row"><div class="patch-src">ENV</div><div>→ OSC B · PITCH</div><div class="patch-amt pos"></div><div class="patch-val">+8%</div></div>
+          <div class="patch-hint">DRAG SOURCE → KNOB · ADD ROUTE</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ribbon-row">
+      <div class="ribbon-device">
+        <div class="ribbon-label">RIBBON</div>
+        <div class="ribbon-cs80">CS-80 EXPRESSION</div>
+        <div class="ribbon-strip">
+          <svg viewBox="0 0 660 44" preserveAspectRatio="none">
+            <g stroke="rgba(236,232,242,0.10)" stroke-width="0.5">
+              <line x1="60" y1="6" x2="60" y2="38"/>
+              <line x1="120" y1="6" x2="120" y2="38"/>
+              <line x1="180" y1="6" x2="180" y2="38"/>
+              <line x1="240" y1="6" x2="240" y2="38"/>
+              <line x1="300" y1="6" x2="300" y2="38"/>
+              <line x1="360" y1="6" x2="360" y2="38"/>
+              <line x1="420" y1="6" x2="420" y2="38"/>
+              <line x1="480" y1="6" x2="480" y2="38"/>
+              <line x1="540" y1="6" x2="540" y2="38"/>
+              <line x1="600" y1="6" x2="600" y2="38"/>
+            </g>
+            <line x1="0" y1="22" x2="660" y2="22" stroke="rgba(236,232,242,0.22)" stroke-width="0.5" stroke-dasharray="2,3"/>
+            <g fill="#C5BFD2" font-size="6.5" letter-spacing="1.4" font-family="SF Pro Display" font-weight="300">
+              <text x="60" y="42">C2</text>
+              <text x="180" y="42">C3</text>
+              <text x="300" y="42">C4</text>
+              <text x="420" y="42">C5</text>
+              <text x="540" y="42">C6</text>
+            </g>
+            <g fill="#FFFFFF">
+              <circle cx="200" cy="22" r="3.4"/>
+              <circle cx="245" cy="22" r="3.4"/>
+              <circle cx="295" cy="22" r="3.4"/>
+              <circle cx="340" cy="22" r="3.4"/>
+            </g>
+            <circle cx="295" cy="22" r="6.5" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.85"/>
+          </svg>
+        </div>
+        <div class="ribbon-controls">
+          <div class="ribbon-mode-dd"><span>PITCH DRIFT</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+          <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">RANGE</div></div>
+          <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">GLIDE</div></div>
+          <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">DRIFT</div></div>
+          <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">RETURN</div></div>
+        </div>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="voice-meta">
+        <div class="voice-row"><svg><use href="#ic-voices"/></svg><span>VOICES</span><b>8</b></div>
+        <div class="voice-row"><svg><use href="#ic-unison"/></svg><span>UNISON</span><b>3</b></div>
+        <div class="voice-row"><svg><use href="#ic-spread"/></svg><span>SPREAD</span><b>42</b></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== v13 WAVETABLE-CONTROLS COMPARISON ===== -->
+<div class="preview-card" style="margin-top: 36px;">
+  <h5 style="color: #B794FF;">v13 · OSC · A WAVETABLE CONTROLS — 3 PLACEMENT VARIANTS</h5>
+  <p style="font-size: 11px; color: #C5BFD2; margin: 4px 0 18px; line-height: 1.5; font-weight: 300;">
+    Each variant shows the same 4 controls (PRESET NAME + FRAME + WARP MODE + WARP AMT) placed differently inside the OSC · A device. Variant A is what's live in the SYN page above. The wavetable display in every variant stays purely visual (no right-click, no drag).
+  </p>
+
+  <!-- VARIANT A — corner row, all inline (the live recommended one) -->
+  <div style="display: flex; align-items: flex-start; gap: 18px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(58,58,88,0.55);">
+    <div style="width: 160px; flex-shrink: 0;">
+      <div style="font-size: 10px; color: #FFFFFF; letter-spacing: 2px; font-weight: 400;">A · INLINE CORNER ROW</div>
+      <div style="font-size: 10px; color: #B794FF; letter-spacing: 1.4px; margin-top: 4px; font-weight: 300;">RECOMMENDED</div>
+      <div style="font-size: 10px; color: #C5BFD2; margin-top: 8px; line-height: 1.5; font-weight: 300;">All 4 controls in the device-corner row. Preset name + FRAME readout + WARP pill + AMT mini-knob (~270px wide). No new rows added. Tight but readable.</div>
+    </div>
+    <div style="
+      flex: 1; background: #2A2A48; border: 1px solid rgba(58,58,88,0.55); border-radius: 11px;
+      padding: 10px 14px 16px; position: relative; min-height: 132px;
+      --bg-hero: #12121F; --knob-track: rgba(120,118,160,0.35);
+      --purple-500: #8B5CF6; --purple-400: #B794FF;
+      --border-strong: rgba(140,130,180,0.45);
+      --text-primary: #ECE8F2; --text-secondary: #C5BFD2; --text-muted: #908599;
+    ">
+      <div style="position: absolute; top: 9px; left: 14px; font-size: 9px; font-weight: 300; letter-spacing: 2px; color: var(--text-secondary); text-transform: uppercase;">OSC · A</div>
+      <div style="position: absolute; top: 6px; right: 14px; display: flex; align-items: center; gap: 12px; font-size: 9.5px; letter-spacing: 0.8px; font-weight: 300; color: var(--text-secondary);">
+        <div style="display: flex; align-items: center; gap: 6px; color: var(--text-primary); cursor: pointer; padding: 2px 6px; border-radius: 4px; background: rgba(139,92,246,0.10);">
+          <span>Prophet Saw</span>
+          <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><polyline points="2,4 5,7 8,4"/></svg>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <span style="color: var(--text-muted); font-size: 8px; letter-spacing: 1.4px;">FRAME</span>
+          <span style="color: var(--text-primary);">0.34</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 5px; color: var(--text-primary); cursor: pointer; padding: 2px 7px; border: 1px solid var(--border-strong); border-radius: 4px;">
+          <span style="font-size: 8px; letter-spacing: 1.4px; color: var(--text-muted);">WARP</span>
+          <span>NONE</span>
+          <svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><polyline points="2,4 5,7 8,4"/></svg>
+        </div>
+        <div style="display: flex; align-items: center; gap: 5px;">
+          <div style="width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 60deg, var(--knob-track) 60deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 5px, black 6px); mask: radial-gradient(circle, transparent 5px, black 6px);"></div>
+          <span style="color: var(--text-primary); font-size: 9px;">0.30</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 5px; margin-top: 22px;">
+        <div style="flex:1; height:24px; background: var(--purple-500); border-radius: 5px; display:flex; align-items:center; justify-content:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"><path d="M3 8 Q7 4, 12 8 T21 8"/><path d="M3 12 Q7 8, 12 12 T21 12" opacity="0.55"/></svg></div>
+        <div style="flex:1; height:24px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:24px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:24px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:24px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:24px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+      </div>
+      <div style="margin-top: 5px; background: var(--bg-hero); border: 1px solid rgba(58,58,88,0.55); border-radius: 7px; height: 26px; display:flex; align-items:center; justify-content:center; padding: 0 6px;">
+        <svg viewBox="0 0 200 20" preserveAspectRatio="none" style="width:96%; height:80%;"><path d="M0,10 Q12,2 24,10 T48,10 T72,10 T96,10 T120,10 T144,10 T168,10 T200,10" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT B — preset name in corner; FRAME/WARP/AMT in a thin sub-row between display and knobs -->
+  <div style="display: flex; align-items: flex-start; gap: 18px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid rgba(58,58,88,0.55);">
+    <div style="width: 160px; flex-shrink: 0;">
+      <div style="font-size: 10px; color: #FFFFFF; letter-spacing: 2px; font-weight: 400;">B · DEDICATED SUB-ROW</div>
+      <div style="font-size: 10px; color: #C5BFD2; margin-top: 8px; line-height: 1.5; font-weight: 300;">Preset name alone in the corner. FRAME + WARP mode + WARP AMT live as a slim ~22px row between the wavetable display and the OCT/SEMI/CENT/LEVEL/PAN knobs. Each gets a tiny dedicated label. More breathing room but adds a row that other engines won't always need.</div>
+    </div>
+    <div style="
+      flex: 1; background: #2A2A48; border: 1px solid rgba(58,58,88,0.55); border-radius: 11px;
+      padding: 10px 14px 16px; position: relative; min-height: 132px;
+      --bg-hero: #12121F; --knob-track: rgba(120,118,160,0.35);
+      --purple-500: #8B5CF6; --purple-400: #B794FF;
+      --border-strong: rgba(140,130,180,0.45);
+      --text-primary: #ECE8F2; --text-secondary: #C5BFD2; --text-muted: #908599;
+    ">
+      <div style="position: absolute; top: 9px; left: 14px; font-size: 9px; font-weight: 300; letter-spacing: 2px; color: var(--text-secondary); text-transform: uppercase;">OSC · A</div>
+      <div style="position: absolute; top: 6px; right: 14px;">
+        <div style="display: flex; align-items: center; gap: 6px; color: var(--text-primary); cursor: pointer; padding: 2px 6px; border-radius: 4px; background: rgba(139,92,246,0.10); font-size: 9.5px; font-weight: 300;">
+          <span>Prophet Saw</span>
+          <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><polyline points="2,4 5,7 8,4"/></svg>
+        </div>
+      </div>
+      <div style="display: flex; gap: 5px; margin-top: 22px;">
+        <div style="flex:1; height:22px; background: var(--purple-500); border-radius: 5px; display:flex; align-items:center; justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"><path d="M3 8 Q7 4, 12 8 T21 8"/></svg></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+      </div>
+      <div style="margin-top: 5px; background: var(--bg-hero); border: 1px solid rgba(58,58,88,0.55); border-radius: 7px; height: 22px; display:flex; align-items:center; justify-content:center; padding: 0 6px;">
+        <svg viewBox="0 0 200 20" preserveAspectRatio="none" style="width:96%; height:80%;"><path d="M0,10 Q12,2 24,10 T48,10 T72,10 T96,10 T120,10 T144,10 T168,10 T200,10" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
+      </div>
+      <!-- The new sub-row: FRAME / WARP / AMT inline mini-controls -->
+      <div style="margin-top: 6px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 5px; justify-content: center;">
+          <div style="width:14px; height:14px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 70deg, var(--knob-track) 70deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 4.5px, black 5.5px); mask: radial-gradient(circle, transparent 4.5px, black 5.5px);"></div>
+          <span style="color: var(--text-muted); font-size: 8px; letter-spacing: 1.4px;">FRAME</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 5px; justify-content: center; padding: 2px 6px; border: 1px solid var(--border-strong); border-radius: 4px; cursor: pointer;">
+          <span style="color: var(--text-muted); font-size: 8px; letter-spacing: 1.4px;">WARP</span>
+          <span style="color: var(--text-primary); font-size: 9px;">NONE</span>
+          <svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="color: var(--text-secondary);"><polyline points="2,4 5,7 8,4"/></svg>
+        </div>
+        <div style="display: flex; align-items: center; gap: 5px; justify-content: center;">
+          <div style="width:14px; height:14px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 60deg, var(--knob-track) 60deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 4.5px, black 5.5px); mask: radial-gradient(circle, transparent 4.5px, black 5.5px);"></div>
+          <span style="color: var(--text-muted); font-size: 8px; letter-spacing: 1.4px;">AMT</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT C — preset name in corner; FRAME/WARP/AMT mixed INTO the knob row (8 cells instead of 5) -->
+  <div style="display: flex; align-items: flex-start; gap: 18px; margin-bottom: 4px;">
+    <div style="width: 160px; flex-shrink: 0;">
+      <div style="font-size: 10px; color: #FFFFFF; letter-spacing: 2px; font-weight: 400;">C · GROW KNOB ROW</div>
+      <div style="font-size: 10px; color: #C5BFD2; margin-top: 8px; line-height: 1.5; font-weight: 300;">Preset name alone in the corner. The 5-knob row at the bottom becomes 8 knobs: OCT/SEMI/CENT/LEVEL/PAN + FRAME + WARP + AMT. Same width per knob, so each is slightly smaller (~25px vs 30px). Most uniform look — every WT-specific control is a real knob.</div>
+    </div>
+    <div style="
+      flex: 1; background: #2A2A48; border: 1px solid rgba(58,58,88,0.55); border-radius: 11px;
+      padding: 10px 14px 16px; position: relative; min-height: 132px;
+      --bg-hero: #12121F; --knob-track: rgba(120,118,160,0.35);
+      --purple-500: #8B5CF6; --purple-400: #B794FF;
+      --border-strong: rgba(140,130,180,0.45);
+      --text-primary: #ECE8F2; --text-secondary: #C5BFD2; --text-muted: #908599;
+    ">
+      <div style="position: absolute; top: 9px; left: 14px; font-size: 9px; font-weight: 300; letter-spacing: 2px; color: var(--text-secondary); text-transform: uppercase;">OSC · A</div>
+      <div style="position: absolute; top: 6px; right: 14px;">
+        <div style="display: flex; align-items: center; gap: 6px; color: var(--text-primary); cursor: pointer; padding: 2px 6px; border-radius: 4px; background: rgba(139,92,246,0.10); font-size: 9.5px; font-weight: 300;">
+          <span>Prophet Saw</span>
+          <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><polyline points="2,4 5,7 8,4"/></svg>
+        </div>
+      </div>
+      <div style="display: flex; gap: 5px; margin-top: 22px;">
+        <div style="flex:1; height:22px; background: var(--purple-500); border-radius: 5px; display:flex; align-items:center; justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"><path d="M3 8 Q7 4, 12 8 T21 8"/></svg></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+        <div style="flex:1; height:22px; border: 1px solid var(--border-strong); border-radius: 5px;"></div>
+      </div>
+      <div style="margin-top: 5px; background: var(--bg-hero); border: 1px solid rgba(58,58,88,0.55); border-radius: 7px; height: 28px; display:flex; align-items:center; justify-content:center; padding: 0 6px;">
+        <svg viewBox="0 0 200 20" preserveAspectRatio="none" style="width:96%; height:80%;"><path d="M0,10 Q12,2 24,10 T48,10 T72,10 T96,10 T120,10 T144,10 T168,10 T200,10" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
+      </div>
+      <!-- 8-cell knob row (originally 5) -->
+      <div style="margin-top: 5px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; align-items: center;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 120deg, var(--knob-track) 120deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px);"></div>
+          <span style="color: var(--text-primary); font-size: 7px; letter-spacing: 1.2px;">OCT</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 90deg, var(--knob-track) 90deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px);"></div>
+          <span style="color: var(--text-primary); font-size: 7px; letter-spacing: 1.2px;">SEMI</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 100deg, var(--knob-track) 100deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px);"></div>
+          <span style="color: var(--text-primary); font-size: 7px; letter-spacing: 1.2px;">CENT</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 140deg, var(--knob-track) 140deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px);"></div>
+          <span style="color: var(--text-primary); font-size: 7px; letter-spacing: 1.2px;">LEVEL</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 130deg, var(--knob-track) 130deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px);"></div>
+          <span style="color: var(--text-primary); font-size: 7px; letter-spacing: 1.2px;">PAN</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 75deg, var(--knob-track) 75deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px); border: 1px dashed var(--purple-400); padding: 0; box-sizing: border-box;"></div>
+          <span style="color: var(--purple-400); font-size: 7px; letter-spacing: 1.2px;">FRAME</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border: 1px solid var(--purple-400); border-radius:6px; display: flex; align-items: center; justify-content: center;"><span style="color: var(--purple-400); font-size: 6.5px; letter-spacing: 0.8px;">NONE</span></div>
+          <span style="color: var(--purple-400); font-size: 7px; letter-spacing: 1.2px;">WARP</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+          <div style="width:22px; height:22px; border-radius:50%; background: conic-gradient(from 225deg, var(--purple-500) 0deg 60deg, var(--knob-track) 60deg 270deg, transparent 270deg); -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px); border: 1px dashed var(--purple-400); padding: 0; box-sizing: border-box;"></div>
+          <span style="color: var(--purple-400); font-size: 7px; letter-spacing: 1.2px;">AMT</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size: 11px; color: #C5BFD2; line-height: 1.6; padding-top: 14px; border-top: 1px solid rgba(58,58,88,0.55); font-weight: 300;">
+    <strong style="color: #FFFFFF;">Implementation notes (whichever variant you pick):</strong>
+    <ul style="margin: 6px 0 0 18px; padding: 0;">
+      <li>Preset name <code style="background:#12121F; padding: 1px 4px; border-radius: 2px;">Prophet Saw</code> click target opens a native HTML <code style="background:#12121F; padding: 1px 4px; border-radius: 2px;">&lt;select&gt;</code> with 5 <code style="background:#12121F; padding: 1px 4px; border-radius: 2px;">&lt;optgroup&gt;</code>s and 20 options (matches the existing hidden control). Setting the select updates SYN_OSC_A_WT_PRESET and the visible name swaps to the new preset.</li>
+      <li>FRAME readout reflects SYN_OSC_A_WT_FRAME live as a 0..1 number; Variant A and B include a tiny knob ring to drag, Variant C uses a full knob in the row.</li>
+      <li>WARP mode is a 4-option select (NONE/BEND/SYNC/FORMANT) or a 4-icon pill row depending on variant. Variants A/B render as a click-to-cycle pill or native select; Variant C uses a small text-in-box.</li>
+      <li>WARP AMT mini-knob in A/B is 16-18px; in C it's a full 22px knob. All variants drag-vertically to change.</li>
+      <li>Wavetable display stays purely visual in all variants. Right-click is RESERVED for future use ("something else" per user — e.g., modulation routing, copy/paste, randomize, etc.).</li>
+      <li>OSC · B keeps its current visual (engine SAMP active, "SAMPLE" in corner) — when SAMP engine has its own controls designed, this same variant pattern will apply for that engine.</li>
+    </ul>
+  </div>
+</div>
+
+  <div class="preview-grid-3">
+    <div>
+      <div style="font-size: 9px; color: #B794FF; letter-spacing: 2px; padding-bottom: 6px;">WAVETABLE</div>
+      <div class="dd-open">
+        <div class="dd-section">ANALOG</div>
+        <div class="dd-item act">PROPHET SAW<small>14 fr</small></div>
+        <div class="dd-item">JUPITER PWM</div>
+        <div class="dd-item">MOOG SQR</div>
+        <div class="dd-item">OB-X SAW</div>
+        <div class="dd-item">CS-80 BRASS</div>
+        <div class="dd-item">JUNO STR</div>
+        <div class="dd-section">DIGITAL</div>
+        <div class="dd-item">PPG WAVE</div>
+        <div class="dd-item">DX7 EP</div>
+        <div class="dd-item">D-50 BELL</div>
+        <div class="dd-item">M1 PIANO</div>
+        <div class="dd-section">VOCAL</div>
+        <div class="dd-item">CHOIR · A→O</div>
+        <div class="dd-item">WHISPER</div>
+        <div class="dd-item">VOWEL MORPH</div>
+        <div class="dd-section">METALLIC</div>
+        <div class="dd-item">BOWED METAL</div>
+        <div class="dd-item">GLASS HARM</div>
+        <div class="dd-item">RAILROAD</div>
+        <div class="dd-section">EXPERIMENTAL</div>
+        <div class="dd-item">DUSTBOWL</div>
+        <div class="dd-item">STATIC EVOLVE</div>
+        <div class="dd-item">SPECTRAL DRIFT</div>
+        <div class="dd-item">SERUM HD</div>
+        <div class="dd-section">USER</div>
+        <div class="dd-item">IMPORT WAV…</div>
+        <div class="dd-item">FROM SAMPLE…</div>
+        <div class="dd-item">FROM IMAGE…<small>PNG</small></div>
+        <div class="dd-item">RANDOM GEN</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size: 9px; color: #B794FF; letter-spacing: 2px; padding-bottom: 6px;">SAMPLE</div>
+      <div class="dd-open">
+        <div class="dd-section">FACTORY · DRUMS</div>
+        <div class="dd-item act">808 KICK</div>
+        <div class="dd-item">RIM 909</div>
+        <div class="dd-item">FOLEY CLAP</div>
+        <div class="dd-section">FACTORY · VOCAL</div>
+        <div class="dd-item">CHOP · AH</div>
+        <div class="dd-item">CHOP · YEAH</div>
+        <div class="dd-item">BREATH</div>
+        <div class="dd-section">FACTORY · INSTRUMENTS</div>
+        <div class="dd-item">RHODES MK1</div>
+        <div class="dd-item">UPRIGHT PNO</div>
+        <div class="dd-item">PIZZ STR</div>
+        <div class="dd-section">FACTORY · LOOPS</div>
+        <div class="dd-item">AMEN BREAK</div>
+        <div class="dd-item">FUNK LOOP</div>
+        <div class="dd-section">FACTORY · TEXTURE</div>
+        <div class="dd-item">SUB DRONE</div>
+        <div class="dd-item">VINYL CRACKLE</div>
+        <div class="dd-section">USER</div>
+        <div class="dd-item">IMPORT WAV…</div>
+        <div class="dd-item">FROM CHOP…<small>slicer</small></div>
+        <div class="dd-item">MULTI-SAMPLE…</div>
+        <div class="dd-section">SETTINGS</div>
+        <div class="dd-item">START / END</div>
+        <div class="dd-item">LOOP POINTS</div>
+        <div class="dd-item">VEL ZONES</div>
+        <div class="dd-item">→ MAKE WT</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size: 9px; color: #B794FF; letter-spacing: 2px; padding-bottom: 6px;">GRANULAR</div>
+      <div class="dd-open">
+        <div class="dd-section">CLOUDS</div>
+        <div class="dd-item act">DENSE CLOUD</div>
+        <div class="dd-item">SCATTERED</div>
+        <div class="dd-item">FROZEN SHARD</div>
+        <div class="dd-item">SWARM</div>
+        <div class="dd-section">RHYTHMIC</div>
+        <div class="dd-item">PULSE STREAM</div>
+        <div class="dd-item">BUZZ TRIG</div>
+        <div class="dd-item">STUTTER GATE</div>
+        <div class="dd-section">EVOLVING</div>
+        <div class="dd-item">SLOW BLOOM</div>
+        <div class="dd-item">RAIN FALL</div>
+        <div class="dd-item">WIND DRIFT</div>
+        <div class="dd-section">EXPERIMENTAL</div>
+        <div class="dd-item">REVERSE GRAINS</div>
+        <div class="dd-item">PITCH SHARDS</div>
+        <div class="dd-item">SPRAY POLY</div>
+        <div class="dd-section">SOURCE</div>
+        <div class="dd-item">FROM OSC A</div>
+        <div class="dd-item">FROM SAMPLE</div>
+        <div class="dd-item">FROM AUDIO IN</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-grid-3" style="margin-top: 18px;">
+    <div>
+      <div style="font-size: 9px; color: #B794FF; letter-spacing: 2px; padding-bottom: 6px;">SPECTRAL</div>
+      <div class="dd-open">
+        <div class="dd-section">FREEZE &amp; BLUR</div>
+        <div class="dd-item act">SPECTRAL FREEZE</div>
+        <div class="dd-item">BIN BLUR</div>
+        <div class="dd-item">FOG</div>
+        <div class="dd-section">MORPH</div>
+        <div class="dd-item">VOCAL → BELL</div>
+        <div class="dd-item">PAD → CHOIR</div>
+        <div class="dd-item">A↔B MORPH</div>
+        <div class="dd-section">SHIFT</div>
+        <div class="dd-item">FORMANT SHIFT</div>
+        <div class="dd-item">PITCH SCATTER</div>
+        <div class="dd-item">HARMONIC RETUNE</div>
+        <div class="dd-section">RESYNTHESIS</div>
+        <div class="dd-item">FROM SAMPLE</div>
+        <div class="dd-item">FROM IMAGE</div>
+        <div class="dd-item">FROM CHOP</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size: 9px; color: #B794FF; letter-spacing: 2px; padding-bottom: 6px;">FM</div>
+      <div class="dd-open">
+        <div class="dd-section">CLASSIC FM</div>
+        <div class="dd-item act">DX7 E.PIANO</div>
+        <div class="dd-item">FM BELL</div>
+        <div class="dd-item">FM BRASS</div>
+        <div class="dd-item">FM BASS</div>
+        <div class="dd-section">PERCUSSIVE</div>
+        <div class="dd-item">FM MARIMBA</div>
+        <div class="dd-item">FM TINE</div>
+        <div class="dd-item">FM PERC</div>
+        <div class="dd-section">METALLIC</div>
+        <div class="dd-item">FM GAMELAN</div>
+        <div class="dd-item">FM STEEL</div>
+        <div class="dd-item">FM TUBULAR</div>
+        <div class="dd-section">EVOLVING</div>
+        <div class="dd-item">FM DRONE</div>
+        <div class="dd-item">FM SWEEP</div>
+        <div class="dd-section">ALGORITHM</div>
+        <div class="dd-item">2-OP STACK</div>
+        <div class="dd-item">3-OP FEEDBACK</div>
+        <div class="dd-item">4-OP COMPLEX</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size: 9px; color: #B794FF; letter-spacing: 2px; padding-bottom: 6px;">NOISE</div>
+      <div class="dd-open">
+        <div class="dd-section">COLOR</div>
+        <div class="dd-item act">WHITE</div>
+        <div class="dd-item">PINK</div>
+        <div class="dd-item">BROWN</div>
+        <div class="dd-item">BLUE</div>
+        <div class="dd-item">VIOLET</div>
+        <div class="dd-item">GREEN<small>airy</small></div>
+        <div class="dd-section">VINTAGE</div>
+        <div class="dd-item">VINYL CRACKLE</div>
+        <div class="dd-item">TAPE HISS</div>
+        <div class="dd-item">RECORD POPS</div>
+        <div class="dd-item">CASSETTE WOW</div>
+        <div class="dd-section">FOLEY</div>
+        <div class="dd-item">RAIN</div>
+        <div class="dd-item">WIND</div>
+        <div class="dd-item">CROWD MURMUR</div>
+        <div class="dd-section">SHAPED</div>
+        <div class="dd-item">RESONANT NOISE</div>
+        <div class="dd-item">FORMANT NOISE</div>
+        <div class="dd-item">METAL NOISE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ti-notes">
+  <h4>v11 — what changed</h4>
+  <ul>
+    <li><strong>Contrast lifted to white-on-purple throughout.</strong> Active engine pills now have a solid <code style="color:#B794FF">--purple-500</code> background with #FFFFFF icons/text (not the previous low-contrast purple-on-purple). Same treatment for active FLOW mode, SYNC pill, A/B direction pill, env tabs, ribbon mode dropdown, patch-source tags.</li>
+    <li><strong>Waveforms, envelope curves, filter response, LFO shapes → bright white</strong> (<code style="color:#ECE8F2">#ECE8F2</code>). The voice-meta number style is now the page-wide reference for what "readable" looks like.</li>
+    <li><strong>Knob labels → white</strong> (<code>--text-primary</code>) instead of muted gray. Every label under every knob actually reads now.</li>
+    <li><strong>Ribbon row fixed at 138px.</strong> No more cut-off. Strip is 44px, controls row gets a full 30px+, voice meta sits at proper rhythm.</li>
+    <li><strong>Filter 1/2 toggle redesigned</strong> — two equal-size pills (22×18px), 1 is active solid purple + white, 2 inactive. Click to swap. Removed the cramped chevrons.</li>
+    <li><strong>CROSS column symmetric</strong> — fixed row heights via grid-template-rows so A/B + SYNC + 3 knobs all align with consistent gaps.</li>
+    <li><strong>LFO rates are dropdowns</strong> — each shows a chevron, click to open rate picker. Same dropdown pattern as the filter.</li>
+    <li><strong>Mod patchbay gets a drag-hint line</strong> — "DRAG SOURCE → KNOB · ADD ROUTE" under the routes. Producers see that mod is interactive without a manual.</li>
+    <li><strong>Patch-source tags (L1/L2/L3/ENV)</strong> now have solid purple bg + white text — they pop as clickable mod sources.</li>
+  </ul>
+
+  <h4>All 6 engines get right-click browsers (preview above the notes)</h4>
+  <ul>
+    <li><strong>WAVETABLE</strong> — 25+ presets across Analog / Digital / Vocal / Metallic / Experimental + USER (Import WAV, From Sample, From Image PNG, Random Gen).</li>
+    <li><strong>SAMPLE — Pigments-class.</strong> Factory library across Drums / Vocal / Instruments / Loops / Texture, USER import + per-chop pull, plus sample-level Settings (Start/End, Loop Points, Velocity Zones) AND a "→ MAKE WT" action that converts the loaded sample to a wavetable.</li>
+    <li><strong>GRANULAR</strong> — Clouds / Rhythmic / Evolving / Experimental presets + Source selector (OSC A · Sample · Audio In).</li>
+    <li><strong>SPECTRAL</strong> — Freeze &amp; Blur / Morph / Shift / Resynthesis (from Sample / Image / Chop).</li>
+    <li><strong>FM</strong> — Classic / Percussive / Metallic / Evolving presets + Algorithm picker (2-op / 3-op feedback / 4-op).</li>
+    <li><strong>NOISE</strong> — Color (white/pink/brown/blue/violet/green) + Vintage (vinyl/tape/cassette) + Foley + Shaped.</li>
+  </ul>
+
+  <h4>Function-not-show check (you raised this — answering)</h4>
+  <ul>
+    <li><strong>Every UI element here maps to a real param or behavior.</strong> When we move to code, each of these becomes an APVTS parameter + a JS↔C++ binding. The mockup is faithful to what we'll actually wire.</li>
+    <li><strong>Modulation</strong>: 3 LFOs (rate, shape, depth, sync), patchbay routes (source → target × depth), drag-from-source-onto-knob assigns. Right-click any knob to see "ADD MOD →" submenu. All wires up.</li>
+    <li><strong>LFO rates</strong>: click the dropdown to open a list (1/64 → 1/32 → 1/16 → 1/8T → 1/8 → 1/4T → 1/4 → 1/4D → 1/2 → 1 bar → 2 bar → 4 bar → 8 bar / FREE Hz). Same dropdown pattern as filter.</li>
+    <li><strong>RIBBON modulatable</strong>: any LFO/ENV can drive RANGE/GLIDE/DRIFT/RETURN.</li>
+    <li><strong>FLOW knobs modulatable</strong>: TIME/SHAPE/SCATTER/TRAJ/MORPH all live in the mod targets list.</li>
+    <li><strong>CROSS knobs modulatable</strong>: FM/RING/MIX are mod targets too — assignable from any LFO/ENV.</li>
+  </ul>
+
+  <h4>If v11 reads clean</h4>
+  <p style="font-size:12.5px;">Say lock and I'll write the design spec — synthesizing every decision from v1–v11 into one document under <code>docs/superpowers/specs/2026-06-01-terrain-synth-page-1-design.md</code>. After that, writing-plans, then code.</p>
+</div>
