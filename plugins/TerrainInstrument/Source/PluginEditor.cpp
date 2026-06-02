@@ -67,6 +67,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(eqRelays[20]) .withOptionsFrom(eqRelays[21]) .withOptionsFrom(eqRelays[22]) .withOptionsFrom(eqRelays[23]) .withOptionsFrom(eqRelays[24])
             .withOptionsFrom(eqRelays[25]) .withOptionsFrom(eqRelays[26]) .withOptionsFrom(eqRelays[27]) .withOptionsFrom(eqRelays[28]) .withOptionsFrom(eqRelays[29])
             .withOptionsFrom(eqRelays[30]) .withOptionsFrom(eqRelays[31]) .withOptionsFrom(eqRelays[32]) .withOptionsFrom(eqRelays[33]) .withOptionsFrom(eqRelays[34])
+            .withOptionsFrom(synOscAEngineRelay)
+            .withOptionsFrom(synOscAOctRelay)
+            .withOptionsFrom(synOscASemiRelay)
+            .withOptionsFrom(synOscACentRelay)
+            .withOptionsFrom(synOscALevelRelay)
+            .withOptionsFrom(synOscAPanRelay)
+            .withOptionsFrom(synFilter1CutRelay)
+            .withOptionsFrom(synFilter1ResRelay)
+            .withOptionsFrom(synEnvAmpARelay)
+            .withOptionsFrom(synEnvAmpDRelay)
+            .withOptionsFrom(synEnvAmpSRelay)
+            .withOptionsFrom(synEnvAmpRRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1841,6 +1853,54 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 *audioProcessor.getAPVTS().getParameter(ids[i]), eqRelays[i], nullptr);
         }
     }
+
+    synOscAEngineAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_ENGINE),
+        synOscAEngineRelay, nullptr);
+
+    synOscAOctAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_OCT),
+        synOscAOctRelay, nullptr);
+
+    synOscASemiAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_SEMI),
+        synOscASemiRelay, nullptr);
+
+    synOscACentAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_CENT),
+        synOscACentRelay, nullptr);
+
+    synOscALevelAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_LEVEL),
+        synOscALevelRelay, nullptr);
+
+    synOscAPanAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_PAN),
+        synOscAPanRelay, nullptr);
+
+    synFilter1CutAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_CUT),
+        synFilter1CutRelay, nullptr);
+
+    synFilter1ResAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_RES),
+        synFilter1ResRelay, nullptr);
+
+    synEnvAmpAAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_A),
+        synEnvAmpARelay, nullptr);
+
+    synEnvAmpDAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_D),
+        synEnvAmpDRelay, nullptr);
+
+    synEnvAmpSAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_S),
+        synEnvAmpSRelay, nullptr);
+
+    synEnvAmpRAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_R),
+        synEnvAmpRRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
