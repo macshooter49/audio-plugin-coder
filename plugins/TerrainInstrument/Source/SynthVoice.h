@@ -379,5 +379,11 @@ namespace tw
                                    ^ static_cast<std::uint32_t> (
                                          reinterpret_cast<std::uintptr_t> (this));
         float         noiseLpZ_    = 0.0f;
+
+        // Phase 3 — FM engine state.
+        // Modulator phase (carrier reuses phase_ from the WT path; both run
+        // at multiples of phaseIncrement_ each sample). modRatio_ resolved
+        // from FRAME in the render loop; modDepth_ resolved from WARP AMT.
+        double modPhase_ = 0.0;
     };
 }
