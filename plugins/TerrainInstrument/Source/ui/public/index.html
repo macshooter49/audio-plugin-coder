@@ -3183,7 +3183,7 @@ body {
 
 /* ── P4-T10: swap-state UI — + button, label row, preset corner, engine-controls ── */
 #syn-panel .device-label-row {
-  position: absolute; top: 6px; left: 14px;
+  position: absolute; top: 6px; left: 17px;   /* +3 to align visible "O" stroke with WT pill border (font bearing comp.) */
   display: flex; align-items: center; gap: 8px;
   z-index: 1;
 }
@@ -3230,28 +3230,42 @@ body {
 #syn-panel .device-corner-preset {
   position: absolute; top: 4px; right: 14px;
   z-index: 1;
+  display: inline-flex;
 }
-#syn-panel .preset-select {
-  appearance: none; -webkit-appearance: none;
-  background: transparent;
+#syn-panel .preset-display {
+  /* visible label — its RIGHT edge sits at right:14 (same as rightmost pill border) */
+  display: block;
   color: var(--text-primary);
-  border: none;
   font-family: inherit;
   font-size: 9.5px; font-weight: 300;
   letter-spacing: 0.8px;
   cursor: pointer;
-  padding: 2px 0 2px 6px;        /* no right padding — text right-edge flush with pill right-edge */
-  text-align: right;
+  padding: 2px 0 2px 6px;
   border-radius: 4px;
   transition: background 0.12s ease;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;          /* clicks pass through to the overlay select below */
 }
-#syn-panel .preset-select:hover {
+#syn-panel .device-corner-preset:hover .preset-display {
   background: rgba(139,92,246,0.15);
 }
-#syn-panel .preset-select:focus {
-  outline: none;
-  background: rgba(139,92,246,0.15);
+#syn-panel .preset-select {
+  /* invisible overlay covering the visible span — captures click → native dropdown opens */
+  appearance: none; -webkit-appearance: none;
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  margin: 0; padding: 0;
+  background: transparent;
+  color: transparent;            /* hide the browser's own selected-text rendering */
+  border: none;
+  font-family: inherit;
+  font-size: 9.5px;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
 }
+#syn-panel .preset-select:focus { outline: none; }
 
 /* engine-controls row — hidden by default, shown when .swapped */
 #syn-panel .engine-controls {
@@ -4071,9 +4085,12 @@ body {
               <div class="device-label">OSC · A</div>
               <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Toggle engine pills / wavetable controls"></button>
             </div>
-            <!-- preset name in corner — click opens the inline <select> -->
+            <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
+                 overlaid by an invisible native <select> that captures clicks and renders the
+                 native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
-              <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select">
+              <span class="preset-display" id="osc-a-preset-display">Prophet Saw</span>
+              <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select" aria-label="Wavetable preset">
                 <optgroup label="Analog">
                   <option value="0">Prophet Saw</option>
                   <option value="1">Jupiter PWM</option>
@@ -8102,6 +8119,32 @@ setTimeout(function wireSynControls () {
         });
       }
     } catch (eSwap) { console.warn ('[SYN-swap] init failed', eSwap); }
+
+    // P4-T11: preset display label — keep visible span in sync with overlay select.
+    try {
+      const presetDisplay = document.getElementById('osc-a-preset-display');
+      const presetSelect  = document.getElementById('osc-a-preset-select');
+      if (presetDisplay && presetSelect) {
+        const syncPresetText = () => {
+          try {
+            const idx = presetSelect.selectedIndex;
+            if (idx >= 0) {
+              presetDisplay.textContent = presetSelect.options[idx].text;
+            }
+          } catch (e) { console.warn('[SYN-preset] sync failed', e); }
+        };
+        syncPresetText();                                  // initial
+        presetSelect.addEventListener('change', syncPresetText);
+        presetSelect.addEventListener('input',  syncPresetText);
+        // Also reverse-sync from APVTS (DAW automation / preset load).
+        if (window.Juce && window.Juce.getSliderState) {
+          const presetState = window.Juce.getSliderState('SYN_OSC_A_WT_PRESET');
+          if (presetState && presetState.valueChangedEvent && presetState.valueChangedEvent.addListener) {
+            presetState.valueChangedEvent.addListener(syncPresetText);
+          }
+        }
+      }
+    } catch (ePreset) { console.warn('[SYN-preset] wiring failed', ePreset); }
 
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
