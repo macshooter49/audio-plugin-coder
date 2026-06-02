@@ -7775,6 +7775,90 @@ setTimeout(function wireSynControls () {
         engineEl.addEventListener ('input',  applyEngineDim);
       }
     } catch (eDim) { console.warn ('[SYN] engine-dim wiring failed', eDim); }
+
+    // Phase 4 T5 — Interactive .knob widgets in the new SYN page layout.
+    // The 7 .knob[data-syn] elements (OSC A: OCT/SEMI/CENT/LEVEL/PAN +
+    // FILTER 1: CUT/RES) become drag-interactive controls. Each .knob > .knob-ring
+    // div has its conic-gradient updated live to reflect the current value.
+    try {
+      const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
+      knobEls.forEach ((knobEl) => {
+        try {
+          const paramId = knobEl.dataset.syn;
+          if (! paramId || ! window.Juce || ! window.Juce.getSliderState) return;
+          const state = window.Juce.getSliderState (paramId);
+          if (! state) {
+            console.warn ('[SYN-knob] no SliderState for', paramId);
+            return;
+          }
+          const ring = knobEl.querySelector ('.knob-ring');
+          if (! ring) {
+            console.warn ('[SYN-knob] no .knob-ring child for', paramId);
+            return;
+          }
+
+          // Helper: update the conic-gradient based on normalised value [0..1].
+          const applyFill = (n) => {
+            const clamped = Math.max (0, Math.min (1, n));
+            const fillDeg = 200 * clamped;
+            ring.style.background =
+              'conic-gradient(from 225deg, var(--purple-500) 0deg ' + fillDeg + 'deg, ' +
+              'var(--knob-track) ' + fillDeg + 'deg 270deg, ' +
+              'transparent 270deg)';
+          };
+
+          // Initial fill from current APVTS value.
+          try {
+            const n = state.getNormalisedValue ? state.getNormalisedValue () : 0;
+            applyFill (n);
+          } catch (e) { console.warn ('[SYN-knob] initial fill failed for', paramId, e); }
+
+          // Pointer drag — vertical drag, 200px = full sweep.
+          let dragStartY = 0;
+          let dragStartN = 0;
+          let dragging = false;
+
+          const onMove = (ev) => {
+            if (! dragging) return;
+            const dy = dragStartY - ev.clientY;       // UP increases value
+            const newN = Math.max (0, Math.min (1, dragStartN + dy / 200));
+            applyFill (newN);
+            try { state.setNormalisedValue (newN); } catch (e) {}
+          };
+          const onUp = () => {
+            dragging = false;
+            document.removeEventListener ('pointermove', onMove);
+            document.removeEventListener ('pointerup', onUp);
+            ring.style.cursor = 'grab';
+          };
+          ring.style.cursor = 'grab';
+          ring.addEventListener ('pointerdown', (ev) => {
+            try {
+              dragging = true;
+              dragStartY = ev.clientY;
+              dragStartN = state.getNormalisedValue ? state.getNormalisedValue () : 0;
+              ring.style.cursor = 'grabbing';
+              if (ring.setPointerCapture) ring.setPointerCapture (ev.pointerId);
+              document.addEventListener ('pointermove', onMove);
+              document.addEventListener ('pointerup', onUp);
+              ev.preventDefault ();
+            } catch (e) { console.warn ('[SYN-knob] pointerdown failed for', paramId, e); }
+          });
+
+          // Reverse-sync from APVTS (DAW automation, preset load, MIDI learn).
+          if (state.valueChangedEvent && state.valueChangedEvent.addListener) {
+            state.valueChangedEvent.addListener (() => {
+              try {
+                const n = state.getNormalisedValue ();
+                applyFill (n);
+              } catch (e) { console.warn ('[SYN-knob] reverse-sync failed for', paramId, e); }
+            });
+          }
+        } catch (perKnob) {
+          console.warn ('[SYN-knob] per-knob wire failed', perKnob);
+        }
+      });
+    } catch (eKnobs) { console.warn ('[SYN-knob] interactive knob wiring failed', eKnobs); }
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
   }
