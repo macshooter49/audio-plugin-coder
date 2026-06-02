@@ -62,14 +62,15 @@ namespace tw
         }
 
         /** Called from PluginProcessor::prepareToPlay. Sizes filter + caches
-         *  block-size for the per-block AudioBlock view. */
-        void prepareToPlay (double sr, int samplesPerBlock, int numChannels) noexcept
+         *  block-size for the per-block AudioBlock view. Phase 9: always stereo
+         *  (2 channels) so OSC A + OSC B can be panned independently. */
+        void prepareToPlay (double sr, int samplesPerBlock, int /*numChannels*/) noexcept
         {
             setCurrentPlaybackSampleRate (sr);
             juce::dsp::ProcessSpec spec;
             spec.sampleRate       = sr;
             spec.maximumBlockSize = (juce::uint32) samplesPerBlock;
-            spec.numChannels      = (juce::uint32) juce::jmax (1, numChannels);
+            spec.numChannels      = 2;   // always stereo for OSC A + B per-osc pan
             filter_.prepare (spec);
             filter_.setMode (juce::dsp::LadderFilterMode::LPF24);
             filter_.reset();
@@ -144,16 +145,62 @@ namespace tw
         /** Test-only accessor — not used in production audio path. */
         Engine engineForTesting() const noexcept { return engine_; }
 
+        // ── Phase 9 — OSC B setters (mirror of OSC A) ─────────────────────
+
+        void setTuningB (int oct, int semi, float cent) noexcept
+        {
+            octOffsetB_   = oct;
+            semiOffsetB_  = semi;
+            centsOffsetB_ = cent;
+            if (playing_)
+                updatePhaseIncrementBFromMidi (currentMidiNote_);
+        }
+
+        void setLevelB (float level) noexcept
+        {
+            levelB_ = juce::jlimit (0.0f, 1.0f, level);
+        }
+
+        void setPanB (float pan) noexcept
+        {
+            const float p = juce::jlimit (-1.0f, 1.0f, pan);
+            const float angle = (p + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
+            panLB_ = std::cos (angle);
+            panRB_ = std::sin (angle);
+        }
+
+        void setWavetableB (const tw::Wavetable* wt) noexcept { currentWavetableB_ = wt; }
+        void setWavetableFrameB (float pos) noexcept { framePosB_ = juce::jlimit (0.0f, 1.0f, pos); }
+
+        void setWarpB (int mode, float amount) noexcept
+        {
+            warpModeB_   = juce::jlimit (0, 3, mode);
+            warpAmountB_ = juce::jlimit (0.0f, 1.0f, amount);
+        }
+
+        void setEngineB (int idx) noexcept
+        {
+            const int clamped = juce::jlimit (0, 5, idx);
+            engineB_ = static_cast<Engine> (clamped);
+        }
+
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
+            // OSC A resets
             phase_           = 0.0;
             modPhase_        = 0.0;      // Phase 3 — FM modulator reset
             noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
             syncPhase_       = 0.0;      // Phase 2C SYNC reset (good hygiene)
             updatePhaseIncrementFromMidi (midiNote);
+            // OSC B resets (Phase 9)
+            phaseB_          = 0.0;
+            modPhaseB_       = 0.0;
+            noiseLpZB_       = 0.0f;
+            syncPhaseB_      = 0.0;
+            updatePhaseIncrementBFromMidi (midiNote);
             playing_         = true;
             ampEnv_.reset();
             ampEnv_.noteOn();
@@ -181,22 +228,22 @@ namespace tw
         {
             if (! playing_) return;
 
-            // Render mono into the scratch buffer (resized lazily).
-            if (scratch_.getNumSamples() < numSamples)
-                scratch_.setSize (1, numSamples, false, true, true);
+            // Phase 9: stereo scratch (OSC A + OSC B each pan independently).
+            if (scratch_.getNumChannels() < 2 || scratch_.getNumSamples() < numSamples)
+                scratch_.setSize (2, numSamples, false, true, true);
             scratch_.clear();
-            auto* mono = scratch_.getWritePointer (0);
+            auto* scratchL = scratch_.getWritePointer (0);
+            auto* scratchR = scratch_.getWritePointer (1);
 
             for (int i = 0; i < numSamples; ++i)
             {
-                float s = 0.0f;
+                // ── OSC A sample ─────────────────────────────────────────
+                float sA = 0.0f;
 
                 switch (engine_)
                 {
                     case Engine::WT:
                     {
-                        // Existing Phase 2A+2C wavetable+warp path — verbatim
-                        // from the prior implementation.
                         if (currentWavetable_ != nullptr)
                         {
                             double warpedPhase = phase_;
@@ -227,13 +274,12 @@ namespace tw
                                 case 0:
                                 default: break;
                             }
-                            s = currentWavetable_->lookup (framePos_, (float) warpedPhase);
+                            sA = currentWavetable_->lookup (framePos_, (float) warpedPhase);
                         }
                         else
                         {
-                            // PolyBLEP fallback (never expected in practice).
-                            s = static_cast<float> (2.0 * phase_ - 1.0);
-                            s -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
+                            sA = static_cast<float> (2.0 * phase_ - 1.0);
+                            sA -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
                         }
                         phase_ += phaseIncrement_;
                         if (phase_ >= 1.0) phase_ -= 1.0;
@@ -242,46 +288,27 @@ namespace tw
 
                     case Engine::NOISE:
                     {
-                        // xorshift32 step
                         noiseState_ ^= noiseState_ << 13;
                         noiseState_ ^= noiseState_ >> 17;
                         noiseState_ ^= noiseState_ << 5;
-                        // Map to -1..+1
                         const float white = static_cast<float> (static_cast<int32_t> (noiseState_))
                                           * (1.0f / 2147483648.0f);
-
-                        // One-pole low-pass for "color" — FRAME=0 (alpha~1) lets
-                        // most of the white through (bright); FRAME=1 (alpha~0.02)
-                        // heavily smooths (dark/brown-ish). Equivalent to a -6 dB
-                        // RC LP at f_c = sampleRate * alpha / (2π·(1-alpha)).
-                        const float alpha = 1.0f - 0.98f * framePos_;  // 1.0 → 0.02
+                        const float alpha = 1.0f - 0.98f * framePos_;
                         noiseLpZ_ += alpha * (white - noiseLpZ_);
-
-                        // Tanh saturation driven by WARP AMT (0 = clean, 1 = squashed).
                         const float drive = 1.0f + 8.0f * warpAmount_;
-                        s = std::tanh (noiseLpZ_ * drive);
-                        // Pre-emphasize a bit so heavy LP-then-drive doesn't kill level.
-                        s *= 1.0f + 0.5f * framePos_;
-                        // Phase_ accumulator NOT advanced — NOISE is pitchless.
+                        sA = std::tanh (noiseLpZ_ * drive);
+                        sA *= 1.0f + 0.5f * framePos_;
                         break;
                     }
+
                     case Engine::FM:
                     {
-                        // 2-op FM. FRAME = modulator ratio (0..1 mapped to
-                        // 0.25× .. 8× the carrier frequency, log-ish).
-                        // WARP AMT = modulation depth in radians (0..1 →
-                        // 0..2π). Carrier is sin(2π·phase_ + depth·sin(2π·modPhase_)).
-                        const double ratio   = 0.25 + std::pow (32.0, (double) framePos_) * 0.234375;
-                        // Range: pow(32,0)*0.234 = 0.234, +0.25 → 0.484 at frame 0.
-                        // pow(32,1)*0.234 = 7.5, +0.25 → 7.75 at frame 1.
-                        // Good musical range covering classic DX algorithms.
-                        const double modInc  = phaseIncrement_ * ratio;
-                        const double depth   = (double) warpAmount_ * 6.2831853071795865; // 2π
-                        const double pi2     = 6.2831853071795865;
-
-                        const double modOut  = std::sin (pi2 * modPhase_);
-                        s = static_cast<float> (std::sin (pi2 * phase_ + depth * modOut));
-
+                        const double ratio  = 0.25 + std::pow (32.0, (double) framePos_) * 0.234375;
+                        const double modInc = phaseIncrement_ * ratio;
+                        const double depth  = (double) warpAmount_ * 6.2831853071795865;
+                        const double pi2    = 6.2831853071795865;
+                        const double modOut = std::sin (pi2 * modPhase_);
+                        sA = static_cast<float> (std::sin (pi2 * phase_ + depth * modOut));
                         modPhase_ += modInc;
                         if (modPhase_ >= 1.0) modPhase_ -= std::floor (modPhase_);
                         phase_    += phaseIncrement_;
@@ -292,36 +319,116 @@ namespace tw
                     case Engine::SAMP:
                     case Engine::GRAN:
                     case Engine::SPEC:
-                        // Phase 3 stubs — silent renders. Real DSP added in later
-                        // phases (SAMP reuses Terrain's existing SamplerVoice
-                        // infrastructure, GRAN reuses GrainEngine.h, SPEC needs
-                        // FFT pipeline). User can switch to them without crashes
-                        // but hears nothing — labelled "(coming soon)" in the
-                        // ENGINE dropdown in Task 9.
-                        s = 0.0f;
-                        break;
+                        sA = 0.0f; break;
                 }
 
-                const float env = ampEnv_.getNextSample();
-                mono[i] = s * currentVelocity_ * env;
+                // ── OSC B sample (Phase 9 — mirror of OSC A, all _B vars) ─
+                float sB = 0.0f;
+
+                switch (engineB_)
+                {
+                    case Engine::WT:
+                    {
+                        if (currentWavetableB_ != nullptr)
+                        {
+                            double warpedPhase = phaseB_;
+                            switch (warpModeB_)
+                            {
+                                case 1:  // BEND
+                                {
+                                    const double pi2 = 2.0 * 3.14159265358979323846;
+                                    warpedPhase = phaseB_ + (double) warpAmountB_ * 0.5 * std::sin (pi2 * phaseB_);
+                                    warpedPhase -= std::floor (warpedPhase);
+                                    break;
+                                }
+                                case 2:  // SYNC
+                                {
+                                    const double syncRatio = 1.0 + (double) warpAmountB_ * 4.0;
+                                    syncPhaseB_ += phaseIncrementB_ * syncRatio;
+                                    if (phaseB_ < phaseIncrementB_) syncPhaseB_ = 0.0;
+                                    if (syncPhaseB_ >= 1.0) syncPhaseB_ -= std::floor (syncPhaseB_);
+                                    warpedPhase = syncPhaseB_;
+                                    break;
+                                }
+                                case 3:  // FORMANT
+                                {
+                                    warpedPhase = phaseB_ * (1.0 + (double) warpAmountB_ * 2.0);
+                                    warpedPhase -= std::floor (warpedPhase);
+                                    break;
+                                }
+                                case 0:
+                                default: break;
+                            }
+                            sB = currentWavetableB_->lookup (framePosB_, (float) warpedPhase);
+                        }
+                        else
+                        {
+                            sB = static_cast<float> (2.0 * phaseB_ - 1.0);
+                            sB -= static_cast<float> (polyBlep (phaseB_, phaseIncrementB_));
+                        }
+                        phaseB_ += phaseIncrementB_;
+                        if (phaseB_ >= 1.0) phaseB_ -= 1.0;
+                        break;
+                    }
+
+                    case Engine::NOISE:
+                    {
+                        noiseStateB_ ^= noiseStateB_ << 13;
+                        noiseStateB_ ^= noiseStateB_ >> 17;
+                        noiseStateB_ ^= noiseStateB_ << 5;
+                        const float white = static_cast<float> (static_cast<int32_t> (noiseStateB_))
+                                          * (1.0f / 2147483648.0f);
+                        const float alpha = 1.0f - 0.98f * framePosB_;
+                        noiseLpZB_ += alpha * (white - noiseLpZB_);
+                        const float drive = 1.0f + 8.0f * warpAmountB_;
+                        sB = std::tanh (noiseLpZB_ * drive);
+                        sB *= 1.0f + 0.5f * framePosB_;
+                        break;
+                    }
+
+                    case Engine::FM:
+                    {
+                        const double ratio  = 0.25 + std::pow (32.0, (double) framePosB_) * 0.234375;
+                        const double modInc = phaseIncrementB_ * ratio;
+                        const double depth  = (double) warpAmountB_ * 6.2831853071795865;
+                        const double pi2    = 6.2831853071795865;
+                        const double modOut = std::sin (pi2 * modPhaseB_);
+                        sB = static_cast<float> (std::sin (pi2 * phaseB_ + depth * modOut));
+                        modPhaseB_ += modInc;
+                        if (modPhaseB_ >= 1.0) modPhaseB_ -= std::floor (modPhaseB_);
+                        phaseB_    += phaseIncrementB_;
+                        if (phaseB_ >= 1.0) phaseB_ -= 1.0;
+                        break;
+                    }
+
+                    case Engine::SAMP:
+                    case Engine::GRAN:
+                    case Engine::SPEC:
+                        sB = 0.0f; break;
+                }
+
+                const float env    = ampEnv_.getNextSample();
+                const float velEnv = currentVelocity_ * env;
+
+                // Sum to stereo with INDEPENDENT per-osc level + pan
+                scratchL[i] = (sA * level_ * panL_ + sB * levelB_ * panLB_) * velEnv;
+                scratchR[i] = (sA * level_ * panR_ + sB * levelB_ * panRB_) * velEnv;
             }
 
-            // Run the ladder filter in-place on the mono scratch.
+            // Run the ladder filter in-place on the stereo scratch.
             juce::dsp::AudioBlock<float> block (scratch_);
             auto sub = block.getSubBlock (0, (size_t) numSamples);
             juce::dsp::ProcessContextReplacing<float> ctx (sub);
             filter_.process (ctx);
 
-            // Pan-spread into the output's L + R, with level applied.
+            // Sum filtered stereo scratch into output.
             auto* L = out.getWritePointer (0, startSample);
             auto* R = out.getNumChannels() > 1
                           ? out.getWritePointer (1, startSample) : L;
-            const float gL = level_ * panL_;
-            const float gR = level_ * panR_;
             for (int i = 0; i < numSamples; ++i)
             {
-                L[i] += mono[i] * gL;
-                R[i] += mono[i] * gR;
+                L[i] += scratchL[i];
+                R[i] += scratchR[i];
             }
 
             if (! ampEnv_.isActive())
@@ -341,6 +448,18 @@ namespace tw
                 + static_cast<double> (centsOffset_) * 0.01;
             const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
             phaseIncrement_ = hz / sampleRate_;
+        }
+
+        // Phase 9 — OSC B phase increment helper
+        void updatePhaseIncrementBFromMidi (int midiNote) noexcept
+        {
+            const double semitones =
+                  static_cast<double> (midiNote - 69)
+                + static_cast<double> (octOffsetB_) * 12.0
+                + static_cast<double> (semiOffsetB_)
+                + static_cast<double> (centsOffsetB_) * 0.01;
+            const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
+            phaseIncrementB_ = hz / sampleRate_;
         }
 
         // Standard PolyBLEP residual — subtract from the naive saw at the
@@ -408,5 +527,29 @@ namespace tw
         // at multiples of phaseIncrement_ each sample). modRatio_ resolved
         // from FRAME in the render loop; modDepth_ resolved from WARP AMT.
         double modPhase_ = 0.0;
+
+        // ── Phase 9 — OSC B state (mirror of OSC A, B suffix on each) ────
+        double phaseB_          = 0.0;
+        double phaseIncrementB_ = 0.0;
+        float  levelB_          = 0.5f;      // default lower than A so they sum tastefully
+        float  panLB_           = 0.7071f;   // cos(pi/4) — center
+        float  panRB_           = 0.7071f;   // sin(pi/4) — center
+        int    octOffsetB_      = 0;
+        int    semiOffsetB_     = 0;
+        float  centsOffsetB_    = 0.0f;
+        const tw::Wavetable* currentWavetableB_ = nullptr;
+        float  framePosB_       = 0.0f;
+        int    warpModeB_       = 0;
+        float  warpAmountB_     = 0.0f;
+        double syncPhaseB_      = 0.0;
+        Engine engineB_         = Engine::WT;
+        // xorshift32 PRNG for OSC B — seeded with sqrt(2) fractional constant
+        // (0x6A09E667) XOR'd with this pointer so OSC B has a decorrelated noise
+        // stream from OSC A (which uses the golden-ratio constant 0x9E3779B9).
+        std::uint32_t noiseStateB_ = 0x6A09E667u
+                                   ^ static_cast<std::uint32_t> (
+                                         reinterpret_cast<std::uintptr_t> (this));
+        float  noiseLpZB_       = 0.0f;
+        double modPhaseB_       = 0.0;
     };
 }

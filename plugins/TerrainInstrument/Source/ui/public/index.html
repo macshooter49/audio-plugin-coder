@@ -4189,11 +4189,10 @@ body {
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
-                 native dropdown. JS updates the span from select.change. NO data-syn — OSC B
-                 has no APVTS params yet (Phase 9). -->
+                 native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
               <span class="preset-display" id="osc-b-preset-display">Prophet Saw</span>
-              <select class="preset-select" id="osc-b-preset-select" aria-label="OSC B wavetable preset">
+              <select class="preset-select" id="osc-b-preset-select" data-syn="SYN_OSC_B_WT_PRESET" aria-label="OSC B wavetable preset">
                 <optgroup label="Analog">
                   <option value="0">Prophet Saw</option>
                   <option value="1">Jupiter PWM</option>
@@ -4237,15 +4236,14 @@ body {
               <div class="eng txt" data-eng-b-idx="4">FM</div>
               <div class="eng txt" data-eng-b-idx="5">NOISE</div>
             </div>
-            <!-- engine-controls row (swap state — hidden by default). NO data-syn.
-                 Purely visual placeholders until Phase 9 adds OSC B APVTS params. -->
+            <!-- engine-controls row (swap state — hidden by default). Phase 9: APVTS-wired. -->
             <div class="engine-controls">
               <div class="ec-knob-group">
-                <div class="knob"><div class="knob-ring"></div></div>
+                <div class="knob" data-syn="SYN_OSC_B_WT_FRAME"><div class="knob-ring"></div></div>
                 <div class="ec-label">FRAME</div>
               </div>
               <div class="ec-select-group">
-                <select class="warp-select" id="osc-b-warp-select" aria-label="OSC B warp mode">
+                <select class="warp-select" id="osc-b-warp-select" data-syn="SYN_OSC_B_WARP_MODE" aria-label="OSC B warp mode">
                   <option value="0">NONE</option>
                   <option value="1">BEND</option>
                   <option value="2">SYNC</option>
@@ -4254,7 +4252,7 @@ body {
                 <div class="ec-label">WARP</div>
               </div>
               <div class="ec-knob-group">
-                <div class="knob"><div class="knob-ring"></div></div>
+                <div class="knob" data-syn="SYN_OSC_B_WARP_AMOUNT"><div class="knob-ring"></div></div>
                 <div class="ec-label">AMT</div>
               </div>
             </div>
@@ -4266,11 +4264,11 @@ body {
               </div>
             </div>
             <div class="osc-knobs">
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+              <div class="knob" data-syn="SYN_OSC_B_OCT"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
+              <div class="knob" data-syn="SYN_OSC_B_SEMI"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
+              <div class="knob" data-syn="SYN_OSC_B_CENT"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
+              <div class="knob" data-syn="SYN_OSC_B_LEVEL"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
+              <div class="knob" data-syn="SYN_OSC_B_PAN"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
             </div>
           </div>
         </div>
@@ -8211,8 +8209,7 @@ setTimeout(function wireSynControls () {
       }
     } catch (ePreset) { console.warn('[SYN-preset] wiring failed', ePreset); }
 
-    // P4-T12: OSC B mirror — + swap button, preset sync, engine pill visual toggle.
-    // NO data-syn on any OSC B element. NO APVTS broadcast. Purely visual/local.
+    // Phase 9: OSC B mirror — swap button, preset sync (APVTS-wired), engine pill (APVTS-wired).
     try {
       // + swap toggle
       const swapBtnB   = document.getElementById('osc-b-swap-btn');
@@ -8226,7 +8223,7 @@ setTimeout(function wireSynControls () {
         });
       }
 
-      // Preset display sync (no APVTS for OSC B yet — purely local)
+      // Preset display sync — wired to SYN_OSC_B_WT_PRESET (Phase 9)
       const presetDisplayB = document.getElementById('osc-b-preset-display');
       const presetSelectB  = document.getElementById('osc-b-preset-select');
       if (presetDisplayB && presetSelectB) {
@@ -8236,14 +8233,65 @@ setTimeout(function wireSynControls () {
             if (idx >= 0) presetDisplayB.textContent = presetSelectB.options[idx].text;
           } catch (e) { console.warn('[SYN-osc-b] preset sync failed', e); }
         };
-        syncBPresetText();                                  // initial
+        syncBPresetText();
         presetSelectB.addEventListener('change', syncBPresetText);
         presetSelectB.addEventListener('input',  syncBPresetText);
+        // Reverse-sync from APVTS (DAW automation / preset load)
+        if (window.Juce && window.Juce.getSliderState) {
+          const presetBState = window.Juce.getSliderState('SYN_OSC_B_WT_PRESET');
+          if (presetBState && presetBState.valueChangedEvent && presetBState.valueChangedEvent.addListener) {
+            presetBState.valueChangedEvent.addListener(syncBPresetText);
+          }
+        }
       }
 
-      // Engine pill visual toggle — purely visual, no APVTS broadcast
+      // Engine pill handler — APVTS-driven (Phase 9)
       const enginePillsB = document.querySelectorAll('#osc-b-device .engine-pills .eng[data-eng-b-idx]');
-      if (enginePillsB.length === 6) {
+      if (enginePillsB.length === 6 && window.Juce && window.Juce.getSliderState) {
+        const engineBState = window.Juce.getSliderState('SYN_OSC_B_ENGINE');
+        if (engineBState) {
+          const setActBPill = (idx) => {
+            enginePillsB.forEach((q, i) => {
+              if (i === idx) q.classList.add('act');
+              else q.classList.remove('act');
+            });
+          };
+          try {
+            const initialIdx = engineBState.getScaledValue ? Math.round(engineBState.getScaledValue()) : 0;
+            setActBPill(Math.max(0, Math.min(5, initialIdx)));
+          } catch (e) { console.warn('[SYN-osc-b] initial pill highlight failed', e); }
+          enginePillsB.forEach((p, idx) => {
+            p.style.cursor = 'pointer';
+            p.addEventListener('click', () => {
+              try {
+                engineBState.setNormalisedValue(idx / 5);
+                setActBPill(idx);
+              } catch (e) { console.warn('[SYN-osc-b] pill click failed for idx', idx, e); }
+            });
+          });
+          if (engineBState.valueChangedEvent && engineBState.valueChangedEvent.addListener) {
+            engineBState.valueChangedEvent.addListener(() => {
+              try {
+                const v = engineBState.getScaledValue ? Math.round(engineBState.getScaledValue()) : 0;
+                setActBPill(Math.max(0, Math.min(5, v)));
+              } catch (e) { console.warn('[SYN-osc-b] reverse-sync failed', e); }
+            });
+          }
+        } else {
+          // Fallback: visual-only if APVTS not ready
+          enginePillsB.forEach((p, idx) => {
+            p.style.cursor = 'pointer';
+            p.addEventListener('click', () => {
+              try {
+                enginePillsB.forEach(q => q.classList.remove('act'));
+                p.classList.add('act');
+              } catch (e) { console.warn('[SYN-osc-b] pill click failed for idx', idx, e); }
+            });
+          });
+          console.warn('[SYN-osc-b] no SliderState for SYN_OSC_B_ENGINE');
+        }
+      } else if (enginePillsB.length === 6) {
+        // Fallback: visual-only if window.Juce not available
         enginePillsB.forEach((p, idx) => {
           p.style.cursor = 'pointer';
           p.addEventListener('click', () => {

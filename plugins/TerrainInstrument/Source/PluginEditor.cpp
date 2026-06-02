@@ -83,6 +83,16 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscAWtFrameRelay)
             .withOptionsFrom(synOscAWarpModeRelay)
             .withOptionsFrom(synOscAWarpAmountRelay)
+            .withOptionsFrom(synOscBEngineRelay)
+            .withOptionsFrom(synOscBOctRelay)
+            .withOptionsFrom(synOscBSemiRelay)
+            .withOptionsFrom(synOscBCentRelay)
+            .withOptionsFrom(synOscBLevelRelay)
+            .withOptionsFrom(synOscBPanRelay)
+            .withOptionsFrom(synOscBWtPresetRelay)
+            .withOptionsFrom(synOscBWtFrameRelay)
+            .withOptionsFrom(synOscBWarpModeRelay)
+            .withOptionsFrom(synOscBWarpAmountRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1923,6 +1933,38 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscAWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP_AMOUNT),
         synOscAWarpAmountRelay, nullptr);
+
+    // Phase 9 — OSC B attachments
+    synOscBEngineAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_ENGINE),
+        synOscBEngineRelay, nullptr);
+    synOscBOctAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_OCT),
+        synOscBOctRelay, nullptr);
+    synOscBSemiAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_SEMI),
+        synOscBSemiRelay, nullptr);
+    synOscBCentAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_CENT),
+        synOscBCentRelay, nullptr);
+    synOscBLevelAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_LEVEL),
+        synOscBLevelRelay, nullptr);
+    synOscBPanAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_PAN),
+        synOscBPanRelay, nullptr);
+    synOscBWtPresetAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WT_PRESET),
+        synOscBWtPresetRelay, nullptr);
+    synOscBWtFrameAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WT_FRAME),
+        synOscBWtFrameRelay, nullptr);
+    synOscBWarpModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP_MODE),
+        synOscBWarpModeRelay, nullptr);
+    synOscBWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP_AMOUNT),
+        synOscBWarpAmountRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

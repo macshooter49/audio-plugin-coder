@@ -898,6 +898,53 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
 
+    // ── Synth section — Phase 9 (OSC B chassis) ──────────────────────────
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_ENGINE, 1 },
+        "Synth OSC B Engine",
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_OCT, 1 },
+        "Synth OSC B Octave", -3, 3, 0));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SEMI, 1 },
+        "Synth OSC B Semitone", -12, 12, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_CENT, 1 },
+        "Synth OSC B Cents",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_LEVEL, 1 },
+        "Synth OSC B Level",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_PAN, 1 },
+        "Synth OSC B Pan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_PRESET, 1 },
+        "Synth OSC B WT Preset",
+        juce::StringArray { "Prophet Saw", "Jupiter PWM", "Moog Sqr",
+                            "OB-X Saw", "CS-80 Brass", "Juno Str",
+                            "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
+                            "Choir A->O", "Whisper", "Vowel Morph",
+                            "Bowed Metal", "Glass Harmonics", "Railroad",
+                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_FRAME, 1 },
+        "Synth OSC B WT Frame",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_MODE, 1 },
+        "Synth OSC B Warp Mode",
+        juce::StringArray { "NONE", "BEND", "SYNC", "FORMANT" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
+        "Synth OSC B Warp Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
     return layout;
 }
 
@@ -1505,6 +1552,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Phase 3 — OSC A engine choice
         const int engineIdx = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ENGINE);
 
+        // Phase 9 — OSC B params
+        const int   octB       = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_OCT);
+        const int   semiB      = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SEMI);
+        const float centB      =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_CENT);
+        const float lvlB       =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_LEVEL);
+        const float panB       =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_PAN);
+        const int   wtPresetB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WT_PRESET);
+        const float wtFrameB   =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WT_FRAME);
+        const tw::Wavetable* wtB = wavetableBank.getTable (wtPresetB);
+        const int   warpModeB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_MODE);
+        const float warpAmountB =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
+        const int   engineIdxB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ENGINE);
+
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
             if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
@@ -1518,6 +1578,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWavetableFrame         (wtFrame);
                 sv->setWarp                   (warpMode, warpAmount);
                 sv->setEngine                 (engineIdx);
+                // Phase 9 — OSC B setters
+                sv->setTuningB                (octB, semiB, centB);
+                sv->setLevelB                 (lvlB);
+                sv->setPanB                   (panB);
+                sv->setWavetableB             (wtB);
+                sv->setWavetableFrameB        (wtFrameB);
+                sv->setWarpB                  (warpModeB, warpAmountB);
+                sv->setEngineB                (engineIdxB);
             }
         }
     }

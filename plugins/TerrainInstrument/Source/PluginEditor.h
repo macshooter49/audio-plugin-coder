@@ -135,6 +135,18 @@ private:
     juce::WebSliderRelay synOscAWarpModeRelay   { ParameterIDs::SYN_OSC_A_WARP_MODE };
     juce::WebSliderRelay synOscAWarpAmountRelay { ParameterIDs::SYN_OSC_A_WARP_AMOUNT };
 
+    // Synth section — Phase 9 (OSC B relays)
+    juce::WebSliderRelay synOscBEngineRelay     { ParameterIDs::SYN_OSC_B_ENGINE };
+    juce::WebSliderRelay synOscBOctRelay        { ParameterIDs::SYN_OSC_B_OCT };
+    juce::WebSliderRelay synOscBSemiRelay       { ParameterIDs::SYN_OSC_B_SEMI };
+    juce::WebSliderRelay synOscBCentRelay       { ParameterIDs::SYN_OSC_B_CENT };
+    juce::WebSliderRelay synOscBLevelRelay      { ParameterIDs::SYN_OSC_B_LEVEL };
+    juce::WebSliderRelay synOscBPanRelay        { ParameterIDs::SYN_OSC_B_PAN };
+    juce::WebSliderRelay synOscBWtPresetRelay   { ParameterIDs::SYN_OSC_B_WT_PRESET };
+    juce::WebSliderRelay synOscBWtFrameRelay    { ParameterIDs::SYN_OSC_B_WT_FRAME };
+    juce::WebSliderRelay synOscBWarpModeRelay   { ParameterIDs::SYN_OSC_B_WARP_MODE };
+    juce::WebSliderRelay synOscBWarpAmountRelay { ParameterIDs::SYN_OSC_B_WARP_AMOUNT };
+
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
@@ -249,6 +261,18 @@ private:
     // Synth section — Phase 2C (warp)
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarpModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarpAmountAttachment;
+
+    // Synth section — Phase 9 (OSC B attachments)
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBEngineAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBOctAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSemiAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBCentAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBLevelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBPanAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWtPresetAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWtFrameAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpAmountAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady
