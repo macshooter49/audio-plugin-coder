@@ -3097,6 +3097,67 @@ body {
   background: var(--purple-500);
   color: #fff;
 }
+
+/* ── Synth Page 1 (Phase 1 MPV) ───────────────────────────────────────
+   Mirrors #delay-panel architecture — overlays #controls when syn-btn
+   is active. Phase 1 ships a minimal subset of the locked v12 mockup;
+   later phases will fill in the full grid per Design/v1-syn-spec.md. */
+#syn-panel {
+  position: absolute;
+  top: 88px;          /* below header + tab nav */
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  background: var(--bg-main, #1A1A2E);
+  border: 1px solid var(--border, rgba(58,58,88,0.55));
+  border-radius: 8px;
+  padding: 16px;
+  z-index: 40;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#syn-panel.hidden { display: none; }
+
+#syn-panel .syn-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  background: var(--bg-card, #2A2A48);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+#syn-panel .syn-knob-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+#syn-panel .syn-knob-label {
+  font-family: "SF Pro Text", -apple-system, sans-serif;
+  font-weight: 300;
+  font-size: 10px;
+  color: var(--text-primary, #ECE8F2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#syn-panel input[type="range"] {
+  width: 100%;
+}
+
+#syn-panel .syn-section-label {
+  font-family: "SF Pro Display", -apple-system, sans-serif;
+  font-weight: 200;
+  font-size: 11px;
+  color: var(--text-secondary, #C5BFD2);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+}
 </style>
 </head>
 <body>
@@ -3114,7 +3175,7 @@ body {
       <button class="preset-nav-btn" id="preset-next">&rsaquo;</button>
     </div>
     <div class="header-right">
-      <button class="mod-btn" id="syn-btn" title="Synth Page (coming soon)">SYN</button>
+      <button class="mod-btn" id="syn-btn" title="Synth Page">SYN</button>
       <button class="mod-btn" id="mix-btn" title="Mixer Page (coming soon)">MIX</button>
       <button class="mod-btn eq-btn" id="delay-btn" title="Delay Panel">DLY</button>
       <button class="mod-btn eq-btn" id="eq-btn" title="EQ Panel">EQ</button>
@@ -3589,6 +3650,76 @@ body {
       </div>
     </div>
   </div>
+
+    <!-- SYNTH PAGE 1 (Phase 1 MPV — see Design/v1-syn-spec.md) -->
+    <div id="syn-panel" class="hidden">
+      <div class="syn-section-label">OSC · A</div>
+      <div class="syn-row">
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">OCT</span>
+          <input type="range" min="-3" max="3" step="1" value="0" data-syn="SYN_OSC_A_OCT" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">SEMI</span>
+          <input type="range" min="-12" max="12" step="1" value="0" data-syn="SYN_OSC_A_SEMI" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">CENT</span>
+          <input type="range" min="-100" max="100" step="0.1" value="0" data-syn="SYN_OSC_A_CENT" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">LEVEL</span>
+          <input type="range" min="0" max="1" step="0.001" value="0.7" data-syn="SYN_OSC_A_LEVEL" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">PAN</span>
+          <input type="range" min="-1" max="1" step="0.001" value="0" data-syn="SYN_OSC_A_PAN" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">ENGINE</span>
+          <select data-syn="SYN_OSC_A_ENGINE">
+            <option value="0">WT (saw)</option>
+            <option value="1" disabled>SAMP (Phase 3)</option>
+            <option value="2" disabled>GRAN (Phase 3)</option>
+            <option value="3" disabled>SPEC (Phase 3)</option>
+            <option value="4" disabled>FM (Phase 3)</option>
+            <option value="5" disabled>NOISE (Phase 3)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="syn-section-label">FILTER 1 · LADDER LP-24</div>
+      <div class="syn-row">
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">CUT</span>
+          <input type="range" min="20" max="20000" step="1" value="20000" data-syn="SYN_FILTER1_CUT" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">RES</span>
+          <input type="range" min="0" max="1" step="0.001" value="0" data-syn="SYN_FILTER1_RES" />
+        </div>
+      </div>
+
+      <div class="syn-section-label">AMP ENVELOPE</div>
+      <div class="syn-row">
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">ATTACK (ms)</span>
+          <input type="range" min="1" max="5000" step="1" value="5" data-syn="SYN_ENV_AMP_A" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">DECAY (ms)</span>
+          <input type="range" min="1" max="5000" step="1" value="100" data-syn="SYN_ENV_AMP_D" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">SUSTAIN</span>
+          <input type="range" min="0" max="1" step="0.001" value="0.7" data-syn="SYN_ENV_AMP_S" />
+        </div>
+        <div class="syn-knob-group">
+          <span class="syn-knob-label">RELEASE (ms)</span>
+          <input type="range" min="1" max="10000" step="1" value="200" data-syn="SYN_ENV_AMP_R" />
+        </div>
+      </div>
+    </div>
 
   <div class="eq-ctx-menu hidden" id="eq-ctx-menu">
     <div class="eq-ctx-item" data-action="filterMode" id="eq-ctx-filter">TO HIGH PASS</div>
@@ -7014,6 +7145,68 @@ document.getElementById('eq-bypass-btn').addEventListener('click', () => {
   pushEqParam('EQ_MASTER_BYPASS', eqState.masterBypass ? 1 : 0);
   redrawEqCanvas();
 });
+
+// ── SYN button: open/close the synth panel ──────────────────────────────
+document.getElementById('syn-btn').addEventListener('click', () => {
+  const panel = document.getElementById('syn-panel');
+  if (! panel) return;
+  panel.classList.toggle('hidden');
+});
+
+// Bridge raw <input type="range"> / <select> elements to the
+// WebSliderRelay system. Each control with [data-syn="PARAM_ID"] gets
+// a one-time wiring to the matching window.__JUCE__ relay.
+(function wireSynControls () {
+  const controls = document.querySelectorAll('[data-syn]');
+  controls.forEach (el => {
+    const paramId = el.dataset.syn;
+    if (! paramId || ! window.__JUCE__) return;
+    const state = window.__JUCE__.getSliderState (paramId);
+    if (! state) {
+      console.warn ('[SYN] no SliderState for', paramId);
+      return;
+    }
+    // Push initial state from APVTS to control.
+    const initial = state.getNormalisedValue();
+    if (el.tagName === 'SELECT') {
+      // For choice params, normalised maps to index/numChoices step.
+      // Read the actual value index from state.getScaledValue() if available.
+      const val = state.getScaledValue ? state.getScaledValue() : initial;
+      el.value = String (Math.round (val));
+    } else {
+      const min = parseFloat (el.min);
+      const max = parseFloat (el.max);
+      el.value = String (min + (max - min) * initial);
+    }
+    // Push UI changes back to APVTS.
+    const handler = () => {
+      const v = parseFloat (el.value);
+      if (el.tagName === 'SELECT') {
+        // Choice: setNormalisedValue with index / (numChoices-1).
+        const numChoices = el.options.length;
+        state.setNormalisedValue (numChoices > 1 ? v / (numChoices - 1) : 0);
+      } else {
+        const min = parseFloat (el.min);
+        const max = parseFloat (el.max);
+        state.setNormalisedValue ((v - min) / (max - min));
+      }
+    };
+    el.addEventListener ('input', handler);
+    el.addEventListener ('change', handler);
+    // Push APVTS changes back to UI so DAW automation / presets update display.
+    state.valueChangedEvent.addListener (() => {
+      const v = state.getNormalisedValue();
+      if (el.tagName === 'SELECT') {
+        const val = state.getScaledValue ? state.getScaledValue() : v;
+        el.value = String (Math.round (val));
+      } else {
+        const min = parseFloat (el.min);
+        const max = parseFloat (el.max);
+        el.value = String (min + (max - min) * v);
+      }
+    });
+  });
+})();
 
 // ===========================================================
 // DELAY PANEL
