@@ -55,6 +55,43 @@ namespace tw
             ampEnv_.setParameters (ampParams_);
         }
 
+        /** Called from PluginProcessor::prepareToPlay. Sizes filter + caches
+         *  block-size for the per-block AudioBlock view. */
+        void prepareToPlay (double sr, int samplesPerBlock, int numChannels) noexcept
+        {
+            setCurrentPlaybackSampleRate (sr);
+            juce::dsp::ProcessSpec spec;
+            spec.sampleRate       = sr;
+            spec.maximumBlockSize = (juce::uint32) samplesPerBlock;
+            spec.numChannels      = (juce::uint32) juce::jmax (1, numChannels);
+            filter_.prepare (spec);
+            filter_.setMode (juce::dsp::LadderFilterMode::LPF24);
+            filter_.reset();
+        }
+
+        /** Cutoff in Hz (20..20000), resonance 0..1. Called per block from
+         *  PluginProcessor. */
+        void setFilterParameters (float cutoffHz, float resonance) noexcept
+        {
+            filter_.setCutoffFrequencyHz (juce::jlimit (20.0f, 20000.0f, cutoffHz));
+            filter_.setResonance         (juce::jlimit (0.0f,  1.0f,    resonance));
+        }
+
+        /** Linear gain 0..1 — applied after filter, before pan. */
+        void setLevel (float level) noexcept
+        {
+            level_ = juce::jlimit (0.0f, 1.0f, level);
+        }
+
+        /** Equal-power pan -1 (full L) .. 0 (center) .. +1 (full R). */
+        void setPan (float pan) noexcept
+        {
+            const float p = juce::jlimit (-1.0f, 1.0f, pan);
+            const float angle = (p + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
+            panL_ = std::cos (angle);
+            panR_ = std::sin (angle);
+        }
+
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
@@ -89,26 +126,43 @@ namespace tw
                               int startSample, int numSamples) override
         {
             if (! playing_) return;
-            auto* L = out.getWritePointer (0, startSample);
-            auto* R = out.getNumChannels() > 1
-                          ? out.getWritePointer (1, startSample) : L;
+
+            // Render mono into the scratch buffer (resized lazily).
+            if (scratch_.getNumSamples() < numSamples)
+                scratch_.setSize (1, numSamples, false, true, true);
+            scratch_.clear();
+            auto* mono = scratch_.getWritePointer (0);
 
             for (int i = 0; i < numSamples; ++i)
             {
-                // Naive saw in [-1, +1] driven by phase_ in [0, 1).
                 float s = static_cast<float> (2.0 * phase_ - 1.0);
                 s -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
 
                 const float env = ampEnv_.getNextSample();
-                const float g   = currentVelocity_ * env;
-                L[i] += s * g;
-                R[i] += s * g;
+                mono[i] = s * currentVelocity_ * env;
 
                 phase_ += phaseIncrement_;
                 if (phase_ >= 1.0) phase_ -= 1.0;
             }
 
-            // Auto-end when the envelope has fully released.
+            // Run the ladder filter in-place on the mono scratch.
+            juce::dsp::AudioBlock<float> block (scratch_);
+            auto sub = block.getSubBlock (0, (size_t) numSamples);
+            juce::dsp::ProcessContextReplacing<float> ctx (sub);
+            filter_.process (ctx);
+
+            // Pan-spread into the output's L + R, with level applied.
+            auto* L = out.getWritePointer (0, startSample);
+            auto* R = out.getNumChannels() > 1
+                          ? out.getWritePointer (1, startSample) : L;
+            const float gL = level_ * panL_;
+            const float gR = level_ * panR_;
+            for (int i = 0; i < numSamples; ++i)
+            {
+                L[i] += mono[i] * gL;
+                R[i] += mono[i] * gR;
+            }
+
             if (! ampEnv_.isActive())
             {
                 playing_ = false;
@@ -145,5 +199,11 @@ namespace tw
 
         juce::ADSR             ampEnv_;
         juce::ADSR::Parameters ampParams_ { 0.005f, 0.1f, 0.7f, 0.2f };
+
+        juce::dsp::LadderFilter<float> filter_;
+        juce::AudioBuffer<float>       scratch_;
+        float                          level_ = 0.7f;
+        float                          panL_  = 0.7071f;  // cos(pi/4)
+        float                          panR_  = 0.7071f;  // sin(pi/4)
     };
 }

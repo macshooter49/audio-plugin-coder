@@ -40,6 +40,7 @@ public:
         {
             tw::SynthVoice v;
             v.setCurrentPlaybackSampleRate (48000.0);
+            v.prepareToPlay (48000.0, /*samplesPerBlock*/ 1024, /*numChannels*/ 2);
 
             // Trigger A4 = MIDI 69 (~440 Hz). We bypass the Synthesiser
             // dispatch and call startNote/renderNextBlock directly.
@@ -68,6 +69,7 @@ public:
         {
             tw::SynthVoice v;
             v.setCurrentPlaybackSampleRate (48000.0);
+            v.prepareToPlay (48000.0, /*samplesPerBlock*/ 1024, /*numChannels*/ 2);
             // Long attack (50 ms) + long release (100 ms) so we can sample the curve.
             v.setAmpEnvelopeParameters (50.0f, 1.0f, 1.0f, 100.0f);
             tw::SynthSound s;
@@ -101,6 +103,57 @@ public:
             expect (releaseRMS < midRMS * 0.6f,
                     juce::String ("release RMS (") + juce::String (releaseRMS)
                     + ") should be < 60% of mid RMS (" + juce::String (midRMS) + ")");
+        }
+
+        beginTest ("LadderFilter cuts highs: low cutoff yields lower RMS than open");
+        {
+            // Render a saw with filter wide open vs filter at 200 Hz.
+            auto renderRMS = [] (float cutoffHz)
+            {
+                tw::SynthVoice v;
+                v.setCurrentPlaybackSampleRate (48000.0);
+                v.prepareToPlay (48000.0, 1024, 2);
+                v.setAmpEnvelopeParameters (1.0f, 1.0f, 1.0f, 1.0f);
+                v.setFilterParameters (cutoffHz, 0.0f);
+                v.setLevel (1.0f);
+                v.setPan   (0.0f);
+                tw::SynthSound s;
+                v.startNote (81, 1.0f, &s, 8192);  // A5 = 880 Hz saw, lots of highs
+                juce::AudioBuffer<float> buf (2, 1024);
+                buf.clear();
+                v.renderNextBlock (buf, 0, 1024);
+                return buf.getRMSLevel (0, 0, 1024);
+            };
+            const float openRMS  = renderRMS (20000.0f);
+            const float closedRMS = renderRMS (200.0f);
+            expect (openRMS > 0.05f, "open filter RMS should be substantial");
+            expect (closedRMS < openRMS * 0.5f,
+                    juce::String ("closed (") + juce::String (closedRMS)
+                    + ") should be < half of open (" + juce::String (openRMS) + ")");
+        }
+
+        beginTest ("Pan: pan=-1 puts energy in L only; pan=+1 in R only");
+        {
+            auto rms = [] (float pan, int channel)
+            {
+                tw::SynthVoice v;
+                v.setCurrentPlaybackSampleRate (48000.0);
+                v.prepareToPlay (48000.0, 512, 2);
+                v.setAmpEnvelopeParameters (1.0f, 1.0f, 1.0f, 1.0f);
+                v.setFilterParameters (20000.0f, 0.0f);
+                v.setLevel (1.0f);
+                v.setPan   (pan);
+                tw::SynthSound s;
+                v.startNote (69, 1.0f, &s, 8192);
+                juce::AudioBuffer<float> buf (2, 512);
+                buf.clear();
+                v.renderNextBlock (buf, 0, 512);
+                return buf.getRMSLevel (channel, 0, 512);
+            };
+            expect (rms (-1.0f, 0) > 0.05f, "pan=-1 L should be loud");
+            expect (rms (-1.0f, 1) < 0.005f, "pan=-1 R should be near silent");
+            expect (rms (+1.0f, 1) > 0.05f, "pan=+1 R should be loud");
+            expect (rms (+1.0f, 0) < 0.005f, "pan=+1 L should be near silent");
         }
     }
 };
