@@ -1502,6 +1502,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Phase 2C — warp mode + amount
         const int   warpMode   = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_MODE);
         const float warpAmount =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
+        // Phase 3 — OSC A engine choice
+        const int engineIdx = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ENGINE);
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -1515,6 +1517,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWavetable              (wt);
                 sv->setWavetableFrame         (wtFrame);
                 sv->setWarp                   (warpMode, warpAmount);
+                sv->setEngine                 (engineIdx);
             }
         }
     }
