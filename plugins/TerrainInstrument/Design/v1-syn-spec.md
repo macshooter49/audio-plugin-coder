@@ -449,7 +449,10 @@ Implemented as a JUCE custom touch slider that drives `SYN_RIBBON_*` params. Mod
    PolyBLEP saw oscillator (engine 0) + juce::dsp::LadderFilter LPF24 + juce::ADSR AMP envelope + 8-voice juce::Synthesiser. 12 SYN_* APVTS params (OSC A: ENGINE/OCT/SEMI/CENT/LEVEL/PAN, FILTER1: CUT/RES, AMP env: A/D/S/R). #syn-panel UI with native HTML controls (canvas knobs deferred to Phase 2 visual polish). Parallel pipeline beside the 4 LayerStates — synth audio sums into master `buffer` after the layer loop, before the master FX chain, so it flows through grain/tape/space/delay/EQ/chorus. Build green at commit `bc70bac`.
 
 2. **Phase 2 — Wavetable engine**
-   Replace simple OSC with frame-based wavetable. Implement smooth frame interpolation, basic warp modes (bend/sync/formant). Wire WT browser dropdown.
+   - **2A SHIPPED 2026-06-02** (tag `mark-2-synth-phase-2a-wavetable-foundation`): frame-based wavetable engine, bilinear lookup, 6 iconic analog tables (Prophet Saw / Jupiter PWM / Moog Sqr / OB-X Saw / CS-80 Brass / Juno Str) generated additively at startup, 16 frames per table, WAVETABLE dropdown + FRAME slider in #syn-panel. Default preset = Prophet Saw.
+   - **2B (next):** Digital / Vocal / Metallic / Experimental category tables (PPG Wave, DX7 EP, D-50 Bell, M1 Piano, Choir, Vowel Morph, Bowed Metal, Glass Harmonics, Dustbowl, Static Evolve, Spectral Drift, Serum HD, etc.). Replace dropdown with right-click categorized browser.
+   - **2C (later):** Warp modes (bend / sync / formant) for live wavetable distortion.
+   - **2D (later):** USER imports — Import WAV, From Sample (resynthesis), From Image PNG, Random Gen.
 
 3. **Phase 3 — Multi-engine OSC chassis**
    Add SAMP / GRAN / SPEC / FM / NOISE engines. SAMP reuses the existing sampler infrastructure from `SamplerVoice.h`.
