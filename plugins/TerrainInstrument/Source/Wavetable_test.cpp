@@ -70,6 +70,38 @@ public:
                 expect (rms > 0.1f, juce::String ("RMS=") + juce::String (rms));
             }
         }
+
+        beginTest ("All 14 Phase 2B wavetable factories construct + produce audio");
+        {
+            tw::Wavetable tables[] = {
+                tw::Wavetable::makePPGWave(),
+                tw::Wavetable::makeDX7EP(),
+                tw::Wavetable::makeD50Bell(),
+                tw::Wavetable::makeM1Piano(),
+                tw::Wavetable::makeChoirAtoO(),
+                tw::Wavetable::makeWhisper(),
+                tw::Wavetable::makeVowelMorph(),
+                tw::Wavetable::makeBowedMetal(),
+                tw::Wavetable::makeGlassHarmonics(),
+                tw::Wavetable::makeRailroad(),
+                tw::Wavetable::makeDustbowl(),
+                tw::Wavetable::makeStaticEvolve(),
+                tw::Wavetable::makeSpectralDrift(),
+                tw::Wavetable::makeSerumHD(),
+            };
+            for (auto& wt : tables)
+            {
+                expectEquals (wt.getNumFrames(), 16);
+                float sumSq = 0.0f;
+                for (int i = 0; i < wt.getFrameSize(); ++i)
+                {
+                    const float s = wt.lookup (0.5f, (float) i / (float) wt.getFrameSize());
+                    sumSq += s * s;
+                }
+                const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
+                expect (rms > 0.05f, juce::String ("Phase 2B table RMS=") + juce::String (rms));
+            }
+        }
     }
 };
 
