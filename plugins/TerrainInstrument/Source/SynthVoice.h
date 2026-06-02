@@ -20,4 +20,30 @@ namespace tw
         bool appliesToNote    (int /*midiNoteNumber*/) override { return true; }
         bool appliesToChannel (int /*midiChannel*/)    override { return true; }
     };
+
+    /** One synth voice — Phase 1 MPV.
+     *  PolyBLEP saw oscillator → ladder LP-24 filter → AMP ADSR → pan.
+     *  Subsequent phases (per Design/v1-syn-spec.md) add more engines,
+     *  filter types, envelopes, cross-mod, FLOW glide, etc. */
+    class SynthVoice : public juce::SynthesiserVoice
+    {
+    public:
+        SynthVoice() = default;
+
+        bool canPlaySound (juce::SynthesiserSound* s) override
+        {
+            return dynamic_cast<SynthSound*> (s) != nullptr;
+        }
+
+        void startNote (int /*midiNote*/, float /*velocity*/,
+                        juce::SynthesiserSound*, int /*pitchWheelPos*/) override {}
+        void stopNote (float /*velocity*/, bool /*allowTailOff*/) override
+        {
+            clearCurrentNote();
+        }
+        void pitchWheelMoved (int) override {}
+        void controllerMoved (int, int) override {}
+        void renderNextBlock (juce::AudioBuffer<float>& /*outputBuffer*/,
+                              int /*startSample*/, int /*numSamples*/) override {}
+    };
 }

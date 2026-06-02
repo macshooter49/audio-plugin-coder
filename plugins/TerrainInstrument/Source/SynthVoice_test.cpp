@@ -21,4 +21,22 @@ public:
     }
 };
 
+class SynthVoiceTests : public juce::UnitTest
+{
+public:
+    SynthVoiceTests() : juce::UnitTest ("SynthVoice", "TerrainInstrument") {}
+
+    void runTest() override
+    {
+        beginTest ("SynthVoice accepts SynthSound");
+        {
+            tw::SynthVoice v;
+            tw::SynthSound s;
+            expect (v.canPlaySound (&s), "SynthVoice should accept SynthSound");
+            expect (! v.canPlaySound (nullptr), "should reject nullptr sound");
+        }
+    }
+};
+
 static SynthSoundTests sSynthSoundTests;
+static SynthVoiceTests sSynthVoiceTests;
