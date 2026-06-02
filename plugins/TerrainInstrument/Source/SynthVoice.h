@@ -150,6 +150,9 @@ namespace tw
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
             phase_           = 0.0;
+            modPhase_        = 0.0;      // Phase 3 — FM modulator reset
+            noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
+            syncPhase_       = 0.0;      // Phase 2C SYNC reset (good hygiene)
             updatePhaseIncrementFromMidi (midiNote);
             playing_         = true;
             ampEnv_.reset();
