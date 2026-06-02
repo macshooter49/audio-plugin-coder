@@ -4182,16 +4182,81 @@ body {
             </div>
           </div>
 
-          <div class="device osc">
-            <div class="device-label">OSC · B</div>
-            <div class="device-corner">SAMPLE</div>
+          <div class="device osc" id="osc-b-device">
+            <div class="device-label-row">
+              <div class="device-label">OSC · B</div>
+              <button class="swap-btn" type="button" id="osc-b-swap-btn" aria-label="Toggle engine pills / engine controls"></button>
+            </div>
+            <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
+                 overlaid by an invisible native <select> that captures clicks and renders the
+                 native dropdown. JS updates the span from select.change. NO data-syn — OSC B
+                 has no APVTS params yet (Phase 9). -->
+            <div class="device-corner-preset">
+              <span class="preset-display" id="osc-b-preset-display">Prophet Saw</span>
+              <select class="preset-select" id="osc-b-preset-select" aria-label="OSC B wavetable preset">
+                <optgroup label="Analog">
+                  <option value="0">Prophet Saw</option>
+                  <option value="1">Jupiter PWM</option>
+                  <option value="2">Moog Sqr</option>
+                  <option value="3">OB-X Saw</option>
+                  <option value="4">CS-80 Brass</option>
+                  <option value="5">Juno Str</option>
+                </optgroup>
+                <optgroup label="Digital">
+                  <option value="6">PPG Wave</option>
+                  <option value="7">DX7 EP</option>
+                  <option value="8">D-50 Bell</option>
+                  <option value="9">M1 Piano</option>
+                </optgroup>
+                <optgroup label="Vocal">
+                  <option value="10">Choir A→O</option>
+                  <option value="11">Whisper</option>
+                  <option value="12">Vowel Morph</option>
+                </optgroup>
+                <optgroup label="Metallic">
+                  <option value="13">Bowed Metal</option>
+                  <option value="14">Glass Harmonics</option>
+                  <option value="15">Railroad</option>
+                </optgroup>
+                <optgroup label="Experimental">
+                  <option value="16">Dustbowl</option>
+                  <option value="17">Static Evolve</option>
+                  <option value="18">Spectral Drift</option>
+                  <option value="19">Serum HD</option>
+                </optgroup>
+              </select>
+            </div>
+            <!-- engine pills row (default visible state) — text style, no icons.
+                 Uses data-eng-b-idx (NOT data-eng-idx) to avoid collision with
+                 OSC A's APVTS-wired pill click handler. WT active by default. -->
             <div class="engine-pills">
-              <div class="eng txt">WT</div>
-              <div class="eng txt act">SAMP</div>
-              <div class="eng txt">GRAN</div>
-              <div class="eng txt">SPEC</div>
-              <div class="eng txt">FM</div>
-              <div class="eng txt">NOISE</div>
+              <div class="eng txt act" data-eng-b-idx="0">WT</div>
+              <div class="eng txt" data-eng-b-idx="1">SAMP</div>
+              <div class="eng txt" data-eng-b-idx="2">GRAN</div>
+              <div class="eng txt" data-eng-b-idx="3">SPEC</div>
+              <div class="eng txt" data-eng-b-idx="4">FM</div>
+              <div class="eng txt" data-eng-b-idx="5">NOISE</div>
+            </div>
+            <!-- engine-controls row (swap state — hidden by default). NO data-syn.
+                 Purely visual placeholders until Phase 9 adds OSC B APVTS params. -->
+            <div class="engine-controls">
+              <div class="ec-knob-group">
+                <div class="knob"><div class="knob-ring"></div></div>
+                <div class="ec-label">FRAME</div>
+              </div>
+              <div class="ec-select-group">
+                <select class="warp-select" id="osc-b-warp-select" aria-label="OSC B warp mode">
+                  <option value="0">NONE</option>
+                  <option value="1">BEND</option>
+                  <option value="2">SYNC</option>
+                  <option value="3">FORMANT</option>
+                </select>
+                <div class="ec-label">WARP</div>
+              </div>
+              <div class="ec-knob-group">
+                <div class="knob"><div class="knob-ring"></div></div>
+                <div class="ec-label">AMT</div>
+              </div>
             </div>
             <div class="osc-display">
               <div class="osc-wave">
@@ -8145,6 +8210,51 @@ setTimeout(function wireSynControls () {
         }
       }
     } catch (ePreset) { console.warn('[SYN-preset] wiring failed', ePreset); }
+
+    // P4-T12: OSC B mirror — + swap button, preset sync, engine pill visual toggle.
+    // NO data-syn on any OSC B element. NO APVTS broadcast. Purely visual/local.
+    try {
+      // + swap toggle
+      const swapBtnB   = document.getElementById('osc-b-swap-btn');
+      const oscBDevice = document.getElementById('osc-b-device');
+      if (swapBtnB && oscBDevice) {
+        swapBtnB.addEventListener('click', () => {
+          try {
+            oscBDevice.classList.toggle('swapped');
+            swapBtnB.classList.toggle('act');
+          } catch (e) { console.warn('[SYN-osc-b] swap toggle failed', e); }
+        });
+      }
+
+      // Preset display sync (no APVTS for OSC B yet — purely local)
+      const presetDisplayB = document.getElementById('osc-b-preset-display');
+      const presetSelectB  = document.getElementById('osc-b-preset-select');
+      if (presetDisplayB && presetSelectB) {
+        const syncBPresetText = () => {
+          try {
+            const idx = presetSelectB.selectedIndex;
+            if (idx >= 0) presetDisplayB.textContent = presetSelectB.options[idx].text;
+          } catch (e) { console.warn('[SYN-osc-b] preset sync failed', e); }
+        };
+        syncBPresetText();                                  // initial
+        presetSelectB.addEventListener('change', syncBPresetText);
+        presetSelectB.addEventListener('input',  syncBPresetText);
+      }
+
+      // Engine pill visual toggle — purely visual, no APVTS broadcast
+      const enginePillsB = document.querySelectorAll('#osc-b-device .engine-pills .eng[data-eng-b-idx]');
+      if (enginePillsB.length === 6) {
+        enginePillsB.forEach((p, idx) => {
+          p.style.cursor = 'pointer';
+          p.addEventListener('click', () => {
+            try {
+              enginePillsB.forEach(q => q.classList.remove('act'));
+              p.classList.add('act');
+            } catch (e) { console.warn('[SYN-osc-b] pill click failed for idx', idx, e); }
+          });
+        });
+      }
+    } catch (eOscB) { console.warn('[SYN-osc-b] mirror init failed', eOscB); }
 
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
