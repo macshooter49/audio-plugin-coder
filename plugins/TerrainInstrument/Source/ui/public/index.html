@@ -4439,6 +4439,19 @@ const PARAMS = {
   chorusAmount:    { label: 'AMOUNT',    section: 'chorus', min: 0, max: 1, default: 0.0, unit: '', desc: 'Overall chorus depth and intensity.', tip: 'Sweep from subtle shimmer to lush ensemble.' },
   chorusWidth:     { label: 'WIDTH',     section: 'chorus', min: 0, max: 1, default: 0.7, unit: '', desc: 'Stereo width of the chorus effect.', tip: 'Higher values create wider stereo spread.' },
   chorusCharacter: { label: 'CHARACTER', section: 'chorus', min: 0, max: 1, default: 0.3, unit: '', desc: 'Tonal character — rate/depth curve of internal chorus LFOs.', tip: 'Low = slow gentle movement. High = fast vibrato-like modulation.' },
+  // Synth engine parameters (Phase 1 MVP)
+  synOscAEngine:   { label: 'ENGINE', section: 'synth', min: 0, max: 5,     default: 0,       unit: '',   desc: 'OSC A engine type' },
+  synOscAOct:      { label: 'OCT',    section: 'synth', min: -3, max: 3,    default: 0,       unit: 'oct', desc: 'OSC A octave' },
+  synOscASemi:     { label: 'SEMI',   section: 'synth', min: -12, max: 12,  default: 0,       unit: 'st', desc: 'OSC A semitone' },
+  synOscACent:     { label: 'CENT',   section: 'synth', min: -100, max: 100, default: 0,      unit: 'ct', desc: 'OSC A cents' },
+  synOscALevel:    { label: 'LEVEL',  section: 'synth', min: 0, max: 1,     default: 0.7,     unit: '',   desc: 'OSC A level' },
+  synOscAPan:      { label: 'PAN',    section: 'synth', min: -1, max: 1,    default: 0,       unit: '',   desc: 'OSC A pan' },
+  synFilter1Cut:   { label: 'CUT',    section: 'synth', min: 20, max: 20000, default: 20000,  unit: 'Hz', desc: 'Filter 1 cutoff' },
+  synFilter1Res:   { label: 'RES',    section: 'synth', min: 0, max: 1,     default: 0,       unit: '',   desc: 'Filter 1 resonance' },
+  synEnvAmpA:      { label: 'AMP A',  section: 'synth', min: 1, max: 5000,  default: 5,       unit: 'ms', desc: 'AMP envelope attack' },
+  synEnvAmpD:      { label: 'AMP D',  section: 'synth', min: 1, max: 5000,  default: 100,     unit: 'ms', desc: 'AMP envelope decay' },
+  synEnvAmpS:      { label: 'AMP S',  section: 'synth', min: 0, max: 1,     default: 0.7,     unit: '',   desc: 'AMP envelope sustain' },
+  synEnvAmpR:      { label: 'AMP R',  section: 'synth', min: 1, max: 10000, default: 200,     unit: 'ms', desc: 'AMP envelope release' },
 };
 
 const OUTPUT_PARAM = { min: -12, max: 12, default: 0 };
