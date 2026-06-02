@@ -7114,10 +7114,10 @@ function applyEqPanelOpen(open) {
   ctrls.classList.toggle('eq-mode', open);
   if (open) requestAnimationFrame(redrawEqCanvas);  // initial draw on open
 }
-// ---- Unified EQ / DLY / MOD panel switcher ----
-// Mutually exclusive: opening one closes the other two. Clicking the active
+// ---- Unified SYN / EQ / DLY / MOD panel switcher ----
+// Mutually exclusive: opening one closes the others. Clicking the active
 // pill closes it (no panel open). Avoids the two-panels-open bug.
-let currentActivePanel = null; // 'eq' | 'dly' | 'mod' | null
+let currentActivePanel = null; // 'syn' | 'eq' | 'dly' | 'mod' | null
 function applyModPanelOpen(open) {
   const modBtn = document.getElementById('mod-btn');
   const modPanel = document.getElementById('mod-panel');
@@ -7128,8 +7128,16 @@ function applyModPanelOpen(open) {
   modPanel.classList.toggle('open', open);
   controls.style.display = open ? 'none' : 'flex';
 }
+function applySynPanelOpen(open) {
+  const synBtn   = document.getElementById('syn-btn');
+  const synPanel = document.getElementById('syn-panel');
+  if (!synBtn || !synPanel) return;
+  synBtn.classList.toggle('active', open);
+  synPanel.classList.toggle('hidden', !open);
+}
 function setActivePanel(which) {
-  // which = 'eq' | 'dly' | 'mod' | null
+  // which = 'syn' | 'eq' | 'dly' | 'mod' | null
+  applySynPanelOpen(which === 'syn');
   applyEqPanelOpen(which === 'eq');
   applyDelayPanelOpen(which === 'dly');
   applyModPanelOpen(which === 'mod');
@@ -7160,66 +7168,94 @@ document.getElementById('eq-bypass-btn').addEventListener('click', () => {
 });
 
 // ── SYN button: open/close the synth panel ──────────────────────────────
+// Uses the existing setActivePanel manager so opening SYN closes any other
+// open panel (EQ/DLY/MOD) and vice versa. Without this, the SYN panel
+// would overlay other panels (same z-index, later-in-DOM wins).
 document.getElementById('syn-btn').addEventListener('click', () => {
-  const panel = document.getElementById('syn-panel');
-  if (! panel) return;
-  panel.classList.toggle('hidden');
+  setActivePanel(currentActivePanel === 'syn' ? null : 'syn');
 });
 
 // Bridge raw <input type="range"> / <select> elements to the
 // WebSliderRelay system. Each control with [data-syn="PARAM_ID"] gets
-// a one-time wiring to the matching window.__JUCE__ relay.
-(function wireSynControls () {
-  const controls = document.querySelectorAll('[data-syn]');
-  controls.forEach (el => {
-    const paramId = el.dataset.syn;
-    if (! paramId || ! window.__JUCE__) return;
-    const state = window.__JUCE__.getSliderState (paramId);
-    if (! state) {
-      console.warn ('[SYN] no SliderState for', paramId);
-      return;
-    }
-    // Push initial state from APVTS to control.
-    const initial = state.getNormalisedValue();
-    if (el.tagName === 'SELECT') {
-      // For choice params, normalised maps to index/numChoices step.
-      // Read the actual value index from state.getScaledValue() if available.
-      const val = state.getScaledValue ? state.getScaledValue() : initial;
-      el.value = String (Math.round (val));
-    } else {
-      const min = parseFloat (el.min);
-      const max = parseFloat (el.max);
-      el.value = String (min + (max - min) * initial);
-    }
-    // Push UI changes back to APVTS.
-    const handler = () => {
-      const v = parseFloat (el.value);
-      if (el.tagName === 'SELECT') {
-        // Choice: setNormalisedValue with index / (numChoices-1).
-        const numChoices = el.options.length;
-        state.setNormalisedValue (numChoices > 1 ? v / (numChoices - 1) : 0);
-      } else {
-        const min = parseFloat (el.min);
-        const max = parseFloat (el.max);
-        state.setNormalisedValue ((v - min) / (max - min));
-      }
-    };
-    el.addEventListener ('input', handler);
-    el.addEventListener ('change', handler);
-    // Push APVTS changes back to UI so DAW automation / presets update display.
-    state.valueChangedEvent.addListener (() => {
-      const v = state.getNormalisedValue();
-      if (el.tagName === 'SELECT') {
-        const val = state.getScaledValue ? state.getScaledValue() : v;
-        el.value = String (Math.round (val));
-      } else {
-        const min = parseFloat (el.min);
-        const max = parseFloat (el.max);
-        el.value = String (min + (max - min) * v);
+// wired to the matching window.__JUCE__ relay.
+//
+// Wrapped in try/catch (outer + per-element) so that ANY API surprise
+// from the JUCE WebView (missing valueChangedEvent, getSliderState
+// returning unexpected shape, etc.) cannot break unrelated JS that
+// loads later in the file — without this guard, an unhandled throw
+// here would abort ALL subsequent script tags including the DLY/MOD/MIX
+// button handlers, making them silently "go away" for the user.
+//
+// Deferred via setTimeout so window.__JUCE__ is fully ready (the WebView
+// injects it asynchronously after the script tag executes).
+setTimeout(function wireSynControls () {
+  try {
+    const controls = document.querySelectorAll('[data-syn]');
+    controls.forEach (el => {
+      try {
+        const paramId = el.dataset.syn;
+        if (! paramId || ! window.__JUCE__ || ! window.__JUCE__.getSliderState) return;
+        const state = window.__JUCE__.getSliderState (paramId);
+        if (! state) {
+          console.warn ('[SYN] no SliderState for', paramId);
+          return;
+        }
+        // Push initial state from APVTS to control.
+        try {
+          const initial = state.getNormalisedValue ? state.getNormalisedValue() : 0;
+          if (el.tagName === 'SELECT') {
+            const val = state.getScaledValue ? state.getScaledValue() : initial;
+            el.value = String (Math.round (val));
+          } else {
+            const min = parseFloat (el.min);
+            const max = parseFloat (el.max);
+            el.value = String (min + (max - min) * initial);
+          }
+        } catch (e) { console.warn ('[SYN] initial value failed for', paramId, e); }
+
+        // Push UI changes back to APVTS.
+        const handler = () => {
+          try {
+            const v = parseFloat (el.value);
+            if (el.tagName === 'SELECT') {
+              const numChoices = el.options.length;
+              state.setNormalisedValue (numChoices > 1 ? v / (numChoices - 1) : 0);
+            } else {
+              const min = parseFloat (el.min);
+              const max = parseFloat (el.max);
+              state.setNormalisedValue ((v - min) / (max - min));
+            }
+          } catch (e) { console.warn ('[SYN] handler failed for', paramId, e); }
+        };
+        el.addEventListener ('input', handler);
+        el.addEventListener ('change', handler);
+
+        // Push APVTS changes back to UI so DAW automation / presets update display.
+        // valueChangedEvent.addListener is the documented JUCE API but we still
+        // guard it in case the version differs.
+        if (state.valueChangedEvent && state.valueChangedEvent.addListener) {
+          state.valueChangedEvent.addListener (() => {
+            try {
+              const v = state.getNormalisedValue();
+              if (el.tagName === 'SELECT') {
+                const val = state.getScaledValue ? state.getScaledValue() : v;
+                el.value = String (Math.round (val));
+              } else {
+                const min = parseFloat (el.min);
+                const max = parseFloat (el.max);
+                el.value = String (min + (max - min) * v);
+              }
+            } catch (e) { console.warn ('[SYN] reverse-sync failed for', paramId, e); }
+          });
+        }
+      } catch (perElement) {
+        console.warn ('[SYN] per-element wire failed', perElement);
       }
     });
-  });
-})();
+  } catch (outer) {
+    console.warn ('[SYN] wireSynControls outer error', outer);
+  }
+}, 0);
 
 // ===========================================================
 // DELAY PANEL
