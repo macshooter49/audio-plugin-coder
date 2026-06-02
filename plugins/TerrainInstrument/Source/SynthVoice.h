@@ -10,6 +10,7 @@
 #include "Wavetable.h"
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 
 namespace tw
 {
@@ -348,5 +349,15 @@ namespace tw
 
         // Phase 3 — Engine choice.
         Engine               engine_           = Engine::WT;
+
+        // Phase 3 — NOISE engine state.
+        // xorshift32 PRNG seeded per-voice from a const offset XOR'd with the
+        // voice's `this` pointer so each voice has decorrelated noise streams.
+        // One-pole low-pass for "color" (FRAME=0 → bright/white, FRAME=1 →
+        // dark/brown). Tanh post-saturation for "drive" (WARP AMT).
+        std::uint32_t noiseState_  = 0x9E3779B9u
+                                   ^ static_cast<std::uint32_t> (
+                                         reinterpret_cast<std::uintptr_t> (this));
+        float         noiseLpZ_    = 0.0f;
     };
 }
