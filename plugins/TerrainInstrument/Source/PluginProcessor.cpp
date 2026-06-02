@@ -793,6 +793,75 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         5.0f,
         juce::AudioParameterFloatAttributes().withLabel("ms")));
 
+    // ── Synth section (Phase 1 MPV — see Design/v1-syn-spec.md) ──────────
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_ENGINE, 1 },
+        "Synth OSC A Engine",
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        0));
+
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_OCT, 1 },
+        "Synth OSC A Octave", -3, 3, 0));
+
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SEMI, 1 },
+        "Synth OSC A Semitone", -12, 12, 0));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_CENT, 1 },
+        "Synth OSC A Cents",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f),
+        0.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_LEVEL, 1 },
+        "Synth OSC A Level",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.7f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_PAN, 1 },
+        "Synth OSC A Pan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f),
+        0.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_CUT, 1 },
+        "Synth Filter 1 Cutoff",
+        juce::NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 0.25f),
+        20000.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_RES, 1 },
+        "Synth Filter 1 Resonance",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_A, 1 },
+        "Synth Amp Attack",
+        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f),
+        5.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_D, 1 },
+        "Synth Amp Decay",
+        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f),
+        100.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_S, 1 },
+        "Synth Amp Sustain",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.7f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_R, 1 },
+        "Synth Amp Release",
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f),
+        200.0f));
+
     return layout;
 }
 
