@@ -79,6 +79,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synEnvAmpDRelay)
             .withOptionsFrom(synEnvAmpSRelay)
             .withOptionsFrom(synEnvAmpRRelay)
+            .withOptionsFrom(synOscAWtPresetRelay)
+            .withOptionsFrom(synOscAWtFrameRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1901,6 +1903,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synEnvAmpRAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_R),
         synEnvAmpRRelay, nullptr);
+
+    // Phase 2A — wavetable preset + frame
+    synOscAWtPresetAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WT_PRESET),
+        synOscAWtPresetRelay, nullptr);
+
+    synOscAWtFrameAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WT_FRAME),
+        synOscAWtFrameRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

@@ -127,6 +127,10 @@ private:
     juce::WebSliderRelay synEnvAmpSRelay      { ParameterIDs::SYN_ENV_AMP_S };
     juce::WebSliderRelay synEnvAmpRRelay      { ParameterIDs::SYN_ENV_AMP_R };
 
+    // Synth section — Phase 2A (wavetable)
+    juce::WebSliderRelay synOscAWtPresetRelay { ParameterIDs::SYN_OSC_A_WT_PRESET };
+    juce::WebSliderRelay synOscAWtFrameRelay  { ParameterIDs::SYN_OSC_A_WT_FRAME };
+
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
@@ -233,6 +237,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpDAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpSAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpRAttachment;
+
+    // Synth section — Phase 2A (wavetable)
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWtPresetAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWtFrameAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady
