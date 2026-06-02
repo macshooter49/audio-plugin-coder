@@ -450,9 +450,23 @@ Implemented as a JUCE custom touch slider that drives `SYN_RIBBON_*` params. Mod
 
 2. **Phase 2 — Wavetable engine**
    - **2A SHIPPED 2026-06-02** (tag `mark-2-synth-phase-2a-wavetable-foundation`): frame-based wavetable engine, bilinear lookup, 6 iconic analog tables (Prophet Saw / Jupiter PWM / Moog Sqr / OB-X Saw / CS-80 Brass / Juno Str) generated additively at startup, 16 frames per table, WAVETABLE dropdown + FRAME slider in #syn-panel. Default preset = Prophet Saw.
-   - **2B (next):** Digital / Vocal / Metallic / Experimental category tables (PPG Wave, DX7 EP, D-50 Bell, M1 Piano, Choir, Vowel Morph, Bowed Metal, Glass Harmonics, Dustbowl, Static Evolve, Spectral Drift, Serum HD, etc.). Replace dropdown with right-click categorized browser.
-   - **2C (later):** Warp modes (bend / sync / formant) for live wavetable distortion.
-   - **2D (later):** USER imports — Import WAV, From Sample (resynthesis), From Image PNG, Random Gen.
+   - **2B SHIPPED 2026-06-02** (tag `mark-2-synth-phase-2b-wavetable-expansion`): 14 more tables across 4 new categories — Digital (PPG Wave, DX7 EP, D-50 Bell, M1 Piano), Vocal (Choir A→O, Whisper, Vowel Morph), Metallic (Bowed Metal, Glass Harmonics, Railroad), Experimental (Dustbowl, Static Evolve, Spectral Drift, Serum HD). Bank now holds 20 wavetables. Dropdown uses `<optgroup>` headers to categorize. Right-click categorized browser overlay deferred to UI polish pass.
+   - **2C SHIPPED 2026-06-02** (tag `mark-2-synth-phase-2c-warp-modes`): live wavetable warp modes — BEND (Casio CZ-style phase distortion), SYNC (virtual hard-sync slave oscillator), FORMANT (phase-scale formant shift). Applied to phase BEFORE wavetable lookup so warp composes with any of the 20 tables. 2 new APVTS params (`SYN_OSC_A_WARP_MODE` choice, `SYN_OSC_A_WARP_AMOUNT` float).
+   - **2D (deferred):** USER imports — Import WAV, From Sample (resynthesis), From Image PNG, Random Gen. Requires file picker UI infrastructure.
+
+### Phase 2 UI alignment debt (mockup vs current implementation)
+
+The Phase 2A/B/C controls SHIP FUNCTIONALLY but DO NOT match their intended v12 mockup positions. To be addressed in a UI polish pass after Phase 8 completes:
+
+| Control | Current spot | v12 mockup spot |
+|---|---|---|
+| ENGINE selector | `<select>` dropdown in OSC row | Row of 6 ICON pills above the wavetable display (per spec "Row 1 — OSC · A" §) |
+| WAVETABLE preset | `<select>` with optgroups in OSC row | Right-click on the OSC wavetable display → categorized browser overlay |
+| FRAME | `<input range>` slider in OSC row | Implicit — corner label "WAVETABLE 12 / 256" shows it; knob may be modulation-only |
+| WARP MODE | `<select>` in OSC row | **Not yet designated** — needs explicit slot. Candidates: right-click overlay extras, dedicated "engine controls" row, or modulation-only |
+| WARP AMOUNT | `<input range>` slider in OSC row | **Not yet designated** — same as WARP MODE |
+
+**Rule going forward:** every new control added in Phase 3+ MUST be anchored to a specific v12 mockup region BEFORE adding the widget. If the mockup doesn't have a slot for the control, either propose where it goes (and update the spec) or fold the function into modulation matrix only.
 
 3. **Phase 3 — Multi-engine OSC chassis**
    Add SAMP / GRAN / SPEC / FM / NOISE engines. SAMP reuses the existing sampler infrastructure from `SamplerVoice.h`.
