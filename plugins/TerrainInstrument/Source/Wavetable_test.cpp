@@ -29,6 +29,47 @@ public:
             expectEquals (wt.getNumFrames(), 1, "sine table is single-frame");
             expect (wt.getFrameSize() >= 256, "sine table should have ≥256 samples per frame");
         }
+
+        beginTest ("Prophet Saw has 16 frames + non-zero RMS in every frame");
+        {
+            auto wt = tw::Wavetable::makeProphetSaw();
+            expectEquals (wt.getNumFrames(), 16);
+            for (int f = 0; f < 16; ++f)
+            {
+                float sumSq = 0.0f;
+                for (int i = 0; i < wt.getFrameSize(); ++i)
+                {
+                    const float s = wt.lookup ((float) f / 15.0f, (float) i / (float) wt.getFrameSize());
+                    sumSq += s * s;
+                }
+                const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
+                expect (rms > 0.1f, juce::String ("Prophet Saw frame ") + juce::String (f) + " RMS=" + juce::String (rms));
+            }
+        }
+
+        beginTest ("All 6 analog wavetable factories construct + produce audio");
+        {
+            tw::Wavetable tables[] = {
+                tw::Wavetable::makeProphetSaw(),
+                tw::Wavetable::makeJupiterPWM(),
+                tw::Wavetable::makeMoogSqr(),
+                tw::Wavetable::makeOBXSaw(),
+                tw::Wavetable::makeCS80Brass(),
+                tw::Wavetable::makeJunoStr(),
+            };
+            for (auto& wt : tables)
+            {
+                expectEquals (wt.getNumFrames(), 16);
+                float sumSq = 0.0f;
+                for (int i = 0; i < wt.getFrameSize(); ++i)
+                {
+                    const float s = wt.lookup (0.5f, (float) i / (float) wt.getFrameSize());
+                    sumSq += s * s;
+                }
+                const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
+                expect (rms > 0.1f, juce::String ("RMS=") + juce::String (rms));
+            }
+        }
     }
 };
 
