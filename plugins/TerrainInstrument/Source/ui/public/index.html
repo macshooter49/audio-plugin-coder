@@ -3098,66 +3098,252 @@ body {
   color: #fff;
 }
 
-/* ── Synth Page 1 (Phase 1 MPV) ───────────────────────────────────────
-   Mirrors #delay-panel architecture — overlays #controls when syn-btn
-   is active. Phase 1 ships a minimal subset of the locked v12 mockup;
-   later phases will fill in the full grid per Design/v1-syn-spec.md. */
+/* ── Synth Panel — v12 mockup CSS scoped under #syn-panel (Phase 4 T1) ──
+   CSS variables from the locked v12 mockup scoped here so they override
+   the light-theme :root values for this panel only. All selectors are
+   prefixed with #syn-panel to prevent style leakage. */
 #syn-panel {
+  /* v12 locked CSS variables (dark theme, exact mockup values) */
+  --bg-main:       #1A1A2E;
+  --bg-hero:       #12121F;
+  --bg-surface:    #232340;
+  --bg-card:       #2A2A48;
+  --bg-card-2:     #252340;
+  --knob-track:    rgba(120,118,160,0.35);
+  --purple-600:    #9B6DFF;
+  --purple-500:    #8B5CF6;
+  --purple-400:    #B794FF;
+  --border:        rgba(58,58,88,0.55);
+  --border-strong: rgba(140,130,180,0.45);
+  --text-primary:  #ECE8F2;
+  --text-secondary: #C5BFD2;
+  --text-muted:    #908599;
+  --text-dim:      #6E6580;
+  --line-bright:   #ECE8F2;
+
+  /* Panel positioning — mirrors #delay-panel architecture */
   position: absolute;
-  top: 88px;          /* below header + tab nav */
+  top: 88px;         /* below header + tab nav */
   left: 14px;
   right: 14px;
   bottom: 14px;
-  background: var(--bg-main, #1A1A2E);
-  border: 1px solid var(--border, rgba(58,58,88,0.55));
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 200;
   z-index: 40;
   overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  border-radius: 8px;
 }
 #syn-panel.hidden { display: none; }
 
-#syn-panel .syn-row {
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);  /* Phase 2C: WARP MODE + AMOUNT added to OSC row */
-  gap: 12px;
-  background: var(--bg-card, #2A2A48);
-  border-radius: 6px;
-  padding: 12px;
+/* ── .ti-syn-page grid ── */
+#syn-panel .ti-syn-page {
+  flex: 1; padding: 12px 14px;
+  display: grid; grid-template-rows: 140px 140px 96px 138px; gap: 12px;
+  background: radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main);
 }
 
-#syn-panel .syn-knob-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+/* ── device card ── */
+#syn-panel .device {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 13px; padding: 10px 14px; position: relative; overflow: hidden;
+}
+#syn-panel .device-label {
+  position: absolute; top: 9px; left: 14px;
+  font-size: 9px; font-weight: 300; letter-spacing: 2px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+#syn-panel .device-corner {
+  position: absolute; top: 9px; right: 14px;
+  font-size: 9px; color: var(--text-secondary); letter-spacing: 1.4px; font-weight: 200;
 }
 
-#syn-panel .syn-knob-label {
-  font-family: "SF Pro Text", -apple-system, sans-serif;
+/* ── ENGINE PILLS ── */
+#syn-panel .engine-pills { display: flex; gap: 5px; }
+#syn-panel .eng {
+  flex: 1; height: 32px; border: 1px solid var(--border-strong); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-primary);
+  position: relative;
+}
+#syn-panel .eng svg { width: 22px; height: 22px; }
+#syn-panel .eng.act {
+  background: var(--purple-500);
+  border-color: var(--purple-500);
+  color: #FFFFFF;
+}
+#syn-panel .eng.txt { font-size: 10px; letter-spacing: 1.4px; font-weight: 300; }
+
+/* ── OSC + CROSS column ── */
+#syn-panel .row-osc { display: grid; grid-template-columns: 1fr 104px 1fr; gap: 12px; }
+#syn-panel .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; }
+#syn-panel .osc-display {
+  flex: 1; background: var(--bg-hero); border: 1px solid var(--border);
+  border-radius: 8px; position: relative; overflow: hidden; min-height: 28px;
+}
+#syn-panel .osc-display::before, #syn-panel .osc-display::after {
+  content: ''; position: absolute; width: 7px; height: 7px;
+  border: 1px solid rgba(236,232,242,0.22);
+}
+#syn-panel .osc-display::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
+#syn-panel .osc-display::after  { bottom: 4px; right: 4px; border-left: none; border-top: none; }
+#syn-panel .osc-wave { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+#syn-panel .osc-wave svg { width: 92%; height: 78%; }
+#syn-panel .osc-rclick {
+  position: absolute; bottom: 4px; right: 6px;
+  font-size: 7.5px; letter-spacing: 1.2px; color: var(--text-muted); font-weight: 200;
+}
+#syn-panel .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
+#syn-panel .knob { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+#syn-panel .knob-ring {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: conic-gradient(from 225deg, var(--purple-500) 0deg 200deg, var(--knob-track) 200deg 270deg, transparent 270deg);
+  -webkit-mask: radial-gradient(circle, transparent 9px, black 10px);
+          mask: radial-gradient(circle, transparent 9px, black 10px);
+}
+#syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; }
+
+/* ── CROSS ── */
+#syn-panel .cross {
+  background: var(--bg-card-2); border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  padding: 8px;
+  display: grid; grid-template-rows: 22px 28px 1fr; gap: 7px;
+  position: relative;
+}
+#syn-panel .cross-dir {
+  display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center;
+  gap: 2px;
+}
+#syn-panel .cross-dir .ab {
+  height: 22px; border: 1px solid var(--border-strong);
+  border-radius: 5px; display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; letter-spacing: 1.2px; color: var(--text-primary); font-weight: 300;
+}
+#syn-panel .cross-dir .ab.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+#syn-panel .cross-dir .arr { color: var(--purple-400); font-size: 11px; text-align: center; font-weight: 200; }
+#syn-panel .cross-sync {
+  width: 100%; height: 28px; border: 1px solid var(--border-strong);
+  border-radius: 7px; display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; letter-spacing: 1.8px; color: var(--text-primary);
   font-weight: 300;
-  font-size: 10px;
-  color: var(--text-primary, #ECE8F2);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
+#syn-panel .cross-sync.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+#syn-panel .cross-knobs {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+  align-items: center; justify-items: center;
+}
+#syn-panel .cross-knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#syn-panel .cross-knob .knob-ring { width: 24px; height: 24px; -webkit-mask: radial-gradient(circle, transparent 7.5px, black 8.5px); mask: radial-gradient(circle, transparent 7.5px, black 8.5px); }
+#syn-panel .cross-knob .knob-label { font-size: 7.5px; letter-spacing: 0.6px; color: var(--text-primary); }
 
-#syn-panel input[type="range"] {
-  width: 100%;
+/* ── FILTER + FLOW row ── */
+#syn-panel .row-filter-vl { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
+#syn-panel .filter { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; }
+#syn-panel .filter-toggle {
+  position: absolute; top: 6px; right: 14px;
+  display: flex; align-items: center; gap: 4px;
 }
+#syn-panel .filter-toggle .ft-pill {
+  width: 22px; height: 18px; border: 1px solid var(--border-strong);
+  border-radius: 4px; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--text-primary); font-weight: 300; letter-spacing: 0.4px;
+}
+#syn-panel .filter-toggle .ft-pill.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+#syn-panel .dd-trigger {
+  height: 24px; padding: 0 10px;
+  background: var(--bg-hero); border: 1px solid var(--border-strong);
+  border-radius: 6px; display: flex; align-items: center; gap: 8px;
+  font-size: 9.5px; letter-spacing: 1.8px; color: var(--text-primary); font-weight: 300;
+}
+#syn-panel .dd-trigger svg.dd-chev { width: 9px; height: 9px; margin-left: auto; color: var(--text-secondary); }
+#syn-panel .filter-display { flex: 1; background: var(--bg-hero); border: 1px solid var(--border); border-radius: 8px; position: relative; min-height: 28px; }
+#syn-panel .filter-display svg { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); }
+#syn-panel .filter-knobs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 
-#syn-panel .syn-section-label {
-  font-family: "SF Pro Display", -apple-system, sans-serif;
-  font-weight: 200;
-  font-size: 11px;
-  color: var(--text-secondary, #C5BFD2);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding-bottom: 4px;
+/* ── FLOW ── */
+#syn-panel .flow { display: grid; grid-template-columns: 1fr 188px; gap: 12px; padding-top: 22px; }
+#syn-panel .flow-modes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 7px; }
+#syn-panel .flow-mode {
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-primary); position: relative;
+  min-height: 42px;
 }
+#syn-panel .flow-mode svg { width: 38px; height: 38px; color: var(--text-primary); }
+#syn-panel .flow-mode.act {
+  background: var(--purple-500);
+  border-color: var(--purple-500); color: #FFFFFF;
+}
+#syn-panel .flow-mode.act svg { color: #FFFFFF; }
+#syn-panel .flow-vis { background: var(--bg-hero); border: 1px solid var(--border); border-radius: 8px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+#syn-panel .flow-vis::before, #syn-panel .flow-vis::after { content: ''; position: absolute; width: 7px; height: 7px; border: 1px solid rgba(236,232,242,0.22); }
+#syn-panel .flow-vis::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
+#syn-panel .flow-vis::after  { bottom: 4px; right: 4px; border-left: none; border-top: none; }
+#syn-panel .flow-vis > svg { flex: 1; width: 100%; }
+#syn-panel .vis-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 3px 8px 5px; border-top: 1px solid var(--border); }
+#syn-panel .vis-knob { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+#syn-panel .vis-knob .knob-ring { width: 22px; height: 22px; -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px); }
+#syn-panel .vis-knob .knob-label { font-size: 7px; color: var(--text-primary); }
+
+/* ── ENV + MOD row ── */
+#syn-panel .row-env-mod { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
+#syn-panel .envs { display: flex; flex-direction: column; gap: 5px; padding-top: 22px; }
+#syn-panel .env-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
+#syn-panel .env-tab { flex: 1; padding: 3px 0 5px; font-size: 9px; letter-spacing: 1.8px; text-align: center; color: var(--text-secondary); font-weight: 300; position: relative; }
+#syn-panel .env-tab.act { color: #FFFFFF; }
+#syn-panel .env-tab.act::after { content: ''; position: absolute; left: 15%; right: 15%; bottom: -1px; height: 1px; background: var(--purple-400); }
+#syn-panel .env-canvas { flex: 1; background: var(--bg-hero); border: 1px solid var(--border); border-radius: 6px; position: relative; overflow: hidden; cursor: grab; }
+#syn-panel .env-canvas::before, #syn-panel .env-canvas::after { content: ''; position: absolute; width: 6px; height: 6px; border: 1px solid rgba(236,232,242,0.22); }
+#syn-panel .env-canvas::before { top: 3px; left: 3px; border-right: none; border-bottom: none; }
+#syn-panel .env-canvas::after  { bottom: 3px; right: 3px; border-left: none; border-top: none; }
+#syn-panel .env-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ── MOD / LFO / PATCHBAY ── */
+#syn-panel .mod { padding-top: 22px; display: grid; grid-template-columns: 156px 1fr; gap: 12px; }
+#syn-panel .lfo-stack { display: flex; flex-direction: column; gap: 5px; }
+#syn-panel .lfo-tile { background: var(--bg-hero); border: 1px solid var(--border); border-radius: 7px; padding: 3px 8px; display: grid; grid-template-columns: 18px 1fr 56px; align-items: center; gap: 8px; height: 20px; }
+#syn-panel .lfo-tag { font-size: 9px; font-weight: 400; color: #FFFFFF; letter-spacing: 1.2px; }
+#syn-panel .lfo-shape { height: 13px; opacity: 1; }
+#syn-panel .lfo-rate {
+  font-size: 8.5px; color: var(--text-primary); letter-spacing: 1px; font-weight: 300;
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+}
+#syn-panel .lfo-rate svg.dd-chev { width: 7px; height: 7px; color: var(--text-secondary); }
+#syn-panel .patchbay { background: var(--bg-hero); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+#syn-panel .patch-row { display: grid; grid-template-columns: 32px 1fr 52px 30px; align-items: center; gap: 6px; font-size: 9px; letter-spacing: 0.6px; color: var(--text-primary); font-weight: 200; padding: 1px 0; border-bottom: 1px dashed var(--border); }
+#syn-panel .patch-row:last-child { border-bottom: none; }
+#syn-panel .patch-src { color: #FFFFFF; font-weight: 400; letter-spacing: 1.2px; background: var(--purple-500); border-radius: 3px; text-align: center; padding: 1px 0; }
+#syn-panel .patch-amt { height: 4px; background: var(--knob-track); border-radius: 2px; position: relative; }
+#syn-panel .patch-amt.pos::after, #syn-panel .patch-amt.neg::after { content: ''; position: absolute; top: 0; bottom: 0; background: var(--purple-400); border-radius: 2px; }
+#syn-panel .patch-amt.pos::after { left: 50%; width: 32%; }
+#syn-panel .patch-amt.neg::after { right: 50%; width: 22%; }
+#syn-panel .patch-val { font-size: 9px; color: var(--text-primary); text-align: right; letter-spacing: 0.6px; font-weight: 300; }
+#syn-panel .patch-hint { font-size: 8px; color: var(--text-muted); letter-spacing: 1.4px; padding: 4px 0 0; text-align: center; }
+
+/* ── RIBBON row (fixed 138px) ── */
+#syn-panel .ribbon-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 13px; display: grid; grid-template-columns: 1fr 1px 110px; gap: 12px; padding: 10px 14px; position: relative; }
+#syn-panel .ribbon-device { display: flex; flex-direction: column; position: relative; gap: 7px; padding-top: 20px; }
+#syn-panel .ribbon-label { position: absolute; top: 6px; left: 0; font-size: 9px; font-weight: 300; letter-spacing: 2px; color: var(--text-secondary); }
+#syn-panel .ribbon-cs80 { position: absolute; top: 6px; right: 0; font-size: 8px; color: var(--text-muted); letter-spacing: 2px; font-weight: 200; }
+#syn-panel .ribbon-strip { position: relative; background: linear-gradient(90deg, rgba(139,92,246,0.04) 0%, rgba(139,92,246,0.08) 50%, rgba(139,92,246,0.04) 100%), var(--bg-hero); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; height: 44px; }
+#syn-panel .ribbon-strip::before, #syn-panel .ribbon-strip::after { content: ''; position: absolute; width: 6px; height: 6px; border: 1px solid rgba(236,232,242,0.22); }
+#syn-panel .ribbon-strip::before { top: 3px; left: 3px; border-right: none; border-bottom: none; }
+#syn-panel .ribbon-strip::after  { bottom: 3px; right: 3px; border-left: none; border-top: none; }
+#syn-panel .ribbon-strip svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+#syn-panel .ribbon-controls { display: grid; grid-template-columns: 180px 1fr 1fr 1fr 1fr; gap: 14px; align-items: center; }
+#syn-panel .ribbon-mode-dd { height: 24px; padding: 0 10px; background: var(--purple-500); border: 1px solid var(--purple-500); border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 9.5px; letter-spacing: 1.6px; color: #FFFFFF; font-weight: 300; }
+#syn-panel .ribbon-mode-dd svg.dd-chev { width: 9px; height: 9px; margin-left: auto; color: #FFFFFF; }
+#syn-panel .ribbon-mini-knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#syn-panel .ribbon-mini-knob .knob-ring { width: 26px; height: 26px; -webkit-mask: radial-gradient(circle, transparent 8px, black 9px); mask: radial-gradient(circle, transparent 8px, black 9px); }
+#syn-panel .ribbon-mini-knob .knob-label { font-size: 8px; letter-spacing: 1.4px; color: var(--text-primary); font-weight: 300; }
+#syn-panel .ribbon-divider { background: var(--border); }
+#syn-panel .voice-meta { padding-top: 4px; display: flex; flex-direction: column; gap: 8px; font-size: 9px; color: var(--text-secondary); letter-spacing: 1px; font-weight: 200; }
+#syn-panel .voice-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 6px; }
+#syn-panel .voice-row svg { width: 11px; height: 11px; color: var(--text-primary); }
+#syn-panel .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
 </style>
 </head>
 <body>
