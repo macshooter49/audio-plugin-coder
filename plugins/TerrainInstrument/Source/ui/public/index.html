@@ -3183,7 +3183,7 @@ body {
 
 /* ── P4-T10: swap-state UI — + button, label row, preset corner, engine-controls ── */
 #syn-panel .device-label-row {
-  position: absolute; top: 9px; left: 14px;
+  position: absolute; top: 6px; left: 14px;
   display: flex; align-items: center; gap: 8px;
   z-index: 1;
 }
@@ -3197,10 +3197,24 @@ body {
   border: 1px solid var(--border-strong);
   border-radius: 3px;
   color: var(--text-secondary);
-  font-size: 11px; font-weight: 300; line-height: 1;
+  font-size: 13px; font-weight: 300; line-height: 1;
   padding: 0; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  display: grid; place-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-feature-settings: "tnum";
+  text-indent: 0;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+#syn-panel .swap-btn::before {
+  content: '+';
+  display: block;
+  line-height: 1;
+  transform: translateY(-1px);   /* visual baseline correction — typographic + sits slightly low */
+}
+#syn-panel .swap-btn.act::before {
+  content: '\2190';              /* left-arrow ← when swapped */
+  transform: translateY(0);
+  font-size: 11px;
 }
 #syn-panel .swap-btn:hover {
   background: var(--purple-500);
@@ -3214,7 +3228,7 @@ body {
 }
 
 #syn-panel .device-corner-preset {
-  position: absolute; top: 6px; right: 14px;
+  position: absolute; top: 4px; right: 14px;
   z-index: 1;
 }
 #syn-panel .preset-select {
@@ -3226,7 +3240,8 @@ body {
   font-size: 9.5px; font-weight: 300;
   letter-spacing: 0.8px;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 2px 0 2px 6px;        /* no right padding — text right-edge flush with pill right-edge */
+  text-align: right;
   border-radius: 4px;
   transition: background 0.12s ease;
 }
@@ -3306,7 +3321,7 @@ body {
 
 /* ── OSC + CROSS column ── */
 #syn-panel .row-osc { display: grid; grid-template-columns: 1fr 104px 1fr; gap: 12px; }
-#syn-panel .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 28px; }
+#syn-panel .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 24px; }
 #syn-panel .osc-display {
   flex: 1; background: var(--bg-hero); border: 1px solid var(--border);
   border-radius: 8px; position: relative; overflow: hidden; min-height: 28px;
@@ -4054,7 +4069,7 @@ body {
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
               <div class="device-label">OSC · A</div>
-              <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Toggle engine pills / wavetable controls">+</button>
+              <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Toggle engine pills / wavetable controls"></button>
             </div>
             <!-- preset name in corner — click opens the inline <select> -->
             <div class="device-corner-preset">
@@ -8082,7 +8097,7 @@ setTimeout(function wireSynControls () {
           try {
             oscADevice.classList.toggle ('swapped');
             swapBtn.classList.toggle ('act');
-            swapBtn.textContent = oscADevice.classList.contains ('swapped') ? '←' : '+';
+            // glyph rendered via CSS ::before; .act class swaps + → ←
           } catch (e) { console.warn ('[SYN-swap] toggle failed', e); }
         });
       }
