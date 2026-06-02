@@ -185,57 +185,81 @@ namespace tw
 
             for (int i = 0; i < numSamples; ++i)
             {
-                // Wavetable lookup (Phase 2A) + warp (Phase 2C).
-                // Warp transforms the phase BEFORE the wavetable read, so
-                // BEND/SYNC/FORMANT compose with any wavetable choice.
-                // Falls back to PolyBLEP saw when no wavetable is set.
-                float s;
-                if (currentWavetable_ != nullptr)
+                float s = 0.0f;
+
+                switch (engine_)
                 {
-                    // Warp transform on phase (0..1).
-                    double warpedPhase = phase_;
-                    switch (warpMode_)
+                    case Engine::WT:
                     {
-                        case 1:  // BEND — Casio CZ-style phase distortion
+                        // Existing Phase 2A+2C wavetable+warp path — verbatim
+                        // from the prior implementation.
+                        if (currentWavetable_ != nullptr)
                         {
-                            const double pi2 = 2.0 * 3.14159265358979323846;
-                            warpedPhase = phase_ + (double) warpAmount_ * 0.5 * std::sin (pi2 * phase_);
-                            warpedPhase -= std::floor (warpedPhase);
-                            break;
+                            double warpedPhase = phase_;
+                            switch (warpMode_)
+                            {
+                                case 1:  // BEND
+                                {
+                                    const double pi2 = 2.0 * 3.14159265358979323846;
+                                    warpedPhase = phase_ + (double) warpAmount_ * 0.5 * std::sin (pi2 * phase_);
+                                    warpedPhase -= std::floor (warpedPhase);
+                                    break;
+                                }
+                                case 2:  // SYNC
+                                {
+                                    const double syncRatio = 1.0 + (double) warpAmount_ * 4.0;
+                                    syncPhase_ += phaseIncrement_ * syncRatio;
+                                    if (phase_ < phaseIncrement_) syncPhase_ = 0.0;
+                                    if (syncPhase_ >= 1.0) syncPhase_ -= std::floor (syncPhase_);
+                                    warpedPhase = syncPhase_;
+                                    break;
+                                }
+                                case 3:  // FORMANT
+                                {
+                                    warpedPhase = phase_ * (1.0 + (double) warpAmount_ * 2.0);
+                                    warpedPhase -= std::floor (warpedPhase);
+                                    break;
+                                }
+                                case 0:
+                                default: break;
+                            }
+                            s = currentWavetable_->lookup (framePos_, (float) warpedPhase);
                         }
-                        case 2:  // SYNC — virtual hard-sync; slave runs at master pitch * (1 + amt*4)
+                        else
                         {
-                            const double syncRatio = 1.0 + (double) warpAmount_ * 4.0;
-                            syncPhase_ += phaseIncrement_ * syncRatio;
-                            // Master wrap → slave reset (detect master crossing 0).
-                            if (phase_ < phaseIncrement_) syncPhase_ = 0.0;
-                            if (syncPhase_ >= 1.0) syncPhase_ -= std::floor (syncPhase_);
-                            warpedPhase = syncPhase_;
-                            break;
+                            // PolyBLEP fallback (never expected in practice).
+                            s = static_cast<float> (2.0 * phase_ - 1.0);
+                            s -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
                         }
-                        case 3:  // FORMANT — shift wavetable formant peak by scaling lookup phase
-                        {
-                            warpedPhase = phase_ * (1.0 + (double) warpAmount_ * 2.0);
-                            warpedPhase -= std::floor (warpedPhase);
-                            break;
-                        }
-                        case 0:  // NONE
-                        default:
-                            break;
+                        phase_ += phaseIncrement_;
+                        if (phase_ >= 1.0) phase_ -= 1.0;
+                        break;
                     }
-                    s = currentWavetable_->lookup (framePos_, (float) warpedPhase);
-                }
-                else
-                {
-                    s = static_cast<float> (2.0 * phase_ - 1.0);
-                    s -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
+
+                    case Engine::NOISE:
+                    case Engine::FM:
+                        // Implemented in Tasks 4-7 / 8-12. For Task 2's checkpoint,
+                        // these fall through to silence (s = 0). The phase_
+                        // accumulator advances ONLY for WT — NOISE doesn't need it
+                        // and FM uses its own phase. Filled in by later tasks.
+                        s = 0.0f;
+                        break;
+
+                    case Engine::SAMP:
+                    case Engine::GRAN:
+                    case Engine::SPEC:
+                        // Phase 3 stubs — silent renders. Real DSP added in later
+                        // phases (SAMP reuses Terrain's existing SamplerVoice
+                        // infrastructure, GRAN reuses GrainEngine.h, SPEC needs
+                        // FFT pipeline). User can switch to them without crashes
+                        // but hears nothing — labelled "(coming soon)" in the
+                        // ENGINE dropdown in Task 9.
+                        s = 0.0f;
+                        break;
                 }
 
                 const float env = ampEnv_.getNextSample();
                 mono[i] = s * currentVelocity_ * env;
-
-                phase_ += phaseIncrement_;
-                if (phase_ >= 1.0) phase_ -= 1.0;
             }
 
             // Run the ladder filter in-place on the mono scratch.
