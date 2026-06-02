@@ -445,8 +445,8 @@ Implemented as a JUCE custom touch slider that drives `SYN_RIBBON_*` params. Mod
 
 ## Phase plan (suggested decomposition for implementation session)
 
-1. **Phase 1 — Minimum Playable Synth Voice (MPV)**
-   One PolyBLEP oscillator (saw default), one filter (Ladder LP-24), AMP envelope, 8-voice allocator. JS↔C++ wiring for OSC A only. Smallest thing that's "a synth I can play."
+1. **Phase 1 — Minimum Playable Synth Voice (MPV)** ✅ SHIPPED 2026-06-01 (tag `mark-2-synth-phase-1-mpv`)
+   PolyBLEP saw oscillator (engine 0) + juce::dsp::LadderFilter LPF24 + juce::ADSR AMP envelope + 8-voice juce::Synthesiser. 12 SYN_* APVTS params (OSC A: ENGINE/OCT/SEMI/CENT/LEVEL/PAN, FILTER1: CUT/RES, AMP env: A/D/S/R). #syn-panel UI with native HTML controls (canvas knobs deferred to Phase 2 visual polish). Parallel pipeline beside the 4 LayerStates — synth audio sums into master `buffer` after the layer loop, before the master FX chain, so it flows through grain/tape/space/delay/EQ/chorus. Build green at commit `bc70bac`.
 
 2. **Phase 2 — Wavetable engine**
    Replace simple OSC with frame-based wavetable. Implement smooth frame interpolation, basic warp modes (bend/sync/formant). Wire WT browser dropdown.
