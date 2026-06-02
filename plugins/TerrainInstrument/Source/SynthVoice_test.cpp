@@ -208,5 +208,21 @@ public:
     }
 };
 
+struct SynthVoiceEngineTests : public juce::UnitTest
+{
+    SynthVoiceEngineTests() : juce::UnitTest ("tw::SynthVoice engine selection") {}
+    void runTest() override
+    {
+        beginTest ("setEngine clamps + stores engine choice");
+        tw::SynthVoice v;
+        v.setEngine (0); expect (v.engineForTesting() == tw::SynthVoice::Engine::WT);
+        v.setEngine (4); expect (v.engineForTesting() == tw::SynthVoice::Engine::FM);
+        v.setEngine (5); expect (v.engineForTesting() == tw::SynthVoice::Engine::NOISE);
+        v.setEngine (-1); expect (v.engineForTesting() == tw::SynthVoice::Engine::WT);   // clamps low
+        v.setEngine (99); expect (v.engineForTesting() == tw::SynthVoice::Engine::NOISE); // clamps high
+    }
+};
+
 static SynthSoundTests sSynthSoundTests;
 static SynthVoiceTests sSynthVoiceTests;
+static SynthVoiceEngineTests sSynthVoiceEngineTests;

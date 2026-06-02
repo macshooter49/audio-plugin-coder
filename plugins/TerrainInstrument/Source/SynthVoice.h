@@ -31,6 +31,10 @@ namespace tw
     public:
         SynthVoice() = default;
 
+        /** Phase 3 — OSC engine choice. Order matches the SYN_OSC_A_ENGINE
+         *  StringArray in createParameterLayout: WT, SAMP, GRAN, SPEC, FM, NOISE. */
+        enum class Engine : int { WT = 0, SAMP = 1, GRAN = 2, SPEC = 3, FM = 4, NOISE = 5 };
+
         bool canPlaySound (juce::SynthesiserSound* s) override
         {
             return dynamic_cast<SynthSound*> (s) != nullptr;
@@ -127,6 +131,17 @@ namespace tw
             warpMode_   = juce::jlimit (0, 3, mode);
             warpAmount_ = juce::jlimit (0.0f, 1.0f, amount);
         }
+
+        /** Select which engine renders this voice. Idx 0..5 from
+         *  SYN_OSC_A_ENGINE APVTS choice. Out-of-range clamps to nearest end. */
+        void setEngine (int idx) noexcept
+        {
+            const int clamped = juce::jlimit (0, 5, idx);
+            engine_ = static_cast<Engine> (clamped);
+        }
+
+        /** Test-only accessor — not used in production audio path. */
+        Engine engineForTesting() const noexcept { return engine_; }
 
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
@@ -306,5 +321,8 @@ namespace tw
         int                  warpMode_         = 0;     // 0=NONE,1=BEND,2=SYNC,3=FORMANT
         float                warpAmount_       = 0.0f;  // 0..1
         double               syncPhase_        = 0.0;   // virtual slave-oscillator phase for SYNC mode
+
+        // Phase 3 — Engine choice.
+        Engine               engine_           = Engine::WT;
     };
 }
