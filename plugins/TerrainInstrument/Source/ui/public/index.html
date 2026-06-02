@@ -7194,8 +7194,8 @@ setTimeout(function wireSynControls () {
     controls.forEach (el => {
       try {
         const paramId = el.dataset.syn;
-        if (! paramId || ! window.__JUCE__ || ! window.__JUCE__.getSliderState) return;
-        const state = window.__JUCE__.getSliderState (paramId);
+        if (! paramId || ! window.Juce || ! window.Juce.getSliderState) return;
+        const state = window.Juce.getSliderState (paramId);
         if (! state) {
           console.warn ('[SYN] no SliderState for', paramId);
           return;
