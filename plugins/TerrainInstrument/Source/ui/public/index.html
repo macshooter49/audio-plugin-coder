@@ -3356,7 +3356,7 @@ body {
 #syn-panel .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .knob-ring {
   width: 24px; height: 24px; border-radius: 50%;
-  background: conic-gradient(from 225deg, var(--purple-500) 0deg 200deg, var(--knob-track) 200deg 270deg, transparent 270deg);
+  background: conic-gradient(from 225deg, var(--purple-500) 0deg 0deg, var(--knob-track) 0deg 270deg, transparent 270deg);
   -webkit-mask: radial-gradient(circle, transparent 7.5px, black 8.5px);
           mask: radial-gradient(circle, transparent 7.5px, black 8.5px);
 }
@@ -4089,37 +4089,43 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
-              <span class="preset-display" id="osc-a-preset-display">Prophet Saw</span>
+              <span class="preset-display" id="osc-a-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select" aria-label="Wavetable preset">
+                <optgroup label="Basic">
+                  <option value="0">Sine</option>
+                  <option value="1">Triangle</option>
+                  <option value="2">Square</option>
+                  <option value="3">Pulse</option>
+                </optgroup>
                 <optgroup label="Analog">
-                  <option value="0">Prophet Saw</option>
-                  <option value="1">Jupiter PWM</option>
-                  <option value="2">Moog Sqr</option>
-                  <option value="3">OB-X Saw</option>
-                  <option value="4">CS-80 Brass</option>
-                  <option value="5">Juno Str</option>
+                  <option value="4">Prophet Saw</option>
+                  <option value="5">Jupiter PWM</option>
+                  <option value="6">Moog Sqr</option>
+                  <option value="7">OB-X Saw</option>
+                  <option value="8">CS-80 Brass</option>
+                  <option value="9">Juno Str</option>
                 </optgroup>
                 <optgroup label="Digital">
-                  <option value="6">PPG Wave</option>
-                  <option value="7">DX7 EP</option>
-                  <option value="8">D-50 Bell</option>
-                  <option value="9">M1 Piano</option>
+                  <option value="10">PPG Wave</option>
+                  <option value="11">DX7 EP</option>
+                  <option value="12">D-50 Bell</option>
+                  <option value="13">M1 Piano</option>
                 </optgroup>
                 <optgroup label="Vocal">
-                  <option value="10">Choir A→O</option>
-                  <option value="11">Whisper</option>
-                  <option value="12">Vowel Morph</option>
+                  <option value="14">Choir A→O</option>
+                  <option value="15">Whisper</option>
+                  <option value="16">Vowel Morph</option>
                 </optgroup>
                 <optgroup label="Metallic">
-                  <option value="13">Bowed Metal</option>
-                  <option value="14">Glass Harmonics</option>
-                  <option value="15">Railroad</option>
+                  <option value="17">Bowed Metal</option>
+                  <option value="18">Glass Harmonics</option>
+                  <option value="19">Railroad</option>
                 </optgroup>
                 <optgroup label="Experimental">
-                  <option value="16">Dustbowl</option>
-                  <option value="17">Static Evolve</option>
-                  <option value="18">Spectral Drift</option>
-                  <option value="19">Serum HD</option>
+                  <option value="20">Dustbowl</option>
+                  <option value="21">Static Evolve</option>
+                  <option value="22">Spectral Drift</option>
+                  <option value="23">Serum HD</option>
                 </optgroup>
               </select>
             </div>
@@ -4191,37 +4197,43 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
-              <span class="preset-display" id="osc-b-preset-display">Prophet Saw</span>
+              <span class="preset-display" id="osc-b-preset-display">Sine</span>
               <select class="preset-select" id="osc-b-preset-select" data-syn="SYN_OSC_B_WT_PRESET" aria-label="OSC B wavetable preset">
+                <optgroup label="Basic">
+                  <option value="0">Sine</option>
+                  <option value="1">Triangle</option>
+                  <option value="2">Square</option>
+                  <option value="3">Pulse</option>
+                </optgroup>
                 <optgroup label="Analog">
-                  <option value="0">Prophet Saw</option>
-                  <option value="1">Jupiter PWM</option>
-                  <option value="2">Moog Sqr</option>
-                  <option value="3">OB-X Saw</option>
-                  <option value="4">CS-80 Brass</option>
-                  <option value="5">Juno Str</option>
+                  <option value="4">Prophet Saw</option>
+                  <option value="5">Jupiter PWM</option>
+                  <option value="6">Moog Sqr</option>
+                  <option value="7">OB-X Saw</option>
+                  <option value="8">CS-80 Brass</option>
+                  <option value="9">Juno Str</option>
                 </optgroup>
                 <optgroup label="Digital">
-                  <option value="6">PPG Wave</option>
-                  <option value="7">DX7 EP</option>
-                  <option value="8">D-50 Bell</option>
-                  <option value="9">M1 Piano</option>
+                  <option value="10">PPG Wave</option>
+                  <option value="11">DX7 EP</option>
+                  <option value="12">D-50 Bell</option>
+                  <option value="13">M1 Piano</option>
                 </optgroup>
                 <optgroup label="Vocal">
-                  <option value="10">Choir A→O</option>
-                  <option value="11">Whisper</option>
-                  <option value="12">Vowel Morph</option>
+                  <option value="14">Choir A→O</option>
+                  <option value="15">Whisper</option>
+                  <option value="16">Vowel Morph</option>
                 </optgroup>
                 <optgroup label="Metallic">
-                  <option value="13">Bowed Metal</option>
-                  <option value="14">Glass Harmonics</option>
-                  <option value="15">Railroad</option>
+                  <option value="17">Bowed Metal</option>
+                  <option value="18">Glass Harmonics</option>
+                  <option value="19">Railroad</option>
                 </optgroup>
                 <optgroup label="Experimental">
-                  <option value="16">Dustbowl</option>
-                  <option value="17">Static Evolve</option>
-                  <option value="18">Spectral Drift</option>
-                  <option value="19">Serum HD</option>
+                  <option value="20">Dustbowl</option>
+                  <option value="21">Static Evolve</option>
+                  <option value="22">Spectral Drift</option>
+                  <option value="23">Serum HD</option>
                 </optgroup>
               </select>
             </div>
@@ -8031,6 +8043,35 @@ setTimeout(function wireSynControls () {
     // FILTER 1: CUT/RES) become drag-interactive controls. Each .knob > .knob-ring
     // div has its conic-gradient updated live to reflect the current value.
     try {
+      // P9 polish — default normalised values for dblclick-to-reset.
+      // Values are normalised [0..1] matching APVTS NormalisableRange for each param.
+      const KNOB_DEFAULTS_NORMALISED = {
+        // OSC A
+        SYN_OSC_A_OCT:         0.5,   // default 0 in [-3, 3]
+        SYN_OSC_A_SEMI:        0.5,   // default 0 in [-12, 12]
+        SYN_OSC_A_CENT:        0.5,   // default 0 in [-100, 100]
+        SYN_OSC_A_LEVEL:       0.7,   // default 0.7 in [0, 1]
+        SYN_OSC_A_PAN:         0.5,   // default 0 in [-1, 1]
+        SYN_OSC_A_WT_FRAME:    0.0,   // default 0
+        SYN_OSC_A_WARP_AMOUNT: 0.0,   // default 0
+        // OSC B
+        SYN_OSC_B_OCT:         0.5,
+        SYN_OSC_B_SEMI:        0.5,
+        SYN_OSC_B_CENT:        0.5,
+        SYN_OSC_B_LEVEL:       0.5,   // OSC B default 0.5 in [0, 1]
+        SYN_OSC_B_PAN:         0.5,
+        SYN_OSC_B_WT_FRAME:    0.0,
+        SYN_OSC_B_WARP_AMOUNT: 0.0,
+        // Filter 1
+        SYN_FILTER1_CUT:       1.0,   // default 20000 Hz (max of skewed range)
+        SYN_FILTER1_RES:       0.0,
+        // AMP envelope (skewed log ranges — hardcoded reasonable normalised values)
+        SYN_ENV_AMP_A:         0.18,  // ~5 ms in [1, 5000] with 0.3 skew
+        SYN_ENV_AMP_D:         0.45,  // ~100 ms
+        SYN_ENV_AMP_S:         0.7,   // 0.7 in [0, 1] linear
+        SYN_ENV_AMP_R:         0.50,  // ~200 ms
+      };
+
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
       knobEls.forEach ((knobEl) => {
         try {
@@ -8048,9 +8089,10 @@ setTimeout(function wireSynControls () {
           }
 
           // Helper: update the conic-gradient based on normalised value [0..1].
+          // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
           const applyFill = (n) => {
             const clamped = Math.max (0, Math.min (1, n));
-            const fillDeg = 200 * clamped;
+            const fillDeg = 270 * clamped;
             ring.style.background =
               'conic-gradient(from 225deg, var(--purple-500) 0deg ' + fillDeg + 'deg, ' +
               'var(--knob-track) ' + fillDeg + 'deg 270deg, ' +
@@ -8104,6 +8146,18 @@ setTimeout(function wireSynControls () {
               } catch (e) { console.warn ('[SYN-knob] reverse-sync failed for', paramId, e); }
             });
           }
+
+          // P9 polish — double-click resets knob to its default normalised value.
+          ring.addEventListener ('dblclick', (ev) => {
+            try {
+              const defaultN = KNOB_DEFAULTS_NORMALISED[paramId];
+              if (typeof defaultN === 'number') {
+                state.setNormalisedValue (defaultN);
+                applyFill (defaultN);
+              }
+              ev.preventDefault ();
+            } catch (e) { console.warn ('[SYN-knob] dblclick reset failed for', paramId, e); }
+          });
         } catch (perKnob) {
           console.warn ('[SYN-knob] per-knob wire failed', perKnob);
         }

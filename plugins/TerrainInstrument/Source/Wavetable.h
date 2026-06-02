@@ -78,6 +78,76 @@ namespace tw
             return wt;
         }
 
+        // ── Basic category (Phase 9 polish) — 4 fundamental waveforms ───────
+        // Constant across all frames (no morph — these are "basic" by design).
+        // Bandlimited additive synthesis (32 harmonics) for Triangle/Square/Pulse.
+
+        /** Bandlimited triangle: odd harmonics, 1/n² decay, alternating sign. */
+        static Wavetable makeTriangle()
+        {
+            Wavetable wt (1);
+            constexpr int numHarmonics = 32;
+            constexpr double pi  = 3.14159265358979323846;
+            constexpr double pi2 = 2.0 * pi;
+            const int N = wt.frameSize_;
+            for (int i = 0; i < N; ++i)
+            {
+                const double phase = (double) i / (double) N;
+                double v = 0.0;
+                for (int n = 1; n <= numHarmonics; n += 2)
+                {
+                    const double sign = ((n - 1) / 2) % 2 == 0 ? 1.0 : -1.0;
+                    v += sign * std::sin (pi2 * (double) n * phase) / (double) (n * n);
+                }
+                v *= 8.0 / (pi * pi);
+                wt.sampleRef (0, i) = (float) v;
+            }
+            return wt;
+        }
+
+        /** Bandlimited square: odd harmonics, 1/n decay. */
+        static Wavetable makeSquare()
+        {
+            Wavetable wt (1);
+            constexpr int numHarmonics = 32;
+            constexpr double pi  = 3.14159265358979323846;
+            constexpr double pi2 = 2.0 * pi;
+            const int N = wt.frameSize_;
+            for (int i = 0; i < N; ++i)
+            {
+                const double phase = (double) i / (double) N;
+                double v = 0.0;
+                for (int n = 1; n <= numHarmonics; n += 2)
+                    v += std::sin (pi2 * (double) n * phase) / (double) n;
+                v *= 4.0 / pi;
+                wt.sampleRef (0, i) = (float) v;
+            }
+            return wt;
+        }
+
+        /** Bandlimited 25% duty pulse: all harmonics, amplitude = (2/πn)sin(πnd). */
+        static Wavetable makePulse()
+        {
+            Wavetable wt (1);
+            constexpr int numHarmonics = 32;
+            constexpr double pi   = 3.14159265358979323846;
+            constexpr double pi2  = 2.0 * pi;
+            constexpr double duty = 0.25;
+            const int N = wt.frameSize_;
+            for (int i = 0; i < N; ++i)
+            {
+                const double phase = (double) i / (double) N;
+                double v = 2.0 * duty - 1.0;  // DC offset for asymmetric pulse
+                for (int n = 1; n <= numHarmonics; ++n)
+                {
+                    const double amp = (2.0 / (pi * (double) n)) * std::sin (pi * (double) n * duty);
+                    v += amp * std::cos (pi2 * (double) n * phase);
+                }
+                wt.sampleRef (0, i) = (float) v;
+            }
+            return wt;
+        }
+
         // ── Analog category: 6 iconic tables (Phase 2A) ──────────────────────
         // All use 16 frames so user can scan/morph via the FRAME knob.
         // Generated additively from sine harmonics — clean-room implementations,

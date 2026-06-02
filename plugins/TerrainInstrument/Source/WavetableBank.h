@@ -1,7 +1,7 @@
-// WavetableBank.h — owns the 6 Phase 2A analog wavetables, indexed by enum.
-// Constructed once at PluginProcessor startup (heavy — generates ~750KB of
-// data on the constructor call). SynthVoices hold a `const Wavetable*` into
-// the bank's storage; the bank outlives all voices.
+// WavetableBank.h — owns all wavetables indexed by enum.
+// Constructed once at PluginProcessor startup (heavy — generates ~750KB+
+// of data on the constructor call). SynthVoices hold a `const Wavetable*`
+// into the bank's storage; the bank outlives all voices.
 #pragma once
 
 #include "Wavetable.h"
@@ -15,8 +15,13 @@ namespace tw
         // Order MUST match the SYN_OSC_A_WT_PRESET StringArray in createParameterLayout.
         enum Preset
         {
+            // Basic (Phase 9 polish — fundamental waveforms at the top)
+            Sine = 0,
+            Triangle,
+            Square,
+            Pulse,
             // Analog (Phase 2A)
-            ProphetSaw = 0,
+            ProphetSaw,
             JupiterPWM,
             MoogSqr,
             OBXSaw,
@@ -45,6 +50,10 @@ namespace tw
 
         WavetableBank()
         {
+            tables_[(size_t) Sine]           = Wavetable::makeSine();
+            tables_[(size_t) Triangle]       = Wavetable::makeTriangle();
+            tables_[(size_t) Square]         = Wavetable::makeSquare();
+            tables_[(size_t) Pulse]          = Wavetable::makePulse();
             tables_[(size_t) ProphetSaw]     = Wavetable::makeProphetSaw();
             tables_[(size_t) JupiterPWM]     = Wavetable::makeJupiterPWM();
             tables_[(size_t) MoogSqr]        = Wavetable::makeMoogSqr();

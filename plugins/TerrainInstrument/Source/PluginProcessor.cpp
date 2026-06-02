@@ -871,13 +871,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WT_PRESET, 1 },
         "Synth OSC A WT Preset",
-        juce::StringArray { "Prophet Saw", "Jupiter PWM", "Moog Sqr",
+        juce::StringArray { "Sine", "Triangle", "Square", "Pulse",
+                            "Prophet Saw", "Jupiter PWM", "Moog Sqr",
                             "OB-X Saw", "CS-80 Brass", "Juno Str",
                             "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
                             "Choir A->O", "Whisper", "Vowel Morph",
                             "Bowed Metal", "Glass Harmonics", "Railroad",
                             "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD" },
-        0));
+        0));  // default = Sine
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WT_FRAME, 1 },
@@ -925,13 +926,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_PRESET, 1 },
         "Synth OSC B WT Preset",
-        juce::StringArray { "Prophet Saw", "Jupiter PWM", "Moog Sqr",
+        juce::StringArray { "Sine", "Triangle", "Square", "Pulse",
+                            "Prophet Saw", "Jupiter PWM", "Moog Sqr",
                             "OB-X Saw", "CS-80 Brass", "Juno Str",
                             "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
                             "Choir A->O", "Whisper", "Vowel Morph",
                             "Bowed Metal", "Glass Harmonics", "Railroad",
                             "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD" },
-        0));
+        0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_FRAME, 1 },
         "Synth OSC B WT Frame",
