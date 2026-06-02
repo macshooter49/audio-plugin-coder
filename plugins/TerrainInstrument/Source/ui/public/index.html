@@ -3181,6 +3181,113 @@ body {
   font-size: 9px; color: var(--text-secondary); letter-spacing: 1.4px; font-weight: 200;
 }
 
+/* ── P4-T10: swap-state UI — + button, label row, preset corner, engine-controls ── */
+#syn-panel .device-label-row {
+  position: absolute; top: 9px; left: 14px;
+  display: flex; align-items: center; gap: 8px;
+  z-index: 1;
+}
+#syn-panel .device-label-row .device-label {
+  position: static;
+}
+
+#syn-panel .swap-btn {
+  width: 14px; height: 14px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 11px; font-weight: 300; line-height: 1;
+  padding: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+#syn-panel .swap-btn:hover {
+  background: var(--purple-500);
+  border-color: var(--purple-500);
+  color: #FFFFFF;
+}
+#syn-panel .swap-btn.act {
+  background: var(--purple-500);
+  border-color: var(--purple-500);
+  color: #FFFFFF;
+}
+
+#syn-panel .device-corner-preset {
+  position: absolute; top: 6px; right: 14px;
+  z-index: 1;
+}
+#syn-panel .preset-select {
+  appearance: none; -webkit-appearance: none;
+  background: transparent;
+  color: var(--text-primary);
+  border: none;
+  font-family: inherit;
+  font-size: 9.5px; font-weight: 300;
+  letter-spacing: 0.8px;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: background 0.12s ease;
+}
+#syn-panel .preset-select:hover {
+  background: rgba(139,92,246,0.15);
+}
+#syn-panel .preset-select:focus {
+  outline: none;
+  background: rgba(139,92,246,0.15);
+}
+
+/* engine-controls row — hidden by default, shown when .swapped */
+#syn-panel .engine-controls {
+  display: none;
+  height: 32px;
+  gap: 5px;
+  align-items: center;
+}
+#syn-panel .device.swapped .engine-pills { display: none; }
+#syn-panel .device.swapped .engine-controls { display: flex; }
+
+#syn-panel .engine-controls .ec-knob-group,
+#syn-panel .engine-controls .ec-select-group {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0 8px;
+}
+#syn-panel .engine-controls .knob {
+  flex-direction: row;
+  gap: 0;
+}
+#syn-panel .engine-controls .knob .knob-ring {
+  width: 22px; height: 22px;
+  background: conic-gradient(from 225deg, var(--purple-500) 0deg 0deg, var(--knob-track) 0deg 270deg, transparent 270deg);
+  -webkit-mask: radial-gradient(circle, transparent 7px, black 8px);
+          mask: radial-gradient(circle, transparent 7px, black 8px);
+}
+#syn-panel .engine-controls .ec-label {
+  font-size: 8.5px; font-weight: 300; letter-spacing: 1.4px;
+  color: var(--text-primary);
+}
+#syn-panel .warp-select {
+  appearance: none; -webkit-appearance: none;
+  background: transparent;
+  color: var(--text-primary);
+  border: none;
+  font-family: inherit;
+  font-size: 9.5px; font-weight: 300;
+  letter-spacing: 1px;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-align: center;
+}
+#syn-panel .warp-select:focus { outline: none; }
+
 /* ── ENGINE PILLS ── */
 #syn-panel .engine-pills { display: flex; gap: 5px; }
 #syn-panel .eng {
@@ -3944,9 +4051,47 @@ body {
         <!-- Row 1: OSC A · CROSS · OSC B -->
         <div class="row-osc">
 
-          <div class="device osc">
-            <div class="device-label">OSC · A</div>
-            <div class="device-corner">WAVETABLE&nbsp;&nbsp;12 / 256</div>
+          <div class="device osc" id="osc-a-device">
+            <div class="device-label-row">
+              <div class="device-label">OSC · A</div>
+              <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Toggle engine pills / wavetable controls">+</button>
+            </div>
+            <!-- preset name in corner — click opens the inline <select> -->
+            <div class="device-corner-preset">
+              <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select">
+                <optgroup label="Analog">
+                  <option value="0">Prophet Saw</option>
+                  <option value="1">Jupiter PWM</option>
+                  <option value="2">Moog Sqr</option>
+                  <option value="3">OB-X Saw</option>
+                  <option value="4">CS-80 Brass</option>
+                  <option value="5">Juno Str</option>
+                </optgroup>
+                <optgroup label="Digital">
+                  <option value="6">PPG Wave</option>
+                  <option value="7">DX7 EP</option>
+                  <option value="8">D-50 Bell</option>
+                  <option value="9">M1 Piano</option>
+                </optgroup>
+                <optgroup label="Vocal">
+                  <option value="10">Choir A→O</option>
+                  <option value="11">Whisper</option>
+                  <option value="12">Vowel Morph</option>
+                </optgroup>
+                <optgroup label="Metallic">
+                  <option value="13">Bowed Metal</option>
+                  <option value="14">Glass Harmonics</option>
+                  <option value="15">Railroad</option>
+                </optgroup>
+                <optgroup label="Experimental">
+                  <option value="16">Dustbowl</option>
+                  <option value="17">Static Evolve</option>
+                  <option value="18">Spectral Drift</option>
+                  <option value="19">Serum HD</option>
+                </optgroup>
+              </select>
+            </div>
+            <!-- engine pills row (default visible state) -->
             <div class="engine-pills">
               <div class="eng act" data-eng-idx="0"><svg><use href="#ic-wt"/></svg></div>
               <div class="eng" data-eng-idx="1"><svg><use href="#ic-samp"/></svg></div>
@@ -3954,6 +4099,26 @@ body {
               <div class="eng" data-eng-idx="3"><svg><use href="#ic-spec"/></svg></div>
               <div class="eng" data-eng-idx="4"><svg><use href="#ic-fm"/></svg></div>
               <div class="eng" data-eng-idx="5"><svg><use href="#ic-noise"/></svg></div>
+            </div>
+            <!-- engine-controls row (swap state — hidden by default) -->
+            <div class="engine-controls">
+              <div class="ec-knob-group">
+                <div class="knob" data-syn="SYN_OSC_A_WT_FRAME"><div class="knob-ring"></div></div>
+                <div class="ec-label">FRAME</div>
+              </div>
+              <div class="ec-select-group">
+                <select class="warp-select" data-syn="SYN_OSC_A_WARP_MODE" id="osc-a-warp-select">
+                  <option value="0">NONE</option>
+                  <option value="1">BEND</option>
+                  <option value="2">SYNC</option>
+                  <option value="3">FORMANT</option>
+                </select>
+                <div class="ec-label">WARP</div>
+              </div>
+              <div class="ec-knob-group">
+                <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div></div>
+                <div class="ec-label">AMT</div>
+              </div>
             </div>
             <div class="osc-display">
               <div class="osc-wave">
@@ -4196,46 +4361,8 @@ body {
           <option value="4">FM</option>
           <option value="5">NOISE</option>
         </select>
-        <select data-syn="SYN_OSC_A_WT_PRESET" id="syn-wt-select">
-          <optgroup label="Analog">
-            <option value="0">Prophet Saw</option>
-            <option value="1">Jupiter PWM</option>
-            <option value="2">Moog Sqr</option>
-            <option value="3">OB-X Saw</option>
-            <option value="4">CS-80 Brass</option>
-            <option value="5">Juno Str</option>
-          </optgroup>
-          <optgroup label="Digital">
-            <option value="6">PPG Wave</option>
-            <option value="7">DX7 EP</option>
-            <option value="8">D-50 Bell</option>
-            <option value="9">M1 Piano</option>
-          </optgroup>
-          <optgroup label="Vocal">
-            <option value="10">Choir A→O</option>
-            <option value="11">Whisper</option>
-            <option value="12">Vowel Morph</option>
-          </optgroup>
-          <optgroup label="Metallic">
-            <option value="13">Bowed Metal</option>
-            <option value="14">Glass Harmonics</option>
-            <option value="15">Railroad</option>
-          </optgroup>
-          <optgroup label="Experimental">
-            <option value="16">Dustbowl</option>
-            <option value="17">Static Evolve</option>
-            <option value="18">Spectral Drift</option>
-            <option value="19">Serum HD</option>
-          </optgroup>
-        </select>
-        <input type="range" min="0" max="1" step="0.001" value="0" data-syn="SYN_OSC_A_WT_FRAME" />
-        <select data-syn="SYN_OSC_A_WARP_MODE">
-          <option value="0">NONE</option>
-          <option value="1">BEND</option>
-          <option value="2">SYNC</option>
-          <option value="3">FORMANT</option>
-        </select>
-        <input type="range" min="0" max="1" step="0.001" value="0" data-syn="SYN_OSC_A_WARP_AMOUNT" />
+        <!-- SYN_OSC_A_WT_PRESET, SYN_OSC_A_WT_FRAME, SYN_OSC_A_WARP_MODE, SYN_OSC_A_WARP_AMOUNT
+             moved to visible locations (corner preset select + engine-controls row) in P4-T10 -->
         <input type="range" min="1" max="5000" step="1" value="5" data-syn="SYN_ENV_AMP_A" />
         <input type="range" min="1" max="5000" step="1" value="100" data-syn="SYN_ENV_AMP_D" />
         <input type="range" min="0" max="1" step="0.001" value="0.7" data-syn="SYN_ENV_AMP_S" />
@@ -7945,6 +8072,21 @@ setTimeout(function wireSynControls () {
         console.warn ('[SYN-engine] expected 6 .eng[data-eng-idx] pills, found', enginePills.length);
       }
     } catch (ePills) { console.warn ('[SYN-engine] OSC A pill wiring failed', ePills); }
+
+    // P4-T10: + swap button — toggles OSC A device between engine-pills and engine-controls.
+    try {
+      const swapBtn   = document.getElementById ('osc-a-swap-btn');
+      const oscADevice = document.getElementById ('osc-a-device');
+      if (swapBtn && oscADevice) {
+        swapBtn.addEventListener ('click', () => {
+          try {
+            oscADevice.classList.toggle ('swapped');
+            swapBtn.classList.toggle ('act');
+            swapBtn.textContent = oscADevice.classList.contains ('swapped') ? '←' : '+';
+          } catch (e) { console.warn ('[SYN-swap] toggle failed', e); }
+        });
+      }
+    } catch (eSwap) { console.warn ('[SYN-swap] init failed', eSwap); }
 
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
