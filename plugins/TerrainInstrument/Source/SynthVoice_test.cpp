@@ -63,6 +63,45 @@ public:
                 if ((L[i] >= 0.0f) != (L[i - 1] >= 0.0f)) ++zc;
             expect (zc >= 7 && zc <= 12, juce::String ("zero crossings ") + juce::String (zc));
         }
+
+        beginTest ("AMP ADSR: attack ramps RMS upward, release decays it");
+        {
+            tw::SynthVoice v;
+            v.setCurrentPlaybackSampleRate (48000.0);
+            // Long attack (50 ms) + long release (100 ms) so we can sample the curve.
+            v.setAmpEnvelopeParameters (50.0f, 1.0f, 1.0f, 100.0f);
+            tw::SynthSound s;
+            v.startNote (69, 1.0f, &s, 8192);
+
+            juce::AudioBuffer<float> early (2, 256);  // first ~5 ms (mid-attack)
+            juce::AudioBuffer<float> mid   (2, 256);  // after attack completes
+            early.clear(); mid.clear();
+            v.renderNextBlock (early, 0, 256);
+            // Skip forward 60 ms (2880 samples) to clear the attack.
+            juce::AudioBuffer<float> skip (2, 2880);
+            skip.clear();
+            v.renderNextBlock (skip, 0, 2880);
+            v.renderNextBlock (mid,  0, 256);
+
+            const float earlyRMS = early.getRMSLevel (0, 0, 256);
+            const float midRMS   = mid  .getRMSLevel (0, 0, 256);
+            expect (midRMS > earlyRMS * 1.5f,
+                    juce::String ("mid RMS (") + juce::String (midRMS)
+                    + ") should be substantially > early RMS (" + juce::String (earlyRMS) + ")");
+
+            // Release: stopNote with allowTailOff. RMS should drop after 50 ms.
+            v.stopNote (1.0f, true);
+            juce::AudioBuffer<float> postRelease (2, 256);
+            // Skip 50 ms of release time first.
+            juce::AudioBuffer<float> rel (2, 2400);
+            rel.clear(); postRelease.clear();
+            v.renderNextBlock (rel, 0, 2400);
+            v.renderNextBlock (postRelease, 0, 256);
+            const float releaseRMS = postRelease.getRMSLevel (0, 0, 256);
+            expect (releaseRMS < midRMS * 0.6f,
+                    juce::String ("release RMS (") + juce::String (releaseRMS)
+                    + ") should be < 60% of mid RMS (" + juce::String (midRMS) + ")");
+        }
     }
 };
 
