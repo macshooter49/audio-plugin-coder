@@ -899,6 +899,44 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
 
+    // ── Phase 11a — OSC A wavetable rework foundation ────────────────────
+    // SPECTRAL TYPE choice (1 option in 11a; "NONE")
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE, 1 },
+        "OSC A Spectral Type",
+        juce::StringArray { "NONE" },
+        0));
+    // SPECTRAL AMT (placeholder param — no DSP yet, persists for V1-fwd compat)
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT, 1 },
+        "OSC A Spectral Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    // FOLD SHAPE choice (1 option in 11a; "LINEAR")
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_FOLD_SHAPE, 1 },
+        "OSC A Fold Shape",
+        juce::StringArray { "LINEAR" },
+        0));
+    // FOLD AMT (placeholder param)
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_FOLD_AMT, 1 },
+        "OSC A Fold Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    // FRAME SPREAD (real DSP — drives per-sine wavetable position spread)
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, 1 },
+        "OSC A Frame Spread",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    // INTERP MODE choice (1 option in 11a; "LINEAR")
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_INTERP_MODE, 1 },
+        "OSC A Interp Mode",
+        juce::StringArray { "LINEAR" },
+        0));
+
     // ── Synth section — Phase 9 (OSC B chassis) ──────────────────────────
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_ENGINE, 1 },
@@ -946,6 +984,38 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
         "Synth OSC B Warp Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
+    // ── Phase 11a — OSC B wavetable rework foundation ────────────────────
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE, 1 },
+        "OSC B Spectral Type",
+        juce::StringArray { "NONE" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT, 1 },
+        "OSC B Spectral Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_FOLD_SHAPE, 1 },
+        "OSC B Fold Shape",
+        juce::StringArray { "LINEAR" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_FOLD_AMT, 1 },
+        "OSC B Fold Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_FRAME_SPREAD, 1 },
+        "OSC B Frame Spread",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_INTERP_MODE, 1 },
+        "OSC B Interp Mode",
+        juce::StringArray { "LINEAR" },
+        0));
 
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
     layout.add (std::make_unique<juce::AudioParameterInt> (
