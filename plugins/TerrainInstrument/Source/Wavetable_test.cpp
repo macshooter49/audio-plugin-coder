@@ -223,12 +223,13 @@ public:
             }
         }
 
-        beginTest ("makeSineSpec / makeTriangleSpec / makePulseSpec — all frames are non-empty and identical (basic shapes)");
+        beginTest ("makeSineSpec / makeTriangleSpec / makeSquareSpec / makePulseSpec — all frames are non-empty and identical (basic shapes)");
         {
             const auto sine     = tw::Wavetable::makeSineSpec();
             const auto triangle = tw::Wavetable::makeTriangleSpec();
+            const auto square   = tw::Wavetable::makeSquareSpec();
             const auto pulse    = tw::Wavetable::makePulseSpec();
-            for (const auto* sp : { &sine, &triangle, &pulse })
+            for (const auto* sp : { &sine, &triangle, &square, &pulse })
             {
                 expect (sp->frames[0].numHarmonics > 0);
                 // All 16 frames identical → basic shape.

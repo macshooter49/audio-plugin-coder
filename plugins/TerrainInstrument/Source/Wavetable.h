@@ -23,8 +23,10 @@ namespace tw
     /** Frequency-domain spec for a single wavetable frame.
      *  amplitudes[h-1] is the gain of the h-th harmonic (1-indexed mathematically,
      *  0-indexed in the array). phases[h-1] is its phase offset in radians.
-     *  numHarmonics is the count of populated harmonics; harmonics beyond
-     *  numHarmonics are ignored (must be zero in amplitudes for cleanness). */
+     *  numHarmonics is the highest harmonic INDEX with potentially non-zero amp
+     *  (i.e., buildFromSpec iterates h=1..numHarmonics inclusive). Skipped
+     *  harmonics within that range must have amplitudes[h-1] == 0 — the
+     *  reconstruction loop skips them via an amp==0 fast path. */
     struct FrameSpec
     {
         static constexpr int kMaxHarmonics = 256;
@@ -232,7 +234,9 @@ namespace tw
 
         /** Bandlimited 25% duty pulse: all harmonics, amplitude (2/πn)sin(πnd).
          *  Uses cosine phase (phase = π/2) so the additive sin sum acts as cos
-         *  — produces the conventional pulse shape, not its Hilbert dual. */
+         *  — produces the conventional pulse shape, not its Hilbert dual.
+         *  DC component (−0.5 for duty=0.25) is intentionally omitted; wavetable
+         *  oscillators must be zero-mean to avoid pop on startNote. */
         static WavetableSpec makePulseSpec()
         {
             WavetableSpec spec;
