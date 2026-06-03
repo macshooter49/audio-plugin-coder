@@ -912,11 +912,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // FOLD SHAPE choice (1 option in 11a; "LINEAR")
+    // FOLD SHAPE choice (Phase 11d: 3 shapes — Linear / Sine / Triangle)
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_FOLD_SHAPE, 1 },
         "OSC A Fold Shape",
-        juce::StringArray { "LINEAR" },
+        juce::StringArray { "Linear", "Sine", "Triangle" },
         0));
     // FOLD AMT (placeholder param)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -999,7 +999,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_FOLD_SHAPE, 1 },
         "OSC B Fold Shape",
-        juce::StringArray { "LINEAR" },
+        juce::StringArray { "Linear", "Sine", "Triangle" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_FOLD_AMT, 1 },
