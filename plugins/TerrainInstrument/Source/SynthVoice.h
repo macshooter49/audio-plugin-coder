@@ -211,6 +211,43 @@ namespace tw
             unisonPanOffset_   = juce::jlimit (-1.0f, 1.0f, panOffset);
         }
 
+        /** Phase 8b — Set UNISON config (count + spread) on this voice. Called
+         *  per-block from PluginProcessor broadcast. Computes per-sine detune
+         *  cents (max ±25 at spread=1.0) + equal-power pan L/R. */
+        void setUnison (int count, float spread01) noexcept
+        {
+            activeUnison_   = juce::jlimit (1, kMaxUnison, count);
+            unisonSpread01_ = juce::jlimit (0.0f, 1.0f, spread01);
+
+            // Compute per-sine detune cents + pan.
+            for (int u = 0; u < activeUnison_; ++u)
+            {
+                if (activeUnison_ <= 1)
+                {
+                    uDetuneCents_[(size_t) u] = 0.0f;
+                    uPanL_[(size_t) u] = 0.7071f;
+                    uPanR_[(size_t) u] = 0.7071f;
+                    continue;
+                }
+                // u_norm in [-1, +1] across the unison stack.
+                const float u_norm = ((float) u / (float) (activeUnison_ - 1)) * 2.0f - 1.0f;
+                uDetuneCents_[(size_t) u] = u_norm * unisonSpread01_ * 25.0f;
+                // Equal-power pan: angle in [0, π/2].
+                const float panAmt = u_norm * unisonSpread01_;       // -1..+1
+                const float angle  = (panAmt + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
+                uPanL_[(size_t) u] = std::cos (angle);
+                uPanR_[(size_t) u] = std::sin (angle);
+            }
+            // Zero out unused slots so render-loop summation is safe even if
+            // activeUnison_ changes mid-playback.
+            for (int u = activeUnison_; u < kMaxUnison; ++u)
+            {
+                uDetuneCents_[(size_t) u] = 0.0f;
+                uPanL_[(size_t) u] = 0.0f;
+                uPanR_[(size_t) u] = 0.0f;
+            }
+        }
+
         /** EROSION amount 0..1 (set per-block from APVTS SYN_EROSION/100). */
         void setErosionAmount (float a) noexcept { erosionAmount_ = juce::jlimit (0.0f, 1.0f, a); }
 
