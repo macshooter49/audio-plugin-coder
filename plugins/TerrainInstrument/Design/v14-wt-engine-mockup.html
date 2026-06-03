@@ -97,17 +97,33 @@
   .knob-label { font-size: 8px; letter-spacing: 1.2px; color: var(--text-secondary); font-weight: 300; text-transform: uppercase; }
   .knob-label.new { color: var(--purple-400); }
 
-  /* + button (swap to back) */
+  /* + button — top, next to OSC · A label (matches actual Terrain placement) */
   .swap-btn {
-    position: absolute; bottom: 8px; right: 12px;
-    width: 18px; height: 18px; border-radius: 4px;
+    position: absolute; top: 6px; left: 52px;
+    width: 14px; height: 14px; border-radius: 3px;
     background: transparent; border: 1px solid var(--border-strong);
     display: grid; place-items: center;
-    font-size: 11px; line-height: 1; color: var(--text-secondary); font-weight: 300;
+    font-size: 9px; line-height: 1; color: var(--text-secondary); font-weight: 300;
   }
   .swap-btn::before { content: '+'; transform: translateY(-1px); display: block; }
   .swap-btn.act::before { content: '\2190'; transform: translateY(0); }
   .swap-btn.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+
+  /* Back top row — 6 BLEND SLOT pills (letters, replaces engine-pills row on back only) */
+  .blend-pills { display: flex; gap: 5px; }
+  .blend-pill {
+    flex: 1; height: 28px;
+    border: 1px solid var(--border-strong); border-radius: 6px;
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; letter-spacing: 1.4px; font-weight: 300;
+    color: var(--text-primary);
+  }
+  .blend-pill.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+  .blend-pill .pill-amt {
+    font-size: 7px; color: var(--text-muted); margin-left: 4px; letter-spacing: 0.6px;
+  }
+  .blend-pill.act .pill-amt { color: rgba(255,255,255,0.7); }
 
   /* Legend table */
   .legend {
@@ -189,13 +205,13 @@
         <span class="preset-pos">12 / 256</span>
         <span>F1</span>
       </div>
-      <div class="engine-pills">
-        <div class="eng act">WT</div>
-        <div class="eng">FM</div>
-        <div class="eng">NS</div>
-        <div class="eng">SA</div>
-        <div class="eng">GR</div>
-        <div class="eng">SP</div>
+      <div class="blend-pills">
+        <div class="blend-pill act">B1<span class="pill-amt">+40</span></div>
+        <div class="blend-pill act">B2<span class="pill-amt">−25</span></div>
+        <div class="blend-pill">B3</div>
+        <div class="blend-pill">B4</div>
+        <div class="blend-pill">MIX</div>
+        <div class="blend-pill">MOD</div>
       </div>
       <div class="selector-pills">
         <div class="sel"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
@@ -284,13 +300,13 @@
         <span class="preset-pos">12 / 256</span>
         <span>F1</span>
       </div>
-      <div class="engine-pills">
-        <div class="eng act">WT</div>
-        <div class="eng">FM</div>
-        <div class="eng">NS</div>
-        <div class="eng">SA</div>
-        <div class="eng">GR</div>
-        <div class="eng">SP</div>
+      <div class="blend-pills">
+        <div class="blend-pill act">B1<span class="pill-amt">+40</span></div>
+        <div class="blend-pill act">B2<span class="pill-amt">−25</span></div>
+        <div class="blend-pill">B3</div>
+        <div class="blend-pill">B4</div>
+        <div class="blend-pill">MIX</div>
+        <div class="blend-pill">MOD</div>
       </div>
       <div class="selector-pills">
         <div class="sel"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
