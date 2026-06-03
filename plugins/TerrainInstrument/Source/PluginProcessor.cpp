@@ -950,7 +950,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_VOICES, 1 },
-        "Synth Voices", 1, 16, 8));
+        "Synth Voices", 1, 32, 8));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_UNISON, 1 },
         "Synth Unison", 1, 8, 1));
