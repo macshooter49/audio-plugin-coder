@@ -251,6 +251,16 @@ namespace tw
             updateUnisonFramePositions();
         }
 
+        /** Phase 11d — Set per-OSC FOLD shape + amount. Pushed per-block from
+         *  PluginProcessor broadcast. Applies in the unison loop, post engine compute. */
+        void setFold (int shapeA, float amountA, int shapeB, float amountB) noexcept
+        {
+            foldShapeA_  = juce::jlimit (0, 2, shapeA);
+            foldAmountA_ = juce::jlimit (0.0f, 1.0f, amountA);
+            foldShapeB_  = juce::jlimit (0, 2, shapeB);
+            foldAmountB_ = juce::jlimit (0.0f, 1.0f, amountB);
+        }
+
         /** EROSION amount 0..1 (set per-block from APVTS SYN_EROSION/100). */
         void setErosionAmount (float a) noexcept { erosionAmount_ = juce::jlimit (0.0f, 1.0f, a); }
 
@@ -557,6 +567,9 @@ namespace tw
                             sAu = 0.0f; break;
                     }
 
+                    // Phase 11d — FOLD applied per-sine, post-engine, pre-pan.
+                    sAu = applyFold (sAu, foldShapeA_, foldAmountA_);
+
                     // Per-sine pan into the OSC A stereo sum.
                     sumAL += sAu * uPanL_[(size_t) u];
                     sumAR += sAu * uPanR_[(size_t) u];
@@ -748,6 +761,9 @@ namespace tw
                             sBu = 0.0f; break;
                     }
 
+                    // Phase 11d — FOLD applied per-sine, post-engine, pre-pan.
+                    sBu = applyFold (sBu, foldShapeB_, foldAmountB_);
+
                     // Per-sine pan into the OSC B stereo sum.
                     sumBL += sBu * uPanL_[(size_t) u];
                     sumBR += sBu * uPanR_[(size_t) u];
@@ -889,6 +905,51 @@ namespace tw
             }
         }
 
+        // Phase 11d — wavefolder. 3 shapes, each output-bounded to ±1.
+        //   0 = Linear (Serge — triangle-wave fold, near-infinite odd harmonics)
+        //   1 = Sine   (Vital — sin(drive·x), bounded, bell character)
+        //   2 = Triangle (Buchla 259 — 3-stage cascade, warm West-Coast)
+        // amount in [0,1]; pre-gain is quadratic so the lower half of the knob
+        // ramps gently and the upper half drives hard.
+        static inline float applyFold (float x, int shape, float amount) noexcept
+        {
+            if (amount <= 1.0e-6f) return x;   // identity fast-path
+
+            switch (shape)
+            {
+                case 0:
+                {
+                    // Linear (Serge) — pre 1..10, closed-form triangle wave fold.
+                    const float pre    = 1.0f + amount * amount * 9.0f;
+                    const float driven = x * pre;
+                    const float q      = (driven + 1.0f) * 0.25f;
+                    return 4.0f * std::fabs (q - std::round (q)) - 1.0f;
+                }
+                case 1:
+                {
+                    // Sine (Vital) — pre 1..2π, sin(drive·x), bounded ±1.
+                    const float pre = 1.0f + amount * amount * 5.28318530f;
+                    return std::sin (x * pre);
+                }
+                case 2:
+                {
+                    // Triangle (Buchla 259) — 3-stage cascade.
+                    const float pre = 1.0f + amount * amount * 5.0f;
+                    const float driven = x * pre;
+                    auto linfold = [] (float v) -> float
+                    {
+                        const float q = (v + 1.0f) * 0.25f;
+                        return 4.0f * std::fabs (q - std::round (q)) - 1.0f;
+                    };
+                    const float s1 = linfold (driven * 1.0f)        * 0.50f;
+                    const float s2 = linfold (driven * 1.41421356f) * 0.35f;
+                    const float s3 = linfold (driven * 2.0f)        * 0.15f;
+                    return s1 + s2 + s3;
+                }
+                default: return x;
+            }
+        }
+
         // Standard PolyBLEP residual — subtract from the naive saw at the
         // discontinuity to suppress alias harmonics above Nyquist. Public
         // domain reference: Välimäki & Huovilainen, "Antialiasing Oscillators
@@ -989,6 +1050,12 @@ namespace tw
         // Phase 11a — SPREAD amount per OSC (0..1, pushed per-block from APVTS).
         float frameSpreadA01_ = 0.0f;
         float frameSpreadB01_ = 0.0f;
+
+        // Phase 11d — FOLD state (per OSC).
+        int   foldShapeA_   = 0;     // 0=Linear, 1=Sine, 2=Triangle
+        float foldAmountA_  = 0.0f;
+        int   foldShapeB_   = 0;
+        float foldAmountB_  = 0.0f;
 
         // Per-sine unison config (computed at setUnison / startNote).
         std::array<float,  kMaxUnison> uDetuneCents_  {};
