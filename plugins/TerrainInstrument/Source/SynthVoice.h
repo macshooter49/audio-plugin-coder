@@ -297,6 +297,11 @@ namespace tw
             updatePhaseIncrementFromMidi  (currentMidiNote_);
             updatePhaseIncrementBFromMidi (currentMidiNote_);
 
+            // Phase 10a — pick mip level for this block's pitch (auto-tracks
+            // EROSION, octave/semi/cents tuning, unison detune, and SR).
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (phaseIncrement_);
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (phaseIncrementB_);
+
             // Phase 8a — HORIZON: per-note tilt depending on midiNote and amount.
             // midiNote 60 = neutral; lower notes get high-shelf cut (warmer),
             // higher notes get high-shelf boost (airier).
@@ -349,7 +354,7 @@ namespace tw
                                 case 0:
                                 default: break;
                             }
-                            sA = currentWavetable_->lookup (framePos_, (float) warpedPhase);
+                            sA = currentWavetable_->lookup (currentMipLevelA_, framePos_, (float) warpedPhase);
                         }
                         else
                         {
@@ -434,7 +439,7 @@ namespace tw
                                 case 0:
                                 default: break;
                             }
-                            sB = currentWavetableB_->lookup (framePosB_, (float) warpedPhase);
+                            sB = currentWavetableB_->lookup (currentMipLevelB_, framePosB_, (float) warpedPhase);
                         }
                         else
                         {
@@ -669,6 +674,8 @@ namespace tw
         const tw::Wavetable* currentWavetableB_ = nullptr;
         float  framePosB_       = 0.0f;
         int    warpModeB_       = 0;
+        int currentMipLevelA_ = 0;   // Phase 10a — refreshed per block from phaseIncrement_
+        int currentMipLevelB_ = 0;   // Phase 10a — refreshed per block from phaseIncrementB_
         float  warpAmountB_     = 0.0f;
         double syncPhaseB_      = 0.0;
         Engine engineB_         = Engine::WT;
