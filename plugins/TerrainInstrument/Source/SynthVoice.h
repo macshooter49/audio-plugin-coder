@@ -90,6 +90,22 @@ namespace tw
             horizonShelfR_.reset();
             *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (sr, 2500.0f, 0.7071f, 1.0f);
             *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (sr, 2500.0f, 0.7071f, 1.0f);
+
+            // Phase 11c — SPECTRAL filter init (per OSC per channel)
+            spectralFilterAL_.prepare (monoSpec);
+            spectralFilterAR_.prepare (monoSpec);
+            spectralFilterBL_.prepare (monoSpec);
+            spectralFilterBR_.prepare (monoSpec);
+            spectralFilterAL_.reset();
+            spectralFilterAR_.reset();
+            spectralFilterBL_.reset();
+            spectralFilterBR_.reset();
+            // Initialize with safe passthrough (high-cutoff LP)
+            auto passthrough = juce::dsp::IIR::Coefficients<float>::makeLowPass (sr, 20000.0f, 0.707f);
+            *spectralFilterAL_.coefficients = *passthrough;
+            *spectralFilterAR_.coefficients = *passthrough;
+            *spectralFilterBL_.coefficients = *passthrough;
+            *spectralFilterBR_.coefficients = *passthrough;
         }
 
         /** Cutoff in Hz (20..20000), resonance 0..1. Called per block from
@@ -259,6 +275,22 @@ namespace tw
             foldAmountA_ = juce::jlimit (0.0f, 1.0f, amountA);
             foldShapeB_  = juce::jlimit (0, 2, shapeB);
             foldAmountB_ = juce::jlimit (0.0f, 1.0f, amountB);
+        }
+
+        /** Phase 11c — Set per-OSC SPECTRAL type + amount. Pushed per-block from
+         *  PluginProcessor broadcast. Updates biquad coefficients on the fly. */
+        void setSpectral (int typeA, float amtA, int typeB, float amtB) noexcept
+        {
+            spectralTypeA_ = juce::jlimit (0, 2, typeA);
+            spectralAmtA_  = juce::jlimit (0.0f, 1.0f, amtA);
+            spectralTypeB_ = juce::jlimit (0, 2, typeB);
+            spectralAmtB_  = juce::jlimit (0.0f, 1.0f, amtB);
+
+            spectralBypassA_ = (spectralAmtA_ < 1.0e-4f);
+            spectralBypassB_ = (spectralAmtB_ < 1.0e-4f);
+
+            updateSpectralCoefficients (spectralTypeA_, spectralAmtA_, spectralFilterAL_, spectralFilterAR_);
+            updateSpectralCoefficients (spectralTypeB_, spectralAmtB_, spectralFilterBL_, spectralFilterBR_);
         }
 
         /** EROSION amount 0..1 (set per-block from APVTS SYN_EROSION/100). */
@@ -582,8 +614,13 @@ namespace tw
                     sumAL *= invN;
                     sumAR *= invN;
                 }
-                const float sA_L = sumAL;
-                const float sA_R = sumAR;
+                float sA_L = sumAL;
+                float sA_R = sumAR;
+                if (! spectralBypassA_)
+                {
+                    sA_L = spectralFilterAL_.processSample (sA_L);
+                    sA_R = spectralFilterAR_.processSample (sA_R);
+                }
 
                 // ── OSC B — sum across activeUnison_ sines (Phase 8b) ─────
                 float sumBL = 0.0f, sumBR = 0.0f;
@@ -776,8 +813,13 @@ namespace tw
                     sumBL *= invN;
                     sumBR *= invN;
                 }
-                const float sB_L = sumBL;
-                const float sB_R = sumBR;
+                float sB_L = sumBL;
+                float sB_R = sumBR;
+                if (! spectralBypassB_)
+                {
+                    sB_L = spectralFilterBL_.processSample (sB_L);
+                    sB_R = spectralFilterBR_.processSample (sB_R);
+                }
 
                 const float env    = ampEnv_.getNextSample();
                 const float velEnv = currentVelocity_ * env;
@@ -950,6 +992,47 @@ namespace tw
             }
         }
 
+        // Phase 11c — compute biquad coefficients for one OSC's spectral filter.
+        // 3 modes: 0=LowPass (20k → 200 Hz quadratic), 1=HighPass (20 → 8000 Hz quadratic),
+        // 2=Smear (allpass, 4000 → 200 Hz quadratic, Q 0.707 → 4.0 linear).
+        void updateSpectralCoefficients (int type, float amount,
+                                          juce::dsp::IIR::Filter<float>& filterL,
+                                          juce::dsp::IIR::Filter<float>& filterR) noexcept
+        {
+            const float amtSq = amount * amount;
+            using Coeffs = juce::dsp::IIR::Coefficients<float>;
+
+            switch (type)
+            {
+                case 0:  // Low Pass
+                {
+                    const float cutoff = 200.0f + (1.0f - amtSq) * 19800.0f;
+                    auto c = Coeffs::makeLowPass (sampleRate_, cutoff, 0.707f);
+                    *filterL.coefficients = *c;
+                    *filterR.coefficients = *c;
+                    break;
+                }
+                case 1:  // High Pass
+                {
+                    const float cutoff = 20.0f + amtSq * 7980.0f;
+                    auto c = Coeffs::makeHighPass (sampleRate_, cutoff, 0.707f);
+                    *filterL.coefficients = *c;
+                    *filterR.coefficients = *c;
+                    break;
+                }
+                case 2:  // Smear (allpass with rising Q)
+                {
+                    const float cutoff = 200.0f + (1.0f - amtSq) * 3800.0f;
+                    const float Q      = 0.707f + amount * 3.293f;
+                    auto c = Coeffs::makeAllPass (sampleRate_, cutoff, Q);
+                    *filterL.coefficients = *c;
+                    *filterR.coefficients = *c;
+                    break;
+                }
+                default: break;
+            }
+        }
+
         // Standard PolyBLEP residual — subtract from the naive saw at the
         // discontinuity to suppress alias harmonics above Nyquist. Public
         // domain reference: Välimäki & Huovilainen, "Antialiasing Oscillators
@@ -1056,6 +1139,17 @@ namespace tw
         float foldAmountA_  = 0.0f;
         int   foldShapeB_   = 0;
         float foldAmountB_  = 0.0f;
+
+        // Phase 11c — SPECTRAL filter state (per OSC).
+        int   spectralTypeA_   = 0;     // 0=LP, 1=HP, 2=Smear
+        float spectralAmtA_    = 0.0f;
+        int   spectralTypeB_   = 0;
+        float spectralAmtB_    = 0.0f;
+        bool  spectralBypassA_ = true;  // optimization: skip processing when amount near zero
+        bool  spectralBypassB_ = true;
+
+        juce::dsp::IIR::Filter<float> spectralFilterAL_, spectralFilterAR_;
+        juce::dsp::IIR::Filter<float> spectralFilterBL_, spectralFilterBR_;
 
         // Per-sine unison config (computed at setUnison / startNote).
         std::array<float,  kMaxUnison> uDetuneCents_  {};
