@@ -1983,6 +1983,45 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP_AMOUNT),
         synOscBWarpAmountRelay, nullptr);
 
+    // Phase 11a — OSC A wavetable rework attachments
+    synOscASpectralTypeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE),
+        synOscASpectralTypeRelay, nullptr);
+    synOscASpectralAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_SPECTRAL_AMT),
+        synOscASpectralAmtRelay, nullptr);
+    synOscAFoldShapeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_FOLD_SHAPE),
+        synOscAFoldShapeRelay, nullptr);
+    synOscAFoldAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_FOLD_AMT),
+        synOscAFoldAmtRelay, nullptr);
+    synOscAFrameSpreadAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_FRAME_SPREAD),
+        synOscAFrameSpreadRelay, nullptr);
+    synOscAInterpModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_INTERP_MODE),
+        synOscAInterpModeRelay, nullptr);
+    // Phase 11a — OSC B wavetable rework attachments
+    synOscBSpectralTypeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE),
+        synOscBSpectralTypeRelay, nullptr);
+    synOscBSpectralAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_SPECTRAL_AMT),
+        synOscBSpectralAmtRelay, nullptr);
+    synOscBFoldShapeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_FOLD_SHAPE),
+        synOscBFoldShapeRelay, nullptr);
+    synOscBFoldAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_FOLD_AMT),
+        synOscBFoldAmtRelay, nullptr);
+    synOscBFrameSpreadAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_FRAME_SPREAD),
+        synOscBFrameSpreadRelay, nullptr);
+    synOscBInterpModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_INTERP_MODE),
+        synOscBInterpModeRelay, nullptr);
+
     // Synth section — Phase 8a (Voice settings + flagship features)
     synVoicesAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_VOICES),
