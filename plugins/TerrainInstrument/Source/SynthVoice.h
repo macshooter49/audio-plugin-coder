@@ -124,7 +124,7 @@ namespace tw
             semiOffset_  = semi;
             centsOffset_ = cent;
             if (playing_)
-                updatePhaseIncrementFromMidi (currentMidiNote_);
+                updateUnisonPhaseIncrementsA (currentMidiNote_);
         }
 
         /** Set which wavetable this voice reads from. Pointer is borrowed —
@@ -169,7 +169,7 @@ namespace tw
             semiOffsetB_  = semi;
             centsOffsetB_ = cent;
             if (playing_)
-                updatePhaseIncrementBFromMidi (currentMidiNote_);
+                updateUnisonPhaseIncrementsB (currentMidiNote_);
         }
 
         void setLevelB (float level) noexcept
@@ -251,15 +251,9 @@ namespace tw
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
             // OSC A resets
-            phase_           = 0.0;
-            modPhase_        = 0.0;      // Phase 3 — FM modulator reset
             noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
-            syncPhase_       = 0.0;      // Phase 2C SYNC reset (good hygiene)
             // OSC B resets (Phase 9)
-            phaseB_          = 0.0;
-            modPhaseB_       = 0.0;
             noiseLpZB_       = 0.0f;
-            syncPhaseB_      = 0.0;
 
             // Phase 8b — reset per-sine arrays for all kMaxUnison slots, with
             // per-sine random initial phase so unison voices don't all start
@@ -289,9 +283,7 @@ namespace tw
             erosionPhase_        = r2;                 // random initial phase
             currentErosionCents_ = 0.0f;
 
-            updatePhaseIncrementFromMidi (midiNote);
-            updatePhaseIncrementBFromMidi (midiNote);
-            // Phase 8b — populate per-sine increments too
+            // Phase 8b — populate per-sine increments
             updateUnisonPhaseIncrementsA (midiNote);
             updateUnisonPhaseIncrementsB (midiNote);
             playing_         = true;
@@ -345,17 +337,15 @@ namespace tw
                 erosionPhase_ += static_cast<float> (erosionRate_ * numSamples / sampleRate_);
                 if (erosionPhase_ >= 1.0f) erosionPhase_ -= std::floor (erosionPhase_);
             }
-            // Re-derive phaseIncrements with updated erosion drift
-            updatePhaseIncrementFromMidi  (currentMidiNote_);
-            updatePhaseIncrementBFromMidi (currentMidiNote_);
-            // Phase 8b — also re-derive per-sine increments (tracks EROSION + spread)
+            // Re-derive per-sine phase increments with updated erosion drift
             updateUnisonPhaseIncrementsA (currentMidiNote_);
             updateUnisonPhaseIncrementsB (currentMidiNote_);
 
-            // Phase 10a — pick mip level for this block's pitch (auto-tracks
-            // EROSION, octave/semi/cents tuning, unison detune, and SR).
-            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (phaseIncrement_);
-            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (phaseIncrementB_);
+            // Phase 10a / Phase 8b — pick mip level using sine 0 (centre-detuned,
+            // no spread offset) as the reference — ±25 cents of unison detune
+            // doesn't cross a mip boundary in practice.
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0]);
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0]);
 
             // Phase 8a — HORIZON: per-note tilt depending on midiNote and amount.
             // midiNote 60 = neutral; lower notes get high-shelf cut (warmer),
@@ -659,31 +649,6 @@ namespace tw
         }
 
     private:
-        void updatePhaseIncrementFromMidi (int midiNote) noexcept
-        {
-            const double semitones =
-                  static_cast<double> (midiNote - 69)
-                + static_cast<double> (octOffset_) * 12.0
-                + static_cast<double> (semiOffset_)
-                + static_cast<double> (centsOffset_)         * 0.01
-                + static_cast<double> (currentErosionCents_) * 0.01;
-            const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
-            phaseIncrement_ = hz / sampleRate_;
-        }
-
-        // Phase 9 — OSC B phase increment helper
-        void updatePhaseIncrementBFromMidi (int midiNote) noexcept
-        {
-            const double semitones =
-                  static_cast<double> (midiNote - 69)
-                + static_cast<double> (octOffsetB_) * 12.0
-                + static_cast<double> (semiOffsetB_)
-                + static_cast<double> (centsOffsetB_)        * 0.01
-                + static_cast<double> (currentErosionCents_) * 0.01;
-            const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
-            phaseIncrementB_ = hz / sampleRate_;
-        }
-
         // Phase 8b — populate per-sine phase-increment update helpers to SynthVoice. They populate the `uPhaseIncA_` / `uPhaseIncB_` arrays from MIDI note + octave/semi/cents tuning + per-sine `uDetuneCents_[u]` + EROSION drift. Called from `startNote` after the existing scalar updates, and from `renderNextBlock` per-block right after the existing erosion-drift recompute.
         void updateUnisonPhaseIncrementsA (int midiNote) noexcept
         {
@@ -737,8 +702,6 @@ namespace tw
         }
 
         double sampleRate_      = 48000.0;
-        double phase_           = 0.0;
-        double phaseIncrement_  = 0.0;
         int    currentMidiNote_ = 60;
         float  currentVelocity_ = 1.0f;
         bool   playing_         = false;
@@ -762,7 +725,6 @@ namespace tw
         // Phase 2C — Warp state.
         int                  warpMode_         = 0;     // 0=NONE,1=BEND,2=SYNC,3=FORMANT
         float                warpAmount_       = 0.0f;  // 0..1
-        double               syncPhase_        = 0.0;   // virtual slave-oscillator phase for SYNC mode
 
         // Phase 3 — Engine choice.
         Engine               engine_           = Engine::WT;
@@ -777,15 +739,7 @@ namespace tw
                                          reinterpret_cast<std::uintptr_t> (this));
         float         noiseLpZ_    = 0.0f;
 
-        // Phase 3 — FM engine state.
-        // Modulator phase (carrier reuses phase_ from the WT path; both run
-        // at multiples of phaseIncrement_ each sample). modRatio_ resolved
-        // from FRAME in the render loop; modDepth_ resolved from WARP AMT.
-        double modPhase_ = 0.0;
-
         // ── Phase 9 — OSC B state (mirror of OSC A, B suffix on each) ────
-        double phaseB_          = 0.0;
-        double phaseIncrementB_ = 0.0;
         float  levelB_          = 0.5f;      // default lower than A so they sum tastefully
         float  panLB_           = 0.7071f;   // cos(pi/4) — center
         float  panRB_           = 0.7071f;   // sin(pi/4) — center
@@ -795,10 +749,9 @@ namespace tw
         const tw::Wavetable* currentWavetableB_ = nullptr;
         float  framePosB_       = 0.0f;
         int    warpModeB_       = 0;
-        int currentMipLevelA_ = 0;   // Phase 10a — refreshed per block from phaseIncrement_
-        int currentMipLevelB_ = 0;   // Phase 10a — refreshed per block from phaseIncrementB_
+        int currentMipLevelA_ = 0;   // Phase 10a — refreshed per block from uPhaseIncA_[0]
+        int currentMipLevelB_ = 0;   // Phase 10a — refreshed per block from uPhaseIncB_[0]
         float  warpAmountB_     = 0.0f;
-        double syncPhaseB_      = 0.0;
         Engine engineB_         = Engine::WT;
         // xorshift32 PRNG for OSC B — seeded with sqrt(2) fractional constant
         // (0x6A09E667) XOR'd with this pointer so OSC B has a decorrelated noise
@@ -807,7 +760,6 @@ namespace tw
                                    ^ static_cast<std::uint32_t> (
                                          reinterpret_cast<std::uintptr_t> (this));
         float  noiseLpZB_       = 0.0f;
-        double modPhaseB_       = 0.0;
 
         // ── Phase 8b — Unison-in-voice state (per-sine arrays) ──────────
         // Each unison sub-voice u in [0, activeUnison_) has its own pitch state.
