@@ -3305,25 +3305,25 @@ body {
 }
 
 /* Phase 11a — selector-pills (back middle row).
-   EXACT clone of .osc-display footprint: same flex:1, same min-height,
-   same border + background visuals. Internally hosts 4 dropdown .sel pills
-   that split the row horizontally. Flipping front↔back leaves this region
-   pixel-identical — only the content changes (waveform SVG ↔ 4 selectors). */
+   Container takes the .osc-display footprint (same flex:1 + min-height),
+   but stays TRANSPARENT (no bg, no border) so the 4 .sel children's own
+   borders are the only visual rectangles. Avoids the container-bg vs
+   sel-border overlap. The 4 sel pills appear as buttons in the same
+   pixel band the visualizer occupies on the front. */
 #syn-panel .selector-pills {
   display: flex; gap: 6px; flex: 1; min-height: 28px;
-  background: var(--bg-hero); border: 1px solid var(--border);
-  border-radius: 8px; padding: 4px;
   box-sizing: border-box;
 }
 #syn-panel .sel {
   flex: 1;
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: rgba(80, 70, 110, 0.18);
+  border-radius: 6px;
+  background: var(--bg-hero);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 3px;
   position: relative;
+  overflow: hidden;
 }
 #syn-panel .sel-label {
   color: var(--text-muted);
