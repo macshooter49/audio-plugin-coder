@@ -417,7 +417,10 @@ namespace tw
                                     case 0:
                                     default: break;
                                 }
-                                sAu = currentWavetable_->lookup (currentMipLevelA_, framePos_, (float) warpedPhase);
+                                // Phase 11a — per-sine frame spread (wraps to [0,1] before lookup).
+                                float fp = framePos_ + uFramePosA_[(size_t) u];
+                                fp -= std::floor (fp);   // wrap to [0,1)
+                                sAu = currentWavetable_->lookup (currentMipLevelA_, fp, (float) warpedPhase);
                             }
                             else
                             {
@@ -528,7 +531,10 @@ namespace tw
                                     case 0:
                                     default: break;
                                 }
-                                sBu = currentWavetableB_->lookup (currentMipLevelB_, framePosB_, (float) warpedPhase);
+                                // Phase 11a — per-sine frame spread (wraps to [0,1] before lookup).
+                                float fp = framePosB_ + uFramePosB_[(size_t) u];
+                                fp -= std::floor (fp);   // wrap to [0,1)
+                                sBu = currentWavetableB_->lookup (currentMipLevelB_, fp, (float) warpedPhase);
                             }
                             else
                             {
