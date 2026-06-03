@@ -1702,6 +1702,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   foldShapeB  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FOLD_SHAPE);
         const float foldAmtB    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FOLD_AMT);
 
+        // Phase 11c — SPECTRAL per OSC.
+        const int   spectralTypeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE);
+        const float spectralAmtA  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SPECTRAL_AMT);
+        const int   spectralTypeB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE);
+        const float spectralAmtB  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SPECTRAL_AMT);
+
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
         const int voiceCap = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_VOICES);
@@ -1713,6 +1719,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 tv->setUnison (unisonCount, unisonSpread01);
                 tv->setFrameSpread (frameSpreadA, frameSpreadB);   // Phase 11a
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
+                tv->setSpectral (spectralTypeA, spectralAmtA, spectralTypeB, spectralAmtB);   // Phase 11c
             }
         }
 
