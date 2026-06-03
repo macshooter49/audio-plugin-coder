@@ -3,6 +3,7 @@
 #include "WavetableBank.h"
 #include <juce_core/juce_core.h>
 #include <cmath>
+#include <array>
 
 class WavetableTests : public juce::UnitTest
 {
@@ -334,6 +335,48 @@ public:
                     sumSq += std::pow (wt->lookup (0, 0.5f, (float) i / 2048.0f), 2.0f);
                 const float rms = std::sqrt (sumSq / 2048.0f);
                 expect (rms > 0.03f, juce::String ("preset ") + juce::String (p) + " RMS=" + juce::String (rms));
+            }
+        }
+
+        beginTest ("Anti-aliasing: Square at C7 mip-5 contains only ≤8 harmonics");
+        {
+            tw::Wavetable wt;
+            wt.buildFromSpec (tw::Wavetable::makeSquareSpec());
+            // C7 ~ 2093 Hz at 48 kHz → phaseInc ~ 0.0436 → mip-5 (8 harmonics).
+            const double phaseIncC7 = 2093.0 / 48000.0;
+            const int lvl = tw::Wavetable::mipLevelForPhaseIncrement (phaseIncC7);
+            expectEquals (lvl, 5);
+
+            // Quick DFT: read one cycle and find magnitude at each harmonic bin.
+            constexpr int N = 2048;
+            std::array<float, N> waveform;
+            for (int i = 0; i < N; ++i)
+                waveform[(size_t) i] = wt.lookup (lvl, 0.5f, (float) i / (float) N);
+
+            // Check harmonics 9, 11, 13 (odd, beyond our mip-5 cap of 8) are silent.
+            constexpr double pi2 = 2.0 * 3.14159265358979323846;
+            for (int h : { 9, 11, 13, 15 })
+            {
+                double mag = 0.0;
+                for (int i = 0; i < N; ++i)
+                {
+                    const double phase = pi2 * (double) h * (double) i / (double) N;
+                    mag += waveform[(size_t) i] * std::sin (phase);
+                }
+                mag = std::abs (mag) * 2.0 / (double) N;
+                expect (mag < 1.0e-3, juce::String ("harmonic ") + juce::String (h) + " mag=" + juce::String ((float) mag));
+            }
+
+            // And harmonic 7 (within mip-5 cap) should be non-trivially present.
+            {
+                double mag = 0.0;
+                for (int i = 0; i < N; ++i)
+                {
+                    const double phase = pi2 * 7.0 * (double) i / (double) N;
+                    mag += waveform[(size_t) i] * std::sin (phase);
+                }
+                mag = std::abs (mag) * 2.0 / (double) N;
+                expect (mag > 0.01, juce::String ("harmonic 7 mag=") + juce::String ((float) mag));
             }
         }
     }
