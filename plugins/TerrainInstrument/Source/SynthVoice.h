@@ -381,90 +381,116 @@ namespace tw
 
             for (int i = 0; i < numSamples; ++i)
             {
-                // ── OSC A sample ─────────────────────────────────────────
-                float sA = 0.0f;
+                // ── OSC A — sum across activeUnison_ sines (Phase 8b) ─────
+                float sumAL = 0.0f, sumAR = 0.0f;
 
-                switch (engine_)
+                for (int u = 0; u < activeUnison_; ++u)
                 {
-                    case Engine::WT:
+                    float sAu = 0.0f;
+
+                    switch (engine_)
                     {
-                        if (currentWavetable_ != nullptr)
+                        case Engine::WT:
                         {
-                            double warpedPhase = phase_;
-                            switch (warpMode_)
+                            if (currentWavetable_ != nullptr)
                             {
-                                case 1:  // BEND
+                                double warpedPhase = uPhaseA_[(size_t) u];
+                                switch (warpMode_)
                                 {
-                                    const double pi2 = 2.0 * 3.14159265358979323846;
-                                    warpedPhase = phase_ + (double) warpAmount_ * 0.5 * std::sin (pi2 * phase_);
-                                    warpedPhase -= std::floor (warpedPhase);
-                                    break;
+                                    case 1:  // BEND
+                                    {
+                                        const double pi2 = 2.0 * 3.14159265358979323846;
+                                        warpedPhase = uPhaseA_[(size_t) u]
+                                                    + (double) warpAmount_ * 0.5 * std::sin (pi2 * uPhaseA_[(size_t) u]);
+                                        warpedPhase -= std::floor (warpedPhase);
+                                        break;
+                                    }
+                                    case 2:  // SYNC
+                                    {
+                                        const double syncRatio = 1.0 + (double) warpAmount_ * 4.0;
+                                        uSyncPhaseA_[(size_t) u] += uPhaseIncA_[(size_t) u] * syncRatio;
+                                        if (uPhaseA_[(size_t) u] < uPhaseIncA_[(size_t) u]) uSyncPhaseA_[(size_t) u] = 0.0;
+                                        if (uSyncPhaseA_[(size_t) u] >= 1.0) uSyncPhaseA_[(size_t) u] -= std::floor (uSyncPhaseA_[(size_t) u]);
+                                        warpedPhase = uSyncPhaseA_[(size_t) u];
+                                        break;
+                                    }
+                                    case 3:  // FORMANT
+                                    {
+                                        warpedPhase = uPhaseA_[(size_t) u] * (1.0 + (double) warpAmount_ * 2.0);
+                                        warpedPhase -= std::floor (warpedPhase);
+                                        break;
+                                    }
+                                    case 0:
+                                    default: break;
                                 }
-                                case 2:  // SYNC
-                                {
-                                    const double syncRatio = 1.0 + (double) warpAmount_ * 4.0;
-                                    syncPhase_ += phaseIncrement_ * syncRatio;
-                                    if (phase_ < phaseIncrement_) syncPhase_ = 0.0;
-                                    if (syncPhase_ >= 1.0) syncPhase_ -= std::floor (syncPhase_);
-                                    warpedPhase = syncPhase_;
-                                    break;
-                                }
-                                case 3:  // FORMANT
-                                {
-                                    warpedPhase = phase_ * (1.0 + (double) warpAmount_ * 2.0);
-                                    warpedPhase -= std::floor (warpedPhase);
-                                    break;
-                                }
-                                case 0:
-                                default: break;
+                                sAu = currentWavetable_->lookup (currentMipLevelA_, framePos_, (float) warpedPhase);
                             }
-                            sA = currentWavetable_->lookup (currentMipLevelA_, framePos_, (float) warpedPhase);
+                            else
+                            {
+                                sAu = static_cast<float> (2.0 * uPhaseA_[(size_t) u] - 1.0);
+                                sAu -= static_cast<float> (polyBlep (uPhaseA_[(size_t) u], uPhaseIncA_[(size_t) u]));
+                            }
+                            uPhaseA_[(size_t) u] += uPhaseIncA_[(size_t) u];
+                            if (uPhaseA_[(size_t) u] >= 1.0) uPhaseA_[(size_t) u] -= 1.0;
+                            break;
                         }
-                        else
+
+                        case Engine::NOISE:
                         {
-                            sA = static_cast<float> (2.0 * phase_ - 1.0);
-                            sA -= static_cast<float> (polyBlep (phase_, phaseIncrement_));
+                            // Noise is a single stream per voice — all unison sines hear the
+                            // same noise sample. Compute PRNG + LP filter once at u==0,
+                            // then broadcast the same noiseLpZ_ to all sines.
+                            if (u == 0)
+                            {
+                                noiseState_ ^= noiseState_ << 13;
+                                noiseState_ ^= noiseState_ >> 17;
+                                noiseState_ ^= noiseState_ << 5;
+                                const float white = static_cast<float> (static_cast<int32_t> (noiseState_))
+                                                  * (1.0f / 2147483648.0f);
+                                const float alpha = 1.0f - 0.98f * framePos_;
+                                noiseLpZ_ += alpha * (white - noiseLpZ_);
+                            }
+                            const float drive = 1.0f + 8.0f * warpAmount_;
+                            sAu = std::tanh (noiseLpZ_ * drive);
+                            sAu *= 1.0f + 0.5f * framePos_;
+                            break;
                         }
-                        phase_ += phaseIncrement_;
-                        if (phase_ >= 1.0) phase_ -= 1.0;
-                        break;
+
+                        case Engine::FM:
+                        {
+                            const double ratio  = 0.25 + std::pow (32.0, (double) framePos_) * 0.234375;
+                            const double modInc = uPhaseIncA_[(size_t) u] * ratio;
+                            const double depth  = (double) warpAmount_ * 6.2831853071795865;
+                            const double pi2    = 6.2831853071795865;
+                            const double modOut = std::sin (pi2 * uModPhaseA_[(size_t) u]);
+                            sAu = static_cast<float> (std::sin (pi2 * uPhaseA_[(size_t) u] + depth * modOut));
+                            uModPhaseA_[(size_t) u] += modInc;
+                            if (uModPhaseA_[(size_t) u] >= 1.0) uModPhaseA_[(size_t) u] -= std::floor (uModPhaseA_[(size_t) u]);
+                            uPhaseA_[(size_t) u] += uPhaseIncA_[(size_t) u];
+                            if (uPhaseA_[(size_t) u] >= 1.0) uPhaseA_[(size_t) u] -= 1.0;
+                            break;
+                        }
+
+                        case Engine::SAMP:
+                        case Engine::GRAN:
+                        case Engine::SPEC:
+                            sAu = 0.0f; break;
                     }
 
-                    case Engine::NOISE:
-                    {
-                        noiseState_ ^= noiseState_ << 13;
-                        noiseState_ ^= noiseState_ >> 17;
-                        noiseState_ ^= noiseState_ << 5;
-                        const float white = static_cast<float> (static_cast<int32_t> (noiseState_))
-                                          * (1.0f / 2147483648.0f);
-                        const float alpha = 1.0f - 0.98f * framePos_;
-                        noiseLpZ_ += alpha * (white - noiseLpZ_);
-                        const float drive = 1.0f + 8.0f * warpAmount_;
-                        sA = std::tanh (noiseLpZ_ * drive);
-                        sA *= 1.0f + 0.5f * framePos_;
-                        break;
-                    }
-
-                    case Engine::FM:
-                    {
-                        const double ratio  = 0.25 + std::pow (32.0, (double) framePos_) * 0.234375;
-                        const double modInc = phaseIncrement_ * ratio;
-                        const double depth  = (double) warpAmount_ * 6.2831853071795865;
-                        const double pi2    = 6.2831853071795865;
-                        const double modOut = std::sin (pi2 * modPhase_);
-                        sA = static_cast<float> (std::sin (pi2 * phase_ + depth * modOut));
-                        modPhase_ += modInc;
-                        if (modPhase_ >= 1.0) modPhase_ -= std::floor (modPhase_);
-                        phase_    += phaseIncrement_;
-                        if (phase_ >= 1.0) phase_ -= 1.0;
-                        break;
-                    }
-
-                    case Engine::SAMP:
-                    case Engine::GRAN:
-                    case Engine::SPEC:
-                        sA = 0.0f; break;
+                    // Per-sine pan into the OSC A stereo sum.
+                    sumAL += sAu * uPanL_[(size_t) u];
+                    sumAR += sAu * uPanR_[(size_t) u];
                 }
+
+                // Average across active sines (preserves perceived loudness as UNISON grows).
+                if (activeUnison_ > 1)
+                {
+                    const float invN = 1.0f / (float) activeUnison_;
+                    sumAL *= invN;
+                    sumAR *= invN;
+                }
+                const float sA_L = sumAL;
+                const float sA_R = sumAR;
 
                 // ── OSC B sample (Phase 9 — mirror of OSC A, all _B vars) ─
                 float sB = 0.0f;
@@ -555,8 +581,8 @@ namespace tw
                 const float velEnv = currentVelocity_ * env;
 
                 // Sum to stereo with INDEPENDENT per-osc level + pan
-                scratchL[i] = (sA * level_ * panL_ + sB * levelB_ * panLB_) * velEnv;
-                scratchR[i] = (sA * level_ * panR_ + sB * levelB_ * panRB_) * velEnv;
+                scratchL[i] = (sA_L * level_ * panL_ + sB * levelB_ * panLB_) * velEnv;
+                scratchR[i] = (sA_R * level_ * panR_ + sB * levelB_ * panRB_) * velEnv;
             }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
