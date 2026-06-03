@@ -3306,29 +3306,30 @@ body {
 }
 
 /* Phase 11a — selector-pills (back middle row, 4 type selectors:
-   WARP / SPECTRAL / FOLD / INTERP) — edge-to-edge alignment with blend-pills above */
+   WARP / SPECTRAL / FOLD / INTERP) — flex:1 mirrors .osc-display on the front,
+   so back-view tuning knobs land at the SAME Y as front-view tuning knobs. */
 #syn-panel .selector-pills {
-  display: flex; gap: 6px;
+  display: flex; gap: 8px; flex: 1; min-height: 0;
 }
 #syn-panel .sel {
-  flex: 1; height: 30px;
+  flex: 1;
   border: 1px solid rgba(140,130,180,0.45);
-  border-radius: 4px;
+  border-radius: 5px;
   background: rgba(80, 70, 110, 0.20);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 1px;
+  gap: 3px;
   position: relative;
 }
 #syn-panel .sel-label {
   color: var(--text-muted, #908599);
-  font-size: 6px; letter-spacing: 1.1px;
+  font-size: 7px; letter-spacing: 1.2px;
   text-transform: uppercase; font-weight: 300;
   line-height: 1;
 }
 #syn-panel .sel-value {
   color: var(--text-primary, #ECE8F2);
-  font-size: 9px; letter-spacing: 0.4px; font-weight: 300;
+  font-size: 10px; letter-spacing: 0.4px; font-weight: 300;
   line-height: 1;
 }
 /* The <select> overlays the sel, transparent, takes the clicks */
@@ -4203,7 +4204,7 @@ body {
               </select>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
-            <div class="front-only" style="flex-direction: column; gap: 5px; flex: 1;">
+            <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
               <!-- engine pills row (unchanged) -->
               <div class="engine-pills">
                 <div class="eng act" data-eng-idx="0"><svg><use href="#ic-wt"/></svg></div>
@@ -4232,7 +4233,7 @@ body {
             </div>
 
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
-            <div class="back-only" style="flex-direction: column; gap: 5px; flex: 1;">
+            <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
               <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
               <div class="blend-pills">
                 <div class="blend-pill">B1</div>
@@ -4351,7 +4352,7 @@ body {
               </select>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
-            <div class="front-only" style="flex-direction: column; gap: 5px; flex: 1;">
+            <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
               <!-- engine pills row (text style, data-eng-b-idx to avoid OSC A handler collision) -->
               <div class="engine-pills">
                 <div class="eng txt act" data-eng-b-idx="0">WT</div>
@@ -4380,7 +4381,7 @@ body {
             </div>
 
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
-            <div class="back-only" style="flex-direction: column; gap: 5px; flex: 1;">
+            <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
               <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
               <div class="blend-pills">
                 <div class="blend-pill">B1</div>
