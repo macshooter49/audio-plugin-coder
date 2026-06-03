@@ -30,98 +30,99 @@
   .lead { color: var(--text-primary); font-weight: 300; }
   .caption { font-size: 11px; color: var(--text-muted); letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 6px; font-weight: 300; }
 
-  .device-pair { display: grid; grid-template-columns: 358px 358px; gap: 20px; align-items: start; }
+  .device-pair { display: grid; grid-template-columns: 284px 284px; gap: 20px; align-items: start; }
   .device-shell { display: flex; flex-direction: column; gap: 8px; }
   .device-state { font-size: 9px; letter-spacing: 1.8px; color: var(--purple-400); text-transform: uppercase; font-weight: 300; }
 
   /* ===== Device — copy of v12 styles ===== */
+  /* Sized to match actual Terrain proportions (~280px wide, smaller text overall) */
   .device {
     background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: 13px; padding: 10px 14px; position: relative; overflow: hidden;
-    width: 330px; height: 220px;
+    border-radius: 11px; padding: 8px 12px; position: relative; overflow: hidden;
+    width: 256px; height: 180px;
   }
   .device-label {
-    position: absolute; top: 9px; left: 14px;
-    font-size: 9px; font-weight: 300; letter-spacing: 2px;
+    position: absolute; top: 7px; left: 12px;
+    font-size: 7px; font-weight: 300; letter-spacing: 1.8px;
     color: var(--text-secondary); text-transform: uppercase;
   }
   .device-corner {
-    position: absolute; top: 9px; right: 14px;
-    font-size: 9px; color: var(--text-secondary); letter-spacing: 1.4px; font-weight: 200;
-    display: flex; align-items: center; gap: 8px;
+    position: absolute; top: 7px; right: 12px;
+    font-size: 7px; color: var(--text-secondary); letter-spacing: 1.2px; font-weight: 200;
+    display: flex; align-items: center; gap: 6px;
   }
   .device-corner .preset-name { color: var(--text-primary); }
   .device-corner .preset-pos { color: var(--text-muted); }
 
-  .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; height: 100%; box-sizing: border-box; }
+  .osc { display: flex; flex-direction: column; gap: 5px; padding-top: 18px; height: 100%; box-sizing: border-box; }
 
-  .engine-pills { display: flex; gap: 5px; }
+  .engine-pills { display: flex; gap: 4px; }
   .eng {
-    flex: 1; height: 28px; border: 1px solid var(--border-strong); border-radius: 6px;
+    flex: 1; height: 22px; border: 1px solid var(--border-strong); border-radius: 4px;
     display: flex; align-items: center; justify-content: center;
-    color: var(--text-primary); font-size: 9px; letter-spacing: 1.2px; font-weight: 300;
+    color: var(--text-primary); font-size: 7px; letter-spacing: 1.0px; font-weight: 300;
   }
   .eng.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
 
   /* The visualizer area — front view shows wave; back view shows selector row */
   .osc-display {
-    background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 6px;
-    height: 48px; position: relative; padding: 0;
+    background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 5px;
+    height: 38px; position: relative; padding: 0;
   }
   .osc-wave { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
   .osc-wave svg { width: 92%; height: 78%; }
 
   /* Back-view selector pills — sibling of engine-pills row, EDGE-TO-EDGE aligned */
-  .selector-pills { display: flex; gap: 5px; }
+  .selector-pills { display: flex; gap: 4px; }
   .sel {
-    flex: 1; height: 48px;
-    border: 1px solid var(--border-strong); border-radius: 6px;
+    flex: 1; height: 38px;
+    border: 1px solid var(--border-strong); border-radius: 5px;
     background: rgba(80, 70, 110, 0.20);   /* low-opacity dark block */
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 3px;
+    gap: 2px;
   }
-  .sel-label { color: var(--text-muted); font-size: 7px; letter-spacing: 1.3px; text-transform: uppercase; font-weight: 300; }
-  .sel-value { color: var(--text-primary); font-size: 10px; letter-spacing: 0.6px; font-weight: 300; }
+  .sel-label { color: var(--text-muted); font-size: 6px; letter-spacing: 1.1px; text-transform: uppercase; font-weight: 300; }
+  .sel-value { color: var(--text-primary); font-size: 8px; letter-spacing: 0.4px; font-weight: 300; }
 
   /* Knob row */
-  .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
-  .knob { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; align-items: center; }
+  .knob { display: flex; flex-direction: column; align-items: center; gap: 3px; }
   .knob-ring {
-    width: 26px; height: 26px; border-radius: 50%;
+    width: 22px; height: 22px; border-radius: 50%;
     background: conic-gradient(from 225deg, var(--purple-500) 0deg 130deg, var(--knob-track) 130deg 270deg, transparent 270deg);
     position: relative;
   }
   .knob-ring::after {
-    content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--bg-card);
+    content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--bg-card);
   }
-  .knob-label { font-size: 8px; letter-spacing: 1.2px; color: var(--text-secondary); font-weight: 300; text-transform: uppercase; }
+  .knob-label { font-size: 7px; letter-spacing: 1.0px; color: var(--text-secondary); font-weight: 300; text-transform: uppercase; }
   .knob-label.new { color: var(--purple-400); }
 
   /* + button — top, next to OSC · A label (matches actual Terrain placement) */
   .swap-btn {
-    position: absolute; top: 6px; left: 52px;
-    width: 14px; height: 14px; border-radius: 3px;
+    position: absolute; top: 5px; left: 42px;
+    width: 11px; height: 11px; border-radius: 2px;
     background: transparent; border: 1px solid var(--border-strong);
     display: grid; place-items: center;
-    font-size: 9px; line-height: 1; color: var(--text-secondary); font-weight: 300;
+    font-size: 8px; line-height: 1; color: var(--text-secondary); font-weight: 300;
   }
   .swap-btn::before { content: '+'; transform: translateY(-1px); display: block; }
   .swap-btn.act::before { content: '\2190'; transform: translateY(0); }
   .swap-btn.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
 
-  /* Back top row — 6 BLEND SLOT pills (letters, replaces engine-pills row on back only) */
-  .blend-pills { display: flex; gap: 5px; }
+  /* Back top row — 6 BLEND SLOT pills (letters, same size as engine pills) */
+  .blend-pills { display: flex; gap: 4px; }
   .blend-pill {
-    flex: 1; height: 28px;
-    border: 1px solid var(--border-strong); border-radius: 6px;
+    flex: 1; height: 22px;
+    border: 1px solid var(--border-strong); border-radius: 4px;
     background: transparent;
     display: flex; align-items: center; justify-content: center;
-    font-size: 9px; letter-spacing: 1.4px; font-weight: 300;
+    font-size: 7px; letter-spacing: 1.0px; font-weight: 300;
     color: var(--text-primary);
   }
   .blend-pill.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
   .blend-pill .pill-amt {
-    font-size: 7px; color: var(--text-muted); margin-left: 4px; letter-spacing: 0.6px;
+    font-size: 5px; color: var(--text-muted); margin-left: 3px; letter-spacing: 0.4px;
   }
   .blend-pill.act .pill-amt { color: rgba(255,255,255,0.7); }
 

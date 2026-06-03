@@ -80,7 +80,22 @@ Each oscillator has its own `SYN_OSC_X_FRAME_SPREAD` so OSC A can sit tight whil
 
 The param `SYN_OSC_A_WT_FRAME` stays — V1 presets load. Only the UI label changes. DAW automation still finds it under its original APVTS path.
 
-### Decision 6: Each SPECTRAL/FOLD mode added in 11c/d gets its own research-before-implement round
+### Decision 6: Back panel TOP ROW = 6 BLEND SLOT pills (B1 / B2 / B3 / B4 / MIX / MOD) — UI-ONLY this phase
+
+User-locked 2026-06-03 afternoon. Replaces what would have been a duplicate engine-pills row on the back. The 6 pills are LETTERS not emblems (per user explicit). Each pill is a future blend slot for cross-parameter modulation routing — the "Terrain inline blender" that Phase 11f wires to real DSP.
+
+**Phase 11a scope: UI shell only.**
+- HTML/CSS for 6 pills in a flex row, same height as front engine pills (28px), edge-to-edge with the selector row below
+- Active state = purple background + white letters, optional tiny "+40" / "−25" suffix to indicate active route amount
+- Empty pills = inert visual placeholder
+- **NO blender DSP this phase.** Pills don't respond to clicks. Pills don't store routing. Pills don't affect audio. Pills just exist as UI shells.
+- The actual blend slot routing + cross-parameter modulation logic lives entirely in Phase 11f.
+
+**Why ship empty pills now:** Locks the visual real estate. Once the back panel is rendered with the pills visible, future phases (11b, 11c, 11d) can iterate on selectors/knobs WITHOUT touching this top row. By Phase 11f, the pills are sitting there waiting to be wired.
+
+**No backing APVTS params for blend slots in Phase 11a.** This is purely DOM/CSS. Phase 11f will add: 4 blend-slot source-target-amount triple params per OSC + MIX float + MOD button (popup trigger).
+
+### Decision 7: Each SPECTRAL/FOLD mode added in 11c/d gets its own research-before-implement round
 
 Per `feedback-defer-to-manuals-and-research.md` implementation-phase corollary, every mode (Vocode, Smear, Sine Fold, etc.) gets a subagent research dispatch BEFORE implementation. We don't ship "Vocode" until we've read Vital's `spectral_morph.h` Vocode block, the Serum 2 manual sections on spectral interpolation, and any relevant Google sources on the underlying math. Phase 11c isn't 1 phase — it's a series of `11c-vocode`, `11c-harmonic-stretch`, etc. mini-phases each with their own research round.
 
