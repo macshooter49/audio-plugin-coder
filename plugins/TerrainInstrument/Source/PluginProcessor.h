@@ -141,7 +141,7 @@ public:
                 if (sound->appliesToNote (midiNoteNumber) && sound->appliesToChannel (midiChannel))
                 {
                     if (auto* oldest = findVoiceToSteal (sound, midiChannel, midiNoteNumber))
-                        stopVoice (oldest, /*allowTailOff=*/ false);
+                        stopVoice (oldest, /*velocity=*/ 0.0f, /*allowTailOff=*/ false);  // triggers 5ms steal-fade in SynthVoice::stopNote
                     break;
                 }
             }
