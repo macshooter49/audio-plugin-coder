@@ -3282,54 +3282,58 @@ body {
 #syn-panel .device .back-only { display: none; }
 #syn-panel .device.swapped .back-only { display: flex; }
 
-/* Phase 11a — blend-pills (back top row, 6 letters: B1 B2 B3 B4 MIX MOD) */
-#syn-panel .blend-pills {
-  display: flex; gap: 6px;
-}
+/* Phase 11a — blend-pills (back top row, 6 letters: B1 B2 B3 B4 MIX MOD).
+   EXACT clone of .engine-pills + .eng above so flipping front↔back leaves the
+   pill row pixel-identical. Only the contents (letters vs engine emblems) change. */
+#syn-panel .blend-pills { display: flex; gap: 8px; }
 #syn-panel .blend-pill {
-  flex: 1; height: 22px;
-  border: 1px solid rgba(140,130,180,0.45);
-  border-radius: 4px;
+  flex: 1; height: 30px;
+  border: 1px solid var(--border-strong); border-radius: 6px;
   background: transparent;
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-primary, #ECE8F2);
-  font-size: 8px; letter-spacing: 1.2px; font-weight: 300;
+  color: var(--text-primary);
+  font-size: 10px; letter-spacing: 1.4px; font-weight: 300;
   text-transform: uppercase;
   cursor: default;        /* Phase 11a: pills are inert visual placeholders */
   user-select: none;
+  position: relative;
 }
-/* Active state (purely visual demo; no runtime activation in 11a) */
 #syn-panel .blend-pill.act {
-  background: var(--purple-500, #8B5CF6);
-  border-color: var(--purple-500, #8B5CF6);
+  background: var(--purple-500);
+  border-color: var(--purple-500);
   color: #FFFFFF;
 }
 
-/* Phase 11a — selector-pills (back middle row, 4 type selectors:
-   WARP / SPECTRAL / FOLD / INTERP) — flex:1 mirrors .osc-display on the front,
-   so back-view tuning knobs land at the SAME Y as front-view tuning knobs. */
+/* Phase 11a — selector-pills (back middle row).
+   EXACT clone of .osc-display footprint: same flex:1, same min-height,
+   same border + background visuals. Internally hosts 4 dropdown .sel pills
+   that split the row horizontally. Flipping front↔back leaves this region
+   pixel-identical — only the content changes (waveform SVG ↔ 4 selectors). */
 #syn-panel .selector-pills {
-  display: flex; gap: 8px; flex: 1; min-height: 0;
+  display: flex; gap: 6px; flex: 1; min-height: 28px;
+  background: var(--bg-hero); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px;
+  box-sizing: border-box;
 }
 #syn-panel .sel {
   flex: 1;
-  border: 1px solid rgba(140,130,180,0.45);
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background: rgba(80, 70, 110, 0.20);
+  background: rgba(80, 70, 110, 0.18);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 3px;
   position: relative;
 }
 #syn-panel .sel-label {
-  color: var(--text-muted, #908599);
-  font-size: 7px; letter-spacing: 1.2px;
+  color: var(--text-muted);
+  font-size: 8px; letter-spacing: 1.4px;
   text-transform: uppercase; font-weight: 300;
   line-height: 1;
 }
 #syn-panel .sel-value {
-  color: var(--text-primary, #ECE8F2);
-  font-size: 10px; letter-spacing: 0.4px; font-weight: 300;
+  color: var(--text-primary);
+  font-size: 11px; letter-spacing: 0.4px; font-weight: 300;
   line-height: 1;
 }
 /* The <select> overlays the sel, transparent, takes the clicks */
