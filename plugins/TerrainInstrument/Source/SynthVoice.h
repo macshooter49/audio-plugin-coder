@@ -9,6 +9,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "Wavetable.h"
 #include <atomic>
+#include <array>
 #include <cmath>
 #include <cstdint>
 
@@ -35,6 +36,8 @@ namespace tw
         /** Phase 3 — OSC engine choice. Order matches the SYN_OSC_A_ENGINE
          *  StringArray in createParameterLayout: WT, SAMP, GRAN, SPEC, FM, NOISE. */
         enum class Engine : int { WT = 0, SAMP = 1, GRAN = 2, SPEC = 3, FM = 4, NOISE = 5 };
+
+        static constexpr int kMaxUnison = 8;
 
         bool canPlaySound (juce::SynthesiserSound* s) override
         {
@@ -691,6 +694,27 @@ namespace tw
         // ── Phase 8a — Unison offset (set per-voice by UnisonSynth on noteOn) ─
         float unisonDetuneCents_ = 0.0f;  // additional cents for OSC A + OSC B pitch
         float unisonPanOffset_   = 0.0f;  // -1..+1 applied after filter, pre-HORIZON
+
+        // ── Phase 8b — Unison-in-voice state (per-sine arrays) ──────────
+        // Each unison sub-voice u in [0, activeUnison_) has its own pitch state.
+        // The single voice now renders all UNISON sines internally.
+        std::array<double, kMaxUnison> uPhaseA_       {};
+        std::array<double, kMaxUnison> uPhaseIncA_    {};
+        std::array<double, kMaxUnison> uModPhaseA_    {};
+        std::array<double, kMaxUnison> uSyncPhaseA_   {};
+
+        std::array<double, kMaxUnison> uPhaseB_       {};
+        std::array<double, kMaxUnison> uPhaseIncB_    {};
+        std::array<double, kMaxUnison> uModPhaseB_    {};
+        std::array<double, kMaxUnison> uSyncPhaseB_   {};
+
+        // Per-sine unison config (computed at setUnison / startNote).
+        std::array<float,  kMaxUnison> uDetuneCents_  {};
+        std::array<float,  kMaxUnison> uPanL_         {};
+        std::array<float,  kMaxUnison> uPanR_         {};
+
+        int   activeUnison_     = 1;       // 1..kMaxUnison
+        float unisonSpread01_   = 0.0f;    // 0..1
 
         // Phase 8a — EROSION state (per-voice slow LFO wobbles pitch ±2 cents max)
         float erosionAmount_       = 0.0f;  // 0..1 from SYN_EROSION/100
