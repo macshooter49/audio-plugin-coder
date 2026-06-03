@@ -300,6 +300,9 @@ namespace tw
 
             updatePhaseIncrementFromMidi (midiNote);
             updatePhaseIncrementBFromMidi (midiNote);
+            // Phase 8b — populate per-sine increments too
+            updateUnisonPhaseIncrementsA (midiNote);
+            updateUnisonPhaseIncrementsB (midiNote);
             playing_         = true;
             ampEnv_.reset();
             ampEnv_.noteOn();
@@ -354,6 +357,9 @@ namespace tw
             // Re-derive phaseIncrements with updated erosion drift
             updatePhaseIncrementFromMidi  (currentMidiNote_);
             updatePhaseIncrementBFromMidi (currentMidiNote_);
+            // Phase 8b — also re-derive per-sine increments (tracks EROSION + spread)
+            updateUnisonPhaseIncrementsA (currentMidiNote_);
+            updateUnisonPhaseIncrementsB (currentMidiNote_);
 
             // Phase 10a — pick mip level for this block's pitch (auto-tracks
             // EROSION, octave/semi/cents tuning, unison detune, and SR).
@@ -652,6 +658,39 @@ namespace tw
                 + static_cast<double> (currentErosionCents_) * 0.01; // Phase 8a
             const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
             phaseIncrementB_ = hz / sampleRate_;
+        }
+
+        // Phase 8b — populate per-sine phase-increment update helpers to SynthVoice. They populate the `uPhaseIncA_` / `uPhaseIncB_` arrays from MIDI note + octave/semi/cents tuning + per-sine `uDetuneCents_[u]` + EROSION drift. Called from `startNote` after the existing scalar updates, and from `renderNextBlock` per-block right after the existing erosion-drift recompute.
+        void updateUnisonPhaseIncrementsA (int midiNote) noexcept
+        {
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                const double semitones =
+                      static_cast<double> (midiNote - 69)
+                    + static_cast<double> (octOffset_) * 12.0
+                    + static_cast<double> (semiOffset_)
+                    + static_cast<double> (centsOffset_)             * 0.01
+                    + static_cast<double> (uDetuneCents_[(size_t) u]) * 0.01
+                    + static_cast<double> (currentErosionCents_)     * 0.01;
+                const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
+                uPhaseIncA_[(size_t) u] = hz / sampleRate_;
+            }
+        }
+
+        void updateUnisonPhaseIncrementsB (int midiNote) noexcept
+        {
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                const double semitones =
+                      static_cast<double> (midiNote - 69)
+                    + static_cast<double> (octOffsetB_) * 12.0
+                    + static_cast<double> (semiOffsetB_)
+                    + static_cast<double> (centsOffsetB_)            * 0.01
+                    + static_cast<double> (uDetuneCents_[(size_t) u]) * 0.01
+                    + static_cast<double> (currentErosionCents_)     * 0.01;
+                const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
+                uPhaseIncB_[(size_t) u] = hz / sampleRate_;
+            }
         }
 
         // Standard PolyBLEP residual — subtract from the naive saw at the
