@@ -1,6 +1,6 @@
 # Phase 10 — Frequency-Domain Wavetables (Vital-class quality)
 
-> **Status:** SPEC (not yet planned, not yet built)
+> **Status:** Phase 10a SHIPPED on 385a83b. Phase 10b (cubic frame interp) + Phase 10c (remaining 17 wavetable migrations) pending.
 > **Drafted:** 2026-06-02 after Vital research deep-dive
 > **Reference:** `docs/research/vital-deep-dive-2026-06-02.md`
 > **Predecessors:** Phase 2A-C (current time-domain wavetable engine), Phase 9 (OSC B chassis), Phase 8a (voice + flagship features)
