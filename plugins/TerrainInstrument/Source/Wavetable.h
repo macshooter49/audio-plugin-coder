@@ -69,7 +69,7 @@ namespace tw
          *  Resets internal storage to 16 frames × kFrameSize samples × 8 levels.
          *  Pure additive synthesis (one sin() per harmonic per sample) — no FFT
          *  in 10a. ~17M sin() calls per wavetable; budget ~150-200ms each.
-         *  Optionally normalizes each mip level so peak == 1.0. */
+         *  Normalizes each mip level so peak == 1.0. */
         void buildFromSpec (const WavetableSpec& spec)
         {
             numFrames_     = WavetableSpec::kNumFrames;

@@ -130,7 +130,7 @@ public:
             wt.buildFromSpec (spec);
             for (int lvl = 0; lvl < tw::Wavetable::kNumMipLevels; ++lvl)
             {
-                for (int f = 0; f < 16; ++f)
+                for (int f = 0; f < tw::WavetableSpec::kNumFrames; ++f)
                 {
                     for (int s = 0; s < 16; ++s)  // sample a few points per frame
                     {
