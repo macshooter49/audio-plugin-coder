@@ -1,5 +1,6 @@
 // Wavetable_test.cpp — Phase 2A wavetable engine
 #include "Wavetable.h"
+#include "WavetableBank.h"
 #include <juce_core/juce_core.h>
 #include <cmath>
 
@@ -318,6 +319,21 @@ public:
                     const float rms = std::sqrt (sumSq / 2048.0f);
                     expect (rms > 0.05f, juce::String ("lvl=") + juce::String (lvl) + " rms=" + juce::String (rms));
                 }
+            }
+        }
+
+        beginTest ("WavetableBank: all 24 wavetables construct + produce non-silent audio");
+        {
+            tw::WavetableBank bank;
+            for (int p = 0; p < tw::WavetableBank::kNumPresets; ++p)
+            {
+                const auto* wt = bank.getTable (p);
+                expect (wt != nullptr, juce::String ("preset ") + juce::String (p) + " is null");
+                float sumSq = 0.0f;
+                for (int i = 0; i < 2048; ++i)
+                    sumSq += std::pow (wt->lookup (0, 0.5f, (float) i / 2048.0f), 2.0f);
+                const float rms = std::sqrt (sumSq / 2048.0f);
+                expect (rms > 0.03f, juce::String ("preset ") + juce::String (p) + " RMS=" + juce::String (rms));
             }
         }
     }

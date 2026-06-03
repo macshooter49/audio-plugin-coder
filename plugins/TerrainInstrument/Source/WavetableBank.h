@@ -50,16 +50,20 @@ namespace tw
 
         WavetableBank()
         {
+            // Phase 10a — basic shapes (spec-based, full 8 mip levels)
             tables_[(size_t) Sine]          .buildFromSpec (Wavetable::makeSineSpec());
             tables_[(size_t) Triangle]      .buildFromSpec (Wavetable::makeTriangleSpec());
             tables_[(size_t) Square]        .buildFromSpec (Wavetable::makeSquareSpec());
             tables_[(size_t) Pulse]         .buildFromSpec (Wavetable::makePulseSpec());
+            // Phase 10a — migrated analog saws (spec-based, full 8 mip levels)
             tables_[(size_t) ProphetSaw]  .buildFromSpec (Wavetable::makeProphetSawSpec());
             tables_[(size_t) JupiterPWM]     = Wavetable::makeJupiterPWM();
             tables_[(size_t) MoogSqr]        = Wavetable::makeMoogSqr();
             tables_[(size_t) OBXSaw]      .buildFromSpec (Wavetable::makeOBXSawSpec());
             tables_[(size_t) CS80Brass]      = Wavetable::makeCS80Brass();
             tables_[(size_t) JunoStr]     .buildFromSpec (Wavetable::makeJunoStrSpec());
+            // Legacy time-domain wavetables (Phase 10c will migrate these).
+            // These are mip-0-only — high notes will alias until migrated.
             tables_[(size_t) PPGWave]        = Wavetable::makePPGWave();
             tables_[(size_t) DX7EP]          = Wavetable::makeDX7EP();
             tables_[(size_t) D50Bell]        = Wavetable::makeD50Bell();
