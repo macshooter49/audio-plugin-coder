@@ -169,6 +169,38 @@ public:
                         juce::String ("lvl=") + juce::String (lvl) + " got " + juce::String (v));
             }
         }
+
+        beginTest ("mipLevelForPhaseIncrement breakpoints at 48 kHz");
+        {
+            const double sr = 48000.0;
+            // C2 ~ 65.4 Hz → phaseInc ~ 0.00136 → maxSafe ~ 367 → level 0 (256 OK)
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (36, sr), 0);
+            // C3 ~ 130.8 Hz → maxSafe ~ 183 → level 1 (128 OK, 256 no)
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (48, sr), 1);
+            // C4 ~ 261.6 Hz → maxSafe ~ 91 → level 2 (64 OK, 128 no)
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (60, sr), 2);
+            // C5 ~ 523 Hz → maxSafe ~ 45 → level 3 (32 OK, 64 no)
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (72, sr), 3);
+            // C6 ~ 1046 Hz → maxSafe ~ 22 → level 4 (16 OK, 32 no)
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (84, sr), 4);
+            // C7 ~ 2093 Hz → maxSafe ~ 11 → level 5 (8 OK, 16 no)
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (96, sr), 5);
+            // C8 ~ 4186 Hz → maxSafe ~ 5 → level 6 (4 OK, 8 no)
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (108, sr), 6);
+            // Above C8 → level 7
+            expectEquals (tw::Wavetable::mipLevelForMidiNote (120, sr), 7);
+        }
+
+        beginTest ("mipLevelForPhaseIncrement monotonic — higher phaseInc never picks lower level");
+        {
+            int prev = 0;
+            for (int n = 0; n <= 127; ++n)
+            {
+                const int lvl = tw::Wavetable::mipLevelForMidiNote (n, 48000.0);
+                expect (lvl >= prev, juce::String ("midi ") + juce::String (n) + " lvl=" + juce::String (lvl) + " < prev=" + juce::String (prev));
+                prev = lvl;
+            }
+        }
     }
 };
 
