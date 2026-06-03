@@ -1689,6 +1689,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float horizonPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_HORIZON);
         const float unisonSpread01 = spreadPct / 100.0f;
 
+        // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
+        // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
+        // have no audio-thread effect yet — render path will start reading them
+        // in Phase 11c (SPECTRAL) and 11d (FOLD).
+        const float frameSpreadA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_FRAME_SPREAD);
+        const float frameSpreadB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FRAME_SPREAD);
+
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
         const int voiceCap = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_VOICES);
@@ -1696,7 +1703,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int v = 0; v < synthEngine.getNumVoices(); ++v)
         {
             if (auto* tv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (v)))
+            {
                 tv->setUnison (unisonCount, unisonSpread01);
+                tv->setFrameSpread (frameSpreadA, frameSpreadB);   // Phase 11a
+            }
         }
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
