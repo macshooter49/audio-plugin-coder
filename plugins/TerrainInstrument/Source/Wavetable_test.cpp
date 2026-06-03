@@ -102,6 +102,20 @@ public:
                 expect (rms > 0.05f, juce::String ("Phase 2B table RMS=") + juce::String (rms));
             }
         }
+
+        beginTest ("FrameSpec + WavetableSpec defaults are zero-filled and empty");
+        {
+            tw::FrameSpec fs;
+            expectEquals (fs.numHarmonics, 0);
+            for (int h = 0; h < tw::FrameSpec::kMaxHarmonics; ++h)
+            {
+                expect (fs.amplitudes[(size_t) h] == 0.0f, juce::String ("amplitudes[") + juce::String (h) + "] not zero");
+                expect (fs.phases[(size_t) h]     == 0.0f, juce::String ("phases[") + juce::String (h) + "] not zero");
+            }
+            tw::WavetableSpec spec;
+            for (int f = 0; f < tw::WavetableSpec::kNumFrames; ++f)
+                expectEquals (spec.frames[(size_t) f].numHarmonics, 0);
+        }
     }
 };
 

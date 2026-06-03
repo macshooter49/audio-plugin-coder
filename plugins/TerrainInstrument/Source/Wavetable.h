@@ -13,9 +13,32 @@
 #include <vector>
 #include <cmath>
 #include <cstddef>
+#include <array>
 
 namespace tw
 {
+    /** Frequency-domain spec for a single wavetable frame.
+     *  amplitudes[h-1] is the gain of the h-th harmonic (1-indexed mathematically,
+     *  0-indexed in the array). phases[h-1] is its phase offset in radians.
+     *  numHarmonics is the count of populated harmonics; harmonics beyond
+     *  numHarmonics are ignored (must be zero in amplitudes for cleanness). */
+    struct FrameSpec
+    {
+        static constexpr int kMaxHarmonics = 256;
+        std::array<float, kMaxHarmonics> amplitudes {};  // value-initialized to 0
+        std::array<float, kMaxHarmonics> phases     {};  // value-initialized to 0
+        int numHarmonics = 0;
+    };
+
+    /** A full wavetable spec: 16 frames of frequency-domain harmonic content.
+     *  This is the source-of-truth representation; Wavetable::buildFromSpec()
+     *  reconstructs 8 time-domain mip levels from it at construction. */
+    struct WavetableSpec
+    {
+        static constexpr int kNumFrames = 16;
+        std::array<FrameSpec, kNumFrames> frames {};
+    };
+
     class Wavetable
     {
     public:
