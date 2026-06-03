@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>v14 — Wavetable Engine 5-knob rework</title>
+<style>
+  :root {
+    --bg-main: #1A1A2E;
+    --bg-hero: #12121F;
+    --bg-surface: #232340;
+    --bg-card: #2A2A48;
+    --bg-card-2: #252340;
+    --knob-track: rgba(120,118,160,0.35);
+    --purple-600: #9B6DFF;
+    --purple-500: #8B5CF6;
+    --purple-400: #B794FF;
+    --border: rgba(58,58,88,0.55);
+    --border-strong: rgba(140,130,180,0.45);
+    --text-primary: #ECE8F2;
+    --text-secondary: #C5BFD2;
+    --text-muted: #908599;
+    --text-dim: #6E6580;
+    --line-bright: #ECE8F2;
+  }
+  body {
+    background: #0a0a14; color: var(--text-primary); margin: 0; padding: 40px 24px 80px;
+    font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 200;
+  }
+  h1 { font-size: 22px; font-weight: 300; letter-spacing: 1.4px; margin: 0 0 6px; color: var(--text-primary); }
+  h2 { font-size: 14px; font-weight: 300; letter-spacing: 2.4px; color: var(--purple-400); text-transform: uppercase; margin: 32px 0 12px; }
+  p { font-size: 13px; color: var(--text-secondary); line-height: 1.55; max-width: 880px; margin: 0 0 12px; font-weight: 300; }
+  .lead { color: var(--text-primary); font-weight: 300; }
+  .caption { font-size: 11px; color: var(--text-muted); letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 6px; font-weight: 300; }
+
+  .device-pair { display: grid; grid-template-columns: 358px 358px; gap: 20px; align-items: start; }
+  .device-shell { display: flex; flex-direction: column; gap: 8px; }
+  .device-state { font-size: 9px; letter-spacing: 1.8px; color: var(--purple-400); text-transform: uppercase; font-weight: 300; }
+
+  /* ===== Device — copy of v12 styles ===== */
+  .device {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 13px; padding: 10px 14px; position: relative; overflow: hidden;
+    width: 330px; height: 220px;
+  }
+  .device-label {
+    position: absolute; top: 9px; left: 14px;
+    font-size: 9px; font-weight: 300; letter-spacing: 2px;
+    color: var(--text-secondary); text-transform: uppercase;
+  }
+  .device-corner {
+    position: absolute; top: 9px; right: 14px;
+    font-size: 9px; color: var(--text-secondary); letter-spacing: 1.4px; font-weight: 200;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .device-corner .preset-name { color: var(--text-primary); }
+  .device-corner .preset-pos { color: var(--text-muted); }
+
+  .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; height: 100%; box-sizing: border-box; }
+
+  .engine-pills { display: flex; gap: 5px; }
+  .eng {
+    flex: 1; height: 28px; border: 1px solid var(--border-strong); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-primary); font-size: 9px; letter-spacing: 1.2px; font-weight: 300;
+  }
+  .eng.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+
+  /* The visualizer area — front view shows wave; back view shows selector row */
+  .osc-display {
+    background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 6px;
+    height: 48px; position: relative; padding: 0;
+  }
+  .osc-wave { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .osc-wave svg { width: 92%; height: 78%; }
+
+  /* Back-view selector row replaces the visualizer */
+  .selector-row {
+    height: 48px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px;
+    padding: 6px; box-sizing: border-box;
+  }
+  .selector {
+    background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 5px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 8px; letter-spacing: 1.1px; color: var(--text-muted); text-transform: uppercase;
+    font-weight: 300;
+  }
+  .selector .sel-label { color: var(--text-muted); font-size: 7px; letter-spacing: 1.3px; }
+  .selector .sel-value { color: var(--text-primary); font-size: 9px; letter-spacing: 0.8px; margin-top: 2px; font-weight: 300; }
+
+  /* Knob row */
+  .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
+  .knob { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .knob-ring {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: conic-gradient(from 225deg, var(--purple-500) 0deg 130deg, var(--knob-track) 130deg 270deg, transparent 270deg);
+    position: relative;
+  }
+  .knob-ring::after {
+    content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--bg-card);
+  }
+  .knob-label { font-size: 8px; letter-spacing: 1.2px; color: var(--text-secondary); font-weight: 300; text-transform: uppercase; }
+  .knob-label.new { color: var(--purple-400); }
+
+  /* + button (swap to back) */
+  .swap-btn {
+    position: absolute; bottom: 8px; right: 12px;
+    width: 18px; height: 18px; border-radius: 4px;
+    background: transparent; border: 1px solid var(--border-strong);
+    display: grid; place-items: center;
+    font-size: 11px; line-height: 1; color: var(--text-secondary); font-weight: 300;
+  }
+  .swap-btn::before { content: '+'; transform: translateY(-1px); display: block; }
+  .swap-btn.act::before { content: '\2190'; transform: translateY(0); }
+  .swap-btn.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+
+  /* Legend table */
+  .legend {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 18px; max-width: 820px; margin-top: 14px;
+  }
+  .legend table { width: 100%; border-collapse: collapse; }
+  .legend th { text-align: left; font-size: 9px; letter-spacing: 1.4px; color: var(--text-muted); text-transform: uppercase; padding: 6px 8px; font-weight: 300; }
+  .legend td { font-size: 11px; color: var(--text-secondary); padding: 8px; border-top: 1px solid var(--border); font-weight: 300; line-height: 1.45; }
+  .legend td.label { color: var(--purple-400); font-weight: 300; letter-spacing: 1.4px; text-transform: uppercase; font-size: 10px; width: 110px; }
+  .legend td.range { color: var(--text-muted); font-size: 10px; width: 110px; }
+  .legend td.source { color: var(--text-muted); font-size: 10px; width: 120px; }
+
+  .note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; font-weight: 300; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border: 1px solid var(--border-strong);
+    border-radius: 999px; font-size: 9px; letter-spacing: 1.2px; color: var(--text-secondary);
+    margin-right: 4px; font-weight: 300;
+  }
+  .pill.new { background: rgba(139,92,246,0.18); border-color: var(--purple-500); color: var(--purple-400); }
+</style></head>
+<body>
+
+<h1>v14 — Wavetable Engine 5-knob rework</h1>
+<p class="lead">Synthesis of Serum 2 (dual warp) + Vital (spectral morph axis + frame spread) + Pigments (wavefolding as a headline section). Front: 5 wavetable-engine-specific knobs that each move the sound day-and-night. Back (toggled via <strong>+</strong>): the type-selector zone replaces the visualizer + the 5 tuning knobs return underneath.</p>
+
+<p>The locked v12 OSC A device frame stays — same width, same height, same colors, same engine pills row. Only the contents of the visualizer area and the knob row change between front/back states.</p>
+
+<h2>Variant A (Recommended) — SPREAD on the OSC device</h2>
+<p>Five front knobs: <strong>WT POS · WARP · SPECTRAL · FOLD · SPREAD</strong>. PHASE lives on the back panel as a small modifier next to the tuning row. SPREAD is the per-OSC frame spread (Phase 8b architecture: each unison sine plays a different wavetable position — Vital's <code>frame_spread</code> idea, now uniquely ours because of T1-T9). Each OSC gets its own SPREAD value so OSC A can be tight while OSC B fans wide.</p>
+
+<div class="device-pair">
+
+  <!-- VARIANT A — FRONT VIEW -->
+  <div class="device-shell">
+    <div class="device-state">FRONT VIEW (default)</div>
+    <div class="device osc">
+      <div class="device-label">OSC · A</div>
+      <div class="device-corner">
+        <span>WAVETABLE</span>
+        <span class="preset-name">Prophet Saw</span>
+        <span class="preset-pos">12 / 256</span>
+        <span>F1</span>
+      </div>
+      <div class="engine-pills">
+        <div class="eng act">WT</div>
+        <div class="eng">FM</div>
+        <div class="eng">NS</div>
+        <div class="eng">SA</div>
+        <div class="eng">GR</div>
+        <div class="eng">SP</div>
+      </div>
+      <div class="osc-display">
+        <div class="osc-wave">
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+            <path d="M0,30 L20,8 L40,52 L60,8 L80,52 L100,8 L120,52 L140,8 L160,52 L180,8 L200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
+          </svg>
+        </div>
+      </div>
+      <div class="osc-knobs">
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">WT POS</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">WARP</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">SPECTRAL</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">FOLD</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">SPREAD</div></div>
+      </div>
+      <div class="swap-btn"></div>
+    </div>
+  </div>
+
+  <!-- VARIANT A — BACK VIEW -->
+  <div class="device-shell">
+    <div class="device-state">BACK VIEW (after pressing +)</div>
+    <div class="device osc">
+      <div class="device-label">OSC · A</div>
+      <div class="device-corner">
+        <span>WAVETABLE</span>
+        <span class="preset-name">Prophet Saw</span>
+        <span class="preset-pos">12 / 256</span>
+        <span>F1</span>
+      </div>
+      <div class="engine-pills">
+        <div class="eng act">WT</div>
+        <div class="eng">FM</div>
+        <div class="eng">NS</div>
+        <div class="eng">SA</div>
+        <div class="eng">GR</div>
+        <div class="eng">SP</div>
+      </div>
+      <div class="osc-display" style="padding: 0;">
+        <div class="selector-row">
+          <div class="selector"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
+          <div class="selector"><div class="sel-label">SPECTRAL</div><div class="sel-value">Vocode</div></div>
+          <div class="selector"><div class="sel-label">FOLD</div><div class="sel-value">Sine</div></div>
+          <div class="selector"><div class="sel-label">INTERP</div><div class="sel-value">Spectral</div></div>
+        </div>
+      </div>
+      <div class="osc-knobs">
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">SEM</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
+      </div>
+      <div class="swap-btn act"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <table>
+    <thead><tr><th>Front Knob</th><th>Range</th><th>What you hear when you move it</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td class="label">WT POS</td><td class="range">0 → 255</td><td>Frame scrub — each frame is a completely different waveform. On Prophet Saw goes bright-saw → warm-saw; on Spectral Drift goes from one alien shape to another at every position. The single most impactful wavetable knob.</td><td class="source">Serum 2 / Vital / Pigments — all three call this the headline control.</td></tr>
+      <tr><td class="label">WARP</td><td class="range">0 → 100%</td><td>Phase-domain transform amount. TYPE picked in BACK selector: Bend ±, PWM, Asym, Sync, Pulse, Skew, Round, FM-from-B, RM-from-B, PD-from-B (Serum/Pigments combined menu). At 100% completely reshapes the waveform.</td><td class="source">Serum 2 WARP slots / Pigments Phase Transform.</td></tr>
+      <tr><td class="label">SPECTRAL <span class="pill new">NEW</span></td><td class="range">0 → 100%</td><td>Frequency-domain morph amount. TYPE picked in BACK selector: Vocode, Harmonic Stretch, Inharmonic, Smear, Phase Disperse, LP, HP. Vocode shifts harmonics inharmonically (alien); Stretch spreads partials outward (bell-like); Smear blurs them into noise. <strong>This axis is unique to us because of Phase 10a frequency-domain storage.</strong></td><td class="source">Vital invented this as a runtime control. Serum/Pigments do this only at WT-editor authoring.</td></tr>
+      <tr><td class="label">FOLD <span class="pill new">NEW</span></td><td class="range">0 → 100%</td><td>Wavefolding depth — folds a secondary waveform onto the peaks of the current wave, generating harmonics that weren't in the source table. SHAPE picked in BACK selector (Sine / Triangle / Linear). At high amounts the spectrum sweeps through harmonics dramatically.</td><td class="source">Pigments treats this as a headline section. Serum 2 has it buried in the WARP menu.</td></tr>
+      <tr><td class="label">SPREAD <span class="pill new">NEW</span></td><td class="range">0 → 100%</td><td>Per-unison FRAME spread. At UNISON=1: silent (only one sine). At UNISON=8 + SPREAD=100: every sine plays a different position in the wavetable simultaneously. Massive timbral thickness no detune knob can produce. Phase 8b's per-sine arrays make this almost-free DSP-wise (just add <code>uFramePos_[u]</code>).</td><td class="source">Vital <code>frame_spread</code>. Serum 2 has the equivalent inside the Unison panel.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="note">Back view: 4 type-selector dropdowns replace the visualizer. <strong>WARP</strong> + <strong>SPECTRAL</strong> + <strong>FOLD</strong> set the modes for the three transformation amount knobs on the front. <strong>INTERP</strong> picks how between-frame morphing works — Linear (time-domain, traditional) or Spectral (frequency-domain re-synthesis, Serum 2's richer mode that can produce harmonics neither anchor frame contains). The 5 tuning knobs (OCT/SEM/CENT/PAN/LEVEL) sit underneath — exactly the original v12 row. PHASE init + RAND lives in a right-click menu on WT POS to save space.</p>
+
+<h2>Variant B — SPREAD in VOICES META column (alternative)</h2>
+<p>Same front: <strong>WT POS · WARP · SPECTRAL · FOLD · PHASE</strong> — PHASE replaces SPREAD as the 5th front knob. SPREAD moves to the VOICES META column on the right (next to UNISON / SPREAD-pan-detune / EROSION / HORIZON / VOICES). Pros: PHASE is more accessible. Cons: one VOICES META row gets crowded; FRAME SPREAD becomes a single global value not per-OSC.</p>
+
+<div class="device-pair">
+
+  <!-- VARIANT B — FRONT VIEW -->
+  <div class="device-shell">
+    <div class="device-state">FRONT VIEW</div>
+    <div class="device osc">
+      <div class="device-label">OSC · A</div>
+      <div class="device-corner">
+        <span>WAVETABLE</span>
+        <span class="preset-name">Prophet Saw</span>
+        <span class="preset-pos">12 / 256</span>
+        <span>F1</span>
+      </div>
+      <div class="engine-pills">
+        <div class="eng act">WT</div>
+        <div class="eng">FM</div>
+        <div class="eng">NS</div>
+        <div class="eng">SA</div>
+        <div class="eng">GR</div>
+        <div class="eng">SP</div>
+      </div>
+      <div class="osc-display">
+        <div class="osc-wave">
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+            <path d="M0,30 L20,8 L40,52 L60,8 L80,52 L100,8 L120,52 L140,8 L160,52 L180,8 L200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
+          </svg>
+        </div>
+      </div>
+      <div class="osc-knobs">
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">WT POS</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">WARP</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">SPECTRAL</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">FOLD</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label new">PHASE</div></div>
+      </div>
+      <div class="swap-btn"></div>
+    </div>
+  </div>
+
+  <!-- VARIANT B — BACK VIEW (same as Variant A's back) -->
+  <div class="device-shell">
+    <div class="device-state">BACK VIEW</div>
+    <div class="device osc">
+      <div class="device-label">OSC · A</div>
+      <div class="device-corner">
+        <span>WAVETABLE</span>
+        <span class="preset-name">Prophet Saw</span>
+        <span class="preset-pos">12 / 256</span>
+        <span>F1</span>
+      </div>
+      <div class="engine-pills">
+        <div class="eng act">WT</div>
+        <div class="eng">FM</div>
+        <div class="eng">NS</div>
+        <div class="eng">SA</div>
+        <div class="eng">GR</div>
+        <div class="eng">SP</div>
+      </div>
+      <div class="osc-display" style="padding: 0;">
+        <div class="selector-row">
+          <div class="selector"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
+          <div class="selector"><div class="sel-label">SPECTRAL</div><div class="sel-value">Vocode</div></div>
+          <div class="selector"><div class="sel-label">FOLD</div><div class="sel-value">Sine</div></div>
+          <div class="selector"><div class="sel-label">INTERP</div><div class="sel-value">Spectral</div></div>
+        </div>
+      </div>
+      <div class="osc-knobs">
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">SEM</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+        <div class="knob"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
+      </div>
+      <div class="swap-btn act"></div>
+    </div>
+  </div>
+
+</div>
+
+<h2>Why Variant A wins (my call)</h2>
+<p class="lead">SPREAD per-OSC is more useful than PHASE on the front for three reasons:</p>
+<ol style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; font-weight: 300; max-width: 820px;">
+  <li><strong>Sonic impact:</strong> SPREAD at UNISON=8 is genuinely day-and-night. PHASE init mostly affects the first 5ms of a note. SPREAD is "what does this sound like at all"; PHASE is "what does the very first instant sound like."</li>
+  <li><strong>Per-OSC value matters:</strong> SPREAD per-OSC = OSC A can sit tight while OSC B fans wide across the wavetable. Way more interesting than one global SPREAD value.</li>
+  <li><strong>PHASE doesn't get lost on the back:</strong> Right-click menu on WT POS exposes PHASE init + RAND amount. Users who want it find it; users who don't aren't paying for it with knob real estate.</li>
+</ol>
+
+<h2>Signal chain (DSP order, locked by the front-back design)</h2>
+<p>
+  <span class="pill">WT POS</span> → <span class="pill">WARP</span> (phase-domain) → <span class="pill">SPECTRAL</span> (freq-domain) → <span class="pill">FOLD</span> (post-spectral harmonic generator) → per-sine sum → filter → HORIZON → output
+</p>
+<p class="note">This matches Pigments' chain (Position → FM/PM → Phase Transform → Wavefolding → Output) and works with Phase 10a (spectral content is already in FrameSpec) + Phase 8b (per-sine sum is where SPREAD applies). Three transformation axes (WARP / SPECTRAL / FOLD) — each independent — give the sound designer a real 3D timbral space. None of the three references has all three on the front simultaneously.</p>
+
+<p class="note" style="margin-top: 18px; color: var(--text-secondary);">
+  <strong>Implementation phases that fall out of this design:</strong><br>
+  <strong>Phase 11a</strong> (UI + foundation): Rename FRAME → WT POS, add 5-knob front layout, add back panel with selector row + tuning row, add SPREAD param + per-OSC frame spread DSP. No new warp/spectral/fold modes yet — uses our existing BEND/SYNC/FORMANT.<br>
+  <strong>Phase 11b</strong>: Expand WARP modes (add Pigments Phase Transform set + Serum FM/RM/PD source variants).<br>
+  <strong>Phase 11c</strong>: SPECTRAL MORPH DSP (apply transformations to FrameSpec at noteOn — uses Phase 10a frequency-domain spec).<br>
+  <strong>Phase 11d</strong>: WAVEFOLDING DSP (post-spectral harmonic generator).<br>
+  <strong>Phase 11e</strong>: Per-engine front-panels for FM/NOISE/SAMP/GRAN/SPEC (each with its own 5 engine-specific knobs).
+</p>
+
+</body></html>
