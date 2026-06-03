@@ -270,6 +270,24 @@ namespace tw
             noiseLpZB_       = 0.0f;
             syncPhaseB_      = 0.0;
 
+            // Phase 8b — reset per-sine arrays for all kMaxUnison slots, with
+            // per-sine random initial phase so unison voices don't all start
+            // in lock-step (which would create a transient click at t=0).
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                // Hash voice pointer XOR midiNote XOR u for decorrelated phase per sine.
+                const std::uint32_t h = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
+                                        ^ static_cast<std::uint32_t> ((midiNote + 1) * 2654435761u)
+                                        ^ static_cast<std::uint32_t> ((u + 1) * 0x9E3779B9u);
+                const double initPhase = (double) (h & 0xFFFF) / 65535.0;  // 0..1
+                uPhaseA_[(size_t) u]      = initPhase;
+                uModPhaseA_[(size_t) u]   = 0.0;
+                uSyncPhaseA_[(size_t) u]  = 0.0;
+                uPhaseB_[(size_t) u]      = initPhase;
+                uModPhaseB_[(size_t) u]   = 0.0;
+                uSyncPhaseB_[(size_t) u]  = 0.0;
+            }
+
             // Phase 8a — EROSION: randomize rate + initial phase per voice/note combination
             // Hash voice pointer XOR midiNote for decorrelated drift across voices
             const std::uint32_t hash = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
