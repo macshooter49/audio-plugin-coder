@@ -237,6 +237,18 @@ namespace tw
                 uPanL_[(size_t) u] = 0.0f;
                 uPanR_[(size_t) u] = 0.0f;
             }
+            updateUnisonFramePositions();
+        }
+
+        /** Phase 11a — Set per-OSC FRAME SPREAD (0..1). Pushed per-block from
+         *  PluginProcessor broadcast. Caches the amount; per-sine offsets are
+         *  recomputed in updateUnisonFramePositions() each block (and on
+         *  setUnison/startNote) so SPREAD tracks UNISON count changes correctly. */
+        void setFrameSpread (float spreadA01, float spreadB01) noexcept
+        {
+            frameSpreadA01_ = juce::jlimit (0.0f, 1.0f, spreadA01);
+            frameSpreadB01_ = juce::jlimit (0.0f, 1.0f, spreadB01);
+            updateUnisonFramePositions();
         }
 
         /** EROSION amount 0..1 (set per-block from APVTS SYN_EROSION/100). */
@@ -284,6 +296,7 @@ namespace tw
             currentErosionCents_ = 0.0f;
 
             // Phase 8b — populate per-sine increments
+            updateUnisonFramePositions();
             updateUnisonPhaseIncrementsA (midiNote);
             updateUnisonPhaseIncrementsB (midiNote);
             playing_         = true;
@@ -682,6 +695,32 @@ namespace tw
             }
         }
 
+        // Phase 11a — populate per-sine uFramePosA_/B_ offsets from current
+        // frameSpreadA01_/B01_ and activeUnison_. Each sine u in [0, activeUnison_)
+        // gets offset u_norm × spread × 0.5 (max ±0.5 of [0,1] frame range).
+        // At UNISON=1 or SPREAD=0 every entry is 0.0 → render path falls back
+        // to the voice-global framePos_ exactly (zero behaviour change vs pre-11a).
+        void updateUnisonFramePositions() noexcept
+        {
+            for (int u = 0; u < activeUnison_; ++u)
+            {
+                if (activeUnison_ <= 1)
+                {
+                    uFramePosA_[(size_t) u] = 0.0f;
+                    uFramePosB_[(size_t) u] = 0.0f;
+                    continue;
+                }
+                const float u_norm = ((float) u / (float) (activeUnison_ - 1)) * 2.0f - 1.0f;
+                uFramePosA_[(size_t) u] = u_norm * frameSpreadA01_ * 0.5f;
+                uFramePosB_[(size_t) u] = u_norm * frameSpreadB01_ * 0.5f;
+            }
+            for (int u = activeUnison_; u < kMaxUnison; ++u)
+            {
+                uFramePosA_[(size_t) u] = 0.0f;
+                uFramePosB_[(size_t) u] = 0.0f;
+            }
+        }
+
         // Standard PolyBLEP residual — subtract from the naive saw at the
         // discontinuity to suppress alias harmonics above Nyquist. Public
         // domain reference: Välimäki & Huovilainen, "Antialiasing Oscillators
@@ -773,6 +812,15 @@ namespace tw
         std::array<double, kMaxUnison> uPhaseIncB_    {};
         std::array<double, kMaxUnison> uModPhaseB_    {};
         std::array<double, kMaxUnison> uSyncPhaseB_   {};
+
+        // Phase 11a — per-sine WT frame position (centre = framePos_, offset = SPREAD × u_norm × 0.5).
+        // Render path wraps to [0,1] before wavetable lookup.
+        std::array<float, kMaxUnison> uFramePosA_   {};
+        std::array<float, kMaxUnison> uFramePosB_   {};
+
+        // Phase 11a — SPREAD amount per OSC (0..1, pushed per-block from APVTS).
+        float frameSpreadA01_ = 0.0f;
+        float frameSpreadB01_ = 0.0f;
 
         // Per-sine unison config (computed at setUnison / startNote).
         std::array<float,  kMaxUnison> uDetuneCents_  {};
