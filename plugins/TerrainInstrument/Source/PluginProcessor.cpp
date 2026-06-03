@@ -1618,6 +1618,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float horizonPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_HORIZON);
         synthEngine.setUnisonState (unisonCount, spreadPct / 100.0f);
 
+        // Phase 8b — also push UNISON config into each voice directly. The
+        // voice computes per-sine detune+pan internally and renders all sines
+        // as one note. (Phase 8a's UnisonSynth noteOn override is now redundant
+        // and is removed in T8 below.)
+        const float unisonSpread01 = spreadPct / 100.0f;
+        for (int v = 0; v < synthEngine.getNumVoices(); ++v)
+        {
+            if (auto* tv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (v)))
+                tv->setUnison (unisonCount, unisonSpread01);
+        }
+
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
             if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
