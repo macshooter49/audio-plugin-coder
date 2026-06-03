@@ -3274,8 +3274,67 @@ body {
   gap: 8px;
   align-items: center;
 }
-#syn-panel .device.swapped .engine-pills { display: none; }
-#syn-panel .device.swapped .engine-controls { display: flex; }
+/* Phase 11a — full front/back layout toggle via .device.swapped */
+/* Front-only elements: visible by default, hidden when .swapped */
+#syn-panel .device .front-only { display: flex; }
+#syn-panel .device.swapped .front-only { display: none; }
+/* Back-only elements: hidden by default, visible when .swapped */
+#syn-panel .device .back-only { display: none; }
+#syn-panel .device.swapped .back-only { display: flex; }
+
+/* Phase 11a — blend-pills (back top row, 6 letters: B1 B2 B3 B4 MIX MOD) */
+#syn-panel .blend-pills {
+  display: flex; gap: 8px;
+}
+#syn-panel .blend-pill {
+  flex: 1; height: 28px;
+  border: 1px solid rgba(140,130,180,0.45);
+  border-radius: 5px;
+  background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-primary, #ECE8F2);
+  font-size: 9px; letter-spacing: 1.2px; font-weight: 300;
+  text-transform: uppercase;
+  cursor: default;        /* Phase 11a: pills are inert visual placeholders */
+  user-select: none;
+}
+/* Active state (purely visual demo; no runtime activation in 11a) */
+#syn-panel .blend-pill.act {
+  background: var(--purple-500, #8B5CF6);
+  border-color: var(--purple-500, #8B5CF6);
+  color: #FFFFFF;
+}
+
+/* Phase 11a — selector-pills (back middle row, 4 type selectors:
+   WARP / SPECTRAL / FOLD / INTERP) — edge-to-edge alignment with blend-pills above */
+#syn-panel .selector-pills {
+  display: flex; gap: 8px;
+}
+#syn-panel .sel {
+  flex: 1; height: 44px;
+  border: 1px solid rgba(140,130,180,0.45);
+  border-radius: 5px;
+  background: rgba(80, 70, 110, 0.20);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px;
+  position: relative;
+}
+#syn-panel .sel-label {
+  color: var(--text-muted, #908599);
+  font-size: 7px; letter-spacing: 1.2px;
+  text-transform: uppercase; font-weight: 300;
+}
+#syn-panel .sel-value {
+  color: var(--text-primary, #ECE8F2);
+  font-size: 10px; letter-spacing: 0.4px; font-weight: 300;
+}
+/* The <select> overlays the sel, transparent, takes the clicks */
+#syn-panel .sel-select {
+  position: absolute; inset: 0;
+  opacity: 0; color: transparent;
+  cursor: pointer; border: none; background: transparent;
+}
 
 #syn-panel .engine-controls .ec-knob-group,
 #syn-panel .engine-controls .ec-select-group {
