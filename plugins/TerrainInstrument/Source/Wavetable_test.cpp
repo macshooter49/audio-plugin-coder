@@ -116,6 +116,59 @@ public:
             for (int f = 0; f < tw::WavetableSpec::kNumFrames; ++f)
                 expectEquals (spec.frames[(size_t) f].numHarmonics, 0);
         }
+
+        beginTest ("buildFromSpec produces finite values across all 8 mip levels");
+        {
+            tw::WavetableSpec spec;
+            // Plant a single fundamental harmonic in every frame.
+            for (int f = 0; f < tw::WavetableSpec::kNumFrames; ++f)
+            {
+                spec.frames[(size_t) f].amplitudes[0] = 1.0f;
+                spec.frames[(size_t) f].numHarmonics  = 1;
+            }
+            tw::Wavetable wt;
+            wt.buildFromSpec (spec);
+            for (int lvl = 0; lvl < tw::Wavetable::kNumMipLevels; ++lvl)
+            {
+                for (int f = 0; f < 16; ++f)
+                {
+                    for (int s = 0; s < 16; ++s)  // sample a few points per frame
+                    {
+                        const float v = wt.lookup (lvl, (float) f / 15.0f, (float) s / 16.0f);
+                        expect (std::isfinite (v), juce::String ("non-finite at lvl=") + juce::String (lvl));
+                        expect (std::abs (v) < 2.0f, juce::String ("|v| >= 2 at lvl=") + juce::String (lvl));
+                    }
+                }
+            }
+        }
+
+        beginTest ("lookup(int, framePos, phase) for legacy single-tier table clamps mipLevel to 0");
+        {
+            // Legacy makeSine() goes through the OLD constructor → numMipLevels_ = 1.
+            auto wt = tw::Wavetable::makeSine();
+            const float v_lvl0 = wt.lookup (0, 0.0f, 0.25f);
+            const float v_lvl7 = wt.lookup (7, 0.0f, 0.25f);  // out-of-range, must clamp
+            expectWithinAbsoluteError (v_lvl7, v_lvl0, 1.0e-6f);
+            expect (std::abs (v_lvl0 - 1.0f) < 0.05f, juce::String ("expected ~1, got ") + juce::String (v_lvl0));
+        }
+
+        beginTest ("spec-built sine wavetable: lookup at phase=0.25 ~= 1.0 at all mip levels");
+        {
+            tw::WavetableSpec spec;
+            for (int f = 0; f < 16; ++f)
+            {
+                spec.frames[(size_t) f].amplitudes[0] = 1.0f;
+                spec.frames[(size_t) f].numHarmonics  = 1;
+            }
+            tw::Wavetable wt;
+            wt.buildFromSpec (spec);
+            for (int lvl = 0; lvl < tw::Wavetable::kNumMipLevels; ++lvl)
+            {
+                const float v = wt.lookup (lvl, 0.5f, 0.25f);
+                expect (std::abs (v - 1.0f) < 0.05f,
+                        juce::String ("lvl=") + juce::String (lvl) + " got " + juce::String (v));
+            }
+        }
     }
 };
 

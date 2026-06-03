@@ -1,12 +1,14 @@
 // Wavetable.h — Terrain Instrument synth section, Phase 2A (foundation)
 // Frame-based wavetable storage + bilinear lookup.
 //
-// Layout: `frames_` is a flat std::vector of size numFrames * frameSize, indexed
-// as [frame * frameSize + sampleIndex]. lookup(framePos, phase) bilinearly
-// interpolates across BOTH frame index (smooth morph between adjacent frames)
-// AND phase index (smooth lookup within a single frame).
+// Layout (Phase 10a+): `mipData_` is a flat std::vector indexed as
+// [mipLevel * numFrames_ * frameSize_ + frame * frameSize_ + sampleIndex].
+// numMipLevels_ == 1 for legacy-constructed (factory) tables; == 8 for
+// spec-built tables. lookup(framePos, phase) bilinearly interpolates across
+// BOTH frame index (smooth morph between adjacent frames) AND phase index
+// (smooth lookup within a single frame).
 //
-// All factory makers are static. The bank constructs all 6 tables at startup;
+// All factory makers are static. The bank constructs all tables at startup;
 // individual SynthVoices hold a pointer to whichever table is selected.
 #pragma once
 
@@ -14,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <array>
+#include <juce_core/juce_core.h>
 
 namespace tw
 {
@@ -42,52 +45,128 @@ namespace tw
     class Wavetable
     {
     public:
-        static constexpr int kFrameSize = 2048;  // power of 2 → cheap modulo via mask
+        static constexpr int kFrameSize    = 2048;  // power of 2 → cheap modulo via mask
+        static constexpr int kNumMipLevels = 8;     // 256/128/64/32/16/8/4/2 harmonics
+
+        // Maximum-harmonic count per mip level. Index 0 = full bandwidth.
+        static constexpr std::array<int, kNumMipLevels> kMipMaxHarmonics
+            { 256, 128, 64, 32, 16, 8, 4, 2 };
 
         Wavetable() = default;
 
         Wavetable (int numFrames, int frameSize = kFrameSize)
-            : numFrames_ (numFrames > 0 ? numFrames : 1),
-              frameSize_ (frameSize > 0 ? frameSize : kFrameSize),
-              frames_ ((size_t)(numFrames_ * frameSize_), 0.0f)
+            : numFrames_     (numFrames > 0 ? numFrames : 1),
+              frameSize_    (frameSize > 0 ? frameSize : kFrameSize),
+              numMipLevels_ (1),
+              mipData_      ((size_t) (1 * numFrames_ * frameSize_), 0.0f)
         {}
 
-        int getNumFrames() const noexcept { return numFrames_; }
-        int getFrameSize() const noexcept { return frameSize_; }
+        int getNumFrames()    const noexcept { return numFrames_; }
+        int getFrameSize()    const noexcept { return frameSize_; }
+        int getNumMipLevels() const noexcept { return numMipLevels_; }
 
-        /** Bilinear interpolation lookup.
-         *  framePos: 0..1 across the frame stack (0 = first, 1 = last)
-         *  phase:    0..1 within a single frame (0 = start of cycle) */
-        float lookup (float framePos, float phase) const noexcept
+        /** Reconstruct 8 bandlimited mip levels from a frequency-domain spec.
+         *  Resets internal storage to 16 frames × kFrameSize samples × 8 levels.
+         *  Pure additive synthesis (one sin() per harmonic per sample) — no FFT
+         *  in 10a. ~17M sin() calls per wavetable; budget ~150-200ms each.
+         *  Optionally normalizes each mip level so peak == 1.0. */
+        void buildFromSpec (const WavetableSpec& spec)
         {
-            // Frame index (continuous) + integer/fractional split.
-            const float fIdx  = framePos * (float)(numFrames_ - 1);
+            numFrames_     = WavetableSpec::kNumFrames;
+            frameSize_     = kFrameSize;
+            numMipLevels_  = kNumMipLevels;
+            mipData_.assign ((size_t) (numMipLevels_ * numFrames_ * frameSize_), 0.0f);
+
+            constexpr double pi2 = 2.0 * 3.14159265358979323846;
+
+            for (int level = 0; level < numMipLevels_; ++level)
+            {
+                const int hMax = kMipMaxHarmonics[(size_t) level];
+                for (int frame = 0; frame < numFrames_; ++frame)
+                {
+                    const FrameSpec& fs = spec.frames[(size_t) frame];
+                    const int hCount = std::min (hMax, fs.numHarmonics);
+                    for (int sample = 0; sample < frameSize_; ++sample)
+                    {
+                        const double normPhase = (double) sample / (double) frameSize_;
+                        double v = 0.0;
+                        for (int h = 1; h <= hCount; ++h)
+                        {
+                            const double amp = (double) fs.amplitudes[(size_t) (h - 1)];
+                            if (amp == 0.0) continue;
+                            const double ph  = (double) fs.phases[(size_t) (h - 1)];
+                            v += amp * std::sin (pi2 * (double) h * normPhase + ph);
+                        }
+                        mipData_[(size_t) ((level * numFrames_ + frame) * frameSize_ + sample)] = (float) v;
+                    }
+                }
+            }
+
+            normalizeMipLevels();
+        }
+
+        /** Canonical render-path lookup. mipLevel is clamped to
+         *  [0, numMipLevels_-1] (so legacy single-tier tables, numMipLevels_=1,
+         *  silently ignore the mipLevel argument). */
+        float lookup (int mipLevel, float framePos, float phase) const noexcept
+        {
+            const int lvl = juce::jlimit (0, numMipLevels_ - 1, mipLevel);
+
+            const float fIdx  = framePos * (float) (numFrames_ - 1);
             const int   f0    = (int) fIdx;
             const int   f1    = f0 < numFrames_ - 1 ? f0 + 1 : f0;
             const float fFrac = fIdx - (float) f0;
 
-            // Phase index (continuous) + integer/fractional split. Wrap to [0,1).
             const float p     = phase - std::floor (phase);
             const float pIdx  = p * (float) frameSize_;
             const int   p0    = (int) pIdx;
             const int   p1    = (p0 + 1) % frameSize_;
             const float pFrac = pIdx - (float) p0;
 
-            const float a = sample (f0, p0);
-            const float b = sample (f0, p1);
-            const float c = sample (f1, p0);
-            const float d = sample (f1, p1);
+            const float a = sample (lvl, f0, p0);
+            const float b = sample (lvl, f0, p1);
+            const float c = sample (lvl, f1, p0);
+            const float d = sample (lvl, f1, p1);
 
-            // Bilinear: lerp on phase first, then on frame.
             const float fr0 = a + (b - a) * pFrac;
             const float fr1 = c + (d - c) * pFrac;
             return fr0 + (fr1 - fr0) * fFrac;
         }
 
-        /** Direct mutable access — used by factory methods only. */
+        /** Backwards-compat alias used by legacy callers. Always reads mip 0. */
+        float lookup (float framePos, float phase) const noexcept
+        {
+            return lookup (0, framePos, phase);
+        }
+
+        /** Direct mutable access — used by legacy factory methods only.
+         *  Writes into mip slot 0 (the only slot legacy tables have). */
         float& sampleRef (int frame, int idx) noexcept
         {
-            return frames_[(size_t)(frame * frameSize_ + idx)];
+            return mipData_[(size_t) ((0 * numFrames_ + frame) * frameSize_ + idx)];
+        }
+
+        /** Pick the mip level that bandlimits this phase increment. phaseInc =
+         *  freq / sampleRate (cycles per sample, normalized). At phaseInc, the
+         *  N-th harmonic sits at N*phaseInc; we need N*phaseInc < 0.5 (Nyquist).
+         *  Picks the smallest level (most harmonics) whose harmonic count fits. */
+        static int mipLevelForPhaseIncrement (double phaseInc) noexcept
+        {
+            const double safeInc = juce::jmax (phaseInc, 1.0e-9);
+            const double maxSafeHarmonics = 0.5 / safeInc;
+            for (int lvl = 0; lvl < kNumMipLevels; ++lvl)
+                if ((double) kMipMaxHarmonics[(size_t) lvl] <= maxSafeHarmonics)
+                    return lvl;
+            return kNumMipLevels - 1;
+        }
+
+        /** Convenience: pick mip level by MIDI note + sample rate. Computes a
+         *  reference phase increment at that note (assumes A4=440, 12-TET). */
+        static int mipLevelForMidiNote (int midiNote, double sampleRate) noexcept
+        {
+            const double hz       = 440.0 * std::pow (2.0, (double) (midiNote - 69) / 12.0);
+            const double phaseInc = hz / juce::jmax (sampleRate, 1.0);
+            return mipLevelForPhaseIncrement (phaseInc);
         }
 
         // ── Factory methods ─────────────────────────────────────────────────
@@ -782,13 +861,32 @@ namespace tw
         }
 
     private:
-        float sample (int frame, int idx) const noexcept
+        float sample (int mipLevel, int frame, int idx) const noexcept
         {
-            return frames_[(size_t)(frame * frameSize_ + idx)];
+            return mipData_[(size_t) ((mipLevel * numFrames_ + frame) * frameSize_ + idx)];
         }
 
-        int                  numFrames_ = 1;
-        int                  frameSize_ = kFrameSize;
-        std::vector<float>   frames_;
+        /** Normalize each mip level so its peak == 1.0 (prevents level imbalance
+         *  where higher mip levels — with fewer harmonics — sound quieter). */
+        void normalizeMipLevels() noexcept
+        {
+            for (int lvl = 0; lvl < numMipLevels_; ++lvl)
+            {
+                float peak = 0.0f;
+                for (int frame = 0; frame < numFrames_; ++frame)
+                    for (int s = 0; s < frameSize_; ++s)
+                        peak = std::max (peak, std::abs (mipData_[(size_t) ((lvl * numFrames_ + frame) * frameSize_ + s)]));
+                if (peak <= 0.0f) continue;
+                const float scale = 1.0f / peak;
+                for (int frame = 0; frame < numFrames_; ++frame)
+                    for (int s = 0; s < frameSize_; ++s)
+                        mipData_[(size_t) ((lvl * numFrames_ + frame) * frameSize_ + s)] *= scale;
+            }
+        }
+
+        int                  numFrames_     = 1;
+        int                  frameSize_     = kFrameSize;
+        int                  numMipLevels_  = 1;
+        std::vector<float>   mipData_;     // flat [mipLevel][frame][sample]
     };
 }
