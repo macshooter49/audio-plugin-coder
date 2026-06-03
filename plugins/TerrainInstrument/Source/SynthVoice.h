@@ -245,6 +245,11 @@ namespace tw
             playing_         = true;
             ampEnv_.reset();
             ampEnv_.noteOn();
+
+            // Phase 8a polish — reset steal-fade state on new note
+            stealing_         = false;
+            stealingFade_     = 1.0f;
+            stealingFadeStep_ = 0.0f;
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -255,9 +260,13 @@ namespace tw
             }
             else
             {
-                playing_ = false;
-                ampEnv_.reset();
-                clearCurrentNote();
+                // Phase 8a polish — fade to zero over ~5ms instead of hard cut
+                stealing_         = true;
+                stealingFade_     = 1.0f;
+                // 5ms at current sampleRate: total samples = 0.005 * sampleRate
+                const float fadeSamples = static_cast<float>(0.005 * sampleRate_);
+                stealingFadeStep_ = std::pow(0.0001f, 1.0f / std::max(1.0f, fadeSamples));
+                // Don't clearCurrentNote here — let the fade complete in renderNextBlock
             }
         }
 
@@ -280,7 +289,7 @@ namespace tw
             {
                 constexpr double pi2 = 6.2831853071795865;
                 currentErosionCents_ = std::sin (static_cast<float> (pi2 * erosionPhase_))
-                                       * erosionAmount_ * 2.0f;   // max ±2 cents
+                                       * erosionAmount_ * 15.0f;  // max ±15 cents
                 erosionPhase_ += static_cast<float> (erosionRate_ * numSamples / sampleRate_);
                 if (erosionPhase_ >= 1.0f) erosionPhase_ -= std::floor (erosionPhase_);
             }
@@ -292,8 +301,9 @@ namespace tw
             // midiNote 60 = neutral; lower notes get high-shelf cut (warmer),
             // higher notes get high-shelf boost (airier).
             {
-                const float horizonTilt = horizonAmount_ * (currentMidiNote_ - 60) / 60.0f;
-                const float shelfGain   = std::pow (2.0f, horizonTilt * 0.5f);  // ±~3 dB at extremes
+                // Phase 8a polish — boost HORIZON range so it's audible at normal MIDI notes
+                const float horizonTilt = horizonAmount_ * static_cast<float>(currentMidiNote_ - 60) / 24.0f;
+                const float shelfGain   = std::pow (2.0f, horizonTilt);  // ±12dB at extremes
                 *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
                     sampleRate_, 2500.0f, 0.7071f, shelfGain);
                 *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
@@ -480,6 +490,29 @@ namespace tw
                 scratchR[i] = (sA * level_ * panR_ + sB * levelB_ * panRB_) * velEnv;
             }
 
+            // Phase 8a polish — apply steal-fade and decide if voice should die
+            if (stealing_)
+            {
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    scratchL[i] *= stealingFade_;
+                    scratchR[i] *= stealingFade_;
+                    stealingFade_ *= stealingFadeStep_;
+                }
+                if (stealingFade_ < 0.001f)
+                {
+                    // Fade complete — clear and exit early; existing post-fade code will write
+                    // mostly-silence to the output. Mark playing_ = false so the next block
+                    // skips this voice entirely.
+                    stealing_   = false;
+                    playing_    = false;
+                    ampEnv_.reset();
+                    // We still let the filter process this block's tiny tail so the filter
+                    // state settles — don't return early.
+                    clearCurrentNote();
+                }
+            }
+
             // Run the ladder filter in-place on the stereo scratch.
             juce::dsp::AudioBlock<float> block (scratch_);
             auto sub = block.getSubBlock (0, (size_t) numSamples);
@@ -662,5 +695,10 @@ namespace tw
         float horizonAmount_   = 0.0f;  // -1..+1 from SYN_HORIZON/100
         juce::dsp::IIR::Filter<float> horizonShelfL_;
         juce::dsp::IIR::Filter<float> horizonShelfR_;
+
+        // Phase 8a polish — exponential fade on voice steal (~5ms) to avoid clicks
+        float stealingFade_     = 1.0f;     // 1.0 = no fade, 0.0 = silent
+        float stealingFadeStep_ = 0.0f;     // multiplier per sample during fade
+        bool  stealing_         = false;
     };
 }

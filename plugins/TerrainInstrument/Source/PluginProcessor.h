@@ -504,7 +504,7 @@ private:
     // Parallel pipeline beside the 4 layers. juce::Synthesiser owns 8
     // SynthVoices + 1 SynthSound. Renders into synthScratch each block,
     // summed into the master `buffer` before the FX chain.
-    static constexpr int kSynthVoiceCount = 8;
+    static constexpr int kSynthVoiceCount = 32;
     UnisonSynth                 synthEngine;   // Phase 8a: was juce::Synthesiser
     juce::AudioBuffer<float>    synthScratch;
 
