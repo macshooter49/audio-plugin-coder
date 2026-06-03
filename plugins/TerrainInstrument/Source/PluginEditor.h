@@ -147,6 +147,21 @@ private:
     juce::WebSliderRelay synOscBWarpModeRelay   { ParameterIDs::SYN_OSC_B_WARP_MODE };
     juce::WebSliderRelay synOscBWarpAmountRelay { ParameterIDs::SYN_OSC_B_WARP_AMOUNT };
 
+    // Phase 11a — OSC A wavetable rework relays (6 new)
+    juce::WebSliderRelay synOscASpectralTypeRelay { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE };
+    juce::WebSliderRelay synOscASpectralAmtRelay  { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT };
+    juce::WebSliderRelay synOscAFoldShapeRelay    { ParameterIDs::SYN_OSC_A_FOLD_SHAPE };
+    juce::WebSliderRelay synOscAFoldAmtRelay      { ParameterIDs::SYN_OSC_A_FOLD_AMT };
+    juce::WebSliderRelay synOscAFrameSpreadRelay  { ParameterIDs::SYN_OSC_A_FRAME_SPREAD };
+    juce::WebSliderRelay synOscAInterpModeRelay   { ParameterIDs::SYN_OSC_A_INTERP_MODE };
+    // Phase 11a — OSC B wavetable rework relays (6 new)
+    juce::WebSliderRelay synOscBSpectralTypeRelay { ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE };
+    juce::WebSliderRelay synOscBSpectralAmtRelay  { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT };
+    juce::WebSliderRelay synOscBFoldShapeRelay    { ParameterIDs::SYN_OSC_B_FOLD_SHAPE };
+    juce::WebSliderRelay synOscBFoldAmtRelay      { ParameterIDs::SYN_OSC_B_FOLD_AMT };
+    juce::WebSliderRelay synOscBFrameSpreadRelay  { ParameterIDs::SYN_OSC_B_FRAME_SPREAD };
+    juce::WebSliderRelay synOscBInterpModeRelay   { ParameterIDs::SYN_OSC_B_INTERP_MODE };
+
     // Synth section — Phase 8a (Voice settings + flagship features)
     juce::WebSliderRelay synVoicesRelay  { ParameterIDs::SYN_VOICES };
     juce::WebSliderRelay synUnisonRelay  { ParameterIDs::SYN_UNISON };
@@ -280,6 +295,21 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWtFrameAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpAmountAttachment;
+
+    // Phase 11a — OSC A attachments
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralTypeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFoldShapeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFoldAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFrameSpreadAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAInterpModeAttachment;
+    // Phase 11a — OSC B attachments
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSpectralTypeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSpectralAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFoldShapeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFoldAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFrameSpreadAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBInterpModeAttachment;
 
     // Synth section — Phase 8a (Voice settings + flagship features)
     std::unique_ptr<juce::WebSliderParameterAttachment> synVoicesAttachment;
