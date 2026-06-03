@@ -98,6 +98,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synSpreadRelay)
             .withOptionsFrom(synErosionRelay)
             .withOptionsFrom(synHorizonRelay)
+            .withOptionsFrom(synOscASpectralTypeRelay)
+            .withOptionsFrom(synOscASpectralAmtRelay)
+            .withOptionsFrom(synOscAFoldShapeRelay)
+            .withOptionsFrom(synOscAFoldAmtRelay)
+            .withOptionsFrom(synOscAFrameSpreadRelay)
+            .withOptionsFrom(synOscAInterpModeRelay)
+            .withOptionsFrom(synOscBSpectralTypeRelay)
+            .withOptionsFrom(synOscBSpectralAmtRelay)
+            .withOptionsFrom(synOscBFoldShapeRelay)
+            .withOptionsFrom(synOscBFoldAmtRelay)
+            .withOptionsFrom(synOscBFrameSpreadRelay)
+            .withOptionsFrom(synOscBInterpModeRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
