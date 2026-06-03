@@ -10,24 +10,27 @@ public:
 
     void runTest() override
     {
-        beginTest ("Single-frame sine wavetable: lookup at phase=0 ≈ 0, phase=0.25 ≈ 1");
+        beginTest ("Spec-built sine wavetable: lookup at phase=0 ≈ 0, phase=0.25 ≈ 1");
         {
-            auto wt = tw::Wavetable::makeSine();
-            const float v0   = wt.lookup (0.0f, 0.0f);
-            const float v90  = wt.lookup (0.0f, 0.25f);
-            const float v180 = wt.lookup (0.0f, 0.5f);
-            const float v270 = wt.lookup (0.0f, 0.75f);
+            tw::Wavetable wt;
+            wt.buildFromSpec (tw::Wavetable::makeSineSpec());
+            const float v0   = wt.lookup (0, 0.0f, 0.0f);
+            const float v90  = wt.lookup (0, 0.0f, 0.25f);
+            const float v180 = wt.lookup (0, 0.0f, 0.5f);
+            const float v270 = wt.lookup (0, 0.0f, 0.75f);
             expect (std::abs (v0)   < 0.05f, juce::String("v0=")   + juce::String(v0));
             expect (std::abs (v90 - 1.0f) < 0.05f, juce::String("v90=")  + juce::String(v90));
             expect (std::abs (v180) < 0.05f, juce::String("v180=") + juce::String(v180));
             expect (std::abs (v270 - (-1.0f)) < 0.05f, juce::String("v270=") + juce::String(v270));
         }
 
-        beginTest ("Wavetable has correct dimensions");
+        beginTest ("Spec-built wavetable has correct dimensions");
         {
-            auto wt = tw::Wavetable::makeSine();
-            expectEquals (wt.getNumFrames(), 1, "sine table is single-frame");
-            expect (wt.getFrameSize() >= 256, "sine table should have ≥256 samples per frame");
+            tw::Wavetable wt;
+            wt.buildFromSpec (tw::Wavetable::makeSineSpec());
+            expectEquals (wt.getNumFrames(),    tw::WavetableSpec::kNumFrames, "spec wavetable has 16 frames");
+            expectEquals (wt.getFrameSize(),    tw::Wavetable::kFrameSize,     "spec wavetable has 2048 samples per frame");
+            expectEquals (wt.getNumMipLevels(), tw::Wavetable::kNumMipLevels,  "spec wavetable has 8 mip levels");
         }
 
         beginTest ("Prophet Saw has 16 frames + non-zero RMS in every frame");
@@ -144,12 +147,12 @@ public:
 
         beginTest ("lookup(int, framePos, phase) for legacy single-tier table clamps mipLevel to 0");
         {
-            // Legacy makeSine() goes through the OLD constructor → numMipLevels_ = 1.
-            auto wt = tw::Wavetable::makeSine();
-            const float v_lvl0 = wt.lookup (0, 0.0f, 0.25f);
-            const float v_lvl7 = wt.lookup (7, 0.0f, 0.25f);  // out-of-range, must clamp
+            // Legacy makeJupiterPWM() goes through the OLD constructor → numMipLevels_ = 1.
+            auto wt = tw::Wavetable::makeJupiterPWM();
+            expectEquals (wt.getNumMipLevels(), 1, "legacy table should be single-tier");
+            const float v_lvl0 = wt.lookup (0, 0.5f, 0.25f);
+            const float v_lvl7 = wt.lookup (7, 0.5f, 0.25f);  // out-of-range, must clamp
             expectWithinAbsoluteError (v_lvl7, v_lvl0, 1.0e-6f);
-            expect (std::abs (v_lvl0 - 1.0f) < 0.05f, juce::String ("expected ~1, got ") + juce::String (v_lvl0));
         }
 
         beginTest ("spec-built sine wavetable: lookup at phase=0.25 ~= 1.0 at all mip levels");
@@ -200,6 +203,54 @@ public:
                 expect (lvl >= prev, juce::String ("midi ") + juce::String (n) + " lvl=" + juce::String (lvl) + " < prev=" + juce::String (prev));
                 prev = lvl;
             }
+        }
+
+        beginTest ("makeSquareSpec — odd harmonics only, 256-harmonic ceiling");
+        {
+            const auto spec = tw::Wavetable::makeSquareSpec();
+            for (int f = 0; f < 16; ++f)
+            {
+                const auto& fs = spec.frames[(size_t) f];
+                expect (fs.numHarmonics > 100, "square should have many harmonics");
+                // Even harmonics must be zero.
+                for (int h = 2; h <= fs.numHarmonics; h += 2)
+                    expect (fs.amplitudes[(size_t)(h - 1)] == 0.0f,
+                            juce::String ("frame=") + juce::String (f) + " harmonic " + juce::String (h) + " non-zero");
+                // Odd harmonics must follow 1/h pattern roughly.
+                const float a1 = fs.amplitudes[0];
+                const float a3 = fs.amplitudes[2];
+                expect (std::abs (a3 - a1 / 3.0f) < 1.0e-4f, "a3 != a1/3");
+            }
+        }
+
+        beginTest ("makeSineSpec / makeTriangleSpec / makePulseSpec — all frames are non-empty and identical (basic shapes)");
+        {
+            const auto sine     = tw::Wavetable::makeSineSpec();
+            const auto triangle = tw::Wavetable::makeTriangleSpec();
+            const auto pulse    = tw::Wavetable::makePulseSpec();
+            for (const auto* sp : { &sine, &triangle, &pulse })
+            {
+                expect (sp->frames[0].numHarmonics > 0);
+                // All 16 frames identical → basic shape.
+                for (int f = 1; f < 16; ++f)
+                {
+                    expectEquals (sp->frames[(size_t) f].numHarmonics, sp->frames[0].numHarmonics);
+                    for (int h = 0; h < tw::FrameSpec::kMaxHarmonics; ++h)
+                        expectWithinAbsoluteError (sp->frames[(size_t) f].amplitudes[(size_t) h],
+                                                   sp->frames[0].amplitudes[(size_t) h], 1.0e-9f);
+                }
+            }
+        }
+
+        beginTest ("Square wavetable from spec → built mip 0 looks square-ish (peak ≈ ±1)");
+        {
+            tw::Wavetable wt;
+            wt.buildFromSpec (tw::Wavetable::makeSquareSpec());
+            // After normalize, peak should be ~1
+            float peak = 0.0f;
+            for (int i = 0; i < 2048; ++i)
+                peak = std::max (peak, std::abs (wt.lookup (0, 0.0f, (float) i / 2048.0f)));
+            expect (peak > 0.9f && peak < 1.05f, juce::String ("square peak=") + juce::String (peak));
         }
     }
 };

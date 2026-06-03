@@ -50,10 +50,10 @@ namespace tw
 
         WavetableBank()
         {
-            tables_[(size_t) Sine]           = Wavetable::makeSine();
-            tables_[(size_t) Triangle]       = Wavetable::makeTriangle();
-            tables_[(size_t) Square]         = Wavetable::makeSquare();
-            tables_[(size_t) Pulse]          = Wavetable::makePulse();
+            tables_[(size_t) Sine]          .buildFromSpec (Wavetable::makeSineSpec());
+            tables_[(size_t) Triangle]      .buildFromSpec (Wavetable::makeTriangleSpec());
+            tables_[(size_t) Square]        .buildFromSpec (Wavetable::makeSquareSpec());
+            tables_[(size_t) Pulse]         .buildFromSpec (Wavetable::makePulseSpec());
             tables_[(size_t) ProphetSaw]     = Wavetable::makeProphetSaw();
             tables_[(size_t) JupiterPWM]     = Wavetable::makeJupiterPWM();
             tables_[(size_t) MoogSqr]        = Wavetable::makeMoogSqr();

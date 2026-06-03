@@ -170,84 +170,89 @@ namespace tw
         }
 
         // ── Factory methods ─────────────────────────────────────────────────
-        /** Plain sine (one frame). Reference for tests and the "boring baseline." */
-        static Wavetable makeSine()
+
+        // ── Basic category (Phase 10a — frequency-domain spec format) ────────
+        // 4 fundamental waveforms, all 16 frames identical (no morph).
+        // 256 harmonics; the mip system bandlimits per-pitch.
+
+        /** Pure sine: one harmonic at full amplitude. */
+        static WavetableSpec makeSineSpec()
         {
-            Wavetable wt (1);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            for (int i = 0; i < wt.frameSize_; ++i)
-                wt.sampleRef (0, i) = (float) std::sin (twoPi * (double) i / (double) wt.frameSize_);
-            return wt;
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.amplitudes[0] = 1.0f;
+                fs.phases[0]     = 0.0f;
+                fs.numHarmonics  = 1;
+            }
+            return spec;
         }
 
-        // ── Basic category (Phase 9 polish) — 4 fundamental waveforms ───────
-        // Constant across all frames (no morph — these are "basic" by design).
-        // Bandlimited additive synthesis (32 harmonics) for Triangle/Square/Pulse.
-
         /** Bandlimited triangle: odd harmonics, 1/n² decay, alternating sign. */
-        static Wavetable makeTriangle()
+        static WavetableSpec makeTriangleSpec()
         {
-            Wavetable wt (1);
-            constexpr int numHarmonics = 32;
-            constexpr double pi  = 3.14159265358979323846;
-            constexpr double pi2 = 2.0 * pi;
-            const int N = wt.frameSize_;
-            for (int i = 0; i < N; ++i)
+            WavetableSpec spec;
+            constexpr double pi = 3.14159265358979323846;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                const double phase = (double) i / (double) N;
-                double v = 0.0;
-                for (int n = 1; n <= numHarmonics; n += 2)
+                FrameSpec& fs = spec.frames[(size_t) f];
+                int populated = 0;
+                for (int n = 1; n <= FrameSpec::kMaxHarmonics; n += 2)
                 {
                     const double sign = ((n - 1) / 2) % 2 == 0 ? 1.0 : -1.0;
-                    v += sign * std::sin (pi2 * (double) n * phase) / (double) (n * n);
+                    fs.amplitudes[(size_t)(n - 1)] = (float)(sign * 8.0 / (pi * pi) / (double)(n * n));
+                    fs.phases[(size_t)(n - 1)]     = 0.0f;
+                    populated = n;
                 }
-                v *= 8.0 / (pi * pi);
-                wt.sampleRef (0, i) = (float) v;
+                fs.numHarmonics = populated;
             }
-            return wt;
+            return spec;
         }
 
         /** Bandlimited square: odd harmonics, 1/n decay. */
-        static Wavetable makeSquare()
+        static WavetableSpec makeSquareSpec()
         {
-            Wavetable wt (1);
-            constexpr int numHarmonics = 32;
-            constexpr double pi  = 3.14159265358979323846;
-            constexpr double pi2 = 2.0 * pi;
-            const int N = wt.frameSize_;
-            for (int i = 0; i < N; ++i)
+            WavetableSpec spec;
+            constexpr double pi = 3.14159265358979323846;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                const double phase = (double) i / (double) N;
-                double v = 0.0;
-                for (int n = 1; n <= numHarmonics; n += 2)
-                    v += std::sin (pi2 * (double) n * phase) / (double) n;
-                v *= 4.0 / pi;
-                wt.sampleRef (0, i) = (float) v;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                int populated = 0;
+                for (int n = 1; n <= FrameSpec::kMaxHarmonics; n += 2)
+                {
+                    fs.amplitudes[(size_t)(n - 1)] = (float)(4.0 / pi / (double) n);
+                    fs.phases[(size_t)(n - 1)]     = 0.0f;
+                    populated = n;
+                }
+                fs.numHarmonics = populated;
             }
-            return wt;
+            return spec;
         }
 
-        /** Bandlimited 25% duty pulse: all harmonics, amplitude = (2/πn)sin(πnd). */
-        static Wavetable makePulse()
+        /** Bandlimited 25% duty pulse: all harmonics, amplitude (2/πn)sin(πnd).
+         *  Uses cosine phase (phase = π/2) so the additive sin sum acts as cos
+         *  — produces the conventional pulse shape, not its Hilbert dual. */
+        static WavetableSpec makePulseSpec()
         {
-            Wavetable wt (1);
-            constexpr int numHarmonics = 32;
-            constexpr double pi   = 3.14159265358979323846;
-            constexpr double pi2  = 2.0 * pi;
+            WavetableSpec spec;
+            constexpr double pi  = 3.14159265358979323846;
             constexpr double duty = 0.25;
-            const int N = wt.frameSize_;
-            for (int i = 0; i < N; ++i)
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                const double phase = (double) i / (double) N;
-                double v = 2.0 * duty - 1.0;  // DC offset for asymmetric pulse
-                for (int n = 1; n <= numHarmonics; ++n)
+                FrameSpec& fs = spec.frames[(size_t) f];
+                int populated = 0;
+                for (int n = 1; n <= FrameSpec::kMaxHarmonics; ++n)
                 {
                     const double amp = (2.0 / (pi * (double) n)) * std::sin (pi * (double) n * duty);
-                    v += amp * std::cos (pi2 * (double) n * phase);
+                    fs.amplitudes[(size_t)(n - 1)] = (float) amp;
+                    // cos(x) = sin(x + π/2)  — apply +π/2 so additive sin sum acts as cos
+                    fs.phases[(size_t)(n - 1)]     = (float)(pi * 0.5);
+                    populated = n;
                 }
-                wt.sampleRef (0, i) = (float) v;
+                fs.numHarmonics = populated;
             }
-            return wt;
+            return spec;
         }
 
         // ── Analog category: 6 iconic tables (Phase 2A) ──────────────────────

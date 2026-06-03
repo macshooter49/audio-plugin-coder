@@ -187,7 +187,8 @@ public:
 
         beginTest ("Wavetable lookup: SynthVoice with sine table produces output");
         {
-            tw::Wavetable sineTable = tw::Wavetable::makeSine();
+            tw::Wavetable sineTable;
+            sineTable.buildFromSpec (tw::Wavetable::makeSineSpec());
             tw::SynthVoice v;
             v.setCurrentPlaybackSampleRate (48000.0);
             v.prepareToPlay (48000.0, 1024, 2);
