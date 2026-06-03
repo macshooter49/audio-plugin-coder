@@ -1618,6 +1618,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float erosionPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_EROSION);
         const float horizonPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_HORIZON);
         const float unisonSpread01 = spreadPct / 100.0f;
+
+        // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
+        // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
+        const int voiceCap = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_VOICES);
+        synthEngine.setVoiceCap (voiceCap);
         for (int v = 0; v < synthEngine.getNumVoices(); ++v)
         {
             if (auto* tv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (v)))

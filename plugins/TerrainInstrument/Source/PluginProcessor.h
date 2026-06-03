@@ -112,10 +112,46 @@ struct PresetData
 //==============================================================================
 // Phase 8a/8b — Synth wrapper. Originally subclassed Synthesiser to override
 // noteOn so it spawned UNISON×N voices per note. Phase 8b moved UNISON in-voice
-// (one voice computes all unison sines internally). This class is now just a
-// passthrough — kept to preserve the symbolic type name in PluginProcessor.
+// (one voice computes all unison sines internally).
+// Phase 8b polish-3 — re-overrides noteOn to enforce VOICES knob as a true
+// polyphony cap: count currently-active voices, steal the oldest with tail-off
+// before allocating if cap reached. Mirrors Serum 2 behavior (8 voices = exactly
+// 8 simultaneously, new notes steal old).
 class UnisonSynth : public juce::Synthesiser
 {
+public:
+    void setVoiceCap (int cap) noexcept { voiceCap_ = juce::jlimit (1, 96, cap); }
+
+    void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
+    {
+        const juce::ScopedLock sl (lock);
+
+        // Count currently-active voices (including sustained ones).
+        int activeCount = 0;
+        for (auto* v : voices)
+            if (v != nullptr && v->getCurrentlyPlayingNote() >= 0)
+                ++activeCount;
+
+        // If at cap, steal the oldest BEFORE the default allocator picks one.
+        // The steal-fade in SynthVoice::stopNote keeps the cut click-free.
+        if (activeCount >= voiceCap_)
+        {
+            for (auto* sound : sounds)
+            {
+                if (sound->appliesToNote (midiNoteNumber) && sound->appliesToChannel (midiChannel))
+                {
+                    if (auto* oldest = findVoiceToSteal (sound, midiChannel, midiNoteNumber))
+                        stopVoice (oldest, /*allowTailOff=*/ false);
+                    break;
+                }
+            }
+        }
+
+        juce::Synthesiser::noteOn (midiChannel, midiNoteNumber, velocity);
+    }
+
+private:
+    int voiceCap_ = 32;  // safe default; PluginProcessor pushes the real value per-block
 };
 
 //==============================================================================
