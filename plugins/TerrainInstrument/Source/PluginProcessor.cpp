@@ -900,11 +900,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
 
     // ── Phase 11a — OSC A wavetable rework foundation ────────────────────
-    // SPECTRAL TYPE choice (1 option in 11a; "NONE")
+    // SPECTRAL TYPE choice (Phase 11c: 3 modes — Low Pass / High Pass / Smear)
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE, 1 },
         "OSC A Spectral Type",
-        juce::StringArray { "NONE" },
+        juce::StringArray { "Low Pass", "High Pass", "Smear" },
         0));
     // SPECTRAL AMT (placeholder param — no DSP yet, persists for V1-fwd compat)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -985,11 +985,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC B Warp Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
-    // ── Phase 11a — OSC B wavetable rework foundation ────────────────────
+    // ── Phase 11a — OSC B wavetable rework foundation (SPECTRAL: Phase 11c) ─
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE, 1 },
         "OSC B Spectral Type",
-        juce::StringArray { "NONE" },
+        juce::StringArray { "Low Pass", "High Pass", "Smear" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT, 1 },
