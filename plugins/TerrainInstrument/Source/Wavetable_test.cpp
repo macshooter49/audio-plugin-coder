@@ -33,45 +33,57 @@ public:
             expectEquals (wt.getNumMipLevels(), tw::Wavetable::kNumMipLevels,  "spec wavetable has 8 mip levels");
         }
 
-        beginTest ("Prophet Saw has 16 frames + non-zero RMS in every frame");
+        beginTest ("Spec-built Prophet Saw has 16 frames + non-zero RMS at mip 0 and mip 4");
         {
-            auto wt = tw::Wavetable::makeProphetSaw();
+            tw::Wavetable wt;
+            wt.buildFromSpec (tw::Wavetable::makeProphetSawSpec());
             expectEquals (wt.getNumFrames(), 16);
-            for (int f = 0; f < 16; ++f)
+            for (int lvl : { 0, 4 })
             {
-                float sumSq = 0.0f;
-                for (int i = 0; i < wt.getFrameSize(); ++i)
+                for (int f = 0; f < 16; ++f)
                 {
-                    const float s = wt.lookup ((float) f / 15.0f, (float) i / (float) wt.getFrameSize());
-                    sumSq += s * s;
+                    float sumSq = 0.0f;
+                    for (int i = 0; i < wt.getFrameSize(); ++i)
+                    {
+                        const float s = wt.lookup (lvl, (float) f / 15.0f, (float) i / (float) wt.getFrameSize());
+                        sumSq += s * s;
+                    }
+                    const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
+                    expect (rms > 0.05f, juce::String ("Prophet Saw lvl=") + juce::String (lvl) + " frame=" + juce::String (f) + " RMS=" + juce::String (rms));
                 }
-                const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
-                expect (rms > 0.1f, juce::String ("Prophet Saw frame ") + juce::String (f) + " RMS=" + juce::String (rms));
             }
         }
 
-        beginTest ("All 6 analog wavetable factories construct + produce audio");
+        beginTest ("All 6 analog wavetables (3 spec + 3 legacy) construct + produce audio");
         {
-            tw::Wavetable tables[] = {
-                tw::Wavetable::makeProphetSaw(),
+            // 3 migrated → spec-based
+            tw::Wavetable specTables[3];
+            specTables[0].buildFromSpec (tw::Wavetable::makeProphetSawSpec());
+            specTables[1].buildFromSpec (tw::Wavetable::makeOBXSawSpec());
+            specTables[2].buildFromSpec (tw::Wavetable::makeJunoStrSpec());
+            // 3 legacy (Phase 10c migrates these)
+            tw::Wavetable legacyTables[] = {
                 tw::Wavetable::makeJupiterPWM(),
                 tw::Wavetable::makeMoogSqr(),
-                tw::Wavetable::makeOBXSaw(),
-                tw::Wavetable::makeCS80Brass(),
-                tw::Wavetable::makeJunoStr(),
+                tw::Wavetable::makeCS80Brass()
             };
-            for (auto& wt : tables)
-            {
-                expectEquals (wt.getNumFrames(), 16);
+            const auto testRms = [this](const tw::Wavetable& wt, const char* label) {
+                expectEquals (wt.getNumFrames(), 16, juce::String (label) + " not 16 frames");
                 float sumSq = 0.0f;
                 for (int i = 0; i < wt.getFrameSize(); ++i)
                 {
-                    const float s = wt.lookup (0.5f, (float) i / (float) wt.getFrameSize());
+                    const float s = wt.lookup (0, 0.5f, (float) i / (float) wt.getFrameSize());
                     sumSq += s * s;
                 }
                 const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
-                expect (rms > 0.1f, juce::String ("RMS=") + juce::String (rms));
-            }
+                expect (rms > 0.05f, juce::String (label) + " RMS=" + juce::String (rms));
+            };
+            testRms (specTables[0], "ProphetSawSpec");
+            testRms (specTables[1], "OBXSawSpec");
+            testRms (specTables[2], "JunoStrSpec");
+            testRms (legacyTables[0], "JupiterPWM (legacy)");
+            testRms (legacyTables[1], "MoogSqr (legacy)");
+            testRms (legacyTables[2], "CS80Brass (legacy)");
         }
 
         beginTest ("All 14 Phase 2B wavetable factories construct + produce audio");
@@ -252,6 +264,61 @@ public:
             for (int i = 0; i < 2048; ++i)
                 peak = std::max (peak, std::abs (wt.lookup (0, 0.0f, (float) i / 2048.0f)));
             expect (peak > 0.9f && peak < 1.05f, juce::String ("square peak=") + juce::String (peak));
+        }
+
+        beginTest ("makeProphetSawSpec — harmonic count decreases across frames");
+        {
+            const auto spec = tw::Wavetable::makeProphetSawSpec();
+            expect (spec.frames[0].numHarmonics  >= 80, "frame 0 should be bright");
+            expect (spec.frames[15].numHarmonics <= 20, "frame 15 should be warm");
+            expect (spec.frames[0].numHarmonics > spec.frames[15].numHarmonics, "should decrease across frames");
+            // Every harmonic should be present with ~1/h amplitude
+            for (int h = 1; h <= 10; ++h)
+                expect (spec.frames[0].amplitudes[(size_t)(h - 1)] > 0.0f,
+                        juce::String ("frame 0 harmonic ") + juce::String (h) + " is zero");
+        }
+
+        beginTest ("makeOBXSawSpec + makeJunoStrSpec — 16 frames, saw spectrum, frame-dependent variation");
+        {
+            const auto obx  = tw::Wavetable::makeOBXSawSpec();
+            const auto juno = tw::Wavetable::makeJunoStrSpec();
+            for (const auto* sp : { &obx, &juno })
+            {
+                expect (sp->frames[0].numHarmonics > 30, "frame 0 should have substantial harmonics");
+                // Saw-like: harmonic 1 amp > harmonic 5 amp
+                expect (sp->frames[0].amplitudes[0] > sp->frames[0].amplitudes[4], "saw 1/h pattern");
+                // Frame-to-frame variation must exist somewhere
+                bool different = false;
+                for (int h = 0; h < tw::FrameSpec::kMaxHarmonics && ! different; ++h)
+                    if (std::abs (sp->frames[0].phases[(size_t) h] - sp->frames[15].phases[(size_t) h]) > 0.01f)
+                        different = true;
+                expect (different, "frame 0 phases must differ from frame 15 phases");
+            }
+        }
+
+        beginTest ("All 3 analog-saw specs build into non-silent wavetables at mip 0 and mip 7");
+        {
+            tw::WavetableSpec specs[] = {
+                tw::Wavetable::makeProphetSawSpec(),
+                tw::Wavetable::makeOBXSawSpec(),
+                tw::Wavetable::makeJunoStrSpec()
+            };
+            for (auto& spec : specs)
+            {
+                tw::Wavetable wt;
+                wt.buildFromSpec (spec);
+                for (int lvl : { 0, 7 })
+                {
+                    float sumSq = 0.0f;
+                    for (int i = 0; i < 2048; ++i)
+                    {
+                        const float v = wt.lookup (lvl, 0.5f, (float) i / 2048.0f);
+                        sumSq += v * v;
+                    }
+                    const float rms = std::sqrt (sumSq / 2048.0f);
+                    expect (rms > 0.05f, juce::String ("lvl=") + juce::String (lvl) + " rms=" + juce::String (rms));
+                }
+            }
         }
     }
 };

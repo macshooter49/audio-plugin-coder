@@ -265,28 +265,85 @@ namespace tw
         // no sampled or copyrighted content. Character is in the harmonic
         // distribution + frame-to-frame morph curve, not in any specific sample.
 
-        /** Prophet 5-style saw: frame 0 = full bright saw, frame 15 = warm
-         *  (higher harmonics rolled off, evoking the SSM 2044 filter). */
-        static Wavetable makeProphetSaw()
+        /** Prophet 5-style saw — frame-dependent harmonic rolloff.
+         *  Frame 0 = ~100 harmonics (bright), frame 15 = ~12 harmonics (warm). */
+        static WavetableSpec makeProphetSawSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                // Frame-dependent harmonic rolloff. Frame 0 = ~100 harmonics
-                // (bright); frame 15 = ~12 harmonics (warm).
-                const int maxHarm = 100 - (int)((100.0 - 12.0) * (double) f / 15.0);
-                for (int i = 0; i < N; ++i)
+                FrameSpec& fs = spec.frames[(size_t) f];
+                const int hMax = 100 - (int)((100.0 - 12.0) * (double) f / 15.0);  // 100..12
+                int populated = 0;
+                for (int h = 1; h <= hMax; ++h)
                 {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= maxHarm; ++h)
-                        s += std::sin (phase * (double) h) / (double) h;
-                    wt.sampleRef (f, i) = (float)(s * (2.0 / 3.14159265358979323846));
+                    fs.amplitudes[(size_t)(h - 1)] = (float)(1.0 / (double) h);
+                    fs.phases[(size_t)(h - 1)]     = 0.0f;
+                    populated = h;
                 }
+                fs.numHarmonics = populated;
             }
-            return wt;
+            return spec;
+        }
+
+        /** OB-X dual-saw chorus character — saw spectrum at every frame, with
+         *  per-harmonic phase scatter growing from 0 (frame 0) to 12-cents-worth
+         *  (frame 15). Deterministic seed for reproducibility. The static phase
+         *  scatter approximates the "thickened saw" character; users get true
+         *  beating from UNISON + SPREAD + EROSION at the voice level. */
+        static WavetableSpec makeOBXSawSpec()
+        {
+            WavetableSpec spec;
+            constexpr int hMax = 80;
+            constexpr double pi2 = 2.0 * 3.14159265358979323846;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                FrameSpec& fs = spec.frames[(size_t) f];
+                const double cents      = 12.0 * ((double) f / 15.0);   // 0..12 cents
+                const double scatterAmt = cents / 12.0 * 0.3;            // 0..0.3 of a cycle
+                unsigned int rng = 0xCAFEF00Du + (unsigned) f;
+                auto rand01 = [&]() {
+                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                    return ((double) rng / (double) 0xFFFFFFFFu);
+                };
+                for (int h = 1; h <= hMax; ++h)
+                {
+                    fs.amplitudes[(size_t)(h - 1)] = (float)(1.0 / (double) h);
+                    fs.phases[(size_t)(h - 1)]     = (float)(pi2 * scatterAmt * (rand01() - 0.5));
+                }
+                fs.numHarmonics = hMax;
+            }
+            return spec;
+        }
+
+        /** Juno-style 3-saw ensemble — saw spectrum + frame-dependent even-
+         *  harmonic boost + 8-cents-worth of per-harmonic phase scatter. */
+        static WavetableSpec makeJunoStrSpec()
+        {
+            WavetableSpec spec;
+            constexpr int hMax = 60;
+            constexpr double pi2 = 2.0 * 3.14159265358979323846;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                FrameSpec& fs = spec.frames[(size_t) f];
+                const double t          = (double) f / 15.0;             // 0..1
+                const double cents      = 8.0 * t;                       // 0..8 cents
+                const double scatterAmt = cents / 8.0 * 0.25;            // 0..0.25 of a cycle
+                const double evenBoost  = 1.0 + 0.3 * t;                 // 1.0..1.3 for even harmonics
+                unsigned int rng = 0xBEEFCAFEu + (unsigned) f;
+                auto rand01 = [&]() {
+                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                    return ((double) rng / (double) 0xFFFFFFFFu);
+                };
+                for (int h = 1; h <= hMax; ++h)
+                {
+                    const double boost = (h % 2 == 0) ? evenBoost : 1.0;
+                    fs.amplitudes[(size_t)(h - 1)] = (float)(boost / (double) h);
+                    fs.phases[(size_t)(h - 1)]     = (float)(pi2 * scatterAmt * (rand01() - 0.5));
+                }
+                fs.numHarmonics = hMax;
+            }
+            return spec;
         }
 
         /** Jupiter-8 PWM: pulse wave morphing from 50% (square) at frame 0
@@ -340,34 +397,6 @@ namespace tw
             return wt;
         }
 
-        /** OB-X dual-saw: one saw + a detuned saw offset by frame-dependent
-         *  cents (0 → 12 cents across frames). Classic OB-X chorusing. */
-        static Wavetable makeOBXSaw()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
-            {
-                // Detune: 0 → 12 cents. Equivalent frequency multiplier 2^(cents/1200).
-                const double cents  = 12.0 * ((double) f / 15.0);
-                const double ratio  = std::pow (2.0, cents / 1200.0);
-                const int   maxH    = 80;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= maxH; ++h)
-                    {
-                        s += std::sin (phase * (double) h) / (double) h;
-                        s += std::sin (phase * (double) h * ratio) / (double) h;
-                    }
-                    wt.sampleRef (f, i) = (float)(s * (1.0 / 3.14159265358979323846));
-                }
-            }
-            return wt;
-        }
-
         /** CS-80 brass: saw blended with high-passed reproducible noise.
          *  Frame 0 = pure saw, frame 15 = saw + airy noise breath. */
         static Wavetable makeCS80Brass()
@@ -402,35 +431,6 @@ namespace tw
                         saw += std::sin (phase * (double) h) / (double) h;
                     saw *= (2.0 / 3.14159265358979323846);
                     wt.sampleRef (f, i) = (float) saw + (float) noiseAmp * noise[(size_t) i];
-                }
-            }
-            return wt;
-        }
-
-        /** Juno-style 3-saw ensemble: 3 detuned saws, spread 0 → 8 cents
-         *  across frames. Wide unison character in a single waveform. */
-        static Wavetable makeJunoStr()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
-            {
-                const double cents  = 8.0 * ((double) f / 15.0);
-                const double rUp    = std::pow (2.0,  cents / 1200.0);
-                const double rDn    = std::pow (2.0, -cents / 1200.0);
-                const int    maxH   = 60;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= maxH; ++h)
-                    {
-                        s += std::sin (phase * (double) h) / (double) h;
-                        s += std::sin (phase * (double) h * rUp) / (double) h;
-                        s += std::sin (phase * (double) h * rDn) / (double) h;
-                    }
-                    wt.sampleRef (f, i) = (float)(s * (2.0 / (3.0 * 3.14159265358979323846)));
                 }
             }
             return wt;
