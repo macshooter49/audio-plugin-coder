@@ -71,19 +71,17 @@
   .osc-wave { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
   .osc-wave svg { width: 92%; height: 78%; }
 
-  /* Back-view selector row replaces the visualizer */
-  .selector-row {
-    height: 48px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px;
-    padding: 6px; box-sizing: border-box;
-  }
-  .selector {
-    background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 5px;
+  /* Back-view selector pills — sibling of engine-pills row, EDGE-TO-EDGE aligned */
+  .selector-pills { display: flex; gap: 5px; }
+  .sel {
+    flex: 1; height: 48px;
+    border: 1px solid var(--border-strong); border-radius: 6px;
+    background: rgba(80, 70, 110, 0.20);   /* low-opacity dark block */
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    font-size: 8px; letter-spacing: 1.1px; color: var(--text-muted); text-transform: uppercase;
-    font-weight: 300;
+    gap: 3px;
   }
-  .selector .sel-label { color: var(--text-muted); font-size: 7px; letter-spacing: 1.3px; }
-  .selector .sel-value { color: var(--text-primary); font-size: 9px; letter-spacing: 0.8px; margin-top: 2px; font-weight: 300; }
+  .sel-label { color: var(--text-muted); font-size: 7px; letter-spacing: 1.3px; text-transform: uppercase; font-weight: 300; }
+  .sel-value { color: var(--text-primary); font-size: 10px; letter-spacing: 0.6px; font-weight: 300; }
 
   /* Knob row */
   .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
@@ -199,13 +197,11 @@
         <div class="eng">GR</div>
         <div class="eng">SP</div>
       </div>
-      <div class="osc-display" style="padding: 0;">
-        <div class="selector-row">
-          <div class="selector"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
-          <div class="selector"><div class="sel-label">SPECTRAL</div><div class="sel-value">Vocode</div></div>
-          <div class="selector"><div class="sel-label">FOLD</div><div class="sel-value">Sine</div></div>
-          <div class="selector"><div class="sel-label">INTERP</div><div class="sel-value">Spectral</div></div>
-        </div>
+      <div class="selector-pills">
+        <div class="sel"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
+        <div class="sel"><div class="sel-label">SPECTRAL</div><div class="sel-value">Vocode</div></div>
+        <div class="sel"><div class="sel-label">FOLD</div><div class="sel-value">Sine</div></div>
+        <div class="sel"><div class="sel-label">INTERP</div><div class="sel-value">Spectral</div></div>
       </div>
       <div class="osc-knobs">
         <div class="knob"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
@@ -296,13 +292,11 @@
         <div class="eng">GR</div>
         <div class="eng">SP</div>
       </div>
-      <div class="osc-display" style="padding: 0;">
-        <div class="selector-row">
-          <div class="selector"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
-          <div class="selector"><div class="sel-label">SPECTRAL</div><div class="sel-value">Vocode</div></div>
-          <div class="selector"><div class="sel-label">FOLD</div><div class="sel-value">Sine</div></div>
-          <div class="selector"><div class="sel-label">INTERP</div><div class="sel-value">Spectral</div></div>
-        </div>
+      <div class="selector-pills">
+        <div class="sel"><div class="sel-label">WARP</div><div class="sel-value">Bend +</div></div>
+        <div class="sel"><div class="sel-label">SPECTRAL</div><div class="sel-value">Vocode</div></div>
+        <div class="sel"><div class="sel-label">FOLD</div><div class="sel-value">Sine</div></div>
+        <div class="sel"><div class="sel-label">INTERP</div><div class="sel-value">Spectral</div></div>
       </div>
       <div class="osc-knobs">
         <div class="knob"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
