@@ -4200,48 +4200,88 @@ body {
                 </optgroup>
               </select>
             </div>
-            <!-- engine pills row (default visible state) -->
-            <div class="engine-pills">
-              <div class="eng act" data-eng-idx="0"><svg><use href="#ic-wt"/></svg></div>
-              <div class="eng" data-eng-idx="1"><svg><use href="#ic-samp"/></svg></div>
-              <div class="eng" data-eng-idx="2"><svg><use href="#ic-gran"/></svg></div>
-              <div class="eng" data-eng-idx="3"><svg><use href="#ic-spec"/></svg></div>
-              <div class="eng" data-eng-idx="4"><svg><use href="#ic-fm"/></svg></div>
-              <div class="eng" data-eng-idx="5"><svg><use href="#ic-noise"/></svg></div>
-            </div>
-            <!-- engine-controls row (swap state — hidden by default) -->
-            <div class="engine-controls">
-              <div class="ec-knob-group">
-                <div class="knob" data-syn="SYN_OSC_A_WT_FRAME"><div class="knob-ring"></div></div>
-                <div class="ec-label">FRAME</div>
+            <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
+            <div class="front-only" style="flex-direction: column; gap: 5px; flex: 1;">
+              <!-- engine pills row (unchanged) -->
+              <div class="engine-pills">
+                <div class="eng act" data-eng-idx="0"><svg><use href="#ic-wt"/></svg></div>
+                <div class="eng" data-eng-idx="1"><svg><use href="#ic-samp"/></svg></div>
+                <div class="eng" data-eng-idx="2"><svg><use href="#ic-gran"/></svg></div>
+                <div class="eng" data-eng-idx="3"><svg><use href="#ic-spec"/></svg></div>
+                <div class="eng" data-eng-idx="4"><svg><use href="#ic-fm"/></svg></div>
+                <div class="eng" data-eng-idx="5"><svg><use href="#ic-noise"/></svg></div>
               </div>
-              <div class="ec-select-group">
-                <select class="warp-select" data-syn="SYN_OSC_A_WARP_MODE" id="osc-a-warp-select">
-                  <option value="0">NONE</option>
-                  <option value="1">BEND</option>
-                  <option value="2">SYNC</option>
-                  <option value="3">FORMANT</option>
-                </select>
-                <div class="ec-label">WARP</div>
+              <!-- waveform display (unchanged) -->
+              <div class="osc-display">
+                <div class="osc-wave">
+                  <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+                    <path d="M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
+                  </svg>
+                </div>
               </div>
-              <div class="ec-knob-group">
-                <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div></div>
-                <div class="ec-label">AMT</div>
-              </div>
-            </div>
-            <div class="osc-display">
-              <div class="osc-wave">
-                <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-                  <path d="M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
-                </svg>
+              <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
+              <div class="osc-knobs">
+                <div class="knob" data-syn="SYN_OSC_A_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT POS</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">WARP</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">SPECTRAL</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">FOLD</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD"><div class="knob-ring"></div><div class="knob-label">SPREAD</div></div>
               </div>
             </div>
-            <div class="osc-knobs">
-              <div class="knob" data-syn="SYN_OSC_A_OCT"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
-              <div class="knob" data-syn="SYN_OSC_A_SEMI"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
-              <div class="knob" data-syn="SYN_OSC_A_CENT"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
-              <div class="knob" data-syn="SYN_OSC_A_LEVEL"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
-              <div class="knob" data-syn="SYN_OSC_A_PAN"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+
+            <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
+            <div class="back-only" style="flex-direction: column; gap: 5px; flex: 1;">
+              <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
+              <div class="blend-pills">
+                <div class="blend-pill">B1</div>
+                <div class="blend-pill">B2</div>
+                <div class="blend-pill">B3</div>
+                <div class="blend-pill">B4</div>
+                <div class="blend-pill">MIX</div>
+                <div class="blend-pill">MOD</div>
+              </div>
+              <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
+              <div class="selector-pills">
+                <div class="sel">
+                  <div class="sel-label">WARP</div>
+                  <div class="sel-value" id="osc-a-warp-mode-value">NONE</div>
+                  <select class="sel-select" data-syn="SYN_OSC_A_WARP_MODE" id="osc-a-warp-mode-select" aria-label="WARP type">
+                    <option value="0">NONE</option>
+                    <option value="1">Bend</option>
+                    <option value="2">Sync</option>
+                    <option value="3">Formant</option>
+                  </select>
+                </div>
+                <div class="sel">
+                  <div class="sel-label">SPECTRAL</div>
+                  <div class="sel-value" id="osc-a-spectral-type-value">NONE</div>
+                  <select class="sel-select" data-syn="SYN_OSC_A_SPECTRAL_TYPE" id="osc-a-spectral-type-select" aria-label="SPECTRAL type">
+                    <option value="0">NONE</option>
+                  </select>
+                </div>
+                <div class="sel">
+                  <div class="sel-label">FOLD</div>
+                  <div class="sel-value" id="osc-a-fold-shape-value">LINEAR</div>
+                  <select class="sel-select" data-syn="SYN_OSC_A_FOLD_SHAPE" id="osc-a-fold-shape-select" aria-label="FOLD shape">
+                    <option value="0">LINEAR</option>
+                  </select>
+                </div>
+                <div class="sel">
+                  <div class="sel-label">INTERP</div>
+                  <div class="sel-value" id="osc-a-interp-mode-value">LINEAR</div>
+                  <select class="sel-select" data-syn="SYN_OSC_A_INTERP_MODE" id="osc-a-interp-mode-select" aria-label="INTERP mode">
+                    <option value="0">LINEAR</option>
+                  </select>
+                </div>
+              </div>
+              <!-- BOTTOM ROW: 5 tuning knobs (OCT/SEMI/CENT/LEVEL/PAN) -->
+              <div class="osc-knobs">
+                <div class="knob" data-syn="SYN_OSC_A_OCT"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SEMI"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_CENT"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_LEVEL"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_PAN"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+              </div>
             </div>
           </div>
 
@@ -8517,6 +8557,26 @@ setTimeout(function wireSynControls () {
         } catch (perRow) { console.warn('[SYN-voice-row] per-row failed', perRow); }
       });
     } catch (eRows) { console.warn('[SYN-voice-row] init failed', eRows); }
+
+    // Phase 11a T10 — selector-pills value mirror
+    // Keeps each .sel-value span text in sync with its paired <select> element.
+    // OSC B entries (osc-b-*) return early via the guard until T11 lands their DOM.
+    try {
+      function bindSelValueMirror(selectId, valueId) {
+        const sel = document.getElementById(selectId);
+        const val = document.getElementById(valueId);
+        if (!sel || !val) return;
+        const sync = () => {
+          if (sel.selectedIndex < 0) return;
+          val.textContent = sel.options[sel.selectedIndex].text;
+        };
+        sel.addEventListener('change', sync);
+        sync(); // initial render
+      }
+      ['osc-a-warp-mode',  'osc-a-spectral-type', 'osc-a-fold-shape', 'osc-a-interp-mode',
+       'osc-b-warp-mode',  'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode']
+        .forEach(prefix => bindSelValueMirror(prefix + '-select', prefix + '-value'));
+    } catch (eSelMirror) { console.warn('[SYN-sel-mirror] bindSelValueMirror failed', eSelMirror); }
 
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
