@@ -200,16 +200,7 @@ namespace tw
             engineB_ = static_cast<Engine> (clamped);
         }
 
-        // ── Phase 8a — Unison + EROSION + HORIZON setters ─────────────────
-
-        /** Set extra unison detune + pan offset on this voice. Called by
-         *  UnisonSynth::noteOn before startVoice so each stack member has a
-         *  unique position in the chorus spread. */
-        void setUnisonOffsets (float detuneCents, float panOffset) noexcept
-        {
-            unisonDetuneCents_ = detuneCents;
-            unisonPanOffset_   = juce::jlimit (-1.0f, 1.0f, panOffset);
-        }
+        // ── Phase 8b — Unison + EROSION + HORIZON setters ────────────────
 
         /** Phase 8b — Set UNISON config (count + spread) on this voice. Called
          *  per-block from PluginProcessor broadcast. Computes per-sine detune
@@ -638,21 +629,6 @@ namespace tw
             juce::dsp::ProcessContextReplacing<float> ctx (sub);
             filter_.process (ctx);
 
-            // Phase 8a — Apply unison pan offset (post-filter, pre-HORIZON).
-            // unisonPanOffset_ is in -1..+1; rebalance L/R amplitudes with
-            // equal-power panning (sqrt(2) normalised so centre = unity).
-            if (std::abs (unisonPanOffset_) > 0.001f)
-            {
-                const float panAngle = (unisonPanOffset_ + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
-                const float gainL = std::cos (panAngle) * 1.4142f;
-                const float gainR = std::sin (panAngle) * 1.4142f;
-                for (int i = 0; i < numSamples; ++i)
-                {
-                    scratchL[i] *= gainL;
-                    scratchR[i] *= gainR;
-                }
-            }
-
             // Phase 8a — HORIZON tilt filter (per-channel high-shelf).
             {
                 float* chL = scratch_.getWritePointer (0);
@@ -689,9 +665,8 @@ namespace tw
                   static_cast<double> (midiNote - 69)
                 + static_cast<double> (octOffset_) * 12.0
                 + static_cast<double> (semiOffset_)
-                + static_cast<double> (centsOffset_)       * 0.01
-                + static_cast<double> (unisonDetuneCents_) * 0.01   // Phase 8a
-                + static_cast<double> (currentErosionCents_) * 0.01; // Phase 8a
+                + static_cast<double> (centsOffset_)         * 0.01
+                + static_cast<double> (currentErosionCents_) * 0.01;
             const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
             phaseIncrement_ = hz / sampleRate_;
         }
@@ -703,9 +678,8 @@ namespace tw
                   static_cast<double> (midiNote - 69)
                 + static_cast<double> (octOffsetB_) * 12.0
                 + static_cast<double> (semiOffsetB_)
-                + static_cast<double> (centsOffsetB_)      * 0.01
-                + static_cast<double> (unisonDetuneCents_) * 0.01   // Phase 8a
-                + static_cast<double> (currentErosionCents_) * 0.01; // Phase 8a
+                + static_cast<double> (centsOffsetB_)        * 0.01
+                + static_cast<double> (currentErosionCents_) * 0.01;
             const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
             phaseIncrementB_ = hz / sampleRate_;
         }
@@ -834,10 +808,6 @@ namespace tw
                                          reinterpret_cast<std::uintptr_t> (this));
         float  noiseLpZB_       = 0.0f;
         double modPhaseB_       = 0.0;
-
-        // ── Phase 8a — Unison offset (set per-voice by UnisonSynth on noteOn) ─
-        float unisonDetuneCents_ = 0.0f;  // additional cents for OSC A + OSC B pitch
-        float unisonPanOffset_   = 0.0f;  // -1..+1 applied after filter, pre-HORIZON
 
         // ── Phase 8b — Unison-in-voice state (per-sine arrays) ──────────
         // Each unison sub-voice u in [0, activeUnison_) has its own pitch state.
