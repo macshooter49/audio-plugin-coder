@@ -146,7 +146,7 @@ namespace tw
          *  composes cleanly with any wavetable choice. */
         void setWarp (int mode, float amount) noexcept
         {
-            warpMode_   = juce::jlimit (0, 3, mode);
+            warpMode_   = juce::jlimit (0, 10, mode);
             warpAmount_ = juce::jlimit (0.0f, 1.0f, amount);
         }
 
@@ -190,7 +190,7 @@ namespace tw
 
         void setWarpB (int mode, float amount) noexcept
         {
-            warpModeB_   = juce::jlimit (0, 3, mode);
+            warpModeB_   = juce::jlimit (0, 10, mode);
             warpAmountB_ = juce::jlimit (0.0f, 1.0f, amount);
         }
 
