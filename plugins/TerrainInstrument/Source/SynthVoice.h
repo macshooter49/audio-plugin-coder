@@ -389,8 +389,14 @@ namespace tw
                             if (currentWavetable_ != nullptr)
                             {
                                 double warpedPhase = uPhaseA_[(size_t) u];
+                                float  window      = 1.0f;   // PWM, FORMANT use this post-lookup window
+                                bool   skipLookup  = false;  // PWM silence half-cycle
+
                                 switch (warpMode_)
                                 {
+                                    case 0:  // NONE
+                                        break;
+
                                     case 1:  // BEND
                                     {
                                         const double pi2 = 2.0 * 3.14159265358979323846;
@@ -399,28 +405,105 @@ namespace tw
                                         warpedPhase -= std::floor (warpedPhase);
                                         break;
                                     }
-                                    case 2:  // SYNC
+
+                                    case 2:  // SYNC — 1×..16× exponential (Vital-style)
                                     {
-                                        const double syncRatio = 1.0 + (double) warpAmount_ * 4.0;
-                                        uSyncPhaseA_[(size_t) u] += uPhaseIncA_[(size_t) u] * syncRatio;
-                                        if (uPhaseA_[(size_t) u] < uPhaseIncA_[(size_t) u]) uSyncPhaseA_[(size_t) u] = 0.0;
-                                        if (uSyncPhaseA_[(size_t) u] >= 1.0) uSyncPhaseA_[(size_t) u] -= std::floor (uSyncPhaseA_[(size_t) u]);
-                                        warpedPhase = uSyncPhaseA_[(size_t) u];
-                                        break;
-                                    }
-                                    case 3:  // FORMANT
-                                    {
-                                        warpedPhase = uPhaseA_[(size_t) u] * (1.0 + (double) warpAmount_ * 2.0);
+                                        const double ratio = std::pow (2.0, (double) warpAmount_ * 4.0);
+                                        warpedPhase = uPhaseA_[(size_t) u] * ratio;
                                         warpedPhase -= std::floor (warpedPhase);
                                         break;
                                     }
-                                    case 0:
+
+                                    case 3:  // FORMANT — windowed sync (Vital-style rebuild)
+                                    {
+                                        const double ratio = std::pow (2.0, (double) warpAmount_ * 4.0);
+                                        warpedPhase = uPhaseA_[(size_t) u] * ratio;
+                                        warpedPhase -= std::floor (warpedPhase);
+                                        // Half-sine bell keyed off the un-multiplied master phase
+                                        const double pi = 3.14159265358979323846;
+                                        window = static_cast<float> (std::sin (pi * uPhaseA_[(size_t) u]));
+                                        break;
+                                    }
+
+                                    case 4:  // PWM — duty-cycle window
+                                    {
+                                        const double duty = juce::jmax (0.10, 1.0 - (double) warpAmount_ * 0.45);
+                                        if (uPhaseA_[(size_t) u] >= duty)
+                                            skipLookup = true;
+                                        else
+                                            warpedPhase = uPhaseA_[(size_t) u] / duty;
+                                        break;
+                                    }
+
+                                    case 5:  // SKEW — piecewise 2-segment peak shift
+                                    {
+                                        const double knee = juce::jmax (0.05, 0.5 - (double) warpAmount_ * 0.4);
+                                        const double p    = uPhaseA_[(size_t) u];
+                                        if (p < knee)
+                                            warpedPhase = p / knee * 0.5;
+                                        else
+                                            warpedPhase = 0.5 + (p - knee) / (1.0 - knee) * 0.5;
+                                        break;
+                                    }
+
+                                    case 6:  // MIRROR — squeezed-mirror blend
+                                    {
+                                        const double p = uPhaseA_[(size_t) u];
+                                        const double mirrored = (p < 0.5) ? p * 2.0 : 2.0 - p * 2.0;
+                                        warpedPhase = p * (1.0 - (double) warpAmount_) + mirrored * (double) warpAmount_;
+                                        warpedPhase -= std::floor (warpedPhase);
+                                        break;
+                                    }
+
+                                    case 7:  // FRACTALIZE — fmod cascade, N = 1..8
+                                    {
+                                        const double N = 1.0 + (double) warpAmount_ * 7.0;
+                                        warpedPhase = uPhaseA_[(size_t) u] * N;
+                                        warpedPhase -= std::floor (warpedPhase);
+                                        break;
+                                    }
+
+                                    case 8:  // P-QUANTIZE — phase staircase, 32→1 steps
+                                    {
+                                        const double inv = 1.0 - (double) warpAmount_;
+                                        const double t   = inv * inv;
+                                        const int    steps = juce::jmax (1, (int) std::round (1.0 + t * 31.0));
+                                        warpedPhase = std::floor (uPhaseA_[(size_t) u] * (double) steps) / (double) steps;
+                                        break;
+                                    }
+
+                                    case 9:  // RECTIFY — amp-domain, handled post-lookup
+                                    case 10: // SINE SHAPER — amp-domain, handled post-lookup
+                                        break;
+
                                     default: break;
                                 }
-                                // Phase 11a — per-sine frame spread (wraps to [0,1] before lookup).
-                                float fp = framePos_ + uFramePosA_[(size_t) u];
-                                fp -= std::floor (fp);   // wrap to [0,1)
-                                sAu = currentWavetable_->lookup (currentMipLevelA_, fp, (float) warpedPhase);
+
+                                if (skipLookup)
+                                {
+                                    sAu = 0.0f;
+                                }
+                                else
+                                {
+                                    // Phase 11a per-sine frame spread (wraps to [0,1] before lookup).
+                                    float fp = framePos_ + uFramePosA_[(size_t) u];
+                                    fp -= std::floor (fp);
+                                    sAu = currentWavetable_->lookup (currentMipLevelA_, fp, (float) warpedPhase);
+                                    sAu *= window;
+
+                                    if (warpMode_ == 9)
+                                    {
+                                        // RECTIFY: blend dry with |x|×2−1 by amount
+                                        const float rect = std::abs (sAu) * 2.0f - 1.0f;
+                                        sAu = sAu * (1.0f - warpAmount_) + rect * warpAmount_;
+                                    }
+                                    else if (warpMode_ == 10)
+                                    {
+                                        // SINE SHAPER: sin(x × π/2 × (1 + amount×4))
+                                        const float drive = 1.0f + warpAmount_ * 4.0f;
+                                        sAu = std::sin (sAu * (float) (3.14159265358979323846 * 0.5) * drive);
+                                    }
+                                }
                             }
                             else
                             {
