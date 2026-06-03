@@ -4,7 +4,7 @@
 > **Parent phase chain:** Phase 8b (unison-in-voice) + Phase 10a (frequency-domain wavetables) + Phase 8b polish-3 (voice cap) all shipped → this is the next major phase.
 > **Mockup:** `plugins/TerrainInstrument/Design/v14-wt-engine-mockup.html` (Variant A approved by user)
 > **References used in design:** `docs/research/vital-deep-dive-2026-06-02.md` (Phase 10 era) + new in-session Serum 2 + Vital + Pigments subagent reports (will be archived to `docs/research/2026-06-03-serum2-vital-pigments-wavetable-research.md` after spec ships)
-> **Branch:** `feature/terrain-instrument` · **Starting HEAD:** `64acce8`
+> **Branch:** `feature/terrain-instrument` · **Starting HEAD:** `4550525`
 
 ## TL;DR
 
@@ -68,9 +68,9 @@ Selector params (all NEW except WARP MODE which already exists):
 
 Plus B mirrors.
 
-### Decision 3: PHASE init + RAND amount via right-click on WT POS
+### Decision 3: PHASE init + RAND amount DEFERRED ENTIRELY to Phase 11b
 
-To stay at 5 front knobs without sacrificing PHASE, expose it as a right-click context menu on the WT POS knob. Two values: `SYN_OSC_A_PHASE_INIT` (NEW float 0..1) and `SYN_OSC_A_PHASE_RAND` (NEW float 0..1, default 1.0 to preserve Phase 8b T3's hash-based randomization). Phase 11a wires the params + the right-click handler but the menu UI can be deferred to 11b polish if it crowds the timeline.
+To stay at 5 front knobs without sacrificing PHASE, expose it as a right-click context menu on the WT POS knob — but the params (`SYN_OSC_A_PHASE_INIT`, `SYN_OSC_A_PHASE_RAND`) AND the right-click UI both ship in Phase 11b, NOT 11a. Phase 11a does not touch PHASE init/RAND. Phase 8b T3's hash-based randomization stays on permanently in 11a (current behavior). Rationale: keeps Phase 11a focused on the 5-knob front + back panel scaffolding; PHASE init/RAND would force WT POS into a context-menu pattern that has zero precedent in the codebase, raising scope risk for marginal sonic gain.
 
 ### Decision 4: SPREAD is per-OSC, not global
 
@@ -105,12 +105,12 @@ Per `feedback-defer-to-manuals-and-research.md` implementation-phase corollary, 
 
 | File | Change |
 |---|---|
-| `plugins/TerrainInstrument/Source/ParameterIDs.hpp` | + 12 new param ID constants (6 per OSC × 2 OSCs): SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, FRAME_SPREAD, INTERP_MODE. Plus PHASE_INIT/RAND |
+| `plugins/TerrainInstrument/Source/ParameterIDs.hpp` | + 12 new param ID constants (6 per OSC × 2 OSCs): SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, FRAME_SPREAD, INTERP_MODE. PHASE_INIT/RAND ship in Phase 11b (see Decision 3). |
 | `plugins/TerrainInstrument/Source/PluginProcessor.cpp` | `createParameterLayout` — add the new APVTS entries. Broadcast block — push new values per-block into voices (SPREAD only — others are read directly by render path in later phases) |
 | `plugins/TerrainInstrument/Source/SynthVoice.h` | Add `std::array<float, kMaxUnison> uFramePos_` per OSC (A + B). `setFrameSpread(float)` setter. `startNote` populates `uFramePos_[u]` based on frame position + spread. Render-path WT engine reads `uFramePos_[u]` instead of voice-global `framePos_` (or with offset from it). |
 | `plugins/TerrainInstrument/Source/PluginEditor.{h,cpp}` | Add 6 new WebSliderRelays per OSC (12 total) for the new params. `withOptionsFrom` + `WebSliderParameterAttachment` per Phase 8b pattern. |
 | `plugins/TerrainInstrument/Source/ui/public/index.html` | Replace OSC A + OSC B knob row content: 5 new front knobs. Add back-view HTML: selector pills row + tuning knob row. Toggle logic in `+` handler. Edge-to-edge alignment per v14 mockup. |
-| `docs/specs/v1-syn-spec.md` | Update phase plan: Phase 11a ships, 11b/c/d/e queued. |
+| `plugins/TerrainInstrument/Design/v1-syn-spec.md` | Update phase plan: Phase 11a ships, 11b/c/d/e queued. |
 
 **No** changes to Wavetable.h, WavetableBank.h, PluginProcessor.h (UnisonSynth class), or test files in this phase.
 
@@ -122,7 +122,7 @@ Per `feedback-defer-to-manuals-and-research.md` implementation-phase corollary, 
 
 **What changes:** The knob currently labeled FRAME on the back panel moves to the front. Label changes to "WT POS". Underlying APVTS param is unchanged (`SYN_OSC_A_WT_FRAME`, float 0..1). The C++ render-path already reads this — no DSP change.
 
-**Right-click menu (deferred to 11b polish if timeline tight):** PHASE INIT (0..1, default 0) and PHASE RAND amount (0..1, default 1.0 — keeps Phase 8b T3 hash randomization on by default; user can dial back to 0 for "all sines start phase=0" laser-zap behavior).
+**Right-click menu (PHASE init + RAND): DEFERRED ENTIRELY to Phase 11b** per Decision 3. Not in Phase 11a scope.
 
 ### Section B — WARP (front amount knob; back type selector)
 
@@ -165,8 +165,9 @@ Populated in `setFrameSpread(float spread)`:
 void setFrameSpread (float spreadA01, float spreadB01) noexcept
 {
     // Distribute the active sines across the wavetable position.
-    // Sine u in [0, activeUnison_) gets offset u_norm × spread × 1.0 around centerFrame.
-    // Wraps to [0, 1] if it goes off either end.
+    // Sine u in [0, activeUnison_) gets offset u_norm × spread × 0.5 around centerFrame.
+    // Max ±0.5 means at spread=1.0 the unison stack fans across HALF the wavetable
+    // (centre±50%). Render path wraps via fmod, so going off either end is fine.
     for (int u = 0; u < activeUnison_; ++u)
     {
         if (activeUnison_ <= 1)
@@ -176,8 +177,8 @@ void setFrameSpread (float spreadA01, float spreadB01) noexcept
             continue;
         }
         const float u_norm = ((float) u / (float) (activeUnison_ - 1)) * 2.0f - 1.0f;
-        uFramePosA_[(size_t) u] = u_norm * spreadA01 * 1.0f;  // max ±1.0 of frame range
-        uFramePosB_[(size_t) u] = u_norm * spreadB01 * 1.0f;
+        uFramePosA_[(size_t) u] = u_norm * spreadA01 * 0.5f;  // ±0.5 max of normalised frame range
+        uFramePosB_[(size_t) u] = u_norm * spreadB01 * 0.5f;
     }
     for (int u = activeUnison_; u < kMaxUnison; ++u)
     {
@@ -187,7 +188,7 @@ void setFrameSpread (float spreadA01, float spreadB01) noexcept
 }
 ```
 
-In the render loop, each sine reads its OWN frame position as `framePos_ + uFramePosA_[u]` (clamped to [0,1]). The voice-global `framePos_` is the centre value from `SYN_OSC_A_WT_FRAME` (the WT POS knob).
+In the render loop, each sine reads its OWN frame position as `wrap(framePos_ + uFramePosA_[u], 0.0f, 1.0f)`. The voice-global `framePos_` is the centre value from `SYN_OSC_A_WT_FRAME` (the WT POS knob). Wrap is preferred over clamp so the unison stack doesn't pile up at the wavetable edges when SPREAD pushes off either end.
 
 **Sonic result:** At SPREAD=0, all unison sines read from the same frame — identical to pre-11a behavior. At SPREAD=1 with UNISON=8, the 8 sines read from 8 different positions spread across ±1.0 of the wavetable position. **Each sine plays a different waveform shape on top of detuning.** Vital's `frame_spread` idea, now ours.
 
@@ -217,6 +218,7 @@ In the render loop, each sine reads its OWN frame position as `framePos_ + uFram
 | New params break V1 preset compat | Low | Medium | Defaults all = 0/NONE. APVTS still loads V1 silently with the new params at defaults. Verify with V1 preset load test. |
 | SPREAD audibly clicks at high values | Medium | Medium | Per-sine frame position uses Phase 10a's bilinear interpolation in `lookup(int mipLevel, float framePos, float phase)`. Already smooth. Mip-level still picked from `uPhaseIncA_[0]` so detune doesn't interact with spread weirdly. |
 | Front-back swap toggle breaks DAW automation on the new params | Low | Low | APVTS handles persistence regardless of which knob is currently visible. Verified by Phase 4's existing + button swap. |
+| Editor reopen forgets which view (front vs back) was active | Low | Low | Toggle state is UI-local and resets to FRONT on editor reopen — same as Phase 4's + button pattern. Not persisted across editor close. Acceptable v1; could persist via DAW state in a future polish if user requests. |
 | Spacing/alignment regression at certain knob/selector counts | Medium | Medium | User has hard rule (UI spacing). Verify each step in DAW (cmd+Q) per the lockedrule. v14 mockup is the visual contract. |
 | Right-click context menu for PHASE init/RAND is harder than expected | Medium | Low | Deferable to 11b polish — keep params functional via APVTS-only access for Phase 11a. |
 | `uFramePosA_[u]` initialization in setFrameSpread races with render thread | Low | High | setFrameSpread is called from per-block broadcast (audio thread). No lock needed. Same pattern as setUnison from Phase 8b T2. Verify with juce::ScopedLock if any drift detected. |
