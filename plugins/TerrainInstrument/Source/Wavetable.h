@@ -346,6 +346,165 @@ namespace tw
             return spec;
         }
 
+        // ── Phase 11h — Morph category: dramatic WT POS sweep wavetables ──
+        // Each varies harmonic content / phase / formant ACROSS its 16 frames,
+        // so sweeping WT POS feels like a night-and-day timbral journey.
+
+        // Pure sine (1 harmonic) at frame 0 → full 64-harmonic sawtooth at frame 15.
+        // The canonical "nothing to everything" sweep.
+        static WavetableSpec makeHarmonicRiseSpec()
+        {
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t    = (float) f / 15.0f;
+                const int   numH = juce::jlimit (1, FrameSpec::kMaxHarmonics,
+                                                  (int) std::round (1.0f + 63.0f * t));
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = numH;
+                for (int h = 1; h <= numH; ++h)
+                    fs.amplitudes[(size_t)(h - 1)] = 1.0f / (float) h;
+                // phases all zero (value-initialized)
+            }
+            return spec;
+        }
+
+        // Odd-only harmonics (clarinet/hollow) at frame 0 → full sawtooth (all
+        // harmonics) at frame 15. Even harmonics grow in linearly across the sweep.
+        static WavetableSpec makeOddEvenSpec()
+        {
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t = (float) f / 15.0f;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = 48;
+                for (int h = 1; h <= 48; ++h)
+                {
+                    const float base   = 1.0f / (float) h;
+                    const bool  isEven = (h % 2 == 0);
+                    fs.amplitudes[(size_t)(h - 1)] = isEven ? base * t : base;
+                }
+            }
+            return spec;
+        }
+
+        // Same amplitude spectrum (full saw, 32 harmonics) for all frames; only
+        // the harmonic phases vary — frame 0 = aligned, frame 15 = randomized.
+        // Vital's phase_modifier baked into frames.
+        static WavetableSpec makePhaseDriftSpec()
+        {
+            WavetableSpec spec;
+            std::uint32_t rng = 0xDEADBEEFu;
+            auto nextPhase = [&rng]() -> float
+            {
+                rng ^= rng << 13;
+                rng ^= rng >> 17;
+                rng ^= rng << 5;
+                return ((float) rng / (float) 0xFFFFFFFFu) * 6.28318530718f;
+            };
+            std::array<float, 32> targetPhases {};
+            for (int h = 0; h < 32; ++h) targetPhases[(size_t) h] = nextPhase();
+
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t = (float) f / 15.0f;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = 32;
+                for (int h = 1; h <= 32; ++h)
+                {
+                    fs.amplitudes[(size_t)(h - 1)] = 1.0f / (float) h;
+                    fs.phases[(size_t)(h - 1)]     = t * targetPhases[(size_t)(h - 1)];
+                }
+            }
+            return spec;
+        }
+
+        // Gaussian spectral envelope; center frequency migrates from h=1.5
+        // (warm/fundamental) to h=28 (brilliant/upper register) across frames.
+        // The body fades and the high harmonics rise — like a filter sweep
+        // baked permanently into WT POS.
+        static WavetableSpec makeSpectralSweepSpec()
+        {
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t      = (float) f / 15.0f;
+                const float center = 1.5f + 26.5f * t;
+                const float sigma  = 1.5f + 3.5f  * t;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = 64;
+                for (int h = 1; h <= 64; ++h)
+                {
+                    const float d = (float) h - center;
+                    fs.amplitudes[(size_t)(h - 1)] = std::exp (-(d * d) / (2.0f * sigma * sigma));
+                }
+            }
+            return spec;
+        }
+
+        // Formant trajectory: tuba → French horn → muted trumpet → vowel /a/
+        // → bright vowel /i/. Each frame bakes a 3-formant Gaussian envelope
+        // into the harmonic weights using the same approach as VowelMorph.
+        static WavetableSpec makeFormantRiseSpec()
+        {
+            // [F1, F2, F3] formant triplets in Hz
+            static const float landmarks[5][3] = {
+                { 150.0f,  600.0f, 1400.0f },  // Tuba
+                { 350.0f, 1000.0f, 2100.0f },  // French Horn
+                { 600.0f, 1400.0f, 2600.0f },  // Trumpet muted
+                { 730.0f, 1090.0f, 2440.0f },  // Vowel /a/
+                { 300.0f, 2300.0f, 3200.0f },  // Vowel /i/
+            };
+            constexpr float fund = 220.0f;
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float vp = ((float) f / 15.0f) * 4.0f;
+                const int   v0 = juce::jlimit (0, 4, (int) vp);
+                const int   v1 = juce::jlimit (0, 4, v0 + 1);
+                const float vt = vp - (float) v0;
+                const float F1 = landmarks[v0][0] + (landmarks[v1][0] - landmarks[v0][0]) * vt;
+                const float F2 = landmarks[v0][1] + (landmarks[v1][1] - landmarks[v0][1]) * vt;
+                const float F3 = landmarks[v0][2] + (landmarks[v1][2] - landmarks[v0][2]) * vt;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = 50;
+                for (int h = 1; h <= 50; ++h)
+                {
+                    const float freq = (float) h * fund;
+                    auto gf = [] (float fr, float center, float bw) -> float
+                    {
+                        const float d = fr - center;
+                        return std::exp (-(d * d) / (2.0f * bw * bw));
+                    };
+                    const float w = gf (freq, F1, 80.0f)
+                                  + 0.7f * gf (freq, F2, 150.0f)
+                                  + 0.4f * gf (freq, F3, 200.0f);
+                    fs.amplitudes[(size_t)(h - 1)] = w / (float) h;
+                }
+            }
+            return spec;
+        }
+
+        // Harmonic series stack: frame 0 = 1 partial (sine), frame 1 = 2 partials,
+        // frame 2 = 3 partials, ..., frame 15 = 16 partials. All at equal amplitude
+        // (normalized by 1/sqrt(N) so RMS stays similar across frames). Educational
+        // but audible — each frame step adds one ring.
+        static WavetableSpec makeHarmonicSeriesSpec()
+        {
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const int   numH = f + 1;            // 1..16 harmonics
+                const float norm = 1.0f / std::sqrt ((float) numH);
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = numH;
+                for (int h = 1; h <= numH; ++h)
+                    fs.amplitudes[(size_t)(h - 1)] = norm;
+            }
+            return spec;
+        }
+
         /** Jupiter-8 PWM: pulse wave morphing from 50% (square) at frame 0
          *  to ~5% (narrow pulse, hollow) at frame 15. Bandlimited via additive. */
         static Wavetable makeJupiterPWM()
