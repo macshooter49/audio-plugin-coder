@@ -282,9 +282,9 @@ namespace tw
          *  Phase 11g: types 3/4/5 (Comb/RingMod/BitCrush) bypass the biquad filter. */
         void setSpectral (int typeA, float amtA, int typeB, float amtB) noexcept
         {
-            spectralTypeA_ = juce::jlimit (0, 5, typeA);
+            spectralTypeA_ = juce::jlimit (0, 9, typeA);
             spectralAmtA_  = juce::jlimit (0.0f, 1.0f, amtA);
-            spectralTypeB_ = juce::jlimit (0, 5, typeB);
+            spectralTypeB_ = juce::jlimit (0, 9, typeB);
             spectralAmtB_  = juce::jlimit (0.0f, 1.0f, amtB);
 
             spectralBypassA_ = (spectralAmtA_ < 1.0e-4f);
@@ -675,6 +675,63 @@ namespace tw
                         sA_L = std::round (sA_L * L) / L;
                         sA_R = std::round (sA_R * L) / L;
                     }
+                    else if (spectralTypeA_ == 6)
+                    {
+                        // Downsample — sample-and-hold at lower rate
+                        const float divisor = 1.0f + spectralAmtA_ * spectralAmtA_ * 31.0f;  // 1..32
+                        spectralDsCounterA_ += 1.0f;
+                        if (spectralDsCounterA_ >= divisor)
+                        {
+                            spectralDsHeldAL_ = sA_L;
+                            spectralDsHeldAR_ = sA_R;
+                            spectralDsCounterA_ -= divisor;
+                        }
+                        sA_L = spectralDsHeldAL_;
+                        sA_R = spectralDsHeldAR_;
+                    }
+                    else if (spectralTypeA_ == 7)
+                    {
+                        // Tube — asymmetric soft clipping with positive bias
+                        const float drive = 1.0f + spectralAmtA_ * spectralAmtA_ * 9.0f;
+                        const float bias = 0.15f * spectralAmtA_;
+                        const float invSat = 1.0f / std::tanh (drive);
+                        sA_L = std::tanh (sA_L * drive + bias) * invSat - bias * invSat;
+                        sA_R = std::tanh (sA_R * drive + bias) * invSat - bias * invSat;
+                    }
+                    else if (spectralTypeA_ == 8)
+                    {
+                        // Tilt — low-shelf cut + high-shelf boost, one-pole based
+                        const float alpha = 0.005f;  // ~120 Hz at 48kHz
+                        spectralTiltLowAL_ += alpha * (sA_L - spectralTiltLowAL_);
+                        spectralTiltLowAR_ += alpha * (sA_R - spectralTiltLowAR_);
+                        const float lowL = spectralTiltLowAL_;
+                        const float lowR = spectralTiltLowAR_;
+                        const float highL = sA_L - lowL;
+                        const float highR = sA_R - lowR;
+                        const float lowGain  = 1.0f - spectralAmtA_;
+                        const float highGain = 1.0f + spectralAmtA_ * 2.0f;
+                        sA_L = lowL * lowGain + highL * highGain;
+                        sA_R = lowR * lowGain + highR * highGain;
+                    }
+                    else if (spectralTypeA_ == 9)
+                    {
+                        // Vibrato — short modulated delay creates pitch wobble
+                        const double modHz = 1.0 + (double) spectralAmtA_ * 8.0;
+                        const double inc   = modHz / sampleRate_;
+                        spectralVibPhaseA_ += inc;
+                        if (spectralVibPhaseA_ >= 1.0) spectralVibPhaseA_ -= 1.0;
+                        const float lfo = static_cast<float> (std::sin (6.2831853071795865 * spectralVibPhaseA_));
+                        const float depthSamples = spectralAmtA_ * 20.0f;
+                        const float delaySamples = (float) (kSpectralVibSize - 4) * 0.5f + lfo * depthSamples;
+                        const int   intDel       = juce::jlimit (1, kSpectralVibSize - 2, (int) delaySamples);
+                        const int   readIdx      = (spectralVibWriteA_ - intDel + kSpectralVibSize) % kSpectralVibSize;
+                        const float dryL = sA_L, dryR = sA_R;
+                        sA_L = dryL * (1.0f - spectralAmtA_) + spectralVibAL_[(size_t) readIdx] * spectralAmtA_;
+                        sA_R = dryR * (1.0f - spectralAmtA_) + spectralVibAR_[(size_t) readIdx] * spectralAmtA_;
+                        spectralVibAL_[(size_t) spectralVibWriteA_] = dryL;
+                        spectralVibAR_[(size_t) spectralVibWriteA_] = dryR;
+                        spectralVibWriteA_ = (spectralVibWriteA_ + 1) % kSpectralVibSize;
+                    }
                 }
 
                 // ── OSC B — sum across activeUnison_ sines (Phase 8b) ─────
@@ -918,6 +975,63 @@ namespace tw
                         const float L = juce::jmax (4.0f, levels);
                         sB_L = std::round (sB_L * L) / L;
                         sB_R = std::round (sB_R * L) / L;
+                    }
+                    else if (spectralTypeB_ == 6)
+                    {
+                        // Downsample — sample-and-hold at lower rate
+                        const float divisor = 1.0f + spectralAmtB_ * spectralAmtB_ * 31.0f;
+                        spectralDsCounterB_ += 1.0f;
+                        if (spectralDsCounterB_ >= divisor)
+                        {
+                            spectralDsHeldBL_ = sB_L;
+                            spectralDsHeldBR_ = sB_R;
+                            spectralDsCounterB_ -= divisor;
+                        }
+                        sB_L = spectralDsHeldBL_;
+                        sB_R = spectralDsHeldBR_;
+                    }
+                    else if (spectralTypeB_ == 7)
+                    {
+                        // Tube — asymmetric soft clipping with positive bias
+                        const float drive = 1.0f + spectralAmtB_ * spectralAmtB_ * 9.0f;
+                        const float bias = 0.15f * spectralAmtB_;
+                        const float invSat = 1.0f / std::tanh (drive);
+                        sB_L = std::tanh (sB_L * drive + bias) * invSat - bias * invSat;
+                        sB_R = std::tanh (sB_R * drive + bias) * invSat - bias * invSat;
+                    }
+                    else if (spectralTypeB_ == 8)
+                    {
+                        // Tilt — low-shelf cut + high-shelf boost, one-pole based
+                        const float alpha = 0.005f;
+                        spectralTiltLowBL_ += alpha * (sB_L - spectralTiltLowBL_);
+                        spectralTiltLowBR_ += alpha * (sB_R - spectralTiltLowBR_);
+                        const float lowL = spectralTiltLowBL_;
+                        const float lowR = spectralTiltLowBR_;
+                        const float highL = sB_L - lowL;
+                        const float highR = sB_R - lowR;
+                        const float lowGain  = 1.0f - spectralAmtB_;
+                        const float highGain = 1.0f + spectralAmtB_ * 2.0f;
+                        sB_L = lowL * lowGain + highL * highGain;
+                        sB_R = lowR * lowGain + highR * highGain;
+                    }
+                    else if (spectralTypeB_ == 9)
+                    {
+                        // Vibrato — short modulated delay creates pitch wobble
+                        const double modHz = 1.0 + (double) spectralAmtB_ * 8.0;
+                        const double inc   = modHz / sampleRate_;
+                        spectralVibPhaseB_ += inc;
+                        if (spectralVibPhaseB_ >= 1.0) spectralVibPhaseB_ -= 1.0;
+                        const float lfo = static_cast<float> (std::sin (6.2831853071795865 * spectralVibPhaseB_));
+                        const float depthSamples = spectralAmtB_ * 20.0f;
+                        const float delaySamples = (float) (kSpectralVibSize - 4) * 0.5f + lfo * depthSamples;
+                        const int   intDel       = juce::jlimit (1, kSpectralVibSize - 2, (int) delaySamples);
+                        const int   readIdx      = (spectralVibWriteB_ - intDel + kSpectralVibSize) % kSpectralVibSize;
+                        const float dryL = sB_L, dryR = sB_R;
+                        sB_L = dryL * (1.0f - spectralAmtB_) + spectralVibBL_[(size_t) readIdx] * spectralAmtB_;
+                        sB_R = dryR * (1.0f - spectralAmtB_) + spectralVibBR_[(size_t) readIdx] * spectralAmtB_;
+                        spectralVibBL_[(size_t) spectralVibWriteB_] = dryL;
+                        spectralVibBR_[(size_t) spectralVibWriteB_] = dryR;
+                        spectralVibWriteB_ = (spectralVibWriteB_ + 1) % kSpectralVibSize;
                     }
                 }
 
@@ -1272,6 +1386,22 @@ namespace tw
 
         juce::dsp::IIR::Filter<float> spectralFilterAL_, spectralFilterAR_;
         juce::dsp::IIR::Filter<float> spectralFilterBL_, spectralFilterBR_;
+
+        // Phase 11i — Downsample S&H state per OSC per channel
+        float spectralDsHeldAL_ = 0.0f, spectralDsHeldAR_ = 0.0f;
+        float spectralDsHeldBL_ = 0.0f, spectralDsHeldBR_ = 0.0f;
+        float spectralDsCounterA_ = 0.0f, spectralDsCounterB_ = 0.0f;
+
+        // Phase 11i — Tilt EQ filter pair per OSC per channel (one-pole LP for low band)
+        float spectralTiltLowAL_ = 0.0f, spectralTiltLowAR_ = 0.0f;
+        float spectralTiltLowBL_ = 0.0f, spectralTiltLowBR_ = 0.0f;
+
+        // Phase 11i — Vibrato modulator phase per OSC + tiny delay buffer
+        static constexpr int kSpectralVibSize = 64;
+        std::array<float, kSpectralVibSize> spectralVibAL_{}, spectralVibAR_{};
+        std::array<float, kSpectralVibSize> spectralVibBL_{}, spectralVibBR_{};
+        int spectralVibWriteA_ = 0, spectralVibWriteB_ = 0;
+        double spectralVibPhaseA_ = 0.0, spectralVibPhaseB_ = 0.0;
 
         // Per-sine unison config (computed at setUnison / startNote).
         std::array<float,  kMaxUnison> uDetuneCents_  {};
