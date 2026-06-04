@@ -930,11 +930,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Frame Spread",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // INTERP MODE choice (1 option in 11a; "LINEAR")
+    // INTERP MODE choice (Phase 11g: 2 modes — Linear / Stepped)
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_INTERP_MODE, 1 },
         "OSC A Interp Mode",
-        juce::StringArray { "LINEAR" },
+        juce::StringArray { "Linear", "Stepped" },
         0));
 
     // ── Synth section — Phase 9 (OSC B chassis) ──────────────────────────
@@ -1014,7 +1014,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_INTERP_MODE, 1 },
         "OSC B Interp Mode",
-        juce::StringArray { "LINEAR" },
+        juce::StringArray { "Linear", "Stepped" },
         0));
 
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
@@ -1708,6 +1708,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   spectralTypeB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE);
         const float spectralAmtB  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SPECTRAL_AMT);
 
+        // Phase 11g — INTERP per OSC.
+        const int interpModeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_INTERP_MODE);
+        const int interpModeB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_INTERP_MODE);
+
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
         const int voiceCap = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_VOICES);
@@ -1720,6 +1724,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 tv->setFrameSpread (frameSpreadA, frameSpreadB);   // Phase 11a
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
                 tv->setSpectral (spectralTypeA, spectralAmtA, spectralTypeB, spectralAmtB);   // Phase 11c
+                tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g
             }
         }
 

@@ -293,6 +293,13 @@ namespace tw
             updateSpectralCoefficients (spectralTypeB_, spectralAmtB_, spectralFilterBL_, spectralFilterBR_);
         }
 
+        /** Phase 11g — Set per-OSC INTERP mode (0=Linear, 1=Stepped). */
+        void setInterpMode (int modeA, int modeB) noexcept
+        {
+            interpModeA_ = juce::jlimit (0, 1, modeA);
+            interpModeB_ = juce::jlimit (0, 1, modeB);
+        }
+
         /** EROSION amount 0..1 (set per-block from APVTS SYN_EROSION/100). */
         void setErosionAmount (float a) noexcept { erosionAmount_ = juce::jlimit (0.0f, 1.0f, a); }
 
@@ -530,6 +537,12 @@ namespace tw
                                     // Phase 11a per-sine frame spread (wraps to [0,1] before lookup).
                                     float fp = framePos_ + uFramePosA_[(size_t) u];
                                     fp -= std::floor (fp);
+                                    // Phase 11g — Stepped INTERP: snap to nearest of 16 frames
+                                    if (interpModeA_ == 1)
+                                    {
+                                        const float N = 16.0f;
+                                        fp = std::round (fp * (N - 1.0f)) / (N - 1.0f);
+                                    }
                                     sAu = currentWavetable_->lookup (currentMipLevelA_, fp, (float) warpedPhase);
                                     sAu *= window;
 
@@ -733,6 +746,12 @@ namespace tw
                                 {
                                     float fp = framePosB_ + uFramePosB_[(size_t) u];
                                     fp -= std::floor (fp);
+                                    // Phase 11g — Stepped INTERP: snap to nearest of 16 frames
+                                    if (interpModeB_ == 1)
+                                    {
+                                        const float N = 16.0f;
+                                        fp = std::round (fp * (N - 1.0f)) / (N - 1.0f);
+                                    }
                                     sBu = currentWavetableB_->lookup (currentMipLevelB_, fp, (float) warpedPhase);
                                     sBu *= window;
 
@@ -1141,12 +1160,25 @@ namespace tw
         float foldAmountB_  = 0.0f;
 
         // Phase 11c — SPECTRAL filter state (per OSC).
-        int   spectralTypeA_   = 0;     // 0=LP, 1=HP, 2=Smear
+        int   spectralTypeA_   = 0;     // 0=LP, 1=HP, 2=Smear, 3=Comb, 4=RingMod, 5=BitCrush
         float spectralAmtA_    = 0.0f;
         int   spectralTypeB_   = 0;
         float spectralAmtB_    = 0.0f;
         bool  spectralBypassA_ = true;  // optimization: skip processing when amount near zero
         bool  spectralBypassB_ = true;
+
+        // Phase 11g — INTERP mode (frame interpolation control).
+        int interpModeA_ = 0;   // 0 = Linear (bilinear, default), 1 = Stepped (snap to nearest frame)
+        int interpModeB_ = 0;
+
+        // Phase 11g — Comb delay line + Ring Mod phase + Bit Crush state per OSC per channel
+        static constexpr int kSpectralCombSize = 256;
+        std::array<float, kSpectralCombSize> spectralCombAL_{}, spectralCombAR_{};
+        std::array<float, kSpectralCombSize> spectralCombBL_{}, spectralCombBR_{};
+        int spectralCombWriteA_ = 0;
+        int spectralCombWriteB_ = 0;
+        double spectralRingPhaseA_ = 0.0;   // for Ring Mod
+        double spectralRingPhaseB_ = 0.0;
 
         juce::dsp::IIR::Filter<float> spectralFilterAL_, spectralFilterAR_;
         juce::dsp::IIR::Filter<float> spectralFilterBL_, spectralFilterBR_;
