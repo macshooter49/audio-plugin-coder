@@ -877,7 +877,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                             "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
                             "Choir A->O", "Whisper", "Vowel Morph",
                             "Bowed Metal", "Glass Harmonics", "Railroad",
-                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD" },
+                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
+                            // Morph (Phase 11h)
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
         0));  // default = Sine
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -970,7 +972,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                             "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
                             "Choir A->O", "Whisper", "Vowel Morph",
                             "Bowed Metal", "Glass Harmonics", "Railroad",
-                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD" },
+                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
+                            // Morph (Phase 11h)
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
         0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_FRAME, 1 },
