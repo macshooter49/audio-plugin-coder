@@ -278,12 +278,13 @@ namespace tw
         }
 
         /** Phase 11c — Set per-OSC SPECTRAL type + amount. Pushed per-block from
-         *  PluginProcessor broadcast. Updates biquad coefficients on the fly. */
+         *  PluginProcessor broadcast. Updates biquad coefficients on the fly.
+         *  Phase 11g: types 3/4/5 (Comb/RingMod/BitCrush) bypass the biquad filter. */
         void setSpectral (int typeA, float amtA, int typeB, float amtB) noexcept
         {
-            spectralTypeA_ = juce::jlimit (0, 2, typeA);
+            spectralTypeA_ = juce::jlimit (0, 5, typeA);
             spectralAmtA_  = juce::jlimit (0.0f, 1.0f, amtA);
-            spectralTypeB_ = juce::jlimit (0, 2, typeB);
+            spectralTypeB_ = juce::jlimit (0, 5, typeB);
             spectralAmtB_  = juce::jlimit (0.0f, 1.0f, amtB);
 
             spectralBypassA_ = (spectralAmtA_ < 1.0e-4f);
@@ -631,8 +632,49 @@ namespace tw
                 float sA_R = sumAR;
                 if (! spectralBypassA_)
                 {
-                    sA_L = spectralFilterAL_.processSample (sA_L);
-                    sA_R = spectralFilterAR_.processSample (sA_R);
+                    if (spectralTypeA_ <= 2)
+                    {
+                        // LP, HP, Smear — biquad
+                        sA_L = spectralFilterAL_.processSample (sA_L);
+                        sA_R = spectralFilterAR_.processSample (sA_R);
+                    }
+                    else if (spectralTypeA_ == 3)
+                    {
+                        // Comb — feedforward y = x + x[n-N]
+                        const int N = juce::jlimit (1, kSpectralCombSize - 1,
+                                                     (int) (4.0f + spectralAmtA_ * (float) (kSpectralCombSize - 8)));
+                        const int readIdx = (spectralCombWriteA_ - N + kSpectralCombSize) % kSpectralCombSize;
+                        const float dryL = sA_L;
+                        const float dryR = sA_R;
+                        sA_L = dryL + spectralCombAL_[(size_t) readIdx] * spectralAmtA_;
+                        sA_R = dryR + spectralCombAR_[(size_t) readIdx] * spectralAmtA_;
+                        spectralCombAL_[(size_t) spectralCombWriteA_] = dryL;
+                        spectralCombAR_[(size_t) spectralCombWriteA_] = dryR;
+                        spectralCombWriteA_ = (spectralCombWriteA_ + 1) % kSpectralCombSize;
+                        // Normalize loudness — comb output can grow up to 2x
+                        sA_L *= 0.5f;
+                        sA_R *= 0.5f;
+                    }
+                    else if (spectralTypeA_ == 4)
+                    {
+                        // Ring Mod — modulate by sine at frequency 30..2000 Hz scaled by amount²
+                        const double modHz = 30.0 + (double) (spectralAmtA_ * spectralAmtA_) * 1970.0;
+                        const double inc = modHz / sampleRate_;
+                        const float modL = static_cast<float> (std::sin (6.2831853071795865 * spectralRingPhaseA_));
+                        spectralRingPhaseA_ += inc;
+                        if (spectralRingPhaseA_ >= 1.0) spectralRingPhaseA_ -= 1.0;
+                        // Wet/dry blend by amount
+                        sA_L = sA_L * (1.0f - spectralAmtA_) + (sA_L * modL) * spectralAmtA_;
+                        sA_R = sA_R * (1.0f - spectralAmtA_) + (sA_R * modL) * spectralAmtA_;
+                    }
+                    else if (spectralTypeA_ == 5)
+                    {
+                        // Bit Crush — quantize to N levels, N = 64 → 4 by amount²
+                        const float levels = 64.0f - (spectralAmtA_ * spectralAmtA_) * 60.0f;
+                        const float L = juce::jmax (4.0f, levels);
+                        sA_L = std::round (sA_L * L) / L;
+                        sA_R = std::round (sA_R * L) / L;
+                    }
                 }
 
                 // ── OSC B — sum across activeUnison_ sines (Phase 8b) ─────
@@ -836,8 +878,47 @@ namespace tw
                 float sB_R = sumBR;
                 if (! spectralBypassB_)
                 {
-                    sB_L = spectralFilterBL_.processSample (sB_L);
-                    sB_R = spectralFilterBR_.processSample (sB_R);
+                    if (spectralTypeB_ <= 2)
+                    {
+                        // LP, HP, Smear — biquad
+                        sB_L = spectralFilterBL_.processSample (sB_L);
+                        sB_R = spectralFilterBR_.processSample (sB_R);
+                    }
+                    else if (spectralTypeB_ == 3)
+                    {
+                        // Comb — feedforward y = x + x[n-N]
+                        const int N = juce::jlimit (1, kSpectralCombSize - 1,
+                                                     (int) (4.0f + spectralAmtB_ * (float) (kSpectralCombSize - 8)));
+                        const int readIdx = (spectralCombWriteB_ - N + kSpectralCombSize) % kSpectralCombSize;
+                        const float dryL = sB_L;
+                        const float dryR = sB_R;
+                        sB_L = dryL + spectralCombBL_[(size_t) readIdx] * spectralAmtB_;
+                        sB_R = dryR + spectralCombBR_[(size_t) readIdx] * spectralAmtB_;
+                        spectralCombBL_[(size_t) spectralCombWriteB_] = dryL;
+                        spectralCombBR_[(size_t) spectralCombWriteB_] = dryR;
+                        spectralCombWriteB_ = (spectralCombWriteB_ + 1) % kSpectralCombSize;
+                        sB_L *= 0.5f;
+                        sB_R *= 0.5f;
+                    }
+                    else if (spectralTypeB_ == 4)
+                    {
+                        // Ring Mod
+                        const double modHz = 30.0 + (double) (spectralAmtB_ * spectralAmtB_) * 1970.0;
+                        const double inc = modHz / sampleRate_;
+                        const float modL = static_cast<float> (std::sin (6.2831853071795865 * spectralRingPhaseB_));
+                        spectralRingPhaseB_ += inc;
+                        if (spectralRingPhaseB_ >= 1.0) spectralRingPhaseB_ -= 1.0;
+                        sB_L = sB_L * (1.0f - spectralAmtB_) + (sB_L * modL) * spectralAmtB_;
+                        sB_R = sB_R * (1.0f - spectralAmtB_) + (sB_R * modL) * spectralAmtB_;
+                    }
+                    else if (spectralTypeB_ == 5)
+                    {
+                        // Bit Crush
+                        const float levels = 64.0f - (spectralAmtB_ * spectralAmtB_) * 60.0f;
+                        const float L = juce::jmax (4.0f, levels);
+                        sB_L = std::round (sB_L * L) / L;
+                        sB_R = std::round (sB_R * L) / L;
+                    }
                 }
 
                 const float env    = ampEnv_.getNextSample();
@@ -1048,7 +1129,16 @@ namespace tw
                     *filterR.coefficients = *c;
                     break;
                 }
-                default: break;
+                default:
+                {
+                    // For non-biquad modes (Comb/RingMod/BitCrush, types 3-5), set passthrough
+                    // so the IIR filter has no effect; the per-sample render code
+                    // applies the actual transform.
+                    auto c = Coeffs::makeLowPass (sampleRate_, 20000.0f, 0.707f);
+                    *filterL.coefficients = *c;
+                    *filterR.coefficients = *c;
+                    break;
+                }
             }
         }
 
