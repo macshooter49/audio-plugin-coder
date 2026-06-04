@@ -64,27 +64,45 @@ namespace tw
             tables_[(size_t) Pulse]         .buildFromSpec (Wavetable::makePulseSpec());
             // Phase 10a — migrated analog saws (spec-based, full 8 mip levels)
             tables_[(size_t) ProphetSaw]  .buildFromSpec (Wavetable::makeProphetSawSpec());
+            // Phase 11k — Analog legacy tables: amplify for dramatic WT POS sweep
             tables_[(size_t) JupiterPWM]     = Wavetable::makeJupiterPWM();
+            tables_[(size_t) JupiterPWM].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
             tables_[(size_t) MoogSqr]        = Wavetable::makeMoogSqr();
+            tables_[(size_t) MoogSqr].amplifyFramesInPlace (Wavetable::AmplifyMode::Warmth);
             tables_[(size_t) OBXSaw]      .buildFromSpec (Wavetable::makeOBXSawSpec());
             tables_[(size_t) CS80Brass]      = Wavetable::makeCS80Brass();
+            tables_[(size_t) CS80Brass].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
             tables_[(size_t) JunoStr]     .buildFromSpec (Wavetable::makeJunoStrSpec());
-            // Legacy time-domain wavetables (Phase 10c will migrate these).
-            // These are mip-0-only — high notes will alias until migrated.
+            // Phase 11k — Legacy time-domain wavetables: amplifyFramesInPlace for dramatic WT POS.
+            // These are mip-0-only — high notes will alias until Phase 10c migrates them.
             tables_[(size_t) PPGWave]        = Wavetable::makePPGWave();
+            tables_[(size_t) PPGWave].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
             tables_[(size_t) DX7EP]          = Wavetable::makeDX7EP();
+            tables_[(size_t) DX7EP].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
             tables_[(size_t) D50Bell]        = Wavetable::makeD50Bell();
+            tables_[(size_t) D50Bell].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
             tables_[(size_t) M1Piano]        = Wavetable::makeM1Piano();
+            tables_[(size_t) M1Piano].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
             tables_[(size_t) ChoirAtoO]      = Wavetable::makeChoirAtoO();
+            tables_[(size_t) ChoirAtoO].amplifyFramesInPlace (Wavetable::AmplifyMode::Warmth);
             tables_[(size_t) Whisper]        = Wavetable::makeWhisper();
+            tables_[(size_t) Whisper].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
             tables_[(size_t) VowelMorph]     = Wavetable::makeVowelMorph();
+            tables_[(size_t) VowelMorph].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
             tables_[(size_t) BowedMetal]     = Wavetable::makeBowedMetal();
+            tables_[(size_t) BowedMetal].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
             tables_[(size_t) GlassHarmonics] = Wavetable::makeGlassHarmonics();
+            tables_[(size_t) GlassHarmonics].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
             tables_[(size_t) Railroad]       = Wavetable::makeRailroad();
+            tables_[(size_t) Railroad].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
             tables_[(size_t) Dustbowl]       = Wavetable::makeDustbowl();
+            tables_[(size_t) Dustbowl].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
             tables_[(size_t) StaticEvolve]   = Wavetable::makeStaticEvolve();
+            tables_[(size_t) StaticEvolve].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
             tables_[(size_t) SpectralDrift]  = Wavetable::makeSpectralDrift();
+            tables_[(size_t) SpectralDrift].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
             tables_[(size_t) SerumHD]        = Wavetable::makeSerumHD();
+            tables_[(size_t) SerumHD].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
             // Phase 11h — Morph category (spec-based, full 8 mip levels)
             tables_[(size_t) Rise]            .buildFromSpec (Wavetable::makeHarmonicRiseSpec());
             tables_[(size_t) OddEven]         .buildFromSpec (Wavetable::makeOddEvenSpec());
