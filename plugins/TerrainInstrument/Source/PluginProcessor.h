@@ -134,17 +134,32 @@ public:
 
         // If at cap, steal the oldest BEFORE the default allocator picks one.
         // The steal-fade in SynthVoice::stopNote keeps the cut click-free.
-        if (activeCount >= voiceCap_)
+        // While at or above the cap, steal voices until the active count drops
+        // below it. We may need to steal multiple if previous steals are still
+        // fading (their currentlyPlayingNote stays set during fade — so we
+        // explicitly call clearCurrentNote() on each so JUCE's findFreeVoice
+        // can immediately pick the stolen slot for the incoming note instead
+        // of picking an idle pool voice (which caused the cap to leak to 96).
+        while (activeCount >= voiceCap_)
         {
+            bool stoleOne = false;
             for (auto* sound : sounds)
             {
                 if (sound->appliesToNote (midiNoteNumber) && sound->appliesToChannel (midiChannel))
                 {
                     if (auto* oldest = findVoiceToSteal (sound, midiChannel, midiNoteNumber))
-                        stopVoice (oldest, /*velocity=*/ 0.0f, /*allowTailOff=*/ false);  // triggers 5ms steal-fade in SynthVoice::stopNote
+                    {
+                        // SynthVoice::stopNote(velocity, allowTailOff=false) sets stealing_=true
+                        // AND calls clearCurrentNote internally, so the slot becomes immediately
+                        // findable as free by JUCE's findFreeVoice for the incoming note.
+                        stopVoice (oldest, /*velocity=*/ 0.0f, /*allowTailOff=*/ false);
+                        stoleOne = true;
+                    }
                     break;
                 }
             }
+            if (! stoleOne) break;
+            --activeCount;
         }
 
         juce::Synthesiser::noteOn (midiChannel, midiNoteNumber, velocity);

@@ -8694,7 +8694,7 @@ setTimeout(function wireSynControls () {
           rowEl.addEventListener('dblclick', function(ev) {
             try {
               const defaults = {
-                SYN_VOICES:  (8 - 1) / (16 - 1),  // 8 in [1,16] → normalised
+                SYN_VOICES:  (8 - 1) / (32 - 1),  // 8 in [1,32] → normalised (Phase 11m fix: was stale [1,16])
                 SYN_UNISON:  0.0,                  // 1 in [1,8] → norm 0
                 SYN_SPREAD:  0.3,                  // 30 in [0,100]
                 SYN_EROSION: 0.0,

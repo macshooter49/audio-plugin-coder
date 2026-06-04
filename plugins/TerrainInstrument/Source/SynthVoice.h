@@ -373,7 +373,12 @@ namespace tw
                 // 5ms at current sampleRate: total samples = 0.005 * sampleRate
                 const float fadeSamples = static_cast<float>(0.005 * sampleRate_);
                 stealingFadeStep_ = std::pow(0.0001f, 1.0f / std::max(1.0f, fadeSamples));
-                // Don't clearCurrentNote here — let the fade complete in renderNextBlock
+                // Phase 11m fix — clear the note here so JUCE's findFreeVoice picks
+                // this slot for the next noteOn (was leaking to 96-voice pool).
+                // The 5ms fade keeps running in renderNextBlock via stealing_=true
+                // until SynthVoice's own playing_ flag goes false. If a new noteOn
+                // hits the slot first, startNote resets stealing_ + fade state cleanly.
+                clearCurrentNote();
             }
         }
 
