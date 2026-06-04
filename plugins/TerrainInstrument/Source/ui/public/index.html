@@ -4292,7 +4292,7 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">WARP</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">SPECTRAL</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">FOLD</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD"><div class="knob-ring"></div><div class="knob-label">SPREAD</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">SPREAD</div></div>
               </div>
             </div>
 
@@ -4336,6 +4336,10 @@ body {
                     <option value="3">Comb</option>
                     <option value="4">Ring Mod</option>
                     <option value="5">Bit Crush</option>
+                    <option value="6">Downsample</option>
+                    <option value="7">Tube</option>
+                    <option value="8">Tilt</option>
+                    <option value="9">Vibrato</option>
                   </select>
                 </div>
                 <div class="sel">
@@ -4463,7 +4467,7 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">WARP</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">SPECTRAL</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">FOLD</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD"><div class="knob-ring"></div><div class="knob-label">SPREAD</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">SPREAD</div></div>
               </div>
             </div>
 
@@ -4507,6 +4511,10 @@ body {
                     <option value="3">Comb</option>
                     <option value="4">Ring Mod</option>
                     <option value="5">Bit Crush</option>
+                    <option value="6">Downsample</option>
+                    <option value="7">Tube</option>
+                    <option value="8">Tilt</option>
+                    <option value="9">Vibrato</option>
                   </select>
                 </div>
                 <div class="sel">
@@ -8736,7 +8744,7 @@ setTimeout(function wireSynControls () {
         synPanel.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           e.stopPropagation();
-        }, true);  // capture phase so we intercept before any child handler
+        });  // bubble phase — fires AFTER knob handlers, only catches empty-space clicks
       }
 
       // Helper to set an APVTS choice param value via window.Juce slider state
@@ -8810,7 +8818,7 @@ setTimeout(function wireSynControls () {
 
       // ── Menu definitions per knob ──────────────────────────────
       const WARP_MODES = ['NONE','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
-      const SPECTRAL_MODES = ['Low Pass','High Pass','Smear','Comb','Ring Mod','Bit Crush'];
+      const SPECTRAL_MODES = ['Low Pass','High Pass','Smear','Comb','Ring Mod','Bit Crush','Downsample','Tube','Tilt','Vibrato'];
       const FOLD_SHAPES = ['Linear','Sine','Triangle'];
 
       const KNOB_MENUS = {
