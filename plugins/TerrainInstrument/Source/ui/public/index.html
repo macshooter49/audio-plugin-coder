@@ -8376,16 +8376,21 @@ setTimeout(function wireSynControls () {
           let dragStartY = 0;
           let dragStartN = 0;
           let dragging = false;
+          let dragMoved = false;          // Phase 12 — true if user actually moved during drag
+          let lastDragEndTime = 0;        // Phase 12 — timestamp of last real-drag release
 
           const onMove = (ev) => {
             if (! dragging) return;
             const dy = dragStartY - ev.clientY;       // UP increases value
+            if (Math.abs (dy) > 2) dragMoved = true;  // Phase 12 — actual drag (not just click)
             const newN = Math.max (0, Math.min (1, dragStartN + dy / 200));
             applyFill (newN);
             try { state.setNormalisedValue (newN); } catch (e) {}
           };
           const onUp = () => {
             dragging = false;
+            if (dragMoved) lastDragEndTime = Date.now ();
+            dragMoved = false;
             document.removeEventListener ('pointermove', onMove);
             document.removeEventListener ('pointerup', onUp);
             ring.style.cursor = 'grab';
@@ -8394,6 +8399,7 @@ setTimeout(function wireSynControls () {
           ring.addEventListener ('pointerdown', (ev) => {
             try {
               dragging = true;
+              dragMoved = false;
               dragStartY = ev.clientY;
               dragStartN = state.getNormalisedValue ? state.getNormalisedValue () : 0;
               ring.style.cursor = 'grabbing';
@@ -8415,14 +8421,22 @@ setTimeout(function wireSynControls () {
           }
 
           // P9 polish — double-click resets knob to its default normalised value.
+          // Phase 12 — IGNORE dblclick within 400ms of a real drag-release. The
+          // browser fires dblclick on two pointerdowns in quick succession, which
+          // means dragging up to 100%, releasing, then dragging again to
+          // fine-tune (or just clicking) zaps the knob to default 0. WT POS and
+          // WARP both default to 0, so the snap-back was very visible — looked
+          // like "I cranked to 100% and it reverted." Other knobs default to 0.5
+          // so the same gesture looked less broken.
           ring.addEventListener ('dblclick', (ev) => {
             try {
+              ev.preventDefault ();
+              if (Date.now () - lastDragEndTime < 400) return;  // recent real drag → suppress
               const defaultN = KNOB_DEFAULTS_NORMALISED[paramId];
               if (typeof defaultN === 'number') {
                 state.setNormalisedValue (defaultN);
                 applyFill (defaultN);
               }
-              ev.preventDefault ();
             } catch (e) { console.warn ('[SYN-knob] dblclick reset failed for', paramId, e); }
           });
         } catch (perKnob) {
@@ -15911,6 +15925,30 @@ function init() {
 window.addEventListener('resize', () => {
   initTerrain();
 });
+
+// Redraw all static canvas icons whose bitmaps get purged by the JUCE WebView
+// when the plugin window is left closed in the DAW for a long time. The HTML
+// markup survives but canvas pixel buffers go blank, leaving tape-link emblem
+// and MOD shape buttons empty until next plugin reload. The animated icons
+// (section headers, knob arcs, LFO waveforms) auto-recover via animate() —
+// these are the ones drawn once at init and never redrawn.
+function redrawStaticIcons() {
+  try {
+    if (typeof window.updateTapeLinkVisual === 'function') window.updateTapeLinkVisual();
+    if (typeof buildShapeButtons === 'function') buildShapeButtons();
+    if (typeof drawTransportIcons === 'function') drawTransportIcons();
+    if (typeof drawUndoIcon === 'function') drawUndoIcon();
+    if (typeof drawFeedIcon === 'function') drawFeedIcon();
+    if (typeof drawOutputIcon === 'function') drawOutputIcon();
+    if (typeof drawRandomizeIcon === 'function') drawRandomizeIcon();
+    if (typeof drawSpeedKnob === 'function') drawSpeedKnob();
+  } catch (e) { console.warn('redrawStaticIcons failed:', e); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) setTimeout(redrawStaticIcons, 50);
+});
+window.addEventListener('pageshow', () => setTimeout(redrawStaticIcons, 50));
+window.addEventListener('focus', () => setTimeout(redrawStaticIcons, 50));
 
 // Dedicated theme restore — runs independently after init to guarantee theme is applied
 async function restoreThemeFromBackend() {

@@ -26,6 +26,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
+#include <limits>
 #include <thread>
 
 //==============================================================================
@@ -126,39 +127,42 @@ public:
     {
         const juce::ScopedLock sl (lock);
 
-        // Count currently-active voices (including sustained ones).
+        // Phase 12 — Serum-2 style smooth voice steal. Count only voices that
+        // are AUDIBLY active (held or in release). Voices in steal-fade are
+        // already dying — they don't count toward the cap, even though their
+        // currentlyPlayingNote is still set so JUCE's findFreeVoice doesn't
+        // hijack their slot mid-fade. The dying voice fades on its own slot
+        // while the new note rises on a fresh idle slot from the 96-pool.
         int activeCount = 0;
         for (auto* v : voices)
-            if (v != nullptr && v->getCurrentlyPlayingNote() >= 0)
-                ++activeCount;
+        {
+            if (v == nullptr) continue;
+            if (v->getCurrentlyPlayingNote() < 0) continue;
+            if (auto* sv = dynamic_cast<tw::SynthVoice*> (v); sv && sv->isStealing()) continue;
+            ++activeCount;
+        }
 
-        // If at cap, steal the oldest BEFORE the default allocator picks one.
-        // The steal-fade in SynthVoice::stopNote keeps the cut click-free.
-        // While at or above the cap, steal voices until the active count drops
-        // below it. We may need to steal multiple if previous steals are still
-        // fading (their currentlyPlayingNote stays set during fade — so we
-        // explicitly call clearCurrentNote() on each so JUCE's findFreeVoice
-        // can immediately pick the stolen slot for the incoming note instead
-        // of picking an idle pool voice (which caused the cap to leak to 96).
+        // If at cap, steal the OLDEST non-stealing voice (Serum 2 picks oldest;
+        // we use a monotonic noteStartStamp set in startNote). Loop in case we
+        // need to steal multiple (e.g. rapid chord change with cap drop).
         while (activeCount >= voiceCap_)
         {
-            bool stoleOne = false;
-            for (auto* sound : sounds)
+            tw::SynthVoice* oldest = nullptr;
+            juce::uint32    oldestStamp = std::numeric_limits<juce::uint32>::max();
+            for (auto* v : voices)
             {
-                if (sound->appliesToNote (midiNoteNumber) && sound->appliesToChannel (midiChannel))
-                {
-                    if (auto* oldest = findVoiceToSteal (sound, midiChannel, midiNoteNumber))
-                    {
-                        // SynthVoice::stopNote(velocity, allowTailOff=false) sets stealing_=true
-                        // AND calls clearCurrentNote internally, so the slot becomes immediately
-                        // findable as free by JUCE's findFreeVoice for the incoming note.
-                        stopVoice (oldest, /*velocity=*/ 0.0f, /*allowTailOff=*/ false);
-                        stoleOne = true;
-                    }
-                    break;
-                }
+                auto* sv = dynamic_cast<tw::SynthVoice*> (v);
+                if (sv == nullptr) continue;
+                if (sv->getCurrentlyPlayingNote() < 0) continue;
+                if (sv->isStealing()) continue;
+                const auto stamp = sv->getNoteStartStamp();
+                if (stamp < oldestStamp) { oldestStamp = stamp; oldest = sv; }
             }
-            if (! stoleOne) break;
+            if (oldest == nullptr) break;
+            // stopVoice → SynthVoice::stopNote(0, allowTailOff=false) starts the
+            // 30ms fade and (since Phase 12) does NOT clear the slot, so the next
+            // findFreeVoice call lands on a different idle slot from the pool.
+            stopVoice (oldest, 0.0f, false);
             --activeCount;
         }
 

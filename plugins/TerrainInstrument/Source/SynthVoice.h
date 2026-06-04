@@ -357,6 +357,13 @@ namespace tw
             stealing_         = false;
             stealingFade_     = 1.0f;
             stealingFadeStep_ = 0.0f;
+
+            // Phase 12 — monotonic stamp so UnisonSynth::noteOn can find the
+            // oldest non-stealing voice when the cap is hit. Static atomic so all
+            // SynthVoice instances share one counter; thread-safe even though
+            // startNote is invoked under the Synthesiser lock.
+            static std::atomic<juce::uint32> globalNoteCounter { 1 };
+            noteStartStamp_ = globalNoteCounter.fetch_add (1, std::memory_order_relaxed);
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -367,20 +374,28 @@ namespace tw
             }
             else
             {
-                // Phase 8a polish — fade to zero over ~5ms instead of hard cut
+                // Phase 12 — Serum-2 style smooth voice steal. 30ms exponential fade
+                // (audibly smooth, not just click-prevention) and the slot stays
+                // OCCUPIED throughout (no clearCurrentNote here). Keeping the slot
+                // means JUCE's findFreeVoice picks a different idle slot from the
+                // 96-voice pool for the incoming note — so the dying note fades out
+                // on its slot WHILE the new note rises on its own slot. The cap is
+                // still enforced because UnisonSynth::noteOn excludes stealing
+                // voices from the active count (see PluginProcessor.h). When the
+                // fade completes, renderNextBlock calls clearCurrentNote().
                 stealing_         = true;
                 stealingFade_     = 1.0f;
-                // 5ms at current sampleRate: total samples = 0.005 * sampleRate
-                const float fadeSamples = static_cast<float>(0.005 * sampleRate_);
-                stealingFadeStep_ = std::pow(0.0001f, 1.0f / std::max(1.0f, fadeSamples));
-                // Phase 11m fix — clear the note here so JUCE's findFreeVoice picks
-                // this slot for the next noteOn (was leaking to 96-voice pool).
-                // The 5ms fade keeps running in renderNextBlock via stealing_=true
-                // until SynthVoice's own playing_ flag goes false. If a new noteOn
-                // hits the slot first, startNote resets stealing_ + fade state cleanly.
-                clearCurrentNote();
+                const float fadeSamples = static_cast<float>(0.030 * sampleRate_);
+                stealingFadeStep_ = std::pow(0.001f, 1.0f / std::max(1.0f, fadeSamples));
             }
         }
+
+        // Phase 12 — used by UnisonSynth to skip stealing voices when counting
+        // toward the polyphony cap (a fading voice no longer "owns" a slot in
+        // the user's perception, even though its currentlyPlayingNote is still
+        // set so the slot doesn't get hijacked mid-fade).
+        bool isStealing() const noexcept { return stealing_; }
+        juce::uint32 getNoteStartStamp() const noexcept { return noteStartStamp_; }
 
         void pitchWheelMoved (int) override {}
         void controllerMoved (int, int) override {}
@@ -1427,9 +1442,13 @@ namespace tw
         juce::dsp::IIR::Filter<float> horizonShelfL_;
         juce::dsp::IIR::Filter<float> horizonShelfR_;
 
-        // Phase 8a polish — exponential fade on voice steal (~5ms) to avoid clicks
+        // Phase 8a polish — exponential fade on voice steal (~30ms, Phase 12) to avoid clicks
         float stealingFade_     = 1.0f;     // 1.0 = no fade, 0.0 = silent
         float stealingFadeStep_ = 0.0f;     // multiplier per sample during fade
         bool  stealing_         = false;
+
+        // Phase 12 — monotonic timestamp from startNote, used by UnisonSynth
+        // to find the oldest non-stealing voice when the polyphony cap is hit.
+        juce::uint32 noteStartStamp_ = 0;
     };
 }
