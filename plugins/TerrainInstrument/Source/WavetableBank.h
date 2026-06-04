@@ -57,59 +57,71 @@ namespace tw
 
         WavetableBank()
         {
-            // Phase 10a — basic shapes (spec-based, full 8 mip levels)
+            // ── Phase 11l — 30 total spec-based wavetables ────────────────────
+            //
+            // Basic (4): 4 fundamental waveforms (Phase 10a, unchanged)
             tables_[(size_t) Sine]          .buildFromSpec (Wavetable::makeSineSpec());
             tables_[(size_t) Triangle]      .buildFromSpec (Wavetable::makeTriangleSpec());
             tables_[(size_t) Square]        .buildFromSpec (Wavetable::makeSquareSpec());
             tables_[(size_t) Pulse]         .buildFromSpec (Wavetable::makePulseSpec());
-            // Phase 10a — migrated analog saws (spec-based, full 8 mip levels)
-            tables_[(size_t) ProphetSaw]  .buildFromSpec (Wavetable::makeProphetSawSpec());
-            // Phase 11k — Analog legacy tables: amplify for dramatic WT POS sweep
-            tables_[(size_t) JupiterPWM]     = Wavetable::makeJupiterPWM();
-            tables_[(size_t) JupiterPWM].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
-            tables_[(size_t) MoogSqr]        = Wavetable::makeMoogSqr();
-            tables_[(size_t) MoogSqr].amplifyFramesInPlace (Wavetable::AmplifyMode::Warmth);
-            tables_[(size_t) OBXSaw]      .buildFromSpec (Wavetable::makeOBXSawSpec());
-            tables_[(size_t) CS80Brass]      = Wavetable::makeCS80Brass();
-            tables_[(size_t) CS80Brass].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
-            tables_[(size_t) JunoStr]     .buildFromSpec (Wavetable::makeJunoStrSpec());
-            // Phase 11k — Legacy time-domain wavetables: amplifyFramesInPlace for dramatic WT POS.
-            // These are mip-0-only — high notes will alias until Phase 10c migrates them.
-            tables_[(size_t) PPGWave]        = Wavetable::makePPGWave();
-            tables_[(size_t) PPGWave].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
+
+            // Analog (6): Phase 11l research-driven — each circuit-grounded and distinct
+            // ProphetSaw: SSM 2030 even-harmonic boost + soft taper (vintage→modern bright)
+            tables_[(size_t) ProphetSaw]    .buildFromSpec (Wavetable::makeProphetSawSpec());
+            // JupiterPWM: Pure pulse-wave formula with authentic harmonic nulls (hollow→narrow)
+            tables_[(size_t) JupiterPWM]    .buildFromSpec (Wavetable::makeJupiterPWMSpec());
+            // MoogSqr: Near-square DC-leakage + even harmonics grow quadratically (square→fat saw)
+            tables_[(size_t) MoogSqr]       .buildFromSpec (Wavetable::makeMoogSqrSpec());
+            // OBXSaw: Gaussian rolloff above h=22 + serial VCA distortion on h=2,3 (clean→gritty)
+            tables_[(size_t) OBXSaw]        .buildFromSpec (Wavetable::makeOBXSawSpec());
+            // CS80Brass: Bandpass formant (HPF reduces h=1,2; bell-curve at h=4-7; dual-VCO scatter)
+            tables_[(size_t) CS80Brass]     .buildFromSpec (Wavetable::makeCS80BrassSpec());
+            // JunoStr: Zero scatter at frame 0 (DCO stability), sub-osc grows, chorus scatter grows
+            tables_[(size_t) JunoStr]       .buildFromSpec (Wavetable::makeJunoStrSpec());
+
+            // Digital (4): Phase 11l research-driven
+            // PPGWave: Gaussian peak h=1.5→20 + 8-bit grit floor (spec-based, buildFromSpec)
+            tables_[(size_t) PPGWave]       .buildFromSpec (Wavetable::makePPGWaveSpec());
+            // DX7EP: FM β=0.5→4.5 with 3.5× tine modulator (legacy — non-integer partials)
             tables_[(size_t) DX7EP]          = Wavetable::makeDX7EP();
-            tables_[(size_t) DX7EP].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
+            // D50Bell: Acoustic bell decay (fundamental fast, upper partials sustain) (legacy)
             tables_[(size_t) D50Bell]        = Wavetable::makeD50Bell();
-            tables_[(size_t) D50Bell].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
+            // M1Piano: Inharmonicity B=0.00015, velocity model frame 0=soft→15=hard strike (legacy)
             tables_[(size_t) M1Piano]        = Wavetable::makeM1Piano();
-            tables_[(size_t) M1Piano].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
-            tables_[(size_t) ChoirAtoO]      = Wavetable::makeChoirAtoO();
-            tables_[(size_t) ChoirAtoO].amplifyFramesInPlace (Wavetable::AmplifyMode::Warmth);
-            tables_[(size_t) Whisper]        = Wavetable::makeWhisper();
-            tables_[(size_t) Whisper].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
-            tables_[(size_t) VowelMorph]     = Wavetable::makeVowelMorph();
-            tables_[(size_t) VowelMorph].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
-            tables_[(size_t) BowedMetal]     = Wavetable::makeBowedMetal();
-            tables_[(size_t) BowedMetal].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
-            tables_[(size_t) GlassHarmonics] = Wavetable::makeGlassHarmonics();
-            tables_[(size_t) GlassHarmonics].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
-            tables_[(size_t) Railroad]       = Wavetable::makeRailroad();
-            tables_[(size_t) Railroad].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
-            tables_[(size_t) Dustbowl]       = Wavetable::makeDustbowl();
-            tables_[(size_t) Dustbowl].amplifyFramesInPlace (Wavetable::AmplifyMode::Drive);
-            tables_[(size_t) StaticEvolve]   = Wavetable::makeStaticEvolve();
-            tables_[(size_t) StaticEvolve].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
-            tables_[(size_t) SpectralDrift]  = Wavetable::makeSpectralDrift();
-            tables_[(size_t) SpectralDrift].amplifyFramesInPlace (Wavetable::AmplifyMode::Spectrum);
-            tables_[(size_t) SerumHD]        = Wavetable::makeSerumHD();
-            tables_[(size_t) SerumHD].amplifyFramesInPlace (Wavetable::AmplifyMode::Brightness);
-            // Phase 11h — Morph category (spec-based, full 8 mip levels)
-            tables_[(size_t) Rise]            .buildFromSpec (Wavetable::makeHarmonicRiseSpec());
-            tables_[(size_t) OddEven]         .buildFromSpec (Wavetable::makeOddEvenSpec());
-            tables_[(size_t) PhaseDrift]      .buildFromSpec (Wavetable::makePhaseDriftSpec());
-            tables_[(size_t) SpectralSweep]   .buildFromSpec (Wavetable::makeSpectralSweepSpec());
-            tables_[(size_t) FormantRise]     .buildFromSpec (Wavetable::makeFormantRiseSpec());
-            tables_[(size_t) HarmonicSeries]  .buildFromSpec (Wavetable::makeHarmonicSeriesSpec());
+
+            // Vocal (3): Phase 11l research-driven — Lorentzian formants (Peterson & Barney 1952)
+            // ChoirAtoO: /a/→/o/ sweep, singer's formant ring, Lorentzian resonance (spec-based)
+            tables_[(size_t) ChoirAtoO]     .buildFromSpec (Wavetable::makeChoirAtoOSpec());
+            // Whisper: Formant-shaped noise (randomized phases = incoherent = noise-like) (spec-based)
+            tables_[(size_t) Whisper]       .buildFromSpec (Wavetable::makeWhisperSpec());
+            // VowelMorph: A→E→I→O→U with /i/→/o/ as most dramatic transition (spec-based)
+            tables_[(size_t) VowelMorph]    .buildFromSpec (Wavetable::makeVowelMorphSpec());
+
+            // Metallic (3): Phase 11l research-driven — physics-based partial ratios
+            // BowedMetal: Vibraphone h=1:4:10 exact integers, bow-lift sweep (spec-based)
+            tables_[(size_t) BowedMetal]    .buildFromSpec (Wavetable::makeBowedMetalSpec());
+            // GlassHarmonics: Free-free bowl modes, h=3 for 2.756× (537¢ error — pending 10c)
+            tables_[(size_t) GlassHarmonics].buildFromSpec (Wavetable::makeGlassHarmonicsSpec());
+            // Railroad: Euler-Bernoulli decay sweep, h=3 for 2.756× (537¢ error — pending 10c)
+            tables_[(size_t) Railroad]      .buildFromSpec (Wavetable::makeRailroadSpec());
+
+            // Experimental (4): Phase 11l research-driven — all spec-based, all distinct process
+            // Dustbowl: 78rpm degradation (LP cutoff + mid-band shellac noise + varispeed jitter)
+            tables_[(size_t) Dustbowl]      .buildFromSpec (Wavetable::makeDustbowlSpec());
+            // StaticEvolve: Static → choir /a/ formant narrative (noise→tone with phase collapse)
+            tables_[(size_t) StaticEvolve]  .buildFromSpec (Wavetable::makeStaticEvolveSpec());
+            // SpectralDrift: IDENTICAL amplitude spectrum, phases drift 0→random (psychoacoustic)
+            tables_[(size_t) SpectralDrift] .buildFromSpec (Wavetable::makeSpectralDriftSpec());
+            // SerumHD: Gaussian center h=3→45 with t^1.5, 20% even boost (brightest in bank)
+            tables_[(size_t) SerumHD]       .buildFromSpec (Wavetable::makeSerumHDSpec());
+
+            // Morph (6): Phase 11h/11j — unchanged
+            tables_[(size_t) Rise]          .buildFromSpec (Wavetable::makeHarmonicRiseSpec());
+            tables_[(size_t) OddEven]       .buildFromSpec (Wavetable::makeOddEvenSpec());
+            tables_[(size_t) PhaseDrift]    .buildFromSpec (Wavetable::makePhaseDriftSpec());
+            tables_[(size_t) SpectralSweep] .buildFromSpec (Wavetable::makeSpectralSweepSpec());
+            tables_[(size_t) FormantRise]   .buildFromSpec (Wavetable::makeFormantRiseSpec());
+            tables_[(size_t) HarmonicSeries].buildFromSpec (Wavetable::makeHarmonicSeriesSpec());
         }
 
         const Wavetable* getTable (int preset) const noexcept

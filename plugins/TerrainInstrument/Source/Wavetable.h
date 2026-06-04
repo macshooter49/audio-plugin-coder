@@ -401,103 +401,360 @@ namespace tw
             return spec;
         }
 
-        // ── Analog category: 6 iconic tables (Phase 2A) ──────────────────────
-        // All use 16 frames so user can scan/morph via the FRAME knob.
-        // Generated additively from sine harmonics — clean-room implementations,
-        // no sampled or copyrighted content. Character is in the harmonic
-        // distribution + frame-to-frame morph curve, not in any specific sample.
+        // ── Analog category: 6 iconic tables (Phase 11l research-driven) ──────
+        // Each factory is circuit-grounded — harmonic signatures derived from
+        // published research on each synth's actual VCO/filter architecture.
+        // See docs/research/2026-06-03-analog-oscillator-research.md for sources.
 
-        /** Prophet 5-style saw — Phase 11k: vintage warm (frame 0) → hyper-bright (frame 15).
-         *  Frame 0: 24 harmonics, 1/h decay (vintage Prophet character).
-         *  Frame 15: 96 harmonics, 1/h^0.65 decay (brutally bright modern saw).
-         *  Decay power migrates 1.0 → 0.65 so upper harmonics get louder as WT POS rises. */
+        /** Prophet 5 (SSM 2030) — Phase 11l research-driven.
+         *  SSM 2030 sawtooth-core: mild even-harmonic boost (+12%) at vintage frames
+         *  from transistor-pair mismatch, fading at high frames. Soft exponential
+         *  taper above h=20 at frame 0 (SSM noise floor). Coherent phases (single VCO).
+         *  Sweep: vintage warm (frame 0) → modern bright aggressive (frame 15). */
         static WavetableSpec makeProphetSawSpec()
         {
+            // SSM 2030 sawtooth-core character:
+            // - Mild even-harmonic boost at low frames (vintage warm)
+            // - Standard 1/h sawtooth transitioning to 1/h^0.70 at high frames (modern bright)
+            // - Even-harmonic boost fades out as upper harmonic count rises
+            // - Coherent (zero) phases — Prophet uses single VCO per voice, no detuning baked in
             WavetableSpec spec;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const float t = (float) f / 15.0f;
                 FrameSpec& fs = spec.frames[(size_t) f];
-                // Harmonic count: 24 (vintage warm) → 96 (modern bright), quadratic
-                const int numH = juce::jlimit (24, 96,
-                                                (int) std::round (24.0f + 72.0f * t * t));
+
+                // Harmonic count: 24 (vintage) → 80 (modern bright), quadratic
+                const int numH = juce::jlimit (24, 80,
+                                                (int) std::round (24.0f + 56.0f * t * t));
                 fs.numHarmonics = numH;
-                // Decay power: 1.0 (classic 1/h) → 0.65 (bright, harmonics sustained)
-                const float decayPow = 1.0f - t * 0.35f;
+
+                // Decay power: 1.0 (classic 1/h) → 0.70 (bright) linear
+                const float decayPow = 1.0f - t * 0.30f;
+
+                // Even-harmonic boost: +12% at frame 0 → 0% at frame 8 → 0% at frame 15
+                // Models SSM 2030 transistor-pair mismatch in expo converter
+                const float evenBoost = juce::jmax (0.0f, 0.12f - t * 0.17f);  // 0.12 → 0 by t=0.7
+
+                // Soft taper above harmonic 20 at low frames (models SSM noise floor)
+                // The taper fades away as we open up to modern bright mode
+                const float taperStart = 20.0f + t * 60.0f;  // moves from 20 to 80 over sweep
+
                 for (int h = 1; h <= numH; ++h)
                 {
-                    fs.amplitudes[(size_t)(h - 1)] = 1.0f / std::pow ((float) h, decayPow);
+                    float amp = 1.0f / std::pow ((float) h, decayPow);
+
+                    // Even-harmonic SSM boost
+                    if (h % 2 == 0)
+                        amp *= (1.0f + evenBoost);
+
+                    // Soft exponential taper for high harmonics at vintage frames
+                    if ((float) h > taperStart)
+                    {
+                        const float taperAmt = ((float) h - taperStart) / 20.0f;
+                        amp *= std::exp (-taperAmt * (1.0f - t) * 1.5f);
+                    }
+
+                    fs.amplitudes[(size_t)(h - 1)] = amp;
+                    fs.phases[(size_t)(h - 1)]     = 0.0f;  // coherent phases, single-VCO
+                }
+            }
+            return spec;
+        }
+
+        /** Jupiter-8 (Roland IR3R09) PWM — Phase 11l research-driven.
+         *  Pure mathematical pulse-wave formula amp(h,pw) = (2/(pi*h)) * sin(pi*h*pw).
+         *  Creates authentic harmonic NULLS at specific duty cycle positions:
+         *  h=3 null at pw=33%, h=4 null at pw=25% — the "hollow animated" JP-8 quality.
+         *  Sweep: 50% (square/odd-only/hollow) → 8% (narrow pulse/bright/all harmonics). */
+        static WavetableSpec makeJupiterPWMSpec()
+        {
+            // Roland Jupiter-8 VCO1 square-to-narrow-pulse sweep.
+            // Pure mathematical pulse-wave formula: amp(h,pw) = (2/(pi*h)) * sin(pi*h*pw)
+            // This creates authentic harmonic nulls at specific duty cycle positions —
+            // the "hollow" and "animated" quality of Jupiter-8 pads comes from these nulls.
+            WavetableSpec spec;
+            constexpr double pi = 3.14159265358979323846;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const double t = (double) f / 15.0;
+                FrameSpec& fs = spec.frames[(size_t) f];
+
+                // Pulse width: 0.50 (square) → 0.08 (narrow pulse), linear
+                const double pw = 0.50 - t * 0.42;
+
+                // Jupiter-8 harmonic count: up to 96 harmonics
+                int populated = 0;
+                for (int h = 1; h <= 96; ++h)
+                {
+                    // Standard pulse-wave formula — mathematically exact, no approximations
+                    const double amp = (2.0 / (pi * (double) h)) * std::sin (pi * (double) h * pw);
+
+                    if (std::abs (amp) < 1e-6)
+                        fs.amplitudes[(size_t)(h - 1)] = 0.0f;
+                    else
+                    {
+                        fs.amplitudes[(size_t)(h - 1)] = (float) amp;
+                        populated = h;
+                    }
+                    fs.phases[(size_t)(h - 1)] = 0.0f;
+                }
+                fs.numHarmonics = populated;
+            }
+            return spec;
+        }
+
+        /** Minimoog (discrete transistor) square-to-saw — Phase 11l research-driven.
+         *  Starts as near-square (odd harmonics dominant) with DC-offset leakage on h=2 (~3%).
+         *  Even harmonics GROW quadratically as frames advance (mixer saturation model).
+         *  Moog IIR soft taper above h=25 (capacitor integrator soft limit).
+         *  Sweep: thick warm square (frame 0) → fat driven 3-oscillator sawtooth (frame 15). */
+        static WavetableSpec makeMoogSqrSpec()
+        {
+            // Minimoog discrete transistor square → fat saw sweep.
+            // Unique characteristics vs ProphetSaw / OBXSaw:
+            // 1. Starts as near-square (ODD harmonics dominant) — not sawtooth-start
+            // 2. Even harmonics GROW progressively as frames advance (mixer saturation)
+            // 3. Additional ~6dB/oct taper above harmonic 25 (capacitor integrator soft limit)
+            // 4. h=2 always at ~3-5% minimum (DC offset / slight asymmetry leakage)
+            constexpr double pi = 3.14159265358979323846;
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t = (float) f / 15.0f;
+                FrameSpec& fs = spec.frames[(size_t) f];
+
+                // Even-harmonic blend: 0 (pure square character) → 1 (full saw)
+                const float evenBlend = t * t;  // quadratic — stays square-like until midpoint
+
+                // Harmonic count: 28 (deep warm square) → 64 (fat saw)
+                const int numH = juce::jlimit (28, 64,
+                                                (int) std::round (28.0f + 36.0f * t));
+                fs.numHarmonics = numH;
+
+                for (int h = 1; h <= numH; ++h)
+                {
+                    // Base amplitude
+                    float amp;
+                    const bool isOdd  = (h % 2 != 0);
+
+                    if (isOdd)
+                    {
+                        // Odd harmonics: square formula (4/(pi*h)), then cross-fade to saw (1/h)
+                        const float squareAmp = (float)(4.0 / pi) / (float) h;
+                        const float sawAmp    = 1.0f / (float) h;
+                        amp = squareAmp + (sawAmp - squareAmp) * evenBlend;
+                    }
+                    else
+                    {
+                        // Even harmonics: DC-offset leakage at frame 0 (3%), growing to full saw by frame 15
+                        const float leakage = 0.03f / (float) h;        // DC offset / asymmetry: 3% of h=1
+                        const float sawAmp  = 1.0f / (float) h;
+                        amp = leakage + (sawAmp - leakage) * evenBlend;
+                    }
+
+                    // Moog IIR soft taper: harmonics above 25 attenuate extra
+                    // Models the capacitor integrator curve + transistor bandwidth limit
+                    if (h > 25)
+                    {
+                        const float excess = (float)(h - 25) / 25.0f;
+                        amp *= std::exp (-excess * (1.0f - t * 0.5f) * 0.8f);
+                    }
+
+                    fs.amplitudes[(size_t)(h - 1)] = amp;
                     fs.phases[(size_t)(h - 1)]     = 0.0f;
                 }
             }
             return spec;
         }
 
-        /** OB-X dual-saw chorus character — Phase 11k: dual-layer enhancement.
-         *  Frame 0: tight vintage saw (30 harmonics, no scatter — clean and focused).
-         *  Frame 15: massive chorus saw (80 harmonics, heavy phase scatter, brighter decay).
-         *  The scatter models OB-X's dual-VCO detuning baked into the waveform shape. */
+        /** Oberheim OB-X (CEM 3340 + discrete SEM filter) — Phase 11l research-driven.
+         *  Gaussian rolloff above h=22 (capacitor filter between oscillator and VCF).
+         *  Even-harmonic boost from CEM 3340 triangle-core sawtooth derivation (+8%).
+         *  Serial VCA distortion: h=2 +10-30%, h=3 +5-15% (the "ballsy" Oberheim character).
+         *  Sweep: clean vintage tight (frame 0) → gritty serial-distorted lead (frame 15). */
         static WavetableSpec makeOBXSawSpec()
         {
+            // Oberheim OB-X sawtooth character:
+            // - 10kHz Gaussian rolloff above ~harmonic 22 (capacitor filter confirmed by Electric Druid)
+            // - Even-harmonic boost from CEM 3340 triangle-core sawtooth derivation (+8%)
+            // - Serial VCA distortion adds h=2,3 enhancement (the "ballsy" Oberheim character)
+            // - WT POS sweep: clean vintage (rolloff tight, low distortion) → gritty lead
             WavetableSpec spec;
-            constexpr double pi2 = 2.0 * 3.14159265358979323846;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                const double t = (double) f / 15.0;
+                const float t = (float) f / 15.0f;
                 FrameSpec& fs = spec.frames[(size_t) f];
-                // Harmonic count: 30 (vintage, tight) → 80 (massive chorus) quadratic
-                const int hMax = juce::jlimit (30, 80,
-                                                (int) std::round (30.0 + 50.0 * t * t));
-                // Phase scatter: 0 (clean frame 0) → 0.45 cycles (heavy chorus)
-                const double scatterAmt = t * t * 0.45;
-                // Decay power: 1.0 → 0.75 (upper harmonics get louder with scatter)
-                const float decayPow = (float)(1.0 - t * 0.25);
-                unsigned int rng = 0xCAFEF00Du + (unsigned) f;
-                auto rand01 = [&]() {
-                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                    return ((double) rng / (double) 0xFFFFFFFFu);
-                };
-                for (int h = 1; h <= hMax; ++h)
+
+                // Harmonic count: 22 (capacitor-limited) → 60 (aggressive, rolloff lifted)
+                const int numH = juce::jlimit (22, 60,
+                                                (int) std::round (22.0f + 38.0f * t * t));
+                fs.numHarmonics = numH;
+
+                // Gaussian rolloff threshold: h=22 (vintage) → h=45 (aggressive)
+                const float rolloffStart = 22.0f + t * 23.0f;
+                // Rolloff sharpness: tight vintage → looser aggressive
+                const float rolloffWidth = 6.0f + t * 12.0f;
+
+                // Serial VCA distortion boost on h=2, h=3 — models OB-X VCA chain overdrive
+                const float h2Boost = 1.10f + t * 0.20f;  // +10% at f0 → +30% at f15
+                const float h3Boost = 1.05f + t * 0.10f;  // +5%  at f0 → +15% at f15
+
+                // Even-harmonic CEM triangle-core boost (consistent — fixed by circuit)
+                const float evenBoost = 0.08f;
+
+                for (int h = 1; h <= numH; ++h)
                 {
-                    fs.amplitudes[(size_t)(h - 1)] = 1.0f / std::pow ((float) h, decayPow);
-                    fs.phases[(size_t)(h - 1)]     = (float)(pi2 * scatterAmt * (rand01() - 0.5));
+                    float amp = 1.0f / (float) h;  // base sawtooth
+
+                    // CEM triangle-core even-harmonic boost
+                    if (h % 2 == 0)
+                        amp *= (1.0f + evenBoost);
+
+                    // Serial VCA distortion boosts
+                    if (h == 2) amp *= h2Boost;
+                    if (h == 3) amp *= h3Boost;
+
+                    // Gaussian rolloff above rolloffStart
+                    if ((float) h > rolloffStart)
+                    {
+                        const float dist = ((float) h - rolloffStart) / rolloffWidth;
+                        amp *= std::exp (-dist * dist);  // Gaussian shape
+                    }
+
+                    fs.amplitudes[(size_t)(h - 1)] = amp;
+                    fs.phases[(size_t)(h - 1)]     = 0.0f;  // single VCO, coherent
                 }
-                fs.numHarmonics = hMax;
             }
             return spec;
         }
 
-        /** Juno-style 3-saw ensemble — Phase 11k: dramatic string/pad evolution.
-         *  Frame 0: clean Juno saw (30 harmonics, no scatter, flat even response).
-         *  Frame 15: lush ensemble (60 harmonics, heavy scatter, 2.0× even boost,
-         *  brighter decay — the thick chorus string the Juno-106 is famous for). */
-        static WavetableSpec makeJunoStrSpec()
+        /** Yamaha CS-80 brass (dual VCO + dual HPF+LPF chain) — Phase 11l research-driven.
+         *  Architecturally unique: bandpass formant structure from HPF+resonant-LPF combination.
+         *  Sub-harmonic attenuation: h=1 at 70%, h=2 at 85% (HPF removes mud below ~190Hz).
+         *  Formant bell curve centered h=4→7 across sweep (resonant LPF bump).
+         *  Dual-VCO phase scatter grows (Vangelis-style detuning).
+         *  Sweep: soft brass (mild formant) → aggressive bite (strong formant + scatter). */
+        static WavetableSpec makeCS80BrassSpec()
         {
-            WavetableSpec spec;
+            // Yamaha CS-80 dual-VCO + dual-filter brass character.
+            // Architecturally unique among the 6 oscillators:
+            // - Bandpass formant structure (HPF + resonant LPF combination)
+            // - Sub-harmonic attenuation (HPF removes h=1,2 partially)
+            // - Formant peak centered near h=5 for mid-range brass character
+            // - Dual-VCO phase scatter increases with WT POS (detuning model)
             constexpr double pi2 = 2.0 * 3.14159265358979323846;
+            WavetableSpec spec;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const double t = (double) f / 15.0;
                 FrameSpec& fs = spec.frames[(size_t) f];
-                // Harmonic count: 30 (tight) → 60 (lush), quadratic
-                const int hMax = juce::jlimit (30, 60,
-                                                (int) std::round (30.0 + 30.0 * t * t));
-                // Phase scatter: 0 → 0.40 cycles (heavy Juno ensemble detuning)
-                const double scatterAmt = t * t * 0.40;
-                // Even harmonic boost: 1.0 (flat) → 2.0 (rich hollow string)
-                const double evenBoost = 1.0 + t * t * 1.0;
-                // Decay power: 1.0 → 0.80 (brighter upper harmonics at high frames)
-                const float decayPow = (float)(1.0 - t * 0.20);
-                unsigned int rng = 0xBEEFCAFEu + (unsigned) f;
-                auto rand01 = [&]() {
+
+                // Harmonic count: 40 (soft) → 80 (bright aggressive)
+                const int numH = juce::jlimit (40, 80,
+                                                (int) std::round (40.0 + 40.0 * t));
+                fs.numHarmonics = numH;
+
+                // Formant parameters:
+                // Center: h=4 (soft) → h=7 (aggressive) — formant shifts up with energy
+                const double fCenter  = 4.0 + t * 3.0;
+                // Width: 2.5 harmonics (focused) → 3.5 (broader)
+                const double fWidth   = 2.5 + t * 1.0;
+                // Strength: +40% (soft) → +120% (aggressive) relative to 1/h base
+                const double fBoost   = 0.40 + t * 0.80;
+
+                // Dual-VCO phase scatter (detuning between the two CS-80 layers)
+                const double scatterAmt = t * t * 0.25;  // 0 → 0.25 cycles at h=1
+
+                unsigned int rng = 0xC580FEEDu + (unsigned) f;  // deterministic per frame
+                auto rand01 = [&]() -> double {
                     rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                    return ((double) rng / (double) 0xFFFFFFFFu);
+                    return (double) rng / (double) 0xFFFFFFFFu;
                 };
+
+                for (int h = 1; h <= numH; ++h)
+                {
+                    // Base sawtooth
+                    double amp = 1.0 / (double) h;
+
+                    // HPF attenuation (sub-harmonic reduction)
+                    if (h == 1)      amp *= 0.70;  // 30% reduction on fundamental
+                    else if (h == 2) amp *= 0.85;  // 15% reduction on 2nd harmonic
+                    // h >= 3: no HPF effect (above HPF cutoff for typical CS-80 brass)
+
+                    // Bandpass formant (resonant LPF creates peak)
+                    const double dist = (double) h - fCenter;
+                    const double bell = std::exp (-0.5 * (dist / fWidth) * (dist / fWidth));
+                    amp *= (1.0 + fBoost * bell);
+
+                    // Dual-VCO phase scatter: proportional to h (higher harmonics scatter more)
+                    const double scatter = scatterAmt * (double) h;
+                    const double phase   = pi2 * scatter * (rand01() - 0.5);
+
+                    fs.amplitudes[(size_t)(h - 1)] = (float) amp;
+                    fs.phases[(size_t)(h - 1)]     = (float) phase;
+                }
+            }
+            return spec;
+        }
+
+        /** Roland Juno-60 DCO + BBD chorus — Phase 11l research-driven.
+         *  DCO is rock-solid: ZERO phase scatter at frame 0 (no VCO drift).
+         *  Sub-oscillator contribution grows: h=1 +30%, h=2 +15%, h=4 +8% at high frames.
+         *  Chorus modeled as phase scatter 0 → 0.35 cycles (BBD FM sideband approximation).
+         *  Sweep: thin solo DCO (clean, stable) → full Juno ensemble pad (sub+chorus). */
+        static WavetableSpec makeJunoStrSpec()
+        {
+            // Roland Juno-60 DCO + chorus string ensemble character.
+            // Unique features vs OBXSaw:
+            // - Starts as CLEAN DCO (no phase scatter) — NOT rich from the start
+            // - Sub-oscillator contribution grows: h=1 boosted +30%, h=2 +15% at high frames
+            // - Chorus modeled as phase scatter growing from 0 → 0.35 cycles
+            // - Even harmonic boost from sub-oscillator octave-below square wave
+            // - WT POS: thin solo DCO → full Juno ensemble pad
+            constexpr double pi2 = 2.0 * 3.14159265358979323846;
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const double t = (double) f / 15.0;
+                FrameSpec& fs = spec.frames[(size_t) f];
+
+                // Harmonic count: 30 (clean solo DCO) → 60 (full ensemble)
+                const int hMax = juce::jlimit (30, 60,
+                                                (int) std::round (30.0 + 30.0 * t));
+
+                // Sub-oscillator blend: 0 (none) → 1 (full sub) — starts engaging at frame 3
+                const double subBlend = juce::jmax (0.0, (t - 0.2) / 0.8);  // 0 until t=0.2, then ramps
+
+                // Chorus phase scatter: 0 (no chorus) → 0.35 cycles (full chorus)
+                const double scatterAmt = t * t * 0.35;  // quadratic — stays near 0 until mid-sweep
+
+                unsigned int rng = 0xBBD60DCu + (unsigned) f;  // deterministic per frame (BBD=bucket brigade delay, DCO)
+                auto rand01 = [&]() -> double {
+                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                    return (double) rng / (double) 0xFFFFFFFFu;
+                };
+
                 for (int h = 1; h <= hMax; ++h)
                 {
-                    const double boost = (h % 2 == 0) ? evenBoost : 1.0;
-                    fs.amplitudes[(size_t)(h - 1)] = (float)(boost / std::pow ((double) h, (double) decayPow));
-                    fs.phases[(size_t)(h - 1)]     = (float)(pi2 * scatterAmt * (rand01() - 0.5));
+                    // Base DCO sawtooth: 1/h, all harmonics
+                    double amp = 1.0 / (double) h;
+
+                    // Sub-oscillator contribution:
+                    // Sub-osc square at f0/2 reinforces h=1, partially boosts h=2,h=4
+                    if (h == 1)
+                        amp += subBlend * 0.30;  // fundamental reinforcement from sub-osc
+                    if (h == 2)
+                        amp += subBlend * 0.15 / (double) h;  // h=2 boost from sub-osc h=3 beat
+                    if (h == 4)
+                        amp += subBlend * 0.08 / (double) h;  // h=4 boost from sub-osc h=5 beat
+
+                    // Chorus phase scatter (proportional to h — higher harmonics scatter more in FM)
+                    const double scatter = scatterAmt * (double) h;
+                    const double phase   = (scatter > 0.0) ? pi2 * scatter * (rand01() - 0.5) : 0.0;
+
+                    fs.amplitudes[(size_t)(h - 1)] = (float) amp;
+                    fs.phases[(size_t)(h - 1)]     = (float) phase;
                 }
                 fs.numHarmonics = hMax;
             }
@@ -713,135 +970,54 @@ namespace tw
             return spec;
         }
 
-        /** Jupiter-8 PWM: pulse wave morphing from 50% (square) at frame 0
-         *  to ~5% (narrow pulse, hollow) at frame 15. Bandlimited via additive. */
-        static Wavetable makeJupiterPWM()
+        // Legacy factory methods removed — JupiterPWM, MoogSqr, CS80Brass
+        // now use spec-based factories (makeJupiterPWMSpec, makeMoogSqrSpec,
+        // makeCS80BrassSpec) above. Dead code kept here for reference only.
+        // DEAD: makeJupiterPWM(), makeMoogSqr(), makeCS80Brass()
+
+        // ── Digital category (Phase 11l research-driven) ─────────────────────
+        // PPGWave migrated to buildFromSpec path (Gaussian peak migration, 8-bit grit).
+        // DX7EP / D50Bell / M1Piano remain legacy time-domain (non-integer partials).
+        // See docs/research/2026-06-03-digital-experimental-wavetable-research.md
+
+        /** PPG Wave 2.2/2.3 — Phase 11l research-driven, spec-based.
+         *  Gaussian harmonic peak migrates h=1.5 → h=20 across frames (the "icy" sweep).
+         *  At high frames: quantization grit added at h=50-80 (8-bit DAC noise floor).
+         *  Frame 0: warm sine-like (peak at h=1.5). Frame 15: icy digital brilliance.
+         *  Completely different from analog saws: no continuous 1/h ladder. */
+        static WavetableSpec makePPGWaveSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
+            WavetableSpec spec;
+            constexpr int kGritStart = 50;
+            constexpr int kGritEnd   = 80;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                // Pulse width: 0.5 → 0.05 across frames.
-                const double pw = 0.5 - 0.45 * ((double) f / 15.0);
-                for (int i = 0; i < N; ++i)
+                const float t      = (float) f / 15.0f;
+                const float center = 1.5f + 18.5f * t;    // h peak: 1.5 → 20.0
+                const float sigma  = 1.0f + 2.5f  * t;    // bandwidth: 1.0 → 3.5
+                const float grit   = t * 0.04f;            // 8-bit noise floor: 0 → 0.04
+
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = kGritEnd;
+
+                for (int h = 1; h <= kGritEnd; ++h)
                 {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    // Pulse Fourier series.
-                    for (int k = 1; k <= 64; ++k)
-                        s += std::sin (3.14159265358979323846 * (double) k * pw) / (double) k
-                             * std::cos ((double) k * phase);
-                    wt.sampleRef (f, i) = (float)(s * (2.0 / 3.14159265358979323846));
+                    const float d  = (float) h - center;
+                    float amp = std::exp (-(d * d) / (2.0f * sigma * sigma));
+                    // Add grit at high harmonics (simulates 8-bit DAC quantization floor)
+                    if (h >= kGritStart)
+                        amp += grit;
+                    fs.amplitudes[(size_t)(h - 1)] = amp;
+                    fs.phases[(size_t)(h - 1)]     = 0.0f;
                 }
             }
-            return wt;
+            return spec;
         }
 
-        /** Moog-style square with light odd-harmonic emphasis tracking across
-         *  frames (suggests the ladder filter's resonance coloration). */
-        static Wavetable makeMoogSqr()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
-            {
-                const double emphasis = 1.0 + 0.4 * ((double) f / 15.0);  // 1.0 → 1.4
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    // Odd harmonics only for square; emphasize 3rd as frame increases.
-                    for (int k = 1; k <= 64; k += 2)
-                    {
-                        const double weight = (k == 3) ? emphasis : 1.0;
-                        s += weight * std::sin ((double) k * phase) / (double) k;
-                    }
-                    wt.sampleRef (f, i) = (float)(s * (4.0 / 3.14159265358979323846));
-                }
-            }
-            return wt;
-        }
-
-        /** CS-80 brass: saw blended with high-passed reproducible noise.
-         *  Frame 0 = pure saw, frame 15 = saw + airy noise breath. */
-        static Wavetable makeCS80Brass()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            // Reproducible pseudo-noise seeded once (xorshift32).
-            unsigned int rng = 0xCAFEBABEu;
-            auto next = [&]() {
-                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                return ((float) rng / (float) 0xFFFFFFFFu) * 2.0f - 1.0f;
-            };
-            // Generate one shared high-passed noise frame: white noise minus its
-            // running average (1st-order HPF approximation).
-            std::vector<float> noise ((size_t) N, 0.0f);
-            float acc = 0.0f;
-            for (int i = 0; i < N; ++i)
-            {
-                const float w = next();
-                acc = acc * 0.95f + w * 0.05f;
-                noise[(size_t) i] = w - acc;
-            }
-            for (int f = 0; f < 16; ++f)
-            {
-                const double noiseAmp = 0.3 * ((double) f / 15.0);
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double saw = 0.0;
-                    for (int h = 1; h <= 60; ++h)
-                        saw += std::sin (phase * (double) h) / (double) h;
-                    saw *= (2.0 / 3.14159265358979323846);
-                    wt.sampleRef (f, i) = (float) saw + (float) noiseAmp * noise[(size_t) i];
-                }
-            }
-            return wt;
-        }
-
-        // ── Digital category (Phase 2B) ──────────────────────────────────────
-        // 4 iconic digital wavetable characters — additive bandlimited recipes
-        // approximating Wave/FM/Sample-based classics. No copyrighted samples.
-
-        /** PPG Wave: 8-bit-flavor wavetable. Mostly-saw harmonics + frame-
-         *  dependent harmonic peak shift (low/warm → high/icy) + sample-level
-         *  quantization to nearest 1/16 to suggest 8-bit DAC character. */
-        static Wavetable makePPGWave()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
-            {
-                // Frame-dependent harmonic emphasis: lowest harmonic emphasis 1.0
-                // → 5.0 across frames (icy = upper harmonics get amplified).
-                const double peakHarm = 1.0 + 5.0 * ((double) f / 15.0);
-                const double sigma = 4.0;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= 64; ++h)
-                    {
-                        const double w = std::exp (-((double) h - peakHarm) * ((double) h - peakHarm)
-                                                    / (2.0 * sigma * sigma));
-                        s += w * std::sin (phase * (double) h) / (double) h;
-                    }
-                    // Bit-quantize to 16 steps (signed) for PPG character.
-                    const double q = std::round (s * 8.0) / 8.0;
-                    wt.sampleRef (f, i) = (float) q;
-                }
-            }
-            return wt;
-        }
-
-        /** DX7 EP: electric-piano bell tone. Fundamental + 3.5x inharmonic
-         *  partial + 7.0x partial. Bell-partial amplitude ramps 0 → 1
-         *  across frames (frame 0 = pure tone, frame 15 = bell ring). */
+        /** DX7 EP (Yamaha FM electric piano) — Phase 11l research-driven.
+         *  FM carrier at h=1 modulated by h=3.5 (tine ratio) + h=7 secondary modulator.
+         *  Modulation index sweep β=0.5 (warm sustain) → β=4.5 (bright tine attack).
+         *  Non-integer partials (3.5×, 7×) require legacy time-domain constructor. */
         static Wavetable makeDX7EP()
         {
             Wavetable wt (16);
@@ -849,45 +1025,68 @@ namespace tw
             const int N = wt.frameSize_;
             for (int f = 0; f < 16; ++f)
             {
-                const double bellAmp = (double) f / 15.0;
+                const double t          = (double) f / 15.0;
+                const double beta       = 0.5 + 4.0 * t;      // FM index: 0.5 → 4.5
+                const double modRatio   = 3.5;                  // EP tine: inharmonic partial
+                const double beta2      = t * 1.5;             // secondary modulator for h7
+                const double mod2Ratio  = 7.0;
+
                 for (int i = 0; i < N; ++i)
                 {
                     const double phase = twoPi * (double) i / (double) N;
-                    double s = std::sin (phase)
-                             + 0.5 * std::sin (phase * 2.0)
-                             + bellAmp * 0.6 * std::sin (phase * 3.5)
-                             + bellAmp * 0.3 * std::sin (phase * 7.0);
-                    wt.sampleRef (f, i) = (float)(s * 0.5);
+                    // Primary FM voice: carrier at h=1 modulated by h=3.5
+                    const double mod1    = beta  * std::sin (modRatio  * phase);
+                    const double mod2    = beta2 * std::sin (mod2Ratio * phase);
+                    const double carrier = std::sin (phase + mod1 + mod2);
+                    // Add piano body harmonics (additive coloring)
+                    const double body    = 0.25 * std::sin (2.0 * phase)
+                                         + 0.12 * std::sin (3.0 * phase);
+                    wt.sampleRef (f, i)  = (float)((carrier + body) * 0.45);
                 }
             }
             return wt;
         }
 
-        /** D-50 Bell: cluster of inharmonic partials at bell-mode ratios
-         *  (1.0, 2.756, 5.404, 8.93). Frames morph cluster amplitudes. */
+        /** D-50 Bell (Roland LA synthesis) — Phase 11l research-driven.
+         *  5 inharmonic partials: ratios 1.0, 2.756, 5.404, 8.933, 13.02 (tubular bell physics).
+         *  CORRECT bell decay: fundamental decays fastest, upper partials ring longest.
+         *  Frame 0: all partials equal (strike — dense). Frame 15: shimmer (h×5.4+ dominant).
+         *  Non-integer ratios require legacy time-domain constructor. */
         static Wavetable makeD50Bell()
         {
             Wavetable wt (16);
             const double twoPi = 2.0 * 3.14159265358979323846;
             const int N = wt.frameSize_;
-            const double partials[] = { 1.0, 2.756, 5.404, 8.93 };
+            // Tubular bell inharmonic partial ratios (from musical acoustics, Chladni modes)
+            static const double r[] = { 1.0, 2.756, 5.404, 8.933, 13.02 };
             for (int f = 0; f < 16; ++f)
             {
-                const double clusterAmp = 0.3 + 0.7 * ((double) f / 15.0);
+                const double t = (double) f / 15.0;
+                // Acoustic bell decay model: fundamental fastest, upper partials slowest
+                const double amp[5] = {
+                    1.00 * (1.0 - 0.95 * t),          // h×1.0   : decays to near zero
+                    0.80 * (1.0 - 0.65 * t),          // h×2.756 : decays to 28%
+                    0.60 * (1.0 - 0.15 * t),          // h×5.404 : barely decays
+                    0.40 * (1.0 + 0.50 * t),          // h×8.933 : grows (sustained shimmer)
+                    0.25 * (1.0 + 1.00 * t),          // h×13.02 : grows (long ring)
+                };
                 for (int i = 0; i < N; ++i)
                 {
                     const double phase = twoPi * (double) i / (double) N;
-                    double s = std::sin (phase);
-                    for (int p = 1; p < 4; ++p)
-                        s += clusterAmp * (0.6 / (double) p) * std::sin (phase * partials[p]);
-                    wt.sampleRef (f, i) = (float)(s * 0.4);
+                    double s = 0.0;
+                    for (int p = 0; p < 5; ++p)
+                        s += amp[p] * std::sin (r[p] * phase);
+                    wt.sampleRef (f, i) = (float)(s * 0.35);
                 }
             }
             return wt;
         }
 
-        /** M1 Piano: percussive piano harmonics. Fundamental + 2nd + 3rd
-         *  (saw-like) + slight 4.04x detune for body inharmonicity. */
+        /** Korg M1 Piano — Phase 11l research-driven.
+         *  Piano string inharmonicity B=0.00015 (middle C range) — harmonics at h*sqrt(1+B*h²).
+         *  Velocity model: frame 0=soft (fundamental only), frame 15=hard strike (all harmonics).
+         *  h=3-4 "presence bump" is the signature M1 mid-honk.
+         *  Non-integer inharmonic ratios require legacy time-domain constructor. */
         static Wavetable makeM1Piano()
         {
             Wavetable wt (16);
@@ -895,345 +1094,535 @@ namespace tw
             const int N = wt.frameSize_;
             for (int f = 0; f < 16; ++f)
             {
-                const double detuneAmt = (double) f / 15.0;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = std::sin (phase)
-                             + 0.5 * std::sin (phase * 2.0)
-                             + 0.33 * std::sin (phase * 3.0)
-                             + 0.2 * std::sin (phase * (4.0 + 0.04 * detuneAmt))
-                             + 0.15 * std::sin (phase * 5.0)
-                             + 0.1 * std::sin (phase * 6.0);
-                    wt.sampleRef (f, i) = (float)(s * 0.4);
-                }
-            }
-            return wt;
-        }
-
-        // ── Vocal category (Phase 2B) ────────────────────────────────────────
-        // Formant-based additive synthesis. Each harmonic's amplitude is
-        // weighted by a sum of Gaussian peaks at the formant frequencies,
-        // simulating the resonant cavities of the human vocal tract.
-
-        /** Helper: formant-weighted amplitude for a given harmonic index given
-         *  fundamental frequency assumption of 220 Hz (A3 — neutral male voice).
-         *  Three Gaussian peaks at f1/f2/f3, each with sigma ~80 Hz. */
-        static double formantAmp (double harmonicHz, double f1, double f2, double f3)
-        {
-            const double sigma = 80.0;
-            const double w1 = std::exp (-(harmonicHz - f1) * (harmonicHz - f1) / (2.0 * sigma * sigma));
-            const double w2 = std::exp (-(harmonicHz - f2) * (harmonicHz - f2) / (2.0 * sigma * sigma));
-            const double w3 = std::exp (-(harmonicHz - f3) * (harmonicHz - f3) / (2.0 * sigma * sigma));
-            return w1 + 0.7 * w2 + 0.5 * w3;
-        }
-
-        /** Choir A→O: vowel A (730/1090/2440) at frame 0 morphs to
-         *  vowel O (360/750/2400) at frame 15. Fundamental assumed 220 Hz. */
-        static Wavetable makeChoirAtoO()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            const double fund = 220.0;
-            for (int f = 0; f < 16; ++f)
-            {
                 const double t = (double) f / 15.0;
-                // Linear morph A → O.
-                const double F1 = 730.0  + (360.0  - 730.0)  * t;
-                const double F2 = 1090.0 + (750.0  - 1090.0) * t;
-                const double F3 = 2440.0 + (2400.0 - 2440.0) * t;
+                // Piano inharmonicity constant (middle C range)
+                constexpr double B = 0.00015;
                 for (int i = 0; i < N; ++i)
                 {
                     const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= 40; ++h)
-                    {
-                        const double w = formantAmp ((double) h * fund, F1, F2, F3);
-                        s += w * std::sin (phase * (double) h) / (double) h;
-                    }
-                    wt.sampleRef (f, i) = (float)(s * 0.6);
+                    // Apply inharmonicity: harmonic h sits at h * sqrt(1 + B*h*h)
+                    auto inharm = [&](int h) -> double {
+                        return (double) h * std::sqrt (1.0 + B * (double) h * (double) h);
+                    };
+                    double s =
+                        1.00                                   * std::sin (inharm(1) * phase)
+                      + 0.55 * (0.6 + 0.4 * t)                * std::sin (inharm(2) * phase)
+                      + 0.38 * (0.5 + 0.5 * t)                * std::sin (inharm(3) * phase)
+                      + 0.28 * std::sqrt (t)                   * std::sin (inharm(4) * phase)
+                      + 0.20 * t                               * std::sin (inharm(5) * phase)
+                      + 0.14 * std::pow (t, 1.5)               * std::sin (inharm(6) * phase)
+                      + 0.10 * t * t                           * std::sin (inharm(7) * phase)
+                      + 0.07 * t * t                           * std::sin (inharm(8) * phase);
+                    wt.sampleRef (f, i) = (float)(s * 0.40);
                 }
             }
             return wt;
         }
 
-        /** Whisper: shaped noise instead of harmonics. Mid-band emphasis
-         *  shifts from low (300-1500 Hz) to high (1500-6000 Hz) across frames. */
-        static Wavetable makeWhisper()
+        // ── Vocal category (Phase 11l research-driven) ───────────────────────
+        // Lorentzian formant synthesis from Peterson & Barney (1952) + Hillenbrand (1995).
+        // All three spec-based (buildFromSpec path). Singer's formant ring at 3100Hz added.
+        // See docs/research/2026-06-03-vowel-formant-metallic-research.md for sources.
+
+        /** Lorentzian resonance helper: L(f,Fc,BW) = (BW/2)^2 / ((f-Fc)^2 + (BW/2)^2) */
+        static float lorentzian (float f, float Fc, float BW) noexcept
         {
-            Wavetable wt (16);
-            const int N = wt.frameSize_;
-            // Reproducible noise — different seed per frame for variety.
-            for (int f = 0; f < 16; ++f)
+            const float r = BW * 0.5f;
+            return (r * r) / ((f - Fc) * (f - Fc) + r * r);
+        }
+
+        /** Choir A→O — Phase 11l research-driven, spec-based.
+         *  Male voice register. Frame 0 = /a/ (F1=730, F2=1090, F3=2440).
+         *  Frame 15 = /o/ (F1=570, F2=840, F3=2410). Linear formant interpolation.
+         *  Singer's formant ring at 3100Hz (trained male choir projection).
+         *  Lorentzian resonance peaks (narrower than Gaussian → more authentic).
+         *  Spectral slope -0.7 (voiced source roll-off). */
+        static WavetableSpec makeChoirAtoOSpec()
+        {
+            // Formant targets (male voice register, Peterson & Barney 1952)
+            // Frame 0 = /a/:  F1=730, F2=1090, F3=2440
+            // Frame 15 = /o/: F1=570, F2=840,  F3=2410
+            constexpr float F0 = 220.0f;  // canonical fundamental for spec generation
+            constexpr int   numH = 64;    // 64 harmonics sufficient for this range
+
+            // /a/ parameters
+            const float a_F1=730, a_F2=1090, a_F3=2440, a_F4=3300;
+            const float a_B1=80,  a_B2=90,   a_B3=120,  a_B4=200;
+
+            // /o/ parameters
+            const float o_F1=570, o_F2=840,  o_F3=2410, o_F4=3300;
+            const float o_B1=60,  o_B2=80,   o_B3=100,  o_B4=200;
+
+            WavetableSpec spec;
+            for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                unsigned int rng = 0xDEADBEEFu + (unsigned) f;
-                auto next = [&]() {
-                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                    return ((float) rng / (float) 0xFFFFFFFFu) * 2.0f - 1.0f;
-                };
-                // 1st-order bandpass approximation: HP cutoff rises, LP fixed.
-                const float hpCoef = 0.7f + 0.25f * ((float) f / 15.0f);  // 0.7 → 0.95
-                const float lpCoef = 0.3f;
-                float hpState = 0.0f, lpState = 0.0f;
-                for (int i = 0; i < N; ++i)
+                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
+                const float F1  = a_F1 + t * (o_F1 - a_F1);
+                const float F2  = a_F2 + t * (o_F2 - a_F2);
+                const float F3  = a_F3 + t * (o_F3 - a_F3);
+                const float F4  = a_F4 + t * (o_F4 - a_F4);
+                const float BW1 = a_B1 + t * (o_B1 - a_B1);
+                const float BW2 = a_B2 + t * (o_B2 - a_B2);
+                const float BW3 = a_B3 + t * (o_B3 - a_B3);
+                const float BW4 = a_B4 + t * (o_B4 - a_B4);
+
+                FrameSpec& fs = spec.frames[(size_t) frame];
+                fs.numHarmonics = numH;
+                for (int h = 1; h <= numH; ++h)
                 {
-                    const float w = next();
-                    // HP via subtracting running average.
-                    hpState = hpState * hpCoef + w * (1.0f - hpCoef);
-                    const float hp = w - hpState;
-                    // LP smoothing for body.
-                    lpState = lpState * lpCoef + hp * (1.0f - lpCoef);
-                    wt.sampleRef (f, i) = lpState * 1.5f;
+                    const float freq = (float) h * F0;
+                    if (freq > 8000.0f) break;
+
+                    float w = lorentzian (freq, F1, BW1)
+                            + 0.8f  * lorentzian (freq, F2, BW2)
+                            + 0.5f  * lorentzian (freq, F3, BW3)
+                            + 0.25f * lorentzian (freq, F4, BW4)
+                            + 0.3f  * lorentzian (freq, 3100.0f, 200.0f);  // singer's formant ring
+                    w *= std::pow ((float) h, -0.7f);  // spectral slope
+                    fs.amplitudes[(size_t)(h - 1)] = w;
+                    fs.phases[(size_t)(h - 1)] = 0.0f;  // cosine phases for stable morph
                 }
             }
-            return wt;
+            return spec;
         }
 
-        /** Vowel morph: cycles A→E→I→O→U across the 16 frames.
-         *  Same formant additive as Choir. */
-        static Wavetable makeVowelMorph()
+        /** Whisper — Phase 11l research-driven, spec-based.
+         *  Formant-shaped noise: randomized phases simulate aperiodic (noisy) source.
+         *  Frame 0 = /u/-dark whisper (F1=300, F2=870). Frame 15 = /i/-bright whisper.
+         *  Shallow spectral slope -0.3 (more high-frequency energy than voiced).
+         *  Key: random phases = incoherent = sounds like bandpass noise (not tonal). */
+        static WavetableSpec makeWhisperSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            const double fund = 220.0;
-            // 5 vowels distributed across 16 frames: idx 0, 4, 8, 12, 15.
-            const double vowels[][3] = {
-                { 730.0, 1090.0, 2440.0 },  // A
-                { 530.0, 1840.0, 2480.0 },  // E
-                { 390.0, 1990.0, 2550.0 },  // I
-                { 360.0,  750.0, 2400.0 },  // O
-                { 300.0,  870.0, 2240.0 },  // U
-            };
-            for (int f = 0; f < 16; ++f)
-            {
-                // Map frame 0..15 to vowel position 0..4 (continuous).
-                const double vp = ((double) f / 15.0) * 4.0;
-                const int v0 = (int) vp;
-                const int v1 = v0 < 4 ? v0 + 1 : v0;
-                const double vt = vp - (double) v0;
-                const double F1 = vowels[v0][0] + (vowels[v1][0] - vowels[v0][0]) * vt;
-                const double F2 = vowels[v0][1] + (vowels[v1][1] - vowels[v0][1]) * vt;
-                const double F3 = vowels[v0][2] + (vowels[v1][2] - vowels[v0][2]) * vt;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= 40; ++h)
-                    {
-                        const double w = formantAmp ((double) h * fund, F1, F2, F3);
-                        s += w * std::sin (phase * (double) h) / (double) h;
-                    }
-                    wt.sampleRef (f, i) = (float)(s * 0.6);
-                }
-            }
-            return wt;
-        }
+            // Whisper: formant-shaped noise. Uses /i/-like formant positions throughout
+            // (whisper naturally produces a more neutral/bright tract shape).
+            constexpr float F0 = 220.0f;
+            constexpr int   numH = 96;  // more harmonics = more noise bandwidth
 
-        // ── Metallic category (Phase 2B) ─────────────────────────────────────
+            struct WhisperFrame { float F1, F2, F3, BW1, BW2, BW3; };
+            const WhisperFrame start = { 300.0f,  870.0f, 2240.0f, 80.0f,  100.0f, 140.0f }; // /u/ dark
+            const WhisperFrame end   = { 270.0f, 2290.0f, 3010.0f, 60.0f,   80.0f, 100.0f }; // /i/ bright
 
-        /** Bowed metal / Tibetan bowl. Inharmonic partials at bowl-mode
-         *  ratios. Frame morph adds subtle irregularity. */
-        static Wavetable makeBowedMetal()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            const double partials[] = { 1.0, 2.71, 5.07, 8.93, 13.40 };
-            for (int f = 0; f < 16; ++f)
-            {
-                const double irregularity = 0.01 * (double) f;  // up to 0.15 cents drift per frame
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int p = 0; p < 5; ++p)
-                    {
-                        const double ratio = partials[p] * (1.0 + irregularity * ((double)(p % 2) - 0.5));
-                        s += (0.8 / (double)(p + 1)) * std::sin (phase * ratio);
-                    }
-                    wt.sampleRef (f, i) = (float)(s * 0.5);
-                }
-            }
-            return wt;
-        }
-
-        /** Glass harmonics: high inharmonic partials clustered around 4-12x. */
-        static Wavetable makeGlassHarmonics()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
-            {
-                const double clusterCenter = 6.0 + 4.0 * ((double) f / 15.0);  // 6 → 10
-                const double sigma = 2.0;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.3 * std::sin (phase);  // fundamental for body
-                    for (int h = 3; h <= 20; ++h)
-                    {
-                        const double hd = (double) h + 0.05 * (double)(h % 3);  // slight inharmonicity
-                        const double w = std::exp (-(hd - clusterCenter) * (hd - clusterCenter)
-                                                    / (2.0 * sigma * sigma));
-                        s += w * 0.8 * std::sin (phase * hd) / hd;
-                    }
-                    wt.sampleRef (f, i) = (float)(s * 0.5);
-                }
-            }
-            return wt;
-        }
-
-        /** Railroad: low metallic clang. Detuned subharmonics + 2/3/5
-         *  partials. Frame morph shifts toward more upper clang. */
-        static Wavetable makeRailroad()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
-            {
-                const double clangAmt = (double) f / 15.0;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = std::sin (phase * 0.5)  // subharmonic for weight
-                             + 0.8 * std::sin (phase)
-                             + 0.6 * std::sin (phase * 2.0)
-                             + (0.3 + 0.7 * clangAmt) * std::sin (phase * 3.0)
-                             + (0.2 + 0.7 * clangAmt) * std::sin (phase * 5.13)
-                             + clangAmt * 0.3 * std::sin (phase * 7.8);
-                    wt.sampleRef (f, i) = (float)(s * 0.3);
-                }
-            }
-            return wt;
-        }
-
-        // ── Experimental category (Phase 2B) ─────────────────────────────────
-
-        /** Dustbowl: bandlimited saw + high-passed reproducible dust noise.
-         *  Frames 0→15 increase noise blend (0 → 40%). */
-        static Wavetable makeDustbowl()
-        {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            unsigned int rng = 0xFEEDFACEu;
-            auto next = [&]() {
+            WavetableSpec spec;
+            std::uint32_t rng = 0xDEADBEEFu;  // fixed seed for deterministic noise shape
+            auto nextPhase = [&rng]() -> float {
                 rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                return ((float) rng / (float) 0xFFFFFFFFu) * 2.0f - 1.0f;
+                return ((float) rng / (float) 0xFFFFFFFFu) * 6.28318530718f - 3.14159f;
             };
-            std::vector<float> dust ((size_t) N, 0.0f);
-            float acc = 0.0f;
-            for (int i = 0; i < N; ++i)
+
+            for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                const float w = next();
-                acc = acc * 0.85f + w * 0.15f;
-                dust[(size_t) i] = w - acc;  // high-passed dust
-            }
-            for (int f = 0; f < 16; ++f)
-            {
-                const double noiseAmp = 0.4 * ((double) f / 15.0);
-                for (int i = 0; i < N; ++i)
+                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
+                const float F1  = start.F1  + t * (end.F1  - start.F1);
+                const float F2  = start.F2  + t * (end.F2  - start.F2);
+                const float F3  = start.F3  + t * (end.F3  - start.F3);
+                const float BW1 = start.BW1 + t * (end.BW1 - start.BW1);
+                const float BW2 = start.BW2 + t * (end.BW2 - start.BW2);
+                const float BW3 = start.BW3 + t * (end.BW3 - start.BW3);
+
+                FrameSpec& fs = spec.frames[(size_t) frame];
+                fs.numHarmonics = numH;
+                for (int h = 1; h <= numH; ++h)
                 {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double saw = 0.0;
-                    for (int h = 1; h <= 50; ++h)
-                        saw += std::sin (phase * (double) h) / (double) h;
-                    saw *= (2.0 / 3.14159265358979323846);
-                    wt.sampleRef (f, i) = (float) saw + (float) noiseAmp * dust[(size_t) i];
+                    const float freq = (float) h * F0;
+                    if (freq > 10000.0f) break;
+
+                    float w = lorentzian (freq, F1, BW1)
+                            + 0.8f * lorentzian (freq, F2, BW2)
+                            + 0.6f * lorentzian (freq, F3, BW3);
+                    w *= std::pow ((float) h, -0.3f);  // shallow slope = bright noisy sound
+                    fs.amplitudes[(size_t)(h - 1)] = w;
+                    fs.phases[(size_t)(h - 1)] = nextPhase();  // KEY: random phases = incoherent = noise-like
                 }
             }
-            return wt;
+            return spec;
         }
 
-        /** Static Evolve: pure static (frame 0) → clean tone with static
-         *  texture (frame 15). Same RNG seed for reproducibility per frame. */
-        static Wavetable makeStaticEvolve()
+        /** VowelMorph A→E→I→O→U — Phase 11l research-driven, spec-based.
+         *  All 5 vowels (male register, Peterson & Barney 1952) mapped across 16 frames.
+         *  Key perceptual waypoints: /i/→/o/ is the most dramatic (F2 collapses 2290→840Hz).
+         *  /a/→/e/ brightens strongly (F2 jumps 1090→1840Hz).
+         *  Singer's formant ring omitted (VowelMorph is broader/less choral than ChoirAtoO). */
+        static WavetableSpec makeVowelMorphSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
+            // 5 formant triplets (male register, Peterson & Barney 1952)
+            struct VowelParams { float F1, F2, F3, F4, BW1, BW2, BW3; };
+            static const VowelParams vowels[5] = {
+                // /a/ "ah"    F1    F2    F3    F4    B1   B2   B3
+                {              730, 1090, 2440, 3300,  80,  90, 120 },
+                // /e/ "eh"
+                {              530, 1840, 2480, 3300,  60,  80, 100 },
+                // /i/ "ee"
+                {              270, 2290, 3010, 3300,  50,  80, 100 },
+                // /o/ "oh"
+                {              570,  840, 2410, 3300,  60,  80, 100 },
+                // /u/ "oo"
+                {              300,  870, 2240, 3300,  60,  80, 100 },
+            };
+
+            constexpr float F0 = 220.0f;
+            constexpr int   numH = 64;
+
+            WavetableSpec spec;
+            for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                const double cleanAmt = (double) f / 15.0;
-                unsigned int rng = 0x12345678u + (unsigned) f;
-                auto next = [&]() {
-                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                    return ((float) rng / (float) 0xFFFFFFFFu) * 2.0f - 1.0f;
-                };
-                for (int i = 0; i < N; ++i)
+                const float t    = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
+                const float vIdx = t * 4.0f;  // 0..4 indexes into vowels[]
+                const int   v0   = juce::jlimit (0, 4, (int) vIdx);
+                const int   v1   = juce::jlimit (0, 4, v0 + 1);
+                const float vFrac = vIdx - (float) v0;
+
+                const float F1  = vowels[v0].F1  + vFrac * (vowels[v1].F1  - vowels[v0].F1);
+                const float F2  = vowels[v0].F2  + vFrac * (vowels[v1].F2  - vowels[v0].F2);
+                const float F3  = vowels[v0].F3  + vFrac * (vowels[v1].F3  - vowels[v0].F3);
+                const float F4  = vowels[v0].F4  + vFrac * (vowels[v1].F4  - vowels[v0].F4);
+                const float BW1 = vowels[v0].BW1 + vFrac * (vowels[v1].BW1 - vowels[v0].BW1);
+                const float BW2 = vowels[v0].BW2 + vFrac * (vowels[v1].BW2 - vowels[v0].BW2);
+                const float BW3 = vowels[v0].BW3 + vFrac * (vowels[v1].BW3 - vowels[v0].BW3);
+
+                FrameSpec& fs = spec.frames[(size_t) frame];
+                fs.numHarmonics = numH;
+                for (int h = 1; h <= numH; ++h)
                 {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double tone = 0.0;
-                    for (int h = 1; h <= 30; ++h)
-                        tone += std::sin (phase * (double) h) / (double) h;
-                    tone *= (2.0 / 3.14159265358979323846);
-                    const float noise = next();
-                    wt.sampleRef (f, i) = (float)(cleanAmt * tone + (1.0 - cleanAmt) * noise * 0.8);
+                    const float freq = (float) h * F0;
+                    if (freq > 8000.0f) break;
+
+                    float w = lorentzian (freq, F1, BW1)
+                            + 0.8f  * lorentzian (freq, F2, BW2)
+                            + 0.5f  * lorentzian (freq, F3, BW3)
+                            + 0.25f * lorentzian (freq, F4, 150.0f);
+                    w *= std::pow ((float) h, -0.7f);
+                    fs.amplitudes[(size_t)(h - 1)] = w;
+                    fs.phases[(size_t)(h - 1)] = 0.0f;
                 }
             }
-            return wt;
+            return spec;
         }
 
-        /** Spectral Drift: same harmonic spectrum across all frames, but
-         *  each harmonic's phase offset is randomized per frame (fixed seed).
-         *  Spectrum stays identical; waveform shape evolves wildly. */
-        static Wavetable makeSpectralDrift()
+        // ── Metallic category (Phase 11l research-driven) ────────────────────
+        // Integer approximations for inharmonic partials (FrameSpec limitation).
+        // BowedMetal uses vibraphone ratios 1:4:10 — ALL map exactly to integers (perfect).
+        // GlassHarmonics + Railroad use Euler-Bernoulli free-free beam ratios approximated.
+        // Note: h=3 for 2.756× has 537-cent error — pending Phase 10c PartialSpec fix.
+        // See docs/research/2026-06-03-vowel-formant-metallic-research.md for sources.
+
+        /** BowedMetal (bowed vibraphone bar) — Phase 11l research-driven, spec-based.
+         *  Vibraphone: tuned partial ratios h=1, h=4, h=10 (ALL map exactly to integers).
+         *  Bowed character: h=10 fades first, h=4 next, h=1 (fundamental) sustains.
+         *  Bow-noise harmonics h=2,3,5,6 add rosin texture during active bowing.
+         *  Sweep: actively bowed (frame 0) → bow lifted / decay tail (frame 15). */
+        static WavetableSpec makeBowedMetalSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
+            // Vibraphone: tuned partial ratios h=1, h=4, h=10
+            // h=1:4:10 are exact integers — zero approximation error (vibraphone bars
+            // are machined to achieve these ratios deliberately).
+            // Bowed character: emphasizes upper harmonics (glassy tone)
+            // Decay across frames: h=10 fades first, h=4 fades next, h=1 stays
+            WavetableSpec spec;
+            for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                // Phase offsets per harmonic — deterministic per frame.
-                unsigned int rng = 0xAABBCCDDu + (unsigned) f * 0x9E3779B9u;
-                auto nextPhase = [&]() {
-                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                    return ((double) rng / (double) 0xFFFFFFFFu) * twoPi;
-                };
-                std::vector<double> phaseOffsets ((size_t) 32);
-                for (size_t k = 0; k < 32; ++k) phaseOffsets[k] = nextPhase();
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= 32; ++h)
-                        s += std::sin (phase * (double) h + phaseOffsets[(size_t)(h - 1)]) / (double) h;
-                    wt.sampleRef (f, i) = (float)(s * (1.5 / 3.14159265358979323846));
-                }
+                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
+
+                // Amplitude envelopes for each partial across frame sweep
+                const float amp1  = 1.0f;                          // fundamental always present
+                const float amp4  = 0.7f * (1.0f - 0.6f * t);    // 4th harmonic fades
+                const float amp10 = 0.5f * (1.0f - 0.9f * t);    // 10th harmonic fades fastest
+
+                // Bow-noise harmonics (subtle, add "rosin" texture)
+                const float bowNoise = 0.15f * (1.0f - t);  // only during active bowing
+
+                FrameSpec& fs = spec.frames[(size_t) frame];
+                fs.numHarmonics = 12;
+
+                // Main bowed partials (vibraphone 1:4:10 ratios — exact integer harmonics)
+                fs.amplitudes[1 - 1]  = amp1;
+                fs.amplitudes[4 - 1]  = amp4;
+                fs.amplitudes[10 - 1] = amp10;
+
+                // Bow-noise harmonics (subtle, add "rosin" texture)
+                fs.amplitudes[2 - 1] = bowNoise * 0.4f;
+                fs.amplitudes[3 - 1] = bowNoise * 0.3f;
+                fs.amplitudes[5 - 1] = bowNoise * 0.2f;
+                fs.amplitudes[6 - 1] = bowNoise * 0.1f;
+
+                // Zero phases for main partials — keep pitch-coherent
+                // Bow noise allowed to be zero-phase too; variation is in amplitude
+                fs.phases[1 - 1]  = 0.0f;
+                fs.phases[4 - 1]  = 0.0f;
+                fs.phases[10 - 1] = 0.0f;
             }
-            return wt;
+            return spec;
         }
 
-        /** Serum HD: bright modern wavetable. Balanced harmonic ramp with
-         *  slight even-harmonic emphasis. Frame center 0→1 shifts low → high. */
-        static Wavetable makeSerumHD()
+        /** GlassHarmonics (Franklin glass harmonica) — Phase 11l research-driven, spec-based.
+         *  Real ratios: 1.000, 2.756, 5.404, 8.933 (free-free bowl modes).
+         *  Integer approx: h=1, h=3 (−537¢ error), h=5 (−140¢), h=9 (+117¢).
+         *  Near-sine at frame 0 (friction barely activates higher modes).
+         *  Shimmer grows with WT POS (more bow pressure → more modes).
+         *  NOTE: h=3 for 2.756× is a 537-cent error. Authentic fix pending Phase 10c PartialSpec. */
+        static WavetableSpec makeGlassHarmonicsSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
+            // Glass harmonica: near-harmonic but slightly inharmonic
+            // Dominant mode: (2,0) = fundamental, with harmonics approximated to integers
+            // Real ratios: 1.000, 2.756, 5.404, 8.933
+            // Integer approx: h=1, h=3, h=5, h=9
+            // KNOWN LIMITATION: h=3 for 2.756× is 537 cents off (sounds like perfect fifth).
+            // Waiting for Phase 10c PartialSpec to place energy at exact 2.756× ratio.
+            WavetableSpec spec;
+            for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                const double center = 2.0 + 8.0 * ((double) f / 15.0);  // 2 → 10
-                const double sigma = 4.0;
-                for (int i = 0; i < N; ++i)
+                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
+
+                // Glass has very low damping — all partials sustain together once excited
+                // Sweep represents spectral richness (low WT POS = sine-like purity)
+                const float amp1 = 1.0f;
+                const float amp3 = 0.15f * t;      // 2.756× approx → h=3, grows with WT POS
+                const float amp5 = 0.08f * t;      // 5.404× approx → h=5
+                const float amp9 = 0.04f * t;      // 8.933× approx → h=9
+
+                FrameSpec& fs = spec.frames[(size_t) frame];
+                fs.numHarmonics = 10;
+                fs.amplitudes[1 - 1] = amp1;
+                fs.amplitudes[3 - 1] = amp3;
+                fs.amplitudes[5 - 1] = amp5;
+                fs.amplitudes[9 - 1] = amp9;
+
+                // All zero phases — glass produces very pure, coherent tones
+            }
+            return spec;
+        }
+
+        /** Railroad (free-free steel bar) — Phase 11l research-driven, spec-based.
+         *  Euler-Bernoulli free-free beam: ratios 1.000, 2.756, 5.404, 8.933, 13.340.
+         *  Integer approx: h=1, h=3, h=5, h=9, h=13 (h=13 for 13.340× = −45¢ — near perfect).
+         *  WT POS sweep = temporal decay after impact: all modes → only fundamental ring.
+         *  High partials decay first (radiation damping ∝ f^4). Realistic metallic strike model.
+         *  NOTE: h=3 for 2.756× is 537-cent error — pending Phase 10c PartialSpec fix. */
+        static WavetableSpec makeRailroadSpec()
+        {
+            // Free-free steel bar (like a railroad rail or spike)
+            // Real partial ratios: 1.000, 2.756, 5.404, 8.933, 13.340
+            // Integer approx: h=1, h=3, h=5, h=9, h=13
+            // KNOWN LIMITATION: h=3 for 2.756× is 537 cents off — pending Phase 10c.
+            // h=13 for 13.340× is only 45 cents off — near perfect.
+            //
+            // WT POS sweep represents temporal decay after impact:
+            //   Frame 0  = initial strike (all partials at full strength, metallic clang)
+            //   Frame 8  = mid-decay (h=13 and h=9 faded significantly)
+            //   Frame 15 = late decay (only h=1 and slight h=3 remain, pure ring)
+            WavetableSpec spec;
+            for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
+            {
+                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
+
+                // Exponential-style decay curves per partial (higher = faster)
+                // t=0 = struck, t=1 = ringing pure
+                const float amp1  = 1.0f;                                          // fundamental: always 1.0
+                const float amp3  = 0.60f * std::pow (1.0f - t, 1.5f);            // 2.756×: slow decay
+                const float amp5  = 0.40f * std::pow (1.0f - t, 2.5f);            // 5.404×: medium decay
+                const float amp9  = 0.25f * std::pow (juce::jmax(0.0f, 1.0f-t), 4.0f);  // 8.933×: fast decay
+                const float amp13 = 0.15f * std::pow (juce::jmax(0.0f, 1.0f-t), 6.0f);  // 13.34×: very fast decay
+
+                // On initial strike (frame 0): add inharmonic "impact noise" at h=2, h=4, h=6
+                const float impactNoise = 0.20f * (1.0f - t) * (1.0f - t);
+
+                FrameSpec& fs = spec.frames[(size_t) frame];
+                fs.numHarmonics = 14;
+
+                // Main modal partials
+                fs.amplitudes[1  - 1] = amp1;
+                fs.amplitudes[3  - 1] = amp3;
+                fs.amplitudes[5  - 1] = amp5;
+                fs.amplitudes[9  - 1] = amp9;
+                fs.amplitudes[13 - 1] = amp13;
+
+                // Impact transient fill (decays quickly with frame position)
+                fs.amplitudes[2 - 1] = impactNoise * 0.5f;
+                fs.amplitudes[4 - 1] = impactNoise * 0.4f;
+                fs.amplitudes[6 - 1] = impactNoise * 0.3f;
+                fs.amplitudes[7 - 1] = impactNoise * 0.2f;
+
+                // Slightly randomized phases for impact frames (strike is noisy)
+                // Pure phases for late frames (ring is coherent)
+                const float phaseNoise = impactNoise * 1.0f;  // 0 at frame 15, ~0.2 at frame 0
+                fs.phases[2 - 1] = phaseNoise * 0.5f;
+                fs.phases[4 - 1] = phaseNoise * 0.8f;
+                fs.phases[6 - 1] = phaseNoise * 1.2f;
+            }
+            return spec;
+        }
+
+        // ── Experimental category (Phase 11l research-driven) ────────────────
+        // All 4 now use buildFromSpec path (mip anti-aliasing). Each is process-defined:
+        // Dustbowl=78rpm degradation, StaticEvolve=static→choir narrative,
+        // SpectralDrift=phase-only variation (flat spectrum), SerumHD=HD brilliance peak.
+        // See docs/research/2026-06-03-digital-experimental-wavetable-research.md
+
+        /** Dustbowl (78rpm shellac record degradation) — Phase 11l research-driven, spec-based.
+         *  LP filter cutoff narrows saw to h=18 at frame 0 (4kHz at 220Hz ref).
+         *  Mid-band surface noise (h=12-30) grows with frame (shellac grain noise).
+         *  Varispeed phase jitter on upper harmonics grows (worn turntable instability).
+         *  Sweep: clean vintage recording (frame 0) → heavily worn/degraded record (frame 15). */
+        static WavetableSpec makeDustbowlSpec()
+        {
+            WavetableSpec spec;
+            // Pre-generate deterministic random phases and noise amplitudes (varispeed + crackle)
+            std::uint32_t rng = 0xFEEDFACEu;
+            auto nextF = [&rng]() -> float {
+                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                return (float) rng / (float) 0xFFFFFFFFu;
+            };
+            float randPhase[48] = {};
+            float randNoise[48] = {};
+            for (int i = 0; i < 48; ++i) {
+                randPhase[i] = nextF() * 6.28318530718f;
+                randNoise[i] = 0.02f + nextF() * 0.06f;  // 0.02..0.08
+            }
+
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t   = (float) f / 15.0f;
+                const int cutH  = juce::jlimit (18, 48, (int) std::round (18.0f + 30.0f * t));
+                FrameSpec& fs   = spec.frames[(size_t) f];
+                fs.numHarmonics = 48;
+
+                for (int h = 1; h <= 48; ++h)
                 {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int h = 1; h <= 50; ++h)
+                    // LP-filtered saw (simulates 78rpm bandwidth limit)
+                    float amp = 0.0f;
+                    if (h <= cutH)
                     {
-                        const double w = std::exp (-((double) h - center) * ((double) h - center)
-                                                    / (2.0 * sigma * sigma));
-                        const double evenBoost = (h % 2 == 0) ? 1.15 : 1.0;
-                        s += w * evenBoost * std::sin (phase * (double) h) / (double) h;
+                        const float norm = (float) h / (float) cutH;
+                        amp = (1.0f / (float) h) * (1.0f - 0.3f * norm * norm);
                     }
-                    wt.sampleRef (f, i) = (float)(s * 1.5);
+                    // Mid-band surface noise (harmonics 12-30): grows with frame
+                    if (h >= 12 && h <= 30)
+                        amp += t * randNoise[h - 1];
+
+                    fs.amplitudes[(size_t)(h - 1)] = amp;
+
+                    // Varispeed phase jitter on upper harmonics (starts at h=10)
+                    if (h >= 10)
+                        fs.phases[(size_t)(h - 1)] = t * randPhase[h - 1] * 0.8f;
                 }
             }
-            return wt;
+            return spec;
+        }
+
+        /** StaticEvolve (radio static → choir formant) — Phase 11l research-driven, spec-based.
+         *  Frame 0 = pure deterministic noise (max incoherence). Frame 15 = choir /a/ vowel.
+         *  Noise decays as (1-t)^1.5; tone arrives as t^2 (late dramatic reveal).
+         *  Target tone: Gaussian-formant choir "ah" at A3=220Hz (rewarding arrival).
+         *  Phases collapse to zero as tone arrives (noise → coherent = static → signal). */
+        static WavetableSpec makeStaticEvolveSpec()
+        {
+            WavetableSpec spec;
+            constexpr int kNH = 64;
+
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t       = (float) f / 15.0f;
+                const float toneAmt = t * t;                         // quadratic arrival
+                const float noiseAmt = std::pow (1.0f - t, 1.5f);   // faster noise decay
+
+                // Deterministic per-frame random noise (different character each frame)
+                std::uint32_t rng = 0x12345678u + (std::uint32_t) f * 0x9E3779B9u;
+                auto nxt = [&rng]() -> float {
+                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                    return (float) rng / (float) 0xFFFFFFFFu;
+                };
+
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = kNH;
+
+                for (int h = 1; h <= kNH; ++h)
+                {
+                    // Noise contribution (deterministic random amplitude + phase)
+                    const float noiseAmp = noiseAmt * (0.2f + nxt() * 0.8f);
+                    const float noisePh  = nxt() * 6.28318530718f;
+
+                    // Tone contribution: choir "ah" vowel formants at A3=220Hz
+                    const float freq = (float) h * 220.0f;
+                    const float sigma = 90.0f;
+                    auto gf = [&](float fc) -> float {
+                        const float d = freq - fc;
+                        return std::exp (-(d * d) / (2.0f * sigma * sigma));
+                    };
+                    const float toneAmp = toneAmt * (gf (730.0f) + 0.7f * gf (1090.0f)
+                                                    + 0.45f * gf (2440.0f)) / (float) h;
+                    // Mix noise and tone; phases collapse as tone arrives
+                    const float totalAmp = noiseAmp + toneAmp;
+                    const float ph = noiseAmt * noisePh;   // phase randomizes when noisy, zeroes as tone arrives
+
+                    fs.amplitudes[(size_t)(h - 1)] = totalAmp;
+                    fs.phases[(size_t)(h - 1)]     = ph;
+                }
+            }
+            return spec;
+        }
+
+        /** SpectralDrift (IDENTICAL amplitude spectrum, drifting phases) — Phase 11l, spec-based.
+         *  Uses FLAT spectral envelope (equal amplitude h=1..32, not 1/h like PhaseDrift Morph).
+         *  Frame 0 = all phases zero → buzzy aggressive additive tone.
+         *  Frame 15 = fully randomized phases → sounds like musical noise (same spectrum, different ear).
+         *  Psychoacoustic paradox: spectrum analyzer shows identical curve at every frame. */
+        static WavetableSpec makeSpectralDriftSpec()
+        {
+            WavetableSpec spec;
+            // Deterministic target phases for frame 15 (maximally randomized)
+            std::uint32_t rng = 0xDEADC0DEu;
+            auto nextPh = [&rng]() -> float {
+                rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                return ((float) rng / (float) 0xFFFFFFFFu) * 6.28318530718f;
+            };
+            float targetPhases[32] = {};
+            for (int h = 0; h < 32; ++h) targetPhases[h] = nextPh();
+
+            constexpr int kNH = 32;
+            const float normAmp = 1.0f / std::sqrt ((float) kNH);  // equal RMS normalization
+
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t = (float) f / 15.0f;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = kNH;
+                for (int h = 1; h <= kNH; ++h)
+                {
+                    fs.amplitudes[(size_t)(h - 1)] = normAmp;
+                    fs.phases[(size_t)(h - 1)]     = t * targetPhases[h - 1];
+                }
+            }
+            return spec;
+        }
+
+        /** SerumHD (modern wavetable synthesis — maximum brilliance) — Phase 11l, spec-based.
+         *  Gaussian envelope center migrates h=3 → h=45 with t^1.5 acceleration.
+         *  20% even-harmonic boost (Serum brand character — "buzzy" vs "hollow").
+         *  Sigma grows 4→8 for increasing density. Zero phases = crystal-clear HD quality.
+         *  Sweep: warm modern saw (frame 0) → overwhelming upper-harmonic brilliance (frame 15). */
+        static WavetableSpec makeSerumHDSpec()
+        {
+            WavetableSpec spec;
+            constexpr int kNH = 96;
+
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t      = (float) f / 15.0f;
+                const float tCube  = t * std::sqrt (t);               // t^1.5 for dramatic acceleration
+                const float center = 3.0f + 42.0f * tCube;           // 3 → 45
+                const float sigma  = 4.0f + 4.0f  * t;               // 4 → 8
+                FrameSpec& fs      = spec.frames[(size_t) f];
+                fs.numHarmonics    = kNH;
+
+                for (int h = 1; h <= kNH; ++h)
+                {
+                    const float d         = (float) h - center;
+                    const float evenBoost = (h % 2 == 0) ? 1.20f : 1.0f;  // Serum even-harmonic brightness
+                    fs.amplitudes[(size_t)(h - 1)] = evenBoost
+                                                   * std::exp (-(d * d) / (2.0f * sigma * sigma));
+                    fs.phases[(size_t)(h - 1)]     = 0.0f;  // HD = phase-coherent, clean
+                }
+            }
+            return spec;
         }
 
     private:

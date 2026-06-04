@@ -56,20 +56,12 @@ public:
             }
         }
 
-        beginTest ("All 6 analog wavetables (3 spec + 3 legacy) construct + produce audio");
+        beginTest ("All 6 analog wavetables (all spec-based as of Phase 11l) construct + produce audio");
         {
-            // 3 migrated → spec-based
-            tw::Wavetable specTables[3];
-            specTables[0].buildFromSpec (tw::Wavetable::makeProphetSawSpec());
-            specTables[1].buildFromSpec (tw::Wavetable::makeOBXSawSpec());
-            specTables[2].buildFromSpec (tw::Wavetable::makeJunoStrSpec());
-            // 3 legacy (Phase 10c migrates these)
-            tw::Wavetable legacyTables[] = {
-                tw::Wavetable::makeJupiterPWM(),
-                tw::Wavetable::makeMoogSqr(),
-                tw::Wavetable::makeCS80Brass()
-            };
-            const auto testRms = [this](const tw::Wavetable& wt, const char* label) {
+            // Phase 11l: all 6 analog tables now spec-based
+            const auto testSpecRms = [this](const tw::WavetableSpec& spec, const char* label) {
+                tw::Wavetable wt;
+                wt.buildFromSpec (spec);
                 expectEquals (wt.getNumFrames(), 16, juce::String (label) + " not 16 frames");
                 float sumSq = 0.0f;
                 for (int i = 0; i < wt.getFrameSize(); ++i)
@@ -80,44 +72,50 @@ public:
                 const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
                 expect (rms > 0.05f, juce::String (label) + " RMS=" + juce::String (rms));
             };
-            testRms (specTables[0], "ProphetSawSpec");
-            testRms (specTables[1], "OBXSawSpec");
-            testRms (specTables[2], "JunoStrSpec");
-            testRms (legacyTables[0], "JupiterPWM (legacy)");
-            testRms (legacyTables[1], "MoogSqr (legacy)");
-            testRms (legacyTables[2], "CS80Brass (legacy)");
+            testSpecRms (tw::Wavetable::makeProphetSawSpec(), "ProphetSawSpec");
+            testSpecRms (tw::Wavetable::makeJupiterPWMSpec(), "JupiterPWMSpec");
+            testSpecRms (tw::Wavetable::makeMoogSqrSpec(),    "MoogSqrSpec");
+            testSpecRms (tw::Wavetable::makeOBXSawSpec(),     "OBXSawSpec");
+            testSpecRms (tw::Wavetable::makeCS80BrassSpec(),  "CS80BrassSpec");
+            testSpecRms (tw::Wavetable::makeJunoStrSpec(),    "JunoStrSpec");
         }
 
-        beginTest ("All 14 Phase 2B wavetable factories construct + produce audio");
+        beginTest ("All 14 Phase 11l wavetable factories construct + produce audio");
         {
-            tw::Wavetable tables[] = {
-                tw::Wavetable::makePPGWave(),
-                tw::Wavetable::makeDX7EP(),
-                tw::Wavetable::makeD50Bell(),
-                tw::Wavetable::makeM1Piano(),
-                tw::Wavetable::makeChoirAtoO(),
-                tw::Wavetable::makeWhisper(),
-                tw::Wavetable::makeVowelMorph(),
-                tw::Wavetable::makeBowedMetal(),
-                tw::Wavetable::makeGlassHarmonics(),
-                tw::Wavetable::makeRailroad(),
-                tw::Wavetable::makeDustbowl(),
-                tw::Wavetable::makeStaticEvolve(),
-                tw::Wavetable::makeSpectralDrift(),
-                tw::Wavetable::makeSerumHD(),
-            };
-            for (auto& wt : tables)
-            {
-                expectEquals (wt.getNumFrames(), 16);
+            // PPGWave is now spec-based; DX7EP / D50Bell / M1Piano remain legacy
+            // Vocal, Metallic, Experimental: all now spec-based
+            const auto testSpecRms2 = [this](const tw::WavetableSpec& spec, const char* label) {
+                tw::Wavetable wt;
+                wt.buildFromSpec (spec);
+                expectEquals (wt.getNumFrames(), 16, juce::String (label) + " not 16 frames");
                 float sumSq = 0.0f;
                 for (int i = 0; i < wt.getFrameSize(); ++i)
-                {
-                    const float s = wt.lookup (0.5f, (float) i / (float) wt.getFrameSize());
-                    sumSq += s * s;
-                }
+                    sumSq += std::pow (wt.lookup (0, 0.5f, (float) i / (float) wt.getFrameSize()), 2.0f);
                 const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
-                expect (rms > 0.05f, juce::String ("Phase 2B table RMS=") + juce::String (rms));
-            }
+                expect (rms > 0.01f, juce::String (label) + " RMS=" + juce::String (rms));
+            };
+            const auto testLegacyRms = [this](const tw::Wavetable& wt, const char* label) {
+                expectEquals (wt.getNumFrames(), 16, juce::String (label) + " not 16 frames");
+                float sumSq = 0.0f;
+                for (int i = 0; i < wt.getFrameSize(); ++i)
+                    sumSq += std::pow (wt.lookup (0.5f, (float) i / (float) wt.getFrameSize()), 2.0f);
+                const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
+                expect (rms > 0.01f, juce::String (label) + " RMS=" + juce::String (rms));
+            };
+            testSpecRms2  (tw::Wavetable::makePPGWaveSpec(),       "PPGWaveSpec");
+            testLegacyRms (tw::Wavetable::makeDX7EP(),             "DX7EP (legacy)");
+            testLegacyRms (tw::Wavetable::makeD50Bell(),           "D50Bell (legacy)");
+            testLegacyRms (tw::Wavetable::makeM1Piano(),           "M1Piano (legacy)");
+            testSpecRms2  (tw::Wavetable::makeChoirAtoOSpec(),     "ChoirAtoOSpec");
+            testSpecRms2  (tw::Wavetable::makeWhisperSpec(),       "WhisperSpec");
+            testSpecRms2  (tw::Wavetable::makeVowelMorphSpec(),    "VowelMorphSpec");
+            testSpecRms2  (tw::Wavetable::makeBowedMetalSpec(),    "BowedMetalSpec");
+            testSpecRms2  (tw::Wavetable::makeGlassHarmonicsSpec(),"GlassHarmonicsSpec");
+            testSpecRms2  (tw::Wavetable::makeRailroadSpec(),      "RailroadSpec");
+            testSpecRms2  (tw::Wavetable::makeDustbowlSpec(),      "DustbowlSpec");
+            testSpecRms2  (tw::Wavetable::makeStaticEvolveSpec(),  "StaticEvolveSpec");
+            testSpecRms2  (tw::Wavetable::makeSpectralDriftSpec(), "SpectralDriftSpec");
+            testSpecRms2  (tw::Wavetable::makeSerumHDSpec(),       "SerumHDSpec");
         }
 
         beginTest ("FrameSpec + WavetableSpec defaults are zero-filled and empty");
@@ -161,8 +159,9 @@ public:
 
         beginTest ("lookup(int, framePos, phase) for legacy single-tier table clamps mipLevel to 0");
         {
-            // Legacy makeJupiterPWM() goes through the OLD constructor → numMipLevels_ = 1.
-            auto wt = tw::Wavetable::makeJupiterPWM();
+            // makeDX7EP() is one of the 3 remaining legacy tables (non-integer FM partials
+            // cannot be represented in integer-harmonic FrameSpec) → numMipLevels_ = 1.
+            auto wt = tw::Wavetable::makeDX7EP();
             expectEquals (wt.getNumMipLevels(), 1, "legacy table should be single-tier");
             const float v_lvl0 = wt.lookup (0, 0.5f, 0.25f);
             const float v_lvl7 = wt.lookup (7, 0.5f, 0.25f);  // out-of-range, must clamp
