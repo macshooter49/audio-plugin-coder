@@ -45,6 +45,13 @@ namespace tw
             StaticEvolve,
             SpectralDrift,
             SerumHD,
+            // Morph (Phase 11h) — designed for dramatic WT POS sweeps
+            Rise,
+            OddEven,
+            PhaseDrift,
+            SpectralSweep,
+            FormantRise,
+            HarmonicSeries,
             kNumPresets
         };
 
@@ -78,6 +85,13 @@ namespace tw
             tables_[(size_t) StaticEvolve]   = Wavetable::makeStaticEvolve();
             tables_[(size_t) SpectralDrift]  = Wavetable::makeSpectralDrift();
             tables_[(size_t) SerumHD]        = Wavetable::makeSerumHD();
+            // Phase 11h — Morph category (spec-based, full 8 mip levels)
+            tables_[(size_t) Rise]            .buildFromSpec (Wavetable::makeHarmonicRiseSpec());
+            tables_[(size_t) OddEven]         .buildFromSpec (Wavetable::makeOddEvenSpec());
+            tables_[(size_t) PhaseDrift]      .buildFromSpec (Wavetable::makePhaseDriftSpec());
+            tables_[(size_t) SpectralSweep]   .buildFromSpec (Wavetable::makeSpectralSweepSpec());
+            tables_[(size_t) FormantRise]     .buildFromSpec (Wavetable::makeFormantRiseSpec());
+            tables_[(size_t) HarmonicSeries]  .buildFromSpec (Wavetable::makeHarmonicSeriesSpec());
         }
 
         const Wavetable* getTable (int preset) const noexcept
