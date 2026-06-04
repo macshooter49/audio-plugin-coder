@@ -3571,6 +3571,58 @@ body {
 #syn-panel .voice-row[data-syn-row] { cursor: ns-resize; transition: background 0.12s ease; border-radius: 4px; padding: 1px 4px; }
 #syn-panel .voice-row[data-syn-row]:hover { background: rgba(139,92,246,0.10); }
 #syn-panel .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
+
+            /* Phase 11g — right-click context menu */
+            #syn-panel .syn-ctx-menu {
+              position: absolute;
+              z-index: 100;
+              min-width: 140px;
+              background: var(--bg-card);
+              border: 1px solid var(--border-strong);
+              border-radius: 6px;
+              padding: 4px 0;
+              box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+              font-family: "SF Pro Text", -apple-system, sans-serif;
+              font-size: 11px;
+              font-weight: 300;
+              color: var(--text-primary);
+              user-select: none;
+              display: none;
+            }
+            #syn-panel .syn-ctx-menu.act { display: block; }
+            #syn-panel .syn-ctx-menu .syn-ctx-header {
+              padding: 4px 12px 6px;
+              font-size: 8px;
+              letter-spacing: 1.4px;
+              text-transform: uppercase;
+              color: var(--text-muted);
+              border-bottom: 1px solid var(--border);
+              margin-bottom: 4px;
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-item {
+              padding: 5px 12px;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-item:hover {
+              background: rgba(139,92,246,0.18);
+              color: #FFFFFF;
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-item.checked {
+              color: var(--purple-400);
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-item.checked::before {
+              content: "•";
+              color: var(--purple-500);
+              margin-right: -2px;
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-item:not(.checked)::before {
+              content: "";
+              width: 6px;
+              display: inline-block;
+            }
 </style>
 </head>
 <body>
@@ -4273,6 +4325,9 @@ body {
                     <option value="0">Low Pass</option>
                     <option value="1">High Pass</option>
                     <option value="2">Smear</option>
+                    <option value="3">Comb</option>
+                    <option value="4">Ring Mod</option>
+                    <option value="5">Bit Crush</option>
                   </select>
                 </div>
                 <div class="sel">
@@ -4288,7 +4343,8 @@ body {
                   <div class="sel-label">INTERP</div>
                   <div class="sel-value" id="osc-a-interp-mode-value">LINEAR</div>
                   <select class="sel-select" data-syn="SYN_OSC_A_INTERP_MODE" id="osc-a-interp-mode-select" aria-label="INTERP mode">
-                    <option value="0">LINEAR</option>
+                    <option value="0">Linear</option>
+                    <option value="1">Stepped</option>
                   </select>
                 </div>
               </div>
@@ -4432,6 +4488,9 @@ body {
                     <option value="0">Low Pass</option>
                     <option value="1">High Pass</option>
                     <option value="2">Smear</option>
+                    <option value="3">Comb</option>
+                    <option value="4">Ring Mod</option>
+                    <option value="5">Bit Crush</option>
                   </select>
                 </div>
                 <div class="sel">
@@ -4447,7 +4506,8 @@ body {
                   <div class="sel-label">INTERP</div>
                   <div class="sel-value" id="osc-b-interp-mode-value">LINEAR</div>
                   <select class="sel-select" data-syn="SYN_OSC_B_INTERP_MODE" id="osc-b-interp-mode-select" aria-label="INTERP mode">
-                    <option value="0">LINEAR</option>
+                    <option value="0">Linear</option>
+                    <option value="1">Stepped</option>
                   </select>
                 </div>
               </div>
@@ -4655,6 +4715,9 @@ body {
         <input type="range" min="0" max="1" step="0.001" value="0.7" data-syn="SYN_ENV_AMP_S" />
         <input type="range" min="1" max="10000" step="1" value="200" data-syn="SYN_ENV_AMP_R" />
       </div>
+
+            <!-- Phase 11g — generic right-click context menu (hidden by default) -->
+            <div id="syn-ctx-menu" class="syn-ctx-menu" role="menu" aria-hidden="true"></div>
     </div>
 
   <div class="eq-ctx-menu hidden" id="eq-ctx-menu">
@@ -8644,6 +8707,143 @@ setTimeout(function wireSynControls () {
        'osc-b-warp-mode',  'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode']
         .forEach(prefix => bindSelValueMirror(prefix + '-select', prefix + '-value'));
     } catch (eSelMirror) { console.warn('[SYN-sel-mirror] bindSelValueMirror failed', eSelMirror); }
+
+    // ── Phase 11g — right-click context menus on the 5 front knobs ──
+    (function initSynRightClickMenus() {
+      const menuEl = document.getElementById('syn-ctx-menu');
+      if (!menuEl) return;
+
+      // Stop ALL contextmenu events on #syn-panel from bubbling to the
+      // sampler's lab card / chop right-click handlers below.
+      const synPanel = document.getElementById('syn-panel');
+      if (synPanel) {
+        synPanel.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, true);  // capture phase so we intercept before any child handler
+      }
+
+      // Helper to set an APVTS choice param value via window.Juce slider state
+      const setChoiceValue = (paramName, value) => {
+        try {
+          const st = (window.Juce && window.Juce.getSliderState)
+                     ? window.Juce.getSliderState(paramName) : null;
+          if (!st) return;
+          st.setNormalisedValue(value);
+        } catch (e) { /* swallow */ }
+      };
+
+      // Read current value as integer choice index
+      const getChoiceIndex = (paramName, numOptions) => {
+        try {
+          const st = (window.Juce && window.Juce.getSliderState)
+                     ? window.Juce.getSliderState(paramName) : null;
+          if (!st) return 0;
+          const n = st.getNormalisedValue();
+          return Math.round(n * (numOptions - 1));
+        } catch (e) { return 0; }
+      };
+
+      // Show the menu at (x,y) with given items.
+      // items = [{label, isChecked, onPick}]
+      const showMenu = (header, items, x, y) => {
+        menuEl.innerHTML = '';
+        if (header) {
+          const h = document.createElement('div');
+          h.className = 'syn-ctx-header';
+          h.textContent = header;
+          menuEl.appendChild(h);
+        }
+        items.forEach(it => {
+          const div = document.createElement('div');
+          div.className = 'syn-ctx-item' + (it.isChecked ? ' checked' : '');
+          div.textContent = it.label;
+          div.addEventListener('click', () => {
+            it.onPick();
+            hideMenu();
+          });
+          menuEl.appendChild(div);
+        });
+        menuEl.classList.add('act');
+        menuEl.setAttribute('aria-hidden', 'false');
+        // Position: clamp to viewport
+        const pw = synPanel ? synPanel.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        const mw = 160, mh = items.length * 22 + (header ? 22 : 0) + 8;
+        const localX = Math.max(0, Math.min(pw.width - mw, x - pw.left));
+        const localY = Math.max(0, Math.min(pw.height - mh, y - pw.top));
+        menuEl.style.left = localX + 'px';
+        menuEl.style.top = localY + 'px';
+      };
+
+      const hideMenu = () => {
+        menuEl.classList.remove('act');
+        menuEl.setAttribute('aria-hidden', 'true');
+        menuEl.innerHTML = '';
+      };
+
+      // Click outside menu closes it
+      document.addEventListener('mousedown', (e) => {
+        if (!menuEl.classList.contains('act')) return;
+        if (menuEl.contains(e.target)) return;
+        hideMenu();
+      }, true);
+      // Escape closes
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && menuEl.classList.contains('act')) hideMenu();
+      });
+
+      // ── Menu definitions per knob ──────────────────────────────
+      const WARP_MODES = ['NONE','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
+      const SPECTRAL_MODES = ['Low Pass','High Pass','Smear','Comb','Ring Mod','Bit Crush'];
+      const FOLD_SHAPES = ['Linear','Sine','Triangle'];
+
+      const KNOB_MENUS = {
+        'SYN_OSC_A_WARP_AMOUNT': { header: 'OSC A — WARP', modeParam: 'SYN_OSC_A_WARP_MODE', options: WARP_MODES },
+        'SYN_OSC_B_WARP_AMOUNT': { header: 'OSC B — WARP', modeParam: 'SYN_OSC_B_WARP_MODE', options: WARP_MODES },
+        'SYN_OSC_A_SPECTRAL_AMT':{ header: 'OSC A — SPECTRAL', modeParam: 'SYN_OSC_A_SPECTRAL_TYPE', options: SPECTRAL_MODES },
+        'SYN_OSC_B_SPECTRAL_AMT':{ header: 'OSC B — SPECTRAL', modeParam: 'SYN_OSC_B_SPECTRAL_TYPE', options: SPECTRAL_MODES },
+        'SYN_OSC_A_FOLD_AMT':    { header: 'OSC A — FOLD', modeParam: 'SYN_OSC_A_FOLD_SHAPE', options: FOLD_SHAPES },
+        'SYN_OSC_B_FOLD_AMT':    { header: 'OSC B — FOLD', modeParam: 'SYN_OSC_B_FOLD_SHAPE', options: FOLD_SHAPES }
+      };
+
+      // Wire contextmenu on each WARP/SPECTRAL/FOLD knob.
+      // Find knobs by `data-syn` attribute.
+      document.querySelectorAll('#syn-panel [data-syn]').forEach(knobEl => {
+        const dataSyn = knobEl.getAttribute('data-syn');
+        const cfg = KNOB_MENUS[dataSyn];
+        if (!cfg) return;
+        knobEl.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const currentIdx = getChoiceIndex(cfg.modeParam, cfg.options.length);
+          const items = cfg.options.map((label, idx) => ({
+            label: label,
+            isChecked: idx === currentIdx,
+            onPick: () => {
+              setChoiceValue(cfg.modeParam, idx / (cfg.options.length - 1));
+              // Also sync the paired <select> element so the sel-value label updates
+              const selEl = document.querySelector('#syn-panel [data-syn="' + cfg.modeParam + '"]');
+              if (selEl && selEl.tagName === 'SELECT') {
+                selEl.value = String(idx);
+                selEl.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            }
+          }));
+          showMenu(cfg.header, items, e.clientX, e.clientY);
+        });
+      });
+
+      // Right-click on the WT POS / SPREAD knobs just suppresses the
+      // bubble (no menu yet — those are future phases).
+      ['SYN_OSC_A_WT_FRAME','SYN_OSC_B_WT_FRAME','SYN_OSC_A_FRAME_SPREAD','SYN_OSC_B_FRAME_SPREAD'].forEach(p => {
+        document.querySelectorAll('#syn-panel [data-syn="' + p + '"]').forEach(el => {
+          el.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          });
+        });
+      });
+    })();
 
   } catch (outer) {
     console.warn ('[SYN] wireSynControls outer error', outer);
