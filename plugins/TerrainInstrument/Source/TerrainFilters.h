@@ -697,6 +697,129 @@ struct CombCore
     }
 };
 
+// ─── 3d. Formant / vowel core — Batch 4, research "Core 4" ─────────────
+//
+// FOUR types from one shared bank of FOUR two-pole resonators (one per formant
+// F1..F4), summed in PARALLEL with ALTERNATING SIGNS (+F1 −F2 +F3 −F4 — Klatt's
+// trick to fill the inter-formant notches). Each resonator is the JOS
+// constant-peak-gain form (unity peak at F for ANY bandwidth), so RES changes
+// the vowel's SHARPNESS without changing its level, and the per-formant dB
+// weights set the vowel's spectral shape:
+//
+//   y[n] = (1-r²)/2 · (x[n] − x[n−2]) + 2r·cosθ · y[n−1] − r² · y[n−2]
+//   r = exp(−π·BW/fs)     θ = 2π·F/fs     (poles at radius r < 1 ⇒ stable ∀ BW>0)
+//
+//   FORMANT A / E / I : fixed Bass-voice vowel (a / e / i). CUT shifts all
+//                       formants (vocal-tract length / "size"), RES = Q.
+//   FORMANT MORPH     : CUT sweeps a→e→i→o→u (log-freq / dB / linear-BW
+//                       interpolation between adjacent vowels), RES = Q.
+//
+// DRV = tanh input pre-saturation (talkbox grit) that makes output LOUDER.
+// Constant-peak zeros at DC kill offset; a DC blocker on the sum is insurance.
+// Coefficients are pure functions of F/BW/fs, so vowels are identical 44.1–192k.
+// Runs at host rate (resonators are linear/alias-free).
+
+struct FormantBank
+{
+    // Bass-voice singer table (Csound Book), nodes a,e,i,o,u × formants F1..F4.
+    static constexpr float VF[5][4] = {
+        { 600.f, 1040.f, 2250.f, 2450.f },   // a
+        { 400.f, 1620.f, 2400.f, 2800.f },   // e
+        { 250.f, 1750.f, 2600.f, 3050.f },   // i
+        { 400.f,  750.f, 2400.f, 2600.f },   // o
+        { 350.f,  600.f, 2400.f, 2675.f } }; // u
+    static constexpr float VB[5][4] = {
+        {  60.f,  70.f, 110.f, 120.f },      // a
+        {  40.f,  80.f, 100.f, 120.f },      // e
+        {  60.f,  90.f, 100.f, 120.f },      // i
+        {  40.f,  80.f, 100.f, 120.f },      // o
+        {  40.f,  80.f, 100.f, 120.f } };    // u
+    static constexpr float VDB[5][4] = {
+        { 0.f,  -7.f,  -9.f,  -9.f },        // a
+        { 0.f, -12.f,  -9.f, -12.f },        // e
+        { 0.f, -30.f, -16.f, -22.f },        // i
+        { 0.f, -11.f, -21.f, -20.f },        // o
+        { 0.f, -20.f, -32.f, -28.f } };      // u
+
+    // Per-vowel output normalization (measured offline vs LP24 on white noise,
+    // then scaled for headroom; seats the five vowels at even loudness so MORPH
+    // doesn't pump and A/E/I switch evenly).
+    static constexpr float kVowelNorm[5] = { 5.01f, 5.67f, 5.58f, 5.00f, 5.07f };
+
+    struct Reson {
+        float a1 = 0.f, a2 = 0.f, gain = 0.f;
+        float x1 = 0.f, x2 = 0.f, y1 = 0.f, y2 = 0.f;
+        inline void set (float F, float BW, double fs) noexcept {
+            const float r  = std::exp (-juce::MathConstants<float>::pi * BW / (float) fs);
+            const float th = 2.0f * juce::MathConstants<float>::pi * F / (float) fs;
+            a1   = 2.0f * r * std::cos (th);
+            a2   = -(r * r);
+            gain = 0.5f * (1.0f - r * r);     // unity peak at F for any BW
+        }
+        inline float process (float x) noexcept {
+            const float y = gain * (x - x2) + a1 * y1 + a2 * y2;
+            x2 = x1; x1 = x; y2 = y1; y1 = y;
+            return y;
+        }
+        inline void reset() noexcept { x1 = x2 = y1 = y2 = 0.f; }
+    };
+
+    Reson  f[4];
+    float  g[4]   = { 1.f, 1.f, 1.f, 1.f };   // linear per-formant amp weights
+    float  drive  = 1.0f;                      // tanh pre-sat gain (DRV)
+    float  driveMk = 1.0f;                     // drive makeup (guarantees louder)
+    float  outTrim = 1.0f;                     // per-vowel level normalization
+    float  dcX = 0.f, dcY = 0.f;               // DC blocker
+
+    void reset() noexcept { for (auto& r : f) r.reset(); dcX = dcY = 0.f; }
+
+    // shift = formant-frequency multiplier (CUT), qScale = bandwidth multiplier
+    // (RES; <1 = sharper). Loads one fixed vowel node (0=a..4=u).
+    void setVowel (int v, float shift, float qScale, double fs) noexcept
+    {
+        const float nyq = 0.45f * (float) fs;
+        for (int k = 0; k < 4; ++k) {
+            const float F  = juce::jlimit (20.0f, nyq, VF[v][k] * shift);
+            const float BW = juce::jmax (25.0f, VB[v][k] * qScale);
+            f[k].set (F, BW, fs);
+            g[k] = std::pow (10.0f, VDB[v][k] / 20.0f);
+        }
+        outTrim = kVowelNorm[v];
+    }
+
+    // morph 0..1 across a→e→i→o→u (log-freq / dB-linear / BW-linear).
+    void setMorph (float morph01, float qScale, double fs) noexcept
+    {
+        const float nyq = 0.45f * (float) fs;
+        const float x = juce::jlimit (0.0f, 1.0f, morph01) * 4.0f;   // 0..4
+        const int   i = juce::jlimit (0, 3, (int) x);
+        const float p = x - (float) i;
+        for (int k = 0; k < 4; ++k) {
+            const float F  = juce::jlimit (20.0f, nyq,
+                                std::exp ((1.0f - p) * std::log (VF[i][k]) + p * std::log (VF[i+1][k])));
+            const float BW = juce::jmax (25.0f, ((1.0f - p) * VB[i][k] + p * VB[i+1][k]) * qScale);
+            const float dB = (1.0f - p) * VDB[i][k] + p * VDB[i+1][k];
+            f[k].set (F, BW, fs);
+            g[k] = std::pow (10.0f, dB / 20.0f);
+        }
+        outTrim = (1.0f - p) * kVowelNorm[i] + p * kVowelNorm[i+1];
+    }
+
+    void setDrive (float driveLin) noexcept { drive = juce::jmax (1.0f, driveLin); driveMk = std::pow (drive, 0.30f); }
+
+    inline float process (float x) noexcept
+    {
+        const float xs = fastTanh (x * drive);                  // pre-saturation (louder + grit)
+        // parallel bank, alternating signs (+ − + −) to fill inter-formant notches
+        const float s = g[0]*f[0].process(xs) - g[1]*f[1].process(xs)
+                      + g[2]*f[2].process(xs) - g[3]*f[3].process(xs);
+        const float yb = s - dcX + 0.999f * dcY;                // DC blocker
+        dcX = s; dcY = yb;
+        float out = yb * outTrim * driveMk;
+        return 4.0f * fastTanh (0.25f * out);                   // soft limiter (peaks safe, normal clean)
+    }
+};
+
 
 // ─── 4. FilterSlot — switchable wrapper consumed by SynthVoice ─────────
 //
@@ -730,6 +853,7 @@ public:
         acidL_.reset();     acidR_.reset();
         diodeL_.reset();    diodeR_.reset();
         combL_.reset();     combR_.reset();
+        formantL_.reset();  formantR_.reset();
     }
 
     /** Set the active type. State of inactive filters is left dirty —
@@ -832,6 +956,33 @@ public:
                 postMakeup_= combMakeup (m);
                 break;
             }
+            case Type::FORMANT_A:
+            case Type::FORMANT_E:
+            case Type::FORMANT_I:
+            case Type::FORMANT_MORPH:
+            {
+                // CUT: 20Hz–20kHz exp knob → 0..1. RES → resonator Q (sharpness).
+                const float cut01  = juce::jlimit (0.0f, 1.0f,
+                    std::log (juce::jmax (20.0f, cutHz) / 20.0f) / std::log (1000.0f));
+                const float qScale = std::pow (0.1f, res01) * 2.0f;     // RES0 broad → RES1 sharp
+                if (type_ == Type::FORMANT_MORPH) {
+                    // CUT sweeps the vowel a→e→i→o→u (the "talking" knob).
+                    formantL_.setMorph (cut01, qScale, fs);
+                    formantR_.setMorph (cut01, qScale, fs);
+                } else {
+                    // Fixed vowel; CUT shifts all formants (vocal-tract size).
+                    const int   v     = (type_ == Type::FORMANT_A) ? 0
+                                      : (type_ == Type::FORMANT_E) ? 1 : 2;
+                    const float shift = std::exp2 ((cut01 - 0.5f) * 2.0f);  // 0.5×..2×
+                    formantL_.setVowel (v, shift, qScale, fs);
+                    formantR_.setVowel (v, shift, qScale, fs);
+                }
+                formantL_.setDrive (driveLin);   // tanh pre-sat inside the bank (LOUDER)
+                formantR_.setDrive (driveLin);
+                preDrive_  = 1.0f;               // drive handled inside
+                postMakeup_= 1.0f;
+                break;
+            }
             case Type::NONE:
             default:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -875,6 +1026,13 @@ public:
             case Type::KARPLUS:
                 l = combL_.process (l * preDrive_) * postMakeup_;
                 r = combR_.process (r * preDrive_) * postMakeup_;
+                break;
+            case Type::FORMANT_A:
+            case Type::FORMANT_E:
+            case Type::FORMANT_I:
+            case Type::FORMANT_MORPH:
+                l = formantL_.process (l * preDrive_) * postMakeup_;
+                r = formantR_.process (r * preDrive_) * postMakeup_;
                 break;
             case Type::NONE:
             default:
@@ -965,6 +1123,7 @@ private:
     Acid303       acidL_,     acidR_;
     DiodeLP       diodeL_,    diodeR_;
     CombCore      combL_,     combR_;        // COMB ± / SHIMMER / KARPLUS
+    FormantBank   formantL_,  formantR_;     // FORMANT A / E / I / MORPH
 };
 
 } // namespace filters

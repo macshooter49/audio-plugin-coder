@@ -3588,6 +3588,24 @@ body {
               color: var(--text-primary);
               user-select: none;
               display: none;
+              /* Filter Batch 1 long menu (27 entries) clamps to panel + scrolls. */
+              overflow-y: scroll;          /* always show scrollbar so user knows it scrolls */
+              overflow-x: hidden;
+              overscroll-behavior: contain;
+              -webkit-overflow-scrolling: touch;
+            }
+            #syn-panel .syn-ctx-menu::-webkit-scrollbar { width: 10px; }
+            #syn-panel .syn-ctx-menu::-webkit-scrollbar-track { background: rgba(0,0,0,0.25); border-radius: 4px; }
+            #syn-panel .syn-ctx-menu::-webkit-scrollbar-thumb {
+              background: rgba(139,92,246,0.55);
+              border-radius: 4px;
+              border: 2px solid transparent;
+              background-clip: padding-box;
+            }
+            #syn-panel .syn-ctx-menu::-webkit-scrollbar-thumb:hover {
+              background: rgba(139,92,246,0.85);
+              background-clip: padding-box;
+              border: 2px solid transparent;
             }
             #syn-panel .syn-ctx-menu.act { display: block; }
             #syn-panel .syn-ctx-menu .syn-ctx-header {
@@ -8874,6 +8892,8 @@ setTimeout(function wireSynControls () {
         // Position: clamp to viewport. Use measured menu size after rendering
         // so tall menus (filter type with 5 sections + 27 items) clamp right.
         const pw = synPanel ? synPanel.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        // Cap height to panel BEFORE measuring so a 27-item menu becomes scrollable.
+        menuEl.style.maxHeight = Math.max(120, pw.height - 16) + 'px';
         menuEl.style.left = '0px';
         menuEl.style.top = '0px';
         const mrect = menuEl.getBoundingClientRect();
@@ -8883,6 +8903,17 @@ setTimeout(function wireSynControls () {
         const localY = Math.max(0, Math.min(pw.height - mh, y - pw.top));
         menuEl.style.left = localX + 'px';
         menuEl.style.top = localY + 'px';
+        // Belt-and-suspenders wheel handler for the rare case JUCE WKWebView
+        // swallows wheel on overflow:scroll. Idempotent via dataset flag.
+        if (! menuEl.dataset.wheelBound) {
+          menuEl.addEventListener('wheel', (e) => {
+            if (! menuEl.classList.contains('act')) return;
+            const before = menuEl.scrollTop;
+            menuEl.scrollTop = before + e.deltaY;
+            if (menuEl.scrollTop !== before) e.preventDefault();
+          }, { passive: false });
+          menuEl.dataset.wheelBound = '1';
+        }
       };
 
       const hideMenu = () => {
@@ -8981,10 +9012,10 @@ setTimeout(function wireSynControls () {
         { idx: 11, label: 'COMB -',         group: 'COMB & RESO',   active: true  },
         { idx: 12, label: 'COMB SHIMMER',   group: 'COMB & RESO',   active: true  },
         { idx: 13, label: 'KARPLUS-STRONG', group: 'COMB & RESO',   active: true  },
-        { idx: 14, label: 'FORMANT · A',    group: 'FORMANT',       active: false },
-        { idx: 15, label: 'FORMANT · E',    group: 'FORMANT',       active: false },
-        { idx: 16, label: 'FORMANT · I',    group: 'FORMANT',       active: false },
-        { idx: 17, label: 'FORMANT MORPH',  group: 'FORMANT',       active: false },
+        { idx: 14, label: 'FORMANT · A',    group: 'FORMANT',       active: true  },
+        { idx: 15, label: 'FORMANT · E',    group: 'FORMANT',       active: true  },
+        { idx: 16, label: 'FORMANT · I',    group: 'FORMANT',       active: true  },
+        { idx: 17, label: 'FORMANT MORPH',  group: 'FORMANT',       active: true  },
         { idx: 18, label: 'REVERB FILTER',  group: 'SPECIAL',       active: false },
         { idx: 19, label: 'PHASER 4P',      group: 'SPECIAL',       active: false },
         { idx: 20, label: 'PHASER 8P',      group: 'SPECIAL',       active: false },
@@ -9252,8 +9283,43 @@ setTimeout(function wireSynControls () {
         const isShim     = (typeIdx === 12);  // COMB SHIMMER (comb + HF damping)
         const isKarp     = (typeIdx === 13);  // KARPLUS-STRONG (comb + string damping)
         const isComb     = isCombP || isCombM || isShim || isKarp;
-        // Fallback for the remaining placeholder types (14-25): flat line.
-        const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf || isComb);
+        // Formant / vowel bank (Batch 4): fixed peaks (A/E/I) or morph (a→e→i→o→u).
+        const isFormA    = (typeIdx === 14);
+        const isFormE    = (typeIdx === 15);
+        const isFormI    = (typeIdx === 16);
+        const isFormM    = (typeIdx === 17);
+        const isFormant  = isFormA || isFormE || isFormI || isFormM;
+        // Fallback for the remaining placeholder types (18-25): flat line.
+        const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf || isComb || isFormant);
+
+        // Precompute the 4 formant resonators once (CUT→shift, RES→Q, morph from CUT).
+        let fA1=[0,0,0,0], fA2=[0,0,0,0], fGain=[0,0,0,0], fSG=[0,0,0,0], fNorm=1.0;
+        if (isFormant) {
+          const VF=[[600,1040,2250,2450],[400,1620,2400,2800],[250,1750,2600,3050],[400,750,2400,2600],[350,600,2400,2675]];
+          const VB=[[60,70,110,120],[40,80,100,120],[60,90,100,120],[40,80,100,120],[40,80,100,120]];
+          const VDB=[[0,-7,-9,-9],[0,-12,-9,-12],[0,-30,-16,-22],[0,-11,-21,-20],[0,-20,-32,-28]];
+          const NRM=[5.01,5.67,5.58,5.00,5.07];
+          const cut01=Math.max(0,Math.min(1,Math.log(Math.max(20,fcHz)/20)/Math.log(1000)));
+          const qScale=Math.pow(0.1,res01)*2.0;
+          let F=[0,0,0,0], BW=[0,0,0,0], dB=[0,0,0,0];
+          if (isFormM) {
+            const x=cut01*4.0, vi=Math.max(0,Math.min(3,Math.floor(x))), p=x-vi;
+            for(let k=0;k<4;k++){F[k]=Math.exp((1-p)*Math.log(VF[vi][k])+p*Math.log(VF[vi+1][k]));
+              BW[k]=((1-p)*VB[vi][k]+p*VB[vi+1][k])*qScale; dB[k]=(1-p)*VDB[vi][k]+p*VDB[vi+1][k];}
+            fNorm=(1-p)*NRM[vi]+p*NRM[vi+1];
+          } else {
+            const v=isFormA?0:isFormE?1:2, shift=Math.pow(2,(cut01-0.5)*2.0);
+            for(let k=0;k<4;k++){F[k]=VF[v][k]*shift; BW[k]=VB[v][k]*qScale; dB[k]=VDB[v][k];}
+            fNorm=NRM[v];
+          }
+          const sgn=[1,-1,1,-1];
+          for(let k=0;k<4;k++){
+            const Fc=Math.max(20,Math.min(0.45*VIZ_FS,F[k])), BWc=Math.max(25,BW[k]);
+            const r=Math.exp(-Math.PI*BWc/VIZ_FS), th=2*Math.PI*Fc/VIZ_FS;
+            fA1[k]=2*r*Math.cos(th); fA2[k]=-(r*r); fGain[k]=0.5*(1-r*r);
+            fSG[k]=sgn[k]*Math.pow(10,dB[k]/20);
+          }
+        }
 
         let pathD = '';
         for (let i = 0; i < VIZ_N; i++) {
@@ -9337,6 +9403,20 @@ setTimeout(function wireSynControls () {
               const lpDen = Math.sqrt(1 - 2 * a * Math.cos(w) + a * a);
               mag *= (1 - a) / Math.max(1e-9, lpDen);
             }
+          } else if (isFormant) {
+            // Parallel bank: H = Σ ±g_k · gain_k·(1−z⁻²)/(1 − a1_k z⁻¹ − a2_k z⁻²).
+            const w = 2 * Math.PI * f / VIZ_FS;
+            const cw = Math.cos(w), sw = Math.sin(w), c2 = Math.cos(2*w), s2 = Math.sin(2*w);
+            let sumR = 0, sumI = 0;
+            for (let k = 0; k < 4; k++) {
+              const nR = fGain[k] * (1 - c2),  nI = fGain[k] * s2;
+              const dR = 1 - fA1[k]*cw - fA2[k]*c2, dI = fA1[k]*sw + fA2[k]*s2;
+              const den = dR*dR + dI*dI;
+              const hR = (nR*dR + nI*dI) / Math.max(1e-12, den);
+              const hI = (nI*dR - nR*dI) / Math.max(1e-12, den);
+              sumR += fSG[k] * hR; sumI += fSG[k] * hI;
+            }
+            mag = fNorm * Math.sqrt(sumR*sumR + sumI*sumI);
           }
           // Convert to dB, apply drive bias
           let db = 20 * Math.log10(Math.max(1e-9, mag)) + drvDb;
