@@ -820,6 +820,166 @@ struct FormantBank
     }
 };
 
+// ─── 3e. SPECIAL effects — Batch 5 ──────────────────────────────────────
+//
+// PHASER 4P / 8P (shared cascaded first-order allpass), RING MOD, BIT-CRUSH,
+// WAVESHAPER. Each maps the universal CUT/RES/DRV grammar to what's musical
+// for a per-voice, envelope-swept synth filter, is level-matched to the
+// ladder reference, and DRV always makes output LOUDER.
+
+// First-order allpass  H(z) = (g + z^-1)/(1 + g*z^-1). Unity magnitude, phase
+// 0deg->-180deg (-90deg at the break freq). One multiply. (JOS, PASP.)
+struct AllpassStage
+{
+    float g = 0.f, x1 = 0.f, y1 = 0.f;
+    inline float process (float x) noexcept {
+        const float y = g * (x - y1) + x1;   // = g*x + x1 - g*y1
+        x1 = x; y1 = y; return y;
+    }
+    inline void reset() noexcept { x1 = y1 = 0.f; }
+};
+
+// PHASER: N allpass stages spread around CUT (ratio 1.5), summed 0.5*(dry+wet)
+// for deepest notches, with feedback = RES (resonance) and a tanh input drive
+// (DRV, louder). 4 stages -> 2 notches; 8 -> 4. CUT/ENV sweep the notches.
+struct PhaserCore
+{
+    static constexpr int MAXST = 8;
+    AllpassStage ap[MAXST];
+    int   nStages = 4;
+    float fb = 0.f, fbState = 0.f, preDrv = 1.f, drvMk = 1.f;
+
+    void reset() noexcept { for (auto& a : ap) a.reset(); fbState = 0.f; }
+
+    void setParams (int stages, float cutHz, float res01, float driveLin, double fs) noexcept
+    {
+        nStages = juce::jlimit (2, MAXST, stages);
+        const float nyq = 0.45f * (float) fs;
+        const float fratio = 1.5f;
+        for (int k = 0; k < nStages; ++k) {
+            float fk = cutHz * std::pow (fratio, (float) k - (float)(nStages - 1) * 0.5f);
+            fk = juce::jlimit (20.0f, nyq, fk);
+            const float t = std::tan (juce::MathConstants<float>::pi * fk / (float) fs);
+            ap[k].g = (t - 1.0f) / (t + 1.0f);
+        }
+        fb     = res01 * 0.9f;            // RES -> feedback (cap 0.9 for stability)
+        preDrv = driveLin;
+        drvMk  = std::pow (driveLin, 0.30f);
+    }
+
+    inline float process (float x) noexcept
+    {
+        const float in = fastTanh (x * preDrv);
+        float v = in + fb * fbState;
+        for (int k = 0; k < nStages; ++k) v = ap[k].process (v);
+        fbState = v;
+        const float out = 0.5f * (in + v) * drvMk * 1.45f;   // 1.45 = level-match trim
+        return 4.0f * fastTanh (0.25f * out);                 // soft limiter (transparent at normal level)
+    }
+};
+
+// RING MOD: x * carrier. CUT = carrier freq, RES = sine->diode-bridge blend,
+// DRV = input drive. x2 makeup (a unit-sine multiply halves RMS).
+struct RingMod
+{
+    double phase = 0.0, inc = 0.0;
+    float  blend = 0.f, preDrv = 1.f, drvMk = 1.f;
+    DCBlocker dc;
+    void reset() noexcept { phase = 0.0; dc.reset(); }
+    void setParams (float carrierHz, float res01, float driveLin, double fs) noexcept
+    {
+        inc    = (2.0*juce::MathConstants<double>::pi) * (double) carrierHz / fs;
+        blend  = res01;
+        preDrv = driveLin;
+        drvMk  = std::pow (driveLin, 0.30f);
+    }
+    static inline float diode (float v) noexcept { return v > 0.f ? 0.2f * v * v : 0.f; }
+    inline float process (float x) noexcept
+    {
+        const float in = fastTanh (x * preDrv);
+        const float c  = (float) std::sin (phase);
+        phase += inc;
+        if (phase >= (2.0*juce::MathConstants<double>::pi)) phase -= (2.0*juce::MathConstants<double>::pi);
+        const float sineRM = in * c;
+        // diode bridge (Parker DAFx-11 topology, simple quadratic diode)
+        const float vi = in * 0.5f;
+        const float diodeRM = 2.2f * (diode (c + vi) - diode (-(c + vi))
+                                    - diode (c - vi) + diode (-(c - vi)));
+        float y = sineRM * (1.0f - blend) + diodeRM * blend;
+        y = dc.process (y);
+        return y * 1.42f * drvMk;   // 1.42 = makeup/level-match vs ladder reference
+    }
+};
+
+// BIT-CRUSH: DRV (drive in) -> quantize (RES = bit depth, low = crushed) ->
+// sample-hold decimate (CUT = sample rate, low = crushed). Aliasing is the
+// effect, so this type is deliberately NOT oversampled.
+struct BitCrush
+{
+    float phase = 0.f, hold = 0.f;
+    float halfL = 1.f, invHalfL = 1.f, rateRatio = 1.f, preDrv = 1.f, drvMk = 1.f;
+    void reset() noexcept { phase = 0.f; hold = 0.f; }
+    void setParams (float cutHz, float res01, float driveLin, double fs) noexcept
+    {
+        const float bits = 1.0f + res01 * 15.0f;                 // 1..16 bits
+        halfL    = 0.5f * (std::pow (2.0f, bits) - 1.0f);
+        invHalfL = 1.0f / halfL;
+        const float cut01 = juce::jlimit (0.0f, 1.0f,
+            std::log (juce::jmax (20.0f, cutHz) / 20.0f) / std::log (1000.0f));
+        const float targetRate = 20.0f * std::pow ((float) fs / 20.0f, cut01);  // 20Hz..fs
+        rateRatio = juce::jlimit (1.0e-4f, 1.0f, targetRate / (float) fs);
+        preDrv = driveLin; drvMk = std::pow (driveLin, 0.30f);
+    }
+    inline float process (float x) noexcept
+    {
+        const float in = fastTanh (x * preDrv);
+        const float q  = std::round (in * halfL) * invHalfL;     // quantize
+        phase += rateRatio;
+        if (phase >= 1.0f) { phase -= 1.0f; hold = q; }           // sample-hold
+        return hold * drvMk;
+    }
+};
+
+// WAVESHAPER: DRV = drive k, RES = morph tanh->sine-fold, CUT = post-LP tone.
+// 1st-order antiderivative anti-aliasing (ADAA) + host 2x oversampling.
+struct WaveShaper
+{
+    float k = 1.f, res = 0.f, makeup = 1.f, lpAlpha = 1.f;
+    float x1 = 0.f, F1x1 = 0.f;
+    TPTOnePole post;
+    DCBlocker  dc;
+    void reset() noexcept { x1 = 0.f; F1x1 = 0.f; post.reset(); dc.reset(); }
+
+    static inline float logcosh (float z) noexcept {            // stable ln(cosh z)
+        const float a = std::fabs (z);
+        return a - 0.6931472f + std::log1p (std::exp (-2.0f * a));
+    }
+    inline float f  (float x) const noexcept {                  // shaping curve
+        return (1.0f - res) * fastTanh (k * x) + res * std::sin (k * x);
+    }
+    inline float F1 (float x) const noexcept {                  // its antiderivative
+        return (1.0f - res) * (logcosh (k * x) / k) + res * (-std::cos (k * x) / k);
+    }
+    void setParams (float cutHz, float res01, float driveLin, double fs) noexcept
+    {
+        k       = driveLin;                                     // DRV -> drive
+        res     = res01;                                        // RES -> morph
+        makeup  = std::pow (driveLin, 0.30f);
+        const float fc = juce::jlimit (20.0f, 0.45f * (float) fs, cutHz);
+        const float t  = std::tan (juce::MathConstants<float>::pi * fc / (float) fs);
+        lpAlpha = t / (1.0f + t);                               // resolved TPT gain ∈ (0,1)
+    }
+    inline float process (float x) noexcept
+    {
+        const float F1x = F1 (x);
+        float out = (std::fabs (x - x1) < 1.0e-5f) ? f (0.5f * (x + x1))
+                                                   : (F1x - F1x1) / (x - x1);
+        x1 = x; F1x1 = F1x;
+        out = post.lp (out * makeup, lpAlpha);                  // CUT tone
+        return dc.process (out);
+    }
+};
+
 
 // ─── 4. FilterSlot — switchable wrapper consumed by SynthVoice ─────────
 //
@@ -854,6 +1014,10 @@ public:
         diodeL_.reset();    diodeR_.reset();
         combL_.reset();     combR_.reset();
         formantL_.reset();  formantR_.reset();
+        phaserL_.reset();   phaserR_.reset();
+        ringL_.reset();     ringR_.reset();
+        crushL_.reset();    crushR_.reset();
+        shaperL_.reset();   shaperR_.reset();
     }
 
     /** Set the active type. State of inactive filters is left dirty —
@@ -983,6 +1147,30 @@ public:
                 postMakeup_= 1.0f;
                 break;
             }
+            case Type::PHASER_4P:
+            case Type::PHASER_8P:
+            {
+                const int stages = (type_ == Type::PHASER_8P) ? 8 : 4;
+                phaserL_.setParams (stages, cutHz, res01, driveLin, fs);
+                phaserR_.setParams (stages, cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;   // handled inside
+                break;
+            }
+            case Type::RING_MOD:
+                ringL_.setParams (cutHz, res01, driveLin, fs);
+                ringR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::BIT_CRUSH:
+                crushL_.setParams (cutHz, res01, driveLin, fs);
+                crushR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::WAVESHAPER:
+                shaperL_.setParams (cutHz, res01, driveLin, fs);
+                shaperR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
             case Type::NONE:
             default:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -1034,6 +1222,15 @@ public:
                 l = formantL_.process (l * preDrive_) * postMakeup_;
                 r = formantR_.process (r * preDrive_) * postMakeup_;
                 break;
+            case Type::PHASER_4P:
+            case Type::PHASER_8P:
+                l = phaserL_.process (l); r = phaserR_.process (r); break;
+            case Type::RING_MOD:
+                l = ringL_.process (l);   r = ringR_.process (r);   break;
+            case Type::BIT_CRUSH:
+                l = crushL_.process (l);  r = crushR_.process (r);  break;
+            case Type::WAVESHAPER:
+                l = shaperL_.process (l); r = shaperR_.process (r); break;
             case Type::NONE:
             default:
                 // True bypass — Max finally hears the oscillators clean.
@@ -1054,7 +1251,8 @@ public:
     {
         return type_ == Type::LADDER_LP24 || type_ == Type::LADDER_LP12
             || type_ == Type::LADDER_HP24 || type_ == Type::DIODE_LP
-            || type_ == Type::ACID_303;
+            || type_ == Type::ACID_303
+            || type_ == Type::WAVESHAPER  || type_ == Type::RING_MOD;
     }
 
     /** Set the OB-X / SEM morph (0=LP, .5=Notch, 1=HP). Wired for when a
@@ -1124,6 +1322,10 @@ private:
     DiodeLP       diodeL_,    diodeR_;
     CombCore      combL_,     combR_;        // COMB ± / SHIMMER / KARPLUS
     FormantBank   formantL_,  formantR_;     // FORMANT A / E / I / MORPH
+    PhaserCore    phaserL_,   phaserR_;       // PHASER 4P / 8P
+    RingMod       ringL_,     ringR_;         // RING MOD
+    BitCrush      crushL_,    crushR_;        // BIT-CRUSH
+    WaveShaper    shaperL_,   shaperR_;       // WAVESHAPER
 };
 
 } // namespace filters

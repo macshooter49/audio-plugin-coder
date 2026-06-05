@@ -9017,12 +9017,12 @@ setTimeout(function wireSynControls () {
         { idx: 16, label: 'FORMANT · I',    group: 'FORMANT',       active: true  },
         { idx: 17, label: 'FORMANT MORPH',  group: 'FORMANT',       active: true  },
         { idx: 18, label: 'REVERB FILTER',  group: 'SPECIAL',       active: false },
-        { idx: 19, label: 'PHASER 4P',      group: 'SPECIAL',       active: false },
-        { idx: 20, label: 'PHASER 8P',      group: 'SPECIAL',       active: false },
-        { idx: 21, label: 'RING MOD',       group: 'SPECIAL',       active: false },
+        { idx: 19, label: 'PHASER 4P',      group: 'SPECIAL',       active: true  },
+        { idx: 20, label: 'PHASER 8P',      group: 'SPECIAL',       active: true  },
+        { idx: 21, label: 'RING MOD',       group: 'SPECIAL',       active: true  },
         { idx: 22, label: 'BODE SHIFTER',   group: 'SPECIAL',       active: false },
-        { idx: 23, label: 'BIT-CRUSH',      group: 'SPECIAL',       active: false },
-        { idx: 24, label: 'WAVESHAPER',     group: 'SPECIAL',       active: false },
+        { idx: 23, label: 'BIT-CRUSH',      group: 'SPECIAL',       active: true  },
+        { idx: 24, label: 'WAVESHAPER',     group: 'SPECIAL',       active: true  },
         { idx: 25, label: 'GRAIN MASK',     group: 'SPECIAL',       active: false },
       ];
       const FILTER_NUM_CHOICES = 27;
@@ -9289,8 +9289,16 @@ setTimeout(function wireSynControls () {
         const isFormI    = (typeIdx === 16);
         const isFormM    = (typeIdx === 17);
         const isFormant  = isFormA || isFormE || isFormI || isFormM;
-        // Fallback for the remaining placeholder types (18-25): flat line.
-        const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf || isComb || isFormant);
+        // SPECIAL effects (Batch 5): Phaser 4P/8P, Ring Mod, Bit-Crush, Waveshaper.
+        const isPhaser4  = (typeIdx === 19);
+        const isPhaser8  = (typeIdx === 20);
+        const isPhaser   = isPhaser4 || isPhaser8;
+        const isRingMod  = (typeIdx === 21);
+        const isCrush    = (typeIdx === 23);
+        const isShaper   = (typeIdx === 24);
+        const isSpecial5 = isPhaser || isRingMod || isCrush || isShaper;
+        // Fallback for the remaining placeholder types (18, 22, 25): flat line.
+        const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf || isComb || isFormant || isSpecial5);
 
         // Precompute the 4 formant resonators once (CUT→shift, RES→Q, morph from CUT).
         let fA1=[0,0,0,0], fA2=[0,0,0,0], fGain=[0,0,0,0], fSG=[0,0,0,0], fNorm=1.0;
@@ -9318,6 +9326,23 @@ setTimeout(function wireSynControls () {
             const r=Math.exp(-Math.PI*BWc/VIZ_FS), th=2*Math.PI*Fc/VIZ_FS;
             fA1[k]=2*r*Math.cos(th); fA2[k]=-(r*r); fGain[k]=0.5*(1-r*r);
             fSG[k]=sgn[k]*Math.pow(10,dB[k]/20);
+          }
+        }
+
+        // Phaser (Batch 5): allpass-coefficient precompute. Stages spread ±1.5×
+        // around CUT; feedback = 0.9 * RES; per-stage g = (tan(πfk/fs) − 1)/(+ 1).
+        // The magnitude branch evaluates the real |H(f)| = 0.5·|1 + A(f)/(1 − fb·A(f))|
+        // with A(f) the complex product of stage transfer functions.
+        let phG = [], phN = 0, phFb = 0;
+        if (isPhaser) {
+          phN = isPhaser8 ? 8 : 4;
+          phFb = 0.9 * res01;
+          const ratio = 1.5;
+          for (let k = 0; k < phN; k++) {
+            const fk = Math.max(20, Math.min(0.45 * VIZ_FS,
+                       fcHz * Math.pow(ratio, k - (phN - 1) * 0.5)));
+            const t = Math.tan(Math.PI * fk / VIZ_FS);
+            phG.push((t - 1) / (t + 1));
           }
         }
 
@@ -9417,6 +9442,66 @@ setTimeout(function wireSynControls () {
               sumR += fSG[k] * hR; sumI += fSG[k] * hI;
             }
             mag = fNorm * Math.sqrt(sumR*sumR + sumI*sumI);
+          } else if (isPhaser) {
+            // Real |H(f)|: H = 0.5·(1 + A/(1 − fb·A)), with A the complex product
+            // of the N first-order allpass stages (each unit magnitude, phase rotates).
+            const w = 2 * Math.PI * f / VIZ_FS;
+            const cw = Math.cos(w), sw = Math.sin(w);
+            let aR = 1, aI = 0;
+            for (let k = 0; k < phN; k++) {
+              const g = phG[k];
+              // single-stage H_k(z) = (g + z^-1)/(1 + g z^-1) evaluated at z = e^{jw}
+              const nR = g + cw,  nI = -sw;
+              const dR = 1 + g * cw,  dI = -g * sw;
+              const den = dR*dR + dI*dI;
+              const hR = (nR*dR + nI*dI) / Math.max(1e-12, den);
+              const hI = (nI*dR - nR*dI) / Math.max(1e-12, den);
+              // a *= h
+              const nAR = aR * hR - aI * hI;
+              const nAI = aR * hI + aI * hR;
+              aR = nAR; aI = nAI;
+            }
+            // mix = 0.5·(1 + A/(1 − fb·A))
+            const fdR = 1 - phFb * aR,  fdI = -phFb * aI;
+            const fden = fdR*fdR + fdI*fdI;
+            const wetR = (aR * fdR + aI * fdI) / Math.max(1e-12, fden);
+            const wetI = (aI * fdR - aR * fdI) / Math.max(1e-12, fden);
+            const mixR = 0.5 * (1 + wetR), mixI = 0.5 * wetI;
+            mag = Math.sqrt(mixR*mixR + mixI*mixI);
+          } else if (isRingMod) {
+            // Illustrative: small bump centred at the carrier (CUT). Spectrum
+            // of a real input × sine is bands at |f ± fc| — drawing a marker
+            // peak at fc reads "carrier here, sidebands form here."
+            const sigma = 0.18; // octave-ish width
+            const t = (Math.log(Math.max(20, f)) - Math.log(Math.max(20, fcHz))) / Math.log(2);
+            mag = 1.0 + 0.55 * Math.exp(-(t*t) / (2 * sigma * sigma));
+          } else if (isCrush) {
+            // Illustrative: sample-rate edge. Sample-hold low-passes content
+            // above ~reducedRate/2; we draw a soft edge there + a tiny noise
+            // floor below to evoke quantization grit.
+            const cut01 = Math.max(0, Math.min(1,
+                          Math.log(Math.max(20, fcHz) / 20) / Math.log(1000)));
+            const reducedRate = 20 * Math.pow(VIZ_FS / 20, cut01);
+            const edge = Math.max(20, 0.5 * reducedRate);
+            const x = f / edge;
+            // edge: ~unity below, falls off sharply above
+            const hp = 1 / Math.sqrt(1 + Math.pow(x, 8));
+            // grit floor scales with low RES (deeper bit-crush = more noise)
+            const grit = 0.05 + 0.15 * (1 - res01);
+            mag = Math.max(grit, hp);
+          } else if (isShaper) {
+            // Illustrative: post-CUT lowpass tone + drive-dependent high-freq rise
+            // (saturation pushes energy upward).
+            const w = 2 * Math.PI * f / VIZ_FS;
+            const t = Math.tan(Math.PI * Math.min(0.45 * VIZ_FS, Math.max(20, fcHz)) / VIZ_FS);
+            const a = t / (1 + t);
+            const lpDen = Math.sqrt(1 - 2 * a * Math.cos(w) + a * a);
+            const lp = (1 - a) / Math.max(1e-9, lpDen);
+            // drive-driven harmonic rise (RES 0 = tanh soft, RES 1 = fold spike)
+            const driveLin = Math.pow(10, drv01 * 24 / 20);
+            const rise = (1 + (driveLin - 1) * 0.07) * (1 + 0.4 * res01);
+            const tilt = 1 + 0.15 * Math.log2(Math.max(20, f) / 1000) * (drv01 + 0.5 * res01);
+            mag = lp * rise * Math.max(0.1, tilt);
           }
           // Convert to dB, apply drive bias
           let db = 20 * Math.log10(Math.max(1e-9, mag)) + drvDb;
