@@ -945,10 +945,10 @@ struct BitCrush
 struct WaveShaper
 {
     float k = 1.f, res = 0.f, makeup = 1.f, lpAlpha = 1.f;
-    float x1 = 0.f, F1x1 = 0.f;
+    float x1 = 0.f;
     TPTOnePole post;
     DCBlocker  dc;
-    void reset() noexcept { x1 = 0.f; F1x1 = 0.f; post.reset(); dc.reset(); }
+    void reset() noexcept { x1 = 0.f; post.reset(); dc.reset(); }
 
     static inline float logcosh (float z) noexcept {            // stable ln(cosh z)
         const float a = std::fabs (z);
@@ -971,10 +971,15 @@ struct WaveShaper
     }
     inline float process (float x) noexcept
     {
-        const float F1x = F1 (x);
-        float out = (std::fabs (x - x1) < 1.0e-5f) ? f (0.5f * (x + x1))
-                                                   : (F1x - F1x1) / (x - x1);
-        x1 = x; F1x1 = F1x;
+        // 1st-order ADAA. F1(x1) is recomputed with CURRENT coeffs every sample
+        // so a note reset (x1=0) seeds F1(0)=-res/k correctly — without this the
+        // first sample is (F1(x)-0)/x, a per-note onset spike that grows with RES.
+        const float dx = x - x1;
+        float out;
+        if      (std::fabs (dx) < 1.0e-5f) out = f (0.5f * (x + x1));   // ill-conditioned
+        else if (std::fabs (dx) > 0.9f)    out = f (x);                 // big jump: no ADAA dropout
+        else                               out = (F1 (x) - F1 (x1)) / dx;
+        x1 = x;
         out = post.lp (out * makeup, lpAlpha);                  // CUT tone
         return dc.process (out);
     }
