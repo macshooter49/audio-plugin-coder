@@ -8997,7 +8997,7 @@ setTimeout(function wireSynControls () {
       // First in display order, but stored as last index so future additions
       // don't reshuffle the enum (per the prompt §3 type list).
       const FILTER_TYPES = [
-        { idx: 26, label: 'NONE',           group: '',  active: true  },
+        { idx: 27, label: 'NONE',           group: '',  active: true  },
         { idx:  0, label: 'LADDER LP · 24', group: 'LADDER',        active: true  },
         { idx:  1, label: 'LADDER LP · 12', group: 'LADDER',        active: true  },
         { idx:  2, label: 'LADDER HP · 24', group: 'LADDER',        active: true  },
@@ -9017,6 +9017,7 @@ setTimeout(function wireSynControls () {
         { idx: 16, label: 'FORMANT · I',    group: 'FORMANT',       active: true  },
         { idx: 17, label: 'FORMANT MORPH',  group: 'FORMANT',       active: true  },
         { idx: 18, label: 'REVERB FILTER',  group: 'SPECIAL',       active: true  },
+        { idx: 26, label: 'REVERB FILTER 2',group: 'SPECIAL',       active: true  },
         { idx: 19, label: 'PHASER 4P',      group: 'SPECIAL',       active: true  },
         { idx: 20, label: 'PHASER 8P',      group: 'SPECIAL',       active: true  },
         { idx: 21, label: 'RING MOD',       group: 'SPECIAL',       active: true  },
@@ -9025,7 +9026,7 @@ setTimeout(function wireSynControls () {
         { idx: 24, label: 'WAVESHAPER',     group: 'SPECIAL',       active: true  },
         { idx: 25, label: 'GRAIN MASK',     group: 'SPECIAL',       active: true  },
       ];
-      const FILTER_NUM_CHOICES = 27;
+      const FILTER_NUM_CHOICES = 28;
       const labelByIdx = (i) => {
         const e = FILTER_TYPES.find(t => t.idx === i);
         return e ? e.label : 'LADDER LP · 24';
@@ -9264,7 +9265,7 @@ setTimeout(function wireSynControls () {
         const drvDb = drv01 * 6.0;
 
         // ── Magnitude evaluator per active type ─────────────────────────
-        const isNone     = (typeIdx === 26);
+        const isNone     = (typeIdx === 27);
         const isLadder   = (typeIdx === 0);   // LADDER LP·24 (4-pole LP)
         const isLadder12 = (typeIdx === 1);   // LADDER LP·12 (2-pole LP)
         const isLadderHp = (typeIdx === 2);   // LADDER HP·24 (4-pole HP, pole-mixed)
@@ -9301,7 +9302,8 @@ setTimeout(function wireSynControls () {
         const isReverb   = (typeIdx === 18);
         const isBode     = (typeIdx === 22);
         const isGrain    = (typeIdx === 25);
-        const isSpecial6 = isReverb || isBode || isGrain;
+        const isReverb2  = (typeIdx === 26);   // Serum/Pigments-style comb reverb
+        const isSpecial6 = isReverb || isBode || isGrain || isReverb2;
         const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf || isComb || isFormant || isSpecial5 || isSpecial6);
 
         // Precompute the 4 formant resonators once (CUT→shift, RES→Q, morph from CUT).
@@ -9525,10 +9527,55 @@ setTimeout(function wireSynControls () {
             const im = s * wn / Math.max(0.01, Q);
             mag = (wn*wn) / Math.max(1e-9, Math.sqrt(re*re + im*im));
           } else if (isBode) {
-            // Frequency shifter — every partial moves by a fixed Hz; the
-            // shaping function is flat (linear allpass + multiplication).
-            // The CUT cursor marks the shift amount; magnitude is unity.
-            mag = 1.0;
+            // Frequency shifter — the wet path is unity magnitude, BUT the
+            // RES-feedback loop builds resonances spaced by the shift amount.
+            // Ripple spacing = |fshift|, depth grows with feedback fb=0.95·RES.
+            // Standing rule: every curve must MOVE with the knobs — no flat lines.
+            const cut01b = Math.max(0, Math.min(1, Math.log(Math.max(20, fcHz)/20)/Math.log(1000)));
+            const d01b   = cut01b - 0.5;
+            const FMAXb  = 1000;
+            const fshift = (d01b < 0 ? -1 : 1) * (Math.pow(FMAXb + 1, 2 * Math.abs(d01b)) - 1);
+            const fshiftA= Math.min(2000, Math.max(20, Math.abs(fshift)));
+            const fb     = 0.95 * res01;
+            // |1/(1 - fb·e^{-jωT})| where T = 1/fshift, peaks at multiples of fshift.
+            const w      = 2 * Math.PI * f * (1 / fshiftA);
+            const denRe  = 1 - fb * Math.cos(w);
+            const denIm  =     fb * Math.sin(w);
+            const den    = Math.sqrt(denRe*denRe + denIm*denIm);
+            mag = 1.0 / Math.max(1e-3, den);
+            mag = Math.min(8.0, mag);   // clamp visual peaks
+          } else if (isReverb2) {
+            // REVERB FILTER 2 — Serum/Pigments-style. Three parallel damped
+            // feedback combs; their modal peaks give the jagged rippling teeth
+            // exactly like the screenshot. Magnitude = |Σ comb_k(f)| with each
+            // comb's |H| = (1-fb)/sqrt(1 + fb² - 2fb·cos(ωD_k)·LP(ω)).
+            // CUT scales the comb lengths (size), RES drives feedback + wet mix.
+            const cut01r = Math.max(0, Math.min(1, Math.log(Math.max(20, fcHz)/20)/Math.log(1000)));
+            const scaleR = 0.12 + 0.88 * cut01r;
+            const Ds = [1116, 1277, 1491].map(L => Math.max(4, Math.floor(L * scaleR)));
+            const fbR = 0.5 + 0.49 * res01;
+            const damp = Math.max(0.05, Math.min(0.9, 0.55 - 0.35 * cut01r));
+            const mixR = 0.35 + 0.5 * res01;
+            const wR = 2 * Math.PI * f / VIZ_FS;
+            // One-pole damping in the loop attenuates HF — affects all 3 combs equally.
+            const lpMag = (1 - damp) / Math.max(1e-9, Math.sqrt(1 - 2*damp*Math.cos(wR) + damp*damp));
+            let sumR = 0, sumI = 0;
+            for (let k = 0; k < 3; k++) {
+              const wd = wR * Ds[k];
+              // H_comb = (1) / (1 - fb·lp·e^{-jωD})  — modal peaks at ωD = 2πn
+              const fbLp = fbR * lpMag;
+              const dr = 1 - fbLp * Math.cos(wd);
+              const di =     fbLp * Math.sin(wd);
+              const dd = dr*dr + di*di;
+              // (1/(d)) with d complex → conjugate over magnitude squared
+              sumR += dr / Math.max(1e-9, dd);
+              sumI += -di / Math.max(1e-9, dd);
+            }
+            sumR /= 3; sumI /= 3;
+            const wetMag = Math.sqrt(sumR*sumR + sumI*sumI);
+            // dry/wet blend at the output (mixR drives wet amount)
+            mag = (1 - mixR) * 1.0 + mixR * wetMag * 1.4;
+            mag = Math.min(8.0, Math.max(0.05, mag));
           } else if (isGrain) {
             // Resonant bandpass spectral mask — draw its |H(f)|. Center
             // tracks CUT (mask freq = 200·40^cut01), Q scales with RES.

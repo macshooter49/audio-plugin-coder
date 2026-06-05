@@ -873,13 +873,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         filterTypeChoices.add ("BIT-CRUSH");
         filterTypeChoices.add ("WAVESHAPER");
         filterTypeChoices.add ("GRAIN MASK");
+        filterTypeChoices.add ("REVERB FILTER 2");
         filterTypeChoices.add ("NONE");
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_FILTER1_TYPE, 1 },
             "Synth Filter 1 Type", filterTypeChoices, 0));   // default = LADDER LP 24 (was the hardwired one)
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_FILTER2_TYPE, 1 },
-            "Synth Filter 2 Type", filterTypeChoices, 26));  // default = NONE (slot 2 inert this batch)
+            "Synth Filter 2 Type", filterTypeChoices, 27));  // default = NONE (slot 2 inert; NONE shifted to 27 after REVERB FILTER 2 was inserted at 26)
     }
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_FILTER1_DRV, 1 },

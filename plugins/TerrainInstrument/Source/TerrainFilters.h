@@ -108,9 +108,10 @@ enum class Type : int
     REVERB_FILT = 18,   PHASER_4P   = 19,    PHASER_8P   = 20,
     RING_MOD    = 21,   BODE_SHIFT  = 22,    BIT_CRUSH   = 23,
     WAVESHAPER  = 24,   GRAIN_MASK  = 25,
-    NONE        = 26
+    REVERB_FILT_2 = 26,
+    NONE        = 27
 };
-constexpr int kNumTypes = 27;
+constexpr int kNumTypes = 28;
 
 // ─── 1. Moog Ladder LP·24 (Huovilainen, corrected ZDF) — report §1 ─────
 //
@@ -1163,6 +1164,75 @@ struct GrainMask
     }
 };
 
+// ─── 3g. REVERB FILTER 2 — Serum/Pigments-style comb reverb — 27th filter ──
+//
+// Distinct from REVERB_FILT (smooth allpass-diffuser bloom = "real-room" timbre).
+// This is COMB-BASED: 3 parallel damped feedback combs (Schroeder/Freeverb-style
+// lengths 1116 / 1277 / 1491 samples, scaled by CUT) → series allpass diffusion.
+// The comb modal peaks give the signature RIPPLING transfer (jagged teeth that
+// move with CUT and deepen with RES — exactly the Pigments "Reverb" filter shape).
+//
+// CUT = size (comb length → ripple density + decay + brightness).
+// RES = decay (feedback) + wet amount.
+// DRV = input drive (LOUDER) with soft limiter at the output.
+
+// Damped feedback comb (Schroeder/Freeverb): y=w[-D]; w=x+fb*LP(y); LP one-pole.
+template <int MAXLEN>
+struct DampComb
+{
+    float buf[MAXLEN] = { 0.0f };
+    int   idx = 0, len = MAXLEN;
+    float fb = 0.5f, damp = 0.4f, lpZ = 0.0f;
+    void reset() noexcept { for (int i = 0; i < MAXLEN; ++i) buf[i] = 0.0f; idx = 0; lpZ = 0.0f; }
+    void setLen (int L) noexcept { len = juce::jlimit (4, MAXLEN, L); if (idx >= len) idx = 0; }
+    inline float process (float x) noexcept
+    {
+        const float y = buf[idx];                  // w[n-D]
+        lpZ = (1.0f - damp) * y + damp * lpZ;       // HF damping in the loop
+        buf[idx] = x + fb * lpZ;                    // w[n]
+        if (++idx >= len) idx = 0;
+        return y;
+    }
+};
+
+struct CombReverb
+{
+    static constexpr int ML = 1600;
+    DampComb<ML>    c0, c1, c2;
+    APDiffuser<225> ap;
+    DCBlocker dc;
+    float mix = 0.5f, preDrv = 1.0f, drvMk = 1.0f;
+
+    void reset() noexcept { c0.reset(); c1.reset(); c2.reset(); ap.reset(); dc.reset(); }
+
+    void setParams (float cutHz, float res01, float driveLin, double fs) noexcept
+    {
+        const float cut01 = juce::jlimit (0.0f, 1.0f,
+            std::log (juce::jmax (20.0f, cutHz) / 20.0f) / std::log (1000.0f));
+        const float scale = 0.12f + 0.88f * cut01;             // CUT = size (ripple density/decay)
+        (void) fs;                                             // fixed sample-length combs
+        c0.setLen ((int) (1116.0f * scale));
+        c1.setLen ((int) (1277.0f * scale));
+        c2.setLen ((int) (1491.0f * scale));
+        const float fb = 0.5f + 0.49f * res01;                 // RES = decay/feedback
+        c0.fb = c1.fb = c2.fb = fb;
+        const float dmp = juce::jlimit (0.05f, 0.9f, 0.55f - 0.35f * cut01);  // bigger = brighter
+        c0.damp = c1.damp = c2.damp = dmp;
+        ap.g  = 0.6f;
+        mix   = 0.35f + 0.5f * res01;                          // RES = wet amount
+        preDrv = driveLin;  drvMk = std::pow (driveLin, 0.30f);
+    }
+    inline float process (float x) noexcept
+    {
+        const float in   = fastTanh (x * preDrv);
+        const float comb = (c0.process (in) + c1.process (in) + c2.process (in)) * 0.3333f;
+        const float diff = ap.process (comb);
+        const float wet  = dc.process (diff);
+        const float out  = (1.0f - mix) * in + mix * wet;
+        return 4.0f * fastTanh (0.25f * out * drvMk * 1.8f);   // level trim + soft limiter
+    }
+};
+
 
 // ─── 4. FilterSlot — switchable wrapper consumed by SynthVoice ─────────
 //
@@ -1204,6 +1274,7 @@ public:
         reverbL_.reset();   reverbR_.reset();
         bodeL_.reset();     bodeR_.reset();
         grainL_.reset();    grainR_.reset();
+        combrevL_.reset();  combrevR_.reset();
     }
 
     /** Set the active type. State of inactive filters is left dirty —
@@ -1372,6 +1443,11 @@ public:
                 grainR_.setParams (cutHz, res01, driveLin, fs);
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
                 break;
+            case Type::REVERB_FILT_2:
+                combrevL_.setParams (cutHz, res01, driveLin, fs);
+                combrevR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
             case Type::NONE:
             default:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -1438,6 +1514,8 @@ public:
                 l = bodeL_.process (l);   r = bodeR_.process (r);   break;
             case Type::GRAIN_MASK:
                 l = grainL_.process (l);  r = grainR_.process (r);  break;
+            case Type::REVERB_FILT_2:
+                l = combrevL_.process (l); r = combrevR_.process (r); break;
             case Type::NONE:
             default:
                 // True bypass — Max finally hears the oscillators clean.
@@ -1537,6 +1615,7 @@ private:
     ReverbFilter  reverbL_,   reverbR_;       // REVERB FILTER
     BodeShifter   bodeL_,     bodeR_;         // BODE SHIFTER
     GrainMask     grainL_,    grainR_;        // GRAIN MASK
+    CombReverb    combrevL_,  combrevR_;      // REVERB FILTER 2 (Serum/Pigments comb)
 };
 
 } // namespace filters
