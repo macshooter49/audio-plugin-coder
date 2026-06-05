@@ -417,6 +417,9 @@ namespace tw
             // Reset filter state on note-on so a stale tail from a stolen
             // voice doesn't bleed into the new note's onset.
             filterSlot_.reset();
+            // Batch 3 — Karplus pluck. No-op for other filter types. Uses
+            // note velocity as pluck strength so harder notes pluck harder.
+            filterSlot_.excite (velocity);
 
             // Phase 8a polish — reset steal-fade state on new note
             stealing_         = false;

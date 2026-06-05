@@ -26,6 +26,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <vector>
 
 namespace tw
 {
@@ -545,6 +546,157 @@ struct DiodeLP
     }
 };
 
+// ─── 3c. Comb / delay-line core — Batch 3, research "Core 3" ───────────
+//
+// ONE interpolated-delay-line + damped-feedback core covering four types:
+//   COMB+    positive feedback  → resonates at f0 and ALL harmonics
+//   COMB−    inverted feedback  → ODD harmonics only (hollow / square / reedy)
+//   SHIMMER  pitch-shifter (+12 st) in the feedback path → ascending octaves
+//   KARPLUS  comb + in-loop damping LP = plucked-string; excite the input
+//            stream, or call excite() on note-on for a true noise-burst pluck.
+//
+// CUT → pitch (delay length). RES → feedback. DRV is applied OUTSIDE as an
+// input boost (so it makes the comb LOUDER, never quieter). Cubic Catmull-Rom
+// fractional delay = modulation-safe tuning across 44.1–192 kHz. In-loop
+// one-pole damping + DC blocker + soft limiter (4·tanh(s/4)) keep it stable at
+// near-unity feedback and let DRIVE saturate without runaway. Runs at host
+// rate — the in-loop LP band-limits, so no oversampling needed.
+//
+// COMB− halves the delay (D = fs/2f0) so its odd-harmonic fundamental still
+// lands on the pitch the user dialed (research §2). The damping LP's phase
+// delay is measured at f0 and folded into the delay so the comb stays in tune.
+
+enum class CombMode : int { Plus, Minus, Shimmer, Karplus };
+
+struct CombCore
+{
+    std::vector<float> buf;
+    int   mask = 0, w = 0, size = 0;
+    CombMode mode = CombMode::Plus;
+
+    float fbk = 0.0f;          // feedback magnitude g (sign applied per mode)
+    float dLine = 8.0f;        // fractional delay, phase-compensated
+    float dampA = 0.0f, dampZ = 0.0f;     // in-loop one-pole damping
+    float dcX = 0.0f, dcY = 0.0f;         // in-loop DC blocker
+
+    // shimmer pitch-shifter (dual-window crossfaded sliding tap)
+    float shimPhase = 0.0f, shimInc = 0.0f;
+    int   shimW = 1024;
+
+    // karplus noise-burst excitation
+    int      exciteCount = 0;
+    float    exciteGain  = 0.0f;
+    uint32_t rng = 0x1234567u;
+
+    inline float noise() noexcept
+    {
+        rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+        return (float) ((int32_t) rng) * (1.0f / 2147483648.0f);   // ~-1..1
+    }
+
+    void prepare (double fs) noexcept
+    {
+        shimW = (int) (0.030 * fs);                          // 30 ms shimmer window
+        int need = (int) std::ceil (fs / 16.0) + shimW + 16; // lowest ~16 Hz + window
+        size = 1; while (size < need) size <<= 1;            // power of two
+        buf.assign ((size_t) size, 0.0f);
+        mask = size - 1;
+        reset();
+    }
+
+    void reset() noexcept
+    {
+        std::fill (buf.begin(), buf.end(), 0.0f);
+        w = 0; dampZ = 0.0f; dcX = dcY = 0.0f; shimPhase = 0.0f; exciteCount = 0;
+    }
+
+    // Catmull-Rom cubic read, D samples back from the write head.
+    inline float readCubic (float D) const noexcept
+    {
+        const float rp = (float) w - D + (float) size;
+        const int   i  = (int) rp;
+        const float fr = rp - (float) i;
+        const float y0 = buf[(i - 1) & mask], y1 = buf[i & mask];
+        const float y2 = buf[(i + 1) & mask], y3 = buf[(i + 2) & mask];
+        const float a0 = y3 - y2 - y0 + y1;
+        const float a1 = y0 - y1 - a0;
+        const float a2 = y2 - y0;
+        return ((a0 * fr + a1) * fr + a2) * fr + y1;
+    }
+
+    // Two windowed taps half a cycle apart, constant-power crossfade (sin):
+    // the read delay slides so the loop signal climbs +12 st each pass.
+    inline float shimmerRead (float baseD) noexcept
+    {
+        float p1 = shimPhase, p2 = shimPhase + 0.5f; if (p2 >= 1.0f) p2 -= 1.0f;
+        const float s1 = readCubic (baseD + p1 * (float) shimW);
+        const float s2 = readCubic (baseD + p2 * (float) shimW);
+        const float e1 = std::sin (juce::MathConstants<float>::pi * p1);
+        const float e2 = std::sin (juce::MathConstants<float>::pi * p2);
+        shimPhase -= shimInc;                       // decrease → upward shift
+        if (shimPhase < 0.0f) shimPhase += 1.0f;
+        return e1 * s1 + e2 * s2;
+    }
+
+    /** f0 in Hz (from CUT), resonance 0..1. Drive is applied outside. */
+    void setParams (float f0, float res01, double fs) noexcept
+    {
+        const float nyq = 0.5f * (float) fs;
+        f0 = juce::jlimit (16.0f, 0.45f * nyq, f0);
+
+        const float dTotal = (mode == CombMode::Minus) ? ((float) fs / (2.0f * f0))
+                                                       : ((float) fs / f0);
+        float fcDamp;
+        switch (mode)
+        {
+            case CombMode::Karplus: fcDamp = juce::jlimit (800.0f,  nyq, 0.6f * f0 + 2200.0f); break;
+            case CombMode::Shimmer: fcDamp = juce::jlimit (1200.0f, nyq, 5000.0f);             break;
+            default:                fcDamp = juce::jlimit (2000.0f, nyq, 2.0f * f0 + 6000.0f); break;
+        }
+        dampA = std::exp (-2.0f * juce::MathConstants<float>::pi * fcDamp / (float) fs);
+        const float wf   = 2.0f * juce::MathConstants<float>::pi * f0 / (float) fs;
+        const float ph   = -std::atan2 (dampA * std::sin (wf), 1.0f - dampA * std::cos (wf));
+        const float pdLp = (wf > 1e-6f) ? (-ph / wf) : 0.0f;   // damping phase delay at f0
+        dLine = juce::jlimit (4.0f, (float) size - (float) shimW - 4.0f, dTotal - pdLp);
+
+        switch (mode)
+        {
+            case CombMode::Plus:
+            case CombMode::Minus:   fbk = 0.995f * res01;            break;
+            case CombMode::Shimmer: fbk = 0.85f  * res01;            break;   // tamer ceiling
+            case CombMode::Karplus: fbk = 0.90f + 0.0995f * res01;   break;   // long ring
+        }
+        shimInc = 1.0f / (float) shimW;   // ratio 2 (+12 semitones)
+    }
+
+    /** Inject a noise burst (Karplus note-on pluck). Optional — KS also
+     *  resonates the input stream without this. */
+    void excite (float level) noexcept
+    {
+        exciteCount = juce::jlimit (1, size, (int) dLine);
+        exciteGain  = level;
+    }
+
+    inline float process (float x) noexcept
+    {
+        float in = x;
+        if (exciteCount > 0) { in += exciteGain * noise(); --exciteCount; }
+
+        float d = (mode == CombMode::Shimmer) ? shimmerRead (dLine) : readCubic (dLine);
+        dampZ = (1.0f - dampA) * d + dampA * dampZ;          // in-loop damping LP
+        d = dampZ;
+        const float fb = (mode == CombMode::Minus) ? (-fbk * d) : (fbk * d);
+
+        float s = in + fb;
+        s = 4.0f * fastTanh (0.25f * s);                     // soft limiter (~unity small, caps ±4)
+        const float y = s - dcX + 0.999f * dcY;              // DC blocker
+        dcX = s; dcY = y;
+
+        buf[w] = y; w = (w + 1) & mask;
+        return y;
+    }
+};
+
 
 // ─── 4. FilterSlot — switchable wrapper consumed by SynthVoice ─────────
 //
@@ -565,6 +717,8 @@ public:
     void prepare (double sampleRate) noexcept
     {
         fsLocal_ = sampleRate;
+        combL_.prepare (sampleRate);
+        combR_.prepare (sampleRate);
         reset();
     }
 
@@ -575,6 +729,7 @@ public:
         svfL_.reset();      svfR_.reset();
         acidL_.reset();     acidR_.reset();
         diodeL_.reset();    diodeR_.reset();
+        combL_.reset();     combR_.reset();
     }
 
     /** Set the active type. State of inactive filters is left dirty —
@@ -661,6 +816,22 @@ public:
                 preDrive_  = driveLin;
                 postMakeup_= driveMakeup (driveLin);
                 break;
+            case Type::COMB_PLUS:
+            case Type::COMB_MINUS:
+            case Type::COMB_SHIMMER:
+            case Type::KARPLUS:
+            {
+                const CombMode m = (type_ == Type::COMB_PLUS)    ? CombMode::Plus
+                                 : (type_ == Type::COMB_MINUS)   ? CombMode::Minus
+                                 : (type_ == Type::COMB_SHIMMER) ? CombMode::Shimmer
+                                 :                                 CombMode::Karplus;
+                combL_.mode = m; combR_.mode = m;
+                combL_.setParams (cutHz,           res01, fs);
+                combR_.setParams (cutHz * 1.0015f, res01, fs);   // ~+2.6 cents → stereo width
+                preDrive_  = driveLin;       // DRV boosts the comb input (LOUDER, never quieter)
+                postMakeup_= combMakeup (m);
+                break;
+            }
             case Type::NONE:
             default:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -698,6 +869,13 @@ public:
                 l = acidL_.process (l * preDrive_) * postMakeup_;
                 r = acidR_.process (r * preDrive_) * postMakeup_;
                 break;
+            case Type::COMB_PLUS:
+            case Type::COMB_MINUS:
+            case Type::COMB_SHIMMER:
+            case Type::KARPLUS:
+                l = combL_.process (l * preDrive_) * postMakeup_;
+                r = combR_.process (r * preDrive_) * postMakeup_;
+                break;
             case Type::NONE:
             default:
                 // True bypass — Max finally hears the oscillators clean.
@@ -725,6 +903,14 @@ public:
      *  morph knob exists; until then OB-X uses the default (LP-voiced SEM). */
     void setMorph (float m01) noexcept { morph_ = juce::jlimit (0.0f, 1.0f, m01); }
 
+    /** Karplus-Strong note-on pluck (OPTIONAL). Call from SynthVoice on
+     *  note-on for a true noise-burst pluck; without it, KARPLUS resonates
+     *  whatever the oscillators feed in (exciter mode). No-op for other types. */
+    void excite (float level = 1.0f) noexcept
+    {
+        if (type_ == Type::KARPLUS) { combL_.excite (level); combR_.excite (level); }
+    }
+
 private:
     /** Configure both SVF channels for a given output tap + Q ceiling. */
     void setSvf (SvfMultimode::Output o, float qMax,
@@ -744,6 +930,25 @@ private:
     static constexpr float kDiodeMakeup     = 13.0f;  // 0.5-scaling deficit, like the 303
     static constexpr float kObxMakeup       = 1.0f;   // SEM already ~unity passband
 
+    // Comb output trims (measured; the in-loop limiter caps level, these just
+    // seat the four comb types near the LP24 reference so switching is neutral).
+    static constexpr float kCombPlusMakeup    = 1.0f;
+    static constexpr float kCombMinusMakeup   = 1.0f;
+    static constexpr float kCombShimmerMakeup = 1.0f;
+    static constexpr float kCombKarplusMakeup = 1.0f;
+
+    static float combMakeup (CombMode m) noexcept
+    {
+        switch (m)
+        {
+            case CombMode::Plus:    return kCombPlusMakeup;
+            case CombMode::Minus:   return kCombMinusMakeup;
+            case CombMode::Shimmer: return kCombShimmerMakeup;
+            case CombMode::Karplus: return kCombKarplusMakeup;
+        }
+        return 1.0f;
+    }
+
     float  morph_     = 0.0f;     // OB-X / SEM morph (UI-bindable)
 
     Type   type_      = Type::NONE;
@@ -759,6 +964,7 @@ private:
     SvfMultimode  svfL_,      svfR_;
     Acid303       acidL_,     acidR_;
     DiodeLP       diodeL_,    diodeR_;
+    CombCore      combL_,     combR_;        // COMB ± / SHIMMER / KARPLUS
 };
 
 } // namespace filters

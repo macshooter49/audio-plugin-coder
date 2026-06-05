@@ -8977,10 +8977,10 @@ setTimeout(function wireSynControls () {
         { idx:  7, label: 'SVF BP',         group: 'STATE-VARIABLE',active: true  },
         { idx:  8, label: 'SVF NOTCH',      group: 'STATE-VARIABLE',active: true  },
         { idx:  9, label: 'OB-X SVF',       group: 'STATE-VARIABLE',active: true  },
-        { idx: 10, label: 'COMB +',         group: 'COMB & RESO',   active: false },
-        { idx: 11, label: 'COMB -',         group: 'COMB & RESO',   active: false },
-        { idx: 12, label: 'COMB SHIMMER',   group: 'COMB & RESO',   active: false },
-        { idx: 13, label: 'KARPLUS-STRONG', group: 'COMB & RESO',   active: false },
+        { idx: 10, label: 'COMB +',         group: 'COMB & RESO',   active: true  },
+        { idx: 11, label: 'COMB -',         group: 'COMB & RESO',   active: true  },
+        { idx: 12, label: 'COMB SHIMMER',   group: 'COMB & RESO',   active: true  },
+        { idx: 13, label: 'KARPLUS-STRONG', group: 'COMB & RESO',   active: true  },
         { idx: 14, label: 'FORMANT · A',    group: 'FORMANT',       active: false },
         { idx: 15, label: 'FORMANT · E',    group: 'FORMANT',       active: false },
         { idx: 16, label: 'FORMANT · I',    group: 'FORMANT',       active: false },
@@ -9246,8 +9246,14 @@ setTimeout(function wireSynControls () {
         const isObx      = (typeIdx === 9);   // OB-X SVF (SEM; shows LP @ morph 0)
         const isAnySvf   = isSvfLp || isSvfHp || isSvfBp || isSvfNotch || isObx;
         const isLad4     = isLadder || isDiode || isAcid;   // 4-pole ladder-family LP
-        // Fallback for the remaining placeholder types (10-25): flat line.
-        const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf);
+        // Comb / delay-line core (Batch 3): teeth at f0 harmonics.
+        const isCombP    = (typeIdx === 10);  // COMB +  (all harmonics)
+        const isCombM    = (typeIdx === 11);  // COMB -  (odd harmonics, D halved)
+        const isShim     = (typeIdx === 12);  // COMB SHIMMER (comb + HF damping)
+        const isKarp     = (typeIdx === 13);  // KARPLUS-STRONG (comb + string damping)
+        const isComb     = isCombP || isCombM || isShim || isKarp;
+        // Fallback for the remaining placeholder types (14-25): flat line.
+        const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf || isComb);
 
         let pathD = '';
         for (let i = 0; i < VIZ_N; i++) {
@@ -9311,6 +9317,26 @@ setTimeout(function wireSynControls () {
               nMag = g * g * Math.sqrt(aR * aR + aI * aI);
             }
             mag = nMag / Math.max(1e-9, dMag);
+          } else if (isComb) {
+            // Feedback comb H = 1/(1 ∓ g·e^{-jωD}). CUT = pitch (delay length);
+            // COMB- halves D so its odd-harmonic fundamental lands on f0.
+            // Peak-normalized (×(1-g)) so the teeth read at ~0 dB; SHIMMER and
+            // KARPLUS roll off the highs via their in-loop damping LP.
+            const w  = 2 * Math.PI * f / VIZ_FS;
+            const D  = isCombM ? (VIZ_FS / (2 * fcHz)) : (VIZ_FS / fcHz);
+            const g  = isShim ? (0.85 * res01)
+                     : isKarp ? (0.90 + 0.0995 * res01)
+                     :          (0.995 * res01);
+            const cwd = Math.cos(w * D), swd = Math.sin(w * D);
+            const re = isCombM ? (1 + g * cwd) : (1 - g * cwd);
+            const im = isCombM ? (-g * swd)    : ( g * swd);
+            mag = (1 - g) / Math.max(1e-9, Math.sqrt(re * re + im * im));
+            if (isKarp || isShim) {
+              const fcDamp = isKarp ? (0.6 * fcHz + 2200) : 5000;
+              const a = Math.exp(-2 * Math.PI * fcDamp / VIZ_FS);
+              const lpDen = Math.sqrt(1 - 2 * a * Math.cos(w) + a * a);
+              mag *= (1 - a) / Math.max(1e-9, lpDen);
+            }
           }
           // Convert to dB, apply drive bias
           let db = 20 * Math.log10(Math.max(1e-9, mag)) + drvDb;
