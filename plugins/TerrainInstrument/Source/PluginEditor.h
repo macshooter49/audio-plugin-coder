@@ -122,6 +122,24 @@ private:
     juce::WebSliderRelay synOscAPanRelay      { ParameterIDs::SYN_OSC_A_PAN };
     juce::WebSliderRelay synFilter1CutRelay   { ParameterIDs::SYN_FILTER1_CUT };
     juce::WebSliderRelay synFilter1ResRelay   { ParameterIDs::SYN_FILTER1_RES };
+    // Batch 1 Filter — without these relays the JUCE WebView backend doesn't
+    // know about the new JS slider state, so setNormalisedValue from the
+    // dropdown / DRV+ENV knobs never reaches APVTS — and the C++ filter type
+    // never changes. That was the "everything sounds the same" bug from
+    // Batch 1 Part 2 first build.
+    juce::WebSliderRelay synFilter1TypeRelay  { ParameterIDs::SYN_FILTER1_TYPE };
+    juce::WebSliderRelay synFilter1DrvRelay   { ParameterIDs::SYN_FILTER1_DRV };
+    juce::WebSliderRelay synFilter1EnvRelay   { ParameterIDs::SYN_FILTER1_ENV };
+    juce::WebSliderRelay synFilterSlotRelay   { ParameterIDs::SYN_FILTER_SLOT };
+    juce::WebSliderRelay synFilter2TypeRelay  { ParameterIDs::SYN_FILTER2_TYPE };
+    juce::WebSliderRelay synFilter2CutRelay   { ParameterIDs::SYN_FILTER2_CUT };
+    juce::WebSliderRelay synFilter2ResRelay   { ParameterIDs::SYN_FILTER2_RES };
+    juce::WebSliderRelay synFilter2DrvRelay   { ParameterIDs::SYN_FILTER2_DRV };
+    juce::WebSliderRelay synFilter2EnvRelay   { ParameterIDs::SYN_FILTER2_ENV };
+    juce::WebSliderRelay synEnvFltARelay      { ParameterIDs::SYN_ENV_FLT_A };
+    juce::WebSliderRelay synEnvFltDRelay      { ParameterIDs::SYN_ENV_FLT_D };
+    juce::WebSliderRelay synEnvFltSRelay      { ParameterIDs::SYN_ENV_FLT_S };
+    juce::WebSliderRelay synEnvFltRRelay      { ParameterIDs::SYN_ENV_FLT_R };
     juce::WebSliderRelay synEnvAmpARelay      { ParameterIDs::SYN_ENV_AMP_A };
     juce::WebSliderRelay synEnvAmpDRelay      { ParameterIDs::SYN_ENV_AMP_D };
     juce::WebSliderRelay synEnvAmpSRelay      { ParameterIDs::SYN_ENV_AMP_S };
@@ -271,6 +289,20 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAPanAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1CutAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1ResAttachment;
+    // Batch 1 Filter — attachments for the new params (TYPE/DRV/ENV + slot 2 reserved + FLT env)
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1TypeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1DrvAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1EnvAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilterSlotAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2TypeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2CutAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2ResAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2DrvAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2EnvAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvFltAAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvFltDAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvFltSAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnvFltRAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpAAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpDAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvAmpSAttachment;

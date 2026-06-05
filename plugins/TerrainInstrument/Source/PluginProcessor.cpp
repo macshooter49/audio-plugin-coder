@@ -843,6 +843,95 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
 
+    // ── Batch 1 Filter — TYPE (27 choices, NONE last in enum but first in UI),
+    //                     DRV (0..1 → 0..+24 dB drive), ENV (bipolar -1..+1).
+    {
+        juce::StringArray filterTypeChoices;
+        filterTypeChoices.add ("LADDER LP 24");
+        filterTypeChoices.add ("LADDER LP 12");
+        filterTypeChoices.add ("LADDER HP 24");
+        filterTypeChoices.add ("DIODE LP");
+        filterTypeChoices.add ("ACID 303");
+        filterTypeChoices.add ("SVF LP");
+        filterTypeChoices.add ("SVF HP");
+        filterTypeChoices.add ("SVF BP");
+        filterTypeChoices.add ("SVF NOTCH");
+        filterTypeChoices.add ("OB-X SVF");
+        filterTypeChoices.add ("COMB +");
+        filterTypeChoices.add ("COMB -");
+        filterTypeChoices.add ("COMB SHIMMER");
+        filterTypeChoices.add ("KARPLUS-STRONG");
+        filterTypeChoices.add ("FORMANT A");
+        filterTypeChoices.add ("FORMANT E");
+        filterTypeChoices.add ("FORMANT I");
+        filterTypeChoices.add ("FORMANT MORPH");
+        filterTypeChoices.add ("REVERB FILTER");
+        filterTypeChoices.add ("PHASER 4P");
+        filterTypeChoices.add ("PHASER 8P");
+        filterTypeChoices.add ("RING MOD");
+        filterTypeChoices.add ("BODE SHIFTER");
+        filterTypeChoices.add ("BIT-CRUSH");
+        filterTypeChoices.add ("WAVESHAPER");
+        filterTypeChoices.add ("GRAIN MASK");
+        filterTypeChoices.add ("NONE");
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER1_TYPE, 1 },
+            "Synth Filter 1 Type", filterTypeChoices, 0));   // default = LADDER LP 24 (was the hardwired one)
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER2_TYPE, 1 },
+            "Synth Filter 2 Type", filterTypeChoices, 26));  // default = NONE (slot 2 inert this batch)
+    }
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_DRV, 1 },
+        "Synth Filter 1 Drive",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_ENV, 1 },
+        "Synth Filter 1 Env Amount",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER_SLOT, 1 },
+        "Synth Filter Edit Slot", 0, 1, 0));
+
+    // Slot 2 reserved (inert this batch — no DSP wiring, just preset persistence)
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_CUT, 1 },
+        "Synth Filter 2 Cutoff",
+        juce::NormalisableRange<float> (20.0f, 20000.0f, 0.0f, 0.25f), 20000.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_RES, 1 },
+        "Synth Filter 2 Resonance",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_DRV, 1 },
+        "Synth Filter 2 Drive",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_ENV, 1 },
+        "Synth Filter 2 Env Amount",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+
+    // Filter ADSR (independent from AMP env — drives the cutoff via the bipolar ENV knob).
+    // Defaults: classic "filter sweep down" shape (instant attack, mid decay, no sustain, short release).
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_A, 1 },
+        "Synth Filter Env Attack",
+        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f), 5.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_D, 1 },
+        "Synth Filter Env Decay",
+        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f), 200.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_S, 1 },
+        "Synth Filter Env Sustain",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_R, 1 },
+        "Synth Filter Env Release",
+        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f), 300.0f));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_A, 1 },
         "Synth Amp Attack",
@@ -1634,6 +1723,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float pan     =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_PAN);
         const float cut     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_CUT);
         const float res     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_RES);
+        // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
+        const int   filtType= (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_TYPE);
+        const float filtDrv =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_DRV);
+        const float filtEnv =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_ENV);
+        const float fltEnvA =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_A);
+        const float fltEnvD =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_D);
+        const float fltEnvS =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_S);
+        const float fltEnvR =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_R);
         const float ampA    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_A);
         const float ampD    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_D);
         const float ampS    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_S);
@@ -1669,6 +1766,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setLevel                  (lvl);
                 sv->setPan                    (pan);
                 sv->setFilterParameters       (cut, res);
+                sv->setFilterType             (filtType);
+                sv->setFilterDrive            (filtDrv);
+                sv->setFilterEnvAmount        (filtEnv);
+                sv->setFilterEnvParameters    (fltEnvA, fltEnvD, fltEnvS, fltEnvR);
                 sv->setAmpEnvelopeParameters  (ampA, ampD, ampS, ampR);
                 sv->setWavetable              (wt);
                 sv->setWavetableFrame         (wtFrame);
@@ -1738,6 +1839,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 sv->setErosionAmount (erosionPct  / 100.0f);
                 sv->setHorizonAmount (horizonPct  / 100.0f);
+                // Batch 1 Filter — EROSION drives cutoff random-walk too.
+                sv->setErosionAmount_filter (erosionPct / 100.0f);
             }
         }
     }

@@ -3464,7 +3464,7 @@ body {
 
 /* ── FILTER + FLOW row ── */
 #syn-panel .row-filter-vl { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
-#syn-panel .filter { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; }
+#syn-panel .filter { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; position: relative; }
 #syn-panel .filter-toggle {
   position: absolute; top: 6px; right: 14px;
   display: flex; align-items: center; gap: 4px;
@@ -3623,6 +3623,53 @@ body {
               width: 6px;
               display: inline-block;
             }
+            /* Batch 1 Filter — section header (per-category in a long menu),
+               disabled "soon" items, and trailing badge. */
+            #syn-panel .syn-ctx-menu .syn-ctx-section {
+              padding: 6px 12px 3px;
+              font-size: 8px;
+              letter-spacing: 1.6px;
+              text-transform: uppercase;
+              color: var(--text-muted);
+              opacity: 0.7;
+              margin-top: 2px;
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-item.disabled {
+              color: var(--text-muted);
+              opacity: 0.55;
+              cursor: default;
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-item.disabled:hover {
+              background: transparent;
+              color: var(--text-muted);
+            }
+            #syn-panel .syn-ctx-menu .syn-ctx-badge {
+              margin-left: auto;
+              font-size: 7.5px;
+              letter-spacing: 1.2px;
+              text-transform: uppercase;
+              color: var(--text-muted);
+              opacity: 0.7;
+              border: 1px solid var(--border);
+              border-radius: 2px;
+              padding: 1px 4px;
+              font-weight: 400;
+            }
+            /* Batch 1 Filter — 1/2 slot toggle: symmetric, no overlap, slot 2 ghosted */
+            #syn-panel .filter-toggle .ft-pill { width: 24px; transition: opacity .15s; }
+            #syn-panel .filter-toggle .ft-pill.ghosted {
+              opacity: 0.32;
+              cursor: not-allowed;
+              border-color: var(--border);
+              background: transparent;
+              color: var(--text-muted);
+            }
+            #syn-panel .filter-toggle .ft-pill.ghosted:hover { opacity: 0.4; }
+            /* Dropdown trigger — make it visibly clickable */
+            #syn-panel .device.filter .dd-trigger { cursor: pointer; transition: border-color .15s; }
+            #syn-panel .device.filter .dd-trigger:hover { border-color: var(--purple-500); }
+            /* Filter response curve — accent the stroke + add a subtle resonance glow */
+            #syn-panel .filter-display svg path { stroke: var(--purple-300, #C4B5FD); }
 </style>
 </head>
 <body>
@@ -8783,7 +8830,10 @@ setTimeout(function wireSynControls () {
       };
 
       // Show the menu at (x,y) with given items.
-      // items = [{label, isChecked, onPick}]
+      // items = [{label, isChecked, onPick, isHeader?, isDisabled?, badge?}]
+      // isHeader: render as section header (no click handler)
+      // isDisabled: render dimmed, no click handler (for "soon" placeholders)
+      // badge: small trailing text (e.g. "soon") rendered after the label
       const showMenu = (header, items, x, y) => {
         menuEl.innerHTML = '';
         if (header) {
@@ -8793,20 +8843,42 @@ setTimeout(function wireSynControls () {
           menuEl.appendChild(h);
         }
         items.forEach(it => {
+          if (it.isHeader) {
+            const sh = document.createElement('div');
+            sh.className = 'syn-ctx-section';
+            sh.textContent = it.label;
+            menuEl.appendChild(sh);
+            return;
+          }
           const div = document.createElement('div');
-          div.className = 'syn-ctx-item' + (it.isChecked ? ' checked' : '');
+          div.className = 'syn-ctx-item'
+                        + (it.isChecked ? ' checked' : '')
+                        + (it.isDisabled ? ' disabled' : '');
           div.textContent = it.label;
-          div.addEventListener('click', () => {
-            it.onPick();
-            hideMenu();
-          });
+          if (it.badge) {
+            const b = document.createElement('span');
+            b.className = 'syn-ctx-badge';
+            b.textContent = it.badge;
+            div.appendChild(b);
+          }
+          if (! it.isDisabled) {
+            div.addEventListener('click', () => {
+              it.onPick();
+              hideMenu();
+            });
+          }
           menuEl.appendChild(div);
         });
         menuEl.classList.add('act');
         menuEl.setAttribute('aria-hidden', 'false');
-        // Position: clamp to viewport
+        // Position: clamp to viewport. Use measured menu size after rendering
+        // so tall menus (filter type with 5 sections + 27 items) clamp right.
         const pw = synPanel ? synPanel.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-        const mw = 160, mh = items.length * 22 + (header ? 22 : 0) + 8;
+        menuEl.style.left = '0px';
+        menuEl.style.top = '0px';
+        const mrect = menuEl.getBoundingClientRect();
+        const mw = mrect.width  || 180;
+        const mh = mrect.height || (items.length * 22 + (header ? 22 : 0) + 8);
         const localX = Math.max(0, Math.min(pw.width - mw, x - pw.left));
         const localY = Math.max(0, Math.min(pw.height - mh, y - pw.top));
         menuEl.style.left = localX + 'px';
@@ -8881,6 +8953,401 @@ setTimeout(function wireSynControls () {
           });
         });
       });
+
+      // ─────────────────────────────────────────────────────────────────
+      // Batch 1 Filter UI — dropdown (NONE pinned top, grouped), wire the
+      // missing DRV/ENV knobs, fix the 1/2 toggle (Slot 1 active, Slot 2
+      // ghosted/disabled — no back panel this batch), and drive the
+      // response-curve visualizer from real filter coefficients so it
+      // visibly moves with CUT / RES / DRV / TYPE.
+      // ─────────────────────────────────────────────────────────────────
+
+      // 27 entries — enum index matches APVTS Type enum (NONE = 26).
+      // First in display order, but stored as last index so future additions
+      // don't reshuffle the enum (per the prompt §3 type list).
+      const FILTER_TYPES = [
+        { idx: 26, label: 'NONE',           group: '',  active: true  },
+        { idx:  0, label: 'LADDER LP · 24', group: 'LADDER',        active: true  },
+        { idx:  1, label: 'LADDER LP · 12', group: 'LADDER',        active: true  },
+        { idx:  2, label: 'LADDER HP · 24', group: 'LADDER',        active: true  },
+        { idx:  3, label: 'DIODE LP',       group: 'LADDER',        active: true  },
+        { idx:  4, label: 'ACID 303',       group: 'LADDER',        active: true  },
+        { idx:  5, label: 'SVF LP',         group: 'STATE-VARIABLE',active: true  },
+        { idx:  6, label: 'SVF HP',         group: 'STATE-VARIABLE',active: true  },
+        { idx:  7, label: 'SVF BP',         group: 'STATE-VARIABLE',active: true  },
+        { idx:  8, label: 'SVF NOTCH',      group: 'STATE-VARIABLE',active: true  },
+        { idx:  9, label: 'OB-X SVF',       group: 'STATE-VARIABLE',active: true  },
+        { idx: 10, label: 'COMB +',         group: 'COMB & RESO',   active: false },
+        { idx: 11, label: 'COMB -',         group: 'COMB & RESO',   active: false },
+        { idx: 12, label: 'COMB SHIMMER',   group: 'COMB & RESO',   active: false },
+        { idx: 13, label: 'KARPLUS-STRONG', group: 'COMB & RESO',   active: false },
+        { idx: 14, label: 'FORMANT · A',    group: 'FORMANT',       active: false },
+        { idx: 15, label: 'FORMANT · E',    group: 'FORMANT',       active: false },
+        { idx: 16, label: 'FORMANT · I',    group: 'FORMANT',       active: false },
+        { idx: 17, label: 'FORMANT MORPH',  group: 'FORMANT',       active: false },
+        { idx: 18, label: 'REVERB FILTER',  group: 'SPECIAL',       active: false },
+        { idx: 19, label: 'PHASER 4P',      group: 'SPECIAL',       active: false },
+        { idx: 20, label: 'PHASER 8P',      group: 'SPECIAL',       active: false },
+        { idx: 21, label: 'RING MOD',       group: 'SPECIAL',       active: false },
+        { idx: 22, label: 'BODE SHIFTER',   group: 'SPECIAL',       active: false },
+        { idx: 23, label: 'BIT-CRUSH',      group: 'SPECIAL',       active: false },
+        { idx: 24, label: 'WAVESHAPER',     group: 'SPECIAL',       active: false },
+        { idx: 25, label: 'GRAIN MASK',     group: 'SPECIAL',       active: false },
+      ];
+      const FILTER_NUM_CHOICES = 27;
+      const labelByIdx = (i) => {
+        const e = FILTER_TYPES.find(t => t.idx === i);
+        return e ? e.label : 'LADDER LP · 24';
+      };
+
+      const ddTriggerEl = document.querySelector('#syn-panel .device.filter .dd-trigger');
+      const ddSpan      = ddTriggerEl ? ddTriggerEl.querySelector('span') : null;
+      const filterSt    = (window.Juce && window.Juce.getSliderState)
+                          ? window.Juce.getSliderState('SYN_FILTER1_TYPE') : null;
+
+      const setFilterTypeIdx = (idx) => {
+        if (! filterSt) return;
+        try {
+          filterSt.setNormalisedValue(idx / (FILTER_NUM_CHOICES - 1));
+        } catch (e) { /* swallow */ }
+      };
+      const getFilterTypeIdx = () => {
+        if (! filterSt) return 0;
+        try {
+          const n = filterSt.getNormalisedValue();
+          return Math.round(n * (FILTER_NUM_CHOICES - 1));
+        } catch (e) { return 0; }
+      };
+
+      const refreshDdLabel = () => {
+        if (ddSpan) ddSpan.textContent = labelByIdx(getFilterTypeIdx());
+      };
+      refreshDdLabel();
+      if (filterSt && filterSt.valueChangedEvent && filterSt.valueChangedEvent.addListener) {
+        filterSt.valueChangedEvent.addListener(refreshDdLabel);
+      }
+
+      if (ddTriggerEl) {
+        ddTriggerEl.style.cursor = 'pointer';
+        ddTriggerEl.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const currentIdx = getFilterTypeIdx();
+          const items = [];
+          let lastGroup = null;
+          FILTER_TYPES.forEach(t => {
+            // NONE has no group — render bare at top, followed by a thin separator.
+            if (t.group && t.group !== lastGroup) {
+              items.push({ isHeader: true, label: t.group });
+              lastGroup = t.group;
+            } else if (! t.group && lastGroup !== null) {
+              // (NONE always comes first; no-op)
+            }
+            items.push({
+              label: t.label,
+              isChecked: t.idx === currentIdx,
+              isDisabled: ! t.active,
+              badge: t.active ? null : 'soon',
+              onPick: () => setFilterTypeIdx(t.idx),
+            });
+          });
+          const r = ddTriggerEl.getBoundingClientRect();
+          showMenu('FILTER 1 TYPE', items, r.left, r.bottom + 4);
+        });
+      }
+
+      // ── 6C — Slot 1/2 toggle cleanup ──────────────────────────────────
+      // Make pills symmetric. Slot 2 is inert this batch — wire it as
+      // dimmed/disabled so the affordance reads correctly but no
+      // architecture rework is needed when slot 2 lands in Batch 2.
+      const slotPill1 = document.querySelector('#syn-panel .device.filter .ft-pill:nth-child(1)');
+      const slotPill2 = document.querySelector('#syn-panel .device.filter .ft-pill:nth-child(2)');
+      if (slotPill2) {
+        slotPill2.classList.add('ghosted');
+        slotPill2.title = 'Filter Slot 2 — coming in Batch 2';
+        slotPill2.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+      }
+      if (slotPill1) {
+        slotPill1.title = 'Filter Slot 1';
+        slotPill1.classList.add('act');   // hard-pin active this batch
+      }
+
+      // ── 6A bis — Wire DRV / ENV knobs on the FILTER device.
+      // The createKnob loop above only wired CUT/RES (Phase 4 T5 only built
+      // those two). Now patch the remaining two so they're interactive.
+      // We attach `data-syn` and re-trigger the existing per-knob handler.
+      const drvKnob = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(3)');
+      const envKnob = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(4)');
+      if (drvKnob && ! drvKnob.getAttribute('data-syn')) drvKnob.setAttribute('data-syn', 'SYN_FILTER1_DRV');
+      if (envKnob && ! envKnob.getAttribute('data-syn')) envKnob.setAttribute('data-syn', 'SYN_FILTER1_ENV');
+      // The earlier SYN-knob wiring loop only fires once during init; for
+      // these two we wire them inline using the same applyFill pattern.
+      const wireExtraSynKnob = (el, paramId, defaultN, bipolar) => {
+        if (! el) return;
+        const ring = el.querySelector('.knob-ring');
+        if (! ring) return;
+        const st = (window.Juce && window.Juce.getSliderState)
+                   ? window.Juce.getSliderState(paramId) : null;
+        if (! st) return;
+        const applyFill = (n01) => {
+          // bipolar = true → 0..1 is the param normalised range covering
+          // [-1, +1]; we want the fill arc to start from center (0.5) and
+          // grow in either direction.
+          let p1 = 0, p2 = 0;
+          if (bipolar) {
+            const c = 0.5;
+            const v = juce_clamp01(n01);
+            const lo = Math.min(c, v), hi = Math.max(c, v);
+            p1 = lo * 270; p2 = hi * 270;
+          } else {
+            p1 = 0; p2 = juce_clamp01(n01) * 270;
+          }
+          if (bipolar) {
+            ring.style.background =
+              'conic-gradient(from 225deg, '
+              + 'var(--knob-track) 0deg ' + p1 + 'deg, '
+              + 'var(--purple-500) ' + p1 + 'deg ' + p2 + 'deg, '
+              + 'var(--knob-track) ' + p2 + 'deg 270deg, '
+              + 'transparent 270deg)';
+          } else {
+            const fillDeg = p2;
+            ring.style.background =
+              'conic-gradient(from 225deg, '
+              + 'var(--purple-500) 0deg ' + fillDeg + 'deg, '
+              + 'var(--knob-track) ' + fillDeg + 'deg 270deg, '
+              + 'transparent 270deg)';
+          }
+        };
+        try { applyFill(st.getNormalisedValue ? st.getNormalisedValue() : defaultN); } catch (e) {}
+        let dragging = false, dragStartY = 0, dragStartN = 0, dragMoved = false, lastDragEnd = 0;
+        const onMove = (ev) => {
+          if (! dragging) return;
+          const dy = dragStartY - ev.clientY;
+          if (Math.abs(dy) > 2) dragMoved = true;
+          const newN = juce_clamp01(dragStartN + dy / 200);
+          applyFill(newN);
+          try { st.setNormalisedValue(newN); } catch (e) {}
+        };
+        const onUp = () => {
+          dragging = false;
+          if (dragMoved) lastDragEnd = Date.now();
+          dragMoved = false;
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          ring.style.cursor = 'grab';
+        };
+        ring.style.cursor = 'grab';
+        ring.addEventListener('pointerdown', (ev) => {
+          dragging = true; dragMoved = false; dragStartY = ev.clientY;
+          dragStartN = st.getNormalisedValue ? st.getNormalisedValue() : defaultN;
+          ring.style.cursor = 'grabbing';
+          if (ring.setPointerCapture) ring.setPointerCapture(ev.pointerId);
+          document.addEventListener('pointermove', onMove);
+          document.addEventListener('pointerup', onUp);
+          ev.preventDefault();
+        });
+        ring.addEventListener('dblclick', (ev) => {
+          ev.preventDefault();
+          if (Date.now() - lastDragEnd < 400) return;
+          try { st.setNormalisedValue(defaultN); applyFill(defaultN); } catch (e) {}
+        });
+        if (st.valueChangedEvent && st.valueChangedEvent.addListener) {
+          st.valueChangedEvent.addListener(() => {
+            try { applyFill(st.getNormalisedValue()); } catch (e) {}
+          });
+        }
+      };
+      // small inline clamp helper (avoid bringing in the global juce JS api)
+      function juce_clamp01(n) { return Math.max(0, Math.min(1, n)); }
+      wireExtraSynKnob(drvKnob, 'SYN_FILTER1_DRV', 0.0, false);
+      wireExtraSynKnob(envKnob, 'SYN_FILTER1_ENV', 0.5, true);   // bipolar — center at 0.5
+
+      // ── 6B — Reactive response curve.
+      // Evaluate the analytic magnitude of the active filter at 128 log-
+      // spaced points (20 Hz .. 20 kHz) and update the existing SVG path.
+      // SVF: closed-form digital |H(z)| (Cytomic). Ladder/Diode: linearized
+      // analog form |H(jω)| = 1/|((1+jω/ωc)^4 + k)| — what every commercial
+      // synth draws (the real nonlinear response would be input-dependent).
+      // NONE: flat 0 dB line. DRV adds a small dB bias so the curve thickens.
+      const VIZ_FS = 48000;
+      const VIZ_W = 280, VIZ_H = 60;            // matches the existing viewBox
+      const VIZ_N = 128;
+      const VIZ_FMIN = 20, VIZ_FMAX = 20000;
+      const VIZ_DB_MIN = -36, VIZ_DB_MAX = 12;
+      const freqs = (() => {
+        const arr = new Float32Array(VIZ_N);
+        const logMin = Math.log(VIZ_FMIN), logMax = Math.log(VIZ_FMAX);
+        for (let i = 0; i < VIZ_N; i++) {
+          const t = i / (VIZ_N - 1);
+          arr[i] = Math.exp(logMin + t * (logMax - logMin));
+        }
+        return arr;
+      })();
+      const dbToY = (db) => {
+        const t = (db - VIZ_DB_MIN) / (VIZ_DB_MAX - VIZ_DB_MIN);
+        return VIZ_H - juce_clamp01(t) * VIZ_H;
+      };
+
+      // Read current knob normalised values + active type to compute curve.
+      const stCut = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_FILTER1_CUT') : null;
+      const stRes = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_FILTER1_RES') : null;
+      const stDrv = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_FILTER1_DRV') : null;
+
+      // Map RES (0..1) → k for ladder/diode visualization (matches DSP §1.6/§5D)
+      const resToLadderK   = (r) => 4.0 * juce_clamp01(r);          // self-osc near 4
+      const resToDiodeK    = (r) => {
+        const rSkew = (1 - Math.exp(-3.0 * juce_clamp01(r))) / (1 - Math.exp(-3.0));
+        return 17.0 * rSkew;
+      };
+      // SVF res → k (=1/Q), exponential per §2.4 / §5C
+      const resToSvfK      = (r) => {
+        const Q = 0.5 * Math.pow(2000.0, juce_clamp01(r));
+        return 1.0 / Math.max(0.0001, Q);
+      };
+
+      const filterPathEl = document.querySelector('#syn-panel .device.filter .filter-display svg path');
+      const filterCurveSvg = document.querySelector('#syn-panel .device.filter .filter-display svg');
+      // Add a cutoff cursor line so the user sees CUT position even on flat
+      // shapes (NONE, low-Q SVF). The existing svg already has a dashed line
+      // hardcoded at x=165; we'll move it via JS.
+      let cursorEl = filterCurveSvg ? filterCurveSvg.querySelector('line') : null;
+
+      // Build the SVG path d= string for the current params.
+      const computeCurvePath = () => {
+        if (! filterPathEl) return null;
+        const typeIdx = getFilterTypeIdx();
+        const cut01   = stCut ? stCut.getNormalisedValue() : 1.0;
+        const res01   = stRes ? stRes.getNormalisedValue() : 0.0;
+        const drv01   = stDrv ? stDrv.getNormalisedValue() : 0.0;
+
+        // CUT knob is 20 Hz .. 20 kHz exponential 0.25 skew — the JUCE
+        // NormalisableRange already maps normalised to Hz; we ask for the
+        // scaled value (Hz).
+        let fcHz = 20000;
+        try { fcHz = stCut && stCut.getScaledValue ? stCut.getScaledValue() : (20 * Math.pow(1000, cut01)); } catch (e) {}
+        fcHz = Math.max(20, Math.min(0.45 * VIZ_FS, fcHz));
+
+        // DRV thickens the curve — extra dB bias at the peak (visual cue;
+        // the DSP makeup gain compensates loudness, but the visualizer
+        // shows the user where the energy is concentrated).
+        const drvDb = drv01 * 6.0;
+
+        // ── Magnitude evaluator per active type ─────────────────────────
+        const isNone     = (typeIdx === 26);
+        const isLadder   = (typeIdx === 0);   // LADDER LP·24 (4-pole LP)
+        const isLadder12 = (typeIdx === 1);   // LADDER LP·12 (2-pole LP)
+        const isLadderHp = (typeIdx === 2);   // LADDER HP·24 (4-pole HP, pole-mixed)
+        const isDiode    = (typeIdx === 3);   // DIODE LP (4-pole LP, diode k)
+        const isAcid     = (typeIdx === 4);   // ACID 303 (4-pole LP, diode k)
+        const isSvfLp    = (typeIdx === 5);
+        const isSvfHp    = (typeIdx === 6);
+        const isSvfBp    = (typeIdx === 7);
+        const isSvfNotch = (typeIdx === 8);
+        const isObx      = (typeIdx === 9);   // OB-X SVF (SEM; shows LP @ morph 0)
+        const isAnySvf   = isSvfLp || isSvfHp || isSvfBp || isSvfNotch || isObx;
+        const isLad4     = isLadder || isDiode || isAcid;   // 4-pole ladder-family LP
+        // Fallback for the remaining placeholder types (10-25): flat line.
+        const isFlat = ! (isNone || isLad4 || isLadder12 || isLadderHp || isAnySvf);
+
+        let pathD = '';
+        for (let i = 0; i < VIZ_N; i++) {
+          const f = freqs[i];
+          let mag = 1.0;
+          if (isNone || isFlat) {
+            mag = 1.0;
+          } else if (isLad4 || isLadder12 || isLadderHp) {
+            // Ladder family — linearized analog magnitude. (1 + jw) = a + jb.
+            const wn = f / fcHz;
+            const a = 1 - wn * wn, b = 2 * wn;
+            const k = (isDiode || isAcid) ? (resToDiodeK(res01) / 4.0)
+                                          : resToLadderK(res01);
+            if (isLadder12) {
+              // 2-pole (12 dB/oct): denom = (1 + jw)^2 + k
+              const dr = a + k, di = b;
+              mag = 1.0 / Math.max(1e-9, Math.sqrt(dr * dr + di * di));
+            } else {
+              // 4-pole: (1 + jw)^4 = ((a+jb)^2)^2 -> r2 + j i2, plus k bump.
+              const r2 = a * a - b * b, i2 = 2 * a * b;
+              const dr = r2 + k, di = i2;
+              const denom = Math.sqrt(dr * dr + di * di);
+              if (isLadderHp) {
+                // 24 dB/oct highpass: numerator |(jw)^4| = wn^4.
+                const w2 = wn * wn;
+                mag = (w2 * w2) / Math.max(1e-9, denom);
+              } else {
+                mag = 1.0 / Math.max(1e-9, denom);   // LP24 / Diode / Acid
+              }
+            }
+          } else if (isAnySvf) {
+            // Cytomic SVF closed-form. All taps share ONE denominator D(z);
+            // only the numerator changes per mode.
+            //   D(z) = (1-z⁻¹)² + g·k·(1-z⁻²) + g²·(1+z⁻¹)²
+            const w  = 2 * Math.PI * f / VIZ_FS;
+            const cz = Math.cos(-w), sz = Math.sin(-w);          // z^{-1}
+            const c2 = Math.cos(-2 * w), s2 = Math.sin(-2 * w);  // z^{-2}
+            const g  = Math.tan(Math.PI * fcHz / VIZ_FS);
+            // OB-X = SEM voicing with bounded Q (qMax 60); others full SVF map.
+            const k  = isObx ? (1.0 / Math.max(1e-4, 0.5 * Math.pow(60.0, juce_clamp01(res01))))
+                             : resToSvfK(res01);
+            const apR = 1 + cz, apI = sz;                        // (1+z⁻¹)
+            const aR  = apR * apR - apI * apI, aI = 2 * apR * apI;// (1+z⁻¹)²
+            const mR  = 1 - cz, mI = -sz;                        // (1-z⁻¹)
+            const mR2 = mR * mR - mI * mI, mI2 = 2 * mR * mI;    // (1-z⁻¹)²
+            const m2R = 1 - c2, m2I = -s2;                       // (1-z⁻²)
+            const dR = mR2 + g * k * m2R + g * g * aR;
+            const dI = mI2 + g * k * m2I + g * g * aI;
+            const dMag = Math.sqrt(dR * dR + dI * dI);
+            let nMag;
+            if (isSvfHp) {
+              nMag = Math.sqrt(mR2 * mR2 + mI2 * mI2);                  // HP: (1-z⁻¹)²
+            } else if (isSvfBp) {
+              // Normalized BP (matches DSP k·v1): peak ≈ unity regardless of Q.
+              nMag = k * g * Math.sqrt(m2R * m2R + m2I * m2I);
+            } else if (isSvfNotch) {
+              const nR = mR2 + g * g * aR, nI = mI2 + g * g * aI;       // LP + HP
+              nMag = Math.sqrt(nR * nR + nI * nI);
+            } else {
+              // SVF LP, and OB-X (SEM at morph 0): g²·(1+z⁻¹)²
+              nMag = g * g * Math.sqrt(aR * aR + aI * aI);
+            }
+            mag = nMag / Math.max(1e-9, dMag);
+          }
+          // Convert to dB, apply drive bias
+          let db = 20 * Math.log10(Math.max(1e-9, mag)) + drvDb;
+          // For NONE, a flat 0 dB line (no drive bias — true bypass)
+          if (isNone) db = 0;
+          const y = dbToY(db);
+          const x = (i / (VIZ_N - 1)) * VIZ_W;
+          pathD += (i === 0 ? 'M' : ' L') + x.toFixed(1) + ',' + y.toFixed(1);
+        }
+        // Update cutoff cursor (only visible when not NONE)
+        if (cursorEl) {
+          const t = (Math.log(fcHz) - Math.log(VIZ_FMIN)) / (Math.log(VIZ_FMAX) - Math.log(VIZ_FMIN));
+          const cx = juce_clamp01(t) * VIZ_W;
+          cursorEl.setAttribute('x1', cx.toFixed(1));
+          cursorEl.setAttribute('x2', cx.toFixed(1));
+          cursorEl.style.opacity = isNone ? '0' : '0.6';
+        }
+        return pathD;
+      };
+
+      // Throttled redraw — flag set on any param change, RAF picks it up.
+      let curveDirty = true;
+      const markCurveDirty = () => { curveDirty = true; };
+      const redrawCurve = () => {
+        if (curveDirty && filterPathEl) {
+          const d = computeCurvePath();
+          if (d) filterPathEl.setAttribute('d', d);
+          curveDirty = false;
+        }
+        requestAnimationFrame(redrawCurve);
+      };
+      [filterSt, stCut, stRes, stDrv].forEach(st => {
+        if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
+          st.valueChangedEvent.addListener(markCurveDirty);
+      });
+      requestAnimationFrame(redrawCurve);
+      markCurveDirty();   // initial paint
     })();
 
   } catch (outer) {

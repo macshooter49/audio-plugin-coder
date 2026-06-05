@@ -8,6 +8,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "Wavetable.h"
+#include "TerrainFilters.h"
 #include <atomic>
 #include <array>
 #include <cmath>
@@ -71,13 +72,36 @@ namespace tw
         void prepareToPlay (double sr, int samplesPerBlock, int /*numChannels*/) noexcept
         {
             setCurrentPlaybackSampleRate (sr);
+            sampleRate_ = sr;
             juce::dsp::ProcessSpec spec;
             spec.sampleRate       = sr;
             spec.maximumBlockSize = (juce::uint32) samplesPerBlock;
             spec.numChannels      = 2;   // always stereo for OSC A + B per-osc pan
-            filter_.prepare (spec);
-            filter_.setMode (juce::dsp::LadderFilterMode::LPF24);
-            filter_.reset();
+
+            // Batch 1 Filter — FilterSlot replaces the hardwired juce::dsp::LadderFilter.
+            // Filter selection + cutoff + res + drive all come per-block from
+            // PluginProcessor via setFilterType/setFilterCut/...; cutoff is
+            // modulated per-sample inside renderNextBlock by the FLT envelope
+            // and per-voice EROSION drift.
+            filterSlot_.prepare (sr);
+
+            // Filter ADSR — independent from amp env, drives cutoff via the
+            // bipolar SYN_FILTER1_ENV knob (the "signed amount" of this env).
+            fltEnv_.setSampleRate (sr);
+            fltEnv_.setParameters (fltEnvParams_);
+            fltEnv_.reset();
+
+            // Per-voice EROSION drift state. One-pole-LP'd uniform noise at
+            // ~0.5 Hz so the random walk happens slowly (analog-like). Per-
+            // voice seed so two voices don't drift in lockstep.
+            const std::uint32_t voiceHash = static_cast<std::uint32_t> (
+                                                reinterpret_cast<std::uintptr_t> (this))
+                                          ^ 0xC0FFEE17u;
+            driftRng_.setSeed ((juce::int64) voiceHash);
+            driftState_ = 0.0f;
+            const float driftCutHz = 0.5f;   // §5 of prompt — sub-Hz LP
+            driftCoef_  = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi
+                                                 * driftCutHz / (float) sr);
 
             // Phase 8a — HORIZON shelves (one per stereo channel, mono spec)
             juce::dsp::ProcessSpec monoSpec;
@@ -108,12 +132,46 @@ namespace tw
             *spectralFilterBR_.coefficients = *passthrough;
         }
 
-        /** Cutoff in Hz (20..20000), resonance 0..1. Called per block from
-         *  PluginProcessor. */
+        /** Batch 1 Filter — per-block from PluginProcessor. Cutoff/res are
+         *  the BASE values; the per-sample audio loop adds env and drift
+         *  before feeding setParams to the active FilterSlot. */
         void setFilterParameters (float cutoffHz, float resonance) noexcept
         {
-            filter_.setCutoffFrequencyHz (juce::jlimit (20.0f, 20000.0f, cutoffHz));
-            filter_.setResonance         (juce::jlimit (0.0f,  1.0f,    resonance));
+            baseCutHz_   = juce::jlimit (20.0f, 20000.0f, cutoffHz);
+            baseRes01_   = juce::jlimit (0.0f,  1.0f,    resonance);
+        }
+        void setFilterType (int typeIdx) noexcept
+        {
+            const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
+            filterSlot_.setType (static_cast<tw::filters::Type> (clamped));
+        }
+        void setFilterDrive (float drv01) noexcept
+        {
+            drv01_ = juce::jlimit (0.0f, 1.0f, drv01);
+        }
+        /** Bipolar -1..+1 amount of the FLT envelope applied to cutoff
+         *  in semitone space (±96 ST at ±1.0). Sign inverts the env. */
+        void setFilterEnvAmount (float env) noexcept
+        {
+            envAmount_ = juce::jlimit (-1.0f, 1.0f, env);
+        }
+        /** FLT envelope ADSR (ms / 0..1 / ms / ms). */
+        void setFilterEnvParameters (float attackMs, float decayMs,
+                                     float sustain,  float releaseMs) noexcept
+        {
+            fltEnvParams_.attack  = juce::jmax (0.001f, attackMs  * 0.001f);
+            fltEnvParams_.decay   = juce::jmax (0.001f, decayMs   * 0.001f);
+            fltEnvParams_.sustain = juce::jlimit (0.0f, 1.0f, sustain);
+            fltEnvParams_.release = juce::jmax (0.001f, releaseMs * 0.001f);
+            fltEnv_.setParameters (fltEnvParams_);
+        }
+        /** EROSION 0..1 (per-block from APVTS / 100). Scaled erosion^1.8
+         *  applied as semitone drift to cutoff inside renderNextBlock. */
+        void setErosionAmount_filter (float e) noexcept
+        {
+            // (Different field from the existing erosionAmount_ which feeds
+            //  pitch drift — this one is for cutoff drift.)
+            fltErosionAmount_ = juce::jlimit (0.0f, 1.0f, e);
         }
 
         /** Linear gain 0..1 — applied after filter, before pan. */
@@ -353,6 +411,13 @@ namespace tw
             ampEnv_.reset();
             ampEnv_.noteOn();
 
+            // Batch 1 Filter — trigger FLT envelope alongside AMP env.
+            fltEnv_.reset();
+            fltEnv_.noteOn();
+            // Reset filter state on note-on so a stale tail from a stolen
+            // voice doesn't bleed into the new note's onset.
+            filterSlot_.reset();
+
             // Phase 8a polish — reset steal-fade state on new note
             stealing_         = false;
             stealingFade_     = 1.0f;
@@ -371,6 +436,7 @@ namespace tw
             if (allowTailOff)
             {
                 ampEnv_.noteOff();
+                fltEnv_.noteOff();
             }
             else
             {
@@ -1086,11 +1152,91 @@ namespace tw
                 }
             }
 
-            // Run the ladder filter in-place on the stereo scratch.
-            juce::dsp::AudioBlock<float> block (scratch_);
-            auto sub = block.getSubBlock (0, (size_t) numSamples);
-            juce::dsp::ProcessContextReplacing<float> ctx (sub);
-            filter_.process (ctx);
+            // Batch 1 Filter — per-sample FilterSlot processing with cutoff
+            // modulated by FLT envelope (bipolar amount) + per-voice EROSION
+            // drift, summed in semitone space and converted to Hz at the end
+            // (so low cutoffs barely move and high cutoffs swing wide stays
+            // musical, per report §6).
+            {
+                const double sr = sampleRate_;
+                const float  nyq = 0.5f * (float) sr;
+                const float  baseCutSemis = hzToSemi (baseCutHz_);
+                // EROSION scale: pow(e, 1.8) per prompt §5 / report §5. The
+                // resulting random walk drifts within ±~6 ST at max erosion.
+                const float  driftDepthSemis = std::pow (fltErosionAmount_, 1.8f) * 6.0f;
+                const bool   driftActive     = fltErosionAmount_ > 0.001f;
+                // Slight resonance wander at high erosion (§5 of prompt).
+                const float  resWander = (fltErosionAmount_ > 0.7f)
+                                            ? (fltErosionAmount_ - 0.7f) * 0.20f
+                                            : 0.0f;
+
+                float* sL = scratch_.getWritePointer (0);
+                float* sR = scratch_.getWritePointer (1);
+                const bool oversample = filterSlot_.needsOversampling();
+                // Coefficient sample rate doubles when oversampling so the
+                // filter's prewarp + ZDF math sees the upsampled Nyquist.
+                const double coefSr = oversample ? sr * 2.0 : sr;
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    // Per-sample FLT envelope tick (single value 0..1).
+                    const float fltEnvVal = fltEnv_.getNextSample();
+
+                    // Per-sample drift (one-pole LP of uniform white noise).
+                    if (driftActive)
+                    {
+                        const float w = driftRng_.nextFloat() * 2.0f - 1.0f;
+                        driftState_ += driftCoef_ * (w - driftState_);
+                    }
+                    const float driftSemis = driftState_ * driftDepthSemis;
+
+                    // Sum modulation in semitones, convert to Hz at the end.
+                    const float cutSemis = baseCutSemis
+                                         + envAmount_ * fltEnvVal * 96.0f
+                                         + driftSemis;
+                    float cutHz = 440.0f * std::pow (2.0f, (cutSemis - 69.0f) / 12.0f);
+                    cutHz = juce::jlimit (20.0f, juce::jmin (20000.0f, 0.45f * (float) coefSr), cutHz);
+                    const float resWithWander = juce::jlimit (
+                        0.0f, 1.0f,
+                        baseRes01_ + resWander * driftState_ * 0.5f);
+
+                    filterSlot_.setParams (cutHz, resWithWander, drv01_, coefSr);
+
+                    if (oversample)
+                    {
+                        // 2× linear-interp upsample → filter twice → box decimate.
+                        // Cheap (no allocations, no halfband filter) but enough to
+                        // halve the in-loop tanh aliasing for Batch 1. Proper
+                        // polyphase IIR halfband is a later upgrade (per §8).
+                        const float midL = 0.5f * (osPrevL_ + sL[i]);
+                        const float midR = 0.5f * (osPrevR_ + sR[i]);
+                        float yMidL = midL, yMidR = midR;
+                        filterSlot_.processStereo (yMidL, yMidR);
+                        float yL = sL[i], yR = sR[i];
+                        filterSlot_.processStereo (yL, yR);
+                        sL[i] = 0.5f * (yMidL + yL);
+                        sR[i] = 0.5f * (yMidR + yR);
+                        osPrevL_ = sL[i]; osPrevR_ = sR[i];
+                    }
+                    else
+                    {
+                        filterSlot_.processStereo (sL[i], sR[i]);
+                    }
+                }
+
+                // NaN/Inf guard — Pirkle/Stilson note that ZDF ladders can blow
+                // up under pathological coefficient updates. One bad sample
+                // cascades into a stuck-on voice; cheap to detect once/block.
+                if (! std::isfinite (sL[numSamples - 1])
+                 || ! std::isfinite (sR[numSamples - 1])
+                 || std::abs (sL[numSamples - 1]) > 30.0f
+                 || std::abs (sR[numSamples - 1]) > 30.0f)
+                {
+                    filterSlot_.reset();
+                    osPrevL_ = osPrevR_ = 0.0f;
+                    juce::FloatVectorOperations::clear (sL, numSamples);
+                    juce::FloatVectorOperations::clear (sR, numSamples);
+                }
+            }
 
             // Phase 8a — HORIZON tilt filter (per-channel high-shelf).
             {
@@ -1303,7 +1449,33 @@ namespace tw
         juce::ADSR             ampEnv_;
         juce::ADSR::Parameters ampParams_ { 0.005f, 0.1f, 0.7f, 0.2f };
 
-        juce::dsp::LadderFilter<float> filter_;
+        // Batch 1 Filter — FilterSlot replaces juce::dsp::LadderFilter.
+        // baseCutHz / baseRes01 are the knob values; the renderNextBlock
+        // loop adds envAmount * fltEnv + drift before each sample's
+        // filterSlot_.setParams call (per-sample modulation, semitone space).
+        tw::filters::FilterSlot filterSlot_;
+        juce::ADSR              fltEnv_;
+        juce::ADSR::Parameters  fltEnvParams_ { 0.005f, 0.2f, 0.0f, 0.3f };
+        float                   baseCutHz_   = 20000.0f;
+        float                   baseRes01_   = 0.0f;
+        float                   drv01_       = 0.0f;
+        float                   envAmount_   = 0.0f;   // -1..+1 (bipolar)
+        float                   fltErosionAmount_ = 0.0f;
+
+        // Per-voice EROSION drift state (cutoff random walk, ~0.5 Hz LP)
+        juce::Random            driftRng_;
+        float                   driftState_  = 0.0f;
+        float                   driftCoef_   = 0.0f;   // 1 - exp(-2π·fc/sr)
+
+        // 2× oversampling input-prev for linear-interp upsample (Ladder + Acid303)
+        float                   osPrevL_     = 0.0f;
+        float                   osPrevR_     = 0.0f;
+
+        static float hzToSemi (float hz) noexcept
+        {
+            return 69.0f + 12.0f * std::log2 (juce::jmax (1.0f, hz) / 440.0f);
+        }
+
         juce::AudioBuffer<float>       scratch_;
         float                          level_ = 0.7f;
         float                          panL_  = 0.7071f;  // cos(pi/4)

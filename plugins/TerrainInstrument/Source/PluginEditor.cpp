@@ -75,6 +75,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscAPanRelay)
             .withOptionsFrom(synFilter1CutRelay)
             .withOptionsFrom(synFilter1ResRelay)
+            // Batch 1 Filter — TYPE, DRV, ENV, slot 2 reserved, FLT envelope
+            .withOptionsFrom(synFilter1TypeRelay)
+            .withOptionsFrom(synFilter1DrvRelay)
+            .withOptionsFrom(synFilter1EnvRelay)
+            .withOptionsFrom(synFilterSlotRelay)
+            .withOptionsFrom(synFilter2TypeRelay)
+            .withOptionsFrom(synFilter2CutRelay)
+            .withOptionsFrom(synFilter2ResRelay)
+            .withOptionsFrom(synFilter2DrvRelay)
+            .withOptionsFrom(synFilter2EnvRelay)
+            .withOptionsFrom(synEnvFltARelay)
+            .withOptionsFrom(synEnvFltDRelay)
+            .withOptionsFrom(synEnvFltSRelay)
+            .withOptionsFrom(synEnvFltRRelay)
             .withOptionsFrom(synEnvAmpARelay)
             .withOptionsFrom(synEnvAmpDRelay)
             .withOptionsFrom(synEnvAmpSRelay)
@@ -1916,6 +1930,49 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synFilter1ResAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_RES),
         synFilter1ResRelay, nullptr);
+
+    // Batch 1 Filter — bind new param attachments. Without these, the JS
+    // dropdown / DRV / ENV writes silently fail (relay exists but has no
+    // backing param). This was the bug where every filter "sounded the same".
+    synFilter1TypeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_TYPE),
+        synFilter1TypeRelay, nullptr);
+    synFilter1DrvAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_DRV),
+        synFilter1DrvRelay, nullptr);
+    synFilter1EnvAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_ENV),
+        synFilter1EnvRelay, nullptr);
+    synFilterSlotAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER_SLOT),
+        synFilterSlotRelay, nullptr);
+    synFilter2TypeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_TYPE),
+        synFilter2TypeRelay, nullptr);
+    synFilter2CutAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_CUT),
+        synFilter2CutRelay, nullptr);
+    synFilter2ResAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_RES),
+        synFilter2ResRelay, nullptr);
+    synFilter2DrvAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_DRV),
+        synFilter2DrvRelay, nullptr);
+    synFilter2EnvAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_ENV),
+        synFilter2EnvRelay, nullptr);
+    synEnvFltAAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_A),
+        synEnvFltARelay, nullptr);
+    synEnvFltDAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_D),
+        synEnvFltDRelay, nullptr);
+    synEnvFltSAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_S),
+        synEnvFltSRelay, nullptr);
+    synEnvFltRAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_R),
+        synEnvFltRRelay, nullptr);
 
     synEnvAmpAAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_A),

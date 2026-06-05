@@ -108,6 +108,32 @@ namespace ParameterIDs
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1
     constexpr char SYN_ENV_AMP_R[]     = "SYN_ENV_AMP_R";      // float ms (skewed)
 
+    // ── Synth section — Batch 1 Filter (Phase 12+) ───────────────────────
+    // SYN_FILTER_SLOT: which slot the UI is editing (0/1). Batch 1 shows
+    //   slot 0 only; slot 1 is reserved namespace, inert this batch.
+    // SYN_FILTER{1,2}_TYPE: enum 0..26 — see TerrainFilters.h Type enum.
+    //   NONE = 26, rendered FIRST in dropdown but stored as last index so
+    //   later additions don't reshuffle the enum.
+    // SYN_FILTER{1,2}_DRV: 0..1 → 0..+24 dB into nonlinearity; output
+    //   makeup gain = drive^-0.5 (~−3 dB per +6 dB drive). §4 of prompt.
+    // SYN_FILTER{1,2}_ENV: BIPOLAR -1..+1, signed amount of the dedicated
+    //   FLT envelope applied to cutoff in semitone space (±96 ST at ±1).
+    constexpr char SYN_FILTER_SLOT[]   = "SYN_FILTER_SLOT";    // int 0..1
+    constexpr char SYN_FILTER1_TYPE[]  = "SYN_FILTER1_TYPE";   // choice 0..26 (active: 0=Ladder LP·24, 4=Acid 303, 5=SVF LP, 26=NONE)
+    constexpr char SYN_FILTER1_DRV[]   = "SYN_FILTER1_DRV";    // float 0..1
+    constexpr char SYN_FILTER1_ENV[]   = "SYN_FILTER1_ENV";    // float -1..+1 (bipolar)
+    constexpr char SYN_FILTER2_TYPE[]  = "SYN_FILTER2_TYPE";   // RESERVED (inert this batch)
+    constexpr char SYN_FILTER2_CUT[]   = "SYN_FILTER2_CUT";    // RESERVED
+    constexpr char SYN_FILTER2_RES[]   = "SYN_FILTER2_RES";    // RESERVED
+    constexpr char SYN_FILTER2_DRV[]   = "SYN_FILTER2_DRV";    // RESERVED
+    constexpr char SYN_FILTER2_ENV[]   = "SYN_FILTER2_ENV";    // RESERVED
+
+    // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
+    constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)
+    constexpr char SYN_ENV_FLT_D[]     = "SYN_ENV_FLT_D";      // float ms (skewed)
+    constexpr char SYN_ENV_FLT_S[]     = "SYN_ENV_FLT_S";      // float 0..1
+    constexpr char SYN_ENV_FLT_R[]     = "SYN_ENV_FLT_R";      // float ms (skewed)
+
     // ── Synth section — Phase 2A (Wavetable foundation) ──────────────────
     constexpr char SYN_OSC_A_WT_PRESET[] = "SYN_OSC_A_WT_PRESET"; // choice 0..5 (Prophet/Jupiter/Moog/OB-X/CS-80/Juno)
     constexpr char SYN_OSC_A_WT_FRAME[]  = "SYN_OSC_A_WT_FRAME";  // float 0..1 frame position within wavetable
