@@ -985,6 +985,184 @@ struct WaveShaper
     }
 };
 
+// ─── 3f. ADVANCED specials — Batch 6 (final, closes the 26-type system) ──
+//
+// REVERB_FILT (18): resonant SVF -> tiny allpass diffuser bloom ("filter into space").
+// BODE_SHIFT  (22): true single-sideband frequency shifter (Hilbert/Bode); RES=feedback.
+// GRAIN_MASK  (25): Terrain-original — grain-rate Hann gate x resonant spectral mask.
+
+// Fixed-length Schroeder allpass diffuser. v=x+g*v[-M]; y=-g*v+v[-M]. Unity gain.
+template <int N>
+struct APDiffuser
+{
+    float buf[N] = { 0.0f };
+    int   idx = 0;
+    float g = 0.55f;
+    void reset() noexcept { for (int i = 0; i < N; ++i) buf[i] = 0.0f; idx = 0; }
+    inline float process (float x) noexcept
+    {
+        const float d = buf[idx];        // v[n-M]
+        const float v = x + g * d;        // v[n]
+        const float y = -g * v + d;       // y[n]
+        buf[idx] = v;
+        if (++idx >= N) idx = 0;
+        return y;
+    }
+};
+
+// REVERB FILTER: resonant lowpass feeding 4 coprime allpass diffusers with a
+// short feedback bloom + HF damping. CUT=cutoff, RES=resonance+bloom, DRV=drive.
+// Tiny per-voice (1486 samples/channel @48k) — a TIMBRE reverb, not a hall.
+struct ReverbFilter
+{
+    SvfMultimode    svf;
+    APDiffuser<173> ap0;  APDiffuser<281> ap1;
+    APDiffuser<419> ap2;  APDiffuser<613> ap3;
+    TPTOnePole damp;
+    DCBlocker  dc;
+    float loopState = 0.0f, mix = 0.5f, gLoop = 0.5f, preDrv = 1.0f, drvMk = 1.0f, dampA = 0.4f;
+    int   dnsign = 1;
+
+    void reset() noexcept
+    {
+        svf.reset(); ap0.reset(); ap1.reset(); ap2.reset(); ap3.reset();
+        damp.reset(); dc.reset(); loopState = 0.0f; dnsign = 1;
+    }
+    void setParams (float cutHz, float res01, float driveLin, double fs) noexcept
+    {
+        svf.qMax = 400.0f;                         // musical resonance, not razor self-osc
+        svf.out  = SvfMultimode::Output::LP;
+        svf.setCoeffs (cutHz, res01, fs);
+        const float gd = 0.5f + 0.12f * res01;     // diffusion 0.50..0.62
+        ap0.g = ap1.g = ap2.g = ap3.g = gd;
+        mix    = 0.30f + 0.50f * res01;            // RES -> wet/bloom
+        gLoop  = juce::jlimit (0.0f, 0.88f, 0.45f + 0.45f * res01);   // RES -> decay
+        const float dfc = juce::jlimit (200.0f, 0.45f * (float) fs, cutHz * 1.5f + 800.0f);
+        const float t   = std::tan (juce::MathConstants<float>::pi * dfc / (float) fs);
+        dampA  = t / (1.0f + t);                    // resolved TPT gain
+        preDrv = driveLin;  drvMk = std::pow (driveLin, 0.30f);
+    }
+    inline float process (float x) noexcept
+    {
+        const float in = fastTanh (x * preDrv);
+        const float lp = svf.process (in);                  // resonant filter
+        float fbIn = lp + gLoop * loopState;
+        float d = ap0.process (fbIn);
+        d = ap1.process (d);
+        d = ap2.process (d);
+        d = ap3.process (d);
+        d = damp.lp (d, dampA);                             // HF absorption in the loop
+        loopState = d + (float) dnsign * 1.0e-18f;          // denormal guard
+        dnsign = -dnsign;
+        const float wet = dc.process (d);
+        const float out = (1.0f - mix) * lp + mix * wet;
+        return 4.0f * fastTanh (0.25f * out * drvMk * 1.8f);// level trim + soft limiter
+    }
+};
+
+// 2nd-order allpass section H(z) = (A - z^-2)/(1 - A z^-2), A = a^2. (Niemitalo.)
+struct BodeAP
+{
+    float A = 0.0f, x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    void reset() noexcept { x1 = x2 = y1 = y2 = 0; }
+    inline float process (float x) noexcept
+    {
+        const float y = A * (x + y2) - x2;
+        x2 = x1; x1 = x; y2 = y1; y1 = y;
+        return y;
+    }
+};
+
+// BODE SHIFTER: single-sideband frequency shifter via a 90-degree quadrature
+// allpass pair (Niemitalo, 8 mults) + recursive quadrature oscillator.
+// CUT = bipolar shift Hz (0.5 = none, <0.5 down, >0.5 up), RES = feedback
+// (barber-pole/metallic cascade), DRV = drive (louder). Shifts every partial
+// by a fixed +-Hz (linear, inharmonic) — NOT a pitch shifter.
+struct BodeShifter
+{
+    BodeAP iA[4], qA[4];
+    float  iDelay = 0.0f;
+    double osC = 1.0, osS = 0.0, oscCos = 1.0, oscSin = 0.0;
+    int    renorm = 0;
+    float  fb = 0.0f, fbState = 0.0f, preDrv = 1.0f, drvMk = 1.0f;
+    DCBlocker dc;
+
+    void reset() noexcept
+    {
+        static const float kI[4] = { 0.6923878f, 0.9360654322959f, 0.9882295226860f, 0.9987488452737f };
+        static const float kQ[4] = { 0.4021921162426f, 0.8561710882420f, 0.9722909545651f, 0.9952884791278f };
+        for (int i = 0; i < 4; ++i) { iA[i].reset(); iA[i].A = kI[i] * kI[i];
+                                      qA[i].reset(); qA[i].A = kQ[i] * kQ[i]; }
+        iDelay = 0.0f; osC = 1.0; osS = 0.0; fbState = 0.0f; renorm = 0; dc.reset();
+    }
+    void setParams (float cutHz, float res01, float driveLin, double fs) noexcept
+    {
+        const float cut01 = juce::jlimit (0.0f, 1.0f,
+            std::log (juce::jmax (20.0f, cutHz) / 20.0f) / std::log (1000.0f));
+        const float d01  = cut01 - 0.5f;
+        const float FMAX = 1000.0f;
+        float fshift = (d01 < 0.0f ? -1.0f : 1.0f) * (std::pow (FMAX + 1.0f, 2.0f * std::fabs (d01)) - 1.0f);
+        fshift = juce::jlimit (-2000.0f, 2000.0f, fshift);
+        const double w = 2.0 * juce::MathConstants<double>::pi * (double) fshift / fs;
+        oscCos = std::cos (w);  oscSin = std::sin (w);
+        fb     = 0.95f * res01;
+        preDrv = driveLin;  drvMk = std::pow (driveLin, 0.30f);
+    }
+    inline float process (float x) noexcept
+    {
+        const float in = fastTanh ((x + fb * fbState) * preDrv);
+        float iSig = in;  for (int k = 0; k < 4; ++k) iSig = iA[k].process (iSig);
+        const float iOut = iDelay; iDelay = iSig;           // 1-sample delay aligns I with Q
+        float qOut = in;  for (int k = 0; k < 4; ++k) qOut = qA[k].process (qOut);
+        const double nC = oscCos * osC - oscSin * osS;       // rotate quadrature osc
+        osS = oscSin * osC + oscCos * osS;
+        osC = nC;
+        if (++renorm >= 512) { renorm = 0; const double m = 1.5 - 0.5 * (osC * osC + osS * osS); osC *= m; osS *= m; }
+        const float y = iOut * (float) osC + qOut * (float) osS;   // SSB (signed shift = up/down)
+        fbState = dc.process (y);
+        return y * drvMk;
+    }
+};
+
+// GRAIN MASK (Terrain-original): grain-rate Hann gate x resonant bandpass mask.
+// CUT = grain rate 2..200 Hz (and mask center), RES = mask focus + dry/mask
+// blend, DRV = intensity (louder). ENV->CUT sweeps grain rate into audio rate.
+struct GrainMask
+{
+    SvfMultimode svf;
+    float  phase = 0.0f, rate = 10.0f, duty = 0.5f, blend = 0.0f;
+    float  preDrv = 1.0f, drvMk = 1.0f, makeup = 1.0f;
+    double fs_ = 48000.0;
+    void reset() noexcept { svf.reset(); phase = 0.0f; }
+    void setParams (float cutHz, float res01, float driveLin, double fs) noexcept
+    {
+        fs_ = fs;
+        const float cut01 = juce::jlimit (0.0f, 1.0f,
+            std::log (juce::jmax (20.0f, cutHz) / 20.0f) / std::log (1000.0f));
+        rate = 2.0f * std::pow (100.0f, cut01);                       // 2..200 Hz
+        const float fcMask = juce::jlimit (40.0f, 0.45f * (float) fs,
+                                           200.0f * std::pow (40.0f, cut01));   // 200..8000
+        svf.qMax = 600.0f;
+        svf.out  = SvfMultimode::Output::BP;
+        svf.setCoeffs (fcMask, juce::jlimit (0.0f, 1.0f, 0.3f + 0.6f * res01), fs);
+        blend  = res01;
+        preDrv = driveLin;  drvMk = std::pow (driveLin, 0.30f);
+        makeup = drvMk * 2.0f / std::sqrt (juce::jmax (0.05f, duty * 0.375f));// gating RMS makeup
+    }
+    inline float process (float x) noexcept
+    {
+        const float in = fastTanh (x * preDrv);
+        phase += rate / (float) fs_;
+        if (phase >= 1.0f) phase -= 1.0f;
+        const float gEnv = (phase < duty)
+            ? 0.5f * (1.0f - std::cos (2.0f * juce::MathConstants<float>::pi * phase / duty))
+            : 0.0f;
+        const float bp     = svf.process (in);
+        const float masked = (1.0f - blend) * in + blend * bp;
+        return gEnv * masked * makeup;
+    }
+};
+
 
 // ─── 4. FilterSlot — switchable wrapper consumed by SynthVoice ─────────
 //
@@ -1023,6 +1201,9 @@ public:
         ringL_.reset();     ringR_.reset();
         crushL_.reset();    crushR_.reset();
         shaperL_.reset();   shaperR_.reset();
+        reverbL_.reset();   reverbR_.reset();
+        bodeL_.reset();     bodeR_.reset();
+        grainL_.reset();    grainR_.reset();
     }
 
     /** Set the active type. State of inactive filters is left dirty —
@@ -1176,6 +1357,21 @@ public:
                 shaperR_.setParams (cutHz, res01, driveLin, fs);
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
                 break;
+            case Type::REVERB_FILT:
+                reverbL_.setParams (cutHz, res01, driveLin, fs);
+                reverbR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::BODE_SHIFT:
+                bodeL_.setParams (cutHz, res01, driveLin, fs);
+                bodeR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::GRAIN_MASK:
+                grainL_.setParams (cutHz, res01, driveLin, fs);
+                grainR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
             case Type::NONE:
             default:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -1236,6 +1432,12 @@ public:
                 l = crushL_.process (l);  r = crushR_.process (r);  break;
             case Type::WAVESHAPER:
                 l = shaperL_.process (l); r = shaperR_.process (r); break;
+            case Type::REVERB_FILT:
+                l = reverbL_.process (l); r = reverbR_.process (r); break;
+            case Type::BODE_SHIFT:
+                l = bodeL_.process (l);   r = bodeR_.process (r);   break;
+            case Type::GRAIN_MASK:
+                l = grainL_.process (l);  r = grainR_.process (r);  break;
             case Type::NONE:
             default:
                 // True bypass — Max finally hears the oscillators clean.
@@ -1257,7 +1459,8 @@ public:
         return type_ == Type::LADDER_LP24 || type_ == Type::LADDER_LP12
             || type_ == Type::LADDER_HP24 || type_ == Type::DIODE_LP
             || type_ == Type::ACID_303
-            || type_ == Type::WAVESHAPER  || type_ == Type::RING_MOD;
+            || type_ == Type::WAVESHAPER  || type_ == Type::RING_MOD
+            || type_ == Type::BODE_SHIFT;
     }
 
     /** Set the OB-X / SEM morph (0=LP, .5=Notch, 1=HP). Wired for when a
@@ -1331,6 +1534,9 @@ private:
     RingMod       ringL_,     ringR_;         // RING MOD
     BitCrush      crushL_,    crushR_;        // BIT-CRUSH
     WaveShaper    shaperL_,   shaperR_;       // WAVESHAPER
+    ReverbFilter  reverbL_,   reverbR_;       // REVERB FILTER
+    BodeShifter   bodeL_,     bodeR_;         // BODE SHIFTER
+    GrainMask     grainL_,    grainR_;        // GRAIN MASK
 };
 
 } // namespace filters
