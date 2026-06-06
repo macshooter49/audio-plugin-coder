@@ -273,32 +273,30 @@ namespace tw
          *  evolution is gentle, not harsh. */
         static WavetableSpec makeSineSpec()
         {
+            // Batch 1.1 — BASIC, refined to the T.
+            // Frame 0: a MATHEMATICALLY PURE sine (single harmonic, nothing else).
+            // Morph: a gentle harmonic "bloom" — a 1/h^1.8 series (odd + even, with
+            // even harmonics softened for a rounder tone) scaled by t, so WT POS
+            // sweeps sine → warm horn/organ. All sine-phase → phase-coherent,
+            // click-free morph. This gives the WT POS knob real, musical travel
+            // while keeping frame 0 a textbook sine.
             WavetableSpec spec;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const float t = (float) f / 15.0f;
                 FrameSpec& fs = spec.frames[(size_t) f];
-                // Frame 0: pure sine. Later frames add gentle 1/h² odd harmonics
-                // so it evolves toward a soft, warm tone — still sine-like but richer.
                 fs.amplitudes[0] = 1.0f;
                 fs.phases[0]     = 0.0f;
-                if (t < 0.01f)
+                if (t < 1.0e-4f) { fs.numHarmonics = 1; continue; }
+                const int numH = juce::jlimit (1, 24, 1 + (int) std::round (23.0f * t));
+                fs.numHarmonics = numH;
+                const float bloom = t;                       // linear bloom intensity
+                for (int h = 2; h <= numH; ++h)
                 {
-                    fs.numHarmonics = 1;
-                }
-                else
-                {
-                    // Grow harmonics quadratically: frame 1→1, frame 7→5, frame 15→16
-                    const int numH = juce::jlimit (1, 16,
-                                                    1 + (int) std::round (15.0f * t * t));
-                    fs.numHarmonics = numH;
-                    for (int h = 3; h <= numH; h += 2)
-                    {
-                        // Odd harmonics with 1/h² decay × t² so they stay inaudible
-                        // at early frames and bloom softly at later ones.
-                        fs.amplitudes[(size_t)(h - 1)] = t * t * 0.35f / (float)(h * h);
-                        fs.phases[(size_t)(h - 1)]     = 0.0f;
-                    }
+                    const float evenSoften = (h % 2 == 0) ? 0.55f : 1.0f;
+                    fs.amplitudes[(size_t)(h - 1)] = bloom * 0.5f * evenSoften
+                                                   / std::pow ((float) h, 1.8f);
+                    fs.phases[(size_t)(h - 1)]     = 0.0f;
                 }
             }
             return spec;
@@ -308,21 +306,24 @@ namespace tw
          *  toward 1/h (triangle → almost-square). Odd-only throughout. */
         static WavetableSpec makeTriangleSpec()
         {
+            // Batch 1.1 — exact band-limited triangle at frame 0: odd harmonics only,
+            // amplitude 8/π²·1/h², ALTERNATING sign (the textbook triangle series).
+            // Morph: the rolloff exponent eases 2.0 → 1.25, brightening it into a
+            // hollow, reedy tone — it stays ODD-ONLY the whole way (never a saw),
+            // so it's a distinct "bright triangle" journey, not a clone of saw.
             WavetableSpec spec;
             constexpr double pi = 3.14159265358979323846;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const float t = (float) f / 15.0f;
                 FrameSpec& fs = spec.frames[(size_t) f];
+                const double decayPow = 2.0 - 0.75 * (double) t;   // 2.0 → 1.25
                 int populated = 0;
-                // decayPow: 2.0 (triangle/1/h²) → 1.0 (square/1/h) over the sweep
-                const float decayPow = 2.0f - t * 1.0f;
                 for (int n = 1; n <= FrameSpec::kMaxHarmonics; n += 2)
                 {
-                    const double sign = ((n - 1) / 2) % 2 == 0 ? 1.0 : -1.0;
-                    // Use the continuously varying exponent instead of fixed 2
-                    const double amp = sign * 8.0 / (pi * pi)
-                                     / std::pow ((double) n, (double) decayPow);
+                    const double sign = (((n - 1) / 2) % 2 == 0) ? 1.0 : -1.0;
+                    const double amp  = sign * (8.0 / (pi * pi))
+                                      / std::pow ((double) n, decayPow);
                     fs.amplitudes[(size_t)(n - 1)] = (float) amp;
                     fs.phases[(size_t)(n - 1)]     = 0.0f;
                     populated = n;
@@ -337,28 +338,27 @@ namespace tw
          *  because pulse waves have both odd + even harmonics. */
         static WavetableSpec makeSquareSpec()
         {
+            // Batch 1.1 — exact band-limited square at frame 0 (duty 0.5 → the
+            // sin(nπ·0.5) term auto-nulls even harmonics, leaving 1/h odd-only).
+            // Morph: PWM, duty 0.5 → 0.15 (square → hollow pulse). COSINE phase
+            // (π/2) on every harmonic so the pulse is centered/symmetric and the
+            // whole duty sweep is phase-continuous (no morph clicks). The "warm PWM".
             WavetableSpec spec;
             constexpr double pi = 3.14159265358979323846;
+            const float cosPhase = (float) (pi * 0.5);
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const float t = (float) f / 15.0f;
                 FrameSpec& fs = spec.frames[(size_t) f];
-                // Pulse width: 0.5 (square) → 0.10 (narrow pulse) over 15 frames
-                const double pw = 0.5 - (double) t * 0.40;
+                const double pw = 0.5 - 0.35 * (double) t;      // 0.5 → 0.15
                 int populated = 0;
                 for (int n = 1; n <= FrameSpec::kMaxHarmonics; ++n)
                 {
-                    const double amp = (4.0 / pi) * (std::sin (pi * (double) n * pw) / (double) n);
-                    if (std::abs (amp) < 1e-6)
-                    {
+                    const double amp = (2.0 / (pi * (double) n)) * std::sin (pi * (double) n * pw);
+                    if (std::abs (amp) < 1.0e-6)
                         fs.amplitudes[(size_t)(n - 1)] = 0.0f;
-                    }
-                    else
-                    {
-                        fs.amplitudes[(size_t)(n - 1)] = (float) amp;
-                        populated = n;
-                    }
-                    fs.phases[(size_t)(n - 1)] = 0.0f;
+                    else { fs.amplitudes[(size_t)(n - 1)] = (float) amp; populated = n; }
+                    fs.phases[(size_t)(n - 1)] = cosPhase;
                 }
                 fs.numHarmonics = populated;
             }
@@ -370,31 +370,28 @@ namespace tw
          *  Produces a distinctive, symmetric timbre journey. */
         static WavetableSpec makePulseSpec()
         {
+            // Batch 1.1 (rev) — a DISTINCT pulse, never a 50% square (that's the Square
+            // table's job). Frame 0 = 33% "third-less" pulse: duty 1/3 nulls the 3rd
+            // harmonic, giving a hollow, woody, clarinet-ish tone that's audibly NOT a
+            // square even at WT POS 0. Morph thins it 0.33 → 0.06 (bright, nasal, reedy
+            // lead). Cosine phase, phase-continuous. So Square = wide hollow PWM, Pulse =
+            // thin bright pulse — two different timbral zones, distinct at every position.
             WavetableSpec spec;
             constexpr double pi = 3.14159265358979323846;
+            const float cosPhase = (float) (pi * 0.5);
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const float t = (float) f / 15.0f;
                 FrameSpec& fs = spec.frames[(size_t) f];
-                // Palindrome: 0..1..0 mapped via (1 - |2t - 1|)
-                const double tBent = 1.0 - std::abs (2.0 * (double) t - 1.0);  // 0..1..0
-                // pw: 0.05 (narrow) → 0.50 (square) → 0.05 (narrow)
-                const double pw = 0.05 + tBent * 0.45;
+                const double pw = 0.33 - 0.27 * (double) t;     // 0.33 (hollow) → 0.06 (nasal)
                 int populated = 0;
                 for (int n = 1; n <= FrameSpec::kMaxHarmonics; ++n)
                 {
-                    const double amp = (2.0 / (pi * (double) n))
-                                     * std::sin (pi * (double) n * pw);
-                    if (std::abs (amp) < 1e-6)
-                    {
+                    const double amp = (2.0 / (pi * (double) n)) * std::sin (pi * (double) n * pw);
+                    if (std::abs (amp) < 1.0e-6)
                         fs.amplitudes[(size_t)(n - 1)] = 0.0f;
-                    }
-                    else
-                    {
-                        fs.amplitudes[(size_t)(n - 1)] = (float) amp;
-                        populated = n;
-                    }
-                    fs.phases[(size_t)(n - 1)] = (float)(pi * 0.5);  // cos phase
+                    else { fs.amplitudes[(size_t)(n - 1)] = (float) amp; populated = n; }
+                    fs.phases[(size_t)(n - 1)] = cosPhase;
                 }
                 fs.numHarmonics = populated;
             }
@@ -440,6 +437,17 @@ namespace tw
                 // The taper fades away as we open up to modern bright mode
                 const float taperStart = 20.0f + t * 60.0f;  // moves from 20 to 80 over sweep
 
+                // SSM 2030 (Rev 1/2) instability is a core part of the early-Prophet
+                // character — the chips drift. Model it as a SMALL harmonic phase
+                // scatter that's largest at the vintage frame and fades to coherent by
+                // the stable CEM 3340 (Rev 3) end. Subtle: single-VCO, not a detune.
+                const float ssmDrift = juce::jmax (0.0f, 0.18f * (1.0f - t * 1.3f));
+                unsigned int rng = 0x50554E4Bu + (unsigned) f;
+                auto rand11 = [&]() -> float {
+                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                    return ((float) rng / (float) 0xFFFFFFFFu) * 2.0f - 1.0f;
+                };
+
                 for (int h = 1; h <= numH; ++h)
                 {
                     float amp = 1.0f / std::pow ((float) h, decayPow);
@@ -456,7 +464,8 @@ namespace tw
                     }
 
                     fs.amplitudes[(size_t)(h - 1)] = amp;
-                    fs.phases[(size_t)(h - 1)]     = 0.0f;  // coherent phases, single-VCO
+                    // Mostly coherent; vintage frames get a touch of SSM phase drift.
+                    fs.phases[(size_t)(h - 1)] = ssmDrift * rand11() * (float) h * 0.04f;
                 }
             }
             return spec;
@@ -484,11 +493,16 @@ namespace tw
                 const double pw = 0.50 - t * 0.42;
 
                 // Jupiter-8 harmonic count: up to 96 harmonics
+                // Jupiter VCOs have a small reset-discharge transient (the "rounding
+                // at the top" / notch) that adds a little high-harmonic edge — the
+                // Roland brightness. Model it as a gentle HF emphasis (~+15% by h=96).
+                const double glitch = 0.15;
                 int populated = 0;
                 for (int h = 1; h <= 96; ++h)
                 {
                     // Standard pulse-wave formula — mathematically exact, no approximations
-                    const double amp = (2.0 / (pi * (double) h)) * std::sin (pi * (double) h * pw);
+                    double amp = (2.0 / (pi * (double) h)) * std::sin (pi * (double) h * pw);
+                    amp *= (1.0 + glitch * ((double) h / 96.0));   // reset-transient HF edge
 
                     if (std::abs (amp) < 1e-6)
                         fs.amplitudes[(size_t)(h - 1)] = 0.0f;
@@ -511,58 +525,41 @@ namespace tw
          *  Sweep: thick warm square (frame 0) → fat driven 3-oscillator sawtooth (frame 15). */
         static WavetableSpec makeMoogSqrSpec()
         {
-            // Minimoog discrete transistor square → fat saw sweep.
-            // Unique characteristics vs ProphetSaw / OBXSaw:
-            // 1. Starts as near-square (ODD harmonics dominant) — not sawtooth-start
-            // 2. Even harmonics GROW progressively as frames advance (mixer saturation)
-            // 3. Additional ~6dB/oct taper above harmonic 25 (capacitor integrator soft limit)
-            // 4. h=2 always at ~3-5% minimum (DC offset / slight asymmetry leakage)
+            // Minimoog discrete-transistor "square" — built on the MEASURED ~48% duty.
+            // Real Minimoogs sit at 48/52%, not a perfect 50%, and that asymmetry is
+            // exactly what injects the weak EVEN harmonics behind the Moog square's
+            // fat-yet-hollow overtone (owner scope measurements; SOS Synth Secrets).
+            // Frame 0 = authentic 48% pulse. Morph: duty widens 0.48 → 0.40 and the
+            // spectrum brightens/fattens (mixer + ladder push) — warm square → fat
+            // driven lead, staying in the pulse family (cosine phase) so it keeps its
+            // Moog identity and morphs click-free. Moog is fat AND bright, so the top
+            // stays extended; only a gentle integrator rolloff at the extreme top.
             constexpr double pi = 3.14159265358979323846;
+            const float cosPhase = (float) (pi * 0.5);
             WavetableSpec spec;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const float t = (float) f / 15.0f;
                 FrameSpec& fs = spec.frames[(size_t) f];
-
-                // Even-harmonic blend: 0 (pure square character) → 1 (full saw)
-                const float evenBlend = t * t;  // quadratic — stays square-like until midpoint
-
-                // Harmonic count: 28 (deep warm square) → 64 (fat saw)
-                const int numH = juce::jlimit (28, 64,
-                                                (int) std::round (28.0f + 36.0f * t));
+                const double pw   = 0.48 - 0.08 * (double) t;     // 0.48 → 0.40 (more even content)
+                const float  fatten = 1.0f + 0.25f * t;           // low-harmonic body lift when driven
+                const int    numH = juce::jlimit (32, 72, (int) std::round (32.0f + 40.0f * t));
                 fs.numHarmonics = numH;
-
                 for (int h = 1; h <= numH; ++h)
                 {
-                    // Base amplitude
-                    float amp;
-                    const bool isOdd  = (h % 2 != 0);
-
-                    if (isOdd)
+                    double amp = (2.0 / (pi * (double) h)) * std::sin (pi * (double) h * pw);
+                    if (h <= 4) amp *= (double) fatten;           // fatten the body across the morph
+                    // Gentle transistor/integrator rolloff only at the very top (stays bright)
+                    if (h > 40)
                     {
-                        // Odd harmonics: square formula (4/(pi*h)), then cross-fade to saw (1/h)
-                        const float squareAmp = (float)(4.0 / pi) / (float) h;
-                        const float sawAmp    = 1.0f / (float) h;
-                        amp = squareAmp + (sawAmp - squareAmp) * evenBlend;
+                        const float excess = (float) (h - 40) / 32.0f;
+                        amp *= std::exp (-excess * (1.2f - t) * 0.6f);
                     }
+                    if (std::abs (amp) < 1.0e-6)
+                        fs.amplitudes[(size_t)(h - 1)] = 0.0f;
                     else
-                    {
-                        // Even harmonics: DC-offset leakage at frame 0 (3%), growing to full saw by frame 15
-                        const float leakage = 0.03f / (float) h;        // DC offset / asymmetry: 3% of h=1
-                        const float sawAmp  = 1.0f / (float) h;
-                        amp = leakage + (sawAmp - leakage) * evenBlend;
-                    }
-
-                    // Moog IIR soft taper: harmonics above 25 attenuate extra
-                    // Models the capacitor integrator curve + transistor bandwidth limit
-                    if (h > 25)
-                    {
-                        const float excess = (float)(h - 25) / 25.0f;
-                        amp *= std::exp (-excess * (1.0f - t * 0.5f) * 0.8f);
-                    }
-
-                    fs.amplitudes[(size_t)(h - 1)] = amp;
-                    fs.phases[(size_t)(h - 1)]     = 0.0f;
+                        fs.amplitudes[(size_t)(h - 1)] = (float) amp;
+                    fs.phases[(size_t)(h - 1)] = cosPhase;
                 }
             }
             return spec;
@@ -591,10 +588,12 @@ namespace tw
                                                 (int) std::round (22.0f + 38.0f * t * t));
                 fs.numHarmonics = numH;
 
-                // Gaussian rolloff threshold: h=22 (vintage) → h=45 (aggressive)
-                const float rolloffStart = 22.0f + t * 23.0f;
-                // Rolloff sharpness: tight vintage → looser aggressive
-                const float rolloffWidth = 6.0f + t * 12.0f;
+                // OB-X signature: a one-pole capacitor rolloff sits between the
+                // oscillators and the filter (Electric Druid / GreatSynthesizers
+                // teardown) — THE reason Oberheims read "dull but girthy/brassy".
+                // Corner harmonic ~h=18 (vintage, strong mid-forward tilt) lifting to
+                // ~h=42 (aggressive, brighter) as WT POS opens up.
+                const float cornerH = 18.0f + t * 24.0f;   // ~10 kHz capacitor corner
 
                 // Serial VCA distortion boost on h=2, h=3 — models OB-X VCA chain overdrive
                 const float h2Boost = 1.10f + t * 0.20f;  // +10% at f0 → +30% at f15
@@ -615,11 +614,11 @@ namespace tw
                     if (h == 2) amp *= h2Boost;
                     if (h == 3) amp *= h3Boost;
 
-                    // Gaussian rolloff above rolloffStart
-                    if ((float) h > rolloffStart)
+                    // One-pole (−6 dB/oct) capacitor rolloff — gentler and more
+                    // authentic than a Gaussian; affects all harmonics, more above corner.
                     {
-                        const float dist = ((float) h - rolloffStart) / rolloffWidth;
-                        amp *= std::exp (-dist * dist);  // Gaussian shape
+                        const float r = (float) h / cornerH;
+                        amp /= std::sqrt (1.0f + r * r);
                     }
 
                     fs.amplitudes[(size_t)(h - 1)] = amp;
