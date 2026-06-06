@@ -84,6 +84,7 @@ namespace tw
             // modulated per-sample inside renderNextBlock by the FLT envelope
             // and per-voice EROSION drift.
             filterSlot_.prepare (sr);
+            filterSlot2_.prepare (sr);
 
             // Filter ADSR — independent from amp env, drives cutoff via the
             // bipolar SYN_FILTER1_ENV knob (the "signed amount" of this env).
@@ -143,8 +144,26 @@ namespace tw
         void setFilterType (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
+            filterType1_ = clamped;
             filterSlot_.setType (static_cast<tw::filters::Type> (clamped));
         }
+        // ── Filter 2 (independent) + routing/mix setters ──
+        void setFilterParameters2 (float cutoffHz, float resonance) noexcept
+        {
+            baseCutHz2_ = juce::jlimit (20.0f, 20000.0f, cutoffHz);
+            baseRes012_ = juce::jlimit (0.0f,  1.0f,    resonance);
+        }
+        void setFilterType2 (int typeIdx) noexcept
+        {
+            const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
+            filterType2_ = clamped;
+            filterSlot2_.setType (static_cast<tw::filters::Type> (clamped));
+        }
+        void setFilterDrive2 (float drv01) noexcept   { drv012_ = juce::jlimit (0.0f, 1.0f, drv01); }
+        void setFilterEnvAmount2 (float env) noexcept { envAmount2_ = juce::jlimit (-1.0f, 1.0f, env); }
+        void setFilterMix1 (float mix) noexcept       { filterMix1_ = juce::jlimit (0.0f, 1.0f, mix); }
+        void setFilterMix2 (float mix) noexcept       { filterMix2_ = juce::jlimit (0.0f, 1.0f, mix); }
+        void setFilterRouting (int mode) noexcept     { filterRouting_ = (mode != 0) ? 1 : 0; }
         void setFilterDrive (float drv01) noexcept
         {
             drv01_ = juce::jlimit (0.0f, 1.0f, drv01);
@@ -417,9 +436,7 @@ namespace tw
             // Reset filter state on note-on so a stale tail from a stolen
             // voice doesn't bleed into the new note's onset.
             filterSlot_.reset();
-            // Batch 3 — Karplus pluck. No-op for other filter types. Uses
-            // note velocity as pluck strength so harder notes pluck harder.
-            filterSlot_.excite (velocity);
+            filterSlot2_.reset();
 
             // Phase 8a polish — reset steal-fade state on new note
             stealing_         = false;
@@ -1175,10 +1192,13 @@ namespace tw
 
                 float* sL = scratch_.getWritePointer (0);
                 float* sR = scratch_.getWritePointer (1);
-                const bool oversample = filterSlot_.needsOversampling();
+                const bool oversample = filterSlot_.needsOversampling()
+                                     || filterSlot2_.needsOversampling();
                 // Coefficient sample rate doubles when oversampling so the
                 // filter's prewarp + ZDF math sees the upsampled Nyquist.
                 const double coefSr = oversample ? sr * 2.0 : sr;
+                const float  baseCutSemis2 = hzToSemi (baseCutHz2_);
+                const int    kNoneType = (int) tw::filters::Type::NONE;
                 for (int i = 0; i < numSamples; ++i)
                 {
                     // Per-sample FLT envelope tick (single value 0..1).
@@ -1191,38 +1211,74 @@ namespace tw
                         driftState_ += driftCoef_ * (w - driftState_);
                     }
                     const float driftSemis = driftState_ * driftDepthSemis;
+                    const float fmax = juce::jmin (20000.0f, 0.45f * (float) coefSr);
 
-                    // Sum modulation in semitones, convert to Hz at the end.
-                    const float cutSemis = baseCutSemis
-                                         + envAmount_ * fltEnvVal * 96.0f
-                                         + driftSemis;
-                    float cutHz = 440.0f * std::pow (2.0f, (cutSemis - 69.0f) / 12.0f);
-                    cutHz = juce::jlimit (20.0f, juce::jmin (20000.0f, 0.45f * (float) coefSr), cutHz);
-                    const float resWithWander = juce::jlimit (
-                        0.0f, 1.0f,
+                    // Filter 1 cutoff (own env amount, shared FLT env + drift).
+                    const float cutSemis1 = baseCutSemis
+                                          + envAmount_ * fltEnvVal * 96.0f + driftSemis;
+                    float cutHz1 = 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f);
+                    cutHz1 = juce::jlimit (20.0f, fmax, cutHz1);
+                    const float res1 = juce::jlimit (0.0f, 1.0f,
                         baseRes01_ + resWander * driftState_ * 0.5f);
+                    filterSlot_.setParams (cutHz1, res1, drv01_, coefSr);
 
-                    filterSlot_.setParams (cutHz, resWithWander, drv01_, coefSr);
+                    // Filter 2 cutoff (fully independent — its own knobs).
+                    const float cutSemis2 = baseCutSemis2
+                                          + envAmount2_ * fltEnvVal * 96.0f + driftSemis;
+                    float cutHz2 = 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f);
+                    cutHz2 = juce::jlimit (20.0f, fmax, cutHz2);
+                    const float res2 = juce::jlimit (0.0f, 1.0f,
+                        baseRes012_ + resWander * driftState_ * 0.5f);
+                    filterSlot2_.setParams (cutHz2, res2, drv012_, coefSr);
+
+                    // Routing + per-filter wet/dry mix. NONE-aware so a bypassed
+                    // slot drops out of the sum cleanly. Filters are independent.
+                    const bool a1 = (filterType1_ != kNoneType);
+                    const bool a2 = (filterType2_ != kNoneType);
+                    auto applyFilters = [&] (float& L, float& R)
+                    {
+                        const float dryL = L, dryR = R;
+                        if (filterRouting_ == 0)          // SERIES: x → F1 → F2
+                        {
+                            float l = L, r = R;
+                            if (a1) { float wl = l, wr = r; filterSlot_.processStereo (wl, wr);
+                                      l = filterMix1_ * wl + (1.0f - filterMix1_) * l;
+                                      r = filterMix1_ * wr + (1.0f - filterMix1_) * r; }
+                            if (a2) { float wl = l, wr = r; filterSlot2_.processStereo (wl, wr);
+                                      l = filterMix2_ * wl + (1.0f - filterMix2_) * l;
+                                      r = filterMix2_ * wr + (1.0f - filterMix2_) * r; }
+                            L = l; R = r;
+                        }
+                        else                              // PARALLEL: F1(x) + F2(x)
+                        {
+                            float b1L = dryL, b1R = dryR, b2L = dryL, b2R = dryR;
+                            if (a1) { filterSlot_.processStereo (b1L, b1R);
+                                      b1L = filterMix1_ * b1L + (1.0f - filterMix1_) * dryL;
+                                      b1R = filterMix1_ * b1R + (1.0f - filterMix1_) * dryR; }
+                            if (a2) { filterSlot2_.processStereo (b2L, b2R);
+                                      b2L = filterMix2_ * b2L + (1.0f - filterMix2_) * dryL;
+                                      b2R = filterMix2_ * b2R + (1.0f - filterMix2_) * dryR; }
+                            if (a1 && a2) { L = 0.5f * (b1L + b2L); R = 0.5f * (b1R + b2R); }
+                            else if (a1)  { L = b1L; R = b1R; }
+                            else if (a2)  { L = b2L; R = b2R; }
+                            else          { L = dryL; R = dryR; }
+                        }
+                    };
 
                     if (oversample)
                     {
                         // 2× linear-interp upsample → filter twice → box decimate.
-                        // Cheap (no allocations, no halfband filter) but enough to
-                        // halve the in-loop tanh aliasing for Batch 1. Proper
-                        // polyphase IIR halfband is a later upgrade (per §8).
                         const float midL = 0.5f * (osPrevL_ + sL[i]);
                         const float midR = 0.5f * (osPrevR_ + sR[i]);
-                        float yMidL = midL, yMidR = midR;
-                        filterSlot_.processStereo (yMidL, yMidR);
-                        float yL = sL[i], yR = sR[i];
-                        filterSlot_.processStereo (yL, yR);
+                        float yMidL = midL, yMidR = midR; applyFilters (yMidL, yMidR);
+                        float yL = sL[i], yR = sR[i];      applyFilters (yL, yR);
                         sL[i] = 0.5f * (yMidL + yL);
                         sR[i] = 0.5f * (yMidR + yR);
                         osPrevL_ = sL[i]; osPrevR_ = sR[i];
                     }
                     else
                     {
-                        filterSlot_.processStereo (sL[i], sR[i]);
+                        applyFilters (sL[i], sR[i]);
                     }
                 }
 
@@ -1235,6 +1291,7 @@ namespace tw
                  || std::abs (sR[numSamples - 1]) > 30.0f)
                 {
                     filterSlot_.reset();
+            filterSlot2_.reset();
                     osPrevL_ = osPrevR_ = 0.0f;
                     juce::FloatVectorOperations::clear (sL, numSamples);
                     juce::FloatVectorOperations::clear (sR, numSamples);
@@ -1473,6 +1530,20 @@ namespace tw
         // 2× oversampling input-prev for linear-interp upsample (Ladder + Acid303)
         float                   osPrevL_     = 0.0f;
         float                   osPrevR_     = 0.0f;
+
+        // Filter 2 — fully independent second FilterSlot (own type/cut/res/drv/env).
+        // Shares the FLT envelope shape + EROSION drift, with its own ENV amount.
+        tw::filters::FilterSlot filterSlot2_;
+        float                   baseCutHz2_  = 20000.0f;
+        float                   baseRes012_  = 0.0f;
+        float                   drv012_      = 0.0f;
+        float                   envAmount2_  = 0.0f;   // -1..+1 (bipolar)
+        int                     filterType1_ = 0;      // tracked for NONE-aware routing
+        int                     filterType2_ = (int) tw::filters::Type::NONE;
+        // Routing between the two filters + per-filter wet/dry mix.
+        int                     filterRouting_ = 0;    // 0 = series, 1 = parallel
+        float                   filterMix1_  = 1.0f;   // 0 = dry, 1 = fully filtered
+        float                   filterMix2_  = 1.0f;
 
         static float hzToSemi (float hz) noexcept
         {

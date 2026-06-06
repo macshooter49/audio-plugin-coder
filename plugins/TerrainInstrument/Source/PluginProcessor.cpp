@@ -880,7 +880,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             "Synth Filter 1 Type", filterTypeChoices, 0));   // default = LADDER LP 24 (was the hardwired one)
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_FILTER2_TYPE, 1 },
-            "Synth Filter 2 Type", filterTypeChoices, 27));  // default = NONE (slot 2 inert; NONE shifted to 27 after REVERB FILTER 2 was inserted at 26)
+            "Synth Filter 2 Type", filterTypeChoices, 27));  // default = NONE (slot 2 inert this batch)
     }
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_FILTER1_DRV, 1 },
@@ -913,6 +913,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_FILTER2_ENV, 1 },
         "Synth Filter 2 Env Amount",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+
+    // Per-filter wet/dry mix (default fully filtered) + series/parallel routing.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_MIX, 1 },
+        "Synth Filter 1 Mix",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_MIX, 1 },
+        "Synth Filter 2 Mix",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER_ROUTING, 1 },
+        "Synth Filter Routing", juce::StringArray { "SERIES", "PARALLEL" }, 0));
 
     // Filter ADSR (independent from AMP env — drives the cutoff via the bipolar ENV knob).
     // Defaults: classic "filter sweep down" shape (instant attack, mid decay, no sustain, short release).
@@ -1728,6 +1741,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   filtType= (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_TYPE);
         const float filtDrv =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_DRV);
         const float filtEnv =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_ENV);
+        // Filter 2 (independent) + per-filter mix + routing.
+        const float cut2     =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_CUT);
+        const float res2     =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_RES);
+        const int   filtType2= (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_TYPE);
+        const float filtDrv2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_DRV);
+        const float filtEnv2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_ENV);
+        const float filtMix1 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_MIX);
+        const float filtMix2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_MIX);
+        const int   filtRoute= (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER_ROUTING);
         const float fltEnvA =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_A);
         const float fltEnvD =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_D);
         const float fltEnvS =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_S);
@@ -1771,6 +1793,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterDrive            (filtDrv);
                 sv->setFilterEnvAmount        (filtEnv);
                 sv->setFilterEnvParameters    (fltEnvA, fltEnvD, fltEnvS, fltEnvR);
+                sv->setFilterParameters2      (cut2, res2);
+                sv->setFilterType2            (filtType2);
+                sv->setFilterDrive2           (filtDrv2);
+                sv->setFilterEnvAmount2       (filtEnv2);
+                sv->setFilterMix1             (filtMix1);
+                sv->setFilterMix2             (filtMix2);
+                sv->setFilterRouting          (filtRoute);
                 sv->setAmpEnvelopeParameters  (ampA, ampD, ampS, ampR);
                 sv->setWavetable              (wt);
                 sv->setWavetableFrame         (wtFrame);

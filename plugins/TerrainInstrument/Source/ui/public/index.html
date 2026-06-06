@@ -3464,7 +3464,7 @@ body {
 
 /* ── FILTER + FLOW row ── */
 #syn-panel .row-filter-vl { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
-#syn-panel .filter { display: flex; flex-direction: column; gap: 7px; padding-top: 22px; position: relative; }
+#syn-panel .filter { display: flex; flex-direction: column; gap: 7px; padding-top: 30px; position: relative; }
 #syn-panel .filter-toggle {
   position: absolute; top: 6px; right: 14px;
   display: flex; align-items: center; gap: 4px;
@@ -3673,16 +3673,56 @@ body {
               padding: 1px 4px;
               font-weight: 400;
             }
-            /* Batch 1 Filter — 1/2 slot toggle: symmetric, no overlap, slot 2 ghosted */
-            #syn-panel .filter-toggle .ft-pill { width: 24px; transition: opacity .15s; }
-            #syn-panel .filter-toggle .ft-pill.ghosted {
-              opacity: 0.32;
-              cursor: not-allowed;
-              border-color: var(--border);
-              background: transparent;
-              color: var(--text-muted);
+            /* TwoFilters — 1/2 slot tabs: small, semi-transparent until active, aligned with the + swap button */
+            #syn-panel .filter-toggle .ft-pill {
+              width: 16px; height: 14px; font-size: 8.5px;
+              opacity: 0.4; cursor: pointer; transition: opacity .15s, background .12s, border-color .12s;
             }
-            #syn-panel .filter-toggle .ft-pill.ghosted:hover { opacity: 0.4; }
+            #syn-panel .filter-toggle .ft-pill:hover { opacity: 0.75; }
+            #syn-panel .filter-toggle .ft-pill.act { opacity: 1; }
+            #syn-panel .filter-toggle .swap-btn { margin-left: 2px; }
+            /* TwoFilters — match the filter knob row to the oscillator knob row + give the graph more room */
+            /* Higher specificity (0,1,3 = id + .device.filter + .filter-knobs) than the
+               #syn-panel .device .front-only { display: flex; } rule (0,1,2) so the grid
+               layout actually applies when .filter-knobs also has .front-only. Without
+               this override the 4 knobs cluster at flex-start (left) instead of spreading
+               across the 4 columns. Mirrors .osc-knobs (5 columns, evenly distributed).
+
+               :not(.swapped) so this rule does NOT override the swap-hide rule
+               (#syn-panel .device.swapped .front-only { display: none }). Without the
+               :not() guard, both rules tie at specificity 0,1,3 and source-order wins —
+               which left the 4 front knobs visible on the back panel and shoved the
+               MIX knob off-screen. The fix: only force grid layout when NOT swapped. */
+            #syn-panel .device.filter:not(.swapped) .filter-knobs {
+              display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+              align-items: center; padding-bottom: 4px;
+            }
+            /* FILTER label — nudge right to match the OSC label position (left:17) so the
+               visible "F" glyph aligns with the dropdown box border below it. */
+            #syn-panel .device.filter > .device-label { left: 17px; }
+            /* 1/2/+ pills cluster — mirror the label nudge so the cluster's right edge
+               sits inside the dropdown box border below, matching OSC's preset-corner inset. */
+            #syn-panel .device.filter .filter-toggle { right: 17px; }
+            #syn-panel .device.filter .filter-display { min-height: 40px; }
+            /* TwoFilters — back panel (per-filter MIX + shared series/parallel routing) */
+            #syn-panel .device.filter .filter-back {
+              flex: 1; display: none; flex-direction: column; gap: 10px;
+              justify-content: center; padding: 2px 2px 0;
+            }
+            #syn-panel .device.filter.swapped .filter-back { display: flex; }
+            #syn-panel .fb-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-secondary); margin-bottom: 5px; }
+            #syn-panel .fb-routing { display: flex; flex-direction: column; }
+            #syn-panel .fb-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+            #syn-panel .fb-opt {
+              height: 22px; border: 1px solid var(--border-strong); border-radius: 6px;
+              display: flex; align-items: center; justify-content: center;
+              font-size: 9px; letter-spacing: 1.2px; color: var(--text-primary);
+              font-weight: 300; cursor: pointer; opacity: 0.5; transition: opacity .12s, background .12s, border-color .12s;
+            }
+            #syn-panel .fb-opt:hover { opacity: 0.8; }
+            #syn-panel .fb-opt.act { opacity: 1; background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+            #syn-panel .fb-mix { display: flex; align-items: center; justify-content: center; }
+            #syn-panel .fb-mix .knob { display: flex; flex-direction: column; align-items: center; gap: 3px; }
             /* Dropdown trigger — make it visibly clickable */
             #syn-panel .device.filter .dd-trigger { cursor: pointer; transition: border-color .15s; }
             #syn-panel .device.filter .dd-trigger:hover { border-color: var(--purple-500); }
@@ -4614,24 +4654,38 @@ body {
 
         <!-- Row 2: FILTER · FLOW -->
         <div class="row-filter-vl">
-          <div class="device filter">
+          <div class="device filter" id="filter-device">
             <div class="device-label">FILTER</div>
             <div class="filter-toggle">
-              <div class="ft-pill act">1</div>
-              <div class="ft-pill">2</div>
+              <div class="ft-pill act" id="filter-pill-1">1</div>
+              <div class="ft-pill" id="filter-pill-2">2</div>
+              <button class="swap-btn" type="button" id="filter-swap-btn" aria-label="Toggle filter back panel (mix + routing)"></button>
             </div>
-            <div class="dd-trigger"><span>LADDER LP · 24</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
-            <div class="filter-display">
+            <div class="dd-trigger front-only"><span>LADDER LP · 24</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+            <div class="filter-display front-only">
               <svg viewBox="0 0 280 60" preserveAspectRatio="none">
                 <path d="M0,40 L120,40 Q150,40 165,18 Q180,2 220,55 L280,58" stroke="#ECE8F2" stroke-width="1.3" fill="none"/>
                 <line x1="165" y1="0" x2="165" y2="60" stroke="rgba(139,92,246,0.45)" stroke-width="0.6" stroke-dasharray="2,3"/>
               </svg>
             </div>
-            <div class="filter-knobs">
-              <div class="knob" data-syn="SYN_FILTER1_CUT"><div class="knob-ring"></div><div class="knob-label">CUT</div></div>
-              <div class="knob" data-syn="SYN_FILTER1_RES"><div class="knob-ring"></div><div class="knob-label">RES</div></div>
+            <div class="filter-knobs front-only">
+              <div class="knob"><div class="knob-ring"></div><div class="knob-label">CUT</div></div>
+              <div class="knob"><div class="knob-ring"></div><div class="knob-label">RES</div></div>
               <div class="knob"><div class="knob-ring"></div><div class="knob-label">DRV</div></div>
               <div class="knob"><div class="knob-ring"></div><div class="knob-label">ENV</div></div>
+            </div>
+            <!-- BACK VIEW (visible when .device.swapped) — per-filter MIX + shared routing -->
+            <div class="filter-back back-only">
+              <div class="fb-routing">
+                <div class="fb-label">ROUTING</div>
+                <div class="fb-seg" id="filter-routing-seg">
+                  <div class="fb-opt act" data-route="0">SERIES</div>
+                  <div class="fb-opt" data-route="1">PARALLEL</div>
+                </div>
+              </div>
+              <div class="fb-mix">
+                <div class="knob" id="filter-mix-knob"><div class="knob-ring"></div><div class="knob-label">MIX</div></div>
+              </div>
             </div>
           </div>
 
@@ -9034,19 +9088,32 @@ setTimeout(function wireSynControls () {
 
       const ddTriggerEl = document.querySelector('#syn-panel .device.filter .dd-trigger');
       const ddSpan      = ddTriggerEl ? ddTriggerEl.querySelector('span') : null;
-      const filterSt    = (window.Juce && window.Juce.getSliderState)
-                          ? window.Juce.getSliderState('SYN_FILTER1_TYPE') : null;
+
+      // ── TwoFilters: which slot the front panel + curve are editing (1 or 2) ──
+      let activeFilterSlot = 1;
+      const slotChangeHooks = [];
+      const onSlotChange = () => { slotChangeHooks.forEach(fn => { try { fn(); } catch (e) {} }); };
+      const gss = (id) => (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState(id) : null;
+      // Proxy slider-state: forwards reads/writes to whichever slot is active,
+      // so the existing curve + dropdown code reads the right filter unchanged.
+      const mkSlotState = (base) => {
+        const s1 = gss('SYN_FILTER1_' + base), s2 = gss('SYN_FILTER2_' + base);
+        return {
+          both: [s1, s2],
+          active() { return activeFilterSlot === 1 ? s1 : s2; },
+          getNormalisedValue() { const s = this.active(); try { return s ? s.getNormalisedValue() : 0; } catch (e) { return 0; } },
+          setNormalisedValue(v) { const s = this.active(); try { if (s) s.setNormalisedValue(v); } catch (e) {} },
+          getScaledValue() { const s = this.active(); try { return (s && s.getScaledValue) ? s.getScaledValue() : undefined; } catch (e) { return undefined; } },
+        };
+      };
+      const filterStType = mkSlotState('TYPE');
 
       const setFilterTypeIdx = (idx) => {
-        if (! filterSt) return;
-        try {
-          filterSt.setNormalisedValue(idx / (FILTER_NUM_CHOICES - 1));
-        } catch (e) { /* swallow */ }
+        try { filterStType.setNormalisedValue(idx / (FILTER_NUM_CHOICES - 1)); } catch (e) {}
       };
       const getFilterTypeIdx = () => {
-        if (! filterSt) return 0;
         try {
-          const n = filterSt.getNormalisedValue();
+          const n = filterStType.getNormalisedValue();
           return Math.round(n * (FILTER_NUM_CHOICES - 1));
         } catch (e) { return 0; }
       };
@@ -9055,9 +9122,10 @@ setTimeout(function wireSynControls () {
         if (ddSpan) ddSpan.textContent = labelByIdx(getFilterTypeIdx());
       };
       refreshDdLabel();
-      if (filterSt && filterSt.valueChangedEvent && filterSt.valueChangedEvent.addListener) {
-        filterSt.valueChangedEvent.addListener(refreshDdLabel);
-      }
+      slotChangeHooks.push(refreshDdLabel);
+      filterStType.both.forEach(s => {
+        if (s && s.valueChangedEvent && s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(refreshDdLabel);
+      });
 
       if (ddTriggerEl) {
         ddTriggerEl.style.cursor = 'pointer';
@@ -9084,57 +9152,28 @@ setTimeout(function wireSynControls () {
             });
           });
           const r = ddTriggerEl.getBoundingClientRect();
-          showMenu('FILTER 1 TYPE', items, r.left, r.bottom + 4);
+          showMenu('FILTER ' + activeFilterSlot + ' TYPE', items, r.left, r.bottom + 4);
         });
       }
 
-      // ── 6C — Slot 1/2 toggle cleanup ──────────────────────────────────
-      // Make pills symmetric. Slot 2 is inert this batch — wire it as
-      // dimmed/disabled so the affordance reads correctly but no
-      // architecture rework is needed when slot 2 lands in Batch 2.
-      const slotPill1 = document.querySelector('#syn-panel .device.filter .ft-pill:nth-child(1)');
-      const slotPill2 = document.querySelector('#syn-panel .device.filter .ft-pill:nth-child(2)');
-      if (slotPill2) {
-        slotPill2.classList.add('ghosted');
-        slotPill2.title = 'Filter Slot 2 — coming in Batch 2';
-        slotPill2.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
-      }
-      if (slotPill1) {
-        slotPill1.title = 'Filter Slot 1';
-        slotPill1.classList.add('act');   // hard-pin active this batch
-      }
+      // ── TwoFilters — slot-aware filter knobs + 1/2 tabs + back panel ──────
+      // (Replaces the Batch-1 slot-2-disabled wiring. CUT/RES lost their
+      //  data-syn in the HTML so the generic loop skips them; all four front
+      //  knobs + the MIX knob are wired here as slot-aware.)
+      function juce_clamp01(n) { return Math.max(0, Math.min(1, n)); }
 
-      // ── 6A bis — Wire DRV / ENV knobs on the FILTER device.
-      // The createKnob loop above only wired CUT/RES (Phase 4 T5 only built
-      // those two). Now patch the remaining two so they're interactive.
-      // We attach `data-syn` and re-trigger the existing per-knob handler.
-      const drvKnob = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(3)');
-      const envKnob = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(4)');
-      if (drvKnob && ! drvKnob.getAttribute('data-syn')) drvKnob.setAttribute('data-syn', 'SYN_FILTER1_DRV');
-      if (envKnob && ! envKnob.getAttribute('data-syn')) envKnob.setAttribute('data-syn', 'SYN_FILTER1_ENV');
-      // The earlier SYN-knob wiring loop only fires once during init; for
-      // these two we wire them inline using the same applyFill pattern.
-      const wireExtraSynKnob = (el, paramId, defaultN, bipolar) => {
+      // Slot-aware knob: reads/writes whichever slot is active; refreshes its
+      // fill on slot change; listens on BOTH slots' underlying states.
+      const wireSlotKnob = (el, base, defaultN, bipolar) => {
         if (! el) return;
         const ring = el.querySelector('.knob-ring');
         if (! ring) return;
-        const st = (window.Juce && window.Juce.getSliderState)
-                   ? window.Juce.getSliderState(paramId) : null;
-        if (! st) return;
+        const proxy = mkSlotState(base);
         const applyFill = (n01) => {
-          // bipolar = true → 0..1 is the param normalised range covering
-          // [-1, +1]; we want the fill arc to start from center (0.5) and
-          // grow in either direction.
-          let p1 = 0, p2 = 0;
           if (bipolar) {
-            const c = 0.5;
-            const v = juce_clamp01(n01);
+            const c = 0.5, v = juce_clamp01(n01);
             const lo = Math.min(c, v), hi = Math.max(c, v);
-            p1 = lo * 270; p2 = hi * 270;
-          } else {
-            p1 = 0; p2 = juce_clamp01(n01) * 270;
-          }
-          if (bipolar) {
+            const p1 = lo * 270, p2 = hi * 270;
             ring.style.background =
               'conic-gradient(from 225deg, '
               + 'var(--knob-track) 0deg ' + p1 + 'deg, '
@@ -9142,7 +9181,7 @@ setTimeout(function wireSynControls () {
               + 'var(--knob-track) ' + p2 + 'deg 270deg, '
               + 'transparent 270deg)';
           } else {
-            const fillDeg = p2;
+            const fillDeg = juce_clamp01(n01) * 270;
             ring.style.background =
               'conic-gradient(from 225deg, '
               + 'var(--purple-500) 0deg ' + fillDeg + 'deg, '
@@ -9150,7 +9189,9 @@ setTimeout(function wireSynControls () {
               + 'transparent 270deg)';
           }
         };
-        try { applyFill(st.getNormalisedValue ? st.getNormalisedValue() : defaultN); } catch (e) {}
+        const refresh = () => { try { applyFill(proxy.getNormalisedValue()); } catch (e) {} };
+        refresh();
+        slotChangeHooks.push(refresh);
         let dragging = false, dragStartY = 0, dragStartN = 0, dragMoved = false, lastDragEnd = 0;
         const onMove = (ev) => {
           if (! dragging) return;
@@ -9158,7 +9199,7 @@ setTimeout(function wireSynControls () {
           if (Math.abs(dy) > 2) dragMoved = true;
           const newN = juce_clamp01(dragStartN + dy / 200);
           applyFill(newN);
-          try { st.setNormalisedValue(newN); } catch (e) {}
+          proxy.setNormalisedValue(newN);
         };
         const onUp = () => {
           dragging = false;
@@ -9171,7 +9212,7 @@ setTimeout(function wireSynControls () {
         ring.style.cursor = 'grab';
         ring.addEventListener('pointerdown', (ev) => {
           dragging = true; dragMoved = false; dragStartY = ev.clientY;
-          dragStartN = st.getNormalisedValue ? st.getNormalisedValue() : defaultN;
+          dragStartN = proxy.getNormalisedValue();
           ring.style.cursor = 'grabbing';
           if (ring.setPointerCapture) ring.setPointerCapture(ev.pointerId);
           document.addEventListener('pointermove', onMove);
@@ -9181,18 +9222,64 @@ setTimeout(function wireSynControls () {
         ring.addEventListener('dblclick', (ev) => {
           ev.preventDefault();
           if (Date.now() - lastDragEnd < 400) return;
-          try { st.setNormalisedValue(defaultN); applyFill(defaultN); } catch (e) {}
+          proxy.setNormalisedValue(defaultN); applyFill(defaultN);
         });
-        if (st.valueChangedEvent && st.valueChangedEvent.addListener) {
-          st.valueChangedEvent.addListener(() => {
-            try { applyFill(st.getNormalisedValue()); } catch (e) {}
-          });
-        }
+        proxy.both.forEach(s => {
+          if (s && s.valueChangedEvent && s.valueChangedEvent.addListener) {
+            s.valueChangedEvent.addListener(() => { try { applyFill(proxy.getNormalisedValue()); } catch (e) {} });
+          }
+        });
       };
-      // small inline clamp helper (avoid bringing in the global juce JS api)
-      function juce_clamp01(n) { return Math.max(0, Math.min(1, n)); }
-      wireExtraSynKnob(drvKnob, 'SYN_FILTER1_DRV', 0.0, false);
-      wireExtraSynKnob(envKnob, 'SYN_FILTER1_ENV', 0.5, true);   // bipolar — center at 0.5
+
+      const fkCut = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(1)');
+      const fkRes = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(2)');
+      const fkDrv = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(3)');
+      const fkEnv = document.querySelector('#syn-panel .device.filter .filter-knobs .knob:nth-child(4)');
+      const fkMix = document.getElementById('filter-mix-knob');
+      wireSlotKnob(fkCut, 'CUT', 1.0, false);   // default 20 kHz (top of skew)
+      wireSlotKnob(fkRes, 'RES', 0.0, false);
+      wireSlotKnob(fkDrv, 'DRV', 0.0, false);
+      wireSlotKnob(fkEnv, 'ENV', 0.5, true);    // bipolar — center
+      wireSlotKnob(fkMix, 'MIX', 1.0, false);   // per-filter wet/dry, default fully filtered
+
+      // ── 1 / 2 tabs — switch the active slot; everything refreshes ──
+      const slotPill1 = document.getElementById('filter-pill-1');
+      const slotPill2 = document.getElementById('filter-pill-2');
+      const setActiveSlot = (slot) => {
+        activeFilterSlot = (slot === 2) ? 2 : 1;
+        if (slotPill1) slotPill1.classList.toggle('act', activeFilterSlot === 1);
+        if (slotPill2) slotPill2.classList.toggle('act', activeFilterSlot === 2);
+        onSlotChange();
+      };
+      if (slotPill1) { slotPill1.title = 'Filter 1'; slotPill1.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); setActiveSlot(1); }); }
+      if (slotPill2) { slotPill2.title = 'Filter 2'; slotPill2.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); setActiveSlot(2); }); }
+
+      // ── + swap button — flip the FILTER device to its back panel ──
+      const filterSwapBtn = document.getElementById('filter-swap-btn');
+      const filterDevice  = document.getElementById('filter-device');
+      if (filterSwapBtn && filterDevice) {
+        filterSwapBtn.addEventListener('click', () => {
+          try { filterDevice.classList.toggle('swapped'); filterSwapBtn.classList.toggle('act'); } catch (e) {}
+        });
+      }
+
+      // ── Routing segmented control (SERIES / PARALLEL) — one shared param ──
+      const routeSt  = gss('SYN_FILTER_ROUTING');
+      const routeOpts = Array.prototype.slice.call(document.querySelectorAll('#filter-routing-seg .fb-opt'));
+      const refreshRouting = () => {
+        let idx = 0;
+        if (routeSt) { try { idx = Math.round(routeSt.getNormalisedValue()); } catch (e) {} }
+        routeOpts.forEach(o => o.classList.toggle('act', parseInt(o.getAttribute('data-route'), 10) === idx));
+      };
+      routeOpts.forEach(o => {
+        o.addEventListener('click', () => {
+          const idx = parseInt(o.getAttribute('data-route'), 10) || 0;
+          if (routeSt) { try { routeSt.setNormalisedValue(idx); } catch (e) {} }
+          refreshRouting();
+        });
+      });
+      if (routeSt && routeSt.valueChangedEvent && routeSt.valueChangedEvent.addListener) routeSt.valueChangedEvent.addListener(refreshRouting);
+      refreshRouting();
 
       // ── 6B — Reactive response curve.
       // Evaluate the analytic magnitude of the active filter at 128 log-
@@ -9221,9 +9308,9 @@ setTimeout(function wireSynControls () {
       };
 
       // Read current knob normalised values + active type to compute curve.
-      const stCut = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_FILTER1_CUT') : null;
-      const stRes = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_FILTER1_RES') : null;
-      const stDrv = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_FILTER1_DRV') : null;
+      const stCut = mkSlotState('CUT');
+      const stRes = mkSlotState('RES');
+      const stDrv = mkSlotState('DRV');
 
       // Map RES (0..1) → k for ladder/diode visualization (matches DSP §1.6/§5D)
       const resToLadderK   = (r) => 4.0 * juce_clamp01(r);          // self-osc near 4
@@ -9623,10 +9710,15 @@ setTimeout(function wireSynControls () {
         }
         requestAnimationFrame(redrawCurve);
       };
-      [filterSt, stCut, stRes, stDrv].forEach(st => {
-        if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
-          st.valueChangedEvent.addListener(markCurveDirty);
+      // Redraw on any change to either slot's CUT/RES/DRV/TYPE, and whenever
+      // the active slot switches (so the curve follows the 1/2 tabs).
+      [filterStType, stCut, stRes, stDrv].forEach(proxy => {
+        (proxy.both || []).forEach(st => {
+          if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
+            st.valueChangedEvent.addListener(markCurveDirty);
+        });
       });
+      slotChangeHooks.push(markCurveDirty);
       requestAnimationFrame(redrawCurve);
       markCurveDirty();   // initial paint
     })();

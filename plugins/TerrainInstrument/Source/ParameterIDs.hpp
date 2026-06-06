@@ -127,6 +127,10 @@ namespace ParameterIDs
     constexpr char SYN_FILTER2_RES[]   = "SYN_FILTER2_RES";    // RESERVED
     constexpr char SYN_FILTER2_DRV[]   = "SYN_FILTER2_DRV";    // RESERVED
     constexpr char SYN_FILTER2_ENV[]   = "SYN_FILTER2_ENV";    // RESERVED
+    // Per-filter wet/dry mix + routing between the two slots (independent filters).
+    constexpr char SYN_FILTER1_MIX[]    = "SYN_FILTER1_MIX";    // float 0..1 (1 = fully filtered)
+    constexpr char SYN_FILTER2_MIX[]    = "SYN_FILTER2_MIX";    // float 0..1
+    constexpr char SYN_FILTER_ROUTING[] = "SYN_FILTER_ROUTING"; // choice 0=SERIES, 1=PARALLEL
 
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)
