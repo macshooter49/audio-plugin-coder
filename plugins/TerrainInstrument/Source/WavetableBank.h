@@ -80,14 +80,14 @@ namespace tw
             tables_[(size_t) JunoStr]       .buildFromSpec (Wavetable::makeJunoStrSpec());
 
             // Digital (4): Phase 11l research-driven
-            // PPGWave: Gaussian peak h=1.5→20 + 8-bit grit floor (spec-based, buildFromSpec)
+            // PPGWave: migrating formant scan + 8-bit grit (spec-based, band-limited)
             tables_[(size_t) PPGWave]       .buildFromSpec (Wavetable::makePPGWaveSpec());
-            // DX7EP: FM β=0.5→4.5 with 3.5× tine modulator (legacy — non-integer partials)
-            tables_[(size_t) DX7EP]          = Wavetable::makeDX7EP();
-            // D50Bell: Acoustic bell decay (fundamental fast, upper partials sustain) (legacy)
-            tables_[(size_t) D50Bell]        = Wavetable::makeD50Bell();
-            // M1Piano: Inharmonicity B=0.00015, velocity model frame 0=soft→15=hard strike (legacy)
-            tables_[(size_t) M1Piano]        = Wavetable::makeM1Piano();
+            // DX7EP: REAL Algorithm-5 FM (Bessel sidebands, index decay) — spec-based, band-limited
+            tables_[(size_t) DX7EP]         .buildFromSpec (Wavetable::makeDX7EPSpec());
+            // D50Bell: tuned-bell inharmonic partials, strike->sustain decay — spec-based, band-limited
+            tables_[(size_t) D50Bell]       .buildFromSpec (Wavetable::makeD50BellSpec());
+            // M1Piano: stiff-string stretched partials (B=0.0005) — spec-based, band-limited
+            tables_[(size_t) M1Piano]       .buildFromSpec (Wavetable::makeM1PianoSpec());
 
             // Vocal (3): Phase 11l research-driven — Lorentzian formants (Peterson & Barney 1952)
             // ChoirAtoO: /a/→/o/ sweep, singer's formant ring, Lorentzian resonance (spec-based)

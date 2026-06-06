@@ -33,6 +33,19 @@ namespace tw
         std::array<float, kMaxHarmonics> amplitudes {};  // value-initialized to 0
         std::array<float, kMaxHarmonics> phases     {};  // value-initialized to 0
         int numHarmonics = 0;
+
+        // ── Batch 2 — arbitrary (inharmonic) partials ──────────────────────
+        // If numPartials > 0, buildFromSpec uses THIS list for the frame instead
+        // of the integer-harmonic arrays. Each partial sits at an arbitrary ratio
+        // of the fundamental (e.g. a bell tierce at 1.2, a stretched piano partial
+        // at 8.128). Band-limited per mip by ratio (treated as a fractional harmonic
+        // number). NOTE: the frame is looped at the played pitch, so non-integer
+        // partials become pseudo-harmonic on playback — this is the band-limited
+        // wavetable rendition of an inharmonic tone, not a true tracking partial.
+        struct Partial { float ratio = 0.0f; float amp = 0.0f; float phase = 0.0f; };
+        static constexpr int kMaxPartials = 96;
+        std::array<Partial, kMaxPartials> partials {};
+        int numPartials = 0;
     };
 
     /** A full wavetable spec: 16 frames of frequency-domain harmonic content.
@@ -87,17 +100,63 @@ namespace tw
                 for (int frame = 0; frame < numFrames_; ++frame)
                 {
                     const FrameSpec& fs = spec.frames[(size_t) frame];
-                    const int hCount = std::min (hMax, fs.numHarmonics);
+
+                    // Resolve this frame to per-harmonic (amp, phase) capped at hMax.
+                    // Integer-harmonic frames pass through; inharmonic-partial frames are
+                    // snapped onto the harmonic grid with an energy-preserving linear split
+                    // (phasor sum), because a single-cycle frame looped at the played pitch
+                    // is harmonic by construction — snapping keeps it seam-clean + band-limited
+                    // while preserving the spectral SHAPE (the bell/piano rendition).
+                    std::array<double, (size_t) (kMipMaxHarmonics[0] + 1)> rAmp {};
+                    std::array<double, (size_t) (kMipMaxHarmonics[0] + 1)> rPh  {};
+                    if (fs.numPartials > 0)
+                    {
+                        std::array<double, (size_t) (kMipMaxHarmonics[0] + 1)> px {}, py {};
+                        for (int p = 0; p < fs.numPartials; ++p)
+                        {
+                            const FrameSpec::Partial& pt = fs.partials[(size_t) p];
+                            if (pt.amp == 0.0f || pt.ratio <= 0.0f || (double) pt.ratio > (double) hMax)
+                                continue;
+                            const double R    = (double) pt.ratio;
+                            const int    h0   = (int) std::floor (R);
+                            const int    h1   = h0 + 1;
+                            const double frac = R - (double) h0;
+                            const double c = std::cos ((double) pt.phase), s = std::sin ((double) pt.phase);
+                            auto dep = [&] (int h, double w)
+                            {
+                                if (h >= 1 && h <= hMax)
+                                { px[(size_t) h] += (double) pt.amp * w * c;
+                                  py[(size_t) h] += (double) pt.amp * w * s; }
+                            };
+                            dep (h0, 1.0 - frac);
+                            dep (h1, frac);
+                        }
+                        for (int h = 1; h <= hMax; ++h)
+                        {
+                            const double a = std::sqrt (px[(size_t) h] * px[(size_t) h] + py[(size_t) h] * py[(size_t) h]);
+                            rAmp[(size_t) h] = a;
+                            rPh[(size_t) h]  = (a > 0.0) ? std::atan2 (py[(size_t) h], px[(size_t) h]) : 0.0;
+                        }
+                    }
+                    else
+                    {
+                        const int hCount = std::min (hMax, fs.numHarmonics);
+                        for (int h = 1; h <= hCount; ++h)
+                        {
+                            rAmp[(size_t) h] = (double) fs.amplitudes[(size_t) (h - 1)];
+                            rPh[(size_t) h]  = (double) fs.phases[(size_t) (h - 1)];
+                        }
+                    }
+
                     for (int sample = 0; sample < frameSize_; ++sample)
                     {
                         const double normPhase = (double) sample / (double) frameSize_;
                         double v = 0.0;
-                        for (int h = 1; h <= hCount; ++h)
+                        for (int h = 1; h <= hMax; ++h)
                         {
-                            const double amp = (double) fs.amplitudes[(size_t) (h - 1)];
+                            const double amp = rAmp[(size_t) h];
                             if (amp == 0.0) continue;
-                            const double ph  = (double) fs.phases[(size_t) (h - 1)];
-                            v += amp * std::sin (pi2 * (double) h * normPhase + ph);
+                            v += amp * std::sin (pi2 * (double) h * normPhase + rPh[(size_t) h]);
                         }
                         mipData_[(size_t) ((level * numFrames_ + frame) * frameSize_ + sample)] = (float) v;
                     }
@@ -979,143 +1038,188 @@ namespace tw
         // DX7EP / D50Bell / M1Piano remain legacy time-domain (non-integer partials).
         // See docs/research/2026-06-03-digital-experimental-wavetable-research.md
 
-        /** PPG Wave 2.2/2.3 — Phase 11l research-driven, spec-based.
-         *  Gaussian harmonic peak migrates h=1.5 → h=20 across frames (the "icy" sweep).
-         *  At high frames: quantization grit added at h=50-80 (8-bit DAC noise floor).
-         *  Frame 0: warm sine-like (peak at h=1.5). Frame 15: icy digital brilliance.
-         *  Completely different from analog saws: no continuous 1/h ladder. */
+        /** PPG Wave 2.2/2.3 — Batch 2, research-driven (spec-based, harmonic).
+         *  A wavetable SCAN: a resonant "formant" harmonic peak migrates up the
+         *  spectrum (h≈2 → h≈26) over a 1/h base, capped at 64 harmonics (the PPG's
+         *  128-sample half-cycle limit), plus a deterministic high-harmonic GRIT
+         *  floor that models the 8-bit DAC quantization buzz — the icy/glassy edge.
+         *  Frame 0 = warm low-formant; frame 15 = bright digital brilliance. */
         static WavetableSpec makePPGWaveSpec()
         {
             WavetableSpec spec;
-            constexpr int kGritStart = 50;
-            constexpr int kGritEnd   = 80;
+            constexpr int kMaxH = 64;          // PPG 128-sample cycle → ~64 harmonics
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
                 const float t      = (float) f / 15.0f;
-                const float center = 1.5f + 18.5f * t;    // h peak: 1.5 → 20.0
-                const float sigma  = 1.0f + 2.5f  * t;    // bandwidth: 1.0 → 3.5
-                const float grit   = t * 0.04f;            // 8-bit noise floor: 0 → 0.04
+                const float center = 2.0f + 24.0f * t;     // formant peak migrates 2 → 26
+                const float sigma  = 1.4f + 3.0f  * t;     // bump widens with the scan
+                const float grit   = 0.006f + 0.018f * t;   // 8-bit quantization floor
 
                 FrameSpec& fs = spec.frames[(size_t) f];
-                fs.numHarmonics = kGritEnd;
+                fs.numHarmonics = kMaxH;
 
-                for (int h = 1; h <= kGritEnd; ++h)
+                // deterministic per-frame grit (xorshift) — stable across builds
+                unsigned int rng = 0x50504721u + (unsigned) f;
+                auto rnd = [&]() -> float {
+                    rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
+                    return (float) rng / (float) 0xFFFFFFFFu;
+                };
+
+                for (int h = 1; h <= kMaxH; ++h)
                 {
-                    const float d  = (float) h - center;
-                    float amp = std::exp (-(d * d) / (2.0f * sigma * sigma));
-                    // Add grit at high harmonics (simulates 8-bit DAC quantization floor)
-                    if (h >= kGritStart)
-                        amp += grit;
+                    const float d    = (float) h - center;
+                    const float bump = std::exp (-(d * d) / (2.0f * sigma * sigma));   // the formant peak
+                    const float floorAmt = 0.10f / (float) h;                          // faint body under it
+                    float amp = bump + floorAmt;
+                    if (h >= 20) amp += grit * rnd();                                  // 8-bit DAC hash on top
                     fs.amplitudes[(size_t)(h - 1)] = amp;
-                    fs.phases[(size_t)(h - 1)]     = 0.0f;
+                    // alternating phase adds the asymmetric "digital" waveshape look
+                    fs.phases[(size_t)(h - 1)] = (h % 2 == 0) ? (float) (3.14159265358979323846 * 0.5) : 0.0f;
                 }
             }
             return spec;
         }
 
-        /** DX7 EP (Yamaha FM electric piano) — Phase 11l research-driven.
-         *  FM carrier at h=1 modulated by h=3.5 (tine ratio) + h=7 secondary modulator.
-         *  Modulation index sweep β=0.5 (warm sustain) → β=4.5 (bright tine attack).
-         *  Non-integer partials (3.5×, 7×) require legacy time-domain constructor. */
-        static Wavetable makeDX7EP()
+        /** Bessel function J_n(x) of the first kind — portable ascending-series
+         *  implementation (no <cmath> special-function dependency). Accurate for the
+         *  range used by FM synthesis here (|x| <= ~4, n <= ~20). */
+        static double besselJ (int n, double x) noexcept
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
+            if (n < 0) return ((-n) % 2 == 0 ? 1.0 : -1.0) * besselJ (-n, x);  // J_-n = (-1)^n J_n
+            const double half = 0.5 * x;
+            double term = 1.0;
+            for (int i = 1; i <= n; ++i) term *= half / (double) i;            // (x/2)^n / n!
+            double sum = term;
+            const double h2 = half * half;
+            for (int m = 1; m <= 40; ++m)
             {
-                const double t          = (double) f / 15.0;
-                const double beta       = 0.5 + 4.0 * t;      // FM index: 0.5 → 4.5
-                const double modRatio   = 3.5;                  // EP tine: inharmonic partial
-                const double beta2      = t * 1.5;             // secondary modulator for h7
-                const double mod2Ratio  = 7.0;
-
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = twoPi * (double) i / (double) N;
-                    // Primary FM voice: carrier at h=1 modulated by h=3.5
-                    const double mod1    = beta  * std::sin (modRatio  * phase);
-                    const double mod2    = beta2 * std::sin (mod2Ratio * phase);
-                    const double carrier = std::sin (phase + mod1 + mod2);
-                    // Add piano body harmonics (additive coloring)
-                    const double body    = 0.25 * std::sin (2.0 * phase)
-                                         + 0.12 * std::sin (3.0 * phase);
-                    wt.sampleRef (f, i)  = (float)((carrier + body) * 0.45);
-                }
+                term *= -h2 / ((double) m * (double) (m + n));
+                sum  += term;
+                if (std::abs (term) < 1.0e-13) break;
             }
-            return wt;
+            return sum;
         }
 
-        /** D-50 Bell (Roland LA synthesis) — Phase 11l research-driven.
-         *  5 inharmonic partials: ratios 1.0, 2.756, 5.404, 8.933, 13.02 (tubular bell physics).
-         *  CORRECT bell decay: fundamental decays fastest, upper partials ring longest.
-         *  Frame 0: all partials equal (strike — dense). Frame 15: shimmer (h×5.4+ dominant).
-         *  Non-integer ratios require legacy time-domain constructor. */
-        static Wavetable makeD50Bell()
+        /** DX7 E.PIANO 1 — Batch 2, the classic Rhodes-y FM electric piano.
+         *  REAL Algorithm 5: three parallel 2-op stacks SUMMED. Carriers all at 1.0;
+         *  the signature "tine" is the OP1/OP2 stack with the modulator at the 14:1
+         *  ratio; the other two stacks are 1:1 "body". Spectrum from Bessel sidebands
+         *  J_k(I) at c±k·m (all integer ratios → harmonic → perfect wavetable fit).
+         *  Morph = modulation index decay: frame 0 bright tine attack, frame 15 mellow
+         *  body. THIS is why it finally sounds like a DX7 (real FM math, not a guess). */
+        static WavetableSpec makeDX7EPSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            // Tubular bell inharmonic partial ratios (from musical acoustics, Chladni modes)
-            static const double r[] = { 1.0, 2.756, 5.404, 8.933, 13.02 };
-            for (int f = 0; f < 16; ++f)
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                const double t = (double) f / 15.0;
-                // Acoustic bell decay model: fundamental fastest, upper partials slowest
-                const double amp[5] = {
-                    1.00 * (1.0 - 0.95 * t),          // h×1.0   : decays to near zero
-                    0.80 * (1.0 - 0.65 * t),          // h×2.756 : decays to 28%
-                    0.60 * (1.0 - 0.15 * t),          // h×5.404 : barely decays
-                    0.40 * (1.0 + 0.50 * t),          // h×8.933 : grows (sustained shimmer)
-                    0.25 * (1.0 + 1.00 * t),          // h×13.02 : grows (long ring)
+                const float t = (float) f / 15.0f;
+                FrameSpec& fs = spec.frames[(size_t) f];
+
+                // Modulation indices decay bright -> mellow across the morph.
+                const double iTine  = 2.5 * std::pow (1.0 - (double) t, 1.5);   // 2.5 -> 0
+                const double iBodyA = 0.30 + 1.20 * (1.0 - (double) t);          // 1.50 -> 0.30
+                const double iBodyB = 0.30 + 0.90 * (1.0 - (double) t);          // 1.20 -> 0.30
+
+                std::array<double, FrameSpec::kMaxHarmonics + 1> H {};           // harmonic accum (1-indexed)
+
+                // One 2-op FM stack: carrier ratio c, modulator ratio m, index I, gain g.
+                auto addStack = [&] (int c, int m, double I, double g)
+                {
+                    const int Kmax = 14;
+                    for (int k = -Kmax; k <= Kmax; ++k)
+                    {
+                        double amp  = g * besselJ (k, I);
+                        if (amp == 0.0) continue;
+                        int    freq = c + k * m;
+                        if (freq == 0) continue;                 // DC — skip
+                        if (freq < 0) { freq = -freq; amp = -amp; }   // fold (sin(-x) = -sin x)
+                        if (freq >= 1 && freq <= FrameSpec::kMaxHarmonics)
+                            H[(size_t) freq] += amp;
+                    }
                 };
-                for (int i = 0; i < N; ++i)
+
+                addStack (1, 14, iTine,  0.85);   // OP1/OP2 — the tine (high-ratio modulator)
+                addStack (1, 1,  iBodyA, 1.00);   // OP3/OP4 — body
+                addStack (1, 1,  iBodyB, 0.90);   // OP5/OP6 — body
+
+                int populated = 0;
+                for (int h = 1; h <= FrameSpec::kMaxHarmonics; ++h)
                 {
-                    const double phase = twoPi * (double) i / (double) N;
-                    double s = 0.0;
-                    for (int p = 0; p < 5; ++p)
-                        s += amp[p] * std::sin (r[p] * phase);
-                    wt.sampleRef (f, i) = (float)(s * 0.35);
+                    const float a = (float) H[(size_t) h];
+                    fs.amplitudes[(size_t)(h - 1)] = a;
+                    fs.phases[(size_t)(h - 1)]     = 0.0f;
+                    if (std::abs (a) > 1.0e-5f) populated = h;
                 }
+                fs.numHarmonics = populated;
             }
-            return wt;
+            return spec;
         }
 
-        /** Korg M1 Piano — Phase 11l research-driven.
-         *  Piano string inharmonicity B=0.00015 (middle C range) — harmonics at h*sqrt(1+B*h²).
-         *  Velocity model: frame 0=soft (fundamental only), frame 15=hard strike (all harmonics).
-         *  h=3-4 "presence bump" is the signature M1 mid-honk.
-         *  Non-integer inharmonic ratios require legacy time-domain constructor. */
-        static Wavetable makeM1Piano()
+        /** D-50 Bell — Batch 2, inharmonic partial path (foundation showcase).
+         *  Western tuned-bell partial ratios relative to the prime: hum 0.5, prime 1.0,
+         *  tierce 1.2, quint 1.5, 1.7, nominal 2.0, 2.6, superquint 3.0, 3.3, octave
+         *  nominal 4.0, + upper inharmonics. Nominal/superquint/octave-nominal (2/3/4)
+         *  kept strong so the strike pitch reads correctly. Morph: frame 0 = full strike
+         *  (metallic clang), frame 15 = sustain (hum/prime/tierce/nominal ring on);
+         *  higher partials decay faster (∝ ratio^1.2).
+         *  NOTE: single-cycle loop → this is the band-limited wavetable RENDITION of a
+         *  bell (pseudo-harmonic on playback), not a true tracking-inharmonic bell. */
+        static WavetableSpec makeD50BellSpec()
         {
-            Wavetable wt (16);
-            const double twoPi = 2.0 * 3.14159265358979323846;
-            const int N = wt.frameSize_;
-            for (int f = 0; f < 16; ++f)
+            struct BP { float ratio, amp; };
+            static const BP bells[] = {
+                {0.50f, 0.45f}, {1.00f, 1.00f}, {1.20f, 0.60f}, {1.50f, 0.40f},
+                {1.70f, 0.28f}, {2.00f, 0.70f}, {2.60f, 0.33f}, {3.00f, 0.50f},
+                {3.30f, 0.22f}, {4.00f, 0.42f}, {5.00f, 0.20f}, {5.43f, 0.16f},
+                {6.40f, 0.12f}, {8.10f, 0.09f},
+            };
+            const int nP = (int) (sizeof (bells) / sizeof (bells[0]));
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
             {
-                const double t = (double) f / 15.0;
-                // Piano inharmonicity constant (middle C range)
-                constexpr double B = 0.00015;
-                for (int i = 0; i < N; ++i)
+                const float t = (float) f / 15.0f;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numPartials = nP;
+                for (int p = 0; p < nP; ++p)
                 {
-                    const double phase = twoPi * (double) i / (double) N;
-                    // Apply inharmonicity: harmonic h sits at h * sqrt(1 + B*h*h)
-                    auto inharm = [&](int h) -> double {
-                        return (double) h * std::sqrt (1.0 + B * (double) h * (double) h);
-                    };
-                    double s =
-                        1.00                                   * std::sin (inharm(1) * phase)
-                      + 0.55 * (0.6 + 0.4 * t)                * std::sin (inharm(2) * phase)
-                      + 0.38 * (0.5 + 0.5 * t)                * std::sin (inharm(3) * phase)
-                      + 0.28 * std::sqrt (t)                   * std::sin (inharm(4) * phase)
-                      + 0.20 * t                               * std::sin (inharm(5) * phase)
-                      + 0.14 * std::pow (t, 1.5)               * std::sin (inharm(6) * phase)
-                      + 0.10 * t * t                           * std::sin (inharm(7) * phase)
-                      + 0.07 * t * t                           * std::sin (inharm(8) * phase);
-                    wt.sampleRef (f, i) = (float)(s * 0.40);
+                    // higher partials decay faster across the morph
+                    const float decay = std::exp (-t * 2.2f * std::pow (bells[(size_t) p].ratio, 1.2f));
+                    fs.partials[(size_t) p] = { bells[(size_t) p].ratio,
+                                                bells[(size_t) p].amp * decay,
+                                                0.0f };
                 }
             }
-            return wt;
+            return spec;
+        }
+
+        /** Korg M1 "Piano 16" — Batch 2, inharmonic partial path.
+         *  Stiff-string inharmonicity: partial n sits at n·sqrt(1 + B·n²), B = 0.0005
+         *  (mid register) — the slight upward stretch that gives the M1 its bright,
+         *  faintly metallic 90s-house shimmer. Strong fundamental, ~ -9 dB/oct rolloff;
+         *  higher partials decay faster across the morph (frame 0 = bright strike,
+         *  frame 15 = mellow body). The small stretch is near-integer, so it renders
+         *  cleanly as a wavetable while keeping the characteristic shimmer. */
+        static WavetableSpec makeM1PianoSpec()
+        {
+            WavetableSpec spec;
+            constexpr double B = 0.0005;
+            constexpr int    nP = 28;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const float t = (float) f / 15.0f;
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numPartials = nP;
+                const float rollPow = 1.0f + 1.3f * t;     // brighter (1.0) -> mellow (2.3)
+                for (int n = 1; n <= nP; ++n)
+                {
+                    const float ratio = (float) ((double) n * std::sqrt (1.0 + B * (double) n * (double) n));
+                    float amp = 1.0f / std::pow ((float) n, rollPow);
+                    // extra fast decay on the top octave across the morph
+                    if (n > 8) amp *= std::exp (-t * 0.12f * (float) (n - 8));
+                    fs.partials[(size_t)(n - 1)] = { ratio, amp, 0.0f };
+                }
+            }
+            return spec;
         }
 
         // ── Vocal category (Phase 11l research-driven) ───────────────────────

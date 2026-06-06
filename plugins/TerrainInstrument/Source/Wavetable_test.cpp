@@ -94,18 +94,10 @@ public:
                 const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
                 expect (rms > 0.01f, juce::String (label) + " RMS=" + juce::String (rms));
             };
-            const auto testLegacyRms = [this](const tw::Wavetable& wt, const char* label) {
-                expectEquals (wt.getNumFrames(), 16, juce::String (label) + " not 16 frames");
-                float sumSq = 0.0f;
-                for (int i = 0; i < wt.getFrameSize(); ++i)
-                    sumSq += std::pow (wt.lookup (0.5f, (float) i / (float) wt.getFrameSize()), 2.0f);
-                const float rms = std::sqrt (sumSq / (float) wt.getFrameSize());
-                expect (rms > 0.01f, juce::String (label) + " RMS=" + juce::String (rms));
-            };
             testSpecRms2  (tw::Wavetable::makePPGWaveSpec(),       "PPGWaveSpec");
-            testLegacyRms (tw::Wavetable::makeDX7EP(),             "DX7EP (legacy)");
-            testLegacyRms (tw::Wavetable::makeD50Bell(),           "D50Bell (legacy)");
-            testLegacyRms (tw::Wavetable::makeM1Piano(),           "M1Piano (legacy)");
+            testSpecRms2  (tw::Wavetable::makeDX7EPSpec(),        "DX7EPSpec");
+            testSpecRms2  (tw::Wavetable::makeD50BellSpec(),      "D50BellSpec");
+            testSpecRms2  (tw::Wavetable::makeM1PianoSpec(),      "M1PianoSpec");
             testSpecRms2  (tw::Wavetable::makeChoirAtoOSpec(),     "ChoirAtoOSpec");
             testSpecRms2  (tw::Wavetable::makeWhisperSpec(),       "WhisperSpec");
             testSpecRms2  (tw::Wavetable::makeVowelMorphSpec(),    "VowelMorphSpec");
@@ -157,15 +149,20 @@ public:
             }
         }
 
-        beginTest ("lookup(int, framePos, phase) for legacy single-tier table clamps mipLevel to 0");
+        beginTest ("lookup(int, framePos, phase) clamps an out-of-range mipLevel");
         {
-            // makeDX7EP() is one of the 3 remaining legacy tables (non-integer FM partials
-            // cannot be represented in integer-harmonic FrameSpec) → numMipLevels_ = 1.
-            auto wt = tw::Wavetable::makeDX7EP();
-            expectEquals (wt.getNumMipLevels(), 1, "legacy table should be single-tier");
-            const float v_lvl0 = wt.lookup (0, 0.5f, 0.25f);
-            const float v_lvl7 = wt.lookup (7, 0.5f, 0.25f);  // out-of-range, must clamp
-            expectWithinAbsoluteError (v_lvl7, v_lvl0, 1.0e-6f);
+            // Batch 2: DX7EP/D50Bell/M1Piano are now spec-based + band-limited (8 mips) —
+            // no legacy single-tier tables remain. Verify lookup() still clamps an
+            // out-of-range mipLevel into [0, numMipLevels-1].
+            tw::Wavetable wt;
+            wt.buildFromSpec (tw::Wavetable::makeDX7EPSpec());
+            expectEquals (wt.getNumMipLevels(), 8, "spec table should be 8-tier");
+            const float vHi  = wt.lookup (99, 0.5f, 0.25f);                       // clamps to top mip
+            const float vTop = wt.lookup (wt.getNumMipLevels() - 1, 0.5f, 0.25f);
+            expectWithinAbsoluteError (vHi, vTop, 1.0e-6f);
+            const float vLo   = wt.lookup (-5, 0.5f, 0.25f);                      // clamps to mip 0
+            const float vZero = wt.lookup (0, 0.5f, 0.25f);
+            expectWithinAbsoluteError (vLo, vZero, 1.0e-6f);
         }
 
         beginTest ("spec-built sine wavetable: lookup at phase=0.25 ~= 1.0 at all mip levels");
