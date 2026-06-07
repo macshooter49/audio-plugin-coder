@@ -1248,13 +1248,14 @@ namespace tw
             constexpr float F0 = 220.0f;  // canonical fundamental for spec generation
             constexpr int   numH = 64;    // 64 harmonics sufficient for this range
 
-            // /a/ parameters
-            const float a_F1=730, a_F2=1090, a_F3=2440, a_F4=3300;
-            const float a_B1=80,  a_B2=90,   a_B3=120,  a_B4=200;
-
-            // /o/ parameters
-            const float o_F1=570, o_F2=840,  o_F3=2410, o_F4=3300;
-            const float o_B1=60,  o_B2=80,   o_B3=100,  o_B4=200;
+            // Hillenbrand et al. (1995) male formants. Bandwidths widened ~1.5x for the
+            // lush massed-choir (multi-voice) blur — a soloist would use tighter BWs.
+            // /a/ ("ah")
+            const float a_F1=768, a_F2=1333, a_F3=2522, a_F4=3500;
+            const float a_B1=120, a_B2=140,  a_B3=180,  a_B4=260;
+            // /o/ ("oh")
+            const float o_F1=497, o_F2=910,  o_F3=2459, o_F4=3400;
+            const float o_B1=100, o_B2=120,  o_B3=160,  o_B4=260;
 
             WavetableSpec spec;
             for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
@@ -1280,7 +1281,7 @@ namespace tw
                             + 0.8f  * lorentzian (freq, F2, BW2)
                             + 0.5f  * lorentzian (freq, F3, BW3)
                             + 0.25f * lorentzian (freq, F4, BW4)
-                            + 0.3f  * lorentzian (freq, 3100.0f, 200.0f);  // singer's formant ring
+                            + 0.18f * lorentzian (freq, 2800.0f, 350.0f); // gentle massed-choir ring (Sundberg)
                     w *= std::pow ((float) h, -0.7f);  // spectral slope
                     fs.amplitudes[(size_t)(h - 1)] = w;
                     fs.phases[(size_t)(h - 1)] = 0.0f;  // cosine phases for stable morph
@@ -1302,8 +1303,10 @@ namespace tw
             constexpr int   numH = 96;  // more harmonics = more noise bandwidth
 
             struct WhisperFrame { float F1, F2, F3, BW1, BW2, BW3; };
-            const WhisperFrame start = { 300.0f,  870.0f, 2240.0f, 80.0f,  100.0f, 140.0f }; // /u/ dark
-            const WhisperFrame end   = { 270.0f, 2290.0f, 3010.0f, 60.0f,   80.0f, 100.0f }; // /i/ bright
+            // Whispered formants shift slightly UP vs voiced and have much WIDER
+            // bandwidths (turbulent source) — research: whispered F1/F2 raised, BW ~2-3x.
+            const WhisperFrame start = { 350.0f,  950.0f, 2350.0f, 200.0f, 260.0f, 340.0f }; // /u/-ish dark
+            const WhisperFrame end   = { 300.0f, 2400.0f, 3100.0f, 150.0f, 210.0f, 270.0f }; // /i/-ish bright
 
             WavetableSpec spec;
             std::uint32_t rng = 0xDEADBEEFu;  // fixed seed for deterministic noise shape
@@ -1329,10 +1332,10 @@ namespace tw
                     const float freq = (float) h * F0;
                     if (freq > 10000.0f) break;
 
-                    float w = lorentzian (freq, F1, BW1)
-                            + 0.8f * lorentzian (freq, F2, BW2)
-                            + 0.6f * lorentzian (freq, F3, BW3);
-                    w *= std::pow ((float) h, -0.3f);  // shallow slope = bright noisy sound
+                    float w = 0.45f * lorentzian (freq, F1, BW1)   // F1 de-emphasized (airy, not chesty)
+                            + 1.00f * lorentzian (freq, F2, BW2)   // upper formants carry the whisper
+                            + 0.85f * lorentzian (freq, F3, BW3);
+                    w *= std::pow ((float) h, -0.15f);  // very shallow slope = airy broadband whisper
                     fs.amplitudes[(size_t)(h - 1)] = w;
                     fs.phases[(size_t)(h - 1)] = nextPhase();  // KEY: random phases = incoherent = noise-like
                 }
@@ -1347,19 +1350,19 @@ namespace tw
          *  Singer's formant ring omitted (VowelMorph is broader/less choral than ChoirAtoO). */
         static WavetableSpec makeVowelMorphSpec()
         {
-            // 5 formant triplets (male register, Peterson & Barney 1952)
+            // 5 cardinal vowels — Hillenbrand et al. (1995) male register.
             struct VowelParams { float F1, F2, F3, F4, BW1, BW2, BW3; };
             static const VowelParams vowels[5] = {
-                // /a/ "ah"    F1    F2    F3    F4    B1   B2   B3
-                {              730, 1090, 2440, 3300,  80,  90, 120 },
+                // /a/ "ah"   F1    F2    F3    F4    B1   B2   B3
+                {              768, 1333, 2522, 3500,  90, 110, 150 },
                 // /e/ "eh"
-                {              530, 1840, 2480, 3300,  60,  80, 100 },
+                {              580, 1799, 2605, 3500,  80, 100, 140 },
                 // /i/ "ee"
-                {              270, 2290, 3010, 3300,  50,  80, 100 },
+                {              342, 2322, 3000, 3657,  60,  90, 150 },
                 // /o/ "oh"
-                {              570,  840, 2410, 3300,  60,  80, 100 },
+                {              497,  910, 2459, 3400,  80, 100, 140 },
                 // /u/ "oo"
-                {              300,  870, 2240, 3300,  60,  80, 100 },
+                {              378,  997, 2343, 3400,  70,  90, 130 },
             };
 
             constexpr float F0 = 220.0f;
@@ -1374,10 +1377,13 @@ namespace tw
                 const int   v1   = juce::jlimit (0, 4, v0 + 1);
                 const float vFrac = vIdx - (float) v0;
 
-                const float F1  = vowels[v0].F1  + vFrac * (vowels[v1].F1  - vowels[v0].F1);
-                const float F2  = vowels[v0].F2  + vFrac * (vowels[v1].F2  - vowels[v0].F2);
-                const float F3  = vowels[v0].F3  + vFrac * (vowels[v1].F3  - vowels[v0].F3);
-                const float F4  = vowels[v0].F4  + vFrac * (vowels[v1].F4  - vowels[v0].F4);
+                // Interpolate formant CENTERS in log space (perceptually even / Bark-like);
+                // bandwidths linearly.
+                auto logLerp = [] (float a, float b, float u) { return a * std::pow (b / a, u); };
+                const float F1  = logLerp (vowels[v0].F1, vowels[v1].F1, vFrac);
+                const float F2  = logLerp (vowels[v0].F2, vowels[v1].F2, vFrac);
+                const float F3  = logLerp (vowels[v0].F3, vowels[v1].F3, vFrac);
+                const float F4  = logLerp (vowels[v0].F4, vowels[v1].F4, vFrac);
                 const float BW1 = vowels[v0].BW1 + vFrac * (vowels[v1].BW1 - vowels[v0].BW1);
                 const float BW2 = vowels[v0].BW2 + vFrac * (vowels[v1].BW2 - vowels[v0].BW2);
                 const float BW3 = vowels[v0].BW3 + vFrac * (vowels[v1].BW3 - vowels[v0].BW3);
@@ -1401,155 +1407,104 @@ namespace tw
             return spec;
         }
 
-        // ── Metallic category (Phase 11l research-driven) ────────────────────
-        // Integer approximations for inharmonic partials (FrameSpec limitation).
-        // BowedMetal uses vibraphone ratios 1:4:10 — ALL map exactly to integers (perfect).
-        // GlassHarmonics + Railroad use Euler-Bernoulli free-free beam ratios approximated.
-        // Note: h=3 for 2.756× has 537-cent error — pending Phase 10c PartialSpec fix.
-        // See docs/research/2026-06-03-vowel-formant-metallic-research.md for sources.
+        // ── Metallic category (Batch 3) — TRUE inharmonic partials ───────────
+        // The 537-cent error is FIXED. These place partials at their real
+        // Euler-Bernoulli bar / thin-shell ring-mode ratios via the arbitrary-ratio
+        // partial path (energy-preserving snap onto the harmonic grid), instead of
+        // forcing 2.758 onto integer harmonic 3. Sources: Fletcher & Rossing "Physics
+        // of Musical Instruments" (bar/shell modes), Apfel/Rossing (glass), CCRMA.
 
-        /** BowedMetal (bowed vibraphone bar) — Phase 11l research-driven, spec-based.
-         *  Vibraphone: tuned partial ratios h=1, h=4, h=10 (ALL map exactly to integers).
-         *  Bowed character: h=10 fades first, h=4 next, h=1 (fundamental) sustains.
-         *  Bow-noise harmonics h=2,3,5,6 add rosin texture during active bowing.
-         *  Sweep: actively bowed (frame 0) → bow lifted / decay tail (frame 15). */
+        /** BowedMetal — tuned vibraphone bar, bowed (pitched, mellow, glassy).
+         *  Tuned bending modes 1 : 4 : 10 (a vibe bar is undercut to hit these), plus a
+         *  faint untuned free-free edge at 2.758 and a high shimmer mode. Bowing SUSTAINS
+         *  the tone: morph = bow attack (all modes + rosin texture) → sustained ring
+         *  (fundamental + tuned 4th dominate, upper/edge modes gone). */
         static WavetableSpec makeBowedMetalSpec()
         {
-            // Vibraphone: tuned partial ratios h=1, h=4, h=10
-            // h=1:4:10 are exact integers — zero approximation error (vibraphone bars
-            // are machined to achieve these ratios deliberately).
-            // Bowed character: emphasizes upper harmonics (glassy tone)
-            // Decay across frames: h=10 fades first, h=4 fades next, h=1 stays
             WavetableSpec spec;
             for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
-
-                // Amplitude envelopes for each partial across frame sweep
-                const float amp1  = 1.0f;                          // fundamental always present
-                const float amp4  = 0.7f * (1.0f - 0.6f * t);    // 4th harmonic fades
-                const float amp10 = 0.5f * (1.0f - 0.9f * t);    // 10th harmonic fades fastest
-
-                // Bow-noise harmonics (subtle, add "rosin" texture)
-                const float bowNoise = 0.15f * (1.0f - t);  // only during active bowing
-
+                const float t = (float) frame / (float) (WavetableSpec::kNumFrames - 1);
                 FrameSpec& fs = spec.frames[(size_t) frame];
-                fs.numHarmonics = 12;
-
-                // Main bowed partials (vibraphone 1:4:10 ratios — exact integer harmonics)
-                fs.amplitudes[1 - 1]  = amp1;
-                fs.amplitudes[4 - 1]  = amp4;
-                fs.amplitudes[10 - 1] = amp10;
-
-                // Bow-noise harmonics (subtle, add "rosin" texture)
-                fs.amplitudes[2 - 1] = bowNoise * 0.4f;
-                fs.amplitudes[3 - 1] = bowNoise * 0.3f;
-                fs.amplitudes[5 - 1] = bowNoise * 0.2f;
-                fs.amplitudes[6 - 1] = bowNoise * 0.1f;
-
-                // Zero phases for main partials — keep pitch-coherent
-                // Bow noise allowed to be zero-phase too; variation is in amplitude
-                fs.phases[1 - 1]  = 0.0f;
-                fs.phases[4 - 1]  = 0.0f;
-                fs.phases[10 - 1] = 0.0f;
+                const FrameSpec::Partial ps[] = {
+                    {  1.000f, 1.00f,                         0.0f },   // fundamental — sustains
+                    {  2.758f, 0.16f * (1.0f - t),           0.0f },   // free-free metal edge (attack)
+                    {  4.000f, 0.55f * (1.0f - 0.45f * t),   0.0f },   // tuned 2nd mode — strong, mellow
+                    {  6.800f, 0.12f * (1.0f - t),           0.0f },   // bow texture (inharmonic)
+                    { 10.000f, 0.34f * (1.0f - 0.85f * t),   0.0f },   // tuned 3rd mode — fades
+                    { 20.000f, 0.10f * (1.0f - t),           0.0f },   // glassy shimmer — fades first
+                };
+                const int n = (int) (sizeof (ps) / sizeof (ps[0]));
+                fs.numPartials = n;
+                for (int p = 0; p < n; ++p) fs.partials[(size_t) p] = ps[p];
             }
             return spec;
         }
 
-        /** GlassHarmonics (Franklin glass harmonica) — Phase 11l research-driven, spec-based.
-         *  Real ratios: 1.000, 2.756, 5.404, 8.933 (free-free bowl modes).
-         *  Integer approx: h=1, h=3 (−537¢ error), h=5 (−140¢), h=9 (+117¢).
-         *  Near-sine at frame 0 (friction barely activates higher modes).
-         *  Shimmer grows with WT POS (more bow pressure → more modes).
-         *  NOTE: h=3 for 2.756× is a 537-cent error. Authentic fix pending Phase 10c PartialSpec. */
+        /** GlassHarmonics — wine glass / glass armonica (the 537-fix showcase).
+         *  STRUCK (frame 0): true inharmonic shell ring-modes 1 : 2.40 : 4.30 : 6.50 : 9.0
+         *  (measured wine-glass (2,0):(3,0) ≈ 1 : 2.4 — Apfel/Rossing) — bell-like.
+         *  RUBBED (frame 15): collapses toward a near-pure 1 : 2 : 3 : 4 with steep falloff
+         *  (rubbing excites mainly the (2,0) mode + stick-slip harmonics) — pure, sustained.
+         *  Each partial MIGRATES from its inharmonic struck ratio to its harmonic rubbed
+         *  ratio across the morph — turning WT POS literally rubs the glass. */
         static WavetableSpec makeGlassHarmonicsSpec()
         {
-            // Glass harmonica: near-harmonic but slightly inharmonic
-            // Dominant mode: (2,0) = fundamental, with harmonics approximated to integers
-            // Real ratios: 1.000, 2.756, 5.404, 8.933
-            // Integer approx: h=1, h=3, h=5, h=9
-            // KNOWN LIMITATION: h=3 for 2.756× is 537 cents off (sounds like perfect fifth).
-            // Waiting for Phase 10c PartialSpec to place energy at exact 2.756× ratio.
+            struct GP { float rS, rR, aS, aR; };   // struck/rubbed ratio + amp endpoints
+            static const GP g[] = {
+                { 1.00f, 1.00f, 1.00f, 1.00f },
+                { 2.40f, 2.00f, 0.50f, 0.16f },
+                { 4.30f, 3.00f, 0.25f, 0.06f },
+                { 6.50f, 4.00f, 0.12f, 0.02f },
+                { 9.00f, 5.00f, 0.06f, 0.01f },
+            };
+            const int n = (int) (sizeof (g) / sizeof (g[0]));
             WavetableSpec spec;
             for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
-
-                // Glass has very low damping — all partials sustain together once excited
-                // Sweep represents spectral richness (low WT POS = sine-like purity)
-                const float amp1 = 1.0f;
-                const float amp3 = 0.15f * t;      // 2.756× approx → h=3, grows with WT POS
-                const float amp5 = 0.08f * t;      // 5.404× approx → h=5
-                const float amp9 = 0.04f * t;      // 8.933× approx → h=9
-
+                const float t = (float) frame / (float) (WavetableSpec::kNumFrames - 1);
                 FrameSpec& fs = spec.frames[(size_t) frame];
-                fs.numHarmonics = 10;
-                fs.amplitudes[1 - 1] = amp1;
-                fs.amplitudes[3 - 1] = amp3;
-                fs.amplitudes[5 - 1] = amp5;
-                fs.amplitudes[9 - 1] = amp9;
-
-                // All zero phases — glass produces very pure, coherent tones
+                fs.numPartials = n;
+                for (int p = 0; p < n; ++p)
+                {
+                    const float r = g[(size_t) p].rS + t * (g[(size_t) p].rR - g[(size_t) p].rS);
+                    const float a = g[(size_t) p].aS + t * (g[(size_t) p].aR - g[(size_t) p].aS);
+                    fs.partials[(size_t) p] = { r, a, 0.0f };
+                }
             }
             return spec;
         }
 
-        /** Railroad (free-free steel bar) — Phase 11l research-driven, spec-based.
-         *  Euler-Bernoulli free-free beam: ratios 1.000, 2.756, 5.404, 8.933, 13.340.
-         *  Integer approx: h=1, h=3, h=5, h=9, h=13 (h=13 for 13.340× = −45¢ — near perfect).
-         *  WT POS sweep = temporal decay after impact: all modes → only fundamental ring.
-         *  High partials decay first (radiation damping ∝ f^4). Realistic metallic strike model.
-         *  NOTE: h=3 for 2.756× is 537-cent error — pending Phase 10c PartialSpec fix. */
+        /** Railroad — struck free-free steel bar / rail (clangorous, industrial).
+         *  Full Euler-Bernoulli free-free bending series 1 : 2.758 : 5.406 : 8.936 :
+         *  13.350 : 18.645 (Fletcher & Rossing) — genuinely inharmonic, NOT snapped to
+         *  integers. Morph = decay after impact: frame 0 = strike (all modes, dense clang)
+         *  → frame 15 = ring (fundamental + low modes; high modes radiate away fastest). */
         static WavetableSpec makeRailroadSpec()
         {
-            // Free-free steel bar (like a railroad rail or spike)
-            // Real partial ratios: 1.000, 2.756, 5.404, 8.933, 13.340
-            // Integer approx: h=1, h=3, h=5, h=9, h=13
-            // KNOWN LIMITATION: h=3 for 2.756× is 537 cents off — pending Phase 10c.
-            // h=13 for 13.340× is only 45 cents off — near perfect.
-            //
-            // WT POS sweep represents temporal decay after impact:
-            //   Frame 0  = initial strike (all partials at full strength, metallic clang)
-            //   Frame 8  = mid-decay (h=13 and h=9 faded significantly)
-            //   Frame 15 = late decay (only h=1 and slight h=3 remain, pure ring)
+            struct RP { float ratio, amp, decayPow; };
+            static const RP rr[] = {
+                {  1.000f, 1.00f, 0.0f },   // fundamental — rings on
+                {  2.758f, 0.70f, 1.5f },   // slow decay
+                {  5.406f, 0.55f, 2.5f },
+                {  8.936f, 0.45f, 4.0f },
+                { 13.350f, 0.35f, 6.0f },
+                { 18.645f, 0.22f, 8.0f },   // very fast decay
+            };
+            const int n = (int) (sizeof (rr) / sizeof (rr[0]));
             WavetableSpec spec;
             for (int frame = 0; frame < WavetableSpec::kNumFrames; ++frame)
             {
-                const float t = (float) frame / (float)(WavetableSpec::kNumFrames - 1);
-
-                // Exponential-style decay curves per partial (higher = faster)
-                // t=0 = struck, t=1 = ringing pure
-                const float amp1  = 1.0f;                                          // fundamental: always 1.0
-                const float amp3  = 0.60f * std::pow (1.0f - t, 1.5f);            // 2.756×: slow decay
-                const float amp5  = 0.40f * std::pow (1.0f - t, 2.5f);            // 5.404×: medium decay
-                const float amp9  = 0.25f * std::pow (juce::jmax(0.0f, 1.0f-t), 4.0f);  // 8.933×: fast decay
-                const float amp13 = 0.15f * std::pow (juce::jmax(0.0f, 1.0f-t), 6.0f);  // 13.34×: very fast decay
-
-                // On initial strike (frame 0): add inharmonic "impact noise" at h=2, h=4, h=6
-                const float impactNoise = 0.20f * (1.0f - t) * (1.0f - t);
-
+                const float t = (float) frame / (float) (WavetableSpec::kNumFrames - 1);
                 FrameSpec& fs = spec.frames[(size_t) frame];
-                fs.numHarmonics = 14;
-
-                // Main modal partials
-                fs.amplitudes[1  - 1] = amp1;
-                fs.amplitudes[3  - 1] = amp3;
-                fs.amplitudes[5  - 1] = amp5;
-                fs.amplitudes[9  - 1] = amp9;
-                fs.amplitudes[13 - 1] = amp13;
-
-                // Impact transient fill (decays quickly with frame position)
-                fs.amplitudes[2 - 1] = impactNoise * 0.5f;
-                fs.amplitudes[4 - 1] = impactNoise * 0.4f;
-                fs.amplitudes[6 - 1] = impactNoise * 0.3f;
-                fs.amplitudes[7 - 1] = impactNoise * 0.2f;
-
-                // Slightly randomized phases for impact frames (strike is noisy)
-                // Pure phases for late frames (ring is coherent)
-                const float phaseNoise = impactNoise * 1.0f;  // 0 at frame 15, ~0.2 at frame 0
-                fs.phases[2 - 1] = phaseNoise * 0.5f;
-                fs.phases[4 - 1] = phaseNoise * 0.8f;
-                fs.phases[6 - 1] = phaseNoise * 1.2f;
+                fs.numPartials = n;
+                for (int p = 0; p < n; ++p)
+                {
+                    const float decay = (rr[(size_t) p].decayPow <= 0.0f)
+                                      ? 1.0f
+                                      : std::pow (juce::jmax (0.0f, 1.0f - t), rr[(size_t) p].decayPow);
+                    fs.partials[(size_t) p] = { rr[(size_t) p].ratio, rr[(size_t) p].amp * decay, 0.0f };
+                }
             }
             return spec;
         }
