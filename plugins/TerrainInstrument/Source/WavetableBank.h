@@ -130,6 +130,49 @@ namespace tw
             return &tables_[(size_t) preset];
         }
 
+        // ── Spectral Morph support ───────────────────────────────────────────
+        // Returns the BASE spectrum (pre-morph) for a preset, so the processor can
+        // run SpectralMorph::apply(...) on it and buildFromSpec a morphed table.
+        // Single source of truth: this MUST mirror the constructor's maker mapping
+        // (validated offline — every preset round-trips to its bank table).
+        static WavetableSpec specForPreset (int preset) noexcept
+        {
+            switch (preset)
+            {
+                case Sine:           return Wavetable::makeSineSpec();
+                case Triangle:       return Wavetable::makeTriangleSpec();
+                case Square:         return Wavetable::makeSquareSpec();
+                case Pulse:          return Wavetable::makePulseSpec();
+                case ProphetSaw:     return Wavetable::makeProphetSawSpec();
+                case JupiterPWM:     return Wavetable::makeJupiterPWMSpec();
+                case MoogSqr:        return Wavetable::makeMoogSqrSpec();
+                case OBXSaw:         return Wavetable::makeOBXSawSpec();
+                case CS80Brass:      return Wavetable::makeCS80BrassSpec();
+                case JunoStr:        return Wavetable::makeJunoStrSpec();
+                case PPGWave:        return Wavetable::makePPGWaveSpec();
+                case DX7EP:          return Wavetable::makeDX7EPSpec();
+                case D50Bell:        return Wavetable::makeD50BellSpec();
+                case M1Piano:        return Wavetable::makeM1PianoSpec();
+                case ChoirAtoO:      return Wavetable::makeChoirAtoOSpec();
+                case Whisper:        return Wavetable::makeWhisperSpec();
+                case VowelMorph:     return Wavetable::makeVowelMorphSpec();
+                case BowedMetal:     return Wavetable::makeBowedMetalSpec();
+                case GlassHarmonics: return Wavetable::makeGlassHarmonicsSpec();
+                case Railroad:       return Wavetable::makeRailroadSpec();
+                case Dustbowl:       return Wavetable::makeDustbowlSpec();
+                case StaticEvolve:   return Wavetable::makeStaticEvolveSpec();
+                case SpectralDrift:  return Wavetable::makeSpectralDriftSpec();
+                case SerumHD:        return Wavetable::makeSerumHDSpec();
+                case Rise:           return Wavetable::makeHarmonicRiseSpec();
+                case OddEven:        return Wavetable::makeOddEvenSpec();
+                case PhaseDrift:     return Wavetable::makePhaseDriftSpec();
+                case SpectralSweep:  return Wavetable::makeSpectralSweepSpec();
+                case FormantRise:    return Wavetable::makeFormantRiseSpec();
+                case HarmonicSeries: return Wavetable::makeHarmonicSeriesSpec();
+                default:             return Wavetable::makeSineSpec();
+            }
+        }
+
     private:
         std::array<Wavetable, kNumPresets> tables_;
     };

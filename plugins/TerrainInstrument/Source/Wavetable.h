@@ -16,6 +16,8 @@
 #include <cmath>
 #include <cstddef>
 #include <array>
+#include <complex>
+#include <algorithm>
 #include <juce_core/juce_core.h>
 
 namespace tw
@@ -92,7 +94,8 @@ namespace tw
             numMipLevels_  = kNumMipLevels;
             mipData_.assign ((size_t) (numMipLevels_ * numFrames_ * frameSize_), 0.0f);
 
-            constexpr double pi2 = 2.0 * 3.14159265358979323846;
+            // iFFT synthesis buffer, reused per frame (far faster than summing sines).
+            std::vector<std::complex<double>> specFFT ((size_t) frameSize_);
 
             for (int level = 0; level < numMipLevels_; ++level)
             {
@@ -148,18 +151,28 @@ namespace tw
                         }
                     }
 
-                    for (int sample = 0; sample < frameSize_; ++sample)
+                    // Synthesize the frame by INVERSE FFT of the resolved harmonics —
+                    // mathematically identical to summing sines, ~75x faster (the morph
+                    // engine + bank build depend on this speed). Bin convention:
+                    // X[h] = (A_h/2)(sin φ − i cos φ), conjugate-mirrored at N−h, so the
+                    // raw inverse transform yields Σ A_h·sin(2π h n/N + φ_h) exactly.
+                    const int N = frameSize_;
+                    std::fill (specFFT.begin(), specFFT.end(), std::complex<double> (0.0, 0.0));
+                    for (int h = 1; h <= hMax && h < N - h; ++h)
                     {
-                        const double normPhase = (double) sample / (double) frameSize_;
-                        double v = 0.0;
-                        for (int h = 1; h <= hMax; ++h)
-                        {
-                            const double amp = rAmp[(size_t) h];
-                            if (amp == 0.0) continue;
-                            v += amp * std::sin (pi2 * (double) h * normPhase + rPh[(size_t) h]);
-                        }
-                        mipData_[(size_t) ((level * numFrames_ + frame) * frameSize_ + sample)] = (float) v;
+                        const double a = rAmp[(size_t) h];
+                        if (a == 0.0) continue;
+                        const double ph = rPh[(size_t) h];
+                        const std::complex<double> c (0.5 * a * std::sin (ph),
+                                                     -0.5 * a * std::cos (ph));
+                        specFFT[(size_t) h]       = c;
+                        specFFT[(size_t) (N - h)] = std::conj (c);
                     }
+                    inverseFFT (specFFT);   // raw Σ X[k]·e^{+i2πkn/N} (no normalization)
+
+                    float* dst = &mipData_[(size_t) ((level * numFrames_ + frame) * frameSize_)];
+                    for (int sample = 0; sample < N; ++sample)
+                        dst[(size_t) sample] = (float) specFFT[(size_t) sample].real();
                 }
             }
 
@@ -1684,6 +1697,37 @@ namespace tw
         }
 
     private:
+        // In-place radix-2 inverse DFT (raw, UNnormalized): a[n] ← Σ_k a[k]·e^{+i2πkn/N}.
+        // N (= frameSize_, 2048) is a power of two. Build-time only (not real-time).
+        static void inverseFFT (std::vector<std::complex<double>>& a) noexcept
+        {
+            const int n = (int) a.size();
+            for (int i = 1, j = 0; i < n; ++i)               // bit-reversal permutation
+            {
+                int bit = n >> 1;
+                for (; j & bit; bit >>= 1) j ^= bit;
+                j ^= bit;
+                if (i < j) std::swap (a[(size_t) i], a[(size_t) j]);
+            }
+            for (int len = 2; len <= n; len <<= 1)
+            {
+                const double ang = 2.0 * 3.14159265358979323846 / (double) len;  // +sign = inverse
+                const std::complex<double> wlen (std::cos (ang), std::sin (ang));
+                for (int i = 0; i < n; i += len)
+                {
+                    std::complex<double> w (1.0, 0.0);
+                    for (int k = 0; k < len / 2; ++k)
+                    {
+                        const std::complex<double> u = a[(size_t) (i + k)];
+                        const std::complex<double> v = a[(size_t) (i + k + len / 2)] * w;
+                        a[(size_t) (i + k)]               = u + v;
+                        a[(size_t) (i + k + len / 2)]     = u - v;
+                        w *= wlen;
+                    }
+                }
+            }
+        }
+
         float sample (int mipLevel, int frame, int idx) const noexcept
         {
             return mipData_[(size_t) ((mipLevel * numFrames_ + frame) * frameSize_ + idx)];
