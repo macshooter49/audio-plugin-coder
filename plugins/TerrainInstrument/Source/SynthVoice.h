@@ -427,6 +427,8 @@ namespace tw
             updateUnisonPhaseIncrementsA (midiNote);
             updateUnisonPhaseIncrementsB (midiNote);
             playing_         = true;
+            foldStateA_.fill ({});   // Phase 11d ADAA — clear per-sine fold history on note start
+            foldStateB_.fill ({});
             ampEnv_.reset();
             ampEnv_.noteOn();
 
@@ -513,8 +515,17 @@ namespace tw
             // Phase 10a / Phase 8b — pick mip level using sine 0 (centre-detuned,
             // no spread offset) as the reference — ±25 cents of unison detune
             // doesn't cross a mip boundary in practice.
-            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0]);
-            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0]);
+            // Phase 11d AA — phase-multiply warps (SYNC, FORMANT, FRACTALIZE) read the
+            // table faster than the base increment, so pick the mip for the WARPED rate
+            // (more band-limited → far less aliasing). Other modes use rate ×1.
+            auto warpRateMul = [] (int mode, float amt) -> double
+            {
+                if (mode == 2 || mode == 3) return std::pow (2.0, (double) amt * 4.0); // SYNC / FORMANT (1..16x)
+                if (mode == 7)              return 1.0 + (double) amt * 7.0;            // FRACTALIZE (1..8x)
+                return 1.0;
+            };
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_));
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_));
 
             // Phase 8a — HORIZON: per-note tilt depending on midiNote and amount.
             // midiNote 60 = neutral; lower notes get high-shelf cut (warmer),
@@ -720,7 +731,7 @@ namespace tw
                     }
 
                     // Phase 11d — FOLD applied per-sine, post-engine, pre-pan.
-                    sAu = applyFold (sAu, foldShapeA_, foldAmountA_);
+                    sAu = applyFoldADAA (sAu, foldShapeA_, foldAmountA_, foldStateA_[(size_t) u]);
 
                     // Per-sine pan into the OSC A stereo sum.
                     sumAL += sAu * uPanL_[(size_t) u];
@@ -1023,7 +1034,7 @@ namespace tw
                     }
 
                     // Phase 11d — FOLD applied per-sine, post-engine, pre-pan.
-                    sBu = applyFold (sBu, foldShapeB_, foldAmountB_);
+                    sBu = applyFoldADAA (sBu, foldShapeB_, foldAmountB_, foldStateB_[(size_t) u]);
 
                     // Per-sine pan into the OSC B stereo sum.
                     sumBL += sBu * uPanL_[(size_t) u];
@@ -1432,7 +1443,69 @@ namespace tw
             }
         }
 
-        // Phase 11c — compute biquad coefficients for one OSC's spectral filter.
+        // ── ADAA wavefolder (1st-order antiderivative anti-aliasing) ─────────
+        // The triangle-based folds (Linear/Serge, Buchla) generate dense high
+        // harmonics that alias badly at base rate. Rather than 2x oversample the
+        // whole voice, we apply 1st-order ADAA — the same technique as the
+        // nonlinear filters. Offline FFT proof: 2.4–5.6x less aliasing on the
+        // triangle folds, neutral on the (already-smooth) sine fold, low-freq
+        // shape preserved. State is per-sine (see foldStateA_/B_).
+        //
+        // foldAntideriv(x) = ∫ applyFold dx, so applyFold = d/dx foldAntideriv.
+        //   triangle-wave antiderivative: G(q) = 2 r|r| − r,  r = q − round(q)
+        //   ∫ linfold(x·a) dx = (4/a)·G((x·a+1)/4)
+        static inline float foldGtri (float q) noexcept
+        {
+            const float r = q - std::round (q);
+            return 2.0f * r * std::fabs (r) - r;
+        }
+        static inline float foldFlin (float x, float a) noexcept
+        {
+            return (4.0f / a) * foldGtri ((x * a + 1.0f) * 0.25f);
+        }
+        static inline float foldAntideriv (float x, int shape, float amount) noexcept
+        {
+            switch (shape)
+            {
+                case 1: { const float pre = 1.0f + amount * amount * 5.28318530f; return -std::cos (pre * x) / pre; }
+                case 2: { const float pre = 1.0f + amount * amount * 5.0f;
+                          return 0.5f  * foldFlin (x, pre)
+                               + 0.35f * foldFlin (x, pre * 1.41421356f)
+                               + 0.15f * foldFlin (x, pre * 2.0f); }
+                default:{ const float pre = 1.0f + amount * amount * 9.0f; return foldFlin (x, pre); }
+            }
+        }
+
+        struct FoldState { float x1 = 0.0f; };
+
+        // 1st-order ADAA: y[n] = (F(x[n]) − F(x[n−1])) / (x[n] − x[n−1]).
+        // NEVER cache F — recompute BOTH antiderivatives live each sample. This is
+        // correct after a note-on reset (x1=0 evaluates the real F(0), which is NOT 0
+        // for any fold shape) and stays correct when shape/amount change between samples
+        // (both terms evaluate on the current curve). [ADAA audit vs Waveshaper 75cb6a9]
+        // A midpoint-naive fallback handles the low-slew 0/0 case.
+        static inline float applyFoldADAA (float x, int shape, float amount, FoldState& st) noexcept
+        {
+            float y;
+            if (amount <= 1.0e-6f)
+            {
+                y = x;                                                   // fold off → identity
+            }
+            else if (std::fabs (x - st.x1) < 1.0e-5f)
+            {
+                y = applyFold (0.5f * (x + st.x1), shape, amount);       // low-slew fallback
+            }
+            else
+            {
+                const float Fx  = foldAntideriv (x,     shape, amount);
+                const float Fx1 = foldAntideriv (st.x1, shape, amount);  // recomputed live, never cached
+                y = (Fx - Fx1) / (x - st.x1);
+            }
+            st.x1 = x;
+            return y;
+        }
+
+
         // 3 modes: 0=LowPass (20k → 200 Hz quadratic), 1=HighPass (20 → 8000 Hz quadratic),
         // 2=Smear (allpass, 4000 → 200 Hz quadratic, Q 0.707 → 4.0 linear).
         void updateSpectralCoefficients (int type, float amount,
@@ -1628,6 +1701,9 @@ namespace tw
         float foldAmountA_  = 0.0f;
         int   foldShapeB_   = 0;
         float foldAmountB_  = 0.0f;
+        // Phase 11d ADAA — per-sine fold state (1st-order antiderivative AA).
+        std::array<FoldState, kMaxUnison> foldStateA_ {};
+        std::array<FoldState, kMaxUnison> foldStateB_ {};
 
         // Phase 11c — SPECTRAL filter state (per OSC).
         int   spectralTypeA_   = 0;     // 0=LP, 1=HP, 2=Smear, 3=Comb, 4=RingMod, 5=BitCrush
