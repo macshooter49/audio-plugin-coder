@@ -337,11 +337,12 @@ namespace tw
          *  PluginProcessor broadcast. Caches the amount; per-sine offsets are
          *  recomputed in updateUnisonFramePositions() each block (and on
          *  setUnison/startNote) so SPREAD tracks UNISON count changes correctly. */
-        void setFrameSpread (float spreadA01, float spreadB01) noexcept
+        /** WT BLUR amount per OSC (0..1). Replaces the old per-sine FRAME_SPREAD: turns
+         *  the knob into a frame-blend width. Smoothed + applied per block in renderNextBlock. */
+        void setBlur (float blurA01, float blurB01) noexcept
         {
-            frameSpreadA01_ = juce::jlimit (0.0f, 1.0f, spreadA01);
-            frameSpreadB01_ = juce::jlimit (0.0f, 1.0f, spreadB01);
-            updateUnisonFramePositions();
+            blurTargetA_ = juce::jlimit (0.0f, 1.0f, blurA01);
+            blurTargetB_ = juce::jlimit (0.0f, 1.0f, blurB01);
         }
 
         /** Phase 11d — Set per-OSC FOLD shape + amount. Pushed per-block from
@@ -527,6 +528,37 @@ namespace tw
             currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_));
             currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_));
 
+            // ── WT BLUR — smooth the amount, then (re)build each OSC's blended single-
+            // cycle buffer ONCE per block (only when frame pos / blur / mip changed). Every
+            // unison sine reads it via readCycle, so frame-blend cost is per-block, not
+            // per-sample. The blend is the mip's frames summed at one band edge → alias-free;
+            // RMS-matched inside renderBlend → no level change; blur 0 → exact old lookup.
+            if (std::abs (blurTargetA_ - blurA_) < 1.0e-4f) blurA_ = blurTargetA_;
+            else                                            blurA_ += (blurTargetA_ - blurA_) * 0.25f;
+            if (std::abs (blurTargetB_ - blurB_) < 1.0e-4f) blurB_ = blurTargetB_;
+            else                                            blurB_ += (blurTargetB_ - blurB_) * 0.25f;
+
+            if (currentWavetable_ != nullptr)
+            {
+                float fpA = framePos_;
+                if (interpModeA_ == 1) { const float Nf = 16.0f; fpA = std::round (fpA * (Nf - 1.0f)) / (Nf - 1.0f); }
+                if (fpA != lastFpA_ || blurA_ != lastBlurA_ || currentMipLevelA_ != lastMipA_ || currentWavetable_ != lastWtA_)
+                {
+                    currentWavetable_->renderBlend (currentMipLevelA_, fpA, blurA_, blendA_.data());
+                    lastFpA_ = fpA; lastBlurA_ = blurA_; lastMipA_ = currentMipLevelA_; lastWtA_ = currentWavetable_;
+                }
+            }
+            if (currentWavetableB_ != nullptr)
+            {
+                float fpB = framePosB_;
+                if (interpModeB_ == 1) { const float Nf = 16.0f; fpB = std::round (fpB * (Nf - 1.0f)) / (Nf - 1.0f); }
+                if (fpB != lastFpB_ || blurB_ != lastBlurB_ || currentMipLevelB_ != lastMipB_ || currentWavetableB_ != lastWtB_)
+                {
+                    currentWavetableB_->renderBlend (currentMipLevelB_, fpB, blurB_, blendB_.data());
+                    lastFpB_ = fpB; lastBlurB_ = blurB_; lastMipB_ = currentMipLevelB_; lastWtB_ = currentWavetableB_;
+                }
+            }
+
             // Phase 8a — HORIZON: per-note tilt depending on midiNote and amount.
             // midiNote 60 = neutral; lower notes get high-shelf cut (warmer),
             // higher notes get high-shelf boost (airier).
@@ -652,16 +684,9 @@ namespace tw
                                 }
                                 else
                                 {
-                                    // Phase 11a per-sine frame spread (wraps to [0,1] before lookup).
-                                    float fp = framePos_ + uFramePosA_[(size_t) u];
-                                    fp -= std::floor (fp);
-                                    // Phase 11g — Stepped INTERP: snap to nearest of 16 frames
-                                    if (interpModeA_ == 1)
-                                    {
-                                        const float N = 16.0f;
-                                        fp = std::round (fp * (N - 1.0f)) / (N - 1.0f);
-                                    }
-                                    sAu = currentWavetable_->lookup (currentMipLevelA_, fp, (float) warpedPhase);
+                                    // WT BLUR — read the per-block blended single-cycle buffer
+                                    // (frame position, stepped-interp and blur already applied at block rate).
+                                    sAu = tw::Wavetable::readCycle (blendA_.data(), (float) warpedPhase);
                                     sAu *= window;
 
                                     if (warpMode_ == 9)
@@ -960,15 +985,8 @@ namespace tw
                                 }
                                 else
                                 {
-                                    float fp = framePosB_ + uFramePosB_[(size_t) u];
-                                    fp -= std::floor (fp);
-                                    // Phase 11g — Stepped INTERP: snap to nearest of 16 frames
-                                    if (interpModeB_ == 1)
-                                    {
-                                        const float N = 16.0f;
-                                        fp = std::round (fp * (N - 1.0f)) / (N - 1.0f);
-                                    }
-                                    sBu = currentWavetableB_->lookup (currentMipLevelB_, fp, (float) warpedPhase);
+                                    // WT BLUR — read the per-block blended single-cycle buffer.
+                                    sBu = tw::Wavetable::readCycle (blendB_.data(), (float) warpedPhase);
                                     sBu *= window;
 
                                     if (warpModeB_ == 9)
@@ -1695,6 +1713,23 @@ namespace tw
         // Phase 11a — SPREAD amount per OSC (0..1, pushed per-block from APVTS).
         float frameSpreadA01_ = 0.0f;
         float frameSpreadB01_ = 0.0f;
+
+        // ── WT BLUR (frame blend) — repurposes the old FRAME_SPREAD knob ─────────
+        // The param sets blurTarget*; it's smoothed into blur* per block for clickless
+        // changes; blend* hold the pre-built blended single-cycle buffer that every
+        // unison sine reads via Wavetable::readCycle. last* gate rebuilds to "on change".
+        // blur 0 ⇒ renderBlend reproduces the old bilinear lookup exactly.
+        float blurTargetA_ = 0.0f, blurTargetB_ = 0.0f;
+        float blurA_ = 0.0f, blurB_ = 0.0f;
+        std::array<float, tw::Wavetable::kFrameSize> blendA_ {};
+        std::array<float, tw::Wavetable::kFrameSize> blendB_ {};
+        float lastFpA_ = -2.0f, lastBlurA_ = -2.0f; int lastMipA_ = -2;
+        float lastFpB_ = -2.0f, lastBlurB_ = -2.0f; int lastMipB_ = -2;
+        // The source table pointer is ALSO a blend dependency: Spectral Morph and live
+        // preset changes swap currentWavetable_ with frame/blur/mip unchanged, so the
+        // gate must watch the pointer too or the blend keeps stale (pre-morph) bytes.
+        const tw::Wavetable* lastWtA_ = nullptr;
+        const tw::Wavetable* lastWtB_ = nullptr;
 
         // Phase 11d — FOLD state (per OSC).
         int   foldShapeA_   = 0;     // 0=Linear, 1=Sine, 2=Triangle

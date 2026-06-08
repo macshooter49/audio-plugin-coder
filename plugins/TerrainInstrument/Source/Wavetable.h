@@ -213,6 +213,83 @@ namespace tw
             return lookup (0, framePos, phase);
         }
 
+        // ── WT BLUR (frame blend) ─────────────────────────────────────────────
+        // Builds ONE blended single-cycle waveform at `mip`, centred on `framePos`,
+        // width set by `blur` (0..1). It is a weighted sum of the wavetable's frames:
+        //   • blur = 0  → exactly the bilinear two-frame read (bit-identical to lookup()).
+        //   • blur > 0  → a Gaussian window over the frame axis blended in, smearing a
+        //                 band of frames into a richer, creamier composite.
+        // Alias-free by construction: EVERY blended frame is read from the SAME mip, so
+        // the band edge is shared and a linear sum of band-limited frames stays
+        // band-limited (no new partials, no imaging). Edge-clamped + weight-renormalised
+        // so the ends don't thin out, and RMS-matched to the un-blurred frame so loudness
+        // is constant across the whole blur range. Build once per block, then read every
+        // sample with readCycle().  `out` must hold frameSize_ samples.
+        void renderBlend (int mip, float framePos, float blur, float* out) const noexcept
+        {
+            const int lvl = juce::jlimit (0, numMipLevels_ - 1, mip);
+            const int N   = numFrames_;
+            framePos = juce::jlimit (0.0f, 1.0f, framePos);
+            blur     = juce::jlimit (0.0f, 1.0f, blur);
+
+            const float fIdx  = framePos * (float) (N - 1);   // centre in frame units
+            const int   f0    = juce::jlimit (0, N - 1, (int) fIdx);
+            const int   f1    = f0 < N - 1 ? f0 + 1 : f0;
+            const float fFrac = fIdx - (float) f0;
+
+            // Weights over all frames = blend( bilinear , Gaussian ), each Σ = 1, so the
+            // combined weights also Σ = 1. At blur = 0 only the bilinear pair survives.
+            float w[WavetableSpec::kNumFrames] = { 0.0f };
+            const float sigma = 0.0001f + blur * blur * 9.0f;  // frame-axis spread → near-whole-table at full
+            float gsum = 0.0f;
+            for (int f = 0; f < N; ++f)
+            {
+                const float d = ((float) f - fIdx) / sigma;
+                const float g = std::exp (-0.5f * d * d);
+                w[(size_t) f] = g;
+                gsum += g;
+            }
+            const float gInv = gsum > 1.0e-12f ? (blur / gsum) : 0.0f;
+            for (int f = 0; f < N; ++f) w[(size_t) f] *= gInv;        // Gaussian part, scaled by blur
+            w[(size_t) f0] += (1.0f - blur) * (1.0f - fFrac);         // + bilinear part, scaled by (1-blur)
+            w[(size_t) f1] += (1.0f - blur) * fFrac;
+
+            // Build the blended cycle + accumulate RMS of it and of the bilinear reference.
+            double accBlend = 0.0, accRef = 0.0;
+            for (int n = 0; n < frameSize_; ++n)
+            {
+                float v = 0.0f;
+                for (int f = 0; f < N; ++f)
+                {
+                    const float wf = w[(size_t) f];
+                    if (wf != 0.0f) v += wf * sample (lvl, f, n);
+                }
+                out[n] = v;
+                accBlend += (double) v * (double) v;
+
+                const float ref = sample (lvl, f0, n) * (1.0f - fFrac)
+                                + sample (lvl, f1, n) * fFrac;
+                accRef += (double) ref * (double) ref;
+            }
+
+            // RMS-match to the un-blurred frame → loudness independent of blur amount.
+            const double g  = accBlend > 1.0e-20 ? std::sqrt (accRef / accBlend) : 1.0;
+            const float  gf = (float) g;
+            for (int n = 0; n < frameSize_; ++n) out[n] *= gf;
+        }
+
+        // Read a pre-built single-cycle buffer (from renderBlend) with the SAME phase
+        // interpolation lookup() uses, so blur = 0 reproduces lookup() exactly.
+        static float readCycle (const float* buf, float phase) noexcept
+        {
+            const float p     = phase - std::floor (phase);
+            const float pIdx  = p * (float) kFrameSize;
+            const int   p0    = (int) pIdx;
+            const int   p1    = (p0 + 1) % kFrameSize;
+            const float pFrac = pIdx - (float) p0;
+            return buf[p0] + (buf[p1] - buf[p0]) * pFrac;
+        }
+
         /** Direct mutable access — used by legacy factory methods only.
          *  Writes into mip slot 0 (the only slot legacy tables have). */
         float& sampleRef (int frame, int idx) noexcept

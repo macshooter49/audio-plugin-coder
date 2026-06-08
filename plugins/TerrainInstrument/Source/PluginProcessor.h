@@ -23,6 +23,7 @@
 #include "IndyFxChain.h"
 #include "SynthVoice.h"
 #include "WavetableBank.h"
+#include "SpectralMorph.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
 #include <array>
@@ -174,7 +175,8 @@ private:
 };
 
 //==============================================================================
-class TerrainInstrumentAudioProcessor  : public juce::AudioProcessor
+class TerrainInstrumentAudioProcessor  : public juce::AudioProcessor,
+                                         private juce::Timer
 {
 public:
     TerrainInstrumentAudioProcessor();
@@ -522,6 +524,36 @@ private:
     // SynthVoices hold const Wavetable* pointers into this bank; bank
     // outlives all voices (member-of-processor lifetime).
     tw::WavetableBank           wavetableBank;
+
+    // ── Spectral Morph (Phase 11c rework) ────────────────────────────────
+    // Per-OSC morphed wavetable. SpectralMorph::apply + buildFromSpec is ~5.6ms
+    // (too heavy for the audio thread), so the morphed table is rebuilt on the
+    // message thread (timerCallback) into a DOUBLE BUFFER and atomic-published
+    // to the voices. The audio thread only ever does an atomic pointer load and
+    // reports which buffer it's reading (audioReadingIdx); the message thread
+    // never rebuilds the buffer the audio thread is currently on. mode == None
+    // publishes nullptr → voices fall back to the plain bank table.
+    struct MorphSlot
+    {
+        tw::Wavetable                     buf[2];
+        std::atomic<const tw::Wavetable*> live { nullptr };
+        std::atomic<int>                  audioReadingIdx { -1 };  // 0/1 = buf in use, -1 = none
+        int   buildIdx    = 0;            // message-thread: next buffer to build into
+        int   builtPreset = -1;
+        int   builtMode   = -1;
+        float builtAmount = -1.0f;
+    };
+    MorphSlot morphA_, morphB_;
+
+    void timerCallback() override;        // message thread — rebuilds morph tables
+    void rebuildMorphIfNeeded (MorphSlot& slot,
+                               const juce::String& presetId,
+                               const juce::String& modeId,
+                               const juce::String& amtId);
+    // Resolve the wavetable a voice should read for one OSC: the morphed table
+    // when a morph mode is active, else the plain bank table. Publishes which
+    // buffer the audio thread is reading (for the rebuild guard).
+    const tw::Wavetable* resolveMorphTable (MorphSlot& slot, int presetIdx) noexcept;
     // sampleBuffer removed in Task 5 — owned by LayerState. Access via layers[editingLayer].sampleBuffer.
     tw::SampleLoader sampleLoader;
     // slicesPtr removed in Task 5 — owned by LayerState as currentSlices. Access via layers[editingLayer].currentSlices.

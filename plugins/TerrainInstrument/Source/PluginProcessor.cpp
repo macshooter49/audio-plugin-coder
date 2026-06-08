@@ -52,12 +52,89 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     synthEngine.addSound (new tw::SynthSound());
     for (int i = 0; i < kSynthVoiceCount; ++i)
         synthEngine.addVoice (new tw::SynthVoice());
+
+    // Spectral-morph rebuild runs on the message thread (the rebuild is ~5.6ms,
+    // far too heavy for the audio thread). 60Hz polling keeps the morph knob
+    // responsive while never touching a buffer the audio thread is reading.
+    startTimerHz (60);
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 {
+    // Stop the morph rebuild timer BEFORE any members are destroyed — the
+    // callback touches apvts / wavetableBank / morph slots.
+    stopTimer();
+
     if (captureExportThread && captureExportThread->joinable())
         captureExportThread->join();
+}
+
+//==============================================================================
+// Spectral Morph — message-thread rebuild + audio-thread resolve.
+//==============================================================================
+const tw::Wavetable*
+TerrainInstrumentAudioProcessor::resolveMorphTable (MorphSlot& slot, int presetIdx) noexcept
+{
+    // Audio thread: atomic-load the published morphed table. If a morph is active,
+    // report which buffer we're reading so the rebuild never overwrites it.
+    const tw::Wavetable* m = slot.live.load (std::memory_order_acquire);
+    if (m != nullptr)
+    {
+        slot.audioReadingIdx.store (m == &slot.buf[1] ? 1 : 0, std::memory_order_release);
+        return m;
+    }
+    slot.audioReadingIdx.store (-1, std::memory_order_release);
+    return wavetableBank.getTable (presetIdx);
+}
+
+void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot,
+                                                            const juce::String& presetId,
+                                                            const juce::String& modeId,
+                                                            const juce::String& amtId)
+{
+    const int   preset = (int) *apvts.getRawParameterValue (presetId);
+    const int   mode   = (int) *apvts.getRawParameterValue (modeId);
+    const float amount =       *apvts.getRawParameterValue (amtId);
+
+    // None (or zero amount) → publish nullptr so voices read the plain bank table.
+    if (mode <= 0 || amount <= 0.0f)
+    {
+        slot.live.store (nullptr, std::memory_order_release);
+        slot.builtPreset = preset;
+        slot.builtMode   = mode;
+        slot.builtAmount = amount;
+        return;
+    }
+
+    // Nothing changed since the last build → skip.
+    if (preset == slot.builtPreset && mode == slot.builtMode
+        && std::abs (amount - slot.builtAmount) < 1.0e-4f)
+        return;
+
+    // Don't rebuild the buffer the audio thread is currently reading.
+    const int target = slot.buildIdx;
+    if (slot.audioReadingIdx.load (std::memory_order_acquire) == target)
+        return;   // try again on the next tick (after the audio thread moves off it)
+
+    slot.buf[target].buildFromSpec (
+        tw::SpectralMorph::apply (tw::WavetableBank::specForPreset (preset),
+                                  (tw::SpectralMode) mode, amount));
+
+    slot.live.store (&slot.buf[target], std::memory_order_release);
+    slot.buildIdx  ^= 1;
+    slot.builtPreset = preset;
+    slot.builtMode   = mode;
+    slot.builtAmount = amount;
+}
+
+void TerrainInstrumentAudioProcessor::timerCallback()
+{
+    rebuildMorphIfNeeded (morphA_, ParameterIDs::SYN_OSC_A_WT_PRESET,
+                          ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE,
+                          ParameterIDs::SYN_OSC_A_SPECTRAL_AMT);
+    rebuildMorphIfNeeded (morphB_, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                          ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
+                          ParameterIDs::SYN_OSC_B_SPECTRAL_AMT);
 }
 
 //==============================================================================
@@ -1005,13 +1082,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
 
     // ── Phase 11a — OSC A wavetable rework foundation ────────────────────
-    // SPECTRAL TYPE choice (Phase 11i: 10 modes — Low Pass / High Pass / Smear / Comb / Ring Mod / Bit Crush / Downsample / Tube / Tilt / Vibrato)
+    // SPECTRAL MORPH mode (Phase 11c rework — frequency-domain morph applied to the
+    // wavetable's spectrum off the audio thread). v1 exposes the implemented modes;
+    // order MUST match tw::SpectralMode (None=0, HarmonicStretch=1, InharmonicStretch=2).
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE, 1 },
         "OSC A Spectral Type",
-        juce::StringArray { "Low Pass", "High Pass", "Smear", "Comb", "Ring Mod", "Bit Crush", "Downsample", "Tube", "Tilt", "Vibrato" },
+        juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
         0));
-    // SPECTRAL AMT (placeholder param — no DSP yet, persists for V1-fwd compat)
+    // SPECTRAL AMT — morph amount (0 = base table, 1 = full morph).
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT, 1 },
         "OSC A Spectral Amount",
@@ -1029,10 +1109,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Fold Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // FRAME SPREAD (real DSP — drives per-sine wavetable position spread)
+    // BLUR (real DSP — frame-blend width; repurposes the old FRAME_SPREAD param ID)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, 1 },
-        "OSC A Frame Spread",
+        "OSC A Blur",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     // INTERP MODE choice (Phase 11g: 2 modes — Linear / Stepped)
@@ -1092,11 +1172,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC B Warp Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
-    // ── Phase 11a — OSC B wavetable rework foundation (SPECTRAL: Phase 11i — 10 modes) ─
+    // ── Phase 11a — OSC B wavetable rework foundation (SPECTRAL MORPH — Phase 11c) ─
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE, 1 },
         "OSC B Spectral Type",
-        juce::StringArray { "Low Pass", "High Pass", "Smear", "Comb", "Ring Mod", "Bit Crush", "Downsample", "Tube", "Tilt", "Vibrato" },
+        juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT, 1 },
@@ -1115,7 +1196,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_FRAME_SPREAD, 1 },
-        "OSC B Frame Spread",
+        "OSC B Blur",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -1761,7 +1842,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
         const int            wtPreset = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_PRESET);
         const float          wtFrame  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_FRAME);
-        const tw::Wavetable* wt       = wavetableBank.getTable (wtPreset);
+        const tw::Wavetable* wt       = resolveMorphTable (morphA_, wtPreset);
         // Phase 2C — warp mode + amount
         const int   warpMode   = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_MODE);
         const float warpAmount =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
@@ -1776,7 +1857,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float panB       =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_PAN);
         const int   wtPresetB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WT_PRESET);
         const float wtFrameB   =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WT_FRAME);
-        const tw::Wavetable* wtB = wavetableBank.getTable (wtPresetB);
+        const tw::Wavetable* wtB = resolveMorphTable (morphB_, wtPresetB);
         const int   warpModeB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_MODE);
         const float warpAmountB =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
         const int   engineIdxB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ENGINE);
@@ -1828,8 +1909,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
         // have no audio-thread effect yet — render path will start reading them
         // in Phase 11c (SPECTRAL) and 11d (FOLD).
-        const float frameSpreadA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_FRAME_SPREAD);
-        const float frameSpreadB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FRAME_SPREAD);
+        const float blurA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_FRAME_SPREAD);
+        const float blurB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FRAME_SPREAD);
 
         // Phase 11d — FOLD per OSC.
         const int   foldShapeA  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_FOLD_SHAPE);
@@ -1837,11 +1918,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   foldShapeB  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FOLD_SHAPE);
         const float foldAmtB    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FOLD_AMT);
 
-        // Phase 11c — SPECTRAL per OSC.
-        const int   spectralTypeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE);
-        const float spectralAmtA  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SPECTRAL_AMT);
-        const int   spectralTypeB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE);
-        const float spectralAmtB  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SPECTRAL_AMT);
+        // Phase 11c — SPECTRAL MORPH per OSC is now applied to the wavetable spectrum
+        // off the audio thread (see timerCallback / resolveMorphTable). The TYPE/AMT
+        // params are read on the message thread; nothing to push per-voice here.
 
         // Phase 11g — INTERP per OSC.
         const int interpModeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_INTERP_MODE);
@@ -1856,9 +1935,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (auto* tv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (v)))
             {
                 tv->setUnison (unisonCount, unisonSpread01);
-                tv->setFrameSpread (frameSpreadA, frameSpreadB);   // Phase 11a
+                tv->setBlur (blurA, blurB);   // WT BLUR (frame blend)
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
-                tv->setSpectral (spectralTypeA, spectralAmtA, spectralTypeB, spectralAmtB);   // Phase 11c
                 tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g
             }
         }
