@@ -1075,6 +1075,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
         0));
 
+    // PHASE mode (back panel pill 1 — replaces the redundant WARP-mode selector).
+    // 0=RETRIG (all voices to phase 0, tight/punchy) · 1=FREE (never reset, analog) ·
+    // 2=RANDOM (fresh decorrelated phase each note, default) · 3=SPREAD (even fan, wide+repeatable)
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_PHASE_MODE, 1 },
+        "Synth OSC A Phase Mode",
+        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
+        2));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_AMOUNT, 1 },
         "Synth OSC A Warp Amount",
@@ -1167,6 +1176,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_MODE, 1 },
         "Synth OSC B Warp Mode",
         juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_PHASE_MODE, 1 },
+        "Synth OSC B Phase Mode",
+        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
+        2));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
         "Synth OSC B Warp Amount",
@@ -1845,6 +1859,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const tw::Wavetable* wt       = resolveMorphTable (morphA_, wtPreset);
         // Phase 2C — warp mode + amount
         const int   warpMode   = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_MODE);
+        const int   phaseModeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_PHASE_MODE);
         const float warpAmount =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
         // Phase 3 — OSC A engine choice
         const int engineIdx = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ENGINE);
@@ -1859,6 +1874,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float wtFrameB   =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WT_FRAME);
         const tw::Wavetable* wtB = resolveMorphTable (morphB_, wtPresetB);
         const int   warpModeB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_MODE);
+        const int   phaseModeB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_PHASE_MODE);
         const float warpAmountB =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
         const int   engineIdxB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ENGINE);
 
@@ -1893,6 +1909,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWavetableB             (wtB);
                 sv->setWavetableFrameB        (wtFrameB);
                 sv->setWarpB                  (warpModeB, warpAmountB);
+                sv->setPhaseMode              (phaseModeA, phaseModeB);
                 sv->setEngineB                (engineIdxB);
             }
         }

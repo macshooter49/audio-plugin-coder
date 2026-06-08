@@ -4415,20 +4415,13 @@ body {
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
                 <div class="sel">
-                  <div class="sel-label">WARP</div>
-                  <div class="sel-value" id="osc-a-warp-mode-value">NONE</div>
-                  <select class="sel-select" data-syn="SYN_OSC_A_WARP_MODE" id="osc-a-warp-mode-select" aria-label="WARP type">
-                    <option value="0">NONE</option>
-                    <option value="1">Bend</option>
-                    <option value="2">Sync</option>
-                    <option value="3">Formant</option>
-                    <option value="4">PWM</option>
-                    <option value="5">Skew</option>
-                    <option value="6">Mirror</option>
-                    <option value="7">Fractalize</option>
-                    <option value="8">P-Quantize</option>
-                    <option value="9">Rectify</option>
-                    <option value="10">Sine Shaper</option>
+                  <div class="sel-label">PHASE</div>
+                  <div class="sel-value" id="osc-a-phase-mode-value">Random</div>
+                  <select class="sel-select" data-syn="SYN_OSC_A_PHASE_MODE" id="osc-a-phase-mode-select" aria-label="PHASE mode">
+                    <option value="0">Retrig</option>
+                    <option value="1">Free</option>
+                    <option value="2">Random</option>
+                    <option value="3">Spread</option>
                   </select>
                 </div>
                 <div class="sel">
@@ -4588,20 +4581,13 @@ body {
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
                 <div class="sel">
-                  <div class="sel-label">WARP</div>
-                  <div class="sel-value" id="osc-b-warp-mode-value">NONE</div>
-                  <select class="sel-select" data-syn="SYN_OSC_B_WARP_MODE" id="osc-b-warp-mode-select" aria-label="WARP type">
-                    <option value="0">NONE</option>
-                    <option value="1">Bend</option>
-                    <option value="2">Sync</option>
-                    <option value="3">Formant</option>
-                    <option value="4">PWM</option>
-                    <option value="5">Skew</option>
-                    <option value="6">Mirror</option>
-                    <option value="7">Fractalize</option>
-                    <option value="8">P-Quantize</option>
-                    <option value="9">Rectify</option>
-                    <option value="10">Sine Shaper</option>
+                  <div class="sel-label">PHASE</div>
+                  <div class="sel-value" id="osc-b-phase-mode-value">Random</div>
+                  <select class="sel-select" data-syn="SYN_OSC_B_PHASE_MODE" id="osc-b-phase-mode-select" aria-label="PHASE mode">
+                    <option value="0">Retrig</option>
+                    <option value="1">Free</option>
+                    <option value="2">Random</option>
+                    <option value="3">Spread</option>
                   </select>
                 </div>
                 <div class="sel">
@@ -8856,8 +8842,8 @@ setTimeout(function wireSynControls () {
         sel.addEventListener('change', sync);
         sync(); // initial render
       }
-      ['osc-a-warp-mode',  'osc-a-spectral-type', 'osc-a-fold-shape', 'osc-a-interp-mode',
-       'osc-b-warp-mode',  'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode']
+      ['osc-a-phase-mode', 'osc-a-spectral-type', 'osc-a-fold-shape', 'osc-a-interp-mode',
+       'osc-b-phase-mode', 'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode']
         .forEach(prefix => bindSelValueMirror(prefix + '-select', prefix + '-value'));
     } catch (eSelMirror) { console.warn('[SYN-sel-mirror] bindSelValueMirror failed', eSelMirror); }
 

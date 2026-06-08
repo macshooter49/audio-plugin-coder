@@ -155,6 +155,7 @@ private:
     // Synth section — Phase 2C (warp modes)
     juce::WebSliderRelay synOscAWarpModeRelay   { ParameterIDs::SYN_OSC_A_WARP_MODE };
     juce::WebSliderRelay synOscAWarpAmountRelay { ParameterIDs::SYN_OSC_A_WARP_AMOUNT };
+    juce::WebSliderRelay synOscAPhaseModeRelay  { ParameterIDs::SYN_OSC_A_PHASE_MODE };
 
     // Synth section — Phase 9 (OSC B relays)
     juce::WebSliderRelay synOscBEngineRelay     { ParameterIDs::SYN_OSC_B_ENGINE };
@@ -167,6 +168,7 @@ private:
     juce::WebSliderRelay synOscBWtFrameRelay    { ParameterIDs::SYN_OSC_B_WT_FRAME };
     juce::WebSliderRelay synOscBWarpModeRelay   { ParameterIDs::SYN_OSC_B_WARP_MODE };
     juce::WebSliderRelay synOscBWarpAmountRelay { ParameterIDs::SYN_OSC_B_WARP_AMOUNT };
+    juce::WebSliderRelay synOscBPhaseModeRelay  { ParameterIDs::SYN_OSC_B_PHASE_MODE };
 
     // Phase 11a — OSC A wavetable rework relays (6 new)
     juce::WebSliderRelay synOscASpectralTypeRelay { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE };
@@ -321,6 +323,7 @@ private:
     // Synth section — Phase 2C (warp)
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarpModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarpAmountAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAPhaseModeAttachment;
 
     // Synth section — Phase 9 (OSC B attachments)
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBEngineAttachment;
@@ -333,6 +336,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWtFrameAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarpAmountAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBPhaseModeAttachment;
 
     // Phase 11a — OSC A attachments
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralTypeAttachment;

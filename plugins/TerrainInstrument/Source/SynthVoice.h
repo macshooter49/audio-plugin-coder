@@ -345,6 +345,45 @@ namespace tw
             blurTargetB_ = juce::jlimit (0.0f, 1.0f, blurB01);
         }
 
+        /** PHASE mode per OSC (0=RETRIG, 1=FREE, 2=RANDOM, 3=SPREAD). Governs how each
+         *  unison sine's phase accumulator is initialised at note-on. Pushed per block. */
+        void setPhaseMode (int modeA, int modeB) noexcept
+        {
+            phaseModeA_ = juce::jlimit (0, 3, modeA);
+            phaseModeB_ = juce::jlimit (0, 3, modeB);
+        }
+
+    private:
+        // One-time decorrelated seed for FREE mode (per voice ptr / sine / osc), 0..1.
+        double seedPhase (int u, int osc) const noexcept
+        {
+            const std::uint32_t h = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
+                                  ^ static_cast<std::uint32_t> ((u   + 1) * 0x9E3779B9u)
+                                  ^ static_cast<std::uint32_t> ((osc + 1) * 2654435761u);
+            return (double) (h & 0xFFFF) / 65535.0;
+        }
+        // Fresh decorrelated phase each call (xorshift32) for RANDOM mode, 0..1.
+        double nextPhaseRandom () noexcept
+        {
+            phaseRng_ ^= phaseRng_ << 13;
+            phaseRng_ ^= phaseRng_ >> 17;
+            phaseRng_ ^= phaseRng_ << 5;
+            return (double) (phaseRng_ & 0xFFFFFFu) / (double) 0x1000000;
+        }
+        // Resolve one unison sine's start phase for a given mode. `carried` is the
+        // accumulator's current value (used by FREE so it keeps running across notes).
+        double resolvePhase (int mode, int u, int osc, double carried) noexcept
+        {
+            switch (mode)
+            {
+                case 0: return 0.0;                                                              // RETRIG — aligned, punchy
+                case 3: return (activeUnison_ > 1) ? (double) u / (double) activeUnison_ : 0.0;   // SPREAD — even fan
+                case 2: return nextPhaseRandom();                                                 // RANDOM — fresh each note
+                case 1: default: return phaseSeeded_ ? carried : seedPhase (u, osc);              // FREE — seed once, then carry
+            }
+        }
+    public:
+
         /** Phase 11d — Set per-OSC FOLD shape + amount. Pushed per-block from
          *  PluginProcessor broadcast. Applies in the unison loop, post engine compute. */
         void setFold (int shapeA, float amountA, int shapeB, float amountB) noexcept
@@ -395,23 +434,23 @@ namespace tw
             // OSC B resets (Phase 9)
             noiseLpZB_       = 0.0f;
 
-            // Phase 8b — reset per-sine arrays for all kMaxUnison slots, with
-            // per-sine random initial phase so unison voices don't all start
-            // in lock-step (which would create a transient click at t=0).
+            // PHASE — initialise each unison sine's phase accumulator per the selected
+            // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
+            // is masked → click-free. FREE keeps the running accumulator (carried) across
+            // notes for true analog behaviour; it's seeded decorrelated once (phaseSeeded_).
+            if (phaseRng_ == 0u)
+                phaseRng_ = (static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this)) ^ 0xA5A5A5A5u) | 1u;
+
             for (int u = 0; u < kMaxUnison; ++u)
             {
-                // Hash voice pointer XOR midiNote XOR u for decorrelated phase per sine.
-                const std::uint32_t h = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
-                                        ^ static_cast<std::uint32_t> ((midiNote + 1) * 2654435761u)
-                                        ^ static_cast<std::uint32_t> ((u + 1) * 0x9E3779B9u);
-                const double initPhase = (double) (h & 0xFFFF) / 65535.0;  // 0..1
-                uPhaseA_[(size_t) u]      = initPhase;
+                uPhaseA_[(size_t) u]      = resolvePhase (phaseModeA_, u, 0, uPhaseA_[(size_t) u]);
                 uModPhaseA_[(size_t) u]   = 0.0;
                 uSyncPhaseA_[(size_t) u]  = 0.0;
-                uPhaseB_[(size_t) u]      = initPhase;
+                uPhaseB_[(size_t) u]      = resolvePhase (phaseModeB_, u, 1, uPhaseB_[(size_t) u]);
                 uModPhaseB_[(size_t) u]   = 0.0;
                 uSyncPhaseB_[(size_t) u]  = 0.0;
             }
+            phaseSeeded_ = true;
 
             // Phase 8a — EROSION: randomize rate + initial phase per voice/note combination
             // Hash voice pointer XOR midiNote for decorrelated drift across voices
@@ -1730,6 +1769,13 @@ namespace tw
         // gate must watch the pointer too or the blend keeps stale (pre-morph) bytes.
         const tw::Wavetable* lastWtA_ = nullptr;
         const tw::Wavetable* lastWtB_ = nullptr;
+
+        // ── PHASE (note-on phase-init mode) ──────────────────────────────────────
+        // 0=RETRIG, 1=FREE, 2=RANDOM (default), 3=SPREAD. phaseSeeded_ guards the
+        // one-time FREE seed; phaseRng_ is the per-voice xorshift state for RANDOM.
+        int phaseModeA_ = 2, phaseModeB_ = 2;
+        bool phaseSeeded_ = false;
+        std::uint32_t phaseRng_ = 0u;
 
         // Phase 11d — FOLD state (per OSC).
         int   foldShapeA_   = 0;     // 0=Linear, 1=Sine, 2=Triangle

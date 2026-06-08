@@ -100,6 +100,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscAWtFrameRelay)
             .withOptionsFrom(synOscAWarpModeRelay)
             .withOptionsFrom(synOscAWarpAmountRelay)
+            .withOptionsFrom(synOscAPhaseModeRelay)
             .withOptionsFrom(synOscBEngineRelay)
             .withOptionsFrom(synOscBOctRelay)
             .withOptionsFrom(synOscBSemiRelay)
@@ -110,6 +111,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBWtFrameRelay)
             .withOptionsFrom(synOscBWarpModeRelay)
             .withOptionsFrom(synOscBWarpAmountRelay)
+            .withOptionsFrom(synOscBPhaseModeRelay)
             .withOptionsFrom(synVoicesRelay)
             .withOptionsFrom(synUnisonRelay)
             .withOptionsFrom(synSpreadRelay)
@@ -2015,6 +2017,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscAWarpModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP_MODE),
         synOscAWarpModeRelay, nullptr);
+    synOscAPhaseModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_PHASE_MODE),
+        synOscAPhaseModeRelay, nullptr);
 
     synOscAWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP_AMOUNT),
@@ -2048,6 +2053,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscBWarpModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP_MODE),
         synOscBWarpModeRelay, nullptr);
+    synOscBPhaseModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_PHASE_MODE),
+        synOscBPhaseModeRelay, nullptr);
     synOscBWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP_AMOUNT),
         synOscBWarpAmountRelay, nullptr);
