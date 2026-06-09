@@ -180,6 +180,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_INTERP_MODE[]   = "SYN_OSC_A_INTERP_MODE";    // choice {0=LINEAR}
     constexpr char SYN_OSC_A_PHASE_MODE[]    = "SYN_OSC_A_PHASE_MODE";     // choice 0=RETRIG,1=FREE,2=RANDOM,3=SPREAD
     constexpr char SYN_OSC_A_WAVER[]         = "SYN_OSC_A_WAVER";          // float 0..100 % analog pitch-drift depth (OU)
+    constexpr char SYN_OSC_A_KEYTRACK[]      = "SYN_OSC_A_KEYTRACK";       // float 0..100 % note->destination depth
+    constexpr char SYN_OSC_A_KEYTRACK_DEST[] = "SYN_OSC_A_KEYTRACK_DEST";  // choice 0=FRAME,1=WARP,2=FOLD
 
     constexpr char SYN_OSC_B_SPECTRAL_TYPE[] = "SYN_OSC_B_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_B_SPECTRAL_AMT[]  = "SYN_OSC_B_SPECTRAL_AMT";   // float 0..1
@@ -189,4 +191,6 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_INTERP_MODE[]   = "SYN_OSC_B_INTERP_MODE";    // choice {0=LINEAR}
     constexpr char SYN_OSC_B_PHASE_MODE[]    = "SYN_OSC_B_PHASE_MODE";     // choice 0=RETRIG,1=FREE,2=RANDOM,3=SPREAD
     constexpr char SYN_OSC_B_WAVER[]         = "SYN_OSC_B_WAVER";          // float 0..100 % analog pitch-drift depth (OU)
+    constexpr char SYN_OSC_B_KEYTRACK[]      = "SYN_OSC_B_KEYTRACK";       // float 0..100 % note->destination depth
+    constexpr char SYN_OSC_B_KEYTRACK_DEST[] = "SYN_OSC_B_KEYTRACK_DEST";  // choice 0=FRAME,1=WARP,2=FOLD
 }

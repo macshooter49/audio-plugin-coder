@@ -1093,6 +1093,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f),
         0.0f));
 
+    // KEYTRACK (back panel pill 3 — replaces the redundant FOLD-shape selector).
+    // First note->destination modulation route: depth 0..100 %, destination selectable
+    // (FRAME=WT POS, WARP, FOLD). Per-voice, latched at note-on. Architected toward the
+    // future mod-matrix. (SPECTRAL is off-thread; sample START has no per-OSC param yet.)
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_KEYTRACK, 1 },
+        "Synth OSC A Keytrack",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_KEYTRACK_DEST, 1 },
+        "Synth OSC A Keytrack Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_AMOUNT, 1 },
         "Synth OSC A Warp Amount",
@@ -1194,6 +1209,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WAVER, 1 },
         "Synth OSC B Waver",
         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_KEYTRACK, 1 },
+        "Synth OSC B Keytrack",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_KEYTRACK_DEST, 1 },
+        "Synth OSC B Keytrack Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
         "Synth OSC B Warp Amount",
@@ -1893,6 +1917,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // WAVER — per-OSC analog pitch-drift depth (0..100 %). Pushed per voice below.
         const float waverA      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WAVER);
         const float waverB      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WAVER);
+        // KEYTRACK — per-OSC note->destination depth (0..100 %) + destination choice.
+        const float ktDepthA    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_KEYTRACK);
+        const int   ktDestA     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_KEYTRACK_DEST);
+        const float ktDepthB    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_KEYTRACK);
+        const int   ktDestB     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_KEYTRACK_DEST);
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -1927,6 +1956,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWarpB                  (warpModeB, warpAmountB);
                 sv->setPhaseMode              (phaseModeA, phaseModeB);
                 sv->setWaver                  (waverA / 100.0f, waverB / 100.0f);   // WAVER — analog pitch drift (OU)
+                sv->setKeytrack               (ktDepthA / 100.0f, ktDestA, ktDepthB / 100.0f, ktDestB);  // KEYTRACK
                 sv->setEngineB                (engineIdxB);
             }
         }

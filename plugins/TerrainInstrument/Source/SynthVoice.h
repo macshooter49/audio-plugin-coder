@@ -230,7 +230,7 @@ namespace tw
         /** Set frame position 0..1 within the current wavetable. */
         void setWavetableFrame (float pos) noexcept
         {
-            framePos_ = juce::jlimit (0.0f, 1.0f, pos);
+            framePosBase_ = juce::jlimit (0.0f, 1.0f, pos);
         }
 
         /** Phase 2C — Warp mode (0=NONE, 1=BEND, 2=SYNC, 3=FORMANT) +
@@ -239,7 +239,7 @@ namespace tw
         void setWarp (int mode, float amount) noexcept
         {
             warpMode_   = juce::jlimit (0, 10, mode);
-            warpAmount_ = juce::jlimit (0.0f, 1.0f, amount);
+            warpAmountBase_ = juce::jlimit (0.0f, 1.0f, amount);
         }
 
         /** Select which engine renders this voice. Idx 0..5 from
@@ -278,12 +278,12 @@ namespace tw
         }
 
         void setWavetableB (const tw::Wavetable* wt) noexcept { currentWavetableB_ = wt; }
-        void setWavetableFrameB (float pos) noexcept { framePosB_ = juce::jlimit (0.0f, 1.0f, pos); }
+        void setWavetableFrameB (float pos) noexcept { framePosBaseB_ = juce::jlimit (0.0f, 1.0f, pos); }
 
         void setWarpB (int mode, float amount) noexcept
         {
             warpModeB_   = juce::jlimit (0, 10, mode);
-            warpAmountB_ = juce::jlimit (0.0f, 1.0f, amount);
+            warpAmountBaseB_ = juce::jlimit (0.0f, 1.0f, amount);
         }
 
         void setEngineB (int idx) noexcept
@@ -450,9 +450,23 @@ namespace tw
         void setFold (int shapeA, float amountA, int shapeB, float amountB) noexcept
         {
             foldShapeA_  = juce::jlimit (0, 2, shapeA);
-            foldAmountA_ = juce::jlimit (0.0f, 1.0f, amountA);
+            foldAmountBaseA_ = juce::jlimit (0.0f, 1.0f, amountA);
             foldShapeB_  = juce::jlimit (0, 2, shapeB);
-            foldAmountB_ = juce::jlimit (0.0f, 1.0f, amountB);
+            foldAmountBaseB_ = juce::jlimit (0.0f, 1.0f, amountB);
+        }
+
+        /** KEYTRACK — the first note→destination modulation route (the mod-matrix
+         *  embryo). Source = note pitch (latched per voice at note-on); depth 0..1
+         *  per OSC; destination selectable (0=FRAME/WT POS, 1=WARP, 2=FOLD). The
+         *  effective destination value = base + depth·noteRamp, clamped, resolved at
+         *  render entry. Architected so Env/LFO sources + a full matrix slot in later
+         *  with no rewrite of the oscillator. Pushed per block. */
+        void setKeytrack (float depthA, int destA, float depthB, int destB) noexcept
+        {
+            ktDepthA_ = juce::jlimit (0.0f, 1.0f, depthA);
+            ktDestA_  = juce::jlimit (0, 2, destA);
+            ktDepthB_ = juce::jlimit (0.0f, 1.0f, depthB);
+            ktDestB_  = juce::jlimit (0, 2, destB);
         }
 
         /** Phase 11c — Set per-OSC SPECTRAL type + amount. Pushed per-block from
@@ -526,6 +540,11 @@ namespace tw
                 waverCentsA_[(size_t) u] = 0.0f;
                 waverCentsB_[(size_t) u] = 0.0f;
             }
+
+            // KEYTRACK — latch the note-pitch source for this voice: a low-anchored
+            // unipolar ramp, 0 at kKtLowNote up to 1 at kKtHighNote (held for the note).
+            ktRamp_ = juce::jlimit (0.0f, 1.0f,
+                          (float) (midiNote - kKtLowNote) / (float) (kKtHighNote - kKtLowNote));
 
             // Phase 8b — populate per-sine increments
             updateUnisonFramePositions();
@@ -604,6 +623,22 @@ namespace tw
             scratch_.clear();
             auto* scratchL = scratch_.getWritePointer (0);
             auto* scratchR = scratch_.getWritePointer (1);
+
+            // KEYTRACK — resolve effective destination values = base (knob) + note→dest
+            // modulation, clamped. This is mod route #1: source = ktRamp_ (note pitch),
+            // depth = ktDepth*_, destination = ktDest*_. The render path below reads only
+            // the effective members (framePos_/warpAmount_/foldAmount*_), so nothing else
+            // changes; adding more sources/routes later means accumulating into these.
+            {
+                const float ktA = ktDepthA_ * ktRamp_;
+                const float ktB = ktDepthB_ * ktRamp_;
+                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktA : 0.0f));
+                warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktA : 0.0f));
+                foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktA : 0.0f));
+                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktB : 0.0f));
+                warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktB : 0.0f));
+                foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktB : 0.0f));
+            }
 
             // WAVER — advance per-(osc × unison sine) OU pitch drift this block. Slow,
             // bounded, decorrelated; cents are consumed by updateUnisonPhaseIncrements*.
@@ -1807,6 +1842,22 @@ namespace tw
         std::array<double, kMaxUnison> uPhaseIncB_    {};
         std::array<double, kMaxUnison> uModPhaseB_    {};
         std::array<double, kMaxUnison> uSyncPhaseB_   {};
+
+        // ── KEYTRACK — note→destination modulation (the mod-matrix embryo) ──────────
+        //   The render path keeps reading the EFFECTIVE members (framePos_/warpAmount_/
+        //   foldAmount*_). The setters now write the BASE members below; at render entry
+        //   effective = base + (selected ? depth·ktRamp_ : 0), clamped. Destinations are
+        //   only the per-voice-modulatable timbre params (SPECTRAL is off-thread; sample
+        //   START has no per-OSC param yet — both drop in here when ready).
+        enum { kKtFrame = 0, kKtWarp = 1, kKtFold = 2 };
+        static constexpr int kKtLowNote  = 36;    // C1 — ramp anchor (0 here = "regular", no tracking)
+        static constexpr int kKtHighNote = 96;    // C6 — full sweep (+1.0 × depth) at the top of the range
+        float ktDepthA_ = 0.0f, ktDepthB_ = 0.0f; // 0..1 depth per OSC (per-block from APVTS/100)
+        int   ktDestA_  = 0,    ktDestB_  = 0;     // 0=FRAME,1=WARP,2=FOLD
+        float ktRamp_   = 0.0f;                    // note-pitch source, latched per voice at note-on
+        float framePosBase_    = 0.0f, framePosBaseB_   = 0.0f;   // knob bases (keytrack adds onto these)
+        float warpAmountBase_  = 0.0f, warpAmountBaseB_ = 0.0f;
+        float foldAmountBaseA_ = 0.0f, foldAmountBaseB_ = 0.0f;
 
         // Phase 11a — per-sine WT frame position (centre = framePos_, offset = SPREAD × u_norm × 0.5).
         // Render path wraps to [0,1] before wavetable lookup.
