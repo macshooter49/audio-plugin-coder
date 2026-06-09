@@ -188,8 +188,7 @@ namespace tw
          *  applied as semitone drift to cutoff inside renderNextBlock. */
         void setErosionAmount_filter (float e) noexcept
         {
-            // (Different field from the existing erosionAmount_ which feeds
-            //  pitch drift — this one is for cutoff drift.)
+            // Filter-cutoff drift only. (Pitch drift is now WAVER — see setWaver().)
             fltErosionAmount_ = juce::jlimit (0.0f, 1.0f, e);
         }
 
@@ -353,6 +352,15 @@ namespace tw
             phaseModeB_ = juce::jlimit (0, 3, modeB);
         }
 
+        /** WAVER depth per OSC, 0..1 (analog pitch drift; from SYN_OSC_A/B_WAVER / 100).
+         *  Replaces the old EROSION pitch sine-LFO with a bounded Ornstein–Uhlenbeck
+         *  drift, independent per (osc × unison sine). Pushed per block; modulatable. */
+        void setWaver (float a, float b) noexcept
+        {
+            waverA_ = juce::jlimit (0.0f, 1.0f, a);
+            waverB_ = juce::jlimit (0.0f, 1.0f, b);
+        }
+
     private:
         // One-time decorrelated seed for FREE mode (per voice ptr / sine / osc), 0..1.
         double seedPhase (int u, int osc) const noexcept
@@ -380,6 +388,59 @@ namespace tw
                 case 3: return (activeUnison_ > 1) ? (double) u / (double) activeUnison_ : 0.0;   // SPREAD — even fan
                 case 2: return nextPhaseRandom();                                                 // RANDOM — fresh each note
                 case 1: default: return phaseSeeded_ ? carried : seedPhase (u, osc);              // FREE — seed once, then carry
+            }
+        }
+
+        // ── WAVER — analog pitch drift (Ornstein–Uhlenbeck, per osc × unison sine) ──
+        // OU is a mean-reverting (bounded) leaky-integrator of Gaussian noise: a slow,
+        // low-frequency, decorrelated wander in cents — "wanders but never runs away".
+        // Updated at block rate; the cents are added to each sine's phase increment in
+        // updateUnisonPhaseIncrements*. Steady-state σ = stdCents, correlation time tauC.
+        static constexpr float kWaverTauSeconds  = 1.0f;   // correlation time 1/θ (per-note breathing)
+        static constexpr float kWaverStdMaxCents = 3.0f;   // steady-state σ at 100% (3σ ≈ 9 cents)
+        static constexpr float kWaverCapCents    = 15.0f;  // hard excursion ceiling (never detune away)
+
+        // Uniform [0,1) from a per-sine xorshift32 stream (one independent stream each).
+        static float waverUniform (std::uint32_t& s) noexcept
+        {
+            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+            return (float) ((s >> 8) & 0xFFFFFFu) * (1.0f / 16777216.0f);
+        }
+        // Murmur3 fmix32 finalizer — strong avalanche so the per-(osc × sine) seeds
+        // decorrelate fully (xorshift32 alone stays correlated for near-identical seeds).
+        static std::uint32_t waverSeedMix (std::uint32_t x) noexcept
+        {
+            x ^= x >> 16; x *= 0x7feb352du;
+            x ^= x >> 15; x *= 0x846ca68bu;
+            x ^= x >> 16;
+            return x | 1u;                                  // nonzero for xorshift
+        }
+        // N(0,1) via Box–Muller (block-rate, cost negligible).
+        static float waverGaussian (std::uint32_t& s) noexcept
+        {
+            float u1 = waverUniform (s);
+            const float u2 = waverUniform (s);
+            u1 = juce::jmax (u1, 1.0e-7f);                  // avoid log(0)
+            return std::sqrt (-2.0f * std::log (u1)) * std::cos (6.2831853071795865f * u2);
+        }
+        // Advance one oscillator's per-unison OU drift by one block (dt seconds).
+        // depth 0..1 scales σ; collapses to zero when off. Bounded + denormal-flushed.
+        void updateWaverOU (float* cents, std::uint32_t* rng, float depth, float dt) noexcept
+        {
+            if (depth <= 0.0f)
+            {
+                for (int u = 0; u < kMaxUnison; ++u) cents[(size_t) u] = 0.0f;
+                return;
+            }
+            const float phi      = std::exp (-dt / kWaverTauSeconds);   // AR(1) pole = e^(-dt/τ)
+            const float stdCents = depth * kWaverStdMaxCents;
+            const float sigStep  = stdCents * std::sqrt (1.0f - phi * phi);
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                float x = phi * cents[(size_t) u] + sigStep * waverGaussian (rng[(size_t) u]);
+                x = juce::jlimit (-kWaverCapCents, kWaverCapCents, x);       // never run away
+                if (x < 1.0e-20f && x > -1.0e-20f) x = 0.0f;                 // denormal flush
+                cents[(size_t) u] = x;
             }
         }
     public:
@@ -418,8 +479,9 @@ namespace tw
             interpModeB_ = juce::jlimit (0, 1, modeB);
         }
 
-        /** EROSION amount 0..1 (set per-block from APVTS SYN_EROSION/100). */
-        void setErosionAmount (float a) noexcept { erosionAmount_ = juce::jlimit (0.0f, 1.0f, a); }
+        // (Old per-voice pitch EROSION setter removed — pitch drift is now WAVER, set
+        //  per-OSC via setWaver(). SYN_EROSION still drives the FILTER cutoff drift via
+        //  setErosionAmount_filter() — that path is unchanged.)
 
         /** HORIZON tilt -1..+1 (set per-block from APVTS SYN_HORIZON/100). */
         void setHorizonAmount (float h) noexcept { horizonAmount_ = juce::jlimit (-1.0f, 1.0f, h); }
@@ -452,15 +514,18 @@ namespace tw
             }
             phaseSeeded_ = true;
 
-            // Phase 8a — EROSION: randomize rate + initial phase per voice/note combination
-            // Hash voice pointer XOR midiNote for decorrelated drift across voices
-            const std::uint32_t hash = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
-                                       ^ static_cast<std::uint32_t> (midiNote * 2654435761u);
-            const float r1 = static_cast<float> (hash & 0xFFFF)         / 65535.0f;  // 0..1
-            const float r2 = static_cast<float> ((hash >> 16) & 0xFFFF) / 65535.0f;  // 0..1
-            erosionRate_         = 0.3f + r1 * 0.4f;  // 0.3..0.7 Hz
-            erosionPhase_        = r2;                 // random initial phase
-            currentErosionCents_ = 0.0f;
+            // WAVER — seed per-(osc × unison sine) OU drift streams, decorrelated per
+            // voice+note. The (2u+1)/(2u+2) interleave gives all 16 streams distinct,
+            // well-separated inputs; waverSeedMix() avalanches them to ~zero cross-corr.
+            const std::uint32_t waverHash = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
+                                          ^ static_cast<std::uint32_t> (midiNote * 2654435761u);
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                waverRngA_[(size_t) u]   = waverSeedMix (waverHash + (std::uint32_t) (2 * u + 1) * 0x9E3779B1u);
+                waverRngB_[(size_t) u]   = waverSeedMix (waverHash + (std::uint32_t) (2 * u + 2) * 0x9E3779B1u);
+                waverCentsA_[(size_t) u] = 0.0f;
+                waverCentsB_[(size_t) u] = 0.0f;
+            }
 
             // Phase 8b — populate per-sine increments
             updateUnisonFramePositions();
@@ -540,15 +605,14 @@ namespace tw
             auto* scratchL = scratch_.getWritePointer (0);
             auto* scratchR = scratch_.getWritePointer (1);
 
-            // Phase 8a — Compute this block's EROSION drift (slow sine LFO, per-voice)
+            // WAVER — advance per-(osc × unison sine) OU pitch drift this block. Slow,
+            // bounded, decorrelated; cents are consumed by updateUnisonPhaseIncrements*.
             {
-                constexpr double pi2 = 6.2831853071795865;
-                currentErosionCents_ = std::sin (static_cast<float> (pi2 * erosionPhase_))
-                                       * erosionAmount_ * 15.0f;  // max ±15 cents
-                erosionPhase_ += static_cast<float> (erosionRate_ * numSamples / sampleRate_);
-                if (erosionPhase_ >= 1.0f) erosionPhase_ -= std::floor (erosionPhase_);
+                const float dt = static_cast<float> (numSamples) / static_cast<float> (sampleRate_);
+                updateWaverOU (waverCentsA_, waverRngA_, waverA_, dt);
+                updateWaverOU (waverCentsB_, waverRngB_, waverB_, dt);
             }
-            // Re-derive per-sine phase increments with updated erosion drift
+            // Re-derive per-sine phase increments with updated drift
             updateUnisonPhaseIncrementsA (currentMidiNote_);
             updateUnisonPhaseIncrementsB (currentMidiNote_);
 
@@ -1407,7 +1471,7 @@ namespace tw
                     + static_cast<double> (semiOffset_)
                     + static_cast<double> (centsOffset_)             * 0.01
                     + static_cast<double> (uDetuneCents_[(size_t) u]) * 0.01
-                    + static_cast<double> (currentErosionCents_)     * 0.01;
+                    + static_cast<double> (waverCentsA_[(size_t) u])  * 0.01;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncA_[(size_t) u] = hz / sampleRate_;
             }
@@ -1423,7 +1487,7 @@ namespace tw
                     + static_cast<double> (semiOffsetB_)
                     + static_cast<double> (centsOffsetB_)            * 0.01
                     + static_cast<double> (uDetuneCents_[(size_t) u]) * 0.01
-                    + static_cast<double> (currentErosionCents_)     * 0.01;
+                    + static_cast<double> (waverCentsB_[(size_t) u])  * 0.01;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncB_[(size_t) u] = hz / sampleRate_;
             }
@@ -1834,11 +1898,13 @@ namespace tw
         int   activeUnison_     = 1;       // 1..kMaxUnison
         float unisonSpread01_   = 0.0f;    // 0..1
 
-        // Phase 8a — EROSION state (per-voice slow LFO wobbles pitch ±2 cents max)
-        float erosionAmount_       = 0.0f;  // 0..1 from SYN_EROSION/100
-        float erosionRate_         = 0.5f;  // sub-1Hz, randomized per voice in startNote
-        float erosionPhase_        = 0.0f;  // 0..1, advances per block
-        float currentErosionCents_ = 0.0f;  // cached this-block drift value
+        // ── WAVER — per-(osc × unison sine) OU analog pitch drift (replaces the old
+        //    EROSION pitch sine-LFO). Depth 0..1 per osc; cents state + per-sine RNG. ──
+        float         waverA_ = 0.0f, waverB_ = 0.0f;   // depth 0..1 (per-block from APVTS/100)
+        float         waverCentsA_[kMaxUnison] {};       // OU drift state, cents (osc A)
+        float         waverCentsB_[kMaxUnison] {};       // OU drift state, cents (osc B)
+        std::uint32_t waverRngA_[kMaxUnison] {};         // per-(osc A × sine) xorshift32 state
+        std::uint32_t waverRngB_[kMaxUnison] {};         // per-(osc B × sine) xorshift32 state
 
         // Phase 8a — HORIZON tilt filter (per-voice high-shelf, gain depends on midiNote * horizon)
         float horizonAmount_   = 0.0f;  // -1..+1 from SYN_HORIZON/100

@@ -3568,6 +3568,8 @@ body {
 #syn-panel .voice-row svg { width: 11px; height: 11px; color: var(--text-primary); }
 #syn-panel .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
 /* Phase 8a — draggable voice rows */
+#syn-panel .sel[data-syn-row] { cursor: ns-resize; user-select: none; }
+#syn-panel .sel[data-syn-row].dragging { background: rgba(139,92,246,0.18); }
 #syn-panel .voice-row[data-syn-row] { cursor: ns-resize; transition: background 0.12s ease; border-radius: 4px; padding: 1px 4px; }
 #syn-panel .voice-row[data-syn-row]:hover { background: rgba(139,92,246,0.10); }
 #syn-panel .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
@@ -4424,19 +4426,9 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel">
-                  <div class="sel-label">SPECTRAL</div>
-                  <div class="sel-value" id="osc-a-spectral-type-value">NONE</div>
-                  <select class="sel-select" data-syn="SYN_OSC_A_SPECTRAL_TYPE" id="osc-a-spectral-type-select" aria-label="SPECTRAL type">
-                    <option value="0">None</option>
-                    <option value="1">Harmonic Stretch</option>
-                    <option value="2">Inharmonic Stretch</option>
-                    <option value="3">Vocode</option>
-                    <option value="4">Smear</option>
-                    <option value="5">Random Amps</option>
-                    <option value="6">Data Compress</option>
-                    <option value="7">Spectral Phaser</option>
-                  </select>
+                <div class="sel" data-syn-row="SYN_OSC_A_WAVER" title="WAVER — analog pitch-drift depth (per-oscillator)">
+                  <div class="sel-label">WAVER</div>
+                  <div class="sel-value"><b>0</b></div>
                 </div>
                 <div class="sel">
                   <div class="sel-label">FOLD</div>
@@ -4590,19 +4582,9 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel">
-                  <div class="sel-label">SPECTRAL</div>
-                  <div class="sel-value" id="osc-b-spectral-type-value">NONE</div>
-                  <select class="sel-select" data-syn="SYN_OSC_B_SPECTRAL_TYPE" id="osc-b-spectral-type-select" aria-label="SPECTRAL type">
-                    <option value="0">None</option>
-                    <option value="1">Harmonic Stretch</option>
-                    <option value="2">Inharmonic Stretch</option>
-                    <option value="3">Vocode</option>
-                    <option value="4">Smear</option>
-                    <option value="5">Random Amps</option>
-                    <option value="6">Data Compress</option>
-                    <option value="7">Spectral Phaser</option>
-                  </select>
+                <div class="sel" data-syn-row="SYN_OSC_B_WAVER" title="WAVER — analog pitch-drift depth (per-oscillator)">
+                  <div class="sel-label">WAVER</div>
+                  <div class="sel-value"><b>0</b></div>
                 </div>
                 <div class="sel">
                   <div class="sel-label">FOLD</div>
@@ -8742,7 +8724,7 @@ setTimeout(function wireSynControls () {
 
     // Phase 8a — Voice meta rows: draggable + APVTS-synced
     try {
-      const voiceRows = document.querySelectorAll('#syn-panel .voice-row[data-syn-row]');
+      const voiceRows = document.querySelectorAll('#syn-panel [data-syn-row]');
       voiceRows.forEach(function(rowEl) {
         try {
           const paramId = rowEl.dataset.synRow;
@@ -8759,6 +8741,7 @@ setTimeout(function wireSynControls () {
           const formatValue = function(scaled) {
             if (paramId === 'SYN_VOICES' || paramId === 'SYN_UNISON') return String(Math.round(scaled));
             if (paramId === 'SYN_HORIZON') return Math.round(scaled).toString();
+            if (paramId === 'SYN_OSC_A_WAVER' || paramId === 'SYN_OSC_B_WAVER') return Math.round(scaled) + '%';
             return String(Math.round(scaled));
           };
 
@@ -8813,6 +8796,8 @@ setTimeout(function wireSynControls () {
                 SYN_UNISON:  0.0,                  // 1 in [1,8] → norm 0
                 SYN_SPREAD:  0.3,                  // 30 in [0,100]
                 SYN_EROSION: 0.0,
+                SYN_OSC_A_WAVER: 0.0,
+                SYN_OSC_B_WAVER: 0.0,
                 SYN_HORIZON: 0.5,                  // 0 in [-100,100]
               };
               const defaultN = defaults[paramId];

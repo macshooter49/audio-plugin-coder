@@ -1084,6 +1084,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "Retrig", "Free", "Random", "Spread" },
         2));
 
+    // WAVER (back panel pill 2 — replaces the redundant SPECTRAL-mode selector).
+    // Per-OSC analog pitch-drift depth (Ornstein–Uhlenbeck, per unison sine).
+    // Supersedes the old SYN_EROSION pitch drift; SYN_EROSION now drives FILTER drift only.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_WAVER, 1 },
+        "Synth OSC A Waver",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+        0.0f));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_AMOUNT, 1 },
         "Synth OSC A Warp Amount",
@@ -1181,6 +1190,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC B Phase Mode",
         juce::StringArray { "Retrig", "Free", "Random", "Spread" },
         2));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_WAVER, 1 },
+        "Synth OSC B Waver",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
         "Synth OSC B Warp Amount",
@@ -1877,6 +1890,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   phaseModeB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_PHASE_MODE);
         const float warpAmountB =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
         const int   engineIdxB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ENGINE);
+        // WAVER — per-OSC analog pitch-drift depth (0..100 %). Pushed per voice below.
+        const float waverA      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WAVER);
+        const float waverB      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WAVER);
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -1910,6 +1926,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWavetableFrameB        (wtFrameB);
                 sv->setWarpB                  (warpModeB, warpAmountB);
                 sv->setPhaseMode              (phaseModeA, phaseModeB);
+                sv->setWaver                  (waverA / 100.0f, waverB / 100.0f);   // WAVER — analog pitch drift (OU)
                 sv->setEngineB                (engineIdxB);
             }
         }
@@ -1962,9 +1979,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
             {
-                sv->setErosionAmount (erosionPct  / 100.0f);
                 sv->setHorizonAmount (horizonPct  / 100.0f);
-                // Batch 1 Filter — EROSION drives cutoff random-walk too.
+                // SYN_EROSION now drives the FILTER cutoff drift only — the per-voice
+                // PITCH drift it used to add is superseded by per-OSC WAVER (setWaver above).
                 sv->setErosionAmount_filter (erosionPct / 100.0f);
             }
         }
