@@ -1127,6 +1127,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f),
         0.0f));
 
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_UNISON, 1 },
+        "Synth OSC A Unison", 1, 16, 1));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_UDETUNE, 1 },
+        "Synth OSC A Unison Detune",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 25.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_UBLEND, 1 },
+        "Synth OSC A Unison Blend",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_UWIDTH, 1 },
+        "Synth OSC A Unison Width",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_AMOUNT, 1 },
         "Synth OSC A Warp Amount",
@@ -1251,6 +1267,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_ROUTE_AMT, 1 },
         "Synth OSC B Route Amount",
         juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_UNISON, 1 },
+        "Synth OSC B Unison", 1, 16, 1));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_UDETUNE, 1 },
+        "Synth OSC B Unison Detune",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 25.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_UBLEND, 1 },
+        "Synth OSC B Unison Blend",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_UWIDTH, 1 },
+        "Synth OSC B Unison Width",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
         "Synth OSC B Warp Amount",
@@ -2009,6 +2041,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float erosionPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_EROSION);
         const float horizonPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_HORIZON);
         const float unisonSpread01 = spreadPct / 100.0f;
+        juce::ignoreUnused (unisonCount, unisonSpread01);   // global UNISON/SPREAD retired → per-OSC below
+
+        // Per-OSC UNISON (replaces global). Voices 1..16 + Detune/Blend/Width (0..100 %→0..1).
+        const int   uniCountA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UNISON);
+        const float uniDetA   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f;
+        const float uniBlnA   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f;
+        const float uniWidA   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f;
+        const int   uniCountB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UNISON);
+        const float uniDetB   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f;
+        const float uniBlnB   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f;
+        const float uniWidB   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f;
 
         // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
@@ -2039,7 +2082,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             if (auto* tv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (v)))
             {
-                tv->setUnison (unisonCount, unisonSpread01);
+                tv->setUnisonA (uniCountA, uniDetA, uniBlnA, uniWidA);   // per-OSC UNISON
+                tv->setUnisonB (uniCountB, uniDetB, uniBlnB, uniWidB);
                 tv->setBlur (blurA, blurB);   // WT BLUR (frame blend)
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
                 tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g

@@ -107,6 +107,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscARouteSrcRelay)
             .withOptionsFrom(synOscARouteDestRelay)
             .withOptionsFrom(synOscARouteAmtRelay)
+            .withOptionsFrom(synOscAUnisonRelay)
+            .withOptionsFrom(synOscAUdetuneRelay)
+            .withOptionsFrom(synOscAUblendRelay)
+            .withOptionsFrom(synOscAUwidthRelay)
             .withOptionsFrom(synOscBEngineRelay)
             .withOptionsFrom(synOscBOctRelay)
             .withOptionsFrom(synOscBSemiRelay)
@@ -124,6 +128,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBRouteSrcRelay)
             .withOptionsFrom(synOscBRouteDestRelay)
             .withOptionsFrom(synOscBRouteAmtRelay)
+            .withOptionsFrom(synOscBUnisonRelay)
+            .withOptionsFrom(synOscBUdetuneRelay)
+            .withOptionsFrom(synOscBUblendRelay)
+            .withOptionsFrom(synOscBUwidthRelay)
             .withOptionsFrom(synVoicesRelay)
             .withOptionsFrom(synUnisonRelay)
             .withOptionsFrom(synSpreadRelay)
@@ -2050,6 +2058,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscARouteAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_ROUTE_AMT),
         synOscARouteAmtRelay, nullptr);
+    synOscAUnisonAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_UNISON),
+        synOscAUnisonRelay, nullptr);
+    synOscAUdetuneAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_UDETUNE),
+        synOscAUdetuneRelay, nullptr);
+    synOscAUblendAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_UBLEND),
+        synOscAUblendRelay, nullptr);
+    synOscAUwidthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_UWIDTH),
+        synOscAUwidthRelay, nullptr);
 
     synOscAWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP_AMOUNT),
@@ -2104,6 +2124,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscBRouteAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_ROUTE_AMT),
         synOscBRouteAmtRelay, nullptr);
+    synOscBUnisonAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_UNISON),
+        synOscBUnisonRelay, nullptr);
+    synOscBUdetuneAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_UDETUNE),
+        synOscBUdetuneRelay, nullptr);
+    synOscBUblendAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_UBLEND),
+        synOscBUblendRelay, nullptr);
+    synOscBUwidthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_UWIDTH),
+        synOscBUwidthRelay, nullptr);
     synOscBWarpAmountAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP_AMOUNT),
         synOscBWarpAmountRelay, nullptr);

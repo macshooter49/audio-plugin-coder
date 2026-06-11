@@ -162,6 +162,10 @@ private:
     juce::WebSliderRelay synOscARouteSrcRelay     { ParameterIDs::SYN_OSC_A_ROUTE_SRC };
     juce::WebSliderRelay synOscARouteDestRelay    { ParameterIDs::SYN_OSC_A_ROUTE_DEST };
     juce::WebSliderRelay synOscARouteAmtRelay     { ParameterIDs::SYN_OSC_A_ROUTE_AMT };
+    juce::WebSliderRelay synOscAUnisonRelay       { ParameterIDs::SYN_OSC_A_UNISON };
+    juce::WebSliderRelay synOscAUdetuneRelay      { ParameterIDs::SYN_OSC_A_UDETUNE };
+    juce::WebSliderRelay synOscAUblendRelay       { ParameterIDs::SYN_OSC_A_UBLEND };
+    juce::WebSliderRelay synOscAUwidthRelay       { ParameterIDs::SYN_OSC_A_UWIDTH };
 
     // Synth section — Phase 9 (OSC B relays)
     juce::WebSliderRelay synOscBEngineRelay     { ParameterIDs::SYN_OSC_B_ENGINE };
@@ -181,6 +185,10 @@ private:
     juce::WebSliderRelay synOscBRouteSrcRelay     { ParameterIDs::SYN_OSC_B_ROUTE_SRC };
     juce::WebSliderRelay synOscBRouteDestRelay    { ParameterIDs::SYN_OSC_B_ROUTE_DEST };
     juce::WebSliderRelay synOscBRouteAmtRelay     { ParameterIDs::SYN_OSC_B_ROUTE_AMT };
+    juce::WebSliderRelay synOscBUnisonRelay       { ParameterIDs::SYN_OSC_B_UNISON };
+    juce::WebSliderRelay synOscBUdetuneRelay      { ParameterIDs::SYN_OSC_B_UDETUNE };
+    juce::WebSliderRelay synOscBUblendRelay       { ParameterIDs::SYN_OSC_B_UBLEND };
+    juce::WebSliderRelay synOscBUwidthRelay       { ParameterIDs::SYN_OSC_B_UWIDTH };
 
     // Phase 11a — OSC A wavetable rework relays (6 new)
     juce::WebSliderRelay synOscASpectralTypeRelay { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE };
@@ -342,6 +350,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteSrcAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteDestAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUnisonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUdetuneAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUblendAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUwidthAttachment;
 
     // Synth section — Phase 9 (OSC B attachments)
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBEngineAttachment;
@@ -361,6 +373,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteSrcAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteDestAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUnisonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUdetuneAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUblendAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUwidthAttachment;
 
     // Phase 11a — OSC A attachments
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralTypeAttachment;

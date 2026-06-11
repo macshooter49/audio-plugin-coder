@@ -3583,6 +3583,11 @@ body {
 #syn-panel .rt-arrow.act { color: var(--purple-500); }
 #syn-panel .rt-amt { cursor: ns-resize; user-select: none; color: var(--text-muted); }
 #syn-panel .rt-amt.act { color: var(--text-primary); }
+#syn-panel .sel.uni-pill { gap: 3px; }
+#syn-panel .uni-pill .uni-param-value { font-size: 9px; line-height: 1.35; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .uni-val { cursor: ns-resize; user-select: none; color: var(--text-muted); line-height: 1.25; padding: 0; }
+#syn-panel .uni-pill.act .uni-val { color: var(--text-primary); }
+#syn-panel .uni-suffix { font-style: normal; opacity: 0.75; }
 #syn-panel .voice-row[data-syn-row] { cursor: ns-resize; transition: background 0.12s ease; border-radius: 4px; padding: 1px 4px; }
 #syn-panel .voice-row[data-syn-row]:hover { background: rgba(139,92,246,0.10); }
 #syn-panel .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
@@ -4443,16 +4448,9 @@ body {
                   <div class="sel-label">WAVER</div>
                   <div class="sel-value"><b>0</b></div>
                 </div>
-                <div class="sel kt-pill" title="KEYTRACK — note opens this destination as you play higher. Pick the destination; drag the % for how far it opens by the top of the keyboard.">
-                  <div class="kt-dest-row">
-                    <div class="sel-value kt-dest-value" id="osc-a-keytrack-dest-value">Frame</div>
-                    <select class="sel-select" data-syn="SYN_OSC_A_KEYTRACK_DEST" id="osc-a-keytrack-dest-select" aria-label="KEYTRACK destination">
-                      <option value="0">Frame</option>
-                      <option value="1">Warp</option>
-                      <option value="2">Fold</option>
-                    </select>
-                  </div>
-                  <div class="sel-value kt-depth" data-syn-kt="SYN_OSC_A_KEYTRACK"><b>0</b>%</div>
+                <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
+                  <div class="sel-value uni-param-value" id="osc-a-uni-param-value">Voices</div>
+                  <div class="sel-value uni-val" id="osc-a-uni-val" data-uni-voices="SYN_OSC_A_UNISON" data-uni-detune="SYN_OSC_A_UDETUNE" data-uni-blend="SYN_OSC_A_UBLEND" data-uni-width="SYN_OSC_A_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
                 </div>
                 <div class="sel rt-pill" title="ROUTE — pick a source, route it to a destination, set the amount (±). Modulates per note.">
                   <div class="rt-route-row">
@@ -4614,16 +4612,9 @@ body {
                   <div class="sel-label">WAVER</div>
                   <div class="sel-value"><b>0</b></div>
                 </div>
-                <div class="sel kt-pill" title="KEYTRACK — note opens this destination as you play higher. Pick the destination; drag the % for how far it opens by the top of the keyboard.">
-                  <div class="kt-dest-row">
-                    <div class="sel-value kt-dest-value" id="osc-b-keytrack-dest-value">Frame</div>
-                    <select class="sel-select" data-syn="SYN_OSC_B_KEYTRACK_DEST" id="osc-b-keytrack-dest-select" aria-label="KEYTRACK destination">
-                      <option value="0">Frame</option>
-                      <option value="1">Warp</option>
-                      <option value="2">Fold</option>
-                    </select>
-                  </div>
-                  <div class="sel-value kt-depth" data-syn-kt="SYN_OSC_B_KEYTRACK"><b>0</b>%</div>
+                <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
+                  <div class="sel-value uni-param-value" id="osc-b-uni-param-value">Voices</div>
+                  <div class="sel-value uni-val" id="osc-b-uni-val" data-uni-voices="SYN_OSC_B_UNISON" data-uni-detune="SYN_OSC_B_UDETUNE" data-uni-blend="SYN_OSC_B_UBLEND" data-uni-width="SYN_OSC_B_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
                 </div>
                 <div class="sel rt-pill" title="ROUTE — pick a source, route it to a destination, set the amount (±). Modulates per note.">
                   <div class="rt-route-row">
@@ -4837,8 +4828,6 @@ body {
 
           <div class="voice-meta">
             <div class="voice-row" data-syn-row="SYN_VOICES"><svg><use href="#ic-voices"/></svg><span>VOICES</span><b>8</b></div>
-            <div class="voice-row" data-syn-row="SYN_UNISON"><svg><use href="#ic-unison"/></svg><span>UNISON</span><b>1</b></div>
-            <div class="voice-row" data-syn-row="SYN_SPREAD"><svg><use href="#ic-spread"/></svg><span>SPREAD</span><b>30</b></div>
             <div class="voice-row" data-syn-row="SYN_EROSION"><svg><use href="#ic-erosion"/></svg><span>EROSION</span><b>0</b></div>
             <div class="voice-row" data-syn-row="SYN_HORIZON"><svg><use href="#ic-horizon"/></svg><span>HORIZON</span><b>0</b></div>
           </div>
@@ -8985,6 +8974,84 @@ setTimeout(function wireSynControls () {
       } catch (eRT) { console.warn('[RT] initRoutePills failed', eRT); }
     })();
 
+    // ── UNISON pills — RIGHT-CLICK to pick Voices/Detune/Blend/Width; drag the value.
+    //    Active param lives on pill.dataset.uniActive so the right-click menu (syn-ctx-menu
+    //    scope) and the drag handler stay in sync. No overlay over the value = clean drag. ──
+    (function initUnisonPills() {
+      try {
+        const PARAMS = [
+          { key: 'voices', label: 'Voices' }, { key: 'detune', label: 'Detune' },
+          { key: 'blend',  label: 'Blend'  }, { key: 'width',  label: 'Width'  },
+        ];
+        document.querySelectorAll('#syn-panel .uni-pill').forEach(function(pill) {
+          try {
+            const valEl = pill.querySelector('.uni-val');
+            const numEl = valEl ? valEl.querySelector('b') : null;
+            const sufEl = valEl ? valEl.querySelector('.uni-suffix') : null;
+            const labEl = pill.querySelector('.uni-param-value');
+            if (!valEl || !numEl || !window.Juce || !window.Juce.getSliderState) return;
+            const ids = { voices: valEl.dataset.uniVoices, detune: valEl.dataset.uniDetune,
+                          blend: valEl.dataset.uniBlend,  width:  valEl.dataset.uniWidth };
+            const states = {};
+            Object.keys(ids).forEach(function(k){ try { states[k] = window.Juce.getSliderState(ids[k]); } catch(e){} });
+            if (!pill.dataset.uniActive) pill.dataset.uniActive = 'voices';
+            const getActive = function(){ return pill.dataset.uniActive || 'voices'; };
+            const refresh = function() {
+              try {
+                const a = getActive(); const st = states[a]; if (!st) return;
+                numEl.textContent = Math.round(st.getScaledValue ? st.getScaledValue() : 0);
+                if (sufEl) sufEl.textContent = (a === 'voices') ? '' : '%';
+                if (labEl) { const p = PARAMS.find(function(x){return x.key===a;}); labEl.textContent = p ? p.label : a; }
+                const vs = states.voices;
+                const nv = (vs && vs.getScaledValue) ? Math.round(vs.getScaledValue()) : 1;
+                pill.classList.toggle('act', nv > 1);
+              } catch (e) {}
+            };
+            Object.keys(states).forEach(function(k) {
+              const st = states[k];
+              if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
+                st.valueChangedEvent.addListener(function(){ if (k === getActive() || k === 'voices') refresh(); });
+            });
+            // right-click -> choose which param the value edits (reuses syn-ctx-menu)
+            pill.addEventListener('contextmenu', function(ev) {
+              ev.preventDefault(); ev.stopPropagation();
+              if (!window.__synShowMenu) return;
+              const a = getActive();
+              const items = PARAMS.map(function(p) {
+                return { label: p.label, isChecked: (p.key === a),
+                         onPick: function(){ pill.dataset.uniActive = p.key; refresh(); } };
+              });
+              window.__synShowMenu('UNISON', items, ev.clientX, ev.clientY);
+            });
+            // left-drag the value -> edits ONLY the active param
+            let startY = 0, startN = 0, drag = false;
+            const onMove = function(ev) {
+              if (!drag) return;
+              const st = states[getActive()]; if (!st) return;
+              const dy = startY - ev.clientY;
+              const nN = Math.max(0, Math.min(1, startN + dy / 150));
+              try { st.setNormalisedValue(nN); } catch (e) {}
+              refresh();
+            };
+            const onUp = function() { drag = false; document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
+            valEl.addEventListener('pointerdown', function(ev) {
+              if (ev.button !== 0) return;   // right-click is the menu, never a drag
+              try {
+                const st = states[getActive()]; if (!st) return;
+                drag = true; startY = ev.clientY;
+                startN = st.getNormalisedValue ? st.getNormalisedValue() : 0;
+                if (valEl.setPointerCapture) valEl.setPointerCapture(ev.pointerId);
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+                ev.preventDefault(); ev.stopPropagation();
+              } catch (e) {}
+            });
+            refresh();
+          } catch (perPill) { console.warn('[UNI] pill init failed', perPill); }
+        });
+      } catch (e) { console.warn('[UNI] initUnisonPills failed', e); }
+    })();
+
     (function initSynRightClickMenus() {
       const menuEl = document.getElementById('syn-ctx-menu');
       if (!menuEl) return;
@@ -9094,6 +9161,7 @@ setTimeout(function wireSynControls () {
         menuEl.setAttribute('aria-hidden', 'true');
         menuEl.innerHTML = '';
       };
+      window.__synShowMenu = showMenu; window.__synHideMenu = hideMenu;
 
       // Click outside menu closes it
       document.addEventListener('mousedown', (e) => {

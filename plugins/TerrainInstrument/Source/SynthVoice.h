@@ -38,7 +38,7 @@ namespace tw
          *  StringArray in createParameterLayout: WT, SAMP, GRAN, SPEC, FM, NOISE. */
         enum class Engine : int { WT = 0, SAMP = 1, GRAN = 2, SPEC = 3, FM = 4, NOISE = 5 };
 
-        static constexpr int kMaxUnison = 8;
+        static constexpr int kMaxUnison = 16;   // Serum-parity unison ceiling (was 8)
 
         bool canPlaySound (juce::SynthesiserSound* s) override
         {
@@ -294,42 +294,74 @@ namespace tw
 
         // ── Phase 8b — Unison + EROSION + HORIZON setters ────────────────
 
-        /** Phase 8b — Set UNISON config (count + spread) on this voice. Called
-         *  per-block from PluginProcessor broadcast. Computes per-sine detune
-         *  cents (max ±25 at spread=1.0) + equal-power pan L/R. */
-        void setUnison (int count, float spread01) noexcept
+        /** Per-OSC UNISON (back panel pill, replaces the old global UNISON+SPREAD).
+         *  count   1..16 voices stacked per note (Serum-parity).
+         *  detune  0..1 → pitch fan ±kUniMaxDetuneCents at the edges (the "fat").
+         *  blend   0..1 → balance of the centre voice vs the detuned/outer voices:
+         *                 1 = all voices equal; 0 = only the centre voice (mono).
+         *                 Modelled per-voice as gain = 1 − (1−blend)·|u_norm|.
+         *  width   0..1 → stereo spread (equal-power pan) of the voices L↔R.
+         *  Blend gain is pre-multiplied into the pan tables so the render loop is
+         *  unchanged; auto-gain (1/√Σgain²) holds perceived loudness as voices rise. */
+        void setUnisonA (int count, float detune01, float blend01, float width01) noexcept
         {
-            activeUnison_   = juce::jlimit (1, kMaxUnison, count);
-            unisonSpread01_ = juce::jlimit (0.0f, 1.0f, spread01);
+            setUnisonImpl (activeUnisonA_, uDetuneCentsA_, uPanLA_, uPanRA_, uNormA_,
+                           count, detune01, blend01, width01);
+            updateUnisonFramePositions();
+            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsA (currentMidiNote_);
+        }
+        void setUnisonB (int count, float detune01, float blend01, float width01) noexcept
+        {
+            setUnisonImpl (activeUnisonB_, uDetuneCentsB_, uPanLB_, uPanRB_, uNormB_,
+                           count, detune01, blend01, width01);
+            updateUnisonFramePositions();
+            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsB (currentMidiNote_);
+        }
 
-            // Compute per-sine detune cents + pan.
-            for (int u = 0; u < activeUnison_; ++u)
+        /** Shared per-OSC unison builder. Fills detune cents, pan tables (with BLEND
+         *  gain pre-multiplied in), and the auto-gain normalization for one oscillator. */
+        void setUnisonImpl (int& activeCount,
+                            std::array<float, kMaxUnison>& detCents,
+                            std::array<float, kMaxUnison>& panL,
+                            std::array<float, kMaxUnison>& panR,
+                            float& norm,
+                            int count, float detune01, float blend01, float width01) noexcept
+        {
+            activeCount = juce::jlimit (1, kMaxUnison, count);
+            const float det = juce::jlimit (0.0f, 1.0f, detune01);
+            const float bl  = juce::jlimit (0.0f, 1.0f, blend01);
+            const float wid = juce::jlimit (0.0f, 1.0f, width01);
+
+            float gainSq = 0.0f;   // Σ (panL² + panR²) = Σ blendGain² → auto-gain
+            for (int u = 0; u < activeCount; ++u)
             {
-                if (activeUnison_ <= 1)
+                if (activeCount <= 1)
                 {
-                    uDetuneCents_[(size_t) u] = 0.0f;
-                    uPanL_[(size_t) u] = 0.7071f;
-                    uPanR_[(size_t) u] = 0.7071f;
+                    detCents[(size_t) u] = 0.0f;
+                    panL[(size_t) u] = 0.7071f;
+                    panR[(size_t) u] = 0.7071f;
+                    gainSq += 1.0f;     // 0.7071² + 0.7071² = 1 (centre voice, equal power)
                     continue;
                 }
-                // u_norm in [-1, +1] across the unison stack.
-                const float u_norm = ((float) u / (float) (activeUnison_ - 1)) * 2.0f - 1.0f;
-                uDetuneCents_[(size_t) u] = u_norm * unisonSpread01_ * 25.0f;
-                // Equal-power pan: angle in [0, π/2].
-                const float panAmt = u_norm * unisonSpread01_;       // -1..+1
-                const float angle  = (panAmt + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
-                uPanL_[(size_t) u] = std::cos (angle);
-                uPanR_[(size_t) u] = std::sin (angle);
+                const float u_norm = ((float) u / (float) (activeCount - 1)) * 2.0f - 1.0f;  // -1..+1
+                detCents[(size_t) u] = u_norm * det * kUniMaxDetuneCents;
+                // BLEND — centre voice (u_norm≈0) full, outer voices scaled toward `blend`.
+                const float g = 1.0f - (1.0f - bl) * std::fabs (u_norm);
+                // WIDTH — equal-power pan, angle in [0, π/2]; BLEND gain folded into the table
+                // so the render loop stays a plain sAu·pan multiply.
+                const float angle = (u_norm * wid + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
+                panL[(size_t) u] = std::cos (angle) * g;
+                panR[(size_t) u] = std::sin (angle) * g;
+                gainSq += panL[(size_t) u] * panL[(size_t) u] + panR[(size_t) u] * panR[(size_t) u];
             }
-            // Zero out unused slots so render-loop summation is safe even if
-            // activeUnison_ changes mid-playback.
-            for (int u = activeUnison_; u < kMaxUnison; ++u)
+            for (int u = activeCount; u < kMaxUnison; ++u)
             {
-                uDetuneCents_[(size_t) u] = 0.0f;
-                uPanL_[(size_t) u] = 0.0f;
-                uPanR_[(size_t) u] = 0.0f;
+                detCents[(size_t) u] = 0.0f;
+                panL[(size_t) u] = 0.0f;
+                panR[(size_t) u] = 0.0f;
             }
-            updateUnisonFramePositions();
+            // AUTO-GAIN — RMS-constant: holds perceived loudness as voices/blend change.
+            norm = (gainSq > 1.0e-9f) ? (1.0f / std::sqrt (gainSq)) : 1.0f;
         }
 
         /** Phase 11a — Set per-OSC FRAME SPREAD (0..1). Pushed per-block from
@@ -385,7 +417,8 @@ namespace tw
             switch (mode)
             {
                 case 0: return 0.0;                                                              // RETRIG — aligned, punchy
-                case 3: return (activeUnison_ > 1) ? (double) u / (double) activeUnison_ : 0.0;   // SPREAD — even fan
+                case 3: { const int cnt = (osc == 0) ? activeUnisonA_ : activeUnisonB_;
+                          return (cnt > 1) ? (double) u / (double) cnt : 0.0; }                     // SPREAD — even fan (per-OSC)
                 case 2: return nextPhaseRandom();                                                 // RANDOM — fresh each note
                 case 1: default: return phaseSeeded_ ? carried : seedPhase (u, osc);              // FREE — seed once, then carry
             }
@@ -749,10 +782,10 @@ namespace tw
 
             for (int i = 0; i < numSamples; ++i)
             {
-                // ── OSC A — sum across activeUnison_ sines (Phase 8b) ─────
+                // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
                 float sumAL = 0.0f, sumAR = 0.0f;
 
-                for (int u = 0; u < activeUnison_; ++u)
+                for (int u = 0; u < activeUnisonA_; ++u)
                 {
                     float sAu = 0.0f;
 
@@ -934,17 +967,13 @@ namespace tw
                     sAu = applyFoldADAA (sAu, foldShapeA_, foldAmountA_, foldStateA_[(size_t) u]);
 
                     // Per-sine pan into the OSC A stereo sum.
-                    sumAL += sAu * uPanL_[(size_t) u];
-                    sumAR += sAu * uPanR_[(size_t) u];
+                    sumAL += sAu * uPanLA_[(size_t) u];
+                    sumAR += sAu * uPanRA_[(size_t) u];
                 }
 
-                // Average across active sines (preserves perceived loudness as UNISON grows).
-                if (activeUnison_ > 1)
-                {
-                    const float invN = 1.0f / (float) activeUnison_;
-                    sumAL *= invN;
-                    sumAR *= invN;
-                }
+                // Auto-gain (RMS-constant): holds loudness as voices / blend change.
+                sumAL *= uNormA_;
+                sumAR *= uNormA_;
                 float sA_L = sumAL;
                 float sA_R = sumAR;
                 if (! spectralBypassA_)
@@ -1051,10 +1080,10 @@ namespace tw
                     }
                 }
 
-                // ── OSC B — sum across activeUnison_ sines (Phase 8b) ─────
+                // ── OSC B — sum across activeUnisonB_ sines (per-OSC unison) ─────
                 float sumBL = 0.0f, sumBR = 0.0f;
 
-                for (int u = 0; u < activeUnison_; ++u)
+                for (int u = 0; u < activeUnisonB_; ++u)
                 {
                     float sBu = 0.0f;
 
@@ -1230,17 +1259,13 @@ namespace tw
                     sBu = applyFoldADAA (sBu, foldShapeB_, foldAmountB_, foldStateB_[(size_t) u]);
 
                     // Per-sine pan into the OSC B stereo sum.
-                    sumBL += sBu * uPanL_[(size_t) u];
-                    sumBR += sBu * uPanR_[(size_t) u];
+                    sumBL += sBu * uPanLB_[(size_t) u];
+                    sumBR += sBu * uPanRB_[(size_t) u];
                 }
 
-                // Average across active sines (preserves perceived loudness).
-                if (activeUnison_ > 1)
-                {
-                    const float invN = 1.0f / (float) activeUnison_;
-                    sumBL *= invN;
-                    sumBR *= invN;
-                }
+                // Auto-gain (RMS-constant): holds loudness as voices / blend change.
+                sumBL *= uNormB_;
+                sumBR *= uNormB_;
                 float sB_L = sumBL;
                 float sB_R = sumBR;
                 if (! spectralBypassB_)
@@ -1532,7 +1557,7 @@ namespace tw
         }
 
     private:
-        // Phase 8b — populate per-sine phase-increment update helpers to SynthVoice. They populate the `uPhaseIncA_` / `uPhaseIncB_` arrays from MIDI note + octave/semi/cents tuning + per-sine `uDetuneCents_[u]` + EROSION drift. Called from `startNote` after the existing scalar updates, and from `renderNextBlock` per-block right after the existing erosion-drift recompute.
+        // Phase 8b — populate per-sine phase-increment update helpers to SynthVoice. They populate the `uPhaseIncA_` / `uPhaseIncB_` arrays from MIDI note + octave/semi/cents tuning + per-sine per-OSC `uDetuneCents{A,B}_[u]` + WAVER drift. Called from `startNote` after the existing scalar updates, and from `renderNextBlock` per-block right after the existing erosion-drift recompute.
         void updateUnisonPhaseIncrementsA (int midiNote) noexcept
         {
             for (int u = 0; u < kMaxUnison; ++u)
@@ -1542,7 +1567,7 @@ namespace tw
                     + static_cast<double> (octOffset_) * 12.0
                     + static_cast<double> (semiOffset_)
                     + static_cast<double> (centsOffset_)             * 0.01
-                    + static_cast<double> (uDetuneCents_[(size_t) u]) * 0.01
+                    + static_cast<double> (uDetuneCentsA_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsA_[(size_t) u])  * 0.01;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncA_[(size_t) u] = hz / sampleRate_;
@@ -1558,7 +1583,7 @@ namespace tw
                     + static_cast<double> (octOffsetB_) * 12.0
                     + static_cast<double> (semiOffsetB_)
                     + static_cast<double> (centsOffsetB_)            * 0.01
-                    + static_cast<double> (uDetuneCents_[(size_t) u]) * 0.01
+                    + static_cast<double> (uDetuneCentsB_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsB_[(size_t) u])  * 0.01;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncB_[(size_t) u] = hz / sampleRate_;
@@ -1566,28 +1591,25 @@ namespace tw
         }
 
         // Phase 11a — populate per-sine uFramePosA_/B_ offsets from current
-        // frameSpreadA01_/B01_ and activeUnison_. Each sine u in [0, activeUnison_)
+        // frameSpreadA01_/B01_ and the per-OSC voice counts. Each sine u in [0, count)
         // gets offset u_norm × spread × 0.5 (max ±0.5 of [0,1] frame range).
         // At UNISON=1 or SPREAD=0 every entry is 0.0 → render path falls back
         // to the voice-global framePos_ exactly (zero behaviour change vs pre-11a).
         void updateUnisonFramePositions() noexcept
         {
-            for (int u = 0; u < activeUnison_; ++u)
+            // OSC A frame offsets across its own voice count.
+            for (int u = 0; u < kMaxUnison; ++u)
             {
-                if (activeUnison_ <= 1)
-                {
-                    uFramePosA_[(size_t) u] = 0.0f;
-                    uFramePosB_[(size_t) u] = 0.0f;
-                    continue;
-                }
-                const float u_norm = ((float) u / (float) (activeUnison_ - 1)) * 2.0f - 1.0f;
+                if (u >= activeUnisonA_ || activeUnisonA_ <= 1) { uFramePosA_[(size_t) u] = 0.0f; continue; }
+                const float u_norm = ((float) u / (float) (activeUnisonA_ - 1)) * 2.0f - 1.0f;
                 uFramePosA_[(size_t) u] = u_norm * frameSpreadA01_ * 0.5f;
-                uFramePosB_[(size_t) u] = u_norm * frameSpreadB01_ * 0.5f;
             }
-            for (int u = activeUnison_; u < kMaxUnison; ++u)
+            // OSC B frame offsets across its own voice count.
+            for (int u = 0; u < kMaxUnison; ++u)
             {
-                uFramePosA_[(size_t) u] = 0.0f;
-                uFramePosB_[(size_t) u] = 0.0f;
+                if (u >= activeUnisonB_ || activeUnisonB_ <= 1) { uFramePosB_[(size_t) u] = 0.0f; continue; }
+                const float u_norm = ((float) u / (float) (activeUnisonB_ - 1)) * 2.0f - 1.0f;
+                uFramePosB_[(size_t) u] = u_norm * frameSpreadB01_ * 0.5f;
             }
         }
 
@@ -1868,7 +1890,7 @@ namespace tw
         float  noiseLpZB_       = 0.0f;
 
         // ── Phase 8b — Unison-in-voice state (per-sine arrays) ──────────
-        // Each unison sub-voice u in [0, activeUnison_) has its own pitch state.
+        // Each unison sub-voice u in [0, count) has its own pitch state.
         // The single voice now renders all UNISON sines internally.
         std::array<double, kMaxUnison> uPhaseA_       {};
         std::array<double, kMaxUnison> uPhaseIncA_    {};
@@ -1992,13 +2014,19 @@ namespace tw
         int spectralVibWriteA_ = 0, spectralVibWriteB_ = 0;
         double spectralVibPhaseA_ = 0.0, spectralVibPhaseB_ = 0.0;
 
-        // Per-sine unison config (computed at setUnison / startNote).
-        std::array<float,  kMaxUnison> uDetuneCents_  {};
-        std::array<float,  kMaxUnison> uPanL_         {};
-        std::array<float,  kMaxUnison> uPanR_         {};
+        // Per-sine unison config — PER-OSC (computed at setUnisonA/B / startNote).
+        // Detune (cents), pan L/R (with BLEND gain pre-multiplied in), and the auto-gain
+        // normalization factor are all independent for OSC A and OSC B.
+        std::array<float,  kMaxUnison> uDetuneCentsA_ {};
+        std::array<float,  kMaxUnison> uDetuneCentsB_ {};
+        std::array<float,  kMaxUnison> uPanLA_        {};
+        std::array<float,  kMaxUnison> uPanRA_        {};
+        std::array<float,  kMaxUnison> uPanLB_        {};
+        std::array<float,  kMaxUnison> uPanRB_        {};
 
-        int   activeUnison_     = 1;       // 1..kMaxUnison
-        float unisonSpread01_   = 0.0f;    // 0..1
+        int   activeUnisonA_ = 1, activeUnisonB_ = 1;   // 1..kMaxUnison per OSC
+        float uNormA_ = 1.0f,     uNormB_ = 1.0f;       // auto-gain: 1/sqrt(Σ blendGain²) — holds loudness as voices rise
+        static constexpr float kUniMaxDetuneCents = 50.0f;  // ±50 cents (±½ semitone) of detune at 100 %
 
         // ── WAVER — per-(osc × unison sine) OU analog pitch drift (replaces the old
         //    EROSION pitch sine-LFO). Depth 0..1 per osc; cents state + per-sine RNG. ──

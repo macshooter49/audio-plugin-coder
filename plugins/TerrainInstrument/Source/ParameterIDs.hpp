@@ -185,6 +185,10 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_ROUTE_SRC[]     = "SYN_OSC_A_ROUTE_SRC";      // choice 0=NOTE,1=VEL
     constexpr char SYN_OSC_A_ROUTE_DEST[]    = "SYN_OSC_A_ROUTE_DEST";     // choice 0=FRAME,1=WARP,2=FOLD,3=CUT1,4=CUT2
     constexpr char SYN_OSC_A_ROUTE_AMT[]     = "SYN_OSC_A_ROUTE_AMT";      // float -100..100 % bipolar amount
+    constexpr char SYN_OSC_A_UNISON[]        = "SYN_OSC_A_UNISON";         // int 1..16 voices (per-OSC)
+    constexpr char SYN_OSC_A_UDETUNE[]       = "SYN_OSC_A_UDETUNE";        // float 0..100 % pitch fan
+    constexpr char SYN_OSC_A_UBLEND[]        = "SYN_OSC_A_UBLEND";         // float 0..100 % centre-vs-outer balance
+    constexpr char SYN_OSC_A_UWIDTH[]        = "SYN_OSC_A_UWIDTH";         // float 0..100 % stereo spread
 
     constexpr char SYN_OSC_B_SPECTRAL_TYPE[] = "SYN_OSC_B_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_B_SPECTRAL_AMT[]  = "SYN_OSC_B_SPECTRAL_AMT";   // float 0..1
@@ -199,4 +203,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_ROUTE_SRC[]     = "SYN_OSC_B_ROUTE_SRC";      // choice 0=NOTE,1=VEL
     constexpr char SYN_OSC_B_ROUTE_DEST[]    = "SYN_OSC_B_ROUTE_DEST";     // choice 0=FRAME,1=WARP,2=FOLD,3=CUT1,4=CUT2
     constexpr char SYN_OSC_B_ROUTE_AMT[]     = "SYN_OSC_B_ROUTE_AMT";      // float -100..100 % bipolar amount
+    constexpr char SYN_OSC_B_UNISON[]        = "SYN_OSC_B_UNISON";         // int 1..16 voices (per-OSC)
+    constexpr char SYN_OSC_B_UDETUNE[]       = "SYN_OSC_B_UDETUNE";        // float 0..100 % pitch fan
+    constexpr char SYN_OSC_B_UBLEND[]        = "SYN_OSC_B_UBLEND";         // float 0..100 % centre-vs-outer balance
+    constexpr char SYN_OSC_B_UWIDTH[]        = "SYN_OSC_B_UWIDTH";         // float 0..100 % stereo spread
 }
