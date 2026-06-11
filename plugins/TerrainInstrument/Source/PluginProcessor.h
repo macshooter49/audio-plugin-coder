@@ -516,6 +516,10 @@ private:
     // SynthVoices + 1 SynthSound. Renders into synthScratch each block,
     // summed into the master `buffer` before the FX chain.
     static constexpr int kSynthVoiceCount = 96;  // 8a polish-2: bumped from 32 — UNISON=8 × polyphony=8 fits without steal
+
+    // PORTAMENTO — audio-thread glide tracking (origin note + held count for ALWAYS-off gating).
+    float synthGlideFrom_  = -1.0f;   // last synth note (pitch to glide FROM); -1 = none yet
+    int   synthNotesHeld_  = 0;       // synth notes currently sounding
     UnisonSynth                 synthEngine;   // Phase 8a: was juce::Synthesiser
     juce::AudioBuffer<float>    synthScratch;
 

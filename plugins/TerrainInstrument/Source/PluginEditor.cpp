@@ -137,6 +137,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synSpreadRelay)
             .withOptionsFrom(synErosionRelay)
             .withOptionsFrom(synHorizonRelay)
+            .withOptionsFrom(synPortaRelay)
+            .withOptionsFrom(synGlideCurveRelay)
+            .withOptionsFrom(synGlideAlwaysRelay)
+            .withOptionsFrom(synGlideScaledRelay)
             .withOptionsFrom(synOscASpectralTypeRelay)
             .withOptionsFrom(synOscASpectralAmtRelay)
             .withOptionsFrom(synOscAFoldShapeRelay)
@@ -569,6 +573,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     captureDragStrip.setDarkMode(json.contains("\"dark\""));
                 }
                 complete({});
+            })
+            .withNativeFunction("setSynthView", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    captureDragStrip.setSynthViewActive(static_cast<int>(args[0]) != 0);
+                complete(juce::var{});
             })
             .withNativeFunction("setChorusEnabled", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -2195,6 +2206,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synHorizonAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_HORIZON),
         synHorizonRelay, nullptr);
+    synPortaAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_PORTA),
+        synPortaRelay, nullptr);
+    synGlideCurveAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_GLIDE_CURVE),
+        synGlideCurveRelay, nullptr);
+    synGlideAlwaysAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_GLIDE_ALWAYS),
+        synGlideAlwaysRelay, nullptr);
+    synGlideScaledAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_GLIDE_SCALED),
+        synGlideScaledRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
@@ -2451,7 +2474,11 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graph
 {
     auto b = getLocalBounds().toFloat();
 
-    g.fillAll(isDarkMode ? juce::Colour(0xFF232340) : juce::Colour(0xFFE8E4EF));
+    // synthViewActive forces the synth panel's own dark bg (#1A1A2E) so the strip is
+    // seamless under the synth view regardless of the global light/dark theme.
+    const bool dark = isDarkMode || synthViewActive;
+    g.fillAll(synthViewActive ? juce::Colour(0xFF1A1A2E)
+                              : (isDarkMode ? juce::Colour(0xFF232340) : juce::Colour(0xFFE8E4EF)));
 
     if (state == 2) // ready — green, drag to DAW
     {
@@ -2471,13 +2498,13 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graph
         int secs = static_cast<int>(avail) % 60;
         if (avail < 1.0f)
         {
-            g.setColour(isDarkMode ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
+            g.setColour(dark ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
             g.setFont(juce::FontOptions(10.0f));
             g.drawText("CAPTURE: LISTENING...", b, juce::Justification::centred);
         }
         else
         {
-            g.setColour(isDarkMode ? juce::Colour(0xFF9B93B0) : juce::Colour(0xFF6B5B7B));
+            g.setColour(dark ? juce::Colour(0xFF9B93B0) : juce::Colour(0xFF6B5B7B));
             g.setFont(juce::FontOptions(10.0f));
             g.drawText("CAPTURE: " + juce::String(mins) + "m " + juce::String(secs) + "s  \u2014  DRAG TO DAW",
                        b, juce::Justification::centred);

@@ -164,6 +164,11 @@ namespace ParameterIDs
     constexpr char SYN_SPREAD[]   = "SYN_SPREAD";    // float 0..100, % detune+pan width for unison stack
     constexpr char SYN_EROSION[]  = "SYN_EROSION";   // float 0..100, % analog per-voice drift amount
     constexpr char SYN_HORIZON[]  = "SYN_HORIZON";   // float -100..+100, keyboard-tracked timbre tilt
+    // VOICING / PORTAMENTO (bottom-right panel)
+    constexpr char SYN_PORTA[]        = "SYN_PORTA";         // float 0..100 % → glide time
+    constexpr char SYN_GLIDE_CURVE[]  = "SYN_GLIDE_CURVE";   // float 0..100 % → slide shape (50=linear)
+    constexpr char SYN_GLIDE_ALWAYS[] = "SYN_GLIDE_ALWAYS";  // bool — glide every note vs only when held
+    constexpr char SYN_GLIDE_SCALED[] = "SYN_GLIDE_SCALED";  // bool — time-per-octave vs fixed total time
 
     // ── Synth section — Phase 11a (wavetable front-panel rework foundation) ──
     // 6 new params per OSC × 2 OSCs = 12 new params total.

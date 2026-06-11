@@ -216,7 +216,7 @@ namespace tw
             semiOffset_  = semi;
             centsOffset_ = cent;
             if (playing_)
-                updateUnisonPhaseIncrementsA (currentMidiNote_);
+                updateUnisonPhaseIncrementsA (glideNote_);
         }
 
         /** Set which wavetable this voice reads from. Pointer is borrowed —
@@ -261,7 +261,7 @@ namespace tw
             semiOffsetB_  = semi;
             centsOffsetB_ = cent;
             if (playing_)
-                updateUnisonPhaseIncrementsB (currentMidiNote_);
+                updateUnisonPhaseIncrementsB (glideNote_);
         }
 
         void setLevelB (float level) noexcept
@@ -308,18 +308,68 @@ namespace tw
             setUnisonImpl (activeUnisonA_, uDetuneCentsA_, uPanLA_, uPanRA_, uNormA_,
                            count, detune01, blend01, width01);
             updateUnisonFramePositions();
-            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsA (currentMidiNote_);
+            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsA (glideNote_);
         }
         void setUnisonB (int count, float detune01, float blend01, float width01) noexcept
         {
             setUnisonImpl (activeUnisonB_, uDetuneCentsB_, uPanLB_, uPanRB_, uNormB_,
                            count, detune01, blend01, width01);
             updateUnisonFramePositions();
-            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsB (currentMidiNote_);
+            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsB (glideNote_);
         }
 
-        /** Shared per-OSC unison builder. Fills detune cents, pan tables (with BLEND
-         *  gain pre-multiplied in), and the auto-gain normalization for one oscillator. */
+        /** PORTAMENTO context, pushed per-block from the processor. fromNote = the last
+         *  synth note (glide origin); anyHeld = a synth note was sounding (ALWAYS-off gate). */
+        void setGlide (float portaTimeSec, float curve01, bool always, bool scaled,
+                       float fromNote, bool anyHeld) noexcept
+        {
+            portaTime_     = juce::jmax (0.0f, portaTimeSec);
+            glideCurve_    = juce::jlimit (0.0f, 1.0f, curve01);
+            glideAlways_   = always;
+            glideScaled_   = scaled;
+            glideFromNote_ = fromNote;
+            glideAnyHeld_  = anyHeld;
+        }
+
+        /** Set up the glide for a note-on. Returns the starting pitch (glideNote_).
+         *  Snaps when porta is off / no origin / (ALWAYS off and nothing held). */
+        void beginGlide (int targetNote) noexcept
+        {
+            glideTarget_ = (double) targetNote;
+            const bool doGlide = (portaTime_ > 1.0e-4f)
+                              && (glideFromNote_ >= 0.0f)
+                              && (glideAlways_ || glideAnyHeld_)
+                              && ((double) glideFromNote_ != glideTarget_);
+            if (doGlide)
+            {
+                glideStart_    = (double) glideFromNote_;
+                glideNote_     = glideStart_;
+                glideProgress_ = 0.0;
+                const double dist = std::abs (glideTarget_ - glideStart_);   // semitones
+                const double durSec = glideScaled_ ? ((double) portaTime_ * dist / 12.0)  // const rate (per-octave)
+                                                   : (double) portaTime_;                 // fixed total time
+                glideDurSamples_ = juce::jmax (1.0, durSec * sampleRate_);
+            }
+            else
+            {
+                glideStart_ = glideNote_ = glideTarget_;
+                glideProgress_ = 1.0;
+                glideDurSamples_ = 1.0;
+            }
+        }
+
+        /** Advance the glide by `numSamples`. Linear progress shaped by glideCurve_:
+         *  exp = 4^((curve−0.5)·2) → curve 0 = ease-out (exp ¼, fast start), 0.5 = linear,
+         *  curve 1 = ease-in (exp 4, slow start). */
+        void advanceGlide (int numSamples) noexcept
+        {
+            if (glideProgress_ >= 1.0) { glideNote_ = glideTarget_; return; }
+            glideProgress_ = juce::jmin (1.0, glideProgress_ + (double) numSamples / glideDurSamples_);
+            const double exp    = std::pow (4.0, ((double) glideCurve_ - 0.5) * 2.0);
+            const double shaped = std::pow (glideProgress_, exp);
+            glideNote_ = glideStart_ + (glideTarget_ - glideStart_) * shaped;
+            if (glideProgress_ >= 1.0) glideNote_ = glideTarget_;
+        }
         void setUnisonImpl (int& activeCount,
                             std::array<float, kMaxUnison>& detCents,
                             std::array<float, kMaxUnison>& panL,
@@ -559,6 +609,7 @@ namespace tw
         {
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
+            beginGlide (midiNote);     // PORTAMENTO — snap or start the slide (sets glideNote_)
             // OSC A resets
             noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
             // OSC B resets (Phase 9)
@@ -602,8 +653,8 @@ namespace tw
 
             // Phase 8b — populate per-sine increments
             updateUnisonFramePositions();
-            updateUnisonPhaseIncrementsA (midiNote);
-            updateUnisonPhaseIncrementsB (midiNote);
+            updateUnisonPhaseIncrementsA (glideNote_);
+            updateUnisonPhaseIncrementsB (glideNote_);
             playing_         = true;
             foldStateA_.fill ({});   // Phase 11d ADAA — clear per-sine fold history on note start
             foldStateB_.fill ({});
@@ -717,9 +768,11 @@ namespace tw
                 updateWaverOU (waverCentsA_, waverRngA_, waverA_, dt);
                 updateWaverOU (waverCentsB_, waverRngB_, waverB_, dt);
             }
-            // Re-derive per-sine phase increments with updated drift
-            updateUnisonPhaseIncrementsA (currentMidiNote_);
-            updateUnisonPhaseIncrementsB (currentMidiNote_);
+            // PORTAMENTO — advance the pitch slide for this block (no-op once arrived).
+            advanceGlide (numSamples);
+            // Re-derive per-sine phase increments with updated drift + glide pitch
+            updateUnisonPhaseIncrementsA (glideNote_);
+            updateUnisonPhaseIncrementsB (glideNote_);
 
             // Phase 10a / Phase 8b — pick mip level using sine 0 (centre-detuned,
             // no spread offset) as the reference — ±25 cents of unison detune
@@ -1558,12 +1611,12 @@ namespace tw
 
     private:
         // Phase 8b — populate per-sine phase-increment update helpers to SynthVoice. They populate the `uPhaseIncA_` / `uPhaseIncB_` arrays from MIDI note + octave/semi/cents tuning + per-sine per-OSC `uDetuneCents{A,B}_[u]` + WAVER drift. Called from `startNote` after the existing scalar updates, and from `renderNextBlock` per-block right after the existing erosion-drift recompute.
-        void updateUnisonPhaseIncrementsA (int midiNote) noexcept
+        void updateUnisonPhaseIncrementsA (double pitchNote) noexcept
         {
             for (int u = 0; u < kMaxUnison; ++u)
             {
                 const double semitones =
-                      static_cast<double> (midiNote - 69)
+                      (pitchNote - 69.0)
                     + static_cast<double> (octOffset_) * 12.0
                     + static_cast<double> (semiOffset_)
                     + static_cast<double> (centsOffset_)             * 0.01
@@ -1574,12 +1627,12 @@ namespace tw
             }
         }
 
-        void updateUnisonPhaseIncrementsB (int midiNote) noexcept
+        void updateUnisonPhaseIncrementsB (double pitchNote) noexcept
         {
             for (int u = 0; u < kMaxUnison; ++u)
             {
                 const double semitones =
-                      static_cast<double> (midiNote - 69)
+                      (pitchNote - 69.0)
                     + static_cast<double> (octOffsetB_) * 12.0
                     + static_cast<double> (semiOffsetB_)
                     + static_cast<double> (centsOffsetB_)            * 0.01
@@ -1792,6 +1845,23 @@ namespace tw
         double sampleRate_      = 48000.0;
         int    currentMidiNote_ = 60;
         float  currentVelocity_ = 1.0f;
+
+        // ── PORTAMENTO / GLIDE — fractional-pitch slide between notes ───────────────
+        // glideNote_ is the pitch actually feeding the oscillators (the increment
+        // functions read it). On note-on it either snaps to the target or starts a
+        // timed slide from glideStart_ → glideTarget_ shaped by glideCurve_.
+        double glideNote_       = 60.0;    // current sounding pitch (fractional MIDI note)
+        double glideStart_      = 60.0;    // pitch at the start of the current slide
+        double glideTarget_     = 60.0;    // destination pitch
+        double glideProgress_   = 1.0;     // 0..1 (1 = arrived, no slide in progress)
+        double glideDurSamples_ = 1.0;     // samples for the full slide
+        // Broadcast glide context (pushed per-block from the processor):
+        float  portaTime_       = 0.0f;    // glide time in seconds (0 = off → snap)
+        float  glideCurve_      = 0.5f;    // 0..1 shape (0.5 = linear, <0.5 ease-in, >0.5 ease-out)
+        bool   glideAlways_     = true;    // ALWAYS = glide every note; else only when a note is held
+        bool   glideScaled_     = false;   // SCALED = time-per-octave (const rate); else fixed total time
+        float  glideFromNote_   = -1.0f;   // pitch to glide FROM (-1 = none; from processor last-note)
+        bool   glideAnyHeld_    = false;   // a synth note was sounding at this block (for ALWAYS-off gating)
         bool   playing_         = false;
 
         juce::ADSR             ampEnv_;

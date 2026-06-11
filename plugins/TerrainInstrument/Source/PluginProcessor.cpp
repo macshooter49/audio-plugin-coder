@@ -1341,6 +1341,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth Horizon",
         juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
 
+    // VOICING / PORTAMENTO
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_PORTA, 1 },
+        "Synth Portamento",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_GLIDE_CURVE, 1 },
+        "Synth Glide Curve",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_GLIDE_ALWAYS, 1 }, "Synth Glide Always", true));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_GLIDE_SCALED, 1 }, "Synth Glide Scaled", false));
+
     return layout;
 }
 
@@ -2078,6 +2092,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
         const int voiceCap = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_VOICES);
         synthEngine.setVoiceCap (voiceCap);
+
+        // VOICING / PORTAMENTO — glide context broadcast to every voice this block.
+        const float portaPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_PORTA);
+        const float glCurvePct =      *apvts.getRawParameterValue (ParameterIDs::SYN_GLIDE_CURVE);
+        const bool  glAlways  = (*apvts.getRawParameterValue (ParameterIDs::SYN_GLIDE_ALWAYS)) > 0.5f;
+        const bool  glScaled  = (*apvts.getRawParameterValue (ParameterIDs::SYN_GLIDE_SCALED)) > 0.5f;
+        const float portaSec  = std::pow (portaPct * 0.01f, 2.0f) * 2.0f;   // squared → fine low end, ~2 s max
+        const float glCurve01 = glCurvePct / 100.0f;
+        const bool  glAnyHeld = synthNotesHeld_ > 0;
         for (int v = 0; v < synthEngine.getNumVoices(); ++v)
         {
             if (auto* tv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (v)))
@@ -2087,7 +2110,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 tv->setBlur (blurA, blurB);   // WT BLUR (frame blend)
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
                 tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g
+                tv->setGlide (portaSec, glCurve01, glAlways, glScaled, synthGlideFrom_, glAnyHeld);   // PORTAMENTO
             }
+        }
+
+        // Track the last synth note + held count for glide. Updated AFTER the broadcast so
+        // this block's note-ons glide from the PREVIOUS note (the origin), not themselves.
+        for (const auto meta : midiMessages)
+        {
+            const auto m = meta.getMessage();
+            if (m.isNoteOn())       { synthGlideFrom_ = (float) m.getNoteNumber(); ++synthNotesHeld_; }
+            else if (m.isNoteOff()) { synthNotesHeld_ = juce::jmax (0, synthNotesHeld_ - 1); }
         }
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)

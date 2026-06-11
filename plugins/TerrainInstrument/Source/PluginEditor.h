@@ -211,6 +211,10 @@ private:
     juce::WebSliderRelay synSpreadRelay  { ParameterIDs::SYN_SPREAD };
     juce::WebSliderRelay synErosionRelay { ParameterIDs::SYN_EROSION };
     juce::WebSliderRelay synHorizonRelay { ParameterIDs::SYN_HORIZON };
+    juce::WebSliderRelay synPortaRelay        { ParameterIDs::SYN_PORTA };
+    juce::WebSliderRelay synGlideCurveRelay   { ParameterIDs::SYN_GLIDE_CURVE };
+    juce::WebSliderRelay synGlideAlwaysRelay  { ParameterIDs::SYN_GLIDE_ALWAYS };
+    juce::WebSliderRelay synGlideScaledRelay  { ParameterIDs::SYN_GLIDE_SCALED };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -240,6 +244,14 @@ private:
             if (isDarkMode != dark) { isDarkMode = dark; repaint(); }
         }
 
+        // When the synth view is active, the panel forces its own dark background
+        // regardless of theme — so the strip matches it (seamless, no light/dark seam
+        // under the VOICING toggles).
+        void setSynthViewActive (bool active)
+        {
+            if (synthViewActive != active) { synthViewActive = active; repaint(); }
+        }
+
         void paint (juce::Graphics& g) override;
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent& e) override;
@@ -252,6 +264,7 @@ private:
         bool mouseWasDown = false;
         bool isDragging = false;
         bool isDarkMode = false;
+        bool synthViewActive = false;
     };
 
     CaptureDragStrip captureDragStrip { audioProcessor };
@@ -399,6 +412,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synSpreadAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synErosionAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synHorizonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synPortaAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synGlideCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synGlideAlwaysAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synGlideScaledAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady

@@ -3569,6 +3569,11 @@ body {
 #syn-panel .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
 /* Phase 8a — draggable voice rows */
 #syn-panel .sel[data-syn-row] { cursor: ns-resize; user-select: none; }
+#syn-panel .voice-section-label { font-size: 9px; letter-spacing: 1px; opacity: 0.45; text-transform: uppercase; padding: 1px 0 2px; }
+#syn-panel .voice-toggle-row { display: flex; gap: 4px; padding: 3px 0 1px; }
+#syn-panel .voice-toggle { flex: 1; font-size: 9px; letter-spacing: 0.5px; padding: 3px 4px; border: 1px solid rgba(255,255,255,0.12); border-radius: 3px; background: transparent; color: var(--text-muted); cursor: pointer; text-transform: uppercase; transition: background 0.12s, color 0.12s, border-color 0.12s; }
+#syn-panel .voice-toggle:hover { border-color: rgba(255,255,255,0.28); }
+#syn-panel .voice-toggle.on { background: rgba(139,92,246,0.25); color: var(--text-primary); border-color: rgba(139,92,246,0.55); }
 #syn-panel .sel[data-syn-row].dragging { background: rgba(139,92,246,0.18); }
 #syn-panel .sel.kt-pill { gap: 2px; }
 #syn-panel .kt-dest-row { position: relative; width: 100%; display: flex; align-items: center; justify-content: center; }
@@ -4827,9 +4832,11 @@ body {
           <div class="ribbon-divider"></div>
 
           <div class="voice-meta">
+            <div class="voice-section-label">VOICING</div>
             <div class="voice-row" data-syn-row="SYN_VOICES"><svg><use href="#ic-voices"/></svg><span>VOICES</span><b>8</b></div>
-            <div class="voice-row" data-syn-row="SYN_EROSION"><svg><use href="#ic-erosion"/></svg><span>EROSION</span><b>0</b></div>
-            <div class="voice-row" data-syn-row="SYN_HORIZON"><svg><use href="#ic-horizon"/></svg><span>HORIZON</span><b>0</b></div>
+            <div class="voice-row" data-syn-row="SYN_PORTA"><svg><use href="#ic-trail"/></svg><span>PORTA</span><b>0</b></div>
+            <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><svg><use href="#ic-horizon"/></svg><span>CURVE</span><b>50</b></div>
+            <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">ALWAYS</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">SCALED</button></div>
           </div>
         </div>
 
@@ -5816,6 +5823,7 @@ let setGrainSyncFn, getGrainSyncFn;
 let setTapeEnabledFn, getTapeEnabledFn;
 let setTapeLoopEnabledFn, getTapeLoopEnabledFn;
 let setEqPanelOpenFn, getEqPanelOpenFn;
+let setSynthViewFn;
 let setTapeMachineFn, getTapeMachineFn;
 let setTapeLoopRecordFn, getTapeLoopRecordFn;
 let setTapeLoopPlayFn, getTapeLoopPlayFn;
@@ -5897,6 +5905,7 @@ async function initJuceBindings() {
     setTapeLoopEnabledFn = window.Juce.getNativeFunction('setTapeLoopEnabled');
     getTapeLoopEnabledFn = window.Juce.getNativeFunction('getTapeLoopEnabled');
     setEqPanelOpenFn = window.Juce.getNativeFunction('setEqPanelOpen');
+    setSynthViewFn = window.Juce.getNativeFunction('setSynthView');
     getEqPanelOpenFn = window.Juce.getNativeFunction('getEqPanelOpen');
     if (getEqPanelOpenFn) {
       getEqPanelOpenFn().then(v => {
@@ -8276,6 +8285,7 @@ function applySynPanelOpen(open) {
   if (!synBtn || !synPanel) return;
   synBtn.classList.toggle('active', open);
   synPanel.classList.toggle('hidden', !open);
+  if (juceMode && setSynthViewFn) { try { setSynthViewFn(open ? 1 : 0); } catch (e) {} }
 }
 function setActivePanel(which) {
   // which = 'syn' | 'eq' | 'dly' | 'mod' | null
@@ -8756,6 +8766,28 @@ setTimeout(function wireSynControls () {
 
     // Phase 8a — Voice meta rows: draggable + APVTS-synced
     try {
+      // VOICING bool-toggles (ALWAYS / SCALED) — click flips the param 0<->1.
+      (function initVoiceToggles(){
+        try {
+          document.querySelectorAll('#syn-panel [data-syn-toggle]').forEach(function(btn){
+            try {
+              const pid = btn.dataset.synToggle;
+              if (!window.Juce || !window.Juce.getSliderState) return;
+              const st = window.Juce.getSliderState(pid); if (!st) return;
+              const refresh = function(){ try {
+                const v = st.getScaledValue ? st.getScaledValue() : st.getNormalisedValue();
+                btn.classList.toggle('on', v >= 0.5);
+              } catch(e){} };
+              if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(refresh);
+              btn.addEventListener('click', function(){ try {
+                const on = (st.getNormalisedValue ? st.getNormalisedValue() : 0) >= 0.5;
+                st.setNormalisedValue(on ? 0 : 1); refresh();
+              } catch(e){} });
+              refresh();
+            } catch(e){}
+          });
+        } catch(e){}
+      })();
       const voiceRows = document.querySelectorAll('#syn-panel [data-syn-row]');
       voiceRows.forEach(function(rowEl) {
         try {
@@ -8774,6 +8806,7 @@ setTimeout(function wireSynControls () {
             if (paramId === 'SYN_VOICES' || paramId === 'SYN_UNISON') return String(Math.round(scaled));
             if (paramId === 'SYN_HORIZON') return Math.round(scaled).toString();
             if (paramId === 'SYN_OSC_A_WAVER' || paramId === 'SYN_OSC_B_WAVER') return Math.round(scaled) + '%';
+            if (paramId === 'SYN_PORTA' || paramId === 'SYN_GLIDE_CURVE') return Math.round(scaled) + '%';
             return String(Math.round(scaled));
           };
 
