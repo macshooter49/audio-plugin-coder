@@ -286,6 +286,16 @@ namespace tw
             warpAmountBaseB_ = juce::jlimit (0.0f, 1.0f, amount);
         }
 
+        /** WARP 2 — second chained warp slot, per OSC. Runs in SERIES on slot 1's
+         *  output phase (Serum WARP1→WARP2 parity). Same mode list as slot 1. */
+        void setWarp2 (int modeA, float amountA, int modeB, float amountB) noexcept
+        {
+            warp2ModeA_       = juce::jlimit (0, 10, modeA);
+            warp2AmountBaseA_ = juce::jlimit (0.0f, 1.0f, amountA);
+            warp2ModeB_       = juce::jlimit (0, 10, modeB);
+            warp2AmountBaseB_ = juce::jlimit (0.0f, 1.0f, amountB);
+        }
+
         void setEngineB (int idx) noexcept
         {
             const int clamped = juce::jlimit (0, 5, idx);
@@ -318,6 +328,90 @@ namespace tw
             if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsB (glideNote_);
         }
 
+        /** WARP phase-domain remap (modes 1-8) — EXACT math of the original inline
+         *  switches, factored so two slots chain in series (slot 2 transforms slot 1's
+         *  output). Pure function of the input phase p; FORMANT's window MULTIPLIES into
+         *  `window` (slot-1 entry value is 1.0 → identical to the old assign) and PWM's
+         *  silence gate ORs into `skipLookup`. Modes 0/9/10 pass phase through
+         *  (9/10 are amp-domain — see applyAmpWarp). */
+        static double applyPhaseWarp (int mode, float amount, double p,
+                                      float& window, bool& skipLookup) noexcept
+        {
+            switch (mode)
+            {
+                case 1:  // BEND
+                {
+                    const double pi2 = 2.0 * 3.14159265358979323846;
+                    const double w = p + (double) amount * 0.5 * std::sin (pi2 * p);
+                    return w - std::floor (w);
+                }
+                case 2:  // SYNC — 1×..16× exponential (Vital-style)
+                {
+                    const double w = p * std::pow (2.0, (double) amount * 4.0);
+                    return w - std::floor (w);
+                }
+                case 3:  // FORMANT — windowed sync (half-sine bell keyed off the input phase)
+                {
+                    const double w  = p * std::pow (2.0, (double) amount * 4.0);
+                    const double pi = 3.14159265358979323846;
+                    window *= static_cast<float> (std::sin (pi * p));
+                    return w - std::floor (w);
+                }
+                case 4:  // PWM — duty-cycle window
+                {
+                    const double duty = juce::jmax (0.10, 1.0 - (double) amount * 0.45);
+                    if (p >= duty) { skipLookup = true; return p; }
+                    return p / duty;
+                }
+                case 5:  // SKEW — piecewise 2-segment peak shift
+                {
+                    const double knee = juce::jmax (0.05, 0.5 - (double) amount * 0.4);
+                    return (p < knee) ? p / knee * 0.5
+                                      : 0.5 + (p - knee) / (1.0 - knee) * 0.5;
+                }
+                case 6:  // MIRROR — squeezed-mirror blend
+                {
+                    const double mirrored = (p < 0.5) ? p * 2.0 : 2.0 - p * 2.0;
+                    const double w = p * (1.0 - (double) amount) + mirrored * (double) amount;
+                    return w - std::floor (w);
+                }
+                case 7:  // FRACTALIZE — fmod cascade, N = 1..8
+                {
+                    const double w = p * (1.0 + (double) amount * 7.0);
+                    return w - std::floor (w);
+                }
+                case 8:  // P-QUANTIZE — phase staircase, 32→2 steps, CENTER-sampled.
+                {
+                    // FIX (Max bug report 2026-06-11): the old curve round(1+(1−a)²·31)
+                    // collapsed to 2 steps by 80% and 1 step (a CONSTANT = silence) past
+                    // ~88%, and floor-edge sampling pinned low step counts to phases 0
+                    // and 0.5 — the zero crossings of sine-like tables — so chained
+                    // P-QUANTIZE muted the oscillator past ~60-70%. New: exponential
+                    // 32→2 (never 1), and each step samples its CENTER, so max quantize
+                    // is a hard 2-step square (±table peaks), not silence.
+                    const double steps = std::round (std::pow (2.0, 5.0 - 4.0 * (double) amount));
+                    return (std::floor (p * steps) + 0.5) / steps;
+                }
+                default: return p;   // NONE / RECTIFY / SINE SHAPER (amp-domain)
+            }
+        }
+
+        /** WARP amp-domain stage (modes 9-10) — applied post-lookup, per slot. */
+        static float applyAmpWarp (int mode, float amount, float s) noexcept
+        {
+            if (mode == 9)         // RECTIFY: blend dry with |x|×2−1 by amount
+            {
+                const float rect = std::abs (s) * 2.0f - 1.0f;
+                return s * (1.0f - amount) + rect * amount;
+            }
+            if (mode == 10)        // SINE SHAPER: sin(x × π/2 × (1 + amount×4))
+            {
+                const float drive = 1.0f + amount * 4.0f;
+                return std::sin (s * (float) (3.14159265358979323846 * 0.5) * drive);
+            }
+            return s;
+        }
+
         /** PORTAMENTO context, pushed per-block from the processor. fromNote = the last
          *  synth note (glide origin); anyHeld = a synth note was sounding (ALWAYS-off gate). */
         void setGlide (float portaTimeSec, float curve01, bool always, bool scaled,
@@ -329,6 +423,34 @@ namespace tw
             glideScaled_   = scaled;
             glideFromNote_ = fromNote;
             glideAnyHeld_  = anyHeld;
+        }
+
+        /** LEGATO — arm the next startNote() to retarget pitch WITHOUT retriggering
+         *  envelopes/phases/waver. Set by UnisonSynth immediately before startVoice(). */
+        void beginLegatoRetarget() noexcept { legatoRetarget_ = true; }
+
+        /** LEGATO glide — slide from the CURRENT sounding pitch (even mid-glide) to the
+         *  new note. Overlapped notes always glide when porta > 0: ALWAYS gates only
+         *  fresh attacks, and a legato overlap is by definition the held case. */
+        void beginGlideLegato (double fromPitch, int targetNote) noexcept
+        {
+            glideTarget_ = (double) targetNote;
+            if (portaTime_ > 1.0e-4f && fromPitch != glideTarget_)
+            {
+                glideStart_    = fromPitch;
+                glideNote_     = fromPitch;
+                glideProgress_ = 0.0;
+                const double dist   = std::abs (glideTarget_ - glideStart_);
+                const double durSec = glideScaled_ ? ((double) portaTime_ * dist / 12.0)
+                                                   : (double) portaTime_;
+                glideDurSamples_ = juce::jmax (1.0, durSec * sampleRate_);
+            }
+            else
+            {
+                glideStart_ = glideNote_ = glideTarget_;
+                glideProgress_ = 1.0;
+                glideDurSamples_ = 1.0;
+            }
         }
 
         /** Set up the glide for a note-on. Returns the starting pitch (glideNote_).
@@ -607,6 +729,42 @@ namespace tw
         void startNote (int midiNote, float velocity,
                         juce::SynthesiserSound*, int /*pitchWheelPos*/) override
         {
+            // Phase 12 — monotonic stamp so UnisonSynth can find the oldest (steal)
+            // or newest (mono retarget) voice. Declared up top so the LEGATO branch
+            // shares it. Static atomic: one counter across all SynthVoice instances;
+            // thread-safe even though startNote runs under the Synthesiser lock.
+            static std::atomic<juce::uint32> globalNoteCounter { 1 };
+            noteStartStamp_ = globalNoteCounter.fetch_add (1, std::memory_order_relaxed);
+
+            // ── LEGATO retarget: slide pitch to the new note, retrigger NOTHING ──
+            // Armed by UnisonSynth::beginLegatoRetarget() just before startVoice().
+            if (legatoRetarget_)
+            {
+                legatoRetarget_ = false;
+
+                // JUCE's startVoice() calls stopNote(0,false) on a sounding voice before
+                // calling startNote — that armed the 30ms steal fade. Disarm it: no
+                // samples rendered in between, so this is a pure flag flip (click-free).
+                stealing_         = false;
+                stealingFade_     = 1.0f;
+                stealingFadeStep_ = 0.0f;
+
+                const double fromPitch = glideNote_;   // mid-slide continuity
+                currentMidiNote_ = midiNote;
+                // currentVelocity_ intentionally NOT updated — classic legato keeps the
+                // phrase's initial velocity (ROUTE velocity stays consistent).
+                beginGlideLegato (fromPitch, midiNote);
+
+                // Pitch-tracking context follows the new note; everything else carries.
+                ktRamp_ = juce::jlimit (0.0f, 1.0f,
+                              (float) (midiNote - kKtLowNote) / (float) (kKtHighNote - kKtLowNote));
+                updateUnisonFramePositions();
+                updateUnisonPhaseIncrementsA (glideNote_);
+                updateUnisonPhaseIncrementsB (glideNote_);
+                playing_ = true;
+                return;   // amp/filter envelopes, phases, waver, fold history all untouched
+            }
+
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
             beginGlide (midiNote);     // PORTAMENTO — snap or start the slide (sets glideNote_)
@@ -673,13 +831,7 @@ namespace tw
             stealing_         = false;
             stealingFade_     = 1.0f;
             stealingFadeStep_ = 0.0f;
-
-            // Phase 12 — monotonic stamp so UnisonSynth::noteOn can find the
-            // oldest non-stealing voice when the cap is hit. Static atomic so all
-            // SynthVoice instances share one counter; thread-safe even though
-            // startNote is invoked under the Synthesiser lock.
-            static std::atomic<juce::uint32> globalNoteCounter { 1 };
-            noteStartStamp_ = globalNoteCounter.fetch_add (1, std::memory_order_relaxed);
+            // (noteStartStamp_ assigned at the top of startNote — shared with the LEGATO branch)
         }
 
         void stopNote (float, bool allowTailOff) override
@@ -758,6 +910,8 @@ namespace tw
                 foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f));
                 framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f));
                 warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f));
+                warp2AmountA_ = warp2AmountBaseA_;   // WARP 2 base->effective (mod-matrix ready)
+                warp2AmountB_ = warp2AmountBaseB_;
                 foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f));
             }
 
@@ -786,8 +940,8 @@ namespace tw
                 if (mode == 7)              return 1.0 + (double) amt * 7.0;            // FRACTALIZE (1..8x)
                 return 1.0;
             };
-            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_));
-            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_));
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_));
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_) * warpRateMul (warp2ModeB_, warp2AmountB_));
 
             // ── WT BLUR — smooth the amount, then (re)build each OSC's blended single-
             // cycle buffer ONCE per block (only when frame pos / blur / mip changed). Every
@@ -852,92 +1006,12 @@ namespace tw
                                 float  window      = 1.0f;   // PWM, FORMANT use this post-lookup window
                                 bool   skipLookup  = false;  // PWM silence half-cycle
 
-                                switch (warpMode_)
-                                {
-                                    case 0:  // NONE
-                                        break;
-
-                                    case 1:  // BEND
-                                    {
-                                        const double pi2 = 2.0 * 3.14159265358979323846;
-                                        warpedPhase = uPhaseA_[(size_t) u]
-                                                    + (double) warpAmount_ * 0.5 * std::sin (pi2 * uPhaseA_[(size_t) u]);
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 2:  // SYNC — 1×..16× exponential (Vital-style)
-                                    {
-                                        const double ratio = std::pow (2.0, (double) warpAmount_ * 4.0);
-                                        warpedPhase = uPhaseA_[(size_t) u] * ratio;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 3:  // FORMANT — windowed sync (Vital-style rebuild)
-                                    {
-                                        const double ratio = std::pow (2.0, (double) warpAmount_ * 4.0);
-                                        warpedPhase = uPhaseA_[(size_t) u] * ratio;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        // Half-sine bell keyed off the un-multiplied master phase
-                                        const double pi = 3.14159265358979323846;
-                                        window = static_cast<float> (std::sin (pi * uPhaseA_[(size_t) u]));
-                                        break;
-                                    }
-
-                                    case 4:  // PWM — duty-cycle window
-                                    {
-                                        const double duty = juce::jmax (0.10, 1.0 - (double) warpAmount_ * 0.45);
-                                        if (uPhaseA_[(size_t) u] >= duty)
-                                            skipLookup = true;
-                                        else
-                                            warpedPhase = uPhaseA_[(size_t) u] / duty;
-                                        break;
-                                    }
-
-                                    case 5:  // SKEW — piecewise 2-segment peak shift
-                                    {
-                                        const double knee = juce::jmax (0.05, 0.5 - (double) warpAmount_ * 0.4);
-                                        const double p    = uPhaseA_[(size_t) u];
-                                        if (p < knee)
-                                            warpedPhase = p / knee * 0.5;
-                                        else
-                                            warpedPhase = 0.5 + (p - knee) / (1.0 - knee) * 0.5;
-                                        break;
-                                    }
-
-                                    case 6:  // MIRROR — squeezed-mirror blend
-                                    {
-                                        const double p = uPhaseA_[(size_t) u];
-                                        const double mirrored = (p < 0.5) ? p * 2.0 : 2.0 - p * 2.0;
-                                        warpedPhase = p * (1.0 - (double) warpAmount_) + mirrored * (double) warpAmount_;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 7:  // FRACTALIZE — fmod cascade, N = 1..8
-                                    {
-                                        const double N = 1.0 + (double) warpAmount_ * 7.0;
-                                        warpedPhase = uPhaseA_[(size_t) u] * N;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 8:  // P-QUANTIZE — phase staircase, 32→1 steps
-                                    {
-                                        const double inv = 1.0 - (double) warpAmount_;
-                                        const double t   = inv * inv;
-                                        const int    steps = juce::jmax (1, (int) std::round (1.0 + t * 31.0));
-                                        warpedPhase = std::floor (uPhaseA_[(size_t) u] * (double) steps) / (double) steps;
-                                        break;
-                                    }
-
-                                    case 9:  // RECTIFY — amp-domain, handled post-lookup
-                                    case 10: // SINE SHAPER — amp-domain, handled post-lookup
-                                        break;
-
-                                    default: break;
-                                }
+                                // WARP slot 1 — phase-domain remap (exact original math, factored to
+                                // applyPhaseWarp so a second slot can chain on its output).
+                                warpedPhase = applyPhaseWarp (warpMode_, warpAmount_, warpedPhase, window, skipLookup);
+                                // WARP 2 — second slot, in SERIES on slot 1's output (Serum parity).
+                                if (! skipLookup && warp2ModeA_ != 0)
+                                    warpedPhase = applyPhaseWarp (warp2ModeA_, warp2AmountA_, warpedPhase, window, skipLookup);
 
                                 if (skipLookup)
                                 {
@@ -950,18 +1024,8 @@ namespace tw
                                     sAu = tw::Wavetable::readCycle (blendA_.data(), (float) warpedPhase);
                                     sAu *= window;
 
-                                    if (warpMode_ == 9)
-                                    {
-                                        // RECTIFY: blend dry with |x|×2−1 by amount
-                                        const float rect = std::abs (sAu) * 2.0f - 1.0f;
-                                        sAu = sAu * (1.0f - warpAmount_) + rect * warpAmount_;
-                                    }
-                                    else if (warpMode_ == 10)
-                                    {
-                                        // SINE SHAPER: sin(x × π/2 × (1 + amount×4))
-                                        const float drive = 1.0f + warpAmount_ * 4.0f;
-                                        sAu = std::sin (sAu * (float) (3.14159265358979323846 * 0.5) * drive);
-                                    }
+                                    sAu = applyAmpWarp (warpMode_,    warpAmount_,    sAu);   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
+                                    sAu = applyAmpWarp (warp2ModeA_,  warp2AmountA_,  sAu);   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -1150,91 +1214,10 @@ namespace tw
                                 float  window      = 1.0f;
                                 bool   skipLookup  = false;
 
-                                switch (warpModeB_)
-                                {
-                                    case 0:  // NONE
-                                        break;
-
-                                    case 1:  // BEND
-                                    {
-                                        const double pi2 = 2.0 * 3.14159265358979323846;
-                                        warpedPhase = uPhaseB_[(size_t) u]
-                                                    + (double) warpAmountB_ * 0.5 * std::sin (pi2 * uPhaseB_[(size_t) u]);
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 2:  // SYNC — 1×..16× exponential
-                                    {
-                                        const double ratio = std::pow (2.0, (double) warpAmountB_ * 4.0);
-                                        warpedPhase = uPhaseB_[(size_t) u] * ratio;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 3:  // FORMANT — windowed sync (Vital-style)
-                                    {
-                                        const double ratio = std::pow (2.0, (double) warpAmountB_ * 4.0);
-                                        warpedPhase = uPhaseB_[(size_t) u] * ratio;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        const double pi = 3.14159265358979323846;
-                                        window = static_cast<float> (std::sin (pi * uPhaseB_[(size_t) u]));
-                                        break;
-                                    }
-
-                                    case 4:  // PWM
-                                    {
-                                        const double duty = juce::jmax (0.10, 1.0 - (double) warpAmountB_ * 0.45);
-                                        if (uPhaseB_[(size_t) u] >= duty)
-                                            skipLookup = true;
-                                        else
-                                            warpedPhase = uPhaseB_[(size_t) u] / duty;
-                                        break;
-                                    }
-
-                                    case 5:  // SKEW
-                                    {
-                                        const double knee = juce::jmax (0.05, 0.5 - (double) warpAmountB_ * 0.4);
-                                        const double p    = uPhaseB_[(size_t) u];
-                                        if (p < knee)
-                                            warpedPhase = p / knee * 0.5;
-                                        else
-                                            warpedPhase = 0.5 + (p - knee) / (1.0 - knee) * 0.5;
-                                        break;
-                                    }
-
-                                    case 6:  // MIRROR
-                                    {
-                                        const double p = uPhaseB_[(size_t) u];
-                                        const double mirrored = (p < 0.5) ? p * 2.0 : 2.0 - p * 2.0;
-                                        warpedPhase = p * (1.0 - (double) warpAmountB_) + mirrored * (double) warpAmountB_;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 7:  // FRACTALIZE
-                                    {
-                                        const double N = 1.0 + (double) warpAmountB_ * 7.0;
-                                        warpedPhase = uPhaseB_[(size_t) u] * N;
-                                        warpedPhase -= std::floor (warpedPhase);
-                                        break;
-                                    }
-
-                                    case 8:  // P-QUANTIZE
-                                    {
-                                        const double inv = 1.0 - (double) warpAmountB_;
-                                        const double t   = inv * inv;
-                                        const int    steps = juce::jmax (1, (int) std::round (1.0 + t * 31.0));
-                                        warpedPhase = std::floor (uPhaseB_[(size_t) u] * (double) steps) / (double) steps;
-                                        break;
-                                    }
-
-                                    case 9:  // RECTIFY — post-lookup
-                                    case 10: // SINE SHAPER — post-lookup
-                                        break;
-
-                                    default: break;
-                                }
+                                // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
+                                warpedPhase = applyPhaseWarp (warpModeB_, warpAmountB_, warpedPhase, window, skipLookup);
+                                if (! skipLookup && warp2ModeB_ != 0)
+                                    warpedPhase = applyPhaseWarp (warp2ModeB_, warp2AmountB_, warpedPhase, window, skipLookup);
 
                                 if (skipLookup)
                                 {
@@ -1246,16 +1229,8 @@ namespace tw
                                     sBu = tw::Wavetable::readCycle (blendB_.data(), (float) warpedPhase);
                                     sBu *= window;
 
-                                    if (warpModeB_ == 9)
-                                    {
-                                        const float rect = std::abs (sBu) * 2.0f - 1.0f;
-                                        sBu = sBu * (1.0f - warpAmountB_) + rect * warpAmountB_;
-                                    }
-                                    else if (warpModeB_ == 10)
-                                    {
-                                        const float drive = 1.0f + warpAmountB_ * 4.0f;
-                                        sBu = std::sin (sBu * (float) (3.14159265358979323846 * 0.5) * drive);
-                                    }
+                                    sBu = applyAmpWarp (warpModeB_,   warpAmountB_,   sBu);   // slot 1 amp-domain
+                                    sBu = applyAmpWarp (warp2ModeB_,  warp2AmountB_,  sBu);   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -1862,6 +1837,7 @@ namespace tw
         bool   glideScaled_     = false;   // SCALED = time-per-octave (const rate); else fixed total time
         float  glideFromNote_   = -1.0f;   // pitch to glide FROM (-1 = none; from processor last-note)
         bool   glideAnyHeld_    = false;   // a synth note was sounding at this block (for ALWAYS-off gating)
+        bool   legatoRetarget_  = false;   // armed by UnisonSynth: next startNote retargets, no retrigger
         bool   playing_         = false;
 
         juce::ADSR             ampEnv_;
@@ -1947,6 +1923,14 @@ namespace tw
         const tw::Wavetable* currentWavetableB_ = nullptr;
         float  framePosB_       = 0.0f;
         int    warpModeB_       = 0;
+        // WARP 2 — second chained warp slot per OSC (same mode list as slot 1).
+        // base→effective: amounts copied per-block, mod-matrix ready.
+        int    warp2ModeA_       = 0;
+        int    warp2ModeB_       = 0;
+        float  warp2AmountA_     = 0.0f;
+        float  warp2AmountB_     = 0.0f;
+        float  warp2AmountBaseA_ = 0.0f;
+        float  warp2AmountBaseB_ = 0.0f;
         int currentMipLevelA_ = 0;   // Phase 10a — refreshed per block from uPhaseIncA_[0]
         int currentMipLevelB_ = 0;   // Phase 10a — refreshed per block from uPhaseIncB_[0]
         float  warpAmountB_     = 0.0f;

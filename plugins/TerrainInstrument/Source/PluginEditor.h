@@ -155,6 +155,8 @@ private:
     // Synth section — Phase 2C (warp modes)
     juce::WebSliderRelay synOscAWarpModeRelay   { ParameterIDs::SYN_OSC_A_WARP_MODE };
     juce::WebSliderRelay synOscAWarpAmountRelay { ParameterIDs::SYN_OSC_A_WARP_AMOUNT };
+    juce::WebSliderRelay synOscAWarp2ModeRelay  { ParameterIDs::SYN_OSC_A_WARP2_MODE };
+    juce::WebSliderRelay synOscAWarp2AmtRelay   { ParameterIDs::SYN_OSC_A_WARP2_AMT };
     juce::WebSliderRelay synOscAPhaseModeRelay  { ParameterIDs::SYN_OSC_A_PHASE_MODE };
     juce::WebSliderRelay synOscAWaverRelay      { ParameterIDs::SYN_OSC_A_WAVER };
     juce::WebSliderRelay synOscAKeytrackRelay     { ParameterIDs::SYN_OSC_A_KEYTRACK };
@@ -178,6 +180,8 @@ private:
     juce::WebSliderRelay synOscBWtFrameRelay    { ParameterIDs::SYN_OSC_B_WT_FRAME };
     juce::WebSliderRelay synOscBWarpModeRelay   { ParameterIDs::SYN_OSC_B_WARP_MODE };
     juce::WebSliderRelay synOscBWarpAmountRelay { ParameterIDs::SYN_OSC_B_WARP_AMOUNT };
+    juce::WebSliderRelay synOscBWarp2ModeRelay  { ParameterIDs::SYN_OSC_B_WARP2_MODE };
+    juce::WebSliderRelay synOscBWarp2AmtRelay   { ParameterIDs::SYN_OSC_B_WARP2_AMT };
     juce::WebSliderRelay synOscBPhaseModeRelay  { ParameterIDs::SYN_OSC_B_PHASE_MODE };
     juce::WebSliderRelay synOscBWaverRelay      { ParameterIDs::SYN_OSC_B_WAVER };
     juce::WebSliderRelay synOscBKeytrackRelay     { ParameterIDs::SYN_OSC_B_KEYTRACK };
@@ -215,6 +219,8 @@ private:
     juce::WebSliderRelay synGlideCurveRelay   { ParameterIDs::SYN_GLIDE_CURVE };
     juce::WebSliderRelay synGlideAlwaysRelay  { ParameterIDs::SYN_GLIDE_ALWAYS };
     juce::WebSliderRelay synGlideScaledRelay  { ParameterIDs::SYN_GLIDE_SCALED };
+    juce::WebSliderRelay synMonoRelay         { ParameterIDs::SYN_MONO };
+    juce::WebSliderRelay synLegatoRelay       { ParameterIDs::SYN_LEGATO };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -355,6 +361,10 @@ private:
 
     // Synth section — Phase 2C (warp)
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarpModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarp2ModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarp2AmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarp2ModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWarp2AmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWarpAmountAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAPhaseModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWaverAttachment;
@@ -416,6 +426,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synGlideCurveAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synGlideAlwaysAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synGlideScaledAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synMonoAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synLegatoAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady

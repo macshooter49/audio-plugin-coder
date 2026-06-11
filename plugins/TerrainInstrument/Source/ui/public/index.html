@@ -3569,11 +3569,12 @@ body {
 #syn-panel .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
 /* Phase 8a — draggable voice rows */
 #syn-panel .sel[data-syn-row] { cursor: ns-resize; user-select: none; }
-#syn-panel .voice-section-label { font-size: 9px; letter-spacing: 1px; opacity: 0.45; text-transform: uppercase; padding: 1px 0 2px; }
-#syn-panel .voice-toggle-row { display: flex; gap: 4px; padding: 3px 0 1px; }
-#syn-panel .voice-toggle { flex: 1; font-size: 9px; letter-spacing: 0.5px; padding: 3px 4px; border: 1px solid rgba(255,255,255,0.12); border-radius: 3px; background: transparent; color: var(--text-muted); cursor: pointer; text-transform: uppercase; transition: background 0.12s, color 0.12s, border-color 0.12s; }
-#syn-panel .voice-toggle:hover { border-color: rgba(255,255,255,0.28); }
-#syn-panel .voice-toggle.on { background: rgba(139,92,246,0.25); color: var(--text-primary); border-color: rgba(139,92,246,0.55); }
+#syn-panel .voice-toggle-row { display: flex; gap: 4px; padding: 2px 0; }
+#syn-panel .voice-mode-row { padding: 1px 0 3px; }
+#syn-panel .voice-mode-row .voice-toggle:first-child { text-align: left; padding-left: 2px; }
+#syn-panel .voice-toggle { flex: 1; font-size: 9px; letter-spacing: 1px; padding: 2px 0; border: none; border-radius: 0; background: transparent; color: var(--text-dim); cursor: pointer; text-transform: uppercase; transition: color 0.12s; }
+#syn-panel .voice-toggle:hover { color: var(--text-muted); }
+#syn-panel .voice-toggle.on { background: transparent; color: var(--text-primary); }
 #syn-panel .sel[data-syn-row].dragging { background: rgba(139,92,246,0.18); }
 #syn-panel .sel.kt-pill { gap: 2px; }
 #syn-panel .kt-dest-row { position: relative; width: 100%; display: flex; align-items: center; justify-content: center; }
@@ -3590,9 +3591,14 @@ body {
 #syn-panel .rt-amt.act { color: var(--text-primary); }
 #syn-panel .sel.uni-pill { gap: 3px; }
 #syn-panel .uni-pill .uni-param-value { font-size: 9px; line-height: 1.35; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#syn-panel .uni-val { cursor: ns-resize; user-select: none; color: var(--text-muted); line-height: 1.25; padding: 0; }
+#syn-panel .uni-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
 #syn-panel .uni-pill.act .uni-val { color: var(--text-primary); }
 #syn-panel .uni-suffix { font-style: normal; opacity: 0.75; }
+#syn-panel .sel.warp2-pill { gap: 3px; }
+#syn-panel .warp2-pill .warp2-mode-value { font-size: 9px; line-height: 1.35; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .warp2-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
+#syn-panel .warp2-pill.act .warp2-val { color: var(--text-primary); }
+#syn-panel .warp2-suffix { font-style: normal; opacity: 0.75; }
 #syn-panel .voice-row[data-syn-row] { cursor: ns-resize; transition: background 0.12s ease; border-radius: 4px; padding: 1px 4px; }
 #syn-panel .voice-row[data-syn-row]:hover { background: rgba(139,92,246,0.10); }
 #syn-panel .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
@@ -4449,9 +4455,9 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel" data-syn-row="SYN_OSC_A_WAVER" title="WAVER — analog pitch-drift depth (per-oscillator)">
-                  <div class="sel-label">WAVER</div>
-                  <div class="sel-value"><b>0</b></div>
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                  <div class="sel-value warp2-mode-value" id="osc-a-warp2-mode">NONE</div>
+                  <div class="sel-value warp2-val" id="osc-a-warp2-val" data-warp2-mode="SYN_OSC_A_WARP2_MODE" data-warp2-amt="SYN_OSC_A_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
                   <div class="sel-value uni-param-value" id="osc-a-uni-param-value">Voices</div>
@@ -4613,9 +4619,9 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel" data-syn-row="SYN_OSC_B_WAVER" title="WAVER — analog pitch-drift depth (per-oscillator)">
-                  <div class="sel-label">WAVER</div>
-                  <div class="sel-value"><b>0</b></div>
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                  <div class="sel-value warp2-mode-value" id="osc-b-warp2-mode">NONE</div>
+                  <div class="sel-value warp2-val" id="osc-b-warp2-val" data-warp2-mode="SYN_OSC_B_WARP2_MODE" data-warp2-amt="SYN_OSC_B_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
                   <div class="sel-value uni-param-value" id="osc-b-uni-param-value">Voices</div>
@@ -4832,7 +4838,7 @@ body {
           <div class="ribbon-divider"></div>
 
           <div class="voice-meta">
-            <div class="voice-section-label">VOICING</div>
+            <div class="voice-toggle-row voice-mode-row"><button class="voice-toggle" data-syn-toggle="SYN_MONO">MONO</button><button class="voice-toggle" data-syn-toggle="SYN_LEGATO">LEGATO</button></div>
             <div class="voice-row" data-syn-row="SYN_VOICES"><svg><use href="#ic-voices"/></svg><span>VOICES</span><b>8</b></div>
             <div class="voice-row" data-syn-row="SYN_PORTA"><svg><use href="#ic-trail"/></svg><span>PORTA</span><b>0</b></div>
             <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><svg><use href="#ic-horizon"/></svg><span>CURVE</span><b>50</b></div>
@@ -9083,6 +9089,78 @@ setTimeout(function wireSynControls () {
           } catch (perPill) { console.warn('[UNI] pill init failed', perPill); }
         });
       } catch (e) { console.warn('[UNI] initUnisonPills failed', e); }
+    })();
+
+    // ── WARP 2 pills — RIGHT-CLICK = mode menu (11 modes), LEFT-DRAG value = amount %.
+    //    Mirrors the UNISON pill pattern; reuses the front-panel syn-ctx-menu. ──
+    (function initWarp2Pills() {
+      try {
+        // Same list as the front-panel WARP knob menu (the layout's StringArray).
+        const MODES = (typeof WARP_MODES !== 'undefined' && WARP_MODES && WARP_MODES.length === 11)
+                        ? WARP_MODES
+                        : ['NONE','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
+        document.querySelectorAll('#syn-panel .warp2-pill').forEach(function(pill) {
+          try {
+            const valEl  = pill.querySelector('.warp2-val');
+            const numEl  = valEl ? valEl.querySelector('b') : null;
+            const modeEl = pill.querySelector('.warp2-mode-value');
+            if (!valEl || !numEl || !modeEl || !window.Juce || !window.Juce.getSliderState) return;
+            let modeState = null, amtState = null;
+            try { modeState = window.Juce.getSliderState(valEl.dataset.warp2Mode); } catch (e) {}
+            try { amtState  = window.Juce.getSliderState(valEl.dataset.warp2Amt);  } catch (e) {}
+            if (!modeState || !amtState) return;
+            const modeIdx = function() {
+              try { return Math.round((modeState.getNormalisedValue ? modeState.getNormalisedValue() : 0) * (MODES.length - 1)); }
+              catch (e) { return 0; }
+            };
+            const refresh = function() {
+              try {
+                const m = modeIdx();
+                modeEl.textContent = MODES[m] || 'NONE';
+                numEl.textContent  = Math.round((amtState.getNormalisedValue ? amtState.getNormalisedValue() : 0) * 100);
+                pill.classList.toggle('act', m !== 0);
+              } catch (e) {}
+            };
+            [modeState, amtState].forEach(function(st) {
+              if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
+                st.valueChangedEvent.addListener(refresh);
+            });
+            // right-click -> mode menu (same menu chrome as the front panel + UNISON)
+            pill.addEventListener('contextmenu', function(ev) {
+              ev.preventDefault(); ev.stopPropagation();
+              if (!window.__synShowMenu) return;
+              const cur = modeIdx();
+              const items = MODES.map(function(name, i) {
+                return { label: name, isChecked: (i === cur),
+                         onPick: function() { try { modeState.setNormalisedValue(i / (MODES.length - 1)); } catch (e) {} refresh(); } };
+              });
+              window.__synShowMenu('WARP 2', items, ev.clientX, ev.clientY);
+            });
+            // left-drag the value -> amount only
+            let startY = 0, startN = 0, drag = false;
+            const onMove = function(ev) {
+              if (!drag) return;
+              const dy = startY - ev.clientY;
+              const nN = Math.max(0, Math.min(1, startN + dy / 150));
+              try { amtState.setNormalisedValue(nN); } catch (e) {}
+              refresh();
+            };
+            const onUp = function() { drag = false; document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
+            valEl.addEventListener('pointerdown', function(ev) {
+              if (ev.button !== 0) return;   // right-click is the menu, never a drag
+              try {
+                drag = true; startY = ev.clientY;
+                startN = amtState.getNormalisedValue ? amtState.getNormalisedValue() : 0;
+                if (valEl.setPointerCapture) valEl.setPointerCapture(ev.pointerId);
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+                ev.preventDefault(); ev.stopPropagation();
+              } catch (e) {}
+            });
+            refresh();
+          } catch (perPill) { console.warn('[WARP2] pill init failed', perPill); }
+        });
+      } catch (e) { console.warn('[WARP2] initWarp2Pills failed', e); }
     })();
 
     (function initSynRightClickMenus() {

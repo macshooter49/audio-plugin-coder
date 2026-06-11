@@ -1148,6 +1148,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC A Warp Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP2_MODE, 1 },
+        "Synth OSC A Warp 2 Mode",
+        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP2_AMT, 1 },
+        "Synth OSC A Warp 2 Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
     // ── Phase 11a — OSC A wavetable rework foundation ────────────────────
     // SPECTRAL MORPH mode (Phase 11c rework — frequency-domain morph applied to the
@@ -1287,6 +1296,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
         "Synth OSC B Warp Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP2_MODE, 1 },
+        "Synth OSC B Warp 2 Mode",
+        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP2_AMT, 1 },
+        "Synth OSC B Warp 2 Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
     // ── Phase 11a — OSC B wavetable rework foundation (SPECTRAL MORPH — Phase 11c) ─
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -1354,6 +1372,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_GLIDE_ALWAYS, 1 }, "Synth Glide Always", true));
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_GLIDE_SCALED, 1 }, "Synth Glide Scaled", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_MONO, 1 }, "Synth Mono", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_LEGATO, 1 }, "Synth Legato", false));
 
     return layout;
 }
@@ -1992,6 +2014,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   warpModeB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_MODE);
         const int   phaseModeB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_PHASE_MODE);
         const float warpAmountB =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
+        // WARP 2 — chained second slot per OSC
+        const int   warp2ModeA = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP2_MODE);
+        const float warp2AmtA  =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP2_AMT);
+        const int   warp2ModeB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP2_MODE);
+        const float warp2AmtB  =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP2_AMT);
         const int   engineIdxB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ENGINE);
         // WAVER — per-OSC analog pitch-drift depth (0..100 %). Pushed per voice below.
         const float waverA      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WAVER);
@@ -2040,6 +2067,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWavetableB             (wtB);
                 sv->setWavetableFrameB        (wtFrameB);
                 sv->setWarpB                  (warpModeB, warpAmountB);
+                sv->setWarp2                  (warp2ModeA, warp2AmtA, warp2ModeB, warp2AmtB);   // WARP 2
                 sv->setPhaseMode              (phaseModeA, phaseModeB);
                 sv->setWaver                  (waverA / 100.0f, waverB / 100.0f);   // WAVER — analog pitch drift (OU)
                 sv->setKeytrack               (ktDepthA / 100.0f, ktDestA, ktDepthB / 100.0f, ktDestB);  // KEYTRACK
@@ -2092,6 +2120,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
         const int voiceCap = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_VOICES);
         synthEngine.setVoiceCap (voiceCap);
+
+        // VOICING — MONO/LEGATO voice modes (last-note priority + legato retarget).
+        const bool synMono   = (*apvts.getRawParameterValue (ParameterIDs::SYN_MONO))   > 0.5f;
+        const bool synLegato = (*apvts.getRawParameterValue (ParameterIDs::SYN_LEGATO)) > 0.5f;
+        synthEngine.setVoiceModes (synMono, synLegato);
 
         // VOICING / PORTAMENTO — glide context broadcast to every voice this block.
         const float portaPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_PORTA);

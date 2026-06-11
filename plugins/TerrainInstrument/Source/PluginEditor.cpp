@@ -100,6 +100,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscAWtFrameRelay)
             .withOptionsFrom(synOscAWarpModeRelay)
             .withOptionsFrom(synOscAWarpAmountRelay)
+            .withOptionsFrom(synOscAWarp2ModeRelay)
+            .withOptionsFrom(synOscAWarp2AmtRelay)
             .withOptionsFrom(synOscAPhaseModeRelay)
             .withOptionsFrom(synOscAWaverRelay)
             .withOptionsFrom(synOscAKeytrackRelay)
@@ -121,6 +123,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBWtFrameRelay)
             .withOptionsFrom(synOscBWarpModeRelay)
             .withOptionsFrom(synOscBWarpAmountRelay)
+            .withOptionsFrom(synOscBWarp2ModeRelay)
+            .withOptionsFrom(synOscBWarp2AmtRelay)
             .withOptionsFrom(synOscBPhaseModeRelay)
             .withOptionsFrom(synOscBWaverRelay)
             .withOptionsFrom(synOscBKeytrackRelay)
@@ -141,6 +145,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synGlideCurveRelay)
             .withOptionsFrom(synGlideAlwaysRelay)
             .withOptionsFrom(synGlideScaledRelay)
+            .withOptionsFrom(synMonoRelay)
+            .withOptionsFrom(synLegatoRelay)
             .withOptionsFrom(synOscASpectralTypeRelay)
             .withOptionsFrom(synOscASpectralAmtRelay)
             .withOptionsFrom(synOscAFoldShapeRelay)
@@ -2048,6 +2054,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscAWarpModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP_MODE),
         synOscAWarpModeRelay, nullptr);
+    synOscAWarp2ModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP2_MODE),
+        synOscAWarp2ModeRelay, nullptr);
+    synOscAWarp2AmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_WARP2_AMT),
+        synOscAWarp2AmtRelay, nullptr);
+    synOscBWarp2ModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP2_MODE),
+        synOscBWarp2ModeRelay, nullptr);
+    synOscBWarp2AmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_WARP2_AMT),
+        synOscBWarp2AmtRelay, nullptr);
     synOscAPhaseModeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_PHASE_MODE),
         synOscAPhaseModeRelay, nullptr);
@@ -2218,6 +2236,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synGlideScaledAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_GLIDE_SCALED),
         synGlideScaledRelay, nullptr);
+    synMonoAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_MONO),
+        synMonoRelay, nullptr);
+    synLegatoAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_LEGATO),
+        synLegatoRelay, nullptr);
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

@@ -124,8 +124,20 @@ class UnisonSynth : public juce::Synthesiser
 public:
     void setVoiceCap (int cap) noexcept { voiceCap_ = juce::jlimit (1, 96, cap); }
 
+    /** MONO/LEGATO voice modes, pushed per-block from the processor (audio thread —
+     *  same thread as noteOn/noteOff, no extra locking needed). The held-note stack
+     *  is cleared whenever MONO flips so stale notes can't resurrect later. */
+    void setVoiceModes (bool mono, bool legato) noexcept
+    {
+        if (mono != monoMode_) heldCount_ = 0;
+        monoMode_   = mono;
+        legatoMode_ = legato;
+    }
+
     void noteOn (int midiChannel, int midiNoteNumber, float velocity) override
     {
+        if (monoMode_) { monoNoteOn (midiChannel, midiNoteNumber, velocity); return; }
+
         const juce::ScopedLock sl (lock);
 
         // Phase 12 — Serum-2 style smooth voice steal. Count only voices that
@@ -170,7 +182,133 @@ public:
         juce::Synthesiser::noteOn (midiChannel, midiNoteNumber, velocity);
     }
 
+    void noteOff (int midiChannel, int midiNoteNumber, float velocity, bool allowTailOff) override
+    {
+        if (monoMode_) { monoNoteOff (midiChannel, midiNoteNumber, velocity, allowTailOff); return; }
+        juce::Synthesiser::noteOff (midiChannel, midiNoteNumber, velocity, allowTailOff);
+    }
+
+    void allNotesOff (int midiChannel, bool allowTailOff) override
+    {
+        heldCount_ = 0;   // never let panic/transport-stop leave stale stack entries
+        juce::Synthesiser::allNotesOff (midiChannel, allowTailOff);
+    }
+
 private:
+    // ── MONO / LEGATO ─────────────────────────────────────────────────────────
+    // Last-note priority with return-to-held: releasing the sounding note while
+    // older keys are still down returns to the most recent of them. LEGATO makes
+    // overlapped transitions retarget the SAME voice (glide, no env retrigger);
+    // non-legato mono steal-fades (30ms) and retriggers — both click-free.
+    struct Held { int note = -1; float vel = 0.0f; };
+
+    void pushHeld (int note, float vel) noexcept
+    {
+        removeHeld (note);                                   // dedupe (key repeat)
+        if (heldCount_ < kMaxHeld) held_[heldCount_++] = { note, vel };
+    }
+
+    void removeHeld (int note) noexcept
+    {
+        for (int i = 0; i < heldCount_; ++i)
+            if (held_[i].note == note)
+            {
+                for (int j = i; j < heldCount_ - 1; ++j) held_[j] = held_[j + 1];
+                --heldCount_;
+                return;
+            }
+    }
+
+    /** Newest non-stealing active SynthVoice (the audible mono voice). */
+    tw::SynthVoice* findActiveSynthVoice() noexcept
+    {
+        tw::SynthVoice* newest = nullptr;
+        juce::uint32 newestStamp = 0;
+        for (auto* v : voices)
+        {
+            auto* sv = dynamic_cast<tw::SynthVoice*> (v);
+            if (sv == nullptr || sv->getCurrentlyPlayingNote() < 0 || sv->isStealing()) continue;
+            if (newest == nullptr || sv->getNoteStartStamp() >= newestStamp)
+            { newestStamp = sv->getNoteStartStamp(); newest = sv; }
+        }
+        return newest;
+    }
+
+    juce::SynthesiserSound* firstSoundFor (int midiChannel, int note) noexcept
+    {
+        for (auto* s : sounds)
+            if (s->appliesToNote (note) && s->appliesToChannel (midiChannel))
+                return s;
+        return nullptr;
+    }
+
+    void monoNoteOn (int midiChannel, int midiNoteNumber, float velocity)
+    {
+        const juce::ScopedLock sl (lock);
+        const bool wasHeld = heldCount_ > 0;
+        pushHeld (midiNoteNumber, velocity);
+
+        auto* active = findActiveSynthVoice();
+        if (legatoMode_ && wasHeld && active != nullptr)
+        {
+            if (auto* sound = firstSoundFor (midiChannel, midiNoteNumber))
+            {
+                active->beginLegatoRetarget();     // glide to the new pitch, retrigger nothing
+                startVoice (active, sound, midiChannel, midiNoteNumber, velocity);
+                return;
+            }
+        }
+        // Hard mono (or the first note of a legato phrase): steal-fade every sounding
+        // voice (30ms smooth fade), then trigger the new note — envelope retriggers.
+        for (auto* v : voices)
+        {
+            auto* sv = dynamic_cast<tw::SynthVoice*> (v);
+            if (sv != nullptr && sv->getCurrentlyPlayingNote() >= 0 && ! sv->isStealing())
+                stopVoice (sv, 0.0f, false);
+        }
+        juce::Synthesiser::noteOn (midiChannel, midiNoteNumber, velocity);
+    }
+
+    void monoNoteOff (int midiChannel, int midiNoteNumber, float velocity, bool allowTailOff)
+    {
+        const juce::ScopedLock sl (lock);
+        removeHeld (midiNoteNumber);
+
+        auto* active = findActiveSynthVoice();
+        const bool releasedWasSounding = active != nullptr
+                                      && active->getCurrentlyPlayingNote() == midiNoteNumber;
+        if (! releasedWasSounding)
+        {
+            // A stacked (non-sounding) key came up — nothing audible changes; let the
+            // base clean up any lingering voice bookkeeping for that note.
+            juce::Synthesiser::noteOff (midiChannel, midiNoteNumber, velocity, allowTailOff);
+            return;
+        }
+        if (heldCount_ > 0)
+        {
+            const Held ret = held_[heldCount_ - 1];   // most recent still-held key
+            if (legatoMode_)
+            {
+                if (auto* sound = firstSoundFor (midiChannel, ret.note))
+                {
+                    active->beginLegatoRetarget();
+                    startVoice (active, sound, midiChannel, ret.note, ret.vel);
+                    return;
+                }
+            }
+            stopVoice (active, 0.0f, false);                                // fade the released note
+            juce::Synthesiser::noteOn (midiChannel, ret.note, ret.vel);     // retrigger the held one
+            return;
+        }
+        juce::Synthesiser::noteOff (midiChannel, midiNoteNumber, velocity, allowTailOff);
+    }
+
+    static constexpr int kMaxHeld = 64;
+    Held held_[kMaxHeld] = {};
+    int  heldCount_   = 0;
+    bool monoMode_    = false;
+    bool legatoMode_  = false;
+
     int voiceCap_ = 32;  // safe default; PluginProcessor pushes the real value per-block
 };
 

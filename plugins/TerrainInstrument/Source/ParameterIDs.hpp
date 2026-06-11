@@ -145,6 +145,8 @@ namespace ParameterIDs
     // ── Synth section — Phase 2C (Warp modes: BEND / SYNC / FORMANT) ─────
     constexpr char SYN_OSC_A_WARP_MODE[]   = "SYN_OSC_A_WARP_MODE";   // choice 0=NONE,1=BEND,2=SYNC,3=FORMANT
     constexpr char SYN_OSC_A_WARP_AMOUNT[] = "SYN_OSC_A_WARP_AMOUNT"; // float 0..1
+    constexpr char SYN_OSC_A_WARP2_MODE[]  = "SYN_OSC_A_WARP2_MODE";  // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_A_WARP2_AMT[]   = "SYN_OSC_A_WARP2_AMT";   // float 0..1
 
     // ── Synth section — Phase 9 (OSC B chassis — full mirror of OSC A) ───
     constexpr char SYN_OSC_B_ENGINE[]      = "SYN_OSC_B_ENGINE";       // enum 0..5
@@ -157,6 +159,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_WT_FRAME[]    = "SYN_OSC_B_WT_FRAME";     // float 0..1
     constexpr char SYN_OSC_B_WARP_MODE[]   = "SYN_OSC_B_WARP_MODE";    // choice 0..3
     constexpr char SYN_OSC_B_WARP_AMOUNT[] = "SYN_OSC_B_WARP_AMOUNT";  // float 0..1
+    constexpr char SYN_OSC_B_WARP2_MODE[]  = "SYN_OSC_B_WARP2_MODE";   // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_B_WARP2_AMT[]   = "SYN_OSC_B_WARP2_AMT";    // float 0..1
 
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
     constexpr char SYN_VOICES[]   = "SYN_VOICES";    // int 1..16, polyphony cap (display-only this phase)
@@ -169,6 +173,8 @@ namespace ParameterIDs
     constexpr char SYN_GLIDE_CURVE[]  = "SYN_GLIDE_CURVE";   // float 0..100 % → slide shape (50=linear)
     constexpr char SYN_GLIDE_ALWAYS[] = "SYN_GLIDE_ALWAYS";  // bool — glide every note vs only when held
     constexpr char SYN_GLIDE_SCALED[] = "SYN_GLIDE_SCALED";  // bool — time-per-octave vs fixed total time
+    constexpr char SYN_MONO[]         = "SYN_MONO";          // bool — single-voice, last-note priority
+    constexpr char SYN_LEGATO[]       = "SYN_LEGATO";        // bool — overlapped notes retarget, no retrigger (mono)
 
     // ── Synth section — Phase 11a (wavetable front-panel rework foundation) ──
     // 6 new params per OSC × 2 OSCs = 12 new params total.
