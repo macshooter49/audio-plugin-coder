@@ -457,9 +457,12 @@ namespace tw
 
         /** KEYTRACK — the first note→destination modulation route (the mod-matrix
          *  embryo). Source = note pitch (latched per voice at note-on); depth 0..1
-         *  per OSC; destination selectable (0=FRAME/WT POS, 1=WARP, 2=FOLD). The
-         *  effective destination value = base + depth·noteRamp, clamped, resolved at
-         *  render entry. Architected so Env/LFO sources + a full matrix slot in later
+         *  per OSC; destination selectable (0=FRAME/WT POS, 1=WARP, 2=FOLD).
+         *  CROSSFADE: effective = base + depth·(noteRamp − base). depth 0 = the knob
+         *  works normally; depth 1 = a pure pitch ramp where the lowest anchor note
+         *  (C1) is SILENT and the highest (C6) is FULL (1.0), independent of the knob
+         *  value (so it can't clamp-to-max or collapse-to-zero). Resolved at render
+         *  entry. Architected so Env/LFO sources + a full matrix slot in later
          *  with no rewrite of the oscillator. Pushed per block. */
         void setKeytrack (float depthA, int destA, float depthB, int destB) noexcept
         {
@@ -467,6 +470,24 @@ namespace tw
             ktDestA_  = juce::jlimit (0, 2, destA);
             ktDepthB_ = juce::jlimit (0.0f, 1.0f, depthB);
             ktDestB_  = juce::jlimit (0, 2, destB);
+        }
+
+        /** ROUTE (back panel pill 4) — the generalized modulation slot, mod route #2.
+         *  Source = Note ramp (reuses KEYTRACK's per-voice note ramp) or Velocity;
+         *  destination selectable incl. the two per-voice filter cutoffs; amount is
+         *  BIPOLAR (-1..+1). Resolved per-voice at render entry exactly like KEYTRACK:
+         *  FRAME/WARP/FOLD accumulate into the effective members alongside KEYTRACK;
+         *  CUT1/CUT2 add a semitone offset into the per-sample filter cutoff. Built so
+         *  Env/LFO sources slot into the source list later with no oscillator rewrite. */
+        void setRoute (int srcA, int destA, float amtA,
+                       int srcB, int destB, float amtB) noexcept
+        {
+            routeSrcA_  = juce::jlimit (0, 1, srcA);
+            routeDestA_ = juce::jlimit (0, 2, destA);
+            routeAmtA_  = juce::jlimit (-1.0f, 1.0f, amtA);
+            routeSrcB_  = juce::jlimit (0, 1, srcB);
+            routeDestB_ = juce::jlimit (0, 2, destB);
+            routeAmtB_  = juce::jlimit (-1.0f, 1.0f, amtB);
         }
 
         /** Phase 11c — Set per-OSC SPECTRAL type + amount. Pushed per-block from
@@ -624,20 +645,36 @@ namespace tw
             auto* scratchL = scratch_.getWritePointer (0);
             auto* scratchR = scratch_.getWritePointer (1);
 
-            // KEYTRACK — resolve effective destination values = base (knob) + note→dest
-            // modulation, clamped. This is mod route #1: source = ktRamp_ (note pitch),
-            // depth = ktDepth*_, destination = ktDest*_. The render path below reads only
-            // the effective members (framePos_/warpAmount_/foldAmount*_), so nothing else
-            // changes; adding more sources/routes later means accumulating into these.
+            // KEYTRACK + ROUTE — resolve effective destination values, clamped.
+            // KEYTRACK (mod route #1) is a CROSSFADE from the knob toward a pure pitch ramp:
+            //   effective = base + depth·(ramp − base)
+            //   depth 0   → base (knob works normally, keytrack off)
+            //   depth 100 → ramp: lowest note (C1)=0 SILENT (no leak whatever the knob is),
+            //               highest (C6)=1.0 FULL. Independent of the knob value, so it can
+            //               neither clamp to max ("mix knob" bug) nor collapse to zero when
+            //               the knob is at 0 ("does nothing" bug). = "bottom nothing, top full".
+            // ROUTE (mod route #2) is ADDITIVE/bipolar. Sources: Velocity (linear — the one
+            // that nails per-note realism) or Note. The NOTE source is CURVED (ramp^kRtNoteCurve)
+            // so the bottom half of the keyboard stays closed and it only blooms open up top
+            // (per Max: "half closed, half open, hella open at the top"). The render path reads
+            // only the effective members; more sources/routes later accumulate into these.
             {
-                const float ktA = ktDepthA_ * ktRamp_;
-                const float ktB = ktDepthB_ * ktRamp_;
-                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktA : 0.0f));
-                warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktA : 0.0f));
-                foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktA : 0.0f));
-                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktB : 0.0f));
-                warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktB : 0.0f));
-                foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktB : 0.0f));
+                const float ktDA = ktDepthA_, ktDB = ktDepthB_;   // 0..1 keytrack depth per OSC
+                // ROUTE — per-OSC source value × bipolar amount. Velocity stays linear; Note is
+                // shaped by a power curve so low notes contribute ~0 and the top blooms.
+                const float noteCurved = std::pow (ktRamp_, kRtNoteCurve);
+                const float rtSrcA = (routeSrcA_ == kRtSrcVel) ? currentVelocity_ : noteCurved;
+                const float rtSrcB = (routeSrcB_ == kRtSrcVel) ? currentVelocity_ : noteCurved;
+                const float rtA = routeAmtA_ * rtSrcA;     // bipolar -1..+1 × 0..1
+                const float rtB = routeAmtB_ * rtSrcB;
+                // FRAME/WARP/FOLD — keytrack crossfade term depth·(ramp − base) on the
+                // selected dest, then ROUTE adds bipolar on top, clamp once.
+                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f));
+                warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f));
+                foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f));
+                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f));
+                warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f));
+                foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f));
             }
 
             // WAVER — advance per-(osc × unison sine) OU pitch drift this block. Slow,
@@ -1858,6 +1895,20 @@ namespace tw
         float framePosBase_    = 0.0f, framePosBaseB_   = 0.0f;   // knob bases (keytrack adds onto these)
         float warpAmountBase_  = 0.0f, warpAmountBaseB_ = 0.0f;
         float foldAmountBaseA_ = 0.0f, foldAmountBaseB_ = 0.0f;
+
+        // ── ROUTE — mod route #2 (the generalized slot, back panel pill 4) ──────────
+        //   Source 0=Note ramp (reuses ktRamp_), 1=Velocity. Dest 0=FRAME,1=WARP,2=FOLD,
+        //   3=CUT1,4=CUT2. Amount BIPOLAR. FRAME/WARP/FOLD accumulate into the effective
+        //   members alongside KEYTRACK (resolved at render entry); CUT1/CUT2 resolve into
+        //   routeCut{1,2}Semis_ — a semitone offset added into the per-sample filter
+        //   cutoff (musical, additive in semitone space). Both OSC routes may target one
+        //   shared filter cutoff, so they sum.
+        enum { kRtFrame = 0, kRtWarp = 1, kRtFold = 2 };   // CUT1/CUT2 removed — filter routing didn't work (filters act on the OSC sum)
+        enum { kRtSrcNote = 0, kRtSrcVel = 1 };
+        int   routeSrcA_  = 0,    routeSrcB_  = 0;         // 0=Note, 1=Velocity
+        int   routeDestA_ = 0,    routeDestB_ = 0;         // 0=FRAME,1=WARP,2=FOLD
+        static constexpr float kRtNoteCurve = 3.0f;        // Note-source shaping: bottom half stays closed, blooms up top
+        float routeAmtA_  = 0.0f, routeAmtB_  = 0.0f;      // bipolar -1..+1 (per-block from APVTS/100)
 
         // Phase 11a — per-sine WT frame position (centre = framePos_, offset = SPREAD × u_norm × 0.5).
         // Render path wraps to [0,1] before wavetable lookup.

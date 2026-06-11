@@ -1108,6 +1108,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "Frame", "Warp", "Fold" },
         0));
 
+    // ROUTE (back panel pill 4 — replaces the rehomed INTERP selector).
+    // Mod route #2 — the generalized slot: source (Note/Velocity) -> destination
+    // (FRAME/WARP/FOLD/CUT1/CUT2) by a BIPOLAR amount. Per-voice, latched at note-on.
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_ROUTE_SRC, 1 },
+        "Synth OSC A Route Source",
+        juce::StringArray { "Note", "Vel" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_ROUTE_DEST, 1 },
+        "Synth OSC A Route Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_ROUTE_AMT, 1 },
+        "Synth OSC A Route Amount",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f),
+        0.0f));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_AMOUNT, 1 },
         "Synth OSC A Warp Amount",
@@ -1218,6 +1237,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC B Keytrack Dest",
         juce::StringArray { "Frame", "Warp", "Fold" },
         0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_ROUTE_SRC, 1 },
+        "Synth OSC B Route Source",
+        juce::StringArray { "Note", "Vel" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_ROUTE_DEST, 1 },
+        "Synth OSC B Route Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_ROUTE_AMT, 1 },
+        "Synth OSC B Route Amount",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
         "Synth OSC B Warp Amount",
@@ -1922,6 +1955,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   ktDestA     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_KEYTRACK_DEST);
         const float ktDepthB    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_KEYTRACK);
         const int   ktDestB     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_KEYTRACK_DEST);
+        // ROUTE — per-OSC source + destination + bipolar amount (-100..100 %).
+        const int   rtSrcA      = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ROUTE_SRC);
+        const int   rtDestA     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ROUTE_DEST);
+        const float rtAmtA      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ROUTE_AMT);
+        const int   rtSrcB      = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_SRC);
+        const int   rtDestB     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
+        const float rtAmtB      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -1957,6 +1997,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setPhaseMode              (phaseModeA, phaseModeB);
                 sv->setWaver                  (waverA / 100.0f, waverB / 100.0f);   // WAVER — analog pitch drift (OU)
                 sv->setKeytrack               (ktDepthA / 100.0f, ktDestA, ktDepthB / 100.0f, ktDestB);  // KEYTRACK
+                sv->setRoute                  (rtSrcA, rtDestA, rtAmtA / 100.0f, rtSrcB, rtDestB, rtAmtB / 100.0f);  // ROUTE
                 sv->setEngineB                (engineIdxB);
             }
         }

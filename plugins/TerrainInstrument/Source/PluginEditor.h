@@ -159,6 +159,9 @@ private:
     juce::WebSliderRelay synOscAWaverRelay      { ParameterIDs::SYN_OSC_A_WAVER };
     juce::WebSliderRelay synOscAKeytrackRelay     { ParameterIDs::SYN_OSC_A_KEYTRACK };
     juce::WebSliderRelay synOscAKeytrackDestRelay { ParameterIDs::SYN_OSC_A_KEYTRACK_DEST };
+    juce::WebSliderRelay synOscARouteSrcRelay     { ParameterIDs::SYN_OSC_A_ROUTE_SRC };
+    juce::WebSliderRelay synOscARouteDestRelay    { ParameterIDs::SYN_OSC_A_ROUTE_DEST };
+    juce::WebSliderRelay synOscARouteAmtRelay     { ParameterIDs::SYN_OSC_A_ROUTE_AMT };
 
     // Synth section — Phase 9 (OSC B relays)
     juce::WebSliderRelay synOscBEngineRelay     { ParameterIDs::SYN_OSC_B_ENGINE };
@@ -175,6 +178,9 @@ private:
     juce::WebSliderRelay synOscBWaverRelay      { ParameterIDs::SYN_OSC_B_WAVER };
     juce::WebSliderRelay synOscBKeytrackRelay     { ParameterIDs::SYN_OSC_B_KEYTRACK };
     juce::WebSliderRelay synOscBKeytrackDestRelay { ParameterIDs::SYN_OSC_B_KEYTRACK_DEST };
+    juce::WebSliderRelay synOscBRouteSrcRelay     { ParameterIDs::SYN_OSC_B_ROUTE_SRC };
+    juce::WebSliderRelay synOscBRouteDestRelay    { ParameterIDs::SYN_OSC_B_ROUTE_DEST };
+    juce::WebSliderRelay synOscBRouteAmtRelay     { ParameterIDs::SYN_OSC_B_ROUTE_AMT };
 
     // Phase 11a — OSC A wavetable rework relays (6 new)
     juce::WebSliderRelay synOscASpectralTypeRelay { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE };
@@ -333,6 +339,9 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAWaverAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAKeytrackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAKeytrackDestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteSrcAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteDestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteAmtAttachment;
 
     // Synth section — Phase 9 (OSC B attachments)
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBEngineAttachment;
@@ -349,6 +358,9 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBWaverAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBKeytrackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBKeytrackDestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteSrcAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteDestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteAmtAttachment;
 
     // Phase 11a — OSC A attachments
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralTypeAttachment;

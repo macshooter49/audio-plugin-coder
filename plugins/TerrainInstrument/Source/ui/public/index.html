@@ -3575,6 +3575,14 @@ body {
 #syn-panel .kt-dest-value { font-size: 11px; }
 #syn-panel .kt-depth { cursor: ns-resize; user-select: none; color: var(--text-muted); }
 #syn-panel .kt-depth.dragging { color: var(--text-primary); }
+#syn-panel .sel.rt-pill { gap: 2px; }
+#syn-panel .rt-route-row { position: relative; width: 100%; display: flex; align-items: center; justify-content: center; gap: 3px; }
+#syn-panel .rt-half { position: relative; flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; }
+#syn-panel .rt-half .sel-value { font-size: 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .rt-arrow { flex: 0 0 auto; font-size: 9px; color: var(--text-muted); line-height: 1; }
+#syn-panel .rt-arrow.act { color: var(--purple-500); }
+#syn-panel .rt-amt { cursor: ns-resize; user-select: none; color: var(--text-muted); }
+#syn-panel .rt-amt.act { color: var(--text-primary); }
 #syn-panel .voice-row[data-syn-row] { cursor: ns-resize; transition: background 0.12s ease; border-radius: 4px; padding: 1px 4px; }
 #syn-panel .voice-row[data-syn-row]:hover { background: rgba(139,92,246,0.10); }
 #syn-panel .voice-row[data-syn-row].dragging { background: rgba(139,92,246,0.20); }
@@ -4446,13 +4454,26 @@ body {
                   </div>
                   <div class="sel-value kt-depth" data-syn-kt="SYN_OSC_A_KEYTRACK"><b>0</b>%</div>
                 </div>
-                <div class="sel">
-                  <div class="sel-label">INTERP</div>
-                  <div class="sel-value" id="osc-a-interp-mode-value">LINEAR</div>
-                  <select class="sel-select" data-syn="SYN_OSC_A_INTERP_MODE" id="osc-a-interp-mode-select" aria-label="INTERP mode">
-                    <option value="0">Linear</option>
-                    <option value="1">Stepped</option>
-                  </select>
+                <div class="sel rt-pill" title="ROUTE — pick a source, route it to a destination, set the amount (±). Modulates per note.">
+                  <div class="rt-route-row">
+                    <div class="rt-half">
+                      <div class="sel-value rt-src-value" id="osc-a-route-src-value">Note</div>
+                      <select class="sel-select" data-syn="SYN_OSC_A_ROUTE_SRC" id="osc-a-route-src-select" aria-label="ROUTE source">
+                        <option value="0">Note</option>
+                        <option value="1">Vel</option>
+                      </select>
+                    </div>
+                    <div class="rt-arrow">→</div>
+                    <div class="rt-half">
+                      <div class="sel-value rt-dst-value" id="osc-a-route-dst-value">Frame</div>
+                      <select class="sel-select" data-syn="SYN_OSC_A_ROUTE_DEST" id="osc-a-route-dst-select" aria-label="ROUTE destination">
+                        <option value="0">Frame</option>
+                        <option value="1">Warp</option>
+                        <option value="2">Fold</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="sel-value rt-amt" data-syn-rt="SYN_OSC_A_ROUTE_AMT"><b>0</b>%</div>
                 </div>
               </div>
               <!-- BOTTOM ROW: 5 tuning knobs (OCT/SEMI/CENT/LEVEL/PAN) -->
@@ -4604,13 +4625,26 @@ body {
                   </div>
                   <div class="sel-value kt-depth" data-syn-kt="SYN_OSC_B_KEYTRACK"><b>0</b>%</div>
                 </div>
-                <div class="sel">
-                  <div class="sel-label">INTERP</div>
-                  <div class="sel-value" id="osc-b-interp-mode-value">LINEAR</div>
-                  <select class="sel-select" data-syn="SYN_OSC_B_INTERP_MODE" id="osc-b-interp-mode-select" aria-label="INTERP mode">
-                    <option value="0">Linear</option>
-                    <option value="1">Stepped</option>
-                  </select>
+                <div class="sel rt-pill" title="ROUTE — pick a source, route it to a destination, set the amount (±). Modulates per note.">
+                  <div class="rt-route-row">
+                    <div class="rt-half">
+                      <div class="sel-value rt-src-value" id="osc-b-route-src-value">Note</div>
+                      <select class="sel-select" data-syn="SYN_OSC_B_ROUTE_SRC" id="osc-b-route-src-select" aria-label="ROUTE source">
+                        <option value="0">Note</option>
+                        <option value="1">Vel</option>
+                      </select>
+                    </div>
+                    <div class="rt-arrow">→</div>
+                    <div class="rt-half">
+                      <div class="sel-value rt-dst-value" id="osc-b-route-dst-value">Frame</div>
+                      <select class="sel-select" data-syn="SYN_OSC_B_ROUTE_DEST" id="osc-b-route-dst-select" aria-label="ROUTE destination">
+                        <option value="0">Frame</option>
+                        <option value="1">Warp</option>
+                        <option value="2">Fold</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="sel-value rt-amt" data-syn-rt="SYN_OSC_B_ROUTE_AMT"><b>0</b>%</div>
                 </div>
               </div>
               <!-- BOTTOM ROW: 5 tuning knobs (OCT/SEMI/CENT/LEVEL/PAN) -->
@@ -8837,7 +8871,7 @@ setTimeout(function wireSynControls () {
         sync(); // initial render
       }
       ['osc-a-phase-mode', 'osc-a-spectral-type', 'osc-a-fold-shape', 'osc-a-interp-mode',
-       'osc-b-phase-mode', 'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode', 'osc-a-keytrack-dest', 'osc-b-keytrack-dest']
+       'osc-b-phase-mode', 'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode', 'osc-a-route-src', 'osc-a-route-dst', 'osc-b-route-src', 'osc-b-route-dst', 'osc-a-keytrack-dest', 'osc-b-keytrack-dest']
         .forEach(prefix => bindSelValueMirror(prefix + '-select', prefix + '-value'));
     } catch (eSelMirror) { console.warn('[SYN-sel-mirror] bindSelValueMirror failed', eSelMirror); }
 
@@ -8892,6 +8926,63 @@ setTimeout(function wireSynControls () {
           } catch (perEl) { console.warn('[KT] per-depth init failed', perEl); }
         });
       } catch (eKT) { console.warn('[KT] initKeytrackPills failed', eKT); }
+    })();
+
+    // ── ROUTE amount — bipolar draggable %. (SRC/DST are native <select> dropdowns,
+    //    auto-bound by the generic [data-syn] wirer + bindSelValueMirror; no JS needed there.)
+    //    The arrow lights purple when the amount is non-zero. ──
+    (function initRoutePills() {
+      try {
+        document.querySelectorAll('#syn-panel .rt-amt[data-syn-rt]').forEach(function(el) {
+          try {
+            const amtId = el.dataset.synRt;
+            if (!amtId || !window.Juce || !window.Juce.getSliderState) return;
+            const amtState = window.Juce.getSliderState(amtId);
+            if (!amtState) { console.warn('[RT] no SliderState for', amtId); return; }
+            const valEl = el.querySelector('b');
+            const pill  = el.closest('.rt-pill');
+            const arrow = pill ? pill.querySelector('.rt-arrow') : null;
+            const refresh = function() {
+              try {
+                const v = Math.round(amtState.getScaledValue ? amtState.getScaledValue() : 0);
+                if (valEl) valEl.textContent = (v > 0 ? '+' : '') + v;
+                const active = v !== 0;
+                el.classList.toggle('act', active);
+                if (arrow) arrow.classList.toggle('act', active);
+              } catch (e) { console.warn('[RT] refresh failed', amtId, e); }
+            };
+            refresh();
+            let startY = 0, startN = 0.5, dragging = false;
+            const onMove = function(ev) {
+              if (!dragging) return;
+              const dy = startY - ev.clientY;
+              const nN = Math.max(0, Math.min(1, startN + dy / 150));
+              try { amtState.setNormalisedValue(nN); } catch (e) {}
+              refresh();
+            };
+            const onUp = function() {
+              dragging = false;
+              document.removeEventListener('pointermove', onMove);
+              document.removeEventListener('pointerup', onUp);
+            };
+            el.addEventListener('pointerdown', function(ev) {
+              try {
+                dragging = true;
+                startY = ev.clientY;
+                startN = amtState.getNormalisedValue ? amtState.getNormalisedValue() : 0.5;
+                if (el.setPointerCapture) el.setPointerCapture(ev.pointerId);
+                document.addEventListener('pointermove', onMove);
+                document.addEventListener('pointerup', onUp);
+                ev.preventDefault(); ev.stopPropagation();
+              } catch (e) { console.warn('[RT] pointerdown failed', amtId, e); }
+            });
+            el.addEventListener('dblclick', function(ev) {        // dbl-click resets to 0 %
+              try { amtState.setNormalisedValue(0.5); refresh(); ev.preventDefault(); } catch (e) {}
+            });
+            if (amtState.valueChangedEvent && amtState.valueChangedEvent.addListener) amtState.valueChangedEvent.addListener(refresh);
+          } catch (perEl) { console.warn('[RT] per-amt init failed', perEl); }
+        });
+      } catch (eRT) { console.warn('[RT] initRoutePills failed', eRT); }
     })();
 
     (function initSynRightClickMenus() {
@@ -9019,6 +9110,7 @@ setTimeout(function wireSynControls () {
       const WARP_MODES = ['NONE','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
       const SPECTRAL_MODES = ['None','Harmonic Stretch','Inharmonic Stretch','Vocode','Smear','Random Amps','Data Compress','Spectral Phaser'];
       const FOLD_SHAPES = ['Linear','Sine','Triangle'];
+      const INTERP_MODES = ['Linear','Stepped'];
 
       const KNOB_MENUS = {
         'SYN_OSC_A_WARP_AMOUNT': { header: 'OSC A — WARP', modeParam: 'SYN_OSC_A_WARP_MODE', options: WARP_MODES },
@@ -9026,7 +9118,9 @@ setTimeout(function wireSynControls () {
         'SYN_OSC_A_SPECTRAL_AMT':{ header: 'OSC A — SPECTRAL', modeParam: 'SYN_OSC_A_SPECTRAL_TYPE', options: SPECTRAL_MODES },
         'SYN_OSC_B_SPECTRAL_AMT':{ header: 'OSC B — SPECTRAL', modeParam: 'SYN_OSC_B_SPECTRAL_TYPE', options: SPECTRAL_MODES },
         'SYN_OSC_A_FOLD_AMT':    { header: 'OSC A — FOLD', modeParam: 'SYN_OSC_A_FOLD_SHAPE', options: FOLD_SHAPES },
-        'SYN_OSC_B_FOLD_AMT':    { header: 'OSC B — FOLD', modeParam: 'SYN_OSC_B_FOLD_SHAPE', options: FOLD_SHAPES }
+        'SYN_OSC_B_FOLD_AMT':    { header: 'OSC B — FOLD', modeParam: 'SYN_OSC_B_FOLD_SHAPE', options: FOLD_SHAPES },
+        'SYN_OSC_A_WT_FRAME':    { header: 'OSC A — INTERP', modeParam: 'SYN_OSC_A_INTERP_MODE', options: INTERP_MODES },
+        'SYN_OSC_B_WT_FRAME':    { header: 'OSC B — INTERP', modeParam: 'SYN_OSC_B_INTERP_MODE', options: INTERP_MODES }
       };
 
       // Wire contextmenu on each WARP/SPECTRAL/FOLD knob.
