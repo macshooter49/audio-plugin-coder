@@ -3519,25 +3519,23 @@ body {
 #syn-panel .env-tab.act { color: #FFFFFF; }
 #syn-panel .env-tab.act::after { content: ''; position: absolute; left: 15%; right: 15%; bottom: -1px; height: 1px; background: var(--purple-400); }
 #syn-panel .env-canvas { flex: 1; background: var(--bg-hero); border: 1px solid var(--border); border-radius: 6px; position: relative; overflow: hidden; cursor: grab; }
-#syn-panel .env-canvas::before, #syn-panel .env-canvas::after { content: ''; position: absolute; width: 6px; height: 6px; border: 1px solid rgba(236,232,242,0.22); }
-#syn-panel .env-canvas::before { top: 3px; left: 3px; border-right: none; border-bottom: none; }
-#syn-panel .env-canvas::after  { bottom: 3px; right: 3px; border-left: none; border-top: none; }
+#syn-panel .env-canvas::before, #syn-panel .env-canvas::after { display: none; }
 #syn-panel .env-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* -- Serum-grade DAHDSR envelope (Batch 4 v5) -- */
 #syn-panel .envs { padding: 0; gap: 0; }
 #syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px; cursor: crosshair; }
 #syn-panel #env-svg { touch-action: none; }
 #syn-panel .env-sel { position: absolute; top: 6px; right: 8px; z-index: 3;
-  font-size: 8px; letter-spacing: 1.5px; color: #FFFFFF;
+  font-size: 11px; letter-spacing: 0.3px; color: #FFFFFF; font-weight: 300;
   background: transparent; border: none;
   border-radius: 4px; padding: 2px 7px; cursor: pointer; user-select: none; }
 #syn-panel .env-sel:hover { color: #FFFFFF; opacity: 0.75; }
 #syn-panel .env-sel-arrow { color: #FFFFFF; font-size: 7px; opacity: 0.8; }
-#syn-panel .env-node { fill: #14121F; stroke: #FFFFFF; stroke-width: 1.3; cursor: grab; }
-#syn-panel .env-node:hover { stroke: #FFFFFF; stroke-width: 1.5; }
-#syn-panel .env-node.sus { fill: #FFFFFF; stroke: #FFFFFF; stroke-width: 1.3; }
-#syn-panel .env-curve { fill: rgba(201,190,239,0.55); cursor: ns-resize; }
-#syn-panel .env-curve:hover { fill: #C9BEEF; }
+#syn-panel .env-node { fill: #FFFFFF; cursor: grab; }
+#syn-panel .env-node:hover { fill: #FFFFFF; stroke: #FFFFFF; stroke-width: 1.2; }
+#syn-panel .env-node.sus { fill: #FFFFFF; cursor: grab; }
+#syn-panel .env-curve { fill: #FFFFFF; cursor: ns-resize; }
+#syn-panel .env-curve:hover { fill: #FFFFFF; }
 #syn-panel .env-hit { fill: transparent; cursor: grab; }
 #syn-panel .env-hit.curve { cursor: ns-resize; }
 #syn-panel .env-loop-on #env-line { stroke-dasharray: 4 2.5; }
@@ -4765,12 +4763,20 @@ body {
                     <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.02"/>
                   </linearGradient>
                 </defs>
-                <g stroke="rgba(201,190,239,0.16)" stroke-width="0.5">
-                  <line x1="70"  y1="0" x2="70"  y2="70"/>
-                  <line x1="140" y1="0" x2="140" y2="70"/>
-                  <line x1="210" y1="0" x2="210" y2="70"/>
+                <g stroke="rgba(201,190,239,0.06)" stroke-width="0.4">
+                  <line x1="35"  y1="2" x2="35"  y2="62"/>
+                  <line x1="70"  y1="2" x2="70"  y2="62"/>
+                  <line x1="105" y1="2" x2="105" y2="62"/>
+                  <line x1="140" y1="2" x2="140" y2="62"/>
+                  <line x1="175" y1="2" x2="175" y2="62"/>
+                  <line x1="210" y1="2" x2="210" y2="62"/>
+                  <line x1="245" y1="2" x2="245" y2="62"/>
+                  <line x1="0" y1="14" x2="280" y2="14"/>
+                  <line x1="0" y1="26" x2="280" y2="26"/>
+                  <line x1="0" y1="38" x2="280" y2="38"/>
+                  <line x1="0" y1="50" x2="280" y2="50"/>
                 </g>
-                <line x1="0" y1="62" x2="280" y2="62" stroke="rgba(201,190,239,0.22)" stroke-width="0.5" stroke-dasharray="2,3"/>
+                <line x1="0" y1="62" x2="280" y2="62" stroke="rgba(201,190,239,0.22)" stroke-width="0.6"/>
                 <path id="env-fill" d="" fill="url(#env-grad)"/>
                 <path id="env-line" d="" stroke="#C9BEEF" stroke-width="1.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
                 <text id="env-loop-tag" x="8" y="12" fill="#8B5CF6" font-size="6.5" letter-spacing="2" style="display:none">LOOP</text>
@@ -4780,11 +4786,11 @@ body {
                 <g id="env-depth" style="display:none">
                   <line id="env-depth-track" x1="274.5" y1="8" x2="274.5" y2="64" stroke="rgba(201,190,239,0.14)" stroke-width="1.5" stroke-linecap="round"/>
                   <line id="env-depth-centermark" x1="271.5" y1="36" x2="277.5" y2="36" stroke="rgba(201,190,239,0.3)" stroke-width="0.6"/>
-                  <line id="env-depth-fill" x1="274.5" y1="36" x2="274.5" y2="36" stroke="#8B5CF6" stroke-width="1.7" stroke-linecap="round"/>
+                  <line id="env-depth-fill" x1="274.5" y1="36" x2="274.5" y2="36" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round"/>
                   <rect id="env-depth-hit" x="269" y="4" width="11" height="64" fill="transparent" style="cursor:ns-resize"/>
                 </g>
               </svg>
-              <div class="env-sel" id="env-sel">AMP <span class="env-sel-arrow">&#9662;</span></div>
+              <div class="env-sel" id="env-sel">Amp <span class="env-sel-arrow">&#9662;</span></div>
             </div>
           </div>
 
@@ -9196,13 +9202,13 @@ setTimeout(function wireSynControls () {
       try {
         var PREFIX = { AMP:'SYN_ENV_AMP_', FLT:'SYN_ENV_FLT_', PIT:'SYN_ENV_PIT_',
                        M1:'SYN_ENV_M1_', M2:'SYN_ENV_M2_' };
-        var LABELS = { AMP:'AMP', FLT:'FLT', PIT:'PITCH', M1:'MOD 1', M2:'MOD 2' };
+        var LABELS = { AMP:'Amp', FLT:'Filter', PIT:'Pitch', M1:'Mod 1', M2:'Mod 2' };
         // Depth/amount destination per envelope. AMP = always full (no control).
         // PITCH -> pitch env depth (semitones); FLT -> filter 1 env amount (bipolar).
         // MOD waits for the mod matrix. {id, min, max, fmt}.
         var DEPTH = {
-          PIT: { id:'SYN_ENV_PIT_DEPTH', min:-48, max:48, fmt:function(v){ return (v>=0?'+':'')+v.toFixed(0)+' st'; } },
-          FLT: { id:'SYN_FILTER1_ENV',   min:-1,  max:1,  fmt:function(v){ return (v>=0?'+':'')+v.toFixed(2); } }
+          PIT: { id:'SYN_ENV_PIT_DEPTH', min:-48, max:48, fmt:function(v){ return (v>=0?'+':'')+v.toFixed(0)+' st'; } }
+          /* FLT depth line removed per Max — shape the filter with its own envelope instead. */
         };
         var FLDS = ['DLY','A','H','D','S','R','CA','CD','CR','LOOP'];
         var states = {};
@@ -9326,7 +9332,7 @@ setTimeout(function wireSynControls () {
               n.setAttribute('class','env-node');
             } else {
               n=document.createElementNS('http://www.w3.org/2000/svg','circle');
-              n.setAttribute('cx',x); n.setAttribute('cy',y); n.setAttribute('r',2.9);
+              n.setAttribute('cx',x); n.setAttribute('cy',y); n.setAttribute('r',3.3);
               n.setAttribute('class','env-node'+(sus?' sus':''));
             }
             n.dataset.kind=kind; nodesG.appendChild(n);
@@ -9336,7 +9342,7 @@ setTimeout(function wireSynControls () {
             var m=midOf(x0,y0,x1,y1,tension);
             addHit(m.x,m.y,7,kind,true);
             var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
-            c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',1.5);
+            c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',2.3);
             c.setAttribute('class','env-curve'); c.dataset.kind=kind;
             nodesG.appendChild(c);
           }
