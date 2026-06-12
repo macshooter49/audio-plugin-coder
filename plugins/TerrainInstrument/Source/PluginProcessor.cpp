@@ -1009,43 +1009,170 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_A, 1 },
         "Synth Filter Env Attack",
-        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f), 5.0f));
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 5.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_D, 1 },
         "Synth Filter Env Decay",
-        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f), 200.0f));
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 200.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_S, 1 },
         "Synth Filter Env Sustain",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_R, 1 },
         "Synth Filter Env Release",
-        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f), 300.0f));
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 120.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_A, 1 },
         "Synth Amp Attack",
-        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f),
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f),
         5.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_D, 1 },
         "Synth Amp Decay",
-        juce::NormalisableRange<float> (1.0f, 5000.0f, 0.0f, 0.3f),
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f),
         100.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_S, 1 },
         "Synth Amp Sustain",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
-        0.7f));
+        1.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_R, 1 },
         "Synth Amp Release",
-        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f),
-        200.0f));
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f),
+        120.0f));
+
+    // ── Envelope DAHDSR params (Batch 2/3): 5 envelopes × delay/hold/curves/loop (+ADSR for PIT/M1/M2) ──
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_DLY, 1 }, "Synth Amp Delay",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_H, 1 }, "Synth Amp Hold",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_CA, 1 }, "Synth Amp Attack Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_CD, 1 }, "Synth Amp Decay Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_CR, 1 }, "Synth Amp Release Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_AMP_LOOP, 1 }, "Synth Amp Loop", false));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_DLY, 1 }, "Synth Filter Delay",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_H, 1 }, "Synth Filter Hold",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_CA, 1 }, "Synth Filter Attack Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_CD, 1 }, "Synth Filter Decay Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_CR, 1 }, "Synth Filter Release Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_FLT_LOOP, 1 }, "Synth Filter Loop", false));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_A, 1 }, "Synth Pitch Attack",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 5.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_D, 1 }, "Synth Pitch Decay",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 200.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_S, 1 }, "Synth Pitch Sustain",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_R, 1 }, "Synth Pitch Release",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 120.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_DLY, 1 }, "Synth Pitch Delay",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_H, 1 }, "Synth Pitch Hold",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_CA, 1 }, "Synth Pitch Attack Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_CD, 1 }, "Synth Pitch Decay Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_CR, 1 }, "Synth Pitch Release Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_DEPTH, 1 }, "Synth Pitch Env Depth",
+        juce::NormalisableRange<float> (-48.0f, 48.0f, 0.01f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_PIT_LOOP, 1 }, "Synth Pitch Loop", false));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_A, 1 }, "Synth Mod 1 Attack",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 5.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_D, 1 }, "Synth Mod 1 Decay",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 200.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_S, 1 }, "Synth Mod 1 Sustain",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_R, 1 }, "Synth Mod 1 Release",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 120.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_DLY, 1 }, "Synth Mod 1 Delay",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_H, 1 }, "Synth Mod 1 Hold",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_CA, 1 }, "Synth Mod 1 Attack Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_CD, 1 }, "Synth Mod 1 Decay Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_CR, 1 }, "Synth Mod 1 Release Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M1_LOOP, 1 }, "Synth Mod 1 Loop", false));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_A, 1 }, "Synth Mod 2 Attack",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 5.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_D, 1 }, "Synth Mod 2 Decay",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 200.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_S, 1 }, "Synth Mod 2 Sustain",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_R, 1 }, "Synth Mod 2 Release",
+        juce::NormalisableRange<float> (1.0f, 4000.0f, 0.0f, 0.3f), 120.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_DLY, 1 }, "Synth Mod 2 Delay",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_H, 1 }, "Synth Mod 2 Hold",
+        juce::NormalisableRange<float> (0.0f, 4000.0f, 0.0f, 0.3f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_CA, 1 }, "Synth Mod 2 Attack Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_CD, 1 }, "Synth Mod 2 Decay Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_CR, 1 }, "Synth Mod 2 Release Curve",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.6f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_ENV_M2_LOOP, 1 }, "Synth Mod 2 Loop", false));
+
 
     // ── Synth section — Phase 2A (Wavetable foundation) ──────────────────
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -1991,6 +2118,51 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float ampD    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_D);
         const float ampS    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_S);
         const float ampR    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_R);
+
+        // ── Envelope DAHDSR extension reads (Batch 2/3) ──
+        const float ampDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_DLY);
+        const float ampHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_H);
+        const float ampCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_CA);
+        const float ampCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_CD);
+        const float ampCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_CR);
+        const bool  ampLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_LOOP) > 0.5f;
+        const float fltDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_DLY);
+        const float fltHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_H);
+        const float fltCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_CA);
+        const float fltCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_CD);
+        const float fltCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_CR);
+        const bool  fltLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_LOOP) > 0.5f;
+        const float pitDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_DLY);
+        const float pitA = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_A);
+        const float pitHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_H);
+        const float pitD = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_D);
+        const float pitS = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_S);
+        const float pitR = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_R);
+        const float pitCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_CA);
+        const float pitCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_CD);
+        const float pitCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_CR);
+        const bool  pitLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_LOOP) > 0.5f;
+        const float pitDepth = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_DEPTH);
+        const float m1eDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_DLY);
+        const float m1eA = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_A);
+        const float m1eHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_H);
+        const float m1eD = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_D);
+        const float m1eS = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_S);
+        const float m1eR = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_R);
+        const float m1eCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_CA);
+        const float m1eCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_CD);
+        const float m1eCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_CR);
+        const bool  m1eLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_LOOP) > 0.5f;
+        const float m2eDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_DLY);
+        const float m2eA = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_A);
+        const float m2eHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_H);
+        const float m2eD = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_D);
+        const float m2eS = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_S);
+        const float m2eR = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_R);
+        const float m2eCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CA);
+        const float m2eCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CD);
+        const float m2eCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CR);
+        const bool  m2eLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_LOOP) > 0.5f;
         // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
         const int            wtPreset = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_PRESET);
         const float          wtFrame  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_FRAME);
@@ -2047,7 +2219,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterType             (filtType);
                 sv->setFilterDrive            (filtDrv);
                 sv->setFilterEnvAmount        (filtEnv);
-                sv->setFilterEnvParameters    (fltEnvA, fltEnvD, fltEnvS, fltEnvR);
+                sv->setFltEnvDAHDSR           (fltDly, fltEnvA, fltHld, fltEnvD, fltEnvS, fltEnvR, fltCa, fltCd, fltCr, fltLoop);
                 sv->setFilterParameters2      (cut2, res2);
                 sv->setFilterType2            (filtType2);
                 sv->setFilterDrive2           (filtDrv2);
@@ -2055,7 +2227,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterMix1             (filtMix1);
                 sv->setFilterMix2             (filtMix2);
                 sv->setFilterRouting          (filtRoute);
-                sv->setAmpEnvelopeParameters  (ampA, ampD, ampS, ampR);
+                sv->setAmpEnv                 (ampDly, ampA, ampHld, ampD, ampS, ampR, ampCa, ampCd, ampCr, ampLoop);
+                sv->setPitchEnv               (pitDly, pitA, pitHld, pitD, pitS, pitR, pitCa, pitCd, pitCr, pitLoop);
+                sv->setPitchEnvDepth          (pitDepth);
+                sv->setMod1Env                (m1eDly, m1eA, m1eHld, m1eD, m1eS, m1eR, m1eCa, m1eCd, m1eCr, m1eLoop);
+                sv->setMod2Env                (m2eDly, m2eA, m2eHld, m2eD, m2eS, m2eR, m2eCa, m2eCd, m2eCr, m2eLoop);
                 sv->setWavetable              (wt);
                 sv->setWavetableFrame         (wtFrame);
                 sv->setWarp                   (warpMode, warpAmount);
@@ -2175,6 +2351,25 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         synthScratch.setSize (2, numSamples, false, true, true);
     synthScratch.clear();
     synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples);
+
+    // ── Envelope follower tap ──
+    // After the block renders, sample the most-active synth voice's AMP envelope
+    // output for the UI playhead dot. "Most active" = the highest live level, so a
+    // newly struck note's follower wins over a tail that's releasing. When nothing
+    // sounds we send -1 and JS parks/hides the follower.
+    {
+        float best = 0.f; float bestFollow = -1.f; bool any = false;
+        for (int i = 0; i < synthEngine.getNumVoices(); ++i)
+            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+                if (sv->isAmpEnvActive())
+                {
+                    const float lv = sv->getAmpEnvLevel();
+                    if (!any || lv > best) { best = lv; bestFollow = sv->getAmpEnvFollow(); any = true; }
+                }
+        ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
+        ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
+    }
+
 
     // Sum synth into master buffer (flows through the master FX chain below).
     for (int ch = 0; ch < buffer.getNumChannels() && ch < 2; ++ch)

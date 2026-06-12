@@ -96,6 +96,49 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synEnvAmpDRelay)
             .withOptionsFrom(synEnvAmpSRelay)
             .withOptionsFrom(synEnvAmpRRelay)
+            .withOptionsFrom(synEnvAmpDlyRelay)
+            .withOptionsFrom(synEnvAmpHRelay)
+            .withOptionsFrom(synEnvAmpCaRelay)
+            .withOptionsFrom(synEnvAmpCdRelay)
+            .withOptionsFrom(synEnvAmpCrRelay)
+            .withOptionsFrom(synEnvAmpLoopRelay)
+            .withOptionsFrom(synEnvFltDlyRelay)
+            .withOptionsFrom(synEnvFltHRelay)
+            .withOptionsFrom(synEnvFltCaRelay)
+            .withOptionsFrom(synEnvFltCdRelay)
+            .withOptionsFrom(synEnvFltCrRelay)
+            .withOptionsFrom(synEnvFltLoopRelay)
+            .withOptionsFrom(synEnvPitDlyRelay)
+            .withOptionsFrom(synEnvPitARelay)
+            .withOptionsFrom(synEnvPitHRelay)
+            .withOptionsFrom(synEnvPitDRelay)
+            .withOptionsFrom(synEnvPitSRelay)
+            .withOptionsFrom(synEnvPitRRelay)
+            .withOptionsFrom(synEnvPitCaRelay)
+            .withOptionsFrom(synEnvPitCdRelay)
+            .withOptionsFrom(synEnvPitCrRelay)
+            .withOptionsFrom(synEnvPitDepthRelay)
+            .withOptionsFrom(synEnvPitLoopRelay)
+            .withOptionsFrom(synEnvM1DlyRelay)
+            .withOptionsFrom(synEnvM1ARelay)
+            .withOptionsFrom(synEnvM1HRelay)
+            .withOptionsFrom(synEnvM1DRelay)
+            .withOptionsFrom(synEnvM1SRelay)
+            .withOptionsFrom(synEnvM1RRelay)
+            .withOptionsFrom(synEnvM1CaRelay)
+            .withOptionsFrom(synEnvM1CdRelay)
+            .withOptionsFrom(synEnvM1CrRelay)
+            .withOptionsFrom(synEnvM1LoopRelay)
+            .withOptionsFrom(synEnvM2DlyRelay)
+            .withOptionsFrom(synEnvM2ARelay)
+            .withOptionsFrom(synEnvM2HRelay)
+            .withOptionsFrom(synEnvM2DRelay)
+            .withOptionsFrom(synEnvM2SRelay)
+            .withOptionsFrom(synEnvM2RRelay)
+            .withOptionsFrom(synEnvM2CaRelay)
+            .withOptionsFrom(synEnvM2CdRelay)
+            .withOptionsFrom(synEnvM2CrRelay)
+            .withOptionsFrom(synEnvM2LoopRelay)
             .withOptionsFrom(synOscAWtPresetRelay)
             .withOptionsFrom(synOscAWtFrameRelay)
             .withOptionsFrom(synOscAWarpModeRelay)
@@ -2040,6 +2083,135 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synEnvAmpRAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_R),
         synEnvAmpRRelay, nullptr);
+    synEnvAmpDlyAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_DLY),
+        synEnvAmpDlyRelay, nullptr);
+    synEnvAmpHAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_H),
+        synEnvAmpHRelay, nullptr);
+    synEnvAmpCaAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_CA),
+        synEnvAmpCaRelay, nullptr);
+    synEnvAmpCdAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_CD),
+        synEnvAmpCdRelay, nullptr);
+    synEnvAmpCrAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_CR),
+        synEnvAmpCrRelay, nullptr);
+    synEnvAmpLoopAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_AMP_LOOP),
+        synEnvAmpLoopRelay, nullptr);
+    synEnvFltDlyAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_DLY),
+        synEnvFltDlyRelay, nullptr);
+    synEnvFltHAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_H),
+        synEnvFltHRelay, nullptr);
+    synEnvFltCaAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_CA),
+        synEnvFltCaRelay, nullptr);
+    synEnvFltCdAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_CD),
+        synEnvFltCdRelay, nullptr);
+    synEnvFltCrAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_CR),
+        synEnvFltCrRelay, nullptr);
+    synEnvFltLoopAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_FLT_LOOP),
+        synEnvFltLoopRelay, nullptr);
+    synEnvPitDlyAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_DLY),
+        synEnvPitDlyRelay, nullptr);
+    synEnvPitAAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_A),
+        synEnvPitARelay, nullptr);
+    synEnvPitHAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_H),
+        synEnvPitHRelay, nullptr);
+    synEnvPitDAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_D),
+        synEnvPitDRelay, nullptr);
+    synEnvPitSAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_S),
+        synEnvPitSRelay, nullptr);
+    synEnvPitRAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_R),
+        synEnvPitRRelay, nullptr);
+    synEnvPitCaAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_CA),
+        synEnvPitCaRelay, nullptr);
+    synEnvPitCdAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_CD),
+        synEnvPitCdRelay, nullptr);
+    synEnvPitCrAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_CR),
+        synEnvPitCrRelay, nullptr);
+    synEnvPitDepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_DEPTH),
+        synEnvPitDepthRelay, nullptr);
+    synEnvPitLoopAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_LOOP),
+        synEnvPitLoopRelay, nullptr);
+    synEnvM1DlyAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_DLY),
+        synEnvM1DlyRelay, nullptr);
+    synEnvM1AAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_A),
+        synEnvM1ARelay, nullptr);
+    synEnvM1HAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_H),
+        synEnvM1HRelay, nullptr);
+    synEnvM1DAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_D),
+        synEnvM1DRelay, nullptr);
+    synEnvM1SAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_S),
+        synEnvM1SRelay, nullptr);
+    synEnvM1RAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_R),
+        synEnvM1RRelay, nullptr);
+    synEnvM1CaAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_CA),
+        synEnvM1CaRelay, nullptr);
+    synEnvM1CdAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_CD),
+        synEnvM1CdRelay, nullptr);
+    synEnvM1CrAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_CR),
+        synEnvM1CrRelay, nullptr);
+    synEnvM1LoopAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M1_LOOP),
+        synEnvM1LoopRelay, nullptr);
+    synEnvM2DlyAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_DLY),
+        synEnvM2DlyRelay, nullptr);
+    synEnvM2AAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_A),
+        synEnvM2ARelay, nullptr);
+    synEnvM2HAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_H),
+        synEnvM2HRelay, nullptr);
+    synEnvM2DAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_D),
+        synEnvM2DRelay, nullptr);
+    synEnvM2SAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_S),
+        synEnvM2SRelay, nullptr);
+    synEnvM2RAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_R),
+        synEnvM2RRelay, nullptr);
+    synEnvM2CaAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_CA),
+        synEnvM2CaRelay, nullptr);
+    synEnvM2CdAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_CD),
+        synEnvM2CdRelay, nullptr);
+    synEnvM2CrAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_CR),
+        synEnvM2CrRelay, nullptr);
+    synEnvM2LoopAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_M2_LOOP),
+        synEnvM2LoopRelay, nullptr);
 
     // Phase 2A — wavetable preset + frame
     synOscAWtPresetAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
@@ -2367,6 +2539,17 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         js << "if(window.updateLFOOutputs){window.updateLFOOutputs("
            << juce::String(lfo0, 4) << "," << juce::String(lfo1, 4) << "," << juce::String(lfo2, 4) << ","
            << juce::String(p0, 4) << "," << juce::String(p1, 4) << "," << juce::String(p2, 4) << ");}";
+    }
+
+    // ── Envelope follower (playhead dot) ──
+    // Push the most-active voice's live AMP-env level to the WebUI. -1 = no voice
+    // sounding (JS hides/parks the dot). The graph reads the value back onto the
+    // exact same bias curve it already draws, so the dot rides the visible line.
+    {
+        float envFollow = audioProcessor.ampEnvVis.load(std::memory_order_relaxed);
+        float envStage  = audioProcessor.ampEnvFollowVis.load(std::memory_order_relaxed);
+        js << "if(window.updateEnvFollower){window.updateEnvFollower("
+           << juce::String(envFollow, 4) << "," << juce::String(envStage, 4) << ");}";
     }
 
     // ── Mod state lifecycle ──

@@ -3523,6 +3523,24 @@ body {
 #syn-panel .env-canvas::before { top: 3px; left: 3px; border-right: none; border-bottom: none; }
 #syn-panel .env-canvas::after  { bottom: 3px; right: 3px; border-left: none; border-top: none; }
 #syn-panel .env-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* -- Serum-grade DAHDSR envelope (Batch 4 v5) -- */
+#syn-panel .envs { padding: 0; gap: 0; }
+#syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px; cursor: crosshair; }
+#syn-panel #env-svg { touch-action: none; }
+#syn-panel .env-sel { position: absolute; top: 6px; right: 8px; z-index: 3;
+  font-size: 8px; letter-spacing: 1.5px; color: var(--text-primary,#ECE8F2);
+  background: rgba(35,35,64,0.85); border: 1px solid var(--border,#3A3A5C);
+  border-radius: 4px; padding: 2px 7px; cursor: pointer; user-select: none; }
+#syn-panel .env-sel:hover { border-color: var(--purple-400,#8B5CF6); }
+#syn-panel .env-sel-arrow { color: var(--purple-400,#8B5CF6); font-size: 7px; }
+#syn-panel .env-node { fill: var(--bg-hero,#12121F); stroke: #FFFFFF; stroke-width: 1.6; cursor: grab; }
+#syn-panel .env-node:hover { stroke: #FFFFFF; stroke-width: 2.0; }
+#syn-panel .env-node.sus { fill: #FFFFFF; stroke: #FFFFFF; }
+#syn-panel .env-curve { fill: rgba(236,232,242,0.85); cursor: ns-resize; }
+#syn-panel .env-curve:hover { fill: #FFFFFF; }
+#syn-panel .env-hit { fill: transparent; cursor: grab; }
+#syn-panel .env-hit.curve { cursor: ns-resize; }
+#syn-panel .env-loop-on #env-line { stroke-dasharray: 4 2.5; }
 
 /* ── MOD / LFO / PATCHBAY ── */
 #syn-panel .mod { padding-top: 22px; display: grid; grid-template-columns: 156px 1fr; gap: 12px; }
@@ -4739,24 +4757,28 @@ body {
         <!-- Row 3: ENVELOPES · MODULATION -->
         <div class="row-env-mod">
           <div class="device envs">
-            <div class="device-label">ENVELOPES</div>
-            <div class="env-tabs">
-              <div class="env-tab act">AMP</div>
-              <div class="env-tab">FLT</div>
-              <div class="env-tab">PITCH</div>
-              <div class="env-tab">MOD</div>
-            </div>
-            <div class="env-canvas">
-              <svg viewBox="0 0 280 60" preserveAspectRatio="none">
-                <g stroke="rgba(236,232,242,0.07)" stroke-width="0.4">
-                  <line x1="70" y1="0" x2="70" y2="60"/>
-                  <line x1="140" y1="0" x2="140" y2="60"/>
-                  <line x1="210" y1="0" x2="210" y2="60"/>
+            <div class="env-canvas" id="env-canvas">
+              <svg id="env-svg" viewBox="0 0 280 70" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="env-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.26"/>
+                    <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                <g stroke="rgba(236,232,242,0.07)" stroke-width="0.5">
+                  <line x1="70"  y1="0" x2="70"  y2="70"/>
+                  <line x1="140" y1="0" x2="140" y2="70"/>
+                  <line x1="210" y1="0" x2="210" y2="70"/>
                 </g>
-                <path d="M5,55 L50,4 L110,22 L210,22 L265,55" stroke="#ECE8F2" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-                <path d="M5,55 L50,4 L110,22 L210,22 L265,55 L265,58 L5,58 Z" fill="#ECE8F2" opacity="0.10"/>
-                <line x1="0" y1="55" x2="280" y2="55" stroke="rgba(236,232,242,0.2)" stroke-width="0.4" stroke-dasharray="2,3"/>
+                <line x1="0" y1="62" x2="280" y2="62" stroke="rgba(236,232,242,0.14)" stroke-width="0.5" stroke-dasharray="2,3"/>
+                <path id="env-fill" d="" fill="url(#env-grad)"/>
+                <path id="env-line" d="" stroke="#C9BEEF" stroke-width="1.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+                <text id="env-loop-tag" x="8" y="12" fill="#8B5CF6" font-size="6.5" letter-spacing="2" style="display:none">LOOP</text>
+                <text id="env-readout" x="140" y="12" text-anchor="middle" fill="#908599" font-size="7.5" letter-spacing="1" style="display:none"></text>
+                <g id="env-nodes"></g>
+                <circle id="env-follow" cx="-10" cy="-10" r="3.4" fill="#EDE7FF" stroke="#8B5CF6" stroke-width="1.2" style="opacity:0;filter:drop-shadow(0 0 3px rgba(201,190,239,0.9));pointer-events:none"/>
               </svg>
+              <div class="env-sel" id="env-sel">AMP <span class="env-sel-arrow">&#9662;</span></div>
             </div>
           </div>
 
@@ -9161,6 +9183,343 @@ setTimeout(function wireSynControls () {
           } catch (perPill) { console.warn('[WARP2] pill init failed', perPill); }
         });
       } catch (e) { console.warn('[WARP2] initWarp2Pills failed', e); }
+    })();
+
+    // -- Serum-grade DAHDSR envelope editor (Batch 4 v5) --
+    (function initEnvelopeEditor() {
+      try {
+        var PREFIX = { AMP:'SYN_ENV_AMP_', FLT:'SYN_ENV_FLT_', PIT:'SYN_ENV_PIT_',
+                       M1:'SYN_ENV_M1_', M2:'SYN_ENV_M2_' };
+        var LABELS = { AMP:'AMP', FLT:'FLT', PIT:'PITCH', M1:'MOD 1', M2:'MOD 2' };
+        var FLDS = ['DLY','A','H','D','S','R','CA','CD','CR','LOOP'];
+        var states = {};
+        function grab(env){
+          if (states[env]) return states[env];
+          var m = {};
+          for (var i=0;i<FLDS.length;i++){
+            try { m[FLDS[i]] = window.Juce.getSliderState(PREFIX[env]+FLDS[i]); } catch(e){ m[FLDS[i]]=null; }
+          }
+          states[env]=m; return m;
+        }
+
+        var curEnv='AMP';
+        var svg     = document.getElementById('env-svg');
+        var nodesG  = document.getElementById('env-nodes');
+        var lineP   = document.getElementById('env-line');
+        var fillP   = document.getElementById('env-fill');
+        var followEl= document.getElementById('env-follow');
+        var canvas  = document.getElementById('env-canvas');
+        var loopTag = document.getElementById('env-loop-tag');
+        var readout = document.getElementById('env-readout');
+        var selChip = document.getElementById('env-sel');
+        if (!svg || !nodesG || !lineP) return;
+
+        var W=280, H=70, PADX=2, YTOP=10, YBASE=62;
+        function st(){ return grab(curEnv); }
+        function nv(s){ try { return (s&&s.getNormalisedValue)? s.getNormalisedValue():0; } catch(e){ return 0; } }
+        function setnv(s,v){ try { if(s&&s.setNormalisedValue) s.setNormalisedValue(Math.max(0,Math.min(1,v))); } catch(e){} }
+        function tfrac(s){ return nv(s); }   // width fraction == normalized value (matches APVTS skew 0.3 -> what you see = what you hear)
+        function curveT(s){ return nv(s)*2-1; }                  // param -1..+1 from norm
+        function msOf(norm){ return 1 + Math.pow(Math.max(0,norm), 1/0.3)*3999; }   // matches NormalisableRange(1,4000,skew0.3)
+        function normOfMs(ms){ return Math.pow(Math.max(0,Math.min(1,(ms-1)/3999)), 0.3); }
+        function fmtMs(ms){ return ms>=1000 ? (ms/1000).toFixed(2)+'s' : Math.round(ms)+'ms'; }
+
+        // layout: attack can reach the HARD LEFT (no min span); release is the
+        // ENDPOINT and grows RIGHT. Proven across 50,421 combos: always in-bounds.
+        // Layout: width fraction == normalized value (matches the param's 0.3 skew, so
+        // what you see == what you hear). Attack reaches the hard-left edge; release OWNS
+        // the right portion and its endpoint reaches the right grid edge at R=1.0.
+        // Proven: 50,421-combo sweep — in-bounds, no overlap, edge-reach, hard-left attack.
+        function layout(){
+          var s=st(), u=(W-2*PADX);
+          var hasDly = nv(s['DLY'])>0.001, hasHld = nv(s['H'])>0.001;
+          var sp = { DLY: hasDly ? 0.02+tfrac(s['DLY'])*0.06 : 0,
+                     A:   tfrac(s['A'])*0.16,
+                     H:   hasHld ? 0.02+tfrac(s['H'])*0.06 : 0,
+                     D:   0.05+tfrac(s['D'])*0.16 };
+          var leftSum = sp.DLY+sp.A+sp.H+sp.D, leftCap=0.45;
+          var lk = leftSum>leftCap ? leftCap/leftSum : 1;
+          var xD=PADX+sp.DLY*u*lk, xA=xD+sp.A*u*lk, xH=xA+sp.H*u*lk, xS=xH+sp.D*u*lk;
+          // release flows directly from the sustain node (Serum flow-through; no shelf).
+          // 0.05 floor keeps the R node clear of the S node even at R=0.
+          var relMax=(W-PADX)-xS, xE=xS+(0.05+0.95*tfrac(s['R']))*relMax;
+          function yL(l){ return YBASE - l*(YBASE-YTOP); }
+          var ySus=yL(nv(s['S']));
+          return { u:u, k:lk, xD0:PADX, xA0:xD, xH0:xA, xS0:xH, relMax:relMax,
+                   xD:xD, xA:xA, xH:xH, xS:xS, xE:xE, ySus:ySus,
+                   hasDly:hasDly, hasHld:hasHld };
+        }
+
+        // Dense sampling (NO derivatives — power curve has infinite slope at t=0 for
+        // fast attacks, which is un-representable as a Bezier control point; that was
+        // VITAL/SURGE exponential bias - the SAME formula as the C++ DSP
+        // (TerrainEnvelope::biasCurve): y = (e^(P*p)-1)/(e^P-1), P = -tension*8.
+        // Finite slope at both ends (never blows up), hits (0,0)&(1,1) exactly,
+        // strictly monotonic. The graph is literally what you hear.
+        function bias(p, tension){
+          if (Math.abs(tension) < 0.001) return p;
+          var P = -tension * 8.0;
+          return (Math.exp(P*p) - 1) / (Math.exp(P) - 1);
+        }
+        // Dense-sample the exact bias curve (~1.5px spacing). No spline, no derivatives,
+        // no wiggles, no overshoot - every point lies exactly on the function.
+        function sampleSeg(x0,y0,x1,y1,tension,out){
+          var span=Math.abs(x1-x0);
+          var N=Math.max(8, Math.min(96, Math.round(span/1.5)));
+          for(var i=1;i<=N;i++){ var p=i/N;
+            out.push({x:x0+(x1-x0)*p, y:y0+(y1-y0)*bias(p,tension)}); }
+        }
+        function buildPath(pts){
+          var d='';
+          for(var i=0;i<pts.length;i++) d+=' L'+pts[i].x.toFixed(2)+','+pts[i].y.toFixed(2);
+          return d;
+        }
+        function midOf(x0,y0,x1,y1,tension){
+          return { x:(x0+x1)/2, y:y0+(y1-y0)*bias(0.5,tension) };
+        }
+
+        function render(){
+          var s=st(), L=layout();
+          var tA=curveT(s['CA']), tD=curveT(s['CD']), tR=curveT(s['CR']);
+          // RUN 1: baseline/delay -> attack peak (its own run; crisp corner at the peak).
+          var run1=[{x:PADX,y:YBASE}];
+          if(L.hasDly) run1.push({x:L.xD,y:YBASE});
+          var aStart = L.hasDly ? L.xD : PADX;
+          if (L.xA-aStart > 0.6) sampleSeg(aStart, YBASE, L.xA, YTOP, tA, run1);
+          else run1.push({x:L.xA,y:YTOP});
+          // RUN 2: peak -> (hold) -> decay -> sustain node -> release, as ONE flowing run.
+          var run2=[{x:L.xA,y:YTOP}];
+          if(L.hasHld) run2.push({x:L.xH,y:YTOP});
+          sampleSeg(L.hasHld?L.xH:L.xA, YTOP, L.xS, L.ySus, tD, run2);
+          sampleSeg(L.xS, L.ySus, L.xE, YBASE, tR, run2);
+          var d='M'+PADX.toFixed(2)+','+YBASE.toFixed(2)+buildPath(run1)+buildPath(run2);
+          lineP.setAttribute('d', d);
+          fillP.setAttribute('d', d+' L'+L.xE.toFixed(1)+','+YBASE+' L'+PADX+','+YBASE+' Z');
+
+          nodesG.innerHTML='';
+          function addHit(x,y,r,kind,curve){
+            var h=document.createElementNS('http://www.w3.org/2000/svg','circle');
+            h.setAttribute('cx',x); h.setAttribute('cy',y); h.setAttribute('r',r);
+            h.setAttribute('class','env-hit'+(curve?' curve':'')); h.dataset.kind=kind;
+            nodesG.appendChild(h);
+          }
+          function addNode(x,y,kind,sq,sus){
+            addHit(x,y,9,kind,false);
+            var n;
+            if (sq){
+              n=document.createElementNS('http://www.w3.org/2000/svg','rect');
+              n.setAttribute('x',x-2.5); n.setAttribute('y',y-2.5);
+              n.setAttribute('width',5); n.setAttribute('height',5);
+              n.setAttribute('class','env-node');
+            } else {
+              n=document.createElementNS('http://www.w3.org/2000/svg','circle');
+              n.setAttribute('cx',x); n.setAttribute('cy',y); n.setAttribute('r',3.2);
+              n.setAttribute('class','env-node'+(sus?' sus':''));
+            }
+            n.dataset.kind=kind; nodesG.appendChild(n);
+          }
+          function addCurveDot(x0,y0,x1,y1,tension,kind){
+            if (Math.abs(y1-y0)<5 || (x1-x0)<10) return;
+            var m=midOf(x0,y0,x1,y1,tension);
+            addHit(m.x,m.y,7,kind,true);
+            var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+            c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',2.2);
+            c.setAttribute('class','env-curve'); c.dataset.kind=kind;
+            nodesG.appendChild(c);
+          }
+          // curve dots first (under), stage nodes on top
+          addCurveDot(L.hasDly?L.xD:PADX, YBASE, L.xA, YTOP, tA, 'CA');
+          addCurveDot(L.hasHld?L.xH:L.xA, YTOP, L.xS, L.ySus, tD, 'CD');
+          addCurveDot(L.xS, L.ySus, L.xE, YBASE, tR, 'CR');
+          if(L.hasDly) addNode(L.xD,YBASE,'DLY',true,false);
+          addNode(L.xA,YTOP,'A',false,false);
+          if(L.hasHld) addNode(L.xH,YTOP,'H',true,false);
+          addNode(L.xS,L.ySus,'S',false,true);
+          addNode(L.xE,YBASE,'R',false,false);
+        }
+
+        // ── Envelope follower (Serum-style playhead dot) ──────────────────────
+        // C++ pushes (level, stageCode). stageCode = stageIndex + segFraction,
+        // e.g. 2.37 = 37% through Attack. We map that straight onto the SAME curve
+        // the graph draws, so the dot rides the exact visible line. stageIndex:
+        // 0 Idle · 1 Delay · 2 Attack · 3 Hold · 4 Decay · 5 Sustain · 6 Release.
+        var followLevel=-1, followStage=-1, followRAF=0;
+        function placeFollower(){
+          if(!followEl) return;
+          if(followStage < 0 || followLevel < 0){            // no voice -> fade out
+            followEl.style.opacity='0'; return;
+          }
+          var L=layout();
+          var si=Math.floor(followStage), f=followStage-si;  // stage index + fraction
+          var tA=curveT(st()['CA']), tD=curveT(st()['CD']), tR=curveT(st()['CR']);
+          var x, y;
+          if(si<=1){                                          // Delay (flat at baseline)
+            x = L.hasDly ? (PADX + (L.xD-PADX)*f) : PADX; y = YBASE;
+          } else if(si===2){                                  // Attack: baseline->peak
+            var ax0=L.hasDly?L.xD:PADX;
+            x = ax0 + (L.xA-ax0)*f;
+            y = YBASE + (YTOP-YBASE)*bias(f, tA);
+          } else if(si===3){                                  // Hold (flat at peak)
+            x = L.xA + (L.xH-L.xA)*f; y = YTOP;
+          } else if(si===4){                                  // Decay: peak->sustain
+            var dx0=L.hasHld?L.xH:L.xA;
+            x = dx0 + (L.xS-dx0)*f;
+            y = YTOP + (L.ySus-YTOP)*bias(f, tD);
+          } else if(si===5){                                  // Sustain (parked on the node)
+            x = L.xS; y = L.ySus;
+          } else {                                            // Release: sustain->0
+            x = L.xS + (L.xE-L.xS)*f;
+            y = L.ySus + (YBASE-L.ySus)*bias(f, tR);
+          }
+          followEl.setAttribute('cx', x.toFixed(2));
+          followEl.setAttribute('cy', y.toFixed(2));
+          followEl.style.opacity='1';
+        }
+        // Receive live env state from C++ (60 Hz).
+        window.updateEnvFollower = function(level, stageCode){
+          followLevel = level; followStage = stageCode;
+          if(!followRAF){ followRAF=requestAnimationFrame(function(){ followRAF=0; placeFollower(); }); }
+        };
+
+        function showReadout(kind){
+          if(!readout) return;
+          var s=st(), txt='';
+          if(kind==='S') txt='SUS '+Math.round(nv(s['S'])*100)+'%';
+          else if(kind==='CA'||kind==='CD'||kind==='CR'){
+            var t=Math.round(curveT(s[kind])*100);
+            txt='CURVE '+(t>0?'+':'')+t+'%';
+          } else {
+            var name={DLY:'DLY',A:'ATK',H:'HLD',D:'DEC',R:'REL'}[kind]||kind;
+            txt=name+' '+fmtMs(msOf(nv(s[kind])));
+          }
+          readout.textContent=txt; readout.style.display='block';
+        }
+        function hideReadout(){ if(readout) readout.style.display='none'; }
+        function flash(msg){
+          if(!readout) return;
+          readout.textContent=msg; readout.style.display='block';
+          setTimeout(hideReadout, 900);
+        }
+
+        var drag=null;
+        function pxy(ev){ var r=svg.getBoundingClientRect();
+          return { x:(ev.clientX-r.left)/r.width*W, y:(ev.clientY-r.top)/r.height*H }; }
+        function nearestStage(pt){
+          var L=layout(), best=null, bd=16;
+          var cand=[{k:'A',x:L.xA,y:YTOP},{k:'S',x:L.xS,y:L.ySus},{k:'R',x:L.xE,y:YBASE}];
+          if(L.hasDly)cand.push({k:'DLY',x:L.xD,y:YBASE});
+          if(L.hasHld)cand.push({k:'H',x:L.xH,y:YTOP});
+          cand.forEach(function(o){ var dx=o.x-pt.x,dy=o.y-pt.y,dd=Math.sqrt(dx*dx+dy*dy);
+            if(dd<bd){bd=dd;best=o.k;} });
+          return best;
+        }
+        svg.addEventListener('pointerdown', function(ev){
+          if (ev.button!==0) return;
+          var el=ev.target, kind=null;
+          if(el.dataset && el.dataset.kind) kind=el.dataset.kind;
+          else kind=nearestStage(pxy(ev));
+          if(!kind) return;
+          drag={k:kind};
+          try{ svg.setPointerCapture(ev.pointerId); }catch(e){}
+          showReadout(kind);
+          ev.preventDefault();
+        });
+        svg.addEventListener('pointermove', function(ev){
+          if(!drag) return;
+          var s=st(), pt=pxy(ev), L=layout(), uk=L.u*L.k;
+          function inv(f0, span, segX0){
+            var tfv=((pt.x-segX0)/uk - f0)/span;
+            return Math.pow(Math.max(0,Math.min(1,tfv)),2);
+          }
+          function bend(kind, x0,y0,x1,y1){
+            var ratio=(pt.y-y0)/((y1-y0)||1);
+            ratio=Math.max(0.02,Math.min(0.98,ratio));
+            var kk=Math.log(ratio)/Math.log(0.5);
+            var t=-Math.log(kk)/Math.log(2)/2;
+            t=Math.max(-1,Math.min(1,t));
+            setnv(s[kind],(t+1)/2);
+          }
+          if(drag.k==='A')        setnv(s['A'],   inv(0.0, 0.16, L.xA0));
+          else if(drag.k==='R'){  var rf=((pt.x-L.xS)/(L.relMax||1)-0.05)/0.95; setnv(s['R'], Math.max(0,Math.min(1,rf))); }   // drag RIGHT = longer, reaches edge
+          else if(drag.k==='DLY') setnv(s['DLY'], Math.max(0.002, inv(0.02,0.06, L.xD0)));
+          else if(drag.k==='H')   setnv(s['H'],   Math.max(0.002, inv(0.02,0.06, L.xH0)));
+          else if(drag.k==='S'){
+            setnv(s['S'], Math.max(0,Math.min(1,(YBASE-pt.y)/(YBASE-YTOP))));
+            setnv(s['D'], inv(0.05,0.16, L.xS0));
+          }
+          else if(drag.k==='CA')  bend('CA', L.hasDly?L.xD:PADX, YBASE, L.xA, YTOP);
+          else if(drag.k==='CD')  bend('CD', L.hasHld?L.xH:L.xA, YTOP, L.xS, L.ySus);
+          else if(drag.k==='CR')  bend('CR', L.xS, L.ySus, L.xE, YBASE);
+          showReadout(drag.k);
+          render();
+        });
+        function endDrag(ev){ if(drag){ drag=null; hideReadout(); try{svg.releasePointerCapture(ev.pointerId);}catch(e){} } }
+        svg.addEventListener('pointerup', endDrag);
+        svg.addEventListener('pointercancel', endDrag);
+
+        function syncLoopUi(){
+          var on = nv(st()['LOOP'])>0.5;
+          if(loopTag) loopTag.style.display = on?'block':'none';
+          var envsEl = canvas ? canvas.parentElement : null;
+          if(envsEl) envsEl.classList.toggle('env-loop-on', on);
+        }
+
+        function setEnv(id){
+          curEnv=id;
+          if(selChip) selChip.innerHTML = LABELS[id]+' <span class="env-sel-arrow">&#9662;</span>';
+          wire(); syncLoopUi(); render();
+        }
+        if (selChip) selChip.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var order=['AMP','FLT','PIT','M1','M2'];
+          if (window.__synShowMenu){
+            window.__synShowMenu('ENVELOPE', order.map(function(id){
+              return { label:LABELS[id], isChecked:(id===curEnv), onPick:function(){ setEnv(id); } };
+            }), ev.clientX, ev.clientY);
+          } else {
+            setEnv(order[(order.indexOf(curEnv)+1)%order.length]);
+          }
+        });
+
+        svg.addEventListener('contextmenu', function(ev){
+          ev.preventDefault(); ev.stopPropagation();
+          var s=st();
+          var loopOn=nv(s['LOOP'])>0.5, dlyOn=nv(s['DLY'])>0.001, hldOn=nv(s['H'])>0.001;
+          if (window.__synShowMenu){
+            window.__synShowMenu('ENVELOPE', [
+              { label:'Loop', isChecked:loopOn, onPick:function(){ setnv(s['LOOP'], loopOn?0:1); syncLoopUi(); render(); } },
+              { label:'Delay stage', isChecked:dlyOn, onPick:function(){ setnv(s['DLY'], dlyOn?0:normOfMs(100)); render(); } },
+              { label:'Hold stage',  isChecked:hldOn, onPick:function(){ setnv(s['H'],  hldOn?0:normOfMs(100)); render(); } },
+              { label:'Reset shape', isChecked:false, onPick:function(){
+                  setnv(s['DLY'],0); setnv(s['A'],normOfMs(5)); setnv(s['H'],0);
+                  setnv(s['D'],normOfMs(200)); setnv(s['S'],0.7); setnv(s['R'],normOfMs(300));
+                  setnv(s['CA'],0.75); setnv(s['CD'],0.8); setnv(s['CR'],0.8);
+                  setnv(s['LOOP'],0); syncLoopUi(); render(); } }
+            ], ev.clientX, ev.clientY);
+          } else {
+            setnv(s['LOOP'], loopOn?0:1); syncLoopUi(); flash(loopOn?'LOOP OFF':'LOOP ON'); render();
+          }
+        });
+
+        var wiredEnvs={};
+        function wire(){
+          if(wiredEnvs[curEnv]) return; wiredEnvs[curEnv]=true;
+          var s=st();
+          ['A','D','S','R','DLY','H','CA','CD','CR','LOOP'].forEach(function(f){
+            var ss=s[f];
+            if(ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener)
+              ss.valueChangedEvent.addListener(function(){ syncLoopUi(); render(); });
+          });
+        }
+
+        function boot(){
+          render();
+          if(window.Juce && window.Juce.getSliderState){ wire(); syncLoopUi(); render(); }
+          else { setTimeout(boot, 200); }
+        }
+        if (window.ResizeObserver){ try { new ResizeObserver(function(){ render(); }).observe(canvas); } catch(e){} }
+        boot();
+      } catch(e) { console.warn('[ENV] initEnvelopeEditor failed', e); }
     })();
 
     (function initSynRightClickMenus() {

@@ -138,6 +138,52 @@ namespace ParameterIDs
     constexpr char SYN_ENV_FLT_S[]     = "SYN_ENV_FLT_S";      // float 0..1
     constexpr char SYN_ENV_FLT_R[]     = "SYN_ENV_FLT_R";      // float ms (skewed)
 
+    // ── Envelope DAHDSR extensions (Batch 2/3): delay, hold, per-segment curves, loop ──
+    constexpr char SYN_ENV_AMP_DLY[]   = "SYN_ENV_AMP_DLY";  // float ms (skewed)
+    constexpr char SYN_ENV_AMP_H[]     = "SYN_ENV_AMP_H";   // float ms (skewed)
+    constexpr char SYN_ENV_AMP_CA[]    = "SYN_ENV_AMP_CA";   // float -1..+1
+    constexpr char SYN_ENV_AMP_CD[]    = "SYN_ENV_AMP_CD";   // float -1..+1
+    constexpr char SYN_ENV_AMP_CR[]    = "SYN_ENV_AMP_CR";   // float -1..+1
+    constexpr char SYN_ENV_AMP_LOOP[]  = "SYN_ENV_AMP_LOOP";  // bool
+    constexpr char SYN_ENV_FLT_DLY[]   = "SYN_ENV_FLT_DLY";  // float ms (skewed)
+    constexpr char SYN_ENV_FLT_H[]     = "SYN_ENV_FLT_H";   // float ms (skewed)
+    constexpr char SYN_ENV_FLT_CA[]    = "SYN_ENV_FLT_CA";   // float -1..+1
+    constexpr char SYN_ENV_FLT_CD[]    = "SYN_ENV_FLT_CD";   // float -1..+1
+    constexpr char SYN_ENV_FLT_CR[]    = "SYN_ENV_FLT_CR";   // float -1..+1
+    constexpr char SYN_ENV_FLT_LOOP[]  = "SYN_ENV_FLT_LOOP";  // bool
+    // PITCH / MOD1 / MOD2 envelopes — full DAHDSR sets
+    constexpr char SYN_ENV_PIT_DLY[]   = "SYN_ENV_PIT_DLY";  // float ms (skewed)
+    constexpr char SYN_ENV_PIT_A[]     = "SYN_ENV_PIT_A";   // float ms (skewed)
+    constexpr char SYN_ENV_PIT_H[]     = "SYN_ENV_PIT_H";   // float ms (skewed)
+    constexpr char SYN_ENV_PIT_D[]     = "SYN_ENV_PIT_D";   // float ms (skewed)
+    constexpr char SYN_ENV_PIT_S[]     = "SYN_ENV_PIT_S";   // float 0..1
+    constexpr char SYN_ENV_PIT_R[]     = "SYN_ENV_PIT_R";   // float ms (skewed)
+    constexpr char SYN_ENV_PIT_CA[]    = "SYN_ENV_PIT_CA";   // float -1..+1
+    constexpr char SYN_ENV_PIT_CD[]    = "SYN_ENV_PIT_CD";   // float -1..+1
+    constexpr char SYN_ENV_PIT_CR[]    = "SYN_ENV_PIT_CR";   // float -1..+1
+    constexpr char SYN_ENV_PIT_DEPTH[] = "SYN_ENV_PIT_DEPTH";  // float -48..+48 semitones
+    constexpr char SYN_ENV_PIT_LOOP[]  = "SYN_ENV_PIT_LOOP";  // bool
+    constexpr char SYN_ENV_M1_DLY[]    = "SYN_ENV_M1_DLY";   // float ms (skewed)
+    constexpr char SYN_ENV_M1_A[]      = "SYN_ENV_M1_A";   // float ms (skewed)
+    constexpr char SYN_ENV_M1_H[]      = "SYN_ENV_M1_H";   // float ms (skewed)
+    constexpr char SYN_ENV_M1_D[]      = "SYN_ENV_M1_D";   // float ms (skewed)
+    constexpr char SYN_ENV_M1_S[]      = "SYN_ENV_M1_S";   // float 0..1
+    constexpr char SYN_ENV_M1_R[]      = "SYN_ENV_M1_R";   // float ms (skewed)
+    constexpr char SYN_ENV_M1_CA[]     = "SYN_ENV_M1_CA";   // float -1..+1
+    constexpr char SYN_ENV_M1_CD[]     = "SYN_ENV_M1_CD";   // float -1..+1
+    constexpr char SYN_ENV_M1_CR[]     = "SYN_ENV_M1_CR";   // float -1..+1
+    constexpr char SYN_ENV_M1_LOOP[]   = "SYN_ENV_M1_LOOP";  // bool
+    constexpr char SYN_ENV_M2_DLY[]    = "SYN_ENV_M2_DLY";   // float ms (skewed)
+    constexpr char SYN_ENV_M2_A[]      = "SYN_ENV_M2_A";   // float ms (skewed)
+    constexpr char SYN_ENV_M2_H[]      = "SYN_ENV_M2_H";   // float ms (skewed)
+    constexpr char SYN_ENV_M2_D[]      = "SYN_ENV_M2_D";   // float ms (skewed)
+    constexpr char SYN_ENV_M2_S[]      = "SYN_ENV_M2_S";   // float 0..1
+    constexpr char SYN_ENV_M2_R[]      = "SYN_ENV_M2_R";   // float ms (skewed)
+    constexpr char SYN_ENV_M2_CA[]     = "SYN_ENV_M2_CA";   // float -1..+1
+    constexpr char SYN_ENV_M2_CD[]     = "SYN_ENV_M2_CD";   // float -1..+1
+    constexpr char SYN_ENV_M2_CR[]     = "SYN_ENV_M2_CR";   // float -1..+1
+    constexpr char SYN_ENV_M2_LOOP[]   = "SYN_ENV_M2_LOOP";  // bool
+
     // ── Synth section — Phase 2A (Wavetable foundation) ──────────────────
     constexpr char SYN_OSC_A_WT_PRESET[] = "SYN_OSC_A_WT_PRESET"; // choice 0..5 (Prophet/Jupiter/Moog/OB-X/CS-80/Juno)
     constexpr char SYN_OSC_A_WT_FRAME[]  = "SYN_OSC_A_WT_FRAME";  // float 0..1 frame position within wavetable

@@ -9,6 +9,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "Wavetable.h"
 #include "TerrainFilters.h"
+#include "TerrainEnvelope.h"
 #include <atomic>
 #include <array>
 #include <cmath>
@@ -49,8 +50,11 @@ namespace tw
         {
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
             sampleRate_ = (sr > 0.0) ? sr : 48000.0;
-            ampEnv_.setSampleRate (sampleRate_);
-            ampEnv_.setParameters (ampParams_);
+            ampEnv_.prepare (sampleRate_);
+            fltEnvT_.prepare (sampleRate_);
+            pitchEnvT_.prepare (sampleRate_);
+            mod1EnvT_.prepare (sampleRate_);
+            mod2EnvT_.prepare (sampleRate_);
         }
 
         /** Set AMP envelope params. attackMs/decayMs/releaseMs are milliseconds;
@@ -58,12 +62,67 @@ namespace tw
         void setAmpEnvelopeParameters (float attackMs, float decayMs,
                                        float sustain, float releaseMs) noexcept
         {
-            ampParams_.attack  = juce::jmax (0.001f, attackMs  * 0.001f);
-            ampParams_.decay   = juce::jmax (0.001f, decayMs   * 0.001f);
-            ampParams_.sustain = juce::jlimit (0.0f, 1.0f, sustain);
-            ampParams_.release = juce::jmax (0.001f, releaseMs * 0.001f);
-            ampEnv_.setParameters (ampParams_);
+            // Back-compat 4-arg shim (no delay/hold/curve) — still callable.
+            setEnvelopeDAHDSR (ampEnv_, 0.0f, attackMs, 0.0f, decayMs,
+                               sustain, releaseMs, 0.0f, 0.0f, 0.0f, false);
         }
+
+        /** Full DAHDSR setter for any of the five envelopes. Times in ms, sustain
+         *  0..1, curves -1..+1. EFFECTIVE values (owner pre-sums modulation). */
+        static void setEnvelopeDAHDSR (terrain::TerrainEnvelope& env,
+                                       float delayMs, float attackMs, float holdMs,
+                                       float decayMs, float sustain, float releaseMs,
+                                       float curveA, float curveD, float curveR,
+                                       bool loop) noexcept
+        {
+            env.setDelay   (juce::jmax (0.0f, delayMs)   * 0.001f);
+            env.setAttack  (juce::jmax (0.0f, attackMs)  * 0.001f);
+            env.setHold    (juce::jmax (0.0f, holdMs)    * 0.001f);
+            env.setDecay   (juce::jmax (0.0f, decayMs)   * 0.001f);
+            env.setSustain (juce::jlimit (0.0f, 1.0f, sustain));
+            env.setRelease (juce::jmax (0.0f, releaseMs) * 0.001f);
+            env.setAttackCurve  (juce::jlimit (-1.0f, 1.0f, curveA));
+            env.setDecayCurve   (juce::jlimit (-1.0f, 1.0f, curveD));
+            env.setReleaseCurve (juce::jlimit (-1.0f, 1.0f, curveR));
+            env.setLoop (loop);
+        }
+
+        /** PITCH envelope depth in semitones (bipolar). env(0..1) × depth is summed
+         *  into the oscillator pitch each block. 0 = off (preset-safe default). */
+        void setPitchEnvDepth (float semis) noexcept { pitchEnvDepth_ = juce::jlimit (-48.0f, 48.0f, semis); }
+
+        /** Per-envelope DAHDSR broadcasts from the processor (EFFECTIVE values). */
+        void setAmpEnv (float dl,float a,float h,float d,float s,float r,
+                        float ca,float cd,float cr,bool lp) noexcept
+        { setEnvelopeDAHDSR (ampEnv_, dl,a,h,d,s,r,ca,cd,cr,lp); }
+
+        // ── Envelope follower taps (for the UI playhead dot) ──
+        // Live amp-env output [0,1] and whether this voice is sounding. The editor
+        // polls the most-active voice each timer tick and pushes this to the WebUI.
+        float getAmpEnvLevel() const noexcept { return (float) ampEnv_.level(); }
+        bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
+        // Packed follower position for an EXACT trace along the drawn curve:
+        // stageIndex (0=Idle,1=Delay,2=Attack,3=Hold,4=Decay,5=Sustain,6=Release)
+        // plus the fraction through that segment. Encoded as stage + frac (e.g. 2.37
+        // = 37% through Attack). JS maps this straight onto the curve's x-axis.
+        float getAmpEnvFollow() const noexcept
+        {
+            const int st = (int) ampEnv_.stage();
+            return (float) st + (float) ampEnv_.segFraction();
+        }
+
+        void setFltEnvDAHDSR (float dl,float a,float h,float d,float s,float r,
+                              float ca,float cd,float cr,bool lp) noexcept
+        { setEnvelopeDAHDSR (fltEnvT_, dl,a,h,d,s,r,ca,cd,cr,lp); }
+        void setPitchEnv (float dl,float a,float h,float d,float s,float r,
+                          float ca,float cd,float cr,bool lp) noexcept
+        { setEnvelopeDAHDSR (pitchEnvT_, dl,a,h,d,s,r,ca,cd,cr,lp); }
+        void setMod1Env (float dl,float a,float h,float d,float s,float r,
+                         float ca,float cd,float cr,bool lp) noexcept
+        { setEnvelopeDAHDSR (mod1EnvT_, dl,a,h,d,s,r,ca,cd,cr,lp); }
+        void setMod2Env (float dl,float a,float h,float d,float s,float r,
+                         float ca,float cd,float cr,bool lp) noexcept
+        { setEnvelopeDAHDSR (mod2EnvT_, dl,a,h,d,s,r,ca,cd,cr,lp); }
 
         /** Called from PluginProcessor::prepareToPlay. Sizes filter + caches
          *  block-size for the per-block AudioBlock view. Phase 9: always stereo
@@ -86,11 +145,8 @@ namespace tw
             filterSlot_.prepare (sr);
             filterSlot2_.prepare (sr);
 
-            // Filter ADSR — independent from amp env, drives cutoff via the
-            // bipolar SYN_FILTER1_ENV knob (the "signed amount" of this env).
-            fltEnv_.setSampleRate (sr);
-            fltEnv_.setParameters (fltEnvParams_);
-            fltEnv_.reset();
+            // FLT envelope is a TerrainEnvelope (prepared alongside AMP in
+            // setCurrentPlaybackSampleRate); it drives cutoff via SYN_FILTER1_ENV.
 
             // Per-voice EROSION drift state. One-pole-LP'd uniform noise at
             // ~0.5 Hz so the random walk happens slowly (analog-like). Per-
@@ -178,11 +234,9 @@ namespace tw
         void setFilterEnvParameters (float attackMs, float decayMs,
                                      float sustain,  float releaseMs) noexcept
         {
-            fltEnvParams_.attack  = juce::jmax (0.001f, attackMs  * 0.001f);
-            fltEnvParams_.decay   = juce::jmax (0.001f, decayMs   * 0.001f);
-            fltEnvParams_.sustain = juce::jlimit (0.0f, 1.0f, sustain);
-            fltEnvParams_.release = juce::jmax (0.001f, releaseMs * 0.001f);
-            fltEnv_.setParameters (fltEnvParams_);
+            // Back-compat 4-arg shim → TerrainEnvelope (no delay/hold/curve).
+            setEnvelopeDAHDSR (fltEnvT_, 0.0f, attackMs, 0.0f, decayMs,
+                               sustain, releaseMs, 0.0f, 0.0f, 0.0f, false);
         }
         /** EROSION 0..1 (per-block from APVTS / 100). Scaled erosion^1.8
          *  applied as semitone drift to cutoff inside renderNextBlock. */
@@ -816,12 +870,14 @@ namespace tw
             playing_         = true;
             foldStateA_.fill ({});   // Phase 11d ADAA — clear per-sine fold history on note start
             foldStateB_.fill ({});
-            ampEnv_.reset();
-            ampEnv_.noteOn();
-
-            // Batch 1 Filter — trigger FLT envelope alongside AMP env.
-            fltEnv_.reset();
-            fltEnv_.noteOn();
+            // Envelopes — fresh note starts from 0 (reset), then gate on. The legato
+            // retarget path returns earlier (envelopes deliberately untouched), so this
+            // only runs for true note starts. All five DAHDSR envelopes trigger together.
+            ampEnv_.reset();    ampEnv_.noteOn();
+            fltEnvT_.reset();   fltEnvT_.noteOn();
+            pitchEnvT_.reset(); pitchEnvT_.noteOn();
+            mod1EnvT_.reset();  mod1EnvT_.noteOn();
+            mod2EnvT_.reset();  mod2EnvT_.noteOn();
             // Reset filter state on note-on so a stale tail from a stolen
             // voice doesn't bleed into the new note's onset.
             filterSlot_.reset();
@@ -839,7 +895,10 @@ namespace tw
             if (allowTailOff)
             {
                 ampEnv_.noteOff();
-                fltEnv_.noteOff();
+                fltEnvT_.noteOff();
+                pitchEnvT_.noteOff();
+                mod1EnvT_.noteOff();
+                mod2EnvT_.noteOff();
             }
             else
             {
@@ -924,6 +983,19 @@ namespace tw
             }
             // PORTAMENTO — advance the pitch slide for this block (no-op once arrived).
             advanceGlide (numSamples);
+
+            // PITCH envelope (Batch 3) — advance by the block length and hold the
+            // resulting semitone offset for this block. Block-rate is smooth enough
+            // for pitch envelopes and matches the per-block pitch architecture. The
+            // MOD1/MOD2 envelopes also advance here so they stay phase-aligned and are
+            // ready as mod-matrix sources (their routing arrives in the matrix phase).
+            {
+                double pv = 0.0;
+                for (int k = 0; k < numSamples; ++k) pv = pitchEnvT_.tick();
+                pitchEnvSemis_ = (double) pitchEnvDepth_ * pv;
+                for (int k = 0; k < numSamples; ++k) mod1EnvT_.tick();
+                for (int k = 0; k < numSamples; ++k) mod2EnvT_.tick();
+            }
             // Re-derive per-sine phase increments with updated drift + glide pitch
             updateUnisonPhaseIncrementsA (glideNote_);
             updateUnisonPhaseIncrementsB (glideNote_);
@@ -1398,7 +1470,7 @@ namespace tw
                     }
                 }
 
-                const float env    = ampEnv_.getNextSample();
+                const float env    = (float) ampEnv_.tick();
                 const float velEnv = currentVelocity_ * env;
 
                 // Sum to stereo with INDEPENDENT per-osc level + pan
@@ -1423,6 +1495,7 @@ namespace tw
                     stealing_   = false;
                     playing_    = false;
                     ampEnv_.reset();
+                    fltEnvT_.reset(); pitchEnvT_.reset(); mod1EnvT_.reset(); mod2EnvT_.reset();
                     // We still let the filter process this block's tiny tail so the filter
                     // state settles — don't return early.
                     clearCurrentNote();
@@ -1459,7 +1532,7 @@ namespace tw
                 for (int i = 0; i < numSamples; ++i)
                 {
                     // Per-sample FLT envelope tick (single value 0..1).
-                    const float fltEnvVal = fltEnv_.getNextSample();
+                    const float fltEnvVal = (float) fltEnvT_.tick();
 
                     // Per-sample drift (one-pole LP of uniform white noise).
                     if (driftActive)
@@ -1596,7 +1669,8 @@ namespace tw
                     + static_cast<double> (semiOffset_)
                     + static_cast<double> (centsOffset_)             * 0.01
                     + static_cast<double> (uDetuneCentsA_[(size_t) u]) * 0.01
-                    + static_cast<double> (waverCentsA_[(size_t) u])  * 0.01;
+                    + static_cast<double> (waverCentsA_[(size_t) u])  * 0.01
+                    + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncA_[(size_t) u] = hz / sampleRate_;
             }
@@ -1612,7 +1686,8 @@ namespace tw
                     + static_cast<double> (semiOffsetB_)
                     + static_cast<double> (centsOffsetB_)            * 0.01
                     + static_cast<double> (uDetuneCentsB_[(size_t) u]) * 0.01
-                    + static_cast<double> (waverCentsB_[(size_t) u])  * 0.01;
+                    + static_cast<double> (waverCentsB_[(size_t) u])  * 0.01
+                    + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncB_[(size_t) u] = hz / sampleRate_;
             }
@@ -1840,16 +1915,21 @@ namespace tw
         bool   legatoRetarget_  = false;   // armed by UnisonSynth: next startNote retargets, no retrigger
         bool   playing_         = false;
 
-        juce::ADSR             ampEnv_;
-        juce::ADSR::Parameters ampParams_ { 0.005f, 0.1f, 0.7f, 0.2f };
+        // Five DAHDSR envelopes (Batch 2/3). ampEnv_ = AMP (drives VCA),
+        // fltEnvT_ = FLT (cutoff), pitchEnvT_/mod1EnvT_/mod2EnvT_ = assignable.
+        terrain::TerrainEnvelope ampEnv_;
+        terrain::TerrainEnvelope fltEnvT_;
+        terrain::TerrainEnvelope pitchEnvT_;
+        terrain::TerrainEnvelope mod1EnvT_;
+        terrain::TerrainEnvelope mod2EnvT_;
+        float  pitchEnvDepth_ = 0.0f;     // semitones, bipolar (Batch 3)
+        double pitchEnvSemis_ = 0.0;      // per-block: depth × pitchEnv tick
 
         // Batch 1 Filter — FilterSlot replaces juce::dsp::LadderFilter.
         // baseCutHz / baseRes01 are the knob values; the renderNextBlock
         // loop adds envAmount * fltEnv + drift before each sample's
         // filterSlot_.setParams call (per-sample modulation, semitone space).
         tw::filters::FilterSlot filterSlot_;
-        juce::ADSR              fltEnv_;
-        juce::ADSR::Parameters  fltEnvParams_ { 0.005f, 0.2f, 0.0f, 0.3f };
         float                   baseCutHz_   = 20000.0f;
         float                   baseRes01_   = 0.0f;
         float                   drv01_       = 0.0f;

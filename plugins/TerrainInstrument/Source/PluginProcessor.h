@@ -449,6 +449,12 @@ public:
 
     // Visualization data (read from editor on timer thread)
     std::atomic<int> activeGrainCount { 0 };
+    // Live AMP envelope output [0,1] of the most-active synth voice, for the UI
+    // envelope follower (playhead dot). Written each audio block, read by the editor timer.
+    std::atomic<float> ampEnvVis { 0.f };
+    // Packed stage+fraction of the same voice (e.g. 2.37 = 37% through Attack), so the
+    // UI dot rides the exact x-position on the curve. -1 = no voice sounding.
+    std::atomic<float> ampEnvFollowVis { -1.f };
     std::atomic<int> currentPresetIndex { 0 };
 
     // XY automation state (synced from JS, captured into presets)

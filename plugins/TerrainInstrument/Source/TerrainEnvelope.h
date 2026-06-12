@@ -1,0 +1,279 @@
+// =============================================================================
+//  TerrainEnvelope.h  —  Terrain Instrument DAHDSR envelope generator
+// -----------------------------------------------------------------------------
+//  One per-voice, per-sample envelope: Delay → Attack → Hold → Decay → Sustain
+//  → Release, with a per-segment curve/tension control, click-free retrigger,
+//  note-off-from-any-stage, and an optional LOOP mode that turns the envelope
+//  into a tempo-syncable cycling modulator (env-as-LFO).
+//
+//  DESIGN CONTRACT (mirrors the Terrain DSP playbook):
+//   • base→effective: the OWNER sets effective stage values each block (already
+//     summed with modulation + velocity). This class consumes effective values
+//     only and LATCHES per-segment timing at the moment a segment begins
+//     (HALion pattern) — so modulating a time mid-segment never glitches the
+//     in-progress ramp. Sustain LEVEL may be updated continuously (it's a held
+//     target) and is handled safely.
+//   • click-free: retrigger does NOT snap to zero — attack ramps from the
+//     current output toward the peak. Note-off from any stage releases from the
+//     current level. No discontinuities.
+//   • curve: per-segment tension in [-1,+1]. 0 = linear; >0 = fast-start/ease-out
+//     (musical for decay/release); <0 = slow-start/ease-in. Implemented as a
+//     pure shaping function of normalized segment progress so it is exact,
+//     allocation-free, and independent of sample rate.
+//   • NO JUCE dependency — header-only, offline-compilable, unit-testable.
+//
+//  Times are in SECONDS (owner converts ms / beat-divisions before setting).
+//  Output is in [0,1] for unipolar envelopes; the owner applies polarity/depth.
+// =============================================================================
+#pragma once
+
+#include <cmath>
+#include <algorithm>
+
+namespace terrain
+{
+
+class TerrainEnvelope
+{
+public:
+    enum class Stage { Idle, Delay, Attack, Hold, Decay, Sustain, Release };
+
+    TerrainEnvelope() = default;
+
+    // ── lifecycle ───────────────────────────────────────────────────────────
+    void prepare (double sampleRate) noexcept
+    {
+        sampleRate_ = (sampleRate > 0.0) ? sampleRate : 48000.0;
+        reset();
+    }
+
+    void reset() noexcept
+    {
+        stage_      = Stage::Idle;
+        level_      = 0.0;
+        segPos_     = 0.0;
+        segLen_     = 0.0;
+        segStart_   = 0.0;
+        segTarget_  = 0.0;
+        gateOn_     = false;
+    }
+
+    // ── per-segment EFFECTIVE parameters (owner sets each block, already
+    //    base+modulation summed). Times in seconds, levels/curves normalized. ──
+    void setDelay   (double seconds) noexcept { delaySec_   = clampTime (seconds); }
+    void setAttack  (double seconds) noexcept { attackSec_  = clampTime (seconds); }
+    void setHold    (double seconds) noexcept { holdSec_    = clampTime (seconds); }
+    void setDecay   (double seconds) noexcept { decaySec_   = clampTime (seconds); }
+    void setSustain (double level)   noexcept { sustain_    = clamp01  (level);   }
+    void setRelease (double seconds) noexcept { releaseSec_ = clampTime (seconds); }
+
+    // curve/tension per time-segment, each in [-1,+1]
+    void setAttackCurve  (double t) noexcept { curveA_ = clampCurve (t); }
+    void setDecayCurve   (double t) noexcept { curveD_ = clampCurve (t); }
+    void setReleaseCurve (double t) noexcept { curveR_ = clampCurve (t); }
+
+    // LOOP: when true, on reaching the end of Decay (sustain point) the envelope
+    // re-triggers Attack instead of holding Sustain — a cycling A(H)D source.
+    // Release still fires on note-off and exits the loop cleanly.
+    void setLoop (bool shouldLoop) noexcept { loop_ = shouldLoop; }
+
+    // ── note events ──────────────────────────────────────────────────────────
+    // Click-free: starts from the CURRENT level (retrigger/legato safe).
+    void noteOn() noexcept
+    {
+        gateOn_ = true;
+        if (delaySec_ > 0.0)
+            enterStage (Stage::Delay);
+        else
+            enterStage (Stage::Attack);
+    }
+
+    // Release from wherever we are, using the CURRENT level as the start.
+    void noteOff() noexcept
+    {
+        gateOn_ = false;
+        if (stage_ != Stage::Idle && stage_ != Stage::Release)
+            enterStage (Stage::Release);
+    }
+
+    bool isActive() const noexcept { return stage_ != Stage::Idle; }
+    Stage stage()  const noexcept { return stage_; }
+    double level() const noexcept { return level_; }
+
+    // Fraction [0,1] through the CURRENT segment (for the UI follower's x-position).
+    double segFraction() const noexcept
+    {
+        if (segLen_ <= 1.0) return 1.0;
+        const double f = segPos_ / segLen_;
+        return f < 0.0 ? 0.0 : (f > 1.0 ? 1.0 : f);
+    }
+
+    // ── per-sample tick — returns the envelope value in [0,1] ─────────────────
+    double tick() noexcept
+    {
+        switch (stage_)
+        {
+            case Stage::Idle:
+                return 0.0;
+
+            case Stage::Delay:
+                // flat at the start level (usually 0); advance time only.
+                if (advanceSeg())
+                    enterStage (Stage::Attack);
+                level_ = segStart_;             // delay holds the entry level
+                return level_;
+
+            case Stage::Attack:
+            {
+                const bool done = advanceSeg();
+                level_ = shape (segStart_, segTarget_, segPos_ / segLenSafe(), curveA_);
+                if (done) { level_ = segTarget_; enterStage (Stage::Hold); }
+                return level_;
+            }
+
+            case Stage::Hold:
+                if (advanceSeg())
+                    enterStage (Stage::Decay);
+                level_ = 1.0;                   // hold sits at peak
+                return level_;
+
+            case Stage::Decay:
+            {
+                const bool done = advanceSeg();
+                // decay target tracks the (possibly changing) sustain level
+                segTarget_ = sustain_;
+                level_ = shape (segStart_, segTarget_, segPos_ / segLenSafe(), curveD_);
+                if (done)
+                {
+                    level_ = sustain_;
+                    if (loop_ && gateOn_) enterStage (Stage::Attack);   // env-as-LFO
+                    else                  enterStage (Stage::Sustain);
+                }
+                return level_;
+            }
+
+            case Stage::Sustain:
+                // hold at the live sustain target (continuous update is safe)
+                level_ = sustain_;
+                return level_;
+
+            case Stage::Release:
+            {
+                const bool done = advanceSeg();
+                level_ = shape (segStart_, 0.0, segPos_ / segLenSafe(), curveR_);
+                if (done) { level_ = 0.0; enterStage (Stage::Idle); }
+                return level_;
+            }
+        }
+        return 0.0;
+    }
+
+private:
+    // ── stage entry: latches segment length + start/target from CURRENT level ─
+    void enterStage (Stage s) noexcept
+    {
+        stage_    = s;
+        segPos_   = 0.0;
+        segStart_ = level_;            // ALWAYS start the ramp from where we are
+
+        switch (s)
+        {
+            case Stage::Delay:
+                segLen_    = delaySec_ * sampleRate_;
+                segTarget_ = segStart_;
+                break;
+            case Stage::Attack:
+                segLen_    = attackSec_ * sampleRate_;
+                segTarget_ = 1.0;
+                if (segLen_ < 1.0) { level_ = 1.0; enterStage (Stage::Hold); return; }
+                break;
+            case Stage::Hold:
+                segLen_    = holdSec_ * sampleRate_;
+                segStart_  = 1.0; segTarget_ = 1.0; level_ = 1.0;
+                if (segLen_ < 1.0) { enterStage (Stage::Decay); return; }
+                break;
+            case Stage::Decay:
+                segLen_    = decaySec_ * sampleRate_;
+                segStart_  = 1.0; segTarget_ = sustain_;
+                if (segLen_ < 1.0)
+                {
+                    level_ = sustain_;
+                    if (loop_ && gateOn_) { enterStage (Stage::Attack); return; }
+                    enterStage (Stage::Sustain); return;
+                }
+                break;
+            case Stage::Sustain:
+                segLen_    = 0.0;
+                segTarget_ = sustain_;
+                break;
+            case Stage::Release:
+                segLen_    = releaseSec_ * sampleRate_;
+                segTarget_ = 0.0;
+                if (segLen_ < 1.0) { level_ = 0.0; enterStage (Stage::Idle); return; }
+                break;
+            case Stage::Idle:
+                segLen_ = 0.0; level_ = 0.0; segStart_ = 0.0; segTarget_ = 0.0;
+                break;
+        }
+    }
+
+    // advance the segment clock by one sample; returns true if the segment is done
+    bool advanceSeg() noexcept
+    {
+        segPos_ += 1.0;
+        return segPos_ >= segLen_;
+    }
+
+    double segLenSafe() const noexcept { return (segLen_ > 1.0) ? segLen_ : 1.0; }
+
+    // ── curve shaper: maps progress p∈[0,1] → eased p', then lerps start→target.
+    //    tension t∈[-1,1]: 0 linear; t>0 fast-start/ease-out; t<0 slow-start.
+    //
+    //    Uses the VITAL/SURGE exponential bias  e = (exp(P·p) − 1)/(exp(P) − 1).
+    //    This is the function both Vital and Surge XT independently converged on
+    //    for envelope curvature. Unlike a power curve p^k, its slope is FINITE at
+    //    BOTH endpoints for every P — so it can never blow up. It hits (0,0) and
+    //    (1,1) exactly (normalized ratio) and is strictly monotonic. The SAME
+    //    formula is mirrored in the WebUI renderer, so the graph is exactly what
+    //    you hear. P = t·8 (the research-recommended 6–10 range). ───────────────
+    static double biasCurve (double p, double t) noexcept
+    {
+        if (std::fabs (t) < 1.0e-3) return p;        // linear (removable singularity)
+        const double P = -t * 8.0;                   // t∈[-1,1] → P∈[8,-8]; +t = fast-rise (concave)
+        return (std::exp (P * p) - 1.0) / (std::exp (P) - 1.0);
+    }
+    static double shape (double start, double target, double p, double t) noexcept
+    {
+        p = clamp01 (p);
+        const double e = biasCurve (p, t);
+        return start + (target - start) * e;
+    }
+
+    static double clamp01   (double v) noexcept { return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v); }
+    static double clampTime (double v) noexcept { return v < 0.0 ? 0.0 : (v > 60.0 ? 60.0 : v); }
+    static double clampCurve(double v) noexcept { return v < -1.0 ? -1.0 : (v > 1.0 ? 1.0 : v); }
+
+    // config (effective values, set by owner)
+    double sampleRate_ = 48000.0;
+    double delaySec_   = 0.0;
+    double attackSec_  = 0.005;
+    double holdSec_    = 0.0;
+    double decaySec_   = 0.10;
+    double sustain_    = 0.70;
+    double releaseSec_ = 0.20;
+    double curveA_     = 0.0;
+    double curveD_     = 0.0;
+    double curveR_     = 0.0;
+    bool   loop_       = false;
+
+    // runtime state
+    Stage  stage_     = Stage::Idle;
+    double level_     = 0.0;
+    double segPos_    = 0.0;     // samples elapsed in current segment
+    double segLen_    = 0.0;     // segment length in samples
+    double segStart_  = 0.0;     // level at segment entry
+    double segTarget_ = 0.0;     // level the segment ramps toward
+    bool   gateOn_    = false;
+};
+
+} // namespace terrain
