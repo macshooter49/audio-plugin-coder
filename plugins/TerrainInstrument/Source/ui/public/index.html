@@ -3528,16 +3528,16 @@ body {
 #syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px; cursor: crosshair; }
 #syn-panel #env-svg { touch-action: none; }
 #syn-panel .env-sel { position: absolute; top: 6px; right: 8px; z-index: 3;
-  font-size: 8px; letter-spacing: 1.5px; color: var(--text-primary,#ECE8F2);
-  background: rgba(35,35,64,0.85); border: 1px solid var(--border,#3A3A5C);
+  font-size: 8px; letter-spacing: 1.5px; color: #FFFFFF;
+  background: transparent; border: none;
   border-radius: 4px; padding: 2px 7px; cursor: pointer; user-select: none; }
-#syn-panel .env-sel:hover { border-color: var(--purple-400,#8B5CF6); }
-#syn-panel .env-sel-arrow { color: var(--purple-400,#8B5CF6); font-size: 7px; }
-#syn-panel .env-node { fill: var(--bg-hero,#12121F); stroke: #FFFFFF; stroke-width: 1.6; cursor: grab; }
-#syn-panel .env-node:hover { stroke: #FFFFFF; stroke-width: 2.0; }
-#syn-panel .env-node.sus { fill: #FFFFFF; stroke: #FFFFFF; }
-#syn-panel .env-curve { fill: rgba(236,232,242,0.85); cursor: ns-resize; }
-#syn-panel .env-curve:hover { fill: #FFFFFF; }
+#syn-panel .env-sel:hover { color: #FFFFFF; opacity: 0.75; }
+#syn-panel .env-sel-arrow { color: #FFFFFF; font-size: 7px; opacity: 0.8; }
+#syn-panel .env-node { fill: #14121F; stroke: #FFFFFF; stroke-width: 1.3; cursor: grab; }
+#syn-panel .env-node:hover { stroke: #FFFFFF; stroke-width: 1.5; }
+#syn-panel .env-node.sus { fill: #FFFFFF; stroke: #FFFFFF; stroke-width: 1.3; }
+#syn-panel .env-curve { fill: rgba(201,190,239,0.55); cursor: ns-resize; }
+#syn-panel .env-curve:hover { fill: #C9BEEF; }
 #syn-panel .env-hit { fill: transparent; cursor: grab; }
 #syn-panel .env-hit.curve { cursor: ns-resize; }
 #syn-panel .env-loop-on #env-line { stroke-dasharray: 4 2.5; }
@@ -4765,18 +4765,24 @@ body {
                     <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.02"/>
                   </linearGradient>
                 </defs>
-                <g stroke="rgba(236,232,242,0.07)" stroke-width="0.5">
+                <g stroke="rgba(201,190,239,0.16)" stroke-width="0.5">
                   <line x1="70"  y1="0" x2="70"  y2="70"/>
                   <line x1="140" y1="0" x2="140" y2="70"/>
                   <line x1="210" y1="0" x2="210" y2="70"/>
                 </g>
-                <line x1="0" y1="62" x2="280" y2="62" stroke="rgba(236,232,242,0.14)" stroke-width="0.5" stroke-dasharray="2,3"/>
+                <line x1="0" y1="62" x2="280" y2="62" stroke="rgba(201,190,239,0.22)" stroke-width="0.5" stroke-dasharray="2,3"/>
                 <path id="env-fill" d="" fill="url(#env-grad)"/>
                 <path id="env-line" d="" stroke="#C9BEEF" stroke-width="1.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
                 <text id="env-loop-tag" x="8" y="12" fill="#8B5CF6" font-size="6.5" letter-spacing="2" style="display:none">LOOP</text>
                 <text id="env-readout" x="140" y="12" text-anchor="middle" fill="#908599" font-size="7.5" letter-spacing="1" style="display:none"></text>
                 <g id="env-nodes"></g>
                 <circle id="env-follow" cx="-10" cy="-10" r="3.4" fill="#EDE7FF" stroke="#8B5CF6" stroke-width="1.2" style="opacity:0;filter:drop-shadow(0 0 3px rgba(201,190,239,0.9));pointer-events:none"/>
+                <g id="env-depth" style="display:none">
+                  <line id="env-depth-track" x1="274.5" y1="8" x2="274.5" y2="64" stroke="rgba(201,190,239,0.14)" stroke-width="1.5" stroke-linecap="round"/>
+                  <line id="env-depth-centermark" x1="271.5" y1="36" x2="277.5" y2="36" stroke="rgba(201,190,239,0.3)" stroke-width="0.6"/>
+                  <line id="env-depth-fill" x1="274.5" y1="36" x2="274.5" y2="36" stroke="#8B5CF6" stroke-width="1.7" stroke-linecap="round"/>
+                  <rect id="env-depth-hit" x="269" y="4" width="11" height="64" fill="transparent" style="cursor:ns-resize"/>
+                </g>
               </svg>
               <div class="env-sel" id="env-sel">AMP <span class="env-sel-arrow">&#9662;</span></div>
             </div>
@@ -9191,6 +9197,13 @@ setTimeout(function wireSynControls () {
         var PREFIX = { AMP:'SYN_ENV_AMP_', FLT:'SYN_ENV_FLT_', PIT:'SYN_ENV_PIT_',
                        M1:'SYN_ENV_M1_', M2:'SYN_ENV_M2_' };
         var LABELS = { AMP:'AMP', FLT:'FLT', PIT:'PITCH', M1:'MOD 1', M2:'MOD 2' };
+        // Depth/amount destination per envelope. AMP = always full (no control).
+        // PITCH -> pitch env depth (semitones); FLT -> filter 1 env amount (bipolar).
+        // MOD waits for the mod matrix. {id, min, max, fmt}.
+        var DEPTH = {
+          PIT: { id:'SYN_ENV_PIT_DEPTH', min:-48, max:48, fmt:function(v){ return (v>=0?'+':'')+v.toFixed(0)+' st'; } },
+          FLT: { id:'SYN_FILTER1_ENV',   min:-1,  max:1,  fmt:function(v){ return (v>=0?'+':'')+v.toFixed(2); } }
+        };
         var FLDS = ['DLY','A','H','D','S','R','CA','CD','CR','LOOP'];
         var states = {};
         function grab(env){
@@ -9308,12 +9321,12 @@ setTimeout(function wireSynControls () {
             var n;
             if (sq){
               n=document.createElementNS('http://www.w3.org/2000/svg','rect');
-              n.setAttribute('x',x-2.5); n.setAttribute('y',y-2.5);
-              n.setAttribute('width',5); n.setAttribute('height',5);
+              n.setAttribute('x',x-2.4); n.setAttribute('y',y-2.4);
+              n.setAttribute('width',4.8); n.setAttribute('height',4.8);
               n.setAttribute('class','env-node');
             } else {
               n=document.createElementNS('http://www.w3.org/2000/svg','circle');
-              n.setAttribute('cx',x); n.setAttribute('cy',y); n.setAttribute('r',3.2);
+              n.setAttribute('cx',x); n.setAttribute('cy',y); n.setAttribute('r',2.9);
               n.setAttribute('class','env-node'+(sus?' sus':''));
             }
             n.dataset.kind=kind; nodesG.appendChild(n);
@@ -9323,7 +9336,7 @@ setTimeout(function wireSynControls () {
             var m=midOf(x0,y0,x1,y1,tension);
             addHit(m.x,m.y,7,kind,true);
             var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
-            c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',2.2);
+            c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',1.5);
             c.setAttribute('class','env-curve'); c.dataset.kind=kind;
             nodesG.appendChild(c);
           }
@@ -9381,6 +9394,54 @@ setTimeout(function wireSynControls () {
           if(!followRAF){ followRAF=requestAnimationFrame(function(){ followRAF=0; placeFollower(); }); }
         };
 
+        // ── DEPTH slider (right edge) ─ how much PITCH/FILTER envelopes move the sound.
+        // Bipolar: center = 0, up = +, down = -. Hidden on AMP (always full) and MOD
+        // (waits for the mod matrix). Maps to the env's destination param via DEPTH[].
+        var depthG    = document.getElementById('env-depth');
+        var depthFill = document.getElementById('env-depth-fill');
+        var depthHit  = document.getElementById('env-depth-hit');
+        var DTOP=8, DBOT=64, DMID=(DTOP+DBOT)/2;
+        var depthState = {};                                  // cached slider-state per param id
+        function depthSS(){
+          var cfg=DEPTH[curEnv]; if(!cfg) return null;
+          if(depthState[cfg.id]) return depthState[cfg.id];
+          try { depthState[cfg.id]=window.Juce.getSliderState(cfg.id); } catch(e){ depthState[cfg.id]=null; }
+          return depthState[cfg.id];
+        }
+        function depthNorm(){                                  // current value -> 0..1 normalized
+          var ss=depthSS(); if(!ss) return 0.5;
+          try { return ss.getNormalisedValue(); } catch(e){ return 0.5; }
+        }
+        function renderDepth(){
+          var cfg=DEPTH[curEnv];
+          if(!cfg){ if(depthG) depthG.style.display='none'; return; }
+          if(depthG) depthG.style.display='';
+          var n=depthNorm();                                  // 0..1 (0=min, 1=max, 0.5=center)
+          var y=DBOT-(DBOT-DTOP)*n;                            // invert: high value = top
+          // thin purple line fills from center (0) toward the value — up=+, down=-
+          if(depthFill){ depthFill.setAttribute('y1', DMID.toFixed(1)); depthFill.setAttribute('y2', y.toFixed(1)); }
+        }
+        function depthFromY(py){
+          var n=Math.max(0,Math.min(1,(DBOT-py)/(DBOT-DTOP)));
+          var ss=depthSS(); if(ss){ try{ ss.setNormalisedValue(n); }catch(e){} }
+          var cfg=DEPTH[curEnv];
+          if(cfg && readout){
+            var val=cfg.min+(cfg.max-cfg.min)*n;
+            readout.textContent='DEPTH '+cfg.fmt(val);
+            readout.style.display='';
+            clearTimeout(readout._t); readout._t=setTimeout(function(){ readout.style.display='none'; },1100);
+          }
+          renderDepth();
+        }
+        if(depthHit){
+          depthHit.addEventListener('pointerdown', function(ev){
+            ev.preventDefault(); ev.stopPropagation();
+            try{ svg.setPointerCapture(ev.pointerId); }catch(e){}
+            depthDrag=true; depthFromY(pxy(ev).y);
+          });
+        }
+        var depthDrag=false;
+
         function showReadout(kind){
           if(!readout) return;
           var s=st(), txt='';
@@ -9425,6 +9486,7 @@ setTimeout(function wireSynControls () {
           ev.preventDefault();
         });
         svg.addEventListener('pointermove', function(ev){
+          if(depthDrag){ ev.preventDefault(); depthFromY(pxy(ev).y); return; }
           if(!drag) return;
           var s=st(), pt=pxy(ev), L=layout(), uk=L.u*L.k;
           function inv(f0, span, segX0){
@@ -9453,7 +9515,7 @@ setTimeout(function wireSynControls () {
           showReadout(drag.k);
           render();
         });
-        function endDrag(ev){ if(drag){ drag=null; hideReadout(); try{svg.releasePointerCapture(ev.pointerId);}catch(e){} } }
+        function endDrag(ev){ if(depthDrag){ depthDrag=false; try{svg.releasePointerCapture(ev.pointerId);}catch(e){} } if(drag){ drag=null; hideReadout(); try{svg.releasePointerCapture(ev.pointerId);}catch(e){} } }
         svg.addEventListener('pointerup', endDrag);
         svg.addEventListener('pointercancel', endDrag);
 
@@ -9467,7 +9529,7 @@ setTimeout(function wireSynControls () {
         function setEnv(id){
           curEnv=id;
           if(selChip) selChip.innerHTML = LABELS[id]+' <span class="env-sel-arrow">&#9662;</span>';
-          wire(); syncLoopUi(); render();
+          wire(); syncLoopUi(); render(); renderDepth();
         }
         if (selChip) selChip.addEventListener('click', function(ev){
           ev.stopPropagation();
@@ -9510,11 +9572,17 @@ setTimeout(function wireSynControls () {
             if(ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener)
               ss.valueChangedEvent.addListener(function(){ syncLoopUi(); render(); });
           });
+          // depth param (PITCH/FILTER) -> keep the slider synced to external changes
+          var ds=depthSS();
+          if(ds && ds.valueChangedEvent && ds.valueChangedEvent.addListener && !ds._envWired){
+            ds._envWired=true;
+            ds.valueChangedEvent.addListener(function(){ renderDepth(); });
+          }
         }
 
         function boot(){
-          render();
-          if(window.Juce && window.Juce.getSliderState){ wire(); syncLoopUi(); render(); }
+          render(); renderDepth();
+          if(window.Juce && window.Juce.getSliderState){ wire(); syncLoopUi(); render(); renderDepth(); }
           else { setTimeout(boot, 200); }
         }
         if (window.ResizeObserver){ try { new ResizeObserver(function(){ render(); }).observe(canvas); } catch(e){} }
