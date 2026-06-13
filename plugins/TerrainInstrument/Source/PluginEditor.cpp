@@ -118,6 +118,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synEnvPitCdRelay)
             .withOptionsFrom(synEnvPitCrRelay)
             .withOptionsFrom(synEnvPitDepthRelay)
+            .withOptionsFrom(synEnv2DestRelay)
+            .withOptionsFrom(synEnv2DepthRelay)
+            .withOptionsFrom(synEnv3DestRelay)
+            .withOptionsFrom(synEnv3DepthRelay)
+            .withOptionsFrom(synEnv4DestRelay)
+            .withOptionsFrom(synEnv4DepthRelay)
+            .withOptionsFrom(synEnv5DestRelay)
+            .withOptionsFrom(synEnv5DepthRelay)
             .withOptionsFrom(synEnvPitLoopRelay)
             .withOptionsFrom(synEnvM1DlyRelay)
             .withOptionsFrom(synEnvM1ARelay)
@@ -2149,6 +2157,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synEnvPitDepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_DEPTH),
         synEnvPitDepthRelay, nullptr);
+    // Per-envelope ROUTING attachments (envs 2–5: DEST choice + DEPTH float).
+    synEnv2DestAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV2_DEST),  synEnv2DestRelay,  nullptr);
+    synEnv2DepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV2_DEPTH), synEnv2DepthRelay, nullptr);
+    synEnv3DestAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV3_DEST),  synEnv3DestRelay,  nullptr);
+    synEnv3DepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV3_DEPTH), synEnv3DepthRelay, nullptr);
+    synEnv4DestAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV4_DEST),  synEnv4DestRelay,  nullptr);
+    synEnv4DepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV4_DEPTH), synEnv4DepthRelay, nullptr);
+    synEnv5DestAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV5_DEST),  synEnv5DestRelay,  nullptr);
+    synEnv5DepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV5_DEPTH), synEnv5DepthRelay, nullptr);
     synEnvPitLoopAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_ENV_PIT_LOOP),
         synEnvPitLoopRelay, nullptr);

@@ -170,6 +170,17 @@ private:
     juce::WebSliderRelay synEnvPitCdRelay { ParameterIDs::SYN_ENV_PIT_CD };
     juce::WebSliderRelay synEnvPitCrRelay { ParameterIDs::SYN_ENV_PIT_CR };
     juce::WebSliderRelay synEnvPitDepthRelay  { ParameterIDs::SYN_ENV_PIT_DEPTH };
+    // Per-envelope ROUTING (envs 2–5): DEST (choice) + DEPTH (float). WebSliderRelay
+    // bridges choice params too (same as synFilter*TypeRelay) so the hub's getSliderState
+    // calls resolve and the Route-to dropdown + Depth slider actually write the params.
+    juce::WebSliderRelay synEnv2DestRelay  { ParameterIDs::SYN_ENV2_DEST };
+    juce::WebSliderRelay synEnv2DepthRelay { ParameterIDs::SYN_ENV2_DEPTH };
+    juce::WebSliderRelay synEnv3DestRelay  { ParameterIDs::SYN_ENV3_DEST };
+    juce::WebSliderRelay synEnv3DepthRelay { ParameterIDs::SYN_ENV3_DEPTH };
+    juce::WebSliderRelay synEnv4DestRelay  { ParameterIDs::SYN_ENV4_DEST };
+    juce::WebSliderRelay synEnv4DepthRelay { ParameterIDs::SYN_ENV4_DEPTH };
+    juce::WebSliderRelay synEnv5DestRelay  { ParameterIDs::SYN_ENV5_DEST };
+    juce::WebSliderRelay synEnv5DepthRelay { ParameterIDs::SYN_ENV5_DEPTH };
     juce::WebSliderRelay synEnvPitLoopRelay { ParameterIDs::SYN_ENV_PIT_LOOP };
     juce::WebSliderRelay synEnvM1DlyRelay { ParameterIDs::SYN_ENV_M1_DLY };
     juce::WebSliderRelay synEnvM1ARelay { ParameterIDs::SYN_ENV_M1_A };
@@ -421,6 +432,14 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvPitCdAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvPitCrAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvPitDepthAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv2DestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv2DepthAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv3DestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv3DepthAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv4DestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv4DepthAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv5DestAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synEnv5DepthAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvPitLoopAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvM1DlyAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvM1AAttachment;

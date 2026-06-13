@@ -1173,6 +1173,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_LOOP, 1 }, "Synth Mod 2 Loop", false));
 
+    // ── Per-envelope ROUTING (envs 2–5 free; DEST + bipolar DEPTH each) ──
+    // DEST labels MUST stay in this order — index is read as an int in the voice
+    // and mirrored by the WebUI menu: 0=Off 1=Amp 2=Filter 1 3=Filter 2
+    // 4=Filter 1+2 5=Mod 1 6=Mod 2 7=Pitch. Defaults pre-route to the natural
+    // destination at DEPTH 0 (nothing modulates on load; assign depth in the menu).
+    const juce::StringArray envDestChoices {
+        "Off", "Amp", "Filter 1", "Filter 2", "Filter 1+2", "Mod 1", "Mod 2", "Pitch" };
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_ENV2_DEST, 1 }, "Synth Env 2 Destination", envDestChoices, 2)); // Filter 1
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV2_DEPTH, 1 }, "Synth Env 2 Depth",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_ENV3_DEST, 1 }, "Synth Env 3 Destination", envDestChoices, 7)); // Pitch
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV3_DEPTH, 1 }, "Synth Env 3 Depth",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_ENV4_DEST, 1 }, "Synth Env 4 Destination", envDestChoices, 0)); // Off
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV4_DEPTH, 1 }, "Synth Env 4 Depth",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_ENV5_DEST, 1 }, "Synth Env 5 Destination", envDestChoices, 0)); // Off
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_ENV5_DEPTH, 1 }, "Synth Env 5 Depth",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+
 
     // ── Synth section — Phase 2A (Wavetable foundation) ──────────────────
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -2163,6 +2191,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float m2eCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CD);
         const float m2eCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CR);
         const bool  m2eLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_LOOP) > 0.5f;
+        // Per-envelope routing (envs 2–5): destination index + bipolar depth.
+        const int   env2Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV2_DEST);
+        const float env2Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV2_DEPTH);
+        const int   env3Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV3_DEST);
+        const float env3Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV3_DEPTH);
+        const int   env4Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV4_DEST);
+        const float env4Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV4_DEPTH);
+        const int   env5Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV5_DEST);
+        const float env5Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV5_DEPTH);
         // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
         const int            wtPreset = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_PRESET);
         const float          wtFrame  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_FRAME);
@@ -2232,6 +2269,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setPitchEnvDepth          (pitDepth);
                 sv->setMod1Env                (m1eDly, m1eA, m1eHld, m1eD, m1eS, m1eR, m1eCa, m1eCd, m1eCr, m1eLoop);
                 sv->setMod2Env                (m2eDly, m2eA, m2eHld, m2eD, m2eS, m2eR, m2eCa, m2eCd, m2eCr, m2eLoop);
+                sv->setEnvRouting             (env2Dest, env2Depth, env3Dest, env3Depth,
+                                               env4Dest, env4Depth, env5Dest, env5Depth);
                 sv->setWavetable              (wt);
                 sv->setWavetableFrame         (wtFrame);
                 sv->setWarp                   (warpMode, warpAmount);

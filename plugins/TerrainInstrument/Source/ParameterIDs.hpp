@@ -184,6 +184,28 @@ namespace ParameterIDs
     constexpr char SYN_ENV_M2_CR[]     = "SYN_ENV_M2_CR";   // float -1..+1
     constexpr char SYN_ENV_M2_LOOP[]   = "SYN_ENV_M2_LOOP";  // bool
 
+    // ── Per-envelope ROUTING (the "mini mod-matrix per envelope") ─────────────
+    //   Envelope 1 = AMP and is HARDWIRED to amplitude (no routing — it's what
+    //   makes a note sound). Envelopes 2–5 are FREE: each has ONE destination +
+    //   a bipolar DEPTH (-1..+1), accumulated into the destination's effective
+    //   value at the per-sample base->effective site (same pattern KEYTRACK/ROUTE
+    //   use). This is the on-ramp to the master mod matrix — when it lands, every
+    //   source/dest reuses this exact accumulation.
+    //
+    //   Envelope→generator map:  2=FLT  3=PITCH  4=MOD1  5=MOD2 (see SynthVoice).
+    //   DEST choice index (matches SynthVoice::EnvDest + the WebUI menu order):
+    //     0=Off 1=Amp 2=Filter 1 3=Filter 2 4=Filter 1+2 5=Mod 1 6=Mod 2 7=Pitch
+    //   DEPTH is normalized -1..+1 and SCALED per-destination at apply time:
+    //     Filter* → ±96 ST · Pitch → ±48 ST · Amp → ±100% gain · Mod* → ±100% bus.
+    constexpr char SYN_ENV2_DEST[]     = "SYN_ENV2_DEST";   // choice 0..7  (default 2 = Filter 1)
+    constexpr char SYN_ENV2_DEPTH[]    = "SYN_ENV2_DEPTH";  // float -1..+1 (default 0)
+    constexpr char SYN_ENV3_DEST[]     = "SYN_ENV3_DEST";   // choice 0..7  (default 7 = Pitch)
+    constexpr char SYN_ENV3_DEPTH[]    = "SYN_ENV3_DEPTH";  // float -1..+1 (default 0)
+    constexpr char SYN_ENV4_DEST[]     = "SYN_ENV4_DEST";   // choice 0..7  (default 0 = Off)
+    constexpr char SYN_ENV4_DEPTH[]    = "SYN_ENV4_DEPTH";  // float -1..+1 (default 0)
+    constexpr char SYN_ENV5_DEST[]     = "SYN_ENV5_DEST";   // choice 0..7  (default 0 = Off)
+    constexpr char SYN_ENV5_DEPTH[]    = "SYN_ENV5_DEPTH";  // float -1..+1 (default 0)
+
     // ── Synth section — Phase 2A (Wavetable foundation) ──────────────────
     constexpr char SYN_OSC_A_WT_PRESET[] = "SYN_OSC_A_WT_PRESET"; // choice 0..5 (Prophet/Jupiter/Moog/OB-X/CS-80/Juno)
     constexpr char SYN_OSC_A_WT_FRAME[]  = "SYN_OSC_A_WT_FRAME";  // float 0..1 frame position within wavetable

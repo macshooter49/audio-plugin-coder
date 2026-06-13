@@ -220,6 +220,23 @@ namespace tw
         void setFilterMix1 (float mix) noexcept       { filterMix1_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterMix2 (float mix) noexcept       { filterMix2_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterRouting (int mode) noexcept     { filterRouting_ = (mode != 0) ? 1 : 0; }
+
+        // ── Per-envelope ROUTING (the mini mod-matrix per envelope) ──────────
+        // Destination indices — MUST match the SYN_ENV*_DEST choice order and the
+        // WebUI menu. Env 1 (AMP) is hardwired to amplitude and not in this enum.
+        enum EnvDest { kEnvOff = 0, kEnvAmp = 1, kEnvFilt1 = 2, kEnvFilt2 = 3,
+                       kEnvFilt12 = 4, kEnvMod1 = 5, kEnvMod2 = 6, kEnvPitch = 7 };
+        /** Routing for the four FREE envelopes (UI 2,3,4,5 → internal 1,2,3,4 =
+         *  FLT, PITCH, MOD1, MOD2). Each carries a destination + bipolar depth
+         *  (-1..+1). Stored at internal slots [1..4]; [0] is AMP (not routed). */
+        void setEnvRouting (int d2, float a2, int d3, float a3,
+                            int d4, float a4, int d5, float a5) noexcept
+        {
+            envDest_[1] = d2; envDepth_[1] = juce::jlimit (-1.0f, 1.0f, a2);
+            envDest_[2] = d3; envDepth_[2] = juce::jlimit (-1.0f, 1.0f, a3);
+            envDest_[3] = d4; envDepth_[3] = juce::jlimit (-1.0f, 1.0f, a4);
+            envDest_[4] = d5; envDepth_[4] = juce::jlimit (-1.0f, 1.0f, a5);
+        }
         void setFilterDrive (float drv01) noexcept
         {
             drv01_ = juce::jlimit (0.0f, 1.0f, drv01);
@@ -984,17 +1001,46 @@ namespace tw
             // PORTAMENTO — advance the pitch slide for this block (no-op once arrived).
             advanceGlide (numSamples);
 
-            // PITCH envelope (Batch 3) — advance by the block length and hold the
-            // resulting semitone offset for this block. Block-rate is smooth enough
-            // for pitch envelopes and matches the per-block pitch architecture. The
-            // MOD1/MOD2 envelopes also advance here so they stay phase-aligned and are
-            // ready as mod-matrix sources (their routing arrives in the matrix phase).
+            // ── Per-envelope value PRE-PASS (mod-matrix foundation) ────────────
+            // Tick all FIVE envelopes once per sample into envScratch_ (ch0=AMP,
+            // 1=FLT, 2=PITCH, 3=MOD1, 4=MOD2). The amp loop, the filter loop and
+            // the per-block pitch/mod routing below all read these SAME buffers, so
+            // every envelope runs at audio rate — the exact shape the master mod
+            // matrix needs (zero rewrite when it arrives).
+            if (envScratch_.getNumChannels() < 5 || envScratch_.getNumSamples() < numSamples)
+                envScratch_.setSize (5, numSamples, false, true, true);
             {
-                double pv = 0.0;
-                for (int k = 0; k < numSamples; ++k) pv = pitchEnvT_.tick();
-                pitchEnvSemis_ = (double) pitchEnvDepth_ * pv;
-                for (int k = 0; k < numSamples; ++k) mod1EnvT_.tick();
-                for (int k = 0; k < numSamples; ++k) mod2EnvT_.tick();
+                float* eAmp = envScratch_.getWritePointer (0);
+                float* eFlt = envScratch_.getWritePointer (1);
+                float* ePit = envScratch_.getWritePointer (2);
+                float* eM1  = envScratch_.getWritePointer (3);
+                float* eM2  = envScratch_.getWritePointer (4);
+                for (int k = 0; k < numSamples; ++k)
+                {
+                    eAmp[k] = (float) ampEnv_.tick();
+                    eFlt[k] = (float) fltEnvT_.tick();
+                    ePit[k] = (float) pitchEnvT_.tick();
+                    eM1[k]  = (float) mod1EnvT_.tick();
+                    eM2[k]  = (float) mod2EnvT_.tick();
+                }
+            }
+            // PITCH + MOD-bus routing (per-block; block-end value of each free env).
+            // Any of envs 2–5 routed to Pitch sum into pitchEnvSemis_ (±48 ST × depth).
+            // Mod 1/2 destinations fill the latent buses for the mod matrix.
+            {
+                const int last = (numSamples > 0) ? (numSamples - 1) : 0;
+                double pit = 0.0, m1 = 0.0, m2 = 0.0;
+                for (int k = 0; k < 4; ++k)                      // free env k → internal ch (k+1)
+                {
+                    const int    d  = envDest_[k + 1];
+                    const double dv = (double) envDepth_[k + 1]
+                                    * (double) envScratch_.getReadPointer (k + 1)[last];
+                    if      (d == kEnvPitch) pit += dv * 48.0;   // ±48 semitones
+                    else if (d == kEnvMod1)  m1  += dv;          // ±100% bus (latent)
+                    else if (d == kEnvMod2)  m2  += dv;
+                }
+                pitchEnvSemis_ = pit;
+                mod1Bus_ = m1; mod2Bus_ = m2;
             }
             // Re-derive per-sine phase increments with updated drift + glide pitch
             updateUnisonPhaseIncrementsA (glideNote_);
@@ -1058,6 +1104,12 @@ namespace tw
                 *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
                     sampleRate_, 2500.0f, 0.7071f, shelfGain);
             }
+
+            // Pre-pass env values for this loop: ch0 = AMP (the VCA); ch1..4 = the
+            // four free envelopes (any routed to Amp add tremolo-style gain mod).
+            const float* eAmpVca = envScratch_.getReadPointer (0);
+            const float* eAmpFree[4] = { envScratch_.getReadPointer (1), envScratch_.getReadPointer (2),
+                                         envScratch_.getReadPointer (3), envScratch_.getReadPointer (4) };
 
             for (int i = 0; i < numSamples; ++i)
             {
@@ -1470,8 +1522,11 @@ namespace tw
                     }
                 }
 
-                const float env    = (float) ampEnv_.tick();
-                const float velEnv = currentVelocity_ * env;
+                const float env    = eAmpVca[i];               // ENV1 AMP, from the pre-pass
+                float ampMod = 0.0f;                           // ENV2–5 routed to Amp (bipolar gain)
+                for (int k = 0; k < 4; ++k)
+                    if (envDest_[k + 1] == kEnvAmp) ampMod += envDepth_[k + 1] * eAmpFree[k][i];
+                const float velEnv = currentVelocity_ * juce::jmax (0.0f, env * (1.0f + ampMod));
 
                 // Sum to stereo with INDEPENDENT per-osc level + pan
                 scratchL[i] = (sA_L * level_ * panL_ + sB_L * levelB_ * panLB_) * velEnv;
@@ -1529,10 +1584,21 @@ namespace tw
                 const double coefSr = oversample ? sr * 2.0 : sr;
                 const float  baseCutSemis2 = hzToSemi (baseCutHz2_);
                 const int    kNoneType = (int) tw::filters::Type::NONE;
+                // Free-envelope per-sample values (ch1..4 = envs 2–5) for filter routing.
+                const float* eFltFree[4] = { envScratch_.getReadPointer (1), envScratch_.getReadPointer (2),
+                                             envScratch_.getReadPointer (3), envScratch_.getReadPointer (4) };
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    // Per-sample FLT envelope tick (single value 0..1).
-                    const float fltEnvVal = (float) fltEnvT_.tick();
+                    // Per-envelope ROUTING → filter cutoff (semitone space). Sum any
+                    // of envs 2–5 routed to Filter 1 / Filter 2 / Filter 1+2.
+                    float fMod1 = 0.0f, fMod2 = 0.0f;
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        const int   d  = envDest_[k + 1];
+                        const float dv = envDepth_[k + 1] * eFltFree[k][i];
+                        if (d == kEnvFilt1 || d == kEnvFilt12) fMod1 += dv;
+                        if (d == kEnvFilt2 || d == kEnvFilt12) fMod2 += dv;
+                    }
 
                     // Per-sample drift (one-pole LP of uniform white noise).
                     if (driftActive)
@@ -1543,18 +1609,16 @@ namespace tw
                     const float driftSemis = driftState_ * driftDepthSemis;
                     const float fmax = juce::jmin (20000.0f, 0.45f * (float) coefSr);
 
-                    // Filter 1 cutoff (own env amount, shared FLT env + drift).
-                    const float cutSemis1 = baseCutSemis
-                                          + envAmount_ * fltEnvVal * 96.0f + driftSemis;
+                    // Filter 1 cutoff: base + routed envelopes (±96 ST) + drift.
+                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + driftSemis;
                     float cutHz1 = 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f);
                     cutHz1 = juce::jlimit (20.0f, fmax, cutHz1);
                     const float res1 = juce::jlimit (0.0f, 1.0f,
                         baseRes01_ + resWander * driftState_ * 0.5f);
                     filterSlot_.setParams (cutHz1, res1, drv01_, coefSr);
 
-                    // Filter 2 cutoff (fully independent — its own knobs).
-                    const float cutSemis2 = baseCutSemis2
-                                          + envAmount2_ * fltEnvVal * 96.0f + driftSemis;
+                    // Filter 2 cutoff: base + routed envelopes (±96 ST) + drift.
+                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + driftSemis;
                     float cutHz2 = 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f);
                     cutHz2 = juce::jlimit (20.0f, fmax, cutHz2);
                     const float res2 = juce::jlimit (0.0f, 1.0f,
@@ -1958,6 +2022,20 @@ namespace tw
         int                     filterRouting_ = 0;    // 0 = series, 1 = parallel
         float                   filterMix1_  = 1.0f;   // 0 = dry, 1 = fully filtered
         float                   filterMix2_  = 1.0f;
+
+        // ── Per-envelope ROUTING state (mini mod-matrix) ──────────────────────
+        // Index 0 = AMP (not routed); 1..4 = the free envelopes (FLT/PITCH/M1/M2,
+        // UI 2/3/4/5). dest is an EnvDest index; depth is bipolar -1..+1.
+        int                     envDest_[5]  = { kEnvAmp, kEnvFilt1, kEnvPitch, kEnvOff, kEnvOff };
+        float                   envDepth_[5] = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        // Per-sample value of all five envelopes for this block (ch0=AMP, 1=FLT,
+        // 2=PITCH, 3=MOD1, 4=MOD2), filled by the pre-pass so the amp loop, the
+        // filter loop, and the per-block pitch path all read the SAME values.
+        juce::AudioBuffer<float> envScratch_;
+        // Latent modulation buses (envs routed to Mod 1/2). Nothing reads these
+        // yet — the master mod matrix will. Block-rate, bipolar.
+        double                  mod1Bus_     = 0.0;
+        double                  mod2Bus_     = 0.0;
 
         static float hzToSemi (float hz) noexcept
         {
