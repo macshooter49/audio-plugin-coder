@@ -904,6 +904,10 @@ namespace tw
             stealing_         = false;
             stealingFade_     = 1.0f;
             stealingFadeStep_ = 0.0f;
+            // Release-end declick — fresh note starts un-faded.
+            finishing_     = false;
+            finishFade_    = 1.0f;
+            finishFadeStep_= 0.0f;
             // (noteStartStamp_ assigned at the top of startNote — shared with the LEGATO branch)
         }
 
@@ -1704,6 +1708,30 @@ namespace tw
                 horizonShelfR_.process (ctxR);
             }
 
+            // ── Release-end declick — "silent light switch" ───────────────────────
+            // The amp VCA has already silenced the oscillator, but the filter / HORIZON
+            // shelf / grain tail can still be ringing. Rather than cut that ring the
+            // instant the env goes idle (→ click, and a click machine-guns through the
+            // granular engine), ramp the FINAL post-filter signal to true zero over
+            // ~8 ms, then release the slot. Click-free at any release/decay length & Q.
+            if (! ampEnv_.isActive() && ! stealing_ && playing_)
+            {
+                if (! finishing_)
+                {
+                    finishing_      = true;
+                    const float fadeSamples = static_cast<float> (kFinishFadeSec * sampleRate_);
+                    finishFadeStep_ = 1.0f / juce::jmax (1.0f, fadeSamples);   // linear → 0
+                    finishFade_     = 1.0f;
+                }
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    scratchL[i] *= finishFade_;
+                    scratchR[i] *= finishFade_;
+                    finishFade_ -= finishFadeStep_;
+                    if (finishFade_ < 0.0f) finishFade_ = 0.0f;
+                }
+            }
+
             // Sum filtered stereo scratch into output.
             auto* L = out.getWritePointer (0, startSample);
             auto* R = out.getNumChannels() > 1
@@ -1714,9 +1742,12 @@ namespace tw
                 R[i] += scratchR[i];
             }
 
-            if (! ampEnv_.isActive())
+            // Release the slot only once the declick ramp has reached true zero (the env
+            // being idle armed the fade above; we wait for it to finish so nothing is cut).
+            if (finishing_ && finishFade_ <= 0.0f)
             {
-                playing_ = false;
+                finishing_ = false;
+                playing_   = false;
                 clearCurrentNote();
             }
         }
@@ -2257,6 +2288,18 @@ namespace tw
         float stealingFade_     = 1.0f;     // 1.0 = no fade, 0.0 = silent
         float stealingFadeStep_ = 0.0f;     // multiplier per sample during fade
         bool  stealing_         = false;
+
+        // Release-end declick — "silent light switch". When the amp envelope finishes
+        // its release the oscillator is already silent, but a resonant filter / HORIZON
+        // shelf / in-flight grain can still be ringing. Clearing the voice the instant
+        // the env goes idle cuts that ring → click (and a click machine-guns through the
+        // granular engine). Instead, ramp the FINAL post-filter output to true zero over
+        // kFinishFadeSec, THEN release the slot. Click-free for any release/decay length
+        // and any filter resonance.
+        static constexpr double kFinishFadeSec = 0.008;   // ~8 ms linear fade-to-zero
+        bool  finishing_     = false;
+        float finishFade_    = 1.0f;        // 1.0 = full, 0.0 = silent
+        float finishFadeStep_= 0.0f;        // linear decrement per sample
 
         // Phase 12 — monotonic timestamp from startNote, used by UnisonSynth
         // to find the oldest non-stealing voice when the polyphony cap is hit.

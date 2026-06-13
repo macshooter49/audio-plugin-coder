@@ -3525,17 +3525,14 @@ body {
 #syn-panel .envs { padding: 0; gap: 0; }
 #syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px; cursor: crosshair; }
 #syn-panel #env-svg { touch-action: none; }
-#syn-panel .env-sel { position: absolute; top: 6px; right: 8px; z-index: 3;
-  /* WC-chip: frosted glass button — softened text blends, echoes the dropdown glass */
-  font-size: 11px; letter-spacing: 0.3px; color: rgba(255,255,255,0.58); font-weight: 300;
-  background: rgba(255,255,255,0.045);
-  -webkit-backdrop-filter: blur(10px) saturate(150%);
-  backdrop-filter: blur(10px) saturate(150%);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 7px; padding: 3px 9px; cursor: pointer; user-select: none;
-  transition: color .15s ease, background .15s ease, border-color .15s ease; }
-#syn-panel .env-sel:hover { color: rgba(255,255,255,0.90); background: rgba(255,255,255,0.075); border-color: rgba(255,255,255,0.13); opacity: 1; }
-#syn-panel .env-sel-arrow { color: inherit; font-size: 7px; opacity: 0.65; }
+#syn-panel .env-sel { position: absolute; top: 6px; right: 2px; z-index: 3;
+  /* WC-chip: transparent + blended text, brightens to white on hover. No box, no glass fill. */
+  font-size: 11px; letter-spacing: 0.3px; color: rgba(255,255,255,0.55); font-weight: 300;
+  background: transparent; border: none;
+  border-radius: 4px; padding: 2px 7px; cursor: pointer; user-select: none;
+  transition: color .15s ease, opacity .15s ease; }
+#syn-panel .env-sel:hover { color: #FFFFFF; opacity: 1; }
+#syn-panel .env-sel-arrow { color: inherit; font-size: 7px; opacity: 0.7; }
 #syn-panel .env-node { fill: #FFFFFF; cursor: grab; }
 #syn-panel .env-node:hover { fill: #FFFFFF; stroke: #FFFFFF; stroke-width: 1.2; }
 #syn-panel .env-node.sus { fill: #FFFFFF; cursor: grab; }
@@ -4786,7 +4783,7 @@ body {
                 <text id="env-loop-tag" x="8" y="12" fill="#8B5CF6" font-size="6.5" letter-spacing="2" style="display:none">LOOP</text>
                 <text id="env-readout" x="140" y="12" text-anchor="middle" fill="#908599" font-size="7.5" letter-spacing="1" style="display:none"></text>
                 <g id="env-nodes"></g>
-                <circle id="env-follow" cx="-10" cy="-10" r="3.4" fill="#EDE7FF" stroke="#8B5CF6" stroke-width="1.2" style="opacity:0;filter:drop-shadow(0 0 3px rgba(201,190,239,0.9));pointer-events:none"/>
+                <circle id="env-follow" cx="-10" cy="-10" r="2.6" fill="#A78BFA" style="opacity:0;filter:drop-shadow(0 0 4.5px rgba(196,181,253,0.85));pointer-events:none"/>
                 <g id="env-depth" style="display:none">
                   <line id="env-depth-track" x1="274.5" y1="8" x2="274.5" y2="64" stroke="rgba(201,190,239,0.14)" stroke-width="1.5" stroke-linecap="round"/>
                   <line id="env-depth-centermark" x1="271.5" y1="36" x2="277.5" y2="36" stroke="rgba(201,190,239,0.3)" stroke-width="0.6"/>
@@ -9242,8 +9239,8 @@ setTimeout(function wireSynControls () {
         function setnv(s,v){ try { if(s&&s.setNormalisedValue) s.setNormalisedValue(Math.max(0,Math.min(1,v))); } catch(e){} }
         function tfrac(s){ return nv(s); }   // width fraction == normalized value (matches APVTS skew 0.3 -> what you see = what you hear)
         function curveT(s){ return nv(s)*2-1; }                  // param -1..+1 from norm
-        function msOf(norm){ return 1 + Math.pow(Math.max(0,norm), 1/0.3)*3999; }   // matches NormalisableRange(1,4000,skew0.3)
-        function normOfMs(ms){ return Math.pow(Math.max(0,Math.min(1,(ms-1)/3999)), 0.3); }
+        function msOf(norm){ return 1 + Math.pow(Math.max(0,norm), 1/0.3)*7999; }   // matches NormalisableRange(1,8000,skew0.3)
+        function normOfMs(ms){ return Math.pow(Math.max(0,Math.min(1,(ms-1)/7999)), 0.3); }
         function fmtMs(ms){ return ms>=1000 ? (ms/1000).toFixed(2)+'s' : Math.round(ms)+'ms'; }
 
         // layout: attack can reach the HARD LEFT (no min span); release is the
@@ -9255,16 +9252,16 @@ setTimeout(function wireSynControls () {
         function layout(){
           var s=st(), u=(W-2*PADX);
           var hasDly = nv(s['DLY'])>0.001, hasHld = nv(s['H'])>0.001;
-          var sp = { DLY: hasDly ? 0.02+tfrac(s['DLY'])*0.06 : 0,
-                     A:   tfrac(s['A'])*0.16,
-                     H:   hasHld ? 0.02+tfrac(s['H'])*0.06 : 0,
-                     D:   0.05+tfrac(s['D'])*0.16 };
-          var leftSum = sp.DLY+sp.A+sp.H+sp.D, leftCap=0.45;
+          var sp = { DLY: hasDly ? 0.02+tfrac(s['DLY'])*0.10 : 0,
+                     A:   tfrac(s['A'])*0.45,
+                     H:   hasHld ? 0.02+tfrac(s['H'])*0.14 : 0,
+                     D:   tfrac(s['D'])*0.93 };
+          var leftSum = sp.DLY+sp.A+sp.H+sp.D, leftCap=0.96;
           var lk = leftSum>leftCap ? leftCap/leftSum : 1;
           var xD=PADX+sp.DLY*u*lk, xA=xD+sp.A*u*lk, xH=xA+sp.H*u*lk, xS=xH+sp.D*u*lk;
           // release flows directly from the sustain node (Serum flow-through; no shelf).
           // 0.05 floor keeps the R node clear of the S node even at R=0.
-          var relMax=(W-PADX)-xS, xE=xS+(0.05+0.95*tfrac(s['R']))*relMax;
+          var relMax=(W-PADX)-xS, xE=xS+tfrac(s['R'])*relMax;
           function yL(l){ return YBASE - l*(YBASE-YTOP); }
           var ySus=yL(nv(s['S']));
           return { u:u, k:lk, xD0:PADX, xA0:xD, xH0:xA, xS0:xH, relMax:relMax,
@@ -9330,22 +9327,26 @@ setTimeout(function wireSynControls () {
             var n;
             if (sq){
               n=document.createElementNS('http://www.w3.org/2000/svg','rect');
-              n.setAttribute('x',x-2.4); n.setAttribute('y',y-2.4);
-              n.setAttribute('width',4.8); n.setAttribute('height',4.8);
+              n.setAttribute('x',x-2.0); n.setAttribute('y',y-2.0);
+              n.setAttribute('width',4.0); n.setAttribute('height',4.0);
               n.setAttribute('class','env-node');
             } else {
               n=document.createElementNS('http://www.w3.org/2000/svg','circle');
-              n.setAttribute('cx',x); n.setAttribute('cy',y); n.setAttribute('r',3.3);
+              n.setAttribute('cx',x); n.setAttribute('cy',y); n.setAttribute('r',2.5);
               n.setAttribute('class','env-node'+(sus?' sus':''));
             }
             n.dataset.kind=kind; nodesG.appendChild(n);
           }
           function addCurveDot(x0,y0,x1,y1,tension,kind){
-            if (Math.abs(y1-y0)<5 || (x1-x0)<10) return;
+            var dx=x1-x0, dy=y1-y0;
+            // Declutter: hide the curve handle when its segment is nearly flat (square
+            // tops / triangle bottoms) OR too short to host a dot without crowding the
+            // ADSR nodes. ADSR structural nodes always stay; only these vanish on overlap.
+            if (Math.abs(dy)<6 || Math.abs(dx)<4 || Math.sqrt(dx*dx+dy*dy)<18) return;
             var m=midOf(x0,y0,x1,y1,tension);
             addHit(m.x,m.y,7,kind,true);
             var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
-            c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',2.3);
+            c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',1.7);
             c.setAttribute('class','env-curve'); c.dataset.kind=kind;
             nodesG.appendChild(c);
           }
@@ -9357,7 +9358,8 @@ setTimeout(function wireSynControls () {
           addNode(L.xA,YTOP,'A',false,false);
           if(L.hasHld) addNode(L.xH,YTOP,'H',true,false);
           addNode(L.xS,L.ySus,'S',false,true);
-          addNode(L.xE,YBASE,'R',false,false);
+          if (Math.abs(L.xE-L.xS)<4 && Math.abs(L.ySus-YBASE)<4) addHit(L.xE,YBASE,9,'R',false);
+          else addNode(L.xE,YBASE,'R',false,false);
         }
 
         // ── Envelope follower (Serum-style playhead dot) ──────────────────────
@@ -9510,13 +9512,13 @@ setTimeout(function wireSynControls () {
             t=Math.max(-1,Math.min(1,t));
             setnv(s[kind],(t+1)/2);
           }
-          if(drag.k==='A')        setnv(s['A'],   inv(0.0, 0.16, L.xA0));
-          else if(drag.k==='R'){  var rf=((pt.x-L.xS)/(L.relMax||1)-0.05)/0.95; setnv(s['R'], Math.max(0,Math.min(1,rf))); }   // drag RIGHT = longer, reaches edge
-          else if(drag.k==='DLY') setnv(s['DLY'], Math.max(0.002, inv(0.02,0.06, L.xD0)));
-          else if(drag.k==='H')   setnv(s['H'],   Math.max(0.002, inv(0.02,0.06, L.xH0)));
+          if(drag.k==='A')        setnv(s['A'],   inv(0.0, 0.45, L.xA0));
+          else if(drag.k==='R'){  var rf=(pt.x-L.xS)/(L.relMax||1); setnv(s['R'], Math.max(0,Math.min(1,rf))); }   // drag RIGHT = longer, reaches edge
+          else if(drag.k==='DLY') setnv(s['DLY'], Math.max(0.002, inv(0.02,0.10, L.xD0)));
+          else if(drag.k==='H')   setnv(s['H'],   Math.max(0.002, inv(0.02,0.14, L.xH0)));
           else if(drag.k==='S'){
             setnv(s['S'], Math.max(0,Math.min(1,(YBASE-pt.y)/(YBASE-YTOP))));
-            setnv(s['D'], inv(0.05,0.16, L.xS0));
+            setnv(s['D'], inv(0.0,0.93, L.xS0));
           }
           else if(drag.k==='CA')  bend('CA', L.hasDly?L.xD:PADX, YBASE, L.xA, YTOP);
           else if(drag.k==='CD')  bend('CD', L.hasHld?L.xH:L.xA, YTOP, L.xS, L.ySus);
@@ -9613,7 +9615,7 @@ setTimeout(function wireSynControls () {
           return (v>=0?'+':'')+(v*100).toFixed(0)+'%'; }            // Filter/Mod as %
         function updateChip(){ if(!selChip) return;
           var id=curEnv, dest=(id==='AMP')?'Amp':DEST_LABELS[destIdx(id)];
-          selChip.innerHTML = 'Env '+ENVNUM[id]+' \u00B7 '+dest+' <span class="env-sel-arrow">&#9662;</span>'; }
+          selChip.innerHTML = 'Env '+ENVNUM[id]+' \u00B7 '+dest; }
         window.__envUpdateChip = updateChip;
 
         // ── Filter ENV knob  <->  depth link ───────────────────────────────────
