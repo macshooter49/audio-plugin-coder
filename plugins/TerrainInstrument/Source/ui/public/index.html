@@ -3562,6 +3562,11 @@ body {
 #syn-panel .patch-amt.pos::after { left: 50%; width: 32%; }
 #syn-panel .patch-amt.neg::after { right: 50%; width: 22%; }
 #syn-panel .patch-val { font-size: 9px; color: var(--text-primary); text-align: right; letter-spacing: 0.6px; font-weight: 300; }
+#syn-panel .env-hud-row { position: absolute; top: 6px; right: 2px; z-index: 3; display: flex; align-items: baseline; gap: 0; }
+#syn-panel .env-hud-row .env-sel { position: static; top: auto; right: auto; }
+#syn-panel .env-read-hud { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
+  font-size: 11px; font-weight: 300; letter-spacing: 0.3px; color: rgba(255,255,255,0.55);
+  padding: 2px 7px; white-space: nowrap; pointer-events: none; display: none; }
 #syn-panel .patch-hint { font-size: 8px; color: var(--text-muted); letter-spacing: 1.4px; padding: 4px 0 0; text-align: center; }
 
 /* ── RIBBON row (fixed 138px) ── */
@@ -4791,7 +4796,7 @@ body {
                   <rect id="env-depth-hit" x="269" y="4" width="11" height="64" fill="transparent" style="cursor:ns-resize"/>
                 </g>
               </svg>
-              <div class="env-sel" id="env-sel">Amp <span class="env-sel-arrow">&#9662;</span></div>
+              <div class="env-hud-row" id="env-hud-row"><div class="env-read-hud" id="env-read-hud"></div><div class="env-sel" id="env-sel">Amp <span class="env-sel-arrow">&#9662;</span></div></div>
             </div>
           </div>
 
@@ -9229,7 +9234,7 @@ setTimeout(function wireSynControls () {
         var followEl= document.getElementById('env-follow');
         var canvas  = document.getElementById('env-canvas');
         var loopTag = document.getElementById('env-loop-tag');
-        var readout = document.getElementById('env-readout');
+        var readout = document.getElementById('env-read-hud');
         var selChip = document.getElementById('env-sel');
         if (!svg || !nodesG || !lineP) return;
 
@@ -9456,12 +9461,12 @@ setTimeout(function wireSynControls () {
         function showReadout(kind){
           if(!readout) return;
           var s=st(), txt='';
-          if(kind==='S') txt='SUS '+Math.round(nv(s['S'])*100)+'%';
+          if(kind==='S') txt='S '+Math.round(nv(s['S'])*100)+'%';
           else if(kind==='CA'||kind==='CD'||kind==='CR'){
             var t=Math.round(curveT(s[kind])*100);
-            txt='CURVE '+(t>0?'+':'')+t+'%';
+            txt='C '+(t>0?'+':'')+t+'%';
           } else {
-            var name={DLY:'DLY',A:'ATK',H:'HLD',D:'DEC',R:'REL'}[kind]||kind;
+            var name={DLY:'DLY',A:'A',H:'H',D:'D',R:'R'}[kind]||kind;
             txt=name+' '+fmtMs(msOf(nv(s[kind])));
           }
           readout.textContent=txt; readout.style.display='block';
