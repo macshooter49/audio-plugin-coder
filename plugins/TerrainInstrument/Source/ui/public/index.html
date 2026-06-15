@@ -2321,6 +2321,79 @@ body {
 }
 
 /* --- Modulation Panel Overlay --- */
+/* ===== MOD V4 (transparent LFO) ===== */
+#syn-panel .device.mod{padding:0;overflow:hidden;}
+#mod-engine{position:absolute;inset:0;border-radius:13px;overflow:hidden;background:var(--bg-hero);
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;
+  --ghost:rgba(255,255,255,0.55);--ghost-dim:rgba(255,255,255,0.34);--gray:#9b93a8;}
+#mod-engine .mv-scope{position:absolute;inset:0;}
+#mod-engine .mv-scope svg{position:absolute;inset:0;width:100%;height:100%;}
+#mod-engine .mv-grid line{stroke:rgba(139,92,246,.14);stroke-width:.5;}
+#mod-engine .mv-grid line.mid{stroke:rgba(139,92,246,.22);}
+#mod-engine .mv-play{stroke:rgba(236,232,242,.42);stroke-width:1;}
+#mod-engine .mv-fill{fill:rgba(236,232,242,.07);}
+#mod-engine .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.7;}
+#mod-engine .mv-foll{fill:#A78BFA;}
+#mod-engine .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
+#mod-engine .mv-ov.top{top:6px;padding:0 11px;justify-content:flex-end;}
+#mod-engine .mv-ov.bot{bottom:6px;padding:0 13px;justify-content:space-between;}
+#mod-engine .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:var(--ghost);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;}
+#mod-engine .mv-c:hover{color:#fff;}
+#mod-engine .mv-c.drag{cursor:ns-resize;}
+#mod-engine .mv-c .ar{font-size:8px;opacity:.55;}
+#mod-engine .mv-c svg.chev{width:8px;height:8px;opacity:.6;}
+#mod-engine .mv-c .ic{display:inline-flex;width:20px;height:11px;color:inherit;}
+#mod-engine .mv-seg{font-size:9px;letter-spacing:1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);}
+#mod-engine .mv-seg b{cursor:pointer;font-weight:300;} #mod-engine .mv-seg .on{color:#fff;} #mod-engine .mv-seg .off{color:var(--ghost-dim);}
+#mod-engine .mv-exp{width:14px;height:14px;cursor:pointer;color:var(--ghost);transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));}
+#mod-engine .mv-exp:hover{color:#fff;}
+#mod-engine .mv-tabs{display:flex;align-items:center;gap:8px;}
+#mod-engine .mv-tabs .t{position:relative;font-size:10px;font-weight:400;color:var(--ghost-dim);cursor:pointer;transition:.12s;text-shadow:0 1px 3px rgba(0,0,0,.9);}
+#mod-engine .mv-tabs .t:hover{color:var(--ghost);} #mod-engine .mv-tabs .t.act{color:#fff;font-weight:600;}
+#mod-engine .mv-tabs .t.act::after{content:'';position:absolute;left:-1px;right:-1px;bottom:-3px;height:1.5px;background:var(--purple-400);border-radius:1px;}
+#mod-engine .mv-tabs .t.dis{opacity:.5;cursor:default;}
+#mod-engine .mv-dep{display:flex;align-items:center;gap:5px;text-shadow:0 1px 3px rgba(0,0,0,.9);}
+#mod-engine .mv-dep .l{font-size:7.5px;letter-spacing:1px;color:var(--ghost-dim);}
+#mod-engine .mv-dep .v{font-size:9px;color:var(--gray);font-variant-numeric:tabular-nums;min-width:24px;}
+#mod-engine .mv-ring{width:17px;height:17px;border-radius:50%;cursor:ns-resize;
+  -webkit-mask:radial-gradient(closest-side,transparent 60%,#000 62%);mask:radial-gradient(closest-side,transparent 60%,#000 62%);}
+
+/* body-level glass menu */
+.mv-menu{position:fixed;z-index:2147483646;background:rgba(24,24,38,0.46);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);
+  padding:5px;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;max-height:228px;overflow:auto;}
+.mv-menu.open{display:block;}
+.mv-menu div{display:flex;align-items:center;gap:9px;padding:6px 12px 6px 8px;border-radius:6px;cursor:pointer;color:rgba(255,255,255,.55);font-size:9.5px;letter-spacing:1px;white-space:nowrap;transition:.1s;}
+.mv-menu div:hover{background:rgba(255,255,255,0.08);color:#fff;}
+.mv-menu div.cur{color:#B794FF;} .mv-menu div.cur:hover{color:#fff;}
+.mv-menu div svg{width:22px;height:12px;flex:none;opacity:.9;}
+
+/* body-level extender */
+.mv-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;
+  box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;}
+.mv-ext.open{display:block;}
+.mv-ext .h{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.025);}
+.mv-ext .h.grab{cursor:grabbing;}
+.mv-ext .h .g{letter-spacing:2px;color:#4a4f68;font-size:10px;} .mv-ext .h .tt{font-size:9px;letter-spacing:1.8px;color:#C5BFD2;text-transform:uppercase;font-weight:600;}
+.mv-ext .h .tg{font-size:11px;color:#fff;font-weight:600;} .mv-ext .h .x{margin-left:auto;color:#908599;cursor:pointer;font-size:13px;}
+.mv-ext .b{padding:11px 13px 13px;display:flex;flex-direction:column;gap:11px;}
+.mv-ext .gl{font-size:8px;letter-spacing:1.4px;color:#6E6580;margin-bottom:6px;}
+.mv-ext .es{background:#12121F;border-radius:9px;position:relative;overflow:hidden;height:110px;cursor:crosshair;}
+.mv-ext .es svg{position:absolute;inset:0;width:100%;height:100%;}
+.mv-ext .es .eh{position:absolute;bottom:6px;right:9px;font-size:7.5px;color:rgba(255,255,255,.34);letter-spacing:.5px;}
+.mv-ext .es .nd{fill:#fff;stroke:rgba(167,139,250,.6);stroke-width:1;} .mv-ext .es .gl2{stroke:rgba(139,92,246,.14);stroke-width:.5;} .mv-ext .es .st{fill:none;stroke:#ECE8F2;stroke-width:1.9;} .mv-ext .es .fl{fill:rgba(236,232,242,.08);}
+.mv-ext .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;} .mv-ext .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.mv-ext .pill{height:24px;padding:0 9px;background:#12121F;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:9px;letter-spacing:1px;color:#ECE8F2;font-weight:300;cursor:pointer;}
+.mv-ext .pill .k{color:#908599;font-size:7px;} .mv-ext .pill .ic{width:16px;height:9px;color:#B794FF;display:inline-flex;}
+.mv-ext .tog{height:24px;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:500;letter-spacing:.6px;color:#908599;cursor:pointer;}
+.mv-ext .tog.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
+.mv-ext .mo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.mv-ext .mk{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.mv-ext .dn{width:30px;height:30px;border-radius:50%;-webkit-mask:radial-gradient(closest-side,transparent 64%,#000 66%);mask:radial-gradient(closest-side,transparent 64%,#000 66%);}
+.mv-ext .mk .kl{font-size:7.5px;letter-spacing:.6px;color:#C5BFD2;} .mv-ext .mk .kv{font-size:7px;color:#908599;}
+
+.mv-err{position:absolute;left:8px;bottom:6px;z-index:9;font-size:9px;color:#ff6b6b;background:rgba(0,0,0,.5);padding:2px 6px;border-radius:4px;display:none;}
+
 #mod-panel {
   display: none;
   width: 820px;
@@ -3174,7 +3247,7 @@ body {
   position: absolute; top: 9px; left: 14px;
   font-size: 9px; font-weight: 300; letter-spacing: 2px;
   color: var(--text-secondary);
-  text-transform: uppercase;
+  text-transform: none;
 }
 #syn-panel .device-corner {
   position: absolute; top: 9px; right: 14px;
@@ -3293,7 +3366,7 @@ body {
   display: flex; align-items: center; justify-content: center;
   color: var(--text-primary);
   font-size: 10px; letter-spacing: 1.4px; font-weight: 300;
-  text-transform: uppercase;
+  text-transform: none;
   cursor: default;        /* Phase 11a: pills are inert visual placeholders */
   user-select: none;
   position: relative;
@@ -3328,7 +3401,7 @@ body {
 #syn-panel .sel-label {
   color: var(--text-muted);
   font-size: 8px; letter-spacing: 1.4px;
-  text-transform: uppercase; font-weight: 300;
+  text-transform: none; font-weight: 300;
   line-height: 1;
 }
 #syn-panel .sel-value {
@@ -3595,7 +3668,7 @@ body {
 #syn-panel .voice-toggle-row { display: flex; gap: 4px; padding: 2px 0; }
 #syn-panel .voice-mode-row { padding: 1px 0 3px; }
 #syn-panel .voice-mode-row .voice-toggle:first-child { text-align: left; padding-left: 2px; }
-#syn-panel .voice-toggle { flex: 1; font-size: 9px; letter-spacing: 1px; padding: 2px 0; border: none; border-radius: 0; background: transparent; color: var(--text-dim); cursor: pointer; text-transform: uppercase; transition: color 0.12s; }
+#syn-panel .voice-toggle { flex: 1; font-size: 9px; letter-spacing: 1px; padding: 2px 0; border: none; border-radius: 0; background: transparent; color: var(--text-dim); cursor: pointer; text-transform: none; transition: color 0.12s; }
 #syn-panel .voice-toggle:hover { color: var(--text-muted); }
 #syn-panel .voice-toggle.on { background: transparent; color: var(--text-primary); }
 #syn-panel .sel[data-syn-row].dragging { background: rgba(139,92,246,0.18); }
@@ -3669,7 +3742,7 @@ body {
               padding: 4px 12px 6px;
               font-size: 8px;
               letter-spacing: 1.4px;
-              text-transform: uppercase;
+              text-transform: none;
               color: var(--text-muted);
               border-bottom: 1px solid var(--border);
               margin-bottom: 4px;
@@ -4361,7 +4434,7 @@ body {
         <div class="ti-tab act">1</div>
         <div class="ti-tab">2</div>
         <div class="ti-tab-spacer"></div>
-        <div class="ti-tab-meta">SYNTH</div>
+        <div class="ti-tab-meta">Synth</div>
       </div>
       <div class="ti-syn-page">
 
@@ -4370,7 +4443,7 @@ body {
 
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
-              <div class="device-label">OSC · A</div>
+              <div class="device-label">Osc · A</div>
               <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Toggle engine pills / wavetable controls"></button>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -4446,11 +4519,11 @@ body {
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
-                <div class="knob" data-syn="SYN_OSC_A_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT POS</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">WARP</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">SPECTRAL</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">FOLD</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">BLUR</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
             </div>
 
@@ -4462,13 +4535,13 @@ body {
                 <div class="blend-pill">B2</div>
                 <div class="blend-pill">B3</div>
                 <div class="blend-pill">B4</div>
-                <div class="blend-pill">MIX</div>
-                <div class="blend-pill">MOD</div>
+                <div class="blend-pill">Mix</div>
+                <div class="blend-pill">Mod</div>
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
                 <div class="sel">
-                  <div class="sel-label">PHASE</div>
+                  <div class="sel-label">Phase</div>
                   <div class="sel-value" id="osc-a-phase-mode-value">Random</div>
                   <select class="sel-select" data-syn="SYN_OSC_A_PHASE_MODE" id="osc-a-phase-mode-select" aria-label="PHASE mode">
                     <option value="0">Retrig</option>
@@ -4478,7 +4551,7 @@ body {
                   </select>
                 </div>
                 <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
-                  <div class="sel-value warp2-mode-value" id="osc-a-warp2-mode">NONE</div>
+                  <div class="sel-value warp2-mode-value" id="osc-a-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-a-warp2-val" data-warp2-mode="SYN_OSC_A_WARP2_MODE" data-warp2-amt="SYN_OSC_A_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
@@ -4509,11 +4582,11 @@ body {
               </div>
               <!-- BOTTOM ROW: 5 tuning knobs (OCT/SEMI/CENT/LEVEL/PAN) -->
               <div class="osc-knobs">
-                <div class="knob" data-syn="SYN_OSC_A_OCT"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_SEMI"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_CENT"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_LEVEL"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_PAN"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_OCT"><div class="knob-ring"></div><div class="knob-label">Oct</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SEMI"><div class="knob-ring"></div><div class="knob-label">Semi</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_CENT"><div class="knob-ring"></div><div class="knob-label">Cent</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_LEVEL"><div class="knob-ring"></div><div class="knob-label">Level</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
               </div>
             </div>
           </div>
@@ -4524,17 +4597,17 @@ body {
               <div class="arr">→</div>
               <div class="ab">B</div>
             </div>
-            <div class="cross-sync act">SYNC</div>
+            <div class="cross-sync act">Sync</div>
             <div class="cross-knobs">
               <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">FM</div></div>
-              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">RING</div></div>
-              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">MIX</div></div>
+              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">Ring</div></div>
+              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">Mix</div></div>
             </div>
           </div>
 
           <div class="device osc" id="osc-b-device">
             <div class="device-label-row">
-              <div class="device-label">OSC · B</div>
+              <div class="device-label">Osc · B</div>
               <button class="swap-btn" type="button" id="osc-b-swap-btn" aria-label="Toggle engine pills / engine controls"></button>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -4594,11 +4667,11 @@ body {
               <!-- engine pills row (text style, data-eng-b-idx to avoid OSC A handler collision) -->
               <div class="engine-pills">
                 <div class="eng txt act" data-eng-b-idx="0">WT</div>
-                <div class="eng txt" data-eng-b-idx="1">SAMP</div>
-                <div class="eng txt" data-eng-b-idx="2">GRAN</div>
-                <div class="eng txt" data-eng-b-idx="3">SPEC</div>
+                <div class="eng txt" data-eng-b-idx="1">Samp</div>
+                <div class="eng txt" data-eng-b-idx="2">Gran</div>
+                <div class="eng txt" data-eng-b-idx="3">Spec</div>
                 <div class="eng txt" data-eng-b-idx="4">FM</div>
-                <div class="eng txt" data-eng-b-idx="5">NOISE</div>
+                <div class="eng txt" data-eng-b-idx="5">Noise</div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
@@ -4610,11 +4683,11 @@ body {
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
-                <div class="knob" data-syn="SYN_OSC_B_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT POS</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">WARP</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">SPECTRAL</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">FOLD</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">BLUR</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
             </div>
 
@@ -4626,13 +4699,13 @@ body {
                 <div class="blend-pill">B2</div>
                 <div class="blend-pill">B3</div>
                 <div class="blend-pill">B4</div>
-                <div class="blend-pill">MIX</div>
-                <div class="blend-pill">MOD</div>
+                <div class="blend-pill">Mix</div>
+                <div class="blend-pill">Mod</div>
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
                 <div class="sel">
-                  <div class="sel-label">PHASE</div>
+                  <div class="sel-label">Phase</div>
                   <div class="sel-value" id="osc-b-phase-mode-value">Random</div>
                   <select class="sel-select" data-syn="SYN_OSC_B_PHASE_MODE" id="osc-b-phase-mode-select" aria-label="PHASE mode">
                     <option value="0">Retrig</option>
@@ -4642,7 +4715,7 @@ body {
                   </select>
                 </div>
                 <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
-                  <div class="sel-value warp2-mode-value" id="osc-b-warp2-mode">NONE</div>
+                  <div class="sel-value warp2-mode-value" id="osc-b-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-b-warp2-val" data-warp2-mode="SYN_OSC_B_WARP2_MODE" data-warp2-amt="SYN_OSC_B_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
@@ -4673,11 +4746,11 @@ body {
               </div>
               <!-- BOTTOM ROW: 5 tuning knobs (OCT/SEMI/CENT/LEVEL/PAN) -->
               <div class="osc-knobs">
-                <div class="knob" data-syn="SYN_OSC_B_OCT"><div class="knob-ring"></div><div class="knob-label">OCT</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_SEMI"><div class="knob-ring"></div><div class="knob-label">SEMI</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_CENT"><div class="knob-ring"></div><div class="knob-label">CENT</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_LEVEL"><div class="knob-ring"></div><div class="knob-label">LEVEL</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_PAN"><div class="knob-ring"></div><div class="knob-label">PAN</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_OCT"><div class="knob-ring"></div><div class="knob-label">Oct</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_SEMI"><div class="knob-ring"></div><div class="knob-label">Semi</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_CENT"><div class="knob-ring"></div><div class="knob-label">Cent</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_LEVEL"><div class="knob-ring"></div><div class="knob-label">Level</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
               </div>
             </div>
           </div>
@@ -4686,13 +4759,13 @@ body {
         <!-- Row 2: FILTER · FLOW -->
         <div class="row-filter-vl">
           <div class="device filter" id="filter-device">
-            <div class="device-label">FILTER</div>
+            <div class="device-label">Filter</div>
             <div class="filter-toggle">
               <div class="ft-pill act" id="filter-pill-1">1</div>
               <div class="ft-pill" id="filter-pill-2">2</div>
               <button class="swap-btn" type="button" id="filter-swap-btn" aria-label="Toggle filter back panel (mix + routing)"></button>
             </div>
-            <div class="dd-trigger front-only"><span>LADDER LP · 24</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+            <div class="dd-trigger front-only"><span>Ladder LP · 24</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
             <div class="filter-display front-only">
               <svg viewBox="0 0 280 60" preserveAspectRatio="none">
                 <path d="M0,40 L120,40 Q150,40 165,18 Q180,2 220,55 L280,58" stroke="#ECE8F2" stroke-width="1.3" fill="none"/>
@@ -4700,29 +4773,29 @@ body {
               </svg>
             </div>
             <div class="filter-knobs front-only">
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">CUT</div></div>
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">RES</div></div>
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">DRV</div></div>
-              <div class="knob"><div class="knob-ring"></div><div class="knob-label">ENV</div></div>
+              <div class="knob"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+              <div class="knob"><div class="knob-ring"></div><div class="knob-label">Res</div></div>
+              <div class="knob"><div class="knob-ring"></div><div class="knob-label">Drv</div></div>
+              <div class="knob"><div class="knob-ring"></div><div class="knob-label">Env</div></div>
             </div>
             <!-- BACK VIEW (visible when .device.swapped) — per-filter MIX + shared routing -->
             <div class="filter-back back-only">
               <div class="fb-routing">
-                <div class="fb-label">ROUTING</div>
+                <div class="fb-label">Routing</div>
                 <div class="fb-seg" id="filter-routing-seg">
-                  <div class="fb-opt act" data-route="0">SERIES</div>
-                  <div class="fb-opt" data-route="1">PARALLEL</div>
+                  <div class="fb-opt act" data-route="0">Series</div>
+                  <div class="fb-opt" data-route="1">Parallel</div>
                 </div>
               </div>
               <div class="fb-mix">
-                <div class="knob" id="filter-mix-knob"><div class="knob-ring"></div><div class="knob-label">MIX</div></div>
+                <div class="knob" id="filter-mix-knob"><div class="knob-ring"></div><div class="knob-label">Mix</div></div>
               </div>
             </div>
           </div>
 
           <div class="device flow">
-            <div class="device-label">FLOW</div>
-            <div class="device-corner" style="color: var(--purple-400)">TERRAIN</div>
+            <div class="device-label">Flow</div>
+            <div class="device-corner" style="color: var(--purple-400)">Terrain</div>
             <div class="flow-modes">
               <div class="flow-mode act"><svg><use href="#ic-anchor"/></svg></div>
               <div class="flow-mode"><svg><use href="#ic-trail"/></svg></div>
@@ -4748,11 +4821,11 @@ body {
                 </g>
               </svg>
               <div class="vis-knobs">
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">TIME</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">SHAPE</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">SCATTER</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">TRAJ</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">MORPH</div></div>
+                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Time</div></div>
+                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Scatter</div></div>
+                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Traj</div></div>
+                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Morph</div></div>
               </div>
             </div>
           </div>
@@ -4785,7 +4858,7 @@ body {
                 <line x1="0" y1="62" x2="280" y2="62" stroke="rgba(201,190,239,0.22)" stroke-width="0.6"/>
                 <path id="env-fill" d="" fill="url(#env-grad)"/>
                 <path id="env-line" d="" stroke="#C9BEEF" stroke-width="1.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
-                <text id="env-loop-tag" x="8" y="12" fill="#8B5CF6" font-size="6.5" letter-spacing="2" style="display:none">LOOP</text>
+                <text id="env-loop-tag" x="8" y="12" fill="#8B5CF6" font-size="6.5" letter-spacing="2" style="display:none">Loop</text>
                 <text id="env-readout" x="140" y="12" text-anchor="middle" fill="#908599" font-size="7.5" letter-spacing="1" style="display:none"></text>
                 <g id="env-nodes"></g>
                 <circle id="env-follow" cx="-10" cy="-10" r="2.6" fill="#A78BFA" style="opacity:0;filter:drop-shadow(0 0 4.5px rgba(196,181,253,0.85));pointer-events:none"/>
@@ -4801,40 +4874,15 @@ body {
           </div>
 
           <div class="device mod">
-            <div class="device-label">MODULATION</div>
-            <div class="device-corner">5 / 32 ROUTES</div>
-            <div class="lfo-stack">
-              <div class="lfo-tile">
-                <div class="lfo-tag">L1</div>
-                <svg class="lfo-shape" viewBox="0 0 100 16" preserveAspectRatio="none"><path d="M0,8 Q12.5,0 25,8 T50,8 T75,8 T100,8" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
-                <div class="lfo-rate"><span>1 / 4</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
-              </div>
-              <div class="lfo-tile">
-                <div class="lfo-tag">L2</div>
-                <svg class="lfo-shape" viewBox="0 0 100 16" preserveAspectRatio="none"><path d="M0,16 L25,0 L50,16 L75,0 L100,16" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
-                <div class="lfo-rate"><span>2 bar</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
-              </div>
-              <div class="lfo-tile">
-                <div class="lfo-tag">L3</div>
-                <svg class="lfo-shape" viewBox="0 0 100 16" preserveAspectRatio="none"><polyline points="0,12 12,12 12,4 30,4 30,14 50,14 50,2 70,2 70,11 88,11 88,5 100,5" stroke="#ECE8F2" stroke-width="1" fill="none"/></svg>
-                <div class="lfo-rate"><span>FREE</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
-              </div>
-            </div>
-            <div class="patchbay">
-              <div class="patch-row"><div class="patch-src">L1</div><div>→ OSC A · WAVE</div><div class="patch-amt pos"></div><div class="patch-val">+32%</div></div>
-              <div class="patch-row"><div class="patch-src">L2</div><div>→ FILTER · CUT</div><div class="patch-amt pos"></div><div class="patch-val">+18%</div></div>
-              <div class="patch-row"><div class="patch-src">L3</div><div>→ FLOW · TIME</div><div class="patch-amt neg"></div><div class="patch-val">−22%</div></div>
-              <div class="patch-row"><div class="patch-src">ENV</div><div>→ OSC B · PITCH</div><div class="patch-amt pos"></div><div class="patch-val">+8%</div></div>
-              <div class="patch-hint">DRAG SOURCE → KNOB · ADD ROUTE</div>
-            </div>
+            <div id="mod-engine"></div>
           </div>
         </div>
 
         <!-- Row 4: RIBBON · VOICE META -->
         <div class="ribbon-row">
           <div class="ribbon-device">
-            <div class="ribbon-label">RIBBON</div>
-            <div class="ribbon-cs80">CS-80 EXPRESSION</div>
+            <div class="ribbon-label">Ribbon</div>
+            <div class="ribbon-cs80">CS-80 Expression</div>
             <div class="ribbon-strip">
               <svg viewBox="0 0 660 44" preserveAspectRatio="none">
                 <g stroke="rgba(236,232,242,0.10)" stroke-width="0.5">
@@ -4867,22 +4915,22 @@ body {
               </svg>
             </div>
             <div class="ribbon-controls">
-              <div class="ribbon-mode-dd"><span>PITCH DRIFT</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">RANGE</div></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">GLIDE</div></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">DRIFT</div></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">RETURN</div></div>
+              <div class="ribbon-mode-dd"><span>Pitch Drift</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
+              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Range</div></div>
+              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Glide</div></div>
+              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Drift</div></div>
+              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Return</div></div>
             </div>
           </div>
 
           <div class="ribbon-divider"></div>
 
           <div class="voice-meta">
-            <div class="voice-toggle-row voice-mode-row"><button class="voice-toggle" data-syn-toggle="SYN_MONO">MONO</button><button class="voice-toggle" data-syn-toggle="SYN_LEGATO">LEGATO</button></div>
-            <div class="voice-row" data-syn-row="SYN_VOICES"><svg><use href="#ic-voices"/></svg><span>VOICES</span><b>8</b></div>
-            <div class="voice-row" data-syn-row="SYN_PORTA"><svg><use href="#ic-trail"/></svg><span>PORTA</span><b>0</b></div>
-            <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><svg><use href="#ic-horizon"/></svg><span>CURVE</span><b>50</b></div>
-            <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">ALWAYS</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">SCALED</button></div>
+            <div class="voice-toggle-row voice-mode-row"><button class="voice-toggle" data-syn-toggle="SYN_MONO">Mono</button><button class="voice-toggle" data-syn-toggle="SYN_LEGATO">Legato</button></div>
+            <div class="voice-row" data-syn-row="SYN_VOICES"><svg><use href="#ic-voices"/></svg><span>Voices</span><b>8</b></div>
+            <div class="voice-row" data-syn-row="SYN_PORTA"><svg><use href="#ic-trail"/></svg><span>Porta</span><b>0</b></div>
+            <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><svg><use href="#ic-horizon"/></svg><span>Curve</span><b>50</b></div>
+            <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">Always</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">Scaled</button></div>
           </div>
         </div>
 
@@ -4898,7 +4946,7 @@ body {
           <option value="2">GRAN (soon)</option>
           <option value="3">SPEC (soon)</option>
           <option value="4">FM</option>
-          <option value="5">NOISE</option>
+          <option value="5">Noise</option>
         </select>
         <!-- SYN_OSC_A_WT_PRESET, SYN_OSC_A_WT_FRAME, SYN_OSC_A_WARP_MODE, SYN_OSC_A_WARP_AMOUNT
              moved to visible locations (corner preset select + engine-controls row) in P4-T10 -->
@@ -17683,6 +17731,293 @@ async function restoreThemeFromBackend() {
 init();
 // Fire theme restore independently (not blocked by initJuceBindings)
 restoreThemeFromBackend();
+</script>
+
+<script>
+/* MOD V4 component */
+(function(){
+  if(window.__modv4)return; window.__modv4=true;
+  var SHORT=['Sine','Tri','Saw','Saw↓','Sqr','S&H','Rand'];      // idx -> LFO1_SHAPE choice (no needless caps; S&H mandatory)
+  var NSHAPE=7;
+  var DIVS=['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32','1/4.','1/8.','1/4T','1/8T','1/16T'];
+  var NDIV=DIVS.length;
+  var SH=[ .65,.2,.85,.4,.95,.15,.7,.35 ], RP=[ .5,.85,.15,.7,.3,.95,.2,.6,.4,.5 ];
+  var CUSTOM=[[0,.5],[.18,.92],[.4,.2],[.62,.78],[.82,.35],[1,.5]];
+  function smooth(a,t){var f=t*(a.length-1),i=Math.floor(f),fr=f-i,x=a[i],y=a[Math.min(i+1,a.length-1)],m=(1-Math.cos(fr*Math.PI))/2;return x+(y-x)*m;}
+  function yfor(k,t){var c=3,p=(t*c)%1;
+    if(k===0)return Math.sin(t*Math.PI*2*c); if(k===1)return p<0.5?(p*4-1):(3-p*4);
+    if(k===2)return p*2-1; if(k===3)return 1-p*2; if(k===4)return p<0.5?1:-1;
+    if(k===5){var i=Math.floor(t*SH.length)%SH.length;return SH[i]*2-1;}
+    if(k===6)return smooth(RP,t)*2-1; return 0;}
+  function waveSVG(w,h,k,amp,mid,phOff){mid=mid||h/2;phOff=phOff||0;var n=200,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,(t+phOff)%1)*amp).toFixed(1)+' ';}
+    var fillD='M0 '+mid+' '+d.replace(/^M/,'L')+'L'+w+' '+mid+' Z';
+    var gh=[.25,.5,.75].map(function(g){return '<line class="'+(g===0.5?'mid':'')+'" x1="0" y1="'+(h*g).toFixed(1)+'" x2="'+w+'" y2="'+(h*g).toFixed(1)+'"/>';}).join('');
+    var gv=[.1,.2,.3,.4,.5,.6,.7,.8,.9].map(function(g){return '<line class="'+(g===0.5?'mid':'')+'" x1="'+(w*g).toFixed(1)+'" y1="0" x2="'+(w*g).toFixed(1)+'" y2="'+h+'"/>';}).join('');
+    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="mv-grid">'+gh+gv+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
+      '<line class="mv-play" id="mv-ph" x1="0" y1="0" x2="0" y2="'+h+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+mid+'" r="2.4"/></svg>';}
+  function icon(k){var w=20,h=11,mid=h/2,n=60,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,t)*(h*0.34)).toFixed(1)+' ';}return '<svg viewBox="0 0 '+w+' '+h+'" fill="none" stroke="currentColor" stroke-width="1.3"><path d="'+d+'"/></svg>';}
+  var CHEV='<svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>';
+  var EXPAND='<svg class="mv-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>';
+  var RINGBG=function(v){return 'conic-gradient(from 220deg,var(--knob-track) 140deg,var(--purple-400) 140deg '+(140+(v-.5)*280)+'deg,var(--knob-track) 0 280deg,transparent 0)';};
+  var DONBG=function(v){return 'conic-gradient(from 220deg,#B794FF '+(v*280)+'deg,rgba(120,118,160,0.35) 0 280deg,transparent 0)';};
+
+  function ssGet(id){try{return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null;}catch(e){return null;}}
+  var LP={}, st={shape:0,sync:true,div:5,rateHz:2,depth:.35,phase:0,tab:1}, ph=0, lastT=0, root, errEl;
+  function cur(){ return LP[st.tab]||{}; }
+  function err(m){if(errEl){errEl.textContent=m;errEl.style.display='block';}if(window.console)console.error('mod-v4:',m);}
+
+  function pull(){ var C=cur();
+    if(C.shape) st.shape=Math.round(C.shape.getNormalisedValue()*(NSHAPE-1));
+    if(C.sync)  st.sync =C.sync.getNormalisedValue()>0.5;
+    if(C.div)   st.div  =Math.round(C.div.getNormalisedValue()*(NDIV-1));
+    if(C.rate)  st.rateHz=C.rate.getScaledValue();
+    if(C.depth) st.depth=C.depth.getScaledValue();
+    if(C.phase) st.phase=C.phase.getScaledValue();
+  }
+  function setNorm(s,v){if(s){try{s.setNormalisedValue(Math.max(0,Math.min(1,v)));}catch(e){}}}
+
+  var AMP=23, MID=40;
+  function front(){
+    var rate = st.sync
+      ? '<span class="mv-c" id="mv-div">'+DIVS[st.div]+' '+CHEV+'</span>'
+      : '<span class="mv-c drag" id="mv-rate"><span id="mv-rv">'+st.rateHz.toFixed(2)+'</span> Hz <span class="ar">⇅</span></span>';
+    var dv=(st.depth>=0?'+':'')+Math.round(st.depth*100);
+    var tabs='<div class="mv-tabs">'+[1,2,3,4,5].map(function(n){return '<span class="t'+(n===st.tab?' act':'')+'" data-tab="'+n+'">'+n+'</span>';}).join('')+'</div>';
+    return '<div class="mv-scope">'+waveSVG(456,96,st.shape,AMP,MID,st.phase)+'</div>'
+      +'<div class="mv-ov top">'+EXPAND+'</div>'
+      +'<div class="mv-ov bot">'
+        +'<span class="mv-c" id="mv-shape"><span class="ic">'+icon(st.shape)+'</span> '+SHORT[st.shape]+' '+CHEV+'</span>'
+        +rate
+        +'<span class="mv-seg"><b class="'+(st.sync?'on':'off')+'" id="mv-bpm">BPM</b> · <b class="'+(st.sync?'off':'on')+'" id="mv-hz">Hz</b></span>'
+        +'<span class="mv-c drag" id="mv-shift" title="slide the LFO"><svg viewBox="0 0 14 10" width="13" height="9" style="opacity:.8" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3 L1 5 L4 7 M10 3 L13 5 L10 7 M1 5 H13"/></svg> <span id="mv-shv">'+Math.round(st.phase*360)+'°</span></span>'
+        +tabs
+        +'<div class="mv-dep"><span class="l">Dep</span><div class="mv-ring" id="mv-depth" style="background:'+RINGBG((st.depth+1)/2)+'"></div><span class="v">'+dv+'</span></div>'
+      +'</div>'
+      +'<div class="mv-err"></div>';
+  }
+  function render(){ root.innerHTML=front(); errEl=root.querySelector('.mv-err'); bindFront(); }
+
+  // ---- body-level menu (glass) ----
+  var menu=document.createElement('div'); menu.className='mv-menu'; document.body.appendChild(menu);
+  function openMenu(items,cur,atEl,cb){
+    menu.innerHTML=items.map(function(it,i){return '<div class="'+(i===cur?'cur':'')+'" data-i="'+i+'">'+(it.ic||'')+'<span>'+it.t+'</span></div>';}).join('');
+    var r=atEl.getBoundingClientRect();
+    menu.style.left=r.left+'px'; menu.style.top=''; menu.style.bottom=(window.innerHeight-r.top+6)+'px';
+    menu.classList.add('open');
+    menu.querySelectorAll('div[data-i]').forEach(function(d){ d.onclick=function(){ cb(+d.getAttribute('data-i')); menu.classList.remove('open'); }; });
+  }
+  document.addEventListener('mousedown',function(e){ if(menu.classList.contains('open') && !menu.contains(e.target)) menu.classList.remove('open'); }, true);
+
+  function bindFront(){
+    var sb=root.querySelector('#mv-shape');
+    if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s,i){return {t:s,ic:icon(i)};}), st.shape, sb, function(i){ setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; render(); }); };
+    var dv=root.querySelector('#mv-div');
+    if(dv)dv.onclick=function(){ openMenu(DIVS.map(function(s){return {t:s};}), st.div, dv, function(i){ setNorm(cur().div,i/(NDIV-1)); st.div=i; render(); }); };
+    var bpm=root.querySelector('#mv-bpm'), hz=root.querySelector('#mv-hz');
+    if(bpm)bpm.onclick=function(){ setNorm(cur().sync,1); st.sync=true; render(); };
+    if(hz)hz.onclick=function(){ setNorm(cur().sync,0); st.sync=false; render(); };
+    var rt=root.querySelector('#mv-rate');
+    if(rt)rt.onmousedown=function(e){ e.preventDefault(); var R=cur().rate, y0=e.clientY, v0=R?R.getNormalisedValue():0;
+      function mv(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.005)); setNorm(R,nv); if(R){st.rateHz=R.getScaledValue(); var rv=root.querySelector('#mv-rv'); if(rv)rv.textContent=st.rateHz.toFixed(2);} }
+      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
+    var dp=root.querySelector('#mv-depth');
+    if(dp)dp.onmousedown=function(e){ e.preventDefault(); var D=cur().depth, y0=e.clientY, v0=D?D.getNormalisedValue():.5;
+      function mv(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.005)); setNorm(D,nv); if(D){st.depth=D.getScaledValue(); render();} }
+      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
+    var sf=root.querySelector('#mv-shift');
+    if(sf)sf.onmousedown=function(e){ e.preventDefault(); var P=cur().phase, x0=e.clientX, v0=P?P.getNormalisedValue():0;
+      function mv(ev){ var nv=((v0+(ev.clientX-x0)*0.004)%1+1)%1; setNorm(P,nv); if(P){st.phase=P.getScaledValue(); var sv=root.querySelector('#mv-shv'); if(sv)sv.textContent=Math.round(st.phase*360)+'°'; var sc=root.querySelector('.mv-scope'); if(sc)sc.innerHTML=waveSVG(456,96,st.shape,AMP,MID,st.phase);} }
+      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
+    root.querySelectorAll('.mv-tabs .t').forEach(function(t){ t.onclick=function(){ st.tab=+t.getAttribute('data-tab'); pull(); render(); }; });
+    var ex=root.querySelector('.mv-exp'); if(ex)ex.onclick=openExt;
+  }
+
+  // ---- toast ----
+  var to=document.createElement('div'); to.className='mv-toast'; document.body.appendChild(to); var toT;
+  function toast(m){ to.textContent=m; to.style.opacity='1'; clearTimeout(toT); toT=setTimeout(function(){to.style.opacity='0';},1400); }
+
+  // ---- extender (body-level, draggable) ----
+  var ext=document.createElement('div'); ext.className='mv-ext'; document.body.appendChild(ext); var extPos=null;
+  function editScope(w,h){var N=CUSTOM,d='';N.forEach(function(p,i){var x=p[0]*w,y=h-6-p[1]*(h-12);if(i===0)d+='M'+x+' '+y+' ';else{var pv=N[i-1],cx=(pv[0]+p[0])/2*w;d+='C'+cx+' '+(h-6-pv[1]*(h-12))+' '+cx+' '+y+' '+x+' '+y+' ';}});
+    var fillD=d+'L'+w+' '+h+' L0 '+h+' Z';
+    var gh=[.25,.5,.75].map(function(g){return '<line class="gl2" x1="0" y1="'+(h*g).toFixed(0)+'" x2="'+w+'" y2="'+(h*g).toFixed(0)+'"/>';}).join('');
+    var gv=[.2,.4,.6,.8].map(function(g){return '<line class="gl2" x1="'+(w*g).toFixed(0)+'" y1="0" x2="'+(w*g).toFixed(0)+'" y2="'+h+'"/>';}).join('');
+    var dots=N.map(function(p){return '<circle class="nd" cx="'+(p[0]*w).toFixed(0)+'" cy="'+(h-6-p[1]*(h-12)).toFixed(0)+'" r="3.4"/>';}).join('');
+    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+gh+gv+'<path class="fl" d="'+fillD+'"/><path class="st" d="'+d+'"/></svg><svg viewBox="0 0 '+w+' '+h+'" style="position:absolute;inset:0">'+dots+'</svg>';}
+  function MK(l,v,n){return '<div class="mk"><div class="dn" style="background:'+DONBG(n)+'"></div><div class="kl">'+l+'</div><div class="kv">'+v+'</div></div>';}
+  function buildExt(){
+    ext.innerHTML='<div class="h"><span class="g">⠿</span><span class="tt">LFO</span><span class="tg">'+st.tab+'</span><span class="x">✕</span></div>'
+      +'<div class="b">'
+      +'<div class="es">'+editScope(290,110)+'<span class="eh">drag nodes → CUSTOM (Stage 4)</span></div>'
+      +'<div><div class="gl">Rate</div><div class="g3"><div class="pill" id="ex-shape"><span class="ic">'+icon(st.shape)+'</span>'+SHORT[st.shape]+CHEV+'</div><div class="pill" id="ex-div"><span class="k">Sync</span>'+DIVS[st.div]+CHEV+'</div><div class="pill" id="ex-unit"><span class="k">Unit</span>'+(st.sync?'BPM':'Hz')+CHEV+'</div></div></div>'
+      +'<div><div class="gl">Behaviour</div><div class="g4"><div class="pill"><span class="k">Trig</span>Free</div><div class="pill"><span class="k">Dir</span>Up</div><div class="tog">Trip</div><div class="tog on">Mono</div></div></div>'
+      +'<div><div class="gl">Motion</div><div class="mo">'+MK('Rise','12ms',.3)+MK('Delay','0',0)+MK('Smooth','30%',.45)+MK('Phase','0°',.5)+'</div></div>'
+      +'</div>';
+    ext.querySelector('.x').onclick=function(){ext.classList.remove('open');};
+    var sh=ext.querySelector('#ex-shape'); if(sh)sh.onclick=function(){ openMenu(SHORT.map(function(s,i){return {t:s,ic:icon(i)};}), st.shape, sh, function(i){ setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; buildExt(); render(); }); };
+    var ed=ext.querySelector('#ex-div'); if(ed)ed.onclick=function(){ if(!st.sync){toast('switch to BPM to use divisions');return;} openMenu(DIVS.map(function(s){return {t:s};}), st.div, ed, function(i){ setNorm(cur().div,i/(NDIV-1)); st.div=i; buildExt(); render(); }); };
+    var eu=ext.querySelector('#ex-unit'); if(eu)eu.onclick=function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); buildExt(); render(); };
+    // drag header
+    var h=ext.querySelector('.h'); h.onmousedown=function(e){ if(e.target.classList.contains('x'))return; e.preventDefault(); h.classList.add('grab'); var r=ext.getBoundingClientRect(); var dx=e.clientX-r.left, dy=e.clientY-r.top;
+      function mv(ev){ extPos={x:Math.max(4,Math.min(window.innerWidth-ext.offsetWidth-4,ev.clientX-dx)),y:Math.max(4,Math.min(window.innerHeight-40,ev.clientY-dy))}; ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; }
+      function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
+  }
+  function openExt(){ buildExt(); if(!extPos){ var r=root.getBoundingClientRect(); extPos={x:Math.min(window.innerWidth-330, r.left+r.width-316), y:Math.max(8, r.top-120)}; } ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; ext.classList.add('open'); }
+
+  // ---- live playhead + follower (JS-computed so it rides every LFO's shape) ----
+  window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
+  function tick(t){ if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
+    ph+=dt*(st.rateHz||1); if(ph>=1)ph-=Math.floor(ph);
+    var pl=root&&root.querySelector('#mv-ph'), fd=root&&root.querySelector('#mv-fd');
+    if(pl){ var x=ph*456; pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
+    if(fd){ fd.setAttribute('cx',(ph*456).toFixed(1)); fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*AMP).toFixed(1)); }
+    requestAnimationFrame(tick); }
+
+  function boot(){
+    root=document.getElementById('mod-engine');
+    if(!root){ return; }
+    [1,2,3,4,5].forEach(function(n){ LP[n]={ shape:ssGet('LFO'+n+'_SHAPE'), sync:ssGet('LFO'+n+'_SYNC'), div:ssGet('LFO'+n+'_DIV'), rate:ssGet('LFO'+n+'_RATE'), depth:ssGet('LFO'+n+'_DEPTH'), phase:ssGet('LFO'+n+'_PHASE') }; });
+    pull(); render();
+    // re-render on external (automation/host) changes of the ACTIVE lfo
+    [1,2,3,4,5].forEach(function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s=LP[n][k]; if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); });
+    requestAnimationFrame(tick);
+  }
+  var tries=0;
+  (function wait(){ if(window.Juce&&window.Juce.getSliderState){ boot(); } else if(tries++<60){ setTimeout(wait,150); } else { boot(); } })();
+})();
+</script>
+
+
+<script>
+/* FILTER ANALYZER v2 */
+(function(){
+  if(window.__filtAna)return; window.__filtAna=true;
+  var st=document.createElement('style'); st.textContent=
+    '#syn-panel .device.filter{position:relative;}'+
+    '#syn-panel .device.filter:not(.swapped){padding:0;overflow:hidden;background:var(--bg-hero);}'+
+    '#syn-panel .device.filter .filt-bg{position:absolute;inset:0;z-index:0;}'+
+    '#syn-panel .device.filter .filt-bg canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}'+
+    '#syn-panel .device.filter.swapped .filt-bg{display:none;}'+
+    '#syn-panel .device.filter .filter-display{display:none;}'+
+    '#syn-panel .device.filter:not(.swapped) .dd-trigger{position:absolute;top:8px;left:11px;z-index:3;height:auto;min-height:0;padding:0;width:auto;max-width:calc(100% - 88px);background:transparent;border:none;border-radius:0;color:rgba(255,255,255,.62);font-size:9px;letter-spacing:1.1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);gap:5px;}'+
+    '#syn-panel .device.filter:not(.swapped) .dd-trigger:hover{color:#fff;border:none;background:transparent;}'+
+    '#syn-panel .device.filter:not(.swapped) .dd-trigger .dd-chev{color:inherit;opacity:.6;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle{top:7px;right:11px;z-index:3;gap:7px;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill{width:auto;min-width:0;height:auto;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:10px;font-weight:400;text-shadow:0 1px 3px rgba(0,0,0,.9);}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill.act{background:transparent;color:#fff;font-weight:600;border:none;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .swap-btn{background:transparent;border:none;color:rgba(255,255,255,.5);}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-knobs{position:absolute;left:0;right:0;bottom:5px;z-index:3;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 12px;background:none;}'+
+    '#syn-panel .device.filter .fk-em{display:flex;flex-direction:column;align-items:center;gap:1px;}'+
+    '#syn-panel .device.filter .fk-em canvas{width:100%;height:23px;cursor:ns-resize;}'+
+    '#syn-panel .device.filter .fk-em .lbl{font-size:7.5px;letter-spacing:.7px;color:rgba(255,255,255,.5);text-shadow:0 1px 2px rgba(0,0,0,.85);}'+
+    '#syn-panel .device.filter:not(.swapped) .filt-exp{width:13px;height:13px;color:rgba(255,255,255,.55);cursor:pointer;display:inline-flex;align-items:center;margin-left:2px;}'+
+    '#syn-panel .device.filter:not(.swapped) .filt-exp:hover{color:#fff;}'+
+    '.filt-ext{position:fixed;z-index:2147483645;width:470px;background:#12121F;border:1px solid rgba(140,130,180,0.45);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);display:none;font-family:-apple-system,sans-serif;}'+
+    '.filt-ext.open{display:block;}'+
+    '.filt-ext .fe-h{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.03);}'+
+    '.filt-ext .fe-h .fe-g{letter-spacing:2px;color:#4a4f68;font-size:10px;} .filt-ext .fe-h .fe-t{font-size:9px;letter-spacing:1.6px;color:#C5BFD2;font-weight:600;} .filt-ext .fe-h .fe-x{margin-left:auto;color:#908599;cursor:pointer;font-size:13px;}'+
+    '.filt-ext .fe-b{position:relative;height:250px;} .filt-ext .fe-b canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}';
+  document.head.appendChild(st);
+  // ---- spectrum (chained from existing EQ FFT push) ----
+  var bins=null, base=window.__terrainEqAnalyzer;
+  window.__terrainEqAnalyzer=function(d){ try{ bins=d.post; }catch(e){} if(base) base(d); };
+  var CAT=['lp','lp','hp','lp','lp','lp','hp','bp','notch','lp','comb','comb','comb','comb','formant','formant','formant','formant','lp','notch','notch','bp','comb','lp','lp','bp','lp','none'];
+  function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
+  function Q(res){ return 0.6+res*res*16; }
+  function mag(type,f,fc,res){ if(type==='none')return 1; var w=f/fc,Qf=Q(res),den=Math.sqrt(Math.pow(1-w*w,2)+Math.pow(w/Qf,2)),H;
+    if(type==='lp')H=1/den; else if(type==='hp')H=w*w/den; else if(type==='bp')H=(w/Qf)/den;
+    else if(type==='notch')H=Math.abs(1-w*w)/den;
+    else if(type==='comb'){ H=Math.abs(Math.cos(Math.PI*1.2*f/fc))*(1/Math.sqrt(1+Math.pow(w*0.25,2))); H=0.2+0.8*H; }
+    else if(type==='formant'){ var fps=[fc*0.7,fc*1.5,fc*2.7],H2=0; fps.forEach(function(fp,i){ var ww=f/fp,dd=Math.sqrt(Math.pow(1-ww*ww,2)+Math.pow(ww/Q(res*0.7+0.2),2)); H2+=(1/dd)*(1-i*0.22); }); H=H2/2.2; }
+    else H=1/den; return H*H; }
+  var SR=48000, FFT=4096;
+  function fAtX(x,w){ return 20*Math.pow(1000,x/w); }
+  function binMag(f){ if(!bins)return 0; var b=f*FFT/SR, i=Math.floor(b); if(i<0||i>=bins.length-1)return 0; var fr=b-i; return bins[i]*(1-fr)+bins[i+1]*fr; }
+  function specY(m,h){ var db=20*Math.log10(Math.max(m*2.2,1e-6)), top=3, bot=-72; return h*(1-(db-bot)/(top-bot)); }
+  function curveY(H,h){ var db=20*Math.log10(Math.max(H,1e-4)), top=26, bot=-40; return h*(1-(db-bot)/(top-bot)); }
+  var dpr=Math.min(window.devicePixelRatio||1,2), anaCv,anaCtx,cutS=null,resS=null,typeS=null;
+  function getP(){ if(!cutS)cutS=ss('SYN_FILTER1_CUT'); if(!resS)resS=ss('SYN_FILTER1_RES'); if(!typeS)typeS=ss('SYN_FILTER1_TYPE'); }
+  var extOpen=false, extCv=null, extCtx=null, ext=null;
+  function drawAnalyzer(){ if(anaCv) drawInto(anaCv,anaCtx); if(extOpen&&extCv) drawInto(extCv,extCtx); }
+  function drawInto(cv,ctx){
+    getP();
+    var r=cv.getBoundingClientRect(), W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
+    if(cv.width!==W) cv.width=W; if(cv.height!==H) cv.height=H;
+    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='rgba(139,92,246,0.10)'; ctx.lineWidth=dpr*0.5;
+    [100,1000,10000].forEach(function(fg){ var x=Math.log(fg/20)/Math.log(1000)*W; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); });
+    var fc=cutS?cutS.getScaledValue():1000, res=resS?resS.getScaledValue():0.3;
+    var ti=typeS?Math.round(typeS.getNormalisedValue()*(CAT.length-1)):0, type=CAT[ti]||'lp';
+    var N=Math.floor(W/dpr), spec=[], crv=[];
+    for(var i=0;i<=N;i++){ var x=i/N*W, f=fAtX(i/N*(W/dpr),W/dpr); spec.push([x,specY(binMag(f),H)]); crv.push([x,curveY(mag(type,f,fc,res),H)]); }
+    ctx.beginPath(); ctx.moveTo(0,H); spec.forEach(function(p){ctx.lineTo(p[0],p[1]);}); ctx.lineTo(W,H); ctx.closePath();
+    var g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'rgba(236,232,242,0.18)'); g.addColorStop(1,'rgba(236,232,242,0.012)'); ctx.fillStyle=g; ctx.fill();
+    ctx.beginPath(); spec.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }); ctx.strokeStyle='rgba(236,232,242,0.5)'; ctx.lineWidth=dpr*0.8; ctx.stroke();
+    if(type!=='none'){
+      ctx.save(); ctx.shadowColor='rgba(183,148,255,0.9)'; ctx.shadowBlur=6*dpr;
+      ctx.beginPath(); crv.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }); ctx.strokeStyle='#C9B3FF'; ctx.lineWidth=dpr*1.8; ctx.stroke(); ctx.restore();
+    }
+  }
+  // ---- emblems (TE×Serum: thin white, purple ping-pong follower, grab-aware) ----
+  function pingpong(x){ x=((x%2)+2)%2; return x<1?x:2-x; }
+  function envShape(x){ if(x<0.13)return x/0.13; if(x<0.42)return 1-(x-0.13)/0.29*0.4; if(x<0.72)return 0.6; return 0.6*(1-(x-0.72)/0.28); }
+  function eS(ctx,grab){ ctx.lineWidth=grab?1.7:1.35; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle=grab?'#FFFFFF':'#ECE8F2'; ctx.fillStyle='#B794FF'; ctx.shadowBlur=0; }
+  function emCUT(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,x1=cx+r,ytop=cy-r*0.5,ybot=cy+r*0.72,knee=cx-r*0.45+v*r*0.85;
+    function sy(px){ if(px<=knee)return ytop; var d=(px-knee)/(x1-knee); return ytop+d*d*(ybot-ytop); }
+    ctx.beginPath(); for(var i=0;i<=40;i++){var px=x0+i/40*2*r; i?ctx.lineTo(px,sy(px)):ctx.moveTo(px,sy(px));} ctx.stroke();
+    var p=grab?v:pingpong(t*0.5),px=x0+p*2*r; ctx.beginPath(); ctx.arc(px,sy(px),2,0,7); ctx.fill(); }
+  function emRES(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,amp=(0.12+v*0.62)*r,osc=grab?1:Math.sin(t*(3+v*8));
+    ctx.beginPath(); for(var i=0;i<=44;i++){var x=i/44,px=x0+x*2*r,py=cy-Math.sin(x*Math.PI)*amp*osc; i?ctx.lineTo(px,py):ctx.moveTo(px,py);} ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy-amp*osc,2,0,7); ctx.fill(); }
+  function emDRV(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,k=1+v*10,nrm=Math.tanh(k);
+    ctx.beginPath(); for(var i=0;i<=48;i++){var x=i/48,ph=x*Math.PI*2-t*3.2,s=Math.tanh(Math.sin(ph)*k)/nrm,px=cx-r+x*2*r,py=cy-s*r*0.7; i?ctx.lineTo(px,py):ctx.moveTo(px,py);} ctx.stroke(); }
+  function emENV(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,base=cy+r*0.7,top=base-r*1.35*(0.35+v*0.65);
+    function ey(x){return base-envShape(x)*(base-top);}
+    ctx.beginPath(); for(var i=0;i<=44;i++){var x=i/44,px=x0+x*2*r; i?ctx.lineTo(px,ey(x)):ctx.moveTo(px,ey(x));} ctx.stroke();
+    var p=grab?v:pingpong(t*0.45); ctx.beginPath(); ctx.arc(x0+p*2*r,ey(p),2,0,7); ctx.fill(); }
+  var EMD={cut:emCUT,res:emRES,drv:emDRV,env:emENV};
+  var EM=[{t:'cut',id:'SYN_FILTER1_CUT',l:'Cut'},{t:'res',id:'SYN_FILTER1_RES',l:'Res'},{t:'drv',id:'SYN_FILTER1_DRV',l:'Drv'},{t:'env',id:'SYN_FILTER1_ENV',l:'Env'}];
+  var emblems=[];
+  function regEmblem(cv,type,id){ var e={cv:cv,ctx:cv.getContext('2d'),type:type,id:id,ss:null,grab:false}; emblems.push(e);
+    cv.addEventListener('mousedown',function(ev){ ev.preventDefault(); e.grab=true; if(!e.ss)e.ss=ss(id); var y0=ev.clientY,v0=e.ss?e.ss.getNormalisedValue():0.5;
+      function mv(m){ if(e.ss){ var nv=Math.max(0,Math.min(1,v0+(y0-m.clientY)*0.006)); try{e.ss.setNormalisedValue(nv);}catch(x){} } }
+      function up(){ e.grab=false; document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }); }
+  function drawEmblems(t){ emblems.forEach(function(e){ if(!e.ss)e.ss=ss(e.id); var v=e.ss?e.ss.getNormalisedValue():0.5;
+    var r=e.cv.getBoundingClientRect(), W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
+    if(e.cv.width!==W)e.cv.width=W; if(e.cv.height!==H)e.cv.height=H;
+    var ctx=e.ctx; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H); ctx.setTransform(dpr,0,0,dpr,0,0); EMD[e.type](ctx,W/dpr,H/dpr,v,t,e.grab); }); }
+  function loop(ts){ var t=ts/1000; drawAnalyzer(); drawEmblems(t); requestAnimationFrame(loop); }
+  function buildExt(){
+    ext=document.createElement('div'); ext.className='filt-ext';
+    ext.innerHTML='<div class="fe-h"><span class="fe-g">⠇</span><span class="fe-t">Filter 1</span><span class="fe-x">✕</span></div><div class="fe-b"><canvas></canvas></div>';
+    document.body.appendChild(ext); extCv=ext.querySelector('canvas'); extCtx=extCv.getContext('2d');
+    ext.querySelector('.fe-x').onclick=function(){ ext.classList.remove('open'); extOpen=false; };
+    var h=ext.querySelector('.fe-h'); h.onmousedown=function(e){ if(e.target.classList.contains('fe-x'))return; e.preventDefault(); var r=ext.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;
+      function mv(ev){ ext.style.left=Math.max(4,Math.min(window.innerWidth-ext.offsetWidth-4,ev.clientX-dx))+'px'; ext.style.top=Math.max(4,Math.min(window.innerHeight-60,ev.clientY-dy))+'px'; }
+      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
+  }
+  function openExt(){ if(!ext)buildExt(); var dev=document.getElementById('filter-device'); var r=dev.getBoundingClientRect(); ext.style.left=Math.max(8,Math.min(window.innerWidth-478,r.left))+'px'; ext.style.top=Math.max(8,r.top-285)+'px'; ext.classList.add('open'); extOpen=true; }
+  function build(dev){
+    var bg=dev.querySelector('.filt-bg'); if(!bg){ bg=document.createElement('div'); bg.className='filt-bg'; bg.innerHTML='<canvas></canvas>'; dev.insertBefore(bg, dev.firstChild); }
+    anaCv=bg.querySelector('canvas'); anaCtx=anaCv.getContext('2d');
+    var kn=dev.querySelector('.filter-knobs');
+    if(kn && !kn.querySelector('.fk-em')){
+      kn.innerHTML=EM.map(function(e){ return '<div class="fk-em"><canvas data-em="'+e.t+'" data-id="'+e.id+'"></canvas><div class="lbl">'+e.l+'</div></div>'; }).join('');
+      kn.querySelectorAll('canvas').forEach(function(c){ regEmblem(c, c.getAttribute('data-em'), c.getAttribute('data-id')); });
+    }
+    var tg=dev.querySelector('.filter-toggle');
+    if(tg && !tg.querySelector('.filt-exp')){ var ic=document.createElement('div'); ic.className='filt-exp'; ic.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>'; ic.onclick=openExt; tg.appendChild(ic); }
+    requestAnimationFrame(loop);
+  }
+  var tries=0;
+  (function wait(){ var dev=document.getElementById('filter-device'); if(dev&&dev.querySelector('.filter-knobs')){ build(dev); return; } if(tries++<300) setTimeout(wait,100); })();
+})();
 </script>
 </body>
 </html>

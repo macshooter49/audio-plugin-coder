@@ -452,6 +452,7 @@ public:
     // Live AMP envelope output [0,1] of the most-active synth voice, for the UI
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
+    std::atomic<float> synthLfo1Vis { 0.f };   // Batch 1 — live L1 LFO value for the editor dot
     // Packed stage+fraction of the same voice (e.g. 2.37 = 37% through Attack), so the
     // UI dot rides the exact x-position on the curve. -1 = no voice sounding.
     std::atomic<float> ampEnvFollowVis { -1.f };

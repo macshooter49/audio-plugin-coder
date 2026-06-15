@@ -103,6 +103,23 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_PAN[]     = "SYN_OSC_A_PAN";      // float -1..+1
     constexpr char SYN_FILTER1_CUT[]   = "SYN_FILTER1_CUT";    // float 20..20000 Hz (skewed)
     constexpr char SYN_FILTER1_RES[]   = "SYN_FILTER1_RES";    // float 0..1
+    constexpr char LFO1_RATE[]         = "LFO1_RATE";          // Batch 1 — synth LFO 1 free rate, 0.01..40 Hz
+    constexpr char LFO1_DEPTH[]        = "LFO1_DEPTH";         // Batch 1 — L1 -> Filter 1 cutoff depth, -1..+1
+    constexpr char LFO1_SHAPE[]        = "LFO1_SHAPE";         // Mod redesign — L1 shape (Sine..Random, 7 choices)
+    constexpr char LFO1_SYNC[]         = "LFO1_SYNC";          // Mod redesign — L1 tempo-sync on/off (BPM vs HZ)
+    constexpr char LFO1_DIV[]          = "LFO1_DIV";           // Mod redesign — L1 sync division index (1/4, 1/8, trip, dot…)
+    // Mod redesign Stage 2 — LFOs 2..5 (same per-LFO param set as L1). All route to Filter 1 cutoff for now.
+    constexpr char LFO2_RATE[]  = "LFO2_RATE";   constexpr char LFO2_DEPTH[] = "LFO2_DEPTH";
+    constexpr char LFO2_SHAPE[] = "LFO2_SHAPE";  constexpr char LFO2_SYNC[]  = "LFO2_SYNC";   constexpr char LFO2_DIV[] = "LFO2_DIV";
+    constexpr char LFO3_RATE[]  = "LFO3_RATE";   constexpr char LFO3_DEPTH[] = "LFO3_DEPTH";
+    constexpr char LFO3_SHAPE[] = "LFO3_SHAPE";  constexpr char LFO3_SYNC[]  = "LFO3_SYNC";   constexpr char LFO3_DIV[] = "LFO3_DIV";
+    constexpr char LFO4_RATE[]  = "LFO4_RATE";   constexpr char LFO4_DEPTH[] = "LFO4_DEPTH";
+    constexpr char LFO4_SHAPE[] = "LFO4_SHAPE";  constexpr char LFO4_SYNC[]  = "LFO4_SYNC";   constexpr char LFO4_DIV[] = "LFO4_DIV";
+    constexpr char LFO5_RATE[]  = "LFO5_RATE";   constexpr char LFO5_DEPTH[] = "LFO5_DEPTH";
+    constexpr char LFO5_SHAPE[] = "LFO5_SHAPE";  constexpr char LFO5_SYNC[]  = "LFO5_SYNC";   constexpr char LFO5_DIV[] = "LFO5_DIV";
+    // Mod redesign — per-LFO PHASE (slides the waveform L/R), 0..1
+    constexpr char LFO1_PHASE[] = "LFO1_PHASE"; constexpr char LFO2_PHASE[] = "LFO2_PHASE"; constexpr char LFO3_PHASE[] = "LFO3_PHASE";
+    constexpr char LFO4_PHASE[] = "LFO4_PHASE"; constexpr char LFO5_PHASE[] = "LFO5_PHASE";
     constexpr char SYN_ENV_AMP_A[]     = "SYN_ENV_AMP_A";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_D[]     = "SYN_ENV_AMP_D";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1

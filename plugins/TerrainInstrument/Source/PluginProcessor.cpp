@@ -920,38 +920,99 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
 
+    // ── Batch 1 — Modulation (synth per-voice). LFO 1 free rate + its depth into
+    //    Filter 1 cutoff. These two drive the audible vertical slice; the full LFO
+    //    bank, sync, shapes, and the route matrix arrive in Batches 2–5.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::LFO1_RATE, 1 },
+        "LFO 1 Rate",
+        juce::NormalisableRange<float> (0.01f, 40.0f, 0.0f, 0.3f),
+        2.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::LFO1_DEPTH, 1 },
+        "LFO 1 Depth",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f),
+        0.35f));
+    // ── Mod redesign — LFO 1 shape / sync / division.
+    //    SHAPE indices match wc::LFOShape (Sine=0 … Random=6).
+    //    DIV indices match wc::kSyncDivisions exactly (so syncIdx = div index).
+    //    Default = BPM · 1/4 (= 2 Hz @ 120 bpm) so the default breathe is unchanged.
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::LFO1_SHAPE, 1 },
+        "LFO 1 Shape",
+        juce::StringArray { "SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "S&H", "RANDOM" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::LFO1_SYNC, 1 },
+        "LFO 1 Sync", true));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::LFO1_DIV, 1 },
+        "LFO 1 Division",
+        juce::StringArray { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T" },
+        5));
+    // Per-LFO PHASE (slides the waveform). 0..1, default 0.
+    for (auto* pid : { ParameterIDs::LFO1_PHASE, ParameterIDs::LFO2_PHASE, ParameterIDs::LFO3_PHASE, ParameterIDs::LFO4_PHASE, ParameterIDs::LFO5_PHASE })
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { pid, 1 }, juce::String (pid).replace ("LFO", "LFO ").replace ("_PHASE", " Phase"),
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    // ── Mod redesign Stage 2 — LFOs 2..5 (same set as L1). Default depth 0 (silent until dialed).
+    {
+        const juce::StringArray lfoShapes { "SINE","TRIANGLE","SAW UP","SAW DOWN","SQUARE","S&H","RANDOM" };
+        const juce::StringArray lfoDivs   { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T" };
+        auto addLfo = [&] (int n, const char* rate, const char* depth, const char* shape, const char* sync, const char* div)
+        {
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { rate, 1 },  "LFO " + juce::String (n) + " Rate",
+                juce::NormalisableRange<float> (0.01f, 40.0f, 0.0f, 0.3f), 2.0f));
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { depth, 1 }, "LFO " + juce::String (n) + " Depth",
+                juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                juce::ParameterID { shape, 1 }, "LFO " + juce::String (n) + " Shape", lfoShapes, 0));
+            layout.add (std::make_unique<juce::AudioParameterBool> (
+                juce::ParameterID { sync, 1 },  "LFO " + juce::String (n) + " Sync", true));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                juce::ParameterID { div, 1 },   "LFO " + juce::String (n) + " Division", lfoDivs, 5));
+        };
+        addLfo (2, ParameterIDs::LFO2_RATE, ParameterIDs::LFO2_DEPTH, ParameterIDs::LFO2_SHAPE, ParameterIDs::LFO2_SYNC, ParameterIDs::LFO2_DIV);
+        addLfo (3, ParameterIDs::LFO3_RATE, ParameterIDs::LFO3_DEPTH, ParameterIDs::LFO3_SHAPE, ParameterIDs::LFO3_SYNC, ParameterIDs::LFO3_DIV);
+        addLfo (4, ParameterIDs::LFO4_RATE, ParameterIDs::LFO4_DEPTH, ParameterIDs::LFO4_SHAPE, ParameterIDs::LFO4_SYNC, ParameterIDs::LFO4_DIV);
+        addLfo (5, ParameterIDs::LFO5_RATE, ParameterIDs::LFO5_DEPTH, ParameterIDs::LFO5_SHAPE, ParameterIDs::LFO5_SYNC, ParameterIDs::LFO5_DIV);
+    }
+
     // ── Batch 1 Filter — TYPE (27 choices, NONE last in enum but first in UI),
     //                     DRV (0..1 → 0..+24 dB drive), ENV (bipolar -1..+1).
     {
         juce::StringArray filterTypeChoices;
-        filterTypeChoices.add ("LADDER LP 24");
-        filterTypeChoices.add ("LADDER LP 12");
-        filterTypeChoices.add ("LADDER HP 24");
-        filterTypeChoices.add ("DIODE LP");
-        filterTypeChoices.add ("ACID 303");
+        // Display names: proper case, mandatory acronyms kept (LP/HP/BP/SVF/OB-X/4P/vowels).
+        filterTypeChoices.add ("Ladder LP 24");
+        filterTypeChoices.add ("Ladder LP 12");
+        filterTypeChoices.add ("Ladder HP 24");
+        filterTypeChoices.add ("Diode LP");
+        filterTypeChoices.add ("Acid 303");
         filterTypeChoices.add ("SVF LP");
         filterTypeChoices.add ("SVF HP");
         filterTypeChoices.add ("SVF BP");
-        filterTypeChoices.add ("SVF NOTCH");
+        filterTypeChoices.add ("SVF Notch");
         filterTypeChoices.add ("OB-X SVF");
-        filterTypeChoices.add ("COMB +");
-        filterTypeChoices.add ("COMB -");
-        filterTypeChoices.add ("COMB SHIMMER");
-        filterTypeChoices.add ("KARPLUS-STRONG");
-        filterTypeChoices.add ("FORMANT A");
-        filterTypeChoices.add ("FORMANT E");
-        filterTypeChoices.add ("FORMANT I");
-        filterTypeChoices.add ("FORMANT MORPH");
-        filterTypeChoices.add ("REVERB FILTER");
-        filterTypeChoices.add ("PHASER 4P");
-        filterTypeChoices.add ("PHASER 8P");
-        filterTypeChoices.add ("RING MOD");
-        filterTypeChoices.add ("BODE SHIFTER");
-        filterTypeChoices.add ("BIT-CRUSH");
-        filterTypeChoices.add ("WAVESHAPER");
-        filterTypeChoices.add ("GRAIN MASK");
-        filterTypeChoices.add ("REVERB FILTER 2");
-        filterTypeChoices.add ("NONE");
+        filterTypeChoices.add ("Comb +");
+        filterTypeChoices.add ("Comb -");
+        filterTypeChoices.add ("Comb Shimmer");
+        filterTypeChoices.add ("Karplus-Strong");
+        filterTypeChoices.add ("Formant A");
+        filterTypeChoices.add ("Formant E");
+        filterTypeChoices.add ("Formant I");
+        filterTypeChoices.add ("Formant Morph");
+        filterTypeChoices.add ("Reverb Filter");
+        filterTypeChoices.add ("Phaser 4P");
+        filterTypeChoices.add ("Phaser 8P");
+        filterTypeChoices.add ("Ring Mod");
+        filterTypeChoices.add ("Bode Shifter");
+        filterTypeChoices.add ("Bit-Crush");
+        filterTypeChoices.add ("Waveshaper");
+        filterTypeChoices.add ("Grain Mask");
+        filterTypeChoices.add ("Reverb Filter 2");
+        filterTypeChoices.add ("None");
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_FILTER1_TYPE, 1 },
             "Synth Filter 1 Type", filterTypeChoices, 0));   // default = LADDER LP 24 (was the hardwired one)
@@ -2245,10 +2306,49 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   rtDestB     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
         const float rtAmtB      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
 
+        // ── Batch 1 — assemble the synth modulation config from params + transport,
+        //    then publish it to every voice. One LFO (L1, sine, free rate) and one
+        //    default route L1 → Filter 1 cutoff (depth from LFO1_DEPTH) so the slice
+        //    is audible the instant it loads. Shape/sync/extra LFOs + dests: Batch 2+.
+        wc::ModConfig synModCfg;
+        {
+            struct LfoP { const char* shape; const char* sync; const char* div; const char* rate; const char* depth; const char* phase; };
+            static const LfoP lp[wc::NUM_LFOS] = {
+                { ParameterIDs::LFO1_SHAPE, ParameterIDs::LFO1_SYNC, ParameterIDs::LFO1_DIV, ParameterIDs::LFO1_RATE, ParameterIDs::LFO1_DEPTH, ParameterIDs::LFO1_PHASE },
+                { ParameterIDs::LFO2_SHAPE, ParameterIDs::LFO2_SYNC, ParameterIDs::LFO2_DIV, ParameterIDs::LFO2_RATE, ParameterIDs::LFO2_DEPTH, ParameterIDs::LFO2_PHASE },
+                { ParameterIDs::LFO3_SHAPE, ParameterIDs::LFO3_SYNC, ParameterIDs::LFO3_DIV, ParameterIDs::LFO3_RATE, ParameterIDs::LFO3_DEPTH, ParameterIDs::LFO3_PHASE },
+                { ParameterIDs::LFO4_SHAPE, ParameterIDs::LFO4_SYNC, ParameterIDs::LFO4_DIV, ParameterIDs::LFO4_RATE, ParameterIDs::LFO4_DEPTH, ParameterIDs::LFO4_PHASE },
+                { ParameterIDs::LFO5_SHAPE, ParameterIDs::LFO5_SYNC, ParameterIDs::LFO5_DIV, ParameterIDs::LFO5_RATE, ParameterIDs::LFO5_DEPTH, ParameterIDs::LFO5_PHASE },
+            };
+            int na = 0;
+            for (int i = 0; i < wc::NUM_LFOS; ++i)
+            {
+                const int  sh = (int) *apvts.getRawParameterValue (lp[i].shape);
+                const bool sy =       *apvts.getRawParameterValue (lp[i].sync) > 0.5f;
+                const int  dv = (int) *apvts.getRawParameterValue (lp[i].div);
+                synModCfg.lfos[i].shape       = (wc::LFOShape) juce::jlimit (0, (int) wc::LFOShape::NumShapes - 1, sh);
+                synModCfg.lfos[i].sync        = sy;
+                synModCfg.lfos[i].rateHz      = *apvts.getRawParameterValue (lp[i].rate);
+                synModCfg.lfos[i].syncIdx     = juce::jlimit (0, wc::kNumSyncDivisions - 1, dv);
+                synModCfg.lfos[i].phaseOffset = *apvts.getRawParameterValue (lp[i].phase);
+                synModCfg.lfos[i].trigger     = wc::LFOTrigger::Free;
+                synModCfg.lfos[i].polarity    = wc::LFOPolarity::Bipolar;
+                // one route per LFO → Filter 1 cutoff (per-LFO destination routing arrives with the matrix stage)
+                synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + i);
+                synModCfg.assignments[na].dest    = wc::ModDest::Cut1;
+                synModCfg.assignments[na].depth   = *apvts.getRawParameterValue (lp[i].depth);
+                synModCfg.assignments[na].enabled = true;
+                ++na;
+            }
+            synModCfg.numAssignments = na;
+        }
+        const float synModBpm = currentBPM.load();
+
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
             if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
             {
+                sv->setModConfig              (synModCfg, synModBpm);
                 sv->setTuning                 (oct, semi, cent);
                 sv->setLevel                  (lvl);
                 sv->setPan                    (pan);
@@ -2397,16 +2497,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // newly struck note's follower wins over a tail that's releasing. When nothing
     // sounds we send -1 and JS parks/hides the follower.
     {
-        float best = 0.f; float bestFollow = -1.f; bool any = false;
+        float best = 0.f; float bestFollow = -1.f; float bestLfo = 0.f; bool any = false;
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
             if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
                 if (sv->isAmpEnvActive())
                 {
                     const float lv = sv->getAmpEnvLevel();
-                    if (!any || lv > best) { best = lv; bestFollow = sv->getAmpEnvFollow(); any = true; }
+                    if (!any || lv > best) { best = lv; bestFollow = sv->getAmpEnvFollow(); bestLfo = sv->getSynthLfoVis(); any = true; }
                 }
         ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
         ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
+        // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
+        synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
     }
 
 

@@ -10,6 +10,7 @@
 #include "Wavetable.h"
 #include "TerrainFilters.h"
 #include "TerrainEnvelope.h"
+#include "SynthModConfig.h"   // Batch 1 — per-voice LFOs + mod routing (namespace wc)
 #include <atomic>
 #include <array>
 #include <cmath>
@@ -145,6 +146,10 @@ namespace tw
             filterSlot_.prepare (sr);
             filterSlot2_.prepare (sr);
 
+            // Batch 1 — prepare the per-voice LFO bank (sample rate only; each LFO's
+            // frequency + shape are pushed per block via setModConfig).
+            for (auto& lfo : synthLfo_) lfo.prepare (sr);
+
             // FLT envelope is a TerrainEnvelope (prepared alongside AMP in
             // setCurrentPlaybackSampleRate); it drives cutoff via SYN_FILTER1_ENV.
 
@@ -197,6 +202,25 @@ namespace tw
             baseCutHz_   = juce::jlimit (20.0f, 20000.0f, cutoffHz);
             baseRes01_   = juce::jlimit (0.0f,  1.0f,    resonance);
         }
+
+        /** Batch 1 — publish the modulation config to this voice. Resolves each
+         *  LFO's frequency now (free rate, or synced Hz from BPM). The per-sample
+         *  audio loop ticks the LFOs and adds enabled routes into effective dests.
+         *  Cheap to call every block; copies a small POD struct. */
+        void setModConfig (const wc::ModConfig& cfg, float bpm) noexcept
+        {
+            modConfig_ = cfg;
+            for (int i = 0; i < wc::NUM_LFOS; ++i)
+            {
+                synthLfo_[i].setSettings (cfg.lfos[i]);
+                const float hz = cfg.lfos[i].sync ? wc::syncedHz (cfg.lfos[i].syncIdx, bpm)
+                                                  : cfg.lfos[i].rateHz;
+                synthLfo_[i].setFrequency (hz);
+            }
+        }
+
+        /** Most-recent L1 value (bipolar -1..+1) for the editor's live LFO dot. */
+        float getSynthLfoVis() const noexcept { return lfoVisValue_; }
         void setFilterType (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
@@ -637,6 +661,11 @@ namespace tw
         }
 
     private:
+        // ── Batch 1 — per-voice modulation state ──
+        wc::SynthLFO  synthLfo_[wc::NUM_LFOS];   // L1..L3 (Batch 1 drives L1)
+        wc::ModConfig modConfig_;                // published per block by PluginProcessor
+        float         lfoVisValue_ = 0.0f;       // most-recent L1 value for the editor dot
+
         // One-time decorrelated seed for FREE mode (per voice ptr / sine / osc), 0..1.
         double seedPhase (int u, int osc) const noexcept
         {
@@ -895,6 +924,9 @@ namespace tw
             pitchEnvT_.reset(); pitchEnvT_.noteOn();
             mod1EnvT_.reset();  mod1EnvT_.noteOn();
             mod2EnvT_.reset();  mod2EnvT_.noteOn();
+            // Batch 1 — retrigger the per-voice LFO bank. Trig/Env/SustainLoop modes
+            // reset phase to startPhase here; Free/Sync keep running.
+            for (auto& lfo : synthLfo_) lfo.noteOn();
             // Reset filter state on note-on so a stale tail from a stolen
             // voice doesn't bleed into the new note's onset.
             filterSlot_.reset();
@@ -1593,6 +1625,27 @@ namespace tw
                                              envScratch_.getReadPointer (3), envScratch_.getReadPointer (4) };
                 for (int i = 0; i < numSamples; ++i)
                 {
+                    // ── Batch 1 — per-voice LFO tick + route accumulation ──
+                    // Tick every LFO once per output sample (free/synced Hz already
+                    // resolved in setModConfig), then sum any enabled LFO→cutoff routes
+                    // in semitone space. Other destinations (frame/warp/pitch/level…)
+                    // join in Batch 3, once the tick is hoisted ahead of the OSC render.
+                    float lfoOut_[wc::NUM_LFOS];
+                    for (int L = 0; L < wc::NUM_LFOS; ++L) lfoOut_[L] = synthLfo_[L].processSample();
+                    lfoVisValue_ = lfoOut_[0];                 // L1 → editor viz dot
+                    float lfoSemis1 = 0.0f, lfoSemis2 = 0.0f;
+                    for (int a = 0; a < modConfig_.numAssignments; ++a)
+                    {
+                        const auto& as = modConfig_.assignments[a];
+                        if (! as.enabled) continue;
+                        const int sIdx = (int) as.source;
+                        if (sIdx < 0 || sIdx >= wc::NUM_LFOS) continue;   // Batch 1: LFO sources only
+                        const wc::DestInfo& info = wc::kDestInfo[(int) as.dest];
+                        const float contrib = wc::routeContribution (info, lfoOut_[sIdx], as.depth);
+                        if      (as.dest == wc::ModDest::Cut1) lfoSemis1 += contrib;
+                        else if (as.dest == wc::ModDest::Cut2) lfoSemis2 += contrib;
+                    }
+
                     // Per-envelope ROUTING → filter cutoff (semitone space). Sum any
                     // of envs 2–5 routed to Filter 1 / Filter 2 / Filter 1+2.
                     float fMod1 = 0.0f, fMod2 = 0.0f;
@@ -1613,16 +1666,16 @@ namespace tw
                     const float driftSemis = driftState_ * driftDepthSemis;
                     const float fmax = juce::jmin (20000.0f, 0.45f * (float) coefSr);
 
-                    // Filter 1 cutoff: base + routed envelopes (±96 ST) + drift.
-                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + driftSemis;
+                    // Filter 1 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
+                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + driftSemis;
                     float cutHz1 = 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f);
                     cutHz1 = juce::jlimit (20.0f, fmax, cutHz1);
                     const float res1 = juce::jlimit (0.0f, 1.0f,
                         baseRes01_ + resWander * driftState_ * 0.5f);
                     filterSlot_.setParams (cutHz1, res1, drv01_, coefSr);
 
-                    // Filter 2 cutoff: base + routed envelopes (±96 ST) + drift.
-                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + driftSemis;
+                    // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
+                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis;
                     float cutHz2 = 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f);
                     cutHz2 = juce::jlimit (20.0f, fmax, cutHz2);
                     const float res2 = juce::jlimit (0.0f, 1.0f,

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Terrain — Modulation A · v4 (scatter bottom · glass menu · clean extender)</title>
+<style>
+:root{
+  --bg-main:#1A1A2E; --bg-hero:#12121F; --bg-card:#2A2A48;
+  --knob-body:#2E2E4A; --knob-track:rgba(120,118,160,0.35);
+  --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.55); --border-strong:rgba(140,130,180,0.45);
+  --text-primary:#ECE8F2; --text-secondary:#C5BFD2; --text-muted:#908599; --text-dim:#6E6580;
+  --ghost:rgba(255,255,255,0.55); --ghost-dim:rgba(255,255,255,0.34); --gray:#9b93a8;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:#15151f;color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;padding:34px 40px 90px;}
+h1{font-size:18px;font-weight:600;margin:0 0 4px;} .sub{color:var(--text-muted);font-size:12px;margin:0 0 22px;max-width:850px;line-height:1.5;} .sub b{color:var(--purple-400);}
+.cap{font-size:10px;color:var(--text-dim);letter-spacing:1.4px;text-transform:uppercase;margin:30px 0 9px;}
+.panel{background:var(--bg-main);border-radius:16px;padding:14px;display:inline-block;}
+.flex{display:flex;gap:34px;align-items:flex-start;flex-wrap:wrap;}
+.shapestrip{display:flex;gap:9px;flex-wrap:wrap;} .shapestrip .item{display:flex;flex-direction:column;gap:5px;align-items:center;} .shapestrip .nm{font-size:9px;color:var(--text-muted);letter-spacing:1px;}
+
+.modx{position:relative;border-radius:13px;overflow:hidden;background:var(--bg-hero);}
+.modx svg.wave{position:absolute;inset:0;width:100%;height:100%;}
+.modx .grid line{stroke:rgba(139,92,246,.14);stroke-width:.5;} .modx .grid line.mid{stroke:rgba(139,92,246,.22);}
+.modx .play{stroke:rgba(183,148,255,.5);stroke-width:1;} .modx .fill{fill:rgba(139,92,246,.13);} .modx .stroke{fill:none;stroke:var(--purple-400);stroke-width:1.7;}
+
+/* bottom is SCATTERED across the full width — each control its own zone */
+.ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
+.ov.top{top:6px;padding:0 11px;justify-content:flex-end;}
+.ov.bottom{bottom:6px;padding:0 13px;justify-content:space-between;}
+.gctl{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:var(--ghost);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);user-select:none;}
+.gctl:hover{color:#fff;} .gctl .chev{opacity:.6;} .gctl .wic{width:18px;height:10px;color:var(--ghost);} .gctl:hover .wic{color:#fff;}
+.gctl.drag{cursor:ns-resize;} .gctl .ar{font-size:8px;opacity:.55;}
+.gseg{font-size:9px;letter-spacing:1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);} .gseg b{cursor:pointer;font-weight:300;} .gseg .on{color:#fff;} .gseg .off{color:var(--ghost-dim);}
+.expand{width:14px;height:14px;cursor:pointer;color:var(--ghost);transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));} .expand:hover{color:#fff;}
+.gtabs{display:flex;align-items:center;gap:8px;}
+.gtabs .t{position:relative;font-size:10px;font-weight:400;color:var(--ghost-dim);cursor:pointer;transition:.12s;text-shadow:0 1px 3px rgba(0,0,0,.9);} .gtabs .t:hover{color:var(--ghost);} .gtabs .t.act{color:#fff;font-weight:600;}
+.gtabs .t.act::after{content:'';position:absolute;left:-1px;right:-1px;bottom:-3px;height:1.5px;background:var(--purple-400);border-radius:1px;}
+.gdepth{display:flex;align-items:center;gap:5px;text-shadow:0 1px 3px rgba(0,0,0,.9);}
+.gdepth .lbl{font-size:7.5px;letter-spacing:1px;color:var(--ghost-dim);text-transform:uppercase;} .gdepth .val{font-size:9px;color:var(--gray);font-variant-numeric:tabular-nums;min-width:20px;}
+.gring{--v:.67;width:17px;height:17px;border-radius:50%;cursor:ns-resize;background:conic-gradient(from 220deg,var(--knob-track) 140deg,var(--purple-400) 140deg calc(140deg + (var(--v)-.5)*280deg),var(--knob-track) 0 280deg,transparent 0);-webkit-mask:radial-gradient(closest-side,transparent 60%,#000 62%);mask:radial-gradient(closest-side,transparent 60%,#000 62%);}
+
+/* ── frosted GLASS popover ── */
+.glass{position:absolute;z-index:6;background:rgba(24,24,38,0.46);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);padding:5px;}
+.glass .mi{display:flex;align-items:center;gap:9px;padding:6px 12px 6px 8px;border-radius:6px;cursor:pointer;color:var(--ghost);font-size:9.5px;letter-spacing:1px;white-space:nowrap;transition:.1s;}
+.glass .mi:hover{background:rgba(255,255,255,0.08);color:#fff;} .glass .mi.cur{color:var(--purple-400);} .glass .mi.cur:hover{color:#fff;}
+.glass .mi svg{width:22px;height:12px;flex:none;opacity:.9;}
+
+.env-chip{position:absolute;top:6px;right:10px;font-size:11px;letter-spacing:.3px;color:var(--ghost);font-weight:300;}
+.corner{position:absolute;width:7px;height:7px;border:1px solid rgba(236,232,242,.30);top:5px;left:5px;border-right:none;border-bottom:none;z-index:2;}
+
+/* ── extender — reorganised, aligned grids, donut rings ── */
+.ext{width:316px;background:var(--bg-card);border:1px solid var(--border-strong);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden;}
+.ext .hdr{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:grab;background:rgba(255,255,255,.025);}
+.ext .grip{letter-spacing:2px;color:#4a4f68;font-size:10px;} .ext .htitle{font-size:9px;letter-spacing:1.8px;color:var(--text-secondary);text-transform:uppercase;font-weight:600;} .ext .etag{font-size:11px;color:#fff;font-weight:600;} .ext .x{margin-left:auto;color:var(--text-muted);cursor:pointer;font-size:13px;}
+.ext .body{padding:11px 13px 13px;display:flex;flex-direction:column;gap:11px;}
+.ext .grp{display:flex;flex-direction:column;gap:6px;}
+.ext .grp-lbl{font-size:8px;letter-spacing:1.6px;color:var(--text-dim);text-transform:uppercase;}
+.ext .escope{background:var(--bg-hero);border-radius:9px;position:relative;overflow:hidden;height:110px;cursor:crosshair;}
+.ext .escope svg{position:absolute;inset:0;width:100%;height:100%;}
+.ext .escope .ehint{position:absolute;bottom:6px;right:9px;font-size:7.5px;color:var(--ghost-dim);letter-spacing:.5px;}
+.ext .escope .node{fill:#fff;stroke:rgba(167,139,250,.6);stroke-width:1;} .ext .escope .gline{stroke:rgba(139,92,246,.14);stroke-width:.5;} .ext .escope .estroke{fill:none;stroke:var(--purple-400);stroke-width:1.9;} .ext .escope .efill{fill:rgba(139,92,246,.16);}
+/* aligned control grids — fill evenly, never ragged */
+.ext .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;} .ext .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.ext .pill{height:24px;padding:0 9px;background:var(--bg-hero);border:1px solid var(--border-strong);border-radius:7px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:9px;letter-spacing:1px;color:var(--text-primary);font-weight:300;}
+.ext .pill .k{color:var(--text-muted);font-size:7px;letter-spacing:1px;} .ext .pill .wic{width:16px;height:9px;color:var(--purple-400);} .ext .pill .chev{opacity:.5;margin-left:auto;}
+.ext .tog{height:24px;border:1px solid var(--border-strong);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:500;letter-spacing:.6px;color:var(--text-muted);cursor:pointer;} .ext .tog.on{background:#191726;border-color:#4a3f6e;color:var(--purple-400);}
+/* motion = plugin donut rings (FLOW vis-knob language) */
+.ext .motion{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.ext .mk{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.ext .donut{--v:.45;width:30px;height:30px;border-radius:50%;background:conic-gradient(from 220deg,var(--purple-400) calc(var(--v)*280deg),var(--knob-track) 0 280deg,transparent 0);-webkit-mask:radial-gradient(closest-side,transparent 64%,#000 66%);mask:radial-gradient(closest-side,transparent 64%,#000 66%);}
+.ext .mk-lbl{font-size:7.5px;letter-spacing:.8px;color:var(--text-secondary);text-transform:uppercase;} .ext .mk-val{font-size:7px;color:var(--text-muted);}
+
+.x2-box{width:912px;height:192px;overflow:hidden;} .x2{transform:scale(2);transform-origin:top left;}
+.note{font-size:11.5px;color:var(--text-secondary);max-width:400px;line-height:1.55;} .note b{color:var(--purple-400);}
+</style>
+</head>
+<body>
+<h1>Modulation A — v4 · scattered bottom · glass menu · clean extender</h1>
+<p class="sub">Bottom controls now <b>scatter across the full width</b> — shape bottom-left, then rate, BPM/HZ, the 1–5 tabs, and depth bottom-right, each in its own zone. The shape picker is a <b>frosted-glass</b> popover (hover/click the shape). The extender is reorganised on aligned grids with proper rhythm, and the motion controls are now the plugin's real <b>donut rings</b> (FLOW language) instead of the chunky knobs.</p>
+
+<div class="cap">1× — interactive · <span style="color:var(--purple-400)">click shape (glass menu) · click BPM/HZ · drag Hz</span></div>
+<div class="panel"><div id="A1"></div></div>
+
+<div class="cap">Shape picker — frosted glass</div>
+<div class="panel"><div id="Amenu" style="position:relative;"></div></div>
+
+<div class="cap">2× — detail</div>
+<div class="x2-box"><div class="x2"><div id="A2"></div></div></div>
+
+<div class="cap">All 7 shapes</div>
+<div class="panel"><div class="shapestrip" id="strip"></div></div>
+
+<div class="cap">Extender — reorganised · aligned grids · donut rings · editable scope</div>
+<div class="flex">
+  <div id="extender"></div>
+  <div class="note">
+    <p><b>Spacing fixed:</b> every row is an even grid (rate = 3-up, behaviour = 4-up, motion = 4 donut rings) so nothing wraps ragged or sits empty.</p>
+    <p><b>Knobs reworked:</b> the motion controls are now the same donut rings as FLOW's TIME/SHAPE/SCATTER — they finally match the rest of the synth.</p>
+    <p>Editable scope on top is the playground — drag white nodes to warp, shows on the front as CUSTOM.</p>
+  </div>
+</div>
+
+<div class="cap">In the row — next to the Env</div>
+<div class="panel"><div style="display:grid;grid-template-columns:318px 456px;gap:12px;">
+  <div class="modx" style="height:96px;"><div class="corner"></div><div id="envwave"></div><div class="env-chip">Amp &#9662;</div></div>
+  <div id="Arow"></div>
+</div></div>
+
+<script>
+const SHAPES=['sine','tri','saw','sawd','square','sh','random'];
+const SHNAME={sine:'SINE',tri:'TRI',saw:'SAW',sawd:'SAW↓',square:'SQR',sh:'S&H',random:'RAND',custom:'CUSTOM'};
+const SH_STEPS=[.65,.2,.85,.4,.95,.15,.7,.35]; const RND_PTS=[.5,.85,.15,.7,.3,.95,.2,.6,.4,.5];
+function smoothStep(a,t){const f=t*(a.length-1),i=Math.floor(f),fr=f-i,x=a[i],y=a[Math.min(i+1,a.length-1)],m=(1-Math.cos(fr*Math.PI))/2;return x+(y-x)*m;}
+const CUSTOM_NODES=[[0,.5],[.18,.92],[.4,.2],[.62,.78],[.82,.35],[1,.5]];
+function customVal(t){for(let i=1;i<CUSTOM_NODES.length;i++){if(t<=CUSTOM_NODES[i][0]){const a=CUSTOM_NODES[i-1],b=CUSTOM_NODES[i],fr=(t-a[0])/(b[0]-a[0]||1),m=(1-Math.cos(fr*Math.PI))/2;return (a[1]+(b[1]-a[1])*m)*2-1;}}return 0;}
+function yfor(k,t){const c=3,p=(t*c)%1;
+  if(k==='sine')return Math.sin(t*Math.PI*2*c); if(k==='tri')return p<0.5?(p*4-1):(3-p*4);
+  if(k==='saw')return p*2-1; if(k==='sawd')return 1-p*2; if(k==='square')return p<0.5?1:-1;
+  if(k==='sh'){const i=Math.floor(t*SH_STEPS.length)%SH_STEPS.length;return SH_STEPS[i]*2-1;}
+  if(k==='random')return smoothStep(RND_PTS,t)*2-1; if(k==='custom')return customVal(t); return 0;}
+function waveSVG(w,h,k,amp,mid){mid=mid||h/2;const n=200;let d='';for(let i=0;i<=n;i++){const t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,t)*amp).toFixed(1)+' ';}
+  const fillD=`M0 ${mid} `+d.replace(/^M/,'L')+`L${w} ${mid} Z`;
+  const gh=[0.25,0.5,0.75].map(g=>`<line class="${g===0.5?'mid':''}" x1="0" y1="${(h*g).toFixed(1)}" x2="${w}" y2="${(h*g).toFixed(1)}"/>`).join('');
+  const gv=[.1,.2,.3,.4,.5,.6,.7,.8,.9].map(g=>`<line class="${g===0.5?'mid':''}" x1="${(w*g).toFixed(1)}" y1="0" x2="${(w*g).toFixed(1)}" y2="${h}"/>`).join('');
+  const play=`<line class="play" x1="0" y1="0" x2="0" y2="${h}"><animate attributeName="x1" values="0;${w}" dur="2.1s" repeatCount="indefinite"/><animate attributeName="x2" values="0;${w}" dur="2.1s" repeatCount="indefinite"/></line>`;
+  return `<svg class="wave" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><g class="grid">${gh}${gv}</g><path class="fill" d="${fillD}"/><path class="stroke" d="${d}"/>${play}</svg>`;}
+function shapeIcon(k){const w=22,h=12,mid=h/2,n=60;let d='';for(let i=0;i<=n;i++){const t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,t)*(h*0.34)).toFixed(1)+' ';}return `<svg viewBox="0 0 ${w} ${h}" fill="none" stroke="currentColor" stroke-width="1.3"><path d="${d}"/></svg>`;}
+const EXPAND=`<svg class="expand" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>`;
+const CHEV=`<svg class="chev" width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>`;
+const WIC=`<svg class="wic" viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 6 C4 6 4 1 7 1 S10 11 13 11 16 1 19 1 22 6 23 6"/></svg>`;
+const TABS=(a=1)=>`<div class="gtabs">${[1,2,3,4,5].map(n=>`<span class="t${n===a?' act':''}">${n}</span>`).join('')}</div>`;
+const AMP=23,MID=40;
+function panel(st){
+  const rate=st.hz?`<span class="gctl drag ratehz"><span class="rv">${st.hzv.toFixed(2)}</span> Hz <span class="ar">⇅</span></span>`:`<span class="gctl">1/4 ${CHEV}</span>`;
+  return `<div class="modx" style="width:456px;height:96px;">${waveSVG(456,96,st.shape,AMP,MID)}
+    <div class="ov top">${EXPAND}</div>
+    <div class="ov bottom">
+      <span class="gctl shapebtn"><span style="display:inline-flex;width:20px;height:11px;color:inherit">${shapeIcon(st.shape)}</span> <span>${SHNAME[st.shape]}</span> ${CHEV}</span>
+      ${rate}
+      <span class="gseg"><b class="bpm ${st.hz?'off':'on'}">BPM</b> · <b class="hzt ${st.hz?'on':'off'}">HZ</b></span>
+      ${TABS(1)}
+      <div class="gdepth"><span class="lbl">Dep</span><div class="gring" style="--v:.67;"></div><span class="val">+35</span></div>
+    </div></div>`;}
+const a1=document.getElementById('A1');const st={shape:'sine',hz:false,hzv:2.00};
+function bind(host){
+  host.querySelector('.shapebtn').onclick=()=>{const i=SHAPES.indexOf(st.shape);st.shape=SHAPES[(i+1)%SHAPES.length];render();};
+  const b=host.querySelector('.bpm'),z=host.querySelector('.hzt');
+  if(b)b.onclick=()=>{st.hz=false;render();}; if(z)z.onclick=()=>{st.hz=true;render();};
+  const rh=host.querySelector('.ratehz');
+  if(rh)rh.onmousedown=e=>{e.preventDefault();const y0=e.clientY,v0=st.hzv;const mv=ev=>{st.hzv=Math.max(0.01,Math.min(40,v0+(y0-ev.clientY)*0.06));host.querySelector('.rv').textContent=st.hzv.toFixed(2);};const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);};document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);};
+}
+function render(){a1.innerHTML=panel(st);bind(a1);}
+render();
+document.getElementById('A2').innerHTML=panel({shape:'random',hz:true,hzv:2.00});
+document.getElementById('Arow').innerHTML=panel({shape:'sine',hz:false,hzv:2});
+// glass menu open
+document.getElementById('Amenu').innerHTML=panel({shape:'sine',hz:false,hzv:2})+
+  `<div class="glass" style="left:13px;bottom:26px;display:flex;flex-direction:column;gap:1px;">${SHAPES.map((k,i)=>`<div class="mi${i===0?' cur':''}">${shapeIcon(k)} ${SHNAME[k]}</div>`).join('')}</div>`;
+document.getElementById('strip').innerHTML=SHAPES.map(k=>`<div class="item"><div class="modx" style="width:118px;height:50px;">${waveSVG(118,50,k,13,25)}</div><div class="nm">${SHNAME[k]}</div></div>`).join('');
+function envSVG(w,h){const n=140;let d='';for(let i=0;i<=n;i++){const t=i/n;let e;if(t<0.12)e=t/0.12;else if(t<0.3)e=1-(t-0.12)/0.18*0.35;else if(t<0.62)e=0.65;else e=0.65*(1-(t-0.62)/0.38);d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(h-7-e*(h-14)).toFixed(1)+' ';}
+  const fillD=`M0 ${h} `+d.replace(/^M/,'L')+`L${w} ${h} Z`;const pts=[[0,1],[0.12,1],[0.3,0.65],[0.62,0.65],[1,0]].map(([t,e])=>`<circle cx="${(t*w).toFixed(0)}" cy="${(h-7-e*(h-14)).toFixed(0)}" r="3" fill="#fff"/>`).join('');
+  return `<svg class="wave" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path class="fill" d="${fillD}"/><path class="stroke" d="${d}"/>${pts}</svg>`;}
+document.getElementById('envwave').innerHTML=envSVG(298,80);
+// extender
+function editableScope(w,h){const N=CUSTOM_NODES;let d='';N.forEach((p,i)=>{const x=p[0]*w,y=h-6-p[1]*(h-12);if(i===0)d+=`M${x} ${y} `;else{const pv=N[i-1],cx=(pv[0]+p[0])/2*w;d+=`C${cx} ${h-6-pv[1]*(h-12)} ${cx} ${y} ${x} ${y} `;}});
+  const fillD=d+`L${w} ${h} L0 ${h} Z`;const gh=[.25,.5,.75].map(g=>`<line class="gline" x1="0" y1="${(h*g).toFixed(0)}" x2="${w}" y2="${(h*g).toFixed(0)}"/>`).join('');const gv=[.2,.4,.6,.8].map(g=>`<line class="gline" x1="${(w*g).toFixed(0)}" y1="0" x2="${(w*g).toFixed(0)}" y2="${h}"/>`).join('');
+  const dots=N.map(p=>`<circle class="node" cx="${(p[0]*w).toFixed(0)}" cy="${(h-6-p[1]*(h-12)).toFixed(0)}" r="3.4"/>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${gh}${gv}<path class="efill" d="${fillD}"/><path class="estroke" d="${d}"/></svg><svg viewBox="0 0 ${w} ${h}" style="position:absolute;inset:0">${dots}</svg>`;}
+const MK=(lbl,val,v)=>`<div class="mk"><div class="donut" style="--v:${v};"></div><div class="mk-lbl">${lbl}</div><div class="mk-val">${val}</div></div>`;
+document.getElementById('extender').innerHTML=`<div class="ext">
+  <div class="hdr"><span class="grip">⠿</span><span class="htitle">LFO</span><span class="etag">1</span><span class="x">✕</span></div>
+  <div class="body">
+    <div class="escope">${editableScope(290,110)}<span class="ehint">drag nodes → CUSTOM on front</span></div>
+    <div class="grp"><div class="grp-lbl">Rate</div><div class="g3"><div class="pill">${WIC}<span>SINE</span>${CHEV}</div><div class="pill"><span class="k">SYNC</span>1/4${CHEV}</div><div class="pill"><span class="k">UNIT</span>BPM${CHEV}</div></div></div>
+    <div class="grp"><div class="grp-lbl">Behaviour</div><div class="g4"><div class="pill"><span class="k">TRIG</span>Free</div><div class="pill"><span class="k">DIR</span>Up</div><div class="tog">TRIP</div><div class="tog on">MONO</div></div></div>
+    <div class="grp"><div class="grp-lbl">Motion</div><div class="motion">${MK('Rise','12ms',.3)}${MK('Delay','0',.0)}${MK('Smooth','30%',.45)}${MK('Phase','0°',.5)}</div></div>
+  </div></div>`;
+</script>
+</body>
+</html>

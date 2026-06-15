@@ -122,6 +122,22 @@ private:
     juce::WebSliderRelay synOscAPanRelay      { ParameterIDs::SYN_OSC_A_PAN };
     juce::WebSliderRelay synFilter1CutRelay   { ParameterIDs::SYN_FILTER1_CUT };
     juce::WebSliderRelay synFilter1ResRelay   { ParameterIDs::SYN_FILTER1_RES };
+    juce::WebSliderRelay lfo1RateRelay         { ParameterIDs::LFO1_RATE };   // Batch 1
+    juce::WebSliderRelay lfo1DepthRelay        { ParameterIDs::LFO1_DEPTH };  // Batch 1
+    juce::WebSliderRelay lfo1ShapeRelay        { ParameterIDs::LFO1_SHAPE };  // Mod redesign
+    juce::WebSliderRelay lfo1SyncRelay         { ParameterIDs::LFO1_SYNC };   // Mod redesign
+    juce::WebSliderRelay lfo1DivRelay          { ParameterIDs::LFO1_DIV };    // Mod redesign
+    // Mod redesign Stage 2 — LFOs 2..5
+    juce::WebSliderRelay lfo2RateRelay { ParameterIDs::LFO2_RATE };  juce::WebSliderRelay lfo2DepthRelay { ParameterIDs::LFO2_DEPTH };
+    juce::WebSliderRelay lfo2ShapeRelay{ ParameterIDs::LFO2_SHAPE }; juce::WebSliderRelay lfo2SyncRelay  { ParameterIDs::LFO2_SYNC };  juce::WebSliderRelay lfo2DivRelay { ParameterIDs::LFO2_DIV };
+    juce::WebSliderRelay lfo3RateRelay { ParameterIDs::LFO3_RATE };  juce::WebSliderRelay lfo3DepthRelay { ParameterIDs::LFO3_DEPTH };
+    juce::WebSliderRelay lfo3ShapeRelay{ ParameterIDs::LFO3_SHAPE }; juce::WebSliderRelay lfo3SyncRelay  { ParameterIDs::LFO3_SYNC };  juce::WebSliderRelay lfo3DivRelay { ParameterIDs::LFO3_DIV };
+    juce::WebSliderRelay lfo4RateRelay { ParameterIDs::LFO4_RATE };  juce::WebSliderRelay lfo4DepthRelay { ParameterIDs::LFO4_DEPTH };
+    juce::WebSliderRelay lfo4ShapeRelay{ ParameterIDs::LFO4_SHAPE }; juce::WebSliderRelay lfo4SyncRelay  { ParameterIDs::LFO4_SYNC };  juce::WebSliderRelay lfo4DivRelay { ParameterIDs::LFO4_DIV };
+    juce::WebSliderRelay lfo5RateRelay { ParameterIDs::LFO5_RATE };  juce::WebSliderRelay lfo5DepthRelay { ParameterIDs::LFO5_DEPTH };
+    juce::WebSliderRelay lfo5ShapeRelay{ ParameterIDs::LFO5_SHAPE }; juce::WebSliderRelay lfo5SyncRelay  { ParameterIDs::LFO5_SYNC };  juce::WebSliderRelay lfo5DivRelay { ParameterIDs::LFO5_DIV };
+    juce::WebSliderRelay lfo1PhaseRelay{ ParameterIDs::LFO1_PHASE }; juce::WebSliderRelay lfo2PhaseRelay{ ParameterIDs::LFO2_PHASE }; juce::WebSliderRelay lfo3PhaseRelay{ ParameterIDs::LFO3_PHASE };
+    juce::WebSliderRelay lfo4PhaseRelay{ ParameterIDs::LFO4_PHASE }; juce::WebSliderRelay lfo5PhaseRelay{ ParameterIDs::LFO5_PHASE };
     // Batch 1 Filter — without these relays the JUCE WebView backend doesn't
     // know about the new JS slider state, so setNormalisedValue from the
     // dropdown / DRV+ENV knobs never reaches APVTS — and the C++ filter type
@@ -335,6 +351,17 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> densityAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> sprayAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> pitchAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo1RateAttachment;    // Batch 1
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo1DepthAttachment;   // Batch 1
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo1ShapeAttachment;   // Mod redesign
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo1SyncAttachment;    // Mod redesign
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo1DivAttachment;     // Mod redesign
+    // Mod redesign Stage 2 — LFOs 2..5 attachments
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo2RateAttachment, lfo2DepthAttachment, lfo2ShapeAttachment, lfo2SyncAttachment, lfo2DivAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo3RateAttachment, lfo3DepthAttachment, lfo3ShapeAttachment, lfo3SyncAttachment, lfo3DivAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo4RateAttachment, lfo4DepthAttachment, lfo4ShapeAttachment, lfo4SyncAttachment, lfo4DivAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo5RateAttachment, lfo5DepthAttachment, lfo5ShapeAttachment, lfo5SyncAttachment, lfo5DivAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> lfo1PhaseAttachment, lfo2PhaseAttachment, lfo3PhaseAttachment, lfo4PhaseAttachment, lfo5PhaseAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> wanderAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> freezeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> grainFilterAttachment;

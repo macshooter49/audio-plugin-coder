@@ -19,6 +19,16 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(densityRelay)
             .withOptionsFrom(sprayRelay)
             .withOptionsFrom(pitchRelay)
+            .withOptionsFrom(lfo1RateRelay)
+            .withOptionsFrom(lfo1DepthRelay)
+            .withOptionsFrom(lfo1ShapeRelay)
+            .withOptionsFrom(lfo1SyncRelay)
+            .withOptionsFrom(lfo1DivRelay)
+            .withOptionsFrom(lfo2RateRelay).withOptionsFrom(lfo2DepthRelay).withOptionsFrom(lfo2ShapeRelay).withOptionsFrom(lfo2SyncRelay).withOptionsFrom(lfo2DivRelay)
+            .withOptionsFrom(lfo3RateRelay).withOptionsFrom(lfo3DepthRelay).withOptionsFrom(lfo3ShapeRelay).withOptionsFrom(lfo3SyncRelay).withOptionsFrom(lfo3DivRelay)
+            .withOptionsFrom(lfo4RateRelay).withOptionsFrom(lfo4DepthRelay).withOptionsFrom(lfo4ShapeRelay).withOptionsFrom(lfo4SyncRelay).withOptionsFrom(lfo4DivRelay)
+            .withOptionsFrom(lfo5RateRelay).withOptionsFrom(lfo5DepthRelay).withOptionsFrom(lfo5ShapeRelay).withOptionsFrom(lfo5SyncRelay).withOptionsFrom(lfo5DivRelay)
+            .withOptionsFrom(lfo1PhaseRelay).withOptionsFrom(lfo2PhaseRelay).withOptionsFrom(lfo3PhaseRelay).withOptionsFrom(lfo4PhaseRelay).withOptionsFrom(lfo5PhaseRelay)
             .withOptionsFrom(wanderRelay)
             .withOptionsFrom(freezeRelay)
             .withOptionsFrom(grainFilterRelay)
@@ -1841,6 +1851,33 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     densityAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::DENSITY), densityRelay, nullptr);
 
+    // Batch 1 — LFO 1 rate + depth attachments (binds the mod strip knobs to APVTS).
+    lfo1RateAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LFO1_RATE), lfo1RateRelay, nullptr);
+    lfo1DepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LFO1_DEPTH), lfo1DepthRelay, nullptr);
+    lfo1ShapeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LFO1_SHAPE), lfo1ShapeRelay, nullptr);
+    lfo1SyncAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LFO1_SYNC), lfo1SyncRelay, nullptr);
+    lfo1DivAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::LFO1_DIV), lfo1DivRelay, nullptr);
+    // Mod redesign Stage 2 — LFOs 2..5 attachments
+    {
+        auto mkAtt = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
+        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
+        mkAtt(lfo2RateAttachment, ParameterIDs::LFO2_RATE, lfo2RateRelay);  mkAtt(lfo2DepthAttachment, ParameterIDs::LFO2_DEPTH, lfo2DepthRelay);
+        mkAtt(lfo2ShapeAttachment, ParameterIDs::LFO2_SHAPE, lfo2ShapeRelay); mkAtt(lfo2SyncAttachment, ParameterIDs::LFO2_SYNC, lfo2SyncRelay); mkAtt(lfo2DivAttachment, ParameterIDs::LFO2_DIV, lfo2DivRelay);
+        mkAtt(lfo3RateAttachment, ParameterIDs::LFO3_RATE, lfo3RateRelay);  mkAtt(lfo3DepthAttachment, ParameterIDs::LFO3_DEPTH, lfo3DepthRelay);
+        mkAtt(lfo3ShapeAttachment, ParameterIDs::LFO3_SHAPE, lfo3ShapeRelay); mkAtt(lfo3SyncAttachment, ParameterIDs::LFO3_SYNC, lfo3SyncRelay); mkAtt(lfo3DivAttachment, ParameterIDs::LFO3_DIV, lfo3DivRelay);
+        mkAtt(lfo4RateAttachment, ParameterIDs::LFO4_RATE, lfo4RateRelay);  mkAtt(lfo4DepthAttachment, ParameterIDs::LFO4_DEPTH, lfo4DepthRelay);
+        mkAtt(lfo4ShapeAttachment, ParameterIDs::LFO4_SHAPE, lfo4ShapeRelay); mkAtt(lfo4SyncAttachment, ParameterIDs::LFO4_SYNC, lfo4SyncRelay); mkAtt(lfo4DivAttachment, ParameterIDs::LFO4_DIV, lfo4DivRelay);
+        mkAtt(lfo5RateAttachment, ParameterIDs::LFO5_RATE, lfo5RateRelay);  mkAtt(lfo5DepthAttachment, ParameterIDs::LFO5_DEPTH, lfo5DepthRelay);
+        mkAtt(lfo5ShapeAttachment, ParameterIDs::LFO5_SHAPE, lfo5ShapeRelay); mkAtt(lfo5SyncAttachment, ParameterIDs::LFO5_SYNC, lfo5SyncRelay); mkAtt(lfo5DivAttachment, ParameterIDs::LFO5_DIV, lfo5DivRelay);
+        mkAtt(lfo1PhaseAttachment, ParameterIDs::LFO1_PHASE, lfo1PhaseRelay); mkAtt(lfo2PhaseAttachment, ParameterIDs::LFO2_PHASE, lfo2PhaseRelay); mkAtt(lfo3PhaseAttachment, ParameterIDs::LFO3_PHASE, lfo3PhaseRelay);
+        mkAtt(lfo4PhaseAttachment, ParameterIDs::LFO4_PHASE, lfo4PhaseRelay); mkAtt(lfo5PhaseAttachment, ParameterIDs::LFO5_PHASE, lfo5PhaseRelay);
+    }
+
     sprayAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SPRAY), sprayRelay, nullptr);
 
@@ -2575,6 +2612,12 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         float envStage  = audioProcessor.ampEnvFollowVis.load(std::memory_order_relaxed);
         js << "if(window.updateEnvFollower){window.updateEnvFollower("
            << juce::String(envFollow, 4) << "," << juce::String(envStage, 4) << ");}";
+    }
+
+    // ── Synth LFO 1 live value (Batch 1) — drives the modulation strip's scope/dot. ──
+    {
+        float lfo1 = audioProcessor.synthLfo1Vis.load(std::memory_order_relaxed);
+        js << "if(window.updateSynthLFO){window.updateSynthLFO(" << juce::String(lfo1, 4) << ");}";
     }
 
     // ── Mod state lifecycle ──
