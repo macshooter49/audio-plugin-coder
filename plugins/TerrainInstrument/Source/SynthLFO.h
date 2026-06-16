@@ -138,6 +138,10 @@ public:
 
     float currentPhase() const noexcept { return phase_; }
 
+    // Current modulation value at the present phase WITHOUT advancing — for per-block
+    // (frame/warp/fold/pitch) modulation that's computed before the per-sample loop.
+    float peek() const noexcept { return applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset))); }
+
 private:
     // Map phase [0,1) -> bipolar [-1,+1]
     float shapeAt (float p) const noexcept

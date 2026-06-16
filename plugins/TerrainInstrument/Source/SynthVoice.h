@@ -1015,16 +1015,51 @@ namespace tw
                 const float rtSrcB = (routeSrcB_ == kRtSrcVel) ? currentVelocity_ : noteCurved;
                 const float rtA = routeAmtA_ * rtSrcA;     // bipolar -1..+1 × 0..1
                 const float rtB = routeAmtB_ * rtSrcB;
-                // FRAME/WARP/FOLD — keytrack crossfade term depth·(ramp − base) on the
-                // selected dest, then ROUTE adds bipolar on top, clamp once.
-                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f));
-                warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f));
-                foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f));
-                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f));
-                warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f));
+                // ── Mod-matrix: LFO → frame/warp/fold per OSC (block-rate via peek(), so the
+                //    per-sample OSC render stays cheap). LFO→LFO 'amt' scales the source first.
+                float lfoPk[wc::NUM_LFOS];
+                for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] = synthLfo_[L].peek();
+                {
+                    float amt[wc::NUM_LFOS] = { 0.0f };
+                    for (int a = 0; a < modConfig_.numAssignments; ++a)
+                    {
+                        const auto& as = modConfig_.assignments[a];
+                        if (! as.enabled) continue;
+                        const int sI = (int) as.source, dI = (int) as.dest;
+                        if (sI < 0 || sI >= wc::NUM_LFOS) continue;
+                        if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
+                            amt[dI - (int) wc::ModDest::LfoAmt1] += lfoPk[sI] * as.depth;
+                    }
+                    for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
+                }
+                float mFrA = 0.0f, mWpA = 0.0f, mFdA = 0.0f, mFrB = 0.0f, mWpB = 0.0f, mFdB = 0.0f;
+                for (int a = 0; a < modConfig_.numAssignments; ++a)
+                {
+                    const auto& as = modConfig_.assignments[a];
+                    if (! as.enabled) continue;
+                    const int sI = (int) as.source;
+                    if (sI < 0 || sI >= wc::NUM_LFOS) continue;
+                    const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], lfoPk[sI], as.depth);
+                    switch (as.dest)
+                    {
+                        case wc::ModDest::Frame:  mFrA += c; break;
+                        case wc::ModDest::Warp:   mWpA += c; break;
+                        case wc::ModDest::Fold:   mFdA += c; break;
+                        case wc::ModDest::FrameB: mFrB += c; break;
+                        case wc::ModDest::WarpB:  mWpB += c; break;
+                        case wc::ModDest::FoldB:  mFdB += c; break;
+                        default: break;
+                    }
+                }
+                // FRAME/WARP/FOLD — keytrack crossfade + ROUTE + LFO mod, clamp once.
+                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA);
+                warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f) + mWpA);
+                foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f) + mFdA);
+                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f) + mFrB);
+                warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f) + mWpB);
                 warp2AmountA_ = warp2AmountBaseA_;   // WARP 2 base->effective (mod-matrix ready)
                 warp2AmountB_ = warp2AmountBaseB_;
-                foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f));
+                foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f) + mFdB);
             }
 
             // WAVER — advance per-(osc × unison sine) OU pitch drift this block. Slow,
@@ -1633,6 +1668,20 @@ namespace tw
                     float lfoOut_[wc::NUM_LFOS];
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoOut_[L] = synthLfo_[L].processSample();
                     lfoVisValue_ = lfoOut_[0];                 // L1 → editor viz dot
+                    // LFO→LFO amt scales each source before it routes (per-sample).
+                    {
+                        float amt[wc::NUM_LFOS] = { 0.0f };
+                        for (int a = 0; a < modConfig_.numAssignments; ++a)
+                        {
+                            const auto& as = modConfig_.assignments[a];
+                            if (! as.enabled) continue;
+                            const int sI = (int) as.source, dI = (int) as.dest;
+                            if (sI < 0 || sI >= wc::NUM_LFOS) continue;
+                            if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
+                                amt[dI - (int) wc::ModDest::LfoAmt1] += lfoOut_[sI] * as.depth;
+                        }
+                        for (int L = 0; L < wc::NUM_LFOS; ++L) lfoOut_[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
+                    }
                     float lfoSemis1 = 0.0f, lfoSemis2 = 0.0f;
                     for (int a = 0; a < modConfig_.numAssignments; ++a)
                     {

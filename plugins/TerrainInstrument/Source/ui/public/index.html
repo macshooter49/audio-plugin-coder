@@ -2351,8 +2351,9 @@ body {
 #mod-engine .mv-seg b{cursor:pointer;font-weight:300;} #mod-engine .mv-seg .on{color:#fff;} #mod-engine .mv-seg .off{color:var(--ghost-dim);}
 #mod-engine .mv-exp{width:14px;height:14px;cursor:pointer;color:var(--ghost);transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));}
 #mod-engine .mv-exp:hover{color:#fff;}
-#mod-engine .mv-tabs{display:flex;align-items:center;gap:8px;}
-#mod-engine .mv-tabs .t{position:relative;font-size:10px;font-weight:400;color:var(--ghost-dim);cursor:pointer;transition:.12s;text-shadow:0 1px 3px rgba(0,0,0,.9);}
+#mod-engine .mv-tabs{display:flex;align-items:center;gap:6px;}
+/* fixed-width slots: paging 1-5 ↔ 6-10 (and the "10"/arrows) must never reflow the row */
+#mod-engine .mv-tabs .t{position:relative;width:13px;flex:none;text-align:center;font-size:10px;font-weight:400;color:var(--ghost-dim);cursor:pointer;transition:.12s;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-tabs .t:hover{color:var(--ghost);} #mod-engine .mv-tabs .t.act{color:#fff;font-weight:600;}
 #mod-engine .mv-tabs .t.act::after{content:'';position:absolute;left:-1px;right:-1px;bottom:-3px;height:1.5px;background:var(--purple-400);border-radius:1px;}
 #mod-engine .mv-tabs .t.dis{opacity:.5;cursor:default;}
@@ -17812,7 +17813,8 @@ restoreThemeFromBackend();
   var BARFILL=function(d){d=Math.max(-1,Math.min(1,d||0));return d>=0?('left:0;right:0;bottom:50%;height:'+(d*50).toFixed(1)+'%;'):('left:0;right:0;top:50%;height:'+(-d*50).toFixed(1)+'%;');};
 
   function ssGet(id){try{return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null;}catch(e){return null;}}
-  var LP={}, st={shape:0,sync:true,div:5,rateHz:2,depth:.35,phase:0,tab:1}, ph=0, lastT=0, root, errEl;
+  var LP={}, st={shape:0,sync:true,div:5,rateHz:2,depth:.35,phase:0,tab:1,page:0}, ph=0, lastT=0, root, errEl;
+  var NLFO=10;
   function cur(){ return LP[st.tab]||{}; }
   function err(m){if(errEl){errEl.textContent=m;errEl.style.display='block';}if(window.console)console.error('mod-v4:',m);}
 
@@ -17832,7 +17834,9 @@ restoreThemeFromBackend();
       ? '<span class="mv-c" id="mv-div">'+DIVS[st.div]+' '+CHEV+'</span>'
       : '<span class="mv-c drag" id="mv-rate"><span id="mv-rv">'+st.rateHz.toFixed(2)+'</span> Hz <span class="ar">⇅</span></span>';
     var dv=(st.depth>=0?'+':'')+Math.round(st.depth*100);
-    var tabs='<div class="mv-tabs">'+[1,2,3,4,5].map(function(n){return '<span class="t'+(n===st.tab?' act':'')+'" data-tab="'+n+'">'+n+'</span>';}).join('')+'</div>';
+    var base=st.page*5;
+    var nums=[1,2,3,4,5].map(function(i){var n=base+i;return '<span class="t'+(n===st.tab?' act':'')+'" data-tab="'+n+'">'+n+'</span>';}).join('');
+    var tabs='<div class="mv-tabs">'+(st.page?'<span class="t mv-pg" data-pg="0" title="LFOs 1–5">‹</span>':'')+nums+(st.page?'':'<span class="t mv-pg" data-pg="1" title="LFOs 6–10">›</span>')+'</div>';
     return '<div class="mv-scope">'+waveSVG(456,96,st.shape,st.depth,st.phase)+'</div>'
       +'<div class="mv-ov top">'+EXPAND+'</div>'
       +'<div class="mv-ov bot">'
@@ -17881,7 +17885,9 @@ restoreThemeFromBackend();
       function mv(ev){ var nv=((v0+(ev.clientX-x0)*0.004)%1+1)%1; setNorm(P,nv); if(P){st.phase=P.getScaledValue(); var sv=root.querySelector('#mv-shv'); if(sv)sv.textContent=Math.round(st.phase*360)+'°'; var sc=root.querySelector('.mv-scope'); if(sc)sc.innerHTML=waveSVG(456,96,st.shape,st.depth,st.phase);} }
       function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
-    root.querySelectorAll('.mv-tabs .t').forEach(function(t){ t.onclick=function(){ st.tab=+t.getAttribute('data-tab'); pull(); render(); }; });
+    root.querySelectorAll('.mv-tabs .t').forEach(function(t){ t.onclick=function(){ var pg=t.getAttribute('data-pg');
+      if(pg!==null){ st.page=+pg; var b=st.page*5; if(st.tab<=b||st.tab>b+5){ st.tab=b+1; pull(); } render(); return; }
+      st.tab=+t.getAttribute('data-tab'); pull(); render(); }; });
     var ex=root.querySelector('.mv-exp'); if(ex)ex.onclick=openExt;
   }
 
@@ -17936,10 +17942,10 @@ restoreThemeFromBackend();
   function boot(){
     root=document.getElementById('mod-engine');
     if(!root){ return; }
-    [1,2,3,4,5].forEach(function(n){ LP[n]={ shape:ssGet('LFO'+n+'_SHAPE'), sync:ssGet('LFO'+n+'_SYNC'), div:ssGet('LFO'+n+'_DIV'), rate:ssGet('LFO'+n+'_RATE'), depth:ssGet('LFO'+n+'_DEPTH'), phase:ssGet('LFO'+n+'_PHASE') }; });
+    for(var qn=1;qn<=NLFO;qn++){ (function(n){ LP[n]={ shape:ssGet('LFO'+n+'_SHAPE'), sync:ssGet('LFO'+n+'_SYNC'), div:ssGet('LFO'+n+'_DIV'), rate:ssGet('LFO'+n+'_RATE'), depth:ssGet('LFO'+n+'_DEPTH'), phase:ssGet('LFO'+n+'_PHASE') }; })(qn); }
     pull(); render();
     // re-render on external (automation/host) changes of the ACTIVE lfo
-    [1,2,3,4,5].forEach(function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s=LP[n][k]; if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); });
+    for(var ln=1;ln<=NLFO;ln++){ (function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s=LP[n][k]; if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); })(ln); }
     requestAnimationFrame(tick);
   }
   var tries=0;
@@ -18142,6 +18148,131 @@ restoreThemeFromBackend();
   }
   var tries=0;
   (function wait(){ var dev=document.getElementById('filter-device'); if(dev&&dev.querySelector('.filter-knobs')){ build(dev); return; } if(tries++<300) setTimeout(wait,100); })();
+})();
+</script>
+
+<script>
+/* SYNTH MOD MATRIX — drag an LFO number onto any knob / filter / other LFO to modulate it */
+(function(){
+  if(window.__synMod)return; window.__synMod=true;
+  var st=document.createElement('style'); st.textContent=
+    '.sm-ghost{position:fixed;z-index:2147483647;width:20px;height:20px;border-radius:50%;background:rgba(167,139,250,.92);color:#fff;font:600 11px -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;pointer-events:none;box-shadow:0 0 10px rgba(167,139,250,.8);transform:translate(-50%,-50%);}'+
+    'body.sm-dragging .sm-target{outline:1px dashed rgba(167,139,250,.55);outline-offset:2px;border-radius:6px;}'+
+    'body.sm-dragging .sm-target.sm-hot{outline:1.5px solid #C9B3FF;background:rgba(167,139,250,.12);}'+
+    '.sm-badge{position:fixed;z-index:400;min-width:8px;height:11px;padding:0;color:#fff;font:600 9px/11px -apple-system,sans-serif;text-align:center;cursor:ns-resize;pointer-events:auto;text-shadow:0 0 4px rgba(167,139,250,.95),0 1px 2px rgba(0,0,0,.95);-webkit-user-select:none;user-select:none;opacity:.85;transition:opacity .12s;}'+
+    '.sm-badge:hover{opacity:1;text-shadow:0 0 7px rgba(183,148,255,1),0 1px 3px rgba(0,0,0,.95);}'+
+    '.sm-att{position:fixed;z-index:2147483647;width:8px;height:50px;border-radius:4px;background:rgba(18,16,30,.5);-webkit-backdrop-filter:blur(10px) saturate(1.3);backdrop-filter:blur(10px) saturate(1.3);box-shadow:0 0 0 1px rgba(167,139,250,.5),0 6px 18px rgba(0,0,0,.5);pointer-events:none;display:none;}'+
+    '.sm-att.on{display:block;}'+
+    '.sm-att::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(255,255,255,.3);}'+
+    '.sm-att .f{position:absolute;left:1px;right:1px;background:#B794FF;border-radius:3px;box-shadow:0 0 7px rgba(139,92,246,.85);}'+
+    '.sm-att .vv{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;font:600 9px -apple-system,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap;}';
+  document.head.appendChild(st);
+  // shared attenuation meter (shown while holding a badge)
+  var att=document.createElement('div'); att.className='sm-att'; att.innerHTML='<div class="vv"></div><div class="f"></div>'; document.body.appendChild(att);
+  var attF=att.querySelector('.f'), attV=att.querySelector('.vv');
+  function updAtt(a){ var d=Math.max(-1,Math.min(1,a.depth)); attV.textContent=(d>=0?'+':'')+Math.round(d*100)+'%';
+    if(d>=0){ attF.style.bottom='50%'; attF.style.top=''; attF.style.height=(d*50).toFixed(1)+'%'; }
+    else    { attF.style.top='50%'; attF.style.bottom=''; attF.style.height=(-d*50).toFixed(1)+'%'; } }
+  function showAtt(a,x,y){ att.style.left=x+'px'; att.style.top=y+'px'; att.classList.add('on'); updAtt(a); }
+  function hideAtt(){ att.classList.remove('on'); }
+
+  function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
+  var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
+    var arr=assigns.map(function(a){return {s:a.lfo-1,d:a.dest,v:+a.depth.toFixed(4)};});
+    if(pushFn)try{ pushFn(JSON.stringify(arr)); }catch(e){} }
+
+  // ── LFO shape + rate (JS mirror of the engine, for the live visual) ──
+  var DIVB=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6];
+  var SHA=[.65,.2,.85,.4,.95,.15,.7,.35], RPA=[.5,.85,.15,.7,.3,.95,.2,.6,.4,.5];
+  function mval(k,t){ t=((t%1)+1)%1;
+    if(k===0)return Math.sin(t*6.2831853); if(k===1)return 1-4*Math.abs(t-0.5);
+    if(k===2)return 2*t-1; if(k===3)return 1-2*t; if(k===4)return t<0.5?1:-1;
+    if(k===5){var i=Math.floor(t*SHA.length)%SHA.length;return SHA[i]*2-1;}
+    if(k===6){var f=t*(RPA.length-1),i=Math.floor(f),fr=f-i,x=RPA[i],y=RPA[Math.min(i+1,RPA.length-1)],m=(1-Math.cos(fr*Math.PI))/2;return (x+(y-x)*m)*2-1;}
+    return 0; }
+  function lfoHz(n){ var sy=ss('LFO'+n+'_SYNC'), rt=ss('LFO'+n+'_RATE'), dv=ss('LFO'+n+'_DIV');
+    if(sy&&sy.getNormalisedValue()>0.5){ var di=dv?Math.round(dv.getNormalisedValue()*13):5; return (120/60)/(DIVB[di]||1); }
+    return rt?rt.getScaledValue():1; }
+  function lfoShape(n){ var s=ss('LFO'+n+'_SHAPE'); return s?Math.round(s.getNormalisedValue()*6):0; }
+  function lfoMaster(n){ var s=ss('LFO'+n+'_DEPTH'); return s?s.getScaledValue():0.35; }
+  var phase=[0,0,0,0,0,0,0,0,0,0], lastT=0;
+  // resolve a route's live target element — LFO→LFO tabs re-render (and page), so look them up fresh
+  function curEl(a){ if(a.dest>=12&&a.dest<=21) return document.querySelector('#mod-engine .mv-tabs .t[data-tab="'+(a.dest-11)+'"]'); return a.el; }
+
+  // ── destinations ──
+  var KNOBDEST={ 'SYN_OSC_A_WT_FRAME':2,'SYN_OSC_A_WARP_AMOUNT':3,'SYN_OSC_A_FOLD_AMT':4,
+                 'SYN_OSC_B_WT_FRAME':9,'SYN_OSC_B_WARP_AMOUNT':10,'SYN_OSC_B_FOLD_AMT':11 };
+  function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
+  var assigns=[];   // {lfo,dest,depth,getEl}
+
+  function targets(){ var out=[];
+    document.querySelectorAll('#syn-panel .knob[data-syn]').forEach(function(k){ var p=k.getAttribute('data-syn'); if(KNOBDEST.hasOwnProperty(p)) out.push({el:k,dest:KNOBDEST[p],kind:'knob'}); });
+    var cut=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="cut"]'); if(cut) out.push({el:cut.parentElement,dest:-1,kind:'cut'}); // dest resolved at drop (slot)
+    document.querySelectorAll('#mod-engine .mv-tabs .t').forEach(function(t){ var n=+t.getAttribute('data-tab'); if(!n)return; out.push({el:t,dest:11+n,kind:'lfo',lfo:n}); }); // LFO→LFO: LfoAmt{n} (skip page arrows)
+    return out; }
+
+  // ── badges + dots ──
+  function mkBadge(a){ var b=document.createElement('div'); b.className='sm-badge'; b.textContent=a.lfo; document.body.appendChild(b); a.badge=b;
+    var down=false,moved=false,y0=0,v0=0;
+    b.addEventListener('pointerdown',function(e){ e.preventDefault(); e.stopPropagation(); down=true; moved=false; y0=e.clientY; v0=a.depth; b.setPointerCapture&&b.setPointerCapture(e.pointerId);
+      var br=b.getBoundingClientRect(); showAtt(a, br.right+7, br.top+br.height/2-25);   // attenuation meter pops next to the number
+      function mv(ev){ if(!down)return; if(Math.abs(ev.clientY-y0)>2)moved=true; a.depth=Math.max(-1,Math.min(1,v0+(y0-ev.clientY)*0.008)); updAtt(a); push(); }
+      function up(){ down=false; hideAtt(); document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); if(!moved) removeAssign(a); }
+      document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
+    b.title='hold + drag = depth · click = remove'; }
+  function removeAssign(a){ var i=assigns.indexOf(a); if(i<0)return; assigns.splice(i,1); if(a.badge)a.badge.remove(); markTargets(); push(); }
+  function addAssign(lfo,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].lfo===lfo&&assigns[i].dest===dest) return; // dedupe
+    if(assigns.length>=32)return; var a={lfo:lfo,dest:dest,depth:0.5,el:el}; assigns.push(a); mkBadge(a); markTargets(); push(); }
+  function markTargets(){ document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
+
+  // ── drag from the LFO tabs ──
+  var ghost=null, drag=null, lastDragEnd=0, TG=[];
+  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#mod-engine .mv-tabs .t'); if(!t)return;
+    var n=+t.getAttribute('data-tab'); if(!n)return; var sx=e.clientX, sy=e.clientY, started=false;   // ignore page arrows
+    function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
+        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent=n; document.body.appendChild(ghost);
+        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+      ghost.style.left=ev.clientX+'px'; ghost.style.top=ev.clientY+'px';
+      var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
+    function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+      if(started){ var g=hit(ev.clientX,ev.clientY); if(g&&!(g.kind==='lfo'&&g.lfo===n)){ var dest=g.kind==='cut'?(actSlot()===2?1:0):g.dest; addAssign(n,dest,g.el); }
+        if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
+  function hit(x,y){ for(var i=0;i<TG.length;i++){ var r=TG[i].el.getBoundingClientRect(); if(x>=r.left-3&&x<=r.right+3&&y>=r.top-3&&y<=r.bottom+3) return TG[i]; } return null; }
+  // suppress the tab's switch-click right after a drag
+  document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('#mod-engine .mv-tabs .t'); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);
+
+  // ── live loop: bob each badge/dot in its LFO's shape × depth × master ──
+  function loop(ts){ var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
+    for(var n=1;n<=10;n++){ phase[n-1]+=dt*lfoHz(n); if(phase[n-1]>=1)phase[n-1]-=Math.floor(phase[n-1]); }   // (kept for the future "knob moves with the LFO" pass)
+    var vis=document.getElementById('syn-panel'); var on=vis&&vis.offsetParent!==null;
+    assigns.forEach(function(a){ if(!a.badge)return;
+      var el=curEl(a);   // live target (knobs are stable; LFO tabs re-render/page)
+      // sit tight on the control itself (the ring for knobs) like a superscript power, not floating up into the row above
+      var ring=el&&el.querySelector?el.querySelector('.knob-ring'):null;
+      var r=(ring||el)?(ring||el).getBoundingClientRect():null;
+      if(!on||!r||r.width===0){ a.badge.style.display='none'; return; }
+      a.badge.style.display='block';
+      var idx=0,c=0; assigns.forEach(function(b){ if(b.dest===a.dest&&curEl(b)===el){ if(b===a)idx=c; c++; } });
+      if(a.dest===0||a.dest===1){
+        // FILTER cut emblem — tuck the number DOWN onto the emblem's top-left so it stays clear of the live curve
+        a.badge.style.left=(r.left+2+idx*11)+'px'; a.badge.style.top=(r.top+1)+'px'; }
+      else {
+        // knobs / LFO tabs — superscript at the top-right corner; multiples step left with a clear gap
+        a.badge.style.left=(r.right+2-idx*11)+'px'; a.badge.style.top=(r.top-7)+'px'; } });
+    requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+
+  // ── restore persisted matrix into the UI (so reload shows the badges, not a clobber) ──
+  function elForDest(dest){
+    if(dest===0||dest===1){ var c=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="cut"]'); return c?c.parentElement:null; }
+    if(dest>=12&&dest<=21){ return document.querySelector('#mod-engine .mv-tabs .t[data-tab="'+(dest-11)+'"]'); }
+    var found=null; document.querySelectorAll('#syn-panel .knob[data-syn]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-syn')]===dest) found=k; }); return found; }
+  function restore(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g)return;
+    g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); arr.forEach(function(o){ var lfo=(o.s|0)+1, dest=o.d|0, el=elForDest(dest); if(!el)return;
+      for(var i=0;i<assigns.length;i++) if(assigns[i].lfo===lfo&&assigns[i].dest===dest) return;
+      var a={lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el}; assigns.push(a); mkBadge(a); }); markTargets(); }catch(e){} }); }catch(e){} }
+  setTimeout(restore, 700);
 })();
 </script>
 </body>

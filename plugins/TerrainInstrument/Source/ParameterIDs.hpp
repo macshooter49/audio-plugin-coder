@@ -117,9 +117,22 @@ namespace ParameterIDs
     constexpr char LFO4_SHAPE[] = "LFO4_SHAPE";  constexpr char LFO4_SYNC[]  = "LFO4_SYNC";   constexpr char LFO4_DIV[] = "LFO4_DIV";
     constexpr char LFO5_RATE[]  = "LFO5_RATE";   constexpr char LFO5_DEPTH[] = "LFO5_DEPTH";
     constexpr char LFO5_SHAPE[] = "LFO5_SHAPE";  constexpr char LFO5_SYNC[]  = "LFO5_SYNC";   constexpr char LFO5_DIV[] = "LFO5_DIV";
+    // Mod matrix — LFOs 6..10 (identical per-LFO set; routed via the drag matrix).
+    constexpr char LFO6_RATE[]  = "LFO6_RATE";   constexpr char LFO6_DEPTH[] = "LFO6_DEPTH";
+    constexpr char LFO6_SHAPE[] = "LFO6_SHAPE";  constexpr char LFO6_SYNC[]  = "LFO6_SYNC";   constexpr char LFO6_DIV[] = "LFO6_DIV";
+    constexpr char LFO7_RATE[]  = "LFO7_RATE";   constexpr char LFO7_DEPTH[] = "LFO7_DEPTH";
+    constexpr char LFO7_SHAPE[] = "LFO7_SHAPE";  constexpr char LFO7_SYNC[]  = "LFO7_SYNC";   constexpr char LFO7_DIV[] = "LFO7_DIV";
+    constexpr char LFO8_RATE[]  = "LFO8_RATE";   constexpr char LFO8_DEPTH[] = "LFO8_DEPTH";
+    constexpr char LFO8_SHAPE[] = "LFO8_SHAPE";  constexpr char LFO8_SYNC[]  = "LFO8_SYNC";   constexpr char LFO8_DIV[] = "LFO8_DIV";
+    constexpr char LFO9_RATE[]  = "LFO9_RATE";   constexpr char LFO9_DEPTH[] = "LFO9_DEPTH";
+    constexpr char LFO9_SHAPE[] = "LFO9_SHAPE";  constexpr char LFO9_SYNC[]  = "LFO9_SYNC";   constexpr char LFO9_DIV[] = "LFO9_DIV";
+    constexpr char LFO10_RATE[] = "LFO10_RATE";  constexpr char LFO10_DEPTH[]= "LFO10_DEPTH";
+    constexpr char LFO10_SHAPE[]= "LFO10_SHAPE"; constexpr char LFO10_SYNC[] = "LFO10_SYNC";  constexpr char LFO10_DIV[]= "LFO10_DIV";
     // Mod redesign — per-LFO PHASE (slides the waveform L/R), 0..1
     constexpr char LFO1_PHASE[] = "LFO1_PHASE"; constexpr char LFO2_PHASE[] = "LFO2_PHASE"; constexpr char LFO3_PHASE[] = "LFO3_PHASE";
     constexpr char LFO4_PHASE[] = "LFO4_PHASE"; constexpr char LFO5_PHASE[] = "LFO5_PHASE";
+    constexpr char LFO6_PHASE[] = "LFO6_PHASE"; constexpr char LFO7_PHASE[] = "LFO7_PHASE"; constexpr char LFO8_PHASE[] = "LFO8_PHASE";
+    constexpr char LFO9_PHASE[] = "LFO9_PHASE"; constexpr char LFO10_PHASE[]= "LFO10_PHASE";
     constexpr char SYN_ENV_AMP_A[]     = "SYN_ENV_AMP_A";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_D[]     = "SYN_ENV_AMP_D";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1

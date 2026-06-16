@@ -29,6 +29,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(lfo4RateRelay).withOptionsFrom(lfo4DepthRelay).withOptionsFrom(lfo4ShapeRelay).withOptionsFrom(lfo4SyncRelay).withOptionsFrom(lfo4DivRelay)
             .withOptionsFrom(lfo5RateRelay).withOptionsFrom(lfo5DepthRelay).withOptionsFrom(lfo5ShapeRelay).withOptionsFrom(lfo5SyncRelay).withOptionsFrom(lfo5DivRelay)
             .withOptionsFrom(lfo1PhaseRelay).withOptionsFrom(lfo2PhaseRelay).withOptionsFrom(lfo3PhaseRelay).withOptionsFrom(lfo4PhaseRelay).withOptionsFrom(lfo5PhaseRelay)
+            .withOptionsFrom(lfo6RateRelay).withOptionsFrom(lfo6DepthRelay).withOptionsFrom(lfo6ShapeRelay).withOptionsFrom(lfo6SyncRelay).withOptionsFrom(lfo6DivRelay).withOptionsFrom(lfo6PhaseRelay)
+            .withOptionsFrom(lfo7RateRelay).withOptionsFrom(lfo7DepthRelay).withOptionsFrom(lfo7ShapeRelay).withOptionsFrom(lfo7SyncRelay).withOptionsFrom(lfo7DivRelay).withOptionsFrom(lfo7PhaseRelay)
+            .withOptionsFrom(lfo8RateRelay).withOptionsFrom(lfo8DepthRelay).withOptionsFrom(lfo8ShapeRelay).withOptionsFrom(lfo8SyncRelay).withOptionsFrom(lfo8DivRelay).withOptionsFrom(lfo8PhaseRelay)
+            .withOptionsFrom(lfo9RateRelay).withOptionsFrom(lfo9DepthRelay).withOptionsFrom(lfo9ShapeRelay).withOptionsFrom(lfo9SyncRelay).withOptionsFrom(lfo9DivRelay).withOptionsFrom(lfo9PhaseRelay)
+            .withOptionsFrom(lfo10RateRelay).withOptionsFrom(lfo10DepthRelay).withOptionsFrom(lfo10ShapeRelay).withOptionsFrom(lfo10SyncRelay).withOptionsFrom(lfo10DivRelay).withOptionsFrom(lfo10PhaseRelay)
             .withOptionsFrom(wanderRelay)
             .withOptionsFrom(freezeRelay)
             .withOptionsFrom(grainFilterRelay)
@@ -226,6 +231,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() > 0)
                     audioProcessor.loadPreset(static_cast<int>(args[0]));
                 complete({});
+            })
+            .withNativeFunction("setSynthMod", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.setSynthModMatrix(args[0].toString());
+                complete(juce::var{});
+            })
+            .withNativeFunction("getSynthMod", [this](const juce::Array<juce::var>&,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.getSynthModMatrix());
             })
             .withNativeFunction("setDelayFreeze", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -1876,6 +1893,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(lfo5ShapeAttachment, ParameterIDs::LFO5_SHAPE, lfo5ShapeRelay); mkAtt(lfo5SyncAttachment, ParameterIDs::LFO5_SYNC, lfo5SyncRelay); mkAtt(lfo5DivAttachment, ParameterIDs::LFO5_DIV, lfo5DivRelay);
         mkAtt(lfo1PhaseAttachment, ParameterIDs::LFO1_PHASE, lfo1PhaseRelay); mkAtt(lfo2PhaseAttachment, ParameterIDs::LFO2_PHASE, lfo2PhaseRelay); mkAtt(lfo3PhaseAttachment, ParameterIDs::LFO3_PHASE, lfo3PhaseRelay);
         mkAtt(lfo4PhaseAttachment, ParameterIDs::LFO4_PHASE, lfo4PhaseRelay); mkAtt(lfo5PhaseAttachment, ParameterIDs::LFO5_PHASE, lfo5PhaseRelay);
+        mkAtt(lfo6RateAttachment, ParameterIDs::LFO6_RATE, lfo6RateRelay);  mkAtt(lfo6DepthAttachment, ParameterIDs::LFO6_DEPTH, lfo6DepthRelay);  mkAtt(lfo6ShapeAttachment, ParameterIDs::LFO6_SHAPE, lfo6ShapeRelay); mkAtt(lfo6SyncAttachment, ParameterIDs::LFO6_SYNC, lfo6SyncRelay); mkAtt(lfo6DivAttachment, ParameterIDs::LFO6_DIV, lfo6DivRelay); mkAtt(lfo6PhaseAttachment, ParameterIDs::LFO6_PHASE, lfo6PhaseRelay);
+        mkAtt(lfo7RateAttachment, ParameterIDs::LFO7_RATE, lfo7RateRelay);  mkAtt(lfo7DepthAttachment, ParameterIDs::LFO7_DEPTH, lfo7DepthRelay);  mkAtt(lfo7ShapeAttachment, ParameterIDs::LFO7_SHAPE, lfo7ShapeRelay); mkAtt(lfo7SyncAttachment, ParameterIDs::LFO7_SYNC, lfo7SyncRelay); mkAtt(lfo7DivAttachment, ParameterIDs::LFO7_DIV, lfo7DivRelay); mkAtt(lfo7PhaseAttachment, ParameterIDs::LFO7_PHASE, lfo7PhaseRelay);
+        mkAtt(lfo8RateAttachment, ParameterIDs::LFO8_RATE, lfo8RateRelay);  mkAtt(lfo8DepthAttachment, ParameterIDs::LFO8_DEPTH, lfo8DepthRelay);  mkAtt(lfo8ShapeAttachment, ParameterIDs::LFO8_SHAPE, lfo8ShapeRelay); mkAtt(lfo8SyncAttachment, ParameterIDs::LFO8_SYNC, lfo8SyncRelay); mkAtt(lfo8DivAttachment, ParameterIDs::LFO8_DIV, lfo8DivRelay); mkAtt(lfo8PhaseAttachment, ParameterIDs::LFO8_PHASE, lfo8PhaseRelay);
+        mkAtt(lfo9RateAttachment, ParameterIDs::LFO9_RATE, lfo9RateRelay);  mkAtt(lfo9DepthAttachment, ParameterIDs::LFO9_DEPTH, lfo9DepthRelay);  mkAtt(lfo9ShapeAttachment, ParameterIDs::LFO9_SHAPE, lfo9ShapeRelay); mkAtt(lfo9SyncAttachment, ParameterIDs::LFO9_SYNC, lfo9SyncRelay); mkAtt(lfo9DivAttachment, ParameterIDs::LFO9_DIV, lfo9DivRelay); mkAtt(lfo9PhaseAttachment, ParameterIDs::LFO9_PHASE, lfo9PhaseRelay);
+        mkAtt(lfo10RateAttachment, ParameterIDs::LFO10_RATE, lfo10RateRelay); mkAtt(lfo10DepthAttachment, ParameterIDs::LFO10_DEPTH, lfo10DepthRelay); mkAtt(lfo10ShapeAttachment, ParameterIDs::LFO10_SHAPE, lfo10ShapeRelay); mkAtt(lfo10SyncAttachment, ParameterIDs::LFO10_SYNC, lfo10SyncRelay); mkAtt(lfo10DivAttachment, ParameterIDs::LFO10_DIV, lfo10DivRelay); mkAtt(lfo10PhaseAttachment, ParameterIDs::LFO10_PHASE, lfo10PhaseRelay);
     }
 
     sprayAttachment = std::make_unique<juce::WebSliderParameterAttachment>(

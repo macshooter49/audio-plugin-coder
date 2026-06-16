@@ -932,7 +932,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::LFO1_DEPTH, 1 },
         "LFO 1 Depth",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f),
-        0.35f));
+        1.0f));   // per-LFO master amount (default full; scales all this LFO's routes, modulatable)
     // ── Mod redesign — LFO 1 shape / sync / division.
     //    SHAPE indices match wc::LFOShape (Sine=0 … Random=6).
     //    DIV indices match wc::kSyncDivisions exactly (so syncIdx = div index).
@@ -951,7 +951,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T" },
         5));
     // Per-LFO PHASE (slides the waveform). 0..1, default 0.
-    for (auto* pid : { ParameterIDs::LFO1_PHASE, ParameterIDs::LFO2_PHASE, ParameterIDs::LFO3_PHASE, ParameterIDs::LFO4_PHASE, ParameterIDs::LFO5_PHASE })
+    for (auto* pid : { ParameterIDs::LFO1_PHASE, ParameterIDs::LFO2_PHASE, ParameterIDs::LFO3_PHASE, ParameterIDs::LFO4_PHASE, ParameterIDs::LFO5_PHASE,
+                       ParameterIDs::LFO6_PHASE, ParameterIDs::LFO7_PHASE, ParameterIDs::LFO8_PHASE, ParameterIDs::LFO9_PHASE, ParameterIDs::LFO10_PHASE })
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { pid, 1 }, juce::String (pid).replace ("LFO", "LFO ").replace ("_PHASE", " Phase"),
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
@@ -966,7 +967,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 juce::NormalisableRange<float> (0.01f, 40.0f, 0.0f, 0.3f), 2.0f));
             layout.add (std::make_unique<juce::AudioParameterFloat> (
                 juce::ParameterID { depth, 1 }, "LFO " + juce::String (n) + " Depth",
-                juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+                juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 1.0f));   // master amount, default full
             layout.add (std::make_unique<juce::AudioParameterChoice> (
                 juce::ParameterID { shape, 1 }, "LFO " + juce::String (n) + " Shape", lfoShapes, 0));
             layout.add (std::make_unique<juce::AudioParameterBool> (
@@ -978,6 +979,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         addLfo (3, ParameterIDs::LFO3_RATE, ParameterIDs::LFO3_DEPTH, ParameterIDs::LFO3_SHAPE, ParameterIDs::LFO3_SYNC, ParameterIDs::LFO3_DIV);
         addLfo (4, ParameterIDs::LFO4_RATE, ParameterIDs::LFO4_DEPTH, ParameterIDs::LFO4_SHAPE, ParameterIDs::LFO4_SYNC, ParameterIDs::LFO4_DIV);
         addLfo (5, ParameterIDs::LFO5_RATE, ParameterIDs::LFO5_DEPTH, ParameterIDs::LFO5_SHAPE, ParameterIDs::LFO5_SYNC, ParameterIDs::LFO5_DIV);
+        addLfo (6, ParameterIDs::LFO6_RATE, ParameterIDs::LFO6_DEPTH, ParameterIDs::LFO6_SHAPE, ParameterIDs::LFO6_SYNC, ParameterIDs::LFO6_DIV);
+        addLfo (7, ParameterIDs::LFO7_RATE, ParameterIDs::LFO7_DEPTH, ParameterIDs::LFO7_SHAPE, ParameterIDs::LFO7_SYNC, ParameterIDs::LFO7_DIV);
+        addLfo (8, ParameterIDs::LFO8_RATE, ParameterIDs::LFO8_DEPTH, ParameterIDs::LFO8_SHAPE, ParameterIDs::LFO8_SYNC, ParameterIDs::LFO8_DIV);
+        addLfo (9, ParameterIDs::LFO9_RATE, ParameterIDs::LFO9_DEPTH, ParameterIDs::LFO9_SHAPE, ParameterIDs::LFO9_SYNC, ParameterIDs::LFO9_DIV);
+        addLfo (10,ParameterIDs::LFO10_RATE,ParameterIDs::LFO10_DEPTH,ParameterIDs::LFO10_SHAPE,ParameterIDs::LFO10_SYNC,ParameterIDs::LFO10_DIV);
     }
 
     // ── Batch 1 Filter — TYPE (27 choices, NONE last in enum but first in UI),
@@ -2319,6 +2325,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 { ParameterIDs::LFO3_SHAPE, ParameterIDs::LFO3_SYNC, ParameterIDs::LFO3_DIV, ParameterIDs::LFO3_RATE, ParameterIDs::LFO3_DEPTH, ParameterIDs::LFO3_PHASE },
                 { ParameterIDs::LFO4_SHAPE, ParameterIDs::LFO4_SYNC, ParameterIDs::LFO4_DIV, ParameterIDs::LFO4_RATE, ParameterIDs::LFO4_DEPTH, ParameterIDs::LFO4_PHASE },
                 { ParameterIDs::LFO5_SHAPE, ParameterIDs::LFO5_SYNC, ParameterIDs::LFO5_DIV, ParameterIDs::LFO5_RATE, ParameterIDs::LFO5_DEPTH, ParameterIDs::LFO5_PHASE },
+                { ParameterIDs::LFO6_SHAPE, ParameterIDs::LFO6_SYNC, ParameterIDs::LFO6_DIV, ParameterIDs::LFO6_RATE, ParameterIDs::LFO6_DEPTH, ParameterIDs::LFO6_PHASE },
+                { ParameterIDs::LFO7_SHAPE, ParameterIDs::LFO7_SYNC, ParameterIDs::LFO7_DIV, ParameterIDs::LFO7_RATE, ParameterIDs::LFO7_DEPTH, ParameterIDs::LFO7_PHASE },
+                { ParameterIDs::LFO8_SHAPE, ParameterIDs::LFO8_SYNC, ParameterIDs::LFO8_DIV, ParameterIDs::LFO8_RATE, ParameterIDs::LFO8_DEPTH, ParameterIDs::LFO8_PHASE },
+                { ParameterIDs::LFO9_SHAPE, ParameterIDs::LFO9_SYNC, ParameterIDs::LFO9_DIV, ParameterIDs::LFO9_RATE, ParameterIDs::LFO9_DEPTH, ParameterIDs::LFO9_PHASE },
+                { ParameterIDs::LFO10_SHAPE,ParameterIDs::LFO10_SYNC,ParameterIDs::LFO10_DIV,ParameterIDs::LFO10_RATE,ParameterIDs::LFO10_DEPTH,ParameterIDs::LFO10_PHASE },
             };
             int na = 0;
             for (int i = 0; i < wc::NUM_LFOS; ++i)
@@ -2333,12 +2344,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 synModCfg.lfos[i].phaseOffset = *apvts.getRawParameterValue (lp[i].phase);
                 synModCfg.lfos[i].trigger     = wc::LFOTrigger::Free;
                 synModCfg.lfos[i].polarity    = wc::LFOPolarity::Bipolar;
-                // one route per LFO → Filter 1 cutoff (per-LFO destination routing arrives with the matrix stage)
-                synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + i);
-                synModCfg.assignments[na].dest    = wc::ModDest::Cut1;
-                synModCfg.assignments[na].depth   = *apvts.getRawParameterValue (lp[i].depth);
-                synModCfg.assignments[na].enabled = true;
-                ++na;
+            }
+            // Assignments come from the UI drag-matrix. Effective depth = per-route badge (the dest
+            // "meter") × that LFO's DEPTH ring (per-LFO MASTER amount, default full so every LFO works
+            // out of the box; turn it down to tame all of one LFO's routes, and it's itself modulatable
+            // via LFO→LFO so you can put an LFO on an LFO's depth).
+            {
+                const juce::ScopedLock sl (synModLock);
+                for (const auto& r : synModRoutes)
+                {
+                    if (na >= wc::MAX_ASSIGNMENTS) break;
+                    if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
+                    const float master = *apvts.getRawParameterValue (lp[r.src].depth);
+                    synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + r.src);
+                    synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
+                    synModCfg.assignments[na].depth   = r.depth * master;
+                    synModCfg.assignments[na].enabled = true;
+                    ++na;
+                }
             }
             synModCfg.numAssignments = na;
         }
@@ -3425,6 +3448,31 @@ void TerrainInstrumentAudioProcessor::setSlicesFromJson (const juce::String& jso
     replaceSlices (tw::slicesFromJson (json));
 }
 
+// Synth mod-matrix: JS pushes an array [{ "s":src, "d":dest, "v":depth }, …]. Parse it
+// (message thread) into a thread-safe route list the audio thread copies each block.
+void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& json)
+{
+    std::vector<SynModRoute> parsed;
+    auto v = juce::JSON::parse (json);
+    if (auto* arr = v.getArray())
+    {
+        for (auto& item : *arr)
+        {
+            SynModRoute r;
+            r.src   = (int)   item.getProperty ("s", 0);
+            r.dest  = (int)   item.getProperty ("d", 0);
+            r.depth = (float) (double) item.getProperty ("v", 0.0);
+            if (r.src  < 0 || r.src  >= wc::NUM_LFOS)            continue;
+            if (r.dest < 0 || r.dest >= (int) wc::ModDest::NumDests) continue;
+            r.depth = juce::jlimit (-1.0f, 1.0f, r.depth);
+            if (parsed.size() < (size_t) wc::MAX_ASSIGNMENTS) parsed.push_back (r);
+        }
+    }
+    const juce::ScopedLock sl (synModLock);
+    synModRoutes = std::move (parsed);
+    synModJson   = json;
+}
+
 juce::String TerrainInstrumentAudioProcessor::getPitchSliceJson() const
 {
     // Serialise pitchModeSlice as a single-element object so JS can use
@@ -3534,6 +3582,11 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     state.setProperty("delayEnabled",       delayEnabled.load(),          nullptr);
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
+    {
+        const juce::ScopedLock sl (synModLock);
+        if (synModJson.isNotEmpty())
+            state.setProperty("synModJson", synModJson, nullptr);
+    }
 
     // ── V2 format marker ─────────────────────────────────────────────────────
     // Task 12: introduce version=2 and editingLayer so Task 13 (setStateInformation)
@@ -3688,6 +3741,10 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
+            {
+                auto sm = newState.getProperty("synModJson", "").toString();
+                if (sm.isNotEmpty()) setSynthModMatrix (sm);
+            }
 
             // ── Task 13: V1 / V2 branching ────────────────────────────────────
             // V2 blobs (saved by Task 12) carry version=2 and a "layers" child tree.

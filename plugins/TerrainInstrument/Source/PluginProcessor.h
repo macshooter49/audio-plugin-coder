@@ -360,6 +360,10 @@ public:
     juce::String      getSlicesJson() const;
     void              setSlicesFromJson (const juce::String& json);
 
+    // Synth mod-matrix bridge (JS setSynthMod native fn → parsed route list).
+    void              setSynthModMatrix (const juce::String& json);
+    juce::String      getSynthModMatrix() const { return synModJson; }
+
     // ── Pitch-mode virtual slice ───────────────────────────────────────────
     // When SLICE_MODE == 0 (PITCH), the whole sample is played as a single
     // chromatic one-shot. This virtual slice carries per-chop features
@@ -537,6 +541,14 @@ public:
 
     // Modulation state JSON (persisted from JS, survives editor close/reopen + DAW session)
     juce::String modStateJson;
+
+    // ── Synth mod-matrix (drag-to-assign): LFO source → synth dest, depth. The editor
+    //    pushes the route list as JSON via the setSynthMod native fn; we parse it into a
+    //    thread-safe vector the audio thread copies into synModCfg each block. Persisted.
+    struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; };
+    mutable juce::CriticalSection synModLock;
+    std::vector<SynModRoute>      synModRoutes;   // guarded by synModLock
+    juce::String                  synModJson;     // last JSON received (for state save)
 
     // Tape loop read-only state (set by processBlock for UI)
     bool getTapeLoopHasContent() const { return tapeLoop.hasContent(); }

@@ -26,22 +26,27 @@ namespace wc
 // ── Sources (what modulates). LFOs bipolar [-1,1]; envelopes unipolar [0,1]. ──
 enum class ModSource : int
 {
-    L1 = 0, L2, L3, L4, L5,    // per-voice LFOs (mod redesign: full 5-LFO bank)
+    L1 = 0, L2, L3, L4, L5,    // per-voice LFOs 1..5
+    L6, L7, L8, L9, L10,       // mod matrix — LFOs 6..10 (contiguous so L1+idx works for all 10)
     EnvAmp, EnvFilter,         // the two "always-on" envelopes
-    EnvMod1, EnvMod2,          // the spare envelopes (routed for the first time in Batch 2)
+    EnvMod1, EnvMod2,          // the spare envelopes
     Velocity, Note,            // (Batch 2+)
     NumSources
 };
-static constexpr int NUM_LFOS = 5;
+static constexpr int NUM_LFOS = 10;
 
 // ── Destinations (what gets modulated). Each maps to a SynthVoice effective member. ──
 enum class ModDest : int
 {
     Cut1 = 0, Cut2,            // filter cutoffs (semitone domain) — Cut1 wired in Batch 1
-    Frame, Warp, Fold,         // wavetable frame / warp / fold (linear 0..1)
+    Frame, Warp, Fold,         // OSC A wavetable frame / warp / fold (linear 0..1)
     Pitch,                     // semitones
     Level, Pan,                // linear
     FlowTime,                  // FLOW · TIME (linear)
+    // ── Mod-matrix stage (append-only; never reshuffle — saved projects stay valid) ──
+    FrameB, WarpB, FoldB,      // OSC B wavetable frame / warp / fold (linear 0..1)
+    LfoAmt1, LfoAmt2, LfoAmt3, LfoAmt4, LfoAmt5,        // LFO→LFO: scales the target LFO's output
+    LfoAmt6, LfoAmt7, LfoAmt8, LfoAmt9, LfoAmt10,       // (LFOs 6..10) — LfoAmt{n} stays at dest 11+n
     NumDests
 };
 
@@ -65,6 +70,19 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // Level
     { ModDomain::Bipolar,   1.0f },  // Pan
     { ModDomain::Linear01,  1.0f },  // FlowTime
+    { ModDomain::Linear01,  1.0f },  // FrameB
+    { ModDomain::Linear01,  1.0f },  // WarpB
+    { ModDomain::Linear01,  1.0f },  // FoldB
+    { ModDomain::Linear01,  1.0f },  // LfoAmt1
+    { ModDomain::Linear01,  1.0f },  // LfoAmt2
+    { ModDomain::Linear01,  1.0f },  // LfoAmt3
+    { ModDomain::Linear01,  1.0f },  // LfoAmt4
+    { ModDomain::Linear01,  1.0f },  // LfoAmt5
+    { ModDomain::Linear01,  1.0f },  // LfoAmt6
+    { ModDomain::Linear01,  1.0f },  // LfoAmt7
+    { ModDomain::Linear01,  1.0f },  // LfoAmt8
+    { ModDomain::Linear01,  1.0f },  // LfoAmt9
+    { ModDomain::Linear01,  1.0f },  // LfoAmt10
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──
