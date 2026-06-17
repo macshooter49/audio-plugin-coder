@@ -225,6 +225,65 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBFoldAmtRelay)
             .withOptionsFrom(synOscBFrameSpreadRelay)
             .withOptionsFrom(synOscBInterpModeRelay)
+            // ── OSC C + D options (4-osc) ──
+            .withOptionsFrom(synOscCEngineRelay)
+            .withOptionsFrom(synOscCOctRelay)
+            .withOptionsFrom(synOscCSemiRelay)
+            .withOptionsFrom(synOscCCentRelay)
+            .withOptionsFrom(synOscCLevelRelay)
+            .withOptionsFrom(synOscCPanRelay)
+            .withOptionsFrom(synOscCWtPresetRelay)
+            .withOptionsFrom(synOscCWtFrameRelay)
+            .withOptionsFrom(synOscCWarpModeRelay)
+            .withOptionsFrom(synOscCWarpAmountRelay)
+            .withOptionsFrom(synOscCWarp2ModeRelay)
+            .withOptionsFrom(synOscCWarp2AmtRelay)
+            .withOptionsFrom(synOscCPhaseModeRelay)
+            .withOptionsFrom(synOscCWaverRelay)
+            .withOptionsFrom(synOscCKeytrackRelay)
+            .withOptionsFrom(synOscCKeytrackDestRelay)
+            .withOptionsFrom(synOscCRouteSrcRelay)
+            .withOptionsFrom(synOscCRouteDestRelay)
+            .withOptionsFrom(synOscCRouteAmtRelay)
+            .withOptionsFrom(synOscCUnisonRelay)
+            .withOptionsFrom(synOscCUdetuneRelay)
+            .withOptionsFrom(synOscCUblendRelay)
+            .withOptionsFrom(synOscCUwidthRelay)
+            .withOptionsFrom(synOscCSpectralTypeRelay)
+            .withOptionsFrom(synOscCSpectralAmtRelay)
+            .withOptionsFrom(synOscCFoldShapeRelay)
+            .withOptionsFrom(synOscCFoldAmtRelay)
+            .withOptionsFrom(synOscCFrameSpreadRelay)
+            .withOptionsFrom(synOscCInterpModeRelay)
+            .withOptionsFrom(synOscDEngineRelay)
+            .withOptionsFrom(synOscDOctRelay)
+            .withOptionsFrom(synOscDSemiRelay)
+            .withOptionsFrom(synOscDCentRelay)
+            .withOptionsFrom(synOscDLevelRelay)
+            .withOptionsFrom(synOscDPanRelay)
+            .withOptionsFrom(synOscDWtPresetRelay)
+            .withOptionsFrom(synOscDWtFrameRelay)
+            .withOptionsFrom(synOscDWarpModeRelay)
+            .withOptionsFrom(synOscDWarpAmountRelay)
+            .withOptionsFrom(synOscDWarp2ModeRelay)
+            .withOptionsFrom(synOscDWarp2AmtRelay)
+            .withOptionsFrom(synOscDPhaseModeRelay)
+            .withOptionsFrom(synOscDWaverRelay)
+            .withOptionsFrom(synOscDKeytrackRelay)
+            .withOptionsFrom(synOscDKeytrackDestRelay)
+            .withOptionsFrom(synOscDRouteSrcRelay)
+            .withOptionsFrom(synOscDRouteDestRelay)
+            .withOptionsFrom(synOscDRouteAmtRelay)
+            .withOptionsFrom(synOscDUnisonRelay)
+            .withOptionsFrom(synOscDUdetuneRelay)
+            .withOptionsFrom(synOscDUblendRelay)
+            .withOptionsFrom(synOscDUwidthRelay)
+            .withOptionsFrom(synOscDSpectralTypeRelay)
+            .withOptionsFrom(synOscDSpectralAmtRelay)
+            .withOptionsFrom(synOscDFoldShapeRelay)
+            .withOptionsFrom(synOscDFoldAmtRelay)
+            .withOptionsFrom(synOscDFrameSpreadRelay)
+            .withOptionsFrom(synOscDInterpModeRelay)
             .withOptionsFrom(flowModeRelay).withOptionsFrom(flowArpLatchRelay)
             .withOptionsFrom(flowArpRateRelay).withOptionsFrom(flowArpGateRelay).withOptionsFrom(flowArpVaryRelay).withOptionsFrom(flowArpTrajRelay).withOptionsFrom(flowArpMorphRelay)
             .withOptionsFrom(flowSeqRateRelay).withOptionsFrom(flowSeqGateRelay).withOptionsFrom(flowSeqVaryRelay).withOptionsFrom(flowSeqTrajRelay).withOptionsFrom(flowSeqMorphRelay)
@@ -2514,6 +2573,70 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkF(flowSeqRateAttachment, ParameterIDs::FLOW_SEQ_RATE, flowSeqRateRelay); mkF(flowSeqGateAttachment, ParameterIDs::FLOW_SEQ_GATE, flowSeqGateRelay); mkF(flowSeqVaryAttachment, ParameterIDs::FLOW_SEQ_VARY, flowSeqVaryRelay); mkF(flowSeqTrajAttachment, ParameterIDs::FLOW_SEQ_TRAJ, flowSeqTrajRelay); mkF(flowSeqMorphAttachment, ParameterIDs::FLOW_SEQ_MORPH, flowSeqMorphRelay);
         mkF(flowGliRateAttachment, ParameterIDs::FLOW_GLI_RATE, flowGliRateRelay); mkF(flowGliGateAttachment, ParameterIDs::FLOW_GLI_GATE, flowGliGateRelay); mkF(flowGliVaryAttachment, ParameterIDs::FLOW_GLI_VARY, flowGliVaryRelay); mkF(flowGliTrajAttachment, ParameterIDs::FLOW_GLI_TRAJ, flowGliTrajRelay); mkF(flowGliMorphAttachment, ParameterIDs::FLOW_GLI_MORPH, flowGliMorphRelay);
         mkF(flowDrfRateAttachment, ParameterIDs::FLOW_DRF_RATE, flowDrfRateRelay); mkF(flowDrfGateAttachment, ParameterIDs::FLOW_DRF_GATE, flowDrfGateRelay); mkF(flowDrfVaryAttachment, ParameterIDs::FLOW_DRF_VARY, flowDrfVaryRelay); mkF(flowDrfTrajAttachment, ParameterIDs::FLOW_DRF_TRAJ, flowDrfTrajRelay); mkF(flowDrfMorphAttachment, ParameterIDs::FLOW_DRF_MORPH, flowDrfMorphRelay);
+    }
+
+    // ── OSC C + D attachments (4-osc) ──
+    {
+        auto mkO = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
+        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
+        mkO(synOscCEngineAttachment, ParameterIDs::SYN_OSC_C_ENGINE, synOscCEngineRelay);
+        mkO(synOscCOctAttachment, ParameterIDs::SYN_OSC_C_OCT, synOscCOctRelay);
+        mkO(synOscCSemiAttachment, ParameterIDs::SYN_OSC_C_SEMI, synOscCSemiRelay);
+        mkO(synOscCCentAttachment, ParameterIDs::SYN_OSC_C_CENT, synOscCCentRelay);
+        mkO(synOscCLevelAttachment, ParameterIDs::SYN_OSC_C_LEVEL, synOscCLevelRelay);
+        mkO(synOscCPanAttachment, ParameterIDs::SYN_OSC_C_PAN, synOscCPanRelay);
+        mkO(synOscCWtPresetAttachment, ParameterIDs::SYN_OSC_C_WT_PRESET, synOscCWtPresetRelay);
+        mkO(synOscCWtFrameAttachment, ParameterIDs::SYN_OSC_C_WT_FRAME, synOscCWtFrameRelay);
+        mkO(synOscCWarpModeAttachment, ParameterIDs::SYN_OSC_C_WARP_MODE, synOscCWarpModeRelay);
+        mkO(synOscCWarpAmountAttachment, ParameterIDs::SYN_OSC_C_WARP_AMOUNT, synOscCWarpAmountRelay);
+        mkO(synOscCWarp2ModeAttachment, ParameterIDs::SYN_OSC_C_WARP2_MODE, synOscCWarp2ModeRelay);
+        mkO(synOscCWarp2AmtAttachment, ParameterIDs::SYN_OSC_C_WARP2_AMT, synOscCWarp2AmtRelay);
+        mkO(synOscCPhaseModeAttachment, ParameterIDs::SYN_OSC_C_PHASE_MODE, synOscCPhaseModeRelay);
+        mkO(synOscCWaverAttachment, ParameterIDs::SYN_OSC_C_WAVER, synOscCWaverRelay);
+        mkO(synOscCKeytrackAttachment, ParameterIDs::SYN_OSC_C_KEYTRACK, synOscCKeytrackRelay);
+        mkO(synOscCKeytrackDestAttachment, ParameterIDs::SYN_OSC_C_KEYTRACK_DEST, synOscCKeytrackDestRelay);
+        mkO(synOscCRouteSrcAttachment, ParameterIDs::SYN_OSC_C_ROUTE_SRC, synOscCRouteSrcRelay);
+        mkO(synOscCRouteDestAttachment, ParameterIDs::SYN_OSC_C_ROUTE_DEST, synOscCRouteDestRelay);
+        mkO(synOscCRouteAmtAttachment, ParameterIDs::SYN_OSC_C_ROUTE_AMT, synOscCRouteAmtRelay);
+        mkO(synOscCUnisonAttachment, ParameterIDs::SYN_OSC_C_UNISON, synOscCUnisonRelay);
+        mkO(synOscCUdetuneAttachment, ParameterIDs::SYN_OSC_C_UDETUNE, synOscCUdetuneRelay);
+        mkO(synOscCUblendAttachment, ParameterIDs::SYN_OSC_C_UBLEND, synOscCUblendRelay);
+        mkO(synOscCUwidthAttachment, ParameterIDs::SYN_OSC_C_UWIDTH, synOscCUwidthRelay);
+        mkO(synOscCSpectralTypeAttachment, ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE, synOscCSpectralTypeRelay);
+        mkO(synOscCSpectralAmtAttachment, ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, synOscCSpectralAmtRelay);
+        mkO(synOscCFoldShapeAttachment, ParameterIDs::SYN_OSC_C_FOLD_SHAPE, synOscCFoldShapeRelay);
+        mkO(synOscCFoldAmtAttachment, ParameterIDs::SYN_OSC_C_FOLD_AMT, synOscCFoldAmtRelay);
+        mkO(synOscCFrameSpreadAttachment, ParameterIDs::SYN_OSC_C_FRAME_SPREAD, synOscCFrameSpreadRelay);
+        mkO(synOscCInterpModeAttachment, ParameterIDs::SYN_OSC_C_INTERP_MODE, synOscCInterpModeRelay);
+        mkO(synOscDEngineAttachment, ParameterIDs::SYN_OSC_D_ENGINE, synOscDEngineRelay);
+        mkO(synOscDOctAttachment, ParameterIDs::SYN_OSC_D_OCT, synOscDOctRelay);
+        mkO(synOscDSemiAttachment, ParameterIDs::SYN_OSC_D_SEMI, synOscDSemiRelay);
+        mkO(synOscDCentAttachment, ParameterIDs::SYN_OSC_D_CENT, synOscDCentRelay);
+        mkO(synOscDLevelAttachment, ParameterIDs::SYN_OSC_D_LEVEL, synOscDLevelRelay);
+        mkO(synOscDPanAttachment, ParameterIDs::SYN_OSC_D_PAN, synOscDPanRelay);
+        mkO(synOscDWtPresetAttachment, ParameterIDs::SYN_OSC_D_WT_PRESET, synOscDWtPresetRelay);
+        mkO(synOscDWtFrameAttachment, ParameterIDs::SYN_OSC_D_WT_FRAME, synOscDWtFrameRelay);
+        mkO(synOscDWarpModeAttachment, ParameterIDs::SYN_OSC_D_WARP_MODE, synOscDWarpModeRelay);
+        mkO(synOscDWarpAmountAttachment, ParameterIDs::SYN_OSC_D_WARP_AMOUNT, synOscDWarpAmountRelay);
+        mkO(synOscDWarp2ModeAttachment, ParameterIDs::SYN_OSC_D_WARP2_MODE, synOscDWarp2ModeRelay);
+        mkO(synOscDWarp2AmtAttachment, ParameterIDs::SYN_OSC_D_WARP2_AMT, synOscDWarp2AmtRelay);
+        mkO(synOscDPhaseModeAttachment, ParameterIDs::SYN_OSC_D_PHASE_MODE, synOscDPhaseModeRelay);
+        mkO(synOscDWaverAttachment, ParameterIDs::SYN_OSC_D_WAVER, synOscDWaverRelay);
+        mkO(synOscDKeytrackAttachment, ParameterIDs::SYN_OSC_D_KEYTRACK, synOscDKeytrackRelay);
+        mkO(synOscDKeytrackDestAttachment, ParameterIDs::SYN_OSC_D_KEYTRACK_DEST, synOscDKeytrackDestRelay);
+        mkO(synOscDRouteSrcAttachment, ParameterIDs::SYN_OSC_D_ROUTE_SRC, synOscDRouteSrcRelay);
+        mkO(synOscDRouteDestAttachment, ParameterIDs::SYN_OSC_D_ROUTE_DEST, synOscDRouteDestRelay);
+        mkO(synOscDRouteAmtAttachment, ParameterIDs::SYN_OSC_D_ROUTE_AMT, synOscDRouteAmtRelay);
+        mkO(synOscDUnisonAttachment, ParameterIDs::SYN_OSC_D_UNISON, synOscDUnisonRelay);
+        mkO(synOscDUdetuneAttachment, ParameterIDs::SYN_OSC_D_UDETUNE, synOscDUdetuneRelay);
+        mkO(synOscDUblendAttachment, ParameterIDs::SYN_OSC_D_UBLEND, synOscDUblendRelay);
+        mkO(synOscDUwidthAttachment, ParameterIDs::SYN_OSC_D_UWIDTH, synOscDUwidthRelay);
+        mkO(synOscDSpectralTypeAttachment, ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE, synOscDSpectralTypeRelay);
+        mkO(synOscDSpectralAmtAttachment, ParameterIDs::SYN_OSC_D_SPECTRAL_AMT, synOscDSpectralAmtRelay);
+        mkO(synOscDFoldShapeAttachment, ParameterIDs::SYN_OSC_D_FOLD_SHAPE, synOscDFoldShapeRelay);
+        mkO(synOscDFoldAmtAttachment, ParameterIDs::SYN_OSC_D_FOLD_AMT, synOscDFoldAmtRelay);
+        mkO(synOscDFrameSpreadAttachment, ParameterIDs::SYN_OSC_D_FRAME_SPREAD, synOscDFrameSpreadRelay);
+        mkO(synOscDInterpModeAttachment, ParameterIDs::SYN_OSC_D_INTERP_MODE, synOscDInterpModeRelay);
     }
 
     // Load embedded web content

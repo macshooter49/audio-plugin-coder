@@ -331,4 +331,63 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_UDETUNE[]       = "SYN_OSC_B_UDETUNE";        // float 0..100 % pitch fan
     constexpr char SYN_OSC_B_UBLEND[]        = "SYN_OSC_B_UBLEND";         // float 0..100 % centre-vs-outer balance
     constexpr char SYN_OSC_B_UWIDTH[]        = "SYN_OSC_B_UWIDTH";         // float 0..100 % stereo spread
+    // ── OSC C + D chassis ids (4-osc) — mirror OSC B ──
+    constexpr char SYN_OSC_C_ENGINE[]      = "SYN_OSC_C_ENGINE";       // enum 0..5
+    constexpr char SYN_OSC_C_OCT[]         = "SYN_OSC_C_OCT";          // int -3..+3
+    constexpr char SYN_OSC_C_SEMI[]        = "SYN_OSC_C_SEMI";         // int -12..+12
+    constexpr char SYN_OSC_C_CENT[]        = "SYN_OSC_C_CENT";         // float -100..+100
+    constexpr char SYN_OSC_C_LEVEL[]       = "SYN_OSC_C_LEVEL";        // float 0..1
+    constexpr char SYN_OSC_C_PAN[]         = "SYN_OSC_C_PAN";          // float -1..+1
+    constexpr char SYN_OSC_C_WT_PRESET[]   = "SYN_OSC_C_WT_PRESET";    // choice 0..19
+    constexpr char SYN_OSC_C_WT_FRAME[]    = "SYN_OSC_C_WT_FRAME";     // float 0..1
+    constexpr char SYN_OSC_C_WARP_MODE[]   = "SYN_OSC_C_WARP_MODE";    // choice 0..3
+    constexpr char SYN_OSC_C_WARP_AMOUNT[] = "SYN_OSC_C_WARP_AMOUNT";  // float 0..1
+    constexpr char SYN_OSC_C_WARP2_MODE[]  = "SYN_OSC_C_WARP2_MODE";   // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_C_WARP2_AMT[]   = "SYN_OSC_C_WARP2_AMT";    // float 0..1
+    constexpr char SYN_OSC_C_SPECTRAL_TYPE[] = "SYN_OSC_C_SPECTRAL_TYPE";  // choice {0=NONE}
+    constexpr char SYN_OSC_C_SPECTRAL_AMT[]  = "SYN_OSC_C_SPECTRAL_AMT";   // float 0..1
+    constexpr char SYN_OSC_C_FOLD_SHAPE[]    = "SYN_OSC_C_FOLD_SHAPE";     // choice {0=LINEAR}
+    constexpr char SYN_OSC_C_FOLD_AMT[]      = "SYN_OSC_C_FOLD_AMT";       // float 0..1
+    constexpr char SYN_OSC_C_FRAME_SPREAD[]  = "SYN_OSC_C_FRAME_SPREAD";   // float 0..1
+    constexpr char SYN_OSC_C_INTERP_MODE[]   = "SYN_OSC_C_INTERP_MODE";    // choice {0=LINEAR}
+    constexpr char SYN_OSC_C_PHASE_MODE[]    = "SYN_OSC_C_PHASE_MODE";     // choice 0=RETRIG,1=FREE,2=RANDOM,3=SPREAD
+    constexpr char SYN_OSC_C_WAVER[]         = "SYN_OSC_C_WAVER";          // float 0..100 % analog pitch-drift depth (OU)
+    constexpr char SYN_OSC_C_KEYTRACK[]      = "SYN_OSC_C_KEYTRACK";       // float 0..100 % note->destination depth
+    constexpr char SYN_OSC_C_KEYTRACK_DEST[] = "SYN_OSC_C_KEYTRACK_DEST";  // choice 0=FRAME,1=WARP,2=FOLD
+    constexpr char SYN_OSC_C_ROUTE_SRC[]     = "SYN_OSC_C_ROUTE_SRC";      // choice 0=NOTE,1=VEL
+    constexpr char SYN_OSC_C_ROUTE_DEST[]    = "SYN_OSC_C_ROUTE_DEST";     // choice 0=FRAME,1=WARP,2=FOLD,3=CUT1,4=CUT2
+    constexpr char SYN_OSC_C_ROUTE_AMT[]     = "SYN_OSC_C_ROUTE_AMT";      // float -100..100 % bipolar amount
+    constexpr char SYN_OSC_C_UNISON[]        = "SYN_OSC_C_UNISON";         // int 1..16 voices (per-OSC)
+    constexpr char SYN_OSC_C_UDETUNE[]       = "SYN_OSC_C_UDETUNE";        // float 0..100 % pitch fan
+    constexpr char SYN_OSC_C_UBLEND[]        = "SYN_OSC_C_UBLEND";         // float 0..100 % centre-vs-outer balance
+    constexpr char SYN_OSC_C_UWIDTH[]        = "SYN_OSC_C_UWIDTH";         // float 0..100 % stereo spread
+    constexpr char SYN_OSC_D_ENGINE[]      = "SYN_OSC_D_ENGINE";       // enum 0..5
+    constexpr char SYN_OSC_D_OCT[]         = "SYN_OSC_D_OCT";          // int -3..+3
+    constexpr char SYN_OSC_D_SEMI[]        = "SYN_OSC_D_SEMI";         // int -12..+12
+    constexpr char SYN_OSC_D_CENT[]        = "SYN_OSC_D_CENT";         // float -100..+100
+    constexpr char SYN_OSC_D_LEVEL[]       = "SYN_OSC_D_LEVEL";        // float 0..1
+    constexpr char SYN_OSC_D_PAN[]         = "SYN_OSC_D_PAN";          // float -1..+1
+    constexpr char SYN_OSC_D_WT_PRESET[]   = "SYN_OSC_D_WT_PRESET";    // choice 0..19
+    constexpr char SYN_OSC_D_WT_FRAME[]    = "SYN_OSC_D_WT_FRAME";     // float 0..1
+    constexpr char SYN_OSC_D_WARP_MODE[]   = "SYN_OSC_D_WARP_MODE";    // choice 0..3
+    constexpr char SYN_OSC_D_WARP_AMOUNT[] = "SYN_OSC_D_WARP_AMOUNT";  // float 0..1
+    constexpr char SYN_OSC_D_WARP2_MODE[]  = "SYN_OSC_D_WARP2_MODE";   // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_D_WARP2_AMT[]   = "SYN_OSC_D_WARP2_AMT";    // float 0..1
+    constexpr char SYN_OSC_D_SPECTRAL_TYPE[] = "SYN_OSC_D_SPECTRAL_TYPE";  // choice {0=NONE}
+    constexpr char SYN_OSC_D_SPECTRAL_AMT[]  = "SYN_OSC_D_SPECTRAL_AMT";   // float 0..1
+    constexpr char SYN_OSC_D_FOLD_SHAPE[]    = "SYN_OSC_D_FOLD_SHAPE";     // choice {0=LINEAR}
+    constexpr char SYN_OSC_D_FOLD_AMT[]      = "SYN_OSC_D_FOLD_AMT";       // float 0..1
+    constexpr char SYN_OSC_D_FRAME_SPREAD[]  = "SYN_OSC_D_FRAME_SPREAD";   // float 0..1
+    constexpr char SYN_OSC_D_INTERP_MODE[]   = "SYN_OSC_D_INTERP_MODE";    // choice {0=LINEAR}
+    constexpr char SYN_OSC_D_PHASE_MODE[]    = "SYN_OSC_D_PHASE_MODE";     // choice 0=RETRIG,1=FREE,2=RANDOM,3=SPREAD
+    constexpr char SYN_OSC_D_WAVER[]         = "SYN_OSC_D_WAVER";          // float 0..100 % analog pitch-drift depth (OU)
+    constexpr char SYN_OSC_D_KEYTRACK[]      = "SYN_OSC_D_KEYTRACK";       // float 0..100 % note->destination depth
+    constexpr char SYN_OSC_D_KEYTRACK_DEST[] = "SYN_OSC_D_KEYTRACK_DEST";  // choice 0=FRAME,1=WARP,2=FOLD
+    constexpr char SYN_OSC_D_ROUTE_SRC[]     = "SYN_OSC_D_ROUTE_SRC";      // choice 0=NOTE,1=VEL
+    constexpr char SYN_OSC_D_ROUTE_DEST[]    = "SYN_OSC_D_ROUTE_DEST";     // choice 0=FRAME,1=WARP,2=FOLD,3=CUT1,4=CUT2
+    constexpr char SYN_OSC_D_ROUTE_AMT[]     = "SYN_OSC_D_ROUTE_AMT";      // float -100..100 % bipolar amount
+    constexpr char SYN_OSC_D_UNISON[]        = "SYN_OSC_D_UNISON";         // int 1..16 voices (per-OSC)
+    constexpr char SYN_OSC_D_UDETUNE[]       = "SYN_OSC_D_UDETUNE";        // float 0..100 % pitch fan
+    constexpr char SYN_OSC_D_UBLEND[]        = "SYN_OSC_D_UBLEND";         // float 0..100 % centre-vs-outer balance
+    constexpr char SYN_OSC_D_UWIDTH[]        = "SYN_OSC_D_UWIDTH";         // float 0..100 % stereo spread
 }

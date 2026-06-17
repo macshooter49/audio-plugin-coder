@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>OSC header rework · 4 oscillators</title>
+<style>
+*{box-sizing:border-box;}
+:root{ --bg-card:#2A2A48; --bg-hero:#12121F; --purple-500:#8B5CF6; --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.5); --border-strong:rgba(88,88,128,0.5); --text-primary:#E0DCE8; --text-secondary:#9B93B0; --text-muted:#6B6080; }
+body{margin:0; min-height:100vh; background:radial-gradient(1200px 700px at 50% -10%, #20203a 0%, #1A1A2E 60%);
+  font-family:-apple-system,'SF Pro Display','SF Pro Text','Inter',system-ui,sans-serif; color:var(--text-primary);
+  display:flex; flex-direction:column; align-items:center; gap:24px; padding:46px 20px 70px;}
+h1{font-size:13px; font-weight:300; letter-spacing:3px; color:var(--text-secondary); margin:0;}
+.sub{font-size:11px; color:var(--text-muted); margin:-16px 0 0; font-weight:300;}
+.row{display:flex; gap:14px; align-items:stretch;}
+
+/* device card */
+.device.osc{ position:relative; width:330px; background:var(--bg-card); border:1px solid var(--border);
+  border-radius:13px; padding:10px 14px 14px; }
+
+/* header row */
+.osc-head{ position:relative; display:flex; align-items:center; height:20px; margin-bottom:10px; }
+.osc-id{ display:flex; align-items:center; gap:4px; font-size:9px; font-weight:300; letter-spacing:2px; color:var(--text-secondary); }
+/* the clickable letter toggle (A<->B, C<->D) */
+.osc-letter{ min-width:13px; height:15px; padding:0 3px; border:1px solid var(--border-strong); border-radius:4px;
+  display:inline-flex; align-items:center; justify-content:center; color:var(--text-primary); font-size:9px; font-weight:500;
+  letter-spacing:0; cursor:pointer; transition:all .15s ease; background:rgba(255,255,255,0.02); }
+.osc-letter:hover{ border-color:var(--purple-400); color:var(--purple-400); box-shadow:0 0 7px rgba(139,92,246,0.35); }
+.osc-dot{ color:var(--text-muted); }
+
+/* S / N chips where the + used to be */
+.sn{ display:flex; gap:5px; margin-left:10px; }
+.sn .chip{ width:16px; height:16px; border:1px solid var(--border-strong); border-radius:4px; background:transparent;
+  display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:500; color:var(--text-secondary);
+  cursor:pointer; transition:all .15s ease; }
+.sn .chip:hover{ color:#fff; border-color:var(--purple-400); box-shadow:0 0 7px rgba(139,92,246,0.4); }
+.sn .chip.on{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+
+/* preset corner: wave-name + the + button right after it (dynamic) */
+.preset-corner{ margin-left:auto; display:flex; align-items:center; gap:7px; }
+.preset-name{ font-size:9px; color:var(--text-secondary); letter-spacing:1.4px; font-weight:200; cursor:pointer; white-space:nowrap; }
+.preset-name:hover{ color:var(--text-primary); }
+.swap-btn{ width:15px; height:15px; border:1px solid var(--border-strong); border-radius:4px; background:transparent;
+  position:relative; cursor:pointer; flex:none; transition:all .15s ease; }
+.swap-btn::before{ content:''; position:absolute; inset:0; background:
+   linear-gradient(var(--text-secondary),var(--text-secondary)) center/7px 1px no-repeat,
+   linear-gradient(var(--text-secondary),var(--text-secondary)) center/1px 7px no-repeat; }
+.swap-btn:hover{ border-color:var(--purple-400); box-shadow:0 0 7px rgba(139,92,246,0.35); }
+.swap-btn:hover::before{ background:
+   linear-gradient(var(--purple-400),var(--purple-400)) center/7px 1px no-repeat,
+   linear-gradient(var(--purple-400),var(--purple-400)) center/1px 7px no-repeat; }
+
+/* engine pill row */
+.engines{ display:grid; grid-template-columns:repeat(6,1fr); gap:5px; margin-bottom:10px; }
+.eng{ height:24px; border:1px solid var(--border-strong); border-radius:6px; display:flex; align-items:center; justify-content:center;
+  font-size:8.5px; letter-spacing:.4px; color:var(--text-secondary); cursor:pointer; transition:all .12s ease; }
+.eng:hover{ color:var(--text-primary); }
+.eng.on{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+
+/* wavetable display + knobs (visual filler so the header reads in context) */
+.wt{ height:40px; background:var(--bg-hero); border:1px solid var(--border); border-radius:7px; margin-bottom:10px; position:relative; overflow:hidden;}
+.wt svg{ position:absolute; inset:4px; width:calc(100% - 8px); height:calc(100% - 8px); }
+.knobs{ display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+.kn{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+.kn .ring{ width:26px; height:26px; border-radius:50%; background:conic-gradient(from 218deg,var(--purple-400) 0 120deg,rgba(255,255,255,0.09) 120deg 284deg,transparent 284deg);
+  -webkit-mask:radial-gradient(closest-side,transparent 64%,#000 66%); mask:radial-gradient(closest-side,transparent 64%,#000 66%); }
+.kn .kl{ font-size:7.5px; color:var(--text-primary); letter-spacing:.4px; }
+.caption{ font-size:10.5px; color:var(--text-muted); max-width:560px; text-align:center; line-height:1.7; }
+.caption b{ color:var(--text-secondary); font-weight:400; }
+.wave{ fill:none; stroke:#ECE8F2; stroke-width:1.2; filter:drop-shadow(0 0 2px rgba(183,148,255,.5)); }
+</style>
+</head>
+<body>
+  <h1>O S C &nbsp; H E A D E R &nbsp; R E W O R K &nbsp;·&nbsp; 4 &nbsp; O S C I L L A T O R S</h1>
+  <p class="sub">click the letter (A↔B, C↔D) · click S / N · the + sits next to the wave-name and repositions with word length</p>
+
+  <div class="row" id="row"></div>
+
+  <p class="caption">
+    <b>Left slot = A / B, right slot = C / D.</b> Click the letter to toggle which oscillator the slot shows (all 4 sound).
+    The <b>+</b> moved next to the wave-name (back panel) and repositions as the name changes (Sine → Vowel Morph).
+    <b>S / N</b> (transparent→white) sit where the + was — they'll open the Sub / Noise panels later. Engine "Noise" is now <b>Analog</b>.
+  </p>
+
+<script>
+var ENGINES=['WT','Samp','Gran','Spec','FM','Analog'];     // Noise -> Analog
+var NAMES=['Sine','Triangle','Square','Pulse','PPG Wave','DX7 EP','Vowel Morph','Glass Harmonics'];
+var WAVES={ // little display path per a few names
+  Sine:'M0,20 C40,20 40,4 80,4 C120,4 120,36 160,36 C200,36 200,20 240,20 C280,20 280,20 320,20',
+  Square:'M0,34 L0,6 L80,6 L80,34 L160,34 L160,6 L240,6 L240,34 L320,34',
+  'DX7 EP':'M0,20 L20,8 L40,30 L60,12 L80,26 L100,16 L160,22 L220,18 L320,20',
+  'Vowel Morph':'M0,20 Q20,2 40,20 T80,20 Q100,38 120,20 T160,20 Q180,6 200,20 T320,20'
+};
+function wavePath(n){ return WAVES[n] || WAVES.Sine; }
+
+function slot(host, pair, startEngine, startNameIdx){
+  var d=document.createElement('div'); d.className='device osc'; host.appendChild(d);
+  var st={ cur:0, name:startNameIdx, eng:startEngine, sub:false, noise:false };
+  function render(){
+    var letter=pair[st.cur];
+    d.innerHTML=''
+      +'<div class="osc-head">'
+      +'  <span class="osc-id">Osc <span class="osc-dot">·</span> <span class="osc-letter" title="toggle">'+letter+'</span></span>'
+      +'  <span class="sn"><span class="chip'+(st.sub?' on':'')+'" data-x="sub">S</span><span class="chip'+(st.noise?' on':'')+'" data-x="noise">N</span></span>'
+      +'  <span class="preset-corner"><span class="preset-name">'+NAMES[st.name]+'</span><span class="swap-btn" title="back panel"></span></span>'
+      +'</div>'
+      +'<div class="engines">'+ENGINES.map(function(e,i){return '<div class="eng'+(i===st.eng?' on':'')+'" data-e="'+i+'">'+e+'</div>';}).join('')+'</div>'
+      +'<div class="wt"><svg viewBox="0 0 320 40" preserveAspectRatio="none"><path class="wave" d="'+wavePath(NAMES[st.name])+'"/></svg></div>'
+      +'<div class="knobs">'+['WT Pos','Warp','Spectral','Fold','Blur'].map(function(l){return '<div class="kn"><div class="ring"></div><div class="kl">'+l+'</div></div>';}).join('')+'</div>';
+    d.querySelector('.osc-letter').onclick=function(){ st.cur=(st.cur+1)%2; render(); };
+    d.querySelector('.preset-name').onclick=function(){ st.name=(st.name+1)%NAMES.length; render(); };
+    [].forEach.call(d.querySelectorAll('.eng'),function(el){ el.onclick=function(){ st.eng=+el.dataset.e; render(); }; });
+    [].forEach.call(d.querySelectorAll('.sn .chip'),function(el){ el.onclick=function(){ if(el.dataset.x==='sub'){st.sub=!st.sub; st.noise=false;} else {st.noise=!st.noise; st.sub=false;} render(); }; });
+  }
+  render();
+}
+var row=document.getElementById('row');
+slot(row, ['A','B'], 0, 0);   // left  = A/B, WT, Sine
+slot(row, ['C','D'], 4, 4);   // right = C/D, WT, PPG Wave
+</script>
+</body>
+</html>

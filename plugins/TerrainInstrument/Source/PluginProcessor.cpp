@@ -1560,6 +1560,284 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC B Interp Mode",
         juce::StringArray { "Linear", "Stepped" },
         0));
+    // ── OSC C chassis (4-osc) — mirrors OSC B ──
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_ENGINE, 1 },
+        "Synth OSC C Engine",
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_OCT, 1 },
+        "Synth OSC C Octave", -3, 3, 0));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SEMI, 1 },
+        "Synth OSC C Semitone", -12, 12, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_CENT, 1 },
+        "Synth OSC C Cents",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_LEVEL, 1 },
+        "Synth OSC C Level",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_PAN, 1 },
+        "Synth OSC C Pan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_WT_PRESET, 1 },
+        "Synth OSC C WT Preset",
+        juce::StringArray { "Sine", "Triangle", "Square", "Pulse",
+                            "Prophet Saw", "Jupiter PWM", "Moog Sqr",
+                            "OB-X Saw", "CS-80 Brass", "Juno Str",
+                            "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
+                            "Choir A->O", "Whisper", "Vowel Morph",
+                            "Bowed Metal", "Glass Harmonics", "Railroad",
+                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
+                            // Morph (Phase 11h)
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
+        0));  // default = Sine
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_WT_FRAME, 1 },
+        "Synth OSC C WT Frame",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP_MODE, 1 },
+        "Synth OSC C Warp Mode",
+        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_PHASE_MODE, 1 },
+        "Synth OSC C Phase Mode",
+        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
+        2));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_WAVER, 1 },
+        "Synth OSC C Waver",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_KEYTRACK, 1 },
+        "Synth OSC C Keytrack",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_KEYTRACK_DEST, 1 },
+        "Synth OSC C Keytrack Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_ROUTE_SRC, 1 },
+        "Synth OSC C Route Source",
+        juce::StringArray { "Note", "Vel" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_ROUTE_DEST, 1 },
+        "Synth OSC C Route Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_ROUTE_AMT, 1 },
+        "Synth OSC C Route Amount",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_UNISON, 1 },
+        "Synth OSC C Unison", 1, 16, 1));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_UDETUNE, 1 },
+        "Synth OSC C Unison Detune",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 25.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_UBLEND, 1 },
+        "Synth OSC C Unison Blend",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_UWIDTH, 1 },
+        "Synth OSC C Unison Width",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP_AMOUNT, 1 },
+        "Synth OSC C Warp Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP2_MODE, 1 },
+        "Synth OSC C Warp 2 Mode",
+        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP2_AMT, 1 },
+        "Synth OSC C Warp 2 Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
+    // ── Phase 11a — OSC C wavetable rework foundation (SPECTRAL MORPH — Phase 11c) ─
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE, 1 },
+        "OSC C Spectral Type",
+        juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, 1 },
+        "OSC C Spectral Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_FOLD_SHAPE, 1 },
+        "OSC C Fold Shape",
+        juce::StringArray { "Linear", "Sine", "Triangle" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_FOLD_AMT, 1 },
+        "OSC C Fold Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_FRAME_SPREAD, 1 },
+        "OSC C Blur",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_INTERP_MODE, 1 },
+        "OSC C Interp Mode",
+        juce::StringArray { "Linear", "Stepped" },
+        0));
+    // ── OSC D chassis (4-osc) — mirrors OSC B ──
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_ENGINE, 1 },
+        "Synth OSC D Engine",
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_OCT, 1 },
+        "Synth OSC D Octave", -3, 3, 0));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SEMI, 1 },
+        "Synth OSC D Semitone", -12, 12, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_CENT, 1 },
+        "Synth OSC D Cents",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_LEVEL, 1 },
+        "Synth OSC D Level",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_PAN, 1 },
+        "Synth OSC D Pan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_WT_PRESET, 1 },
+        "Synth OSC D WT Preset",
+        juce::StringArray { "Sine", "Triangle", "Square", "Pulse",
+                            "Prophet Saw", "Jupiter PWM", "Moog Sqr",
+                            "OB-X Saw", "CS-80 Brass", "Juno Str",
+                            "PPG Wave", "DX7 EP", "D-50 Bell", "M1 Piano",
+                            "Choir A->O", "Whisper", "Vowel Morph",
+                            "Bowed Metal", "Glass Harmonics", "Railroad",
+                            "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
+                            // Morph (Phase 11h)
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
+        0));  // default = Sine
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_WT_FRAME, 1 },
+        "Synth OSC D WT Frame",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP_MODE, 1 },
+        "Synth OSC D Warp Mode",
+        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_PHASE_MODE, 1 },
+        "Synth OSC D Phase Mode",
+        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
+        2));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_WAVER, 1 },
+        "Synth OSC D Waver",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_KEYTRACK, 1 },
+        "Synth OSC D Keytrack",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_KEYTRACK_DEST, 1 },
+        "Synth OSC D Keytrack Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_ROUTE_SRC, 1 },
+        "Synth OSC D Route Source",
+        juce::StringArray { "Note", "Vel" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_ROUTE_DEST, 1 },
+        "Synth OSC D Route Dest",
+        juce::StringArray { "Frame", "Warp", "Fold" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_ROUTE_AMT, 1 },
+        "Synth OSC D Route Amount",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_UNISON, 1 },
+        "Synth OSC D Unison", 1, 16, 1));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_UDETUNE, 1 },
+        "Synth OSC D Unison Detune",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 25.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_UBLEND, 1 },
+        "Synth OSC D Unison Blend",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_UWIDTH, 1 },
+        "Synth OSC D Unison Width",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP_AMOUNT, 1 },
+        "Synth OSC D Warp Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP2_MODE, 1 },
+        "Synth OSC D Warp 2 Mode",
+        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP2_AMT, 1 },
+        "Synth OSC D Warp 2 Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
+    // ── Phase 11a — OSC D wavetable rework foundation (SPECTRAL MORPH — Phase 11c) ─
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE, 1 },
+        "OSC D Spectral Type",
+        juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_AMT, 1 },
+        "OSC D Spectral Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_FOLD_SHAPE, 1 },
+        "OSC D Fold Shape",
+        juce::StringArray { "Linear", "Sine", "Triangle" },
+        0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_FOLD_AMT, 1 },
+        "OSC D Fold Amount",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_FRAME_SPREAD, 1 },
+        "OSC D Blur",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+        0.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_INTERP_MODE, 1 },
+        "OSC D Interp Mode",
+        juce::StringArray { "Linear", "Stepped" },
+        0));
 
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
     layout.add (std::make_unique<juce::AudioParameterInt> (
