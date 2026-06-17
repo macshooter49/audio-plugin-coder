@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>FLOW · ARP extension card</title>
+<style>
+*{box-sizing:border-box;}
+body{margin:0; min-height:100vh; background:radial-gradient(1200px 700px at 50% -10%, #20203a 0%, #1A1A2E 60%);
+  font-family:-apple-system,'SF Pro Display','SF Pro Text','Inter',system-ui,sans-serif; color:#E0DCE8;
+  display:flex; flex-direction:column; align-items:center; gap:22px; padding:42px 20px 70px; user-select:none;}
+h1{font-size:13px; font-weight:300; letter-spacing:3px; color:#9B93B0; margin:0;}
+.sub{font-size:11px; color:#6B6080; margin:-14px 0 0; font-weight:300;}
+.tabsline{font-size:10.5px; color:#6B6080; text-align:center; max-width:560px; line-height:1.7;}
+.tabsline b{color:#9B93B0; font-weight:400;}
+
+/* ════════ ARP CARD — pixel-sibling of the LFO extender (.mv-ext) ════════ */
+.arp-ext{position:relative; width:316px; background:#2A2A48; border:1px solid rgba(140,130,180,0.45);
+  border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.6); overflow:hidden;}
+.arp-ext .h{display:flex; align-items:center; gap:9px; padding:9px 12px; border-bottom:1px solid rgba(58,58,88,0.55);
+  cursor:grab; background:rgba(255,255,255,.025);}
+.arp-ext .h .g{letter-spacing:2px; color:#4a4f68; font-size:10px;}
+.arp-ext .h .tt{font-size:9px; letter-spacing:1.8px; color:#C5BFD2; text-transform:uppercase; font-weight:600;}
+.arp-ext .h .tg{font-size:11px; color:#fff; font-weight:600;}
+.arp-ext .h .dot{width:6px; height:6px; border-radius:50%; background:#B794FF; box-shadow:0 0 6px rgba(183,148,255,.8);}
+.arp-ext .h .x{margin-left:auto; color:#908599; cursor:pointer; font-size:13px;}
+.arp-ext .b{padding:11px 13px 13px; display:flex; flex-direction:column; gap:11px;}
+.arp-ext .gl{font-size:8px; letter-spacing:1.4px; color:#6E6580; margin-bottom:6px;}
+
+/* hero grid */
+.es{background:#12121F; border-radius:9px; position:relative; overflow:hidden; height:108px; cursor:crosshair;}
+.es svg{position:absolute; inset:0; width:100%; height:100%; touch-action:none;}
+.es .eh{position:absolute; top:5px; right:8px; font-size:7px; color:rgba(255,255,255,.4); letter-spacing:1px; pointer-events:none;}
+.glow{filter:drop-shadow(0 0 2px rgba(183,148,255,0.85));}
+
+/* sub-tabs as pills (Opus parity) */
+.subtabs{display:grid; grid-template-columns:repeat(3,1fr); gap:6px;}
+.subtab{height:26px; border:1px solid rgba(140,130,180,0.45); border-radius:8px; display:flex; align-items:center; justify-content:center;
+  font-size:9px; letter-spacing:1.6px; color:#908599; cursor:pointer; font-weight:500; transition:.12s;}
+.subtab:hover{color:#C5BFD2;}
+.subtab.on{background:#8B5CF6; border-color:#8B5CF6; color:#fff; box-shadow:0 0 10px rgba(139,92,246,.4);}
+
+.pane{display:none; flex-direction:column; gap:11px;} .pane.on{display:flex;}
+
+/* lane tabs */
+.lanes{display:grid; grid-template-columns:repeat(7,1fr); gap:3px;}
+.lane{height:20px; border:1px solid rgba(140,130,180,0.30); border-radius:6px; display:flex; align-items:center; justify-content:center;
+  font-size:7px; letter-spacing:.3px; color:#908599; cursor:pointer; transition:.12s;}
+.lane:hover{color:#C5BFD2;}
+.lane.on{background:#191726; border-color:#4a3f6e; color:#B794FF;}
+
+/* knob row */
+.mo{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+.mk{display:flex; flex-direction:column; align-items:center; gap:4px;}
+.dn{width:30px; height:30px; border-radius:50%;
+  -webkit-mask:radial-gradient(closest-side,transparent 64%,#000 66%); mask:radial-gradient(closest-side,transparent 64%,#000 66%);
+  filter:drop-shadow(0 0 2px rgba(167,139,250,0.4));}
+.mk .kl{font-size:7.5px; letter-spacing:.6px; color:#C5BFD2;} .mk .kv{font-size:7px; color:#908599;}
+
+/* 12 slots + chain */
+.slots{display:grid; grid-template-columns:repeat(12,1fr); gap:3px;}
+.slot{height:18px; border:1px solid rgba(140,130,180,0.30); border-radius:5px; display:flex; align-items:center; justify-content:center;
+  font-size:7.5px; color:#908599; cursor:pointer; transition:.12s;}
+.slot:hover{color:#C5BFD2;}
+.slot.on{background:#B794FF; border-color:#B794FF; color:#fff; box-shadow:0 0 7px rgba(183,148,255,.5);}
+.chain{display:flex; align-items:center; gap:6px; margin-top:8px;}
+.chain .cl{font-size:8px; letter-spacing:1.4px; color:#6E6580;}
+.chain .seq{display:flex; gap:4px; align-items:center;}
+.chip{height:16px; min-width:16px; padding:0 5px; border-radius:4px; background:#191726; border:1px solid #3a3460;
+  display:flex; align-items:center; justify-content:center; font-size:7.5px; color:#B794FF;}
+.chain .arr{color:#4a4f68; font-size:8px;}
+.chain .add{margin-left:auto; color:#6E6580; cursor:pointer; border:1px dashed #3a3460; border-radius:4px; height:17px; width:22px; display:flex; align-items:center; justify-content:center; font-size:9px;}
+
+/* PLAY tab */
+.g3{display:grid; grid-template-columns:repeat(3,1fr); gap:6px;}
+.g4{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
+.pill{height:24px; padding:0 9px; background:#12121F; border:1px solid rgba(140,130,180,0.45); border-radius:7px;
+  display:flex; align-items:center; justify-content:center; gap:6px; font-size:9px; letter-spacing:1px; color:#ECE8F2; font-weight:300; cursor:pointer;}
+.pill .k{color:#908599; font-size:7px;}
+.tog{height:24px; border:1px solid rgba(140,130,180,0.45); border-radius:7px; display:flex; align-items:center; justify-content:center;
+  font-size:8.5px; font-weight:500; letter-spacing:.6px; color:#908599; cursor:pointer;}
+.tog.on{background:#191726; border-color:#4a3f6e; color:#B794FF;}
+</style>
+</head>
+<body>
+  <h1>F L O W &nbsp;·&nbsp; A R P &nbsp; E X T E N S I O N &nbsp; C A R D</h1>
+  <p class="sub">interactive · drag any step to program it · LFO-sized (316px) · Tier 2</p>
+
+  <div class="arp-ext" id="card">
+    <div class="h">
+      <span class="g">⠿</span><span class="dot"></span>
+      <span class="tt">ARP</span><span class="tg">1</span>
+      <span class="x">✕</span>
+    </div>
+    <div class="b">
+      <div class="es">
+        <svg id="grid" viewBox="0 0 290 92" preserveAspectRatio="none"></svg>
+        <div class="eh" id="laneTag">PITCH · 16 STEPS</div>
+      </div>
+
+      <div class="subtabs">
+        <div class="subtab on" data-pane="pattern">PATTERN</div>
+        <div class="subtab" data-pane="play">PLAY</div>
+        <div class="subtab" data-pane="motion">MOTION</div>
+      </div>
+
+      <!-- PATTERN -->
+      <div class="pane on" data-pane="pattern">
+        <div>
+          <div class="gl">Lane</div>
+          <div class="lanes" id="lanes">
+            <div class="lane on" data-l="pitch">Pitch</div>
+            <div class="lane" data-l="gate">Gate</div>
+            <div class="lane" data-l="vel">Vel</div>
+            <div class="lane" data-l="oct">Oct</div>
+            <div class="lane" data-l="ratchet">Ratch</div>
+            <div class="lane" data-l="prob">Prob</div>
+            <div class="lane" data-l="wt">WT</div>
+          </div>
+        </div>
+        <div>
+          <div class="gl" id="depthLabel">PITCH DEPTH</div>
+          <div class="mo" id="depthKnobs"></div>
+        </div>
+        <div>
+          <div class="gl">Patterns · 12 slots</div>
+          <div class="slots" id="slots"></div>
+          <div class="chain">
+            <span class="cl">CHAIN</span>
+            <span class="seq">
+              <span class="chip">1</span><span class="arr">›</span>
+              <span class="chip">1</span><span class="arr">›</span>
+              <span class="chip">2</span><span class="arr">›</span>
+              <span class="chip">3</span>
+            </span>
+            <span class="add">+</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PLAY -->
+      <div class="pane" data-pane="play">
+        <div>
+          <div class="gl">Rate</div>
+          <div class="g3">
+            <div class="pill"><span class="k">Div</span>1/16 ▾</div>
+            <div class="pill"><span class="k">Sync</span>1/4 ▾</div>
+            <div class="pill"><span class="k">Unit</span>BPM ▾</div>
+          </div>
+        </div>
+        <div>
+          <div class="gl">Behaviour</div>
+          <div class="g4">
+            <div class="pill"><span class="k">Dir</span>Up</div>
+            <div class="pill"><span class="k">Oct</span>2</div>
+            <div class="tog on">Latch</div>
+            <div class="tog">Order</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MOTION -->
+      <div class="pane" data-pane="motion">
+        <div>
+          <div class="gl">Motion</div>
+          <div class="mo" id="motionKnobs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="tabsline">
+    <b>Drag any step to program it.</b> Pitch = drag notes up/down (double-click = rest) ·
+    Gate = drag length · Vel/WT/Prob = drag height · Oct/Ratchet = click to cycle. Switch lanes & sub-tabs; playhead + step-spotlight run live.
+  </p>
+
+<script>
+/* ── pattern state ── */
+const N=16, ROWS=7;
+const P={
+  pitch:[4,2,5,-1,3,4,6,2, 4,1,5,3,-1,4,2,5],
+  gate: [.8,.6,1,.5,.7,.9,.4,.6,.8,.5,1,.6,.4,.9,.7,.6],
+  vel:  [.9,.6,1,.4,.7,.85,.5,.6,.9,.5,.95,.6,.4,.8,.7,.65],
+  oct:  [0,0,1,0,-1,0,0,1, 0,0,1,0,0,0,-1,0],
+  ratchet:[1,1,2,1,1,3,1,1,2,1,1,4,1,1,2,1],
+  prob: [1,1,.7,1,.5,1,.8,1, 1,.6,1,1,.4,1,.9,1],
+  wt:   [.2,.4,.7,.3,.55,.8,.5,.35, .6,.45,.85,.4,.3,.7,.5,.6],
+};
+const CHORD=[1,3,5];
+const X0=34, XW=290-X0-4, sw=XW/N;
+const Y0=8, Y1=84, rh=(Y1-Y0)/(ROWS-1);
+const rowY=r=>Y1-r*rh;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const vval=y=>clamp((Y1-y)/(Y1-Y0),0,1);
+function rect(x,y,w,h,fill,cls){return `<rect class="${cls||''}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(0,w).toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" rx="1.6" fill="${fill}"/>`;}
+
+const svg=document.getElementById('grid');
+const state={lane:'pitch'};
+
+function gridLines(){
+  let s='';
+  for(let i=0;i<=N;i++){const x=X0+i*sw; s+=`<line x1="${x.toFixed(1)}" y1="4" x2="${x.toFixed(1)}" y2="88" stroke="rgba(139,92,246,.10)" stroke-width="0.5"/>`;}
+  for(let r=0;r<ROWS;r++){const y=rowY(r); s+=`<line x1="${X0}" y1="${y.toFixed(1)}" x2="286" y2="${y.toFixed(1)}" stroke="rgba(139,92,246,.06)" stroke-width="0.5"/>`;}
+  return s;
+}
+function chordStrip(){
+  let s='<g>';
+  for(let i=0;i<ROWS;i++){const y=rowY(i),lit=CHORD.includes(i);
+    s+=`<circle cx="18" cy="${y.toFixed(1)}" r="${lit?2.6:1.6}" fill="${lit?'#B794FF':'rgba(155,147,176,0.35)'}" ${lit?'class="glow"':''}/>`;}
+  s+=`<line x1="30" y1="4" x2="30" y2="88" stroke="rgba(139,92,246,.18)" stroke-width="0.6"/></g>`;
+  return s;
+}
+function skeleton(){
+  svg.innerHTML =
+    gridLines()+chordStrip()+
+    `<rect id="phCol" x="${X0}" y="4" width="${sw.toFixed(1)}" height="84" fill="rgba(183,148,255,0.08)"/>`+
+    `<g id="laneBody"></g>`+
+    `<line id="ph" x1="${X0}" y1="2" x2="${X0}" y2="90" stroke="rgba(255,255,255,0.85)" stroke-width="1" style="filter:drop-shadow(0 0 2px rgba(255,255,255,.6))"/>`;
+}
+function renderLane(){
+  const lane=state.lane; let s='';
+  if(lane==='pitch'){
+    for(let i=0;i<N;i++){ if(P.pitch[i]<0)continue; s+=rect(X0+i*sw+1.6, rowY(P.pitch[i])-rh*0.34, sw-3.2, rh*0.68, 'rgba(183,148,255,0.92)','glow'); }
+  } else if(lane==='gate'){
+    for(let i=0;i<N;i++) s+=rect(X0+i*sw+1.6, 40, (sw-3.2)*P.gate[i], 14, 'rgba(183,148,255,0.85)','glow');
+  } else if(lane==='vel'||lane==='wt'){
+    const a=P[lane]; for(let i=0;i<N;i++){const v=a[i],h=Math.max(2,v*(Y1-Y0)); s+=rect(X0+i*sw+1.6, Y1-h, sw-3.2, h, 'rgba(183,148,255,'+(0.45+0.4*v)+')','glow');}
+  } else if(lane==='prob'){
+    for(let i=0;i<N;i++){const p=P.prob[i],h=p*(Y1-Y0); s+=`<rect x="${(X0+i*sw+1.6).toFixed(1)}" y="${(Y1-h).toFixed(1)}" width="${(sw-3.2).toFixed(1)}" height="${h.toFixed(1)}" rx="1.6" fill="rgba(183,148,255,${0.3+0.5*p})" stroke="rgba(183,148,255,0.55)" stroke-width="0.6" stroke-dasharray="2 2" class="glow"/>`;}
+  } else if(lane==='oct'){
+    for(let i=0;i<N;i++){const o=P.oct[i],cx=X0+i*sw+sw/2,cy=46-o*18,col=o>0?'#B794FF':o<0?'#7C6BBF':'rgba(155,147,176,0.55)';
+      if(o)s+=`<line x1="${cx.toFixed(1)}" y1="46" x2="${cx.toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`;
+      s+=`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="2.6" fill="${col}" class="${o?'glow':''}"/>`;}
+  } else if(lane==='ratchet'){
+    for(let i=0;i<N;i++){const n=P.ratchet[i],x=X0+i*sw+1.6,w=sw-3.2,seg=w/n; for(let k=0;k<n;k++)s+=rect(x+k*seg+0.5,36,seg-1,20,'rgba(183,148,255,'+(n>1?0.9:0.5)+')',n>1?'glow':'');}
+  }
+  document.getElementById('laneBody').innerHTML=s;
+  document.getElementById('laneTag').textContent=lane.toUpperCase()+' · 16 STEPS';
+}
+
+/* ── interactivity: drag to program ── */
+function toVB(e){const rc=svg.getBoundingClientRect(); return {x:(e.clientX-rc.left)/rc.width*290, y:(e.clientY-rc.top)/rc.height*92};}
+let dragging=false, lastPaint=-1;
+function editAt(vb, start){
+  const step=Math.floor((vb.x-X0)/sw); if(step<0||step>=N) return;
+  const l=state.lane;
+  if(l==='pitch') P.pitch[step]=clamp(Math.round((Y1-vb.y)/rh),0,ROWS-1);
+  else if(l==='gate') P.gate[step]=clamp((vb.x-(X0+step*sw))/sw,0.05,1);
+  else if(l==='vel') P.vel[step]=vval(vb.y);
+  else if(l==='wt') P.wt[step]=vval(vb.y);
+  else if(l==='prob') P.prob[step]=vval(vb.y);
+  else if(l==='oct'){ if(start||step!==lastPaint) P.oct[step]=(P.oct[step]>=1?-1:P.oct[step]+1); }
+  else if(l==='ratchet'){ if(start||step!==lastPaint) P.ratchet[step]=(P.ratchet[step]>=4?1:P.ratchet[step]+1); }
+  lastPaint=step; renderLane();
+}
+svg.addEventListener('mousedown',e=>{const vb=toVB(e); if(vb.x<X0)return; e.preventDefault(); dragging=true; lastPaint=-1; editAt(vb,true);});
+window.addEventListener('mousemove',e=>{ if(dragging) editAt(toVB(e),false); });
+window.addEventListener('mouseup',()=>{dragging=false; lastPaint=-1;});
+svg.addEventListener('dblclick',e=>{ if(state.lane!=='pitch')return; const vb=toVB(e),step=Math.floor((vb.x-X0)/sw); if(step>=0&&step<N){P.pitch[step]=-1; renderLane();}});
+
+/* ── live playhead + step spotlight ── */
+let phase=0,last=0; const PERIOD=3.6;
+function frame(t){ if(!last)last=t; const dt=(t-last)/1000; last=t; phase=(phase+dt/PERIOD)%1;
+  const x=X0+phase*XW, step=Math.floor(phase*N);
+  const ph=document.getElementById('ph'); if(ph){ph.setAttribute('x1',x.toFixed(1)); ph.setAttribute('x2',x.toFixed(1));}
+  const col=document.getElementById('phCol'); if(col) col.setAttribute('x',(X0+step*sw).toFixed(1));
+  requestAnimationFrame(frame);
+}
+
+/* ── per-lane depth knobs (4) ── */
+const DEPTH={
+  pitch:['PITCH DEPTH',[['Range',150,'50'],['Curve',120,'50'],['Quant',95,'30'],['Slide',70,'20']]],
+  gate: ['GATE DEPTH',[['Length',165,'65'],['Curve',110,'40'],['Random',60,'0'],['Slide',80,'15']]],
+  vel:  ['VELOCITY DEPTH',[['Range',170,'70'],['Curve',120,'50'],['Random',70,'12'],['Floor',85,'20']]],
+  oct:  ['OCTAVE DEPTH',[['Range',120,'2'],['Bias',90,'0'],['Random',60,'0'],['Wrap',200,'On']]],
+  ratchet:['RATCHET DEPTH',[['Count',120,'2'],['Decay',130,'40'],['Curve',100,'30'],['Chance',150,'50']]],
+  prob: ['PROBABILITY',[['Amount',200,'80'],['Bias',90,'0'],['Seed',110,'7'],['Mode',95,'1/N']]],
+  wt:   ['WT-POS · TIMBRE',[['Depth',170,'60'],['Curve',120,'45'],['Slide',95,'25'],['Random',70,'10']]],
+};
+function ring(v){return `<div class="dn" style="background:conic-gradient(from 218deg,#B794FF 0 ${v}deg,rgba(255,255,255,0.09) ${v}deg 284deg,transparent 284deg)"></div>`;}
+function knobs(arr){return arr.map(([l,v,t])=>`<div class="mk">${ring(v)}<div class="kl">${l}</div><div class="kv">${t}</div></div>`).join('');}
+function setDepth(l){const [lbl,ks]=DEPTH[l]; document.getElementById('depthLabel').textContent=lbl; document.getElementById('depthKnobs').innerHTML=knobs(ks);}
+document.getElementById('motionKnobs').innerHTML=knobs([['Swing',120,'12%'],['Ratchet',95,'2'],['Timbre',170,'60'],['Glide',60,'15']]);
+
+/* slots */
+document.getElementById('slots').innerHTML=Array.from({length:12},(_,i)=>`<div class="slot ${i===0?'on':''}" data-s="${i+1}">${i+1}</div>`).join('');
+document.getElementById('slots').addEventListener('click',e=>{const b=e.target.closest('.slot');if(!b)return; document.querySelectorAll('.slot').forEach(x=>x.classList.toggle('on',x===b));});
+
+/* lanes + sub-tabs */
+document.getElementById('lanes').addEventListener('click',e=>{const b=e.target.closest('.lane');if(!b)return;
+  document.querySelectorAll('.lane').forEach(x=>x.classList.toggle('on',x===b)); state.lane=b.dataset.l; renderLane(); setDepth(state.lane);});
+document.querySelectorAll('.subtab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.subtab').forEach(x=>x.classList.toggle('on',x===t));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.dataset.pane===t.dataset.pane));}));
+
+skeleton(); renderLane(); setDepth('pitch'); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
