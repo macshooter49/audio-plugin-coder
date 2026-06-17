@@ -4508,6 +4508,11 @@ body {
     <symbol id="ic-noise" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="miter">
       <polyline points="3,12 5,6 7,16 9,8 11,17 13,9 15,15 17,7 19,16 21,11"/>
     </symbol>
+    <!-- ANALOG: two warm, slightly-offset sine curves = analog drift/detune -->
+    <symbol id="ic-analog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+      <path d="M3,13.5 C6,6 9,6 12,13.5 C15,21 18,21 21,13.5" opacity="0.5"/>
+      <path d="M3,10.5 C6,3 9,3 12,10.5 C15,18 18,18 21,10.5"/>
+    </symbol>
 
     <symbol id="ic-anchor" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
       <circle cx="16" cy="28" r="4.5" fill="currentColor"/>
@@ -4637,7 +4642,7 @@ body {
                 <div class="eng" data-eng-idx="2"><svg><use href="#ic-gran"/></svg></div>
                 <div class="eng" data-eng-idx="3"><svg><use href="#ic-spec"/></svg></div>
                 <div class="eng" data-eng-idx="4"><svg><use href="#ic-fm"/></svg></div>
-                <div class="eng" data-eng-idx="5"><svg><use href="#ic-noise"/></svg></div>
+                <div class="eng" data-eng-idx="5"><svg><use href="#ic-analog"/></svg></div>
               </div>
               <!-- waveform display (unchanged) -->
               <div class="osc-display">
@@ -4801,7 +4806,7 @@ body {
                 <div class="eng txt" data-eng-b-idx="2">Gran</div>
                 <div class="eng txt" data-eng-b-idx="3">Spec</div>
                 <div class="eng txt" data-eng-b-idx="4">FM</div>
-                <div class="eng txt" data-eng-b-idx="5">Noise</div>
+                <div class="eng txt" data-eng-b-idx="5">Analog</div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
