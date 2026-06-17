@@ -37,8 +37,8 @@ int main()
 
     // 1) RATE -------------------------------------------------------------
     std::printf ("[1] RATE -> division\n");
-    check (arpBeatsPerStep (0.0f) == 4.0f,   "RATE=0 -> 1/1 (4 beats/step)");
-    check (arpBeatsPerStep (1.0f) == 0.125f, "RATE=1 -> 1/32 (0.125 beats/step)");
+    check (arpBeatsPerStep (0.0f) == 4.0f,      "RATE=0 -> 1/1 (4 beats/step)");
+    check (arpBeatsPerStep (1.0f) == 0.015625f, "RATE=1 -> 1/256 (near-static buzz)");
     {
         bool mono = true; float prev = 1e9f;
         for (int i = 0; i <= 20; ++i) { float b = arpBeatsPerStep (i / 20.0f); if (b > prev + 1e-6f) mono = false; prev = b; }
@@ -122,38 +122,79 @@ int main()
         check (std::llabs ((long long) total - expTotal) <= 1, "total step count matches ppq span");
     }
 
-    // 8) engine sim -------------------------------------------------------
-    std::printf ("[8] FlowArp engine sim\n");
+    // 8) engine sim — monophonic clock + robust note-offs --------------------
+    std::printf ("[8] FlowArp engine sim (monophonic, free-run, no stuck notes)\n");
+    auto runArp = [] (FlowArp& a, float rate, float gate, float vary, float traj, float morph,
+                      bool playing, int blocks, double sr, double bpm, int block,
+                      int& ons, int& offs, int& maxSound, int& soundIO, int& badOff)
     {
-        FlowArp arp; arp.reset();
-        arp.noteOn (60, 100); arp.noteOn (64, 100); arp.noteOn (67, 100); // hold C major
-        const double sr = 48000.0, bpm = 120.0; const int block = 512;
-        const double ppqPerSample = (bpm/60.0)/sr, ppqPerBlock = ppqPerSample*block;
-        // RATE=0.4 -> ~1/8 (0.5 beats); GATE=0.5; VARY=0; TRAJ=0 (Up,1oct); MORPH=0
-        int ons = 0, offs = 0; double ppq = 0.0;
-        for (int b = 0; b < 400; ++b)   // 400*512/48000 ≈ 4.27 s
+        ons = offs = badOff = 0; maxSound = soundIO; int sound = soundIO; double ppq = 0.0;
+        const double pps = (bpm / 60.0) / sr, ppb = pps * block;
+        for (int b = 0; b < blocks; ++b)
         {
             ArpEvent ev[kArpMaxEvents];
-            int n = arp.process (0.4f, 0.5f, 0.0f, 0.0f, 0.0f, ppq, bpm, sr, block, true, ev, kArpMaxEvents);
-            for (int i = 0; i < n; ++i) { if (ev[i].on) ++ons; else ++offs; if (ev[i].sampleOffset < 0 || ev[i].sampleOffset >= block) check(false,"event offset in block"); }
-            ppq += ppqPerBlock;
+            const int n = a.process (rate, gate, vary, traj, morph, ppq, bpm, sr, block, playing, ev, kArpMaxEvents);
+            for (int i = 0; i < n; ++i)
+            {
+                if (ev[i].sampleOffset < 0 || ev[i].sampleOffset >= block) ++badOff;
+                if (ev[i].on) { ++ons; ++sound; } else { ++offs; --sound; }
+                if (sound > maxSound) maxSound = sound;
+            }
+            if (playing) ppq += ppb;   // stopped: engine uses its own internal clock
         }
-        check (ons > 0, "engine emits note-ons while held + playing");
-        check (std::abs (ons - offs) <= 2, "every note-on gets a matching note-off (within flush latency)");
+        soundIO = sound;               // persists across calls (engine note-state carries too)
+    };
 
-        // latch: notes off, but arp keeps playing the latched chord
+    {
+        FlowArp arp; arp.reset();
+        arp.noteOn (60,100); arp.noteOn (64,100); arp.noteOn (67,100);   // hold C major
+        int ons, offs, mx, bad, sound = 0;
+        runArp (arp, 0.4f, 0.5f, 0.0f, 0.0f, 0.0f, true, 400, 48000.0, 120.0, 512, ons, offs, mx, sound, bad);
+        check (ons > 0,    "playing + held: emits note-ons");
+        check (mx <= 1,    "monophonic: never more than one arp note sounding");
+        check (bad == 0,   "all event offsets within their block");
+        check (sound <= 1, "at most one note sounding while held");
+
+        arp.noteOff (60); arp.noteOff (64); arp.noteOff (67);            // release every key
+        int ons2, offs2, mx2, bad2;
+        runArp (arp, 0.4f, 0.5f, 0.0f, 0.0f, 0.0f, true, 8, 48000.0, 120.0, 512, ons2, offs2, mx2, sound, bad2);
+        check (bad2 == 0,  "post-release offsets in block");
+        check (mx2 <= 1,   "post-release stays monophonic");
+        check (sound == 0, "keys released -> no note left sounding (NO STUCK NOTE)");
+        check ((ons + ons2) == (offs + offs2), "every note-on matched by a note-off");
+    }
+    {
+        // transport STOPPED but keys held -> internal free-run clock still arps
+        FlowArp arp; arp.reset(); arp.noteOn (60,100); arp.noteOn (64,100);
+        int ons, offs, mx, bad, sound = 0;
+        runArp (arp, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, false, 400, 48000.0, 120.0, 512, ons, offs, mx, sound, bad);
+        check (ons > 0,    "transport STOPPED + held: free-run clock still arpeggiates (fixes silence)");
+        check (mx <= 1,    "stopped free-run also monophonic");
+        check (bad == 0,   "stopped offsets in block");
+        check (sound <= 1, "stopped: at most one sounding");
+    }
+    {
+        // latch holds the chord after keys released
         FlowArp la; la.reset(); la.setLatch (true);
         la.noteOn (60,100); la.noteOn (63,100); la.noteOn (67,100);
-        la.noteOff (60); la.noteOff (63); la.noteOff (67);   // hands off the keys
-        int latchOns = 0; double p2 = 0.0;
-        for (int b = 0; b < 200; ++b) { ArpEvent ev[kArpMaxEvents]; int n = la.process (0.5f,0.5f,0.f,0.f,0.f,p2,bpm,sr,block,true,ev,kArpMaxEvents); for (int i=0;i<n;++i) if (ev[i].on) ++latchOns; p2 += ppqPerBlock; }
-        check (latchOns > 0, "LATCH holds the chord after keys released");
-
-        // stopped transport: no new note-ons
-        FlowArp sa; sa.reset(); sa.noteOn (60,100);
-        ArpEvent ev[kArpMaxEvents]; int n = sa.process (0.5f,0.5f,0.f,0.f,0.f, 0.0, bpm, sr, block, false, ev, kArpMaxEvents);
-        int stoppedOns = 0; for (int i=0;i<n;++i) if (ev[i].on) ++stoppedOns;
-        check (stoppedOns == 0, "transport stopped -> no note-ons emitted");
+        la.noteOff (60); la.noteOff (63); la.noteOff (67);
+        int ons, offs, mx, bad, sound = 0;
+        runArp (la, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, true, 200, 48000.0, 120.0, 512, ons, offs, mx, sound, bad);
+        check (ons > 0,  "LATCH holds the chord after keys released");
+        check (mx <= 1,  "latch stays monophonic");
+        check (bad == 0, "latch offsets in block");
+    }
+    {
+        // turning FLOW OFF mid-note must release the sounding note (no hang on bypass)
+        FlowArp arp; arp.reset(); arp.noteOn (60,100);
+        int ons, offs, mx, bad, sound = 0;
+        runArp (arp, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, true, 30, 48000.0, 120.0, 512, ons, offs, mx, sound, bad);
+        ArpEvent rel[kArpMaxEvents];
+        const int rn = arp.releaseAll (rel, kArpMaxEvents);
+        int relOffs = 0; for (int i = 0; i < rn; ++i) if (! rel[i].on) ++relOffs;
+        check (sound - relOffs == 0, "releaseAll() clears the sounding arp note (no hang when FLOW off)");
+        const int rn2 = arp.releaseAll (rel, kArpMaxEvents);
+        check (rn2 == 0, "releaseAll() idempotent — nothing left after release");
     }
 
     // 9) FLOW-knob modulation accumulation (the processBlock MOD HOOK math) ----

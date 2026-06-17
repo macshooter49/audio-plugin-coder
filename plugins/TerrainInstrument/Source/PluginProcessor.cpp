@@ -1602,7 +1602,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── FLOW ───────────────────────────────────────────────────────────────
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_MODE, 1 }, "Flow Mode",
-        juce::StringArray { "Arp", "Seq", "Glitch", "Drift" }, 0));
+        juce::StringArray { "Off", "Arp", "Seq", "Glitch", "Drift" }, 0));   // 0 = Off (nothing on at load)
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_LATCH, 1 }, "Arp Latch", false));
     auto addFlowKnob = [&] (const char* id, const char* name, float def) {
@@ -2569,9 +2569,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         synthScratch.setSize (2, numSamples, false, true, true);
     synthScratch.clear();
 
-    // ── FLOW · ARP: transform incoming MIDI -> arpeggiated MIDI (mode 0 = Arp) ──
-    const int flowMode = (int) *apvts.getRawParameterValue (ParameterIDs::FLOW_MODE);
-    if (flowMode == 0)   // ARP
+    // ── FLOW · ARP: transform incoming MIDI -> arpeggiated MIDI (0=Off, 1=Arp, 2/3/4=Seq/Glitch/Drift) ──
+    const int flowMode = (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load();
+    if (flowMode == 1)   // ARP  (0 = Off; 2/3/4 = Seq/Glitch/Drift, not built yet)
     {
         flowArp.setLatch (*apvts.getRawParameterValue (ParameterIDs::FLOW_ARP_LATCH) > 0.5f);
 
@@ -2618,7 +2618,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     }
     else
     {
-        synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples); // SEQ/GLITCH/DRIFT passthrough for now
+        // FLOW Off (or a not-yet-built mode): release any note the arp was holding so it
+        // can't hang on the synth, then pass the raw MIDI straight through.
+        wc::ArpEvent rel[wc::kArpMaxEvents];
+        const int rn = flowArp.releaseAll (rel, wc::kArpMaxEvents);
+        if (rn > 0)
+        {
+            juce::MidiBuffer mixed;
+            mixed.addEvents (midiMessages, 0, numSamples, 0);
+            for (int i = 0; i < rn; ++i)
+                mixed.addEvent (juce::MidiMessage::noteOff (1, rel[i].note), 0);
+            synthEngine.renderNextBlock (synthScratch, mixed, 0, numSamples);
+        }
+        else
+            synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples);
     }
 
     // ── Envelope follower tap ──

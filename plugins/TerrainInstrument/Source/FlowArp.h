@@ -47,8 +47,9 @@ inline int    arpClampi  (int v, int lo, int hi) noexcept { return v < lo ? lo :
 inline int    arpQuantIdx(float norm, int n) noexcept     { return arpClampi((int) std::lround (arpClamp01(norm) * (float)(n - 1)), 0, n - 1); }
 
 // ── RATE: knob -> beats-per-step (quarter-note units). Quantized, musical. ───
-//    1/1, 1/2, 1/4, 1/8, 1/16, 1/32  (straight; dotted/triplet live in the card).
-static constexpr float kArpRate[] = { 4.0f, 2.0f, 1.0f, 0.5f, 0.25f, 0.125f };
+//    1/1 … 1/256 straight (dotted/triplet live in the card). The top end is a
+//    creative extreme — at 120 BPM, 1/256 ≈ 128 Hz, a near-static buzz.
+static constexpr float kArpRate[] = { 4.0f, 2.0f, 1.0f, 0.5f, 0.25f, 0.125f, 0.0625f, 0.03125f, 0.015625f };
 static constexpr int   kArpRateN  = (int) (sizeof (kArpRate) / sizeof (float));
 inline float arpBeatsPerStep (float rateKnob) noexcept { return kArpRate[ arpQuantIdx (rateKnob, kArpRateN) ]; }
 
@@ -197,9 +198,22 @@ inline int arpStepsInBlock (double ppqStart, double bpm, double sampleRate, int 
 struct ArpEvent { bool on; int note; int vel; int sampleOffset; };
 
 // =============================================================================
-//  FlowArp — thin stateful engine wrapping the pure helpers above.
-//  Holds: held / latched notes, latch flag, pending note-offs, last velocity.
-//  process() is called once per block; it returns the events for this block.
+//  FlowArp — monophonic arp state machine wrapping the pure helpers above.
+//
+//  ONE note sounds at a time (an arpeggiator plays a chord's notes in sequence).
+//  Two correctness rules that the first version got wrong:
+//
+//   • CLOCK: runs on an INTERNAL free-running clock when the host transport is
+//     stopped, and locks to host PPQ when it's playing — handed off seamlessly
+//     (the free clock tracks host+block while playing, so STOP continues from the
+//     exact position). So holding keys makes sound even with transport stopped.
+//
+//   • NOTE-OFFS CAN NEVER STRAND: the currently-sounding note is closed right
+//     before the next note-on (legato-cut, never overlapping) and at its gate
+//     time; releasing all keys closes it immediately. No PPQ-keyed pending queue
+//     that a transport-stop/loop could freeze before it fires.
+//
+//  knobs: rate,gate,vary,traj,morph normalized [0,1] (EFFECTIVE values).
 // =============================================================================
 class FlowArp
 {
@@ -207,12 +221,11 @@ public:
     void reset() noexcept
     {
         held_.count = 0; latched_.count = 0; latchActive_ = false;
-        pendingN_ = 0; lastVel_ = 100; rng_.seed (0x12345678u);
+        curNote_ = -1; curOffPpq_ = 0.0; freePpq_ = 0.0; lastVel_ = 100; rng_.seed (0x12345678u);
     }
 
     void setLatch (bool on) noexcept
     {
-        // Turning latch off clears the latched copy; pending offs still flush.
         latchEnabled_ = on;
         if (! on) { latched_.count = 0; latchActive_ = false; }
     }
@@ -222,64 +235,94 @@ public:
         lastVel_ = arpClampi (vel, 1, 127);
         if (latchEnabled_)
         {
-            // first key after silence starts a fresh latched chord
             if (! latchActive_ || held_.count == 0) { latched_.count = 0; latchActive_ = true; }
             addUnique (latched_, note);
         }
         addUnique (held_, note);
     }
 
-    void noteOff (int note) noexcept
+    void noteOff (int note) noexcept { removeNote (held_, note); }  // latched copy persists
+
+    // Release everything and clear state — call when FLOW switches OFF (or to a mode that
+    // isn't ARP) so the synth never hangs on the last arp note. Emits the pending note-off.
+    int releaseAll (ArpEvent* out, int maxOut) noexcept
     {
-        removeNote (held_, note);          // latched copy persists until latch off / new chord
+        int n = 0;
+        if (curNote_ >= 0 && n < maxOut) { out[n++] = { false, curNote_, 0, 0 }; curNote_ = -1; }
+        held_.count = 0; latched_.count = 0; latchActive_ = false;
+        return n;
     }
 
-    // Returns number of events written to `out` (capacity kArpMaxEvents).
-    // knobs: rate,gate,vary,traj,morph all normalized [0,1] (EFFECTIVE values).
+    // Returns number of events written to `out` (capacity maxOut).
     int process (float rate, float gate, float vary, float traj, float morph,
-                 double ppqStart, double bpm, double sampleRate, int numSamples,
+                 double hostPpq, double bpm, double sampleRate, int numSamples,
                  bool playing, ArpEvent* out, int maxOut) noexcept
     {
         int n = 0;
-        const double bps = (bpm > 0.0 ? bpm : 120.0) / 60.0;
-        const double ppqPerSample = bps / (sampleRate > 0.0 ? sampleRate : 44100.0);
-        const double ppqEnd = ppqStart + ppqPerSample * (double) numSamples;
+        const double sr  = (sampleRate > 0.0 ? sampleRate : 44100.0);
+        const double bp  = (bpm > 0.0 ? bpm : 120.0);
+        const double ppqPerSample = (bp / 60.0) / sr;
+        const double blockBeats   = ppqPerSample * (double) numSamples;
 
-        // 1) flush any pending note-offs that fall inside this block (always, even if stopped)
-        n += flushPendingOffs (ppqStart, ppqEnd, ppqPerSample, out, maxOut, n);
+        // clock: host when playing, internal free-run when stopped — seamless handoff.
+        const double pos    = playing ? hostPpq : freePpq_;
+        const double ppqEnd = pos + blockBeats;
+        freePpq_ = (playing ? hostPpq : freePpq_) + blockBeats;
 
-        // transport stopped, or nothing to play -> emit only the flushed offs
         const NoteSet& src = (latchEnabled_ && latched_.count > 0) ? latched_ : held_;
-        if (! playing || src.count == 0) return n;
 
-        // 2) build voicing + sequence for this block (cheap; reflects current knobs/chord)
+        // nothing held -> release the sounding note, silence
+        if (src.count <= 0)
+        {
+            if (curNote_ >= 0 && n < maxOut) { out[n++] = { false, curNote_, 0, 0 }; curNote_ = -1; }
+            return n;
+        }
+
         const TrajPreset tp = arpTraj (traj);
         NoteSet voiced; arpVoicing (src.n, src.count, morph, voiced);
         NoteSet seq;    arpSequence (voiced, tp.dir, tp.octaves, seq);
-        if (seq.count == 0) return n;
-
-        const float  beats = arpBeatsPerStep (rate);
-        const float  gFrac = arpGateFrac (gate);
-
-        // 3) place step boundaries in this block
-        StepHit hits[kArpMaxEvents];
-        const int hitN = arpStepsInBlock (ppqStart, bpm, sampleRate, numSamples, beats, hits, kArpMaxEvents);
-
-        for (int h = 0; h < hitN && n < maxOut; ++h)
+        if (seq.count <= 0)
         {
+            if (curNote_ >= 0 && n < maxOut) { out[n++] = { false, curNote_, 0, 0 }; curNote_ = -1; }
+            return n;
+        }
+
+        const float beats = arpBeatsPerStep (rate);
+        const float gFrac = arpGateFrac (gate);
+
+        StepHit hits[kArpMaxEvents];
+        const int hitN = arpStepsInBlock (pos, bp, sr, numSamples, beats, hits, kArpMaxEvents);
+
+        for (int h = 0; h < hitN && n + 1 < maxOut; ++h)
+        {
+            const int onOff = hits[h].sampleOffset;
+
+            // close the current note before this new one (legato-cut, never overlap)
+            if (curNote_ >= 0)
+            {
+                int offOff = (int) std::llround ((curOffPpq_ - pos) / ppqPerSample);
+                if (offOff < 0)     offOff = 0;
+                if (offOff > onOff)  offOff = onOff;
+                out[n++] = { false, curNote_, 0, offOff };
+                curNote_ = -1;
+            }
+
             const int note = arpPickNote (seq, tp.dir, hits[h].stepIndex, vary, tp.octaves, rng_);
             if (note < 0) continue;
+            out[n++] = { true, note, lastVel_, onOff };
+            curNote_   = note;
+            curOffPpq_ = hits[h].ppq + (double) beats * (double) gFrac;
+        }
 
-            // note-on now
-            out[n++] = { true, note, lastVel_, hits[h].sampleOffset };
-
-            // schedule note-off at stepPpq + beats*gate (may land in a later block)
-            const double offPpq = hits[h].ppq + (double) beats * (double) gFrac;
-            const int offInBlock = (int) std::llround ((offPpq - ppqStart) / ppqPerSample);
-            if (offPpq < ppqEnd && offInBlock >= 0 && offInBlock < numSamples && n < maxOut)
-                out[n++] = { false, note, 0, arpClampi (offInBlock, 0, numSamples - 1) };
-            else
-                pushPendingOff (note, offPpq);
+        // gate-off for the current note if it ends within this block (creates the gap)
+        if (curNote_ >= 0)
+        {
+            int offOff = (int) std::llround ((curOffPpq_ - pos) / ppqPerSample);
+            if (curOffPpq_ < ppqEnd && offOff >= 0 && offOff < numSamples && n < maxOut)
+            {
+                out[n++] = { false, curNote_, 0, offOff };
+                curNote_ = -1;
+            }
         }
         return n;
     }
@@ -294,36 +337,14 @@ private:
     {
         for (int i = 0; i < s.count; ++i) if (s.n[i] == note) { for (int j = i; j < s.count - 1; ++j) s.n[j] = s.n[j+1]; --s.count; return; }
     }
-    void pushPendingOff (int note, double ppq) noexcept
-    {
-        if (pendingN_ < kArpMaxPending) { pending_[pendingN_].note = note; pending_[pendingN_].ppq = ppq; ++pendingN_; }
-    }
-    int flushPendingOffs (double ppqStart, double ppqEnd, double ppqPerSample,
-                          ArpEvent* out, int maxOut, int startN) noexcept
-    {
-        int added = 0;
-        for (int i = 0; i < pendingN_; )
-        {
-            if (pending_[i].ppq < ppqEnd && (startN + added) < maxOut)
-            {
-                int off = (int) std::llround ((pending_[i].ppq - ppqStart) / ppqPerSample);
-                if (off < 0) off = 0;
-                out[startN + added] = { false, pending_[i].note, 0, off };
-                ++added;
-                pending_[i] = pending_[--pendingN_];   // swap-remove
-            }
-            else ++i;
-        }
-        return added;
-    }
 
-    struct Pending { int note; double ppq; };
-    NoteSet  held_, latched_;
-    Pending  pending_[kArpMaxPending];
-    int      pendingN_   = 0;
-    bool     latchEnabled_ = false, latchActive_ = false;
-    int      lastVel_    = 100;
-    ArpRng   rng_;
+    NoteSet held_, latched_;
+    int     curNote_     = -1;      // the single note currently sounding (-1 = none)
+    double  curOffPpq_   = 0.0;     // when it should release (absolute PPQ)
+    double  freePpq_     = 0.0;     // internal clock position (transport-stopped fallback)
+    bool    latchEnabled_ = false, latchActive_ = false;
+    int     lastVel_     = 100;
+    ArpRng  rng_;
 };
 
 } // namespace wc
