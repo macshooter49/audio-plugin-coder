@@ -18455,16 +18455,55 @@ restoreThemeFromBackend();
       glitch:['Grid','Window','Glitch','Repeat','Pitch'],
       drift:['Rate','Smooth','Chaos','Dims','Spread']
     };
-    function setMode(m){
+
+    // ── APVTS param wiring (per-mode knob memory) ──
+    var J = (window.Juce && window.Juce.getSliderState) ? window.Juce : null;
+    var MP={arp:'FLOW_ARP',seq:'FLOW_SEQ',glitch:'FLOW_GLI',drift:'FLOW_DRF'};
+    var SUF=['RATE','GATE','VARY','TRAJ','MORPH'];
+    var MODE_LIST=['arp','seq','glitch','drift'];
+    var curMode='arp';
+    var rings=Array.prototype.slice.call(knobRow.querySelectorAll('.vis-knob .knob-ring'));
+    function applyFill(ring,n){ n=Math.max(0,Math.min(1,n||0)); var f=270*n;
+      ring.style.background='conic-gradient(from 225deg, var(--purple-500) 0deg '+f+'deg, var(--knob-track) '+f+'deg 270deg, transparent 270deg)'; }
+    function stOf(mode,i){ if(!J) return null; try{ return J.getSliderState(MP[mode]+'_'+SUF[i]); }catch(e){ return null; } }
+    function refreshKnobs(){ for(var i=0;i<rings.length;i++){ var st=stOf(curMode,i); rings[i]._state=st;
+      if(st&&st.getNormalisedValue) applyFill(rings[i], st.getNormalisedValue()); else applyFill(rings[i],0); } }
+    // drag (once per ring) — vertical 200px sweep, writes the ACTIVE mode's param
+    for(var ri=0;ri<rings.length;ri++){ (function(ring){
+      var sy=0,sn=0,drag=false;
+      function mv(e){ if(!drag)return; var dy=sy-e.clientY; var n=Math.max(0,Math.min(1,sn+dy/200)); applyFill(ring,n);
+        if(ring._state){ try{ ring._state.setNormalisedValue(n); }catch(_){} } }
+      function up(){ drag=false; document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); }
+      ring.style.cursor='grab';
+      ring.addEventListener('pointerdown',function(e){ drag=true; sy=e.clientY;
+        sn=(ring._state&&ring._state.getNormalisedValue)?ring._state.getNormalisedValue():0;
+        document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); e.preventDefault(); });
+    })(rings[ri]); }
+    // reverse-sync: DAW automation / preset recall repaints the active mode's rings
+    if(J){ MODE_LIST.forEach(function(mode){ SUF.forEach(function(s,i){ var st=null; try{ st=J.getSliderState(MP[mode]+'_'+s);}catch(e){}
+      if(st&&st.valueChangedEvent&&st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(function(){ if(mode===curMode){ try{ applyFill(rings[i], st.getNormalisedValue()); }catch(e){} } }); }); }); }
+    // FLOW_MODE param <-> emblems
+    var modeState=null; if(J){ try{ modeState=J.getSliderState('FLOW_MODE'); }catch(e){} }
+    function setModeParam(m){ if(!modeState)return; var idx=MODE_LIST.indexOf(m); if(idx<0)idx=0;
+      try{ modeState.setNormalisedValue(MODE_LIST.length>1 ? idx/(MODE_LIST.length-1) : 0); }catch(e){} }
+    if(modeState&&modeState.valueChangedEvent&&modeState.valueChangedEvent.addListener){
+      modeState.valueChangedEvent.addListener(function(){ try{ var n=modeState.getNormalisedValue();
+        var idx=Math.round(n*(MODE_LIST.length-1)); var m=MODE_LIST[idx]||'arp'; if(m!==curMode) setMode(m,true); }catch(e){} }); }
+
+    function setMode(m, fromParam){
+      curMode=m;
       dev.setAttribute('data-mode',m);
       Array.prototype.forEach.call(modes.querySelectorAll('.flow-mode'),function(t){ t.classList.toggle('act', t.getAttribute('data-mode')===m); });
       Array.prototype.forEach.call(dev.querySelectorAll('.vis-layer'),function(v){ v.classList.toggle('show', v.getAttribute('data-vis')===m); });
       var labs=KLAB[m]||KLAB.arp, kl=knobRow.querySelectorAll('.knob-label');
       for(var i=0;i<kl.length;i++) kl[i].textContent=labs[i]||'';
       if(exp) exp.style.display=(m==='arp')?'block':'none';
+      refreshKnobs();
+      if(!fromParam) setModeParam(m);
     }
     Array.prototype.forEach.call(modes.querySelectorAll('.flow-mode'),function(t){ t.addEventListener('click',function(){ setMode(t.getAttribute('data-mode')); }); });
-    setMode('arp');
+    // init from the FLOW_MODE param (preset/automation) if present, else Arp
+    (function(){ var m='arp'; if(modeState&&modeState.getNormalisedValue){ try{ m=MODE_LIST[Math.round(modeState.getNormalisedValue()*(MODE_LIST.length-1))]||'arp'; }catch(e){} } setMode(m,true); })();
 
     /* ───────── ARP extension card ───────── */
     var N=16, ROWS=7, X0=34, XW=290-X0-4, sw=XW/N, Y0=8, Y1=84, rh=(Y1-Y0)/(ROWS-1);
@@ -18569,6 +18608,18 @@ restoreThemeFromBackend();
       svg.addEventListener('dblclick',function(e){ if(state.lane!=='pitch')return; var vb=toVB(e),step=Math.floor((vb.x-X0)/sw); if(step>=0&&step<N){P.pitch[step]=-1; renderLane();} });
       window.addEventListener('mousemove',function(e){ if(dragging) editAt(toVB(e),false); });
       window.addEventListener('mouseup',function(){ dragging=false; lastPaint=-1; });
+
+      // FLOW_ARP_LATCH <-> the Latch toggle in the PLAY tab
+      var latchEl = card.querySelector('.pane[data-pane="play"] .tog');
+      if(latchEl){
+        var latchState=null; if(J){ try{ latchState=J.getSliderState('FLOW_ARP_LATCH'); }catch(e){} }
+        var applyLatch=function(on){ latchEl.classList.toggle('on', !!on); };
+        if(latchState){ try{ applyLatch(latchState.getNormalisedValue()>0.5); }catch(e){}
+          if(latchState.valueChangedEvent&&latchState.valueChangedEvent.addListener)
+            latchState.valueChangedEvent.addListener(function(){ try{ applyLatch(latchState.getNormalisedValue()>0.5); }catch(e){} }); }
+        latchEl.addEventListener('click',function(){ var on=!latchEl.classList.contains('on'); applyLatch(on);
+          if(latchState){ try{ latchState.setNormalisedValue(on?1:0); }catch(e){} } });
+      }
     }
     function openCard(){ if(!card) buildCard();
       if(!cardPos){ var r=dev.getBoundingClientRect(); cardPos={x:Math.min(window.innerWidth-332, Math.max(8, r.right-316)), y:Math.max(8, r.top-40)}; }

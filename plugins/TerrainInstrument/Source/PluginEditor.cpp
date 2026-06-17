@@ -225,6 +225,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBFoldAmtRelay)
             .withOptionsFrom(synOscBFrameSpreadRelay)
             .withOptionsFrom(synOscBInterpModeRelay)
+            .withOptionsFrom(flowModeRelay).withOptionsFrom(flowArpLatchRelay)
+            .withOptionsFrom(flowArpRateRelay).withOptionsFrom(flowArpGateRelay).withOptionsFrom(flowArpVaryRelay).withOptionsFrom(flowArpTrajRelay).withOptionsFrom(flowArpMorphRelay)
+            .withOptionsFrom(flowSeqRateRelay).withOptionsFrom(flowSeqGateRelay).withOptionsFrom(flowSeqVaryRelay).withOptionsFrom(flowSeqTrajRelay).withOptionsFrom(flowSeqMorphRelay)
+            .withOptionsFrom(flowGliRateRelay).withOptionsFrom(flowGliGateRelay).withOptionsFrom(flowGliVaryRelay).withOptionsFrom(flowGliTrajRelay).withOptionsFrom(flowGliMorphRelay)
+            .withOptionsFrom(flowDrfRateRelay).withOptionsFrom(flowDrfGateRelay).withOptionsFrom(flowDrfVaryRelay).withOptionsFrom(flowDrfTrajRelay).withOptionsFrom(flowDrfMorphRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2498,6 +2503,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synLegatoAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_LEGATO),
         synLegatoRelay, nullptr);
+
+    // ── FLOW attachments (mode + latch + 20 per-mode knobs) ──
+    {
+        auto mkF = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
+        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
+        mkF(flowModeAttachment, ParameterIDs::FLOW_MODE, flowModeRelay);
+        mkF(flowArpLatchAttachment, ParameterIDs::FLOW_ARP_LATCH, flowArpLatchRelay);
+        mkF(flowArpRateAttachment, ParameterIDs::FLOW_ARP_RATE, flowArpRateRelay); mkF(flowArpGateAttachment, ParameterIDs::FLOW_ARP_GATE, flowArpGateRelay); mkF(flowArpVaryAttachment, ParameterIDs::FLOW_ARP_VARY, flowArpVaryRelay); mkF(flowArpTrajAttachment, ParameterIDs::FLOW_ARP_TRAJ, flowArpTrajRelay); mkF(flowArpMorphAttachment, ParameterIDs::FLOW_ARP_MORPH, flowArpMorphRelay);
+        mkF(flowSeqRateAttachment, ParameterIDs::FLOW_SEQ_RATE, flowSeqRateRelay); mkF(flowSeqGateAttachment, ParameterIDs::FLOW_SEQ_GATE, flowSeqGateRelay); mkF(flowSeqVaryAttachment, ParameterIDs::FLOW_SEQ_VARY, flowSeqVaryRelay); mkF(flowSeqTrajAttachment, ParameterIDs::FLOW_SEQ_TRAJ, flowSeqTrajRelay); mkF(flowSeqMorphAttachment, ParameterIDs::FLOW_SEQ_MORPH, flowSeqMorphRelay);
+        mkF(flowGliRateAttachment, ParameterIDs::FLOW_GLI_RATE, flowGliRateRelay); mkF(flowGliGateAttachment, ParameterIDs::FLOW_GLI_GATE, flowGliGateRelay); mkF(flowGliVaryAttachment, ParameterIDs::FLOW_GLI_VARY, flowGliVaryRelay); mkF(flowGliTrajAttachment, ParameterIDs::FLOW_GLI_TRAJ, flowGliTrajRelay); mkF(flowGliMorphAttachment, ParameterIDs::FLOW_GLI_MORPH, flowGliMorphRelay);
+        mkF(flowDrfRateAttachment, ParameterIDs::FLOW_DRF_RATE, flowDrfRateRelay); mkF(flowDrfGateAttachment, ParameterIDs::FLOW_DRF_GATE, flowDrfGateRelay); mkF(flowDrfVaryAttachment, ParameterIDs::FLOW_DRF_VARY, flowDrfVaryRelay); mkF(flowDrfTrajAttachment, ParameterIDs::FLOW_DRF_TRAJ, flowDrfTrajRelay); mkF(flowDrfMorphAttachment, ParameterIDs::FLOW_DRF_MORPH, flowDrfMorphRelay);
+    }
 
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

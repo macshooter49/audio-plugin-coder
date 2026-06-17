@@ -47,6 +47,7 @@ enum class ModDest : int
     FrameB, WarpB, FoldB,      // OSC B wavetable frame / warp / fold (linear 0..1)
     LfoAmt1, LfoAmt2, LfoAmt3, LfoAmt4, LfoAmt5,        // LFO→LFO: scales the target LFO's output
     LfoAmt6, LfoAmt7, LfoAmt8, LfoAmt9, LfoAmt10,       // (LFOs 6..10) — LfoAmt{n} stays at dest 11+n
+    FlowGate, FlowVary, FlowTraj, FlowMorph,            // FLOW knobs 2..5 (FlowTime already above) — append-only
     NumDests
 };
 
@@ -83,6 +84,10 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // LfoAmt8
     { ModDomain::Linear01,  1.0f },  // LfoAmt9
     { ModDomain::Linear01,  1.0f },  // LfoAmt10
+    { ModDomain::Linear01,  1.0f },  // FlowGate
+    { ModDomain::Linear01,  1.0f },  // FlowVary
+    { ModDomain::Linear01,  1.0f },  // FlowTraj
+    { ModDomain::Linear01,  1.0f },  // FlowMorph
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

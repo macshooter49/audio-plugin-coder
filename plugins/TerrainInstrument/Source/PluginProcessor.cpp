@@ -1599,6 +1599,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_LEGATO, 1 }, "Synth Legato", false));
 
+    // ── FLOW ───────────────────────────────────────────────────────────────
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_MODE, 1 }, "Flow Mode",
+        juce::StringArray { "Arp", "Seq", "Glitch", "Drift" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { ParameterIDs::FLOW_ARP_LATCH, 1 }, "Arp Latch", false));
+    auto addFlowKnob = [&] (const char* id, const char* name, float def) {
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
+    addFlowKnob (ParameterIDs::FLOW_ARP_RATE,"Arp Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_ARP_GATE,"Arp Gate",0.55f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_VARY,"Arp Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_TRAJ,"Arp Traj",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_MORPH,"Arp Morph",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_SEQ_RATE,"Seq Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_SEQ_GATE,"Seq Gate",0.55f);
+    addFlowKnob (ParameterIDs::FLOW_SEQ_VARY,"Seq Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_SEQ_TRAJ,"Seq Traj",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_SEQ_MORPH,"Seq Morph",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);
+    addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_GLI_MORPH,"Glitch Morph",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_DRF_RATE,"Drift Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_DRF_GATE,"Drift Gate",0.55f);
+    addFlowKnob (ParameterIDs::FLOW_DRF_VARY,"Drift Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_DRF_TRAJ,"Drift Traj",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_DRF_MORPH,"Drift Morph",0.00f);
+
     return layout;
 }
 
@@ -1686,6 +1708,10 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
 
     // Prepare modulation engine
     modulationEngine.prepare(sampleRate);
+
+    // FLOW · ARP — prepare the block-rate global LFO bank + reset the engine
+    for (auto& l : flowLfo_) l.prepare (sampleRate);
+    flowArp.reset();
     if (modStateJson.isNotEmpty())
         modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
 
@@ -2184,6 +2210,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // ── Synth section render (Phase 1 MPV) ──────────────────────────────
     // Push current SYN_* APVTS values onto every SynthVoice each block
     // — same pattern as the per-layer atomic broadcast above.
+    // FLOW · ARP reads synModCfg + synModBpm at the synth-render site (which sits
+    // AFTER this SYN_* scope closes), so their declarations are hoisted out here.
+    // [CC integration note: wiring patch anchored 5b/5c against these but they were
+    //  scope-local; hoisting keeps Opus's 5b/5c code verbatim and in-scope.]
+    wc::ModConfig synModCfg;
+    float         synModBpm = 0.0f;
     {
         const int   oct     = (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_OCT);
         const int   semi    = (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SEMI);
@@ -2316,7 +2348,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         //    then publish it to every voice. One LFO (L1, sine, free rate) and one
         //    default route L1 → Filter 1 cutoff (depth from LFO1_DEPTH) so the slice
         //    is audible the instant it loads. Shape/sync/extra LFOs + dests: Batch 2+.
-        wc::ModConfig synModCfg;
+        // (synModCfg hoisted to the outer processBlock scope above — FLOW ARP reads it post-scope.)
         {
             struct LfoP { const char* shape; const char* sync; const char* div; const char* rate; const char* depth; const char* phase; };
             static const LfoP lp[wc::NUM_LFOS] = {
@@ -2365,7 +2397,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
             synModCfg.numAssignments = na;
         }
-        const float synModBpm = currentBPM.load();
+        synModBpm = currentBPM.load();   // (declared in outer scope — hoisted for FLOW ARP)
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -2506,13 +2538,88 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
     }
 
+    // ── FLOW transport + global LFO bank (block-rate mirror; free or transport-locked) ──
+    double flowBpm = (double) synModBpm, flowPpq = 0.0; bool flowPlaying = false;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+        {
+            if (auto b = pos->getBpm())         flowBpm     = *b;
+            if (auto q = pos->getPpqPosition()) flowPpq     = *q;
+            flowPlaying = pos->getIsPlaying();
+        }
+    for (int i = 0; i < wc::NUM_LFOS; ++i)
+    {
+        flowLfo_[i].setSettings (synModCfg.lfos[i]);
+        if (synModCfg.lfos[i].sync)
+        {
+            const float bpc = wc::kSyncDivisions[ juce::jlimit (0, wc::kNumSyncDivisions - 1, synModCfg.lfos[i].syncIdx) ].beatsPerCycle;
+            flowLfo_[i].setPhaseFromTransport ((float) std::fmod (flowPpq / (double) bpc, 1.0)); // locks to bar + arp clock
+        }
+        else
+        {
+            flowLfo_[i].setFrequency (synModCfg.lfos[i].rateHz);
+            for (int s = 0; s < numSamples; ++s) flowLfo_[i].processSample();   // advance to track time
+        }
+    }
+
     // Synth renders into its own scratch (broadcast midiMessages unfiltered —
     // the trigger-mode dispatcher above gates the LAYERS only, the synth
     // is a parallel pipeline that always receives the host's MIDI).
     if (synthScratch.getNumSamples() < numSamples)
         synthScratch.setSize (2, numSamples, false, true, true);
     synthScratch.clear();
-    synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples);
+
+    // ── FLOW · ARP: transform incoming MIDI -> arpeggiated MIDI (mode 0 = Arp) ──
+    const int flowMode = (int) *apvts.getRawParameterValue (ParameterIDs::FLOW_MODE);
+    if (flowMode == 0)   // ARP
+    {
+        flowArp.setLatch (*apvts.getRawParameterValue (ParameterIDs::FLOW_ARP_LATCH) > 0.5f);
+
+        juce::MidiBuffer flowMidi;
+        for (const auto meta : midiMessages)
+        {
+            const auto m = meta.getMessage();
+            if      (m.isNoteOn())  flowArp.noteOn  (m.getNoteNumber(), m.getVelocity());
+            else if (m.isNoteOff()) flowArp.noteOff (m.getNoteNumber());
+            else                    flowMidi.addEvent (m, meta.samplePosition);   // CC / pitchbend pass through
+        }
+
+        // EFFECTIVE knobs = base param + Σ(global-LFO × depth), clamp once  (proven: 35/35)
+        auto base    = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (id)->load()); };  // [CC fix: ->load(), atomic<float> can't deduce in jlimit]
+        auto flowMod = [&] (wc::ModDest dest) -> float {
+            float sum = 0.0f; const auto& info = wc::kDestInfo[(int) dest];
+            for (int a = 0; a < synModCfg.numAssignments; ++a) {
+                const auto& as = synModCfg.assignments[a];
+                if (! as.enabled || as.dest != dest) continue;
+                const int si = (int) as.source - (int) wc::ModSource::L1;
+                if (si < 0 || si >= wc::NUM_LFOS) continue;           // only LFO sources have a global value
+                sum += wc::routeContribution (info, flowLfo_[si].peek(), as.depth);
+            }
+            return sum; };
+
+        const float kRate  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_RATE)  + flowMod (wc::ModDest::FlowTime));
+        const float kGate  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_GATE)  + flowMod (wc::ModDest::FlowGate));
+        const float kVary  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_VARY)  + flowMod (wc::ModDest::FlowVary));
+        const float kTraj  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_TRAJ)  + flowMod (wc::ModDest::FlowTraj));
+        const float kMorph = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_MORPH) + flowMod (wc::ModDest::FlowMorph));
+
+        wc::ArpEvent ev[wc::kArpMaxEvents];
+        const int n = flowArp.process (kRate, kGate, kVary, kTraj, kMorph,
+                                       flowPpq, flowBpm, getSampleRate(), numSamples,
+                                       flowPlaying, ev, wc::kArpMaxEvents);
+        for (int i = 0; i < n; ++i)
+        {
+            const auto msg = ev[i].on
+                ? juce::MidiMessage::noteOn  (1, ev[i].note, (juce::uint8) ev[i].vel)
+                : juce::MidiMessage::noteOff (1, ev[i].note);
+            flowMidi.addEvent (msg, juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
+        }
+        synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
+    }
+    else
+    {
+        synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples); // SEQ/GLITCH/DRIFT passthrough for now
+    }
 
     // ── Envelope follower tap ──
     // After the block renders, sample the most-active synth voice's AMP envelope

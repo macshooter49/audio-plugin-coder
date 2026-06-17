@@ -303,6 +303,13 @@ private:
     juce::WebSliderRelay synGlideScaledRelay  { ParameterIDs::SYN_GLIDE_SCALED };
     juce::WebSliderRelay synMonoRelay         { ParameterIDs::SYN_MONO };
     juce::WebSliderRelay synLegatoRelay       { ParameterIDs::SYN_LEGATO };
+    // ── FLOW (performance engine) relays ──
+    juce::WebSliderRelay flowModeRelay      { ParameterIDs::FLOW_MODE };
+    juce::WebSliderRelay flowArpLatchRelay  { ParameterIDs::FLOW_ARP_LATCH };
+    juce::WebSliderRelay flowArpRateRelay { ParameterIDs::FLOW_ARP_RATE }; juce::WebSliderRelay flowArpGateRelay { ParameterIDs::FLOW_ARP_GATE }; juce::WebSliderRelay flowArpVaryRelay { ParameterIDs::FLOW_ARP_VARY }; juce::WebSliderRelay flowArpTrajRelay { ParameterIDs::FLOW_ARP_TRAJ }; juce::WebSliderRelay flowArpMorphRelay { ParameterIDs::FLOW_ARP_MORPH };
+    juce::WebSliderRelay flowSeqRateRelay { ParameterIDs::FLOW_SEQ_RATE }; juce::WebSliderRelay flowSeqGateRelay { ParameterIDs::FLOW_SEQ_GATE }; juce::WebSliderRelay flowSeqVaryRelay { ParameterIDs::FLOW_SEQ_VARY }; juce::WebSliderRelay flowSeqTrajRelay { ParameterIDs::FLOW_SEQ_TRAJ }; juce::WebSliderRelay flowSeqMorphRelay { ParameterIDs::FLOW_SEQ_MORPH };
+    juce::WebSliderRelay flowGliRateRelay { ParameterIDs::FLOW_GLI_RATE }; juce::WebSliderRelay flowGliGateRelay { ParameterIDs::FLOW_GLI_GATE }; juce::WebSliderRelay flowGliVaryRelay { ParameterIDs::FLOW_GLI_VARY }; juce::WebSliderRelay flowGliTrajRelay { ParameterIDs::FLOW_GLI_TRAJ }; juce::WebSliderRelay flowGliMorphRelay { ParameterIDs::FLOW_GLI_MORPH };
+    juce::WebSliderRelay flowDrfRateRelay { ParameterIDs::FLOW_DRF_RATE }; juce::WebSliderRelay flowDrfGateRelay { ParameterIDs::FLOW_DRF_GATE }; juce::WebSliderRelay flowDrfVaryRelay { ParameterIDs::FLOW_DRF_VARY }; juce::WebSliderRelay flowDrfTrajRelay { ParameterIDs::FLOW_DRF_TRAJ }; juce::WebSliderRelay flowDrfMorphRelay { ParameterIDs::FLOW_DRF_MORPH };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -578,6 +585,12 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synGlideScaledAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synMonoAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synLegatoAttachment;
+    // ── FLOW attachments ──
+    std::unique_ptr<juce::WebSliderParameterAttachment> flowModeAttachment, flowArpLatchAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> flowArpRateAttachment, flowArpGateAttachment, flowArpVaryAttachment, flowArpTrajAttachment, flowArpMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> flowSeqRateAttachment, flowSeqGateAttachment, flowSeqVaryAttachment, flowSeqTrajAttachment, flowSeqMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> flowGliRateAttachment, flowGliGateAttachment, flowGliVaryAttachment, flowGliTrajAttachment, flowGliMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> flowDrfRateAttachment, flowDrfGateAttachment, flowDrfVaryAttachment, flowDrfTrajAttachment, flowDrfMorphAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady

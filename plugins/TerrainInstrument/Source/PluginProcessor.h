@@ -18,6 +18,8 @@
 #include "SampleLoader.h"
 #include "Slice.h"
 #include "TerrainSynth.h"
+#include "FlowArp.h"            // FLOW · ARP engine
+#include "SynthLFO.h"          // block-rate global FLOW LFO bank (guarded; likely transitive)
 #include "TerrainConstants.h"
 #include "LayerState.h"
 #include "IndyFxChain.h"
@@ -678,6 +680,8 @@ private:
     float synthGlideFrom_  = -1.0f;   // last synth note (pitch to glide FROM); -1 = none yet
     int   synthNotesHeld_  = 0;       // synth notes currently sounding
     UnisonSynth                 synthEngine;   // Phase 8a: was juce::Synthesiser
+    wc::FlowArp                 flowArp;                    // FLOW · ARP engine (one global instance)
+    wc::SynthLFO                flowLfo_[wc::NUM_LFOS];     // block-rate global LFO bank for FLOW-knob mod
     juce::AudioBuffer<float>    synthScratch;
 
     // ── Synth wavetable bank (Phase 2A) ──────────────────────────────────

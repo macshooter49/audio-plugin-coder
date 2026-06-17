@@ -133,6 +133,21 @@ namespace ParameterIDs
     constexpr char LFO4_PHASE[] = "LFO4_PHASE"; constexpr char LFO5_PHASE[] = "LFO5_PHASE";
     constexpr char LFO6_PHASE[] = "LFO6_PHASE"; constexpr char LFO7_PHASE[] = "LFO7_PHASE"; constexpr char LFO8_PHASE[] = "LFO8_PHASE";
     constexpr char LFO9_PHASE[] = "LFO9_PHASE"; constexpr char LFO10_PHASE[]= "LFO10_PHASE";
+    // ── FLOW (performance engine) — mode + per-mode knobs (remember per mode) ──
+    constexpr char FLOW_MODE[]     = "FLOW_MODE";        // choice: ARP, SEQ, GLITCH, DRIFT
+    constexpr char FLOW_ARP_LATCH[]= "FLOW_ARP_LATCH";   // bool — ARP latch (perf essential)
+    constexpr char FLOW_ARP_RATE[] = "FLOW_ARP_RATE";  constexpr char FLOW_ARP_GATE[] = "FLOW_ARP_GATE";
+    constexpr char FLOW_ARP_VARY[] = "FLOW_ARP_VARY";  constexpr char FLOW_ARP_TRAJ[] = "FLOW_ARP_TRAJ";
+    constexpr char FLOW_ARP_MORPH[]= "FLOW_ARP_MORPH";
+    constexpr char FLOW_SEQ_RATE[] = "FLOW_SEQ_RATE";  constexpr char FLOW_SEQ_GATE[] = "FLOW_SEQ_GATE";
+    constexpr char FLOW_SEQ_VARY[] = "FLOW_SEQ_VARY";  constexpr char FLOW_SEQ_TRAJ[] = "FLOW_SEQ_TRAJ";
+    constexpr char FLOW_SEQ_MORPH[]= "FLOW_SEQ_MORPH";
+    constexpr char FLOW_GLI_RATE[] = "FLOW_GLI_RATE";  constexpr char FLOW_GLI_GATE[] = "FLOW_GLI_GATE";
+    constexpr char FLOW_GLI_VARY[] = "FLOW_GLI_VARY";  constexpr char FLOW_GLI_TRAJ[] = "FLOW_GLI_TRAJ";
+    constexpr char FLOW_GLI_MORPH[]= "FLOW_GLI_MORPH";
+    constexpr char FLOW_DRF_RATE[] = "FLOW_DRF_RATE";  constexpr char FLOW_DRF_GATE[] = "FLOW_DRF_GATE";
+    constexpr char FLOW_DRF_VARY[] = "FLOW_DRF_VARY";  constexpr char FLOW_DRF_TRAJ[] = "FLOW_DRF_TRAJ";
+    constexpr char FLOW_DRF_MORPH[]= "FLOW_DRF_MORPH";
     constexpr char SYN_ENV_AMP_A[]     = "SYN_ENV_AMP_A";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_D[]     = "SYN_ENV_AMP_D";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1
