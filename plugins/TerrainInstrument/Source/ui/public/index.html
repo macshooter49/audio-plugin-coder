@@ -3370,8 +3370,19 @@ body {
 #syn-panel .device-corner-preset {
   position: absolute; top: 4px; right: 14px;
   z-index: 1;
-  display: inline-flex;
+  display: inline-flex; align-items: center; gap: 6px;   /* + sits just right of the wave-name, repositions with word length */
 }
+#syn-panel .device-corner-preset .preset-wrap { position: relative; display: inline-block; }  /* select overlay covers only the name, not the + */
+/* S / N chips (Sub / Noise) — where the + used to be; tight + symmetric */
+#syn-panel .osc-sn { display: inline-flex; gap: 4px; }
+#syn-panel .osc-sn .sn-chip {
+  width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: 3px;
+  background: transparent; display: grid; place-items: center;
+  font-size: 8.5px; font-weight: 500; color: var(--text-secondary); cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
+}
+#syn-panel .osc-sn .sn-chip:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
+#syn-panel .osc-sn .sn-chip.on { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
 #syn-panel .preset-display {
   /* visible label — its RIGHT edge sits at right:14 (same as rightmost pill border) */
   display: block;
@@ -4579,12 +4590,13 @@ body {
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
               <div class="device-label">Osc · A</div>
-              <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Toggle engine pills / wavetable controls"></button>
+              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
+              <span class="preset-wrap">
               <span class="preset-display" id="osc-a-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select" aria-label="Wavetable preset">
                 <optgroup label="Basic">
@@ -4632,6 +4644,8 @@ body {
                   <option value="29">Stack</option>
                 </optgroup>
               </select>
+              </span>
+              <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
@@ -4743,12 +4757,13 @@ body {
           <div class="device osc" id="osc-b-device">
             <div class="device-label-row">
               <div class="device-label">Osc · B</div>
-              <button class="swap-btn" type="button" id="osc-b-swap-btn" aria-label="Toggle engine pills / engine controls"></button>
+              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
+              <span class="preset-wrap">
               <span class="preset-display" id="osc-b-preset-display">Sine</span>
               <select class="preset-select" id="osc-b-preset-select" data-syn="SYN_OSC_B_WT_PRESET" aria-label="OSC B wavetable preset">
                 <optgroup label="Basic">
@@ -4796,6 +4811,8 @@ body {
                   <option value="29">Stack</option>
                 </optgroup>
               </select>
+              </span>
+              <button class="swap-btn" type="button" id="osc-b-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
