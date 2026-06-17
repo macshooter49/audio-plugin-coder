@@ -1579,7 +1579,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_LEVEL, 1 },
         "Synth OSC C Level",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));   // start silent (spec)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PAN, 1 },
         "Synth OSC C Pan",
@@ -1718,7 +1718,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_LEVEL, 1 },
         "Synth OSC D Level",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));   // start silent (spec)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PAN, 1 },
         "Synth OSC D Pan",
