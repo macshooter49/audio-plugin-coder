@@ -10676,7 +10676,15 @@ setTimeout(function wireSynControls () {
         'SYN_OSC_A_FOLD_AMT':    { header: 'OSC A — FOLD', modeParam: 'SYN_OSC_A_FOLD_SHAPE', options: FOLD_SHAPES },
         'SYN_OSC_B_FOLD_AMT':    { header: 'OSC B — FOLD', modeParam: 'SYN_OSC_B_FOLD_SHAPE', options: FOLD_SHAPES },
         'SYN_OSC_A_WT_FRAME':    { header: 'OSC A — INTERP', modeParam: 'SYN_OSC_A_INTERP_MODE', options: INTERP_MODES },
-        'SYN_OSC_B_WT_FRAME':    { header: 'OSC B — INTERP', modeParam: 'SYN_OSC_B_INTERP_MODE', options: INTERP_MODES }
+        'SYN_OSC_B_WT_FRAME':    { header: 'OSC B — INTERP', modeParam: 'SYN_OSC_B_INTERP_MODE', options: INTERP_MODES },
+        'SYN_OSC_C_WARP_AMOUNT': { header: 'OSC C — WARP', modeParam: 'SYN_OSC_C_WARP_MODE', options: WARP_MODES },
+        'SYN_OSC_D_WARP_AMOUNT': { header: 'OSC D — WARP', modeParam: 'SYN_OSC_D_WARP_MODE', options: WARP_MODES },
+        'SYN_OSC_C_SPECTRAL_AMT':{ header: 'OSC C — SPECTRAL', modeParam: 'SYN_OSC_C_SPECTRAL_TYPE', options: SPECTRAL_MODES },
+        'SYN_OSC_D_SPECTRAL_AMT':{ header: 'OSC D — SPECTRAL', modeParam: 'SYN_OSC_D_SPECTRAL_TYPE', options: SPECTRAL_MODES },
+        'SYN_OSC_C_FOLD_AMT':    { header: 'OSC C — FOLD', modeParam: 'SYN_OSC_C_FOLD_SHAPE', options: FOLD_SHAPES },
+        'SYN_OSC_D_FOLD_AMT':    { header: 'OSC D — FOLD', modeParam: 'SYN_OSC_D_FOLD_SHAPE', options: FOLD_SHAPES },
+        'SYN_OSC_C_WT_FRAME':    { header: 'OSC C — INTERP', modeParam: 'SYN_OSC_C_INTERP_MODE', options: INTERP_MODES },
+        'SYN_OSC_D_WT_FRAME':    { header: 'OSC D — INTERP', modeParam: 'SYN_OSC_D_INTERP_MODE', options: INTERP_MODES }
       };
 
       // Wire contextmenu on each WARP/SPECTRAL/FOLD knob.
@@ -10708,7 +10716,7 @@ setTimeout(function wireSynControls () {
 
       // Right-click on the WT POS / SPREAD knobs just suppresses the
       // bubble (no menu yet — those are future phases).
-      ['SYN_OSC_A_WT_FRAME','SYN_OSC_B_WT_FRAME','SYN_OSC_A_FRAME_SPREAD','SYN_OSC_B_FRAME_SPREAD'].forEach(p => {
+      ['SYN_OSC_A_WT_FRAME','SYN_OSC_B_WT_FRAME','SYN_OSC_C_WT_FRAME','SYN_OSC_D_WT_FRAME','SYN_OSC_A_FRAME_SPREAD','SYN_OSC_B_FRAME_SPREAD','SYN_OSC_C_FRAME_SPREAD','SYN_OSC_D_FRAME_SPREAD'].forEach(p => {
         document.querySelectorAll('#syn-panel [data-syn="' + p + '"]').forEach(el => {
           el.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -18908,7 +18916,9 @@ restoreThemeFromBackend();
 
   // ── destinations ──
   var KNOBDEST={ 'SYN_OSC_A_WT_FRAME':2,'SYN_OSC_A_WARP_AMOUNT':3,'SYN_OSC_A_FOLD_AMT':4,
-                 'SYN_OSC_B_WT_FRAME':9,'SYN_OSC_B_WARP_AMOUNT':10,'SYN_OSC_B_FOLD_AMT':11 };
+                 'SYN_OSC_B_WT_FRAME':9,'SYN_OSC_B_WARP_AMOUNT':10,'SYN_OSC_B_FOLD_AMT':11,
+                 'SYN_OSC_C_WT_FRAME':26,'SYN_OSC_C_WARP_AMOUNT':27,'SYN_OSC_C_FOLD_AMT':28,
+                 'SYN_OSC_D_WT_FRAME':29,'SYN_OSC_D_WARP_AMOUNT':30,'SYN_OSC_D_FOLD_AMT':31 };
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
 
