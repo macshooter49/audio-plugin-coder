@@ -3383,6 +3383,13 @@ body {
 }
 #syn-panel .osc-sn .sn-chip:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
 #syn-panel .osc-sn .sn-chip.on { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+/* 4-osc slots: each slot (grid cell) holds two panels; only the non-hidden one shows */
+#syn-panel .osc-slot { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+#syn-panel .osc-slot > .device.osc { flex: 1; min-height: 0; }
+#syn-panel .device.osc.osc-hidden { display: none; }
+/* clickable letter that toggles A<->B / C<->D within the slot */
+#syn-panel .device-label .osc-letter { cursor: pointer; padding: 0 3px; border-radius: 3px; transition: color .12s ease, background .12s ease, box-shadow .12s ease; }
+#syn-panel .device-label .osc-letter:hover { color: var(--purple-400); background: rgba(139,92,246,0.18); box-shadow: 0 0 6px rgba(139,92,246,0.35); }
 #syn-panel .preset-display {
   /* visible label — its RIGHT edge sits at right:14 (same as rightmost pill border) */
   display: block;
@@ -4587,9 +4594,10 @@ body {
         <!-- Row 1: OSC A · CROSS · OSC B -->
         <div class="row-osc">
 
+          <div class="osc-slot" id="slot-ab" data-cur="a">
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
-              <div class="device-label">Osc · A</div>
+              <div class="device-label">Osc · <span class="osc-letter" data-slot="ab" title="Toggle">A</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -4739,33 +4747,18 @@ body {
               </div>
             </div>
           </div>
-
-          <div class="cross">
-            <div class="cross-dir">
-              <div class="ab act">A</div>
-              <div class="arr">→</div>
-              <div class="ab">B</div>
-            </div>
-            <div class="cross-sync act">Sync</div>
-            <div class="cross-knobs">
-              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">FM</div></div>
-              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">Ring</div></div>
-              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">Mix</div></div>
-            </div>
-          </div>
-
           <div class="device osc" id="osc-b-device">
             <div class="device-label-row">
-              <div class="device-label">Osc · B</div>
+              <div class="device-label">Osc · <span class="osc-letter" data-slot="ab" title="Toggle">B</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
-                 native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
+                 native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
               <span class="preset-wrap">
               <span class="preset-display" id="osc-b-preset-display">Sine</span>
-              <select class="preset-select" id="osc-b-preset-select" data-syn="SYN_OSC_B_WT_PRESET" aria-label="OSC B wavetable preset">
+              <select class="preset-select" data-syn="SYN_OSC_B_WT_PRESET" id="osc-b-preset-select" aria-label="Wavetable preset">
                 <optgroup label="Basic">
                   <option value="0">Sine</option>
                   <option value="1">Triangle</option>
@@ -4816,20 +4809,20 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (text style, data-eng-b-idx to avoid OSC A handler collision) -->
+              <!-- engine pills row (unchanged) -->
               <div class="engine-pills">
-                <div class="eng txt act" data-eng-b-idx="0">WT</div>
-                <div class="eng txt" data-eng-b-idx="1">Samp</div>
-                <div class="eng txt" data-eng-b-idx="2">Gran</div>
-                <div class="eng txt" data-eng-b-idx="3">Spec</div>
-                <div class="eng txt" data-eng-b-idx="4">FM</div>
-                <div class="eng txt" data-eng-b-idx="5">ANLG</div>
+                <div class="eng act" data-eng-b-idx="0"><svg><use href="#ic-wt"/></svg></div>
+                <div class="eng" data-eng-b-idx="1"><svg><use href="#ic-samp"/></svg></div>
+                <div class="eng" data-eng-b-idx="2"><svg><use href="#ic-gran"/></svg></div>
+                <div class="eng" data-eng-b-idx="3"><svg><use href="#ic-spec"/></svg></div>
+                <div class="eng" data-eng-b-idx="4"><svg><use href="#ic-fm"/></svg></div>
+                <div class="eng" data-eng-b-idx="5"><svg><use href="#ic-analog"/></svg></div>
               </div>
-              <!-- waveform display (OSC B waveform) -->
+              <!-- waveform display (unchanged) -->
               <div class="osc-display">
                 <div class="osc-wave">
                   <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-                    <path d="M0,30 L4,22 L8,38 L14,18 L20,42 L26,12 L32,48 L40,8 L46,52 L54,20 L62,40 L70,16 L78,44 L88,30 L96,30 L108,30 L120,28 L132,34 L144,30 L156,32 L168,28 L180,30 L200,30" stroke="#ECE8F2" stroke-width="0.95" fill="none"/>
+                    <path d="M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
                   </svg>
                 </div>
               </div>
@@ -4906,7 +4899,329 @@ body {
               </div>
             </div>
           </div>
+          </div>
+          <div class="cross">
+            <div class="cross-dir">
+              <div class="ab act">A</div>
+              <div class="arr">→</div>
+              <div class="ab">B</div>
+            </div>
+            <div class="cross-sync act">Sync</div>
+            <div class="cross-knobs">
+              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">FM</div></div>
+              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">Ring</div></div>
+              <div class="cross-knob"><div class="knob-ring"></div><div class="knob-label">Mix</div></div>
+            </div>
+          </div>
+
+          <div class="osc-slot" id="slot-cd" data-cur="c">
+          <div class="device osc" id="osc-c-device">
+            <div class="device-label-row">
+              <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">C</span></div>
+              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+            </div>
+            <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
+                 overlaid by an invisible native <select> that captures clicks and renders the
+                 native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
+            <div class="device-corner-preset">
+              <span class="preset-wrap">
+              <span class="preset-display" id="osc-c-preset-display">Sine</span>
+              <select class="preset-select" id="osc-c-preset-select" data-syn="SYN_OSC_C_WT_PRESET" aria-label="OSC B wavetable preset">
+                <optgroup label="Basic">
+                  <option value="0">Sine</option>
+                  <option value="1">Triangle</option>
+                  <option value="2">Square</option>
+                  <option value="3">Pulse</option>
+                </optgroup>
+                <optgroup label="Analog">
+                  <option value="4">Prophet Saw</option>
+                  <option value="5">Jupiter PWM</option>
+                  <option value="6">Moog Sqr</option>
+                  <option value="7">OB-X Saw</option>
+                  <option value="8">CS-80 Brass</option>
+                  <option value="9">Juno Str</option>
+                </optgroup>
+                <optgroup label="Digital">
+                  <option value="10">PPG Wave</option>
+                  <option value="11">DX7 EP</option>
+                  <option value="12">D-50 Bell</option>
+                  <option value="13">M1 Piano</option>
+                </optgroup>
+                <optgroup label="Vocal">
+                  <option value="14">Choir A→O</option>
+                  <option value="15">Whisper</option>
+                  <option value="16">Vowel Morph</option>
+                </optgroup>
+                <optgroup label="Metallic">
+                  <option value="17">Bowed Metal</option>
+                  <option value="18">Glass Harmonics</option>
+                  <option value="19">Railroad</option>
+                </optgroup>
+                <optgroup label="Experimental">
+                  <option value="20">Dustbowl</option>
+                  <option value="21">Static Evolve</option>
+                  <option value="22">Spectral Drift</option>
+                  <option value="23">Serum HD</option>
+                </optgroup>
+                <optgroup label="Morph">
+                  <option value="24">Rise</option>
+                  <option value="25">Even</option>
+                  <option value="26">Drift</option>
+                  <option value="27">Sweep</option>
+                  <option value="28">Formant</option>
+                  <option value="29">Stack</option>
+                </optgroup>
+              </select>
+              </span>
+              <button class="swap-btn" type="button" id="osc-c-swap-btn" aria-label="Back panel"></button>
+            </div>
+            <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
+            <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
+              <!-- engine pills row (text style, data-eng-c-idx to avoid OSC A handler collision) -->
+              <div class="engine-pills">
+                <div class="eng txt act" data-eng-c-idx="0">WT</div>
+                <div class="eng txt" data-eng-c-idx="1">Samp</div>
+                <div class="eng txt" data-eng-c-idx="2">Gran</div>
+                <div class="eng txt" data-eng-c-idx="3">Spec</div>
+                <div class="eng txt" data-eng-c-idx="4">FM</div>
+                <div class="eng txt" data-eng-c-idx="5">ANLG</div>
+              </div>
+              <!-- waveform display (OSC B waveform) -->
+              <div class="osc-display">
+                <div class="osc-wave">
+                  <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+                    <path d="M0,30 L4,22 L8,38 L14,18 L20,42 L26,12 L32,48 L40,8 L46,52 L54,20 L62,40 L70,16 L78,44 L88,30 L96,30 L108,30 L120,28 L132,34 L144,30 L156,32 L168,28 L180,30 L200,30" stroke="#ECE8F2" stroke-width="0.95" fill="none"/>
+                  </svg>
+                </div>
+              </div>
+              <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
+              <div class="osc-knobs">
+                <div class="knob" data-syn="SYN_OSC_C_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+            </div>
+
+            <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
+            <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
+              <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
+              <div class="blend-pills">
+                <div class="blend-pill">B1</div>
+                <div class="blend-pill">B2</div>
+                <div class="blend-pill">B3</div>
+                <div class="blend-pill">B4</div>
+                <div class="blend-pill">Mix</div>
+                <div class="blend-pill">Mod</div>
+              </div>
+              <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
+              <div class="selector-pills">
+                <div class="sel">
+                  <div class="sel-label">Phase</div>
+                  <div class="sel-value" id="osc-c-phase-mode-value">Random</div>
+                  <select class="sel-select" data-syn="SYN_OSC_C_PHASE_MODE" id="osc-c-phase-mode-select" aria-label="PHASE mode">
+                    <option value="0">Retrig</option>
+                    <option value="1">Free</option>
+                    <option value="2">Random</option>
+                    <option value="3">Spread</option>
+                  </select>
+                </div>
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                  <div class="sel-value warp2-mode-value" id="osc-c-warp2-mode">None</div>
+                  <div class="sel-value warp2-val" id="osc-c-warp2-val" data-warp2-mode="SYN_OSC_C_WARP2_MODE" data-warp2-amt="SYN_OSC_C_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
+                </div>
+                <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
+                  <div class="sel-value uni-param-value" id="osc-c-uni-param-value">Voices</div>
+                  <div class="sel-value uni-val" id="osc-c-uni-val" data-uni-voices="SYN_OSC_C_UNISON" data-uni-detune="SYN_OSC_C_UDETUNE" data-uni-blend="SYN_OSC_C_UBLEND" data-uni-width="SYN_OSC_C_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
+                </div>
+                <div class="sel rt-pill" title="ROUTE — pick a source, route it to a destination, set the amount (±). Modulates per note.">
+                  <div class="rt-route-row">
+                    <div class="rt-half">
+                      <div class="sel-value rt-src-value" id="osc-c-route-src-value">Note</div>
+                      <select class="sel-select" data-syn="SYN_OSC_C_ROUTE_SRC" id="osc-c-route-src-select" aria-label="ROUTE source">
+                        <option value="0">Note</option>
+                        <option value="1">Vel</option>
+                      </select>
+                    </div>
+                    <div class="rt-arrow">→</div>
+                    <div class="rt-half">
+                      <div class="sel-value rt-dst-value" id="osc-c-route-dst-value">Frame</div>
+                      <select class="sel-select" data-syn="SYN_OSC_C_ROUTE_DEST" id="osc-c-route-dst-select" aria-label="ROUTE destination">
+                        <option value="0">Frame</option>
+                        <option value="1">Warp</option>
+                        <option value="2">Fold</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="sel-value rt-amt" data-syn-rt="SYN_OSC_C_ROUTE_AMT"><b>0</b>%</div>
+                </div>
+              </div>
+              <!-- BOTTOM ROW: 5 tuning knobs (OCT/SEMI/CENT/LEVEL/PAN) -->
+              <div class="osc-knobs">
+                <div class="knob" data-syn="SYN_OSC_C_OCT"><div class="knob-ring"></div><div class="knob-label">Oct</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_SEMI"><div class="knob-ring"></div><div class="knob-label">Semi</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_CENT"><div class="knob-ring"></div><div class="knob-label">Cent</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_LEVEL"><div class="knob-ring"></div><div class="knob-label">Level</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="device osc" id="osc-d-device">
+            <div class="device-label-row">
+              <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">C</span></div>
+              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+            </div>
+            <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
+                 overlaid by an invisible native <select> that captures clicks and renders the
+                 native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
+            <div class="device-corner-preset">
+              <span class="preset-wrap">
+              <span class="preset-display" id="osc-d-preset-display">Sine</span>
+              <select class="preset-select" id="osc-d-preset-select" data-syn="SYN_OSC_D_WT_PRESET" aria-label="OSC B wavetable preset">
+                <optgroup label="Basic">
+                  <option value="0">Sine</option>
+                  <option value="1">Triangle</option>
+                  <option value="2">Square</option>
+                  <option value="3">Pulse</option>
+                </optgroup>
+                <optgroup label="Analog">
+                  <option value="4">Prophet Saw</option>
+                  <option value="5">Jupiter PWM</option>
+                  <option value="6">Moog Sqr</option>
+                  <option value="7">OB-X Saw</option>
+                  <option value="8">CS-80 Brass</option>
+                  <option value="9">Juno Str</option>
+                </optgroup>
+                <optgroup label="Digital">
+                  <option value="10">PPG Wave</option>
+                  <option value="11">DX7 EP</option>
+                  <option value="12">D-50 Bell</option>
+                  <option value="13">M1 Piano</option>
+                </optgroup>
+                <optgroup label="Vocal">
+                  <option value="14">Choir A→O</option>
+                  <option value="15">Whisper</option>
+                  <option value="16">Vowel Morph</option>
+                </optgroup>
+                <optgroup label="Metallic">
+                  <option value="17">Bowed Metal</option>
+                  <option value="18">Glass Harmonics</option>
+                  <option value="19">Railroad</option>
+                </optgroup>
+                <optgroup label="Experimental">
+                  <option value="20">Dustbowl</option>
+                  <option value="21">Static Evolve</option>
+                  <option value="22">Spectral Drift</option>
+                  <option value="23">Serum HD</option>
+                </optgroup>
+                <optgroup label="Morph">
+                  <option value="24">Rise</option>
+                  <option value="25">Even</option>
+                  <option value="26">Drift</option>
+                  <option value="27">Sweep</option>
+                  <option value="28">Formant</option>
+                  <option value="29">Stack</option>
+                </optgroup>
+              </select>
+              </span>
+              <button class="swap-btn" type="button" id="osc-d-swap-btn" aria-label="Back panel"></button>
+            </div>
+            <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
+            <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
+              <!-- engine pills row (text style, data-eng-d-idx to avoid OSC A handler collision) -->
+              <div class="engine-pills">
+                <div class="eng txt act" data-eng-d-idx="0">WT</div>
+                <div class="eng txt" data-eng-d-idx="1">Samp</div>
+                <div class="eng txt" data-eng-d-idx="2">Gran</div>
+                <div class="eng txt" data-eng-d-idx="3">Spec</div>
+                <div class="eng txt" data-eng-d-idx="4">FM</div>
+                <div class="eng txt" data-eng-d-idx="5">ANLG</div>
+              </div>
+              <!-- waveform display (OSC B waveform) -->
+              <div class="osc-display">
+                <div class="osc-wave">
+                  <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+                    <path d="M0,30 L4,22 L8,38 L14,18 L20,42 L26,12 L32,48 L40,8 L46,52 L54,20 L62,40 L70,16 L78,44 L88,30 L96,30 L108,30 L120,28 L132,34 L144,30 L156,32 L168,28 L180,30 L200,30" stroke="#ECE8F2" stroke-width="0.95" fill="none"/>
+                  </svg>
+                </div>
+              </div>
+              <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
+              <div class="osc-knobs">
+                <div class="knob" data-syn="SYN_OSC_D_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+            </div>
+
+            <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
+            <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
+              <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
+              <div class="blend-pills">
+                <div class="blend-pill">B1</div>
+                <div class="blend-pill">B2</div>
+                <div class="blend-pill">B3</div>
+                <div class="blend-pill">B4</div>
+                <div class="blend-pill">Mix</div>
+                <div class="blend-pill">Mod</div>
+              </div>
+              <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
+              <div class="selector-pills">
+                <div class="sel">
+                  <div class="sel-label">Phase</div>
+                  <div class="sel-value" id="osc-d-phase-mode-value">Random</div>
+                  <select class="sel-select" data-syn="SYN_OSC_D_PHASE_MODE" id="osc-d-phase-mode-select" aria-label="PHASE mode">
+                    <option value="0">Retrig</option>
+                    <option value="1">Free</option>
+                    <option value="2">Random</option>
+                    <option value="3">Spread</option>
+                  </select>
+                </div>
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                  <div class="sel-value warp2-mode-value" id="osc-d-warp2-mode">None</div>
+                  <div class="sel-value warp2-val" id="osc-d-warp2-val" data-warp2-mode="SYN_OSC_D_WARP2_MODE" data-warp2-amt="SYN_OSC_D_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
+                </div>
+                <div class="sel uni-pill" data-uni-active="voices" title="UNISON — right-click to choose Voices / Detune / Blend / Width, then drag the value.">
+                  <div class="sel-value uni-param-value" id="osc-d-uni-param-value">Voices</div>
+                  <div class="sel-value uni-val" id="osc-d-uni-val" data-uni-voices="SYN_OSC_D_UNISON" data-uni-detune="SYN_OSC_D_UDETUNE" data-uni-blend="SYN_OSC_D_UBLEND" data-uni-width="SYN_OSC_D_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
+                </div>
+                <div class="sel rt-pill" title="ROUTE — pick a source, route it to a destination, set the amount (±). Modulates per note.">
+                  <div class="rt-route-row">
+                    <div class="rt-half">
+                      <div class="sel-value rt-src-value" id="osc-d-route-src-value">Note</div>
+                      <select class="sel-select" data-syn="SYN_OSC_D_ROUTE_SRC" id="osc-d-route-src-select" aria-label="ROUTE source">
+                        <option value="0">Note</option>
+                        <option value="1">Vel</option>
+                      </select>
+                    </div>
+                    <div class="rt-arrow">→</div>
+                    <div class="rt-half">
+                      <div class="sel-value rt-dst-value" id="osc-d-route-dst-value">Frame</div>
+                      <select class="sel-select" data-syn="SYN_OSC_D_ROUTE_DEST" id="osc-d-route-dst-select" aria-label="ROUTE destination">
+                        <option value="0">Frame</option>
+                        <option value="1">Warp</option>
+                        <option value="2">Fold</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="sel-value rt-amt" data-syn-rt="SYN_OSC_D_ROUTE_AMT"><b>0</b>%</div>
+                </div>
+              </div>
+              <!-- BOTTOM ROW: 5 tuning knobs (OCT/SEMI/CENT/LEVEL/PAN) -->
+              <div class="osc-knobs">
+                <div class="knob" data-syn="SYN_OSC_D_OCT"><div class="knob-ring"></div><div class="knob-label">Oct</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_SEMI"><div class="knob-ring"></div><div class="knob-label">Semi</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_CENT"><div class="knob-ring"></div><div class="knob-label">Cent</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_LEVEL"><div class="knob-ring"></div><div class="knob-label">Level</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
+              </div>
+            </div>
+          </div>
+          </div>
         </div>
+
 
         <!-- Row 2: FILTER · FLOW -->
         <div class="row-filter-vl">
@@ -9076,6 +9391,195 @@ setTimeout(function wireSynControls () {
       }
     } catch (eOscB) { console.warn('[SYN-osc-b] mirror init failed', eOscB); }
 
+    // Phase 9: OSC C mirror — swap button, preset sync (APVTS-wired), engine pill (APVTS-wired).
+    try {
+      // + swap toggle
+      const swapBtnB   = document.getElementById('osc-c-swap-btn');
+      const oscBDevice = document.getElementById('osc-c-device');
+      if (swapBtnB && oscBDevice) {
+        swapBtnB.addEventListener('click', () => {
+          try {
+            oscBDevice.classList.toggle('swapped');
+            swapBtnB.classList.toggle('act');
+          } catch (e) { console.warn('[SYN-osc-c] swap toggle failed', e); }
+        });
+      }
+
+      // Preset display sync — wired to SYN_OSC_C_WT_PRESET (Phase 9)
+      const presetDisplayB = document.getElementById('osc-c-preset-display');
+      const presetSelectB  = document.getElementById('osc-c-preset-select');
+      if (presetDisplayB && presetSelectB) {
+        const syncBPresetText = () => {
+          try {
+            const idx = presetSelectB.selectedIndex;
+            if (idx >= 0) presetDisplayB.textContent = presetSelectB.options[idx].text;
+          } catch (e) { console.warn('[SYN-osc-c] preset sync failed', e); }
+        };
+        syncBPresetText();
+        presetSelectB.addEventListener('change', syncBPresetText);
+        presetSelectB.addEventListener('input',  syncBPresetText);
+        // Reverse-sync from APVTS (DAW automation / preset load)
+        if (window.Juce && window.Juce.getSliderState) {
+          const presetBState = window.Juce.getSliderState('SYN_OSC_C_WT_PRESET');
+          if (presetBState && presetBState.valueChangedEvent && presetBState.valueChangedEvent.addListener) {
+            presetBState.valueChangedEvent.addListener(syncBPresetText);
+          }
+        }
+      }
+
+      // Engine pill handler — APVTS-driven (Phase 9)
+      const enginePillsB = document.querySelectorAll('#osc-c-device .engine-pills .eng[data-eng-c-idx]');
+      if (enginePillsB.length === 6 && window.Juce && window.Juce.getSliderState) {
+        const engineCState = window.Juce.getSliderState('SYN_OSC_C_ENGINE');
+        if (engineCState) {
+          const setActBPill = (idx) => {
+            enginePillsB.forEach((q, i) => {
+              if (i === idx) q.classList.add('act');
+              else q.classList.remove('act');
+            });
+          };
+          try {
+            const initialIdx = engineCState.getScaledValue ? Math.round(engineCState.getScaledValue()) : 0;
+            setActBPill(Math.max(0, Math.min(5, initialIdx)));
+          } catch (e) { console.warn('[SYN-osc-c] initial pill highlight failed', e); }
+          enginePillsB.forEach((p, idx) => {
+            p.style.cursor = 'pointer';
+            p.addEventListener('click', () => {
+              try {
+                engineCState.setNormalisedValue(idx / 5);
+                setActBPill(idx);
+              } catch (e) { console.warn('[SYN-osc-c] pill click failed for idx', idx, e); }
+            });
+          });
+          if (engineCState.valueChangedEvent && engineCState.valueChangedEvent.addListener) {
+            engineCState.valueChangedEvent.addListener(() => {
+              try {
+                const v = engineCState.getScaledValue ? Math.round(engineCState.getScaledValue()) : 0;
+                setActBPill(Math.max(0, Math.min(5, v)));
+              } catch (e) { console.warn('[SYN-osc-c] reverse-sync failed', e); }
+            });
+          }
+        } else {
+          // Fallback: visual-only if APVTS not ready
+          enginePillsB.forEach((p, idx) => {
+            p.style.cursor = 'pointer';
+            p.addEventListener('click', () => {
+              try {
+                enginePillsB.forEach(q => q.classList.remove('act'));
+                p.classList.add('act');
+              } catch (e) { console.warn('[SYN-osc-c] pill click failed for idx', idx, e); }
+            });
+          });
+          console.warn('[SYN-osc-c] no SliderState for SYN_OSC_C_ENGINE');
+        }
+      } else if (enginePillsB.length === 6) {
+        // Fallback: visual-only if window.Juce not available
+        enginePillsB.forEach((p, idx) => {
+          p.style.cursor = 'pointer';
+          p.addEventListener('click', () => {
+            try {
+              enginePillsB.forEach(q => q.classList.remove('act'));
+              p.classList.add('act');
+            } catch (e) { console.warn('[SYN-osc-c] pill click failed for idx', idx, e); }
+          });
+        });
+      }
+    } catch (eOscC) { console.warn('[SYN-osc-c] mirror init failed', eOscC); }
+    // Phase 9: OSC D mirror — swap button, preset sync (APVTS-wired), engine pill (APVTS-wired).
+    try {
+      // + swap toggle
+      const swapBtnB   = document.getElementById('osc-d-swap-btn');
+      const oscBDevice = document.getElementById('osc-d-device');
+      if (swapBtnB && oscBDevice) {
+        swapBtnB.addEventListener('click', () => {
+          try {
+            oscBDevice.classList.toggle('swapped');
+            swapBtnB.classList.toggle('act');
+          } catch (e) { console.warn('[SYN-osc-d] swap toggle failed', e); }
+        });
+      }
+
+      // Preset display sync — wired to SYN_OSC_D_WT_PRESET (Phase 9)
+      const presetDisplayB = document.getElementById('osc-d-preset-display');
+      const presetSelectB  = document.getElementById('osc-d-preset-select');
+      if (presetDisplayB && presetSelectB) {
+        const syncBPresetText = () => {
+          try {
+            const idx = presetSelectB.selectedIndex;
+            if (idx >= 0) presetDisplayB.textContent = presetSelectB.options[idx].text;
+          } catch (e) { console.warn('[SYN-osc-d] preset sync failed', e); }
+        };
+        syncBPresetText();
+        presetSelectB.addEventListener('change', syncBPresetText);
+        presetSelectB.addEventListener('input',  syncBPresetText);
+        // Reverse-sync from APVTS (DAW automation / preset load)
+        if (window.Juce && window.Juce.getSliderState) {
+          const presetBState = window.Juce.getSliderState('SYN_OSC_D_WT_PRESET');
+          if (presetBState && presetBState.valueChangedEvent && presetBState.valueChangedEvent.addListener) {
+            presetBState.valueChangedEvent.addListener(syncBPresetText);
+          }
+        }
+      }
+
+      // Engine pill handler — APVTS-driven (Phase 9)
+      const enginePillsB = document.querySelectorAll('#osc-d-device .engine-pills .eng[data-eng-d-idx]');
+      if (enginePillsB.length === 6 && window.Juce && window.Juce.getSliderState) {
+        const engineDState = window.Juce.getSliderState('SYN_OSC_D_ENGINE');
+        if (engineDState) {
+          const setActBPill = (idx) => {
+            enginePillsB.forEach((q, i) => {
+              if (i === idx) q.classList.add('act');
+              else q.classList.remove('act');
+            });
+          };
+          try {
+            const initialIdx = engineDState.getScaledValue ? Math.round(engineDState.getScaledValue()) : 0;
+            setActBPill(Math.max(0, Math.min(5, initialIdx)));
+          } catch (e) { console.warn('[SYN-osc-d] initial pill highlight failed', e); }
+          enginePillsB.forEach((p, idx) => {
+            p.style.cursor = 'pointer';
+            p.addEventListener('click', () => {
+              try {
+                engineDState.setNormalisedValue(idx / 5);
+                setActBPill(idx);
+              } catch (e) { console.warn('[SYN-osc-d] pill click failed for idx', idx, e); }
+            });
+          });
+          if (engineDState.valueChangedEvent && engineDState.valueChangedEvent.addListener) {
+            engineDState.valueChangedEvent.addListener(() => {
+              try {
+                const v = engineDState.getScaledValue ? Math.round(engineDState.getScaledValue()) : 0;
+                setActBPill(Math.max(0, Math.min(5, v)));
+              } catch (e) { console.warn('[SYN-osc-d] reverse-sync failed', e); }
+            });
+          }
+        } else {
+          // Fallback: visual-only if APVTS not ready
+          enginePillsB.forEach((p, idx) => {
+            p.style.cursor = 'pointer';
+            p.addEventListener('click', () => {
+              try {
+                enginePillsB.forEach(q => q.classList.remove('act'));
+                p.classList.add('act');
+              } catch (e) { console.warn('[SYN-osc-d] pill click failed for idx', idx, e); }
+            });
+          });
+          console.warn('[SYN-osc-d] no SliderState for SYN_OSC_D_ENGINE');
+        }
+      } else if (enginePillsB.length === 6) {
+        // Fallback: visual-only if window.Juce not available
+        enginePillsB.forEach((p, idx) => {
+          p.style.cursor = 'pointer';
+          p.addEventListener('click', () => {
+            try {
+              enginePillsB.forEach(q => q.classList.remove('act'));
+              p.classList.add('act');
+            } catch (e) { console.warn('[SYN-osc-d] pill click failed for idx', idx, e); }
+          });
+        });
+      }
+    } catch (eOscD) { console.warn('[SYN-osc-d] mirror init failed', eOscD); }
+
     // Phase 8a — Voice meta rows: draggable + APVTS-synced
     try {
       // VOICING bool-toggles (ALWAYS / SCALED) — click flips the param 0<->1.
@@ -9205,9 +9709,23 @@ setTimeout(function wireSynControls () {
         sync(); // initial render
       }
       ['osc-a-phase-mode', 'osc-a-spectral-type', 'osc-a-fold-shape', 'osc-a-interp-mode',
-       'osc-b-phase-mode', 'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode', 'osc-a-route-src', 'osc-a-route-dst', 'osc-b-route-src', 'osc-b-route-dst', 'osc-a-keytrack-dest', 'osc-b-keytrack-dest']
+       'osc-b-phase-mode', 'osc-b-spectral-type', 'osc-b-fold-shape', 'osc-b-interp-mode', 'osc-a-route-src', 'osc-a-route-dst', 'osc-b-route-src', 'osc-b-route-dst', 'osc-a-keytrack-dest', 'osc-b-keytrack-dest',
+       'osc-c-phase-mode', 'osc-c-spectral-type', 'osc-c-fold-shape', 'osc-c-interp-mode', 'osc-c-route-src', 'osc-c-route-dst', 'osc-c-keytrack-dest',
+       'osc-d-phase-mode', 'osc-d-spectral-type', 'osc-d-fold-shape', 'osc-d-interp-mode', 'osc-d-route-src', 'osc-d-route-dst', 'osc-d-keytrack-dest']
         .forEach(prefix => bindSelValueMirror(prefix + '-select', prefix + '-value'));
     } catch (eSelMirror) { console.warn('[SYN-sel-mirror] bindSelValueMirror failed', eSelMirror); }
+
+    // ── 4-osc slot toggle (A<->B, C<->D): click the slot's letter to switch which osc shows ──
+    try {
+      document.querySelectorAll('#syn-panel .osc-slot').forEach(function(slot){
+        slot.querySelectorAll('.osc-letter').forEach(function(letter){
+          letter.addEventListener('click', function(ev){
+            ev.preventDefault(); ev.stopPropagation();
+            slot.querySelectorAll('.device.osc').forEach(function(d){ d.classList.toggle('osc-hidden'); });
+          });
+        });
+      });
+    } catch (eOscToggle) { console.warn('[SYN-osc-toggle] failed', eOscToggle); }
 
     // ── Phase 11g — right-click context menus on the 5 front knobs ──
     // ── KEYTRACK depth — draggable %. (Destination is the native <select> dropdown above,
