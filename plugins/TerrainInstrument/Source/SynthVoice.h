@@ -1645,6 +1645,406 @@ namespace tw
                         spectralVibWriteB_ = (spectralVibWriteB_ + 1) % kSpectralVibSize;
                     }
                 }
+                // ── OSC C — sum across activeUnisonC_ sines (per-OSC unison) ─────
+                float sumCL = 0.0f, sumCR = 0.0f;
+
+                for (int u = 0; u < activeUnisonC_; ++u)
+                {
+                    float sCu = 0.0f;
+
+                    switch (engineC_)
+                    {
+                        case Engine::WT:
+                        {
+                            if (currentWavetableC_ != nullptr)
+                            {
+                                double warpedPhase = uPhaseC_[(size_t) u];
+                                float  window      = 1.0f;
+                                bool   skipLookup  = false;
+
+                                // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
+                                warpedPhase = applyPhaseWarp (warpModeC_, warpAmountC_, warpedPhase, window, skipLookup);
+                                if (! skipLookup && warp2ModeC_ != 0)
+                                    warpedPhase = applyPhaseWarp (warp2ModeC_, warp2AmountC_, warpedPhase, window, skipLookup);
+
+                                if (skipLookup)
+                                {
+                                    sCu = 0.0f;
+                                }
+                                else
+                                {
+                                    // WT BLUR — read the per-block blended single-cycle buffer.
+                                    sCu = tw::Wavetable::readCycle (blendC_.data(), (float) warpedPhase);
+                                    sCu *= window;
+
+                                    sCu = applyAmpWarp (warpModeC_,   warpAmountC_,   sCu);   // slot 1 amp-domain
+                                    sCu = applyAmpWarp (warp2ModeC_,  warp2AmountC_,  sCu);   // WARP 2 amp-domain, chained
+                                }
+                            }
+                            else
+                            {
+                                sCu = static_cast<float> (2.0 * uPhaseC_[(size_t) u] - 1.0);
+                                sCu -= static_cast<float> (polyBlep (uPhaseC_[(size_t) u], uPhaseIncC_[(size_t) u]));
+                            }
+                            uPhaseC_[(size_t) u] += uPhaseIncC_[(size_t) u];
+                            if (uPhaseC_[(size_t) u] >= 1.0) uPhaseC_[(size_t) u] -= 1.0;
+                            break;
+                        }
+
+                        case Engine::NOISE:
+                        {
+                            // OSC C noise is single-stream per voice — all unison sines hear the same noise.
+                            if (u == 0)
+                            {
+                                noiseStateC_ ^= noiseStateC_ << 13;
+                                noiseStateC_ ^= noiseStateC_ >> 17;
+                                noiseStateC_ ^= noiseStateC_ << 5;
+                                const float white = static_cast<float> (static_cast<int32_t> (noiseStateC_))
+                                                  * (1.0f / 2147483648.0f);
+                                const float alpha = 1.0f - 0.98f * framePosC_;
+                                noiseLpZC_ += alpha * (white - noiseLpZC_);
+                            }
+                            const float drive = 1.0f + 8.0f * warpAmountC_;
+                            sCu = std::tanh (noiseLpZC_ * drive);
+                            sCu *= 1.0f + 0.5f * framePosC_;
+                            break;
+                        }
+
+                        case Engine::FM:
+                        {
+                            const double ratio  = 0.25 + std::pow (32.0, (double) framePosC_) * 0.234375;
+                            const double modInc = uPhaseIncC_[(size_t) u] * ratio;
+                            const double depth  = (double) warpAmountC_ * 6.2831853071795865;
+                            const double pi2    = 6.2831853071795865;
+                            const double modOut = std::sin (pi2 * uModPhaseC_[(size_t) u]);
+                            sCu = static_cast<float> (std::sin (pi2 * uPhaseC_[(size_t) u] + depth * modOut));
+                            uModPhaseC_[(size_t) u] += modInc;
+                            if (uModPhaseC_[(size_t) u] >= 1.0) uModPhaseC_[(size_t) u] -= std::floor (uModPhaseC_[(size_t) u]);
+                            uPhaseC_[(size_t) u] += uPhaseIncC_[(size_t) u];
+                            if (uPhaseC_[(size_t) u] >= 1.0) uPhaseC_[(size_t) u] -= 1.0;
+                            break;
+                        }
+
+                        case Engine::SAMP:
+                        case Engine::GRAN:
+                        case Engine::SPEC:
+                            sCu = 0.0f; break;
+                    }
+
+                    // Phase 11d — FOLD applied per-sine, post-engine, pre-pan.
+                    sCu = applyFoldADAA (sCu, foldShapeC_, foldAmountC_, foldStateC_[(size_t) u]);
+
+                    // Per-sine pan into the OSC C stereo sum.
+                    sumCL += sCu * uPanLC_[(size_t) u];
+                    sumCR += sCu * uPanRC_[(size_t) u];
+                }
+
+                // Auto-gain (RMS-constant): holds loudness as voices / blend change.
+                sumCL *= uNormC_;
+                sumCR *= uNormC_;
+                float sC_L = sumCL;
+                float sC_R = sumCR;
+                if (! spectralBypassC_)
+                {
+                    if (spectralTypeC_ <= 2)
+                    {
+                        // LP, HP, Smear — biquad
+                        sC_L = spectralFilterBL_.processSample (sC_L);
+                        sC_R = spectralFilterBR_.processSample (sC_R);
+                    }
+                    else if (spectralTypeC_ == 3)
+                    {
+                        // Comb — feedforward y = x + x[n-N]
+                        const int N = juce::jlimit (1, kSpectralCombSize - 1,
+                                                     (int) (4.0f + spectralAmtC_ * (float) (kSpectralCombSize - 8)));
+                        const int readIdx = (spectralCombWriteC_ - N + kSpectralCombSize) % kSpectralCombSize;
+                        const float dryL = sC_L;
+                        const float dryR = sC_R;
+                        sC_L = dryL + spectralCombBL_[(size_t) readIdx] * spectralAmtC_;
+                        sC_R = dryR + spectralCombBR_[(size_t) readIdx] * spectralAmtC_;
+                        spectralCombBL_[(size_t) spectralCombWriteC_] = dryL;
+                        spectralCombBR_[(size_t) spectralCombWriteC_] = dryR;
+                        spectralCombWriteC_ = (spectralCombWriteC_ + 1) % kSpectralCombSize;
+                        sC_L *= 0.5f;
+                        sC_R *= 0.5f;
+                    }
+                    else if (spectralTypeC_ == 4)
+                    {
+                        // Ring Mod
+                        const double modHz = 30.0 + (double) (spectralAmtC_ * spectralAmtC_) * 1970.0;
+                        const double inc = modHz / sampleRate_;
+                        const float modL = static_cast<float> (std::sin (6.2831853071795865 * spectralRingPhaseC_));
+                        spectralRingPhaseC_ += inc;
+                        if (spectralRingPhaseC_ >= 1.0) spectralRingPhaseC_ -= 1.0;
+                        sC_L = sC_L * (1.0f - spectralAmtC_) + (sC_L * modL) * spectralAmtC_;
+                        sC_R = sC_R * (1.0f - spectralAmtC_) + (sC_R * modL) * spectralAmtC_;
+                    }
+                    else if (spectralTypeC_ == 5)
+                    {
+                        // Bit Crush
+                        const float levels = 64.0f - (spectralAmtC_ * spectralAmtC_) * 60.0f;
+                        const float L = juce::jmax (4.0f, levels);
+                        sC_L = std::round (sC_L * L) / L;
+                        sC_R = std::round (sC_R * L) / L;
+                    }
+                    else if (spectralTypeC_ == 6)
+                    {
+                        // Downsample — sample-and-hold at lower rate
+                        const float divisor = 1.0f + spectralAmtC_ * spectralAmtC_ * 31.0f;
+                        spectralDsCounterC_ += 1.0f;
+                        if (spectralDsCounterC_ >= divisor)
+                        {
+                            spectralDsHeldBL_ = sC_L;
+                            spectralDsHeldBR_ = sC_R;
+                            spectralDsCounterC_ -= divisor;
+                        }
+                        sC_L = spectralDsHeldBL_;
+                        sC_R = spectralDsHeldBR_;
+                    }
+                    else if (spectralTypeC_ == 7)
+                    {
+                        // Tube — asymmetric soft clipping with positive bias
+                        const float drive = 1.0f + spectralAmtC_ * spectralAmtC_ * 9.0f;
+                        const float bias = 0.15f * spectralAmtC_;
+                        const float invSat = 1.0f / std::tanh (drive);
+                        sC_L = std::tanh (sC_L * drive + bias) * invSat - bias * invSat;
+                        sC_R = std::tanh (sC_R * drive + bias) * invSat - bias * invSat;
+                    }
+                    else if (spectralTypeC_ == 8)
+                    {
+                        // Tilt — low-shelf cut + high-shelf boost, one-pole based
+                        const float alpha = 0.005f;
+                        spectralTiltLowBL_ += alpha * (sC_L - spectralTiltLowBL_);
+                        spectralTiltLowBR_ += alpha * (sC_R - spectralTiltLowBR_);
+                        const float lowL = spectralTiltLowBL_;
+                        const float lowR = spectralTiltLowBR_;
+                        const float highL = sC_L - lowL;
+                        const float highR = sC_R - lowR;
+                        const float lowGain  = 1.0f - spectralAmtC_;
+                        const float highGain = 1.0f + spectralAmtC_ * 2.0f;
+                        sC_L = lowL * lowGain + highL * highGain;
+                        sC_R = lowR * lowGain + highR * highGain;
+                    }
+                    else if (spectralTypeC_ == 9)
+                    {
+                        // Vibrato — short modulated delay creates pitch wobble
+                        const double modHz = 1.0 + (double) spectralAmtC_ * 8.0;
+                        const double inc   = modHz / sampleRate_;
+                        spectralVibPhaseC_ += inc;
+                        if (spectralVibPhaseC_ >= 1.0) spectralVibPhaseC_ -= 1.0;
+                        const float lfo = static_cast<float> (std::sin (6.2831853071795865 * spectralVibPhaseC_));
+                        const float depthSamples = spectralAmtC_ * 20.0f;
+                        const float delaySamples = (float) (kSpectralVibSize - 4) * 0.5f + lfo * depthSamples;
+                        const int   intDel       = juce::jlimit (1, kSpectralVibSize - 2, (int) delaySamples);
+                        const int   readIdx      = (spectralVibWriteC_ - intDel + kSpectralVibSize) % kSpectralVibSize;
+                        const float dryL = sC_L, dryR = sC_R;
+                        sC_L = dryL * (1.0f - spectralAmtC_) + spectralVibBL_[(size_t) readIdx] * spectralAmtC_;
+                        sC_R = dryR * (1.0f - spectralAmtC_) + spectralVibBR_[(size_t) readIdx] * spectralAmtC_;
+                        spectralVibBL_[(size_t) spectralVibWriteC_] = dryL;
+                        spectralVibBR_[(size_t) spectralVibWriteC_] = dryR;
+                        spectralVibWriteC_ = (spectralVibWriteC_ + 1) % kSpectralVibSize;
+                    }
+                }
+                // ── OSC D — sum across activeUnisonD_ sines (per-OSC unison) ─────
+                float sumDL = 0.0f, sumDR = 0.0f;
+
+                for (int u = 0; u < activeUnisonD_; ++u)
+                {
+                    float sDu = 0.0f;
+
+                    switch (engineD_)
+                    {
+                        case Engine::WT:
+                        {
+                            if (currentWavetableD_ != nullptr)
+                            {
+                                double warpedPhase = uPhaseD_[(size_t) u];
+                                float  window      = 1.0f;
+                                bool   skipLookup  = false;
+
+                                // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
+                                warpedPhase = applyPhaseWarp (warpModeD_, warpAmountD_, warpedPhase, window, skipLookup);
+                                if (! skipLookup && warp2ModeD_ != 0)
+                                    warpedPhase = applyPhaseWarp (warp2ModeD_, warp2AmountD_, warpedPhase, window, skipLookup);
+
+                                if (skipLookup)
+                                {
+                                    sDu = 0.0f;
+                                }
+                                else
+                                {
+                                    // WT BLUR — read the per-block blended single-cycle buffer.
+                                    sDu = tw::Wavetable::readCycle (blendD_.data(), (float) warpedPhase);
+                                    sDu *= window;
+
+                                    sDu = applyAmpWarp (warpModeD_,   warpAmountD_,   sDu);   // slot 1 amp-domain
+                                    sDu = applyAmpWarp (warp2ModeD_,  warp2AmountD_,  sDu);   // WARP 2 amp-domain, chained
+                                }
+                            }
+                            else
+                            {
+                                sDu = static_cast<float> (2.0 * uPhaseD_[(size_t) u] - 1.0);
+                                sDu -= static_cast<float> (polyBlep (uPhaseD_[(size_t) u], uPhaseIncD_[(size_t) u]));
+                            }
+                            uPhaseD_[(size_t) u] += uPhaseIncD_[(size_t) u];
+                            if (uPhaseD_[(size_t) u] >= 1.0) uPhaseD_[(size_t) u] -= 1.0;
+                            break;
+                        }
+
+                        case Engine::NOISE:
+                        {
+                            // OSC D noise is single-stream per voice — all unison sines hear the same noise.
+                            if (u == 0)
+                            {
+                                noiseStateD_ ^= noiseStateD_ << 13;
+                                noiseStateD_ ^= noiseStateD_ >> 17;
+                                noiseStateD_ ^= noiseStateD_ << 5;
+                                const float white = static_cast<float> (static_cast<int32_t> (noiseStateD_))
+                                                  * (1.0f / 2147483648.0f);
+                                const float alpha = 1.0f - 0.98f * framePosD_;
+                                noiseLpZD_ += alpha * (white - noiseLpZD_);
+                            }
+                            const float drive = 1.0f + 8.0f * warpAmountD_;
+                            sDu = std::tanh (noiseLpZD_ * drive);
+                            sDu *= 1.0f + 0.5f * framePosD_;
+                            break;
+                        }
+
+                        case Engine::FM:
+                        {
+                            const double ratio  = 0.25 + std::pow (32.0, (double) framePosD_) * 0.234375;
+                            const double modInc = uPhaseIncD_[(size_t) u] * ratio;
+                            const double depth  = (double) warpAmountD_ * 6.2831853071795865;
+                            const double pi2    = 6.2831853071795865;
+                            const double modOut = std::sin (pi2 * uModPhaseD_[(size_t) u]);
+                            sDu = static_cast<float> (std::sin (pi2 * uPhaseD_[(size_t) u] + depth * modOut));
+                            uModPhaseD_[(size_t) u] += modInc;
+                            if (uModPhaseD_[(size_t) u] >= 1.0) uModPhaseD_[(size_t) u] -= std::floor (uModPhaseD_[(size_t) u]);
+                            uPhaseD_[(size_t) u] += uPhaseIncD_[(size_t) u];
+                            if (uPhaseD_[(size_t) u] >= 1.0) uPhaseD_[(size_t) u] -= 1.0;
+                            break;
+                        }
+
+                        case Engine::SAMP:
+                        case Engine::GRAN:
+                        case Engine::SPEC:
+                            sDu = 0.0f; break;
+                    }
+
+                    // Phase 11d — FOLD applied per-sine, post-engine, pre-pan.
+                    sDu = applyFoldADAA (sDu, foldShapeD_, foldAmountD_, foldStateD_[(size_t) u]);
+
+                    // Per-sine pan into the OSC D stereo sum.
+                    sumDL += sDu * uPanLD_[(size_t) u];
+                    sumDR += sDu * uPanRD_[(size_t) u];
+                }
+
+                // Auto-gain (RMS-constant): holds loudness as voices / blend change.
+                sumDL *= uNormD_;
+                sumDR *= uNormD_;
+                float sD_L = sumDL;
+                float sD_R = sumDR;
+                if (! spectralBypassD_)
+                {
+                    if (spectralTypeD_ <= 2)
+                    {
+                        // LP, HP, Smear — biquad
+                        sD_L = spectralFilterBL_.processSample (sD_L);
+                        sD_R = spectralFilterBR_.processSample (sD_R);
+                    }
+                    else if (spectralTypeD_ == 3)
+                    {
+                        // Comb — feedforward y = x + x[n-N]
+                        const int N = juce::jlimit (1, kSpectralCombSize - 1,
+                                                     (int) (4.0f + spectralAmtD_ * (float) (kSpectralCombSize - 8)));
+                        const int readIdx = (spectralCombWriteD_ - N + kSpectralCombSize) % kSpectralCombSize;
+                        const float dryL = sD_L;
+                        const float dryR = sD_R;
+                        sD_L = dryL + spectralCombBL_[(size_t) readIdx] * spectralAmtD_;
+                        sD_R = dryR + spectralCombBR_[(size_t) readIdx] * spectralAmtD_;
+                        spectralCombBL_[(size_t) spectralCombWriteD_] = dryL;
+                        spectralCombBR_[(size_t) spectralCombWriteD_] = dryR;
+                        spectralCombWriteD_ = (spectralCombWriteD_ + 1) % kSpectralCombSize;
+                        sD_L *= 0.5f;
+                        sD_R *= 0.5f;
+                    }
+                    else if (spectralTypeD_ == 4)
+                    {
+                        // Ring Mod
+                        const double modHz = 30.0 + (double) (spectralAmtD_ * spectralAmtD_) * 1970.0;
+                        const double inc = modHz / sampleRate_;
+                        const float modL = static_cast<float> (std::sin (6.2831853071795865 * spectralRingPhaseD_));
+                        spectralRingPhaseD_ += inc;
+                        if (spectralRingPhaseD_ >= 1.0) spectralRingPhaseD_ -= 1.0;
+                        sD_L = sD_L * (1.0f - spectralAmtD_) + (sD_L * modL) * spectralAmtD_;
+                        sD_R = sD_R * (1.0f - spectralAmtD_) + (sD_R * modL) * spectralAmtD_;
+                    }
+                    else if (spectralTypeD_ == 5)
+                    {
+                        // Bit Crush
+                        const float levels = 64.0f - (spectralAmtD_ * spectralAmtD_) * 60.0f;
+                        const float L = juce::jmax (4.0f, levels);
+                        sD_L = std::round (sD_L * L) / L;
+                        sD_R = std::round (sD_R * L) / L;
+                    }
+                    else if (spectralTypeD_ == 6)
+                    {
+                        // Downsample — sample-and-hold at lower rate
+                        const float divisor = 1.0f + spectralAmtD_ * spectralAmtD_ * 31.0f;
+                        spectralDsCounterD_ += 1.0f;
+                        if (spectralDsCounterD_ >= divisor)
+                        {
+                            spectralDsHeldBL_ = sD_L;
+                            spectralDsHeldBR_ = sD_R;
+                            spectralDsCounterD_ -= divisor;
+                        }
+                        sD_L = spectralDsHeldBL_;
+                        sD_R = spectralDsHeldBR_;
+                    }
+                    else if (spectralTypeD_ == 7)
+                    {
+                        // Tube — asymmetric soft clipping with positive bias
+                        const float drive = 1.0f + spectralAmtD_ * spectralAmtD_ * 9.0f;
+                        const float bias = 0.15f * spectralAmtD_;
+                        const float invSat = 1.0f / std::tanh (drive);
+                        sD_L = std::tanh (sD_L * drive + bias) * invSat - bias * invSat;
+                        sD_R = std::tanh (sD_R * drive + bias) * invSat - bias * invSat;
+                    }
+                    else if (spectralTypeD_ == 8)
+                    {
+                        // Tilt — low-shelf cut + high-shelf boost, one-pole based
+                        const float alpha = 0.005f;
+                        spectralTiltLowBL_ += alpha * (sD_L - spectralTiltLowBL_);
+                        spectralTiltLowBR_ += alpha * (sD_R - spectralTiltLowBR_);
+                        const float lowL = spectralTiltLowBL_;
+                        const float lowR = spectralTiltLowBR_;
+                        const float highL = sD_L - lowL;
+                        const float highR = sD_R - lowR;
+                        const float lowGain  = 1.0f - spectralAmtD_;
+                        const float highGain = 1.0f + spectralAmtD_ * 2.0f;
+                        sD_L = lowL * lowGain + highL * highGain;
+                        sD_R = lowR * lowGain + highR * highGain;
+                    }
+                    else if (spectralTypeD_ == 9)
+                    {
+                        // Vibrato — short modulated delay creates pitch wobble
+                        const double modHz = 1.0 + (double) spectralAmtD_ * 8.0;
+                        const double inc   = modHz / sampleRate_;
+                        spectralVibPhaseD_ += inc;
+                        if (spectralVibPhaseD_ >= 1.0) spectralVibPhaseD_ -= 1.0;
+                        const float lfo = static_cast<float> (std::sin (6.2831853071795865 * spectralVibPhaseD_));
+                        const float depthSamples = spectralAmtD_ * 20.0f;
+                        const float delaySamples = (float) (kSpectralVibSize - 4) * 0.5f + lfo * depthSamples;
+                        const int   intDel       = juce::jlimit (1, kSpectralVibSize - 2, (int) delaySamples);
+                        const int   readIdx      = (spectralVibWriteD_ - intDel + kSpectralVibSize) % kSpectralVibSize;
+                        const float dryL = sD_L, dryR = sD_R;
+                        sD_L = dryL * (1.0f - spectralAmtD_) + spectralVibBL_[(size_t) readIdx] * spectralAmtD_;
+                        sD_R = dryR * (1.0f - spectralAmtD_) + spectralVibBR_[(size_t) readIdx] * spectralAmtD_;
+                        spectralVibBL_[(size_t) spectralVibWriteD_] = dryL;
+                        spectralVibBR_[(size_t) spectralVibWriteD_] = dryR;
+                        spectralVibWriteD_ = (spectralVibWriteD_ + 1) % kSpectralVibSize;
+                    }
+                }
 
                 const float env    = eAmpVca[i];               // ENV1 AMP, from the pre-pass
                 float ampMod = 0.0f;                           // ENV2–5 routed to Amp (bipolar gain)
@@ -1653,8 +2053,8 @@ namespace tw
                 const float velEnv = currentVelocity_ * juce::jmax (0.0f, env * (1.0f + ampMod));
 
                 // Sum to stereo with INDEPENDENT per-osc level + pan
-                scratchL[i] = (sA_L * level_ * panL_ + sB_L * levelB_ * panLB_) * velEnv;
-                scratchR[i] = (sA_R * level_ * panR_ + sB_R * levelB_ * panRB_) * velEnv;
+                scratchL[i] = (sA_L * level_ * panL_ + sB_L * levelB_ * panLB_ + sC_L * levelC_ * panLC_ + sD_L * levelD_ * panLD_) * velEnv;
+                scratchR[i] = (sA_R * level_ * panR_ + sB_R * levelB_ * panRB_ + sC_R * levelC_ * panRC_ + sD_R * levelD_ * panRD_) * velEnv;
             }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
