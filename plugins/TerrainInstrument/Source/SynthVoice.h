@@ -2381,6 +2381,88 @@ namespace tw
         std::uint32_t waverRngA_[kMaxUnison] {};         // per-(osc A × sine) xorshift32 state
         std::uint32_t waverRngB_[kMaxUnison] {};         // per-(osc B × sine) xorshift32 state
 
+        // ════ OSC C + D state (4-osc, spec P2) — full twins of OSC B, same types/inits ════
+        // ── OSC C ──
+        float  levelC_ = 0.0f;                           // start silent (spec)
+        float  panLC_ = 0.7071f, panRC_ = 0.7071f;
+        int    octOffsetC_ = 0, semiOffsetC_ = 0;
+        float  centsOffsetC_ = 0.0f;
+        const tw::Wavetable* currentWavetableC_ = nullptr;
+        float  framePosC_ = 0.0f;
+        int    warpModeC_ = 0;
+        int    warp2ModeC_ = 0;
+        float  warp2AmountC_ = 0.0f, warp2AmountBaseC_ = 0.0f;
+        int    currentMipLevelC_ = 0;
+        float  warpAmountC_ = 0.0f;
+        Engine engineC_ = Engine::WT;
+        std::uint32_t noiseStateC_ = 0xBB67AE85u ^ static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this));
+        float  noiseLpZC_ = 0.0f;
+        std::array<double, kMaxUnison> uPhaseC_{}, uPhaseIncC_{}, uModPhaseC_{}, uSyncPhaseC_{};
+        float  ktDepthC_ = 0.0f; int ktDestC_ = 0;
+        float  framePosBaseC_ = 0.0f, warpAmountBaseC_ = 0.0f, foldAmountBaseC_ = 0.0f;
+        int    routeSrcC_ = 0, routeDestC_ = 0; float routeAmtC_ = 0.0f;
+        std::array<float, kMaxUnison> uFramePosC_{};
+        float  frameSpreadC01_ = 0.0f;
+        float  blurTargetC_ = 0.0f, blurC_ = 0.0f;
+        std::array<float, tw::Wavetable::kFrameSize> blendC_{};
+        float  lastFpC_ = -2.0f, lastBlurC_ = -2.0f; int lastMipC_ = -2;
+        const tw::Wavetable* lastWtC_ = nullptr;
+        int    phaseModeC_ = 2;
+        int    foldShapeC_ = 0; float foldAmountC_ = 0.0f;
+        std::array<FoldState, kMaxUnison> foldStateC_{};
+        int    spectralTypeC_ = 0; float spectralAmtC_ = 0.0f; bool spectralBypassC_ = true;
+        int    interpModeC_ = 0;
+        std::array<float, kSpectralCombSize> spectralCombCL_{}, spectralCombCR_{};
+        int    spectralCombWriteC_ = 0; double spectralRingPhaseC_ = 0.0;
+        juce::dsp::IIR::Filter<float> spectralFilterCL_, spectralFilterCR_;
+        float  spectralDsHeldCL_ = 0.0f, spectralDsHeldCR_ = 0.0f, spectralDsCounterC_ = 0.0f;
+        float  spectralTiltLowCL_ = 0.0f, spectralTiltLowCR_ = 0.0f;
+        std::array<float, kSpectralVibSize> spectralVibCL_{}, spectralVibCR_{};
+        int    spectralVibWriteC_ = 0; double spectralVibPhaseC_ = 0.0;
+        std::array<float, kMaxUnison> uDetuneCentsC_{}, uPanLC_{}, uPanRC_{};
+        int    activeUnisonC_ = 1; float uNormC_ = 1.0f;
+        float  waverC_ = 0.0f; float waverCentsC_[kMaxUnison]{}; std::uint32_t waverRngC_[kMaxUnison]{};
+        // ── OSC D ──
+        float  levelD_ = 0.0f;                           // start silent (spec)
+        float  panLD_ = 0.7071f, panRD_ = 0.7071f;
+        int    octOffsetD_ = 0, semiOffsetD_ = 0;
+        float  centsOffsetD_ = 0.0f;
+        const tw::Wavetable* currentWavetableD_ = nullptr;
+        float  framePosD_ = 0.0f;
+        int    warpModeD_ = 0;
+        int    warp2ModeD_ = 0;
+        float  warp2AmountD_ = 0.0f, warp2AmountBaseD_ = 0.0f;
+        int    currentMipLevelD_ = 0;
+        float  warpAmountD_ = 0.0f;
+        Engine engineD_ = Engine::WT;
+        std::uint32_t noiseStateD_ = 0x3C6EF372u ^ static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this));
+        float  noiseLpZD_ = 0.0f;
+        std::array<double, kMaxUnison> uPhaseD_{}, uPhaseIncD_{}, uModPhaseD_{}, uSyncPhaseD_{};
+        float  ktDepthD_ = 0.0f; int ktDestD_ = 0;
+        float  framePosBaseD_ = 0.0f, warpAmountBaseD_ = 0.0f, foldAmountBaseD_ = 0.0f;
+        int    routeSrcD_ = 0, routeDestD_ = 0; float routeAmtD_ = 0.0f;
+        std::array<float, kMaxUnison> uFramePosD_{};
+        float  frameSpreadD01_ = 0.0f;
+        float  blurTargetD_ = 0.0f, blurD_ = 0.0f;
+        std::array<float, tw::Wavetable::kFrameSize> blendD_{};
+        float  lastFpD_ = -2.0f, lastBlurD_ = -2.0f; int lastMipD_ = -2;
+        const tw::Wavetable* lastWtD_ = nullptr;
+        int    phaseModeD_ = 2;
+        int    foldShapeD_ = 0; float foldAmountD_ = 0.0f;
+        std::array<FoldState, kMaxUnison> foldStateD_{};
+        int    spectralTypeD_ = 0; float spectralAmtD_ = 0.0f; bool spectralBypassD_ = true;
+        int    interpModeD_ = 0;
+        std::array<float, kSpectralCombSize> spectralCombDL_{}, spectralCombDR_{};
+        int    spectralCombWriteD_ = 0; double spectralRingPhaseD_ = 0.0;
+        juce::dsp::IIR::Filter<float> spectralFilterDL_, spectralFilterDR_;
+        float  spectralDsHeldDL_ = 0.0f, spectralDsHeldDR_ = 0.0f, spectralDsCounterD_ = 0.0f;
+        float  spectralTiltLowDL_ = 0.0f, spectralTiltLowDR_ = 0.0f;
+        std::array<float, kSpectralVibSize> spectralVibDL_{}, spectralVibDR_{};
+        int    spectralVibWriteD_ = 0; double spectralVibPhaseD_ = 0.0;
+        std::array<float, kMaxUnison> uDetuneCentsD_{}, uPanLD_{}, uPanRD_{};
+        int    activeUnisonD_ = 1; float uNormD_ = 1.0f;
+        float  waverD_ = 0.0f; float waverCentsD_[kMaxUnison]{}; std::uint32_t waverRngD_[kMaxUnison]{};
+
         // Phase 8a — HORIZON tilt filter (per-voice high-shelf, gain depends on midiNote * horizon)
         float horizonAmount_   = 0.0f;  // -1..+1 from SYN_HORIZON/100
         juce::dsp::IIR::Filter<float> horizonShelfL_;
