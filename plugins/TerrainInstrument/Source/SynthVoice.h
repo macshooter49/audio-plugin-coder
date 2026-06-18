@@ -913,6 +913,8 @@ namespace tw
             updateUnisonFramePositions();
             updateUnisonPhaseIncrementsA (glideNote_);
             updateUnisonPhaseIncrementsB (glideNote_);
+            updateUnisonPhaseIncrementsC (glideNote_);
+            updateUnisonPhaseIncrementsD (glideNote_);
             playing_         = true;
             foldStateA_.fill ({});   // Phase 11d ADAA — clear per-sine fold history on note start
             foldStateB_.fill ({});
@@ -1015,6 +1017,11 @@ namespace tw
                 const float rtSrcB = (routeSrcB_ == kRtSrcVel) ? currentVelocity_ : noteCurved;
                 const float rtA = routeAmtA_ * rtSrcA;     // bipolar -1..+1 × 0..1
                 const float rtB = routeAmtB_ * rtSrcB;
+                const float ktDC = ktDepthC_, ktDD = ktDepthD_;
+                const float rtSrcC = (routeSrcC_ == kRtSrcVel) ? currentVelocity_ : noteCurved;
+                const float rtSrcD = (routeSrcD_ == kRtSrcVel) ? currentVelocity_ : noteCurved;
+                const float rtC = routeAmtC_ * rtSrcC;
+                const float rtD = routeAmtD_ * rtSrcD;
                 // ── Mod-matrix: LFO → frame/warp/fold per OSC (block-rate via peek(), so the
                 //    per-sample OSC render stays cheap). LFO→LFO 'amt' scales the source first.
                 float lfoPk[wc::NUM_LFOS];
@@ -1033,6 +1040,7 @@ namespace tw
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                 }
                 float mFrA = 0.0f, mWpA = 0.0f, mFdA = 0.0f, mFrB = 0.0f, mWpB = 0.0f, mFdB = 0.0f;
+                float mFrC = 0.0f, mWpC = 0.0f, mFdC = 0.0f, mFrD = 0.0f, mWpD = 0.0f, mFdD = 0.0f;
                 for (int a = 0; a < modConfig_.numAssignments; ++a)
                 {
                     const auto& as = modConfig_.assignments[a];
@@ -1048,6 +1056,12 @@ namespace tw
                         case wc::ModDest::FrameB: mFrB += c; break;
                         case wc::ModDest::WarpB:  mWpB += c; break;
                         case wc::ModDest::FoldB:  mFdB += c; break;
+                        case wc::ModDest::FrameC: mFrC += c; break;
+                        case wc::ModDest::WarpC:  mWpC += c; break;
+                        case wc::ModDest::FoldC:  mFdC += c; break;
+                        case wc::ModDest::FrameD: mFrD += c; break;
+                        case wc::ModDest::WarpD:  mWpD += c; break;
+                        case wc::ModDest::FoldD:  mFdD += c; break;
                         default: break;
                     }
                 }
@@ -1060,6 +1074,15 @@ namespace tw
                 warp2AmountA_ = warp2AmountBaseA_;   // WARP 2 base->effective (mod-matrix ready)
                 warp2AmountB_ = warp2AmountBaseB_;
                 foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f) + mFdB);
+                // OSC C / D — same keytrack + route + LFO mod, clamp once.
+                framePosC_   = juce::jlimit (0.0f, 1.0f, framePosBaseC_   + (ktDestC_ == kKtFrame ? ktDC * (ktRamp_ - framePosBaseC_)   : 0.0f) + (routeDestC_ == kRtFrame ? rtC : 0.0f) + mFrC);
+                warpAmountC_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseC_ + (ktDestC_ == kKtWarp  ? ktDC * (ktRamp_ - warpAmountBaseC_) : 0.0f) + (routeDestC_ == kRtWarp  ? rtC : 0.0f) + mWpC);
+                foldAmountC_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseC_ + (ktDestC_ == kKtFold  ? ktDC * (ktRamp_ - foldAmountBaseC_) : 0.0f) + (routeDestC_ == kRtFold  ? rtC : 0.0f) + mFdC);
+                warp2AmountC_ = warp2AmountBaseC_;
+                framePosD_   = juce::jlimit (0.0f, 1.0f, framePosBaseD_   + (ktDestD_ == kKtFrame ? ktDD * (ktRamp_ - framePosBaseD_)   : 0.0f) + (routeDestD_ == kRtFrame ? rtD : 0.0f) + mFrD);
+                warpAmountD_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseD_ + (ktDestD_ == kKtWarp  ? ktDD * (ktRamp_ - warpAmountBaseD_) : 0.0f) + (routeDestD_ == kRtWarp  ? rtD : 0.0f) + mWpD);
+                foldAmountD_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseD_ + (ktDestD_ == kKtFold  ? ktDD * (ktRamp_ - foldAmountBaseD_) : 0.0f) + (routeDestD_ == kRtFold  ? rtD : 0.0f) + mFdD);
+                warp2AmountD_ = warp2AmountBaseD_;
             }
 
             // WAVER — advance per-(osc × unison sine) OU pitch drift this block. Slow,
@@ -1068,6 +1091,8 @@ namespace tw
                 const float dt = static_cast<float> (numSamples) / static_cast<float> (sampleRate_);
                 updateWaverOU (waverCentsA_, waverRngA_, waverA_, dt);
                 updateWaverOU (waverCentsB_, waverRngB_, waverB_, dt);
+                updateWaverOU (waverCentsC_, waverRngC_, waverC_, dt);
+                updateWaverOU (waverCentsD_, waverRngD_, waverD_, dt);
             }
             // PORTAMENTO — advance the pitch slide for this block (no-op once arrived).
             advanceGlide (numSamples);
@@ -1116,6 +1141,8 @@ namespace tw
             // Re-derive per-sine phase increments with updated drift + glide pitch
             updateUnisonPhaseIncrementsA (glideNote_);
             updateUnisonPhaseIncrementsB (glideNote_);
+            updateUnisonPhaseIncrementsC (glideNote_);
+            updateUnisonPhaseIncrementsD (glideNote_);
 
             // Phase 10a / Phase 8b — pick mip level using sine 0 (centre-detuned,
             // no spread offset) as the reference — ±25 cents of unison detune
@@ -1131,6 +1158,8 @@ namespace tw
             };
             currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_));
             currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_) * warpRateMul (warp2ModeB_, warp2AmountB_));
+            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpAmountC_) * warpRateMul (warp2ModeC_, warp2AmountC_));
+            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpAmountD_) * warpRateMul (warp2ModeD_, warp2AmountD_));
 
             // ── WT BLUR — smooth the amount, then (re)build each OSC's blended single-
             // cycle buffer ONCE per block (only when frame pos / blur / mip changed). Every
@@ -1141,6 +1170,10 @@ namespace tw
             else                                            blurA_ += (blurTargetA_ - blurA_) * 0.25f;
             if (std::abs (blurTargetB_ - blurB_) < 1.0e-4f) blurB_ = blurTargetB_;
             else                                            blurB_ += (blurTargetB_ - blurB_) * 0.25f;
+            if (std::abs (blurTargetC_ - blurC_) < 1.0e-4f) blurC_ = blurTargetC_;
+            else                                            blurC_ += (blurTargetC_ - blurC_) * 0.25f;
+            if (std::abs (blurTargetD_ - blurD_) < 1.0e-4f) blurD_ = blurTargetD_;
+            else                                            blurD_ += (blurTargetD_ - blurD_) * 0.25f;
 
             if (currentWavetable_ != nullptr)
             {
@@ -1160,6 +1193,26 @@ namespace tw
                 {
                     currentWavetableB_->renderBlend (currentMipLevelB_, fpB, blurB_, blendB_.data());
                     lastFpB_ = fpB; lastBlurB_ = blurB_; lastMipB_ = currentMipLevelB_; lastWtB_ = currentWavetableB_;
+                }
+            }
+            if (currentWavetableC_ != nullptr)
+            {
+                float fpC = framePosC_;
+                if (interpModeC_ == 1) { const float Nf = 16.0f; fpC = std::round (fpC * (Nf - 1.0f)) / (Nf - 1.0f); }
+                if (fpC != lastFpC_ || blurC_ != lastBlurC_ || currentMipLevelC_ != lastMipC_ || currentWavetableC_ != lastWtC_)
+                {
+                    currentWavetableC_->renderBlend (currentMipLevelC_, fpC, blurC_, blendC_.data());
+                    lastFpC_ = fpC; lastBlurC_ = blurC_; lastMipC_ = currentMipLevelC_; lastWtC_ = currentWavetableC_;
+                }
+            }
+            if (currentWavetableD_ != nullptr)
+            {
+                float fpD = framePosD_;
+                if (interpModeD_ == 1) { const float Nf = 16.0f; fpD = std::round (fpD * (Nf - 1.0f)) / (Nf - 1.0f); }
+                if (fpD != lastFpD_ || blurD_ != lastBlurD_ || currentMipLevelD_ != lastMipD_ || currentWavetableD_ != lastWtD_)
+                {
+                    currentWavetableD_->renderBlend (currentMipLevelD_, fpD, blurD_, blendD_.data());
+                    lastFpD_ = fpD; lastBlurD_ = blurD_; lastMipD_ = currentMipLevelD_; lastWtD_ = currentWavetableD_;
                 }
             }
 
@@ -1889,6 +1942,38 @@ namespace tw
                 uPhaseIncB_[(size_t) u] = hz / sampleRate_;
             }
         }
+        void updateUnisonPhaseIncrementsC (double pitchNote) noexcept
+        {
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                const double semitones =
+                      (pitchNote - 69.0)
+                    + static_cast<double> (octOffsetC_) * 12.0
+                    + static_cast<double> (semiOffsetC_)
+                    + static_cast<double> (centsOffsetC_)            * 0.01
+                    + static_cast<double> (uDetuneCentsC_[(size_t) u]) * 0.01
+                    + static_cast<double> (waverCentsC_[(size_t) u])  * 0.01
+                    + pitchEnvSemis_;
+                const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
+                uPhaseIncC_[(size_t) u] = hz / sampleRate_;
+            }
+        }
+        void updateUnisonPhaseIncrementsD (double pitchNote) noexcept
+        {
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                const double semitones =
+                      (pitchNote - 69.0)
+                    + static_cast<double> (octOffsetD_) * 12.0
+                    + static_cast<double> (semiOffsetD_)
+                    + static_cast<double> (centsOffsetD_)            * 0.01
+                    + static_cast<double> (uDetuneCentsD_[(size_t) u]) * 0.01
+                    + static_cast<double> (waverCentsD_[(size_t) u])  * 0.01
+                    + pitchEnvSemis_;
+                const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
+                uPhaseIncD_[(size_t) u] = hz / sampleRate_;
+            }
+        }
 
         // Phase 11a — populate per-sine uFramePosA_/B_ offsets from current
         // frameSpreadA01_/B01_ and the per-OSC voice counts. Each sine u in [0, count)
@@ -1910,6 +1995,20 @@ namespace tw
                 if (u >= activeUnisonB_ || activeUnisonB_ <= 1) { uFramePosB_[(size_t) u] = 0.0f; continue; }
                 const float u_norm = ((float) u / (float) (activeUnisonB_ - 1)) * 2.0f - 1.0f;
                 uFramePosB_[(size_t) u] = u_norm * frameSpreadB01_ * 0.5f;
+            }
+            // OSC C frame offsets.
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                if (u >= activeUnisonC_ || activeUnisonC_ <= 1) { uFramePosC_[(size_t) u] = 0.0f; continue; }
+                const float u_norm = ((float) u / (float) (activeUnisonC_ - 1)) * 2.0f - 1.0f;
+                uFramePosC_[(size_t) u] = u_norm * frameSpreadC01_ * 0.5f;
+            }
+            // OSC D frame offsets.
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                if (u >= activeUnisonD_ || activeUnisonD_ <= 1) { uFramePosD_[(size_t) u] = 0.0f; continue; }
+                const float u_norm = ((float) u / (float) (activeUnisonD_ - 1)) * 2.0f - 1.0f;
+                uFramePosD_[(size_t) u] = u_norm * frameSpreadD01_ * 0.5f;
             }
         }
 
