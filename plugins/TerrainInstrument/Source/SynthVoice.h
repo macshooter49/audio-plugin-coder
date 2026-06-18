@@ -192,6 +192,13 @@ namespace tw
             *spectralFilterAR_.coefficients = *passthrough;
             *spectralFilterBL_.coefficients = *passthrough;
             *spectralFilterBR_.coefficients = *passthrough;
+            // OSC C / D spectral filters (4-osc)
+            spectralFilterCL_.prepare (monoSpec); spectralFilterCR_.prepare (monoSpec);
+            spectralFilterDL_.prepare (monoSpec); spectralFilterDR_.prepare (monoSpec);
+            spectralFilterCL_.reset(); spectralFilterCR_.reset();
+            spectralFilterDL_.reset(); spectralFilterDR_.reset();
+            *spectralFilterCL_.coefficients = *passthrough; *spectralFilterCR_.coefficients = *passthrough;
+            *spectralFilterDL_.coefficients = *passthrough; *spectralFilterDR_.coefficients = *passthrough;
         }
 
         /** Batch 1 Filter — per-block from PluginProcessor. Cutoff/res are
@@ -689,7 +696,7 @@ namespace tw
             switch (mode)
             {
                 case 0: return 0.0;                                                              // RETRIG — aligned, punchy
-                case 3: { const int cnt = (osc == 0) ? activeUnisonA_ : activeUnisonB_;
+                case 3: { const int cnt = (osc == 0) ? activeUnisonA_ : (osc == 1) ? activeUnisonB_ : (osc == 2) ? activeUnisonC_ : activeUnisonD_;
                           return (cnt > 1) ? (double) u / (double) cnt : 0.0; }                     // SPREAD — even fan (per-OSC)
                 case 2: return nextPhaseRandom();                                                 // RANDOM — fresh each note
                 case 1: default: return phaseSeeded_ ? carried : seedPhase (u, osc);              // FREE — seed once, then carry
@@ -819,6 +826,33 @@ namespace tw
             interpModeB_ = juce::jlimit (0, 1, modeB);
         }
 
+        // ════ OSC C + D setters (4-osc, spec P5) — twins of the B / combined setters ════
+        void setTuningC (int oct, int semi, float cent) noexcept { octOffsetC_=oct; semiOffsetC_=semi; centsOffsetC_=cent; if (playing_) updateUnisonPhaseIncrementsC (glideNote_); }
+        void setTuningD (int oct, int semi, float cent) noexcept { octOffsetD_=oct; semiOffsetD_=semi; centsOffsetD_=cent; if (playing_) updateUnisonPhaseIncrementsD (glideNote_); }
+        void setLevelC (float level) noexcept { levelC_ = juce::jlimit (0.0f, 1.0f, level); }
+        void setLevelD (float level) noexcept { levelD_ = juce::jlimit (0.0f, 1.0f, level); }
+        void setPanC (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLC_=std::cos(a); panRC_=std::sin(a); }
+        void setPanD (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLD_=std::cos(a); panRD_=std::sin(a); }
+        void setWavetableC (const tw::Wavetable* wt) noexcept { currentWavetableC_ = wt; }
+        void setWavetableD (const tw::Wavetable* wt) noexcept { currentWavetableD_ = wt; }
+        void setWavetableFrameC (float pos) noexcept { framePosBaseC_ = juce::jlimit (0.0f, 1.0f, pos); }
+        void setWavetableFrameD (float pos) noexcept { framePosBaseD_ = juce::jlimit (0.0f, 1.0f, pos); }
+        void setWarpC (int mode, float amount) noexcept { warpModeC_ = juce::jlimit(0,10,mode); warpAmountBaseC_ = juce::jlimit(0.0f,1.0f,amount); }
+        void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,10,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
+        void setEngineC (int idx) noexcept { engineC_ = static_cast<Engine> (juce::jlimit(0,5,idx)); }
+        void setEngineD (int idx) noexcept { engineD_ = static_cast<Engine> (juce::jlimit(0,5,idx)); }
+        void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonC_, uDetuneCentsC_, uPanLC_, uPanRC_, uNormC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
+        void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonD_, uDetuneCentsD_, uPanLD_, uPanRD_, uNormD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
+        void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,10,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,10,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
+        void setBlurCD (float blurC01, float blurD01) noexcept { blurTargetC_=juce::jlimit(0.0f,1.0f,blurC01); blurTargetD_=juce::jlimit(0.0f,1.0f,blurD01); }
+        void setPhaseModeCD (int modeC, int modeD) noexcept { phaseModeC_=juce::jlimit(0,3,modeC); phaseModeD_=juce::jlimit(0,3,modeD); }
+        void setWaverCD (float c, float d) noexcept { waverC_=juce::jlimit(0.0f,1.0f,c); waverD_=juce::jlimit(0.0f,1.0f,d); }
+        void setFoldCD (int shapeC, float amountC, int shapeD, float amountD) noexcept { foldShapeC_=juce::jlimit(0,2,shapeC); foldAmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); foldShapeD_=juce::jlimit(0,2,shapeD); foldAmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
+        void setKeytrackCD (float depthC, int destC, float depthD, int destD) noexcept { ktDepthC_=juce::jlimit(0.0f,1.0f,depthC); ktDestC_=juce::jlimit(0,2,destC); ktDepthD_=juce::jlimit(0.0f,1.0f,depthD); ktDestD_=juce::jlimit(0,2,destD); }
+        void setRouteCD (int srcC, int destC, float amtC, int srcD, int destD, float amtD) noexcept { routeSrcC_=juce::jlimit(0,1,srcC); routeDestC_=juce::jlimit(0,2,destC); routeAmtC_=juce::jlimit(-1.0f,1.0f,amtC); routeSrcD_=juce::jlimit(0,1,srcD); routeDestD_=juce::jlimit(0,2,destD); routeAmtD_=juce::jlimit(-1.0f,1.0f,amtD); }
+        void setSpectralCD (int typeC, float amtC, int typeD, float amtD) noexcept { spectralTypeC_=juce::jlimit(0,9,typeC); spectralAmtC_=juce::jlimit(0.0f,1.0f,amtC); spectralTypeD_=juce::jlimit(0,9,typeD); spectralAmtD_=juce::jlimit(0.0f,1.0f,amtD); spectralBypassC_=(spectralAmtC_<1.0e-4f); spectralBypassD_=(spectralAmtD_<1.0e-4f); updateSpectralCoefficients(spectralTypeC_,spectralAmtC_,spectralFilterCL_,spectralFilterCR_); updateSpectralCoefficients(spectralTypeD_,spectralAmtD_,spectralFilterDL_,spectralFilterDR_); }
+        void setInterpModeCD (int modeC, int modeD) noexcept { interpModeC_=juce::jlimit(0,1,modeC); interpModeD_=juce::jlimit(0,1,modeD); }
+
         // (Old per-voice pitch EROSION setter removed — pitch drift is now WAVER, set
         //  per-OSC via setWaver(). SYN_EROSION still drives the FILTER cutoff drift via
         //  setErosionAmount_filter() — that path is unchanged.)
@@ -872,6 +906,8 @@ namespace tw
             noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
             // OSC B resets (Phase 9)
             noiseLpZB_       = 0.0f;
+            noiseLpZC_       = 0.0f;   // OSC C/D resets (4-osc)
+            noiseLpZD_       = 0.0f;
 
             // PHASE — initialise each unison sine's phase accumulator per the selected
             // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
@@ -888,6 +924,12 @@ namespace tw
                 uPhaseB_[(size_t) u]      = resolvePhase (phaseModeB_, u, 1, uPhaseB_[(size_t) u]);
                 uModPhaseB_[(size_t) u]   = 0.0;
                 uSyncPhaseB_[(size_t) u]  = 0.0;
+                uPhaseC_[(size_t) u]      = resolvePhase (phaseModeC_, u, 2, uPhaseC_[(size_t) u]);
+                uModPhaseC_[(size_t) u]   = 0.0;
+                uSyncPhaseC_[(size_t) u]  = 0.0;
+                uPhaseD_[(size_t) u]      = resolvePhase (phaseModeD_, u, 3, uPhaseD_[(size_t) u]);
+                uModPhaseD_[(size_t) u]   = 0.0;
+                uSyncPhaseD_[(size_t) u]  = 0.0;
             }
             phaseSeeded_ = true;
 
@@ -900,8 +942,12 @@ namespace tw
             {
                 waverRngA_[(size_t) u]   = waverSeedMix (waverHash + (std::uint32_t) (2 * u + 1) * 0x9E3779B1u);
                 waverRngB_[(size_t) u]   = waverSeedMix (waverHash + (std::uint32_t) (2 * u + 2) * 0x9E3779B1u);
+                waverRngC_[(size_t) u]   = waverSeedMix ((waverHash ^ 0x68E31DA4u) + (std::uint32_t) (2 * u + 1) * 0x9E3779B1u);
+                waverRngD_[(size_t) u]   = waverSeedMix ((waverHash ^ 0xB5297A4Du) + (std::uint32_t) (2 * u + 2) * 0x9E3779B1u);
                 waverCentsA_[(size_t) u] = 0.0f;
                 waverCentsB_[(size_t) u] = 0.0f;
+                waverCentsC_[(size_t) u] = 0.0f;
+                waverCentsD_[(size_t) u] = 0.0f;
             }
 
             // KEYTRACK — latch the note-pitch source for this voice: a low-anchored
@@ -918,6 +964,8 @@ namespace tw
             playing_         = true;
             foldStateA_.fill ({});   // Phase 11d ADAA — clear per-sine fold history on note start
             foldStateB_.fill ({});
+            foldStateC_.fill ({});
+            foldStateD_.fill ({});
             // Envelopes — fresh note starts from 0 (reset), then gate on. The legato
             // retarget path returns earlier (envelopes deliberately untouched), so this
             // only runs for true note starts. All five DAHDSR envelopes trigger together.

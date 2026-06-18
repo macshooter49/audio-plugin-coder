@@ -708,7 +708,7 @@ private:
         int   builtMode   = -1;
         float builtAmount = -1.0f;
     };
-    MorphSlot morphA_, morphB_;
+    MorphSlot morphA_, morphB_, morphC_, morphD_;
 
     void timerCallback() override;        // message thread — rebuilds morph tables
     void rebuildMorphIfNeeded (MorphSlot& slot,

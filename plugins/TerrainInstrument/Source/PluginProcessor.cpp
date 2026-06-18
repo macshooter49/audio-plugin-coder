@@ -135,6 +135,12 @@ void TerrainInstrumentAudioProcessor::timerCallback()
     rebuildMorphIfNeeded (morphB_, ParameterIDs::SYN_OSC_B_WT_PRESET,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_AMT);
+    rebuildMorphIfNeeded (morphC_, ParameterIDs::SYN_OSC_C_WT_PRESET,
+                          ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE,
+                          ParameterIDs::SYN_OSC_C_SPECTRAL_AMT);
+    rebuildMorphIfNeeded (morphD_, ParameterIDs::SYN_OSC_D_WT_PRESET,
+                          ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE,
+                          ParameterIDs::SYN_OSC_D_SPECTRAL_AMT);
 }
 
 //==============================================================================
@@ -2622,6 +2628,38 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   rtDestB     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
         const float rtAmtB      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
 
+        // ── OSC C / D params (4-osc) — mirror OSC B; pushed per voice below ──
+        const int   octC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_OCT), semiC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_SEMI);
+        const float centC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_CENT), lvlC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_LEVEL), panC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_PAN);
+        const int   wtPresetC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WT_PRESET);
+        const float wtFrameC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WT_FRAME);
+        const tw::Wavetable* wtC = resolveMorphTable(morphC_, wtPresetC);
+        const int   warpModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_PHASE_MODE);
+        const float warpAmountC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
+        const int   warp2ModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP2_MODE);
+        const float warp2AmtC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP2_AMT);
+        const int   engineIdxC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ENGINE);
+        const float waverC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WAVER);
+        const float ktDepthC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_KEYTRACK);
+        const int   ktDestC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_KEYTRACK_DEST);
+        const int   rtSrcC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ROUTE_SRC), rtDestC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ROUTE_DEST);
+        const float rtAmtC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ROUTE_AMT);
+        const int   octD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_OCT), semiD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_SEMI);
+        const float centD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_CENT), lvlD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_LEVEL), panD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_PAN);
+        const int   wtPresetD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WT_PRESET);
+        const float wtFrameD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WT_FRAME);
+        const tw::Wavetable* wtD = resolveMorphTable(morphD_, wtPresetD);
+        const int   warpModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_PHASE_MODE);
+        const float warpAmountD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
+        const int   warp2ModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP2_MODE);
+        const float warp2AmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP2_AMT);
+        const int   engineIdxD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ENGINE);
+        const float waverD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WAVER);
+        const float ktDepthD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_KEYTRACK);
+        const int   ktDestD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_KEYTRACK_DEST);
+        const int   rtSrcD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_DEST);
+        const float rtAmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_AMT);
+
         // ── Batch 1 — assemble the synth modulation config from params + transport,
         //    then publish it to every voice. One LFO (L1, sine, free rate) and one
         //    default route L1 → Filter 1 cutoff (depth from LFO1_DEPTH) so the slice
@@ -2721,6 +2759,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setKeytrack               (ktDepthA / 100.0f, ktDestA, ktDepthB / 100.0f, ktDestB);  // KEYTRACK
                 sv->setRoute                  (rtSrcA, rtDestA, rtAmtA / 100.0f, rtSrcB, rtDestB, rtAmtB / 100.0f);  // ROUTE
                 sv->setEngineB                (engineIdxB);
+                // ── OSC C / D pushes (4-osc) ──
+                sv->setTuningC (octC, semiC, centC);  sv->setTuningD (octD, semiD, centD);
+                sv->setLevelC (lvlC);                 sv->setLevelD (lvlD);
+                sv->setPanC (panC);                   sv->setPanD (panD);
+                sv->setWavetableC (wtC);              sv->setWavetableD (wtD);
+                sv->setWavetableFrameC (wtFrameC);    sv->setWavetableFrameD (wtFrameD);
+                sv->setWarpC (warpModeC, warpAmountC); sv->setWarpD (warpModeD, warpAmountD);
+                sv->setWarp2CD (warp2ModeC, warp2AmtC, warp2ModeD, warp2AmtD);
+                sv->setPhaseModeCD (phaseModeC, phaseModeD);
+                sv->setWaverCD (waverC / 100.0f, waverD / 100.0f);
+                sv->setKeytrackCD (ktDepthC / 100.0f, ktDestC, ktDepthD / 100.0f, ktDestD);
+                sv->setRouteCD (rtSrcC, rtDestC, rtAmtC / 100.0f, rtSrcD, rtDestD, rtAmtD / 100.0f);
+                sv->setEngineC (engineIdxC);          sv->setEngineD (engineIdxD);
             }
         }
 
@@ -2763,6 +2814,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Phase 11g — INTERP per OSC.
         const int interpModeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_INTERP_MODE);
         const int interpModeB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_INTERP_MODE);
+        // OSC C / D — unison / blur / fold / interp (4-osc)
+        const int   uniCountC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UNISON);
+        const float uniDetC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, uniBlnC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, uniWidC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f;
+        const float blurC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_FRAME_SPREAD);
+        const int   foldShapeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
+        const float foldAmtC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_FOLD_AMT);
+        const int   interpModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_INTERP_MODE);
+        const int   uniCountD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UNISON);
+        const float uniDetD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, uniBlnD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, uniWidD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f;
+        const float blurD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_FRAME_SPREAD);
+        const int   foldShapeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
+        const float foldAmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_FOLD_AMT);
+        const int   interpModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_INTERP_MODE);
 
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
@@ -2791,6 +2855,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 tv->setBlur (blurA, blurB);   // WT BLUR (frame blend)
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
                 tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g
+                tv->setUnisonC (uniCountC, uniDetC, uniBlnC, uniWidC);  tv->setUnisonD (uniCountD, uniDetD, uniBlnD, uniWidD);
+                tv->setBlurCD (blurC, blurD);
+                tv->setFoldCD (foldShapeC, foldAmtC, foldShapeD, foldAmtD);
+                tv->setInterpModeCD (interpModeC, interpModeD);
                 tv->setGlide (portaSec, glCurve01, glAlways, glScaled, synthGlideFrom_, glAnyHeld);   // PORTAMENTO
             }
         }
