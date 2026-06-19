@@ -2915,39 +2915,50 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         synthScratch.setSize (2, numSamples, false, true, true);
     synthScratch.clear();
 
-    // ── FLOW · ARP: transform incoming MIDI -> arpeggiated MIDI (0=Off, 1=Arp, 2/3/4=Seq/Glitch/Drift) ──
+    // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
     const int flowMode = (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load();
-    if (flowMode == 1)   // ARP  (0 = Off; 2/3/4 = Seq/Glitch/Drift, not built yet)
-    {
-        flowArp.setLatch (*apvts.getRawParameterValue (ParameterIDs::FLOW_ARP_LATCH) > 0.5f);
 
+    // EFFECTIVE FLOW knobs = base param + Σ(global-LFO × depth), clamp once. Shared by ARP + SEQ —
+    // SEQ reuses the same FLOW_ARP_* params (per-mode memory lives in the JS).  (proven: 35/35)
+    auto flowBase = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (id)->load()); };  // ->load(): atomic<float> can't deduce in jlimit
+    auto flowMod  = [&] (wc::ModDest dest) -> float {
+        float sum = 0.0f; const auto& info = wc::kDestInfo[(int) dest];
+        for (int a = 0; a < synModCfg.numAssignments; ++a) {
+            const auto& as = synModCfg.assignments[a];
+            if (! as.enabled || as.dest != dest) continue;
+            const int si = (int) as.source - (int) wc::ModSource::L1;
+            if (si < 0 || si >= wc::NUM_LFOS) continue;           // only LFO sources have a global value
+            sum += wc::routeContribution (info, flowLfo_[si].peek(), as.depth);
+        }
+        return sum; };
+    // Each mode reads its OWN 5 knob params (per-mode knob memory: ARP=FLOW_ARP_*, SEQ=FLOW_SEQ_*).
+    // The FLOW mod-dests are shared, so the LFO→FLOW-knob contribution is added on top of whichever
+    // mode's base value. Latch is a single shared param (no per-mode latch exists).
+    auto flowKnob = [&] (const char* id, wc::ModDest d) { return juce::jlimit (0.f, 1.f, flowBase (id) + flowMod (d)); };
+    const bool  kLatch = *apvts.getRawParameterValue (ParameterIDs::FLOW_ARP_LATCH) > 0.5f;
+
+    if (flowMode == 1)   // ── ARP (mode 1) ──
+    {
+        const float kRate  = flowKnob (ParameterIDs::FLOW_ARP_RATE,  wc::ModDest::FlowTime);
+        const float kGate  = flowKnob (ParameterIDs::FLOW_ARP_GATE,  wc::ModDest::FlowGate);
+        const float kVary  = flowKnob (ParameterIDs::FLOW_ARP_VARY,  wc::ModDest::FlowVary);
+        const float kTraj  = flowKnob (ParameterIDs::FLOW_ARP_TRAJ,  wc::ModDest::FlowTraj);
+        const float kMorph = flowKnob (ParameterIDs::FLOW_ARP_MORPH, wc::ModDest::FlowMorph);
+
+        // SEQ inactive: drop anything it was holding (not rendering → no note-offs needed).
+        { wc::SeqEvent srel[wc::kSeqMaxEvents]; flowSeq.releaseAll (srel, wc::kSeqMaxEvents); }
+        flowSeq.clearLocks();
+
+        flowArp.setLatch (kLatch);
         juce::MidiBuffer flowMidi;
         for (const auto meta : midiMessages)
         {
             const auto m = meta.getMessage();
-            if      (m.isNoteOn())  flowArp.noteOn  (m.getNoteNumber(), m.getVelocity());
-            else if (m.isNoteOff()) flowArp.noteOff (m.getNoteNumber());
+            // feed both engines' held-note sets so a mode switch mid-hold is seamless
+            if      (m.isNoteOn())  { flowArp.noteOn  (m.getNoteNumber(), m.getVelocity()); flowSeq.noteOn (m.getNoteNumber(), m.getVelocity()); }
+            else if (m.isNoteOff()) { flowArp.noteOff (m.getNoteNumber()); flowSeq.noteOff (m.getNoteNumber()); }
             else                    flowMidi.addEvent (m, meta.samplePosition);   // CC / pitchbend pass through
         }
-
-        // EFFECTIVE knobs = base param + Σ(global-LFO × depth), clamp once  (proven: 35/35)
-        auto base    = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (id)->load()); };  // [CC fix: ->load(), atomic<float> can't deduce in jlimit]
-        auto flowMod = [&] (wc::ModDest dest) -> float {
-            float sum = 0.0f; const auto& info = wc::kDestInfo[(int) dest];
-            for (int a = 0; a < synModCfg.numAssignments; ++a) {
-                const auto& as = synModCfg.assignments[a];
-                if (! as.enabled || as.dest != dest) continue;
-                const int si = (int) as.source - (int) wc::ModSource::L1;
-                if (si < 0 || si >= wc::NUM_LFOS) continue;           // only LFO sources have a global value
-                sum += wc::routeContribution (info, flowLfo_[si].peek(), as.depth);
-            }
-            return sum; };
-
-        const float kRate  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_RATE)  + flowMod (wc::ModDest::FlowTime));
-        const float kGate  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_GATE)  + flowMod (wc::ModDest::FlowGate));
-        const float kVary  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_VARY)  + flowMod (wc::ModDest::FlowVary));
-        const float kTraj  = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_TRAJ)  + flowMod (wc::ModDest::FlowTraj));
-        const float kMorph = juce::jlimit (0.f, 1.f, base (ParameterIDs::FLOW_ARP_MORPH) + flowMod (wc::ModDest::FlowMorph));
 
         wc::ArpEvent ev[wc::kArpMaxEvents];
         const int n = flowArp.process (kRate, kGate, kVary, kTraj, kMorph,
@@ -2962,18 +2973,62 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
         synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
     }
+    else if (flowMode == 2)   // ── SEQ (mode 2) — §1 process + §2 MIDI translate ──
+    {
+        // ARP inactive: drop anything it was holding (not rendering → no note-offs needed).
+        { wc::ArpEvent arel[wc::kArpMaxEvents]; flowArp.releaseAll (arel, wc::kArpMaxEvents); }
+
+        flowSeq.setLatch (kLatch);
+        juce::MidiBuffer flowMidi;
+        for (const auto meta : midiMessages)
+        {
+            const auto m = meta.getMessage();
+            if      (m.isNoteOn())  { flowSeq.noteOn  (m.getNoteNumber(), m.getVelocity()); flowArp.noteOn (m.getNoteNumber(), m.getVelocity()); }
+            else if (m.isNoteOff()) { flowSeq.noteOff (m.getNoteNumber()); flowArp.noteOff (m.getNoteNumber()); }
+            else                    flowMidi.addEvent (m, meta.samplePosition);   // CC / pitchbend pass through
+        }
+
+        // SEQ reads its OWN knob params (FLOW_SEQ_*) — these are what the SEQ front knobs write.
+        const float kRate  = flowKnob (ParameterIDs::FLOW_SEQ_RATE,  wc::ModDest::FlowTime);
+        const float kGate  = flowKnob (ParameterIDs::FLOW_SEQ_GATE,  wc::ModDest::FlowGate);
+        const float kVary  = flowKnob (ParameterIDs::FLOW_SEQ_VARY,  wc::ModDest::FlowVary);
+        const float kTraj  = flowKnob (ParameterIDs::FLOW_SEQ_TRAJ,  wc::ModDest::FlowTraj);
+        const float kMorph = flowKnob (ParameterIDs::FLOW_SEQ_MORPH, wc::ModDest::FlowMorph);
+
+        // §1 process → §2 translate SeqEvent[] → MidiBuffer. legato overlap is intentional (engine
+        // suppresses the close-before-open for slides). JUCE MidiBuffer::addEvent inserts in order,
+        // so unsorted sampleOffsets are safe — same as ARP. (porta/voice-side slide = card phase.)
+        wc::SeqEvent sev[wc::kSeqMaxEvents];
+        const int sn = flowSeq.process (kRate, kGate, kVary, kTraj, kMorph,
+                                        flowPpq, flowBpm, getSampleRate(), numSamples,
+                                        flowPlaying, sev, wc::kSeqMaxEvents);
+        for (int i = 0; i < sn; ++i)
+        {
+            const auto msg = sev[i].on
+                ? juce::MidiMessage::noteOn  (1, sev[i].note, (juce::uint8) sev[i].vel)
+                : juce::MidiMessage::noteOff (1, sev[i].note);
+            flowMidi.addEvent (msg, juce::jlimit (0, numSamples - 1, sev[i].sampleOffset));
+        }
+
+        // §3 — publish the 4 mod-lane values as block-rate matrix sources (SeqMod1..4).
+        for (int i = 0; i < wc::kSeqModLanes; ++i) seqModSource_[i] = flowSeq.modValue (i);
+
+        synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
+    }
     else
     {
-        // FLOW Off (or a not-yet-built mode): release any note the arp was holding so it
-        // can't hang on the synth, then pass the raw MIDI straight through.
-        wc::ArpEvent rel[wc::kArpMaxEvents];
-        const int rn = flowArp.releaseAll (rel, wc::kArpMaxEvents);
-        if (rn > 0)
+        // FLOW Off / not-yet-built: release BOTH engines so nothing hangs, clear SEQ locks +
+        // mod sources, then pass the raw MIDI straight through.
+        wc::ArpEvent arel[wc::kArpMaxEvents]; const int an   = flowArp.releaseAll (arel, wc::kArpMaxEvents);
+        wc::SeqEvent srel[wc::kSeqMaxEvents]; const int seqn = flowSeq.releaseAll (srel, wc::kSeqMaxEvents);
+        flowSeq.clearLocks();
+        for (auto& s : seqModSource_) s = 0.0f;
+        if (an > 0 || seqn > 0)
         {
             juce::MidiBuffer mixed;
             mixed.addEvents (midiMessages, 0, numSamples, 0);
-            for (int i = 0; i < rn; ++i)
-                mixed.addEvent (juce::MidiMessage::noteOff (1, rel[i].note), 0);
+            for (int i = 0; i < an;   ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, arel[i].note), 0);
+            for (int i = 0; i < seqn; ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, srel[i].note), 0);
             synthEngine.renderNextBlock (synthScratch, mixed, 0, numSamples);
         }
         else

@@ -3377,9 +3377,10 @@ body {
 #syn-panel .osc-sn { display: inline-flex; gap: 5px; }
 #syn-panel .osc-sn .sn-chip {
   width: 14px; height: 14px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: 3px;
-  background: transparent; display: inline-flex; align-items: center; justify-content: center;
-  line-height: 1; font-size: 9px; font-weight: 600; color: var(--text-secondary); cursor: pointer; -webkit-font-smoothing: antialiased;
-  padding-top: 2px;   /* optical centering: caps reserve empty descender space below baseline -> nudge glyph down */
+  background: transparent; display: inline-grid; place-items: center;
+  line-height: 1; font-size: 9px; font-weight: 600; letter-spacing: 0; text-indent: 0;
+  color: var(--text-secondary); cursor: pointer; -webkit-font-smoothing: antialiased;
+  padding: 1.5px 0 0 0;   /* optical centering: caps sit ~0.75px high in the line box -> nudge glyph down to true center */
   transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
 }
 #syn-panel .osc-sn .sn-chip:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
@@ -3393,12 +3394,12 @@ body {
    S/N chips so the three header boxes are uniform + symmetric; no active highlight = looks the
    same whichever sibling is showing. */
 #syn-panel .device-label .osc-letter {
-  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  display: inline-grid; place-items: center; box-sizing: border-box;
   width: 14px; height: 14px; margin-left: 3px; vertical-align: middle;
   border: 1px solid var(--border-strong); border-radius: 3px; background: transparent;
   line-height: 1; font-size: 9px; font-weight: 600; letter-spacing: 0; text-indent: 0;
   color: var(--text-secondary); cursor: pointer; -webkit-font-smoothing: antialiased;
-  padding-top: 2px;   /* optical centering: caps reserve empty descender space below baseline -> nudge glyph down */
+  padding: 1.5px 0 0 0;   /* optical centering: caps sit ~0.75px high in the line box -> nudge glyph down to true center */
   transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
 }
 #syn-panel .device-label .osc-letter:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
@@ -4989,14 +4990,14 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (icon style — identical to OSC A/B; data-eng-c-idx avoids handler collision) -->
+              <!-- engine pills row (TEXT legend — C/D = legend, A/B = emblem; data-eng-c-idx avoids handler collision) -->
               <div class="engine-pills">
-                <div class="eng act" data-eng-c-idx="0"><svg><use href="#ic-wt"/></svg></div>
-                <div class="eng" data-eng-c-idx="1"><svg><use href="#ic-samp"/></svg></div>
-                <div class="eng" data-eng-c-idx="2"><svg><use href="#ic-gran"/></svg></div>
-                <div class="eng" data-eng-c-idx="3"><svg><use href="#ic-spec"/></svg></div>
-                <div class="eng" data-eng-c-idx="4"><svg><use href="#ic-fm"/></svg></div>
-                <div class="eng" data-eng-c-idx="5"><svg><use href="#ic-analog"/></svg></div>
+                <div class="eng txt act" data-eng-c-idx="0">WT</div>
+                <div class="eng txt" data-eng-c-idx="1">Samp</div>
+                <div class="eng txt" data-eng-c-idx="2">Gran</div>
+                <div class="eng txt" data-eng-c-idx="3">Spec</div>
+                <div class="eng txt" data-eng-c-idx="4">FM</div>
+                <div class="eng txt" data-eng-c-idx="5">ANLG</div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
@@ -5141,14 +5142,14 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (icon style — identical to OSC A/B; data-eng-d-idx avoids handler collision) -->
+              <!-- engine pills row (TEXT legend — C/D = legend, A/B = emblem; data-eng-d-idx avoids handler collision) -->
               <div class="engine-pills">
-                <div class="eng act" data-eng-d-idx="0"><svg><use href="#ic-wt"/></svg></div>
-                <div class="eng" data-eng-d-idx="1"><svg><use href="#ic-samp"/></svg></div>
-                <div class="eng" data-eng-d-idx="2"><svg><use href="#ic-gran"/></svg></div>
-                <div class="eng" data-eng-d-idx="3"><svg><use href="#ic-spec"/></svg></div>
-                <div class="eng" data-eng-d-idx="4"><svg><use href="#ic-fm"/></svg></div>
-                <div class="eng" data-eng-d-idx="5"><svg><use href="#ic-analog"/></svg></div>
+                <div class="eng txt act" data-eng-d-idx="0">WT</div>
+                <div class="eng txt" data-eng-d-idx="1">Samp</div>
+                <div class="eng txt" data-eng-d-idx="2">Gran</div>
+                <div class="eng txt" data-eng-d-idx="3">Spec</div>
+                <div class="eng txt" data-eng-d-idx="4">FM</div>
+                <div class="eng txt" data-eng-d-idx="5">ANLG</div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
@@ -19036,10 +19037,13 @@ restoreThemeFromBackend();
     var labels=Array.prototype.slice.call(knobRow.querySelectorAll('.vis-knob .knob-label'));
 
     // live readout mapping — mirrors FlowArp.h exactly (ARP); shown on drag, label restored on release
-    var ARP_RATE_DIV=["1/1","1/2","1/4","1/8","1/16","1/32","1/64","1/128","1/256"];
-    var ARP_TRAJ=["UP","UP·2","UP-DN·2","CONV·2","DN·3","UP-DN·3","RAND·4"];
+    var ARP_RATE_DIV=["1/1","1/2","1/4","1/8","1/16","1/32","1/64","1/128","1/256"];   // SEQ + non-ARP (straight, mirrors kArpRate)
+    // ARP rich ladder — MUST mirror kArpRateRich[] in FlowArp.h (same order + count = 19): straight + dotted(.) + triplet(T).
+    var RATE_DIV_RICH=["1/1","1/2.","1/2","1/4.","1/2T","1/4","1/8.","1/4T","1/8","1/16.","1/8T","1/16","1/32.","1/16T","1/32","1/32T","1/64","1/128","1/256"];
+    var ARP_TRAJ=["UP","DN","UP-DN","UP·2","DN·2","UP-DN·2","CONV·2","UP·3","DN·3","UP-DN·3","CONV·3","RAND·4"];   // mirrors kArpTraj[] (12 presets)
     function arpReadout(suf,norm){ var q=function(N){return Math.max(0,Math.min(N-1,Math.round(norm*(N-1))));};
-      switch(suf){ case 'RATE': return ARP_RATE_DIV[q(ARP_RATE_DIV.length)];
+      var rateDiv=(displayMode==='arp')?RATE_DIV_RICH:ARP_RATE_DIV;
+      switch(suf){ case 'RATE': return rateDiv[q(rateDiv.length)];
                    case 'GATE': return Math.round((0.05+0.93*norm)*100)+'%';
                    case 'VARY': return Math.round(norm*100)+'%';
                    case 'TRAJ': return ARP_TRAJ[q(ARP_TRAJ.length)];

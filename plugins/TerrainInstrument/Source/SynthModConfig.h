@@ -31,6 +31,7 @@ enum class ModSource : int
     EnvAmp, EnvFilter,         // the two "always-on" envelopes
     EnvMod1, EnvMod2,          // the spare envelopes
     Velocity, Note,            // (Batch 2+)
+    SeqMod1, SeqMod2, SeqMod3, SeqMod4,   // FLOW·SEQ mod lanes (block-rate bipolar) — append-only (§3)
     NumSources
 };
 static constexpr int NUM_LFOS = 10;

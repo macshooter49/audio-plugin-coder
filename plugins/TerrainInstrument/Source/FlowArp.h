@@ -47,11 +47,41 @@ inline int    arpClampi  (int v, int lo, int hi) noexcept { return v < lo ? lo :
 inline int    arpQuantIdx(float norm, int n) noexcept     { return arpClampi((int) std::lround (arpClamp01(norm) * (float)(n - 1)), 0, n - 1); }
 
 // ── RATE: knob -> beats-per-step (quarter-note units). Quantized, musical. ───
-//    1/1 … 1/256 straight (dotted/triplet live in the card). The top end is a
-//    creative extreme — at 120 BPM, 1/256 ≈ 128 Hz, a near-static buzz.
+//    Straight ladder 1/1 … 1/256. The SEQ engine uses THIS via arpBeatsPerStep
+//    (kept stable so FlowSeq + its proof are untouched). The ARP front knob uses
+//    the RICH ladder below (straight + dotted + triplet).
 static constexpr float kArpRate[] = { 4.0f, 2.0f, 1.0f, 0.5f, 0.25f, 0.125f, 0.0625f, 0.03125f, 0.015625f };
 static constexpr int   kArpRateN  = (int) (sizeof (kArpRate) / sizeof (float));
 inline float arpBeatsPerStep (float rateKnob) noexcept { return kArpRate[ arpQuantIdx (rateKnob, kArpRateN) ]; }
+
+// ── RATE (RICH): the ARP front-knob ladder — straight + dotted (.) + triplet (T),
+//    1/1 … 1/256, ordered slow→fast (descending beats, strictly monotonic so the
+//    knob always speeds up as it climbs). Dotted = ×1.5, triplet = ×2/3. The UI
+//    readout RATE_DIV_RICH must stay byte-for-byte in lockstep with this list
+//    (same order + count) — picture == sound. Top end (1/256 ≈ 128 Hz @120BPM) buzzes.
+static constexpr float kArpRateRich[] = {
+    4.0f,             // 1/1
+    3.0f,             // 1/2.   dotted half
+    2.0f,             // 1/2
+    1.5f,             // 1/4.   dotted quarter
+    2.0f*2.0f/3.0f,   // 1/2T   half triplet    (1.3333)
+    1.0f,             // 1/4
+    0.75f,            // 1/8.   dotted eighth
+    1.0f*2.0f/3.0f,   // 1/4T   quarter triplet (0.6667)
+    0.5f,             // 1/8
+    0.375f,           // 1/16.  dotted sixteenth
+    0.5f*2.0f/3.0f,   // 1/8T   eighth triplet  (0.3333)
+    0.25f,            // 1/16
+    0.1875f,          // 1/32.  dotted 32nd
+    0.25f*2.0f/3.0f,  // 1/16T  sixteenth triplet (0.16667)
+    0.125f,           // 1/32
+    0.125f*2.0f/3.0f, // 1/32T  32nd triplet    (0.08333)
+    0.0625f,          // 1/64
+    0.03125f,         // 1/128
+    0.015625f         // 1/256
+};
+static constexpr int   kArpRateRichN  = (int) (sizeof (kArpRateRich) / sizeof (float));
+inline float arpBeatsPerStepRich (float rateKnob) noexcept { return kArpRateRich[ arpQuantIdx (rateKnob, kArpRateRichN) ]; }
 
 // ── GATE: knob -> note length as fraction of the step (5%..98%). ─────────────
 inline float arpGateFrac (float gateKnob) noexcept { return 0.05f + 0.93f * arpClamp01 (gateKnob); }
@@ -61,11 +91,16 @@ enum class ArpDir : int { Up = 0, Down, UpDown, Converge, Random };
 struct TrajPreset { ArpDir dir; int octaves; };
 static constexpr TrajPreset kArpTraj[] = {
     { ArpDir::Up,       1 },   // 0.00  tight, rising
+    { ArpDir::Down,     1 },
+    { ArpDir::UpDown,   1 },
     { ArpDir::Up,       2 },
+    { ArpDir::Down,     2 },
     { ArpDir::UpDown,   2 },
     { ArpDir::Converge, 2 },
+    { ArpDir::Up,       3 },
     { ArpDir::Down,     3 },
     { ArpDir::UpDown,   3 },
+    { ArpDir::Converge, 3 },
     { ArpDir::Random,   4 },   // 1.00  wide, chaotic
 };
 static constexpr int kArpTrajN = (int) (sizeof (kArpTraj) / sizeof (TrajPreset));
@@ -287,7 +322,7 @@ public:
             return n;
         }
 
-        const float beats = arpBeatsPerStep (rate);
+        const float beats = arpBeatsPerStepRich (rate);   // ARP uses the rich straight/dotted/triplet ladder
         const float gFrac = arpGateFrac (gate);
 
         StepHit hits[kArpMaxEvents];

@@ -44,6 +44,15 @@ int main()
         for (int i = 0; i <= 20; ++i) { float b = arpBeatsPerStep (i / 20.0f); if (b > prev + 1e-6f) mono = false; prev = b; }
         check (mono, "RATE knob monotonic (faster as it climbs)");
     }
+    // RATE (rich) — the ARP front-knob ladder: straight + dotted + triplet, endpoints + monotonic.
+    check (arpBeatsPerStepRich (0.0f) == 4.0f,      "RICH RATE=0 -> 1/1");
+    check (arpBeatsPerStepRich (1.0f) == 0.015625f, "RICH RATE=1 -> 1/256");
+    check (kArpRateRichN == 19,                     "RICH ladder has 19 divisions (straight+dotted+triplet)");
+    {
+        bool mono = true; float prev = 1e9f;
+        for (int i = 0; i < kArpRateRichN; ++i) { float b = kArpRateRich[i]; if (b >= prev) mono = false; prev = b; }
+        check (mono, "RICH ladder strictly descending (every division distinct + monotonic)");
+    }
 
     // 2) GATE -------------------------------------------------------------
     std::printf ("[2] GATE -> note length fraction\n");
