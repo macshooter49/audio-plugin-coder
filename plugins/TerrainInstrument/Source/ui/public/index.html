@@ -3324,11 +3324,11 @@ body {
 /* ── P4-T10: swap-state UI — + button, label row, preset corner, engine-controls ── */
 #syn-panel .device-label-row {
   position: absolute; top: 6px; left: 17px;   /* +3 to align visible "O" stroke with WT pill border (font bearing comp.) */
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 5px;   /* uniform letter->S gap; matches osc-sn S->N gap for a symmetric 3-box header */
   z-index: 1;
 }
 #syn-panel .device-label-row .device-label {
-  position: static;
+  position: static; display: inline-flex; align-items: center;
 }
 
 #syn-panel .swap-btn {
@@ -3374,11 +3374,12 @@ body {
 }
 #syn-panel .device-corner-preset .preset-wrap { position: relative; display: inline-block; }  /* select overlay covers only the name, not the + */
 /* S / N chips (Sub / Noise) — where the + used to be; tight + symmetric */
-#syn-panel .osc-sn { display: inline-flex; gap: 4px; }
+#syn-panel .osc-sn { display: inline-flex; gap: 5px; }
 #syn-panel .osc-sn .sn-chip {
-  width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: 3px;
-  background: transparent; display: grid; place-items: center;
-  font-size: 8.5px; font-weight: 500; color: var(--text-secondary); cursor: pointer;
+  width: 14px; height: 14px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: 3px;
+  background: transparent; display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1; font-size: 9px; font-weight: 600; color: var(--text-secondary); cursor: pointer; -webkit-font-smoothing: antialiased;
+  padding-top: 2px;   /* optical centering: caps reserve empty descender space below baseline -> nudge glyph down */
   transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
 }
 #syn-panel .osc-sn .sn-chip:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
@@ -3388,8 +3389,19 @@ body {
 #syn-panel .osc-slot > .device.osc { flex: 1; min-height: 0; }
 #syn-panel .device.osc.osc-hidden { display: none; }
 /* clickable letter that toggles A<->B / C<->D within the slot */
-#syn-panel .device-label .osc-letter { cursor: pointer; padding: 0 3px; border-radius: 3px; transition: color .12s ease, background .12s ease, box-shadow .12s ease; }
-#syn-panel .device-label .osc-letter:hover { color: var(--purple-400); background: rgba(139,92,246,0.18); box-shadow: 0 0 6px rgba(139,92,246,0.35); }
+/* the letter is the easter-egg "seamless switch" (A<->B / C<->D). Styled IDENTICALLY to the
+   S/N chips so the three header boxes are uniform + symmetric; no active highlight = looks the
+   same whichever sibling is showing. */
+#syn-panel .device-label .osc-letter {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  width: 14px; height: 14px; margin-left: 3px; vertical-align: middle;
+  border: 1px solid var(--border-strong); border-radius: 3px; background: transparent;
+  line-height: 1; font-size: 9px; font-weight: 600; letter-spacing: 0; text-indent: 0;
+  color: var(--text-secondary); cursor: pointer; -webkit-font-smoothing: antialiased;
+  padding-top: 2px;   /* optical centering: caps reserve empty descender space below baseline -> nudge glyph down */
+  transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
+}
+#syn-panel .device-label .osc-letter:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
 #syn-panel .preset-display {
   /* visible label — its RIGHT edge sits at right:14 (same as rightmost pill border) */
   display: block;
@@ -4747,7 +4759,7 @@ body {
               </div>
             </div>
           </div>
-          <div class="device osc" id="osc-b-device">
+          <div class="device osc osc-hidden" id="osc-b-device">
             <div class="device-label-row">
               <div class="device-label">Osc · <span class="osc-letter" data-slot="ab" title="Toggle">B</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
@@ -4977,14 +4989,14 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (text style, data-eng-c-idx to avoid OSC A handler collision) -->
+              <!-- engine pills row (icon style — identical to OSC A/B; data-eng-c-idx avoids handler collision) -->
               <div class="engine-pills">
-                <div class="eng txt act" data-eng-c-idx="0">WT</div>
-                <div class="eng txt" data-eng-c-idx="1">Samp</div>
-                <div class="eng txt" data-eng-c-idx="2">Gran</div>
-                <div class="eng txt" data-eng-c-idx="3">Spec</div>
-                <div class="eng txt" data-eng-c-idx="4">FM</div>
-                <div class="eng txt" data-eng-c-idx="5">ANLG</div>
+                <div class="eng act" data-eng-c-idx="0"><svg><use href="#ic-wt"/></svg></div>
+                <div class="eng" data-eng-c-idx="1"><svg><use href="#ic-samp"/></svg></div>
+                <div class="eng" data-eng-c-idx="2"><svg><use href="#ic-gran"/></svg></div>
+                <div class="eng" data-eng-c-idx="3"><svg><use href="#ic-spec"/></svg></div>
+                <div class="eng" data-eng-c-idx="4"><svg><use href="#ic-fm"/></svg></div>
+                <div class="eng" data-eng-c-idx="5"><svg><use href="#ic-analog"/></svg></div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
@@ -5067,9 +5079,9 @@ body {
               </div>
             </div>
           </div>
-          <div class="device osc" id="osc-d-device">
+          <div class="device osc osc-hidden" id="osc-d-device">
             <div class="device-label-row">
-              <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">C</span></div>
+              <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">D</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -5129,14 +5141,14 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (text style, data-eng-d-idx to avoid OSC A handler collision) -->
+              <!-- engine pills row (icon style — identical to OSC A/B; data-eng-d-idx avoids handler collision) -->
               <div class="engine-pills">
-                <div class="eng txt act" data-eng-d-idx="0">WT</div>
-                <div class="eng txt" data-eng-d-idx="1">Samp</div>
-                <div class="eng txt" data-eng-d-idx="2">Gran</div>
-                <div class="eng txt" data-eng-d-idx="3">Spec</div>
-                <div class="eng txt" data-eng-d-idx="4">FM</div>
-                <div class="eng txt" data-eng-d-idx="5">ANLG</div>
+                <div class="eng act" data-eng-d-idx="0"><svg><use href="#ic-wt"/></svg></div>
+                <div class="eng" data-eng-d-idx="1"><svg><use href="#ic-samp"/></svg></div>
+                <div class="eng" data-eng-d-idx="2"><svg><use href="#ic-gran"/></svg></div>
+                <div class="eng" data-eng-d-idx="3"><svg><use href="#ic-spec"/></svg></div>
+                <div class="eng" data-eng-d-idx="4"><svg><use href="#ic-fm"/></svg></div>
+                <div class="eng" data-eng-d-idx="5"><svg><use href="#ic-analog"/></svg></div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
@@ -9721,7 +9733,14 @@ setTimeout(function wireSynControls () {
         slot.querySelectorAll('.osc-letter').forEach(function(letter){
           letter.addEventListener('click', function(ev){
             ev.preventDefault(); ev.stopPropagation();
-            slot.querySelectorAll('.device.osc').forEach(function(d){ d.classList.toggle('osc-hidden'); });
+            // The clicked letter lives inside the currently-shown device. Flip to its
+            // sibling: hide this device, reveal the other(s) in the slot. Explicit (not a
+            // blind dual-toggle) so the slot can never collapse to neither/both shown.
+            var current = letter.closest('.device.osc');
+            slot.querySelectorAll('.device.osc').forEach(function(d){
+              // hide the panel you clicked (currently shown), reveal its sibling
+              d.classList.toggle('osc-hidden', d === current);
+            });
           });
         });
       });
