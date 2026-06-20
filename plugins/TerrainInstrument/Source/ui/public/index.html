@@ -3661,6 +3661,16 @@ body {
 #syn-panel .device.flow { background: transparent; border: none; overflow: visible; padding: 8px 0 0; }
 #syn-panel .flow { display: grid; grid-template-columns: 1fr 200px; gap: 12px; }
 #syn-panel .flow-modes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 9px; }
+/* CHOP glass menu — right-click the mode badge → BLEND dry/wet (product-emblem aesthetic) */
+#syn-panel .flow-glass { position: absolute; z-index: 60; display: none; min-width: 134px; padding: 9px 11px 11px;
+  background: rgba(26,26,46,0.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: 0 8px 26px rgba(0,0,0,0.5); }
+#syn-panel .flow-glass.act { display: block; }
+#syn-panel .flow-glass .fg-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+#syn-panel .flow-glass .fg-label { font-size: 9px; letter-spacing: 1.6px; color: var(--text-secondary); font-weight: 400; }
+#syn-panel .flow-glass .fg-val { font-size: 9px; color: #FFFFFF; font-variant-numeric: tabular-nums; }
+#syn-panel .flow-glass .fg-track { position: relative; height: 6px; border-radius: 3px; background: rgba(120,118,160,0.30); cursor: ew-resize; overflow: hidden; }
+#syn-panel .flow-glass .fg-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 60%; background: var(--purple-500); box-shadow: 0 0 6px rgba(139,92,246,0.6); }
 #syn-panel .flow-mode {
   position: relative; min-height: 56px; border-radius: 11px; cursor: pointer;
   border: 1px solid rgba(255,255,255,0.10);
@@ -5274,6 +5284,11 @@ body {
           </div>
 
           <div class="device flow" id="flow-device" data-mode="arp">
+            <!-- CHOP glass menu (right-click the Chop badge) — BLEND dry/wet -->
+            <div class="flow-glass" id="flow-glass">
+              <div class="fg-row"><span class="fg-label">Blend</span><span class="fg-val" id="fg-blend-val">60%</span></div>
+              <div class="fg-track" id="fg-blend-track"><div class="fg-fill" id="fg-blend-fill"></div></div>
+            </div>
             <div class="flow-modes" id="flow-modes">
               <!-- ARP -->
               <div class="flow-mode act" data-mode="arp" title="Arp">
@@ -5289,7 +5304,7 @@ body {
                 </svg>
               </div>
               <!-- SEQ -->
-              <div class="flow-mode" data-mode="seq" title="Seq">
+              <div class="flow-mode" data-mode="chop" title="Chop">
                 <span class="clip"><span class="orbit"></span></span>
                 <svg class="emb" viewBox="0 0 42 42">
                   <g class="dot" fill="currentColor">
@@ -5339,7 +5354,7 @@ body {
                   <line class="playhead whiteline" x1="32" y1="4" x2="32" y2="74" stroke="rgba(255,255,255,0.85)" stroke-width="1"/>
                 </svg>
                 <!-- SEQ -->
-                <svg class="vis-layer" data-vis="seq" viewBox="0 0 188 78" preserveAspectRatio="none">
+                <svg class="vis-layer" data-vis="chop" viewBox="0 0 188 78" preserveAspectRatio="none">
                   <line x1="12" y1="64" x2="176" y2="64" stroke="rgba(236,232,242,0.12)" stroke-width="0.6"/>
                   <g class="glowline" fill="rgba(183,148,255,0.9)">
                     <rect x="18" y="30" width="13" height="34" rx="2"/><rect x="38" y="44" width="13" height="20" rx="2"/><rect x="58" y="18" width="13" height="46" rx="2"/><rect x="78" y="38" width="13" height="26" rx="2"/>
@@ -19022,16 +19037,16 @@ restoreThemeFromBackend();
     var exp=document.getElementById('flow-exp');
     var KLAB={
       arp:['Rate','Gate','Vary','Traj','Morph'],
-      seq:['Rate','Slew','Chance','Order','Pattern'],
+      chop:['Rate','Gate','Vary','Style','Morph'],
       glitch:['Grid','Window','Glitch','Repeat','Pitch'],
       drift:['Rate','Smooth','Chaos','Dims','Spread']
     };
 
     // ── APVTS param wiring (per-mode knob memory + Off/deselect + live readouts) ──
     var J = (window.Juce && window.Juce.getSliderState) ? window.Juce : null;
-    var MP={arp:'FLOW_ARP',seq:'FLOW_SEQ',glitch:'FLOW_GLI',drift:'FLOW_DRF'};
+    var MP={arp:'FLOW_ARP',chop:'FLOW_SEQ',glitch:'FLOW_GLI',drift:'FLOW_DRF'};   // chop reuses the mode-2 FLOW_SEQ_* params
     var SUF=['RATE','GATE','VARY','TRAJ','MORPH'];
-    var CHOICES=['off','arp','seq','glitch','drift'];   // mirrors FLOW_MODE (Off=0)
+    var CHOICES=['off','arp','chop','glitch','drift'];   // mirrors FLOW_MODE (Off=0); idx2 = Chop (replaced Seq)
     var curChoice='off', displayMode='arp';             // displayMode = last selected (drives vis/knobs/labels)
     var rings=Array.prototype.slice.call(knobRow.querySelectorAll('.vis-knob .knob-ring'));
     var labels=Array.prototype.slice.call(knobRow.querySelectorAll('.vis-knob .knob-label'));
@@ -19041,12 +19056,14 @@ restoreThemeFromBackend();
     // ARP rich ladder — MUST mirror kArpRateRich[] in FlowArp.h (same order + count = 19): straight + dotted(.) + triplet(T).
     var RATE_DIV_RICH=["1/1","1/2.","1/2","1/4.","1/2T","1/4","1/8.","1/4T","1/8","1/16.","1/8T","1/16","1/32.","1/16T","1/32","1/32T","1/64","1/128","1/256"];
     var ARP_TRAJ=["UP","DN","UP-DN","UP·2","DN·2","UP-DN·2","CONV·2","UP·3","DN·3","UP-DN·3","CONV·3","RAND·4"];   // mirrors kArpTraj[] (12 presets)
+    var CHOP_STYLES=["FWD","REV","SHUF","PING","ROLL","SPRAY"];   // mirrors ChopStyle / chopStyle(traj) (6 flip styles)
     function arpReadout(suf,norm){ var q=function(N){return Math.max(0,Math.min(N-1,Math.round(norm*(N-1))));};
       var rateDiv=(displayMode==='arp')?RATE_DIV_RICH:ARP_RATE_DIV;
+      var trajArr=(displayMode==='chop')?CHOP_STYLES:ARP_TRAJ;
       switch(suf){ case 'RATE': return rateDiv[q(rateDiv.length)];
                    case 'GATE': return Math.round((0.05+0.93*norm)*100)+'%';
                    case 'VARY': return Math.round(norm*100)+'%';
-                   case 'TRAJ': return ARP_TRAJ[q(ARP_TRAJ.length)];
+                   case 'TRAJ': return trajArr[q(trajArr.length)];
                    case 'MORPH':return Math.round(norm*100)+'%'; } return ''; }
     function setLabel(i,txt){ if(labels[i]) labels[i].textContent=txt; }
     function restoreLabel(i){ var labs=KLAB[displayMode]||KLAB.arp; setLabel(i, labs[i]||''); }
@@ -19070,7 +19087,7 @@ restoreThemeFromBackend();
         document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); e.preventDefault(); });
     })(rings[ri], ri); }
     // reverse-sync: DAW automation / preset recall repaints the display mode's rings
-    if(J){ ['arp','seq','glitch','drift'].forEach(function(mode){ SUF.forEach(function(s,i){ var st=null; try{ st=J.getSliderState(MP[mode]+'_'+s);}catch(e){}
+    if(J){ ['arp','chop','glitch','drift'].forEach(function(mode){ SUF.forEach(function(s,i){ var st=null; try{ st=J.getSliderState(MP[mode]+'_'+s);}catch(e){}
       if(st&&st.valueChangedEvent&&st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(function(){ if(mode===displayMode){ try{ applyFill(rings[i], st.getNormalisedValue()); }catch(e){} } }); }); }); }
 
     // FLOW_MODE param (Off · Arp · Seq · Glitch · Drift) <-> emblems
@@ -19100,6 +19117,31 @@ restoreThemeFromBackend();
       var m=t.getAttribute('data-mode'); applyChoice(curChoice===m ? 'off' : m); }); });
     // init from the FLOW_MODE param (preset/automation), else Off
     (function(){ var c='off'; if(modeState&&modeState.getNormalisedValue){ try{ c=CHOICES[Math.round(modeState.getNormalisedValue()*(CHOICES.length-1))]||'off'; }catch(e){} } applyChoice(c,true); })();
+
+    /* ── CHOP glass menu — right-click the Chop badge → BLEND dry/wet (FLOW_CHOP_BLEND, default 60%) ── */
+    (function(){
+      try{
+        var glass=document.getElementById('flow-glass'); if(!glass) return;
+        var track=document.getElementById('fg-blend-track'), fill=document.getElementById('fg-blend-fill'), bval=document.getElementById('fg-blend-val');
+        var bState=null; if(J){ try{ bState=J.getSliderState('FLOW_CHOP_BLEND'); }catch(e){} }
+        function curN(){ return (bState&&bState.getNormalisedValue)?bState.getNormalisedValue():0.6; }
+        function paint(n){ n=Math.max(0,Math.min(1,n)); fill.style.width=(n*100).toFixed(1)+'%'; if(bval) bval.textContent=Math.round(n*100)+'%'; }
+        paint(curN());
+        if(bState&&bState.valueChangedEvent&&bState.valueChangedEvent.addListener) bState.valueChangedEvent.addListener(function(){ paint(curN()); });
+        var chopTile=modes.querySelector('.flow-mode[data-mode="chop"]');
+        if(chopTile) chopTile.addEventListener('contextmenu', function(e){ e.preventDefault(); e.stopPropagation();
+          var hr=dev.getBoundingClientRect(), tr=chopTile.getBoundingClientRect();
+          glass.style.left=Math.max(4,(tr.left-hr.left))+'px'; glass.style.top=(tr.bottom-hr.top+5)+'px';
+          paint(curN()); glass.classList.add('act'); });
+        function setFromX(cx){ var r=track.getBoundingClientRect(); if(r.width<=0)return; var n=Math.max(0,Math.min(1,(cx-r.left)/r.width)); paint(n); if(bState){ try{ bState.setNormalisedValue(n); }catch(_){} } }
+        var drag=false;
+        track.addEventListener('pointerdown', function(e){ drag=true; setFromX(e.clientX); try{ track.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); e.stopPropagation(); });
+        track.addEventListener('pointermove', function(e){ if(drag) setFromX(e.clientX); });
+        track.addEventListener('pointerup', function(){ drag=false; });
+        track.addEventListener('dblclick', function(e){ if(bState){ try{ bState.setNormalisedValue(0.6); }catch(_){} } paint(0.6); e.preventDefault(); });
+        document.addEventListener('pointerdown', function(e){ if(glass.classList.contains('act') && !glass.contains(e.target) && !(chopTile&&chopTile.contains(e.target))) glass.classList.remove('act'); });
+      } catch(eGlass){ console.warn('[FLOW-glass] init failed', eGlass); }
+    })();
 
     /* ───────── ARP extension card ───────── */
     var N=16, ROWS=7, X0=34, XW=290-X0-4, sw=XW/N, Y0=8, Y1=84, rh=(Y1-Y0)/(ROWS-1);

@@ -148,6 +148,7 @@ namespace ParameterIDs
     constexpr char FLOW_DRF_RATE[] = "FLOW_DRF_RATE";  constexpr char FLOW_DRF_GATE[] = "FLOW_DRF_GATE";
     constexpr char FLOW_DRF_VARY[] = "FLOW_DRF_VARY";  constexpr char FLOW_DRF_TRAJ[] = "FLOW_DRF_TRAJ";
     constexpr char FLOW_DRF_MORPH[]= "FLOW_DRF_MORPH";
+    constexpr char FLOW_CHOP_BLEND[]= "FLOW_CHOP_BLEND";  // float 0..1 — CHOP dry/wet (glass menu); default 0.60
     constexpr char SYN_ENV_AMP_A[]     = "SYN_ENV_AMP_A";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_D[]     = "SYN_ENV_AMP_D";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1

@@ -367,6 +367,7 @@ private:
     juce::WebSliderRelay flowArpLatchRelay  { ParameterIDs::FLOW_ARP_LATCH };
     juce::WebSliderRelay flowArpRateRelay { ParameterIDs::FLOW_ARP_RATE }; juce::WebSliderRelay flowArpGateRelay { ParameterIDs::FLOW_ARP_GATE }; juce::WebSliderRelay flowArpVaryRelay { ParameterIDs::FLOW_ARP_VARY }; juce::WebSliderRelay flowArpTrajRelay { ParameterIDs::FLOW_ARP_TRAJ }; juce::WebSliderRelay flowArpMorphRelay { ParameterIDs::FLOW_ARP_MORPH };
     juce::WebSliderRelay flowSeqRateRelay { ParameterIDs::FLOW_SEQ_RATE }; juce::WebSliderRelay flowSeqGateRelay { ParameterIDs::FLOW_SEQ_GATE }; juce::WebSliderRelay flowSeqVaryRelay { ParameterIDs::FLOW_SEQ_VARY }; juce::WebSliderRelay flowSeqTrajRelay { ParameterIDs::FLOW_SEQ_TRAJ }; juce::WebSliderRelay flowSeqMorphRelay { ParameterIDs::FLOW_SEQ_MORPH };
+    juce::WebSliderRelay flowChopBlendRelay { ParameterIDs::FLOW_CHOP_BLEND };   // CHOP dry/wet (glass menu)
     juce::WebSliderRelay flowGliRateRelay { ParameterIDs::FLOW_GLI_RATE }; juce::WebSliderRelay flowGliGateRelay { ParameterIDs::FLOW_GLI_GATE }; juce::WebSliderRelay flowGliVaryRelay { ParameterIDs::FLOW_GLI_VARY }; juce::WebSliderRelay flowGliTrajRelay { ParameterIDs::FLOW_GLI_TRAJ }; juce::WebSliderRelay flowGliMorphRelay { ParameterIDs::FLOW_GLI_MORPH };
     juce::WebSliderRelay flowDrfRateRelay { ParameterIDs::FLOW_DRF_RATE }; juce::WebSliderRelay flowDrfGateRelay { ParameterIDs::FLOW_DRF_GATE }; juce::WebSliderRelay flowDrfVaryRelay { ParameterIDs::FLOW_DRF_VARY }; juce::WebSliderRelay flowDrfTrajRelay { ParameterIDs::FLOW_DRF_TRAJ }; juce::WebSliderRelay flowDrfMorphRelay { ParameterIDs::FLOW_DRF_MORPH };
 
@@ -707,6 +708,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> flowModeAttachment, flowArpLatchAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> flowArpRateAttachment, flowArpGateAttachment, flowArpVaryAttachment, flowArpTrajAttachment, flowArpMorphAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> flowSeqRateAttachment, flowSeqGateAttachment, flowSeqVaryAttachment, flowSeqTrajAttachment, flowSeqMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> flowChopBlendAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> flowGliRateAttachment, flowGliGateAttachment, flowGliVaryAttachment, flowGliTrajAttachment, flowGliMorphAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> flowDrfRateAttachment, flowDrfGateAttachment, flowDrfVaryAttachment, flowDrfTrajAttachment, flowDrfMorphAttachment;
 

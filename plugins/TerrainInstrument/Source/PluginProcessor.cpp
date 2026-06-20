@@ -1886,7 +1886,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── FLOW ───────────────────────────────────────────────────────────────
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_MODE, 1 }, "Flow Mode",
-        juce::StringArray { "Off", "Arp", "Seq", "Glitch", "Drift" }, 0));   // 0 = Off (nothing on at load)
+        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Drift" }, 0));   // 0 = Off; mode 2 = CHOP (replaced Seq)
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_LATCH, 1 }, "Arp Latch", false));
     auto addFlowKnob = [&] (const char* id, const char* name, float def) {
@@ -1895,9 +1895,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_ARP_RATE,"Arp Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_ARP_GATE,"Arp Gate",0.55f);
     addFlowKnob (ParameterIDs::FLOW_ARP_VARY,"Arp Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_TRAJ,"Arp Traj",0.00f);
     addFlowKnob (ParameterIDs::FLOW_ARP_MORPH,"Arp Morph",0.00f);
-    addFlowKnob (ParameterIDs::FLOW_SEQ_RATE,"Seq Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_SEQ_GATE,"Seq Gate",0.55f);
-    addFlowKnob (ParameterIDs::FLOW_SEQ_VARY,"Seq Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_SEQ_TRAJ,"Seq Traj",0.00f);
-    addFlowKnob (ParameterIDs::FLOW_SEQ_MORPH,"Seq Morph",0.00f);
+    // mode-2 macros — IDs stay FLOW_SEQ_* (preset-stable) but now drive CHOP (Rate/Gate/Vary/Style/Morph)
+    addFlowKnob (ParameterIDs::FLOW_SEQ_RATE,"Chop Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_SEQ_GATE,"Chop Gate",0.55f);
+    addFlowKnob (ParameterIDs::FLOW_SEQ_VARY,"Chop Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_SEQ_TRAJ,"Chop Style",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_SEQ_MORPH,"Chop Morph",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_BLEND,"Chop Blend",0.60f);   // dry/wet — 60% so dry plays under the chop (zero-latency), wet on top
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);
     addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);
     addFlowKnob (ParameterIDs::FLOW_GLI_MORPH,"Glitch Morph",0.00f);
@@ -1995,6 +1997,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
 
     // FLOW · ARP — prepare the block-rate global LFO bank + reset the engine
     for (auto& l : flowLfo_) l.prepare (sampleRate);
+    chop.prepare (sampleRate, 4.0);   // FLOW · CHOP capture ring (4 s) — allocation happens here only
     flowArp.reset();
     if (modStateJson.isNotEmpty())
         modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
@@ -2973,7 +2976,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
         synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
     }
-    else if (flowMode == 2)   // ── SEQ (mode 2) — §1 process + §2 MIDI translate ──
+    else if (false)   // ── SEQ (dormant) — CHOP replaced it at mode 2; CHOP is an audio insert at end of processBlock (see below). Dead branch kept for now; remove when SEQ is fully retired. ──
     {
         // ARP inactive: drop anything it was holding (not rendering → no note-offs needed).
         { wc::ArpEvent arel[wc::kArpMaxEvents]; flowArp.releaseAll (arel, wc::kArpMaxEvents); }
@@ -3662,6 +3665,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // Update grain count for visualization
     activeGrainCount.store(grainEngineL.getActiveGrainCount() + grainEngineR.getActiveGrainCount());
+
+    // ── FLOW · CHOP (mode 2): audio insert — re-groove the fully-FX'd output IN PLACE,
+    //    click-free (FlowChop.h). MIDI passed through normally above; this chops the mix.
+    //    Engine defaults (AlwaysOn, 8 slices, full wet) groove out of the box; the 5 mode-2
+    //    macros (FLOW_SEQ_* IDs, now CHOP) ride it. Always call process so it free-runs when stopped.
+    if (flowMode == 2)
+    {
+        const float cRate  = flowKnob (ParameterIDs::FLOW_SEQ_RATE,  wc::ModDest::ChopRate);
+        const float cGate  = flowKnob (ParameterIDs::FLOW_SEQ_GATE,  wc::ModDest::ChopGate);
+        const float cVary  = flowKnob (ParameterIDs::FLOW_SEQ_VARY,  wc::ModDest::ChopVary);
+        const float cTraj  = flowKnob (ParameterIDs::FLOW_SEQ_TRAJ,  wc::ModDest::ChopTraj);
+        const float cMorph = flowKnob (ParameterIDs::FLOW_SEQ_MORPH, wc::ModDest::ChopMorph);
+        chop.setMix (flowBase (ParameterIDs::FLOW_CHOP_BLEND));   // dry/wet (glass menu); default 0.60
+        float* cl = buffer.getWritePointer (0);
+        float* cr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : cl;
+        chop.process (cRate, cGate, cVary, cTraj, cMorph,
+                      flowPpq, flowBpm, getSampleRate(), cl, cr, numSamples, flowPlaying);
+    }
 }
 
 //==============================================================================

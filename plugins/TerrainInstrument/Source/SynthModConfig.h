@@ -51,6 +51,7 @@ enum class ModDest : int
     FlowGate, FlowVary, FlowTraj, FlowMorph,            // FLOW knobs 2..5 (FlowTime already above) — append-only
     FrameC, WarpC, FoldC,      // OSC C wavetable frame / warp / fold (linear 0..1) — Phase 4B
     FrameD, WarpD, FoldD,      // OSC D wavetable frame / warp / fold (linear 0..1) — Phase 4B
+    ChopRate, ChopGate, ChopVary, ChopTraj, ChopMorph,   // FLOW · CHOP macros (mode 2) — append-only
     NumDests
 };
 
@@ -97,6 +98,11 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // FrameD
     { ModDomain::Linear01,  1.0f },  // WarpD
     { ModDomain::Linear01,  1.0f },  // FoldD
+    { ModDomain::Linear01,  1.0f },  // ChopRate
+    { ModDomain::Linear01,  1.0f },  // ChopGate
+    { ModDomain::Linear01,  1.0f },  // ChopVary
+    { ModDomain::Linear01,  1.0f },  // ChopTraj
+    { ModDomain::Linear01,  1.0f },  // ChopMorph
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──
