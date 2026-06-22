@@ -125,7 +125,7 @@ public:
         const double SR  = (sampleRate > 0.0 ? sampleRate : sr_);
         const double BP  = (bpm > 0.0 ? bpm : 120.0);
         const double pps = (BP / 60.0) / SR;
-        const float  beats = arpBeatsPerStep (rate);
+        const float  beats = arpBeatsPerStepRich (rate);
         const double stepSamp = (double) beats / pps;
         const double sw = (double) arpClamp01 (morph > 0.9f ? 0.9f : morph) * ((double) beats * 0.5);
 

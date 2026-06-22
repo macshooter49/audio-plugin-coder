@@ -2459,6 +2459,151 @@ body {
 .arp-ext .tog{height:24px;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:500;letter-spacing:.6px;color:#908599;cursor:pointer;}
 .arp-ext .tog.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
 
+/* ── FLOW · CHOP extension card — blue twin of .arp-ext (same shell/sizes, CHOP accent) ── */
+.chop-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;
+  box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;user-select:none;}
+.chop-ext.open{display:block;}
+.chop-ext .h{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.025);}
+.chop-ext .h.grab{cursor:grabbing;}
+.chop-ext .h .g{letter-spacing:2px;color:#4a4f68;font-size:10px;}
+.chop-ext .h .dot{width:6px;height:6px;border-radius:50%;background:#B794FF;box-shadow:0 0 6px rgba(183,148,255,.85);}
+.chop-ext .h .tt{font-size:9px;letter-spacing:1.8px;color:#C5BFD2;text-transform:uppercase;font-weight:600;}
+.chop-ext .h .tg{font-size:11px;color:#fff;font-weight:600;}
+.chop-ext .h .bl{margin-left:auto;font-size:8px;letter-spacing:1px;color:#908599;}
+.chop-ext .h .x{margin-left:10px;color:#908599;cursor:pointer;font-size:13px;}
+.chop-ext .b{padding:11px 13px 13px;display:flex;flex-direction:column;gap:11px;}
+.chop-ext .gl{font-size:8px;letter-spacing:1.4px;color:#6E6580;margin-bottom:6px;}
+.chop-ext .es{background:#12121F;border-radius:9px;position:relative;overflow:hidden;height:108px;cursor:crosshair;}
+.chop-ext .es svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;}
+.chop-ext .es .eh{position:absolute;top:5px;right:8px;font-size:7px;color:rgba(255,255,255,.45);letter-spacing:1px;pointer-events:none;}
+.chop-ext .es .ehl{position:absolute;top:5px;left:8px;font-size:7px;color:rgba(155,147,176,.6);letter-spacing:1px;pointer-events:none;}
+.chop-ext .glow{filter:drop-shadow(0 0 2px rgba(183,148,255,0.85));}
+.chop-ext .subtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.chop-ext .subtab{height:26px;border:1px solid rgba(140,130,180,0.45);border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:9px;letter-spacing:1.6px;color:#908599;cursor:pointer;font-weight:500;transition:.12s;}
+.chop-ext .subtab:hover{color:#C5BFD2;}
+.chop-ext .subtab.on{background:#8B5CF6;border-color:#8B5CF6;color:#fff;box-shadow:0 0 10px rgba(139,92,246,.4);}
+.chop-ext .pane{display:none;flex-direction:column;gap:11px;} .chop-ext .pane.on{display:flex;}
+.chop-ext .lanes{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;}
+.chop-ext .lane{height:20px;border:1px solid rgba(140,130,180,0.30);border-radius:6px;display:flex;align-items:center;justify-content:center;
+  font-size:7px;letter-spacing:.3px;color:#908599;cursor:pointer;transition:.12s;}
+.chop-ext .lane:hover{color:#C5BFD2;}
+.chop-ext .lane.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
+.chop-ext .mo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.chop-ext .mk{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.chop-ext .dn{width:30px;height:30px;border-radius:50%;-webkit-mask:radial-gradient(closest-side,transparent 64%,#000 66%);mask:radial-gradient(closest-side,transparent 64%,#000 66%);filter:drop-shadow(0 0 2px rgba(183,148,255,0.4));}
+.chop-ext .mk .kl{font-size:7.5px;letter-spacing:.6px;color:#C5BFD2;} .chop-ext .mk .kv{font-size:7px;color:#908599;}
+.chop-ext .slots{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;}
+.chop-ext .slot{height:18px;border:1px solid rgba(140,130,180,0.30);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:#908599;cursor:pointer;transition:.12s;}
+.chop-ext .slot:hover{color:#C5BFD2;}
+.chop-ext .slot.on{background:#B794FF;border-color:#B794FF;color:#12121F;box-shadow:0 0 7px rgba(183,148,255,.5);}
+.chop-ext .chain{display:flex;align-items:center;gap:6px;margin-top:8px;}
+.chop-ext .chain .cl{font-size:8px;letter-spacing:1.4px;color:#6E6580;}
+.chop-ext .chain .seq{display:flex;gap:4px;align-items:center;}
+.chop-ext .chip{height:16px;min-width:16px;padding:0 5px;border-radius:4px;background:#191726;border:1px solid #4a3f6e;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:#B794FF;}
+.chop-ext .chain .arr{color:#4a4f68;font-size:8px;}
+.chop-ext .chain .add{margin-left:auto;color:#6E6580;cursor:pointer;border:1px dashed #4a3f6e;border-radius:4px;height:17px;width:22px;display:flex;align-items:center;justify-content:center;font-size:9px;}
+.chop-ext .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.chop-ext .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.chop-ext .pill{height:24px;padding:0 9px;background:#12121F;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:9px;letter-spacing:1px;color:#ECE8F2;font-weight:300;cursor:pointer;}
+.chop-ext .pill .k{color:#908599;font-size:7px;}
+.chop-ext .tog{height:24px;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:500;letter-spacing:.6px;color:#908599;cursor:pointer;}
+.chop-ext .tog.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
+
+/* ── FLOW · GLITCH extension card — crimson twin of .arp-ext ── */
+.gli-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;user-select:none;}
+.gli-ext.open{display:block;}
+.gli-ext .h{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.025);}
+.gli-ext .h.grab{cursor:grabbing;}
+.gli-ext .h .g{letter-spacing:2px;color:#4a4f68;font-size:10px;}
+.gli-ext .h .dot{width:6px;height:6px;border-radius:50%;background:#B794FF;box-shadow:0 0 6px rgba(183,148,255,.85);}
+.gli-ext .h .tt{font-size:9px;letter-spacing:1.8px;color:#C5BFD2;text-transform:uppercase;font-weight:600;}
+.gli-ext .h .bl{margin-left:auto;font-size:8px;letter-spacing:1px;color:#908599;}
+.gli-ext .h .x{margin-left:10px;color:#908599;cursor:pointer;font-size:13px;}
+.gli-ext .b{padding:11px 13px 13px;display:flex;flex-direction:column;gap:11px;}
+.gli-ext .gl{font-size:8px;letter-spacing:1.4px;color:#6E6580;margin-bottom:6px;}
+.gli-ext .es{background:#12121F;border-radius:9px;position:relative;overflow:hidden;height:108px;cursor:crosshair;}
+.gli-ext .es svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;}
+.gli-ext .es .eh{position:absolute;top:5px;right:8px;font-size:7px;color:rgba(255,255,255,.45);letter-spacing:1px;pointer-events:none;}
+.gli-ext .es .ehl{position:absolute;top:5px;left:8px;font-size:7px;color:rgba(183,148,255,.6);letter-spacing:1px;pointer-events:none;}
+.gli-ext .glow{filter:drop-shadow(0 0 2px rgba(183,148,255,0.85));}
+.gli-ext .subtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.gli-ext .subtab{height:26px;border:1px solid rgba(140,130,180,0.45);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:9px;letter-spacing:1.6px;color:#908599;cursor:pointer;font-weight:500;transition:.12s;}
+.gli-ext .subtab:hover{color:#C5BFD2;}
+.gli-ext .subtab.on{background:#8B5CF6;border-color:#8B5CF6;color:#fff;box-shadow:0 0 10px rgba(139,92,246,.4);}
+.gli-ext .pane{display:none;flex-direction:column;gap:11px;} .gli-ext .pane.on{display:flex;}
+.gli-ext .lanes{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;}
+.gli-ext .lane{height:20px;border:1px solid rgba(140,130,180,0.30);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:6.5px;letter-spacing:.2px;color:#908599;cursor:pointer;transition:.12s;}
+.gli-ext .lane:hover{color:#C5BFD2;}
+.gli-ext .lane.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
+.gli-ext .mo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.gli-ext .mk{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.gli-ext .dn{width:30px;height:30px;border-radius:50%;-webkit-mask:radial-gradient(closest-side,transparent 64%,#000 66%);mask:radial-gradient(closest-side,transparent 64%,#000 66%);filter:drop-shadow(0 0 2px rgba(183,148,255,0.4));}
+.gli-ext .mk .kl{font-size:7.5px;letter-spacing:.6px;color:#C5BFD2;} .gli-ext .mk .kv{font-size:7px;color:#908599;}
+.gli-ext .slots{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;}
+.gli-ext .slot{height:18px;border:1px solid rgba(140,130,180,0.30);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:#908599;cursor:pointer;transition:.12s;}
+.gli-ext .slot:hover{color:#C5BFD2;}
+.gli-ext .slot.on{background:#B794FF;border-color:#B794FF;color:#12121F;box-shadow:0 0 7px rgba(183,148,255,.5);}
+.gli-ext .chain{display:flex;align-items:center;gap:6px;margin-top:8px;}
+.gli-ext .chain .cl{font-size:8px;letter-spacing:1.4px;color:#6E6580;}
+.gli-ext .chain .seq{display:flex;gap:4px;align-items:center;}
+.gli-ext .chip{height:16px;min-width:16px;padding:0 5px;border-radius:4px;background:#191726;border:1px solid #4a3f6e;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:#B794FF;}
+.gli-ext .chain .arr{color:#4a4f68;font-size:8px;}
+.gli-ext .chain .add{margin-left:auto;color:#6E6580;cursor:pointer;border:1px dashed #4a3f6e;border-radius:4px;height:17px;width:22px;display:flex;align-items:center;justify-content:center;font-size:9px;}
+.gli-ext .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.gli-ext .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.gli-ext .pill{height:24px;padding:0 9px;background:#12121F;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:9px;letter-spacing:1px;color:#ECE8F2;font-weight:300;cursor:pointer;}
+.gli-ext .pill .k{color:#908599;font-size:7px;}
+.gli-ext .tog{height:24px;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:500;letter-spacing:.6px;color:#908599;cursor:pointer;}
+.gli-ext .tog.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
+
+/* ── FLOW · DRIFT extension card — green twin of .arp-ext ── */
+.drf-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;user-select:none;}
+.drf-ext.open{display:block;}
+.drf-ext .h{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.025);}
+.drf-ext .h.grab{cursor:grabbing;}
+.drf-ext .h .g{letter-spacing:2px;color:#4a4f68;font-size:10px;}
+.drf-ext .h .dot{width:6px;height:6px;border-radius:50%;background:#B794FF;box-shadow:0 0 6px rgba(183,148,255,.85);}
+.drf-ext .h .tt{font-size:9px;letter-spacing:1.8px;color:#C5BFD2;text-transform:uppercase;font-weight:600;}
+.drf-ext .h .bl{margin-left:auto;font-size:8px;letter-spacing:1px;color:#908599;}
+.drf-ext .h .x{margin-left:10px;color:#908599;cursor:pointer;font-size:13px;}
+.drf-ext .b{padding:11px 13px 13px;display:flex;flex-direction:column;gap:11px;}
+.drf-ext .gl{font-size:8px;letter-spacing:1.4px;color:#6E6580;margin-bottom:6px;}
+.drf-ext .es{background:#12121F;border-radius:9px;position:relative;overflow:hidden;height:108px;cursor:crosshair;}
+.drf-ext .es svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;}
+.drf-ext .es .eh{position:absolute;top:5px;right:8px;font-size:7px;color:rgba(255,255,255,.45);letter-spacing:1px;pointer-events:none;}
+.drf-ext .es .ehl{position:absolute;top:5px;left:8px;font-size:7px;color:rgba(183,148,255,.6);letter-spacing:1px;pointer-events:none;}
+.drf-ext .glow{filter:drop-shadow(0 0 2px rgba(183,148,255,0.85));}
+.drf-ext .subtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.drf-ext .subtab{height:26px;border:1px solid rgba(140,130,180,0.45);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:9px;letter-spacing:1.6px;color:#908599;cursor:pointer;font-weight:500;transition:.12s;}
+.drf-ext .subtab:hover{color:#C5BFD2;}
+.drf-ext .subtab.on{background:#8B5CF6;border-color:#8B5CF6;color:#fff;box-shadow:0 0 10px rgba(139,92,246,.4);}
+.drf-ext .pane{display:none;flex-direction:column;gap:11px;} .drf-ext .pane.on{display:flex;}
+.drf-ext .lanes{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;}
+.drf-ext .lane{height:20px;border:1px solid rgba(140,130,180,0.30);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:7px;letter-spacing:.3px;color:#908599;cursor:pointer;transition:.12s;}
+.drf-ext .lane:hover{color:#C5BFD2;}
+.drf-ext .lane.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
+.drf-ext .mo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.drf-ext .mk{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.drf-ext .dn{width:30px;height:30px;border-radius:50%;-webkit-mask:radial-gradient(closest-side,transparent 64%,#000 66%);mask:radial-gradient(closest-side,transparent 64%,#000 66%);filter:drop-shadow(0 0 2px rgba(183,148,255,0.4));}
+.drf-ext .mk .kl{font-size:7.5px;letter-spacing:.6px;color:#C5BFD2;} .drf-ext .mk .kv{font-size:7px;color:#908599;}
+.drf-ext .slots{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;}
+.drf-ext .slot{height:18px;border:1px solid rgba(140,130,180,0.30);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:#908599;cursor:pointer;transition:.12s;}
+.drf-ext .slot:hover{color:#C5BFD2;}
+.drf-ext .slot.on{background:#B794FF;border-color:#B794FF;color:#12121F;box-shadow:0 0 7px rgba(183,148,255,.5);}
+.drf-ext .chain{display:flex;align-items:center;gap:6px;margin-top:8px;}
+.drf-ext .chain .cl{font-size:8px;letter-spacing:1.4px;color:#6E6580;}
+.drf-ext .chain .seq{display:flex;gap:4px;align-items:center;}
+.drf-ext .chip{height:16px;min-width:16px;padding:0 5px;border-radius:4px;background:#191726;border:1px solid #4a3f6e;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:#B794FF;}
+.drf-ext .chain .arr{color:#4a4f68;font-size:8px;}
+.drf-ext .chain .add{margin-left:auto;color:#6E6580;cursor:pointer;border:1px dashed #4a3f6e;border-radius:4px;height:17px;width:22px;display:flex;align-items:center;justify-content:center;font-size:9px;}
+.drf-ext .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.drf-ext .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.drf-ext .pill{height:24px;padding:0 9px;background:#12121F;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:9px;letter-spacing:1px;color:#ECE8F2;font-weight:300;cursor:pointer;}
+.drf-ext .pill .k{color:#908599;font-size:7px;}
+.drf-ext .tog{height:24px;border:1px solid rgba(140,130,180,0.45);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:500;letter-spacing:.6px;color:#908599;cursor:pointer;}
+.drf-ext .tog.on{background:#191726;border-color:#4a3f6e;color:#B794FF;}
+
 .mv-err{position:absolute;left:8px;bottom:6px;z-index:9;font-size:9px;color:#ff6b6b;background:rgba(0,0,0,.5);padding:2px 6px;border-radius:4px;display:none;}
 
 #mod-panel {
@@ -19058,7 +19203,7 @@ restoreThemeFromBackend();
     var ARP_TRAJ=["UP","DN","UP-DN","UP·2","DN·2","UP-DN·2","CONV·2","UP·3","DN·3","UP-DN·3","CONV·3","RAND·4"];   // mirrors kArpTraj[] (12 presets)
     var CHOP_STYLES=["FWD","REV","SHUF","PING","ROLL","SPRAY"];   // mirrors ChopStyle / chopStyle(traj) (6 flip styles)
     function arpReadout(suf,norm){ var q=function(N){return Math.max(0,Math.min(N-1,Math.round(norm*(N-1))));};
-      var rateDiv=(displayMode==='arp')?RATE_DIV_RICH:ARP_RATE_DIV;
+      var rateDiv=RATE_DIV_RICH;   // all FLOW modes now use the rich straight+dotted+triplet ladder
       var trajArr=(displayMode==='chop')?CHOP_STYLES:ARP_TRAJ;
       switch(suf){ case 'RATE': return rateDiv[q(rateDiv.length)];
                    case 'GATE': return Math.round((0.05+0.93*norm)*100)+'%';
@@ -19108,7 +19253,7 @@ restoreThemeFromBackend();
       Array.prototype.forEach.call(dev.querySelectorAll('.vis-layer'),function(v){ v.classList.toggle('show', v.getAttribute('data-vis')===displayMode); });
       var labs=KLAB[displayMode]||KLAB.arp, kl=knobRow.querySelectorAll('.knob-label');
       for(var i=0;i<kl.length;i++) kl[i].textContent=labs[i]||'';
-      if(exp) exp.style.display=(displayMode==='arp')?'block':'none';
+      if(exp) exp.style.display=(displayMode==='arp'||displayMode==='chop'||displayMode==='glitch'||displayMode==='drift')?'block':'none';
       refreshKnobs();
       if(!fromParam) setChoiceParam(choice);
     }
@@ -19118,28 +19263,39 @@ restoreThemeFromBackend();
     // init from the FLOW_MODE param (preset/automation), else Off
     (function(){ var c='off'; if(modeState&&modeState.getNormalisedValue){ try{ c=CHOICES[Math.round(modeState.getNormalisedValue()*(CHOICES.length-1))]||'off'; }catch(e){} } applyChoice(c,true); })();
 
-    /* ── CHOP glass menu — right-click the Chop badge → BLEND dry/wet (FLOW_CHOP_BLEND, default 60%) ── */
+    /* ── FLOW glass menu — right-click ANY mode badge → its BLEND (every mode). Shared popup, rebinds
+          to the clicked mode's param: ARP=FLOW_ARP_BLEND (arp↔dry chord, def 100%), CHOP/GLITCH dry/wet
+          (FLOW_CHOP/GLI_BLEND, def 60%), DRIFT=DEPTH (FLOW_DRF_MORPH, def 50%). ── */
     (function(){
       try{
         var glass=document.getElementById('flow-glass'); if(!glass) return;
-        var track=document.getElementById('fg-blend-track'), fill=document.getElementById('fg-blend-fill'), bval=document.getElementById('fg-blend-val');
-        var bState=null; if(J){ try{ bState=J.getSliderState('FLOW_CHOP_BLEND'); }catch(e){} }
-        function curN(){ return (bState&&bState.getNormalisedValue)?bState.getNormalisedValue():0.6; }
+        var track=document.getElementById('fg-blend-track'), fill=document.getElementById('fg-blend-fill'),
+            bval=document.getElementById('fg-blend-val'), blab=glass.querySelector('.fg-label');
+        var CFG={ arp:{id:'FLOW_ARP_BLEND',label:'Blend',def:1.0},
+                  chop:{id:'FLOW_CHOP_BLEND',label:'Blend',def:0.6},
+                  glitch:{id:'FLOW_GLI_BLEND',label:'Blend',def:0.6},
+                  drift:{id:'FLOW_DRF_MORPH',label:'Depth',def:0.5} };
+        var bState=null, bDef=0.6, openTile=null;
+        function curN(){ return (bState&&bState.getNormalisedValue)?bState.getNormalisedValue():bDef; }
         function paint(n){ n=Math.max(0,Math.min(1,n)); fill.style.width=(n*100).toFixed(1)+'%'; if(bval) bval.textContent=Math.round(n*100)+'%'; }
-        paint(curN());
-        if(bState&&bState.valueChangedEvent&&bState.valueChangedEvent.addListener) bState.valueChangedEvent.addListener(function(){ paint(curN()); });
-        var chopTile=modes.querySelector('.flow-mode[data-mode="chop"]');
-        if(chopTile) chopTile.addEventListener('contextmenu', function(e){ e.preventDefault(); e.stopPropagation();
-          var hr=dev.getBoundingClientRect(), tr=chopTile.getBoundingClientRect();
-          glass.style.left=Math.max(4,(tr.left-hr.left))+'px'; glass.style.top=(tr.bottom-hr.top+5)+'px';
-          paint(curN()); glass.classList.add('act'); });
+        function bindMode(mode){ var c=CFG[mode]; if(!c) return false; bDef=c.def; if(blab)blab.textContent=c.label;
+          bState=null; if(J){ try{ bState=J.getSliderState(c.id); }catch(e){} } paint(curN()); return true; }
         function setFromX(cx){ var r=track.getBoundingClientRect(); if(r.width<=0)return; var n=Math.max(0,Math.min(1,(cx-r.left)/r.width)); paint(n); if(bState){ try{ bState.setNormalisedValue(n); }catch(_){} } }
         var drag=false;
         track.addEventListener('pointerdown', function(e){ drag=true; setFromX(e.clientX); try{ track.setPointerCapture(e.pointerId); }catch(_){} e.preventDefault(); e.stopPropagation(); });
         track.addEventListener('pointermove', function(e){ if(drag) setFromX(e.clientX); });
         track.addEventListener('pointerup', function(){ drag=false; });
-        track.addEventListener('dblclick', function(e){ if(bState){ try{ bState.setNormalisedValue(0.6); }catch(_){} } paint(0.6); e.preventDefault(); });
-        document.addEventListener('pointerdown', function(e){ if(glass.classList.contains('act') && !glass.contains(e.target) && !(chopTile&&chopTile.contains(e.target))) glass.classList.remove('act'); });
+        track.addEventListener('dblclick', function(e){ if(bState){ try{ bState.setNormalisedValue(bDef); }catch(_){} } paint(bDef); e.preventDefault(); });
+        // attach right-click to every mode tile
+        Array.prototype.forEach.call(modes.querySelectorAll('.flow-mode'), function(tile){
+          var mode=tile.getAttribute('data-mode'); if(!CFG[mode]) return;
+          tile.addEventListener('contextmenu', function(e){ e.preventDefault(); e.stopPropagation();
+            if(!bindMode(mode)) return; openTile=tile;
+            var hr=dev.getBoundingClientRect(), tr=tile.getBoundingClientRect();
+            glass.style.left=Math.max(4,(tr.left-hr.left))+'px'; glass.style.top=(tr.bottom-hr.top+5)+'px';
+            glass.classList.add('act'); });
+        });
+        document.addEventListener('pointerdown', function(e){ if(glass.classList.contains('act') && !glass.contains(e.target) && !(openTile&&openTile.contains(e.target))) glass.classList.remove('act'); });
       } catch(eGlass){ console.warn('[FLOW-glass] init failed', eGlass); }
     })();
 
@@ -19201,7 +19357,7 @@ restoreThemeFromBackend();
     function buildCard(){
       card=document.createElement('div'); card.className='arp-ext';
       card.innerHTML=''
-        +'<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">ARP</span><span class="tg">1</span><span class="x">✕</span></div>'
+        +'<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">ARP</span><span class="x">✕</span></div>'
         +'<div class="b">'
         +'<div class="es"><svg id="arp-grid" viewBox="0 0 290 92" preserveAspectRatio="none"></svg><div class="eh" id="arp-laneTag">PITCH · 16 STEPS</div></div>'
         +'<div class="subtabs"><div class="subtab on" data-pane="pattern">PATTERN</div><div class="subtab" data-pane="play">PLAY</div><div class="subtab" data-pane="motion">MOTION</div></div>'
@@ -19263,9 +19419,254 @@ restoreThemeFromBackend();
       if(!cardPos){ var r=dev.getBoundingClientRect(); cardPos={x:Math.min(window.innerWidth-332, Math.max(8, r.right-316)), y:Math.max(8, r.top-40)}; }
       card.style.left=cardPos.x+'px'; card.style.top=cardPos.y+'px'; card.classList.add('open');
       if(!rafOn){ rafOn=true; lastT=0; requestAnimationFrame(frame); } }
-    if(exp) exp.addEventListener('click', openCard);
+    /* ───────── CHOP extension card (blue twin of the ARP card) ───────── */
+    var cNSL=8, cX0=10, cXW=290-cX0-4, csw=cXW/cNSL, cY0=8, cY1=84;
+    var cclamp=function(v,a,b){return Math.max(a,Math.min(b,v));};
+    var LADDER=['-8va','-5th','-4th','1','+4th','+5th','+m7','+8va'];   // harmonic ladder rungs (§5)
+    var CP={ order:[0,1,2,3,4,5,6,7], pitch:[3,3,5,3,2,3,6,3], reverse:[0,0,1,0,0,1,0,0],
+             trim:[1,.8,1,.6,1,.9,.7,1], repeat:[1,1,2,1,1,3,1,1], drop:[0,0,0,1,0,0,0,0] };
+    var CDEPTH={ order:['ORDER · SHUFFLE',[['Spread',150,'50'],['Bias',95,'0'],['Lock',70,'20'],['Seed',110,'7']]],
+      pitch:['HARMONIC LADDER',[['Range',150,'4'],['Steps',120,'50'],['Glide',80,'15'],['Key',95,'C']]],
+      reverse:['REVERSE',[['Chance',150,'30'],['Run',95,'1'],['Sync',70,'On'],['Spread',90,'0']]],
+      trim:['TRIM · SUBDIVIDE',[['Length',165,'70'],['Curve',110,'40'],['Random',60,'0'],['Gate',85,'20']]],
+      repeat:['REPEAT · STUTTER',[['Count',120,'2'],['Decay',130,'40'],['Curve',100,'30'],['Chance',150,'50']]],
+      drop:['DROP · DUST',[['Density',150,'30'],['Grain',110,'40'],['Spray',70,'10'],['Tone',95,'50']]] };
+    var cstate={lane:'order'};
+    var ccard=null, ccPos=null, csvg=null, cdrag=false, clastPaint=-1, cphase=0, clastT=0, crafOn=false, cblendState=null;
+
+    function crect(x,y,w,h,fill,cls){return '<rect class="'+(cls||'')+'" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+Math.max(0,w).toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" rx="1.6" fill="'+fill+'"/>';}
+    function cribbon(){ var s='';
+      // memory timeline: faint horizontal baseline + slice columns; NOW on the right, PAST to the left
+      for(var i=0;i<=cNSL;i++){var x=cX0+i*csw;s+='<line x1="'+x.toFixed(1)+'" y1="4" x2="'+x.toFixed(1)+'" y2="88" stroke="rgba(183,148,255,.09)" stroke-width="0.5"/>';}
+      s+='<line x1="'+cX0+'" y1="46" x2="286" y2="46" stroke="rgba(183,148,255,.14)" stroke-width="0.5"/>';
+      return s; }
+    function cskeleton(){ csvg.innerHTML = cribbon()
+      +'<rect id="chop-phCol" x="'+cX0+'" y="4" width="'+csw.toFixed(1)+'" height="84" fill="rgba(183,148,255,0.08)"/>'
+      +'<g id="chop-laneBody"></g>'
+      +'<line id="chop-scan" x1="'+cX0+'" y1="4" x2="'+cX0+'" y2="88" stroke="rgba(155,147,176,0.55)" stroke-width="1" stroke-dasharray="2 2"/>'
+      +'<line id="chop-spread" x1="'+(cX0+csw*3).toFixed(1)+'" y1="4" x2="'+(cX0+csw*3).toFixed(1)+'" y2="88" stroke="rgba(155,147,176,0.30)" stroke-width="1"/>'
+      +'<line id="chop-ph" x1="'+cX0+'" y1="2" x2="'+cX0+'" y2="90" stroke="rgba(255,255,255,0.85)" stroke-width="1" style="filter:drop-shadow(0 0 2px rgba(255,255,255,.6))"/>'; }
+    function crenderLane(){ var l=cstate.lane, s='', i;
+      if(l==='order'){ for(i=0;i<cNSL;i++){var o=CP.order[i],hue=0.35+0.5*(o/(cNSL-1)); s+=crect(cX0+i*csw+1.4, 30, csw-2.8, 32,'rgba(183,148,255,'+hue.toFixed(2)+')','glow'); s+='<text x="'+(cX0+i*csw+csw/2).toFixed(1)+'" y="50" font-size="7" fill="#12121F" text-anchor="middle" style="pointer-events:none">'+(o+1)+'</text>';} }
+      else if(l==='pitch'){ for(i=0;i<cNSL;i++){var p=CP.pitch[i],rh=(cY1-cY0)/(LADDER.length-1),y=cY1-p*rh; s+=crect(cX0+i*csw+1.4,y-3,csw-2.8,6,'rgba(183,148,255,0.92)','glow');} }
+      else if(l==='reverse'){ for(i=0;i<cNSL;i++){var rv=CP.reverse[i]; s+=crect(cX0+i*csw+1.4,34,csw-2.8,24,rv?'rgba(183,148,255,0.9)':'rgba(140,130,180,0.18)',rv?'glow':''); if(rv)s+='<text x="'+(cX0+i*csw+csw/2).toFixed(1)+'" y="50" font-size="8" fill="#12121F" text-anchor="middle" style="pointer-events:none">◂</text>';} }
+      else if(l==='trim'){ for(i=0;i<cNSL;i++) s+=crect(cX0+i*csw+1.4,40,(csw-2.8)*CP.trim[i],12,'rgba(183,148,255,0.85)','glow'); }
+      else if(l==='repeat'){ for(i=0;i<cNSL;i++){var n=CP.repeat[i],x=cX0+i*csw+1.4,w=csw-2.8,seg=w/n; for(var k=0;k<n;k++)s+=crect(x+k*seg+0.4,36,seg-0.8,20,'rgba(183,148,255,'+(n>1?0.9:0.5)+')',n>1?'glow':'');} }
+      else if(l==='drop'){ for(i=0;i<cNSL;i++){var d=CP.drop[i]; s+=crect(cX0+i*csw+1.4,34,csw-2.8,24,d?'rgba(140,130,180,0.12)':'rgba(183,148,255,0.7)',d?'':'glow'); if(d)s+='<text x="'+(cX0+i*csw+csw/2).toFixed(1)+'" y="50" font-size="7" fill="#908599" text-anchor="middle" style="pointer-events:none">·∙·</text>';} }
+      var lb=csvg.querySelector('#chop-laneBody'); if(lb)lb.innerHTML=s;
+      var tag=ccard.querySelector('#chop-laneTag'); if(tag)tag.textContent=l.toUpperCase()+' · '+cNSL+' SLICES'; }
+    function ctoVB(e){var rc=csvg.getBoundingClientRect();return {x:(e.clientX-rc.left)/rc.width*290, y:(e.clientY-rc.top)/rc.height*92};}
+    function ceditAt(vb,start){ var slice=Math.floor((vb.x-cX0)/csw); if(slice<0||slice>=cNSL)return; var l=cstate.lane;
+      if(l==='pitch'){ var rh=(cY1-cY0)/(LADDER.length-1); CP.pitch[slice]=cclamp(Math.round((cY1-vb.y)/rh),0,LADDER.length-1); }
+      else if(l==='trim') CP.trim[slice]=cclamp((vb.x-(cX0+slice*csw))/csw,0.1,1);
+      else if(l==='reverse'){ if(start||slice!==clastPaint) CP.reverse[slice]=CP.reverse[slice]?0:1; }
+      else if(l==='drop'){ if(start||slice!==clastPaint) CP.drop[slice]=CP.drop[slice]?0:1; }
+      else if(l==='repeat'){ if(start||slice!==clastPaint) CP.repeat[slice]=(CP.repeat[slice]>=4?1:CP.repeat[slice]+1); }
+      else if(l==='order'){ if(start){ cdragFrom=slice; } else if(slice!==cdragFrom && cdragFrom>=0){ var t=CP.order[cdragFrom]; CP.order[cdragFrom]=CP.order[slice]; CP.order[slice]=t; cdragFrom=slice; } }
+      clastPaint=slice; crenderLane(); }
+    var cdragFrom=-1;
+    function cring(v){return '<div class="dn" style="background:conic-gradient(from 218deg,#B794FF 0 '+v+'deg,rgba(255,255,255,0.09) '+v+'deg 284deg,transparent 284deg)"></div>';}
+    function cknobs(arr){return arr.map(function(it){return '<div class="mk">'+cring(it[1])+'<div class="kl">'+it[0]+'</div><div class="kv">'+it[2]+'</div></div>';}).join('');}
+    function csetDepth(l){var d=CDEPTH[l]; ccard.querySelector('#chop-depthLabel').textContent=d[0]; ccard.querySelector('#chop-depthKnobs').innerHTML=cknobs(d[1]);}
+    function cframe(t){ if(!ccard||!ccard.classList.contains('open')){ crafOn=false; return; } if(!clastT)clastT=t; var dt=(t-clastT)/1000; clastT=t; cphase=(cphase+dt/2.6)%1;
+      var x=cX0+cphase*cXW, slice=Math.floor(cphase*cNSL); var ph=csvg.querySelector('#chop-ph'); if(ph){ph.setAttribute('x1',x.toFixed(1));ph.setAttribute('x2',x.toFixed(1));}
+      var col=csvg.querySelector('#chop-phCol'); if(col)col.setAttribute('x',(cX0+slice*csw).toFixed(1)); requestAnimationFrame(cframe); }
+    function cpaintBlend(){ if(!cblendState)return; var n; try{ n=cblendState.getNormalisedValue(); }catch(e){ n=0.6; } var el=ccard&&ccard.querySelector('#chop-blendHdr'); if(el)el.textContent='BLEND '+Math.round(n*100)+'%'; }
+
+    function buildChopCard(){
+      ccard=document.createElement('div'); ccard.className='chop-ext';
+      ccard.innerHTML=''
+        +'<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">CHOP</span><span class="bl" id="chop-blendHdr">BLEND 60%</span><span class="x">✕</span></div>'
+        +'<div class="b">'
+        +'<div class="es"><svg id="chop-grid" viewBox="0 0 290 92" preserveAspectRatio="none"></svg><div class="ehl">← PAST</div><div class="eh" id="chop-laneTag">ORDER · 8 SLICES</div></div>'
+        +'<div class="subtabs"><div class="subtab on" data-pane="slice">SLICE</div><div class="subtab" data-pane="scan">SCAN</div><div class="subtab" data-pane="shape">SHAPE</div></div>'
+        // SLICE
+        +'<div class="pane on" data-pane="slice">'
+        +'<div><div class="gl">Carve</div><div class="g3"><div class="pill"><span class="k">Slices</span>8</div><div class="pill"><span class="k">Loop</span>8</div><div class="pill"><span class="k">Mode</span>Step ▾</div></div></div>'
+        +'<div class="g4" style="margin-top:-4px"><div class="pill"><span class="k">Lock</span>0%</div><div class="pill"><span class="k">Seed</span>7</div><div class="tog">Always</div><div class="tog">Catch</div></div>'
+        +'<div><div class="gl">Lane</div><div class="lanes" id="chop-lanes">'
+        +'<div class="lane on" data-l="order">Order</div><div class="lane" data-l="pitch">Pitch</div><div class="lane" data-l="reverse">Rev</div><div class="lane" data-l="trim">Trim</div><div class="lane" data-l="repeat">Rpt</div><div class="lane" data-l="drop">Drop</div>'
+        +'</div></div>'
+        +'<div><div class="gl" id="chop-depthLabel">ORDER · SHUFFLE</div><div class="mo" id="chop-depthKnobs"></div></div>'
+        +'<div><div class="gl">Patterns · 12 slots</div><div class="slots" id="chop-slots"></div>'
+        +'<div class="chain"><span class="cl">CHAIN</span><span class="seq"><span class="chip">1</span><span class="arr">›</span><span class="chip">1</span><span class="arr">›</span><span class="chip">2</span><span class="arr">›</span><span class="chip">3</span></span><span class="add">+</span></div></div>'
+        +'</div>'
+        // SCAN
+        +'<div class="pane" data-pane="scan">'
+        +'<div><div class="gl">Memory</div><div class="mo" id="chop-scanKnobs"></div></div>'
+        +'<div><div class="gl">Capture</div><div class="g4"><div class="tog">Freeze</div><div class="tog">Collect</div><div class="tog">Wipe</div><div class="pill"><span class="k">Rpts</span>2</div></div></div>'
+        +'</div>'
+        // SHAPE
+        +'<div class="pane" data-pane="shape">'
+        +'<div><div class="gl">Character</div><div class="mo" id="chop-shapeKnobs"></div></div>'
+        +'<div><div class="gl">Bus</div><div class="g3"><div class="pill"><span class="k">Filter</span>Mid</div><div class="pill"><span class="k">Grit</span>0%</div><div class="pill"><span class="k">Blend</span>60%</div></div></div>'
+        +'</div>'
+        +'</div>';
+      document.body.appendChild(ccard);
+      csvg=ccard.querySelector('#chop-grid');
+      cskeleton(); crenderLane(); csetDepth('order');
+      ccard.querySelector('#chop-scanKnobs').innerHTML=cknobs([['Scan',60,'Now'],['Auto',95,'0'],['Spread',120,'25'],['Feed',70,'0']]);
+      ccard.querySelector('#chop-shapeKnobs').innerHTML=cknobs([['Steps',120,'50'],['Detune',80,'12'],['Trim',95,'30'],['Wow',70,'10'],['Drop',60,'0'],['Smooth',150,'60'],['Filter',142,'Mid'],['Grit',60,'0']]);
+      ccard.querySelector('#chop-slots').innerHTML=(function(){var s='';for(var i=0;i<12;i++)s+='<div class="slot '+(i===0?'on':'')+'" data-s="'+(i+1)+'">'+(i+1)+'</div>';return s;})();
+      // close
+      ccard.querySelector('.x').onclick=function(){ ccard.classList.remove('open'); };
+      // drag header
+      var h=ccard.querySelector('.h'); h.addEventListener('mousedown',function(e){ if(e.target.classList.contains('x')||e.target.id==='chop-blendHdr')return; e.preventDefault(); h.classList.add('grab');
+        var r=ccard.getBoundingClientRect(), dx=e.clientX-r.left, dy=e.clientY-r.top;
+        function mv(ev){ ccPos={x:Math.max(4,Math.min(window.innerWidth-ccard.offsetWidth-4,ev.clientX-dx)), y:Math.max(4,Math.min(window.innerHeight-40,ev.clientY-dy))}; ccard.style.left=ccPos.x+'px'; ccard.style.top=ccPos.y+'px'; }
+        function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+        document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
+      // lanes
+      ccard.querySelector('#chop-lanes').addEventListener('click',function(e){ var b=e.target.closest('.lane'); if(!b)return;
+        Array.prototype.forEach.call(ccard.querySelectorAll('.lane'),function(x){x.classList.toggle('on',x===b);}); cstate.lane=b.getAttribute('data-l'); crenderLane(); csetDepth(cstate.lane); });
+      // slots
+      ccard.querySelector('#chop-slots').addEventListener('click',function(e){ var b=e.target.closest('.slot'); if(!b)return; Array.prototype.forEach.call(ccard.querySelectorAll('.slot'),function(x){x.classList.toggle('on',x===b);}); });
+      // sub-tabs
+      Array.prototype.forEach.call(ccard.querySelectorAll('.subtab'),function(tb){ tb.addEventListener('click',function(){
+        Array.prototype.forEach.call(ccard.querySelectorAll('.subtab'),function(x){x.classList.toggle('on',x===tb);});
+        Array.prototype.forEach.call(ccard.querySelectorAll('.pane'),function(p){p.classList.toggle('on',p.getAttribute('data-pane')===tb.getAttribute('data-pane'));}); }); });
+      // ribbon edit (paint lanes)
+      csvg.addEventListener('mousedown',function(e){ var vb=ctoVB(e); if(vb.x<cX0)return; e.preventDefault(); cdrag=true; clastPaint=-1; cdragFrom=-1; ceditAt(vb,true); });
+      window.addEventListener('mousemove',function(e){ if(cdrag) ceditAt(ctoVB(e),false); });
+      window.addEventListener('mouseup',function(){ cdrag=false; clastPaint=-1; cdragFrom=-1; });
+      // LIVE: header BLEND is a draggable dry/wet control (drag horizontally) → FLOW_CHOP_BLEND (default 60%)
+      if(J){ try{ cblendState=J.getSliderState('FLOW_CHOP_BLEND'); }catch(e){} }
+      if(cblendState){ cpaintBlend(); if(cblendState.valueChangedEvent&&cblendState.valueChangedEvent.addListener) cblendState.valueChangedEvent.addListener(cpaintBlend); }
+      (function(){ var bh=ccard.querySelector('#chop-blendHdr'); if(!bh)return; bh.style.cursor='ew-resize'; bh.title='Drag = dry/wet blend · dbl-click = 60%';
+        var bdrag=false,bsx=0,bsn=0.6;
+        function bset(n){ n=Math.max(0,Math.min(1,n)); if(cblendState){try{cblendState.setNormalisedValue(n);}catch(e){}} cpaintBlend(); }
+        bh.addEventListener('pointerdown',function(e){ bdrag=true; bsx=e.clientX; bsn=(cblendState&&cblendState.getNormalisedValue)?cblendState.getNormalisedValue():0.6; try{bh.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); e.stopPropagation(); });
+        bh.addEventListener('pointermove',function(e){ if(bdrag) bset(bsn+(e.clientX-bsx)/160); });
+        bh.addEventListener('pointerup',function(){ bdrag=false; });
+        bh.addEventListener('dblclick',function(e){ bset(0.6); e.preventDefault(); e.stopPropagation(); });
+      })();
+    }
+    function openChopCard(){ if(!ccard) buildChopCard();
+      if(!ccPos){ var r=dev.getBoundingClientRect(); ccPos={x:Math.min(window.innerWidth-332, Math.max(8, r.right-316)), y:Math.max(8, r.top-40)}; }
+      ccard.style.left=ccPos.x+'px'; ccard.style.top=ccPos.y+'px'; ccard.classList.add('open'); cpaintBlend();
+      if(!crafOn){ crafOn=true; clastT=0; requestAnimationFrame(cframe); } }
+
+    /* ───────── generic FLOW card factory (GLITCH crimson + DRIFT green; same shell/grammar as ARP/CHOP) ───────── */
+    function flowCard(cfg){
+      var card=null,pos=null,svg=null,raf=false,lastT=0,phase=0,blendSt=null, st={lane:cfg.lanes[0][0]};
+      function ring(v){return '<div class="dn" style="background:conic-gradient(from 218deg,'+cfg.accent+' 0 '+v+'deg,rgba(255,255,255,0.09) '+v+'deg 284deg,transparent 284deg)"></div>';}
+      function knobs(a){return a.map(function(it){return '<div class="mk">'+ring(it[1])+'<div class="kl">'+it[0]+'</div><div class="kv">'+it[2]+'</div></div>';}).join('');}
+      function setDepth(l){var d=cfg.depth[l]; if(!d)return; var lab=card.querySelector('.fc-depthLabel'),kn=card.querySelector('.fc-depthKnobs'); if(lab)lab.textContent=d[0]; if(kn)kn.innerHTML=knobs(d[1]);}
+      function paintBlend(){ if(!blendSt)return; var n; try{n=blendSt.getNormalisedValue();}catch(e){n=0.6;} var el=card&&card.querySelector('.fc-blend'); if(el)el.textContent=cfg.blendFmt(n); }
+      function frame(t){ if(!card||!card.classList.contains('open')){raf=false;return;} if(!lastT)lastT=t; lastT=t; phase=(phase+ (1/60)/2.6)%1; if(cfg.heroFrame&&svg)cfg.heroFrame(svg,phase); requestAnimationFrame(frame); }
+      function build(){
+        card=document.createElement('div'); card.className=cfg.cls;
+        var subtabs=cfg.subtabs.map(function(s,i){return '<div class="subtab'+(i===0?' on':'')+'" data-pane="'+s[0]+'">'+s[1]+'</div>';}).join('');
+        card.innerHTML='<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">'+cfg.title+'</span><span class="bl fc-blend">'+cfg.blendFmt(0.6)+'</span><span class="x">✕</span></div>'
+          +'<div class="b">'
+          +'<div class="es"><svg class="fc-grid" viewBox="0 0 290 92" preserveAspectRatio="none"></svg><div class="ehl">'+cfg.heroL+'</div><div class="eh">'+cfg.heroR+'</div></div>'
+          +'<div class="subtabs">'+subtabs+'</div>'+cfg.panes+'</div>';
+        document.body.appendChild(card);
+        svg=card.querySelector('.fc-grid'); if(cfg.hero)cfg.hero(svg);
+        var lc=card.querySelector('.fc-lanes'); if(lc)lc.innerHTML=cfg.lanes.map(function(l,i){return '<div class="lane'+(i===0?' on':'')+'" data-l="'+l[0]+'">'+l[1]+'</div>';}).join('');
+        var sc=card.querySelector('.fc-slots'); if(sc){var s='';for(var i=0;i<12;i++)s+='<div class="slot'+(i===0?' on':'')+'" data-s="'+(i+1)+'">'+(i+1)+'</div>';sc.innerHTML=s;}
+        if(cfg.fill)cfg.fill(card,knobs);
+        setDepth(st.lane);
+        card.querySelector('.x').onclick=function(){ card.classList.remove('open'); };
+        var h=card.querySelector('.h'); h.addEventListener('mousedown',function(e){ if(e.target.classList.contains('x')||e.target.classList.contains('fc-blend'))return; e.preventDefault(); h.classList.add('grab');
+          var r=card.getBoundingClientRect(), dx=e.clientX-r.left, dy=e.clientY-r.top;
+          function mv(ev){ pos={x:Math.max(4,Math.min(window.innerWidth-card.offsetWidth-4,ev.clientX-dx)), y:Math.max(4,Math.min(window.innerHeight-40,ev.clientY-dy))}; card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; }
+          function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+          document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
+        var lanesEl=card.querySelector('.fc-lanes'); if(lanesEl) lanesEl.addEventListener('click',function(e){ var b=e.target.closest('.lane'); if(!b)return;
+          Array.prototype.forEach.call(card.querySelectorAll('.lane'),function(x){x.classList.toggle('on',x===b);}); st.lane=b.getAttribute('data-l'); setDepth(st.lane); });
+        var slotsEl=card.querySelector('.fc-slots'); if(slotsEl) slotsEl.addEventListener('click',function(e){ var b=e.target.closest('.slot'); if(!b)return; Array.prototype.forEach.call(card.querySelectorAll('.slot'),function(x){x.classList.toggle('on',x===b);}); });
+        Array.prototype.forEach.call(card.querySelectorAll('.subtab'),function(tb){ tb.addEventListener('click',function(){
+          Array.prototype.forEach.call(card.querySelectorAll('.subtab'),function(x){x.classList.toggle('on',x===tb);});
+          Array.prototype.forEach.call(card.querySelectorAll('.pane'),function(p){p.classList.toggle('on',p.getAttribute('data-pane')===tb.getAttribute('data-pane'));}); }); });
+        if(J){ try{ blendSt=J.getSliderState(cfg.blendId); }catch(e){} }
+        if(blendSt){ paintBlend(); if(blendSt.valueChangedEvent&&blendSt.valueChangedEvent.addListener) blendSt.valueChangedEvent.addListener(paintBlend); }
+        // header BLEND/DEPTH is a draggable control (drag horizontally) → cfg.blendId
+        (function(){ var bh=card.querySelector('.fc-blend'); if(!bh)return; bh.style.cursor='ew-resize'; bh.title='Drag to set';
+          var bdrag=false,bsx=0,bsn=0.6;
+          function bset(n){ n=Math.max(0,Math.min(1,n)); if(blendSt){try{blendSt.setNormalisedValue(n);}catch(e){}} paintBlend(); }
+          bh.addEventListener('pointerdown',function(e){ bdrag=true; bsx=e.clientX; bsn=(blendSt&&blendSt.getNormalisedValue)?blendSt.getNormalisedValue():0.6; try{bh.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); e.stopPropagation(); });
+          bh.addEventListener('pointermove',function(e){ if(bdrag) bset(bsn+(e.clientX-bsx)/160); });
+          bh.addEventListener('pointerup',function(){ bdrag=false; });
+          bh.addEventListener('dblclick',function(e){ bset(0.6); e.preventDefault(); e.stopPropagation(); });
+        })();
+      }
+      return { open:function(){ if(!card)build();
+        if(!pos){ var r=dev.getBoundingClientRect(); pos={x:Math.min(window.innerWidth-332,Math.max(8,r.right-316)), y:Math.max(8,r.top-40)}; }
+        card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; card.classList.add('open'); paintBlend();
+        if(!raf){ raf=true; lastT=0; requestAnimationFrame(frame); } } };
+    }
+
+    // GLITCH (mode 3) — crimson, FIRE/FX/MOTION, 8 effect lanes, 12 scenes
+    var GFX=[['rep','Rep'],['rev','Rev'],['tape','Tape'],['gate','Gate'],['pit','Pit'],['crsh','Crsh'],['frz','Frz'],['sct','Sct']];
+    var gliCard=flowCard({ cls:'gli-ext', title:'GLITCH', accent:'#B794FF', blendId:'FLOW_GLI_BLEND',
+      blendFmt:function(n){return 'BLEND '+Math.round(n*100)+'%';}, heroL:'MANGLE', heroR:'FIRE',
+      subtabs:[['fire','FIRE'],['fx','FX'],['motion','MOTION']],
+      lanes:GFX,
+      depth:{ rep:['REPEAT',[['Hold',150,'2'],['Loop',95,'8'],['Decay',80,'30'],['Chance',150,'50']]],
+        rev:['REVERSE',[['Chance',150,'40'],['Run',90,'1'],['Sync',70,'On'],['Spread',80,'0']]],
+        tape:['TAPESTOP · CURVE',[['Curve',270,'3.5'],['Time',150,'1'],['Depth',120,'100'],['Spin',60,'0']]],
+        gate:['GATE',[['Div',150,'8'],['Shape',95,'50'],['Phase',70,'0'],['Mix',120,'100']]],
+        pit:['PITCH',[['Ratio',120,'2.0'],['Jump',95,'30'],['Glide',60,'0'],['Key',80,'Off']]],
+        crsh:['CRUSH',[['Bits',120,'8'],['Down',150,'4'],['Tone',95,'50'],['Mix',120,'100']]],
+        frz:['FREEZE',[['Grain',120,'40'],['Spray',80,'10'],['Pitch',60,'0'],['Mix',120,'100']]],
+        sct:['SCATTER',[['Grain',110,'40'],['Window',150,'250'],['Dens',95,'50'],['Jit',70,'20']]] },
+      hero:function(svg){ var s='';
+        for(var i=0;i<=8;i++){var x=10+i*34;s+='<line x1="'+x+'" y1="6" x2="'+x+'" y2="74" stroke="rgba(183,148,255,.08)" stroke-width="0.5"/>';}
+        s+='<path d="M10,40 L24,28 L30,52 L44,20 L58,58 L70,30 L84,48 L96,22 L110,56 L124,34 L138,50 L152,18 L166,54 L180,32 L196,46 L210,26 L224,52 L240,36 L256,44 L272,30 L286,40" fill="none" stroke="rgba(140,130,180,0.25)" stroke-width="0.8"/>';
+        s+='<path class="fc-mangle glow" d="M10,40 L24,28 L30,52 L44,20 L58,58 L70,30 L84,48 L96,22 L110,56 L124,34 L138,50 L152,18 L166,54 L180,32 L196,46 L210,26 L224,52 L240,36 L256,44 L272,30 L286,40" fill="none" stroke="rgba(183,148,255,0.95)" stroke-width="1.1"/>';
+        s+='<line class="fc-ph" x1="10" y1="4" x2="10" y2="84" stroke="rgba(255,255,255,0.85)" stroke-width="1" style="filter:drop-shadow(0 0 2px rgba(255,255,255,.6))"/>'; svg.innerHTML=s; },
+      heroFrame:function(svg,p){ var ph=svg.querySelector('.fc-ph'); if(ph){var x=(10+p*276).toFixed(1); ph.setAttribute('x1',x); ph.setAttribute('x2',x);} },
+      panes:''
+        +'<div class="pane on" data-pane="fire">'
+        +'<div><div class="gl">Fire</div><div class="g3"><div class="pill"><span class="k">Chance</span>50%</div><div class="pill"><span class="k">Hold</span>1</div><div class="pill"><span class="k">Loop</span>8</div></div></div>'
+        +'<div class="g4" style="margin-top:-4px"><div class="pill"><span class="k">Seed</span>7</div><div class="pill"><span class="k">DéjàVu</span>0%</div><div class="tog on">Dice</div><div class="tog">Grid</div></div>'
+        +'<div><div class="gl">Effect</div><div class="lanes fc-lanes"></div></div>'
+        +'<div><div class="gl fc-depthLabel">REPEAT</div><div class="mo fc-depthKnobs"></div></div>'
+        +'<div><div class="gl">Scenes · 12</div><div class="slots fc-slots"></div>'
+        +'<div class="chain"><span class="cl">CHAIN</span><span class="seq"><span class="chip">1</span><span class="arr">›</span><span class="chip">2</span><span class="arr">›</span><span class="chip">1</span><span class="arr">›</span><span class="chip">4</span></span><span class="add">+</span></div></div>'
+        +'</div>'
+        +'<div class="pane" data-pane="fx"><div><div class="gl">Per-Effect (select a lane)</div><div class="mo fc-depthKnobs2"></div></div><div><div class="gl">Filter · Pan</div><div class="g3"><div class="pill"><span class="k">Filter</span>Off</div><div class="pill"><span class="k">Pan</span>C</div><div class="pill"><span class="k">Mix</span>100%</div></div></div></div>'
+        +'<div class="pane" data-pane="motion"><div><div class="gl">Motion</div><div class="mo fc-motion"></div></div><div><div class="gl">Performance</div><div class="g3"><div class="pill"><span class="k">Quant</span>1/16</div><div class="pill"><span class="k">Release</span>End</div><div class="pill"><span class="k">Blend</span>60%</div></div></div></div>',
+      fill:function(card,knobs){ var m=card.querySelector('.fc-motion'); if(m)m.innerHTML=knobs([['Rate',120,'1/16'],['Swing',95,'12'],['Chaos',60,'0'],['Blend',150,'60']]);
+        var fx=card.querySelector('.fc-depthKnobs2'); if(fx)fx.innerHTML=knobs([['Curve',270,'3.5'],['Bits',120,'8'],['Down',150,'4'],['Grain',110,'40']]); } });
+
+    // DRIFT (mode 4) — green, SHAPE/LOOP/MOTION, 8 lanes, 12 slots
+    var DLN=[['l1','L1'],['l2','L2'],['l3','L3'],['l4','L4'],['l5','L5'],['l6','L6'],['l7','L7'],['l8','L8']];
+    var dDepth={}; for(var di=0;di<8;di++){ dDepth['l'+(di+1)]=['LANE '+(di+1),[['Depth',150,'80'],['Spread',120,'50'],['Bias',90,'0'],['Rate',95,'1x']]]; }
+    var drfCard=flowCard({ cls:'drf-ext', title:'DRIFT', accent:'#B794FF', blendId:'FLOW_DRF_MORPH',
+      blendFmt:function(n){return 'DEPTH '+Math.round(n*100)+'%';}, heroL:'← PAST', heroR:'LANES',
+      subtabs:[['shape','SHAPE'],['loop','LOOP'],['motion','MOTION']],
+      lanes:DLN, depth:dDepth,
+      hero:function(svg){ var s=''; for(var L=0;L<4;L++){ var cy=18+L*20; s+='<path class="glow" d="'+driftScopePath(cy,L)+'" fill="none" stroke="rgba(183,148,255,'+(0.85-L*0.16).toFixed(2)+')" stroke-width="1"/>'; s+='<circle cx="286" cy="'+cy+'" r="1.8" fill="#B794FF" class="glow"/>'; }
+        s+='<line class="fc-ph" x1="286" y1="4" x2="286" y2="84" stroke="rgba(255,255,255,0.25)" stroke-width="0.8"/>'; svg.innerHTML=s; },
+      heroFrame:null,
+      panes:''
+        +'<div class="pane on" data-pane="shape">'
+        +'<div><div class="gl">Character</div><div class="g3"><div class="pill"><span class="k">Shape</span>Human ▾</div><div class="pill"><span class="k">Vary</span>50%</div><div class="pill"><span class="k">Polarity</span>Bi</div></div></div>'
+        +'<div class="g4" style="margin-top:-4px"><div class="pill"><span class="k">Spread</span>50%</div><div class="pill"><span class="k">Bias</span>0</div><div class="tog">Dist</div><div class="tog on">Scope</div></div>'
+        +'<div><div class="gl">Lane</div><div class="lanes fc-lanes"></div></div>'
+        +'<div><div class="gl fc-depthLabel">LANE 1</div><div class="mo fc-depthKnobs"></div></div>'
+        +'<div><div class="gl">Presets · 12</div><div class="slots fc-slots"></div>'
+        +'<div class="chain"><span class="cl">CHAIN</span><span class="seq"><span class="chip">1</span><span class="arr">›</span><span class="chip">1</span><span class="arr">›</span><span class="chip">3</span><span class="arr">›</span><span class="chip">2</span></span><span class="add">+</span></div></div>'
+        +'</div>'
+        +'<div class="pane" data-pane="loop"><div><div class="gl">Déjà-Vu · Memory</div><div class="g4"><div class="pill"><span class="k">DéjàVu</span>Free</div><div class="pill"><span class="k">Length</span>8</div><div class="pill"><span class="k">Lanes</span>4</div><div class="tog">Reseed</div></div></div><div><div class="gl">Scope</div><div class="g3"><div class="pill"><span class="k">Mode</span>Per-Lane</div><div class="pill"><span class="k">Clock</span>Free</div><div class="pill"><span class="k">Sync</span>Bar</div></div></div></div>'
+        +'<div class="pane" data-pane="motion"><div><div class="gl">Motion</div><div class="mo fc-motion"></div></div><div><div class="gl">Routing (mod-matrix)</div><div class="g3"><div class="pill"><span class="k">Corr</span>0%</div><div class="pill"><span class="k">Quant</span>Off</div><div class="pill"><span class="k">Route</span>+</div></div></div></div>',
+      fill:function(card,knobs){ var m=card.querySelector('.fc-motion'); if(m)m.innerHTML=knobs([['Rate',120,'1/8'],['Glide',150,'60'],['Depth',150,'80'],['Corr',60,'0']]); } });
+
+    // expand button → the active mode's extension card
+    if(exp) exp.addEventListener('click', function(){
+      if(displayMode==='chop')        openChopCard();
+      else if(displayMode==='glitch') gliCard.open();
+      else if(displayMode==='drift')  drfCard.open();
+      else                            openCard(); });
   }catch(e){}
 })();
+
+/* DRIFT scope path helper (static decorative breathing line per lane) */
+function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
+  for(i=1;i<=n;i++){ var x=10+i*w; var y=cy + Math.sin(i*0.7 + seed*1.9)*6 + Math.sin(i*0.31 + seed)*3; s+=' L'+x.toFixed(1)+','+y.toFixed(1); }
+  return s; }
 </script>
 </body>
 </html>

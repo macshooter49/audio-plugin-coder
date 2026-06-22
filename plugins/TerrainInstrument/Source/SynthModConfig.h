@@ -31,7 +31,7 @@ enum class ModSource : int
     EnvAmp, EnvFilter,         // the two "always-on" envelopes
     EnvMod1, EnvMod2,          // the spare envelopes
     Velocity, Note,            // (Batch 2+)
-    SeqMod1, SeqMod2, SeqMod3, SeqMod4,   // FLOW·SEQ mod lanes (block-rate bipolar) — append-only (§3)
+    Drift1, Drift2, Drift3, Drift4, Drift5, Drift6, Drift7, Drift8,  // FLOW·DRIFT lanes (block-rate bipolar) — append-only (replaced dead SeqMod)
     NumSources
 };
 static constexpr int NUM_LFOS = 10;
@@ -144,6 +144,7 @@ struct ModConfig
     LFOSettings lfos[NUM_LFOS];
     Assignment  assignments[MAX_ASSIGNMENTS];
     int         numAssignments = 0;
+    float       driftLanes[8] = { 0 };   // FLOW·DRIFT block-rate lane values (sources Drift1..Drift8)
 };
 
 // ---------------------------------------------------------------------------

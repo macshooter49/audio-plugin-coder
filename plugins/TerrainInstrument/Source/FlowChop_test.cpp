@@ -61,7 +61,7 @@ static std::vector<int> sliceSeq (const std::function<void(FlowChop&)>& setup, f
     for (int s = 0; s < nSteps; ++s)
     {
         for (int i = 0; i < STEP; ++i) { float v = sineSig (gc + i); L[(size_t)i] = v; R[(size_t)i] = v; }
-        c.process (0.5f, 1.0f, 0.0f, traj, 0.0f, ppq, BPM, SR, L.data(), R.data(), STEP, true);
+        c.process (0.6111f, 1.0f, 0.0f, traj, 0.0f, ppq, BPM, SR, L.data(), R.data(), STEP, true);  // 0.6111 = 1/16 on the rich ladder (0.25 beats = STEP)
         seq.push_back (c.lastSliceIndex());
         gc += STEP; ppq += pps * STEP;
     }
@@ -108,7 +108,7 @@ int main()
     {
         Run r = drive ([](FlowChop& c){ c.setMode (ChopMode::AlwaysOn); c.setMix (1.0f); c.setLoopLen (4);
                                         c.setPitchRangeDeg (0); c.setReverseProb (0.0f); c.setRatchet (1); },
-                       sineSig, 0.5f, /*gate full*/1.0f, /*vary*/0.0f, /*Forward*/0.0f, /*morph*/0.0f, 140);
+                       sineSig, 0.6111f, /*gate full*/1.0f, /*vary*/0.0f, /*Forward*/0.0f, /*morph*/0.0f, 140);
         const long long latency = (long long) 1 * STEP;             // Forward now ≈ 1 slice (live-anchored)
         bool ok = true; int tested = 0;
         for (size_t g = (size_t) latency + 2000; g + 1 < r.out.size(); ++g)
@@ -128,7 +128,7 @@ int main()
         // region the single voice reads backwards -> recovered source index decreases.
         Run r = drive ([](FlowChop& c){ c.setMode (ChopMode::AlwaysOn); c.setMix (1.0f); c.setLoopLen (4);
                                         c.setPitchRangeDeg (0); c.setReverseProb (1.0f); c.setRatchet (1); },
-                       countSig, 0.5f, 1.0f, /*vary so revProb applies*/1.0f, 0.0f, 0.0f, 140);
+                       countSig, 0.6111f, 1.0f, /*vary so revProb applies*/1.0f, 0.0f, 0.0f, 140);
         auto idxOf = [] (float v) { return (long long) std::llround ((double) v * 4096.0 + 2048.0); };
         // scan a sustain window well past latency; count decreasing vs increasing steps
         int dec = 0, inc = 0; long long prev = -1;

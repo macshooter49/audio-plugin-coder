@@ -1900,12 +1900,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_SEQ_VARY,"Chop Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_SEQ_TRAJ,"Chop Style",0.00f);
     addFlowKnob (ParameterIDs::FLOW_SEQ_MORPH,"Chop Morph",0.00f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_BLEND,"Chop Blend",0.60f);   // dry/wet — 60% so dry plays under the chop (zero-latency), wet on top
+    addFlowKnob (ParameterIDs::FLOW_GLI_BLEND, "Glitch Blend",0.60f); // GLITCH dry/wet — same 60% default
+    addFlowKnob (ParameterIDs::FLOW_ARP_BLEND, "Arp Blend",1.00f);    // ARP vs dry held-chord — 1.0 = pure arp (normal); pull down to hear the sustained chord under it
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);
-    addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);  // VARY = fire CHANCE; 0 = never fires (silent), 0.5 = glitches out of the box
     addFlowKnob (ParameterIDs::FLOW_GLI_MORPH,"Glitch Morph",0.00f);
     addFlowKnob (ParameterIDs::FLOW_DRF_RATE,"Drift Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_DRF_GATE,"Drift Gate",0.55f);
-    addFlowKnob (ParameterIDs::FLOW_DRF_VARY,"Drift Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_DRF_TRAJ,"Drift Traj",0.00f);
-    addFlowKnob (ParameterIDs::FLOW_DRF_MORPH,"Drift Morph",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_DRF_VARY,"Drift Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_DRF_TRAJ,"Drift Traj",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_DRF_MORPH,"Drift Depth",0.50f);  // DEPTH = output amplitude; 0 = inert (no modulation), 0.5 = breathes out of the box
 
     return layout;
 }
@@ -1997,7 +1999,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
 
     // FLOW · ARP — prepare the block-rate global LFO bank + reset the engine
     for (auto& l : flowLfo_) l.prepare (sampleRate);
-    chop.prepare (sampleRate, 4.0);   // FLOW · CHOP capture ring (4 s) — allocation happens here only
+    chop.prepare   (sampleRate, 4.0);   // FLOW · CHOP capture ring (4 s) — allocation happens here only
+    glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
+    drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
     flowArp.reset();
     if (modStateJson.isNotEmpty())
         modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
@@ -2714,6 +2718,27 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     ++na;
                 }
             }
+            // ── FLOW · DRIFT (mode 4): publish last block's 8 lane values to the voices, and while
+            //    DRIFT is the active mode, inject default routes so it audibly modulates the wavetable
+            //    timbre — DEPTH (FLOW_DRF_MORPH) scales it. (Full per-lane custom routing = mod-matrix phase.)
+            for (int i = 0; i < 8; ++i) synModCfg.driftLanes[i] = driftLane_[i];
+            if ((int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() == 4)
+            {
+                const float dDepth = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (ParameterIDs::FLOW_DRF_MORPH)->load());
+                if (dDepth > 0.001f)
+                {
+                    const wc::ModSource dsrc[] = { wc::ModSource::Drift1, wc::ModSource::Drift2, wc::ModSource::Drift3, wc::ModSource::Drift4 };
+                    const wc::ModDest   ddst[] = { wc::ModDest::Frame,   wc::ModDest::FrameB,   wc::ModDest::Warp,     wc::ModDest::Fold };
+                    for (int k = 0; k < 4 && na < wc::MAX_ASSIGNMENTS; ++k)
+                    {
+                        synModCfg.assignments[na].source  = dsrc[k];
+                        synModCfg.assignments[na].dest    = ddst[k];
+                        synModCfg.assignments[na].depth   = 0.7f;   // fixed musical scaler — the engine already applies DEPTH (o*=depth), so don't ×dDepth again
+                        synModCfg.assignments[na].enabled = true;
+                        ++na;
+                    }
+                }
+            }
             synModCfg.numAssignments = na;
         }
         synModBpm = currentBPM.load();   // (declared in outer scope — hoisted for FLOW ARP)
@@ -2948,18 +2973,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float kTraj  = flowKnob (ParameterIDs::FLOW_ARP_TRAJ,  wc::ModDest::FlowTraj);
         const float kMorph = flowKnob (ParameterIDs::FLOW_ARP_MORPH, wc::ModDest::FlowMorph);
 
-        // SEQ inactive: drop anything it was holding (not rendering → no note-offs needed).
-        { wc::SeqEvent srel[wc::kSeqMaxEvents]; flowSeq.releaseAll (srel, wc::kSeqMaxEvents); }
-        flowSeq.clearLocks();
+        // ARP BLEND (glass menu): 1.0 = pure arp (normal). Pull down to also hear the dry held
+        // chord sustaining under the arp — the held note-ons pass through at vel×(1-blend), the arp
+        // events play at vel×blend (velocity crossfade through the shared poly synth). Changing the
+        // blend affects newly-struck notes (MIDI velocity is set at note-on).
+        const float kBlend  = flowBase (ParameterIDs::FLOW_ARP_BLEND);
+        const float dryGain = 1.0f - kBlend;
 
         flowArp.setLatch (kLatch);
         juce::MidiBuffer flowMidi;
         for (const auto meta : midiMessages)
         {
             const auto m = meta.getMessage();
-            // feed both engines' held-note sets so a mode switch mid-hold is seamless
-            if      (m.isNoteOn())  { flowArp.noteOn  (m.getNoteNumber(), m.getVelocity()); flowSeq.noteOn (m.getNoteNumber(), m.getVelocity()); }
-            else if (m.isNoteOff()) { flowArp.noteOff (m.getNoteNumber()); flowSeq.noteOff (m.getNoteNumber()); }
+            if      (m.isNoteOn())
+            {
+                flowArp.noteOn (m.getNoteNumber(), m.getVelocity());
+                const int dv = (int) std::lround (m.getVelocity() * dryGain);   // dry held chord (un-arped)
+                if (dv >= 1) flowMidi.addEvent (juce::MidiMessage::noteOn (1, m.getNoteNumber(), (juce::uint8) juce::jlimit (1, 127, dv)), meta.samplePosition);
+            }
+            else if (m.isNoteOff())
+            {
+                flowArp.noteOff (m.getNoteNumber());
+                flowMidi.addEvent (juce::MidiMessage::noteOff (1, m.getNoteNumber()), meta.samplePosition);   // release any sustained dry note
+            }
             else                    flowMidi.addEvent (m, meta.samplePosition);   // CC / pitchbend pass through
         }
 
@@ -2969,69 +3005,26 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                        flowPlaying, ev, wc::kArpMaxEvents);
         for (int i = 0; i < n; ++i)
         {
-            const auto msg = ev[i].on
-                ? juce::MidiMessage::noteOn  (1, ev[i].note, (juce::uint8) ev[i].vel)
-                : juce::MidiMessage::noteOff (1, ev[i].note);
-            flowMidi.addEvent (msg, juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
+            if (ev[i].on)
+            {
+                const int av = (int) std::lround (ev[i].vel * kBlend);   // arp stream scaled by blend
+                if (av >= 1) flowMidi.addEvent (juce::MidiMessage::noteOn (1, ev[i].note, (juce::uint8) juce::jlimit (1, 127, av)), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
+            }
+            else
+                flowMidi.addEvent (juce::MidiMessage::noteOff (1, ev[i].note), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
         }
-        synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
-    }
-    else if (false)   // ── SEQ (dormant) — CHOP replaced it at mode 2; CHOP is an audio insert at end of processBlock (see below). Dead branch kept for now; remove when SEQ is fully retired. ──
-    {
-        // ARP inactive: drop anything it was holding (not rendering → no note-offs needed).
-        { wc::ArpEvent arel[wc::kArpMaxEvents]; flowArp.releaseAll (arel, wc::kArpMaxEvents); }
-
-        flowSeq.setLatch (kLatch);
-        juce::MidiBuffer flowMidi;
-        for (const auto meta : midiMessages)
-        {
-            const auto m = meta.getMessage();
-            if      (m.isNoteOn())  { flowSeq.noteOn  (m.getNoteNumber(), m.getVelocity()); flowArp.noteOn (m.getNoteNumber(), m.getVelocity()); }
-            else if (m.isNoteOff()) { flowSeq.noteOff (m.getNoteNumber()); flowArp.noteOff (m.getNoteNumber()); }
-            else                    flowMidi.addEvent (m, meta.samplePosition);   // CC / pitchbend pass through
-        }
-
-        // SEQ reads its OWN knob params (FLOW_SEQ_*) — these are what the SEQ front knobs write.
-        const float kRate  = flowKnob (ParameterIDs::FLOW_SEQ_RATE,  wc::ModDest::FlowTime);
-        const float kGate  = flowKnob (ParameterIDs::FLOW_SEQ_GATE,  wc::ModDest::FlowGate);
-        const float kVary  = flowKnob (ParameterIDs::FLOW_SEQ_VARY,  wc::ModDest::FlowVary);
-        const float kTraj  = flowKnob (ParameterIDs::FLOW_SEQ_TRAJ,  wc::ModDest::FlowTraj);
-        const float kMorph = flowKnob (ParameterIDs::FLOW_SEQ_MORPH, wc::ModDest::FlowMorph);
-
-        // §1 process → §2 translate SeqEvent[] → MidiBuffer. legato overlap is intentional (engine
-        // suppresses the close-before-open for slides). JUCE MidiBuffer::addEvent inserts in order,
-        // so unsorted sampleOffsets are safe — same as ARP. (porta/voice-side slide = card phase.)
-        wc::SeqEvent sev[wc::kSeqMaxEvents];
-        const int sn = flowSeq.process (kRate, kGate, kVary, kTraj, kMorph,
-                                        flowPpq, flowBpm, getSampleRate(), numSamples,
-                                        flowPlaying, sev, wc::kSeqMaxEvents);
-        for (int i = 0; i < sn; ++i)
-        {
-            const auto msg = sev[i].on
-                ? juce::MidiMessage::noteOn  (1, sev[i].note, (juce::uint8) sev[i].vel)
-                : juce::MidiMessage::noteOff (1, sev[i].note);
-            flowMidi.addEvent (msg, juce::jlimit (0, numSamples - 1, sev[i].sampleOffset));
-        }
-
-        // §3 — publish the 4 mod-lane values as block-rate matrix sources (SeqMod1..4).
-        for (int i = 0; i < wc::kSeqModLanes; ++i) seqModSource_[i] = flowSeq.modValue (i);
-
         synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
     }
     else
     {
-        // FLOW Off / not-yet-built: release BOTH engines so nothing hangs, clear SEQ locks +
-        // mod sources, then pass the raw MIDI straight through.
-        wc::ArpEvent arel[wc::kArpMaxEvents]; const int an   = flowArp.releaseAll (arel, wc::kArpMaxEvents);
-        wc::SeqEvent srel[wc::kSeqMaxEvents]; const int seqn = flowSeq.releaseAll (srel, wc::kSeqMaxEvents);
-        flowSeq.clearLocks();
-        for (auto& s : seqModSource_) s = 0.0f;
-        if (an > 0 || seqn > 0)
+        // ARP inactive (Off, or CHOP/GLITCH = end-of-block audio inserts, or DRIFT = mod source):
+        // release any note the arp was holding so it can't hang, then pass raw MIDI straight through.
+        wc::ArpEvent arel[wc::kArpMaxEvents]; const int an = flowArp.releaseAll (arel, wc::kArpMaxEvents);
+        if (an > 0)
         {
             juce::MidiBuffer mixed;
             mixed.addEvents (midiMessages, 0, numSamples, 0);
-            for (int i = 0; i < an;   ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, arel[i].note), 0);
-            for (int i = 0; i < seqn; ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, srel[i].note), 0);
+            for (int i = 0; i < an; ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, arel[i].note), 0);
             synthEngine.renderNextBlock (synthScratch, mixed, 0, numSamples);
         }
         else
@@ -3682,6 +3675,39 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         float* cr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : cl;
         chop.process (cRate, cGate, cVary, cTraj, cMorph,
                       flowPpq, flowBpm, getSampleRate(), cl, cr, numSamples, flowPlaying);
+    }
+
+    // ── FLOW · GLITCH (mode 3): audio insert — beat-synced buffer-mangler IN PLACE, click-free
+    //    (FlowGlitch.h, equal-power seams + exponential tape-stop). Same insert shape as CHOP.
+    //    Macros read FLOW_GLI_* (RATE/GATE/VARY=CHANCE/TRAJ=CHAOS/MORPH=SWING); BLEND default 0.60.
+    else if (flowMode == 3)
+    {
+        const float gRate  = flowKnob (ParameterIDs::FLOW_GLI_RATE,  wc::ModDest::FlowTime);
+        const float gGate  = flowKnob (ParameterIDs::FLOW_GLI_GATE,  wc::ModDest::FlowGate);
+        const float gVary  = flowKnob (ParameterIDs::FLOW_GLI_VARY,  wc::ModDest::FlowVary);
+        const float gTraj  = flowKnob (ParameterIDs::FLOW_GLI_TRAJ,  wc::ModDest::FlowTraj);
+        const float gMorph = flowKnob (ParameterIDs::FLOW_GLI_MORPH, wc::ModDest::FlowMorph);
+        glitch.setMix (flowBase (ParameterIDs::FLOW_GLI_BLEND));   // dry/wet (glass menu); default 0.60
+        float* gl = buffer.getWritePointer (0);
+        float* gr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : gl;
+        glitch.process (gRate, gGate, gVary, gTraj, gMorph,
+                        flowPpq, flowBpm, getSampleRate(), gl, gr, numSamples, flowPlaying);
+    }
+
+    // ── FLOW · DRIFT (mode 4): generative MOD SOURCE — makes no audio; advances 8 bipolar lanes
+    //    (FlowDrift.h). Kept alive every block so the card scopes have live motion and the lanes
+    //    are ready for the mod matrix. DEPTH = MORPH macro. (Lane→ModDest routing = mod-matrix phase.)
+    else if (flowMode == 4)
+    {
+        const float dRate  = flowKnob (ParameterIDs::FLOW_DRF_RATE,  wc::ModDest::FlowTime);
+        const float dGlide = flowBase (ParameterIDs::FLOW_DRF_GATE);    // GATE macro = GLIDE/slew
+        const float dVary  = flowBase (ParameterIDs::FLOW_DRF_VARY);    // VARY  = volatility/character
+        const float dTraj  = flowBase (ParameterIDs::FLOW_DRF_TRAJ);    // TRAJ  = shape selector
+        const float dDepth = flowBase (ParameterIDs::FLOW_DRF_MORPH);   // MORPH = DEPTH (the "blend")
+        float lanes[wc::kDriftLanes] = { 0.0f };
+        drift.process (dRate, dGlide, dVary, dTraj, dDepth,
+                       flowPpq, flowBpm, getSampleRate(), lanes, numSamples, flowPlaying);
+        for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = lanes[i];
     }
 }
 

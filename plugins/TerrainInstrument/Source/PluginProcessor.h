@@ -18,9 +18,10 @@
 #include "SampleLoader.h"
 #include "Slice.h"
 #include "TerrainSynth.h"
-#include "FlowArp.h"            // FLOW · ARP engine
-#include "FlowSeq.h"            // FLOW · SEQ engine (dormant — replaced by CHOP at mode 2)
-#include "FlowChop.h"           // FLOW · CHOP engine (mode 2) — audio insert
+#include "FlowArp.h"            // FLOW · ARP engine   (mode 1)
+#include "FlowChop.h"           // FLOW · CHOP engine  (mode 2) — audio insert
+#include "FlowGlitch.h"         // FLOW · GLITCH engine(mode 3) — audio insert
+#include "FlowDrift.h"          // FLOW · DRIFT engine (mode 4) — generative mod source
 #include "SynthLFO.h"          // block-rate global FLOW LFO bank (guarded; likely transitive)
 #include "TerrainConstants.h"
 #include "LayerState.h"
@@ -683,9 +684,10 @@ private:
     int   synthNotesHeld_  = 0;       // synth notes currently sounding
     UnisonSynth                 synthEngine;   // Phase 8a: was juce::Synthesiser
     wc::FlowArp                 flowArp;                    // FLOW · ARP engine (one global instance)
-    wc::FlowSeq                 flowSeq;                    // FLOW · SEQ engine (dormant — replaced by CHOP at mode 2)
-    float                       seqModSource_[wc::kSeqModLanes] {};  // §3 — per-block bipolar SEQ mod-lane values (matrix sources SeqMod1..4)
     wc::FlowChop                chop;                       // FLOW · CHOP engine (mode 2) — audio insert at end of processBlock
+    wc::FlowGlitch              glitch;                     // FLOW · GLITCH engine (mode 3) — audio insert at end of processBlock
+    wc::FlowDrift               drift;                      // FLOW · DRIFT engine (mode 4) — generative mod source
+    float                       driftLane_[wc::kDriftLanes] {};  // per-block DRIFT lane values (mod sources; matrix routing = phase-2)
     wc::SynthLFO                flowLfo_[wc::NUM_LFOS];     // block-rate global LFO bank for FLOW-knob mod
     juce::AudioBuffer<float>    synthScratch;
 

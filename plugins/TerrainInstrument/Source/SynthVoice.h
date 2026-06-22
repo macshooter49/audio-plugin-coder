@@ -1094,8 +1094,13 @@ namespace tw
                     const auto& as = modConfig_.assignments[a];
                     if (! as.enabled) continue;
                     const int sI = (int) as.source;
-                    if (sI < 0 || sI >= wc::NUM_LFOS) continue;
-                    const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], lfoPk[sI], as.depth);
+                    // source value: LFO peak (0..9), or a FLOW·DRIFT lane (Drift1..Drift8, block-rate bipolar)
+                    float srcV;
+                    if      (sI >= 0 && sI < wc::NUM_LFOS) srcV = lfoPk[sI];
+                    else if (sI >= (int) wc::ModSource::Drift1 && sI < (int) wc::ModSource::Drift1 + 8)
+                                                          srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
+                    else continue;
+                    const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
                     switch (as.dest)
                     {
                         case wc::ModDest::Frame:  mFrA += c; break;
