@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>OSC · transparent rework</title>
+<style>
+*{box-sizing:border-box;}
+:root{
+  --bg-main:#1A1A2E; --bg-hero:#12121F; --bg-surface:#232340; --bg-card:#2A2A48; --bg-card-2:#252340;
+  --knob-track:rgba(120,118,160,0.35);
+  --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.55); --border-strong:rgba(140,130,180,0.45);
+  --text-primary:#ECE8F2; --text-secondary:#C5BFD2; --text-muted:#908599; --text-dim:#6E6580;
+  --line-bright:#ECE8F2;
+}
+body{margin:0; min-height:100vh; background:radial-gradient(1200px 700px at 50% -10%, #20203a 0%, #1A1A2E 60%);
+  font-family:-apple-system,'SF Pro Display','SF Pro Text','Inter',system-ui,sans-serif; color:var(--text-primary);
+  display:flex; flex-direction:column; align-items:center; gap:30px; padding:42px 20px 80px;}
+h1{font-size:13px; font-weight:300; letter-spacing:4px; color:var(--text-secondary); margin:0;}
+.sub{font-size:11px; color:var(--text-muted); margin:-20px 0 0; font-weight:300; letter-spacing:.4px; text-align:center; max-width:640px; line-height:1.7;}
+
+/* a "stage" = a faithful slice of #syn-panel (so transparency reads against the real backdrop) */
+.stage{ width:820px; background:var(--bg-main); border:1px solid var(--border); border-radius:16px;
+  padding:26px 22px 22px; position:relative; box-shadow:0 18px 50px rgba(0,0,0,.35); }
+.tag{ position:absolute; top:-10px; left:20px; font-size:9.5px; letter-spacing:2.4px; font-weight:500;
+  padding:3px 10px; border-radius:6px; background:var(--bg-card); border:1px solid var(--border-strong); color:var(--text-secondary); }
+.tag.now{ color:var(--text-muted); }
+.tag.go{ color:#fff; background:var(--purple-500); border-color:var(--purple-500); }
+.note{ font-size:10px; color:var(--text-muted); margin:14px 2px 0; line-height:1.65; }
+.note b{ color:var(--text-secondary); font-weight:500; }
+
+/* ── shared row layout (identical to plugin: 1fr 104px 1fr) ── */
+.row-osc{ display:grid; grid-template-columns:1fr 104px 1fr; gap:12px; }
+.osc{ display:flex; flex-direction:column; gap:7px; padding-top:24px; position:relative; }
+
+/* header */
+.ohead{ position:absolute; top:0; left:0; right:0; height:18px; display:flex; align-items:center; }
+.oid{ display:flex; align-items:center; gap:5px; font-size:9px; font-weight:300; letter-spacing:2px; color:var(--text-secondary); }
+.oletter{ width:14px; height:14px; border:1px solid var(--border-strong); border-radius:3px; display:inline-grid; place-items:center;
+  font-size:9px; font-weight:600; color:var(--text-primary); cursor:pointer; transition:all .15s ease; background:rgba(255,255,255,.02);}
+.oletter:hover{ border-color:var(--purple-400); color:var(--purple-400); box-shadow:0 0 7px rgba(139,92,246,.4); }
+.sn{ display:inline-flex; gap:5px; margin-left:5px; }
+.sn .chip{ width:14px; height:14px; border:1px solid var(--border-strong); border-radius:3px; background:transparent;
+  display:inline-grid; place-items:center; font-size:9px; font-weight:600; color:var(--text-secondary); cursor:pointer; padding-top:1px; transition:all .15s ease;}
+.sn .chip:hover{ color:#fff; border-color:var(--purple-400); box-shadow:0 0 6px rgba(139,92,246,.4); }
+.sn .chip.on{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.pcorner{ margin-left:auto; display:flex; align-items:center; gap:7px; }
+.pname{ font-size:9px; color:var(--text-secondary); letter-spacing:1.4px; font-weight:200; cursor:pointer; white-space:nowrap; }
+.swap{ width:14px; height:14px; border:1px solid var(--border-strong); border-radius:3px; background:transparent; position:relative; cursor:pointer; }
+.swap::before{ content:''; position:absolute; inset:0; background:
+   linear-gradient(var(--text-secondary),var(--text-secondary)) center/7px 1px no-repeat,
+   linear-gradient(var(--text-secondary),var(--text-secondary)) center/1px 7px no-repeat; }
+.swap:hover{ border-color:var(--purple-400); }
+
+/* engine pills */
+.engines{ display:flex; gap:8px; }
+.eng{ flex:1; height:30px; border:1px solid var(--border-strong); border-radius:6px; display:flex; align-items:center; justify-content:center;
+  color:var(--text-primary); transition:all .12s ease; cursor:pointer; }
+.eng svg{ width:22px; height:22px; }
+.eng.txt{ font-size:10px; letter-spacing:1.2px; font-weight:300; color:var(--text-secondary); }
+.eng:hover{ border-color:var(--purple-400); }
+.eng.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.eng.txt.act{ color:#fff; }
+
+/* ── waveform display ── */
+/* BOXED (current): inset dark card */
+.wave-box{ flex:1; background:var(--bg-hero); border:1px solid var(--border); border-radius:8px; position:relative; overflow:hidden; min-height:34px; }
+.wave-box::before,.wave-box::after{ content:''; position:absolute; width:7px; height:7px; border:1px solid rgba(236,232,242,.22); }
+.wave-box::before{ top:4px; left:4px; border-right:none; border-bottom:none; }
+.wave-box::after{ bottom:4px; right:4px; border-left:none; border-top:none; }
+.wave-box .wrap{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+.wave-box .wrap svg{ width:92%; height:78%; }
+
+/* TRANSPARENT (new): floats on the panel, glowing, alive */
+.wave-glass{ position:relative; overflow:hidden; }
+.wave-glass.sm{ min-height:38px; flex:1; }
+.wave-glass.lg{ min-height:62px; flex:none; }       /* the "hero" morph display */
+.wave-glass .wrap{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+.wave-glass .wrap svg{ width:96%; height:84%; overflow:visible; }
+.wline{ fill:none; stroke:var(--line-bright); stroke-width:1.4; filter:drop-shadow(0 0 3px rgba(183,148,255,.55)); }
+.wline.dim{ opacity:.22; }
+.wave-glass.lg .wline{ stroke-width:1.6; }
+/* faint frame ticks + playhead so the glass still reads as a "display" without a box */
+.wave-glass .ticks{ position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(90deg, transparent 0 23px, rgba(183,148,255,.05) 23px 24px); }
+.playhead{ position:absolute; top:8%; bottom:8%; width:1px; background:linear-gradient(rgba(183,148,255,0),rgba(183,148,255,.7),rgba(183,148,255,0));
+  box-shadow:0 0 6px rgba(183,148,255,.6); animation:sweep 5.5s linear infinite; }
+@keyframes sweep{ from{ left:4%; } to{ left:96%; } }
+/* the live morph: gently breathe the wave so it feels alive */
+.breathe{ animation:breathe 6s ease-in-out infinite; transform-origin:center; }
+@keyframes breathe{ 0%,100%{ transform:scaleY(1); } 50%{ transform:scaleY(.84); } }
+
+/* knobs */
+.knobs{ display:grid; grid-template-columns:repeat(5,1fr); gap:4px; align-items:center; }
+.knob{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+.ring{ width:24px; height:24px; border-radius:50%;
+  -webkit-mask:radial-gradient(circle, transparent 7.5px, black 8.5px); mask:radial-gradient(circle, transparent 7.5px, black 8.5px); }
+.klabel{ font-size:8px; letter-spacing:1.4px; color:var(--text-primary); font-weight:300; }
+
+/* the new front tuning row — smaller, secondary */
+.tune{ display:grid; grid-template-columns:repeat(3,auto); gap:14px; justify-content:center; align-items:center; padding-top:2px;
+  border-top:1px solid rgba(140,130,180,.12); margin-top:1px; }
+.tune .knob .ring{ width:21px; height:21px; -webkit-mask:radial-gradient(circle, transparent 6.5px, black 7.5px); mask:radial-gradient(circle, transparent 6.5px, black 7.5px); }
+.tune .klabel{ font-size:7.5px; color:var(--text-secondary); letter-spacing:1px; }
+
+/* ── CROSS / mixer ── */
+.cross{ border-radius:11px; padding:8px; display:grid; grid-template-rows:22px 28px 1fr; gap:7px; position:relative; }
+.cross.boxed{ background:var(--bg-card-2); border:1px solid var(--border-strong); }
+.cross.glass{ background:transparent; border:none; }
+.cdir{ display:grid; grid-template-columns:1fr 14px 1fr; align-items:center; gap:2px; }
+.cdir .ab{ height:22px; border:1px solid var(--border-strong); border-radius:5px; display:flex; align-items:center; justify-content:center;
+  font-size:9.5px; letter-spacing:1.2px; color:var(--text-primary); font-weight:300; cursor:pointer; }
+.cdir .ab.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.cdir .arr{ color:var(--purple-400); font-size:11px; text-align:center; font-weight:200; }
+.csync{ width:100%; height:28px; border:1px solid var(--border-strong); border-radius:7px; display:flex; align-items:center; justify-content:center;
+  font-size:10.5px; letter-spacing:1.8px; color:var(--text-primary); font-weight:300; cursor:pointer; }
+.csync.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.cknobs{ display:grid; grid-template-columns:repeat(3,1fr); align-items:center; justify-items:center; }
+.cknob{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+.cknob .ring{ width:24px; height:24px; }
+.cknob .klabel{ font-size:7.5px; letter-spacing:.6px; }
+.cross.glass .cdir-pad{ height:0; } /* center column shifts up a touch when un-boxed */
+.cross.glass{ padding-top:24px; }   /* align with .osc padding-top so rows line up */
+</style>
+</head>
+<body>
+
+  <h1>O S C &nbsp;·&nbsp; T R A N S P A R E N T &nbsp; R E W O R K</h1>
+  <p class="sub">Same layout, nothing moved — the three boxes dissolve into the transparent / alive language of the filters, LFOs and FLOW. The space the boxes were eating becomes a bigger live morph display + tuning up front.</p>
+
+  <!-- ════════ BEFORE ════════ -->
+  <div class="stage">
+    <span class="tag now">NOW · BOXED</span>
+    <div class="row-osc" id="before"></div>
+    <p class="note">Three hard cards (<b>bg-card + border + radius</b>). The dark waveform sits in its own inset box, and Oct/Semi/Cent live on the hidden back panel.</p>
+  </div>
+
+  <!-- ════════ OPTION 1 ════════ -->
+  <div class="stage">
+    <span class="tag go">OPTION 1 · PURE TRANSPARENT</span>
+    <div class="row-osc" id="opt1"></div>
+    <p class="note"><b>Minimal read of your note:</b> just remove the boxes. Every element stays exactly where it is. The waveform loses its dark inset and <b>floats as a glowing live curve</b> on the panel (like the filter/LFO visualizers), with a faint frame grid + a sweeping playhead so it still reads as a display. Sync block is transparent too.</p>
+  </div>
+
+  <!-- ════════ OPTION 2 ════════ -->
+  <div class="stage">
+    <span class="tag go">OPTION 2 · TRANSPARENT + RECLAIMED SPACE</span>
+    <div class="row-osc" id="opt2"></div>
+    <p class="note"><b>Doing more with the space:</b> same transparency, but the reclaimed chrome pays for a <b>taller hero morph display</b> (breathing, alive) and a slim <b>Oct / Semi / Cent</b> tuning row surfaced under the main knobs — no flip to the back panel for basic tuning. Center mixer unchanged, transparent.</p>
+  </div>
+
+<!-- ICON DEFS (copied verbatim from index.html) -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="ic-wt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+    <path d="M3 8 Q7 4, 12 8 T21 8"/><path d="M3 12 Q7 8, 12 12 T21 12" opacity="0.55"/><path d="M3 16 Q7 12, 12 16 T21 16" opacity="0.28"/>
+  </symbol>
+  <symbol id="ic-samp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 5 L4 19 M4 5 L7 5 M4 19 L7 19 M20 5 L20 19 M20 5 L17 5 M20 19 L17 19"/><polyline points="7,12 9,8 11,15 13,10 15,15 17,9 19,12" stroke-width="1.3"/>
+  </symbol>
+  <symbol id="ic-gran" viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="7" cy="7" r="1.4"/><circle cx="12" cy="5" r="1.4"/><circle cx="17" cy="7" r="1.4"/><circle cx="9" cy="11" r="1.4"/><circle cx="15" cy="11" r="1.4"/><circle cx="12" cy="15" r="1.4"/><circle cx="7" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/><circle cx="12" cy="19" r="1.4"/>
+  </symbol>
+  <symbol id="ic-spec" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="3.5" y="14" width="2.2" height="6" rx="0.5"/><rect x="7.6" y="10" width="2.2" height="10" rx="0.5"/><rect x="11.7" y="5" width="2.2" height="15" rx="0.5"/><rect x="15.8" y="11" width="2.2" height="9" rx="0.5"/><rect x="19.9" y="8" width="2.2" height="12" rx="0.5"/>
+  </symbol>
+  <symbol id="ic-fm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="3"/></symbol>
+  <symbol id="ic-analog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    <path d="M3,13.5 C6,6 9,6 12,13.5 C15,21 18,21 21,13.5" opacity="0.5"/><path d="M3,10.5 C6,3 9,3 12,10.5 C15,18 18,18 21,10.5"/>
+  </symbol>
+</svg>
+
+<script>
+var ICONS=['ic-wt','ic-samp','ic-gran','ic-spec','ic-fm','ic-analog'];
+var LEGEND=['WT','Samp','Gran','Spec','FM','ANLG'];
+var KN=['WT Pos','Warp','Spectral','Fold','Blur'];
+// a few wave shapes (200x60 viewBox)
+var WAVES={
+  sine:'M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30',
+  saw:'M0,52 L25,8 L25,52 L50,8 L50,52 L75,8 L75,52 L100,8 L100,52 L125,8 L125,52 L150,8 L150,52 L175,8 L175,52 L200,8',
+  ppg:'M0,30 L14,10 L28,46 L42,16 L56,40 L70,14 L100,30 L130,22 L160,34 L200,30'
+};
+function ring(pct){ var deg=pct*270; return 'background:conic-gradient(from 225deg, var(--purple-500) 0deg '+deg+'deg, var(--knob-track) '+deg+'deg 270deg, transparent 270deg);'; }
+
+function engines(active, asText){
+  return '<div class="engines">'+ICONS.map(function(ic,i){
+    if(asText) return '<div class="eng txt'+(i===active?' act':'')+'">'+LEGEND[i]+'</div>';
+    return '<div class="eng'+(i===active?' act':'')+'"><svg><use href="#'+ic+'"/></svg></div>';
+  }).join('')+'</div>';
+}
+function header(letter, name, sub, noise){
+  return '<div class="ohead"><span class="oid">Osc · <span class="oletter">'+letter+'</span>'
+    +'<span class="sn"><span class="chip'+(sub?' on':'')+'">S</span><span class="chip'+(noise?' on':'')+'">N</span></span></span>'
+    +'<span class="pcorner"><span class="pname">'+name+'</span><span class="swap"></span></span></div>';
+}
+function knobs(vals){
+  return '<div class="knobs">'+KN.map(function(l,i){
+    return '<div class="knob"><div class="ring" style="'+ring(vals[i])+'"></div><div class="klabel">'+l+'</div></div>';
+  }).join('')+'</div>';
+}
+function tune(vals){
+  var L=['Oct','Semi','Cent'];
+  return '<div class="tune">'+L.map(function(l,i){
+    return '<div class="knob"><div class="ring" style="'+ring(vals[i])+'"></div><div class="klabel">'+l+'</div></div>';
+  }).join('')+'</div>';
+}
+function waveSVG(shape, cls){
+  return '<div class="wrap"><svg viewBox="0 0 200 60" preserveAspectRatio="none">'
+    + '<path class="wline dim" d="'+WAVES[shape]+'"/>'
+    + '<path class="wline '+(cls||'')+'" d="'+WAVES[shape]+'"/></svg></div>';
+}
+
+function cross(glass){
+  return '<div class="cross '+(glass?'glass':'boxed')+'">'
+    +'<div class="cdir"><div class="ab act">A</div><div class="arr">→</div><div class="ab">B</div></div>'
+    +'<div class="csync act">Sync</div>'
+    +'<div class="cknobs">'
+    +'<div class="cknob"><div class="ring" style="'+ring(.4)+'"></div><div class="klabel">FM</div></div>'
+    +'<div class="cknob"><div class="ring" style="'+ring(.25)+'"></div><div class="klabel">Ring</div></div>'
+    +'<div class="cknob"><div class="ring" style="'+ring(.6)+'"></div><div class="klabel">Mix</div></div>'
+    +'</div></div>';
+}
+
+// ── BEFORE (boxed) ──
+(function(){
+  var L='<div class="osc">'+header('A','Sine',false,false)+engines(0,false)
+    +'<div class="wave-box"><div class="wrap"><svg viewBox="0 0 200 60" preserveAspectRatio="none"><path class="wline" d="'+WAVES.sine+'"/></svg></div></div>'
+    +knobs([.55,.3,.2,.45,.15])+'</div>';
+  var R='<div class="osc">'+header('C','PPG Wave',false,false)+engines(0,true)
+    +'<div class="wave-box"><div class="wrap"><svg viewBox="0 0 200 60" preserveAspectRatio="none"><path class="wline" d="'+WAVES.saw+'"/></svg></div></div>'
+    +knobs([.7,.5,.35,.2,.4])+'</div>';
+  // boxed look: wrap each osc col in a card
+  document.getElementById('before').innerHTML =
+    '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:13px;padding:10px 14px 12px;">'+L+'</div>'
+    + cross(false)
+    + '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:13px;padding:10px 14px 12px;">'+R+'</div>';
+  // un-pad the inner .osc since the card provides padding
+  [].forEach.call(document.querySelectorAll('#before .osc'),function(o){ o.style.paddingTop='18px'; });
+})();
+
+// ── OPTION 1 (pure transparent) ──
+(function(){
+  var L='<div class="osc">'+header('A','Sine',false,false)+engines(0,false)
+    +'<div class="wave-glass sm"><div class="ticks"></div>'+waveSVG('sine','breathe')+'<div class="playhead"></div></div>'
+    +knobs([.55,.3,.2,.45,.15])+'</div>';
+  var R='<div class="osc">'+header('C','PPG Wave',false,false)+engines(0,true)
+    +'<div class="wave-glass sm"><div class="ticks"></div>'+waveSVG('saw','breathe')+'<div class="playhead" style="animation-delay:-2.2s"></div></div>'
+    +knobs([.7,.5,.35,.2,.4])+'</div>';
+  document.getElementById('opt1').innerHTML = L + cross(true) + R;
+})();
+
+// ── OPTION 2 (transparent + bigger morph + tuning) ──
+(function(){
+  var L='<div class="osc">'+header('A','Sine',false,false)+engines(0,false)
+    +'<div class="wave-glass lg"><div class="ticks"></div>'+waveSVG('sine','breathe')+'<div class="playhead"></div></div>'
+    +knobs([.55,.3,.2,.45,.15])+tune([.5,.3,.5])+'</div>';
+  var R='<div class="osc">'+header('C','PPG Wave',false,false)+engines(0,true)
+    +'<div class="wave-glass lg"><div class="ticks"></div>'+waveSVG('ppg','breathe')+'<div class="playhead" style="animation-delay:-3s"></div></div>'
+    +knobs([.7,.5,.35,.2,.4])+tune([.6,.5,.45])+'</div>';
+  document.getElementById('opt2').innerHTML = L + cross(true) + R;
+})();
+</script>
+</body>
+</html>

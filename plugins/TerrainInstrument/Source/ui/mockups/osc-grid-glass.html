@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>OSC · grid-glass scope</title>
+<style>
+*{box-sizing:border-box;}
+:root{
+  --bg-main:#1A1A2E; --bg-hero:#12121F; --bg-surface:#232340; --bg-card:#2A2A48; --bg-card-2:#252340;
+  --knob-track:rgba(120,118,160,0.35);
+  --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.55); --border-strong:rgba(140,130,180,0.45);
+  --text-primary:#ECE8F2; --text-secondary:#C5BFD2; --text-muted:#908599; --text-dim:#6E6580;
+  --line-bright:#ECE8F2;
+}
+body{margin:0; min-height:100vh; background:radial-gradient(1200px 700px at 50% -10%, #20203a 0%, #1A1A2E 60%);
+  font-family:-apple-system,'SF Pro Display','SF Pro Text','Inter',system-ui,sans-serif; color:var(--text-primary);
+  display:flex; flex-direction:column; align-items:center; gap:30px; padding:42px 20px 80px;}
+h1{font-size:13px; font-weight:300; letter-spacing:4px; color:var(--text-secondary); margin:0;}
+.sub{font-size:11px; color:var(--text-muted); margin:-20px 0 0; font-weight:300; letter-spacing:.4px; text-align:center; max-width:660px; line-height:1.7;}
+
+.stage{ width:820px; background:var(--bg-main); border:1px solid var(--border); border-radius:16px;
+  padding:26px 22px 22px; position:relative; box-shadow:0 18px 50px rgba(0,0,0,.35); }
+.tag{ position:absolute; top:-10px; left:20px; font-size:9.5px; letter-spacing:2.4px; font-weight:500;
+  padding:3px 10px; border-radius:6px; background:var(--bg-card); border:1px solid var(--border-strong); color:var(--text-secondary); }
+.tag.go{ color:#fff; background:var(--purple-500); border-color:var(--purple-500); }
+.note{ font-size:10px; color:var(--text-muted); margin:14px 2px 0; line-height:1.65; }
+.note b{ color:var(--text-secondary); font-weight:500; }
+
+.row-osc{ display:grid; grid-template-columns:1fr 104px 1fr; gap:12px; }
+.osc{ display:flex; flex-direction:column; gap:7px; padding-top:24px; position:relative; }
+
+/* header */
+.ohead{ position:absolute; top:0; left:0; right:0; height:18px; display:flex; align-items:center; }
+.oid{ display:flex; align-items:center; gap:5px; font-size:9px; font-weight:300; letter-spacing:2px; color:var(--text-secondary); }
+.oletter{ width:14px; height:14px; border:1px solid var(--border-strong); border-radius:3px; display:inline-grid; place-items:center;
+  font-size:9px; font-weight:600; color:var(--text-primary); cursor:pointer; transition:all .15s ease; background:rgba(255,255,255,.02);}
+.oletter:hover{ border-color:var(--purple-400); color:var(--purple-400); box-shadow:0 0 7px rgba(139,92,246,.4); }
+.sn{ display:inline-flex; gap:5px; margin-left:5px; }
+.sn .chip{ width:14px; height:14px; border:1px solid var(--border-strong); border-radius:3px; background:transparent;
+  display:inline-grid; place-items:center; font-size:9px; font-weight:600; color:var(--text-secondary); cursor:pointer; padding-top:1px; transition:all .15s ease;}
+.sn .chip:hover{ color:#fff; border-color:var(--purple-400); box-shadow:0 0 6px rgba(139,92,246,.4); }
+.sn .chip.on{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.pcorner{ margin-left:auto; display:flex; align-items:center; gap:7px; }
+.pname{ font-size:9px; color:var(--text-secondary); letter-spacing:1.4px; font-weight:200; cursor:pointer; white-space:nowrap; }
+.swap{ width:14px; height:14px; border:1px solid var(--border-strong); border-radius:3px; background:transparent; position:relative; cursor:pointer; }
+.swap::before{ content:''; position:absolute; inset:0; background:
+   linear-gradient(var(--text-secondary),var(--text-secondary)) center/7px 1px no-repeat,
+   linear-gradient(var(--text-secondary),var(--text-secondary)) center/1px 7px no-repeat; }
+.swap:hover{ border-color:var(--purple-400); }
+
+/* engine pills */
+.engines{ display:flex; gap:8px; }
+.eng{ flex:1; height:30px; border:1px solid var(--border-strong); border-radius:6px; display:flex; align-items:center; justify-content:center;
+  color:var(--text-primary); transition:all .12s ease; cursor:pointer; }
+.eng svg{ width:22px; height:22px; }
+.eng.txt{ font-size:10px; letter-spacing:1.2px; font-weight:300; color:var(--text-secondary); }
+.eng:hover{ border-color:var(--purple-400); }
+.eng.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.eng.txt.act{ color:#fff; }
+
+/* ── the GRID-GLASS scope (matches the LFO / filter displays) ── */
+.scope{ position:relative; overflow:hidden; border-radius:9px;
+  background:var(--bg-hero);
+  border:1px solid rgba(140,130,180,.10);
+  box-shadow:inset 0 0 0 1px rgba(18,18,31,.4), inset 0 8px 26px rgba(0,0,0,.30); }
+.scope.sm{ flex:1; min-height:42px; }
+.scope.lg{ flex:none; min-height:70px; }
+.scope svg{ position:absolute; inset:0; width:100%; height:100%; }
+.gline{ stroke:rgba(139,92,246,.14); stroke-width:.5; }
+.gline.mid{ stroke:rgba(139,92,246,.22); }
+.wfill{ fill:rgba(224,216,245,0.06); }
+.wstroke{ fill:none; stroke:#ECE8F2; stroke-width:1.7; vector-effect:non-scaling-stroke;
+  filter:drop-shadow(0 0 2px rgba(183,148,255,.85)) drop-shadow(0 0 5px rgba(183,148,255,.5));
+  animation:breathe 3.4s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+@keyframes breathe{ 0%,100%{ transform:scaleY(1);} 50%{ transform:scaleY(.9);} }
+.play{ stroke:rgba(236,232,242,.42); stroke-width:1; vector-effect:non-scaling-stroke; }
+.foll{ fill:#fff; filter:drop-shadow(0 0 2px rgba(167,139,250,.95)) drop-shadow(0 0 5px rgba(167,139,250,.6)); }
+.scope .corner{ position:absolute; top:6px; right:8px; font-size:7.5px; letter-spacing:1px; color:var(--text-dim); font-weight:300; }
+
+/* knobs */
+.knobs{ display:grid; grid-template-columns:repeat(5,1fr); gap:4px; align-items:center; }
+.knob{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+.ring{ width:24px; height:24px; border-radius:50%;
+  -webkit-mask:radial-gradient(circle, transparent 7.5px, black 8.5px); mask:radial-gradient(circle, transparent 7.5px, black 8.5px); }
+.klabel{ font-size:8px; letter-spacing:1.4px; color:var(--text-primary); font-weight:300; }
+
+/* front tuning row */
+.tune{ display:grid; grid-template-columns:repeat(3,auto); gap:16px; justify-content:center; align-items:center; padding-top:3px;
+  border-top:1px solid rgba(140,130,180,.10); margin-top:1px; }
+.tune .knob .ring{ width:21px; height:21px; -webkit-mask:radial-gradient(circle, transparent 6.5px, black 7.5px); mask:radial-gradient(circle, transparent 6.5px, black 7.5px); }
+.tune .klabel{ font-size:7.5px; color:var(--text-secondary); letter-spacing:1px; }
+
+/* CROSS (transparent) */
+.cross{ border-radius:11px; padding:24px 8px 8px; display:grid; grid-template-rows:22px 28px 1fr; gap:7px; position:relative; background:transparent; border:none; }
+.cdir{ display:grid; grid-template-columns:1fr 14px 1fr; align-items:center; gap:2px; }
+.cdir .ab{ height:22px; border:1px solid var(--border-strong); border-radius:5px; display:flex; align-items:center; justify-content:center;
+  font-size:9.5px; letter-spacing:1.2px; color:var(--text-primary); font-weight:300; cursor:pointer; }
+.cdir .ab.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.cdir .arr{ color:var(--purple-400); font-size:11px; text-align:center; font-weight:200; }
+.csync{ width:100%; height:28px; border:1px solid var(--border-strong); border-radius:7px; display:flex; align-items:center; justify-content:center;
+  font-size:10.5px; letter-spacing:1.8px; color:var(--text-primary); font-weight:300; cursor:pointer; }
+.csync.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+.cknobs{ display:grid; grid-template-columns:repeat(3,1fr); align-items:center; justify-items:center; }
+.cknob{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+.cknob .ring{ width:24px; height:24px; }
+.cknob .klabel{ font-size:7.5px; letter-spacing:.6px; }
+</style>
+</head>
+<body>
+
+  <h1>O S C &nbsp;·&nbsp; G R I D - G L A S S &nbsp; S C O P E</h1>
+  <p class="sub">Same transparent cards you liked — but the waveform is now a dark grid-glass scope like the LFO / filter: spacious purple grid, glowing curve with fill, a sweeping playhead + follower dot riding the wave. Boxes gone, scope vibe kept.</p>
+
+  <div class="stage">
+    <span class="tag go">COMPACT · SCOPE ONLY</span>
+    <div class="row-osc" id="compact"></div>
+    <p class="note"><b>Purist:</b> nothing moves. Outer card dissolves; the waveform becomes the grid-glass scope. Sync block transparent. Closest to your "just de-box it" note, now with the scope vibe.</p>
+  </div>
+
+  <div class="stage">
+    <span class="tag go">HERO + TUNING · USE THE SPACE</span>
+    <div class="row-osc" id="hero"></div>
+    <p class="note"><b>More of the vibe:</b> a taller scope so the spacious grid really breathes, plus a slim <b>Oct / Semi / Cent</b> tuning row under the knobs. The grid + playhead make it feel like the filter/LFO scopes — alive and technical.</p>
+  </div>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="ic-wt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+    <path d="M3 8 Q7 4, 12 8 T21 8"/><path d="M3 12 Q7 8, 12 12 T21 12" opacity="0.55"/><path d="M3 16 Q7 12, 12 16 T21 16" opacity="0.28"/>
+  </symbol>
+  <symbol id="ic-samp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 5 L4 19 M4 5 L7 5 M4 19 L7 19 M20 5 L20 19 M20 5 L17 5 M20 19 L17 19"/><polyline points="7,12 9,8 11,15 13,10 15,15 17,9 19,12" stroke-width="1.3"/>
+  </symbol>
+  <symbol id="ic-gran" viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="7" cy="7" r="1.4"/><circle cx="12" cy="5" r="1.4"/><circle cx="17" cy="7" r="1.4"/><circle cx="9" cy="11" r="1.4"/><circle cx="15" cy="11" r="1.4"/><circle cx="12" cy="15" r="1.4"/><circle cx="7" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/><circle cx="12" cy="19" r="1.4"/>
+  </symbol>
+  <symbol id="ic-spec" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="3.5" y="14" width="2.2" height="6" rx="0.5"/><rect x="7.6" y="10" width="2.2" height="10" rx="0.5"/><rect x="11.7" y="5" width="2.2" height="15" rx="0.5"/><rect x="15.8" y="11" width="2.2" height="9" rx="0.5"/><rect x="19.9" y="8" width="2.2" height="12" rx="0.5"/>
+  </symbol>
+  <symbol id="ic-fm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="3"/></symbol>
+  <symbol id="ic-analog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    <path d="M3,13.5 C6,6 9,6 12,13.5 C15,21 18,21 21,13.5" opacity="0.5"/><path d="M3,10.5 C6,3 9,3 12,10.5 C15,18 18,18 21,10.5"/>
+  </symbol>
+</svg>
+
+<script>
+var ICONS=['ic-wt','ic-samp','ic-gran','ic-spec','ic-fm','ic-analog'];
+var LEGEND=['WT','Samp','Gran','Spec','FM','ANLG'];
+var KN=['WT Pos','Warp','Spectral','Fold','Blur'];
+var uid=0;
+var WAVES={
+  sine:'M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30',
+  ppg:'M0,30 L14,12 L28,44 L42,16 L56,40 L70,16 L100,30 L130,22 L160,34 L200,30'
+};
+function fillPath(d){ return d+' L200,60 L0,60 Z'; }
+function ring(pct){ var deg=pct*270; return 'background:conic-gradient(from 225deg, var(--purple-500) 0deg '+deg+'deg, var(--knob-track) '+deg+'deg 270deg, transparent 270deg);'; }
+
+function engines(active, asText){
+  return '<div class="engines">'+ICONS.map(function(ic,i){
+    if(asText) return '<div class="eng txt'+(i===active?' act':'')+'">'+LEGEND[i]+'</div>';
+    return '<div class="eng'+(i===active?' act':'')+'"><svg><use href="#'+ic+'"/></svg></div>';
+  }).join('')+'</div>';
+}
+function header(letter, name, sub, noise){
+  return '<div class="ohead"><span class="oid">Osc · <span class="oletter">'+letter+'</span>'
+    +'<span class="sn"><span class="chip'+(sub?' on':'')+'">S</span><span class="chip'+(noise?' on':'')+'">N</span></span></span>'
+    +'<span class="pcorner"><span class="pname">'+name+'</span><span class="swap"></span></span></div>';
+}
+function knobs(vals){
+  return '<div class="knobs">'+KN.map(function(l,i){
+    return '<div class="knob"><div class="ring" style="'+ring(vals[i])+'"></div><div class="klabel">'+l+'</div></div>';
+  }).join('')+'</div>';
+}
+function tune(vals){
+  var L=['Oct','Semi','Cent'];
+  return '<div class="tune">'+L.map(function(l,i){
+    return '<div class="knob"><div class="ring" style="'+ring(vals[i])+'"></div><div class="klabel">'+l+'</div></div>';
+  }).join('')+'</div>';
+}
+// the grid-glass scope. SVG viewBox 0 0 200 60 (preserveAspectRatio none so it fills).
+function scope(shape, size, label, delay){
+  var id='w'+(uid++);
+  // spacious grid: 5 verticals (center brighter), 3 horizontals (center brighter)
+  var gx=[33.3,66.6,100,133.3,166.6], gy=[15,30,45];
+  var grid='';
+  gx.forEach(function(x){ grid+='<line class="gline'+(x===100?' mid':'')+'" x1="'+x+'" y1="0" x2="'+x+'" y2="60"/>'; });
+  gy.forEach(function(y){ grid+='<line class="gline'+(y===30?' mid':'')+'" x1="0" y1="'+y+'" x2="200" y2="'+y+'"/>'; });
+  var d=WAVES[shape];
+  return '<div class="scope '+size+'">'
+    +'<svg viewBox="0 0 200 60" preserveAspectRatio="none">'
+    +'<g>'+grid+'</g>'
+    +'<path class="wfill" d="'+fillPath(d)+'"/>'
+    +'<path id="'+id+'" class="wstroke" d="'+d+'"/>'
+    +'<line class="play" x1="0" y1="0" x2="0" y2="60"><animate attributeName="x1" values="6;194" dur="5.5s" begin="'+delay+'" repeatCount="indefinite"/><animate attributeName="x2" values="6;194" dur="5.5s" begin="'+delay+'" repeatCount="indefinite"/></line>'
+    +'<circle class="foll" r="2.4"><animateMotion dur="5.5s" begin="'+delay+'" repeatCount="indefinite"><mpath href="#'+id+'"/></animateMotion></circle>'
+    +'</svg>'
+    +(label?'<span class="corner">'+label+'</span>':'')
+    +'</div>';
+}
+function cross(){
+  return '<div class="cross">'
+    +'<div class="cdir"><div class="ab act">A</div><div class="arr">→</div><div class="ab">B</div></div>'
+    +'<div class="csync act">Sync</div>'
+    +'<div class="cknobs">'
+    +'<div class="cknob"><div class="ring" style="'+ring(.4)+'"></div><div class="klabel">FM</div></div>'
+    +'<div class="cknob"><div class="ring" style="'+ring(.25)+'"></div><div class="klabel">Ring</div></div>'
+    +'<div class="cknob"><div class="ring" style="'+ring(.6)+'"></div><div class="klabel">Mix</div></div>'
+    +'</div></div>';
+}
+
+// COMPACT
+(function(){
+  var L='<div class="osc">'+header('A','Sine')+engines(0,false)+scope('sine','sm','',  '0s')+knobs([.55,.3,.2,.45,.15])+'</div>';
+  var R='<div class="osc">'+header('C','PPG Wave')+engines(0,true)+scope('ppg','sm','','-2.2s')+knobs([.7,.5,.35,.2,.4])+'</div>';
+  document.getElementById('compact').innerHTML = L + cross() + R;
+})();
+// HERO + TUNING
+(function(){
+  var L='<div class="osc">'+header('A','Sine')+engines(0,false)+scope('sine','lg','WT 1/256','0s')+knobs([.55,.3,.2,.45,.15])+tune([.5,.3,.5])+'</div>';
+  var R='<div class="osc">'+header('C','PPG Wave')+engines(0,true)+scope('ppg','lg','WT 12/256','-3s')+knobs([.7,.5,.35,.2,.4])+tune([.6,.5,.45])+'</div>';
+  document.getElementById('hero').innerHTML = L + cross() + R;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Terrain · filled grid + white separators (full-panel style study)</title>
+<style>
+*{box-sizing:border-box;}
+:root{
+  --bg-main:#1A1A2E; --bg-hero:#12121F; --grid:#14141f; --grid-deep:#101019;
+  --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.55); --border-strong:rgba(140,130,180,0.45);
+  --text-primary:#ECE8F2; --text-secondary:#C5BFD2; --text-muted:#908599; --text-dim:#6E6580;
+  --knob-track:rgba(120,118,160,0.35);
+  --sep:rgba(255,255,255,0.16);          /* the white separators */
+  --sep-glow:rgba(255,255,255,0.26);
+}
+body{margin:0; min-height:100vh; background:radial-gradient(1200px 700px at 50% -10%, #20203a 0%, #14141f 60%);
+  font-family:-apple-system,'SF Pro Display','SF Pro Text','Inter',system-ui,sans-serif; color:var(--text-primary);
+  display:flex; flex-direction:column; align-items:center; gap:16px; padding:34px 18px 60px;}
+h1{font-size:12px;font-weight:300;letter-spacing:3.5px;color:var(--text-secondary);margin:0;}
+.sub{font-size:11px;color:var(--text-muted);margin:-8px 0 6px;font-weight:300;max-width:760px;text-align:center;line-height:1.7;}
+.sub b{color:var(--text-secondary);font-weight:500;}
+
+/* ── the synth surface: ONE filled grid, modules carved by white separators ── */
+.synth{ width:880px; border-radius:14px; overflow:hidden; position:relative;
+  background:
+    linear-gradient(rgba(139,92,246,0.055) 1px, transparent 1px) 0 0/26px 26px,
+    linear-gradient(90deg, rgba(139,92,246,0.055) 1px, transparent 1px) 0 0/26px 26px,
+    radial-gradient(120% 90% at 50% 0%, #1b1b2c 0%, #14141f 55%, #101019 100%);
+  box-shadow:0 22px 60px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05);
+}
+
+/* top bar */
+.topbar{ display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--sep); }
+.logo{ display:flex; align-items:center; gap:8px; font-size:13px; letter-spacing:3px; font-weight:500; color:#fff; }
+.logo .mark{ width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--purple-400),var(--purple-600)); box-shadow:0 0 10px rgba(139,92,246,.6);}
+.tb-mini{ width:18px;height:18px;border:1px solid var(--border-strong);border-radius:5px;display:grid;place-items:center;color:var(--text-muted);font-size:12px;}
+.preset{ margin-left:6px; font-size:11px; color:var(--text-secondary); letter-spacing:1px; }
+.tabs{ margin-left:auto; display:flex; gap:6px; }
+.tab{ padding:5px 12px; border-radius:7px; font-size:10px; letter-spacing:1.4px; color:var(--text-muted); border:1px solid transparent; cursor:pointer; }
+.tab.act{ background:var(--purple-500); color:#fff; box-shadow:0 0 12px rgba(139,92,246,.5); }
+
+/* rows + white separators (no boxes) */
+.row{ display:grid; position:relative; }
+.row + .row{ border-top:1px solid var(--sep); }
+.cell{ padding:11px 14px; position:relative; min-width:0; }
+.cell + .cell{ border-left:1px solid var(--sep); }
+.r-osc{ grid-template-columns:1fr 112px 1fr; }
+.r-mid{ grid-template-columns:330px 176px 1fr; }
+.r-eg { grid-template-columns:1fr 1.42fr; }
+.r-rib{ grid-template-columns:1fr 158px; }
+
+/* module header */
+.mhead{ display:flex; align-items:center; gap:8px; height:16px; margin-bottom:9px; font-size:9px; letter-spacing:2px; color:var(--text-secondary); font-weight:300; }
+.mhead .gly{ font-size:10px; font-weight:600; color:var(--text-secondary); cursor:pointer; }
+.mhead .gly:hover{ color:var(--purple-400); }
+.mhead .dot{ color:var(--text-dim); }
+.mhead .sn{ display:inline-flex; gap:6px; margin-left:2px; }
+.mhead .right{ margin-left:auto; display:flex; align-items:center; gap:7px; color:var(--text-muted); font-weight:200; letter-spacing:1.2px; }
+.plus{ color:var(--text-muted); cursor:pointer; font-size:13px; }
+
+/* engine pills (kept boxed — the icons/chips) */
+.engines{ display:flex; gap:7px; margin-bottom:9px; }
+.eng{ flex:1; height:28px; border:1px solid var(--border-strong); border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--text-primary); cursor:pointer; }
+.eng svg{ width:20px;height:20px; }
+.eng.txt{ font-size:9.5px; letter-spacing:1px; color:var(--text-secondary); }
+.eng.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+
+/* scope = filled grid area (slightly deeper) with a white waveform */
+.scope{ position:relative; border-radius:7px; overflow:hidden; background:
+  linear-gradient(rgba(139,92,246,0.06) 1px, transparent 1px) 0 0/0 0,
+  rgba(0,0,0,0.22);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
+.scope svg{ position:absolute; inset:0; width:100%; height:100%; }
+.gridline{ stroke:rgba(139,92,246,0.14); stroke-width:.6; } .gridline.mid{ stroke:rgba(139,92,246,0.22); }
+.wv{ fill:none; stroke:#ECE8F2; stroke-width:1.6; vector-effect:non-scaling-stroke; filter:drop-shadow(0 0 2px rgba(183,148,255,.85)) drop-shadow(0 0 5px rgba(183,148,255,.45)); }
+.wfill{ fill:rgba(224,216,245,0.07); }
+.play{ stroke:rgba(236,232,242,0.4); stroke-width:1; } .foll{ fill:#fff; filter:drop-shadow(0 0 4px rgba(167,139,250,.9)); }
+
+/* knobs */
+.knobs{ display:grid; gap:4px; align-items:start; margin-top:9px; }
+.knob{ display:flex; flex-direction:column; align-items:center; gap:3px; }
+.ring{ width:25px;height:25px;border-radius:50%; -webkit-mask:radial-gradient(circle,transparent 8px,#000 9px); mask:radial-gradient(circle,transparent 8px,#000 9px); }
+.kl{ font-size:7.5px; letter-spacing:1.2px; color:var(--text-primary); font-weight:300; }
+
+/* sync */
+.cross{ display:grid; grid-template-rows:20px 26px 1fr; gap:8px; padding-top:6px; }
+.cdir{ display:grid; grid-template-columns:1fr 14px 1fr; align-items:center; gap:3px; }
+.ab{ height:20px;border:1px solid var(--border-strong);border-radius:5px;display:grid;place-items:center;font-size:9px;letter-spacing:1px;color:var(--text-primary);}
+.ab.act{ background:var(--purple-500);border-color:var(--purple-500);color:#fff;}
+.arr{ text-align:center;color:var(--purple-400);font-size:11px;}
+.sync{ height:26px;border:1px solid var(--purple-500);border-radius:7px;display:grid;place-items:center;font-size:10px;letter-spacing:1.6px;background:var(--purple-500);color:#fff;box-shadow:0 0 12px rgba(139,92,246,.45);}
+.cross .knobs{ grid-template-columns:repeat(3,1fr); }
+
+/* filter mini shapes + flow tiles */
+.minirow{ display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-top:8px; }
+.mini{ height:34px; border:1px solid var(--border-strong); border-radius:7px; position:relative; overflow:hidden; background:rgba(0,0,0,0.18); }
+.mini.act{ border-color:var(--purple-500); box-shadow:0 0 10px rgba(139,92,246,.4) inset; }
+.mini svg{ position:absolute; inset:0; width:100%; height:100%; }
+.tiles{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.tile{ height:40px; border:1px solid var(--border-strong); border-radius:8px; display:grid; place-items:center; color:var(--text-secondary); }
+.tile.act{ border-color:var(--purple-500); background:rgba(139,92,246,.16); color:#fff; box-shadow:0 0 12px rgba(139,92,246,.35) inset; }
+.tile svg{ width:24px;height:18px; }
+.bars{ display:flex; align-items:flex-end; gap:3px; height:46px; }
+.bars i{ flex:1; background:linear-gradient(var(--purple-400),var(--purple-600)); border-radius:2px 2px 0 0; box-shadow:0 0 6px rgba(139,92,246,.4); }
+
+/* ribbon */
+.ribbon{ height:54px; border-radius:8px; background:rgba(0,0,0,.22); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); position:relative; margin-bottom:8px; }
+.ribbon .dotr{ position:absolute; top:50%; width:7px;height:7px;border-radius:50%; background:#fff; transform:translate(-50%,-50%); box-shadow:0 0 8px rgba(167,139,250,.9);}
+.dd{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:7px; background:var(--purple-500); color:#fff; font-size:10px; letter-spacing:1px; }
+.voice .vrow{ display:flex; justify-content:space-between; font-size:9.5px; color:var(--text-secondary); padding:4px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+.voice .vrow b{ color:#fff; font-weight:500; }
+.seg{ display:flex; gap:6px; margin-bottom:7px; }
+.seg .s{ flex:1; text-align:center; font-size:9px; letter-spacing:1px; padding:4px 0; border:1px solid var(--border-strong); border-radius:6px; color:var(--text-muted); }
+.seg .s.act{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+
+.capture{ display:flex; align-items:center; justify-content:center; gap:10px; padding:7px; border-top:1px solid var(--sep); font-size:9px; letter-spacing:2px; color:var(--text-muted); }
+.legend{ font-size:9px;color:var(--text-muted);letter-spacing:1px;margin-left:auto;}
+</style>
+</head>
+<body>
+  <h1>T E R R A I N &nbsp;·&nbsp; F I L L E D &nbsp; G R I D &nbsp;+&nbsp; W H I T E &nbsp; S E P A R A T O R S</h1>
+  <p class="sub">Style study: the whole synth on <b>one filled grid surface</b> (the LFO/filter/envelope background everywhere) · <b>white waveforms</b> throughout · modules divided by <b>white separator lines instead of boxes</b>. Same icons + purple/white scheme.</p>
+  <div class="synth" id="synth"></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="ic-wt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8 Q7 4,12 8 T21 8"/><path d="M3 12 Q7 8,12 12 T21 12" opacity=".55"/><path d="M3 16 Q7 12,12 16 T21 16" opacity=".28"/></symbol>
+  <symbol id="ic-samp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4 5V19M4 5H7M4 19H7M20 5V19M20 5H17M20 19H17"/><polyline points="7,12 9,8 11,15 13,10 15,15 17,9 19,12" stroke-width="1.3"/></symbol>
+  <symbol id="ic-gran" viewBox="0 0 24 24" fill="currentColor"><circle cx="7" cy="7" r="1.4"/><circle cx="12" cy="5" r="1.4"/><circle cx="17" cy="7" r="1.4"/><circle cx="9" cy="11" r="1.4"/><circle cx="15" cy="11" r="1.4"/><circle cx="12" cy="15" r="1.4"/><circle cx="7" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/><circle cx="12" cy="19" r="1.4"/></symbol>
+  <symbol id="ic-spec" viewBox="0 0 24 24" fill="currentColor"><rect x="3.5" y="14" width="2.2" height="6" rx=".5"/><rect x="7.6" y="10" width="2.2" height="10" rx=".5"/><rect x="11.7" y="5" width="2.2" height="15" rx=".5"/><rect x="15.8" y="11" width="2.2" height="9" rx=".5"/><rect x="19.9" y="8" width="2.2" height="12" rx=".5"/></symbol>
+  <symbol id="ic-fm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="3"/></symbol>
+  <symbol id="ic-analog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3,13.5 C6,6 9,6 12,13.5 C15,21 18,21 21,13.5" opacity=".5"/><path d="M3,10.5 C6,3 9,3 12,10.5 C15,18 18,18 21,10.5"/></symbol>
+  <symbol id="ic-arp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 17 L3 12 M8 17 L8 7 M13 17 L13 10 M18 17 L18 4"/></symbol>
+  <symbol id="ic-chop" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.4"/><circle cx="10" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="20" cy="12" r="1.4"/></symbol>
+</svg>
+
+<script>
+"use strict";
+var TAU=Math.PI*2;
+function ring(p){var d=p*270;return 'conic-gradient(from 225deg,var(--purple-500) 0deg '+d+'deg,var(--knob-track) '+d+'deg 270deg,transparent 270deg)';}
+function knob(l,p){return '<div class="knob"><div class="ring" style="background:'+ring(p)+'"></div><div class="kl">'+l+'</div></div>';}
+function knobs(arr,cols){return '<div class="knobs" style="grid-template-columns:repeat('+(cols||arr.length)+',1fr)">'+arr.map(function(k){return knob(k[0],k[1]);}).join('')+'</div>';}
+
+// grid + white waveform scope
+function gridLines(w,h){var s='';[0.25,0.5,0.75].forEach(function(g){s+='<line class="gridline'+(g===0.5?' mid':'')+'" x1="0" y1="'+(h*g)+'" x2="'+w+'" y2="'+(h*g)+'"/>';});
+  [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9].forEach(function(g){s+='<line class="gridline'+(g===0.5?' mid':'')+'" x1="'+(w*g)+'" y1="0" x2="'+(w*g)+'" y2="'+h+'"/>';});return s;}
+function wave(kind){var n=160,w=200,h=60,mid=30,amp=22,d='';for(var i=0;i<=n;i++){var t=i/n,y;
+  if(kind==='sine')y=Math.sin(TAU*t*3);
+  else if(kind==='saw')y=2*(((t*4)%1))-1;
+  else if(kind==='ppg'){y=0;for(var hh=1;hh<=8;hh++)y+=Math.sin(TAU*hh*t*1+(hh%2?0:1))/hh;y*=0.6;}
+  else if(kind==='lfo')y=Math.sin(TAU*t*2);
+  else y=Math.sin(TAU*t*3);
+  d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-y*amp).toFixed(1)+' ';}
+  var fill='M0 '+mid+' '+d.replace(/^M/,'L')+'L'+w+' '+mid+' Z';
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+gridLines(w,h)+'<path class="wfill" d="'+fill+'"/><path class="wv" d="'+d+'"/></svg>';}
+function scope(kind,cls){return '<div class="scope '+(cls||'')+'" style="height:'+(cls==='tall'?'88px':'46px')+'">'+wave(kind)+'</div>';}
+
+function engines(icons,active,txt){return '<div class="engines">'+icons.map(function(ic,i){
+  if(txt)return '<div class="eng txt'+(i===active?' act':'')+'">'+ic+'</div>';
+  return '<div class="eng'+(i===active?' act':'')+'"><svg><use href="#'+ic+'"/></svg></div>';}).join('')+'</div>';}
+
+function oscHead(letter,name){return '<div class="mhead">Osc <span class="dot">·</span> <span class="gly">'+letter+'</span>'
+  +'<span class="sn"><span class="gly">S</span><span class="gly">N</span></span>'
+  +'<span class="right">'+name+' <span class="plus">+</span></span></div>';}
+
+/* filter response curve (white) */
+function filterCurve(){var w=300,h=70,d='M0 18 ';for(var x=0;x<=w;x+=4){var t=x/w;var y=18; if(t>0.55){var k=(t-0.55)/0.45; y=18+k*k*46;} d+='L'+x+' '+y.toFixed(1)+' ';}
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+gridLines(w,h)+'<path class="wv" d="'+d+'"/></svg>';}
+function miniShape(p){return '<div class="mini'+(p[1]?' act':'')+'"><svg viewBox="0 0 60 34" preserveAspectRatio="none"><path class="wv" style="stroke-width:1.3" d="'+p[0]+'"/></svg></div>';}
+/* envelope curve (white DAHDSR) */
+function envCurve(){var w=300,h=90; var d='M4 84 L4 10 L70 10 L150 70 L210 70 L292 86';
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+gridLines(w,h)+'<path class="wfill" d="'+d+' L292 90 L4 90 Z"/><path class="wv" d="'+d+'"/>'
+   +'<circle class="foll" cx="4" cy="10" r="2.6"/><circle class="foll" cx="70" cy="10" r="2.6"/><circle class="foll" cx="150" cy="70" r="2.6"/><circle class="foll" cx="292" cy="86" r="2.6"/></svg>';}
+function lfoScope(){var w=420,h=90,mid=45,amp=30,n=240,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-Math.sin(TAU*t*3)*amp).toFixed(1)+' ';}
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+gridLines(w,h)+'<path class="wfill" d="M0 '+mid+' '+d.replace(/^M/,'L')+'L'+w+' '+mid+' Z"/><path class="wv" d="'+d+'"/><line class="play" x1="'+(w*0.5)+'" y1="0" x2="'+(w*0.5)+'" y2="'+h+'"/><circle class="foll" cx="'+(w*0.5)+'" cy="'+mid+'" r="2.6"/></svg>';}
+
+var SY=document.getElementById('synth');
+SY.innerHTML =
+  /* top bar */
+  '<div class="topbar"><span class="logo"><span class="mark"></span>TERRAIN</span>'
+  +'<span class="tb-mini">+</span><span class="preset">Init</span>'
+  +'<span class="tabs"><span class="tab act">SYN</span><span class="tab">MIX</span><span class="tab">DLY</span><span class="tab">EQ</span><span class="tab">MOD</span></span></div>'
+
+  /* row: oscillators */
+  +'<div class="row r-osc">'
+    +'<div class="cell">'+oscHead('A','Triangle')+engines(['ic-wt','ic-samp','ic-gran','ic-spec','ic-fm','ic-analog'],0,false)+scope('sine')
+        +knobs([['WT POS',.55],['WARP',.3],['SPECTRAL',.2],['FOLD',.45],['BLUR',.15]],5)+'</div>'
+    +'<div class="cell"><div class="cross"><div class="cdir"><div class="ab act">A</div><div class="arr">→</div><div class="ab">B</div></div>'
+        +'<div class="sync">Sync</div>'+knobs([['FM',.4],['RING',.25],['MIX',.6]],3)+'</div></div>'
+    +'<div class="cell">'+oscHead('C','Dustbowl')+engines(['WT','SAMP','GRAN','SPEC','FM','ANLG'],0,true)+scope('ppg')
+        +knobs([['WT POS',.7],['WARP',.5],['SPECTRAL',.35],['FOLD',.2],['BLUR',.4]],5)+'</div>'
+  +'</div>'
+
+  /* row: filter | flow | spectrum */
+  +'<div class="row r-mid">'
+    +'<div class="cell"><div class="mhead">Ladder LP <span class="dot">·</span> 24<span class="right">1 2 <span class="plus">+</span></span></div>'
+        +'<div class="scope" style="height:74px">'+filterCurve()+'</div>'
+        +'<div class="minirow">'+[['M6 24 L26 24 L34 10 L54 10',0],['M6 22 Q30 22 30 22 Q42 8 54 20',0],['M6 22 Q30 0 54 22',1],['M6 26 Q30 0 40 26 L54 14',0]].map(miniShape).join('')+'</div></div>'
+    +'<div class="cell"><div class="mhead">Flow</div><div class="tiles">'
+        +'<div class="tile act"><svg><use href="#ic-arp"/></svg></div><div class="tile"><svg><use href="#ic-chop"/></svg></div>'
+        +'<div class="tile"><svg><use href="#ic-spec"/></svg></div><div class="tile"><svg><use href="#ic-gran"/></svg></div></div>'
+        +knobs([['RATE',.5],['DEPTH',.4]],2)+'</div>'
+    +'<div class="cell"><div class="mhead">Glitch<span class="right">8×16</span></div>'
+        +'<div class="bars">'+[.4,.7,.5,.9,.6,1,.45,.8,.55,.7,.35,.85,.6,.5,.75,.4].map(function(v){return '<i style="height:'+(v*100)+'%"></i>';}).join('')+'</div>'
+        +knobs([['RATE',.5],['GATE',.6],['VARY',.3],['STYLE',.45],['MORPH',.7]],5)+'</div>'
+  +'</div>'
+
+  /* row: envelope | lfo */
+  +'<div class="row r-eg">'
+    +'<div class="cell"><div class="mhead">Env 1 <span class="dot">·</span> Amp<span class="right">A D S R</span></div><div class="scope" style="height:96px">'+envCurve()+'</div></div>'
+    +'<div class="cell"><div class="mhead">LFO 1 <span class="dot">·</span> Sine<span class="right">BPM · 1/4 &nbsp; Dep +68</span></div><div class="scope" style="height:96px">'+lfoScope()+'</div>'
+        +'<div class="seg" style="margin-top:8px"><span class="s">Sine</span><span class="s act">1/4</span><span class="s">BPM</span><span class="s">1</span><span class="s">2</span><span class="s">3</span></div></div>'
+  +'</div>'
+
+  /* row: ribbon | voicing */
+  +'<div class="row r-rib">'
+    +'<div class="cell"><div class="mhead">Ribbon<span class="right">CS-80 Expression</span></div>'
+        +'<div class="ribbon"><div class="dotr" style="left:30%"></div><div class="dotr" style="left:42%"></div><div class="dotr" style="left:54%;width:9px;height:9px;background:var(--purple-400)"></div><div class="dotr" style="left:66%"></div></div>'
+        +'<div style="display:flex;align-items:center;gap:14px"><span class="dd">Pitch Drift ▾</span>'+knobs([['RANGE',.5],['GLIDE',.3],['DRIFT',.4],['RETURN',.6]],4)+'</div></div>'
+    +'<div class="cell voice"><div class="seg"><span class="s act">Mono</span><span class="s">Legato</span></div>'
+        +'<div class="vrow"><span>Voices</span><b>8</b></div><div class="vrow"><span>Porta</span><b>0%</b></div><div class="vrow"><span>Curve</span><b>50%</b></div>'
+        +'<div class="seg" style="margin-top:7px"><span class="s act">Always</span><span class="s">Scaled</span></div></div>'
+  +'</div>'
+
+  +'<div class="capture">CAPTURE · 5m 38s &nbsp;—&nbsp; DRAG TO DAW</div>';
+</script>
+</body>
+</html>

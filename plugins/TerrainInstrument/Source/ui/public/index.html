@@ -3469,7 +3469,7 @@ body {
 /* ── P4-T10: swap-state UI — + button, label row, preset corner, engine-controls ── */
 #syn-panel .device-label-row {
   position: absolute; top: 6px; left: 17px;   /* +3 to align visible "O" stroke with WT pill border (font bearing comp.) */
-  display: flex; align-items: center; gap: 5px;   /* uniform letter->S gap; matches osc-sn S->N gap for a symmetric 3-box header */
+  display: flex; align-items: center; gap: 6px;   /* uniform letter->S gap; matches osc-sn S->N gap for a symmetric A S N header */
   z-index: 1;
 }
 #syn-panel .device-label-row .device-label {
@@ -3519,35 +3519,38 @@ body {
 }
 #syn-panel .device-corner-preset .preset-wrap { position: relative; display: inline-block; }  /* select overlay covers only the name, not the + */
 /* S / N chips (Sub / Noise) — where the + used to be; tight + symmetric */
-#syn-panel .osc-sn { display: inline-flex; gap: 5px; }
+#syn-panel .osc-sn { display: inline-flex; gap: 6px; }
 #syn-panel .osc-sn .sn-chip {
-  width: 14px; height: 14px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: 3px;
-  background: transparent; display: inline-grid; place-items: center;
-  line-height: 1; font-size: 9px; font-weight: 600; letter-spacing: 0; text-indent: 0;
+  box-sizing: border-box; border: none; background: transparent; display: inline-grid; place-items: center;
+  line-height: 1; font-size: 10px; font-weight: 600; letter-spacing: 0; text-indent: 0;
   color: var(--text-secondary); cursor: pointer; -webkit-font-smoothing: antialiased;
-  padding: 1.5px 0 0 0;   /* optical centering: caps sit ~0.75px high in the line box -> nudge glyph down to true center */
-  transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
+  transition: color .12s ease, text-shadow .12s ease;
 }
-#syn-panel .osc-sn .sn-chip:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
-#syn-panel .osc-sn .sn-chip.on { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+#syn-panel .osc-sn .sn-chip:hover { color: var(--purple-400); text-shadow: 0 0 8px rgba(167,139,250,0.6); }
+#syn-panel .osc-sn .sn-chip.on { background: transparent; color: var(--purple-400); text-shadow: 0 0 8px rgba(167,139,250,0.7); }
 /* 4-osc slots: each slot (grid cell) holds two panels; only the non-hidden one shows */
 #syn-panel .osc-slot { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 #syn-panel .osc-slot > .device.osc { flex: 1; min-height: 0; }
 #syn-panel .device.osc.osc-hidden { display: none; }
+/* PURE TRANSPARENT oscillators — dissolve the card; everything floats on the panel like the filter/LFO/FLOW. */
+#syn-panel .device.osc { background: transparent; border-color: transparent; box-shadow: none; }
+/* + (back-panel) button: glyph only, no box — scoped to oscillators so the filter's own + is untouched. */
+#syn-panel .device.osc .swap-btn { border: none; background: transparent; color: var(--text-muted); font-size: 15px; transition: color .12s ease, text-shadow .12s ease; }
+#syn-panel .device.osc .swap-btn:hover { background: transparent; color: var(--purple-400); text-shadow: 0 0 8px rgba(167,139,250,0.6); box-shadow: none; }
+#syn-panel .device.osc .swap-btn.act { background: transparent; color: var(--purple-400); box-shadow: none; }
 /* clickable letter that toggles A<->B / C<->D within the slot */
 /* the letter is the easter-egg "seamless switch" (A<->B / C<->D). Styled IDENTICALLY to the
    S/N chips so the three header boxes are uniform + symmetric; no active highlight = looks the
    same whichever sibling is showing. */
 #syn-panel .device-label .osc-letter {
   display: inline-grid; place-items: center; box-sizing: border-box;
-  width: 14px; height: 14px; margin-left: 3px; vertical-align: middle;
-  border: 1px solid var(--border-strong); border-radius: 3px; background: transparent;
-  line-height: 1; font-size: 9px; font-weight: 600; letter-spacing: 0; text-indent: 0;
+  margin-left: 6px; vertical-align: middle;
+  border: none; background: transparent;
+  line-height: 1; font-size: 10px; font-weight: 600; letter-spacing: 0; text-indent: 0;
   color: var(--text-secondary); cursor: pointer; -webkit-font-smoothing: antialiased;
-  padding: 1.5px 0 0 0;   /* optical centering: caps sit ~0.75px high in the line box -> nudge glyph down to true center */
-  transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
+  transition: color .12s ease, text-shadow .12s ease;
 }
-#syn-panel .device-label .osc-letter:hover { color: #FFFFFF; border-color: var(--purple-400); box-shadow: 0 0 6px rgba(139,92,246,0.4); }
+#syn-panel .device-label .osc-letter:hover { color: var(--purple-400); text-shadow: 0 0 8px rgba(167,139,250,0.6); }
 #syn-panel .preset-display {
   /* visible label — its RIGHT edge sits at right:14 (same as rightmost pill border) */
   display: block;
@@ -3719,11 +3722,13 @@ body {
 #syn-panel .row-osc { display: grid; grid-template-columns: 1fr 104px 1fr; gap: 12px; }
 #syn-panel .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 24px; }
 #syn-panel .osc-display {
-  flex: 1; background: var(--bg-hero); border: 1px solid var(--border);
+  flex: 1; background: transparent; border: none;
   border-radius: 8px; position: relative; overflow: hidden; min-height: 28px;
 }
+/* canvas waveform visualizer — fills the (now transparent) display footprint */
+#syn-panel .osc-display .osc-wave canvas { display: block; width: 100%; height: 100%; }
 #syn-panel .osc-display::before, #syn-panel .osc-display::after {
-  content: ''; position: absolute; width: 7px; height: 7px;
+  content: ''; position: absolute; width: 7px; height: 7px; display: none;
   border: 1px solid rgba(236,232,242,0.22);
 }
 #syn-panel .osc-display::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
@@ -3746,7 +3751,7 @@ body {
 
 /* ── CROSS ── */
 #syn-panel .cross {
-  background: var(--bg-card-2); border: 1px solid var(--border-strong);
+  background: transparent; border: none;
   border-radius: 11px;
   padding: 8px;
   display: grid; grid-template-rows: 22px 28px 1fr; gap: 7px;
@@ -4836,11 +4841,7 @@ body {
               </div>
               <!-- waveform display (unchanged) -->
               <div class="osc-display">
-                <div class="osc-wave">
-                  <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-                    <path d="M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
-                  </svg>
-                </div>
+                <div class="osc-wave"></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -4988,11 +4989,7 @@ body {
               </div>
               <!-- waveform display (unchanged) -->
               <div class="osc-display">
-                <div class="osc-wave">
-                  <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-                    <path d="M0,30 Q12,4 24,30 T48,30 T72,30 T96,30 T120,30 T144,30 T168,30 T200,30" stroke="#ECE8F2" stroke-width="1.4" fill="none"/>
-                  </svg>
-                </div>
+                <div class="osc-wave"></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -5148,19 +5145,15 @@ body {
               <!-- engine pills row (TEXT legend — C/D = legend, A/B = emblem; data-eng-c-idx avoids handler collision) -->
               <div class="engine-pills">
                 <div class="eng txt act" data-eng-c-idx="0">WT</div>
-                <div class="eng txt" data-eng-c-idx="1">Samp</div>
-                <div class="eng txt" data-eng-c-idx="2">Gran</div>
-                <div class="eng txt" data-eng-c-idx="3">Spec</div>
+                <div class="eng txt" data-eng-c-idx="1">SAMP</div>
+                <div class="eng txt" data-eng-c-idx="2">GRAN</div>
+                <div class="eng txt" data-eng-c-idx="3">SPEC</div>
                 <div class="eng txt" data-eng-c-idx="4">FM</div>
                 <div class="eng txt" data-eng-c-idx="5">ANLG</div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
-                <div class="osc-wave">
-                  <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-                    <path d="M0,30 L4,22 L8,38 L14,18 L20,42 L26,12 L32,48 L40,8 L46,52 L54,20 L62,40 L70,16 L78,44 L88,30 L96,30 L108,30 L120,28 L132,34 L144,30 L156,32 L168,28 L180,30 L200,30" stroke="#ECE8F2" stroke-width="0.95" fill="none"/>
-                  </svg>
-                </div>
+                <div class="osc-wave"></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -5300,19 +5293,15 @@ body {
               <!-- engine pills row (TEXT legend — C/D = legend, A/B = emblem; data-eng-d-idx avoids handler collision) -->
               <div class="engine-pills">
                 <div class="eng txt act" data-eng-d-idx="0">WT</div>
-                <div class="eng txt" data-eng-d-idx="1">Samp</div>
-                <div class="eng txt" data-eng-d-idx="2">Gran</div>
-                <div class="eng txt" data-eng-d-idx="3">Spec</div>
+                <div class="eng txt" data-eng-d-idx="1">SAMP</div>
+                <div class="eng txt" data-eng-d-idx="2">GRAN</div>
+                <div class="eng txt" data-eng-d-idx="3">SPEC</div>
                 <div class="eng txt" data-eng-d-idx="4">FM</div>
                 <div class="eng txt" data-eng-d-idx="5">ANLG</div>
               </div>
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
-                <div class="osc-wave">
-                  <svg viewBox="0 0 200 60" preserveAspectRatio="none">
-                    <path d="M0,30 L4,22 L8,38 L14,18 L20,42 L26,12 L32,48 L40,8 L46,52 L54,20 L62,40 L70,16 L78,44 L88,30 L96,30 L108,30 L120,28 L132,34 L144,30 L156,32 L168,28 L180,30 L200,30" stroke="#ECE8F2" stroke-width="0.95" fill="none"/>
-                  </svg>
-                </div>
+                <div class="osc-wave"></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -19667,6 +19656,252 @@ restoreThemeFromBackend();
 function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   for(i=1;i<=n;i++){ var x=10+i*w; var y=cy + Math.sin(i*0.7 + seed*1.9)*6 + Math.sin(i*0.31 + seed)*3; s+=' L'+x.toFixed(1)+','+y.toFixed(1); }
   return s; }
+</script>
+<script>
+/* ============================================================================
+   Terrain — Oscillator 2D Waveform Display   (Stage A: data-driven, LFO-parity)
+   Drop-in for Source/ui/public/index.html
+   ----------------------------------------------------------------------------
+   Replaces the hardcoded <path> (the fake sine on OSC A/B, the fake jagged line
+   on OSC C/D) with a LIVE single-cycle render of the ACTUAL wavetable shape,
+   drawn by the same kind of canvas routine the LFO uses (drawLFOWaveform) — so
+   it finally belongs to the same world: clean, thin, exact. The analog tables
+   use the IDENTICAL generators as the LFO (lfoWaveform), so "Triangle" looks
+   exactly like a Triangle LFO. Updates live with WT POS / WARP / FOLD.
+
+   STAGE B (later, no renderer change): have C++ push the engine's real post-warp
+   cycle via  window.updateOscCycle(oscId, Float32Array)  — the draw path below
+   already prefers a pushed cycle when present, so warp/fold/spectral become
+   byte-exact to what's played. Until then, Stage A mirrors the shapes in JS.
+   ============================================================================ */
+(function () {
+  'use strict';
+
+  var OSC_IDS = ['a', 'b', 'c', 'd'];
+  var TWO_PI  = Math.PI * 2;
+  var NHARM   = 64;            // band-limit for additive tables -> clean, never jagged
+  var WAVE_COLOR = '#ECE8F2';  // the light color the osc waveform already uses
+  var GLOW_COLOR = '#A78BFA';  // house accent, used only for the subtle glow (like the LFO)
+
+  function clamp01(x){ x = +x; return x < 0 ? 0 : (x > 1 ? 1 : (x || 0)); }
+
+  // per-osc display state (fed by setParams; safe defaults)
+  var st = {};
+  OSC_IDS.forEach(function (o) {
+    st[o] = { table: 0, pos: 0, warp: 0.5, fold: 0, foldMode: 1, spectral: 0, samples: null };
+  });
+
+  /* ----------------------------------------------------------------- shapes */
+  // Analog basics — the SAME forms as the LFO's lfoWaveform(), so they match it
+  // exactly. (sine, triangle, saw, square are pixel-for-pixel the LFO shapes.)
+  function sine(p)     { return Math.sin((p % 1) * TWO_PI); }
+  function triangle(p) { return 1 - 4 * Math.abs((p % 1) - 0.5); }   // identical to LFO triangle
+  function sawUp(p)    { return 2 * (p % 1) - 1; }
+  function sawDown(p)  { return 1 - 2 * (p % 1); }
+  function square(p)   { return (p % 1) < 0.5 ? 1 : -1; }
+  function pulse(p, w) { return (p % 1) < w ? 1 : -1; }
+
+  // Additive builder: value(phase) from a harmonic-amplitude fn a(h), h=1..N.
+  // Self-normalizes to ~0.92 peak by sampling, so every table fills the view.
+  // Band-limited by construction => smooth, intentional line (never the jaggies).
+  function additive(aFn, phFn) {
+    var amp = new Float32Array(NHARM + 1), phs = new Float32Array(NHARM + 1), h;
+    for (h = 1; h <= NHARM; h++) { amp[h] = aFn(h) || 0; phs[h] = phFn ? (phFn(h) || 0) : 0; }
+    function raw(p) {
+      var s = 0, base = (p % 1) * TWO_PI, k;
+      for (k = 1; k <= NHARM; k++) { if (amp[k]) s += amp[k] * Math.sin(k * base + phs[k]); }
+      return s;
+    }
+    var peak = 1e-6, i, v;
+    for (i = 0; i < 256; i++) { v = Math.abs(raw(i / 256)); if (v > peak) peak = v; }
+    var g = 0.92 / peak;
+    return function (p) { return raw(p) * g; };
+  }
+  function odd(h){ return (h % 2) === 1; }
+  function dk(h, k){ return Math.pow(h, -(k || 1)); }   // 1/h^k harmonic decay
+
+  // The 23 stock tables (indices match the <select>). 0-7 = clean analog forms
+  // (LFO-matched); 8-22 = representative additive spectra (Stage B swaps in the
+  // engine's exact frames). pos = WT POS in [0,1] for the tables that morph.
+  function makeCycleFn(table, pos) {
+    switch (table) {
+      case 0:  return sine;                                                // Sine
+      case 1:  return triangle;                                            // Triangle
+      case 2:  return square;                                              // Square
+      case 3:  return function (p) { return pulse(p, 0.30); };             // Pulse
+      case 4:  return sawUp;                                               // Prophet Saw
+      case 5:  return function (p) { return pulse(p, clamp01(0.5 - 0.38 * pos) || 0.12); }; // Jupiter PWM (pos sweeps duty)
+      case 6:  return function (p) { return pulse(p, 0.46); };             // Moog Sqr (slightly fat)
+      case 7:  return sawDown;                                             // OB-X Saw (mirror of Prophet)
+      case 8:  return additive(function (h){ return dk(h, 1.1) * ((h >= 3 && h <= 6) ? 1.5 : 1.0); }); // CS-80 Brass (saw + formant)
+      case 9:  return additive(function (h){ return dk(h, 1.3); });        // Juno Str (soft saw)
+      case 10: return additive(function (h){ var t = 0.6 + 0.8 * pos; return (odd(h) ? 1 : 0.4) * dk(h, t); }); // PPG Wave (pos tilts)
+      case 11: return additive(function (h){ if (h===1) return 1; if (h===3) return 0.5; if (h===7) return 0.35 + 0.3*pos; if (h===11) return 0.18; return 0; }); // DX7 EP (pos = tine brightness)
+      case 12: return additive(function (h){ return [1,4,6,9,13].indexOf(h) >= 0 ? dk(h, 0.6) : 0; }); // D-50 Bell (inharmonic-ish)
+      case 13: return additive(function (h){ return h <= 6 ? dk(h, 1.4) : dk(h, 2.2) * 0.5; }); // M1 Piano
+      case 14: return additive(function (h){ var f1 = 3 + Math.round(pos*3), f2 = 7 + Math.round(pos*4); var a = dk(h,1.6); if (h===f1||h===f2) a += 1.0; return a; }); // Choir A->O (pos shifts vowel)
+      case 15: return additive(function (h){ return (h>8?0.6:0.3) * dk(h,0.9) * (0.6 + 0.4*Math.sin(h*1.7)); }); // Whisper
+      case 16: return additive(function (h){ var fa = 2 + Math.round(pos*5), fb = 6 + Math.round(pos*6); return (h===fa?1:0) + (h===fb?0.7:0) + dk(h,2)*0.4; }); // Vowel Morph
+      case 17: return additive(function (h){ return dk(h,0.85) * (0.7 + 0.3*Math.sin(h*2.2)); }); // Bowed Metal
+      case 18: return additive(function (h){ return [1,2,5,8,12,16].indexOf(h) >= 0 ? dk(h,0.7) : 0; }, function (h){ return h*0.5; }); // Glass Harmonics
+      case 19: return additive(function (h){ return dk(h,0.7) * (0.5 + 0.5*Math.cos(h*0.8)); }); // Railroad
+      case 20: return additive(function (h){ return dk(h, 0.8 + 0.6*(1-pos)) * (0.6 + 0.4*Math.sin(h*3.1)); }, function (h){ return h*1.3; }); // Dustbowl (pos = brightness)
+      case 21: return additive(function (h){ var c = 2 + pos*10; return Math.exp(-Math.pow((h-c)/3,2)) + dk(h,2)*0.3; }); // Static Evolve (moving spectral bump)
+      case 22: return additive(function (h){ return (Math.sin(h*(0.6 + pos*1.4)) > 0 ? 1 : 0.2) * dk(h,1.1); }); // Spectral Drift (pos drifts a comb)
+      default: return sine;
+    }
+  }
+
+  /* ------------------------------------------------------------- warp + fold */
+  // Phase-domain WARP (generic bend). warp in [0,1], 0.5 = neutral; <0.5 pinches
+  // toward the center, >0.5 pushes toward the edges. STAGE B: replace with the
+  // engine's exact warp-mode math (Bend/PWM/Asym/Sync/Flip/Mirror) so the line
+  // matches the played sound precisely.
+  function warpPhase(p, warp) {
+    var k = (warp - 0.5) * 2;                 // -1..+1
+    if (Math.abs(k) < 1e-4) return p % 1;
+    var e = Math.pow(2, -k * 2.2);            // k>0 -> e<1 -> push toward edges
+    var pp = p % 1; if (pp < 0) pp += 1;
+    return Math.pow(pp, e);
+  }
+  // Wavefolding. fold in [0,1]; mode 0=Linear, 1=Sine, 2=Triangle (matches FOLD_SHAPES).
+  function foldVal(v, fold, mode) {
+    if (fold <= 1e-4) return v;
+    var drive = 1 + fold * 3.0, x = v * drive, y;
+    if (mode === 1) return Math.sin(x * (Math.PI / 2));                 // sine fold
+    y = ((x + 1) % 4 + 4) % 4; y = (y < 2 ? y - 1 : 3 - y);             // triangle reflect
+    if (mode === 2) return y;                                          // triangle fold
+    return y * 0.92 + Math.tanh(x) * 0.08;                             // linear (soft) fold
+  }
+
+  // Final value(phase) closure combining table + warp + fold.
+  function oscValueFn(o) {
+    var s = st[o];
+    var base = makeCycleFn(s.table | 0, clamp01(s.pos));
+    var warp = clamp01(s.warp), fold = clamp01(s.fold), fmode = s.foldMode | 0;
+    return function (p) {
+      var v = foldVal(base(warpPhase(p % 1, warp)), fold, fmode);
+      return v > 1.15 ? 1.15 : (v < -1.15 ? -1.15 : v);
+    };
+  }
+
+  /* ----------------------------------------------------------------- drawing */
+  // Mirrors drawLFOWaveform(): DPR canvas, faint grid + center line, ONE clean
+  // stroke with a subtle glow. This is what makes it read like the LFO.
+  function drawOsc(o) {
+    var cv = document.getElementById('osc-wave-' + o);
+    if (!cv) return;
+    var rect = cv.parentElement.getBoundingClientRect();
+    var w = Math.round(rect.width), h = Math.round(rect.height);
+    if (!w || !h) return;
+    var dpr = window.DPR || window.devicePixelRatio || 1;
+    if (cv.width !== w * dpr || cv.height !== h * dpr) {
+      cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    }
+    var ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.save(); ctx.scale(dpr, dpr);
+
+    // faint grid (white-alpha, to sit on the dark panel like the rest of the UI)
+    ctx.strokeStyle = 'rgba(255,255,255,0.045)'; ctx.lineWidth = 0.5;
+    [0.25, 0.5, 0.75].forEach(function (gy) { ctx.beginPath(); ctx.moveTo(0, gy*h); ctx.lineTo(w, gy*h); ctx.stroke(); });
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath(); ctx.moveTo(0, h*0.5); ctx.lineTo(w, h*0.5); ctx.stroke();
+
+    // the waveform — one clean pass, sampled per pixel (exactly like the LFO).
+    // Prefer a pushed engine cycle (Stage B) if present; else compute (Stage A).
+    var samples = st[o].samples, valFn = samples ? null : oscValueFn(o);
+    function sampleAt(t) {                    // t in [0,1)
+      if (!samples) return valFn(t);
+      var fp = t * samples.length, i = fp | 0, fr = fp - i;
+      var a = samples[i % samples.length], b = samples[(i + 1) % samples.length];
+      return a + (b - a) * fr;
+    }
+    ctx.beginPath();
+    ctx.strokeStyle = WAVE_COLOR; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.shadowColor = GLOW_COLOR; ctx.shadowBlur = 3;          // subtle glow, like the LFO
+    for (var x = 0; x <= w; x++) {
+      var v = sampleAt(x / w), py = h * 0.5 - v * h * 0.40;
+      if (x === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
+    }
+    ctx.stroke(); ctx.shadowBlur = 0;
+
+    // WT POS frame number, lower-left (Serum shows this on the 2D view)
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '10px -apple-system, system-ui, sans-serif';
+    ctx.fillText((1 + Math.round(clamp01(st[o].pos) * 15)) + ' / 16', 6, h - 6);
+
+    ctx.restore();
+  }
+
+  /* -------------------------------------------------------------- public API */
+  function ensureCanvas(o) {
+    // The .osc-wave divs appear in DOM order a,b,c,d. Replace inner SVG w/ canvas.
+    var waves = document.querySelectorAll('#syn-panel .osc-wave');
+    var host = waves[OSC_IDS.indexOf(o)];
+    if (!host || document.getElementById('osc-wave-' + o)) return;
+    host.innerHTML = '';
+    var cv = document.createElement('canvas');
+    cv.id = 'osc-wave-' + o; cv.style.width = '100%'; cv.style.height = '100%';
+    host.appendChild(cv);
+  }
+
+  var OscWave = {
+    init: function () {
+      OSC_IDS.forEach(ensureCanvas);
+      OSC_IDS.forEach(function (o) {           // auto-wire the preset <select>s
+        var sel = document.getElementById('osc-' + o + '-preset-select');
+        if (!sel) return;
+        st[o].table = parseInt(sel.value, 10) || 0;
+        sel.addEventListener('change', function () { st[o].table = parseInt(sel.value, 10) || 0; drawOsc(o); });
+      });
+      OscWave.redrawAll();
+    },
+    // CC adds ONE line in each existing osc knob handler (values normalized 0..1):
+    //   OscWave.setParams('a', { pos: v });                 // WT POS / FRAME
+    //   OscWave.setParams('a', { warp: v });                // WARP
+    //   OscWave.setParams('a', { fold: v, foldMode: m });   // FOLD (+ fold-shape index)
+    setParams: function (o, partial) { if (!st[o]) return; if (partial) Object.assign(st[o], partial); drawOsc(o); },
+    // STAGE B bridge: C++ pushes the real post-warp single cycle (any length).
+    //   window.updateOscCycle('a', float32cycle);
+    setCycle:  function (o, arr) { if (!st[o]) return; st[o].samples = (arr && arr.length) ? arr : null; drawOsc(o); },
+    redrawAll: function () { OSC_IDS.forEach(drawOsc); }
+  };
+
+  window.OscWave = OscWave;
+  window.updateOscCycle = function (o, arr) { OscWave.setCycle(o, arr); };   // Stage B hook
+
+  if (document.readyState !== 'loading') OscWave.init();
+  else document.addEventListener('DOMContentLoaded', OscWave.init);
+  window.addEventListener('resize', function () { OscWave.redrawAll(); });
+})();
+</script>
+<script>
+/* Builder glue for Opus's OscWave (Stage A): feed live knobs (WT POS / WARP / FOLD)
+   from the APVTS slider states, and redraw a hidden osc (B/D) when it becomes visible. */
+(function(){
+  'use strict';
+  function ready(fn){ if(window.Juce&&window.Juce.getSliderState&&window.OscWave){fn();} else setTimeout(function(){ready(fn);},120); }
+  ready(function(){
+    var OSC=['a','b','c','d'];
+    function ss(n){try{return window.Juce.getSliderState(n);}catch(e){return null;}}
+    function nv(s){try{return s?Math.max(0,Math.min(1,s.getNormalisedValue())):0;}catch(e){return 0;}}
+    OSC.forEach(function(o){
+      var P='SYN_OSC_'+o.toUpperCase()+'_';
+      var pos=ss(P+'WT_FRAME'), warp=ss(P+'WARP_AMOUNT'), fold=ss(P+'FOLD_AMT'), shape=ss(P+'FOLD_SHAPE');
+      function pPos(){ window.OscWave.setParams(o,{pos:nv(pos)}); }
+      function pWarp(){ window.OscWave.setParams(o,{warp:nv(warp)}); }
+      function pFold(){ var m=1; try{ if(shape) m=Math.round(shape.getScaledValue()); }catch(e){} window.OscWave.setParams(o,{fold:nv(fold), foldMode:m}); }
+      if(pos&&pos.valueChangedEvent) pos.valueChangedEvent.addListener(pPos);
+      if(warp&&warp.valueChangedEvent) warp.valueChangedEvent.addListener(pWarp);
+      if(fold&&fold.valueChangedEvent) fold.valueChangedEvent.addListener(pFold);
+      if(shape&&shape.valueChangedEvent) shape.valueChangedEvent.addListener(pFold);
+      pPos(); pWarp(); pFold();
+      var dev=document.getElementById('osc-'+o+'-device');
+      if(dev&&window.ResizeObserver){ try{ new ResizeObserver(function(){ window.OscWave.redrawAll(); }).observe(dev); }catch(e){} }
+    });
+  });
+})();
 </script>
 </body>
 </html>

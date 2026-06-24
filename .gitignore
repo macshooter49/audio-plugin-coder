@@ -58,3 +58,9 @@ dist/
 # clangd / IDE tooling
 .cache/
 compile_commands.json
+
+# Visual brainstorm sessions (Claude Code superpowers)
+.superpowers/
+
+# CMake build output (live build dir on this machine)
+build-release/
