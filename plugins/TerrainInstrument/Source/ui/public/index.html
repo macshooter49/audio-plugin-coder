@@ -3800,6 +3800,108 @@ body {
 #syn-panel .knob .knob-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
 #syn-panel .knob .knob-label.kv-live { letter-spacing: 0.6px; color: var(--purple-300, #c4b5fd); }
 
+/* ════════════ SAMPLE engine front (oscillator engine #2) ════════════
+   Engine-conditional: shown when SYN_OSC_x_ENGINE == 1 (Sample) and not flipped.
+   Layout mirrors the LFO — full-bleed waveform with ALL text below it, never
+   inside the box. Box holds only: waveform, region handles, loop brace,
+   fade markers, xfade gradients, playhead, expand glyph. */
+#syn-panel .device .sample-view { display: none; }
+#syn-panel .device.osc.engine-sample:not(.swapped) .front-only { display: none; }
+#syn-panel .device.osc.engine-sample:not(.swapped) .sample-view { display: flex; }
+
+#syn-panel .samp-disp { flex: 1 1 auto; min-height: 65px; position: relative; overflow: hidden; border-radius: 8px; }
+#syn-panel .samp-disp canvas.samp-wave { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#syn-panel .samp-grid { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(rgba(139,92,246,.07), rgba(139,92,246,.07)) 0 50% / 100% 1px no-repeat; }
+/* trim shade outside Start/End */
+#syn-panel .samp-shade { position: absolute; top: 0; bottom: 0; background: rgba(8,8,18,.52); z-index: 1; pointer-events: none; }
+/* fades — real triangular amplitude ramps at the edges, draggable */
+#syn-panel .samp-fade { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; }
+#syn-panel .samp-fade.in  { left: 0;  background: linear-gradient(90deg,  rgba(8,8,18,.60), rgba(8,8,18,0)); }
+#syn-panel .samp-fade.out { right: 0; background: linear-gradient(270deg, rgba(8,8,18,.60), rgba(8,8,18,0)); }
+#syn-panel .samp-fade i { position: absolute; top: 0; width: 8px; height: 6px; border-radius: 2px; background: rgba(236,232,242,.55);
+  pointer-events: auto; cursor: ew-resize; transition: .12s; }
+#syn-panel .samp-fade.in  i { right: -4px; } #syn-panel .samp-fade.out i { left: -4px; }
+#syn-panel .samp-fade i:hover { background: #ECE8F2; box-shadow: 0 0 7px rgba(236,232,242,.6); }
+/* loop band + xfade gradients at the seam */
+#syn-panel .samp-band { position: absolute; top: 0; bottom: 0; background: rgba(183,148,255,.08); z-index: 1; cursor: grab; transition: background .12s; }
+#syn-panel .samp-band:hover { background: rgba(183,148,255,.13); } #syn-panel .samp-band.grab { cursor: grabbing; }
+#syn-panel .samp-xf { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; }
+#syn-panel .samp-xf.ls { background: linear-gradient(90deg,  rgba(183,148,255,.26), rgba(183,148,255,0)); }
+#syn-panel .samp-xf.le { background: linear-gradient(270deg, rgba(183,148,255,.26), rgba(183,148,255,0)); }
+/* region handles */
+#syn-panel .samp-h { position: absolute; top: 0; bottom: 0; width: 12px; margin-left: -6px; z-index: 5; cursor: ew-resize; }
+#syn-panel .samp-h::before { content: ''; position: absolute; left: 6px; top: 0; bottom: 0; width: 1px; background: #ECE8F2; opacity: .5; transition: opacity .12s, box-shadow .12s; }
+#syn-panel .samp-h:hover::before, #syn-panel .samp-h.drag::before { opacity: 1; box-shadow: 0 0 7px rgba(236,232,242,.7); }
+#syn-panel .samp-h i { position: absolute; left: 1.5px; width: 9px; height: 7px; border-radius: 2px; background: #ECE8F2; opacity: .6; transition: .12s; }
+#syn-panel .samp-h:hover i, #syn-panel .samp-h.drag i { opacity: 1; box-shadow: 0 0 7px rgba(236,232,242,.55); }
+#syn-panel .samp-h.s i, #syn-panel .samp-h.e i { top: 0; }
+#syn-panel .samp-h.ls, #syn-panel .samp-h.le { z-index: 6; }
+#syn-panel .samp-h.ls::before, #syn-panel .samp-h.le::before { background: var(--purple-400); }
+#syn-panel .samp-h.ls i, #syn-panel .samp-h.le i { bottom: 0; top: auto; background: var(--purple-400); }
+/* loop-off: hide brace + band + xfade when there is no loop */
+#syn-panel .sample-view.loopoff .samp-h.ls, #syn-panel .sample-view.loopoff .samp-h.le,
+#syn-panel .sample-view.loopoff .samp-band, #syn-panel .sample-view.loopoff .samp-xf { display: none; }
+/* playhead */
+#syn-panel .samp-ph { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(236,232,242,.5); z-index: 3; pointer-events: none; opacity: 0; transition: opacity .25s; }
+#syn-panel .samp-ph.on { opacity: 1; }
+#syn-panel .samp-ph i { position: absolute; left: -2px; top: 50%; margin-top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 7px rgba(255,255,255,.9), 0 0 13px rgba(167,139,250,.6); }
+/* expand glyph — top-right, like the LFO */
+#syn-panel .samp-exp { position: absolute; top: 6px; right: 8px; width: 13px; height: 13px; color: rgba(224,220,232,.6); cursor: pointer; z-index: 7;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.9)); transition: .12s; }
+#syn-panel .samp-exp:hover { color: #fff; transform: scale(1.08); }
+/* control row — UNDER the waveform, above the knobs (no text in the box) */
+#syn-panel .samp-ctl { flex: 0 0 auto; height: 14px; display: flex; align-items: center; gap: 9px; font-size: 8.5px; letter-spacing: .4px; color: var(--text-muted); }
+#syn-panel .samp-ctl .c { display: inline-flex; align-items: center; gap: 4px; color: var(--text-primary); font-weight: 300; cursor: pointer; }
+#syn-panel .samp-ctl .c .cv { font-size: 6px; color: var(--text-muted); }
+#syn-panel .samp-ctl .c:hover { color: var(--purple-400); }
+#syn-panel .samp-ctl .kv { display: inline-flex; align-items: center; gap: 3px; color: var(--text-muted); cursor: ns-resize; }
+#syn-panel .samp-ctl .kv b { color: var(--text-primary); font-weight: 400; font-variant-numeric: tabular-nums; }
+#syn-panel .samp-ctl .kv:hover b { color: var(--purple-400); }
+#syn-panel .samp-ctl .dv { width: 1px; height: 9px; background: var(--border); }
+#syn-panel .sample-view.loopoff .samp-ctl .kv, #syn-panel .sample-view.loopoff .samp-ctl .dv.loopdiv { display: none; }
+#syn-panel .samp-ctl .meta { margin-left: auto; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+#syn-panel .samp-knobs { flex: 0 0 auto; }
+
+/* ── refinements: no markers, line-ramp fades, header dropdowns, drop affordance ── */
+#syn-panel .samp-h i { display: none; }   /* markers removed — keep only the separator lines */
+#syn-panel .samp-ph i { display: none; }  /* follower dot removed — keep only the white scan line */
+/* fades = thin LFO-style ramp lines (shift+drag a region edge to set); 100%-viewBox SVG */
+#syn-panel .samp-env { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+#syn-panel .samp-env polyline { fill: none; vector-effect: non-scaling-stroke; stroke-width: 1.3; stroke-linecap: round; }
+#syn-panel .samp-env .env-fadein, #syn-panel .samp-env .env-fadeout { stroke: #ECE8F2; opacity: .6; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
+#syn-panel .samp-env .env-loopin, #syn-panel .samp-env .env-loopout { stroke: var(--purple-400); opacity: .72; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
+/* drop affordance (shown on dragover / empty) */
+#syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
+  font-size: 9px; letter-spacing: 1.5px; color: var(--text-muted); pointer-events: none; opacity: 0; transition: opacity .15s; }
+#syn-panel .samp-disp.dragover { box-shadow: inset 0 0 0 1px var(--purple-400); }
+#syn-panel .samp-disp.dragover .samp-drop { opacity: 1; color: var(--purple-300, #c4b5fd); }
+/* header controls — loop-mode + snap dropdowns; shown only in Sample engine. Hide the wavetable shape selector for Sample. */
+#syn-panel .device .samp-head { display: none; }
+#syn-panel .device.osc.engine-sample .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
+#syn-panel .device.osc.engine-sample .device-corner-preset .preset-wrap { display: none; }
+#syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
+#syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
+#syn-panel .samp-sel::after { content: '▾'; font-size: 6px; color: var(--text-muted); margin-left: 3px; pointer-events: none; }
+#syn-panel .samp-sel:hover .samp-sel-disp { color: var(--text-primary); }
+#syn-panel .samp-sel select { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; background: transparent; color: transparent; border: none; font-size: 9px; opacity: 0; cursor: pointer; z-index: 2; }
+#syn-panel .samp-sel select:focus { outline: none; }
+
+/* body-level glass menu for the sample waveform (own, unscoped styling like .mv-menu) */
+.samp-menu { position: fixed; z-index: 2147483646; background: rgba(24,24,38,0.52);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.10); border-radius: 11px;
+  box-shadow: 0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+  padding: 5px; display: none; min-width: 160px; font-family: -apple-system,'SF Pro Text',sans-serif; }
+.samp-menu.open { display: block; }
+.samp-menu div { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 7px; cursor: pointer;
+  color: rgba(255,255,255,.6); font-size: 9.5px; letter-spacing: 1px; white-space: nowrap; transition: .1s; }
+.samp-menu div:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.samp-menu div svg { width: 13px; height: 13px; opacity: .85; flex: none; }
+.samp-menu .sepd { height: 1px; background: rgba(255,255,255,.08); margin: 4px 6px; padding: 0; }
+
 /* ── CROSS ── */
 #syn-panel .cross {
   background: transparent; border: none;
@@ -4823,6 +4925,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
+              <span class="samp-head" data-osc="a"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -4897,6 +5000,32 @@ body {
               </div>
             </div>
 
+            <!-- SAMPLE VIEW (engine #2) — visible when SYN_OSC_A_ENGINE == Sample -->
+            <div class="sample-view" data-osc="a" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
+              <div class="samp-disp">
+                <canvas class="samp-wave"></canvas>
+                <div class="samp-grid"></div>
+                <div class="samp-shade sh-l"></div>
+                <div class="samp-shade sh-r"></div>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <div class="samp-band"></div>
+                <div class="samp-ph"><i></i></div>
+                <div class="samp-h s"></div>
+                <div class="samp-h e"></div>
+                <div class="samp-h ls"></div>
+                <div class="samp-h le"></div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="osc-knobs samp-knobs">
+                <div class="knob" data-syn="SYN_OSC_A_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SAMPLE_FORMANT"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
+              </div>
+            </div>
+
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
             <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
               <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
@@ -4964,6 +5093,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
+              <span class="samp-head" data-osc="b"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5035,6 +5165,32 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+            </div>
+
+            <!-- SAMPLE VIEW (engine #2) — visible when SYN_OSC_B_ENGINE == Sample -->
+            <div class="sample-view" data-osc="b" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
+              <div class="samp-disp">
+                <canvas class="samp-wave"></canvas>
+                <div class="samp-grid"></div>
+                <div class="samp-shade sh-l"></div>
+                <div class="samp-shade sh-r"></div>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <div class="samp-band"></div>
+                <div class="samp-ph"><i></i></div>
+                <div class="samp-h s"></div>
+                <div class="samp-h e"></div>
+                <div class="samp-h ls"></div>
+                <div class="samp-h le"></div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="osc-knobs samp-knobs">
+                <div class="knob" data-syn="SYN_OSC_B_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_SAMPLE_FORMANT"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
               </div>
             </div>
 
@@ -5121,6 +5277,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
+              <span class="samp-head" data-osc="c"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5195,6 +5352,32 @@ body {
               </div>
             </div>
 
+            <!-- SAMPLE VIEW (engine #2) — visible when SYN_OSC_C_ENGINE == Sample -->
+            <div class="sample-view" data-osc="c" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
+              <div class="samp-disp">
+                <canvas class="samp-wave"></canvas>
+                <div class="samp-grid"></div>
+                <div class="samp-shade sh-l"></div>
+                <div class="samp-shade sh-r"></div>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <div class="samp-band"></div>
+                <div class="samp-ph"><i></i></div>
+                <div class="samp-h s"></div>
+                <div class="samp-h e"></div>
+                <div class="samp-h ls"></div>
+                <div class="samp-h le"></div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="osc-knobs samp-knobs">
+                <div class="knob" data-syn="SYN_OSC_C_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_SAMPLE_FORMANT"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
+              </div>
+            </div>
+
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
             <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
               <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
@@ -5262,6 +5445,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
+              <span class="samp-head" data-osc="d"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5333,6 +5517,32 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+            </div>
+
+            <!-- SAMPLE VIEW (engine #2) — visible when SYN_OSC_D_ENGINE == Sample -->
+            <div class="sample-view" data-osc="d" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
+              <div class="samp-disp">
+                <canvas class="samp-wave"></canvas>
+                <div class="samp-grid"></div>
+                <div class="samp-shade sh-l"></div>
+                <div class="samp-shade sh-r"></div>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <div class="samp-band"></div>
+                <div class="samp-ph"><i></i></div>
+                <div class="samp-h s"></div>
+                <div class="samp-h e"></div>
+                <div class="samp-h ls"></div>
+                <div class="samp-h le"></div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="osc-knobs samp-knobs">
+                <div class="knob" data-syn="SYN_OSC_D_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_SAMPLE_FORMANT"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
               </div>
             </div>
 
@@ -9231,7 +9441,11 @@ setTimeout(function wireSynControls () {
         var es = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_ENGINE');
         if (! es) { console.warn ('[SYN-engine-select] no SliderState for osc', o); return; }
         function idxNow () { try { return Math.max (0, Math.min (5, Math.round (es.getScaledValue ? es.getScaledValue () : 0))); } catch (e) { return 0; } }
-        function paint () { var i = idxNow (); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; try { sel.value = String (i); } catch (e) {} }
+        function paint () { var i = idxNow (); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; try { sel.value = String (i); } catch (e) {}
+          // Engine-conditional front: Sample engine (index 1) swaps the wavetable
+          // front for the .sample-view. Redraw its canvas when it becomes visible
+          // (a hidden canvas has zero size, so the initial draw is a no-op).
+          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); dev.classList.toggle ('engine-sample', isSamp); if (isSamp && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); } } catch (e) {} }
         function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 5); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {} }
         paint ();
         sel.addEventListener ('change', pick);
@@ -9239,6 +9453,228 @@ setTimeout(function wireSynControls () {
         if (es.valueChangedEvent && es.valueChangedEvent.addListener) es.valueChangedEvent.addListener (paint);
       });
     } catch (eEng) { console.warn ('[SYN-engine-select] wiring failed', eEng); }
+
+    // ════════ SAMPLE engine front — interactive visualizer (engine #2) ════════
+    // Pure-UI layer. Region/loop/fade/xfade interactions are live now; the 5 knobs
+    // (SYN_OSC_x_SAMPLE_*) are auto-wired by the generic .knob[data-syn] handler once
+    // those APVTS params exist (Opus, C++). Audio is the C++ handoff; this is the face.
+    try {
+      var SAMP = {};
+      var SAMP_MODES = ['One-Shot','Forward','Reverse','Ping-Pong','Tailed'];
+      var SAMP_SNAPS = ['Off','Zero','Transient'];
+      var sampMenuEl = null;
+
+      function sampSynth (n, seed) {
+        var a = new Float32Array (n), s = seed || 7;
+        function rnd () { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }
+        for (var i = 0; i < n; i++) {
+          var t = i / n, env = Math.pow (1 - t, 1.5) * 0.95 + 0.04;
+          var ring = Math.sin (t * n * 0.13) * 0.5 + Math.sin (t * n * 0.355 + 1.2) * 0.3 + Math.sin (t * n * 0.88 + 2.0) * 0.17;
+          var noise = (rnd () * 2 - 1) * 0.5, atk = t < 0.01 ? (t / 0.01) : 1;
+          a[i] = (ring * 0.56 + noise * 0.44) * env * atk;
+        }
+        return a;
+      }
+      function sampDraw (cv, data) {
+        if (! cv) return;
+        var dpr = window.devicePixelRatio || 1, r = cv.getBoundingClientRect ();
+        var w = Math.max (1, Math.round (r.width)), h = Math.max (1, Math.round (r.height));
+        if (w < 2 || h < 2) return;   // hidden / not laid out yet
+        cv.width = w * dpr; cv.height = h * dpr;
+        var x = cv.getContext ('2d'); x.setTransform (dpr, 0, 0, dpr, 0, 0); x.clearRect (0, 0, w, h);
+        var mid = h / 2, amp = h * 0.44, step = Math.max (1, Math.floor (data.length / w));
+        x.beginPath (); x.moveTo (0, mid);
+        for (var i = 0; i < w; i++) { var v = data[Math.min (data.length - 1, i * step)]; x.lineTo (i, mid - Math.abs (v) * amp); }
+        for (var j = w - 1; j >= 0; j--) { var v2 = data[Math.min (data.length - 1, j * step)]; x.lineTo (j, mid + Math.abs (v2) * amp); }
+        x.closePath (); x.fillStyle = 'rgba(183,148,255,0.07)'; x.fill ();
+        x.lineWidth = 1.3; x.strokeStyle = '#E0DCE8'; x.lineJoin = 'round';
+        x.shadowColor = 'rgba(183,148,255,.35)'; x.shadowBlur = 2.5;
+        x.beginPath (); for (var k = 0; k < w; k++) { var y = mid - Math.abs (data[Math.min (data.length - 1, k * step)]) * amp; k ? x.lineTo (k, y) : x.moveTo (k, y); } x.stroke ();
+        x.beginPath (); for (var m = 0; m < w; m++) { var y2 = mid + Math.abs (data[Math.min (data.length - 1, m * step)]) * amp; m ? x.lineTo (m, y2) : x.moveTo (m, y2); } x.stroke ();
+        x.shadowBlur = 0;
+      }
+
+      function buildSampMenu () {
+        if (sampMenuEl) return sampMenuEl;
+        var m = document.createElement ('div'); m.className = 'samp-menu';
+        document.body.appendChild (m); sampMenuEl = m;
+        document.addEventListener ('pointerdown', function (e) { if (sampMenuEl && ! sampMenuEl.contains (e.target)) sampMenuEl.classList.remove ('open'); });
+        return m;
+      }
+      function openSampMenu (e, S) {
+        var m = buildSampMenu ();
+        var ic = function (p) { return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">' + p + '</svg>'; };
+        m.innerHTML =
+          '<div data-a="loop">' + ic ('<path d="M5 8 a3 3 0 1 1 3 3 H4 M4 11 L6 9 M4 11 L6 13"/>') + (S.st.loop ? 'Remove loop' : 'Add loop') + '</div>' +
+          '<div class="sepd"></div>' +
+          '<div data-a="reverse">' + ic ('<path d="M3 6 H11 M3 6 L6 3 M3 6 L6 9 M13 10 H5 M13 10 L10 7 M13 10 L10 13"/>') + 'Reverse</div>' +
+          '<div data-a="trim">' + ic ('<path d="M5 2 V14 M11 2 V14 M2 5 H14 M2 11 H14"/>') + 'Trim to loop</div>' +
+          '<div data-a="normalize">' + ic ('<path d="M2 13 V9 M6 13 V4 M10 13 V6 M14 13 V2"/>') + 'Normalize</div>' +
+          '<div data-a="fade">' + ic ('<path d="M2 13 L14 3 M2 13 H14"/>') + 'Fade in / out</div>' +
+          '<div class="sepd"></div>' +
+          '<div data-a="reset">' + ic ('<path d="M3 8 a5 5 0 1 0 1.6-3.7 M3 3 V5 H5"/>') + 'Reset region</div>';
+        m.style.left = Math.min (e.clientX, window.innerWidth - 178) + 'px';
+        m.style.top = Math.min (e.clientY, window.innerHeight - 230) + 'px';
+        m.classList.add ('open');
+        m.querySelectorAll ('div[data-a]').forEach (function (d) {
+          d.onclick = function () {
+            var a = d.dataset.a, st = S.st;
+            if (a === 'loop') { st.loop = ! st.loop; }
+            else if (a === 'reverse') { Array.prototype.reverse.call (S.data); S.redraw (); }
+            else if (a === 'normalize') { var mx = 0, i; for (i = 0; i < S.data.length; i++) mx = Math.max (mx, Math.abs (S.data[i])); if (mx > 0) { var g = 0.98 / mx; for (i = 0; i < S.data.length; i++) S.data[i] *= g; } S.redraw (); }
+            else if (a === 'trim') { st.s = st.ls; st.e = st.le; }
+            else if (a === 'fade') { st.fin = st.fin > 0 ? 0 : 8; st.fout = st.fout > 0 ? 0 : 12; }
+            else if (a === 'reset') { st.s = 5; st.e = 96; st.ls = 18; st.le = 62; st.fin = 0; st.fout = 0; st.lxf = 0; }
+            S.place (); sampMenuEl.classList.remove ('open');
+          };
+        });
+      }
+
+      function wireSample (view) {
+        var osc = view.dataset.osc;
+        var disp = view.querySelector ('.samp-disp');
+        var canvas = view.querySelector ('canvas.samp-wave');
+        var band = view.querySelector ('.samp-band');
+        var shL = view.querySelector ('.samp-shade.sh-l'), shR = view.querySelector ('.samp-shade.sh-r');
+        var hS = view.querySelector ('.samp-h.s'), hE = view.querySelector ('.samp-h.e'),
+            hLS = view.querySelector ('.samp-h.ls'), hLE = view.querySelector ('.samp-h.le');
+        var ph = view.querySelector ('.samp-ph');
+        // fade-ramp polylines (thin LFO-style lines, not shadows)
+        var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
+        var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
+        var dev = view.closest ('.device.osc');
+        var head = dev ? dev.querySelector ('.samp-head[data-osc="' + osc + '"]') : null;
+        var data = sampSynth (2600, 7 + osc.charCodeAt (0));
+        // fin/fout = fade lengths (% of sample); lxf = loop crossfade length (%). 0 = no fade.
+        var st = { s: 5, e: 96, ls: 18, le: 62, fin: 0, fout: 0, lxf: 0, loop: true, mode: 1, snap: 1, t: 0, dir: 1 };
+
+        function setPts (el, pts) { if (el) el.setAttribute ('points', pts); }
+        function drawEnv () {
+          // y: 0 = full (top), 100 = silence (bottom). A ramp line only over the fade region.
+          setPts (envFadeIn,  st.fin  > 0.3 ? (st.s + ',100 ' + (st.s + st.fin) + ',0') : '');
+          setPts (envFadeOut, st.fout > 0.3 ? ((st.e - st.fout) + ',0 ' + st.e + ',100') : '');
+          if (st.loop && st.lxf > 0.3) {
+            setPts (envLoopIn,  st.ls + ',100 ' + (st.ls + st.lxf) + ',0');
+            setPts (envLoopOut, (st.le - st.lxf) + ',0 ' + st.le + ',100');
+          } else { setPts (envLoopIn, ''); setPts (envLoopOut, ''); }
+        }
+        function place () {
+          if (st.le < st.ls + 3) st.le = st.ls + 3;
+          if (st.ls < st.s) st.ls = st.s; if (st.le > st.e) st.le = st.e;
+          if (st.fin  > (st.e - st.s)) st.fin  = st.e - st.s;
+          if (st.fout > (st.e - st.s)) st.fout = st.e - st.s;
+          if (st.lxf  > (st.le - st.ls) / 2) st.lxf = (st.le - st.ls) / 2;
+          hS.style.left = st.s + '%'; hE.style.left = st.e + '%'; hLS.style.left = st.ls + '%'; hLE.style.left = st.le + '%';
+          band.style.left = st.ls + '%'; band.style.width = (st.le - st.ls) + '%';
+          shL.style.left = '0'; shL.style.width = st.s + '%'; shR.style.left = st.e + '%'; shR.style.width = (100 - st.e) + '%';
+          drawEnv ();
+          view.classList.toggle ('loopoff', ! st.loop);
+        }
+        function redraw () { sampDraw (canvas, data); }
+        function pctOf (e) { var r = disp.getBoundingClientRect (); return Math.max (0, Math.min (100, ((e.clientX - r.left) / r.width) * 100)); }
+        // Region drag. Shift+drag = set a fade ramp from that edge instead of moving it.
+        function dragH (h, posKey, fadeKey, fromEnd, lo, hi) {
+          h.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); try { h.setPointerCapture (ev.pointerId); } catch (_) {} h.classList.add ('drag');
+            var fade = ev.shiftKey && fadeKey;
+            function mv (e) {
+              if (fade) {
+                var p = pctOf (e);
+                var anchor = (fadeKey === 'lxf') ? (fromEnd ? st.le : st.ls) : (fromEnd ? st.e : st.s);
+                st[fadeKey] = Math.max (0, Math.min (50, fromEnd ? (anchor - p) : (p - anchor)));
+              } else { st[posKey] = Math.max (lo (), Math.min (hi (), pctOf (e))); }
+              place ();
+            }
+            function up () { try { h.releasePointerCapture (ev.pointerId); } catch (_) {} h.classList.remove ('drag'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
+            document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
+          });
+        }
+        dragH (hS, 's', 'fin',  false, function () { return 0; }, function () { return st.loop ? st.ls - 3 : st.e - 3; });
+        dragH (hE, 'e', 'fout', true,  function () { return st.loop ? st.le + 3 : st.s + 3; }, function () { return 100; });
+        dragH (hLS, 'ls', 'lxf', false, function () { return st.s; }, function () { return st.le - 3; });
+        dragH (hLE, 'le', 'lxf', true,  function () { return st.ls + 3; }, function () { return st.e; });
+        band.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); try { band.setPointerCapture (ev.pointerId); } catch (_) {} band.classList.add ('grab');
+          var x0 = pctOf (ev), ls0 = st.ls, len = st.le - st.ls;
+          function mv (e) { var d = pctOf (e) - x0; var ls = Math.max (st.s, Math.min (st.e - len, ls0 + d)); st.ls = ls; st.le = ls + len; place (); }
+          function up () { try { band.releasePointerCapture (ev.pointerId); } catch (_) {} band.classList.remove ('grab'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
+          document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
+        });
+
+        // Header dropdowns (native <select>, like the engine selector) — loop mode + snap.
+        function wireSel (kind, opts, getIdx, onPick) {
+          if (! head) return;
+          var wrap = head.querySelector ('.samp-sel.' + kind); if (! wrap) return;
+          var dispEl = wrap.querySelector ('.samp-sel-disp'), sel = wrap.querySelector ('select');
+          function paint () { dispEl.textContent = opts[getIdx ()]; if (sel) sel.value = String (getIdx ()); }
+          paint ();
+          if (sel) sel.addEventListener ('change', function () { onPick (parseInt (sel.value, 10) || 0); paint (); });
+        }
+        wireSel ('mode', SAMP_MODES, function () { return st.mode; }, function (i) { st.mode = i; st.loop = (SAMP_MODES[i] !== 'One-Shot'); place (); });
+        wireSel ('snap', SAMP_SNAPS, function () { return st.snap; }, function (i) { st.snap = i; });
+
+        // Drop affordance — visual only; the actual file load is the C++ handoff.
+        ['dragenter', 'dragover'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); disp.classList.add ('dragover'); }); });
+        ['dragleave', 'drop'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); disp.classList.remove ('dragover'); }); });
+
+        disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
+        var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
+
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, view: view };
+        place (); redraw ();
+      }
+
+      function sampTick () {
+        for (var k in SAMP) {
+          var S = SAMP[k]; if (! S) continue;
+          var visible = S.view.offsetParent !== null;
+          if (! visible || ! S.st.loop) { S.ph.classList.remove ('on'); continue; }
+          S.ph.classList.add ('on');
+          var st = S.st, mode = SAMP_MODES[st.mode], spd = 0.0075;
+          if (mode === 'Reverse') { st.t -= spd; if (st.t < 0) st.t = 1; }
+          else if (mode === 'Ping-Pong') { st.t += spd * st.dir; if (st.t > 1) { st.t = 1; st.dir = -1; } if (st.t < 0) { st.t = 0; st.dir = 1; } }
+          else { st.t += spd; if (st.t > 1) st.t = 0; }
+          S.ph.style.left = (st.ls + (st.le - st.ls) * st.t) + '%';
+        }
+        requestAnimationFrame (sampTick);
+      }
+
+      window.__terrainSampleRedraw = function (osc) { var S = SAMP[osc]; if (S) requestAnimationFrame (function () { S.redraw (); S.place (); }); };
+      document.querySelectorAll ('#syn-panel .sample-view').forEach (wireSample);
+
+      // Fallback interactive knobs — visual-only while SYN_OSC_x_SAMPLE_* params don't
+      // exist yet. The generic .knob[data-syn] handler takes over the moment they do.
+      function sampFmt (pid, v) {
+        if (/_SCAN$/.test (pid))    { var d = Math.round ((v - 0.5) * 200); return d === 0 ? '0' : (d > 0 ? '+' + d : '' + d); }
+        if (/_FORMANT$/.test (pid)) { var s = Math.round ((v - 0.5) * 24); return (s > 0 ? '+' : '') + s + ' st'; }
+        if (/_STRETCH$/.test (pid)) return v < 0.02 ? 'tones' : Math.round (v * 400) + '%';
+        return Math.round (v * 100) + '%';
+      }
+      function wireSampKnob (knob) {
+        var pid = knob.dataset.syn; if (! pid) return;
+        if (window.Juce && window.Juce.getSliderState && window.Juce.getSliderState (pid)) return; // real param owns it
+        var ring = knob.querySelector ('.knob-ring'), lab = knob.querySelector ('.knob-label'); if (! ring) return;
+        var bip = /_SAMPLE_(SCAN|FORMANT)$/.test (pid);
+        var name = lab ? lab.textContent : '';
+        var v = bip ? 0.5 : (/_XFADE$/.test (pid) ? 0.12 : 0), tmr = null;
+        function fill (n) {
+          if (bip) { var sw = 270, c = 135, ang = (n - 0.5) * sw, a0 = ang >= 0 ? c : c + ang, a1 = ang >= 0 ? c + ang : c;
+            ring.style.background = 'conic-gradient(from 225deg, var(--knob-track) 0deg ' + a0 + 'deg, var(--purple-500) ' + a0 + 'deg ' + a1 + 'deg, var(--knob-track) ' + a1 + 'deg ' + sw + 'deg, transparent ' + sw + 'deg)';
+          } else { var d = 270 * n; ring.style.background = 'conic-gradient(from 225deg, var(--purple-500) 0deg ' + d + 'deg, var(--knob-track) ' + d + 'deg 270deg, transparent 270deg)'; }
+        }
+        function live () { if (lab) { lab.textContent = sampFmt (pid, v); lab.classList.add ('kv-live'); } }
+        function rest () { if (! lab) return; if (tmr) clearTimeout (tmr); tmr = setTimeout (function () { lab.textContent = name; lab.classList.remove ('kv-live'); }, 650); }
+        fill (v); ring.style.cursor = 'grab';
+        ring.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); try { ring.setPointerCapture (ev.pointerId); } catch (_) {}
+          var y0 = ev.clientY, v0 = v; ring.style.cursor = 'grabbing'; live ();
+          function mv (e) { v = Math.max (0, Math.min (1, v0 + (y0 - e.clientY) / 200)); fill (v); if (lab) lab.textContent = sampFmt (pid, v); }
+          function up () { try { ring.releasePointerCapture (ev.pointerId); } catch (_) {} ring.style.cursor = 'grab'; document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); rest (); }
+          document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
+        });
+        ring.addEventListener ('dblclick', function () { v = bip ? 0.5 : (/_XFADE$/.test (pid) ? 0.12 : 0); fill (v); live (); rest (); });
+      }
+      document.querySelectorAll ('#syn-panel .samp-knobs .knob[data-syn]').forEach (wireSampKnob);
+      requestAnimationFrame (sampTick);
+      window.addEventListener ('resize', function () { for (var k in SAMP) { if (SAMP[k]) { SAMP[k].redraw (); SAMP[k].place (); } } });
+    } catch (eSamp) { console.warn ('[SYN-sample] wiring failed', eSamp); }
 
     // Phase 3 — visual dim of WAVETABLE selector when engine != WT.
     // WAVETABLE only applies to engine 0 (WT). For NOISE/FM/SAMP/GRAN/SPEC
@@ -9273,6 +9709,11 @@ setTimeout(function wireSynControls () {
       // P9 polish — default normalised values for dblclick-to-reset.
       // Values are normalised [0..1] matching APVTS NormalisableRange for each param.
       const KNOB_DEFAULTS_NORMALISED = {
+        // SAMPLE engine knobs (all 4 osc) — SCAN/FORMANT bipolar (center 0.5)
+        SYN_OSC_A_SAMPLE_SCAN: 0.5, SYN_OSC_A_SAMPLE_STRETCH: 0.0, SYN_OSC_A_SAMPLE_FORMANT: 0.5, SYN_OSC_A_SAMPLE_SPRAY: 0.0, SYN_OSC_A_SAMPLE_XFADE: 0.12,
+        SYN_OSC_B_SAMPLE_SCAN: 0.5, SYN_OSC_B_SAMPLE_STRETCH: 0.0, SYN_OSC_B_SAMPLE_FORMANT: 0.5, SYN_OSC_B_SAMPLE_SPRAY: 0.0, SYN_OSC_B_SAMPLE_XFADE: 0.12,
+        SYN_OSC_C_SAMPLE_SCAN: 0.5, SYN_OSC_C_SAMPLE_STRETCH: 0.0, SYN_OSC_C_SAMPLE_FORMANT: 0.5, SYN_OSC_C_SAMPLE_SPRAY: 0.0, SYN_OSC_C_SAMPLE_XFADE: 0.12,
+        SYN_OSC_D_SAMPLE_SCAN: 0.5, SYN_OSC_D_SAMPLE_STRETCH: 0.0, SYN_OSC_D_SAMPLE_FORMANT: 0.5, SYN_OSC_D_SAMPLE_SPRAY: 0.0, SYN_OSC_D_SAMPLE_XFADE: 0.12,
         // OSC A
         SYN_OSC_A_OCT:         0.5,   // default 0 in [-3, 3]
         SYN_OSC_A_SEMI:        0.5,   // default 0 in [-12, 12]
@@ -9356,13 +9797,24 @@ setTimeout(function wireSynControls () {
 
           // Helper: update the conic-gradient based on normalised value [0..1].
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
+          // Bipolar params (Sample SCAN / FORMANT) fill from 12 o'clock toward + or −.
+          const isBipolar = /_SAMPLE_(SCAN|FORMANT)$/.test (paramId);
           const applyFill = (n) => {
             const clamped = Math.max (0, Math.min (1, n));
-            const fillDeg = 270 * clamped;
-            ring.style.background =
-              'conic-gradient(from 225deg, var(--purple-500) 0deg ' + fillDeg + 'deg, ' +
-              'var(--knob-track) ' + fillDeg + 'deg 270deg, ' +
-              'transparent 270deg)';
+            if (isBipolar) {
+              const sweep = 270, c = 135, ang = (clamped - 0.5) * sweep;
+              const a0 = ang >= 0 ? c : c + ang, a1 = ang >= 0 ? c + ang : c;
+              ring.style.background =
+                'conic-gradient(from 225deg, var(--knob-track) 0deg ' + a0 + 'deg, ' +
+                'var(--purple-500) ' + a0 + 'deg ' + a1 + 'deg, ' +
+                'var(--knob-track) ' + a1 + 'deg ' + sweep + 'deg, transparent ' + sweep + 'deg)';
+            } else {
+              const fillDeg = 270 * clamped;
+              ring.style.background =
+                'conic-gradient(from 225deg, var(--purple-500) 0deg ' + fillDeg + 'deg, ' +
+                'var(--knob-track) ' + fillDeg + 'deg 270deg, ' +
+                'transparent 270deg)';
+            }
           };
 
           // Initial fill from current APVTS value.
