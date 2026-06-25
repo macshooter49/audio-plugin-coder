@@ -3528,6 +3528,21 @@ body {
 }
 #syn-panel .osc-sn .sn-chip:hover { color: var(--purple-400); text-shadow: 0 0 8px rgba(167,139,250,0.6); }
 #syn-panel .osc-sn .sn-chip.on { background: transparent; color: var(--purple-400); text-shadow: 0 0 8px rgba(167,139,250,0.7); }
+/* engine category selector — header dropdown that replaced the emblem pills (mirrors the preset-name overlay) */
+#syn-panel .engine-wrap { position: relative; display: inline-flex; align-items: center; }
+#syn-panel .engine-display {
+  font-size: 9.5px; font-weight: 500; letter-spacing: 0.5px; color: var(--text-secondary);
+  cursor: pointer; white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s ease;
+}
+#syn-panel .engine-display::after { content: '\25BE'; font-size: 7px; margin-left: 3px; color: var(--text-dim); vertical-align: middle; }
+#syn-panel .engine-wrap:hover .engine-display { color: var(--purple-400); }
+#syn-panel .engine-select {
+  -webkit-appearance: none; appearance: none;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; background: transparent; color: transparent; border: none;
+  font-family: inherit; font-size: 9.5px; opacity: 0; cursor: pointer; z-index: 2;
+}
+#syn-panel .engine-select:focus { outline: none; }
 /* 4-osc slots: each slot (grid cell) holds two panels; only the non-hidden one shows */
 #syn-panel .osc-slot { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 #syn-panel .osc-slot > .device.osc { flex: 1; min-height: 0; }
@@ -3748,6 +3763,9 @@ body {
           mask: radial-gradient(circle, transparent 7.5px, black 8.5px);
 }
 #syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; }
+/* OSCFIX-READOUT-CSS — knob label swaps to live value while dragging (zero reflow) */
+#syn-panel .knob .knob-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
+#syn-panel .knob .knob-label.kv-live { letter-spacing: 0.6px; color: var(--purple-300, #c4b5fd); }
 
 /* ── CROSS ── */
 #syn-panel .cross {
@@ -4772,6 +4790,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc · <span class="osc-letter" data-slot="ab" title="Toggle">A</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -4830,15 +4849,7 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (unchanged) -->
-              <div class="engine-pills">
-                <div class="eng act" data-eng-idx="0"><svg><use href="#ic-wt"/></svg></div>
-                <div class="eng" data-eng-idx="1"><svg><use href="#ic-samp"/></svg></div>
-                <div class="eng" data-eng-idx="2"><svg><use href="#ic-gran"/></svg></div>
-                <div class="eng" data-eng-idx="3"><svg><use href="#ic-spec"/></svg></div>
-                <div class="eng" data-eng-idx="4"><svg><use href="#ic-fm"/></svg></div>
-                <div class="eng" data-eng-idx="5"><svg><use href="#ic-analog"/></svg></div>
-              </div>
+              <!-- engine emblems removed — engine chosen via header dropdown; display grows into this space -->
               <!-- waveform display (unchanged) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
@@ -4920,6 +4931,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc · <span class="osc-letter" data-slot="ab" title="Toggle">B</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -4978,15 +4990,7 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (unchanged) -->
-              <div class="engine-pills">
-                <div class="eng act" data-eng-b-idx="0"><svg><use href="#ic-wt"/></svg></div>
-                <div class="eng" data-eng-b-idx="1"><svg><use href="#ic-samp"/></svg></div>
-                <div class="eng" data-eng-b-idx="2"><svg><use href="#ic-gran"/></svg></div>
-                <div class="eng" data-eng-b-idx="3"><svg><use href="#ic-spec"/></svg></div>
-                <div class="eng" data-eng-b-idx="4"><svg><use href="#ic-fm"/></svg></div>
-                <div class="eng" data-eng-b-idx="5"><svg><use href="#ic-analog"/></svg></div>
-              </div>
+              <!-- engine emblems removed — engine chosen via header dropdown; display grows into this space -->
               <!-- waveform display (unchanged) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
@@ -5084,6 +5088,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">C</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5142,15 +5147,7 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (TEXT legend — C/D = legend, A/B = emblem; data-eng-c-idx avoids handler collision) -->
-              <div class="engine-pills">
-                <div class="eng txt act" data-eng-c-idx="0">WT</div>
-                <div class="eng txt" data-eng-c-idx="1">SAMP</div>
-                <div class="eng txt" data-eng-c-idx="2">GRAN</div>
-                <div class="eng txt" data-eng-c-idx="3">SPEC</div>
-                <div class="eng txt" data-eng-c-idx="4">FM</div>
-                <div class="eng txt" data-eng-c-idx="5">ANLG</div>
-              </div>
+              <!-- engine emblems removed — engine chosen via header dropdown; display grows into this space -->
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
@@ -5232,6 +5229,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">D</span></div>
               <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5290,15 +5288,7 @@ body {
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
             <div class="front-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- engine pills row (TEXT legend — C/D = legend, A/B = emblem; data-eng-d-idx avoids handler collision) -->
-              <div class="engine-pills">
-                <div class="eng txt act" data-eng-d-idx="0">WT</div>
-                <div class="eng txt" data-eng-d-idx="1">SAMP</div>
-                <div class="eng txt" data-eng-d-idx="2">GRAN</div>
-                <div class="eng txt" data-eng-d-idx="3">SPEC</div>
-                <div class="eng txt" data-eng-d-idx="4">FM</div>
-                <div class="eng txt" data-eng-d-idx="5">ANLG</div>
-              </div>
+              <!-- engine emblems removed — engine chosen via header dropdown; display grows into this space -->
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
@@ -9194,6 +9184,29 @@ setTimeout(function wireSynControls () {
       }
     });
 
+    // OSC engine selector (header dropdown) — replaces the removed emblem pills.
+    // SYN_OSC_x_ENGINE is a 6-choice param (WT/Samp/Gran/Spec/FM/Analog); we write idx/5.
+    // The UI exposes 5 engines (Analog dropped) and each <option value> is the REAL engine
+    // index, so the param mapping stays exact. NOT data-syn (the generic binder divides by
+    // options.length-1 = 4, which would mis-map this 6-choice param) — dedicated handler instead.
+    try {
+      var ENGINE_NAMES = ['Wavetable','Sample','Granular','Spectral','FM','Analog']; // by param index 0..5
+      ['a','b','c','d'].forEach(function (o) {
+        var disp = document.getElementById ('osc-' + o + '-engine-display');
+        var sel  = document.getElementById ('osc-' + o + '-engine-select');
+        if (! disp || ! sel || ! window.Juce || ! window.Juce.getSliderState) return;
+        var es = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_ENGINE');
+        if (! es) { console.warn ('[SYN-engine-select] no SliderState for osc', o); return; }
+        function idxNow () { try { return Math.max (0, Math.min (5, Math.round (es.getScaledValue ? es.getScaledValue () : 0))); } catch (e) { return 0; } }
+        function paint () { var i = idxNow (); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; try { sel.value = String (i); } catch (e) {} }
+        function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 5); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {} }
+        paint ();
+        sel.addEventListener ('change', pick);
+        sel.addEventListener ('input', pick);
+        if (es.valueChangedEvent && es.valueChangedEvent.addListener) es.valueChangedEvent.addListener (paint);
+      });
+    } catch (eEng) { console.warn ('[SYN-engine-select] wiring failed', eEng); }
+
     // Phase 3 — visual dim of WAVETABLE selector when engine != WT.
     // WAVETABLE only applies to engine 0 (WT). For NOISE/FM/SAMP/GRAN/SPEC
     // the dropdown is irrelevant; show that visually by reducing opacity +
@@ -9253,6 +9266,24 @@ setTimeout(function wireSynControls () {
         SYN_ENV_AMP_R:         0.50,  // ~200 ms
       };
 
+      // Formats a normalised [0..1] knob value into a compact label readout.
+      // Engine ranges mirrored exactly (see PluginProcessor param ranges).
+      const FRAME_COUNT = 16;   // Wavetable.h kNumFrames (bump when the importer lands)
+      function fmtSynReadout (paramId, n) {
+        n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
+        const pct = Math.round (n * 100);
+        if (paramId.indexOf ('_WT_FRAME')     >= 0) return (1 + Math.round (n * (FRAME_COUNT - 1))) + ' / ' + FRAME_COUNT;
+        if (paramId.indexOf ('_FRAME_SPREAD') >= 0) return pct + '%';
+        if (paramId.indexOf ('_WARP_AMOUNT')  >= 0) return pct + '%';
+        if (paramId.indexOf ('_SPECTRAL_AMT') >= 0) return pct + '%';
+        if (paramId.indexOf ('_FOLD_AMT')     >= 0) return pct + '%';
+        if (paramId.indexOf ('_OCT')  >= 0) { const v = Math.round (-3   + n * 6);   return (v > 0 ? '+' : '') + v + ' oct'; }
+        if (paramId.indexOf ('_SEMI') >= 0) { const v = Math.round (-12  + n * 24);  return (v > 0 ? '+' : '') + v + ' st'; }
+        if (paramId.indexOf ('_CENT') >= 0) { const v = Math.round (-100 + n * 200); return (v > 0 ? '+' : '') + v + ' ct'; }
+        if (paramId.indexOf ('_LEVEL') >= 0) return pct + '%';
+        if (paramId.indexOf ('_PAN')   >= 0) { const v = Math.round (-100 + n * 200); return v === 0 ? 'C' : (v < 0 ? 'L' + (-v) : 'R' + v); }
+        return pct + '%';
+      }
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
       knobEls.forEach ((knobEl) => {
         try {
@@ -9268,6 +9299,27 @@ setTimeout(function wireSynControls () {
             console.warn ('[SYN-knob] no .knob-ring child for', paramId);
             return;
           }
+
+          // ── Readout legend: label flips to the live value while dragging, then
+          //    settles back to its name (parity with the FLOW vis-knobs). ──
+          const labelEl = knobEl.querySelector ('.knob-label');
+          const labelName = labelEl ? labelEl.textContent : '';
+          let readoutTimer = null;
+          const showReadout = (n) => {
+            if (! labelEl) return;
+            if (readoutTimer) { clearTimeout (readoutTimer); readoutTimer = null; }
+            labelEl.textContent = fmtSynReadout (paramId, n);
+            labelEl.classList.add ('kv-live');
+          };
+          const restoreLabel = () => {
+            if (! labelEl) return;
+            if (readoutTimer) clearTimeout (readoutTimer);
+            readoutTimer = setTimeout (() => {
+              labelEl.textContent = labelName;
+              labelEl.classList.remove ('kv-live');
+              readoutTimer = null;
+            }, 650);   // brief linger so the value is readable after release
+          };
 
           // Helper: update the conic-gradient based on normalised value [0..1].
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
@@ -9299,6 +9351,7 @@ setTimeout(function wireSynControls () {
             if (Math.abs (dy) > 2) dragMoved = true;  // Phase 12 — actual drag (not just click)
             const newN = Math.max (0, Math.min (1, dragStartN + dy / 200));
             applyFill (newN);
+            showReadout (newN);
             try { state.setNormalisedValue (newN); } catch (e) {}
           };
           const onUp = () => {
@@ -9307,6 +9360,7 @@ setTimeout(function wireSynControls () {
             dragMoved = false;
             document.removeEventListener ('pointermove', onMove);
             document.removeEventListener ('pointerup', onUp);
+            restoreLabel ();
             ring.style.cursor = 'grab';
           };
           ring.style.cursor = 'grab';
@@ -9316,6 +9370,7 @@ setTimeout(function wireSynControls () {
               dragMoved = false;
               dragStartY = ev.clientY;
               dragStartN = state.getNormalisedValue ? state.getNormalisedValue () : 0;
+              showReadout (dragStartN);
               ring.style.cursor = 'grabbing';
               if (ring.setPointerCapture) ring.setPointerCapture (ev.pointerId);
               document.addEventListener ('pointermove', onMove);
@@ -9350,6 +9405,7 @@ setTimeout(function wireSynControls () {
               if (typeof defaultN === 'number') {
                 state.setNormalisedValue (defaultN);
                 applyFill (defaultN);
+                showReadout (defaultN); restoreLabel ();
               }
             } catch (e) { console.warn ('[SYN-knob] dblclick reset failed for', paramId, e); }
           });
@@ -19688,7 +19744,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // per-osc display state (fed by setParams; safe defaults)
   var st = {};
   OSC_IDS.forEach(function (o) {
-    st[o] = { table: 0, pos: 0, warp: 0.5, fold: 0, foldMode: 1, spectral: 0, samples: null };
+    st[o] = { table: 0, pos: 0, warp: 0, fold: 0, foldMode: 0, spectral: 0, samples: null };
   });
 
   /* ----------------------------------------------------------------- shapes */
@@ -19753,16 +19809,19 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   }
 
   /* ------------------------------------------------------------- warp + fold */
-  // Phase-domain WARP (generic bend). warp in [0,1], 0.5 = neutral; <0.5 pinches
-  // toward the center, >0.5 pushes toward the edges. STAGE B: replace with the
-  // engine's exact warp-mode math (Bend/PWM/Asym/Sync/Flip/Mirror) so the line
-  // matches the played sound precisely.
-  function warpPhase(p, warp) {
-    var k = (warp - 0.5) * 2;                 // -1..+1
-    if (Math.abs(k) < 1e-4) return p % 1;
-    var e = Math.pow(2, -k * 2.2);            // k>0 -> e<1 -> push toward edges
+  // Phase-domain WARP. amount in [0,1] == SYN_OSC_x_WARP_AMOUNT (default 0 =
+  // NEUTRAL, matching the engine). Mirrors SynthVoice::applyPhaseWarp mode 1
+  // (BEND): w = p + amount*0.5*sin(2*pi*p). Neutral at amount 0 so a fresh patch
+  // / untouched WARP knob shows the CLEAN single cycle (no right-shift); turning
+  // WARP bends it byte-for-byte like the engine's BEND mode. STAGE B / mode-aware
+  // upgrade: read SYN_OSC_x_WARP_MODE and branch the other modes (SYNC/FORMANT/
+  // PWM/SKEW/MIRROR/FRACTALIZE/P-QUANTIZE) — all are likewise identity at 0.
+  function warpPhase(p, amount) {
     var pp = p % 1; if (pp < 0) pp += 1;
-    return Math.pow(pp, e);
+    var a = amount < 0 ? 0 : (amount > 1 ? 1 : (amount || 0));
+    if (a < 1e-4) return pp;                  // amount 0 -> identity (engine NONE/0)
+    var w = pp + a * 0.5 * Math.sin(TWO_PI * pp);   // BEND (engine-exact)
+    return w - Math.floor(w);
   }
   // Wavefolding. fold in [0,1]; mode 0=Linear, 1=Sine, 2=Triangle (matches FOLD_SHAPES).
   function foldVal(v, fold, mode) {
@@ -19826,10 +19885,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     }
     ctx.stroke(); ctx.shadowBlur = 0;
 
-    // WT POS frame number, lower-left (Serum shows this on the 2D view)
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '10px -apple-system, system-ui, sans-serif';
-    ctx.fillText((1 + Math.round(clamp01(st[o].pos) * 15)) + ' / 16', 6, h - 6);
+    // (Frame number is shown on the WT POS knob label while dragging — keeps the
+    //  visualizer clean.  OSCFIX-FRAME-MOVED)
 
     ctx.restore();
   }
