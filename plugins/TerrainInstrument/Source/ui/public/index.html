@@ -3534,8 +3534,7 @@ body {
   font-size: 9.5px; font-weight: 500; letter-spacing: 0.5px; color: var(--text-secondary);
   cursor: pointer; white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s ease;
 }
-#syn-panel .engine-display::after { content: '\25BE'; font-size: 7px; margin-left: 3px; color: var(--text-dim); vertical-align: middle; }
-#syn-panel .engine-wrap:hover .engine-display { color: var(--purple-400); }
+#syn-panel .device.osc .engine-wrap:hover .engine-display { color: var(--text-primary); }
 #syn-panel .engine-select {
   -webkit-appearance: none; appearance: none;
   position: absolute; inset: 0; width: 100%; height: 100%;
@@ -3553,6 +3552,40 @@ body {
 #syn-panel .device.osc .swap-btn { border: none; background: transparent; color: var(--text-muted); font-size: 15px; transition: color .12s ease, text-shadow .12s ease; }
 #syn-panel .device.osc .swap-btn:hover { background: transparent; color: var(--purple-400); text-shadow: 0 0 8px rgba(167,139,250,0.6); box-shadow: none; }
 #syn-panel .device.osc .swap-btn.act { background: transparent; color: var(--purple-400); box-shadow: none; }
+
+/* ── OSCFIX-HEADER-EMBLEMS: OSC caps + muted header; A/S/N/+ uniform boxed emblems (right cluster); knob baseline lock ── */
+#syn-panel .device.osc .device-label { color: var(--text-muted); text-transform: uppercase; }
+#syn-panel .device.osc .engine-display { color: var(--text-muted); font-weight: 400; }
+#syn-panel .device.osc .device-corner-preset { gap: 4px; }
+#syn-panel .device.osc .osc-emblems { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+#syn-panel .device.osc .osc-emblems .osc-letter,
+#syn-panel .device.osc .osc-emblems .sn-chip,
+#syn-panel .device.osc .swap-btn {
+  width: 16px; height: 16px; box-sizing: border-box; margin: 0;
+  border: 1px solid var(--border-strong); border-radius: 4px;
+  background: transparent; color: var(--text-muted);
+  font-weight: 400; line-height: 1; letter-spacing: 0;
+  display: inline-grid; place-items: center; cursor: pointer;
+  transition: color .12s ease, border-color .12s ease;
+}
+#syn-panel .device.osc .osc-emblems .osc-letter,
+#syn-panel .device.osc .osc-emblems .sn-chip { font-size: 9px; }
+#syn-panel .device.osc .swap-btn { font-size: 12px; }
+#syn-panel .device.osc .swap-btn::before { transform: none; }
+#syn-panel .device.osc .swap-btn.act::before { font-size: 11px; }
+#syn-panel .device.osc .osc-emblems .osc-letter:hover,
+#syn-panel .device.osc .osc-emblems .sn-chip:hover,
+#syn-panel .device.osc .swap-btn:hover { color: #FFFFFF; border-color: var(--purple-400); background: rgba(139,92,246,0.22); box-shadow: 0 0 7px rgba(167,139,250,0.45); text-shadow: none; }
+#syn-panel .device.osc .osc-emblems .sn-chip.on { color: var(--purple-400); border-color: var(--purple-400); background: transparent; }
+#syn-panel .device.osc .swap-btn.act { color: var(--purple-400); border-color: var(--purple-400); background: transparent; box-shadow: none; }
+/* knob baseline lock: front + back knob rows pin to the same bottom band so swapping never shifts them */
+#syn-panel .osc-knobs { flex: 0 0 auto; min-height: 38px; }
+
+/* ── OSCFIX-ALIGN-V2: lift A/S/N glyphs to the + center; OSC device → flex column so front+back knob rows share one baseline ── */
+#syn-panel .device.osc .osc-emblems .osc-letter,
+#syn-panel .device.osc .osc-emblems .sn-chip,
+#syn-panel .device.osc .swap-btn { padding-bottom: 2px; }
+#syn-panel .device.osc { display: flex; flex-direction: column; }
 /* clickable letter that toggles A<->B / C<->D within the slot */
 /* the letter is the easter-egg "seamless switch" (A<->B / C<->D). Styled IDENTICALLY to the
    S/N chips so the three header boxes are uniform + symmetric; no active highlight = looks the
@@ -3574,14 +3607,14 @@ body {
   font-size: 9.5px; font-weight: 300;
   letter-spacing: 0.8px;
   cursor: pointer;
-  padding: 2px 0 2px 6px;
-  border-radius: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
   transition: background 0.12s ease;
   white-space: nowrap;
   user-select: none;
   pointer-events: none;          /* clicks pass through to the overlay select below */
 }
-#syn-panel .device-corner-preset:hover .preset-display {
+#syn-panel .device-corner-preset .preset-wrap:hover .preset-display {
   background: rgba(139,92,246,0.15);
 }
 #syn-panel .preset-select {
@@ -3738,7 +3771,7 @@ body {
 #syn-panel .osc { display: flex; flex-direction: column; gap: 7px; padding-top: 24px; }
 #syn-panel .osc-display {
   flex: 1; background: transparent; border: none;
-  border-radius: 8px; position: relative; overflow: hidden; min-height: 28px;
+  border-radius: 8px; position: relative; overflow: hidden; min-height: 65px;
 }
 /* canvas waveform visualizer — fills the (now transparent) display footprint */
 #syn-panel .osc-display .osc-wave canvas { display: block; width: 100%; height: 100%; }
@@ -4788,8 +4821,7 @@ body {
           <div class="osc-slot" id="slot-ab" data-cur="a">
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
-              <div class="device-label">Osc · <span class="osc-letter" data-slot="ab" title="Toggle">A</span></div>
-              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -4845,6 +4877,7 @@ body {
                 </optgroup>
               </select>
               </span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">A</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
               <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -4929,8 +4962,7 @@ body {
           </div>
           <div class="device osc osc-hidden" id="osc-b-device">
             <div class="device-label-row">
-              <div class="device-label">Osc · <span class="osc-letter" data-slot="ab" title="Toggle">B</span></div>
-              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -4986,6 +5018,7 @@ body {
                 </optgroup>
               </select>
               </span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">B</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
               <button class="swap-btn" type="button" id="osc-b-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -5086,8 +5119,7 @@ body {
           <div class="osc-slot" id="slot-cd" data-cur="c">
           <div class="device osc" id="osc-c-device">
             <div class="device-label-row">
-              <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">C</span></div>
-              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -5143,6 +5175,7 @@ body {
                 </optgroup>
               </select>
               </span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">C</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
               <button class="swap-btn" type="button" id="osc-c-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -5227,8 +5260,7 @@ body {
           </div>
           <div class="device osc osc-hidden" id="osc-d-device">
             <div class="device-label-row">
-              <div class="device-label">Osc · <span class="osc-letter" data-slot="cd" title="Toggle">D</span></div>
-              <span class="osc-sn"><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
@@ -5284,6 +5316,7 @@ body {
                 </optgroup>
               </select>
               </span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">D</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
               <button class="swap-btn" type="button" id="osc-d-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -19958,6 +19991,42 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if(dev&&window.ResizeObserver){ try{ new ResizeObserver(function(){ window.OscWave.redrawAll(); }).observe(dev); }catch(e){} }
     });
   });
+})();
+</script>
+<script>
+/* OSC header re-sync — keeps the preset name, engine name and their <select> values
+   pinned to the live APVTS state on every (re)load. Fixes the UI reverting to defaults
+   ("Sine" / "Wavetable") after the plugin is closed/reopened: the SliderState initial
+   update can fire before listeners attach, so we re-read a few times to catch it. */
+(function () {
+  'use strict';
+  var ENGINE_NAMES = ['Wavetable','Sample','Granular','Spectral','FM','Analog'];
+  function ss (n) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState(n) : null; } catch (e) { return null; } }
+  function sIdx (s) { try { return s ? Math.round(s.getScaledValue ? s.getScaledValue() : 0) : 0; } catch (e) { return 0; } }
+  function resync () {
+    if (! (window.Juce && window.Juce.getSliderState)) return;
+    ['a','b','c','d'].forEach(function (o) {
+      var L = o.toUpperCase();
+      var ps = ss('SYN_OSC_' + L + '_WT_PRESET'),
+          psel = document.getElementById('osc-' + o + '-preset-select'),
+          pdisp = document.getElementById('osc-' + o + '-preset-display');
+      if (ps && psel) {
+        var i = Math.max(0, Math.min(psel.options.length - 1, sIdx(ps)));
+        try { psel.value = String(i); } catch (e) {}
+        if (pdisp && psel.selectedIndex >= 0) pdisp.textContent = psel.options[psel.selectedIndex].text;
+      }
+      var es = ss('SYN_OSC_' + L + '_ENGINE'),
+          esel = document.getElementById('osc-' + o + '-engine-select'),
+          edisp = document.getElementById('osc-' + o + '-engine-display');
+      if (es && edisp) {
+        var ei = Math.max(0, Math.min(5, sIdx(es)));
+        edisp.textContent = ENGINE_NAMES[ei] || 'Wavetable';
+        if (esel) { try { esel.value = String(ei); } catch (e) {} }
+      }
+    });
+  }
+  function boot () { resync(); [120, 400, 1000, 2200].forEach(function (t) { setTimeout(resync, t); }); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
 </script>
 </body>
