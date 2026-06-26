@@ -9719,20 +9719,21 @@ setTimeout(function wireSynControls () {
         place (); redraw ();
       }
 
-      function sampTick () {
-        for (var k in SAMP) {
-          var S = SAMP[k]; if (! S) continue;
-          var visible = S.view.offsetParent !== null;
-          if (! visible || ! S.st.loop) { S.ph.classList.remove ('on'); continue; }
-          S.ph.classList.add ('on');
-          var st = S.st, mode = SAMP_MODES[st.mode], spd = 0.0075;
-          if (mode === 'Reverse') { st.t -= spd; if (st.t < 0) st.t = 1; }
-          else if (mode === 'Ping-Pong') { st.t += spd * st.dir; if (st.t > 1) { st.t = 1; st.dir = -1; } if (st.t < 0) { st.t = 0; st.dir = 1; } }
-          else { st.t += spd; if (st.t > 1) st.t = 0; }
-          S.ph.style.left = (st.ls + (st.le - st.ls) * st.t) + '%';
-        }
-        requestAnimationFrame (sampTick);
-      }
+      // MIDI follower — driven by C++ at 60 Hz: window.updateSampleFollower(osc, pos01, active).
+      // pos01 = 0..1 across the WHOLE buffer; active=false (or pos<0) → fade out (CSS .25s).
+      // Retrigger is implicit (pos01 jumps on a new note while active stays true); frozen SCAN
+      // = active+stationary (drawn parked, not faded). Works in one-shot AND loop — no mode gating.
+      window.updateSampleFollower = function (osc, pos01, active) {
+        try {
+          var S = SAMP[osc]; if (! S || ! S.ph) return;
+          if (active && pos01 >= 0) {
+            S.ph.style.left = (Math.max (0, Math.min (1, pos01)) * 100) + '%';
+            S.ph.classList.add ('on');
+          } else {
+            S.ph.classList.remove ('on');
+          }
+        } catch (e) {}
+      };
 
       // C++ → JS: a real sample finished loading for an oscillator → draw it.
       window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {} };
@@ -9777,7 +9778,6 @@ setTimeout(function wireSynControls () {
         ring.addEventListener ('dblclick', function () { v = bip ? 0.5 : (/_XFADE$/.test (pid) ? 0.12 : 0); fill (v); live (); rest (); });
       }
       document.querySelectorAll ('#syn-panel .samp-knobs .knob[data-syn]').forEach (wireSampKnob);
-      requestAnimationFrame (sampTick);
       window.addEventListener ('resize', function () { for (var k in SAMP) { if (SAMP[k]) { SAMP[k].redraw (); SAMP[k].place (); } } });
     } catch (eSamp) { console.warn ('[SYN-sample] wiring failed', eSamp); }
 

@@ -2951,6 +2951,19 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
            << juce::String(envFollow, 4) << "," << juce::String(envStage, 4) << ");}";
     }
 
+    // ── Sample engine MIDI follower (per-osc playhead) ──
+    // SAMPLE-FOLLOWER — push the most-active voice's per-osc sample read position. pos < 0
+    // means that osc isn't a sounding Sample engine, so JS fades/parks the line (active=false).
+    {
+        static const char* oscId[4] = { "'a'", "'b'", "'c'", "'d'" };
+        for (int o = 0; o < 4; ++o)
+        {
+            const float pos = audioProcessor.sampleFollowVis_[o].load(std::memory_order_relaxed);
+            js << "if(window.updateSampleFollower){window.updateSampleFollower(" << oscId[o] << ","
+               << juce::String(pos < 0.f ? 0.f : pos, 4) << "," << (pos >= 0.f ? "true" : "false") << ");}";
+        }
+    }
+
     // ── Synth LFO 1 live value (Batch 1) — drives the modulation strip's scope/dot. ──
     {
         float lfo1 = audioProcessor.synthLfo1Vis.load(std::memory_order_relaxed);

@@ -3295,17 +3295,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // sounds we send -1 and JS parks/hides the follower.
     {
         float best = 0.f; float bestFollow = -1.f; float bestLfo = 0.f; bool any = false;
+        tw::SynthVoice* bestVoice = nullptr;   // SAMPLE-FOLLOWER — same voice the env dot tracks
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
             if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
                 if (sv->isAmpEnvActive())
                 {
                     const float lv = sv->getAmpEnvLevel();
-                    if (!any || lv > best) { best = lv; bestFollow = sv->getAmpEnvFollow(); bestLfo = sv->getSynthLfoVis(); any = true; }
+                    if (!any || lv > best) { best = lv; bestFollow = sv->getAmpEnvFollow(); bestLfo = sv->getSynthLfoVis(); bestVoice = sv; any = true; }
                 }
         ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
         ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
+        // SAMPLE-FOLLOWER — that same voice's per-osc sample read positions (-1 = idle).
+        for (int o = 0; o < 4; ++o)
+            sampleFollowVis_[o].store (bestVoice ? bestVoice->sampleFollowPos01 (o) : -1.f, std::memory_order_relaxed);
     }
 
 

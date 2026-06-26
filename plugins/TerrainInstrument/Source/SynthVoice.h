@@ -110,6 +110,19 @@ namespace tw
         // polls the most-active voice each timer tick and pushes this to the WebUI.
         float getAmpEnvLevel() const noexcept { return (float) ampEnv_.level(); }
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
+        // SAMPLE-FOLLOWER — per-osc sample read position [0,1] for the UI MIDI follower,
+        // or -1 if that oscillator isn't a sounding Sample engine. osc: 0=A,1=B,2=C,3=D.
+        float sampleFollowPos01 (int osc) const noexcept
+        {
+            switch (osc)
+            {
+                case 0: return (engine_  == Engine::SAMP && sampleEngA_.isActive()) ? (float) sampleEngA_.position01() : -1.f;
+                case 1: return (engineB_ == Engine::SAMP && sampleEngB_.isActive()) ? (float) sampleEngB_.position01() : -1.f;
+                case 2: return (engineC_ == Engine::SAMP && sampleEngC_.isActive()) ? (float) sampleEngC_.position01() : -1.f;
+                case 3: return (engineD_ == Engine::SAMP && sampleEngD_.isActive()) ? (float) sampleEngD_.position01() : -1.f;
+                default: return -1.f;
+            }
+        }
         // Packed follower position for an EXACT trace along the drawn curve:
         // stageIndex (0=Idle,1=Delay,2=Attack,3=Hold,4=Decay,5=Sustain,6=Release)
         // plus the fraction through that segment. Encoded as stage + frac (e.g. 2.37

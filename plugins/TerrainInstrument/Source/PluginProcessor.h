@@ -474,6 +474,7 @@ public:
     // Packed stage+fraction of the same voice (e.g. 2.37 = 37% through Attack), so the
     // UI dot rides the exact x-position on the curve. -1 = no voice sounding.
     std::atomic<float> ampEnvFollowVis { -1.f };
+    std::atomic<float> sampleFollowVis_[4] { -1.f, -1.f, -1.f, -1.f };   // SAMPLE-FOLLOWER — per-osc playhead 0..1 (-1 = idle)
     std::atomic<int> currentPresetIndex { 0 };
 
     // XY automation state (synced from JS, captured into presets)
