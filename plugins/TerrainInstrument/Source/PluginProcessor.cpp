@@ -1798,6 +1798,223 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC D Unison Width",
         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
 
+    // ════════ SAMPLE-ENGINE-PARAMS (Opus, 2026-06-25) ════════
+    // ── SAMPLE engine params — OSC A ──
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_SCAN, 1 },
+        "Synth OSC A Sample Scan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH, 1 },
+        "Synth OSC A Sample Stretch",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT, 1 },
+        "Synth OSC A Sample Formant",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY, 1 },
+        "Synth OSC A Sample Spray",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_XFADE, 1 },
+        "Synth OSC A Sample XFade",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.12f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_START, 1 },
+        "Synth OSC A Sample Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_END, 1 },
+        "Synth OSC A Sample End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START, 1 },
+        "Synth OSC A Sample Loop Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END, 1 },
+        "Synth OSC A Sample Loop End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE, 1 },
+        "Synth OSC A Sample Loop Mode",
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_SNAP, 1 },
+        "Synth OSC A Sample Snap",
+        juce::StringArray { "Off", "Zero-cross", "Transient" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN, 1 },
+        "Synth OSC A Sample Fade In",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT, 1 },
+        "Synth OSC A Sample Fade Out",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
+    // ── SAMPLE engine params — OSC B ──
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_SCAN, 1 },
+        "Synth OSC B Sample Scan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH, 1 },
+        "Synth OSC B Sample Stretch",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT, 1 },
+        "Synth OSC B Sample Formant",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY, 1 },
+        "Synth OSC B Sample Spray",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_XFADE, 1 },
+        "Synth OSC B Sample XFade",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.12f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_START, 1 },
+        "Synth OSC B Sample Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_END, 1 },
+        "Synth OSC B Sample End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START, 1 },
+        "Synth OSC B Sample Loop Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END, 1 },
+        "Synth OSC B Sample Loop End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE, 1 },
+        "Synth OSC B Sample Loop Mode",
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_SNAP, 1 },
+        "Synth OSC B Sample Snap",
+        juce::StringArray { "Off", "Zero-cross", "Transient" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN, 1 },
+        "Synth OSC B Sample Fade In",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT, 1 },
+        "Synth OSC B Sample Fade Out",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
+    // ── SAMPLE engine params — OSC C ──
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_SCAN, 1 },
+        "Synth OSC C Sample Scan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH, 1 },
+        "Synth OSC C Sample Stretch",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT, 1 },
+        "Synth OSC C Sample Formant",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY, 1 },
+        "Synth OSC C Sample Spray",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_XFADE, 1 },
+        "Synth OSC C Sample XFade",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.12f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_START, 1 },
+        "Synth OSC C Sample Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_END, 1 },
+        "Synth OSC C Sample End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START, 1 },
+        "Synth OSC C Sample Loop Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END, 1 },
+        "Synth OSC C Sample Loop End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE, 1 },
+        "Synth OSC C Sample Loop Mode",
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_SNAP, 1 },
+        "Synth OSC C Sample Snap",
+        juce::StringArray { "Off", "Zero-cross", "Transient" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN, 1 },
+        "Synth OSC C Sample Fade In",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT, 1 },
+        "Synth OSC C Sample Fade Out",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
+    // ── SAMPLE engine params — OSC D ──
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_SCAN, 1 },
+        "Synth OSC D Sample Scan",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH, 1 },
+        "Synth OSC D Sample Stretch",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT, 1 },
+        "Synth OSC D Sample Formant",
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY, 1 },
+        "Synth OSC D Sample Spray",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_XFADE, 1 },
+        "Synth OSC D Sample XFade",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.12f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_START, 1 },
+        "Synth OSC D Sample Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_END, 1 },
+        "Synth OSC D Sample End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START, 1 },
+        "Synth OSC D Sample Loop Start",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END, 1 },
+        "Synth OSC D Sample Loop End",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE, 1 },
+        "Synth OSC D Sample Loop Mode",
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_SNAP, 1 },
+        "Synth OSC D Sample Snap",
+        juce::StringArray { "Off", "Zero-cross", "Transient" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN, 1 },
+        "Synth OSC D Sample Fade In",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT, 1 },
+        "Synth OSC D Sample Fade Out",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP_AMOUNT, 1 },
         "Synth OSC D Warp Amount",
@@ -2667,6 +2884,41 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   rtSrcD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_DEST);
         const float rtAmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_AMT);
 
+        // ════════ SAMPLE-ENGINE-PUSH — read per-OSC Sample params (Opus) ════════
+        tw::SynthVoice::SampleEngineParams spA;
+        spA.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SCAN);       spA.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH);
+        spA.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT);    spA.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY);
+        spA.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_XFADE);      spA.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_START);
+        spA.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_END);        spA.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START);
+        spA.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END);   spA.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE);
+        spA.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SNAP);      spA.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN);
+        spA.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT);
+        tw::SynthVoice::SampleEngineParams spB;
+        spB.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SCAN);       spB.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH);
+        spB.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT);    spB.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY);
+        spB.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_XFADE);      spB.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_START);
+        spB.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_END);        spB.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START);
+        spB.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END);   spB.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE);
+        spB.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SNAP);      spB.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN);
+        spB.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT);
+        tw::SynthVoice::SampleEngineParams spC;
+        spC.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SCAN);       spC.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH);
+        spC.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT);    spC.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY);
+        spC.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_XFADE);      spC.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_START);
+        spC.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_END);        spC.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START);
+        spC.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END);   spC.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE);
+        spC.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SNAP);      spC.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN);
+        spC.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT);
+        tw::SynthVoice::SampleEngineParams spD;
+        spD.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SCAN);       spD.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH);
+        spD.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT);    spD.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY);
+        spD.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_XFADE);      spD.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_START);
+        spD.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_END);        spD.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START);
+        spD.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END);   spD.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE);
+        spD.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
+        spD.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
+        tw::SampleBuffer* sampleSrcPtr = &getSampleBuffer();  // editing-layer buffer (v1 shared source)
+
         // ── Batch 1 — assemble the synth modulation config from params + transport,
         //    then publish it to every voice. One LFO (L1, sine, free rate) and one
         //    default route L1 → Filter 1 cutoff (depth from LFO1_DEPTH) so the slice
@@ -2800,6 +3052,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setKeytrackCD (ktDepthC / 100.0f, ktDestC, ktDepthD / 100.0f, ktDestD);
                 sv->setRouteCD (rtSrcC, rtDestC, rtAmtC / 100.0f, rtSrcD, rtDestD, rtAmtD / 100.0f);
                 sv->setEngineC (engineIdxC);          sv->setEngineD (engineIdxD);
+                // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
+                sv->setSampleParamsA (spA);  sv->setSampleParamsB (spB);
+                sv->setSampleParamsC (spC);  sv->setSampleParamsD (spD);
+                sv->setSampleSource  (sampleSrcPtr);
             }
         }
 

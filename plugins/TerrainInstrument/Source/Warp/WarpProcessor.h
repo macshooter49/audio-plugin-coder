@@ -63,6 +63,7 @@ namespace tw
                 signalsmithEngine->reset();
                 signalsmithEngine->setStretchRatio   (stretchRatio);
                 signalsmithEngine->setPitchSemitones (pitchSemitones);
+                signalsmithEngine->setFormantFactor  (formantFactor);   // SAMPLE-ENGINE-FORMANT
             }
             else if (mode == WarpMode::Beats)
             {
@@ -101,6 +102,12 @@ namespace tw
             if (textureEngine)     textureEngine    ->setStretchRatio (stretchRatio);
         }
 
+        // SAMPLE-ENGINE-FORMANT — pass-through to the Signalsmith (Tones) engine.
+        void setFormantFactor (float f) noexcept
+        {
+            formantFactor = f;
+            if (signalsmithEngine) signalsmithEngine->setFormantFactor (f);
+        }
         void setPitchSemitones (float semis) noexcept
         {
             pitchSemitones = semis;
@@ -317,6 +324,7 @@ namespace tw
         WarpMode mode           = WarpMode::None;
         float    stretchRatio   = 1.0f;
         float    pitchSemitones = 0.0f;
+        float    formantFactor  = 1.0f;   // SAMPLE-ENGINE-FORMANT
 
         double sampleRate = 48000.0;
         int    channels   = 2;

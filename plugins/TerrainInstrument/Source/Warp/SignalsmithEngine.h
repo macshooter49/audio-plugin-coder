@@ -37,7 +37,7 @@ namespace tw
             // picks sensible windowing for the SR. setFormantFactor(1.0) keeps
             // formants where they belong even at non-unity pitch shifts.
             stretcher.presetDefault (channels, (float) sampleRate);
-            stretcher.setFormantFactor (1.0f);
+            stretcher.setFormantFactor (formantFactor);
 
             ready = true;
         }
@@ -56,6 +56,12 @@ namespace tw
             stretchRatio = juce::jlimit (0.1f, 15.0f, r);
         }
 
+        // SAMPLE-ENGINE-FORMANT — formant shift factor (1.0 = neutral, 2.0 = +1 oct).
+        void setFormantFactor (float f) noexcept
+        {
+            formantFactor = juce::jlimit (0.25f, 4.0f, f);
+            if (ready) stretcher.setFormantFactor (formantFactor);
+        }
         void setPitchSemitones (float semis) noexcept
         {
             pitchSemitones = juce::jlimit (-24.0f, 24.0f, semis);
@@ -128,6 +134,7 @@ namespace tw
         int    channels       = 2;
         float  stretchRatio   = 1.0f;
         float  pitchSemitones = 0.0f;
+        float  formantFactor  = 1.0f;   // SAMPLE-ENGINE-FORMANT
         bool   ready          = false;
     };
 }

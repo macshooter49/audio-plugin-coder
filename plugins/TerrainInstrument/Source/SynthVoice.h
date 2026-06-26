@@ -11,6 +11,9 @@
 #include "TerrainFilters.h"
 #include "TerrainEnvelope.h"
 #include "SynthModConfig.h"   // Batch 1 — per-voice LFOs + mod routing (namespace wc)
+#include "SampleEngine.h"          // SAMPLE-ENGINE-VOICE — per-OSC sample playback core
+#include "SampleBuffer.h"          // SAMPLE-ENGINE-VOICE — shared lock-free buffer
+#include "Warp/WarpProcessor.h"    // SAMPLE-ENGINE-VOICE — STRETCH + FORMANT (Signalsmith Tones)
 #include <atomic>
 #include <array>
 #include <cmath>
@@ -56,6 +59,11 @@ namespace tw
             pitchEnvT_.prepare (sampleRate_);
             mod1EnvT_.prepare (sampleRate_);
             mod2EnvT_.prepare (sampleRate_);
+            // SAMPLE-ENGINE-VOICE — prepare per-OSC sample engines + warp processors
+            sampleEngA_.prepare (sampleRate_); sampleEngB_.prepare (sampleRate_);
+            sampleEngC_.prepare (sampleRate_); sampleEngD_.prepare (sampleRate_);
+            sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
+            sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
         }
 
         /** Set AMP envelope params. attackMs/decayMs/releaseMs are milliseconds;
@@ -354,6 +362,20 @@ namespace tw
 
         /** Test-only accessor — not used in production audio path. */
         Engine engineForTesting() const noexcept { return engine_; }
+
+        // ════════ SAMPLE-ENGINE-VOICE — per-OSC Sample engine params + setters ════════
+        struct SampleEngineParams
+        {
+            float scan = 0.f, stretch = 0.f, formant = 0.f, spray = 0.f, xfade = 0.12f;
+            float start = 0.f, end = 1.f, loopStart = 0.f, loopEnd = 1.f;
+            int   loopMode = 1, snap = 0;
+            float fadeIn = 0.f, fadeOut = 0.f;
+        };
+        void setSampleParamsA (const SampleEngineParams& p) noexcept { sampleParamsA_ = p; }
+        void setSampleParamsB (const SampleEngineParams& p) noexcept { sampleParamsB_ = p; }
+        void setSampleParamsC (const SampleEngineParams& p) noexcept { sampleParamsC_ = p; }
+        void setSampleParamsD (const SampleEngineParams& p) noexcept { sampleParamsD_ = p; }
+        void setSampleSource  (tw::SampleBuffer* s) noexcept { sampleSource_ = s; }
 
         // ── Phase 9 — OSC B setters (mirror of OSC A) ─────────────────────
 
@@ -908,6 +930,12 @@ namespace tw
             noiseLpZB_       = 0.0f;
             noiseLpZC_       = 0.0f;   // OSC C/D resets (4-osc)
             noiseLpZD_       = 0.0f;
+            // SAMPLE-ENGINE-VOICE — arm note-on; the per-block render does the actual
+            // noteOn AFTER the buffer pointer is refreshed (so SPRAY scatters in-bounds).
+            sampleSprayRng_ = sampleSprayRng_ * 1664525u + 1013904223u;
+            spraySeedA_ = sampleSprayRng_ ^ 0xA1u; spraySeedB_ = sampleSprayRng_ ^ 0xB2u;
+            spraySeedC_ = sampleSprayRng_ ^ 0xC3u; spraySeedD_ = sampleSprayRng_ ^ 0xD4u;
+            sampleNoteOnPending_ = true;
 
             // PHASE — initialise each unison sine's phase accumulator per the selected
             // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
@@ -1288,6 +1316,10 @@ namespace tw
             const float* eAmpFree[4] = { envScratch_.getReadPointer (1), envScratch_.getReadPointer (2),
                                          envScratch_.getReadPointer (3), envScratch_.getReadPointer (4) };
 
+            // SAMPLE-ENGINE-VOICE — render any SAMP oscillators' stereo blocks for this
+            // buffer (scan/loop/xfade/spray + STRETCH/FORMANT warp). Cheap no-op if none.
+            renderSampleBlocks (numSamples);
+
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
@@ -1394,6 +1426,7 @@ namespace tw
                 sumAR *= uNormA_;
                 float sA_L = sumAL;
                 float sA_R = sumAR;
+                if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
                 if (! spectralBypassA_)
                 {
                     if (spectralTypeA_ <= 2)
@@ -1597,6 +1630,7 @@ namespace tw
                 sumBR *= uNormB_;
                 float sB_L = sumBL;
                 float sB_R = sumBR;
+                if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
                 if (! spectralBypassB_)
                 {
                     if (spectralTypeB_ <= 2)
@@ -1797,6 +1831,7 @@ namespace tw
                 sumCR *= uNormC_;
                 float sC_L = sumCL;
                 float sC_R = sumCR;
+                if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
                 if (! spectralBypassC_)
                 {
                     if (spectralTypeC_ <= 2)
@@ -1997,6 +2032,7 @@ namespace tw
                 sumDR *= uNormD_;
                 float sD_L = sumDL;
                 float sD_R = sumDR;
+                if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
                 if (! spectralBypassD_)
                 {
                     if (spectralTypeD_ <= 2)
@@ -2744,6 +2780,105 @@ namespace tw
         float                warpAmount_       = 0.0f;  // 0..1
 
         // Phase 3 — Engine choice.
+        // ════════════════ SAMPLE-ENGINE-VOICE — state + render ════════════════
+        tw::SampleEngine   sampleEngA_, sampleEngB_, sampleEngC_, sampleEngD_;
+        tw::WarpProcessor  sampleWarpA_, sampleWarpB_, sampleWarpC_, sampleWarpD_;
+        SampleEngineParams sampleParamsA_, sampleParamsB_, sampleParamsC_, sampleParamsD_;
+        tw::SampleBuffer*  sampleSource_   = nullptr;
+        tw::SampleBuffer::BufferPtr sampleHeldBuf_;                 // keep AudioBuffer alive while reading
+        const juce::AudioBuffer<float>* sampleBufLast_ = nullptr;   // detect buffer swap
+        double sampleNativeOverOut_ = 1.0;
+        juce::AudioBuffer<float> sampleBlkA_, sampleBlkB_, sampleBlkC_, sampleBlkD_, warpSrc_;
+        const float *sampBlkAL_ = nullptr, *sampBlkAR_ = nullptr, *sampBlkBL_ = nullptr, *sampBlkBR_ = nullptr,
+                    *sampBlkCL_ = nullptr, *sampBlkCR_ = nullptr, *sampBlkDL_ = nullptr, *sampBlkDR_ = nullptr;
+        bool          sampleNoteOnPending_ = false;
+        std::uint32_t sampleSprayRng_ = 0x12345u, spraySeedA_ = 0, spraySeedB_ = 0, spraySeedC_ = 0, spraySeedD_ = 0;
+
+        void renderSampleOsc (tw::SampleEngine& eng, tw::WarpProcessor& warp,
+                              const SampleEngineParams& p, bool isSamp,
+                              int oct, int semi, float cent,
+                              juce::AudioBuffer<float>& blk,
+                              const float*& outL, const float*& outR,
+                              int numSamples, std::uint32_t seed, bool doNoteOn) noexcept
+        {
+            if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
+                blk.setSize (2, numSamples, false, false, true);
+            float* wL = blk.getWritePointer (0);
+            float* wR = blk.getWritePointer (1);
+            outL = wL; outR = wR;
+            if (! isSamp) return;
+            if (! eng.hasSample())
+            {
+                juce::FloatVectorOperations::clear (wL, numSamples);
+                juce::FloatVectorOperations::clear (wR, numSamples);
+                return;
+            }
+            // params (modulatable — refreshed every block)
+            eng.setRegion (p.start, p.end);
+            float ls = p.loopStart, le = p.loopEnd;
+            if (p.snap == 1) { ls = eng.snapZeroCross01 (ls); le = eng.snapZeroCross01 (le); }
+            eng.setLoop (ls, le);
+            eng.setLoopMode ((tw::SampleEngine::LoopMode) p.loopMode);
+            eng.setXFade (p.xfade);
+            eng.setFades (p.fadeIn, p.fadeOut);
+            eng.setScan (p.scan);
+            // pitch: root MIDI 60 = C3; resample ratio incl native/output SR
+            const double noteSemis  = (double) (currentMidiNote_ - 60 + oct * 12 + semi) + (double) cent * 0.01;
+            const double pitchRatio = sampleNativeOverOut_ * std::pow (2.0, noteSemis / 12.0);
+            eng.setPitchRatio (pitchRatio);
+            if (doNoteOn) { eng.noteOn (pitchRatio, p.spray, seed); warp.noteOnReset(); }
+            // render — direct (resample) unless STRETCH/FORMANT engage the Warp (Tones) engine
+            const bool useWarp = (p.stretch > 0.001f) || (std::fabs (p.formant) > 0.001f);
+            if (! useWarp)
+            {
+                for (int k = 0; k < numSamples; ++k) eng.tick (wL[k], wR[k]);
+            }
+            else
+            {
+                if (warp.getMode() != tw::WarpMode::Tones) { warp.setMode (tw::WarpMode::Tones); warp.noteOnReset(); }
+                warp.setStretchRatio   (1.0f + p.stretch * 3.0f);     // 0 → 1x … 1 → 4x (slower; pitch held)
+                warp.setPitchSemitones (0.0f);                        // note pitch already in the resampled read
+                warp.setFormantFactor  (std::pow (2.0f, p.formant));  // -1..+1 → ±1 octave formant shift
+                const int srcN = juce::jmax (1, warp.sourceSamplesPerBlock (numSamples));
+                if (warpSrc_.getNumChannels() < 2 || warpSrc_.getNumSamples() < srcN)
+                    warpSrc_.setSize (2, srcN, false, false, true);
+                float* sL = warpSrc_.getWritePointer (0);
+                float* sR = warpSrc_.getWritePointer (1);
+                for (int k = 0; k < srcN; ++k) eng.tick (sL[k], sR[k]);
+                warp.process (sL, sR, wL, wR, numSamples);            // distinct in/out (Signalsmith requires)
+            }
+        }
+
+        void renderSampleBlocks (int numSamples) noexcept
+        {
+            if (engine_ != Engine::SAMP && engineB_ != Engine::SAMP
+                && engineC_ != Engine::SAMP && engineD_ != Engine::SAMP)
+                return;   // no sample oscillators → free no-op (common case)
+
+            if (sampleSource_ != nullptr)
+            {
+                auto bp = sampleSource_->load();
+                if (bp.get() != sampleBufLast_)
+                {
+                    sampleHeldBuf_ = bp;
+                    sampleBufLast_ = bp.get();
+                    const int nCh = bp ? bp->getNumChannels() : 0;
+                    const int nSm = bp ? bp->getNumSamples()  : 0;
+                    const double nr = sampleSource_->getSampleRate();
+                    const float* const* rp = (bp && nSm > 0) ? bp->getArrayOfReadPointers() : nullptr;
+                    sampleEngA_.setSample (rp, nCh, nSm, nr); sampleEngB_.setSample (rp, nCh, nSm, nr);
+                    sampleEngC_.setSample (rp, nCh, nSm, nr); sampleEngD_.setSample (rp, nCh, nSm, nr);
+                    sampleNativeOverOut_ = (nr > 0.0 && sampleRate_ > 0.0) ? (nr / sampleRate_) : 1.0;
+                }
+            }
+            const bool doOn = sampleNoteOnPending_;
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn);
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn);
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn);
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn);
+            sampleNoteOnPending_ = false;
+        }
+
         Engine               engine_           = Engine::WT;
 
         // Phase 3 — NOISE engine state.

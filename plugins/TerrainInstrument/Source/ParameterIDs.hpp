@@ -393,4 +393,61 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_UDETUNE[]       = "SYN_OSC_D_UDETUNE";        // float 0..100 % pitch fan
     constexpr char SYN_OSC_D_UBLEND[]        = "SYN_OSC_D_UBLEND";         // float 0..100 % centre-vs-outer balance
     constexpr char SYN_OSC_D_UWIDTH[]        = "SYN_OSC_D_UWIDTH";         // float 0..100 % stereo spread
+
+    // ── SAMPLE-ENGINE-IDS — per-OSC Sample engine params (Opus, 2026-06-25) ──
+    constexpr char SYN_OSC_A_SAMPLE_SCAN[]       = "SYN_OSC_A_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction
+    constexpr char SYN_OSC_A_SAMPLE_STRETCH[]    = "SYN_OSC_A_SAMPLE_STRETCH";    // float 0..1 — time-stretch (Warp), pitch held
+    constexpr char SYN_OSC_A_SAMPLE_FORMANT[]    = "SYN_OSC_A_SAMPLE_FORMANT";    // float -1..+1 bipolar — formant shift
+    constexpr char SYN_OSC_A_SAMPLE_SPRAY[]      = "SYN_OSC_A_SAMPLE_SPRAY";      // float 0..1 — per-note random start scatter
+    constexpr char SYN_OSC_A_SAMPLE_XFADE[]      = "SYN_OSC_A_SAMPLE_XFADE";      // float 0..1 — equal-power loop crossfade
+    constexpr char SYN_OSC_A_SAMPLE_START[]      = "SYN_OSC_A_SAMPLE_START";      // float 0..1 — region start
+    constexpr char SYN_OSC_A_SAMPLE_END[]        = "SYN_OSC_A_SAMPLE_END";        // float 0..1 — region end
+    constexpr char SYN_OSC_A_SAMPLE_LOOP_START[] = "SYN_OSC_A_SAMPLE_LOOP_START"; // float 0..1 — loop start (clamped in region)
+    constexpr char SYN_OSC_A_SAMPLE_LOOP_END[]   = "SYN_OSC_A_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
+    constexpr char SYN_OSC_A_SAMPLE_LOOP_MODE[]  = "SYN_OSC_A_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
+    constexpr char SYN_OSC_A_SAMPLE_SNAP[]       = "SYN_OSC_A_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_A_SAMPLE_FADE_IN[]    = "SYN_OSC_A_SAMPLE_FADE_IN";    // float 0..1 — region fade in
+    constexpr char SYN_OSC_A_SAMPLE_FADE_OUT[]   = "SYN_OSC_A_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
+
+    constexpr char SYN_OSC_B_SAMPLE_SCAN[]       = "SYN_OSC_B_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction
+    constexpr char SYN_OSC_B_SAMPLE_STRETCH[]    = "SYN_OSC_B_SAMPLE_STRETCH";    // float 0..1 — time-stretch (Warp), pitch held
+    constexpr char SYN_OSC_B_SAMPLE_FORMANT[]    = "SYN_OSC_B_SAMPLE_FORMANT";    // float -1..+1 bipolar — formant shift
+    constexpr char SYN_OSC_B_SAMPLE_SPRAY[]      = "SYN_OSC_B_SAMPLE_SPRAY";      // float 0..1 — per-note random start scatter
+    constexpr char SYN_OSC_B_SAMPLE_XFADE[]      = "SYN_OSC_B_SAMPLE_XFADE";      // float 0..1 — equal-power loop crossfade
+    constexpr char SYN_OSC_B_SAMPLE_START[]      = "SYN_OSC_B_SAMPLE_START";      // float 0..1 — region start
+    constexpr char SYN_OSC_B_SAMPLE_END[]        = "SYN_OSC_B_SAMPLE_END";        // float 0..1 — region end
+    constexpr char SYN_OSC_B_SAMPLE_LOOP_START[] = "SYN_OSC_B_SAMPLE_LOOP_START"; // float 0..1 — loop start (clamped in region)
+    constexpr char SYN_OSC_B_SAMPLE_LOOP_END[]   = "SYN_OSC_B_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
+    constexpr char SYN_OSC_B_SAMPLE_LOOP_MODE[]  = "SYN_OSC_B_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
+    constexpr char SYN_OSC_B_SAMPLE_SNAP[]       = "SYN_OSC_B_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_B_SAMPLE_FADE_IN[]    = "SYN_OSC_B_SAMPLE_FADE_IN";    // float 0..1 — region fade in
+    constexpr char SYN_OSC_B_SAMPLE_FADE_OUT[]   = "SYN_OSC_B_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
+
+    constexpr char SYN_OSC_C_SAMPLE_SCAN[]       = "SYN_OSC_C_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction
+    constexpr char SYN_OSC_C_SAMPLE_STRETCH[]    = "SYN_OSC_C_SAMPLE_STRETCH";    // float 0..1 — time-stretch (Warp), pitch held
+    constexpr char SYN_OSC_C_SAMPLE_FORMANT[]    = "SYN_OSC_C_SAMPLE_FORMANT";    // float -1..+1 bipolar — formant shift
+    constexpr char SYN_OSC_C_SAMPLE_SPRAY[]      = "SYN_OSC_C_SAMPLE_SPRAY";      // float 0..1 — per-note random start scatter
+    constexpr char SYN_OSC_C_SAMPLE_XFADE[]      = "SYN_OSC_C_SAMPLE_XFADE";      // float 0..1 — equal-power loop crossfade
+    constexpr char SYN_OSC_C_SAMPLE_START[]      = "SYN_OSC_C_SAMPLE_START";      // float 0..1 — region start
+    constexpr char SYN_OSC_C_SAMPLE_END[]        = "SYN_OSC_C_SAMPLE_END";        // float 0..1 — region end
+    constexpr char SYN_OSC_C_SAMPLE_LOOP_START[] = "SYN_OSC_C_SAMPLE_LOOP_START"; // float 0..1 — loop start (clamped in region)
+    constexpr char SYN_OSC_C_SAMPLE_LOOP_END[]   = "SYN_OSC_C_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
+    constexpr char SYN_OSC_C_SAMPLE_LOOP_MODE[]  = "SYN_OSC_C_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
+    constexpr char SYN_OSC_C_SAMPLE_SNAP[]       = "SYN_OSC_C_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_C_SAMPLE_FADE_IN[]    = "SYN_OSC_C_SAMPLE_FADE_IN";    // float 0..1 — region fade in
+    constexpr char SYN_OSC_C_SAMPLE_FADE_OUT[]   = "SYN_OSC_C_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
+
+    constexpr char SYN_OSC_D_SAMPLE_SCAN[]       = "SYN_OSC_D_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction
+    constexpr char SYN_OSC_D_SAMPLE_STRETCH[]    = "SYN_OSC_D_SAMPLE_STRETCH";    // float 0..1 — time-stretch (Warp), pitch held
+    constexpr char SYN_OSC_D_SAMPLE_FORMANT[]    = "SYN_OSC_D_SAMPLE_FORMANT";    // float -1..+1 bipolar — formant shift
+    constexpr char SYN_OSC_D_SAMPLE_SPRAY[]      = "SYN_OSC_D_SAMPLE_SPRAY";      // float 0..1 — per-note random start scatter
+    constexpr char SYN_OSC_D_SAMPLE_XFADE[]      = "SYN_OSC_D_SAMPLE_XFADE";      // float 0..1 — equal-power loop crossfade
+    constexpr char SYN_OSC_D_SAMPLE_START[]      = "SYN_OSC_D_SAMPLE_START";      // float 0..1 — region start
+    constexpr char SYN_OSC_D_SAMPLE_END[]        = "SYN_OSC_D_SAMPLE_END";        // float 0..1 — region end
+    constexpr char SYN_OSC_D_SAMPLE_LOOP_START[] = "SYN_OSC_D_SAMPLE_LOOP_START"; // float 0..1 — loop start (clamped in region)
+    constexpr char SYN_OSC_D_SAMPLE_LOOP_END[]   = "SYN_OSC_D_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
+    constexpr char SYN_OSC_D_SAMPLE_LOOP_MODE[]  = "SYN_OSC_D_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
+    constexpr char SYN_OSC_D_SAMPLE_SNAP[]       = "SYN_OSC_D_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_D_SAMPLE_FADE_IN[]    = "SYN_OSC_D_SAMPLE_FADE_IN";    // float 0..1 — region fade in
+    constexpr char SYN_OSC_D_SAMPLE_FADE_OUT[]   = "SYN_OSC_D_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
 }

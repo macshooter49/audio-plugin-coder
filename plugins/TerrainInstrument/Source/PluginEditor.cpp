@@ -278,6 +278,59 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDUdetuneRelay)
             .withOptionsFrom(synOscDUblendRelay)
             .withOptionsFrom(synOscDUwidthRelay)
+            // ════ SAMPLE-ENGINE-WITHOPTIONS (Opus) ════
+            .withOptionsFrom(synOscASampleScanRelay)
+            .withOptionsFrom(synOscASampleStretchRelay)
+            .withOptionsFrom(synOscASampleFormantRelay)
+            .withOptionsFrom(synOscASampleSprayRelay)
+            .withOptionsFrom(synOscASampleXfadeRelay)
+            .withOptionsFrom(synOscASampleStartRelay)
+            .withOptionsFrom(synOscASampleEndRelay)
+            .withOptionsFrom(synOscASampleLoopStartRelay)
+            .withOptionsFrom(synOscASampleLoopEndRelay)
+            .withOptionsFrom(synOscASampleLoopModeRelay)
+            .withOptionsFrom(synOscASampleSnapRelay)
+            .withOptionsFrom(synOscASampleFadeInRelay)
+            .withOptionsFrom(synOscASampleFadeOutRelay)
+            .withOptionsFrom(synOscBSampleScanRelay)
+            .withOptionsFrom(synOscBSampleStretchRelay)
+            .withOptionsFrom(synOscBSampleFormantRelay)
+            .withOptionsFrom(synOscBSampleSprayRelay)
+            .withOptionsFrom(synOscBSampleXfadeRelay)
+            .withOptionsFrom(synOscBSampleStartRelay)
+            .withOptionsFrom(synOscBSampleEndRelay)
+            .withOptionsFrom(synOscBSampleLoopStartRelay)
+            .withOptionsFrom(synOscBSampleLoopEndRelay)
+            .withOptionsFrom(synOscBSampleLoopModeRelay)
+            .withOptionsFrom(synOscBSampleSnapRelay)
+            .withOptionsFrom(synOscBSampleFadeInRelay)
+            .withOptionsFrom(synOscBSampleFadeOutRelay)
+            .withOptionsFrom(synOscCSampleScanRelay)
+            .withOptionsFrom(synOscCSampleStretchRelay)
+            .withOptionsFrom(synOscCSampleFormantRelay)
+            .withOptionsFrom(synOscCSampleSprayRelay)
+            .withOptionsFrom(synOscCSampleXfadeRelay)
+            .withOptionsFrom(synOscCSampleStartRelay)
+            .withOptionsFrom(synOscCSampleEndRelay)
+            .withOptionsFrom(synOscCSampleLoopStartRelay)
+            .withOptionsFrom(synOscCSampleLoopEndRelay)
+            .withOptionsFrom(synOscCSampleLoopModeRelay)
+            .withOptionsFrom(synOscCSampleSnapRelay)
+            .withOptionsFrom(synOscCSampleFadeInRelay)
+            .withOptionsFrom(synOscCSampleFadeOutRelay)
+            .withOptionsFrom(synOscDSampleScanRelay)
+            .withOptionsFrom(synOscDSampleStretchRelay)
+            .withOptionsFrom(synOscDSampleFormantRelay)
+            .withOptionsFrom(synOscDSampleSprayRelay)
+            .withOptionsFrom(synOscDSampleXfadeRelay)
+            .withOptionsFrom(synOscDSampleStartRelay)
+            .withOptionsFrom(synOscDSampleEndRelay)
+            .withOptionsFrom(synOscDSampleLoopStartRelay)
+            .withOptionsFrom(synOscDSampleLoopEndRelay)
+            .withOptionsFrom(synOscDSampleLoopModeRelay)
+            .withOptionsFrom(synOscDSampleSnapRelay)
+            .withOptionsFrom(synOscDSampleFadeInRelay)
+            .withOptionsFrom(synOscDSampleFadeOutRelay)
             .withOptionsFrom(synOscDSpectralTypeRelay)
             .withOptionsFrom(synOscDSpectralAmtRelay)
             .withOptionsFrom(synOscDFoldShapeRelay)
@@ -1948,6 +2001,59 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     {
         auto mkAtt = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
         { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
+        // ════ SAMPLE-ENGINE-MKATT (Opus) ════
+        mkAtt(synOscASampleScanAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_SCAN, synOscASampleScanRelay);
+        mkAtt(synOscASampleStretchAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH, synOscASampleStretchRelay);
+        mkAtt(synOscASampleFormantAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT, synOscASampleFormantRelay);
+        mkAtt(synOscASampleSprayAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY, synOscASampleSprayRelay);
+        mkAtt(synOscASampleXfadeAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_XFADE, synOscASampleXfadeRelay);
+        mkAtt(synOscASampleStartAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_START, synOscASampleStartRelay);
+        mkAtt(synOscASampleEndAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_END, synOscASampleEndRelay);
+        mkAtt(synOscASampleLoopStartAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START, synOscASampleLoopStartRelay);
+        mkAtt(synOscASampleLoopEndAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END, synOscASampleLoopEndRelay);
+        mkAtt(synOscASampleLoopModeAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE, synOscASampleLoopModeRelay);
+        mkAtt(synOscASampleSnapAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_SNAP, synOscASampleSnapRelay);
+        mkAtt(synOscASampleFadeInAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN, synOscASampleFadeInRelay);
+        mkAtt(synOscASampleFadeOutAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT, synOscASampleFadeOutRelay);
+        mkAtt(synOscBSampleScanAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_SCAN, synOscBSampleScanRelay);
+        mkAtt(synOscBSampleStretchAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH, synOscBSampleStretchRelay);
+        mkAtt(synOscBSampleFormantAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT, synOscBSampleFormantRelay);
+        mkAtt(synOscBSampleSprayAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY, synOscBSampleSprayRelay);
+        mkAtt(synOscBSampleXfadeAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_XFADE, synOscBSampleXfadeRelay);
+        mkAtt(synOscBSampleStartAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_START, synOscBSampleStartRelay);
+        mkAtt(synOscBSampleEndAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_END, synOscBSampleEndRelay);
+        mkAtt(synOscBSampleLoopStartAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START, synOscBSampleLoopStartRelay);
+        mkAtt(synOscBSampleLoopEndAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END, synOscBSampleLoopEndRelay);
+        mkAtt(synOscBSampleLoopModeAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE, synOscBSampleLoopModeRelay);
+        mkAtt(synOscBSampleSnapAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_SNAP, synOscBSampleSnapRelay);
+        mkAtt(synOscBSampleFadeInAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN, synOscBSampleFadeInRelay);
+        mkAtt(synOscBSampleFadeOutAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT, synOscBSampleFadeOutRelay);
+        mkAtt(synOscCSampleScanAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_SCAN, synOscCSampleScanRelay);
+        mkAtt(synOscCSampleStretchAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH, synOscCSampleStretchRelay);
+        mkAtt(synOscCSampleFormantAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT, synOscCSampleFormantRelay);
+        mkAtt(synOscCSampleSprayAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY, synOscCSampleSprayRelay);
+        mkAtt(synOscCSampleXfadeAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_XFADE, synOscCSampleXfadeRelay);
+        mkAtt(synOscCSampleStartAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_START, synOscCSampleStartRelay);
+        mkAtt(synOscCSampleEndAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_END, synOscCSampleEndRelay);
+        mkAtt(synOscCSampleLoopStartAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START, synOscCSampleLoopStartRelay);
+        mkAtt(synOscCSampleLoopEndAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END, synOscCSampleLoopEndRelay);
+        mkAtt(synOscCSampleLoopModeAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE, synOscCSampleLoopModeRelay);
+        mkAtt(synOscCSampleSnapAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_SNAP, synOscCSampleSnapRelay);
+        mkAtt(synOscCSampleFadeInAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN, synOscCSampleFadeInRelay);
+        mkAtt(synOscCSampleFadeOutAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT, synOscCSampleFadeOutRelay);
+        mkAtt(synOscDSampleScanAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_SCAN, synOscDSampleScanRelay);
+        mkAtt(synOscDSampleStretchAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH, synOscDSampleStretchRelay);
+        mkAtt(synOscDSampleFormantAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT, synOscDSampleFormantRelay);
+        mkAtt(synOscDSampleSprayAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY, synOscDSampleSprayRelay);
+        mkAtt(synOscDSampleXfadeAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_XFADE, synOscDSampleXfadeRelay);
+        mkAtt(synOscDSampleStartAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_START, synOscDSampleStartRelay);
+        mkAtt(synOscDSampleEndAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_END, synOscDSampleEndRelay);
+        mkAtt(synOscDSampleLoopStartAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START, synOscDSampleLoopStartRelay);
+        mkAtt(synOscDSampleLoopEndAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END, synOscDSampleLoopEndRelay);
+        mkAtt(synOscDSampleLoopModeAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE, synOscDSampleLoopModeRelay);
+        mkAtt(synOscDSampleSnapAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_SNAP, synOscDSampleSnapRelay);
+        mkAtt(synOscDSampleFadeInAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN, synOscDSampleFadeInRelay);
+        mkAtt(synOscDSampleFadeOutAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT, synOscDSampleFadeOutRelay);
         mkAtt(lfo2RateAttachment, ParameterIDs::LFO2_RATE, lfo2RateRelay);  mkAtt(lfo2DepthAttachment, ParameterIDs::LFO2_DEPTH, lfo2DepthRelay);
         mkAtt(lfo2ShapeAttachment, ParameterIDs::LFO2_SHAPE, lfo2ShapeRelay); mkAtt(lfo2SyncAttachment, ParameterIDs::LFO2_SYNC, lfo2SyncRelay); mkAtt(lfo2DivAttachment, ParameterIDs::LFO2_DIV, lfo2DivRelay);
         mkAtt(lfo3RateAttachment, ParameterIDs::LFO3_RATE, lfo3RateRelay);  mkAtt(lfo3DepthAttachment, ParameterIDs::LFO3_DEPTH, lfo3DepthRelay);
