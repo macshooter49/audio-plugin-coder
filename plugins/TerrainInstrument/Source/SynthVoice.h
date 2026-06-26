@@ -375,7 +375,9 @@ namespace tw
         void setSampleParamsB (const SampleEngineParams& p) noexcept { sampleParamsB_ = p; }
         void setSampleParamsC (const SampleEngineParams& p) noexcept { sampleParamsC_ = p; }
         void setSampleParamsD (const SampleEngineParams& p) noexcept { sampleParamsD_ = p; }
-        void setSampleSource  (tw::SampleBuffer* s) noexcept { sampleSource_ = s; }
+        void setSampleSources (tw::SampleBuffer* a, tw::SampleBuffer* b,
+                               tw::SampleBuffer* c, tw::SampleBuffer* d) noexcept   // PEROSC-VOICE
+        { sampleSource_[0] = a; sampleSource_[1] = b; sampleSource_[2] = c; sampleSource_[3] = d; }
 
         // ── Phase 9 — OSC B setters (mirror of OSC A) ─────────────────────
 
@@ -2784,10 +2786,11 @@ namespace tw
         tw::SampleEngine   sampleEngA_, sampleEngB_, sampleEngC_, sampleEngD_;
         tw::WarpProcessor  sampleWarpA_, sampleWarpB_, sampleWarpC_, sampleWarpD_;
         SampleEngineParams sampleParamsA_, sampleParamsB_, sampleParamsC_, sampleParamsD_;
-        tw::SampleBuffer*  sampleSource_   = nullptr;
-        tw::SampleBuffer::BufferPtr sampleHeldBuf_;                 // keep AudioBuffer alive while reading
-        const juce::AudioBuffer<float>* sampleBufLast_ = nullptr;   // detect buffer swap
-        double sampleNativeOverOut_ = 1.0;
+        // PEROSC-VOICE — per-OSC sample sources (A/B/C/D each read their own buffer)
+        tw::SampleBuffer*  sampleSource_[4] = { nullptr, nullptr, nullptr, nullptr };
+        tw::SampleBuffer::BufferPtr sampleHeldBuf_[4];                                    // keep each alive
+        const juce::AudioBuffer<float>* sampleBufLast_[4] = { nullptr, nullptr, nullptr, nullptr };
+        double sampleNativeOverOut_[4] = { 1.0, 1.0, 1.0, 1.0 };
         juce::AudioBuffer<float> sampleBlkA_, sampleBlkB_, sampleBlkC_, sampleBlkD_, warpSrc_;
         const float *sampBlkAL_ = nullptr, *sampBlkAR_ = nullptr, *sampBlkBL_ = nullptr, *sampBlkBR_ = nullptr,
                     *sampBlkCL_ = nullptr, *sampBlkCR_ = nullptr, *sampBlkDL_ = nullptr, *sampBlkDR_ = nullptr;
@@ -2799,7 +2802,7 @@ namespace tw
                               int oct, int semi, float cent,
                               juce::AudioBuffer<float>& blk,
                               const float*& outL, const float*& outR,
-                              int numSamples, std::uint32_t seed, bool doNoteOn) noexcept
+                              int numSamples, std::uint32_t seed, bool doNoteOn, double nativeOverOut) noexcept
         {
             if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
                 blk.setSize (2, numSamples, false, false, true);
@@ -2824,7 +2827,7 @@ namespace tw
             eng.setScan (p.scan);
             // pitch: root MIDI 60 = C3; resample ratio incl native/output SR
             const double noteSemis  = (double) (currentMidiNote_ - 60 + oct * 12 + semi) + (double) cent * 0.01;
-            const double pitchRatio = sampleNativeOverOut_ * std::pow (2.0, noteSemis / 12.0);
+            const double pitchRatio = nativeOverOut * std::pow (2.0, noteSemis / 12.0);
             eng.setPitchRatio (pitchRatio);
             if (doNoteOn) { eng.noteOn (pitchRatio, p.spray, seed); warp.noteOnReset(); }
             // render — direct (resample) unless STRETCH/FORMANT engage the Warp (Tones) engine
@@ -2855,27 +2858,29 @@ namespace tw
                 && engineC_ != Engine::SAMP && engineD_ != Engine::SAMP)
                 return;   // no sample oscillators → free no-op (common case)
 
-            if (sampleSource_ != nullptr)
+            // PEROSC-VOICE — refresh each OSC's engine from its OWN buffer (independent samples).
+            tw::SampleEngine* engs[4] = { &sampleEngA_, &sampleEngB_, &sampleEngC_, &sampleEngD_ };
+            for (int o = 0; o < 4; ++o)
             {
-                auto bp = sampleSource_->load();
-                if (bp.get() != sampleBufLast_)
+                if (sampleSource_[o] == nullptr) continue;
+                auto bp = sampleSource_[o]->load();
+                if (bp.get() != sampleBufLast_[o])
                 {
-                    sampleHeldBuf_ = bp;
-                    sampleBufLast_ = bp.get();
+                    sampleHeldBuf_[o] = bp;
+                    sampleBufLast_[o] = bp.get();
                     const int nCh = bp ? bp->getNumChannels() : 0;
                     const int nSm = bp ? bp->getNumSamples()  : 0;
-                    const double nr = sampleSource_->getSampleRate();
+                    const double nr = sampleSource_[o]->getSampleRate();
                     const float* const* rp = (bp && nSm > 0) ? bp->getArrayOfReadPointers() : nullptr;
-                    sampleEngA_.setSample (rp, nCh, nSm, nr); sampleEngB_.setSample (rp, nCh, nSm, nr);
-                    sampleEngC_.setSample (rp, nCh, nSm, nr); sampleEngD_.setSample (rp, nCh, nSm, nr);
-                    sampleNativeOverOut_ = (nr > 0.0 && sampleRate_ > 0.0) ? (nr / sampleRate_) : 1.0;
+                    engs[o]->setSample (rp, nCh, nSm, nr);
+                    sampleNativeOverOut_[o] = (nr > 0.0 && sampleRate_ > 0.0) ? (nr / sampleRate_) : 1.0;
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn);
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn);
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn);
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn);
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0]);
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1]);
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2]);
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3]);
             sampleNoteOnPending_ = false;
         }
 

@@ -9680,10 +9680,12 @@ setTimeout(function wireSynControls () {
         onParam (pSnap, function () { st.snap = rdChoice (pSnap, 3, st.snap); if (snapPaint) snapPaint (); });
 
         // Drop affordance — visual only; the actual file load is the C++ handoff.
-        ['dragenter', 'dragover'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); disp.classList.add ('dragover'); }); });
-        disp.addEventListener ('dragleave', function (e) { e.preventDefault (); disp.classList.remove ('dragover'); });
+        // stopPropagation: keep an osc-waveform drop from bubbling to the front
+        // sampler's document-level drop handler (which would also load a sampler pad).
+        ['dragenter', 'dragover'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); e.stopPropagation (); disp.classList.add ('dragover'); }); });
+        disp.addEventListener ('dragleave', function (e) { e.preventDefault (); e.stopPropagation (); disp.classList.remove ('dragover'); });
         disp.addEventListener ('drop', function (e) {
-          e.preventDefault (); disp.classList.remove ('dragover');
+          e.preventDefault (); e.stopPropagation (); disp.classList.remove ('dragover');
           var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (! f) return;
           sampReadB64 (f, function (b64) { if (! b64) return;
             try { var fn = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('loadSampleForOsc') : null; if (fn) fn (osc, f.name, b64); } catch (_) {} });

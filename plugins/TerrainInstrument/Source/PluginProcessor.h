@@ -354,6 +354,15 @@ public:
     tw::SampleBuffer& getSampleBuffer() noexcept { return layers[(size_t) editingLayer.load()].sampleBuffer; }
     tw::SampleLoader& getSampleLoader() noexcept { return sampleLoader; }
 
+    // PEROSC-BUFFERS — per-OSC Sample oscillator buffers (synth-side; A/B/C/D independent).
+    tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, 3, idx)]; }
+    tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
+    juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
+    void setCachedOscPayload (const juce::String& json, int idx)
+    { if (idx < 0 || idx > 3) return; juce::ScopedLock sl (samplePayloadLock); cachedOscPayloads_[(size_t) idx] = json; }
+    juce::String getCachedOscPayload (int idx) const
+    { if (idx < 0 || idx > 3) return {}; juce::ScopedLock sl (samplePayloadLock); return cachedOscPayloads_[(size_t) idx]; }
+
     // ── Slicer state ──────────────────────────────────────────────────────
     // Slice list — atomic snapshot pointer. UI thread writes via
     // replaceSlices(); audio thread reads via loadSlices() / readSlices().
@@ -750,6 +759,12 @@ private:
     // because the audio buffers need re-populating).
     mutable juce::CriticalSection             samplePayloadLock;
     std::array<juce::String, 4>               cachedLayerPayloads;
+    // PEROSC-BUFFERS — dedicated per-OSC buffers/loaders/payloads/paths (one loader each so
+    // rapid drops on A..D don't cancel one another). Guarded by samplePayloadLock for payloads.
+    std::array<tw::SampleBuffer, 4>           oscSampleBuffers_;
+    std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
+    std::array<juce::String, 4>               cachedOscPayloads_;
+    std::array<juce::String, 4>               oscSourcePaths_;
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;

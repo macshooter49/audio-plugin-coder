@@ -2917,7 +2917,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spD.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END);   spD.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE);
         spD.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
         spD.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
-        tw::SampleBuffer* sampleSrcPtr = &getSampleBuffer();  // editing-layer buffer (v1 shared source)
+        // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
         //    then publish it to every voice. One LFO (L1, sine, free rate) and one
@@ -3055,7 +3055,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
                 sv->setSampleParamsA (spA);  sv->setSampleParamsB (spB);
                 sv->setSampleParamsC (spC);  sv->setSampleParamsD (spD);
-                sv->setSampleSource  (sampleSrcPtr);
+                sv->setSampleSources (&getOscSampleBuffer (0), &getOscSampleBuffer (1),
+                                      &getOscSampleBuffer (2), &getOscSampleBuffer (3));   // PEROSC-PUSH
             }
         }
 
@@ -4500,6 +4501,11 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // the V2 layers[] parse path. The V1 properties can be removed from saves
     // once there are no V1 users left.
     {
+        // PEROSC-STATE — persist each oscillator's sample path (survives DAW project reload).
+        for (int oi = 0; oi < 4; ++oi)
+            if (oscSourcePaths_[(size_t) oi].isNotEmpty())
+                state.setProperty ("oscSamplePath" + juce::String (oi), oscSourcePaths_[(size_t) oi], nullptr);
+
         // Full path for the V1 sample-path restore path (layers[0] only).
         if (layers[0].sourcePath.isNotEmpty())
             state.setProperty ("sampleSourcePath", layers[0].sourcePath, nullptr);
@@ -4710,6 +4716,9 @@ void TerrainInstrumentAudioProcessor::loadV1State (const juce::ValueTree& loaded
 
     // V1 stored the path under "sampleSourcePath" at the root.
     A.sourcePath     = loaded.getProperty ("sampleSourcePath", "").toString();
+    // PEROSC-STATE — restore each oscillator's sample path; the editor reload loop re-decodes it.
+    for (int oi = 0; oi < 4; ++oi)
+        oscSourcePaths_[(size_t) oi] = loaded.getProperty ("oscSamplePath" + juce::String (oi), "").toString();
     A.sourceFileName = loaded.getProperty ("sourceFileName",   "").toString();
 
     // Persist the path via the legacy singleton so the editor constructor's

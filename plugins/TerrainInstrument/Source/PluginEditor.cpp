@@ -1906,6 +1906,54 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 obj->setProperty ("end",   (double) b.endNorm);
                 complete (juce::var (obj));
             })
+            .withNativeFunction("loadSampleForOsc", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // PEROSC — args[0]=osc letter 'a'..'d', args[1]=filename, args[2]=base64 bytes
+                if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const auto filename = args[1].toString();
+                const auto b64      = args[2].toString();
+
+                juce::MemoryOutputStream decodedStream;
+                if (! juce::Base64::convertFromBase64 (decodedStream, b64))
+                {
+                    complete (juce::var ("decode-failed"));
+                    return;
+                }
+
+                auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                  .getChildFile ("Terrain-Instrument-Drops");
+                tempDir.createDirectory();
+
+                auto safeName = juce::File::createLegalFileName (filename);
+                if (safeName.isEmpty()) safeName = "osc-sample.wav";
+
+                auto tempFile = tempDir.getNonexistentChildFile (
+                                   safeName.upToLastOccurrenceOf (".", false, false),
+                                   safeName.fromLastOccurrenceOf (".", true, false),
+                                   true);
+                tempFile.replaceWithData (decodedStream.getData(), decodedStream.getDataSize());
+
+                if (tempFile.existsAsFile())
+                {
+                    loadOscSampleAsync (oscIdx, tempFile);
+                    complete (juce::var ("ok"));
+                }
+                else
+                {
+                    complete (juce::var ("temp-write-failed"));
+                }
+            })
+            .withNativeFunction("getOscSamplePayload", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // PEROSC — return the cached peaks JSON for this osc (or "").
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                complete (juce::var (audioProcessor.getCachedOscPayload (oscIdx)));
+            })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2797,6 +2845,19 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 
             // Fire the per-layer async decode.
             safeThis->loadSampleIntoLayer (f, li);
+        }
+
+        // PEROSC-RELOAD — reload each oscillator's saved sample from disk (DAW project reload).
+        // In-session reopen is already covered by the persistent buffer + cached payload; this
+        // path handles a fresh processor whose oscSampleBuffers_ are empty but paths were restored.
+        for (int oi = 0; oi < 4; ++oi)
+        {
+            if (safeThis->audioProcessor.getOscSampleBuffer (oi).getNumSamples() > 0) continue;
+            const juce::String op = safeThis->audioProcessor.oscSourcePath (oi);
+            if (op.isEmpty()) continue;
+            const juce::File of (op);
+            if (! of.existsAsFile()) continue;
+            safeThis->loadOscSampleAsync (oi, of);
         }
     });
 }
@@ -9576,6 +9637,52 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleIntoLayer (const juce::Fil
             if (webView != nullptr)
                 webView->evaluateJavascript (
                     "if (window.onSampleLoaded) window.onSampleLoaded(" + json + ");",
+                    nullptr);
+        });
+}
+
+// ── PEROSC — per-OSC sample load. Mirrors loadSampleIntoLayer but targets the dedicated
+//    synth-side oscSampleBuffers_[idx], caches a per-OSC payload, and fires
+//    window.onOscSampleLoaded(letter, json) so the UI draws that oscillator's waveform.
+void TerrainInstrumentAudioProcessorEditor::loadOscSampleAsync (int oscIdx, const juce::File& file)
+{
+    if (oscIdx < 0 || oscIdx > 3) return;
+    const char oscLetter = (char) ('a' + oscIdx);
+    audioProcessor.oscSourcePath (oscIdx) = file.getFullPathName();
+
+    auto& loader = audioProcessor.getOscSampleLoader (oscIdx);
+    auto& target = audioProcessor.getOscSampleBuffer (oscIdx);
+
+    loader.load (
+        file,
+        target,
+        [] (float) {},   // per-OSC drops are short one-shots — no progress UI
+        [this, oscIdx, oscLetter] (tw::SampleLoader::Result r)
+        {
+            if (! r.success) return;   // SampleLoader already stored the buffer (rate set) into target.
+
+            // Build the peaks JSON — identical shape to the front sampler's onSampleLoaded.
+            juce::Array<juce::var> minArr, maxArr;
+            minArr.ensureStorageAllocated ((int) r.peaksMin.size());
+            maxArr.ensureStorageAllocated ((int) r.peaksMax.size());
+            for (auto v : r.peaksMin) minArr.add (juce::var (v));
+            for (auto v : r.peaksMax) maxArr.add (juce::var (v));
+
+            juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+            obj->setProperty ("filename",      r.filename);
+            obj->setProperty ("sampleRate",    r.sampleRate);
+            obj->setProperty ("lengthSamples", r.lengthSamples);
+            obj->setProperty ("numChannels",   r.numChannels);
+            obj->setProperty ("peaksMin",      juce::var (minArr));
+            obj->setProperty ("peaksMax",      juce::var (maxArr));
+            const auto json = juce::JSON::toString (juce::var (obj.get()), true /*allOnOneLine*/);
+
+            audioProcessor.setCachedOscPayload (json, oscIdx);   // restored on editor reopen
+
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    juce::String ("if (window.onOscSampleLoaded) window.onOscSampleLoaded('")
+                    + oscLetter + "', " + json + ");",
                     nullptr);
         });
 }

@@ -33,6 +33,7 @@ private:
     // Used by the editor constructor to fan out V2 preset reloads across all
     // 4 layer slots without temporarily changing editingLayer on the audio thread.
     void loadSampleIntoLayer  (const juce::File& file, int layerIdx);
+    void loadOscSampleAsync   (int oscIdx, const juce::File& file);   // PEROSC
     void loadPatch         (const juce::File& patchFile);    // Task 18 stub
     void importTerrainPack (const juce::File& packFile);     // Task 22 stub
 
