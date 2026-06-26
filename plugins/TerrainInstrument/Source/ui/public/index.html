@@ -3884,6 +3884,16 @@ body {
   font-size: 9px; letter-spacing: 1.5px; color: var(--text-muted); pointer-events: none; opacity: 0; transition: opacity .15s; }
 #syn-panel .samp-disp.dragover { box-shadow: inset 0 0 0 1px var(--purple-400); }
 #syn-panel .samp-disp.dragover .samp-drop { opacity: 1; color: var(--purple-300, #c4b5fd); }
+/* EMPTY STATE — no sample loaded for this osc: show the prompt, hide the region UI
+   (and the canvas is cleared in JS so there's no fake placeholder waveform). */
+#syn-panel .sample-view:not(.loaded) .samp-drop { opacity: .5; }
+#syn-panel .sample-view.loaded .samp-drop { opacity: 0; }
+#syn-panel .sample-view:not(.loaded) .samp-h,
+#syn-panel .sample-view:not(.loaded) .samp-band,
+#syn-panel .sample-view:not(.loaded) .samp-env,
+#syn-panel .sample-view:not(.loaded) .samp-shade,
+#syn-panel .sample-view:not(.loaded) .samp-fadefill,
+#syn-panel .sample-view:not(.loaded) .samp-ph { opacity: 0 !important; pointer-events: none; }
 /* header controls — loop-mode + snap dropdowns; shown only in Sample engine. Hide the wavetable shape selector for Sample. */
 #syn-panel .device .samp-head { display: none; }
 #syn-panel .device.osc.engine-sample .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
@@ -5023,7 +5033,7 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
-                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
               <div class="osc-knobs samp-knobs">
@@ -5193,7 +5203,7 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
-                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
               <div class="osc-knobs samp-knobs">
@@ -5379,7 +5389,7 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
-                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
               <div class="osc-knobs samp-knobs">
@@ -5549,7 +5559,7 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
-                <div class="samp-drop">＋&nbsp;&nbsp;Drop a sample</div>
+                <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
               <div class="osc-knobs samp-knobs">
@@ -9635,7 +9645,7 @@ setTimeout(function wireSynControls () {
           view.classList.toggle ('loopoff', ! st.loop);
         }
         var peaks = null;   // {min,max} once a real sample loads; else synthetic placeholder
-        function redraw () { if (peaks) drawPeaks (canvas, peaks.min, peaks.max); else sampDraw (canvas, data); }
+        function redraw () { if (peaks) { drawPeaks (canvas, peaks.min, peaks.max); } else { try { var cx = canvas.getContext ('2d'); cx.clearRect (0, 0, canvas.width, canvas.height); } catch (e) {} } }
         function setLoaded (payload) {
           if (! payload) return;
           try { if (typeof payload === 'string') payload = JSON.parse (payload); } catch (e) { return; }

@@ -2865,14 +2865,17 @@ namespace tw
                 //   Cross-Formant: shift formants up while tilting brightness down (they cross)
                 //   Spectral-Tilt: neutral formant, knob drives a pure spectral tilt
                 float fmFactor, fmTilt;
+                // CC: amplified formant shift to ±2 octaves (was ±1 — too subtle; Max wanted
+                // "night and day"). Spectral-Tilt (case 3) left at Opus's measured ±9 dB.
+                const float fmAmp = 2.0f;
                 switch (p.formantMode)
                 {
-                    case 1:  fmFactor = std::pow (2.0f, -p.formant); fmTilt = 0.f;        break;
-                    case 2:  fmFactor = std::pow (2.0f,  p.formant); fmTilt = -p.formant; break;
-                    case 3:  fmFactor = 1.0f;                        fmTilt =  p.formant; break;
-                    default: fmFactor = std::pow (2.0f,  p.formant); fmTilt = 0.f;        break;
+                    case 1:  fmFactor = std::pow (2.0f, -p.formant * fmAmp); fmTilt = 0.f;        break;
+                    case 2:  fmFactor = std::pow (2.0f,  p.formant * fmAmp); fmTilt = -p.formant; break;
+                    case 3:  fmFactor = 1.0f;                                fmTilt =  p.formant; break;
+                    default: fmFactor = std::pow (2.0f,  p.formant * fmAmp); fmTilt = 0.f;        break;
                 }
-                warp.setFormantFactor  (fmFactor);                    // -1..+1 → ±1 octave formant shift
+                warp.setFormantFactor  (fmFactor);                    // -1..+1 → ±2 octave formant shift
                 const int srcN = juce::jmax (1, warp.sourceSamplesPerBlock (numSamples));
                 if (warpSrc_.getNumChannels() < 2 || warpSrc_.getNumSamples() < srcN)
                     warpSrc_.setSize (2, srcN, false, false, true);
