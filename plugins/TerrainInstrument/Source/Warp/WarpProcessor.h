@@ -108,6 +108,26 @@ namespace tw
             formantFactor = f;
             if (signalsmithEngine) signalsmithEngine->setFormantFactor (f);
         }
+        /** FORMANT-MODE — post-warp spectral tilt for the Sample engine's creative
+         *  formant modes. tilt in [-1,+1]: +1 brightens (highs +~9 dB, lows -~9 dB),
+         *  -1 darkens, 0 bypasses. One-pole split at 700 Hz, per-instance state reset
+         *  at note-on. Post-process, so it works in any stretch mode (not Tones-only). */
+        void processTilt (float* l, float* r, int n, float tilt, double sr) noexcept
+        {
+            if (tilt > -1.0e-4f && tilt < 1.0e-4f) return;                 // neutral -> bypass
+            const float  t  = (tilt < -1.f) ? -1.f : (tilt > 1.f ? 1.f : tilt);
+            const double fs = (sr > 0.0) ? sr : 48000.0;
+            const float  a  = 1.0f - (float) std::exp (-2.0 * 3.14159265358979 * 700.0 / fs);
+            const float  gLow  = std::pow (10.0f, (-t * 9.0f) / 20.0f);
+            const float  gHigh = std::pow (10.0f, ( t * 9.0f) / 20.0f);
+            for (int i = 0; i < n; ++i)
+            {
+                tiltLpL_ += a * (l[i] - tiltLpL_);
+                tiltLpR_ += a * (r[i] - tiltLpR_);
+                l[i] = tiltLpL_ * gLow + (l[i] - tiltLpL_) * gHigh;
+                r[i] = tiltLpR_ * gLow + (r[i] - tiltLpR_) * gHigh;
+            }
+        }
         void setPitchSemitones (float semis) noexcept
         {
             pitchSemitones = semis;
@@ -122,6 +142,7 @@ namespace tw
             if (signalsmithEngine) signalsmithEngine->reset();
             if (beatsEngine)       beatsEngine      ->reset();
             if (textureEngine)     textureEngine    ->reset();
+            tiltLpL_ = tiltLpR_ = 0.f;   // FORMANT-MODE
         }
 
         /** Returns the active engine's input latency in samples. Caller
@@ -323,6 +344,7 @@ namespace tw
     private:
         WarpMode mode           = WarpMode::None;
         float    stretchRatio   = 1.0f;
+        float    tiltLpL_ = 0.f, tiltLpR_ = 0.f;   // FORMANT-MODE — one-pole spectral-tilt state (post-warp)
         float    pitchSemitones = 0.0f;
         float    formantFactor  = 1.0f;   // SAMPLE-ENGINE-FORMANT
 

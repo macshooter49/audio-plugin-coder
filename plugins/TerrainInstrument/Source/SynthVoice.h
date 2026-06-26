@@ -382,6 +382,8 @@ namespace tw
             float scan = 0.f, stretch = 0.f, formant = 0.f, spray = 0.f, xfade = 0.12f;
             float start = 0.f, end = 1.f, loopStart = 0.f, loopEnd = 1.f;
             int   loopMode = 1, snap = 0;
+            int   stretchMode = 0;   // 0=Tones 1=Beats 2=Texture (warp algorithm)
+            int   formantMode = 0;   // 0=Normal 1=Inverted 2=Cross-Formant 3=Spectral-Tilt
             float fadeIn = 0.f, fadeOut = 0.f;
         };
         void setSampleParamsA (const SampleEngineParams& p) noexcept { sampleParamsA_ = p; }
@@ -2851,10 +2853,26 @@ namespace tw
             }
             else
             {
-                if (warp.getMode() != tw::WarpMode::Tones) { warp.setMode (tw::WarpMode::Tones); warp.noteOnReset(); }
+                const tw::WarpMode wm = (p.stretchMode == 1) ? tw::WarpMode::Beats
+                                      : (p.stretchMode == 2) ? tw::WarpMode::Texture
+                                                             : tw::WarpMode::Tones;
+                if (warp.getMode() != wm) { warp.setMode (wm); warp.noteOnReset(); }
                 warp.setStretchRatio   (1.0f + p.stretch * 3.0f);     // 0 → 1x … 1 → 4x (slower; pitch held)
                 warp.setPitchSemitones (0.0f);                        // note pitch already in the resampled read
-                warp.setFormantFactor  (std::pow (2.0f, p.formant));  // -1..+1 → ±1 octave formant shift
+                // FORMANT-MODE — reinterpret the FORMANT knob per creative mode.
+                //   Normal       : shift formants ±1 oct (factor 2^knob)
+                //   Inverted     : opposite shift (reciprocal, 2^-knob)
+                //   Cross-Formant: shift formants up while tilting brightness down (they cross)
+                //   Spectral-Tilt: neutral formant, knob drives a pure spectral tilt
+                float fmFactor, fmTilt;
+                switch (p.formantMode)
+                {
+                    case 1:  fmFactor = std::pow (2.0f, -p.formant); fmTilt = 0.f;        break;
+                    case 2:  fmFactor = std::pow (2.0f,  p.formant); fmTilt = -p.formant; break;
+                    case 3:  fmFactor = 1.0f;                        fmTilt =  p.formant; break;
+                    default: fmFactor = std::pow (2.0f,  p.formant); fmTilt = 0.f;        break;
+                }
+                warp.setFormantFactor  (fmFactor);                    // -1..+1 → ±1 octave formant shift
                 const int srcN = juce::jmax (1, warp.sourceSamplesPerBlock (numSamples));
                 if (warpSrc_.getNumChannels() < 2 || warpSrc_.getNumSamples() < srcN)
                     warpSrc_.setSize (2, srcN, false, false, true);
@@ -2862,6 +2880,7 @@ namespace tw
                 float* sR = warpSrc_.getWritePointer (1);
                 for (int k = 0; k < srcN; ++k) eng.tick (sL[k], sR[k]);
                 warp.process (sL, sR, wL, wR, numSamples);            // distinct in/out (Signalsmith requires)
+                warp.processTilt (wL, wR, numSamples, fmTilt, sampleRate_);   // FORMANT-MODE — spectral tilt post-process
             }
         }
 

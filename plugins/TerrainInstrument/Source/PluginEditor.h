@@ -356,6 +356,8 @@ private:
     juce::WebSliderRelay synOscASampleLoopStartRelay { ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START };
     juce::WebSliderRelay synOscASampleLoopEndRelay { ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END };
     juce::WebSliderRelay synOscASampleLoopModeRelay { ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE };
+    juce::WebSliderRelay synOscASampleStretchModeRelay { ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE };
+    juce::WebSliderRelay synOscASampleFormantModeRelay { ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE };
     juce::WebSliderRelay synOscASampleSnapRelay { ParameterIDs::SYN_OSC_A_SAMPLE_SNAP };
     juce::WebSliderRelay synOscASampleFadeInRelay { ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN };
     juce::WebSliderRelay synOscASampleFadeOutRelay { ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT };
@@ -369,6 +371,8 @@ private:
     juce::WebSliderRelay synOscBSampleLoopStartRelay { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START };
     juce::WebSliderRelay synOscBSampleLoopEndRelay { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END };
     juce::WebSliderRelay synOscBSampleLoopModeRelay { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE };
+    juce::WebSliderRelay synOscBSampleStretchModeRelay { ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE };
+    juce::WebSliderRelay synOscBSampleFormantModeRelay { ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE };
     juce::WebSliderRelay synOscBSampleSnapRelay { ParameterIDs::SYN_OSC_B_SAMPLE_SNAP };
     juce::WebSliderRelay synOscBSampleFadeInRelay { ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN };
     juce::WebSliderRelay synOscBSampleFadeOutRelay { ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT };
@@ -382,6 +386,8 @@ private:
     juce::WebSliderRelay synOscCSampleLoopStartRelay { ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START };
     juce::WebSliderRelay synOscCSampleLoopEndRelay { ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END };
     juce::WebSliderRelay synOscCSampleLoopModeRelay { ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE };
+    juce::WebSliderRelay synOscCSampleStretchModeRelay { ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE };
+    juce::WebSliderRelay synOscCSampleFormantModeRelay { ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE };
     juce::WebSliderRelay synOscCSampleSnapRelay { ParameterIDs::SYN_OSC_C_SAMPLE_SNAP };
     juce::WebSliderRelay synOscCSampleFadeInRelay { ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN };
     juce::WebSliderRelay synOscCSampleFadeOutRelay { ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT };
@@ -395,6 +401,8 @@ private:
     juce::WebSliderRelay synOscDSampleLoopStartRelay { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START };
     juce::WebSliderRelay synOscDSampleLoopEndRelay { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END };
     juce::WebSliderRelay synOscDSampleLoopModeRelay { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE };
+    juce::WebSliderRelay synOscDSampleStretchModeRelay { ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE };
+    juce::WebSliderRelay synOscDSampleFormantModeRelay { ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE };
     juce::WebSliderRelay synOscDSampleSnapRelay { ParameterIDs::SYN_OSC_D_SAMPLE_SNAP };
     juce::WebSliderRelay synOscDSampleFadeInRelay { ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN };
     juce::WebSliderRelay synOscDSampleFadeOutRelay { ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT };
@@ -759,6 +767,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleLoopStartAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleLoopEndAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleLoopModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleStretchModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleFormantModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleSnapAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleFadeInAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASampleFadeOutAttachment;
@@ -772,6 +782,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleLoopStartAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleLoopEndAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleLoopModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleStretchModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleFormantModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleSnapAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleFadeInAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSampleFadeOutAttachment;
@@ -785,6 +797,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleLoopStartAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleLoopEndAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleLoopModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleStretchModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleFormantModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleSnapAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleFadeInAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSampleFadeOutAttachment;
@@ -798,6 +812,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleLoopStartAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleLoopEndAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleLoopModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleStretchModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleFormantModeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleSnapAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleFadeInAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleFadeOutAttachment;

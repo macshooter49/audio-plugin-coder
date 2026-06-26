@@ -1841,6 +1841,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC A Sample Loop Mode",
         juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE, 1 },
+        "Synth OSC A Sample Stretch Mode",
+        juce::StringArray { "Tones", "Beats", "Texture" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE, 1 },
+        "Synth OSC A Sample Formant Mode",
+        juce::StringArray { "Normal", "Inverted", "Cross-Formant", "Spectral-Tilt" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_SNAP, 1 },
         "Synth OSC A Sample Snap",
         juce::StringArray { "Off", "Zero-cross", "Transient" }, 0));
@@ -1894,6 +1902,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE, 1 },
         "Synth OSC B Sample Loop Mode",
         juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE, 1 },
+        "Synth OSC B Sample Stretch Mode",
+        juce::StringArray { "Tones", "Beats", "Texture" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE, 1 },
+        "Synth OSC B Sample Formant Mode",
+        juce::StringArray { "Normal", "Inverted", "Cross-Formant", "Spectral-Tilt" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_SNAP, 1 },
         "Synth OSC B Sample Snap",
@@ -1949,6 +1965,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC C Sample Loop Mode",
         juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE, 1 },
+        "Synth OSC C Sample Stretch Mode",
+        juce::StringArray { "Tones", "Beats", "Texture" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE, 1 },
+        "Synth OSC C Sample Formant Mode",
+        juce::StringArray { "Normal", "Inverted", "Cross-Formant", "Spectral-Tilt" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_SNAP, 1 },
         "Synth OSC C Sample Snap",
         juce::StringArray { "Off", "Zero-cross", "Transient" }, 0));
@@ -2002,6 +2026,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE, 1 },
         "Synth OSC D Sample Loop Mode",
         juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE, 1 },
+        "Synth OSC D Sample Stretch Mode",
+        juce::StringArray { "Tones", "Beats", "Texture" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE, 1 },
+        "Synth OSC D Sample Formant Mode",
+        juce::StringArray { "Normal", "Inverted", "Cross-Formant", "Spectral-Tilt" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_SNAP, 1 },
         "Synth OSC D Sample Snap",
@@ -2891,6 +2923,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spA.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_XFADE);      spA.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_START);
         spA.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_END);        spA.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START);
         spA.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END);   spA.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE);
+        spA.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE);
+        spA.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE);
         spA.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SNAP);      spA.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN);
         spA.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT);
         tw::SynthVoice::SampleEngineParams spB;
@@ -2899,6 +2933,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spB.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_XFADE);      spB.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_START);
         spB.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_END);        spB.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START);
         spB.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END);   spB.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE);
+        spB.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE);
+        spB.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE);
         spB.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SNAP);      spB.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN);
         spB.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT);
         tw::SynthVoice::SampleEngineParams spC;
@@ -2907,6 +2943,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spC.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_XFADE);      spC.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_START);
         spC.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_END);        spC.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START);
         spC.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END);   spC.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE);
+        spC.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE);
+        spC.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE);
         spC.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SNAP);      spC.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN);
         spC.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT);
         tw::SynthVoice::SampleEngineParams spD;
@@ -2915,6 +2953,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spD.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_XFADE);      spD.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_START);
         spD.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_END);        spD.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START);
         spD.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END);   spD.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE);
+        spD.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE);
+        spD.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE);
         spD.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
         spD.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.

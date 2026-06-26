@@ -11482,6 +11482,8 @@ setTimeout(function wireSynControls () {
       const SPECTRAL_MODES = ['None','Harmonic Stretch','Inharmonic Stretch','Vocode','Smear','Random Amps','Data Compress','Spectral Phaser'];
       const FOLD_SHAPES = ['Linear','Sine','Triangle'];
       const INTERP_MODES = ['Linear','Stepped'];
+      const STRETCH_MODES = ['Tones','Beats','Texture'];
+      const FORMANT_MODES = ['Normal','Inverted','Cross-Formant','Spectral-Tilt'];
 
       const KNOB_MENUS = {
         'SYN_OSC_A_WARP_AMOUNT': { header: 'OSC A — WARP', modeParam: 'SYN_OSC_A_WARP_MODE', options: WARP_MODES },
@@ -11499,7 +11501,15 @@ setTimeout(function wireSynControls () {
         'SYN_OSC_C_FOLD_AMT':    { header: 'OSC C — FOLD', modeParam: 'SYN_OSC_C_FOLD_SHAPE', options: FOLD_SHAPES },
         'SYN_OSC_D_FOLD_AMT':    { header: 'OSC D — FOLD', modeParam: 'SYN_OSC_D_FOLD_SHAPE', options: FOLD_SHAPES },
         'SYN_OSC_C_WT_FRAME':    { header: 'OSC C — INTERP', modeParam: 'SYN_OSC_C_INTERP_MODE', options: INTERP_MODES },
-        'SYN_OSC_D_WT_FRAME':    { header: 'OSC D — INTERP', modeParam: 'SYN_OSC_D_INTERP_MODE', options: INTERP_MODES }
+        'SYN_OSC_D_WT_FRAME':    { header: 'OSC D — INTERP', modeParam: 'SYN_OSC_D_INTERP_MODE', options: INTERP_MODES },
+        'SYN_OSC_A_SAMPLE_STRETCH': { header: 'OSC A — STRETCH', modeParam: 'SYN_OSC_A_SAMPLE_STRETCH_MODE', options: STRETCH_MODES },
+        'SYN_OSC_B_SAMPLE_STRETCH': { header: 'OSC B — STRETCH', modeParam: 'SYN_OSC_B_SAMPLE_STRETCH_MODE', options: STRETCH_MODES },
+        'SYN_OSC_C_SAMPLE_STRETCH': { header: 'OSC C — STRETCH', modeParam: 'SYN_OSC_C_SAMPLE_STRETCH_MODE', options: STRETCH_MODES },
+        'SYN_OSC_D_SAMPLE_STRETCH': { header: 'OSC D — STRETCH', modeParam: 'SYN_OSC_D_SAMPLE_STRETCH_MODE', options: STRETCH_MODES },
+        'SYN_OSC_A_SAMPLE_FORMANT': { header: 'OSC A — FORMANT', modeParam: 'SYN_OSC_A_SAMPLE_FORMANT_MODE', options: FORMANT_MODES },
+        'SYN_OSC_B_SAMPLE_FORMANT': { header: 'OSC B — FORMANT', modeParam: 'SYN_OSC_B_SAMPLE_FORMANT_MODE', options: FORMANT_MODES },
+        'SYN_OSC_C_SAMPLE_FORMANT': { header: 'OSC C — FORMANT', modeParam: 'SYN_OSC_C_SAMPLE_FORMANT_MODE', options: FORMANT_MODES },
+        'SYN_OSC_D_SAMPLE_FORMANT': { header: 'OSC D — FORMANT', modeParam: 'SYN_OSC_D_SAMPLE_FORMANT_MODE', options: FORMANT_MODES }
       };
 
       // Wire contextmenu on each WARP/SPECTRAL/FOLD knob.

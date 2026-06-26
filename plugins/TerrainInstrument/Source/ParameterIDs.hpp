@@ -406,6 +406,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_SAMPLE_LOOP_END[]   = "SYN_OSC_A_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
     constexpr char SYN_OSC_A_SAMPLE_LOOP_MODE[]  = "SYN_OSC_A_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
     constexpr char SYN_OSC_A_SAMPLE_SNAP[]       = "SYN_OSC_A_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_A_SAMPLE_STRETCH_MODE[] = "SYN_OSC_A_SAMPLE_STRETCH_MODE"; // choice 0..2 — Tones/Beats/Texture
+    constexpr char SYN_OSC_A_SAMPLE_FORMANT_MODE[] = "SYN_OSC_A_SAMPLE_FORMANT_MODE"; // choice 0..3 — Normal/Inverted/Cross/Tilt
     constexpr char SYN_OSC_A_SAMPLE_FADE_IN[]    = "SYN_OSC_A_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_A_SAMPLE_FADE_OUT[]   = "SYN_OSC_A_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
 
@@ -420,6 +422,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_SAMPLE_LOOP_END[]   = "SYN_OSC_B_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
     constexpr char SYN_OSC_B_SAMPLE_LOOP_MODE[]  = "SYN_OSC_B_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
     constexpr char SYN_OSC_B_SAMPLE_SNAP[]       = "SYN_OSC_B_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_B_SAMPLE_STRETCH_MODE[] = "SYN_OSC_B_SAMPLE_STRETCH_MODE"; // choice 0..2 — Tones/Beats/Texture
+    constexpr char SYN_OSC_B_SAMPLE_FORMANT_MODE[] = "SYN_OSC_B_SAMPLE_FORMANT_MODE"; // choice 0..3 — Normal/Inverted/Cross/Tilt
     constexpr char SYN_OSC_B_SAMPLE_FADE_IN[]    = "SYN_OSC_B_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_B_SAMPLE_FADE_OUT[]   = "SYN_OSC_B_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
 
@@ -434,6 +438,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_SAMPLE_LOOP_END[]   = "SYN_OSC_C_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
     constexpr char SYN_OSC_C_SAMPLE_LOOP_MODE[]  = "SYN_OSC_C_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
     constexpr char SYN_OSC_C_SAMPLE_SNAP[]       = "SYN_OSC_C_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_C_SAMPLE_STRETCH_MODE[] = "SYN_OSC_C_SAMPLE_STRETCH_MODE"; // choice 0..2 — Tones/Beats/Texture
+    constexpr char SYN_OSC_C_SAMPLE_FORMANT_MODE[] = "SYN_OSC_C_SAMPLE_FORMANT_MODE"; // choice 0..3 — Normal/Inverted/Cross/Tilt
     constexpr char SYN_OSC_C_SAMPLE_FADE_IN[]    = "SYN_OSC_C_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_C_SAMPLE_FADE_OUT[]   = "SYN_OSC_C_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
 
@@ -448,6 +454,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_SAMPLE_LOOP_END[]   = "SYN_OSC_D_SAMPLE_LOOP_END";   // float 0..1 — loop end (clamped in region)
     constexpr char SYN_OSC_D_SAMPLE_LOOP_MODE[]  = "SYN_OSC_D_SAMPLE_LOOP_MODE";  // choice 0..4 — OneShot/Fwd/Rev/PingPong/Tailed
     constexpr char SYN_OSC_D_SAMPLE_SNAP[]       = "SYN_OSC_D_SAMPLE_SNAP";       // choice 0..2 — Off/Zero-cross/Transient
+    constexpr char SYN_OSC_D_SAMPLE_STRETCH_MODE[] = "SYN_OSC_D_SAMPLE_STRETCH_MODE"; // choice 0..2 — Tones/Beats/Texture
+    constexpr char SYN_OSC_D_SAMPLE_FORMANT_MODE[] = "SYN_OSC_D_SAMPLE_FORMANT_MODE"; // choice 0..3 — Normal/Inverted/Cross/Tilt
     constexpr char SYN_OSC_D_SAMPLE_FADE_IN[]    = "SYN_OSC_D_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_D_SAMPLE_FADE_OUT[]   = "SYN_OSC_D_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
 }
