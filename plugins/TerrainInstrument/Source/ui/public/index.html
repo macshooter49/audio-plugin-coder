@@ -3872,6 +3872,13 @@ body {
 #syn-panel .samp-env polyline { fill: none; vector-effect: non-scaling-stroke; stroke-width: 1.3; stroke-linecap: round; }
 #syn-panel .samp-env .env-fadein, #syn-panel .samp-env .env-fadeout { stroke: #ECE8F2; opacity: .6; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
 #syn-panel .samp-env .env-loopin, #syn-panel .samp-env .env-loopout { stroke: var(--purple-400); opacity: .72; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
+/* region-edge fade gray-out (Ableton clip-fade look) — bound to FADE_IN/FADE_OUT.
+   Subtle at rest (the ramp line is the persistent cue); prominent while shift-dragging. */
+#syn-panel .samp-fadefill { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; opacity: .22; transition: opacity .12s; }
+#syn-panel .samp-fadefill.in  { background: linear-gradient(90deg,  rgba(8,8,18,.66), rgba(8,8,18,0)); }
+#syn-panel .samp-fadefill.out { background: linear-gradient(270deg, rgba(8,8,18,.66), rgba(8,8,18,0)); }
+#syn-panel .sample-view.dragfade .samp-fadefill { opacity: 1; }
+#syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { opacity: 1; stroke-width: 1.6; }
 /* drop affordance (shown on dragover / empty) */
 #syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
   font-size: 9px; letter-spacing: 1.5px; color: var(--text-muted); pointer-events: none; opacity: 0; transition: opacity .15s; }
@@ -5007,6 +5014,8 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
+                <div class="samp-fadefill in"></div>
+                <div class="samp-fadefill out"></div>
                 <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
@@ -5175,6 +5184,8 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
+                <div class="samp-fadefill in"></div>
+                <div class="samp-fadefill out"></div>
                 <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
@@ -5359,6 +5370,8 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
+                <div class="samp-fadefill in"></div>
+                <div class="samp-fadefill out"></div>
                 <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
@@ -5527,6 +5540,8 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
+                <div class="samp-fadefill in"></div>
+                <div class="samp-fadefill out"></div>
                 <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
@@ -9570,6 +9585,7 @@ setTimeout(function wireSynControls () {
         var ph = view.querySelector ('.samp-ph');
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
+        var fadeFillIn = view.querySelector ('.samp-fadefill.in'), fadeFillOut = view.querySelector ('.samp-fadefill.out');
         var dev = view.closest ('.device.osc');
         var head = dev ? dev.querySelector ('.samp-head[data-osc="' + osc + '"]') : null;
         var data = sampSynth (2600, 7 + osc.charCodeAt (0));
@@ -9599,6 +9615,9 @@ setTimeout(function wireSynControls () {
           var RL = Math.max (0.001, st.e - st.s), LL = Math.max (0.001, st.le - st.ls);
           var fi = st.fin * RL, fo = st.fout * RL;            // fraction-of-region → buffer %
           var xf = Math.min (st.xfade * LL, LL / 2);          // fraction-of-loop → buffer %, half-cap
+          // region-edge fade gray-out fills (Ableton clip-fade) — sized to the fade length
+          if (fadeFillIn)  { fadeFillIn.style.left = st.s + '%'; fadeFillIn.style.width = fi + '%'; fadeFillIn.style.display = fi > 0.3 ? 'block' : 'none'; }
+          if (fadeFillOut) { fadeFillOut.style.left = (st.e - fo) + '%'; fadeFillOut.style.width = fo + '%'; fadeFillOut.style.display = fo > 0.3 ? 'block' : 'none'; }
           setPts (envFadeIn,  fi > 0.3 ? (st.s + ',100 ' + (st.s + fi) + ',0') : '');
           setPts (envFadeOut, fo > 0.3 ? ((st.e - fo) + ',0 ' + st.e + ',100') : '');
           if (st.loop && xf > 0.3) {
@@ -9631,6 +9650,7 @@ setTimeout(function wireSynControls () {
         function dragH (h, posKey, posParam, fadeKind, fromEnd, lo, hi) {
           h.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); try { h.setPointerCapture (ev.pointerId); } catch (_) {} h.classList.add ('drag');
             var fade = ev.shiftKey && fadeKind; syncing = true;
+            if (fade && (fadeKind === 'fin' || fadeKind === 'fout')) view.classList.add ('dragfade');
             function mv (e) {
               var p = pctOf (e);
               if (fade && fadeKind === 'xfade') { var LL = Math.max (0.001, st.le - st.ls); st.xfade = Math.max (0, Math.min (0.5, (fromEnd ? (st.le - p) : (p - st.ls)) / LL)); wr (pXfade, st.xfade); }
@@ -9638,7 +9658,7 @@ setTimeout(function wireSynControls () {
               else { st[posKey] = Math.max (lo (), Math.min (hi (), p)); wr (posParam, st[posKey] / 100); }
               place ();
             }
-            function up () { syncing = false; try { h.releasePointerCapture (ev.pointerId); } catch (_) {} h.classList.remove ('drag'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
+            function up () { syncing = false; view.classList.remove ('dragfade'); try { h.releasePointerCapture (ev.pointerId); } catch (_) {} h.classList.remove ('drag'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
             document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
           });
         }
@@ -9795,10 +9815,10 @@ setTimeout(function wireSynControls () {
       // Values are normalised [0..1] matching APVTS NormalisableRange for each param.
       const KNOB_DEFAULTS_NORMALISED = {
         // SAMPLE engine knobs (all 4 osc) — SCAN/FORMANT bipolar (center 0.5)
-        SYN_OSC_A_SAMPLE_SCAN: 0.5, SYN_OSC_A_SAMPLE_STRETCH: 0.0, SYN_OSC_A_SAMPLE_FORMANT: 0.5, SYN_OSC_A_SAMPLE_SPRAY: 0.0, SYN_OSC_A_SAMPLE_XFADE: 0.12,
-        SYN_OSC_B_SAMPLE_SCAN: 0.5, SYN_OSC_B_SAMPLE_STRETCH: 0.0, SYN_OSC_B_SAMPLE_FORMANT: 0.5, SYN_OSC_B_SAMPLE_SPRAY: 0.0, SYN_OSC_B_SAMPLE_XFADE: 0.12,
-        SYN_OSC_C_SAMPLE_SCAN: 0.5, SYN_OSC_C_SAMPLE_STRETCH: 0.0, SYN_OSC_C_SAMPLE_FORMANT: 0.5, SYN_OSC_C_SAMPLE_SPRAY: 0.0, SYN_OSC_C_SAMPLE_XFADE: 0.12,
-        SYN_OSC_D_SAMPLE_SCAN: 0.5, SYN_OSC_D_SAMPLE_STRETCH: 0.0, SYN_OSC_D_SAMPLE_FORMANT: 0.5, SYN_OSC_D_SAMPLE_SPRAY: 0.0, SYN_OSC_D_SAMPLE_XFADE: 0.12,
+        SYN_OSC_A_SAMPLE_SCAN: 0.75, SYN_OSC_A_SAMPLE_STRETCH: 0.0, SYN_OSC_A_SAMPLE_FORMANT: 0.5, SYN_OSC_A_SAMPLE_SPRAY: 0.0, SYN_OSC_A_SAMPLE_XFADE: 0.12,
+        SYN_OSC_B_SAMPLE_SCAN: 0.75, SYN_OSC_B_SAMPLE_STRETCH: 0.0, SYN_OSC_B_SAMPLE_FORMANT: 0.5, SYN_OSC_B_SAMPLE_SPRAY: 0.0, SYN_OSC_B_SAMPLE_XFADE: 0.12,
+        SYN_OSC_C_SAMPLE_SCAN: 0.75, SYN_OSC_C_SAMPLE_STRETCH: 0.0, SYN_OSC_C_SAMPLE_FORMANT: 0.5, SYN_OSC_C_SAMPLE_SPRAY: 0.0, SYN_OSC_C_SAMPLE_XFADE: 0.12,
+        SYN_OSC_D_SAMPLE_SCAN: 0.75, SYN_OSC_D_SAMPLE_STRETCH: 0.0, SYN_OSC_D_SAMPLE_FORMANT: 0.5, SYN_OSC_D_SAMPLE_SPRAY: 0.0, SYN_OSC_D_SAMPLE_XFADE: 0.12,
         // OSC A
         SYN_OSC_A_OCT:         0.5,   // default 0 in [-3, 3]
         SYN_OSC_A_SEMI:        0.5,   // default 0 in [-12, 12]

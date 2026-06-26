@@ -95,8 +95,11 @@ public:
     void setScan (float scan) noexcept
     {
         const float s = (scan < -1.f) ? -1.f : (scan > 1.f ? 1.f : scan);
-        scanRate_ = (s >= 0.f) ? (1.f + 3.f * s)      // 0 → +1 (natural) … +1 → +4 (fast)
-                               : (1.f + 2.f * s);     // 0 → +1 … −0.5 → 0 (freeze) … −1 → −1 (reverse)
+        // Serum notch model (confirmed w/ Max + CC): center 0 = FROZEN (no scan),
+        // right = forward & faster, left = reverse & faster, ±1 = ±2x (one octave).
+        // The SCAN param DEFAULTS to +0.5 (-> 1x forward) so a freshly-loaded sample
+        // plays the instant a key is hit — the knob just sits a notch right of center.
+        scanRate_ = 2.f * s;                          // -1 -> -2x (rev) … 0 -> frozen … +1 -> +2x (fwd)
     }
 
     // ── note lifecycle ────────────────────────────────────────────────────────
@@ -120,10 +123,18 @@ public:
             startPos = regStart_ + r * spray * (regLen() - 1.0);
         }
 
-        // Reverse mode enters from the loop's high edge so it has room to run back.
-        if (mode_ == LoopMode::Reverse) startPos = (loopEnd_ > regStart_) ? (loopEnd_ - 1.0) : regEnd_ - 1.0;
+        pos_ = clampPos (startPos);
 
-        pos_    = clampPos (startPos);
+        // LOOP-CATCH model (confirmed w/ Max): every looping mode plays a one-shot
+        // lead-in forward from the region Start and only starts looping once the
+        // playhead first reaches the purple loop region [loopStart,loopEnd] ("caught").
+        // No lead-in zone (loopStart already at/under the start — e.g. the default
+        // full-region loop, or a sprayed start inside the loop) => caught at once.
+        // Reverse (A): on catch, snap to the loop END and run backwards from there.
+        caught_ = (pos_ >= loopStart_);
+        if (caught_ && mode_ == LoopMode::Reverse && loopEnd_ > loopStart_)
+            pos_ = loopEnd_ - 1.0;
+
         active_ = hasSample();
     }
 
@@ -137,6 +148,10 @@ public:
 
     bool isActive() const noexcept { return active_; }
     double positionForTesting() const noexcept { return pos_; }
+    /** Normalised read position 0..1 of the whole buffer — for the UI MIDI follower.
+     *  The voice/processor pushes this (per active voice) to the WebView each frame. */
+    double position01() const noexcept { return (numSamples_ > 1) ? (pos_ / (double) (numSamples_ - 1)) : 0.0; }
+    bool   caught()     const noexcept { return caught_; }
 
     // ── render one stereo frame. returns false once finished (one-shot / tail) ──
     bool tick (float& outL, float& outR) noexcept
@@ -226,8 +241,45 @@ private:
     // ── playhead advance + loop boundary behaviour (direction-agnostic) ────────
     void advance (double inc) noexcept
     {
-        const bool looping = (mode_ == LoopMode::Forward || mode_ == LoopMode::Reverse
-                              || (mode_ == LoopMode::Tailed && ! releasing_));
+        // One-Shot: never loops — play through the region once, then die.
+        if (mode_ == LoopMode::OneShot)
+        {
+            pos_ += inc;
+            clampRegionEnds (inc);
+            return;
+        }
+
+        // ── LEAD-IN (Serum "armed" phase) ─────────────────────────────────────
+        // Not yet caught: play forward from the region Start toward the loop. The
+        // moment the playhead reaches the loop region we're caught and the loop
+        // mode takes over. Selecting a mode never jumps the playhead anymore.
+        if (! caught_)
+        {
+            pos_ += inc;
+            if (pos_ >= loopStart_)
+            {
+                caught_   = true;
+                pingSign_ = 1;
+                if (mode_ == LoopMode::Reverse && loopEnd_ > loopStart_)
+                    pos_ = loopEnd_ - 1.0;                       // (A) snap to loop end, run back
+                else
+                    while (pos_ >= loopEnd_) pos_ -= loopLen();  // clamp any overshoot into the loop
+            }
+            else
+            {
+                clampRegionEnds (inc);   // reverse-scan / ran off the front before catching
+            }
+            return;
+        }
+
+        // ── CAUGHT: behave per the loop mode inside [loopStart, loopEnd] ───────
+        // Tailed in release: stop looping, play the tail out to End, then die.
+        if (mode_ == LoopMode::Tailed && releasing_)
+        {
+            pos_ += inc;
+            clampRegionEnds (inc);
+            return;
+        }
 
         pos_ += (mode_ == LoopMode::PingPong) ? (inc * (double) pingSign_)
               : (mode_ == LoopMode::Reverse)  ? -inc
@@ -241,15 +293,14 @@ private:
             return;
         }
 
-        if (looping && loopLen() > 1.0)
-        {
-            // wrap in whichever direction the playhead crossed (scan can reverse a fwd loop)
-            while (pos_ >= loopEnd_)   pos_ -= loopLen();
-            while (pos_ <  loopStart_) pos_ += loopLen();
-            return;
-        }
+        // Forward / Reverse / Tailed-held: wrap within the loop (scan can reverse a fwd loop).
+        while (pos_ >= loopEnd_)   pos_ -= loopLen();
+        while (pos_ <  loopStart_) pos_ += loopLen();
+    }
 
-        // One-Shot, or Tailed-in-release: play through the region once, then die.
+    /** One-shot / lead-in / tail boundary: clamp to the region ends, die at the far edge. */
+    void clampRegionEnds (double inc) noexcept
+    {
         if (pos_ >= regEnd_ - 1.0) { pos_ = regEnd_ - 1.0; if (inc >= 0.0) active_ = false; }
         if (pos_ <= regStart_)     { pos_ = regStart_;     if (inc <  0.0) active_ = false; }
     }
@@ -368,6 +419,7 @@ private:
     int     pingSign_ = 1;
     bool    active_ = false;
     bool    releasing_ = false;
+    bool    caught_ = false;     // LOOP-CATCH — false during the one-shot lead-in, true once in the loop
 
     static constexpr double kHalfPi = 1.57079632679489661923;
     static constexpr double kMinLoopSamples = 8.0;

@@ -1803,7 +1803,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_SCAN, 1 },
         "Synth OSC A Sample Scan",
-        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));   // SCAN-DEFAULT-HALFRIGHT — 1x fwd on load
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH, 1 },
         "Synth OSC A Sample Stretch",
@@ -1857,7 +1857,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_SCAN, 1 },
         "Synth OSC B Sample Scan",
-        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));   // SCAN-DEFAULT-HALFRIGHT — 1x fwd on load
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH, 1 },
         "Synth OSC B Sample Stretch",
@@ -1911,7 +1911,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_SCAN, 1 },
         "Synth OSC C Sample Scan",
-        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));   // SCAN-DEFAULT-HALFRIGHT — 1x fwd on load
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH, 1 },
         "Synth OSC C Sample Stretch",
@@ -1965,7 +1965,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_SCAN, 1 },
         "Synth OSC D Sample Scan",
-        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));   // SCAN-DEFAULT-HALFRIGHT — 1x fwd on load
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH, 1 },
         "Synth OSC D Sample Stretch",
