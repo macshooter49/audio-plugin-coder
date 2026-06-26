@@ -9493,6 +9493,34 @@ setTimeout(function wireSynControls () {
         x.beginPath (); for (var m = 0; m < w; m++) { var y2 = mid + Math.abs (data[Math.min (data.length - 1, m * step)]) * amp; m ? x.lineTo (m, y2) : x.moveTo (m, y2); } x.stroke ();
         x.shadowBlur = 0;
       }
+      // Draw a real loaded sample from C++ peak arrays (mirrors the front sampler's
+      // onSampleLoaded payload: peaksMin[]/peaksMax[], one pair per bin).
+      function drawPeaks (cv, pmin, pmax) {
+        if (! cv || ! pmin || ! pmax || ! pmin.length) return;
+        var dpr = window.devicePixelRatio || 1, r = cv.getBoundingClientRect ();
+        var w = Math.max (1, Math.round (r.width)), h = Math.max (1, Math.round (r.height));
+        if (w < 2 || h < 2) return;
+        cv.width = w * dpr; cv.height = h * dpr; var x = cv.getContext ('2d'); x.setTransform (dpr, 0, 0, dpr, 0, 0); x.clearRect (0, 0, w, h);
+        var mid = h / 2, amp = h * 0.46, n = pmin.length;
+        function maxAt (i) { return pmax[Math.min (n - 1, (i / w * n) | 0)]; }
+        function minAt (i) { return pmin[Math.min (n - 1, (i / w * n) | 0)]; }
+        x.beginPath (); x.moveTo (0, mid);
+        for (var i = 0; i < w; i++) x.lineTo (i, mid - maxAt (i) * amp);
+        for (var j = w - 1; j >= 0; j--) x.lineTo (j, mid - minAt (j) * amp);
+        x.closePath (); x.fillStyle = 'rgba(183,148,255,0.07)'; x.fill ();
+        x.lineWidth = 1.3; x.strokeStyle = '#E0DCE8'; x.lineJoin = 'round'; x.shadowColor = 'rgba(183,148,255,.35)'; x.shadowBlur = 2.5;
+        x.beginPath (); for (var k = 0; k < w; k++) { var y = mid - maxAt (k) * amp; k ? x.lineTo (k, y) : x.moveTo (k, y); } x.stroke ();
+        x.beginPath (); for (var m = 0; m < w; m++) { var y2 = mid - minAt (m) * amp; m ? x.lineTo (m, y2) : x.moveTo (m, y2); } x.stroke ();
+        x.shadowBlur = 0;
+      }
+      // Read a dropped file → base64 (mirrors the front sampler's readAsBase64).
+      function sampReadB64 (file, cb) {
+        try { var fr = new FileReader ();
+          fr.onload = function () { var u = fr.result || ''; var c = u.indexOf (','); cb (c >= 0 ? u.substring (c + 1) : ''); };
+          fr.onerror = function () { cb (null); };
+          fr.readAsDataURL (file);
+        } catch (e) { cb (null); }
+      }
 
       function buildSampMenu () {
         if (sampMenuEl) return sampMenuEl;
@@ -9587,7 +9615,14 @@ setTimeout(function wireSynControls () {
           drawEnv ();
           view.classList.toggle ('loopoff', ! st.loop);
         }
-        function redraw () { sampDraw (canvas, data); }
+        var peaks = null;   // {min,max} once a real sample loads; else synthetic placeholder
+        function redraw () { if (peaks) drawPeaks (canvas, peaks.min, peaks.max); else sampDraw (canvas, data); }
+        function setLoaded (payload) {
+          if (! payload) return;
+          try { if (typeof payload === 'string') payload = JSON.parse (payload); } catch (e) { return; }
+          if (payload.peaksMin && payload.peaksMax) peaks = { min: payload.peaksMin, max: payload.peaksMax };
+          view.classList.add ('loaded'); redraw ();
+        }
         function pctOf (e) { var r = disp.getBoundingClientRect (); return Math.max (0, Math.min (100, ((e.clientX - r.left) / r.width) * 100)); }
         function syncParams () { wr (pStart, st.s / 100); wr (pEnd, st.e / 100); wr (pLS, st.ls / 100); wr (pLE, st.le / 100); wr (pFadeIn, st.fin); wr (pFadeOut, st.fout); wr (pXfade, st.xfade); wrChoice (pMode, st.mode, 5); }
 
@@ -9646,12 +9681,18 @@ setTimeout(function wireSynControls () {
 
         // Drop affordance — visual only; the actual file load is the C++ handoff.
         ['dragenter', 'dragover'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); disp.classList.add ('dragover'); }); });
-        ['dragleave', 'drop'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); disp.classList.remove ('dragover'); }); });
+        disp.addEventListener ('dragleave', function (e) { e.preventDefault (); disp.classList.remove ('dragover'); });
+        disp.addEventListener ('drop', function (e) {
+          e.preventDefault (); disp.classList.remove ('dragover');
+          var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (! f) return;
+          sampReadB64 (f, function (b64) { if (! b64) return;
+            try { var fn = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('loadSampleForOsc') : null; if (fn) fn (osc, f.name, b64); } catch (_) {} });
+        });
 
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
 
-        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, view: view,
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, view: view, setLoaded: setLoaded,
           syncParams: syncParams, repaintHeader: function () { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } };
         place (); redraw ();
       }
@@ -9671,7 +9712,15 @@ setTimeout(function wireSynControls () {
         requestAnimationFrame (sampTick);
       }
 
-      window.__terrainSampleRedraw = function (osc) { var S = SAMP[osc]; if (S) requestAnimationFrame (function () { S.redraw (); S.place (); }); };
+      // C++ → JS: a real sample finished loading for an oscillator → draw it.
+      window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {} };
+      window.__terrainSampleRedraw = function (osc) {
+        var S = SAMP[osc]; if (! S) return;
+        requestAnimationFrame (function () { S.redraw (); S.place (); });
+        // Restore a previously-loaded sample (editor reopen / preset) for this osc.
+        try { var g = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('getOscSamplePayload') : null;
+          if (g) { var p = g (osc); if (p && p.then) p.then (function (j) { if (j && window.onOscSampleLoaded) window.onOscSampleLoaded (osc, j); }); } } catch (_) {}
+      };
       document.querySelectorAll ('#syn-panel .sample-view').forEach (wireSample);
 
       // Fallback interactive knobs — visual-only while SYN_OSC_x_SAMPLE_* params don't
