@@ -780,7 +780,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 if (args.size() > 0)
-                    captureDragStrip.setSynthViewActive(static_cast<int>(args[0]) != 0);
+                {
+                    const bool on = static_cast<int>(args[0]) != 0;
+                    captureDragStrip.setSynthViewActive(on);
+                    synthPageActive_ = on;   // PEROSC-DRAGGUARD
+                }
                 complete(juce::var{});
             })
             .withNativeFunction("setChorusEnabled", [this](const juce::Array<juce::var>& args,
@@ -9401,6 +9405,12 @@ void TerrainInstrumentAudioProcessorEditor::filesDropped (const juce::StringArra
 
     if (ext == ".terrain")     { loadPatch (f);          return; }
     if (ext == ".terrainpack") { importTerrainPack (f);  return; }
+
+    // PEROSC-DRAGGUARD — on the synth page, an oscillator waveform drop is handled in JS
+    // (the .samp-disp 'drop' listener → loadSampleForOsc → that osc's own buffer). The OS-level
+    // drop target must NOT also load the front-panel multi-sampler layer, or one file lands in
+    // two places. When the synth page is hidden the front panel still loads via loadSampleAsync.
+    if (synthPageActive_) return;
 
     // Audio file → load as new sample
     loadSampleAsync (f);

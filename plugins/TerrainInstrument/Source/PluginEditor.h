@@ -38,6 +38,7 @@ private:
     void importTerrainPack (const juce::File& packFile);     // Task 22 stub
 
     juce::String currentSampleSourcePath;
+    bool synthPageActive_ = false;   // PEROSC-DRAGGUARD — true while the synth page is visible (message-thread only)
 
     TerrainInstrumentAudioProcessor& audioProcessor;
 
