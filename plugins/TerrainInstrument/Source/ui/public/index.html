@@ -9519,12 +9519,13 @@ setTimeout(function wireSynControls () {
         m.querySelectorAll ('div[data-a]').forEach (function (d) {
           d.onclick = function () {
             var a = d.dataset.a, st = S.st;
-            if (a === 'loop') { st.loop = ! st.loop; }
+            if (a === 'loop') { st.mode = st.loop ? 0 : 1; st.loop = ! st.loop; if (S.repaintHeader) S.repaintHeader (); }
             else if (a === 'reverse') { Array.prototype.reverse.call (S.data); S.redraw (); }
             else if (a === 'normalize') { var mx = 0, i; for (i = 0; i < S.data.length; i++) mx = Math.max (mx, Math.abs (S.data[i])); if (mx > 0) { var g = 0.98 / mx; for (i = 0; i < S.data.length; i++) S.data[i] *= g; } S.redraw (); }
             else if (a === 'trim') { st.s = st.ls; st.e = st.le; }
-            else if (a === 'fade') { st.fin = st.fin > 0 ? 0 : 8; st.fout = st.fout > 0 ? 0 : 12; }
-            else if (a === 'reset') { st.s = 5; st.e = 96; st.ls = 18; st.le = 62; st.fin = 0; st.fout = 0; st.lxf = 0; }
+            else if (a === 'fade') { st.fin = st.fin > 0 ? 0 : 0.15; st.fout = st.fout > 0 ? 0 : 0.20; }
+            else if (a === 'reset') { st.s = 0; st.e = 100; st.ls = 0; st.le = 100; st.fin = 0; st.fout = 0; st.xfade = 0.12; st.mode = 1; st.loop = true; if (S.repaintHeader) S.repaintHeader (); }
+            if (S.syncParams) S.syncParams ();
             S.place (); sampMenuEl.classList.remove ('open');
           };
         });
@@ -9539,31 +9540,47 @@ setTimeout(function wireSynControls () {
         var hS = view.querySelector ('.samp-h.s'), hE = view.querySelector ('.samp-h.e'),
             hLS = view.querySelector ('.samp-h.ls'), hLE = view.querySelector ('.samp-h.le');
         var ph = view.querySelector ('.samp-ph');
-        // fade-ramp polylines (thin LFO-style lines, not shadows)
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
         var dev = view.closest ('.device.osc');
         var head = dev ? dev.querySelector ('.samp-head[data-osc="' + osc + '"]') : null;
         var data = sampSynth (2600, 7 + osc.charCodeAt (0));
-        // fin/fout = fade lengths (% of sample); lxf = loop crossfade length (%). 0 = no fade.
-        var st = { s: 5, e: 96, ls: 18, le: 62, fin: 0, fout: 0, lxf: 0, loop: true, mode: 1, snap: 1, t: 0, dir: 1 };
+
+        // ── APVTS binding ── positions s/e/ls/le are buffer % (param 0..1 = pct/100).
+        // Fades + xfade are FRACTIONS to mirror the DSP: FADE_IN/OUT = fraction of region,
+        // XFADE = fraction of loop. Params may be absent (mockup) → pure-local fallback.
+        var PRE = 'SYN_OSC_' + osc.toUpperCase () + '_SAMPLE_';
+        function P (f) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (PRE + f) : null; } catch (e) { return null; } }
+        var pStart = P ('START'), pEnd = P ('END'), pLS = P ('LOOP_START'), pLE = P ('LOOP_END'),
+            pMode = P ('LOOP_MODE'), pSnap = P ('SNAP'), pFadeIn = P ('FADE_IN'), pFadeOut = P ('FADE_OUT'), pXfade = P ('XFADE');
+        function rd (p, d) { try { return p ? p.getNormalisedValue () : d; } catch (e) { return d; } }
+        function rdChoice (p, n, d) { try { return p ? Math.max (0, Math.min (n - 1, Math.round (p.getScaledValue ()))) : d; } catch (e) { return d; } }
+        function wr (p, v) { try { if (p) p.setNormalisedValue (Math.max (0, Math.min (1, v))); } catch (e) {} }
+        function wrChoice (p, i, n) { try { if (p) p.setNormalisedValue (i / (n - 1)); } catch (e) {} }
+
+        var st = {
+          s: rd (pStart, 0.05) * 100, e: rd (pEnd, 0.96) * 100,
+          ls: rd (pLS, 0.0) * 100, le: rd (pLE, 1.0) * 100,
+          fin: rd (pFadeIn, 0), fout: rd (pFadeOut, 0), xfade: rd (pXfade, 0.12),
+          mode: rdChoice (pMode, 5, 1), snap: rdChoice (pSnap, 3, 0), loop: true, t: 0, dir: 1
+        };
+        st.loop = (SAMP_MODES[st.mode] !== 'One-Shot');
 
         function setPts (el, pts) { if (el) el.setAttribute ('points', pts); }
         function drawEnv () {
-          // y: 0 = full (top), 100 = silence (bottom). A ramp line only over the fade region.
-          setPts (envFadeIn,  st.fin  > 0.3 ? (st.s + ',100 ' + (st.s + st.fin) + ',0') : '');
-          setPts (envFadeOut, st.fout > 0.3 ? ((st.e - st.fout) + ',0 ' + st.e + ',100') : '');
-          if (st.loop && st.lxf > 0.3) {
-            setPts (envLoopIn,  st.ls + ',100 ' + (st.ls + st.lxf) + ',0');
-            setPts (envLoopOut, (st.le - st.lxf) + ',0 ' + st.le + ',100');
+          var RL = Math.max (0.001, st.e - st.s), LL = Math.max (0.001, st.le - st.ls);
+          var fi = st.fin * RL, fo = st.fout * RL;            // fraction-of-region → buffer %
+          var xf = Math.min (st.xfade * LL, LL / 2);          // fraction-of-loop → buffer %, half-cap
+          setPts (envFadeIn,  fi > 0.3 ? (st.s + ',100 ' + (st.s + fi) + ',0') : '');
+          setPts (envFadeOut, fo > 0.3 ? ((st.e - fo) + ',0 ' + st.e + ',100') : '');
+          if (st.loop && xf > 0.3) {
+            setPts (envLoopIn,  st.ls + ',100 ' + (st.ls + xf) + ',0');
+            setPts (envLoopOut, (st.le - xf) + ',0 ' + st.le + ',100');
           } else { setPts (envLoopIn, ''); setPts (envLoopOut, ''); }
         }
         function place () {
           if (st.le < st.ls + 3) st.le = st.ls + 3;
           if (st.ls < st.s) st.ls = st.s; if (st.le > st.e) st.le = st.e;
-          if (st.fin  > (st.e - st.s)) st.fin  = st.e - st.s;
-          if (st.fout > (st.e - st.s)) st.fout = st.e - st.s;
-          if (st.lxf  > (st.le - st.ls) / 2) st.lxf = (st.le - st.ls) / 2;
           hS.style.left = st.s + '%'; hE.style.left = st.e + '%'; hLS.style.left = st.ls + '%'; hLE.style.left = st.le + '%';
           band.style.left = st.ls + '%'; band.style.width = (st.le - st.ls) + '%';
           shL.style.left = '0'; shL.style.width = st.s + '%'; shR.style.left = st.e + '%'; shR.style.width = (100 - st.e) + '%';
@@ -9572,44 +9589,60 @@ setTimeout(function wireSynControls () {
         }
         function redraw () { sampDraw (canvas, data); }
         function pctOf (e) { var r = disp.getBoundingClientRect (); return Math.max (0, Math.min (100, ((e.clientX - r.left) / r.width) * 100)); }
-        // Region drag. Shift+drag = set a fade ramp from that edge instead of moving it.
-        function dragH (h, posKey, fadeKey, fromEnd, lo, hi) {
+        function syncParams () { wr (pStart, st.s / 100); wr (pEnd, st.e / 100); wr (pLS, st.ls / 100); wr (pLE, st.le / 100); wr (pFadeIn, st.fin); wr (pFadeOut, st.fout); wr (pXfade, st.xfade); wrChoice (pMode, st.mode, 5); }
+
+        var syncing = false;   // guard reverse-sync during a local drag
+        // Region drag. Shift+drag = set a fade ramp from that edge (writes the fade/xfade param).
+        function dragH (h, posKey, posParam, fadeKind, fromEnd, lo, hi) {
           h.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); try { h.setPointerCapture (ev.pointerId); } catch (_) {} h.classList.add ('drag');
-            var fade = ev.shiftKey && fadeKey;
+            var fade = ev.shiftKey && fadeKind; syncing = true;
             function mv (e) {
-              if (fade) {
-                var p = pctOf (e);
-                var anchor = (fadeKey === 'lxf') ? (fromEnd ? st.le : st.ls) : (fromEnd ? st.e : st.s);
-                st[fadeKey] = Math.max (0, Math.min (50, fromEnd ? (anchor - p) : (p - anchor)));
-              } else { st[posKey] = Math.max (lo (), Math.min (hi (), pctOf (e))); }
+              var p = pctOf (e);
+              if (fade && fadeKind === 'xfade') { var LL = Math.max (0.001, st.le - st.ls); st.xfade = Math.max (0, Math.min (0.5, (fromEnd ? (st.le - p) : (p - st.ls)) / LL)); wr (pXfade, st.xfade); }
+              else if (fade) { var RL = Math.max (0.001, st.e - st.s); var fr = Math.max (0, Math.min (1, (fromEnd ? (st.e - p) : (p - st.s)) / RL)); if (fadeKind === 'fin') { st.fin = fr; wr (pFadeIn, fr); } else { st.fout = fr; wr (pFadeOut, fr); } }
+              else { st[posKey] = Math.max (lo (), Math.min (hi (), p)); wr (posParam, st[posKey] / 100); }
               place ();
             }
-            function up () { try { h.releasePointerCapture (ev.pointerId); } catch (_) {} h.classList.remove ('drag'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
+            function up () { syncing = false; try { h.releasePointerCapture (ev.pointerId); } catch (_) {} h.classList.remove ('drag'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
             document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
           });
         }
-        dragH (hS, 's', 'fin',  false, function () { return 0; }, function () { return st.loop ? st.ls - 3 : st.e - 3; });
-        dragH (hE, 'e', 'fout', true,  function () { return st.loop ? st.le + 3 : st.s + 3; }, function () { return 100; });
-        dragH (hLS, 'ls', 'lxf', false, function () { return st.s; }, function () { return st.le - 3; });
-        dragH (hLE, 'le', 'lxf', true,  function () { return st.ls + 3; }, function () { return st.e; });
+        dragH (hS, 's', pStart, 'fin',   false, function () { return 0; }, function () { return st.loop ? st.ls - 3 : st.e - 3; });
+        dragH (hE, 'e', pEnd,   'fout',  true,  function () { return st.loop ? st.le + 3 : st.s + 3; }, function () { return 100; });
+        dragH (hLS, 'ls', pLS,  'xfade', false, function () { return st.s; }, function () { return st.le - 3; });
+        dragH (hLE, 'le', pLE,  'xfade', true,  function () { return st.ls + 3; }, function () { return st.e; });
         band.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); try { band.setPointerCapture (ev.pointerId); } catch (_) {} band.classList.add ('grab');
-          var x0 = pctOf (ev), ls0 = st.ls, len = st.le - st.ls;
-          function mv (e) { var d = pctOf (e) - x0; var ls = Math.max (st.s, Math.min (st.e - len, ls0 + d)); st.ls = ls; st.le = ls + len; place (); }
-          function up () { try { band.releasePointerCapture (ev.pointerId); } catch (_) {} band.classList.remove ('grab'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
+          var x0 = pctOf (ev), ls0 = st.ls, len = st.le - st.ls; syncing = true;
+          function mv (e) { var d = pctOf (e) - x0; var ls = Math.max (st.s, Math.min (st.e - len, ls0 + d)); st.ls = ls; st.le = ls + len; wr (pLS, st.ls / 100); wr (pLE, st.le / 100); place (); }
+          function up () { syncing = false; try { band.releasePointerCapture (ev.pointerId); } catch (_) {} band.classList.remove ('grab'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
           document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
         });
 
-        // Header dropdowns (native <select>, like the engine selector) — loop mode + snap.
-        function wireSel (kind, opts, getIdx, onPick) {
-          if (! head) return;
-          var wrap = head.querySelector ('.samp-sel.' + kind); if (! wrap) return;
+        // Header dropdowns (native <select>) — loop mode + snap, param-backed.
+        var modePaint = null, snapPaint = null;
+        function wireSel (kind, opts, param, nChoices, getIdx, onPick) {
+          if (! head) return null;
+          var wrap = head.querySelector ('.samp-sel.' + kind); if (! wrap) return null;
           var dispEl = wrap.querySelector ('.samp-sel-disp'), sel = wrap.querySelector ('select');
-          function paint () { dispEl.textContent = opts[getIdx ()]; if (sel) sel.value = String (getIdx ()); }
+          function paint () { var i = getIdx (); dispEl.textContent = opts[i]; if (sel) sel.value = String (i); }
           paint ();
-          if (sel) sel.addEventListener ('change', function () { onPick (parseInt (sel.value, 10) || 0); paint (); });
+          if (sel) sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; onPick (i); wrChoice (param, i, nChoices); paint (); });
+          return paint;
         }
-        wireSel ('mode', SAMP_MODES, function () { return st.mode; }, function (i) { st.mode = i; st.loop = (SAMP_MODES[i] !== 'One-Shot'); place (); });
-        wireSel ('snap', SAMP_SNAPS, function () { return st.snap; }, function (i) { st.snap = i; });
+        modePaint = wireSel ('mode', SAMP_MODES, pMode, 5, function () { return st.mode; }, function (i) { st.mode = i; st.loop = (SAMP_MODES[i] !== 'One-Shot'); place (); });
+        snapPaint = wireSel ('snap', SAMP_SNAPS, pSnap, 3, function () { return st.snap; }, function (i) { st.snap = i; });
+
+        // Reverse-sync: DAW automation / preset load / the XFADE knob update the UI.
+        function onParam (p, fn) { try { if (p && p.valueChangedEvent && p.valueChangedEvent.addListener) p.valueChangedEvent.addListener (function () { if (syncing) return; fn (); place (); }); } catch (e) {} }
+        onParam (pStart,   function () { st.s = rd (pStart, st.s / 100) * 100; });
+        onParam (pEnd,     function () { st.e = rd (pEnd, st.e / 100) * 100; });
+        onParam (pLS,      function () { st.ls = rd (pLS, st.ls / 100) * 100; });
+        onParam (pLE,      function () { st.le = rd (pLE, st.le / 100) * 100; });
+        onParam (pFadeIn,  function () { st.fin = rd (pFadeIn, st.fin); });
+        onParam (pFadeOut, function () { st.fout = rd (pFadeOut, st.fout); });
+        onParam (pXfade,   function () { st.xfade = rd (pXfade, st.xfade); });
+        onParam (pMode, function () { st.mode = rdChoice (pMode, 5, st.mode); st.loop = (SAMP_MODES[st.mode] !== 'One-Shot'); if (modePaint) modePaint (); });
+        onParam (pSnap, function () { st.snap = rdChoice (pSnap, 3, st.snap); if (snapPaint) snapPaint (); });
 
         // Drop affordance — visual only; the actual file load is the C++ handoff.
         ['dragenter', 'dragover'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); disp.classList.add ('dragover'); }); });
@@ -9618,7 +9651,8 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
 
-        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, view: view };
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, view: view,
+          syncParams: syncParams, repaintHeader: function () { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } };
         place (); redraw ();
       }
 
