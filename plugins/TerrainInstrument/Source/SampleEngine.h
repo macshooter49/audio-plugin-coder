@@ -110,7 +110,7 @@ public:
     {
         pitchRatio_ = (pitchRatio != 0.0) ? pitchRatio : 1.0;
         releasing_  = false;
-        pingSign_   = 1;
+        pingSign_   = (scanRate_ < 0.0f) ? -1 : 1;   // reverse scan → ping-pong starts heading backward
 
         double startPos = regStart_;
         const float spray = clamp01 (sprayAmount);
@@ -290,7 +290,11 @@ private:
             return;
         }
 
-        pos_ += (mode_ == LoopMode::PingPong) ? (inc * (double) pingSign_)
+        // Ping-pong travels on its OWN sign (pingSign_) at |inc| speed. Using the raw signed
+        // inc breaks under reverse scan (inc<0): at loopStart the bounce sets pingSign_=+1 but
+        // inc<0 keeps pushing left, so it sticks/reverses instead of bouncing. |inc| fixes it.
+        const double mag = (inc < 0.0) ? -inc : inc;
+        pos_ += (mode_ == LoopMode::PingPong) ? (mag * (double) pingSign_)
               : (mode_ == LoopMode::Reverse)  ? -inc
                                               :  inc;
 
