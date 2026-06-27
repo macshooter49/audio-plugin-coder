@@ -1860,6 +1860,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT, 1 },
         "Synth OSC A Sample Fade Out",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_AIR, 1 },
+        "Synth OSC A Sample Air",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
     // ── SAMPLE engine params — OSC B ──
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -1921,6 +1925,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT, 1 },
         "Synth OSC B Sample Fade Out",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_AIR, 1 },
+        "Synth OSC B Sample Air",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
     // ── SAMPLE engine params — OSC C ──
@@ -1984,6 +1992,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT, 1 },
         "Synth OSC C Sample Fade Out",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_AIR, 1 },
+        "Synth OSC C Sample Air",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
     // ── SAMPLE engine params — OSC D ──
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -2045,6 +2057,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT, 1 },
         "Synth OSC D Sample Fade Out",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_AIR, 1 },
+        "Synth OSC D Sample Air",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -2927,6 +2943,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spA.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE);
         spA.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SNAP);      spA.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN);
         spA.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT);
+        spA.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_AIR);
         tw::SynthVoice::SampleEngineParams spB;
         spB.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SCAN);       spB.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH);
         spB.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT);    spB.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY);
@@ -2937,6 +2954,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spB.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE);
         spB.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SNAP);      spB.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN);
         spB.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT);
+        spB.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_AIR);
         tw::SynthVoice::SampleEngineParams spC;
         spC.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SCAN);       spC.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH);
         spC.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT);    spC.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY);
@@ -2947,6 +2965,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spC.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE);
         spC.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SNAP);      spC.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN);
         spC.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT);
+        spC.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_AIR);
         tw::SynthVoice::SampleEngineParams spD;
         spD.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SCAN);       spD.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH);
         spD.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT);    spD.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY);
@@ -2957,6 +2976,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spD.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE);
         spD.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
         spD.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
+        spD.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_AIR);
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,

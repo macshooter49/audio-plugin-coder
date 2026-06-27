@@ -64,6 +64,7 @@ namespace tw
             for (auto& e : sampleEngC_) e.prepare (sampleRate_);  for (auto& e : sampleEngD_) e.prepare (sampleRate_);
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
+            airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
         }
 
         /** Set AMP envelope params. attackMs/decayMs/releaseMs are milliseconds;
@@ -385,6 +386,7 @@ namespace tw
             int   stretchMode = 0;   // 0=Tones 1=Beats 2=Texture (warp algorithm)
             int   formantMode = 0;   // 0=Normal 1=Inverted 2=Cross-Formant 3=Spectral-Tilt
             float fadeIn = 0.f, fadeOut = 0.f;
+            float air = 0.f;   // AIR exciter amount 0..1
         };
         void setSampleParamsA (const SampleEngineParams& p) noexcept { sampleParamsA_ = p; }
         void setSampleParamsB (const SampleEngineParams& p) noexcept { sampleParamsB_ = p; }
@@ -1011,6 +1013,8 @@ namespace tw
             foldStateB_.fill ({});
             foldStateC_.fill ({});
             foldStateD_.fill ({});
+            sampAirLpAL_ = sampAirLpAR_ = sampAirLpBL_ = sampAirLpBR_ = 0.f;
+            sampAirLpCL_ = sampAirLpCR_ = sampAirLpDL_ = sampAirLpDR_ = 0.f;
             // Envelopes — fresh note starts from 0 (reset), then gate on. The legato
             // retarget path returns earlier (envelopes deliberately untouched), so this
             // only runs for true note starts. All five DAHDSR envelopes trigger together.
@@ -1443,7 +1447,16 @@ namespace tw
                 sumAR *= uNormA_;
                 float sA_L = sumAL;
                 float sA_R = sumAR;
-                if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
+                if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
+                    const float airA = sampleParamsA_.air;   // AIR exciter — add generated high harmonics
+                    if (airA > 0.001f) {
+                        const float drv = 1.0f + airA * 6.0f;
+                        sampAirLpAL_ += airHpCoef_ * (sA_L - sampAirLpAL_); const float hpL = sA_L - sampAirLpAL_;
+                        sA_L += airA * (std::tanh (hpL * drv) - hpL);
+                        sampAirLpAR_ += airHpCoef_ * (sA_R - sampAirLpAR_); const float hpR = sA_R - sampAirLpAR_;
+                        sA_R += airA * (std::tanh (hpR * drv) - hpR);
+                    }
+                }
                 if (! spectralBypassA_)
                 {
                     if (spectralTypeA_ <= 2)
@@ -1647,7 +1660,16 @@ namespace tw
                 sumBR *= uNormB_;
                 float sB_L = sumBL;
                 float sB_R = sumBR;
-                if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
+                if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
+                    const float airB = sampleParamsB_.air;   // AIR exciter — add generated high harmonics
+                    if (airB > 0.001f) {
+                        const float drv = 1.0f + airB * 6.0f;
+                        sampAirLpBL_ += airHpCoef_ * (sB_L - sampAirLpBL_); const float hpL = sB_L - sampAirLpBL_;
+                        sB_L += airB * (std::tanh (hpL * drv) - hpL);
+                        sampAirLpBR_ += airHpCoef_ * (sB_R - sampAirLpBR_); const float hpR = sB_R - sampAirLpBR_;
+                        sB_R += airB * (std::tanh (hpR * drv) - hpR);
+                    }
+                }
                 if (! spectralBypassB_)
                 {
                     if (spectralTypeB_ <= 2)
@@ -1848,7 +1870,16 @@ namespace tw
                 sumCR *= uNormC_;
                 float sC_L = sumCL;
                 float sC_R = sumCR;
-                if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
+                if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
+                    const float airC = sampleParamsC_.air;   // AIR exciter — add generated high harmonics
+                    if (airC > 0.001f) {
+                        const float drv = 1.0f + airC * 6.0f;
+                        sampAirLpCL_ += airHpCoef_ * (sC_L - sampAirLpCL_); const float hpL = sC_L - sampAirLpCL_;
+                        sC_L += airC * (std::tanh (hpL * drv) - hpL);
+                        sampAirLpCR_ += airHpCoef_ * (sC_R - sampAirLpCR_); const float hpR = sC_R - sampAirLpCR_;
+                        sC_R += airC * (std::tanh (hpR * drv) - hpR);
+                    }
+                }
                 if (! spectralBypassC_)
                 {
                     if (spectralTypeC_ <= 2)
@@ -2049,7 +2080,16 @@ namespace tw
                 sumDR *= uNormD_;
                 float sD_L = sumDL;
                 float sD_R = sumDR;
-                if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i]; }  // SAMPLE-ENGINE-VOICE
+                if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
+                    const float airD = sampleParamsD_.air;   // AIR exciter — add generated high harmonics
+                    if (airD > 0.001f) {
+                        const float drv = 1.0f + airD * 6.0f;
+                        sampAirLpDL_ += airHpCoef_ * (sD_L - sampAirLpDL_); const float hpL = sD_L - sampAirLpDL_;
+                        sD_L += airD * (std::tanh (hpL * drv) - hpL);
+                        sampAirLpDR_ += airHpCoef_ * (sD_R - sampAirLpDR_); const float hpR = sD_R - sampAirLpDR_;
+                        sD_R += airD * (std::tanh (hpR * drv) - hpR);
+                    }
+                }
                 if (! spectralBypassD_)
                 {
                     if (spectralTypeD_ <= 2)
@@ -2813,6 +2853,10 @@ namespace tw
                     *sampBlkCL_ = nullptr, *sampBlkCR_ = nullptr, *sampBlkDL_ = nullptr, *sampBlkDR_ = nullptr;
         bool          sampleNoteOnPending_ = false;
         std::uint32_t sampleSprayRng_ = 0x12345u, spraySeedA_ = 0, spraySeedB_ = 0, spraySeedC_ = 0, spraySeedD_ = 0;
+        // AIR exciter — per-voice/per-channel one-pole HP-split state + coefficient.
+        float sampAirLpAL_ = 0.f, sampAirLpAR_ = 0.f, sampAirLpBL_ = 0.f, sampAirLpBR_ = 0.f,
+              sampAirLpCL_ = 0.f, sampAirLpCR_ = 0.f, sampAirLpDL_ = 0.f, sampAirLpDR_ = 0.f;
+        float airHpCoef_ = 0.37f;
 
         void renderSampleOsc (std::array<tw::SampleEngine, kMaxUnison>& engs, tw::WarpProcessor& warp,
                               const SampleEngineParams& p, bool isSamp,
