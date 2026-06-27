@@ -3935,21 +3935,25 @@ body {
    ≥2 classes so they win over the aggressive generic `.samp-menu div` rule above. */
 .samp-menu .oscq { display: block; padding: 5px 11px 8px; margin: 0; background: none; border-radius: 0;
   cursor: default; letter-spacing: normal; white-space: normal; min-width: 174px; }
-.samp-menu .oscq .oq-slot { display: block; padding: 6px 7px 8px; margin: 0; gap: 0; background: none;
-  border-radius: 7px; cursor: default; transition: background .1s; }
-.samp-menu .oscq .oq-slot:hover { background: rgba(255,255,255,0.05); }
+.samp-menu .oscq .oq-slot { display: block; padding: 5px 7px 6px; margin: 0; gap: 0; background: none;
+  border-radius: 0; cursor: default; transition: none; }
 .samp-menu .oscq .oq-row { display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 0; margin: 0 0 8px; background: none; border-radius: 0; cursor: default; letter-spacing: .2px; white-space: nowrap; }
+  padding: 0; margin: 0 0 7px; background: none; border-radius: 0; cursor: default; letter-spacing: .2px; white-space: nowrap; }
 .samp-menu .oscq .oq-lab { color: rgba(255,255,255,0.5); font-size: 10px; font-weight: 300; letter-spacing: .2px; }
 .samp-menu .oscq .oq-val { color: #fff; font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; }
-.samp-menu .oscq .oq-track { position: relative; display: block; height: 2px; padding: 0; margin: 0;
-  border-radius: 1px; background: rgba(255,255,255,0.16); cursor: ew-resize; transition: none; }
+/* fat transparent hit-zone — the thin line is easy to grab, ONE cursor (ew-resize), no flicker,
+   free-flowing drag. The visual line + fill + marker + tick are pointer-events:none so they never
+   fight the cursor with the generic `.samp-menu div { cursor:pointer }` rule. */
+.samp-menu .oscq .oq-hit { position: relative; display: block; height: 16px; padding: 0; margin: 0;
+  background: none; border-radius: 0; cursor: ew-resize; transition: none; }
+.samp-menu .oscq .oq-track { position: absolute; display: block; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  height: 2px; padding: 0; margin: 0; border-radius: 1px; background: rgba(255,255,255,0.16); pointer-events: none; transition: none; }
 .samp-menu .oscq .oq-ctr { position: absolute; display: block; left: 50%; top: -3px; width: 1px; height: 7px; padding: 0; margin: 0;
-  background: rgba(255,255,255,0.28); border-radius: 0; transition: none; }
+  background: rgba(255,255,255,0.28); border-radius: 0; pointer-events: none; transition: none; }
 .samp-menu .oscq .oq-fill { position: absolute; display: block; top: 0; left: 0; height: 2px; padding: 0; margin: 0;
-  border-radius: 1px; background: var(--purple-500); transition: none; }
+  border-radius: 1px; background: var(--purple-500); pointer-events: none; transition: none; }
 .samp-menu .oscq .oq-mark { position: absolute; display: block; top: 50%; width: 2px; height: 9px; padding: 0; margin: 0;
-  border-radius: 1px; background: #fff; transform: translate(-50%,-50%); cursor: ew-resize; transition: none; }
+  border-radius: 1px; background: #fff; transform: translate(-50%,-50%); pointer-events: none; transition: none; }
 
 /* ── CROSS ── */
 #syn-panel .cross {
@@ -9654,12 +9658,13 @@ setTimeout(function wireSynControls () {
           var lab = document.createElement ('span'); lab.className = 'oq-lab'; lab.textContent = R.lab;
           var val = document.createElement ('span'); val.className = 'oq-val';
           row.appendChild (lab); row.appendChild (val);
+          var hit = document.createElement ('div'); hit.className = 'oq-hit';
           var track = document.createElement ('div'); track.className = 'oq-track';
           if (R.bip) { var ctr = document.createElement ('div'); ctr.className = 'oq-ctr'; track.appendChild (ctr); }
           var fill = document.createElement ('div'); fill.className = 'oq-fill';
           var mark = document.createElement ('div'); mark.className = 'oq-mark';
-          track.appendChild (fill); track.appendChild (mark);
-          slot.appendChild (row); slot.appendChild (track);
+          track.appendChild (fill); track.appendChild (mark); hit.appendChild (track);
+          slot.appendChild (row); slot.appendChild (hit);
           wrap.appendChild (slot);
 
           function curN () { try { return ss ? ss.getNormalisedValue () : oscqDefault (pid); } catch (e) { return oscqDefault (pid); } }
@@ -9673,18 +9678,18 @@ setTimeout(function wireSynControls () {
           }
           render (curN ());
           function fromX (cx) {
-            var r = track.getBoundingClientRect ();
+            var r = hit.getBoundingClientRect ();
             var t = Math.max (0, Math.min (1, (cx - r.left) / Math.max (1, r.width)));
             var n = (R.suf === 'SEMI') ? Math.round (t * 24) / 24 : t;   // SEMI snaps to whole semitones
             if (ss) { try { ss.setNormalisedValue (n); } catch (e) {} }
             render (n);
           }
           var drag = false;
-          track.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); drag = true; try { track.setPointerCapture (ev.pointerId); } catch (e) {} fromX (ev.clientX); });
-          track.addEventListener ('pointermove', function (ev) { if (drag) { ev.preventDefault (); fromX (ev.clientX); } });
-          function up (ev) { if (drag) { drag = false; try { track.releasePointerCapture (ev.pointerId); } catch (e) {} } }
-          track.addEventListener ('pointerup', up); track.addEventListener ('pointercancel', up);
-          track.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation (); var d = oscqDefault (pid); if (ss) { try { ss.setNormalisedValue (d); } catch (e) {} } render (d); });
+          hit.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); drag = true; try { hit.setPointerCapture (ev.pointerId); } catch (e) {} fromX (ev.clientX); });
+          hit.addEventListener ('pointermove', function (ev) { if (drag) { ev.preventDefault (); fromX (ev.clientX); } });
+          function up (ev) { if (drag) { drag = false; try { hit.releasePointerCapture (ev.pointerId); } catch (e) {} } }
+          hit.addEventListener ('pointerup', up); hit.addEventListener ('pointercancel', up);
+          hit.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation (); var d = oscqDefault (pid); if (ss) { try { ss.setNormalisedValue (d); } catch (e) {} } render (d); });
         });
         return wrap;
       }
