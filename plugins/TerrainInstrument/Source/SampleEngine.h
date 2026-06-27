@@ -125,6 +125,15 @@ public:
 
         pos_ = clampPos (startPos);
 
+        // SCAN reverse: if the note starts with a reverse playback direction (scan < 0),
+        // begin at the region END so the sample plays backward (end → start). Otherwise a
+        // one-shot / lead-in dead-stops at the Start on frame one (clampRegionEnds kills it
+        // the instant pos <= regStart with a negative inc). The UI follower rides
+        // position01(), so it visually runs from the end too. The Reverse LOOP mode does
+        // its own loop-END snap below, so leave it alone here.
+        if (scanRate_ < 0.0f && mode_ != LoopMode::Reverse && regEnd_ > regStart_ + 1.0)
+            pos_ = regEnd_ - 1.0;
+
         // LOOP-CATCH model (confirmed w/ Max): every looping mode plays a one-shot
         // lead-in forward from the region Start and only starts looping once the
         // playhead first reaches the purple loop region [loopStart,loopEnd] ("caught").
