@@ -39,6 +39,7 @@ public:
     void prepare (double outputSampleRate) noexcept
     {
         outRate_ = (outputSampleRate > 0.0) ? outputSampleRate : 44100.0;
+        endFadeLen_ = 0.0025 * outRate_;   // ~2.5 ms terminal micro fade-out (region-edge declick)
     }
 
     /** Point the engine at the loaded buffer. Call whenever the BufferPtr or
@@ -178,6 +179,34 @@ public:
         const float g = edgeGain (pos_);
         outL *= g; outR *= g;
 
+        // DECLICK — TERMINAL micro fade-out (UNCONDITIONAL "no clicks ever"). The non-looping /
+        // exhausting modes die at a region edge with NO ramp (clampRegionEnds sets active_=false,
+        // next tick returns 0 → the un-faded last frame steps to silence = click). Spray exposes it
+        // by ending at random non-zero points. Equal-power ramp the last endFadeLen_ samples to 0.
+        // Terminating cases ONLY: One-Shot, Tailed-while-releasing, or a lead-in (!caught_) whose
+        // loop is UNREACHABLE in the travel direction (so it genuinely dies at the edge). A normal
+        // looping lead-in gets CAUGHT — fading it would notch the level just before the loop engages,
+        // so it must NOT count as terminating. Active loops never exhaust → skipped.
+        const bool fwd = (scanRate_ >= 0.0f);
+        const bool loopUnreachable = fwd ? (loopStart_ >= regEnd_ - 1.0)
+                                         : (loopEnd_  <= regStart_ + 1.0);
+        const bool terminating = (mode_ == LoopMode::OneShot)
+                              || (mode_ == LoopMode::Tailed && releasing_)
+                              || (! caught_ && loopUnreachable);
+        // Gate on actual motion: a frozen playhead (scanRate_==0) never exhausts → no click to
+        // fix, and fading it would statically attenuate a held tail. Only fade when it's moving.
+        if (terminating && scanRate_ != 0.0f && endFadeLen_ > 1.0)
+        {
+            // Travel direction = sign of inc = sign of scanRate_ (pitchRatio_ > 0).
+            const double dTerm = (scanRate_ < 0.0f) ? (pos_ - regStart_)
+                                                    : ((regEnd_ - 1.0) - pos_);
+            if (dTerm >= 0.0 && dTerm < endFadeLen_)
+            {
+                const float eg = (float) std::sin ((dTerm / endFadeLen_) * kHalfPi);   // [0,1]
+                outL *= eg; outR *= eg;
+            }
+        }
+
         // DECLICK — loop-seam micro fade (only when a content crossfade can't run, e.g. loop at a
         // buffer edge) + the note-on micro fade-in (kills sprayed random-start clicks).
         if (caught_ && ! loopXfadeContentValid_ && seamFadeLen_ > 1.0)
@@ -260,6 +289,13 @@ private:
         loopXfadeContentValid_ = (loopStart_ >= xfadeLen_) && (loopEnd_ + xfadeLen_ <= Nm1);
         const double seamMax = 0.0015 * outRate_;   // ~1.5 ms declick
         seamFadeLen_ = (xfadeLen_ < seamMax) ? xfadeLen_ : seamMax;
+
+        // Terminal (region-edge) micro fade-out length — ~2.5 ms, capped to half the region so a
+        // tiny region can't make the whole thing fade. UNCONDITIONAL "no clicks ever" tail.
+        endFadeLen_ = 0.0025 * outRate_;
+        const double endCap = 0.5 * (regEnd_ - regStart_);
+        if (endFadeLen_ > endCap) endFadeLen_ = endCap;
+        if (endFadeLen_ < 0.0)    endFadeLen_ = 0.0;
 
         // Region edge fades — fraction of the region length, each capped to the region.
         const double RL = regEnd_ - regStart_;
@@ -470,6 +506,7 @@ private:
     // ── declick state ──
     double  onsetLen_ = 0.0, onsetPos_ = 1.0e18;   // note-on micro fade-in (kills sprayed random-start clicks)
     double  seamFadeLen_ = 0.0;                    // loop-seam micro fade half-width (samples), fallback declick
+    double  endFadeLen_ = 0.0;                     // terminal (region-edge) micro fade-out (samples) — UNCONDITIONAL "no clicks"
     bool    loopXfadeContentValid_ = true;         // pre/post-loop audio exists → use the content crossfade
 
     static constexpr double kHalfPi = 1.57079632679489661923;
