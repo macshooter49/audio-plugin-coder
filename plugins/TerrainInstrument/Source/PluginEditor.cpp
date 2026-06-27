@@ -90,6 +90,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscAPanRelay)
             .withOptionsFrom(synFilter1CutRelay)
             .withOptionsFrom(synFilter1ResRelay)
+            .withOptionsFrom(synFilter1KeytrackRelay)
+            .withOptionsFrom(synFilter2KeytrackRelay)
             // Batch 1 Filter — TYPE, DRV, ENV, slot 2 reserved, FLT envelope
             .withOptionsFrom(synFilter1TypeRelay)
             .withOptionsFrom(synFilter1DrvRelay)
@@ -2387,6 +2389,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synFilter1ResAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_RES),
         synFilter1ResRelay, nullptr);
+
+    synFilter1KeytrackAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_KEYTRACK),
+        synFilter1KeytrackRelay, nullptr);
+    synFilter2KeytrackAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_KEYTRACK),
+        synFilter2KeytrackRelay, nullptr);
 
     // Batch 1 Filter — bind new param attachments. Without these, the JS
     // dropdown / DRV / ENV writes silently fail (relay exists but has no

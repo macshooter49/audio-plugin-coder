@@ -103,6 +103,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_PAN[]     = "SYN_OSC_A_PAN";      // float -1..+1
     constexpr char SYN_FILTER1_CUT[]   = "SYN_FILTER1_CUT";    // float 20..20000 Hz (skewed)
     constexpr char SYN_FILTER1_RES[]   = "SYN_FILTER1_RES";    // float 0..1
+    constexpr char SYN_FILTER1_KEYTRACK[] = "SYN_FILTER1_KEYTRACK";  // float 0..100 % — cutoff tracks note
+    constexpr char SYN_FILTER2_KEYTRACK[] = "SYN_FILTER2_KEYTRACK";  // float 0..100 %
     constexpr char LFO1_RATE[]         = "LFO1_RATE";          // Batch 1 — synth LFO 1 free rate, 0.01..40 Hz
     constexpr char LFO1_DEPTH[]        = "LFO1_DEPTH";         // Batch 1 — L1 -> Filter 1 cutoff depth, -1..+1
     constexpr char LFO1_SHAPE[]        = "LFO1_SHAPE";         // Mod redesign — L1 shape (Sine..Random, 7 choices)

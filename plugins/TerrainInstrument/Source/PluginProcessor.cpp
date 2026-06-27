@@ -926,6 +926,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
 
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_KEYTRACK, 1 },
+        "Synth Filter 1 Keytrack",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+
     // ── Batch 1 — Modulation (synth per-voice). LFO 1 free rate + its depth into
     //    Filter 1 cutoff. These two drive the audible vertical slice; the full LFO
     //    bank, sync, shapes, and the route matrix arrive in Batches 2–5.
@@ -1055,6 +1060,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_FILTER2_RES, 1 },
         "Synth Filter 2 Resonance",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_KEYTRACK, 1 },
+        "Synth Filter 2 Keytrack",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_FILTER2_DRV, 1 },
         "Synth Filter 2 Drive",
@@ -2780,6 +2789,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float pan     =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_PAN);
         const float cut     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_CUT);
         const float res     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_RES);
+        const float fltKt1  =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_KEYTRACK);
         // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
         const int   filtType= (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_TYPE);
         const float filtDrv =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_DRV);
@@ -2787,6 +2797,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Filter 2 (independent) + per-filter mix + routing.
         const float cut2     =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_CUT);
         const float res2     =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_RES);
+        const float fltKt2   =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_KEYTRACK);
         const int   filtType2= (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_TYPE);
         const float filtDrv2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_DRV);
         const float filtEnv2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_ENV);
@@ -3064,6 +3075,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setLevel                  (lvl);
                 sv->setPan                    (pan);
                 sv->setFilterParameters       (cut, res);
+                sv->setFilterKeytrack         (fltKt1 / 100.0f);
+                sv->setFilterKeytrack2        (fltKt2 / 100.0f);
                 sv->setFilterType             (filtType);
                 sv->setFilterDrive            (filtDrv);
                 sv->setFilterEnvAmount        (filtEnv);

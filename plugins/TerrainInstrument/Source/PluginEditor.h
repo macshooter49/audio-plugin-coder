@@ -124,6 +124,8 @@ private:
     juce::WebSliderRelay synOscAPanRelay      { ParameterIDs::SYN_OSC_A_PAN };
     juce::WebSliderRelay synFilter1CutRelay   { ParameterIDs::SYN_FILTER1_CUT };
     juce::WebSliderRelay synFilter1ResRelay   { ParameterIDs::SYN_FILTER1_RES };
+    juce::WebSliderRelay synFilter1KeytrackRelay { ParameterIDs::SYN_FILTER1_KEYTRACK };
+    juce::WebSliderRelay synFilter2KeytrackRelay { ParameterIDs::SYN_FILTER2_KEYTRACK };
     juce::WebSliderRelay lfo1RateRelay         { ParameterIDs::LFO1_RATE };   // Batch 1
     juce::WebSliderRelay lfo1DepthRelay        { ParameterIDs::LFO1_DEPTH };  // Batch 1
     juce::WebSliderRelay lfo1ShapeRelay        { ParameterIDs::LFO1_SHAPE };  // Mod redesign
@@ -567,6 +569,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAPanAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1CutAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1ResAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1KeytrackAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2KeytrackAttachment;
     // Batch 1 Filter — attachments for the new params (TYPE/DRV/ENV + slot 2 reserved + FLT env)
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1TypeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1DrvAttachment;

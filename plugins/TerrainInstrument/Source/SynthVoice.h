@@ -231,6 +231,10 @@ namespace tw
             baseCutHz_   = juce::jlimit (20.0f, 20000.0f, cutoffHz);
             baseRes01_   = juce::jlimit (0.0f,  1.0f,    resonance);
         }
+        // Filter key-track amount (0..1). 1 = 1 semitone of cutoff per semitone
+        // of played note, referenced to MIDI note 60 (middle C).
+        void setFilterKeytrack  (float amt01) noexcept { filterKeytrack1_ = juce::jlimit (0.0f, 1.0f, amt01); }
+        void setFilterKeytrack2 (float amt01) noexcept { filterKeytrack2_ = juce::jlimit (0.0f, 1.0f, amt01); }
 
         /** Batch 1 — publish the modulation config to this voice. Resolves each
          *  LFO's frequency now (free rate, or synced Hz from BPM). The per-sample
@@ -2253,6 +2257,10 @@ namespace tw
                 // filter's prewarp + ZDF math sees the upsampled Nyquist.
                 const double coefSr = oversample ? sr * 2.0 : sr;
                 const float  baseCutSemis2 = hzToSemi (baseCutHz2_);
+                // Key-track: constant per held note (currentMidiNote_ default 60).
+                // amount·(note−60) semitones of cutoff offset, added below.
+                const float ktCutSemis1 = filterKeytrack1_ * ((float) currentMidiNote_ - 60.0f);
+                const float ktCutSemis2 = filterKeytrack2_ * ((float) currentMidiNote_ - 60.0f);
                 const int    kNoneType = (int) tw::filters::Type::NONE;
                 // Free-envelope per-sample values (ch1..4 = envs 2–5) for filter routing.
                 const float* eFltFree[4] = { envScratch_.getReadPointer (1), envScratch_.getReadPointer (2),
@@ -2315,7 +2323,7 @@ namespace tw
                     const float fmax = juce::jmin (20000.0f, 0.45f * (float) coefSr);
 
                     // Filter 1 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
-                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + driftSemis;
+                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + driftSemis + ktCutSemis1;
                     float cutHz1 = 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f);
                     cutHz1 = juce::jlimit (20.0f, fmax, cutHz1);
                     const float res1 = juce::jlimit (0.0f, 1.0f,
@@ -2323,7 +2331,7 @@ namespace tw
                     filterSlot_.setParams (cutHz1, res1, drv01_, coefSr);
 
                     // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
-                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis;
+                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis + ktCutSemis2;
                     float cutHz2 = 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f);
                     cutHz2 = juce::jlimit (20.0f, fmax, cutHz2);
                     const float res2 = juce::jlimit (0.0f, 1.0f,
@@ -2774,6 +2782,7 @@ namespace tw
         tw::filters::FilterSlot filterSlot_;
         float                   baseCutHz_   = 20000.0f;
         float                   baseRes01_   = 0.0f;
+        float                   filterKeytrack1_ = 0.0f, filterKeytrack2_ = 0.0f;  // 0..1 (cutoff tracks note)
         float                   drv01_       = 0.0f;
         float                   envAmount_   = 0.0f;   // -1..+1 (bipolar)
         float                   fltErosionAmount_ = 0.0f;

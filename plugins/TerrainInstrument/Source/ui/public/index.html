@@ -4006,6 +4006,9 @@ body {
   font-size: 9px; color: var(--text-primary); font-weight: 300; letter-spacing: 0.4px;
 }
 #syn-panel .filter-toggle .ft-pill.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+/* Key-track emblem — independent toggle (not part of the 1/2 group). Glows purple when active. */
+#syn-panel .filter-toggle .ft-kt { cursor: pointer; }
+#syn-panel .filter-toggle .ft-kt.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; box-shadow: 0 0 6px var(--purple-500); }
 #syn-panel .dd-trigger {
   height: 24px; padding: 0 10px;
   background: var(--bg-hero); border: 1px solid var(--border-strong);
@@ -5689,6 +5692,7 @@ body {
             <div class="filter-toggle">
               <div class="ft-pill act" id="filter-pill-1">1</div>
               <div class="ft-pill" id="filter-pill-2">2</div>
+              <div class="ft-pill ft-kt" id="filter-kt-emblem" title="Key Track">K</div>
               <button class="swap-btn" type="button" id="filter-swap-btn" aria-label="Toggle filter back panel (mix + routing)"></button>
             </div>
             <div class="dd-trigger front-only"><span>Ladder LP · 24</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
@@ -11973,6 +11977,33 @@ setTimeout(function wireSynControls () {
       };
       if (slotPill1) { slotPill1.title = 'Filter 1'; slotPill1.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); setActiveSlot(1); }); }
       if (slotPill2) { slotPill2.title = 'Filter 2'; slotPill2.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); setActiveSlot(2); }); }
+
+      // ── K emblem — per-filter KEY-TRACK toggle (slot-aware) ──
+      // Resolves SYN_FILTER{1,2}_KEYTRACK by the active 1/2 tab. Click toggles
+      // the active slot's amount 0 <-> full (100%). The .act glow + the param
+      // both follow the active slot; refreshed on tab-flip and on param change.
+      const ktProxy = mkSlotState('KEYTRACK');
+      const ktEmblem = document.getElementById('filter-kt-emblem');
+      const refreshKtEmblem = () => {
+        if (! ktEmblem) return;
+        let on = false;
+        try { on = ktProxy.getNormalisedValue() > 0.001; } catch (e) {}
+        ktEmblem.classList.toggle('act', on);
+      };
+      if (ktEmblem) {
+        ktEmblem.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          let on = false;
+          try { on = ktProxy.getNormalisedValue() > 0.001; } catch (e2) {}
+          try { ktProxy.setNormalisedValue(on ? 0 : 1); } catch (e2) {}
+          refreshKtEmblem();
+        });
+      }
+      slotChangeHooks.push(refreshKtEmblem);
+      ktProxy.both.forEach(s => {
+        if (s && s.valueChangedEvent && s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(refreshKtEmblem);
+      });
+      refreshKtEmblem();
 
       // ── + swap button — flip the FILTER device to its back panel ──
       const filterSwapBtn = document.getElementById('filter-swap-btn');
@@ -19722,6 +19753,9 @@ restoreThemeFromBackend();
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill{position:relative;width:auto;min-width:0;height:auto;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:10px;font-weight:400;text-shadow:0 1px 3px rgba(0,0,0,.9);}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill.act{background:transparent;color:#fff;font-weight:600;border:none;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill.act::after{content:"";position:absolute;left:-1px;right:-1px;bottom:-3px;height:1.5px;background:var(--purple-400);border-radius:1px;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-kt{cursor:pointer;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-kt.act{color:var(--purple-300,#c4a6ff);font-weight:700;text-shadow:0 0 7px var(--purple-400),0 1px 3px rgba(0,0,0,.9);}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-kt.act::after{display:none;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .swap-btn{background:transparent;border:none;color:rgba(255,255,255,.5);margin-left:6px;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-knobs{position:absolute;left:0;right:0;bottom:5px;z-index:3;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 12px;background:none;}'+
     '#syn-panel .device.filter .fk-em{display:flex;flex-direction:column;align-items:center;gap:1px;}'+
