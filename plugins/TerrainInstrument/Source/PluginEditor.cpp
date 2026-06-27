@@ -3310,6 +3310,14 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     e.preventDefault();
     if (window.onDragHover) window.onDragHover(false);
 
+    // DROP-ZONE-WALL (CC — 2nd door): this whole-window document-level drop USED to load the
+    // front sampler from ANYWHERE — the second trapdoor (the native OS filesDropped one was
+    // sealed separately). The front sampler now loads ONLY from its bounded #hero zone (which
+    // claims its own drops via stopPropagation) and synth oscillators from their .samp-disp
+    // slots. A drop anywhere else must do nothing. preventDefault above still stops the browser
+    // from navigating to the file; we just never load it here.
+    return;
+
     var f = (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
     if (!f) { showStatus('Drop: no file payload', 4000); return; }
 
