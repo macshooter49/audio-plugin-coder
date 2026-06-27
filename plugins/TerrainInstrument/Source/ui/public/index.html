@@ -3883,9 +3883,9 @@ body {
 /* region-edge fade gray-out (Ableton clip-fade look) — bound to FADE_IN/FADE_OUT.
    Subtle at rest (the ramp line is the persistent cue); prominent while shift-dragging. */
 #syn-panel .samp-fadefill { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; opacity: .22; transition: opacity .12s; }
-#syn-panel .samp-fadefill.in  { background: linear-gradient(90deg,  rgba(8,8,18,.66), rgba(8,8,18,0)); }
-#syn-panel .samp-fadefill.out { background: linear-gradient(270deg, rgba(8,8,18,.66), rgba(8,8,18,0)); }
-#syn-panel .sample-view.dragfade .samp-fadefill { opacity: 1; }
+#syn-panel .samp-fadefill.in  { background: linear-gradient(90deg,  rgba(8,8,18,.42), rgba(8,8,18,0)); }
+#syn-panel .samp-fadefill.out { background: linear-gradient(270deg, rgba(8,8,18,.42), rgba(8,8,18,0)); }
+#syn-panel .sample-view.dragfade .samp-fadefill { opacity: .6; }
 #syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { opacity: 1; stroke-width: 1.6; }
 /* drop affordance (shown on dragover / empty) */
 #syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
@@ -4950,7 +4950,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
-              <span class="samp-head" data-osc="a"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="samp-head" data-osc="a"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5120,7 +5120,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
-              <span class="samp-head" data-osc="b"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="samp-head" data-osc="b"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5306,7 +5306,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
-              <span class="samp-head" data-osc="c"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="samp-head" data-osc="c"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5476,7 +5476,7 @@ body {
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
               <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Spectral</option></select></span>
-              <span class="samp-head" data-osc="d"><span class="samp-sel mode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="samp-head" data-osc="d"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -9626,7 +9626,7 @@ setTimeout(function wireSynControls () {
           s: rd (pStart, 0.05) * 100, e: rd (pEnd, 0.96) * 100,
           ls: rd (pLS, 0.0) * 100, le: rd (pLE, 1.0) * 100,
           fin: rd (pFadeIn, 0), fout: rd (pFadeOut, 0), xfade: rd (pXfade, 0.12),
-          mode: rdChoice (pMode, 5, 1), snap: rdChoice (pSnap, 3, 0), loop: true, t: 0, dir: 1
+          mode: rdChoice (pMode, 5, 0), snap: rdChoice (pSnap, 3, 0), loop: true, t: 0, dir: 1
         };
         st.loop = (SAMP_MODES[st.mode] !== 'One-Shot');
 
@@ -9638,8 +9638,10 @@ setTimeout(function wireSynControls () {
           // region-edge fade gray-out fills (Ableton clip-fade) — sized to the fade length
           if (fadeFillIn)  { fadeFillIn.style.left = st.s + '%'; fadeFillIn.style.width = fi + '%'; fadeFillIn.style.display = fi > 0.3 ? 'block' : 'none'; }
           if (fadeFillOut) { fadeFillOut.style.left = (st.e - fo) + '%'; fadeFillOut.style.width = fo + '%'; fadeFillOut.style.display = fo > 0.3 ? 'block' : 'none'; }
-          setPts (envFadeIn,  fi > 0.3 ? (st.s + ',100 ' + (st.s + fi) + ',0') : '');
-          setPts (envFadeOut, fo > 0.3 ? ((st.e - fo) + ',0 ' + st.e + ',100') : '');
+          // Region fade ramps cap at y=5 (a touch below the top edge) so the slit stays VISIBLE
+          // at high fade instead of clipping into the top — a clean horizontal slit, never off-screen.
+          setPts (envFadeIn,  fi > 0.3 ? (st.s + ',100 ' + (st.s + fi) + ',5') : '');
+          setPts (envFadeOut, fo > 0.3 ? ((st.e - fo) + ',5 ' + st.e + ',100') : '');
           if (st.loop && xf > 0.3) {
             setPts (envLoopIn,  st.ls + ',100 ' + (st.ls + xf) + ',0');
             setPts (envLoopOut, (st.le - xf) + ',0 ' + st.le + ',100');
@@ -9838,6 +9840,16 @@ setTimeout(function wireSynControls () {
         ring.addEventListener ('dblclick', function () { v = bip ? 0.5 : (/_XFADE$/.test (pid) ? 0.12 : 0); fill (v); live (); rest (); });
       }
       document.querySelectorAll ('#syn-panel .samp-knobs .knob[data-syn]').forEach (wireSampKnob);
+
+      // PERSIST-RESYNC — on editor reopen, the engine paint() can fire before the
+      // getOscSamplePayload native fn / the C++ reload-from-disk are ready, so the initial
+      // waveform restore misses (and since the engine state didn't "change", no valueChangedEvent
+      // retry fires). Re-request each osc's cached sample payload a couple of times to beat the
+      // WKWebView init race — restores the loaded waveforms so they survive close/reopen.
+      [350, 900, 1800].forEach (function (ms) {
+        setTimeout (function () { try { for (var k in SAMP) { if (SAMP[k] && window.__terrainSampleRedraw) window.__terrainSampleRedraw (k); } } catch (e) {} }, ms);
+      });
+
       window.addEventListener ('resize', function () { for (var k in SAMP) { if (SAMP[k]) { SAMP[k].redraw (); SAMP[k].place (); } } });
     } catch (eSamp) { console.warn ('[SYN-sample] wiring failed', eSamp); }
 

@@ -1839,7 +1839,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE, 1 },
         "Synth OSC A Sample Loop Mode",
-        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE, 1 },
         "Synth OSC A Sample Stretch Mode",
@@ -1901,7 +1901,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE, 1 },
         "Synth OSC B Sample Loop Mode",
-        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE, 1 },
         "Synth OSC B Sample Stretch Mode",
@@ -1963,7 +1963,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE, 1 },
         "Synth OSC C Sample Loop Mode",
-        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE, 1 },
         "Synth OSC C Sample Stretch Mode",
@@ -2025,7 +2025,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE, 1 },
         "Synth OSC D Sample Loop Mode",
-        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 1));
+        juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong", "Tailed" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE, 1 },
         "Synth OSC D Sample Stretch Mode",
