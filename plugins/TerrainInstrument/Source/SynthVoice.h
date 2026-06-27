@@ -1023,6 +1023,10 @@ namespace tw
             sampAirLpCL_ = sampAirLpCR_ = sampAirLpDL_ = sampAirLpDR_ = 0.f;
             sampWarpFoldAL_ = sampWarpFoldAR_ = sampWarpFoldBL_ = sampWarpFoldBR_ = {};   // SAMPLE WARP fold history reset
             sampWarpFoldCL_ = sampWarpFoldCR_ = sampWarpFoldDL_ = sampWarpFoldDR_ = {};
+            wtRectDcAL_.reset(); wtRectDcAR_.reset(); wtRectDcBL_.reset(); wtRectDcBR_.reset();   // RECTIFY DC-blocker reset (wavetable)
+            wtRectDcCL_.reset(); wtRectDcCR_.reset(); wtRectDcDL_.reset(); wtRectDcDR_.reset();
+            spRectDcAL_.reset(); spRectDcAR_.reset(); spRectDcBL_.reset(); spRectDcBR_.reset();   // RECTIFY DC-blocker reset (sample)
+            spRectDcCL_.reset(); spRectDcCR_.reset(); spRectDcDL_.reset(); spRectDcDR_.reset();
             // Envelopes — fresh note starts from 0 (reset), then gate on. The legato
             // retarget path returns earlier (envelopes deliberately untouched), so this
             // only runs for true note starts. All five DAHDSR envelopes trigger together.
@@ -1455,6 +1459,11 @@ namespace tw
                 sumAR *= uNormA_;
                 float sA_L = sumAL;
                 float sA_R = sumAR;
+                // RECTIFY DC block — only when this osc's wavetable warp == Rectify (slot 1 or 2)
+                // with nonzero amount; dormant (bit-identical) otherwise.
+                if (engine_ == Engine::WT
+                    && ((warpMode_ == 9 && warpAmount_ > 0.001f) || (warp2ModeA_ == 9 && warp2AmountA_ > 0.001f)))
+                { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
                 if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airA = sampleParamsA_.air;   // AIR exciter — add generated high harmonics
                     if (airA > 0.001f) {
@@ -1469,7 +1478,8 @@ namespace tw
                     if (warpA > 0.001f) {
                         switch (sampleParamsA_.warpMode) {
                             case 1: sA_L = applyAmpWarp (10, warpA, sA_L);  sA_R = applyAmpWarp (10, warpA, sA_R); break;   // Sine Shaper
-                            case 2: sA_L = applyAmpWarp (9,  warpA, sA_L);  sA_R = applyAmpWarp (9,  warpA, sA_R); break;   // Rectify
+                            case 2: sA_L = applyAmpWarp (9,  warpA, sA_L);  sA_R = applyAmpWarp (9,  warpA, sA_R);
+                                    sA_L = spRectDcAL_.process (sA_L); sA_R = spRectDcAR_.process (sA_R); break;   // Rectify (+ DC block)
                             case 3: sA_L = applyFoldADAA (sA_L, 0, warpA, sampWarpFoldAL_); sA_R = applyFoldADAA (sA_R, 0, warpA, sampWarpFoldAR_); break;   // Fold
                             case 4: { const float d = 1.0f + warpA * 9.0f;
                                       sA_L = sA_L * (1.0f - warpA) + std::tanh (sA_L * d) * warpA;
@@ -1684,6 +1694,10 @@ namespace tw
                 sumBR *= uNormB_;
                 float sB_L = sumBL;
                 float sB_R = sumBR;
+                // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
+                if (engineB_ == Engine::WT
+                    && ((warpModeB_ == 9 && warpAmountB_ > 0.001f) || (warp2ModeB_ == 9 && warp2AmountB_ > 0.001f)))
+                { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
                 if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airB = sampleParamsB_.air;   // AIR exciter — add generated high harmonics
                     if (airB > 0.001f) {
@@ -1698,7 +1712,8 @@ namespace tw
                     if (warpB > 0.001f) {
                         switch (sampleParamsB_.warpMode) {
                             case 1: sB_L = applyAmpWarp (10, warpB, sB_L);  sB_R = applyAmpWarp (10, warpB, sB_R); break;   // Sine Shaper
-                            case 2: sB_L = applyAmpWarp (9,  warpB, sB_L);  sB_R = applyAmpWarp (9,  warpB, sB_R); break;   // Rectify
+                            case 2: sB_L = applyAmpWarp (9,  warpB, sB_L);  sB_R = applyAmpWarp (9,  warpB, sB_R);
+                                    sB_L = spRectDcBL_.process (sB_L); sB_R = spRectDcBR_.process (sB_R); break;   // Rectify (+ DC block)
                             case 3: sB_L = applyFoldADAA (sB_L, 0, warpB, sampWarpFoldBL_); sB_R = applyFoldADAA (sB_R, 0, warpB, sampWarpFoldBR_); break;   // Fold
                             case 4: { const float d = 1.0f + warpB * 9.0f;
                                       sB_L = sB_L * (1.0f - warpB) + std::tanh (sB_L * d) * warpB;
@@ -1910,6 +1925,10 @@ namespace tw
                 sumCR *= uNormC_;
                 float sC_L = sumCL;
                 float sC_R = sumCR;
+                // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
+                if (engineC_ == Engine::WT
+                    && ((warpModeC_ == 9 && warpAmountC_ > 0.001f) || (warp2ModeC_ == 9 && warp2AmountC_ > 0.001f)))
+                { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
                 if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airC = sampleParamsC_.air;   // AIR exciter — add generated high harmonics
                     if (airC > 0.001f) {
@@ -1924,7 +1943,8 @@ namespace tw
                     if (warpC > 0.001f) {
                         switch (sampleParamsC_.warpMode) {
                             case 1: sC_L = applyAmpWarp (10, warpC, sC_L);  sC_R = applyAmpWarp (10, warpC, sC_R); break;   // Sine Shaper
-                            case 2: sC_L = applyAmpWarp (9,  warpC, sC_L);  sC_R = applyAmpWarp (9,  warpC, sC_R); break;   // Rectify
+                            case 2: sC_L = applyAmpWarp (9,  warpC, sC_L);  sC_R = applyAmpWarp (9,  warpC, sC_R);
+                                    sC_L = spRectDcCL_.process (sC_L); sC_R = spRectDcCR_.process (sC_R); break;   // Rectify (+ DC block)
                             case 3: sC_L = applyFoldADAA (sC_L, 0, warpC, sampWarpFoldCL_); sC_R = applyFoldADAA (sC_R, 0, warpC, sampWarpFoldCR_); break;   // Fold
                             case 4: { const float d = 1.0f + warpC * 9.0f;
                                       sC_L = sC_L * (1.0f - warpC) + std::tanh (sC_L * d) * warpC;
@@ -2136,6 +2156,10 @@ namespace tw
                 sumDR *= uNormD_;
                 float sD_L = sumDL;
                 float sD_R = sumDR;
+                // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
+                if (engineD_ == Engine::WT
+                    && ((warpModeD_ == 9 && warpAmountD_ > 0.001f) || (warp2ModeD_ == 9 && warp2AmountD_ > 0.001f)))
+                { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
                 if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airD = sampleParamsD_.air;   // AIR exciter — add generated high harmonics
                     if (airD > 0.001f) {
@@ -2150,7 +2174,8 @@ namespace tw
                     if (warpD > 0.001f) {
                         switch (sampleParamsD_.warpMode) {
                             case 1: sD_L = applyAmpWarp (10, warpD, sD_L);  sD_R = applyAmpWarp (10, warpD, sD_R); break;   // Sine Shaper
-                            case 2: sD_L = applyAmpWarp (9,  warpD, sD_L);  sD_R = applyAmpWarp (9,  warpD, sD_R); break;   // Rectify
+                            case 2: sD_L = applyAmpWarp (9,  warpD, sD_L);  sD_R = applyAmpWarp (9,  warpD, sD_R);
+                                    sD_L = spRectDcDL_.process (sD_L); sD_R = spRectDcDR_.process (sD_R); break;   // Rectify (+ DC block)
                             case 3: sD_L = applyFoldADAA (sD_L, 0, warpD, sampWarpFoldDL_); sD_R = applyFoldADAA (sD_R, 0, warpD, sampWarpFoldDR_); break;   // Fold
                             case 4: { const float d = 1.0f + warpD * 9.0f;
                                       sD_L = sD_L * (1.0f - warpD) + std::tanh (sD_L * d) * warpD;
@@ -2937,6 +2962,14 @@ namespace tw
         // SAMPLE WARP shaper — per-channel ADAA fold history (Fold mode only).
         FoldState sampWarpFoldAL_, sampWarpFoldAR_, sampWarpFoldBL_, sampWarpFoldBR_,
                   sampWarpFoldCL_, sampWarpFoldCR_, sampWarpFoldDL_, sampWarpFoldDR_;
+        // RECTIFY DC-blocker — |x| has a nonzero mean → the Rectify warp injects a DC
+        // offset that rides the amp env (low-freq "kick" + note-on/mode-switch step click).
+        // One per-osc, per-channel 1-pole DC blocker, ON ONLY when that osc's warp == Rectify.
+        // Wavetable path (slot-1 OR slot-2 == 9); Sample path (warpMode == 2 / Rectify).
+        tw::filters::DCBlocker wtRectDcAL_, wtRectDcAR_, wtRectDcBL_, wtRectDcBR_,
+                               wtRectDcCL_, wtRectDcCR_, wtRectDcDL_, wtRectDcDR_;
+        tw::filters::DCBlocker spRectDcAL_, spRectDcAR_, spRectDcBL_, spRectDcBR_,
+                               spRectDcCL_, spRectDcCR_, spRectDcDL_, spRectDcDR_;
 
         void renderSampleOsc (std::array<tw::SampleEngine, kMaxUnison>& engs, tw::WarpProcessor& warp,
                               const SampleEngineParams& p, bool isSamp,
