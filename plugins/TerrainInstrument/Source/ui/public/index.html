@@ -616,6 +616,14 @@ body {
   flex-shrink: 0;
   overflow: hidden;
 }
+/* DROP-ZONE-WALL — feedback while dragging an audio file over the front sampler's zone. */
+#hero.drop-armed { box-shadow: inset 0 0 0 2px var(--purple-400, #a78bfa); }
+#hero.drop-armed::after {
+  content: '\002B  Drop sample here'; position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; color: var(--purple-300, #c4b5fd);
+  font-weight: 600; font-size: 13px; letter-spacing: .04em; pointer-events: none;
+  z-index: 50; background: rgba(10, 8, 20, 0.55);
+}
 
 #terrain-canvas {
   display: block;
@@ -9763,6 +9771,40 @@ setTimeout(function wireSynControls () {
           if (g) { var p = g (osc); if (p && p.then) p.then (function (j) { if (j && window.onOscSampleLoaded) window.onOscSampleLoaded (osc, j); }); } } catch (_) {}
       };
       document.querySelectorAll ('#syn-panel .sample-view').forEach (wireSample);
+
+      // DROP-ZONE-WALL — the front multi-sampler loads ONLY from its own bounded zone (the
+      // #hero display), never from a whole-window OS drop. Same pattern as the oscillator
+      // slots: read the dropped file to base64 in JS and hand it to loadSampleFromBase64
+      // (which targets the current editing layer). Only audio is claimed here; .terrain /
+      // .terrainpack patches fall through to the native handler. stopPropagation + a guarded
+      // dragover keep the zone bounded, so drops elsewhere never reach the front sampler.
+      (function wireFrontDropZone () {
+        var hero = document.getElementById ('hero');
+        if (! hero) return;
+        var isAudio  = function (n) { return /\.(wav|aif|aiff|flac|mp3)$/i.test (n || ''); };
+        var hasFiles = function (e) { try { return !! (e.dataTransfer && e.dataTransfer.types && Array.prototype.indexOf.call (e.dataTransfer.types, 'Files') !== -1); } catch (_) { return true; } };
+        ['dragenter', 'dragover'].forEach (function (t) {
+          hero.addEventListener (t, function (e) {
+            if (! hasFiles (e)) return;
+            e.preventDefault (); e.stopPropagation (); hero.classList.add ('drop-armed');
+          });
+        });
+        hero.addEventListener ('dragleave', function (e) {
+          if (e.relatedTarget && hero.contains (e.relatedTarget)) return;   // ignore moves between children
+          hero.classList.remove ('drop-armed');
+        });
+        hero.addEventListener ('drop', function (e) {
+          hero.classList.remove ('drop-armed');
+          var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+          if (! f) return;
+          e.preventDefault (); e.stopPropagation ();          // claim the drop + stop browser default
+          if (! isAudio (f.name)) return;                     // patches are handled by the native target
+          sampReadB64 (f, function (b64) {
+            if (! b64) return;
+            try { var fn = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('loadSampleFromBase64') : null; if (fn) fn (f.name, b64); } catch (_) {}
+          });
+        });
+      })();
 
       // Fallback interactive knobs — visual-only while SYN_OSC_x_SAMPLE_* params don't
       // exist yet. The generic .knob[data-syn] handler takes over the moment they do.

@@ -9438,11 +9438,15 @@ void TerrainInstrumentAudioProcessorEditor::filesDropped (const juce::StringArra
     // PEROSC-DRAGGUARD — on the synth page, an oscillator waveform drop is handled in JS
     // (the .samp-disp 'drop' listener → loadSampleForOsc → that osc's own buffer). The OS-level
     // drop target must NOT also load the front-panel multi-sampler layer, or one file lands in
-    // two places. When the synth page is hidden the front panel still loads via loadSampleAsync.
+    // two places. Audio is no longer loaded by this whole-window target at all (see below).
     if (synthPageActive_) return;
 
-    // Audio file → load as new sample
-    loadSampleAsync (f);
+    // DROP-ZONE-WALL — audio is NOT loaded by this OS-level whole-window target. The front
+    // multi-sampler loads only from its own bounded zone (the #hero display, via the JS
+    // loadSampleFromBase64 path); each synth oscillator loads only from its own slot
+    // (.samp-disp -> loadSampleForOsc). Dropping audio anywhere else (grain tiles, tape,
+    // loop, mod, LFO, empty space) intentionally does nothing. The old whole-window glass
+    // door that mirrored every drop onto the front panel is gone.
 }
 
 void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& file)
