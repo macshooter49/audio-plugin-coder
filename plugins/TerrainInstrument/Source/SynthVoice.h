@@ -60,8 +60,8 @@ namespace tw
             mod1EnvT_.prepare (sampleRate_);
             mod2EnvT_.prepare (sampleRate_);
             // SAMPLE-ENGINE-VOICE — prepare per-OSC sample engines + warp processors
-            sampleEngA_.prepare (sampleRate_); sampleEngB_.prepare (sampleRate_);
-            sampleEngC_.prepare (sampleRate_); sampleEngD_.prepare (sampleRate_);
+            for (auto& e : sampleEngA_) e.prepare (sampleRate_);  for (auto& e : sampleEngB_) e.prepare (sampleRate_);
+            for (auto& e : sampleEngC_) e.prepare (sampleRate_);  for (auto& e : sampleEngD_) e.prepare (sampleRate_);
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
         }
@@ -116,10 +116,10 @@ namespace tw
         {
             switch (osc)
             {
-                case 0: return (engine_  == Engine::SAMP && sampleEngA_.isActive()) ? (float) sampleEngA_.position01() : -1.f;
-                case 1: return (engineB_ == Engine::SAMP && sampleEngB_.isActive()) ? (float) sampleEngB_.position01() : -1.f;
-                case 2: return (engineC_ == Engine::SAMP && sampleEngC_.isActive()) ? (float) sampleEngC_.position01() : -1.f;
-                case 3: return (engineD_ == Engine::SAMP && sampleEngD_.isActive()) ? (float) sampleEngD_.position01() : -1.f;
+                case 0: return (engine_  == Engine::SAMP && sampleEngA_[0].isActive()) ? (float) sampleEngA_[0].position01() : -1.f;
+                case 1: return (engineB_ == Engine::SAMP && sampleEngB_[0].isActive()) ? (float) sampleEngB_[0].position01() : -1.f;
+                case 2: return (engineC_ == Engine::SAMP && sampleEngC_[0].isActive()) ? (float) sampleEngC_[0].position01() : -1.f;
+                case 3: return (engineD_ == Engine::SAMP && sampleEngD_[0].isActive()) ? (float) sampleEngD_[0].position01() : -1.f;
                 default: return -1.f;
             }
         }
@@ -2798,7 +2798,9 @@ namespace tw
 
         // Phase 3 — Engine choice.
         // ════════════════ SAMPLE-ENGINE-VOICE — state + render ════════════════
-        tw::SampleEngine   sampleEngA_, sampleEngB_, sampleEngC_, sampleEngD_;
+        // UNISON-ON-SAMPLE — one SampleEngine per unison voice (index 0 = the dry/centre voice,
+        // byte-identical to the pre-unison single-engine path when the count is 1).
+        std::array<tw::SampleEngine, kMaxUnison> sampleEngA_, sampleEngB_, sampleEngC_, sampleEngD_;
         tw::WarpProcessor  sampleWarpA_, sampleWarpB_, sampleWarpC_, sampleWarpD_;
         SampleEngineParams sampleParamsA_, sampleParamsB_, sampleParamsC_, sampleParamsD_;
         // PEROSC-VOICE — per-OSC sample sources (A/B/C/D each read their own buffer)
@@ -2812,12 +2814,13 @@ namespace tw
         bool          sampleNoteOnPending_ = false;
         std::uint32_t sampleSprayRng_ = 0x12345u, spraySeedA_ = 0, spraySeedB_ = 0, spraySeedC_ = 0, spraySeedD_ = 0;
 
-        void renderSampleOsc (tw::SampleEngine& eng, tw::WarpProcessor& warp,
+        void renderSampleOsc (std::array<tw::SampleEngine, kMaxUnison>& engs, tw::WarpProcessor& warp,
                               const SampleEngineParams& p, bool isSamp,
                               int oct, int semi, float cent,
                               juce::AudioBuffer<float>& blk,
                               const float*& outL, const float*& outR,
-                              int numSamples, std::uint32_t seed, bool doNoteOn, double nativeOverOut) noexcept
+                              int numSamples, std::uint32_t seed, bool doNoteOn, double nativeOverOut,
+                              int uniCount, const float* detCents, const float* panL, const float* panR, float uNorm) noexcept
         {
             if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
                 blk.setSize (2, numSamples, false, false, true);
@@ -2825,33 +2828,43 @@ namespace tw
             float* wR = blk.getWritePointer (1);
             outL = wL; outR = wR;
             if (! isSamp) return;
-            if (! eng.hasSample())
+            if (! engs[0].hasSample())
             {
                 juce::FloatVectorOperations::clear (wL, numSamples);
                 juce::FloatVectorOperations::clear (wR, numSamples);
                 return;
             }
-            // params (modulatable — refreshed every block)
-            eng.setRegion (p.start, p.end);
-            float ls = p.loopStart, le = p.loopEnd;
-            if (p.snap == 1) { ls = eng.snapZeroCross01 (ls); le = eng.snapZeroCross01 (le); }
-            eng.setLoop (ls, le);
-            eng.setLoopMode ((tw::SampleEngine::LoopMode) p.loopMode);
-            eng.setXFade (p.xfade);
-            eng.setFades (p.fadeIn, p.fadeOut);
-            eng.setScan (p.scan);
             // pitch: root MIDI 60 = C3; resample ratio incl native/output SR
             const double noteSemis  = (double) (currentMidiNote_ - 60 + oct * 12 + semi) + (double) cent * 0.01;
             const double pitchRatio = nativeOverOut * std::pow (2.0, noteSemis / 12.0);
-            eng.setPitchRatio (pitchRatio);
-            if (doNoteOn) { eng.noteOn (pitchRatio, p.spray, seed); warp.noteOnReset(); }
-            // render — direct (resample) unless STRETCH/FORMANT engage the Warp (Tones) engine
-            const bool useWarp = (p.stretch > 0.001f) || (std::fabs (p.formant) > 0.001f);
-            if (! useWarp)
+            const int    N          = juce::jlimit (1, kMaxUnison, uniCount);
+
+            // params (modulatable — refreshed every block) applied to EVERY active unison voice.
+            // Detune fans each voice by ±cents (the SAME table the wavetable unison uses); the
+            // centre/count==1 voice always runs at the dry note pitch so count==1 is bit-identical.
+            float ls = p.loopStart, le = p.loopEnd;
+            if (p.snap == 1) { ls = engs[0].snapZeroCross01 (ls); le = engs[0].snapZeroCross01 (le); }
+            for (int u = 0; u < N; ++u)
             {
-                for (int k = 0; k < numSamples; ++k) eng.tick (wL[k], wR[k]);
+                auto& e = engs[(size_t) u];
+                e.setRegion (p.start, p.end);
+                e.setLoop (ls, le);
+                e.setLoopMode ((tw::SampleEngine::LoopMode) p.loopMode);
+                e.setXFade (p.xfade);
+                e.setFades (p.fadeIn, p.fadeOut);
+                e.setScan (p.scan);
+                const double ratio = (N <= 1) ? pitchRatio
+                                              : pitchRatio * std::pow (2.0, (double) detCents[u] / 1200.0);
+                e.setPitchRatio (ratio);
+                if (doNoteOn)
+                    e.noteOn (ratio, p.spray,
+                              (N <= 1) ? seed : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1))));  // decorrelate per voice
             }
-            else
+            if (doNoteOn) warp.noteOnReset();
+
+            // render — direct (resample) unless STRETCH/FORMANT engage the Warp (Tones) engine.
+            const bool useWarp = (p.stretch > 0.001f) || (std::fabs (p.formant) > 0.001f);
+            if (useWarp)
             {
                 const tw::WarpMode wm = (p.stretchMode == 1) ? tw::WarpMode::Beats
                                       : (p.stretchMode == 2) ? tw::WarpMode::Texture
@@ -2859,14 +2872,8 @@ namespace tw
                 if (warp.getMode() != wm) { warp.setMode (wm); warp.noteOnReset(); }
                 warp.setStretchRatio   (1.0f + p.stretch * 3.0f);     // 0 → 1x … 1 → 4x (slower; pitch held)
                 warp.setPitchSemitones (0.0f);                        // note pitch already in the resampled read
-                // FORMANT-MODE — reinterpret the FORMANT knob per creative mode.
-                //   Normal       : shift formants ±1 oct (factor 2^knob)
-                //   Inverted     : opposite shift (reciprocal, 2^-knob)
-                //   Cross-Formant: shift formants up while tilting brightness down (they cross)
-                //   Spectral-Tilt: neutral formant, knob drives a pure spectral tilt
+                // FORMANT-MODE — reinterpret the FORMANT knob per creative mode (±2 octave shift).
                 float fmFactor, fmTilt;
-                // CC: amplified formant shift to ±2 octaves (was ±1 — too subtle; Max wanted
-                // "night and day"). Spectral-Tilt (case 3) left at Opus's measured ±9 dB.
                 const float fmAmp = 2.0f;
                 switch (p.formantMode)
                 {
@@ -2875,15 +2882,62 @@ namespace tw
                     case 3:  fmFactor = 1.0f;                                fmTilt =  p.formant; break;
                     default: fmFactor = std::pow (2.0f,  p.formant * fmAmp); fmTilt = 0.f;        break;
                 }
-                warp.setFormantFactor  (fmFactor);                    // -1..+1 → ±2 octave formant shift
+                warp.setFormantFactor  (fmFactor);
                 const int srcN = juce::jmax (1, warp.sourceSamplesPerBlock (numSamples));
                 if (warpSrc_.getNumChannels() < 2 || warpSrc_.getNumSamples() < srcN)
                     warpSrc_.setSize (2, srcN, false, false, true);
                 float* sL = warpSrc_.getWritePointer (0);
                 float* sR = warpSrc_.getWritePointer (1);
-                for (int k = 0; k < srcN; ++k) eng.tick (sL[k], sR[k]);
+                if (N <= 1)
+                {
+                    for (int k = 0; k < srcN; ++k) engs[0].tick (sL[k], sR[k]);
+                }
+                else
+                {
+                    // UNISON can't run 16 FFT phase-vocoders — sum the detuned reads into the warp
+                    // SOURCE (detune + width survive), then warp ONCE. (Serum-class approach.)
+                    juce::FloatVectorOperations::clear (sL, srcN);
+                    juce::FloatVectorOperations::clear (sR, srcN);
+                    for (int u = 0; u < N; ++u)
+                    {
+                        auto& e = engs[(size_t) u];
+                        const float pl = panL[u], pr = panR[u];
+                        for (int k = 0; k < srcN; ++k)
+                        {
+                            float l, r; e.tick (l, r);
+                            const float m = 0.5f * (l + r);
+                            sL[k] += m * pl; sR[k] += m * pr;
+                        }
+                    }
+                    juce::FloatVectorOperations::multiply (sL, uNorm, srcN);
+                    juce::FloatVectorOperations::multiply (sR, uNorm, srcN);
+                }
                 warp.process (sL, sR, wL, wR, numSamples);            // distinct in/out (Signalsmith requires)
                 warp.processTilt (wL, wR, numSamples, fmTilt, sampleRate_);   // FORMANT-MODE — spectral tilt post-process
+            }
+            else if (N <= 1)
+            {
+                for (int k = 0; k < numSamples; ++k) engs[0].tick (wL[k], wR[k]);   // pre-unison path (bit-identical)
+            }
+            else
+            {
+                // UNISON — N detuned voices, each mono-collapsed then width-panned via the SAME
+                // pan tables the wavetable unison uses, summed and RMS-normalised (loudness held).
+                juce::FloatVectorOperations::clear (wL, numSamples);
+                juce::FloatVectorOperations::clear (wR, numSamples);
+                for (int u = 0; u < N; ++u)
+                {
+                    auto& e = engs[(size_t) u];
+                    const float pl = panL[u], pr = panR[u];
+                    for (int k = 0; k < numSamples; ++k)
+                    {
+                        float l, r; e.tick (l, r);
+                        const float m = 0.5f * (l + r);
+                        wL[k] += m * pl; wR[k] += m * pr;
+                    }
+                }
+                juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
+                juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
             }
         }
 
@@ -2893,8 +2947,9 @@ namespace tw
                 && engineC_ != Engine::SAMP && engineD_ != Engine::SAMP)
                 return;   // no sample oscillators → free no-op (common case)
 
-            // PEROSC-VOICE — refresh each OSC's engine from its OWN buffer (independent samples).
-            tw::SampleEngine* engs[4] = { &sampleEngA_, &sampleEngB_, &sampleEngC_, &sampleEngD_ };
+            // PEROSC-VOICE — refresh each OSC's engines from its OWN buffer (independent samples).
+            // Every unison instance shares the same buffer pointer (cheap; set only on change).
+            std::array<tw::SampleEngine, kMaxUnison>* engs[4] = { &sampleEngA_, &sampleEngB_, &sampleEngC_, &sampleEngD_ };
             for (int o = 0; o < 4; ++o)
             {
                 if (sampleSource_[o] == nullptr) continue;
@@ -2907,15 +2962,15 @@ namespace tw
                     const int nSm = bp ? bp->getNumSamples()  : 0;
                     const double nr = sampleSource_[o]->getSampleRate();
                     const float* const* rp = (bp && nSm > 0) ? bp->getArrayOfReadPointers() : nullptr;
-                    engs[o]->setSample (rp, nCh, nSm, nr);
+                    for (auto& e : *engs[o]) e.setSample (rp, nCh, nSm, nr);
                     sampleNativeOverOut_[o] = (nr > 0.0 && sampleRate_ > 0.0) ? (nr / sampleRate_) : 1.0;
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0]);
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1]);
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2]);
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3]);
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_);
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_);
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_);
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_);
             sampleNoteOnPending_ = false;
         }
 
