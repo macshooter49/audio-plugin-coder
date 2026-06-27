@@ -148,6 +148,8 @@ public:
             pos_ = loopEnd_ - 1.0;
 
         active_ = hasSample();
+        onsetPos_ = 0.0;                                  // arm the note-on micro fade-in (declicks the start)
+        onsetLen_ = 0.003 * outRate_;                     // ~3 ms equal-power ramp
     }
 
     /** Tailed → drop the loop and play the release tail to End. Others → stop. */
@@ -175,6 +177,20 @@ public:
         // Region edge fades (amplitude ramp from Start / into End).
         const float g = edgeGain (pos_);
         outL *= g; outR *= g;
+
+        // DECLICK — loop-seam micro fade (only when a content crossfade can't run, e.g. loop at a
+        // buffer edge) + the note-on micro fade-in (kills sprayed random-start clicks).
+        if (caught_ && ! loopXfadeContentValid_ && seamFadeLen_ > 1.0)
+        {
+            const double dE = loopEnd_ - pos_, dS = pos_ - loopStart_;
+            const double d  = (dE < dS) ? dE : dS;
+            if (d >= 0.0 && d < seamFadeLen_) { const float sg = (float) std::sin ((d / seamFadeLen_) * kHalfPi); outL *= sg; outR *= sg; }
+        }
+        if (onsetPos_ < onsetLen_)
+        {
+            const float og = (float) std::sin ((onsetPos_ / onsetLen_) * kHalfPi);
+            outL *= og; outR *= og; onsetPos_ += 1.0;
+        }
 
         const double inc = pitchRatio_ * (double) scanRate_;   // signed: + fwd, − rev, 0 frozen
         advance (inc);
@@ -236,6 +252,14 @@ private:
         const double cap = 0.5 * L;
         if (xfadeLen_ > cap) xfadeLen_ = cap;
         if (xfadeLen_ < 0.0) xfadeLen_ = 0.0;
+
+        // DECLICK — the content crossfade reads pre/post-loop audio (p ± loopLen); when the loop
+        // sits at a buffer edge those reads clamp to DC and THUMP. Only use the content crossfade
+        // when that audio genuinely exists; otherwise fall back to a short seam amplitude micro-fade.
+        const double Nm1 = (double) (numSamples_ - 1);
+        loopXfadeContentValid_ = (loopStart_ >= xfadeLen_) && (loopEnd_ + xfadeLen_ <= Nm1);
+        const double seamMax = 0.0015 * outRate_;   // ~1.5 ms declick
+        seamFadeLen_ = (xfadeLen_ < seamMax) ? xfadeLen_ : seamMax;
 
         // Region edge fades — fraction of the region length, each capped to the region.
         const double RL = regEnd_ - regStart_;
@@ -338,7 +362,7 @@ private:
         // the wrap loopEnd→loopStart is seamless. cos²+sin² = 1 (constant power).
         const bool fwdLoop = (mode_ == LoopMode::Forward
                               || (mode_ == LoopMode::Tailed && ! releasing_));
-        if (fwdLoop && xfadeLen_ > 1.0)
+        if (fwdLoop && xfadeLen_ > 1.0 && loopXfadeContentValid_)
         {
             const double dEnd = loopEnd_ - p;                 // distance to loop end
             if (dEnd >= 0.0 && dEnd < xfadeLen_)
@@ -352,7 +376,7 @@ private:
                 r = r * gT + hr * gH;
             }
         }
-        else if (mode_ == LoopMode::Reverse && xfadeLen_ > 1.0)
+        else if (mode_ == LoopMode::Reverse && xfadeLen_ > 1.0 && loopXfadeContentValid_)
         {
             const double dStart = p - loopStart_;             // reverse seam at loopStart
             if (dStart >= 0.0 && dStart < xfadeLen_)
@@ -443,6 +467,10 @@ private:
     bool    active_ = false;
     bool    releasing_ = false;
     bool    caught_ = false;     // LOOP-CATCH — false during the one-shot lead-in, true once in the loop
+    // ── declick state ──
+    double  onsetLen_ = 0.0, onsetPos_ = 1.0e18;   // note-on micro fade-in (kills sprayed random-start clicks)
+    double  seamFadeLen_ = 0.0;                    // loop-seam micro fade half-width (samples), fallback declick
+    bool    loopXfadeContentValid_ = true;         // pre/post-loop audio exists → use the content crossfade
 
     static constexpr double kHalfPi = 1.57079632679489661923;
     static constexpr double kMinLoopSamples = 8.0;

@@ -1450,11 +1450,11 @@ namespace tw
                 if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airA = sampleParamsA_.air;   // AIR exciter — add generated high harmonics
                     if (airA > 0.001f) {
-                        const float drv = 1.0f + airA * 6.0f;
+                        const float drv = 1.0f + airA * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpAL_ += airHpCoef_ * (sA_L - sampAirLpAL_); const float hpL = sA_L - sampAirLpAL_;
-                        sA_L += airA * (std::tanh (hpL * drv) - hpL);
+                        sA_L += airA * 2.0f * (std::tanh (hpL * drv) - hpL);
                         sampAirLpAR_ += airHpCoef_ * (sA_R - sampAirLpAR_); const float hpR = sA_R - sampAirLpAR_;
-                        sA_R += airA * (std::tanh (hpR * drv) - hpR);
+                        sA_R += airA * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
                 }
                 if (! spectralBypassA_)
@@ -1663,11 +1663,11 @@ namespace tw
                 if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airB = sampleParamsB_.air;   // AIR exciter — add generated high harmonics
                     if (airB > 0.001f) {
-                        const float drv = 1.0f + airB * 6.0f;
+                        const float drv = 1.0f + airB * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpBL_ += airHpCoef_ * (sB_L - sampAirLpBL_); const float hpL = sB_L - sampAirLpBL_;
-                        sB_L += airB * (std::tanh (hpL * drv) - hpL);
+                        sB_L += airB * 2.0f * (std::tanh (hpL * drv) - hpL);
                         sampAirLpBR_ += airHpCoef_ * (sB_R - sampAirLpBR_); const float hpR = sB_R - sampAirLpBR_;
-                        sB_R += airB * (std::tanh (hpR * drv) - hpR);
+                        sB_R += airB * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
                 }
                 if (! spectralBypassB_)
@@ -1873,11 +1873,11 @@ namespace tw
                 if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airC = sampleParamsC_.air;   // AIR exciter — add generated high harmonics
                     if (airC > 0.001f) {
-                        const float drv = 1.0f + airC * 6.0f;
+                        const float drv = 1.0f + airC * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpCL_ += airHpCoef_ * (sC_L - sampAirLpCL_); const float hpL = sC_L - sampAirLpCL_;
-                        sC_L += airC * (std::tanh (hpL * drv) - hpL);
+                        sC_L += airC * 2.0f * (std::tanh (hpL * drv) - hpL);
                         sampAirLpCR_ += airHpCoef_ * (sC_R - sampAirLpCR_); const float hpR = sC_R - sampAirLpCR_;
-                        sC_R += airC * (std::tanh (hpR * drv) - hpR);
+                        sC_R += airC * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
                 }
                 if (! spectralBypassC_)
@@ -2083,11 +2083,11 @@ namespace tw
                 if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airD = sampleParamsD_.air;   // AIR exciter — add generated high harmonics
                     if (airD > 0.001f) {
-                        const float drv = 1.0f + airD * 6.0f;
+                        const float drv = 1.0f + airD * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpDL_ += airHpCoef_ * (sD_L - sampAirLpDL_); const float hpL = sD_L - sampAirLpDL_;
-                        sD_L += airD * (std::tanh (hpL * drv) - hpL);
+                        sD_L += airD * 2.0f * (std::tanh (hpL * drv) - hpL);
                         sampAirLpDR_ += airHpCoef_ * (sD_R - sampAirLpDR_); const float hpR = sD_R - sampAirLpDR_;
-                        sD_R += airD * (std::tanh (hpR * drv) - hpR);
+                        sD_R += airD * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
                 }
                 if (! spectralBypassD_)
