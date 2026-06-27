@@ -3935,6 +3935,9 @@ body {
    ≥2 classes so they win over the aggressive generic `.samp-menu div` rule above. */
 .samp-menu .oscq { display: block; padding: 5px 11px 8px; margin: 0; background: none; border-radius: 0;
   cursor: default; letter-spacing: normal; white-space: normal; min-width: 174px; }
+/* PLAIN GLASS — no selector glow. The generic `.samp-menu div:hover` (0,0,2,1) out-specifies the
+   2-class `.oscq` wrapper (0,0,2,0) and was lighting the WHOLE menu gray/white on hover. Kill it. */
+.samp-menu .oscq:hover { background: none; }
 .samp-menu .oscq .oq-slot { display: block; padding: 5px 7px 6px; margin: 0; gap: 0; background: none;
   border-radius: 0; cursor: default; transition: none; }
 .samp-menu .oscq .oq-row { display: flex; align-items: center; justify-content: space-between; gap: 8px;

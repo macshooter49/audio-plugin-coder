@@ -140,7 +140,10 @@ public:
         // No lead-in zone (loopStart already at/under the start — e.g. the default
         // full-region loop, or a sprayed start inside the loop) => caught at once.
         // Reverse (A): on catch, snap to the loop END and run backwards from there.
-        caught_ = (pos_ >= loopStart_);
+        // Direction-aware catch: a forward playhead enters the loop from loopStart (below); a
+        // reverse-scan playhead enters from loopEnd (above), so it leads in BACKWARD from the
+        // region END and only catches once it reaches the loop — mirroring the forward feel.
+        caught_ = (scanRate_ < 0.0f) ? (pos_ <= loopEnd_) : (pos_ >= loopStart_);
         if (caught_ && mode_ == LoopMode::Reverse && loopEnd_ > loopStart_)
             pos_ = loopEnd_ - 1.0;
 
@@ -265,18 +268,25 @@ private:
         if (! caught_)
         {
             pos_ += inc;
-            if (pos_ >= loopStart_)
+            // Direction-aware catch: forward enters the loop at loopStart (from below), reverse
+            // enters at loopEnd (from above). So reverse scan leads in BACKWARD from the End and
+            // only starts looping once the playhead reaches the loop — same feel as forward.
+            const bool reached = (inc < 0.0) ? (pos_ <= loopEnd_) : (pos_ >= loopStart_);
+            if (reached)
             {
                 caught_   = true;
-                pingSign_ = 1;
+                pingSign_ = (inc < 0.0) ? -1 : 1;                // bounce starts in the travel direction
                 if (mode_ == LoopMode::Reverse && loopEnd_ > loopStart_)
                     pos_ = loopEnd_ - 1.0;                       // (A) snap to loop end, run back
                 else
-                    while (pos_ >= loopEnd_) pos_ -= loopLen();  // clamp any overshoot into the loop
+                {
+                    while (pos_ >= loopEnd_)   pos_ -= loopLen();  // clamp overshoot (forward catch)
+                    while (pos_ <  loopStart_) pos_ += loopLen();  // clamp overshoot (reverse catch)
+                }
             }
             else
             {
-                clampRegionEnds (inc);   // reverse-scan / ran off the front before catching
+                clampRegionEnds (inc);   // hasn't reached the loop yet — keep leading in
             }
             return;
         }
