@@ -7,6 +7,27 @@ this file is the operating contract + the load-bearing facts, not the full archi
 
 ---
 
+## ⭐ RITUALS — Max's code words (DO THESE WHEN HE SAYS THE WORD)
+
+Two trigger phrases. When Max says them, run the ritual without being asked to spell it out.
+
+- **"checkpoint"** (a.k.a. "CC checkpoint") = mid-stream save. Do: (1) an **in-depth, comprehensive
+  memory save** of everything since the last save (no fluff — topic file + MEMORY.md index line),
+  (2) a **clean commit** (working tree ends clean), (3) **refresh the Desktop zip** (see below).
+
+- **"clean up"** (a.k.a. "cleanup") = end-of-session / context-clear wrap. Everything in *checkpoint*,
+  PLUS: (4) a **quick bug-sweep / tighten pass** — patrol the recent work for small errors, loose ends,
+  obvious bugs, and tidy them (commit any fixes), (5) **clear the drop** (`~/terrain-drop/`),
+  (6) confirm a **clean tree**. This is the per-session close-out before Max clears context.
+
+**Desktop zip — refresh it AUTONOMOUSLY (don't make Max ask).** After any checkpoint/cleanup (and after
+meaningful commits), rebuild **`~/Desktop/terrain-CURRENT.zip`** = the FULL `Source/` tree (the UI
+`ui/public/index.html` + ALL the C++) plus a `_STATE-FOR-OPUS.md` (HEAD hash, date, what changed, where
+things live). This is so **Opus sees exactly what we see in Terrain**. Stable name = it overwrites (no
+accumulation); the hash/summary lives inside. Build from `plugins/TerrainInstrument/` with
+`zip -r ~/Desktop/terrain-CURRENT.zip Source _STATE-FOR-OPUS.md` (write the STATE file, zip, then delete
+the STATE file so the repo tree stays clean). Desktop listing may be TCC-blocked — operate by full path.
+
 ## 0. Who does what (the cross-AI workflow — LOCKED)
 
 This project runs as a two-AI team:
