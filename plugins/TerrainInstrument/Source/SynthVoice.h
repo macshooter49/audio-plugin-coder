@@ -2857,8 +2857,16 @@ namespace tw
                                               : pitchRatio * std::pow (2.0, (double) detCents[u] / 1200.0);
                 e.setPitchRatio (ratio);
                 if (doNoteOn)
-                    e.noteOn (ratio, p.spray,
-                              (N <= 1) ? seed : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1))));  // decorrelate per voice
+                {
+                    // Decorrelate the OUTER unison voices' start positions at onset even when
+                    // Spray=0 — otherwise all N voices begin byte-identical and sum COHERENTLY at
+                    // the attack (RMS uNorm assumes decorrelation → up to +8.8 dB peak at 16 voices
+                    // → clipping). Voice 0 stays clean: it drives the follower and keeps the dry
+                    // transient. count==1 is untouched (vSpray=p.spray, vSeed=seed → bit-identical).
+                    const std::uint32_t vSeed  = (N <= 1) ? seed : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1)));
+                    const float         vSpray = (N <= 1 || u == 0) ? p.spray : juce::jmax (p.spray, 0.04f);
+                    e.noteOn (ratio, vSpray, vSeed);
+                }
             }
             if (doNoteOn) warp.noteOnReset();
 
