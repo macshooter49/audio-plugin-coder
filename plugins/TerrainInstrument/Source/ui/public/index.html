@@ -3927,6 +3927,30 @@ body {
 .samp-menu div svg { width: 13px; height: 13px; opacity: .85; flex: none; }
 .samp-menu .sepd { height: 1px; background: rgba(255,255,255,.08); margin: 4px 6px; padding: 0; }
 
+/* ── OSC QUICK-CONTROLS (Volume / Pan / Semitone) ──────────────────────────────
+   Glass sliders shown on right-click of the WAVETABLE osc (brand-new menu) AND
+   appended to the bottom of the SAMPLE menu — identical look across both. Lives
+   inside the .samp-menu glass. Marker = the envelope Depth-slider's thin white
+   line, a touch smaller, no glow (visual consistency, per Max). All selectors use
+   ≥2 classes so they win over the aggressive generic `.samp-menu div` rule above. */
+.samp-menu .oscq { display: block; padding: 5px 11px 8px; margin: 0; background: none; border-radius: 0;
+  cursor: default; letter-spacing: normal; white-space: normal; min-width: 174px; }
+.samp-menu .oscq .oq-slot { display: block; padding: 6px 7px 8px; margin: 0; gap: 0; background: none;
+  border-radius: 7px; cursor: default; transition: background .1s; }
+.samp-menu .oscq .oq-slot:hover { background: rgba(255,255,255,0.05); }
+.samp-menu .oscq .oq-row { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 0; margin: 0 0 8px; background: none; border-radius: 0; cursor: default; letter-spacing: .2px; white-space: nowrap; }
+.samp-menu .oscq .oq-lab { color: rgba(255,255,255,0.5); font-size: 10px; font-weight: 300; letter-spacing: .2px; }
+.samp-menu .oscq .oq-val { color: #fff; font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.samp-menu .oscq .oq-track { position: relative; display: block; height: 2px; padding: 0; margin: 0;
+  border-radius: 1px; background: rgba(255,255,255,0.16); cursor: ew-resize; transition: none; }
+.samp-menu .oscq .oq-ctr { position: absolute; display: block; left: 50%; top: -3px; width: 1px; height: 7px; padding: 0; margin: 0;
+  background: rgba(255,255,255,0.28); border-radius: 0; transition: none; }
+.samp-menu .oscq .oq-fill { position: absolute; display: block; top: 0; left: 0; height: 2px; padding: 0; margin: 0;
+  border-radius: 1px; background: var(--purple-500); transition: none; }
+.samp-menu .oscq .oq-mark { position: absolute; display: block; top: 50%; width: 2px; height: 9px; padding: 0; margin: 0;
+  border-radius: 1px; background: #fff; transform: translate(-50%,-50%); cursor: ew-resize; transition: none; }
+
 /* ── CROSS ── */
 #syn-panel .cross {
   background: transparent; border: none;
@@ -9577,8 +9601,12 @@ setTimeout(function wireSynControls () {
           '<div data-a="fade">' + ic ('<path d="M2 13 L14 3 M2 13 H14"/>') + 'Fade in / out</div>' +
           '<div class="sepd"></div>' +
           '<div data-a="reset">' + ic ('<path d="M3 8 a5 5 0 1 0 1.6-3.7 M3 3 V5 H5"/>') + 'Reset region</div>';
+        // Quick-controls (Volume / Pan / Semitone) at the BOTTOM — same glass component the
+        // wavetable osc uses, so the two right-click menus look identical.
+        try { var qsep = document.createElement ('div'); qsep.className = 'sepd'; m.appendChild (qsep);
+              m.appendChild (buildOscQuick (S.view ? S.view.dataset.osc : 'a')); } catch (eq) {}
         m.style.left = Math.min (e.clientX, window.innerWidth - 178) + 'px';
-        m.style.top = Math.min (e.clientY, window.innerHeight - 230) + 'px';
+        m.style.top = Math.max (8, Math.min (e.clientY, window.innerHeight - 372)) + 'px';
         m.classList.add ('open');
         m.querySelectorAll ('div[data-a]').forEach (function (d) {
           d.onclick = function () {
@@ -9592,6 +9620,91 @@ setTimeout(function wireSynControls () {
             S.place (); sampMenuEl.classList.remove ('open');
           };
         });
+      }
+
+      // ── OSC QUICK-CONTROLS: Volume / Pan / Semitone glass sliders (shared) ──────
+      // Bound to the SAME APVTS params as the back-panel knobs (SYN_OSC_x_LEVEL/PAN/SEMI),
+      // so writing here moves the back knob automatically (it owns a valueChangedEvent
+      // listener). Reads the current value on open. Intentionally NOT a mod-drop target —
+      // the back-panel knobs stay the modulation surface. Same component used by the
+      // wavetable right-click (new) and appended to the bottom of the Sample menu.
+      var OSCQ_ROWS = [
+        { suf: 'LEVEL', lab: 'Volume',   bip: false },
+        { suf: 'PAN',   lab: 'Pan',      bip: true  },
+        { suf: 'SEMI',  lab: 'Semitone', bip: true  }
+      ];
+      function oscqDefault (pid) {                       // normalised dblclick-reset = real engine default
+        if (/_LEVEL$/.test (pid)) { if (/_A_/.test (pid)) return 0.7; if (/_B_/.test (pid)) return 0.5; return 0.0; }  // C/D start silent (spec)
+        return 0.5;                                      // PAN + SEMI centre
+      }
+      function oscqReadout (suf, n) {                    // matches fmtSynReadout exactly
+        n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
+        if (suf === 'LEVEL') return Math.round (n * 100) + '%';
+        if (suf === 'PAN') { var v = Math.round (-100 + n * 200); return v === 0 ? 'C' : (v < 0 ? 'L' + (-v) : 'R' + v); }
+        var s = Math.round (-12 + n * 24); return (s > 0 ? '+' : '') + s + ' st';   // SEMI
+      }
+      function buildOscQuick (oscLetter) {
+        var L = (oscLetter || 'a').toUpperCase ();
+        var wrap = document.createElement ('div'); wrap.className = 'oscq';
+        OSCQ_ROWS.forEach (function (R) {
+          var pid = 'SYN_OSC_' + L + '_' + R.suf;
+          var ss = null; try { ss = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (pid) : null; } catch (e) {}
+          var slot = document.createElement ('div'); slot.className = 'oq-slot';
+          var row = document.createElement ('div'); row.className = 'oq-row';
+          var lab = document.createElement ('span'); lab.className = 'oq-lab'; lab.textContent = R.lab;
+          var val = document.createElement ('span'); val.className = 'oq-val';
+          row.appendChild (lab); row.appendChild (val);
+          var track = document.createElement ('div'); track.className = 'oq-track';
+          if (R.bip) { var ctr = document.createElement ('div'); ctr.className = 'oq-ctr'; track.appendChild (ctr); }
+          var fill = document.createElement ('div'); fill.className = 'oq-fill';
+          var mark = document.createElement ('div'); mark.className = 'oq-mark';
+          track.appendChild (fill); track.appendChild (mark);
+          slot.appendChild (row); slot.appendChild (track);
+          wrap.appendChild (slot);
+
+          function curN () { try { return ss ? ss.getNormalisedValue () : oscqDefault (pid); } catch (e) { return oscqDefault (pid); } }
+          function render (n) {
+            var pct = n * 100;
+            mark.style.left = pct + '%';
+            if (R.bip) { if (n >= 0.5) { fill.style.left = '50%'; fill.style.width = (pct - 50) + '%'; }
+                         else          { fill.style.left = pct + '%'; fill.style.width = (50 - pct) + '%'; } }
+            else { fill.style.left = '0%'; fill.style.width = pct + '%'; }
+            val.textContent = oscqReadout (R.suf, n);
+          }
+          render (curN ());
+          function fromX (cx) {
+            var r = track.getBoundingClientRect ();
+            var t = Math.max (0, Math.min (1, (cx - r.left) / Math.max (1, r.width)));
+            var n = (R.suf === 'SEMI') ? Math.round (t * 24) / 24 : t;   // SEMI snaps to whole semitones
+            if (ss) { try { ss.setNormalisedValue (n); } catch (e) {} }
+            render (n);
+          }
+          var drag = false;
+          track.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); drag = true; try { track.setPointerCapture (ev.pointerId); } catch (e) {} fromX (ev.clientX); });
+          track.addEventListener ('pointermove', function (ev) { if (drag) { ev.preventDefault (); fromX (ev.clientX); } });
+          function up (ev) { if (drag) { drag = false; try { track.releasePointerCapture (ev.pointerId); } catch (e) {} } }
+          track.addEventListener ('pointerup', up); track.addEventListener ('pointercancel', up);
+          track.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation (); var d = oscqDefault (pid); if (ss) { try { ss.setNormalisedValue (d); } catch (e) {} } render (d); });
+        });
+        return wrap;
+      }
+      // Wavetable osc has no right-click today — give it its own body-level glass popup
+      // (same .samp-menu glass as the sample menu, so they look identical).
+      var oscQuickEl = null;
+      function buildOscQuickMenu () {
+        if (oscQuickEl) return oscQuickEl;
+        var m = document.createElement ('div'); m.className = 'samp-menu oscq-pop';
+        document.body.appendChild (m); oscQuickEl = m;
+        document.addEventListener ('pointerdown', function (e) { if (oscQuickEl && ! oscQuickEl.contains (e.target)) oscQuickEl.classList.remove ('open'); });
+        return m;
+      }
+      function openOscQuick (e, oscLetter) {
+        var m = buildOscQuickMenu ();
+        m.innerHTML = '';
+        m.appendChild (buildOscQuick (oscLetter));
+        m.style.left = Math.min (e.clientX, window.innerWidth - 200) + 'px';
+        m.style.top  = Math.max (8, Math.min (e.clientY, window.innerHeight - 150)) + 'px';
+        m.classList.add ('open');
       }
 
       function wireSample (view) {
@@ -9773,6 +9886,17 @@ setTimeout(function wireSynControls () {
           if (g) { var p = g (osc); if (p && p.then) p.then (function (j) { if (j && window.onOscSampleLoaded) window.onOscSampleLoaded (osc, j); }); } } catch (_) {}
       };
       document.querySelectorAll ('#syn-panel .sample-view').forEach (wireSample);
+
+      // WAVETABLE osc right-click → glass Volume / Pan / Semitone (this view has no menu
+      // otherwise). Derive the osc letter from the display's own front knobs (SYN_OSC_<L>_…).
+      document.querySelectorAll ('#syn-panel .osc-display').forEach (function (disp) {
+        var fo = disp.closest ('.front-only');
+        var k  = fo ? fo.querySelector ('.knob[data-syn^="SYN_OSC_"]') : null;
+        var mm = k ? String (k.dataset.syn).match (/SYN_OSC_([A-D])_/) : null;
+        var L  = mm ? mm[1].toLowerCase () : null;
+        if (! L) return;
+        disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); e.stopPropagation (); openOscQuick (e, L); });
+      });
 
       // DROP-ZONE-WALL — the front multi-sampler loads ONLY from its own bounded zone (the
       // #hero display), never from a whole-window OS drop. Same pattern as the oscillator
