@@ -9332,7 +9332,11 @@ function applySynPanelOpen(open) {
   if (!synBtn || !synPanel) return;
   synBtn.classList.toggle('active', open);
   synPanel.classList.toggle('hidden', !open);
-  if (juceMode && setSynthViewFn) { try { setSynthViewFn(open ? 1 : 0); } catch (e) {} }
+  // PEROSC-DRAGGUARD-RELIABLE — assert the synth-view flag through a DIRECT native-function
+  // lookup (the same pattern loadSampleForOsc uses), not a pre-obtained handle gated on
+  // juceMode. A null/stale handle or unset juceMode was leaving synthPageActive_ false, so
+  // the OS-level filesDropped still loaded the front-panel layer on a synth-oscillator drop.
+  try { var _ssv = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('setSynthView') : null; if (_ssv) _ssv (open ? 1 : 0); } catch (e) {}
 }
 function setActivePanel(which) {
   // which = 'syn' | 'eq' | 'dly' | 'mod' | null
@@ -9710,7 +9714,13 @@ setTimeout(function wireSynControls () {
         // Drop affordance — visual only; the actual file load is the C++ handoff.
         // stopPropagation: keep an osc-waveform drop from bubbling to the front
         // sampler's document-level drop handler (which would also load a sampler pad).
-        ['dragenter', 'dragover'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); e.stopPropagation (); disp.classList.add ('dragover'); }); });
+        ['dragenter', 'dragover'].forEach (function (t) { disp.addEventListener (t, function (e) { e.preventDefault (); e.stopPropagation (); disp.classList.add ('dragover');
+          // PEROSC-DRAGGUARD-RELIABLE — while a file is dragged over an oscillator slot, assert
+          // the synth-view flag directly so the OS-level filesDropped is guaranteed to skip the
+          // front-panel load on the drop that follows, even if applySynPanelOpen never ran.
+          // dragover fires repeatedly during the hover, so the flag is set well before the drop;
+          // it is cleared again when the synth panel closes (applySynPanelOpen -> setSynthView 0).
+          try { var _g = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('setSynthView') : null; if (_g) _g (1); } catch (_) {} }); });
         disp.addEventListener ('dragleave', function (e) { e.preventDefault (); e.stopPropagation (); disp.classList.remove ('dragover'); });
         disp.addEventListener ('drop', function (e) {
           e.preventDefault (); e.stopPropagation (); disp.classList.remove ('dragover');
