@@ -2307,6 +2307,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     for (auto& l : flowLfo_) l.prepare (sampleRate);
     chop.prepare   (sampleRate, 4.0);   // FLOW · CHOP capture ring (4 s) — allocation happens here only
     glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
+    prevFlowMode_ = 0;                   // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
     flowArp.reset();
     if (modStateJson.isNotEmpty())
@@ -3315,6 +3316,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
     const int flowMode = (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load();
+
+    // FLOW · GLITCH (mode 3): reset the engine on the ENABLE EDGE so its step clock re-anchors to
+    // the live transport ppq instead of resuming from a stale free-run phase (fired late / "whenever",
+    // worse the longer the editor was closed). reset() clears haveClock_/nextStep_/freePpq_ and the
+    // next process() re-anchors to hostPpq. Default-identical: only fires when GLITCH is (re)selected.
+    if (flowMode == 3 && prevFlowMode_ != 3)
+        glitch.reset();
+    prevFlowMode_ = flowMode;
 
     // EFFECTIVE FLOW knobs = base param + Σ(global-LFO × depth), clamp once. Shared by ARP + SEQ —
     // SEQ reuses the same FLOW_ARP_* params (per-mode memory lives in the JS).  (proven: 35/35)

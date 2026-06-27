@@ -696,6 +696,7 @@ private:
     wc::FlowArp                 flowArp;                    // FLOW · ARP engine (one global instance)
     wc::FlowChop                chop;                       // FLOW · CHOP engine (mode 2) — audio insert at end of processBlock
     wc::FlowGlitch              glitch;                     // FLOW · GLITCH engine (mode 3) — audio insert at end of processBlock
+    int                         prevFlowMode_ = 0;          // FLOW · prev-block mode (enable-edge detection; resets glitch clock on (re)enable)
     wc::FlowDrift               drift;                      // FLOW · DRIFT engine (mode 4) — generative mod source
     float                       driftLane_[wc::kDriftLanes] {};  // per-block DRIFT lane values (mod sources; matrix routing = phase-2)
     wc::SynthLFO                flowLfo_[wc::NUM_LFOS];     // block-rate global LFO bank for FLOW-knob mod
