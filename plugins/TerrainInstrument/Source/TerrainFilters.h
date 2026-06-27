@@ -406,6 +406,11 @@ struct Acid303
         preHpZ = fbHpZ = 0.0f;
         z1 = z2 = z3 = z4 = 0.0f;
         dcOut.reset();
+        // ONSET DECLICK — the post-VCA saturator emits tanh(0.05) on sample 0 even
+        // from zero state (the +0.05 bias is the 303 squelch character). Pre-charge the
+        // DC blocker's xPrev to that value so the first-sample delta is ~0 instead of a
+        // step (the click). Steady-state DC removal is unchanged (bias is constant DC).
+        dcOut.xPrev = fastTanh (0.05f);
     }
 
     void setCoeffs (float fcHz, float res01, double fs) noexcept
