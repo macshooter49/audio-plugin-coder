@@ -9584,7 +9584,7 @@ setTimeout(function wireSynControls () {
           d.onclick = function () {
             var a = d.dataset.a, st = S.st;
             if (a === 'loop') { st.mode = st.loop ? 0 : 1; st.loop = ! st.loop; if (S.repaintHeader) S.repaintHeader (); }
-            else if (a === 'normalize') { var mx = 0, i; for (i = 0; i < S.data.length; i++) mx = Math.max (mx, Math.abs (S.data[i])); if (mx > 0) { var g = 0.98 / mx; for (i = 0; i < S.data.length; i++) S.data[i] *= g; } S.redraw (); }
+            else if (a === 'normalize') { try { var oscL = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; var nf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('normalizeOscSample') : null; if (nf && oscL) nf (oscL); /* C++ scales the real buffer + re-pushes peaks via onOscSampleLoaded → wave grows to match audio */ } catch (e) {} }
             else if (a === 'trim') { st.s = st.ls; st.e = st.le; }
             else if (a === 'fade') { st.fin = st.fin > 0 ? 0 : 0.15; st.fout = st.fout > 0 ? 0 : 0.20; }
             else if (a === 'reset') { st.s = 0; st.e = 100; st.ls = 0; st.le = 100; st.fin = 0; st.fout = 0; st.xfade = 0.12; st.mode = 1; st.loop = true; if (S.repaintHeader) S.repaintHeader (); }

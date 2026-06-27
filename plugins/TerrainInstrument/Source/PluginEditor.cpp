@@ -1966,6 +1966,64 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getCachedOscPayload (oscIdx)));
             })
+            .withNativeFunction("normalizeOscSample", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // PEROSC NORMALIZE — destructively scale this osc's sample buffer so its TRUE
+                // peak sits at a headroom target (NOT 0 dBFS — we deliberately leave room for
+                // downstream compression). Then scale the cached display peaks by the SAME gain
+                // and re-push them, so the drawn waveform grows to match what you hear (picture ==
+                // sound). Region/loop edits are untouched (setLoaded only refreshes the wave data).
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+
+                constexpr float kNormTargetPeak = 0.70f;   // ≈ -3 dBFS — "a little bigger", not slammed
+
+                auto& sb  = audioProcessor.getOscSampleBuffer (oscIdx);
+                auto  buf = sb.load();
+                if (buf == nullptr || buf->getNumSamples() <= 0)
+                { complete (juce::var ("empty")); return; }
+
+                const float peak = buf->getMagnitude (0, buf->getNumSamples());
+                if (peak <= 1.0e-6f) { complete (juce::var ("silent")); return; }
+
+                const float gain = kNormTargetPeak / peak;
+
+                // UI-thread-safe: scale a COPY and atomic-swap it in. The audio thread may still
+                // hold the old buffer via load(); store() publishes the new one without a tear.
+                auto scaled = std::make_shared<juce::AudioBuffer<float>> (*buf);
+                scaled->applyGain (gain);
+                sb.store (scaled);
+
+                // Refresh the display payload by the SAME gain (identical bucket shape, so no
+                // re-bucketing needed) and push it back through the normal load path.
+                const juce::String oscLetter (juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)));
+                auto payloadVar = juce::JSON::parse (audioProcessor.getCachedOscPayload (oscIdx));
+                if (auto* obj = payloadVar.getDynamicObject())
+                {
+                    auto scaleArr = [gain] (juce::var& arrVar)
+                    {
+                        if (auto* arr = arrVar.getArray())
+                            for (auto& v : *arr)
+                                v = juce::var (juce::jlimit (-1.0f, 1.0f, (float) v * gain));
+                    };
+                    juce::var mn = obj->getProperty ("peaksMin");
+                    juce::var mx = obj->getProperty ("peaksMax");
+                    scaleArr (mn);
+                    scaleArr (mx);
+                    obj->setProperty ("peaksMin", mn);
+                    obj->setProperty ("peaksMax", mx);
+
+                    const auto json = juce::JSON::toString (payloadVar, true /*allOnOneLine*/);
+                    audioProcessor.setCachedOscPayload (json, oscIdx);
+                    if (webView != nullptr)
+                        webView->evaluateJavascript (
+                            juce::String ("if (window.onOscSampleLoaded) window.onOscSampleLoaded('")
+                            + oscLetter + "', " + json + ");", nullptr);
+                }
+
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
