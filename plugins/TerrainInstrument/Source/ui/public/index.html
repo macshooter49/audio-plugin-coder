@@ -3879,15 +3879,12 @@ body {
 /* fades = thin LFO-style ramp lines (shift+drag a region edge to set); 100%-viewBox SVG */
 #syn-panel .samp-env { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 #syn-panel .samp-env polyline { fill: none; vector-effect: non-scaling-stroke; stroke-width: 1.3; stroke-linecap: round; }
-#syn-panel .samp-env .env-fadein, #syn-panel .samp-env .env-fadeout { stroke: #ECE8F2; opacity: .6; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
+/* Region fades = a FILLED curved wedge that IS the start/end marker (shift+drag an edge to
+   grow it). The bright top edge is the true equal-power sin() gain the DSP plays (edgeGain);
+   the dark fill is the progressively-unavailable signal — same darkening as cutting start/end. */
+#syn-panel .samp-env .env-fadein, #syn-panel .samp-env .env-fadeout { fill: rgba(8,8,18,.55); stroke: #ECE8F2; stroke-width: 1.3; vector-effect: non-scaling-stroke; stroke-linejoin: round; opacity: .85; }
 #syn-panel .samp-env .env-loopin, #syn-panel .samp-env .env-loopout { stroke: var(--purple-400); opacity: .72; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
-/* region-edge fade gray-out (Ableton clip-fade look) — bound to FADE_IN/FADE_OUT.
-   Subtle at rest (the ramp line is the persistent cue); prominent while shift-dragging. */
-#syn-panel .samp-fadefill { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; opacity: .22; transition: opacity .12s; }
-#syn-panel .samp-fadefill.in  { background: linear-gradient(90deg,  rgba(8,8,18,.42), rgba(8,8,18,0)); }
-#syn-panel .samp-fadefill.out { background: linear-gradient(270deg, rgba(8,8,18,.42), rgba(8,8,18,0)); }
-#syn-panel .sample-view.dragfade .samp-fadefill { opacity: .6; }
-#syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { opacity: 1; stroke-width: 1.6; }
+#syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { opacity: 1; stroke-width: 1.7; fill: rgba(8,8,18,.72); }
 /* drop affordance (shown on dragover / empty) */
 #syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
   font-size: 9px; letter-spacing: 1.5px; color: var(--text-muted); pointer-events: none; opacity: 0; transition: opacity .15s; }
@@ -5067,9 +5064,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <div class="samp-fadefill in"></div>
-                <div class="samp-fadefill out"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -5238,9 +5233,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <div class="samp-fadefill in"></div>
-                <div class="samp-fadefill out"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -5425,9 +5418,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <div class="samp-fadefill in"></div>
-                <div class="samp-fadefill out"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -5596,9 +5587,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <div class="samp-fadefill in"></div>
-                <div class="samp-fadefill out"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline class="env-fadein"></polyline><polyline class="env-fadeout"></polyline><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -9735,7 +9724,6 @@ setTimeout(function wireSynControls () {
         var ph = view.querySelector ('.samp-ph');
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
-        var fadeFillIn = view.querySelector ('.samp-fadefill.in'), fadeFillOut = view.querySelector ('.samp-fadefill.out');
         var dev = view.closest ('.device.osc');
         var head = dev ? dev.querySelector ('.samp-head[data-osc="' + osc + '"]') : null;
         var data = sampSynth (2600, 7 + osc.charCodeAt (0));
@@ -9761,17 +9749,31 @@ setTimeout(function wireSynControls () {
         st.loop = (SAMP_MODES[st.mode] !== 'One-Shot');
 
         function setPts (el, pts) { if (el) el.setAttribute ('points', pts); }
+        function setPath (el, d) { if (el) el.setAttribute ('d', d); }
+        // Curved region fade = the true equal-power sin() gain the DSP plays (SampleEngine
+        // edgeGain). Drawn as a FILLED wedge from the marker (gain 0, y=100) inward to (gain 1,
+        // y≈3): bright top edge = the gain envelope, dark fill = the unavailable signal. The
+        // wedge is anchored AT the marker, so moving the start/end edge moves the fade with it
+        // (they are one thing). Picture == sound by construction.
+        function fadeWedge (mark, inner) {
+          var N = 18, d = 'M' + mark.toFixed (2) + ',100';
+          for (var k = 1; k <= N; k++) {
+            var u = k / N, x = mark + (inner - mark) * u, y = 100 - 97 * Math.sin (u * Math.PI / 2);
+            d += ' L' + x.toFixed (2) + ',' + y.toFixed (2);
+          }
+          return d + ' L' + inner.toFixed (2) + ',0 L' + mark.toFixed (2) + ',0 Z';
+        }
         function drawEnv () {
           var RL = Math.max (0.001, st.e - st.s), LL = Math.max (0.001, st.le - st.ls);
           var fi = st.fin * RL, fo = st.fout * RL;            // fraction-of-region → buffer %
           var xf = Math.min (st.xfade * LL, LL / 2);          // fraction-of-loop → buffer %, half-cap
-          // region-edge fade gray-out fills (Ableton clip-fade) — sized to the fade length
-          if (fadeFillIn)  { fadeFillIn.style.left = st.s + '%'; fadeFillIn.style.width = fi + '%'; fadeFillIn.style.display = fi > 0.3 ? 'block' : 'none'; }
-          if (fadeFillOut) { fadeFillOut.style.left = (st.e - fo) + '%'; fadeFillOut.style.width = fo + '%'; fadeFillOut.style.display = fo > 0.3 ? 'block' : 'none'; }
-          // Region fade ramps cap at y=5 (a touch below the top edge) so the slit stays VISIBLE
-          // at high fade instead of clipping into the top — a clean horizontal slit, never off-screen.
-          setPts (envFadeIn,  fi > 0.3 ? (st.s + ',100 ' + (st.s + fi) + ',5') : '');
-          setPts (envFadeOut, fo > 0.3 ? ((st.e - fo) + ',5 ' + st.e + ',100') : '');
+          // FADE-IN: curve from the start marker inward. Clamp to the loop start when a real
+          // lead-in exists (ls > s) — past the loop the playhead is caught and the fade is moot.
+          if (fi > 0.3) { var finX = st.s + fi; if (st.loop && st.ls > st.s + 0.5) finX = Math.min (finX, st.ls); setPath (envFadeIn, fadeWedge (st.s, finX)); }
+          else setPath (envFadeIn, '');
+          // FADE-OUT: curve from the end marker inward. Clamp to the loop end (tail-out only).
+          if (fo > 0.3) { var foutX = st.e - fo; if (st.loop && st.le < st.e - 0.5) foutX = Math.max (foutX, st.le); setPath (envFadeOut, fadeWedge (st.e, foutX)); }
+          else setPath (envFadeOut, '');
           if (st.loop && xf > 0.3) {
             setPts (envLoopIn,  st.ls + ',100 ' + (st.ls + xf) + ',0');
             setPts (envLoopOut, (st.le - xf) + ',0 ' + st.le + ',100');
