@@ -391,6 +391,8 @@ namespace tw
             int   formantMode = 0;   // 0=Normal 1=Inverted 2=Cross-Formant 3=Spectral-Tilt
             float fadeIn = 0.f, fadeOut = 0.f;
             float air = 0.f;   // AIR exciter amount 0..1
+            float warp = 0.f;  // sample warp shaper amount 0..1
+            int   warpMode = 0;  // 0=Off 1=Sine Shaper 2=Rectify 3=Fold 4=Drive 5=Crush
         };
         void setSampleParamsA (const SampleEngineParams& p) noexcept { sampleParamsA_ = p; }
         void setSampleParamsB (const SampleEngineParams& p) noexcept { sampleParamsB_ = p; }
@@ -1019,6 +1021,8 @@ namespace tw
             foldStateD_.fill ({});
             sampAirLpAL_ = sampAirLpAR_ = sampAirLpBL_ = sampAirLpBR_ = 0.f;
             sampAirLpCL_ = sampAirLpCR_ = sampAirLpDL_ = sampAirLpDR_ = 0.f;
+            sampWarpFoldAL_ = sampWarpFoldAR_ = sampWarpFoldBL_ = sampWarpFoldBR_ = {};   // SAMPLE WARP fold history reset
+            sampWarpFoldCL_ = sampWarpFoldCR_ = sampWarpFoldDL_ = sampWarpFoldDR_ = {};
             // Envelopes — fresh note starts from 0 (reset), then gate on. The legato
             // retarget path returns earlier (envelopes deliberately untouched), so this
             // only runs for true note starts. All five DAHDSR envelopes trigger together.
@@ -1460,6 +1464,22 @@ namespace tw
                         sampAirLpAR_ += airHpCoef_ * (sA_R - sampAirLpAR_); const float hpR = sA_R - sampAirLpAR_;
                         sA_R += airA * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
+                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                    const float warpA = sampleParamsA_.warp;
+                    if (warpA > 0.001f) {
+                        switch (sampleParamsA_.warpMode) {
+                            case 1: sA_L = applyAmpWarp (10, warpA, sA_L);  sA_R = applyAmpWarp (10, warpA, sA_R); break;   // Sine Shaper
+                            case 2: sA_L = applyAmpWarp (9,  warpA, sA_L);  sA_R = applyAmpWarp (9,  warpA, sA_R); break;   // Rectify
+                            case 3: sA_L = applyFoldADAA (sA_L, 0, warpA, sampWarpFoldAL_); sA_R = applyFoldADAA (sA_R, 0, warpA, sampWarpFoldAR_); break;   // Fold
+                            case 4: { const float d = 1.0f + warpA * 9.0f;
+                                      sA_L = sA_L * (1.0f - warpA) + std::tanh (sA_L * d) * warpA;
+                                      sA_R = sA_R * (1.0f - warpA) + std::tanh (sA_R * d) * warpA; } break;                 // Drive
+                            case 5: { const float L = juce::jmax (4.0f, 64.0f - (warpA * warpA) * 60.0f);
+                                      sA_L = sA_L * (1.0f - warpA) + (std::round (sA_L * L) / L) * warpA;
+                                      sA_R = sA_R * (1.0f - warpA) + (std::round (sA_R * L) / L) * warpA; } break;          // Crush
+                            default: break;   // Off
+                        }
+                    }
                 }
                 if (! spectralBypassA_)
                 {
@@ -1673,6 +1693,22 @@ namespace tw
                         sampAirLpBR_ += airHpCoef_ * (sB_R - sampAirLpBR_); const float hpR = sB_R - sampAirLpBR_;
                         sB_R += airB * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
+                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                    const float warpB = sampleParamsB_.warp;
+                    if (warpB > 0.001f) {
+                        switch (sampleParamsB_.warpMode) {
+                            case 1: sB_L = applyAmpWarp (10, warpB, sB_L);  sB_R = applyAmpWarp (10, warpB, sB_R); break;   // Sine Shaper
+                            case 2: sB_L = applyAmpWarp (9,  warpB, sB_L);  sB_R = applyAmpWarp (9,  warpB, sB_R); break;   // Rectify
+                            case 3: sB_L = applyFoldADAA (sB_L, 0, warpB, sampWarpFoldBL_); sB_R = applyFoldADAA (sB_R, 0, warpB, sampWarpFoldBR_); break;   // Fold
+                            case 4: { const float d = 1.0f + warpB * 9.0f;
+                                      sB_L = sB_L * (1.0f - warpB) + std::tanh (sB_L * d) * warpB;
+                                      sB_R = sB_R * (1.0f - warpB) + std::tanh (sB_R * d) * warpB; } break;                 // Drive
+                            case 5: { const float L = juce::jmax (4.0f, 64.0f - (warpB * warpB) * 60.0f);
+                                      sB_L = sB_L * (1.0f - warpB) + (std::round (sB_L * L) / L) * warpB;
+                                      sB_R = sB_R * (1.0f - warpB) + (std::round (sB_R * L) / L) * warpB; } break;          // Crush
+                            default: break;   // Off
+                        }
+                    }
                 }
                 if (! spectralBypassB_)
                 {
@@ -1883,6 +1919,22 @@ namespace tw
                         sampAirLpCR_ += airHpCoef_ * (sC_R - sampAirLpCR_); const float hpR = sC_R - sampAirLpCR_;
                         sC_R += airC * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
+                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                    const float warpC = sampleParamsC_.warp;
+                    if (warpC > 0.001f) {
+                        switch (sampleParamsC_.warpMode) {
+                            case 1: sC_L = applyAmpWarp (10, warpC, sC_L);  sC_R = applyAmpWarp (10, warpC, sC_R); break;   // Sine Shaper
+                            case 2: sC_L = applyAmpWarp (9,  warpC, sC_L);  sC_R = applyAmpWarp (9,  warpC, sC_R); break;   // Rectify
+                            case 3: sC_L = applyFoldADAA (sC_L, 0, warpC, sampWarpFoldCL_); sC_R = applyFoldADAA (sC_R, 0, warpC, sampWarpFoldCR_); break;   // Fold
+                            case 4: { const float d = 1.0f + warpC * 9.0f;
+                                      sC_L = sC_L * (1.0f - warpC) + std::tanh (sC_L * d) * warpC;
+                                      sC_R = sC_R * (1.0f - warpC) + std::tanh (sC_R * d) * warpC; } break;                 // Drive
+                            case 5: { const float L = juce::jmax (4.0f, 64.0f - (warpC * warpC) * 60.0f);
+                                      sC_L = sC_L * (1.0f - warpC) + (std::round (sC_L * L) / L) * warpC;
+                                      sC_R = sC_R * (1.0f - warpC) + (std::round (sC_R * L) / L) * warpC; } break;          // Crush
+                            default: break;   // Off
+                        }
+                    }
                 }
                 if (! spectralBypassC_)
                 {
@@ -2092,6 +2144,22 @@ namespace tw
                         sD_L += airD * 2.0f * (std::tanh (hpL * drv) - hpL);
                         sampAirLpDR_ += airHpCoef_ * (sD_R - sampAirLpDR_); const float hpR = sD_R - sampAirLpDR_;
                         sD_R += airD * 2.0f * (std::tanh (hpR * drv) - hpR);
+                    }
+                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                    const float warpD = sampleParamsD_.warp;
+                    if (warpD > 0.001f) {
+                        switch (sampleParamsD_.warpMode) {
+                            case 1: sD_L = applyAmpWarp (10, warpD, sD_L);  sD_R = applyAmpWarp (10, warpD, sD_R); break;   // Sine Shaper
+                            case 2: sD_L = applyAmpWarp (9,  warpD, sD_L);  sD_R = applyAmpWarp (9,  warpD, sD_R); break;   // Rectify
+                            case 3: sD_L = applyFoldADAA (sD_L, 0, warpD, sampWarpFoldDL_); sD_R = applyFoldADAA (sD_R, 0, warpD, sampWarpFoldDR_); break;   // Fold
+                            case 4: { const float d = 1.0f + warpD * 9.0f;
+                                      sD_L = sD_L * (1.0f - warpD) + std::tanh (sD_L * d) * warpD;
+                                      sD_R = sD_R * (1.0f - warpD) + std::tanh (sD_R * d) * warpD; } break;                 // Drive
+                            case 5: { const float L = juce::jmax (4.0f, 64.0f - (warpD * warpD) * 60.0f);
+                                      sD_L = sD_L * (1.0f - warpD) + (std::round (sD_L * L) / L) * warpD;
+                                      sD_R = sD_R * (1.0f - warpD) + (std::round (sD_R * L) / L) * warpD; } break;          // Crush
+                            default: break;   // Off
+                        }
                     }
                 }
                 if (! spectralBypassD_)
@@ -2866,6 +2934,9 @@ namespace tw
         float sampAirLpAL_ = 0.f, sampAirLpAR_ = 0.f, sampAirLpBL_ = 0.f, sampAirLpBR_ = 0.f,
               sampAirLpCL_ = 0.f, sampAirLpCR_ = 0.f, sampAirLpDL_ = 0.f, sampAirLpDR_ = 0.f;
         float airHpCoef_ = 0.37f;
+        // SAMPLE WARP shaper — per-channel ADAA fold history (Fold mode only).
+        FoldState sampWarpFoldAL_, sampWarpFoldAR_, sampWarpFoldBL_, sampWarpFoldBR_,
+                  sampWarpFoldCL_, sampWarpFoldCR_, sampWarpFoldDL_, sampWarpFoldDR_;
 
         void renderSampleOsc (std::array<tw::SampleEngine, kMaxUnison>& engs, tw::WarpProcessor& warp,
                               const SampleEngineParams& p, bool isSamp,

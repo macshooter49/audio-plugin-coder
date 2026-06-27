@@ -5112,7 +5112,7 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
                   <div class="sel-value warp2-mode-value" id="osc-a-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-a-warp2-val" data-warp2-mode="SYN_OSC_A_WARP2_MODE" data-warp2-amt="SYN_OSC_A_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
@@ -5283,7 +5283,7 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
                   <div class="sel-value warp2-mode-value" id="osc-b-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-b-warp2-val" data-warp2-mode="SYN_OSC_B_WARP2_MODE" data-warp2-amt="SYN_OSC_B_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
@@ -5470,7 +5470,7 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
                   <div class="sel-value warp2-mode-value" id="osc-c-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-c-warp2-val" data-warp2-mode="SYN_OSC_C_WARP2_MODE" data-warp2-amt="SYN_OSC_C_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
@@ -5641,7 +5641,7 @@ body {
                     <option value="3">Spread</option>
                   </select>
                 </div>
-                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP. Right-click to choose the mode, drag the value for amount.">
+                <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
                   <div class="sel-value warp2-mode-value" id="osc-d-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-d-warp2-val" data-warp2-mode="SYN_OSC_D_WARP2_MODE" data-warp2-amt="SYN_OSC_D_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
@@ -9522,7 +9522,7 @@ setTimeout(function wireSynControls () {
           // Engine-conditional front: Sample engine (index 1) swaps the wavetable
           // front for the .sample-view. Redraw its canvas when it becomes visible
           // (a hidden canvas has zero size, so the initial draw is a no-op).
-          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); dev.classList.toggle ('engine-sample', isSamp); if (isSamp && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); } } catch (e) {} }
+          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); dev.classList.toggle ('engine-sample', isSamp); if (isSamp && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
         function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 5); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {} }
         paint ();
         sel.addEventListener ('change', pick);
@@ -10943,37 +10943,66 @@ setTimeout(function wireSynControls () {
       } catch (e) { console.warn('[UNI] initUnisonPills failed', e); }
     })();
 
-    // ── WARP 2 pills — RIGHT-CLICK = mode menu (11 modes), LEFT-DRAG value = amount %.
+    // ── WARP 2 pills — RIGHT-CLICK = mode menu, LEFT-DRAG value = amount %.
+    //    DUAL-PURPOSE / ENGINE-CONDITIONAL: when the osc is in the SAMPLE engine
+    //    (.device.osc.engine-sample) the pill drives the per-osc SAMPLE warp
+    //    shaper (SYN_OSC_x_SAMPLE_WARPMODE / _WARP, 6 sample modes); otherwise it
+    //    keeps the wavetable WARP 2 behavior (SYN_OSC_x_WARP2_MODE / _AMT, 11 modes).
     //    Mirrors the UNISON pill pattern; reuses the front-panel syn-ctx-menu. ──
     (function initWarp2Pills() {
       try {
-        // Same list as the front-panel WARP knob menu (the layout's StringArray).
+        // Wavetable WARP 2 list (the layout's StringArray) + the SAMPLE warp list.
         const MODES = (typeof WARP_MODES !== 'undefined' && WARP_MODES && WARP_MODES.length === 11)
                         ? WARP_MODES
                         : ['NONE','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
+        const SAMPLE_MODES = ['Off','Sine Shaper','Rectify','Fold','Drive','Crush'];
+        const pillRefreshers = [];
         document.querySelectorAll('#syn-panel .warp2-pill').forEach(function(pill) {
           try {
             const valEl  = pill.querySelector('.warp2-val');
             const numEl  = valEl ? valEl.querySelector('b') : null;
             const modeEl = pill.querySelector('.warp2-mode-value');
             if (!valEl || !numEl || !modeEl || !window.Juce || !window.Juce.getSliderState) return;
-            let modeState = null, amtState = null;
-            try { modeState = window.Juce.getSliderState(valEl.dataset.warp2Mode); } catch (e) {}
-            try { amtState  = window.Juce.getSliderState(valEl.dataset.warp2Amt);  } catch (e) {}
-            if (!modeState || !amtState) return;
-            const modeIdx = function() {
-              try { return Math.round((modeState.getNormalisedValue ? modeState.getNormalisedValue() : 0) * (MODES.length - 1)); }
+            // Wavetable WARP 2 states (existing behavior).
+            let wtModeState = null, wtAmtState = null;
+            try { wtModeState = window.Juce.getSliderState(valEl.dataset.warp2Mode); } catch (e) {}
+            try { wtAmtState  = window.Juce.getSliderState(valEl.dataset.warp2Amt);  } catch (e) {}
+            if (!wtModeState || !wtAmtState) return;
+            // SAMPLE warp states — derive the osc letter from SYN_OSC_<X>_WARP2_MODE.
+            let smModeState = null, smAmtState = null;
+            const oscLetter = (function() {
+              try { const m = (valEl.dataset.warp2Mode || '').match(/SYN_OSC_([A-D])_/); return m ? m[1] : null; } catch (e) { return null; }
+            })();
+            if (oscLetter) {
+              try { smModeState = window.Juce.getSliderState('SYN_OSC_' + oscLetter + '_SAMPLE_WARPMODE'); } catch (e) {}
+              try { smAmtState  = window.Juce.getSliderState('SYN_OSC_' + oscLetter + '_SAMPLE_WARP'); } catch (e) {}
+            }
+            // Is this osc currently in the SAMPLE engine? (the back panel is shared.)
+            const isSample = function() {
+              try { const dev = pill.closest('.device.osc'); return !!(dev && dev.classList.contains('engine-sample') && smModeState && smAmtState); }
+              catch (e) { return false; }
+            };
+            // Active context — choose the param set + mode list per engine.
+            const ctx = function() {
+              return isSample()
+                ? { modeState: smModeState, amtState: smAmtState, modes: SAMPLE_MODES, header: 'SAMPLE WARP' }
+                : { modeState: wtModeState, amtState: wtAmtState, modes: MODES,        header: 'WARP 2' };
+            };
+            const modeIdxOf = function(c) {
+              try { return Math.round((c.modeState.getNormalisedValue ? c.modeState.getNormalisedValue() : 0) * (c.modes.length - 1)); }
               catch (e) { return 0; }
             };
             const refresh = function() {
               try {
-                const m = modeIdx();
-                modeEl.textContent = MODES[m] || 'NONE';
-                numEl.textContent  = Math.round((amtState.getNormalisedValue ? amtState.getNormalisedValue() : 0) * 100);
+                const c = ctx();
+                const m = modeIdxOf(c);
+                modeEl.textContent = c.modes[m] || c.modes[0];
+                numEl.textContent  = Math.round((c.amtState.getNormalisedValue ? c.amtState.getNormalisedValue() : 0) * 100);
                 pill.classList.toggle('act', m !== 0);
               } catch (e) {}
             };
-            [modeState, amtState].forEach(function(st) {
+            pillRefreshers.push(refresh);
+            [wtModeState, wtAmtState, smModeState, smAmtState].forEach(function(st) {
               if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
                 st.valueChangedEvent.addListener(refresh);
             });
@@ -10981,28 +11010,30 @@ setTimeout(function wireSynControls () {
             pill.addEventListener('contextmenu', function(ev) {
               ev.preventDefault(); ev.stopPropagation();
               if (!window.__synShowMenu) return;
-              const cur = modeIdx();
-              const items = MODES.map(function(name, i) {
+              const c = ctx();
+              const cur = modeIdxOf(c);
+              const items = c.modes.map(function(name, i) {
                 return { label: name, isChecked: (i === cur),
-                         onPick: function() { try { modeState.setNormalisedValue(i / (MODES.length - 1)); } catch (e) {} refresh(); } };
+                         onPick: function() { try { c.modeState.setNormalisedValue(i / (c.modes.length - 1)); } catch (e) {} refresh(); } };
               });
-              window.__synShowMenu('WARP 2', items, ev.clientX, ev.clientY);
+              window.__synShowMenu(c.header, items, ev.clientX, ev.clientY);
             });
-            // left-drag the value -> amount only
-            let startY = 0, startN = 0, drag = false;
+            // left-drag the value -> amount only (of whichever engine is active)
+            let startY = 0, startN = 0, drag = false, dragAmt = null;
             const onMove = function(ev) {
-              if (!drag) return;
+              if (!drag || !dragAmt) return;
               const dy = startY - ev.clientY;
               const nN = Math.max(0, Math.min(1, startN + dy / 150));
-              try { amtState.setNormalisedValue(nN); } catch (e) {}
+              try { dragAmt.setNormalisedValue(nN); } catch (e) {}
               refresh();
             };
-            const onUp = function() { drag = false; document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
+            const onUp = function() { drag = false; dragAmt = null; document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
             valEl.addEventListener('pointerdown', function(ev) {
               if (ev.button !== 0) return;   // right-click is the menu, never a drag
               try {
+                dragAmt = ctx().amtState;
                 drag = true; startY = ev.clientY;
-                startN = amtState.getNormalisedValue ? amtState.getNormalisedValue() : 0;
+                startN = dragAmt.getNormalisedValue ? dragAmt.getNormalisedValue() : 0;
                 if (valEl.setPointerCapture) valEl.setPointerCapture(ev.pointerId);
                 document.addEventListener('pointermove', onMove);
                 document.addEventListener('pointerup', onUp);
@@ -11012,6 +11043,8 @@ setTimeout(function wireSynControls () {
             refresh();
           } catch (perPill) { console.warn('[WARP2] pill init failed', perPill); }
         });
+        // Engine toggle re-paints every pill so the SAMPLE/wavetable label + amount flip.
+        window.__terrainWarp2Refresh = function() { pillRefreshers.forEach(function(fn) { try { fn(); } catch (e) {} }); };
       } catch (e) { console.warn('[WARP2] initWarp2Pills failed', e); }
     })();
 

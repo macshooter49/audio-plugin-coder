@@ -287,6 +287,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscASampleSprayRelay)
             .withOptionsFrom(synOscASampleXfadeRelay)
             .withOptionsFrom(synOscASampleAirRelay)
+            .withOptionsFrom(synOscASampleWarpRelay)
+            .withOptionsFrom(synOscASampleWarpModeRelay)
             .withOptionsFrom(synOscASampleStartRelay)
             .withOptionsFrom(synOscASampleEndRelay)
             .withOptionsFrom(synOscASampleLoopStartRelay)
@@ -303,6 +305,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBSampleSprayRelay)
             .withOptionsFrom(synOscBSampleXfadeRelay)
             .withOptionsFrom(synOscBSampleAirRelay)
+            .withOptionsFrom(synOscBSampleWarpRelay)
+            .withOptionsFrom(synOscBSampleWarpModeRelay)
             .withOptionsFrom(synOscBSampleStartRelay)
             .withOptionsFrom(synOscBSampleEndRelay)
             .withOptionsFrom(synOscBSampleLoopStartRelay)
@@ -319,6 +323,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscCSampleSprayRelay)
             .withOptionsFrom(synOscCSampleXfadeRelay)
             .withOptionsFrom(synOscCSampleAirRelay)
+            .withOptionsFrom(synOscCSampleWarpRelay)
+            .withOptionsFrom(synOscCSampleWarpModeRelay)
             .withOptionsFrom(synOscCSampleStartRelay)
             .withOptionsFrom(synOscCSampleEndRelay)
             .withOptionsFrom(synOscCSampleLoopStartRelay)
@@ -335,6 +341,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDSampleSprayRelay)
             .withOptionsFrom(synOscDSampleXfadeRelay)
             .withOptionsFrom(synOscDSampleAirRelay)
+            .withOptionsFrom(synOscDSampleWarpRelay)
+            .withOptionsFrom(synOscDSampleWarpModeRelay)
             .withOptionsFrom(synOscDSampleStartRelay)
             .withOptionsFrom(synOscDSampleEndRelay)
             .withOptionsFrom(synOscDSampleLoopStartRelay)
@@ -2132,6 +2140,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscASampleSprayAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY, synOscASampleSprayRelay);
         mkAtt(synOscASampleXfadeAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_XFADE, synOscASampleXfadeRelay);
         mkAtt(synOscASampleAirAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_AIR, synOscASampleAirRelay);
+        mkAtt(synOscASampleWarpAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_WARP, synOscASampleWarpRelay);
+        mkAtt(synOscASampleWarpModeAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_WARPMODE, synOscASampleWarpModeRelay);
         mkAtt(synOscASampleStartAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_START, synOscASampleStartRelay);
         mkAtt(synOscASampleEndAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_END, synOscASampleEndRelay);
         mkAtt(synOscASampleLoopStartAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START, synOscASampleLoopStartRelay);
@@ -2148,6 +2158,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscBSampleSprayAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY, synOscBSampleSprayRelay);
         mkAtt(synOscBSampleXfadeAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_XFADE, synOscBSampleXfadeRelay);
         mkAtt(synOscBSampleAirAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_AIR, synOscBSampleAirRelay);
+        mkAtt(synOscBSampleWarpAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_WARP, synOscBSampleWarpRelay);
+        mkAtt(synOscBSampleWarpModeAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_WARPMODE, synOscBSampleWarpModeRelay);
         mkAtt(synOscBSampleStartAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_START, synOscBSampleStartRelay);
         mkAtt(synOscBSampleEndAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_END, synOscBSampleEndRelay);
         mkAtt(synOscBSampleLoopStartAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START, synOscBSampleLoopStartRelay);
@@ -2164,6 +2176,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscCSampleSprayAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY, synOscCSampleSprayRelay);
         mkAtt(synOscCSampleXfadeAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_XFADE, synOscCSampleXfadeRelay);
         mkAtt(synOscCSampleAirAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_AIR, synOscCSampleAirRelay);
+        mkAtt(synOscCSampleWarpAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_WARP, synOscCSampleWarpRelay);
+        mkAtt(synOscCSampleWarpModeAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_WARPMODE, synOscCSampleWarpModeRelay);
         mkAtt(synOscCSampleStartAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_START, synOscCSampleStartRelay);
         mkAtt(synOscCSampleEndAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_END, synOscCSampleEndRelay);
         mkAtt(synOscCSampleLoopStartAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START, synOscCSampleLoopStartRelay);
@@ -2180,6 +2194,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDSampleSprayAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY, synOscDSampleSprayRelay);
         mkAtt(synOscDSampleXfadeAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_XFADE, synOscDSampleXfadeRelay);
         mkAtt(synOscDSampleAirAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_AIR, synOscDSampleAirRelay);
+        mkAtt(synOscDSampleWarpAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_WARP, synOscDSampleWarpRelay);
+        mkAtt(synOscDSampleWarpModeAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE, synOscDSampleWarpModeRelay);
         mkAtt(synOscDSampleStartAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_START, synOscDSampleStartRelay);
         mkAtt(synOscDSampleEndAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_END, synOscDSampleEndRelay);
         mkAtt(synOscDSampleLoopStartAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START, synOscDSampleLoopStartRelay);

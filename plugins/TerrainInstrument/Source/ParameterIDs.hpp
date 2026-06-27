@@ -413,6 +413,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_SAMPLE_FADE_IN[]    = "SYN_OSC_A_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_A_SAMPLE_FADE_OUT[]   = "SYN_OSC_A_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
     constexpr char SYN_OSC_A_SAMPLE_AIR[]        = "SYN_OSC_A_SAMPLE_AIR";        // float 0..1 — Chebyshev high-harmonic exciter (timbral air)
+    constexpr char SYN_OSC_A_SAMPLE_WARP[]       = "SYN_OSC_A_SAMPLE_WARP";       // float 0..1 — sample warp shaper amount
+    constexpr char SYN_OSC_A_SAMPLE_WARPMODE[]   = "SYN_OSC_A_SAMPLE_WARPMODE";   // choice 0..5 — Off/Sine Shaper/Rectify/Fold/Drive/Crush
 
     constexpr char SYN_OSC_B_SAMPLE_SCAN[]       = "SYN_OSC_B_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction
     constexpr char SYN_OSC_B_SAMPLE_STRETCH[]    = "SYN_OSC_B_SAMPLE_STRETCH";    // float 0..1 — time-stretch (Warp), pitch held
@@ -430,6 +432,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_SAMPLE_FADE_IN[]    = "SYN_OSC_B_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_B_SAMPLE_FADE_OUT[]   = "SYN_OSC_B_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
     constexpr char SYN_OSC_B_SAMPLE_AIR[]        = "SYN_OSC_B_SAMPLE_AIR";        // float 0..1 — Chebyshev high-harmonic exciter (timbral air)
+    constexpr char SYN_OSC_B_SAMPLE_WARP[]       = "SYN_OSC_B_SAMPLE_WARP";       // float 0..1 — sample warp shaper amount
+    constexpr char SYN_OSC_B_SAMPLE_WARPMODE[]   = "SYN_OSC_B_SAMPLE_WARPMODE";   // choice 0..5 — Off/Sine Shaper/Rectify/Fold/Drive/Crush
 
     constexpr char SYN_OSC_C_SAMPLE_SCAN[]       = "SYN_OSC_C_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction
     constexpr char SYN_OSC_C_SAMPLE_STRETCH[]    = "SYN_OSC_C_SAMPLE_STRETCH";    // float 0..1 — time-stretch (Warp), pitch held
@@ -447,6 +451,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_SAMPLE_FADE_IN[]    = "SYN_OSC_C_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_C_SAMPLE_FADE_OUT[]   = "SYN_OSC_C_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
     constexpr char SYN_OSC_C_SAMPLE_AIR[]        = "SYN_OSC_C_SAMPLE_AIR";        // float 0..1 — Chebyshev high-harmonic exciter (timbral air)
+    constexpr char SYN_OSC_C_SAMPLE_WARP[]       = "SYN_OSC_C_SAMPLE_WARP";       // float 0..1 — sample warp shaper amount
+    constexpr char SYN_OSC_C_SAMPLE_WARPMODE[]   = "SYN_OSC_C_SAMPLE_WARPMODE";   // choice 0..5 — Off/Sine Shaper/Rectify/Fold/Drive/Crush
 
     constexpr char SYN_OSC_D_SAMPLE_SCAN[]       = "SYN_OSC_D_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction
     constexpr char SYN_OSC_D_SAMPLE_STRETCH[]    = "SYN_OSC_D_SAMPLE_STRETCH";    // float 0..1 — time-stretch (Warp), pitch held
@@ -464,4 +470,6 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_SAMPLE_FADE_IN[]    = "SYN_OSC_D_SAMPLE_FADE_IN";    // float 0..1 — region fade in
     constexpr char SYN_OSC_D_SAMPLE_FADE_OUT[]   = "SYN_OSC_D_SAMPLE_FADE_OUT";   // float 0..1 — region fade out
     constexpr char SYN_OSC_D_SAMPLE_AIR[]        = "SYN_OSC_D_SAMPLE_AIR";        // float 0..1 — Chebyshev high-harmonic exciter (timbral air)
+    constexpr char SYN_OSC_D_SAMPLE_WARP[]       = "SYN_OSC_D_SAMPLE_WARP";       // float 0..1 — sample warp shaper amount
+    constexpr char SYN_OSC_D_SAMPLE_WARPMODE[]   = "SYN_OSC_D_SAMPLE_WARPMODE";   // choice 0..5 — Off/Sine Shaper/Rectify/Fold/Drive/Crush
 }
