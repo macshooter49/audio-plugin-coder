@@ -20648,9 +20648,10 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // renders identically every frame = it sits still. Motion comes ONLY from the audio itself
   // evolving in place (detune beating, chord interference, warp/fold modulation), made fluid by
   // morphing the displayed buffer toward the live capture a little each frame.
-  var SHAPE_CYCLES   = 6;        // cycles of the fundamental shown across the width (stationary)
+  var SHAPE_CYCLES   = 3;        // cycles shown — fewer = bigger, clearer shape (was 6 = busy/noise-like)
   var SHAPE_SMOOTH   = 0.22;     // per-frame morph toward the live shape (fluid; lower = slower/smoother)
   var RELEASE_SMOOTH = 0.10;     // slower morph toward the flatline on note release (smooth fade-out)
+  var SHAPE_FILL     = 0.95;     // auto-normalize the shape to fill ±this of the display (dramatic / supersized)
   var DLEN           = 320;      // display resolution (samples across the width)
   var SCOPE_MODE     = 'shaper'; // 'shaper' (default) | 'scroll' (the OLD path — kept for a future view-mode)
 
@@ -20789,7 +20790,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     ctx.strokeStyle = WAVE_COLOR; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.shadowColor = GLOW_COLOR; ctx.shadowBlur = 3;          // subtle glow, like the LFO
     for (var x = 0; x <= w; x++) {
-      var v = sampleAt(x / w), py = h * 0.5 - v * h * 0.40;
+      var v = sampleAt(x / w), py = h * 0.5 - v * h * 0.45;   // taller — fill the display more dramatically
       if (x === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
     }
     ctx.stroke(); ctx.shadowBlur = 0;
@@ -20969,6 +20970,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     // going active→idle must NOT hard-jump to flat, so we DON'T reset disp; we let it settle.
     // Frame-rate-normalize the morph rate so it feels the same regardless of refresh rate.
     var frac = Math.min(1, dt * 60);
+    if (!scope.peak) scope.peak = { a: 0, b: 0, c: 0, d: 0 };   // per-osc level tracker for the fill-normalize
     var anyAlive = false;
     for (var k = 0; k < OSC_IDS.length; k++) {
       var o = OSC_IDS[k];
@@ -20976,10 +20978,17 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var hasData = scope.active && scope[o] && scope[o].length > 4;
       var target = null;
       if (hasData) { fillTarget(scope[o], scope.hz, scope.sr, shapeScratch); target = shapeScratch; }
+      // FILL-NORMALIZE — scale the shape to fill ±SHAPE_FILL of the display so a saw reads as a SAW
+      // (dramatic / supersized), tracking the peak with a FAST attack + SLOW release so new notes
+      // fill instantly while short-term beating still shows. The floor avoids amplifying near-silence.
+      var fpk = 0;
+      if (target) { for (var p = 0; p < DLEN; p++) { var av = target[p] < 0 ? -target[p] : target[p]; if (av > fpk) fpk = av; } }
+      var pk = scope.peak[o]; pk += (fpk - pk) * (fpk > pk ? 0.5 : 0.04); scope.peak[o] = pk;
+      var gain = target ? (SHAPE_FILL / Math.max(pk, 0.06)) : 0;
       var a = (scope.active ? SHAPE_SMOOTH : RELEASE_SMOOTH) * frac;   // slower morph on release
       var alive = false;
       for (var x = 0; x < DLEN; x++) {
-        var tg = target ? target[x] : 0;
+        var tg = target ? target[x] * gain : 0;
         disp[x] += (tg - disp[x]) * a;
         if (!alive && (disp[x] > 0.0015 || disp[x] < -0.0015)) alive = true;
       }
