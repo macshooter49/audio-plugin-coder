@@ -19817,7 +19817,7 @@ restoreThemeFromBackend();
     '#syn-panel .device.filter:not(.swapped) .filt-exp{width:13px;height:13px;color:rgba(255,255,255,.72);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:6px;}'+
     '#syn-panel .device.filter:not(.swapped) .filt-exp svg{width:13px;height:13px;display:block;}'+
     '#syn-panel .device.filter:not(.swapped) .filt-exp:hover{color:#fff;}'+
-    '#syn-panel .device.filter:not(.swapped) .filt-hud{position:absolute;top:8px;right:92px;z-index:4;font-family:-apple-system,system-ui,sans-serif;font-size:10px;font-weight:400;letter-spacing:.3px;color:rgba(255,255,255,.8);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .14s;text-shadow:0 1px 3px rgba(0,0,0,.95);}'+
+    '#syn-panel .device.filter:not(.swapped) .filt-hud{position:absolute;top:8px;right:112px;z-index:4;font-family:-apple-system,system-ui,sans-serif;font-size:10px;font-weight:400;letter-spacing:.3px;color:rgba(255,255,255,.8);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .14s;text-shadow:0 1px 3px rgba(0,0,0,.95);}'+
     '#syn-panel .device.filter:not(.swapped) .filt-hud.on{opacity:1;}'+
     '#syn-panel .device.filter.swapped .filt-hud{display:none;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-knobs{bottom:6px;}'+
@@ -20909,12 +20909,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     var cv = document.getElementById('osc-wave-' + o);
     if (!cv) return false;
     var disp = scope.disp[o];
+    var g = (scope.gain && scope.gain[o]) || 1;          // FIX B — fill-normalize gain applied at RENDER
     function sampleAt(t) {
       var fp = t * (DLEN - 1);
       if (fp < 0) fp = 0; else if (fp > DLEN - 1) fp = DLEN - 1;
       var i = fp | 0, fr = fp - i, i2 = (i + 1 < DLEN) ? i + 1 : i;
-      var v = disp[i] + (disp[i2] - disp[i]) * fr;
-      // the EXISTING subtle analog grit, scaled by |v| so it doesn't fuzz the quiet tail.
+      var v = (disp[i] + (disp[i2] - disp[i]) * fr) * g;
+      // the EXISTING subtle analog grit, scaled by |v| (the SCALED value) so it doesn't fuzz the quiet tail.
       var hsh = Math.sin((t * DLEN) * 12.9898) * 43758.5453; hsh -= Math.floor(hsh);
       return v + (hsh * 2 - 1) * GRIT_AMP * Math.min(1, Math.abs(v) + 0.15);
     }
@@ -20970,7 +20971,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     // going active→idle must NOT hard-jump to flat, so we DON'T reset disp; we let it settle.
     // Frame-rate-normalize the morph rate so it feels the same regardless of refresh rate.
     var frac = Math.min(1, dt * 60);
-    if (!scope.peak) scope.peak = { a: 0, b: 0, c: 0, d: 0 };   // per-osc level tracker for the fill-normalize
+    if (!scope.peak) scope.peak = { a: 0, b: 0, c: 0, d: 0 };   // per-osc level tracker (display-amplitude)
+    if (!scope.gain) scope.gain = { a: 1, b: 1, c: 1, d: 1 };   // per-osc fill-normalize gain (applied at RENDER)
+    var alignPeriod = Math.max(8, Math.round(DLEN / SHAPE_CYCLES));   // ~one display period (alignment search window)
     var anyAlive = false;
     for (var k = 0; k < OSC_IDS.length; k++) {
       var o = OSC_IDS[k];
@@ -20978,22 +20981,50 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var hasData = scope.active && scope[o] && scope[o].length > 4;
       var target = null;
       if (hasData) { fillTarget(scope[o], scope.hz, scope.sr, shapeScratch); target = shapeScratch; }
-      // FILL-NORMALIZE — scale the shape to fill ±SHAPE_FILL of the display so a saw reads as a SAW
-      // (dramatic / supersized), tracking the peak with a FAST attack + SLOW release so new notes
-      // fill instantly while short-term beating still shows. The floor avoids amplifying near-silence.
-      var fpk = 0;
-      if (target) { for (var p = 0; p < DLEN; p++) { var av = target[p] < 0 ? -target[p] : target[p]; if (av > fpk) fpk = av; } }
-      var pk = scope.peak[o]; pk += (fpk - pk) * (fpk > pk ? 0.5 : 0.04); scope.peak[o] = pk;
-      var gain = target ? (SHAPE_FILL / Math.max(pk, 0.06)) : 0;
+      // FIX A — ROBUST FRAME-TO-FRAME ALIGNMENT. The rough zero-crossing anchor in fillTarget lands at a
+      // DIFFERENT phase every frame on fold/warp/chord waveforms, so consecutive raw targets are phase-
+      // INCOHERENT and averaging them in the smoother collapses disp toward ZERO (the flatline bug). Here
+      // we circular-shift `target` to best-align it with the CURRENT disp (the previous displayed frame)
+      // BEFORE smoothing — so the smoother MORPHS between aligned shapes instead of cancelling. A steady
+      // tone → bestShift≈0 (sits still); slow drift → gentle motion (beating); chords → locks to the
+      // dominant. It CANNOT cancel to zero because every target is realigned to the existing disp; after
+      // silence disp is ~flat so all shifts tie → bestShift=0 → it self-establishes, then locks.
+      var bestShift = 0;
+      if (target) {
+        var bestErr = Infinity;
+        for (var s = 0; s < alignPeriod; s++) {
+          var err = 0;
+          for (var cx = 0; cx < DLEN; cx += 4) {
+            var d = target[(cx + s) % DLEN] - disp[cx];
+            err += d * d;
+            if (err >= bestErr) break;
+          }
+          if (err < bestErr) { bestErr = err; bestShift = s; }
+        }
+      }
       var a = (scope.active ? SHAPE_SMOOTH : RELEASE_SMOOTH) * frac;   // slower morph on release
-      var alive = false;
+      // FIX B (part 1) — smooth disp toward the RAW (shifted) target, NO gain. Normalizing the target
+      // pre-smooth (the old way) does NOT compensate for the amplitude the smoothing removes → chords
+      // looked small. We normalize the FINAL disp at render instead (below + in drawShaper).
+      var alive = false, dpk = 0;
       for (var x = 0; x < DLEN; x++) {
-        var tg = target ? target[x] * gain : 0;
+        var tg = target ? target[(x + bestShift) % DLEN] : 0;
         disp[x] += (tg - disp[x]) * a;
-        if (!alive && (disp[x] > 0.0015 || disp[x] < -0.0015)) alive = true;
+        var ad = disp[x] < 0 ? -disp[x] : disp[x];
+        if (ad > dpk) dpk = ad;
+        if (!alive && ad > 0.0015) alive = true;
       }
       if (alive) anyAlive = true;
-      if (oscVisible(o)) drawShaper(o);                  // drawShaper paints the flat case too
+      // FIX B (part 2) — FILL-NORMALIZE the FINAL display. Track the peak of the *smoothed* disp (fast
+      // attack / slow release) and derive a gain so a single note fills ±SHAPE_FILL AND a 6-note chord
+      // ALSO fills it (no shrink), each keeping its major shape. ONLY update while ACTIVE — when releasing
+      // we FREEZE peak/gain so disp→0 fades smoothly to flat at the held gain (a shrinking disp must not
+      // get re-amplified, which would fight the fade).
+      if (hasData) {
+        var pk = scope.peak[o]; pk += (dpk - pk) * (dpk > pk ? 0.5 : 0.04); scope.peak[o] = pk;
+        scope.gain[o] = SHAPE_FILL / Math.max(pk, 0.06);
+      }
+      if (oscVisible(o)) drawShaper(o);                  // drawShaper paints the flat case too (gain applied there)
     }
 
     // KEEP looping while (active OR something still settling toward flat) AND a display is
