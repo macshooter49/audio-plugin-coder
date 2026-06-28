@@ -3081,7 +3081,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // Read the lock-free oscScope atoms published by the audio thread and hand them
     // to the WebUI's window.updateOscScope. When no voice sounds (active=false) we
     // still call it so JS parks and falls back to the static single-cycle renderer.
-    // 4 x 512 floats at 3 dp — comfortably under the proven ~80 KB EQ push below.
+    // 4 x 1024 floats at 3 dp — comfortably under the proven ~80 KB EQ push below.
     {
         const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed);
         if (oscActive)
@@ -3105,7 +3105,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 if (s0 == s1) break;                           // consistent snapshot
             }
             juce::String os;
-            os.preallocateBytes(20000);
+            os.preallocateBytes(40000);   // 4×1024 floats @3dp ≈ 30 KB (still well under the EQ push)
             os << "if(window.updateOscScope){window.updateOscScope({";
             static const char* oscKey[4] = { "a", "b", "c", "d" };
             for (int o = 0; o < 4; ++o)

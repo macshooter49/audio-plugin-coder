@@ -305,6 +305,10 @@ private:
         if (fadeOutLen_ > RL) fadeOutLen_ = RL;
         if (fadeInLen_  < 0.0) fadeInLen_  = 0.0;
         if (fadeOutLen_ < 0.0) fadeOutLen_ = 0.0;
+        // Don't let the two fades CROSS/overlap into a mid-region dip — scale both so they
+        // meet at most in the middle (matches the UI clamp → picture==sound).
+        const double fsum = fadeInLen_ + fadeOutLen_;
+        if (fsum > RL && fsum > 0.0) { const double k = RL / fsum; fadeInLen_ *= k; fadeOutLen_ *= k; }
     }
 
     double regLen()  const noexcept { return regEnd_  - regStart_; }

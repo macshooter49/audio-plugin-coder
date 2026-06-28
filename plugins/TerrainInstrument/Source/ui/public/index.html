@@ -3879,12 +3879,14 @@ body {
 /* fades = thin LFO-style ramp lines (shift+drag a region edge to set); 100%-viewBox SVG */
 #syn-panel .samp-env { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 #syn-panel .samp-env polyline { fill: none; vector-effect: non-scaling-stroke; stroke-width: 1.3; stroke-linecap: round; }
-/* Region fades = a FILLED curved wedge that IS the start/end marker (shift+drag an edge to
-   grow it). The bright top edge is the true equal-power sin() gain the DSP plays (edgeGain);
-   the dark fill is the progressively-unavailable signal — same darkening as cutting start/end. */
-#syn-panel .samp-env .env-fadein, #syn-panel .samp-env .env-fadeout { fill: rgba(8,8,18,.55); stroke: #ECE8F2; stroke-width: 1.3; vector-effect: non-scaling-stroke; stroke-linejoin: round; opacity: .85; }
+/* Region fades = a clean curved LINE (the true equal-power sin() gain the DSP plays =
+   picture==sound) over a SUBTLE dark wedge fill (the progressively-unavailable signal).
+   Fill + line are SEPARATE elements so the fill never cuts/outlines the line ("pizza"). */
+#syn-panel .samp-env .env-fadein, #syn-panel .samp-env .env-fadeout { fill: rgba(8,8,18,.30); stroke: none; }
+#syn-panel .samp-env .env-fadein-line, #syn-panel .samp-env .env-fadeout-line { fill: none; stroke: #ECE8F2; stroke-width: 1.3; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; opacity: .9; }
 #syn-panel .samp-env .env-loopin, #syn-panel .samp-env .env-loopout { stroke: var(--purple-400); opacity: .72; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
-#syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { opacity: 1; stroke-width: 1.7; fill: rgba(8,8,18,.72); }
+#syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { fill: rgba(8,8,18,.5); }
+#syn-panel .sample-view.dragfade .samp-env .env-fadein-line, #syn-panel .sample-view.dragfade .samp-env .env-fadeout-line { opacity: 1; stroke-width: 1.6; }
 /* drop affordance (shown on dragover / empty) */
 #syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
   font-size: 9px; letter-spacing: 1.5px; color: var(--text-muted); pointer-events: none; opacity: 0; transition: opacity .15s; }
@@ -5064,7 +5066,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><path class="env-fadein-line"></path><path class="env-fadeout-line"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -5233,7 +5235,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><path class="env-fadein-line"></path><path class="env-fadeout-line"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -5418,7 +5420,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><path class="env-fadein-line"></path><path class="env-fadeout-line"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -5587,7 +5589,7 @@ body {
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
-                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
+                <svg class="samp-env" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="env-fadein"></path><path class="env-fadeout"></path><path class="env-fadein-line"></path><path class="env-fadeout-line"></path><polyline class="env-loopin"></polyline><polyline class="env-loopout"></polyline></svg>
                 <div class="samp-band"></div>
                 <div class="samp-ph"><i></i></div>
                 <div class="samp-h s"></div>
@@ -9723,6 +9725,7 @@ setTimeout(function wireSynControls () {
             hLS = view.querySelector ('.samp-h.ls'), hLE = view.querySelector ('.samp-h.le');
         var ph = view.querySelector ('.samp-ph');
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
+        var envFadeInLine = view.querySelector ('.env-fadein-line'), envFadeOutLine = view.querySelector ('.env-fadeout-line');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
         var dev = view.closest ('.device.osc');
         var head = dev ? dev.querySelector ('.samp-head[data-osc="' + osc + '"]') : null;
@@ -9750,30 +9753,35 @@ setTimeout(function wireSynControls () {
 
         function setPts (el, pts) { if (el) el.setAttribute ('points', pts); }
         function setPath (el, d) { if (el) el.setAttribute ('d', d); }
-        // Curved region fade = the true equal-power sin() gain the DSP plays (SampleEngine
-        // edgeGain). Drawn as a FILLED wedge from the marker (gain 0, y=100) inward to (gain 1,
-        // y≈3): bright top edge = the gain envelope, dark fill = the unavailable signal. The
-        // wedge is anchored AT the marker, so moving the start/end edge moves the fade with it
-        // (they are one thing). Picture == sound by construction.
-        function fadeWedge (mark, inner) {
+        // Region fade = the true equal-power sin() gain the DSP plays (SampleEngine edgeGain),
+        // anchored AT the start/end marker (moving the edge moves the fade — they're one thing).
+        // fadePath builds the curve from the marker (gain 0, y=100) inward to (gain 1, y≈3); fill=true
+        // closes it into the subtle dark "unavailable" wedge, fill=false leaves it OPEN = the clean
+        // white line (drawn as a SEPARATE element so the fill never cuts it). Picture==sound.
+        function fadePath (mark, inner, fill) {
           var N = 18, d = 'M' + mark.toFixed (2) + ',100';
           for (var k = 1; k <= N; k++) {
             var u = k / N, x = mark + (inner - mark) * u, y = 100 - 97 * Math.sin (u * Math.PI / 2);
             d += ' L' + x.toFixed (2) + ',' + y.toFixed (2);
           }
-          return d + ' L' + inner.toFixed (2) + ',0 L' + mark.toFixed (2) + ',0 Z';
+          return fill ? (d + ' L' + inner.toFixed (2) + ',0 L' + mark.toFixed (2) + ',0 Z') : d;
         }
         function drawEnv () {
           var RL = Math.max (0.001, st.e - st.s), LL = Math.max (0.001, st.le - st.ls);
           var fi = st.fin * RL, fo = st.fout * RL;            // fraction-of-region → buffer %
+          if (fi + fo > RL) { var kk = RL / (fi + fo); fi *= kk; fo *= kk; }   // fades MEET in the middle, never CROSS
           var xf = Math.min (st.xfade * LL, LL / 2);          // fraction-of-loop → buffer %, half-cap
           // FADE-IN: curve from the start marker inward. Clamp to the loop start when a real
           // lead-in exists (ls > s) — past the loop the playhead is caught and the fade is moot.
-          if (fi > 0.3) { var finX = st.s + fi; if (st.loop && st.ls > st.s + 0.5) finX = Math.min (finX, st.ls); setPath (envFadeIn, fadeWedge (st.s, finX)); }
-          else setPath (envFadeIn, '');
+          if (fi > 0.3) {
+            var finX = st.s + fi; if (st.loop && st.ls > st.s + 0.5) finX = Math.min (finX, st.ls);
+            setPath (envFadeIn, fadePath (st.s, finX, true)); setPath (envFadeInLine, fadePath (st.s, finX, false));
+          } else { setPath (envFadeIn, ''); setPath (envFadeInLine, ''); }
           // FADE-OUT: curve from the end marker inward. Clamp to the loop end (tail-out only).
-          if (fo > 0.3) { var foutX = st.e - fo; if (st.loop && st.le < st.e - 0.5) foutX = Math.max (foutX, st.le); setPath (envFadeOut, fadeWedge (st.e, foutX)); }
-          else setPath (envFadeOut, '');
+          if (fo > 0.3) {
+            var foutX = st.e - fo; if (st.loop && st.le < st.e - 0.5) foutX = Math.max (foutX, st.le);
+            setPath (envFadeOut, fadePath (st.e, foutX, true)); setPath (envFadeOutLine, fadePath (st.e, foutX, false));
+          } else { setPath (envFadeOut, ''); setPath (envFadeOutLine, ''); }
           if (st.loop && xf > 0.3) {
             setPts (envLoopIn,  st.ls + ',100 ' + (st.ls + xf) + ',0');
             setPts (envLoopOut, (st.le - xf) + ',0 ' + st.le + ',100');
@@ -10956,7 +10964,7 @@ setTimeout(function wireSynControls () {
         // Wavetable WARP 2 list (the layout's StringArray) + the SAMPLE warp list.
         const MODES = (typeof WARP_MODES !== 'undefined' && WARP_MODES && WARP_MODES.length === 11)
                         ? WARP_MODES
-                        : ['NONE','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
+                        : ['None','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
         const SAMPLE_MODES = ['Off','Sine Shaper','Rectify','Fold','Drive','Crush'];
         const pillRefreshers = [];
         document.querySelectorAll('#syn-panel .warp2-pill').forEach(function(pill) {
@@ -11726,7 +11734,7 @@ setTimeout(function wireSynControls () {
       });
 
       // ── Menu definitions per knob ──────────────────────────────
-      const WARP_MODES = ['NONE','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
+      const WARP_MODES = ['None','Bend','Sync','Formant','PWM','Skew','Mirror','Fractalize','P-Quantize','Rectify','Sine Shaper'];
       const SPECTRAL_MODES = ['None','Harmonic Stretch','Inharmonic Stretch','Vocode','Smear','Random Amps','Data Compress','Spectral Phaser'];
       const FOLD_SHAPES = ['Linear','Sine','Triangle'];
       const INTERP_MODES = ['Linear','Stepped'];
@@ -20616,6 +20624,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   var NHARM   = 64;            // band-limit for additive tables -> clean, never jagged
   var WAVE_COLOR = '#ECE8F2';  // the light color the osc waveform already uses
   var GLOW_COLOR = '#A78BFA';  // house accent, used only for the subtle glow (like the LFO)
+  // LIVE-SCOPE feel (tunable). The trace is driven by a CONTINUOUS phase accumulator (no
+  // per-frame re-trigger = no flip-book); it scrolls a fraction of real-time so a held note
+  // always flows like water and higher pitch cycles faster.
+  var SCOPE_CYCLES    = 5;       // periods shown across the width (was ~2 = "too zoomed in")
+  var SCOPE_TIMESCALE = 0.013;   // scroll speed as a fraction of real-time → fluid flow
+  var GRIT_AMP        = 0.02;    // subtle rugged analog grit on the white line (coherent, not snow)
 
   function clamp01(x){ x = +x; return x < 0 ? 0 : (x > 1 ? 1 : (x || 0)); }
 
@@ -20760,72 +20774,76 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     return true;
   }
 
-  // STATIC single-cycle renderer (the idle fallback). Prefers a pushed engine cycle
-  // (Stage B) if present; else computes the Stage-A table+warp+fold cycle. This is
-  // bit-identical to the pre-oscilloscope behaviour when no note sounds.
+  // IDLE render = FLATLINE. Max: the osc display must NOT show a static wavetable picture;
+  // when nothing's playing it's a clean flat line (heartbeat-monitor) and it only comes alive
+  // when a note sounds. (The static single-cycle renderer is retained as drawOscStatic for a
+  // future dedicated wavetable / 3D view, but it's no longer the idle render.)
   function drawOsc(o) {
     var cv = document.getElementById('osc-wave-' + o);
     if (!cv) return;
-    // If the live oscilloscope is currently driving this VISIBLE osc, skip the static
-    // paint — the rAF loop redraws it this frame anyway (avoids a double-paint flicker
-    // when a knob is dragged while a note sustains). Idle still paints the static cycle.
+    // Live scope driving this VISIBLE osc → the rAF loop draws it (skip to avoid double-paint).
     if (scope.active && scope[o] && scope[o].length > 4 && cv.offsetParent !== null) return;
+    paintWave(cv, function () { return 0; });   // flatline
+  }
+  // (retained for a future wavetable view) static single-cycle of osc o's current table.
+  function drawOscStatic(o) {
+    var cv = document.getElementById('osc-wave-' + o); if (!cv) return;
     var samples = st[o].samples, valFn = samples ? null : oscValueFn(o);
-    function sampleAt(t) {                    // t in [0,1)
+    paintWave(cv, function (t) {
       if (!samples) return valFn(t);
       var fp = t * samples.length, i = fp | 0, fr = fp - i;
       var a = samples[i % samples.length], b = samples[(i + 1) % samples.length];
       return a + (b - a) * fr;
-    }
-    paintWave(cv, sampleAt);
-    // (Frame number is shown on the WT POS knob label while dragging — keeps the
-    //  visualizer clean.  OSCFIX-FRAME-MOVED)
+    });
   }
 
   /* ------------------------------------------------------- LIVE OSCILLOSCOPE */
-  // Latest per-osc frame from C++ (window.updateOscScope). When active, the rAF
-  // loop draws the REAL triggered audio window through paintWave; when inactive it
-  // falls back to drawOsc (the static single cycle) so idle == today, bit-for-bit.
-  var scope = { active: false, hz: 0, sr: 48000, a: null, b: null, c: null, d: null, fresh: false };
+  // Latest per-osc frame from C++ (window.updateOscScope). When active, the rAF loop
+  // scroll-reads the REAL audio window through paintWave via a CONTINUOUS phase
+  // accumulator (ph) — fluid flow, never a per-frame jump (no flip-book). When idle it
+  // FLATLINES (heartbeat-monitor style), not the static wavetable picture.
+  var scope = { active: false, hz: 0, sr: 48000, a: null, b: null, c: null, d: null, fresh: false,
+                ph: { a: 0, b: 0, c: 0, d: 0 }, lastT: 0 };
 
-  // Trigger: find a stable start so the trace doesn't slide, WITHOUT hard-syncing
-  // away detune beating. samplesPerPeriod = sr/hz. Scan the first ~1.5 periods for
-  // a RISING zero-crossing (sub-sample interpolated). Frame ~2 periods of the
-  // window. If no fundamental / no crossing, start at 0 (free-run) so it still moves.
-  function triggerStart(buf, sr, hz) {
-    var n = buf.length;
-    if (!(hz > 0) || !(sr > 0)) return { start: 0, span: n };
-    var spp = sr / hz;                                   // samples per period
-    if (!(spp > 2) || spp > n) return { start: 0, span: n };
-    var scanEnd = Math.min(n - 2, Math.floor(spp * 1.5) + 2);
-    var start = 0, found = false;
-    for (var i = 1; i <= scanEnd; i++) {
-      if (buf[i - 1] <= 0 && buf[i] > 0) {               // rising zero-crossing
-        var d = buf[i] - buf[i - 1];                     // sub-sample interp
-        start = (i - 1) + (d !== 0 ? (-buf[i - 1] / d) : 0);
-        found = true; break;
-      }
-    }
-    if (!found) start = 0;
-    // Frame ~2 periods so beating (slow amplitude/phase wobble) reads on screen,
-    // but clamp so we never run past the captured window.
-    var span = Math.min(n - start - 1, spp * 2);
-    if (!(span > 4)) span = n - start - 1;
-    return { start: start, span: span };
-  }
-
+  // Continuous-phase SCROLL (replaces the per-frame zero-crossing re-trigger that caused the
+  // flip-book). The horizontal read is driven by scope.ph[o] (advanced in scopeFrame from real
+  // rAF time), so the trace flows smoothly and never freezes on a held note. The captured
+  // buffer updates at 60 Hz underneath, so detune-beating + warp morph evolve while it scrolls.
   function drawScope(o, buf) {
     var cv = document.getElementById('osc-wave-' + o);
     if (!cv) return false;
-    var tr = triggerStart(buf, scope.sr, scope.hz);
-    var start = tr.start, span = tr.span, n = buf.length;
-    function sampleAt(t) {                                // t in [0,1) across the framed span
-      var fp = start + t * span;
-      if (fp < 0) fp = 0; if (fp > n - 2) fp = n - 2;
-      var i = fp | 0, fr = fp - i;
-      return buf[i] + (buf[i + 1] - buf[i]) * fr;
+    var n = buf.length;
+    var spp = (scope.hz > 0 && scope.sr > 0) ? scope.sr / scope.hz : 0;    // samples per period
+    // PERIOD-LOCK: read a whole-number-of-periods window so the scroll WRAP lands on a period
+    // boundary (seamless for pitched tones → no moving "seam" tear, even on bass). Unpitched →
+    // raw buffer (a faint wrap on noise is fine).
+    var loopLen, base;
+    if (spp > 4 && spp < n) {
+      var cyc = Math.max(1, Math.floor(n / spp));        // whole periods captured in the window
+      loopLen = Math.min(n, Math.round(cyc * spp));      // integer ≈ whole-periods length
+      base = n - loopLen;                                // anchor at the most-recent whole periods
+    } else { loopLen = n; base = 0; }
+    var span = (spp > 4) ? Math.min(Math.round(SCOPE_CYCLES * spp), loopLen) : loopLen;  // ~SCOPE_CYCLES cycles
+    var ph = scope.ph[o];                                // continuous scroll position (samples), advanced in scopeFrame
+    function sampleAt(t) {
+      var sp  = ph + t * span;                           // continuous (monotonic) scroll position
+      var off = ((sp % loopLen) + loopLen) % loopLen;    // wrapped into the period-locked loop
+      var rp = base + off, i = rp | 0, fr = rp - i;
+      var o2 = (off + 1) % loopLen, i2 = (base + o2) | 0;
+      var v = buf[i] + (buf[i2] - buf[i]) * fr;
+      // subtle analog grit, keyed on the CONTINUOUS position so it scrolls smoothly (no seam
+      // jump) and scaled by signal magnitude so it doesn't fuzz the quiet decay tail.
+      var hsh = Math.sin(sp * 12.9898) * 43758.5453; hsh -= Math.floor(hsh);
+      return v + (hsh * 2 - 1) * GRIT_AMP * Math.min(1, Math.abs(v) + 0.15);
     }
     return paintWave(cv, sampleAt);
+  }
+
+  // Idle = a clean flat white line (heartbeat-monitor style) through the SAME painter so the
+  // grid/glow/size match — NOT the static wavetable picture.
+  function paintFlatlineO(o) {
+    var cv = document.getElementById('osc-wave-' + o);
+    if (cv) paintWave(cv, function () { return 0; });
   }
 
   // Is this osc's display currently visible? (A<->B / C<->D slot toggles hide one
@@ -20840,22 +20858,25 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     for (var k = 0; k < OSC_IDS.length; k++) if (oscVisible(OSC_IDS[k])) return true;
     return false;
   }
-  function scopeFrame() {
+  function scopeFrame(now) {
     scopeRAF = 0;
+    var nowMs = now || ((window.performance && performance.now) ? performance.now() : 0);
+    var dt = scope.lastT ? Math.min(0.05, (nowMs - scope.lastT) / 1000) : 0;   // clamp dt (tab-stall → no jump)
+    scope.lastT = nowMs;
+    var adv = (scope.hz > 0 && scope.sr > 0) ? SCOPE_TIMESCALE * scope.sr * dt : 0;   // pitch-proportional scroll
     var anyVisible = false;
     if (scope.active) {
       for (var k = 0; k < OSC_IDS.length; k++) {
         var o = OSC_IDS[k];
+        scope.ph[o] += adv;                              // advance EVERY osc (a steady held note still flows)
         if (!oscVisible(o)) continue;
         anyVisible = true;
         var buf = scope[o];
         if (buf && buf.length > 4) drawScope(o, buf);
-        else drawOsc(o);                                 // no data for this osc -> static
+        else paintFlatlineO(o);                          // no data for this osc -> flatline
       }
     }
-    // Re-arm ONLY while sounding AND at least one osc display is on-screen. With the
-    // synth panel hidden (FX view) the loop PARKS instead of spinning at 60fps doing
-    // nothing; a fresh frame or re-showing the panel re-kicks it (see kickScope).
+    // Re-arm ONLY while sounding AND at least one osc display is on-screen (parks on the FX view).
     if (scope.active && anyVisible) scopeRAF = requestAnimationFrame(scopeFrame);
   }
   function kickScope() { if (!scopeRAF && anyOscVisible()) scopeRAF = requestAnimationFrame(scopeFrame); }
@@ -20870,9 +20891,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       scope.a = f.a || null; scope.b = f.b || null; scope.c = f.c || null; scope.d = f.d || null;
       kickScope();                                       // ensure the rAF loop is running
     } else if (wasActive) {
-      // Just went idle — repaint each VISIBLE osc once as the static single cycle
-      // (idle fallback), then let the loop stop.
-      OSC_IDS.forEach(function (o) { if (oscVisible(o)) drawOsc(o); });
+      // Just went idle — FLATLINE each visible osc (heartbeat-monitor, NOT the static
+      // wavetable picture), reset the scroll phase, then let the loop stop.
+      OSC_IDS.forEach(function (o) { scope.ph[o] = 0; if (oscVisible(o)) paintFlatlineO(o); });
     }
   };
 

@@ -480,9 +480,9 @@ public:
     // SPSC seqlock handoff: the audio thread brackets its window stores with an odd/even
     // oscScopeSeq (odd = write in progress, even = complete); the editor's 60 Hz timer
     // reads oscScopeSeq before+after copying the window and retries on a mismatch, so it
-    // always gets a tear-free snapshot. 4 x 512 floats (well under the proven 80 KB EQ
+    // always gets a tear-free snapshot. 4 x 1024 floats (well under the proven 80 KB EQ
     // push). active=false => no voice sounding (JS falls back to the static cycle).
-    static constexpr int OSC_SCOPE_SIZE = 512;
+    static constexpr int OSC_SCOPE_SIZE = 1024;   // full per-osc ring → more cycles on the scope (less zoom)
     std::array<std::array<std::atomic<float>, OSC_SCOPE_SIZE>, 4> oscScope {};
     std::atomic<float> oscScopeHz     { 0.f };    // fundamental Hz of the displayed voice
     std::atomic<float> oscScopeSr     { 48000.f };// sample rate (for the JS trigger period)
