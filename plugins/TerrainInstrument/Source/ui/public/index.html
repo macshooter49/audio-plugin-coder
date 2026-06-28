@@ -20723,14 +20723,16 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   }
 
   /* ----------------------------------------------------------------- drawing */
-  // Mirrors drawLFOWaveform(): DPR canvas, faint grid + center line, ONE clean
-  // stroke with a subtle glow. This is what makes it read like the LFO.
-  function drawOsc(o) {
-    var cv = document.getElementById('osc-wave-' + o);
-    if (!cv) return;
+  // Shared painter — mirrors drawLFOWaveform(): DPR canvas, faint grid + center
+  // line, ONE clean ~1.5px white stroke with a subtle glow, transparent bg. Takes
+  // a sampleAt(x01)->value-in-[-1,1] closure. BOTH the static single-cycle renderer
+  // and the LIVE oscilloscope draw through here, so the look/size/position are
+  // pixel-identical either way. Returns false if the canvas isn't ready/visible.
+  function paintWave(cv, sampleAt) {
+    if (!cv) return false;
     var rect = cv.parentElement.getBoundingClientRect();
     var w = Math.round(rect.width), h = Math.round(rect.height);
-    if (!w || !h) return;
+    if (!w || !h) return false;
     var dpr = window.DPR || window.devicePixelRatio || 1;
     if (cv.width !== w * dpr || cv.height !== h * dpr) {
       cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px';
@@ -20746,14 +20748,6 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     ctx.beginPath(); ctx.moveTo(0, h*0.5); ctx.lineTo(w, h*0.5); ctx.stroke();
 
     // the waveform — one clean pass, sampled per pixel (exactly like the LFO).
-    // Prefer a pushed engine cycle (Stage B) if present; else compute (Stage A).
-    var samples = st[o].samples, valFn = samples ? null : oscValueFn(o);
-    function sampleAt(t) {                    // t in [0,1)
-      if (!samples) return valFn(t);
-      var fp = t * samples.length, i = fp | 0, fr = fp - i;
-      var a = samples[i % samples.length], b = samples[(i + 1) % samples.length];
-      return a + (b - a) * fr;
-    }
     ctx.beginPath();
     ctx.strokeStyle = WAVE_COLOR; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.shadowColor = GLOW_COLOR; ctx.shadowBlur = 3;          // subtle glow, like the LFO
@@ -20762,12 +20756,125 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if (x === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
     }
     ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.restore();
+    return true;
+  }
 
+  // STATIC single-cycle renderer (the idle fallback). Prefers a pushed engine cycle
+  // (Stage B) if present; else computes the Stage-A table+warp+fold cycle. This is
+  // bit-identical to the pre-oscilloscope behaviour when no note sounds.
+  function drawOsc(o) {
+    var cv = document.getElementById('osc-wave-' + o);
+    if (!cv) return;
+    // If the live oscilloscope is currently driving this VISIBLE osc, skip the static
+    // paint — the rAF loop redraws it this frame anyway (avoids a double-paint flicker
+    // when a knob is dragged while a note sustains). Idle still paints the static cycle.
+    if (scope.active && scope[o] && scope[o].length > 4 && cv.offsetParent !== null) return;
+    var samples = st[o].samples, valFn = samples ? null : oscValueFn(o);
+    function sampleAt(t) {                    // t in [0,1)
+      if (!samples) return valFn(t);
+      var fp = t * samples.length, i = fp | 0, fr = fp - i;
+      var a = samples[i % samples.length], b = samples[(i + 1) % samples.length];
+      return a + (b - a) * fr;
+    }
+    paintWave(cv, sampleAt);
     // (Frame number is shown on the WT POS knob label while dragging — keeps the
     //  visualizer clean.  OSCFIX-FRAME-MOVED)
-
-    ctx.restore();
   }
+
+  /* ------------------------------------------------------- LIVE OSCILLOSCOPE */
+  // Latest per-osc frame from C++ (window.updateOscScope). When active, the rAF
+  // loop draws the REAL triggered audio window through paintWave; when inactive it
+  // falls back to drawOsc (the static single cycle) so idle == today, bit-for-bit.
+  var scope = { active: false, hz: 0, sr: 48000, a: null, b: null, c: null, d: null, fresh: false };
+
+  // Trigger: find a stable start so the trace doesn't slide, WITHOUT hard-syncing
+  // away detune beating. samplesPerPeriod = sr/hz. Scan the first ~1.5 periods for
+  // a RISING zero-crossing (sub-sample interpolated). Frame ~2 periods of the
+  // window. If no fundamental / no crossing, start at 0 (free-run) so it still moves.
+  function triggerStart(buf, sr, hz) {
+    var n = buf.length;
+    if (!(hz > 0) || !(sr > 0)) return { start: 0, span: n };
+    var spp = sr / hz;                                   // samples per period
+    if (!(spp > 2) || spp > n) return { start: 0, span: n };
+    var scanEnd = Math.min(n - 2, Math.floor(spp * 1.5) + 2);
+    var start = 0, found = false;
+    for (var i = 1; i <= scanEnd; i++) {
+      if (buf[i - 1] <= 0 && buf[i] > 0) {               // rising zero-crossing
+        var d = buf[i] - buf[i - 1];                     // sub-sample interp
+        start = (i - 1) + (d !== 0 ? (-buf[i - 1] / d) : 0);
+        found = true; break;
+      }
+    }
+    if (!found) start = 0;
+    // Frame ~2 periods so beating (slow amplitude/phase wobble) reads on screen,
+    // but clamp so we never run past the captured window.
+    var span = Math.min(n - start - 1, spp * 2);
+    if (!(span > 4)) span = n - start - 1;
+    return { start: start, span: span };
+  }
+
+  function drawScope(o, buf) {
+    var cv = document.getElementById('osc-wave-' + o);
+    if (!cv) return false;
+    var tr = triggerStart(buf, scope.sr, scope.hz);
+    var start = tr.start, span = tr.span, n = buf.length;
+    function sampleAt(t) {                                // t in [0,1) across the framed span
+      var fp = start + t * span;
+      if (fp < 0) fp = 0; if (fp > n - 2) fp = n - 2;
+      var i = fp | 0, fr = fp - i;
+      return buf[i] + (buf[i + 1] - buf[i]) * fr;
+    }
+    return paintWave(cv, sampleAt);
+  }
+
+  // Is this osc's display currently visible? (A<->B / C<->D slot toggles hide one
+  // via display:none -> offsetParent === null.) Skip hidden ones to save work.
+  function oscVisible(o) {
+    var cv = document.getElementById('osc-wave-' + o);
+    return !!(cv && cv.offsetParent !== null);
+  }
+
+  var scopeRAF = 0;
+  function anyOscVisible() {
+    for (var k = 0; k < OSC_IDS.length; k++) if (oscVisible(OSC_IDS[k])) return true;
+    return false;
+  }
+  function scopeFrame() {
+    scopeRAF = 0;
+    var anyVisible = false;
+    if (scope.active) {
+      for (var k = 0; k < OSC_IDS.length; k++) {
+        var o = OSC_IDS[k];
+        if (!oscVisible(o)) continue;
+        anyVisible = true;
+        var buf = scope[o];
+        if (buf && buf.length > 4) drawScope(o, buf);
+        else drawOsc(o);                                 // no data for this osc -> static
+      }
+    }
+    // Re-arm ONLY while sounding AND at least one osc display is on-screen. With the
+    // synth panel hidden (FX view) the loop PARKS instead of spinning at 60fps doing
+    // nothing; a fresh frame or re-showing the panel re-kicks it (see kickScope).
+    if (scope.active && anyVisible) scopeRAF = requestAnimationFrame(scopeFrame);
+  }
+  function kickScope() { if (!scopeRAF && anyOscVisible()) scopeRAF = requestAnimationFrame(scopeFrame); }
+
+  // C++ 60 Hz push. {a,b,c,d:[...512], hz, sr, active} or {active:false}.
+  window.updateOscScope = function (f) {
+    if (!f) return;
+    var wasActive = scope.active;
+    scope.active = !!f.active;
+    if (scope.active) {
+      scope.hz = +f.hz || 0; scope.sr = +f.sr || 48000;
+      scope.a = f.a || null; scope.b = f.b || null; scope.c = f.c || null; scope.d = f.d || null;
+      kickScope();                                       // ensure the rAF loop is running
+    } else if (wasActive) {
+      // Just went idle — repaint each VISIBLE osc once as the static single cycle
+      // (idle fallback), then let the loop stop.
+      OSC_IDS.forEach(function (o) { if (oscVisible(o)) drawOsc(o); });
+    }
+  };
 
   /* -------------------------------------------------------------- public API */
   function ensureCanvas(o) {

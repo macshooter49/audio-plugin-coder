@@ -3432,6 +3432,35 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // SAMPLE-FOLLOWER — that same voice's per-osc sample read positions (-1 = idle).
         for (int o = 0; o < 4; ++o)
             sampleFollowVis_[o].store (bestVoice ? bestVoice->sampleFollowPos01 (o) : -1.f, std::memory_order_relaxed);
+
+        // ── OSC SCOPE — publish the most-active voice's 4 osc waveform windows ──
+        // Still on the AUDIO thread, right after renderNextBlock: bestVoice's rings
+        // were written this same block on this same thread, so copyScopeWindow reads
+        // them with no sync. We copy into a stack scratch (no heap), then store into
+        // the lock-free oscScope atomics (same discipline as scopeBuffer) and bump
+        // the seq so the editor knows a fresh frame is ready. No note sounding ->
+        // active=false and JS falls back to the static single-cycle renderer.
+        if (bestVoice != nullptr)
+        {
+            // SPSC seqlock WRITE: bracket the window stores with odd→even so the editor
+            // can detect a torn snapshot and retry (see PluginEditor timerCallback).
+            float win[OSC_SCOPE_SIZE];
+            oscScopeSeq.fetch_add (1, std::memory_order_release);   // → odd: window write begins
+            for (int o = 0; o < 4; ++o)
+            {
+                bestVoice->copyScopeWindow (o, win, OSC_SCOPE_SIZE);
+                for (int s = 0; s < OSC_SCOPE_SIZE; ++s)
+                    oscScope[(size_t) o][(size_t) s].store (win[s], std::memory_order_relaxed);
+            }
+            oscScopeHz.store     (bestVoice->getFundamentalHz(), std::memory_order_relaxed);
+            oscScopeSr.store     ((float) getSampleRate(),       std::memory_order_relaxed);
+            oscScopeSeq.fetch_add (1, std::memory_order_release);   // → even: window complete
+            oscScopeActive.store (true, std::memory_order_relaxed);
+        }
+        else
+        {
+            oscScopeActive.store (false, std::memory_order_relaxed);
+        }
     }
 
 

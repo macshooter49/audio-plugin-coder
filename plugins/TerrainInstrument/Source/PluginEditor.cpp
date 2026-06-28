@@ -3077,6 +3077,57 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         js << "if(window.updateSynthLFO){window.updateSynthLFO(" << juce::String(lfo1, 4) << ");}";
     }
 
+    // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──
+    // Read the lock-free oscScope atoms published by the audio thread and hand them
+    // to the WebUI's window.updateOscScope. When no voice sounds (active=false) we
+    // still call it so JS parks and falls back to the static single-cycle renderer.
+    // 4 x 512 floats at 3 dp — comfortably under the proven ~80 KB EQ push below.
+    {
+        const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed);
+        if (oscActive)
+        {
+            // SPSC seqlock READ: snapshot the window into locals, retrying if the audio
+            // thread published a new frame mid-copy (odd seq, or seq changed). Bounded so
+            // the message thread never spins; worst case = one slightly-torn frame (cosmetic).
+            constexpr int N = TerrainInstrumentAudioProcessor::OSC_SCOPE_SIZE;
+            float win[4][N];
+            float oscHz = 0.f, oscSr = 48000.f;
+            for (int attempt = 0; attempt < 8; ++attempt)
+            {
+                const int s0 = audioProcessor.oscScopeSeq.load(std::memory_order_acquire);
+                if (s0 & 1) continue;                          // write in progress → retry
+                for (int o = 0; o < 4; ++o)
+                    for (int s = 0; s < N; ++s)
+                        win[o][s] = audioProcessor.oscScope[(size_t) o][(size_t) s].load(std::memory_order_relaxed);
+                oscHz = audioProcessor.oscScopeHz.load(std::memory_order_relaxed);
+                oscSr = audioProcessor.oscScopeSr.load(std::memory_order_relaxed);
+                const int s1 = audioProcessor.oscScopeSeq.load(std::memory_order_acquire);
+                if (s0 == s1) break;                           // consistent snapshot
+            }
+            juce::String os;
+            os.preallocateBytes(20000);
+            os << "if(window.updateOscScope){window.updateOscScope({";
+            static const char* oscKey[4] = { "a", "b", "c", "d" };
+            for (int o = 0; o < 4; ++o)
+            {
+                os << oscKey[o] << ":[";
+                for (int s = 0; s < N; ++s)
+                {
+                    if (s > 0) os << ",";
+                    os << juce::String(win[o][s], 3);
+                }
+                os << "],";
+            }
+            os << "hz:" << juce::String(oscHz, 3) << ",sr:" << juce::String(oscSr, 1)
+               << ",active:true});}";
+            js << os;
+        }
+        else
+        {
+            js << "if(window.updateOscScope){window.updateOscScope({active:false});}";
+        }
+    }
+
     // ── Mod state lifecycle ──
     // Before pageReady: RESTORE — push saved state every tick (JS may not be ready yet)
     // After pageReady:  SAVE    — pull serialized state from JS every 5 ticks (~83ms)

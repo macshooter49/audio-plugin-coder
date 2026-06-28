@@ -475,6 +475,20 @@ public:
     // UI dot rides the exact x-position on the curve. -1 = no voice sounding.
     std::atomic<float> ampEnvFollowVis { -1.f };
     std::atomic<float> sampleFollowVis_[4] { -1.f, -1.f, -1.f, -1.f };   // SAMPLE-FOLLOWER — per-osc playhead 0..1 (-1 = idle)
+
+    // ── OSC SCOPE — published per-osc live waveform windows (A/B/C/D) ──────────
+    // SPSC seqlock handoff: the audio thread brackets its window stores with an odd/even
+    // oscScopeSeq (odd = write in progress, even = complete); the editor's 60 Hz timer
+    // reads oscScopeSeq before+after copying the window and retries on a mismatch, so it
+    // always gets a tear-free snapshot. 4 x 512 floats (well under the proven 80 KB EQ
+    // push). active=false => no voice sounding (JS falls back to the static cycle).
+    static constexpr int OSC_SCOPE_SIZE = 512;
+    std::array<std::array<std::atomic<float>, OSC_SCOPE_SIZE>, 4> oscScope {};
+    std::atomic<float> oscScopeHz     { 0.f };    // fundamental Hz of the displayed voice
+    std::atomic<float> oscScopeSr     { 48000.f };// sample rate (for the JS trigger period)
+    std::atomic<bool>  oscScopeActive { false };  // false = no voice sounding (JS falls back to static cycle)
+    std::atomic<int>   oscScopeSeq    { 0 };      // SPSC seqlock: odd = write in progress, even = complete
+
     std::atomic<int> currentPresetIndex { 0 };
 
     // XY automation state (synced from JS, captured into presets)

@@ -134,6 +134,31 @@ namespace tw
             return (float) st + (float) ampEnv_.segFraction();
         }
 
+        // ── OSC SCOPE accessors (read on the AUDIO thread by the processor, right
+        // after renderNextBlock — same thread that wrote the rings, so no sync) ──
+        // Copy this voice's most-recent N samples for oscillator `osc` (0=A..3=D)
+        // into `dest`, in chronological order (oldest -> newest). N is clamped to
+        // the ring size. Plain reads — no allocation, no locking.
+        void copyScopeWindow (int osc, float* dest, int n) const noexcept
+        {
+            if (osc < 0 || osc > 3 || dest == nullptr) return;
+            const int N = (n > kScopeRingSize) ? kScopeRingSize : (n < 0 ? 0 : n);
+            const float* ring = scopeRing_[osc];
+            // newest sample is at (scopeRingPos_ - 1); oldest of the N-window is
+            // (scopeRingPos_ - N). Walk forward so dest[0] is the oldest.
+            int idx = (scopeRingPos_ - N) & kScopeRingMask;
+            for (int k = 0; k < N; ++k) { dest[k] = ring[idx]; idx = (idx + 1) & kScopeRingMask; }
+        }
+
+        // Fundamental frequency of the currently-played note, in Hz (equal-temp,
+        // A4=440). Used by the scope trigger to find one period. Honors glide so
+        // the displayed period follows portamento.
+        float getFundamentalHz() const noexcept
+        {
+            const double n = (glideProgress_ < 1.0) ? glideNote_ : (double) currentMidiNote_;
+            return (float) (440.0 * std::pow (2.0, (n - 69.0) / 12.0));
+        }
+
         void setFltEnvDAHDSR (float dl,float a,float h,float d,float s,float r,
                               float ca,float cd,float cr,bool lp) noexcept
         { setEnvelopeDAHDSR (fltEnvT_, dl,a,h,d,s,r,ca,cd,cr,lp); }
@@ -2295,6 +2320,21 @@ namespace tw
                     if (envDest_[k + 1] == kEnvAmp) ampMod += envDepth_[k + 1] * eAmpFree[k][i];
                 const float velEnv = currentVelocity_ * juce::jmax (0.0f, env * (1.0f + ampMod));
 
+                // ── OSC SCOPE tap — per-osc, PRE-SUM, PRE-FILTER, pre-level/pan/VCA.
+                // Write each oscillator's raw mono signal so the live oscilloscope
+                // shows the actual waveform SHAPE (saw/triangle/warped) at a stable
+                // amplitude regardless of that osc's volume/pan/envelope; unison
+                // detune BEATING is already summed into sX_L/sX_R, so it stays
+                // visible. Plain float writes only — audio thread, no atomics/alloc.
+                {
+                    const int wp = scopeRingPos_;
+                    scopeRing_[0][wp] = 0.5f * (sA_L + sA_R);
+                    scopeRing_[1][wp] = 0.5f * (sB_L + sB_R);
+                    scopeRing_[2][wp] = 0.5f * (sC_L + sC_R);
+                    scopeRing_[3][wp] = 0.5f * (sD_L + sD_R);
+                    scopeRingPos_ = (wp + 1) & kScopeRingMask;
+                }
+
                 // Sum to stereo with INDEPENDENT per-osc level + pan
                 scratchL[i] = (sA_L * level_ * panL_ + sB_L * levelB_ * panLB_ + sC_L * levelC_ * panLC_ + sD_L * levelD_ * panLD_) * velEnv;
                 scratchR[i] = (sA_R * level_ * panR_ + sB_R * levelB_ * panRB_ + sC_R * levelC_ * panRC_ + sD_R * levelD_ * panRD_) * velEnv;
@@ -2838,6 +2878,18 @@ namespace tw
         double sampleRate_      = 48000.0;
         int    currentMidiNote_ = 60;
         float  currentVelocity_ = 1.0f;
+
+        // ── OSC SCOPE — per-osc audio-thread ring buffers (A/B/C/D) ─────────────
+        // Live oscilloscope tap: per output sample the render loop writes each
+        // oscillator's mono signal 0.5*(sX_L+sX_R) here, BEFORE the pre-filter sum.
+        // Written AND read on the AUDIO thread only (the processor copies them right
+        // after renderNextBlock, same thread), so these are PLAIN floats — NO atomics,
+        // NO locks, NO allocation in the hot path. The fixed mask (& kScopeRingMask)
+        // makes the advance a single AND with no branch.
+        static constexpr int kScopeRingSize = 1024;
+        static constexpr int kScopeRingMask = kScopeRingSize - 1;   // 0x3FF
+        float scopeRing_[4][kScopeRingSize] = {};
+        int   scopeRingPos_ = 0;
 
         // ── PORTAMENTO / GLIDE — fractional-pitch slide between notes ───────────────
         // glideNote_ is the pitch actually feeding the oscillators (the increment
