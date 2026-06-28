@@ -554,17 +554,19 @@ namespace tw
                     const double w = p * (1.0 + (double) amount * 7.0);
                     return w - std::floor (w);
                 }
-                case 8:  // P-QUANTIZE — phase staircase, 32→2 steps, CENTER-sampled.
+                case 8:  // P-QUANTIZE — phase staircase, 32→2 steps, QUARTER-sampled.
                 {
-                    // FIX (Max bug report 2026-06-11): the old curve round(1+(1−a)²·31)
-                    // collapsed to 2 steps by 80% and 1 step (a CONSTANT = silence) past
-                    // ~88%, and floor-edge sampling pinned low step counts to phases 0
-                    // and 0.5 — the zero crossings of sine-like tables — so chained
-                    // P-QUANTIZE muted the oscillator past ~60-70%. New: exponential
-                    // 32→2 (never 1), and each step samples its CENTER, so max quantize
-                    // is a hard 2-step square (±table peaks), not silence.
+                    // FIX (Max 2026-06-11 + 2026-06-27): exponential 32→2 steps (never 1).
+                    // The 2026-06-11 pass CENTER-sampled (+0.5), but the center phases 0.25/0.75
+                    // are the odd-harmonic NULLS of the cosine-phase tables (Square/Pulse/Minimoog,
+                    // Wavetable.h cosPhase=π/2), so P-Quantize went SILENT at low even step counts
+                    // (steps=2 total silence past ~92%, steps=6 a ~18% dip at ~58-63% = Max's "64%").
+                    // A QUARTER offset (+0.25) is grid-misaligned with BOTH the cosine nulls
+                    // (0.25/0.75) AND the sine nulls (0/0.5), so no table convention can zero every
+                    // sample point — audible across the whole 0–100% range; at steps=2 it reads a
+                    // clean hard 2-step square at ±table peaks. (RT-safe, DSP-only, no UI mirror.)
                     const double steps = std::round (std::pow (2.0, 5.0 - 4.0 * (double) amount));
-                    return (std::floor (p * steps) + 0.5) / steps;
+                    return (std::floor (p * steps) + 0.25) / steps;
                 }
                 default: return p;   // NONE / RECTIFY / SINE SHAPER (amp-domain)
             }
