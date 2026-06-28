@@ -3433,31 +3433,62 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int o = 0; o < 4; ++o)
             sampleFollowVis_[o].store (bestVoice ? bestVoice->sampleFollowPos01 (o) : -1.f, std::memory_order_relaxed);
 
-        // ── OSC SCOPE — publish the most-active voice's 4 osc waveform windows ──
-        // Still on the AUDIO thread, right after renderNextBlock: bestVoice's rings
-        // were written this same block on this same thread, so copyScopeWindow reads
-        // them with no sync. We copy into a stack scratch (no heap), then store into
-        // the lock-free oscScope atomics (same discipline as scopeBuffer) and bump
-        // the seq so the editor knows a fresh frame is ready. No note sounding ->
-        // active=false and JS falls back to the static single-cycle renderer.
-        if (bestVoice != nullptr)
+        // ── OSC SCOPE — publish the SUM of ALL sounding voices' 4 osc windows ──
+        // Still on the AUDIO thread, right after renderNextBlock: every active voice's
+        // rings were written this same block on this same thread, so copyScopeWindow
+        // reads them with no sync. The "visual shaper" shows the REAL combined waveform
+        // — 1 note = a clean shape, 2+ notes = the held-voice interference pattern
+        // (matching the Notes reference). We accumulate each active voice's per-osc
+        // window into a stack scratch (no heap), RMS-normalize by 1/sqrt(nActive) so
+        // display height stays ~constant regardless of voice count (1 voice → ×1 =
+        // byte-identical to the old single-voice publish), then store into the
+        // lock-free oscScope atomics (same discipline as scopeBuffer) and bump the seq
+        // so the editor knows a fresh frame is ready. No note sounding -> active=false
+        // and JS smooths the display down to a flatline.
+        // RT-SAFE: stack temps only (acc[1024]+tmp[1024] = 8 KB), plain float add/mul,
+        // no heap/lock/IO on the audio thread.
+        // PERF: the per-voice sum is O(4·active-voices·1024); the editor only consumes at 60 Hz,
+        // so gate the whole publish to ~60 Hz instead of block-rate (~750 Hz) → ~12× less
+        // audio-thread work with zero visual cost (the editor reads the last published frame).
+        oscScopePubAccum_ += (double) numSamples;
+        const bool oscDoPub = (oscScopePubAccum_ >= getSampleRate() / 60.0);
+        if (oscDoPub) oscScopePubAccum_ -= getSampleRate() / 60.0;
+        if (oscDoPub && bestVoice != nullptr)
         {
+            // Count the voices we will sum (same iteration discipline as bestVoice above).
+            int nActive = 0;
+            for (int i = 0; i < synthEngine.getNumVoices(); ++i)
+                if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+                    if (sv->isAmpEnvActive())
+                        ++nActive;
+            if (nActive < 1) nActive = 1;
+            const float norm = 1.0f / std::sqrt ((float) nActive);   // RMS-style height hold
+
             // SPSC seqlock WRITE: bracket the window stores with odd→even so the editor
             // can detect a torn snapshot and retry (see PluginEditor timerCallback).
-            float win[OSC_SCOPE_SIZE];
+            float acc[OSC_SCOPE_SIZE];
+            float tmp[OSC_SCOPE_SIZE];
             oscScopeSeq.fetch_add (1, std::memory_order_release);   // → odd: window write begins
             for (int o = 0; o < 4; ++o)
             {
-                bestVoice->copyScopeWindow (o, win, OSC_SCOPE_SIZE);
+                for (int s = 0; s < OSC_SCOPE_SIZE; ++s) acc[s] = 0.0f;
+                for (int i = 0; i < synthEngine.getNumVoices(); ++i)
+                    if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+                        if (sv->isAmpEnvActive())
+                        {
+                            sv->copyScopeWindow (o, tmp, OSC_SCOPE_SIZE);
+                            for (int s = 0; s < OSC_SCOPE_SIZE; ++s) acc[s] += tmp[s];
+                        }
                 for (int s = 0; s < OSC_SCOPE_SIZE; ++s)
-                    oscScope[(size_t) o][(size_t) s].store (win[s], std::memory_order_relaxed);
+                    oscScope[(size_t) o][(size_t) s].store (acc[s] * norm, std::memory_order_relaxed);
             }
+            // Anchor the display period on the loudest/most-active voice's fundamental.
             oscScopeHz.store     (bestVoice->getFundamentalHz(), std::memory_order_relaxed);
             oscScopeSr.store     ((float) getSampleRate(),       std::memory_order_relaxed);
             oscScopeSeq.fetch_add (1, std::memory_order_release);   // → even: window complete
             oscScopeActive.store (true, std::memory_order_relaxed);
         }
-        else
+        else if (oscDoPub)
         {
             oscScopeActive.store (false, std::memory_order_relaxed);
         }

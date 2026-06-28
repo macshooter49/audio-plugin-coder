@@ -488,6 +488,7 @@ public:
     std::atomic<float> oscScopeSr     { 48000.f };// sample rate (for the JS trigger period)
     std::atomic<bool>  oscScopeActive { false };  // false = no voice sounding (JS falls back to static cycle)
     std::atomic<int>   oscScopeSeq    { 0 };      // SPSC seqlock: odd = write in progress, even = complete
+    double             oscScopePubAccum_ = 0.0;   // audio-thread sample accumulator — gates the voice-sum publish to ~60 Hz
 
     std::atomic<int> currentPresetIndex { 0 };
 
