@@ -536,7 +536,7 @@ private:
             //
             // WINDOW = ADAPTIVE, per-turn, limited to the material available on the MIRROR side
             // (loopStart for the start turn; numSamples-1-loopEnd for the end turn). This replaces
-            // the old all-or-nothing loopXfadeContentValid_ gate, which switched the corner-rounding
+            // an earlier all-or-nothing content-valid gate, which switched the corner-rounding
             // OFF entirely once X-Fade exceeded the lead-in distance — that cliff let the click back
             // in at the loop ENTRY above ~40 % X-Fade. Fires only with ADEQUATE room (room ≥
             // min(xfadeLen, kMinXfadeRoom)); below that the buffer-edge turn falls to the seam-

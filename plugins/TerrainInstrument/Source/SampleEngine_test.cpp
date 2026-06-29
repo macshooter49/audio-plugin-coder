@@ -52,8 +52,8 @@ struct Run { std::vector<float> out, pos; };
 
 // Drive the engine for `frames` mono samples with a given loop mode + xfade.
 // Loop placed at [1000,5000] — both rising zero-crossings, and ≥ xfadeLen away
-// from the buffer edges so the CONTENT crossfade path (loopXfadeContentValid_)
-// is the one under test, not the buffer-edge seam-fade fallback.
+// from the buffer edges so the CONTENT crossfade is the one under test, not the
+// buffer-edge seam-fade fallback.
 static Run drive (SampleEngine::LoopMode mode, float xfade, int frames, float scan = 0.5f)
 {
     static std::vector<float> buf = makeSine();
