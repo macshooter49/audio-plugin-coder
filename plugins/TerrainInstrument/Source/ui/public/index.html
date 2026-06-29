@@ -3859,6 +3859,10 @@ body {
 #syn-panel .samp-exp { position: absolute; top: 6px; right: 8px; width: 13px; height: 13px; color: rgba(224,220,232,.6); cursor: pointer; z-index: 7;
   filter: drop-shadow(0 1px 3px rgba(0,0,0,.9)); transition: .12s; }
 #syn-panel .samp-exp:hover { color: #fff; transform: scale(1.08); }
+/* DEFERRED to 1.2 — the ⤢ "Chop editor" extension emblem (sample-osc mini chop engine). Markup +
+   stub handler kept; just hidden so there's no dead emblem until the extension ships. Remove this
+   one rule (and build the chop card) to bring it back. */
+#syn-panel .samp-exp { display: none; }
 /* control row — UNDER the waveform, above the knobs (no text in the box) */
 #syn-panel .samp-ctl { flex: 0 0 auto; height: 14px; display: flex; align-items: center; gap: 9px; font-size: 8.5px; letter-spacing: .4px; color: var(--text-muted); }
 #syn-panel .samp-ctl .c { display: inline-flex; align-items: center; gap: 4px; color: var(--text-primary); font-weight: 300; cursor: pointer; }
