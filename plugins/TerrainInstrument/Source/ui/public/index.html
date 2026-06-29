@@ -21012,7 +21012,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         disp[x] += (tg - disp[x]) * a;
         var ad = disp[x] < 0 ? -disp[x] : disp[x];
         if (ad > dpk) dpk = ad;
-        if (!alive && ad > 0.0015) alive = true;
+        // 'alive' gates the release-fade park; measure the RENDERED amplitude (disp × the held
+        // gain) so a quiet note (high gain) fades to TRUE flat instead of parking on a faint residual.
+        if (!alive && ad * (scope.gain[o] || 1) > 0.0015) alive = true;
       }
       if (alive) anyAlive = true;
       // FIX B (part 2) — FILL-NORMALIZE the FINAL display. Track the peak of the *smoothed* disp (fast
