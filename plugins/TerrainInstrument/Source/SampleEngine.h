@@ -40,6 +40,7 @@ public:
     {
         outRate_ = (outputSampleRate > 0.0) ? outputSampleRate : 44100.0;
         endFadeLen_ = 0.0025 * outRate_;   // ~2.5 ms terminal micro fade-out (region-edge declick)
+        transFadeLen_ = 0.003 * outRate_;  // ~3 ms loop-ENTRY (catch-snap) declick crossfade
     }
 
     /** Point the engine at the loaded buffer. Call whenever the BufferPtr or
@@ -71,7 +72,14 @@ public:
         loopEnd01_   = clamp01 (loopEnd01);
         recomputeRegion();
     }
-    void setLoopMode (LoopMode m) noexcept { mode_ = m; }
+    void setLoopMode (LoopMode m) noexcept
+    {
+        // Leaving Reverse mid-fade: disarm the loop-entry transition crossfade (it would otherwise
+        // blend the stale reverse-glide against an unrelated Forward/PingPong playhead). Called per
+        // block; harmless no-op for non-Reverse modes (which never arm it).
+        if (m != LoopMode::Reverse) transFadePos_ = 1.0e18;
+        mode_ = m;
+    }
     /** 0..1 → loop crossfade as a fraction of loop length (capped to half-loop). */
     void setXFade (float x01) noexcept { xfade01_ = clamp01 (x01); recomputeRegion(); }
     /** Region edge amplitude fades (shift-drag Start/End in the UI). 0..1 of region. */
@@ -151,6 +159,7 @@ public:
         active_ = hasSample();
         onsetPos_ = 0.0;                                  // arm the note-on micro fade-in (declicks the start)
         onsetLen_ = 0.003 * outRate_;                     // ~3 ms equal-power ramp
+        transFadePos_ = 1.0e18;                           // disarm any stale loop-entry transition crossfade
     }
 
     /** Tailed → drop the loop and play the release tail to End. Others → stop. */
@@ -174,6 +183,29 @@ public:
         if (! active_ || ! hasSample()) { outL = outR = 0.f; return false; }
 
         readFrame (pos_, outL, outR);
+
+        // LOOP-ENTRY (catch-snap) DECLICK — only the Reverse loop arms this (it snaps loopStart →
+        // loopEnd on catch). Crossfade the new (post-snap reverse) read IN over ~3 ms while the OLD
+        // forward lead-in trajectory glides on, so the doorway hands over with no value jump.
+        // GAIN LAW = EQUAL-GAIN (gOld + gNew == 1) + SMOOTHSTEP, matching the ping-pong crossfade:
+        // reverse loops live on sustained/bass material where the two doorway reads can correlate,
+        // and equal-power (0.707/0.707) would then BOOST +3 dB at the doorway — a level pump is the
+        // failure mode that draws the ear, whereas equal-gain can only dip (inaudible over 3 ms on
+        // the rarer decorrelated case). Smoothstep (zero slope at both ends) keeps it C1-continuous
+        // with the lead-in (t→0) and the steady reverse loop (t→1) — no kink at either edge.
+        if (transFadePos_ < transFadeLen_)
+        {
+            float ol, orr;
+            readHermite (transFromPos_, ol, orr);            // old voice: raw read, keeps gliding fwd
+            const double t  = transFadePos_ / transFadeLen_; // 0 → 1
+            const double sm = t * t * (3.0 - 2.0 * t);       // smoothstep: s(0)=0,s(1)=1, s'(0)=s'(1)=0
+            const float gNew = (float) sm;                   // new (reverse) read fades IN
+            const float gOld = 1.0f - gNew;                  // old lead-in fades OUT (EQUAL-GAIN: sum == 1)
+            outL = outL * gNew + ol  * gOld;
+            outR = outR * gNew + orr * gOld;
+            transFromPos_ += transFromInc_;
+            transFadePos_ += 1.0;
+        }
 
         // Region edge fades (amplitude ramp from Start / into End).
         const float g = edgeGain (pos_);
@@ -209,11 +241,33 @@ public:
 
         // DECLICK — loop-seam micro fade (only when a content crossfade can't run, e.g. loop at a
         // buffer edge) + the note-on micro fade-in (kills sprayed random-start clicks).
-        if (caught_ && ! loopXfadeContentValid_ && seamFadeLen_ > 1.0)
+        // Loop-seam amplitude micro-fade — the fallback declick for when the adaptive CONTENT
+        // crossfade has NO ROOM, which only happens at a BUFFER-EDGE loop (room ≤ 1): loopStart==0
+        // for a Forward wrap, loopEnd==N-1 for a Reverse wrap, or either edge for a Ping-Pong turn.
+        // Keying on room (not the old contentValid flag) is the crux of the >40 % X-Fade ENTRY click
+        // fix: a seam/turn that DID have crossfade room (the lead-in case) must NOT get this
+        // amplitude fade — that slammed the just-caught entry toward zero. A no-room edge has no
+        // lead-in, so it never collides with the entry.
+        // Suppressed while the loop-ENTRY transition crossfade is active (transFadePos_ < len): that
+        // one-shot declick already bridges the entry, and for a Reverse buffer-edge loop the entry
+        // snaps right INTO this seam zone — letting both fire double-attenuates the doorway = a kink.
+        if (caught_ && seamFadeLen_ > 1.0 && transFadePos_ >= transFadeLen_)
         {
+            // Complementary to the readFrame content crossfade: it fires when room ≥ xfReq, so this
+            // amplitude fallback fires when room < xfReq (small-room / buffer-edge), declicking by
+            // attenuation where a short content crossfade would clamp/under-bridge. No gap, no overlap.
             const double dE = loopEnd_ - pos_, dS = pos_ - loopStart_;
-            const double d  = (dE < dS) ? dE : dS;
-            if (d >= 0.0 && d < seamFadeLen_) { const float sg = (float) std::sin ((d / seamFadeLen_) * kHalfPi); outL *= sg; outR *= sg; }
+            const double Nm1 = (double) (numSamples_ - 1);
+            const double xfReq = (xfadeLen_ < kMinXfadeRoom) ? xfadeLen_ : kMinXfadeRoom;
+            double room;
+            if (mode_ == LoopMode::PingPong)   room = ((dE <= dS) ? (Nm1 - loopEnd_) : loopStart_);  // nearer turn
+            else if (mode_ == LoopMode::Reverse) room = Nm1 - loopEnd_;   // reverse opposite-seam at the buffer end
+            else                                 room = loopStart_;        // Forward/Tailed lead-in at the buffer start
+            if (room < xfReq)
+            {
+                const double d = (dE < dS) ? dE : dS;
+                if (d >= 0.0 && d < seamFadeLen_) { const float sg = (float) std::sin ((d / seamFadeLen_) * kHalfPi); outL *= sg; outR *= sg; }
+            }
         }
         if (onsetPos_ < onsetLen_)
         {
@@ -282,11 +336,10 @@ private:
         if (xfadeLen_ > cap) xfadeLen_ = cap;
         if (xfadeLen_ < 0.0) xfadeLen_ = 0.0;
 
-        // DECLICK — the content crossfade reads pre/post-loop audio (p ± loopLen); when the loop
-        // sits at a buffer edge those reads clamp to DC and THUMP. Only use the content crossfade
-        // when that audio genuinely exists; otherwise fall back to a short seam amplitude micro-fade.
-        const double Nm1 = (double) (numSamples_ - 1);
-        loopXfadeContentValid_ = (loopStart_ >= xfadeLen_) && (loopEnd_ + xfadeLen_ <= Nm1);
+        // DECLICK — the loop content crossfade uses an ADAPTIVE per-edge window (see readFrame) that
+        // limits its reads to the material available before loopStart / after loopEnd, so it runs at
+        // ANY X-Fade without ever clamping to DC. The short seam amplitude micro-fade is the fallback
+        // only for a BUFFER-EDGE loop where even that window has no room (see tick()).
         const double seamMax = 0.0015 * outRate_;   // ~1.5 ms declick
         seamFadeLen_ = (xfadeLen_ < seamMax) ? xfadeLen_ : seamMax;
 
@@ -341,7 +394,16 @@ private:
                 caught_   = true;
                 pingSign_ = (inc < 0.0) ? -1 : 1;                // bounce starts in the travel direction
                 if (mode_ == LoopMode::Reverse && loopEnd_ > loopStart_)
-                    pos_ = loopEnd_ - 1.0;                       // (A) snap to loop end, run back
+                {
+                    // (A) Reverse loop: snap to the loop END and run back. The snap is a HARD
+                    // position jump (loopStart → loopEnd) = a click "entering the loop zone".
+                    // DECLICK it: keep the old forward lead-in trajectory gliding for ~3 ms while
+                    // the new reverse read fades in (equal-power), so the doorway is seamless.
+                    transFromPos_ = pos_;                        // pre-snap read position (≈ loopStart)
+                    transFromInc_ = inc;                         // keep the old voice moving forward
+                    transFadePos_ = 0.0;                         // arm the entry crossfade
+                    pos_ = loopEnd_ - 1.0;
+                }
                 else
                 {
                     while (pos_ >= loopEnd_)   pos_ -= loopLen();  // clamp overshoot (forward catch)
@@ -397,37 +459,106 @@ private:
     {
         readHermite (p, l, r);
 
-        // Equal-power loop crossfade: in the last xfadeLen samples before the
-        // loop end, blend the loop tail (here) with the lead-in to loopStart, so
-        // the wrap loopEnd→loopStart is seamless. cos²+sin² = 1 (constant power).
+        // EQUAL-GAIN loop crossfade: in the last xfadeLen samples before the loop end, blend the
+        // loop tail (here) with the lead-in to loopStart so the wrap loopEnd→loopStart is seamless.
+        // gT + gH == 1 (equal-GAIN, not equal-power): a well-set loop's two seam reads are CORRELATED
+        // (adjacent cycles), and equal-power (cos/sin) would sum them to +3 dB = a level PUMP at the
+        // seam on sustained/bass material. Equal-gain holds the level; smoothstep (zero slope at both
+        // ends) keeps it C1-continuous into the loop body and across the wrap. (Same law the ping-pong
+        // + reverse-entry crossfades use — the engine is consistent: declicks never boost level.)
         const bool fwdLoop = (mode_ == LoopMode::Forward
                               || (mode_ == LoopMode::Tailed && ! releasing_));
-        if (fwdLoop && xfadeLen_ > 1.0 && loopXfadeContentValid_)
+        if (fwdLoop && xfadeLen_ > 1.0)
         {
-            const double dEnd = loopEnd_ - p;                 // distance to loop end
-            if (dEnd >= 0.0 && dEnd < xfadeLen_)
+            // ADAPTIVE window: limit to loopStart so the lead-in read (p − loopLen, down to
+            // loopStart − xfEff) never passes index 0. Fires only when the lead-in side has room for
+            // an ADEQUATE window — room ≥ min(xfadeLen, kMinXfadeRoom): either the full user window
+            // fits (loopStart ≥ xfadeLen, the old "valid" case, xfEff == xfadeLen, behaviour
+            // unchanged) or, when room-limited, room ≥ kMinXfadeRoom so the short window still
+            // bridges and the Hermite fringe stays unclamped. Below that the seam-amplitude fallback
+            // in tick() takes over (complementary — no declick gap), exactly as the old gate did.
+            const double xfReq = (xfadeLen_ < kMinXfadeRoom) ? xfadeLen_ : kMinXfadeRoom;
+            const double xfEff = (xfadeLen_ < loopStart_) ? xfadeLen_ : loopStart_;
+            const double dEnd  = loopEnd_ - p;                // distance to loop end
+            if (loopStart_ >= xfReq && dEnd >= 0.0 && dEnd < xfEff)
             {
-                const double t  = 1.0 - (dEnd / xfadeLen_);   // 0 at xfade-in, →1 at loopEnd
+                const double t  = 1.0 - (dEnd / xfEff);       // 0 at xfade-in, →1 at loopEnd
                 float hl, hr;
                 readHermite (p - loopLen(), hl, hr);          // the lead-in to loopStart
-                const float gT = (float) std::cos (t * kHalfPi);
-                const float gH = (float) std::sin (t * kHalfPi);
+                const double s  = t * t * (3.0 - 2.0 * t);    // smoothstep
+                const float gH = (float) s;                   // lead-in fades IN
+                const float gT = 1.0f - gH;                   // tail fades OUT (gT + gH == 1)
                 l = l * gT + hl * gH;
                 r = r * gT + hr * gH;
             }
         }
-        else if (mode_ == LoopMode::Reverse && xfadeLen_ > 1.0 && loopXfadeContentValid_)
+        else if (mode_ == LoopMode::Reverse && xfadeLen_ > 1.0)
         {
+            // ADAPTIVE window: limit to (N-1 − loopEnd) so the opposite-seam read (p + loopLen, up
+            // to loopEnd + xfEff) never passes the last sample. Same room ≥ min(xfadeLen,kMinXfadeRoom)
+            // adequacy gate as forward; below it the seam-amplitude fallback covers the seam.
+            const double room   = (double) (numSamples_ - 1) - loopEnd_;
+            const double xfReq  = (xfadeLen_ < kMinXfadeRoom) ? xfadeLen_ : kMinXfadeRoom;
+            const double xfEff  = (xfadeLen_ < room) ? xfadeLen_ : room;
             const double dStart = p - loopStart_;             // reverse seam at loopStart
-            if (dStart >= 0.0 && dStart < xfadeLen_)
+            if (room >= xfReq && dStart >= 0.0 && dStart < xfEff)
             {
-                const double t  = 1.0 - (dStart / xfadeLen_);
+                const double t  = 1.0 - (dStart / xfEff);
                 float hl, hr;
                 readHermite (p + loopLen(), hl, hr);
-                const float gT = (float) std::cos (t * kHalfPi);
-                const float gH = (float) std::sin (t * kHalfPi);
+                const double s  = t * t * (3.0 - 2.0 * t);    // smoothstep
+                const float gH = (float) s;                   // opposite-seam read fades IN
+                const float gT = 1.0f - gH;                   // current tail fades OUT (equal-gain)
                 l = l * gT + hl * gH;
                 r = r * gT + hr * gH;
+            }
+        }
+        else if (mode_ == LoopMode::PingPong && xfadeLen_ > 1.0)
+        {
+            // Ping-Pong REFLECTS at loopStart/loopEnd, so the position is continuous — there's
+            // no value jump like Forward/Reverse. Its artefact is a SLOPE-REVERSAL CORNER at each
+            // turnaround: the play direction flips, so the waveform's time-derivative jumps sign =
+            // a click on every bounce. (Forward/Reverse round a value step; Ping-Pong needs a
+            // corner ROUNDED.) Fix = a MIRROR crossfade: within xfadeLen of the nearer turn, blend
+            // the actual read f(p) with the mirror read f(2·turn − p). With the weights 50/50 at
+            // the turn, the actual and mirror reads are exact REFLECTIONS (equal-and-opposite
+            // slope) so the position-driven first derivative cancels → the corner is rounded away;
+            // the weight then ramps to 100 % actual at the window edge to hand back to the
+            // un-crossfaded signal.
+            //
+            // GAIN LAW = EQUAL-GAIN (gA + gM == 1), NOT equal-power. At the turn the mirror sample
+            // EQUALS the actual sample (d = 0 → 2·turn − p == p), i.e. the two reads are perfectly
+            // CORRELATED; equal-power gains (0.707/0.707) would sum them to 1.414× = a +3 dB level
+            // PUMP on every bounce (worst on peak/DC loop endpoints — Max's bass/sustained
+            // territory). Equal-gain sums correlated reads to exactly 1× → no swell. The weight is
+            // a SMOOTHSTEP (zero slope at both ends): 50/50 at the turn, 100 % actual at the edge
+            // with MATCHING slope, so no new kink is introduced at the window edge either.
+            //
+            // WINDOW = ADAPTIVE, per-turn, limited to the material available on the MIRROR side
+            // (loopStart for the start turn; numSamples-1-loopEnd for the end turn). This replaces
+            // the old all-or-nothing loopXfadeContentValid_ gate, which switched the corner-rounding
+            // OFF entirely once X-Fade exceeded the lead-in distance — that cliff let the click back
+            // in at the loop ENTRY above ~40 % X-Fade. Fires only with ADEQUATE room (room ≥
+            // min(xfadeLen, kMinXfadeRoom)); below that the buffer-edge turn falls to the seam-
+            // amplitude fallback in tick() (complementary — no declick gap, no clamped-fringe thump).
+            const double dEnd    = loopEnd_   - p;            // distance up to the loopEnd turn
+            const double dStart  = p - loopStart_;            // distance down to the loopStart turn
+            const bool   nearEnd = (dEnd <= dStart);          // which turnaround is closer
+            const double d       = nearEnd ? dEnd : dStart;
+            const double room    = nearEnd ? ((double) (numSamples_ - 1) - loopEnd_) : loopStart_;
+            const double xfReq   = (xfadeLen_ < kMinXfadeRoom) ? xfadeLen_ : kMinXfadeRoom;
+            const double xfEff   = (xfadeLen_ < room) ? xfadeLen_ : room;   // in-bounds per-turn window
+            if (room >= xfReq && xfEff > 1.0 && d >= 0.0 && d < xfEff)
+            {
+                const double mirror = nearEnd ? (loopEnd_ + d) : (loopStart_ - d);   // 2·turn − p
+                float hl, hr;
+                readHermite (mirror, hl, hr);
+                const double t  = d / xfEff;                     // 0 at the turn → 1 at the window edge
+                const double s  = t * t * (3.0 - 2.0 * t);       // smoothstep: s(0)=0, s(1)=1, s'(0)=s'(1)=0
+                const float  gM = (float) (0.5 * (1.0 - s));     // mirror: 0.5 at the turn → 0 at the edge
+                const float  gA = 1.0f - gM;                     // actual: 0.5 → 1   (EQUAL-GAIN: gA + gM = 1)
+                l = l * gA + hl * gM;
+                r = r * gA + hr * gM;
             }
         }
     }
@@ -511,10 +642,22 @@ private:
     double  onsetLen_ = 0.0, onsetPos_ = 1.0e18;   // note-on micro fade-in (kills sprayed random-start clicks)
     double  seamFadeLen_ = 0.0;                    // loop-seam micro fade half-width (samples), fallback declick
     double  endFadeLen_ = 0.0;                     // terminal (region-edge) micro fade-out (samples) — UNCONDITIONAL "no clicks"
-    bool    loopXfadeContentValid_ = true;         // pre/post-loop audio exists → use the content crossfade
+    // loop-ENTRY declick: the Reverse loop snaps loopStart→loopEnd on catch; crossfade the old
+    // forward lead-in out and the new reverse read in over transFadeLen_ samples (kills the "doorway" click).
+    double  transFadeLen_ = 0.0;                   // ~3 ms entry crossfade length (samples)
+    double  transFadePos_ = 1.0e18;                // counter; >= len = inactive (disarmed)
+    double  transFromPos_ = 0.0;                   // old (pre-snap) read position, glides fwd during the fade
+    double  transFromInc_ = 0.0;                   // old voice's per-sample advance (the lead-in step)
 
     static constexpr double kHalfPi = 1.57079632679489661923;
     static constexpr double kMinLoopSamples = 8.0;
+    // Min crossfade-window room (samples). Below this a room-limited content crossfade is too short
+    // to bridge the seam (and its Hermite fringe carries DC-clamp weight) → use the seam-amplitude
+    // fallback instead. Chosen at the measured crossover (~13-16): the crossfade is reliably clean
+    // for room ≥ this, while below it the amplitude fallback degrades GRACEFULLY (a small notch at
+    // attenuated level) — erring toward the fallback, since a too-short crossfade THUMPS. Well under
+    // the 3 ms onset fade so a tiny-lead-in loop entry is masked at note-on.
+    static constexpr double kMinXfadeRoom = 16.0;
     static constexpr float  kMinSpan01 = 0.001f;
 };
 } // namespace tw
