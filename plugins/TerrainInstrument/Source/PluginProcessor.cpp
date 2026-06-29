@@ -3417,21 +3417,30 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // sounds we send -1 and JS parks/hides the follower.
     {
         float best = 0.f; float bestFollow = -1.f; float bestLfo = 0.f; bool any = false;
-        tw::SynthVoice* bestVoice = nullptr;   // SAMPLE-FOLLOWER — same voice the env dot tracks
+        tw::SynthVoice* bestVoice = nullptr;   // most-active voice (env dot + scope pick)
+        // SAMPLE-FOLLOWER (multi) — gathered in this SAME voice pass: every sounding voice's per-osc
+        // read position, keyed by voice index i (stable identity → smooth fade on release in the UI),
+        // capped at kMaxFollowers, so the editor draws one fading white playhead per held note.
+        int cnt[4] = { 0, 0, 0, 0 };
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
             if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
                 if (sv->isAmpEnvActive())
                 {
                     const float lv = sv->getAmpEnvLevel();
                     if (!any || lv > best) { best = lv; bestFollow = sv->getAmpEnvFollow(); bestLfo = sv->getSynthLfoVis(); bestVoice = sv; any = true; }
+                    for (int o = 0; o < 4; ++o)
+                        if (cnt[o] < kMaxFollowers)
+                        {
+                            const float p = sv->sampleFollowPos01 (o);
+                            if (p >= 0.f) { sampleFollowIdx_[o][cnt[o]].store (i, std::memory_order_relaxed);
+                                            sampleFollowPos_[o][cnt[o]].store (p, std::memory_order_relaxed); ++cnt[o]; }
+                        }
                 }
         ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
         ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
-        // SAMPLE-FOLLOWER — that same voice's per-osc sample read positions (-1 = idle).
-        for (int o = 0; o < 4; ++o)
-            sampleFollowVis_[o].store (bestVoice ? bestVoice->sampleFollowPos01 (o) : -1.f, std::memory_order_relaxed);
+        for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
 
         // ── OSC SCOPE — publish the SUM of ALL sounding voices' 4 osc windows ──
         // Still on the AUDIO thread, right after renderNextBlock: every active voice's

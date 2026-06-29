@@ -474,7 +474,14 @@ public:
     // Packed stage+fraction of the same voice (e.g. 2.37 = 37% through Attack), so the
     // UI dot rides the exact x-position on the curve. -1 = no voice sounding.
     std::atomic<float> ampEnvFollowVis { -1.f };
-    std::atomic<float> sampleFollowVis_[4] { -1.f, -1.f, -1.f, -1.f };   // SAMPLE-FOLLOWER — per-osc playhead 0..1 (-1 = idle)
+    // SAMPLE-FOLLOWER (multi) — one playhead per SOUNDING voice so the UI can draw a fading white
+    // line for every held note (Phase Plant style). Per osc: a compact list of {voiceIndex, pos01}
+    // for active sample voices + a count. Keyed by voiceIndex so the editor can give each note a
+    // stable line (smooth fade on release). Capped at kMaxFollowers.
+    static constexpr int kMaxFollowers = 16;
+    std::atomic<int>   sampleFollowIdx_[4][kMaxFollowers] {};   // voice index (identity)
+    std::atomic<float> sampleFollowPos_[4][kMaxFollowers] {};   // read position 0..1
+    std::atomic<int>   sampleFollowCount_[4] {};               // active count per osc
 
     // ── OSC SCOPE — published per-osc live waveform windows (A/B/C/D) ──────────
     // SPSC seqlock handoff: the audio thread brackets its window stores with an odd/even

@@ -3058,16 +3058,24 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
            << juce::String(envFollow, 4) << "," << juce::String(envStage, 4) << ");}";
     }
 
-    // ── Sample engine MIDI follower (per-osc playhead) ──
-    // SAMPLE-FOLLOWER — push the most-active voice's per-osc sample read position. pos < 0
-    // means that osc isn't a sounding Sample engine, so JS fades/parks the line (active=false).
+    // ── Sample engine MIDI followers (one playhead per held note) ──
+    // SAMPLE-FOLLOWER (multi) — push every sounding voice's per-osc read position as a flat
+    // [voiceIdx,pos, voiceIdx,pos, …] list. JS keys each line by voiceIdx for stable identity and
+    // fades out any that disappear. Empty list → JS fades all lines for that osc.
     {
         static const char* oscId[4] = { "'a'", "'b'", "'c'", "'d'" };
         for (int o = 0; o < 4; ++o)
         {
-            const float pos = audioProcessor.sampleFollowVis_[o].load(std::memory_order_relaxed);
-            js << "if(window.updateSampleFollower){window.updateSampleFollower(" << oscId[o] << ","
-               << juce::String(pos < 0.f ? 0.f : pos, 4) << "," << (pos >= 0.f ? "true" : "false") << ");}";
+            const int n = audioProcessor.sampleFollowCount_[o].load(std::memory_order_relaxed);
+            js << "if(window.updateSampleFollower){window.updateSampleFollower(" << oscId[o] << ",[";
+            for (int k = 0; k < n; ++k)
+            {
+                const int   vi = audioProcessor.sampleFollowIdx_[o][k].load(std::memory_order_relaxed);
+                const float p  = audioProcessor.sampleFollowPos_[o][k].load(std::memory_order_relaxed);
+                if (k) js << ",";
+                js << vi << "," << juce::String(p, 4);
+            }
+            js << "]);}";
         }
     }
 

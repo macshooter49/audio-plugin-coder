@@ -3851,7 +3851,7 @@ body {
 #syn-panel .sample-view.loopoff .samp-h.ls, #syn-panel .sample-view.loopoff .samp-h.le,
 #syn-panel .sample-view.loopoff .samp-band, #syn-panel .sample-view.loopoff .samp-xf { display: none; }
 /* playhead */
-#syn-panel .samp-ph { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(236,232,242,.5); z-index: 3; pointer-events: none; opacity: 0; transition: opacity .25s; }
+#syn-panel .samp-ph { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(236,232,242,.5); z-index: 3; pointer-events: none; opacity: 0; transition: opacity .4s ease-out; }
 #syn-panel .samp-ph.on { opacity: 1; }
 #syn-panel .samp-ph i { position: absolute; left: -2px; top: 50%; margin-top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff;
   box-shadow: 0 0 7px rgba(255,255,255,.9), 0 0 13px rgba(167,139,250,.6); }
@@ -9724,6 +9724,12 @@ setTimeout(function wireSynControls () {
         var hS = view.querySelector ('.samp-h.s'), hE = view.querySelector ('.samp-h.e'),
             hLS = view.querySelector ('.samp-h.ls'), hLE = view.querySelector ('.samp-h.le');
         var ph = view.querySelector ('.samp-ph');
+        // MULTI-FOLLOWER pool — one white playhead line per held note (Phase Plant style). Clone the
+        // single .samp-ph into a pool of 16; each line is bound to a voice index at runtime and fades
+        // via the CSS opacity transition. C++ pushes [voiceIdx,pos,…]; updateSampleFollower maps each.
+        var phPool = ph ? [ph] : [];
+        if (ph && ph.parentNode) { for (var _pi = 1; _pi < 16; _pi++) { var _c = ph.cloneNode (true); ph.parentNode.appendChild (_c); phPool.push (_c); } }
+        phPool.forEach (function (L) { L._on = false; L._vi = -1; L.classList.remove ('on'); });
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
         var envFadeInLine = view.querySelector ('.env-fadein-line'), envFadeOutLine = view.querySelector ('.env-fadeout-line');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
@@ -9892,24 +9898,31 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
 
-        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, view: view, setLoaded: setLoaded,
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded,
           syncParams: syncParams, repaintHeader: function () { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } };
         place (); redraw ();
       }
 
-      // MIDI follower — driven by C++ at 60 Hz: window.updateSampleFollower(osc, pos01, active).
-      // pos01 = 0..1 across the WHOLE buffer; active=false (or pos<0) → fade out (CSS .25s).
-      // Retrigger is implicit (pos01 jumps on a new note while active stays true); frozen SCAN
-      // = active+stationary (drawn parked, not faded). Works in one-shot AND loop — no mode gating.
-      window.updateSampleFollower = function (osc, pos01, active) {
+      // MULTI MIDI follower — driven by C++ at 60 Hz: window.updateSampleFollower(osc, list) where
+      // list is a FLAT [voiceIdx,pos01, voiceIdx,pos01, …] of every SOUNDING voice on that osc
+      // (pos01 = 0..1 across the whole buffer). One white line per held note, each at its own speed
+      // (higher notes scan faster). Lines are keyed by voiceIdx so a held note keeps the SAME line
+      // (no jump); when a voice stops it drops out of the list and its line fades out (CSS .4s).
+      window.updateSampleFollower = function (osc, list) {
         try {
-          var S = SAMP[osc]; if (! S || ! S.ph) return;
-          if (active && pos01 >= 0) {
-            S.ph.style.left = (Math.max (0, Math.min (1, pos01)) * 100) + '%';
-            S.ph.classList.add ('on');
-          } else {
-            S.ph.classList.remove ('on');
+          var S = SAMP[osc]; if (! S || ! S.phPool) return;
+          var pool = S.phPool, flat = list || [], seen = {};
+          for (var i = 0; i + 1 < flat.length; i += 2) {
+            var vi = flat[i] | 0, p = +flat[i + 1];
+            seen[vi] = 1;
+            var L = null, j;
+            for (j = 0; j < pool.length; j++) if (pool[j]._on && pool[j]._vi === vi) { L = pool[j]; break; }   // this voice's line
+            if (! L) for (j = 0; j < pool.length; j++) if (! pool[j]._on) { L = pool[j]; L._vi = vi; L._on = true; L.classList.add ('on'); break; }  // claim a free line
+            if (! L) continue;                                               // pool full (>16 notes) — drop extras
+            L.style.left = (Math.max (0, Math.min (1, p)) * 100) + '%';
           }
+          for (var k = 0; k < pool.length; k++)                              // voices that stopped → fade out
+            if (pool[k]._on && ! seen[pool[k]._vi]) { pool[k]._on = false; pool[k]._vi = -1; pool[k].classList.remove ('on'); }
         } catch (e) {}
       };
 
