@@ -449,6 +449,14 @@ private:
     juce::WebSliderRelay flowArpBlendRelay  { ParameterIDs::FLOW_ARP_BLEND };    // ARP vs dry held-chord (glass menu)
     juce::WebSliderRelay flowGliRateRelay { ParameterIDs::FLOW_GLI_RATE }; juce::WebSliderRelay flowGliGateRelay { ParameterIDs::FLOW_GLI_GATE }; juce::WebSliderRelay flowGliVaryRelay { ParameterIDs::FLOW_GLI_VARY }; juce::WebSliderRelay flowGliTrajRelay { ParameterIDs::FLOW_GLI_TRAJ }; juce::WebSliderRelay flowGliMorphRelay { ParameterIDs::FLOW_GLI_MORPH };
     juce::WebSliderRelay flowDrfRateRelay { ParameterIDs::FLOW_DRF_RATE }; juce::WebSliderRelay flowDrfGateRelay { ParameterIDs::FLOW_DRF_GATE }; juce::WebSliderRelay flowDrfVaryRelay { ParameterIDs::FLOW_DRF_VARY }; juce::WebSliderRelay flowDrfTrajRelay { ParameterIDs::FLOW_DRF_TRAJ }; juce::WebSliderRelay flowDrfMorphRelay { ParameterIDs::FLOW_DRF_MORPH };
+    // ── ANNULUS resonator relays (Material = choice via slider relay, like FLOW_MODE) ──
+    juce::WebSliderRelay resoStructureRelay  { ParameterIDs::SYN_RESO_STRUCTURE };
+    juce::WebSliderRelay resoBrightnessRelay { ParameterIDs::SYN_RESO_BRIGHTNESS };
+    juce::WebSliderRelay resoDampingRelay    { ParameterIDs::SYN_RESO_DAMPING };
+    juce::WebSliderRelay resoPositionRelay   { ParameterIDs::SYN_RESO_POSITION };
+    juce::WebSliderRelay resoMixRelay        { ParameterIDs::SYN_RESO_MIX };
+    juce::WebSliderRelay resoKeyTrackRelay   { ParameterIDs::SYN_RESO_KEYTRACK };
+    juce::WebSliderRelay resoMaterialRelay   { ParameterIDs::SYN_RESO_MATERIAL };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -867,6 +875,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> flowArpBlendAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> flowGliRateAttachment, flowGliGateAttachment, flowGliVaryAttachment, flowGliTrajAttachment, flowGliMorphAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> flowDrfRateAttachment, flowDrfGateAttachment, flowDrfVaryAttachment, flowDrfTrajAttachment, flowDrfMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> resoStructureAttachment, resoBrightnessAttachment, resoDampingAttachment, resoPositionAttachment, resoMixAttachment, resoKeyTrackAttachment, resoMaterialAttachment;
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady

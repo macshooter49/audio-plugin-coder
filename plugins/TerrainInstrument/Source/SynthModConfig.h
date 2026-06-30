@@ -52,6 +52,7 @@ enum class ModDest : int
     FrameC, WarpC, FoldC,      // OSC C wavetable frame / warp / fold (linear 0..1) — Phase 4B
     FrameD, WarpD, FoldD,      // OSC D wavetable frame / warp / fold (linear 0..1) — Phase 4B
     ChopRate, ChopGate, ChopVary, ChopTraj, ChopMorph,   // FLOW · CHOP macros (mode 2) — append-only
+    ResoStructure, ResoBrightness, ResoDamping, ResoPosition, ResoMix,  // ANNULUS resonator macros — append-only
     NumDests
 };
 

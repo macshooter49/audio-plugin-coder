@@ -153,6 +153,14 @@ namespace ParameterIDs
     constexpr char FLOW_CHOP_BLEND[]= "FLOW_CHOP_BLEND";  // float 0..1 — CHOP dry/wet (glass menu); default 0.60
     constexpr char FLOW_GLI_BLEND[] = "FLOW_GLI_BLEND";   // float 0..1 — GLITCH dry/wet (glass menu); default 0.60
     constexpr char FLOW_ARP_BLEND[] = "FLOW_ARP_BLEND";   // float 0..1 — ARP vs dry held-chord mix (glass menu); 1.0 = pure arp
+    // ── ANNULUS resonator — global key-tracked physical-modeling node (ResonatorNode.h) ──
+    constexpr char SYN_RESO_STRUCTURE[]  = "SYN_RESO_STRUCTURE";   // float 0..1 — harmonic↔material morph
+    constexpr char SYN_RESO_BRIGHTNESS[] = "SYN_RESO_BRIGHTNESS";  // float 0..1 — mode count + spectral tilt
+    constexpr char SYN_RESO_DAMPING[]    = "SYN_RESO_DAMPING";     // float 0..1 — ring length (0=long, 1=dead)
+    constexpr char SYN_RESO_POSITION[]   = "SYN_RESO_POSITION";    // float 0..1 — pluck-point comb
+    constexpr char SYN_RESO_MIX[]        = "SYN_RESO_MIX";         // float 0..1 — dry→fully resonated; default 0 (bypassed)
+    constexpr char SYN_RESO_KEYTRACK[]   = "SYN_RESO_KEYTRACK";    // float 0..1 — fundamental tracks played note; default 1 (pitched)
+    constexpr char SYN_RESO_MATERIAL[]   = "SYN_RESO_MATERIAL";    // choice: String/Bar/Drum/Metal
     constexpr char SYN_ENV_AMP_A[]     = "SYN_ENV_AMP_A";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_D[]     = "SYN_ENV_AMP_D";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1

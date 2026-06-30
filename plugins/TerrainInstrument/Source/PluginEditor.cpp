@@ -365,6 +365,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(flowChopBlendRelay).withOptionsFrom(flowGliBlendRelay).withOptionsFrom(flowArpBlendRelay)
             .withOptionsFrom(flowGliRateRelay).withOptionsFrom(flowGliGateRelay).withOptionsFrom(flowGliVaryRelay).withOptionsFrom(flowGliTrajRelay).withOptionsFrom(flowGliMorphRelay)
             .withOptionsFrom(flowDrfRateRelay).withOptionsFrom(flowDrfGateRelay).withOptionsFrom(flowDrfVaryRelay).withOptionsFrom(flowDrfTrajRelay).withOptionsFrom(flowDrfMorphRelay)
+            .withOptionsFrom(resoStructureRelay).withOptionsFrom(resoBrightnessRelay).withOptionsFrom(resoDampingRelay).withOptionsFrom(resoPositionRelay).withOptionsFrom(resoMixRelay).withOptionsFrom(resoKeyTrackRelay).withOptionsFrom(resoMaterialRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2842,6 +2843,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkF(flowArpBlendAttachment, ParameterIDs::FLOW_ARP_BLEND, flowArpBlendRelay);
         mkF(flowGliRateAttachment, ParameterIDs::FLOW_GLI_RATE, flowGliRateRelay); mkF(flowGliGateAttachment, ParameterIDs::FLOW_GLI_GATE, flowGliGateRelay); mkF(flowGliVaryAttachment, ParameterIDs::FLOW_GLI_VARY, flowGliVaryRelay); mkF(flowGliTrajAttachment, ParameterIDs::FLOW_GLI_TRAJ, flowGliTrajRelay); mkF(flowGliMorphAttachment, ParameterIDs::FLOW_GLI_MORPH, flowGliMorphRelay);
         mkF(flowDrfRateAttachment, ParameterIDs::FLOW_DRF_RATE, flowDrfRateRelay); mkF(flowDrfGateAttachment, ParameterIDs::FLOW_DRF_GATE, flowDrfGateRelay); mkF(flowDrfVaryAttachment, ParameterIDs::FLOW_DRF_VARY, flowDrfVaryRelay); mkF(flowDrfTrajAttachment, ParameterIDs::FLOW_DRF_TRAJ, flowDrfTrajRelay); mkF(flowDrfMorphAttachment, ParameterIDs::FLOW_DRF_MORPH, flowDrfMorphRelay);
+        // ── ANNULUS resonator attachments (Material via slider relay, like FLOW_MODE) ──
+        mkF(resoStructureAttachment,  ParameterIDs::SYN_RESO_STRUCTURE,  resoStructureRelay);
+        mkF(resoBrightnessAttachment, ParameterIDs::SYN_RESO_BRIGHTNESS, resoBrightnessRelay);
+        mkF(resoDampingAttachment,    ParameterIDs::SYN_RESO_DAMPING,    resoDampingRelay);
+        mkF(resoPositionAttachment,   ParameterIDs::SYN_RESO_POSITION,   resoPositionRelay);
+        mkF(resoMixAttachment,        ParameterIDs::SYN_RESO_MIX,        resoMixRelay);
+        mkF(resoKeyTrackAttachment,   ParameterIDs::SYN_RESO_KEYTRACK,   resoKeyTrackRelay);
+        mkF(resoMaterialAttachment,   ParameterIDs::SYN_RESO_MATERIAL,   resoMaterialRelay);
     }
 
     // ── OSC C + D attachments (4-osc) ──
@@ -3083,6 +3092,19 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     {
         float lfo1 = audioProcessor.synthLfo1Vis.load(std::memory_order_relaxed);
         js << "if(window.updateSynthLFO){window.updateSynthLFO(" << juce::String(lfo1, 4) << ");}";
+    }
+
+    // ── ANNULUS resonator live feed — real modal energy + output level drive the
+    //    harmonograph's purple audio-reactive layer (glow/streaks follow the signal). ──
+    {
+        const float e0 = audioProcessor.resoVizEnergy_[0].load(std::memory_order_relaxed);
+        const float e1 = audioProcessor.resoVizEnergy_[1].load(std::memory_order_relaxed);
+        const float e2 = audioProcessor.resoVizEnergy_[2].load(std::memory_order_relaxed);
+        const float e3 = audioProcessor.resoVizEnergy_[3].load(std::memory_order_relaxed);
+        const float ro = audioProcessor.resoVizOut_.load(std::memory_order_relaxed);
+        js << "if(window.__terrainReso){window.__terrainReso({energy:["
+           << juce::String(e0, 3) << "," << juce::String(e1, 3) << "," << juce::String(e2, 3) << "," << juce::String(e3, 3)
+           << "],out:" << juce::String(ro, 3) << "});}";
     }
 
     // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──

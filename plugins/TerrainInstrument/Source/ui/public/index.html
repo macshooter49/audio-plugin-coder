@@ -4036,7 +4036,7 @@ body {
 /* ── FLOW (transparent, edge-to-edge, alive) ── */
 #syn-panel .device.flow { background: transparent; border: none; overflow: visible; padding: 8px 0 0; }
 #syn-panel .flow { display: grid; grid-template-columns: 1fr 200px; gap: 12px; }
-#syn-panel .flow-modes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 9px; }
+#syn-panel .flow-modes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 9px; align-self: center; }   /* stay 58px tiles, center in the taller row — modes don't grow with the resonator */
 /* CHOP glass menu — right-click the mode badge → BLEND dry/wet (product-emblem aesthetic) */
 #syn-panel .flow-glass { position: absolute; z-index: 60; display: none; min-width: 134px; padding: 9px 11px 11px;
   background: rgba(26,26,46,0.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
@@ -4096,7 +4096,7 @@ body {
 
 /* FLOW visualizer (4 layers swap per mode) */
 #syn-panel .flow-vis { position: relative; border-radius: 9px; overflow: visible; background: transparent; border: none; display: flex; flex-direction: column; }
-#syn-panel .flow-vis .vis-stage { position: relative; flex: 1; min-height: 78px; }
+#syn-panel .flow-vis .vis-stage { position: relative; flex: 1; min-height: 146px; }   /* resonator gets a little more room than the 2x2 mode block */
 #syn-panel .flow-vis .vis-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #syn-panel .flow-vis .vis-layer { display: none; } #syn-panel .flow-vis .vis-layer.show { display: block; }
 #syn-panel .flow-vis .vis-exp { position: absolute; top: 4px; right: 5px; z-index: 3; width: 13px; height: 13px; opacity: .5; cursor: pointer; color: var(--text-secondary); }
@@ -5811,8 +5811,8 @@ body {
                   <div class="rm-item" data-f="3">Metal</div>
                   <div class="rm-sep"></div>
                   <div class="rm-mix">
-                    <div class="rm-mlab"><span>Mix</span><span id="rm-mix-val">60%</span></div>
-                    <div class="rm-track" id="rm-mix-track"><div class="rm-fill" id="rm-mix-fill" style="width:60%"></div></div>
+                    <div class="rm-mlab"><span>Mix</span><span id="rm-mix-val">0%</span></div>
+                    <div class="rm-track" id="rm-mix-track"><div class="rm-fill" id="rm-mix-fill" style="width:0%"></div></div>
                   </div>
                 </div>
                 <!-- ARP -->
@@ -7493,6 +7493,27 @@ window.__synArc = function (ring, n, bipolar) {
     var ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
     var P={structure:0.0,brightness:0.35,damping:0.55,position:0.12}, family=0, bloom=0;
     var QUAD=[{k:'structure',sx:-1,sy:-1},{k:'brightness',sx:1,sy:-1},{k:'damping',sx:1,sy:1},{k:'position',sx:-1,sy:1}];
+    // ── JUCE param wiring (UI ↔ APVTS). No-ops gracefully outside a JUCE host. ──
+    function _ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
+    var JS_STR=_ss('SYN_RESO_STRUCTURE'),JS_BRI=_ss('SYN_RESO_BRIGHTNESS'),JS_DMP=_ss('SYN_RESO_DAMPING'),JS_POS=_ss('SYN_RESO_POSITION'),JS_MIX=_ss('SYN_RESO_MIX'),JS_MAT=_ss('SYN_RESO_MATERIAL');
+    var QSS={structure:JS_STR,brightness:JS_BRI,damping:JS_DMP,position:JS_POS};
+    function _wr(s,v){ if(s){ try{ s.setNormalisedValue(Math.max(0,Math.min(1,v))); }catch(e){} } }
+    function _rd(s,d){ if(s){ try{ var v=s.getNormalisedValue?s.getNormalisedValue():d; if(typeof v==='number'&&!isNaN(v)) return v; }catch(e){} } return d; }
+    function _sub(s,fn){ try{ if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(fn); }catch(e){} }
+    function markMat(){ if(menu){ [].forEach.call(menu.querySelectorAll('.rm-item'),function(x){ x.classList.toggle('on',(+x.dataset.f)===family); }); } }
+    // pull live APVTS values into the UI (preset/automation recall)
+    P.structure=_rd(JS_STR,P.structure); P.brightness=_rd(JS_BRI,P.brightness); P.damping=_rd(JS_DMP,P.damping); P.position=_rd(JS_POS,P.position);
+    if(JS_MAT){ family=Math.round(_rd(JS_MAT,0)*3); }
+    _sub(JS_STR,function(){P.structure=_rd(JS_STR,P.structure);}); _sub(JS_BRI,function(){P.brightness=_rd(JS_BRI,P.brightness);});
+    _sub(JS_DMP,function(){P.damping=_rd(JS_DMP,P.damping);}); _sub(JS_POS,function(){P.position=_rd(JS_POS,P.position);});
+    _sub(JS_MAT,function(){family=Math.round(_rd(JS_MAT,0)*3); markMat();});
+    // strike — clicking the centre changes the sound: new material + reshaped params (your "every strike = new" idea)
+    function strike(){ bloom=1; family=Math.floor(Math.random()*4); _wr(JS_MAT,family/3); markMat();
+      P.structure=Math.random(); P.brightness=0.30+Math.random()*0.60; P.position=Math.random()*0.85;
+      _wr(JS_STR,P.structure); _wr(JS_BRI,P.brightness); _wr(JS_POS,P.position); }
+    // audio-reactive feed from C++ — real modal energy + output level drive the PURPLE layer
+    var vizOut=0, vizEn=[0,0,0,0], gOut=0, gEn=[0,0,0,0];
+    window.__terrainReso=function(d){ try{ if(d){ if(d.energy&&d.energy.length>=4) vizEn=d.energy; if(typeof d.out==='number') vizOut=d.out; } }catch(e){} };
     // ALIVE HARMONOGRAPH — tamed (stays elegant, never scribbles). Materials shift the ratio set.
     var FAM=[[1,2,3,4],[1,2.0,2.76,3.4],[1,1.59,2.14,2.65],[1,2.0,2.4,3.0]];
     var ph=[0,1.7,3.1,4.6], en=[1,.8,.6,.45];
@@ -7507,10 +7528,13 @@ window.__synArc = function (ring, n, bipolar) {
         px[s]=CX+x*sc;py[s]=CY+y*sc;}
     }
     var W=0,H=0,CX=0,CY=0,Rg=0;
-    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.50;}
+    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.46;}   /* 0.46 (was .50) leaves margin so the round-cap arcs never clip top/bottom */
     function frame(ts){
       if(!frame._l)frame._l=ts; var dt=Math.min(.05,(ts-frame._l)/1000); frame._l=ts; sz();
       bloom=Math.max(0,bloom-dt*(0.6+(1-P.damping)*1.6));
+      // smooth the audio-reactive feed; let live audio energize the figure (purple follower)
+      gOut+=(vizOut-gOut)*0.18; for(var bi=0;bi<4;bi++) gEn[bi]+=(((vizEn[bi]||0))-gEn[bi])*0.18;
+      if(gOut*1.05>bloom) bloom=gOut*1.05;
       ctx.clearRect(0,0,W,H);
       if(!W||!H){requestAnimationFrame(frame);return;}
       // (radar grid removed — only the four control arcs remain, forming the circle)
@@ -7528,6 +7552,21 @@ window.__synArc = function (ring, n, bipolar) {
       ctx.lineWidth=1.3; ctx.lineJoin='round'; ctx.strokeStyle='rgba(255,255,255,.86)';
       ctx.beginPath(); for(var s=0;s<=STEPS;s++){ s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]); } ctx.stroke();
       ctx.restore();
+      // PURPLE audio-reactive overlay — glowing streaks that intensify with the live signal feeding in
+      if(gOut>0.012){
+        ctx.save(); ctx.translate(CX,CY); ctx.rotate(P.position*Math.PI*2); ctx.translate(-CX,-CY);
+        ctx.lineWidth=1.6; ctx.lineJoin='round';
+        ctx.strokeStyle='rgba(167,139,250,'+(0.55*gOut).toFixed(3)+')';
+        ctx.shadowColor='rgba(167,139,250,'+(0.6*gOut).toFixed(3)+')'; ctx.shadowBlur=10*gOut;
+        ctx.beginPath(); for(var s=0;s<=STEPS;s+=2){ s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]); } ctx.stroke();
+        ctx.shadowBlur=0; ctx.restore();
+        // per-quadrant purple energy pulse on the control arcs (band energy)
+        ctx.lineCap='round';
+        for(var qi=0;qi<arcs.length;qi++){ var e=gEn[qi]||0; if(e<0.03)continue; var Ab=arcs[qi];
+          ctx.lineWidth=2.6; ctx.strokeStyle='rgba(167,139,250,'+(0.55*e).toFixed(3)+')';
+          ctx.beginPath(); ctx.arc(CX,CY,Rg,Ab[1],Ab[1]+(Ab[2]-Ab[1])*P[Ab[0]]); ctx.stroke(); }
+        ctx.lineCap='butt';
+      }
       requestAnimationFrame(frame);
     }
     // interaction
@@ -7536,8 +7575,8 @@ window.__synArc = function (ring, n, bipolar) {
       if(Math.hypot(dx,dy)<Rg*0.34)return 'center';
       for(var i=0;i<QUAD.length;i++)if(Math.sign(dx)===QUAD[i].sx&&Math.sign(dy)===QUAD[i].sy)return QUAD[i].k;return null;}
     cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); var q=quadAt(e); if(!q)return;
-      if(q==='center'){bloom=1;return;} drag=q;sY=e.clientY;sVal=P[q];try{cv.setPointerCapture(e.pointerId);}catch(_){}});
-    cv.addEventListener('pointermove',function(e){if(!drag)return;P[drag]=Math.max(0,Math.min(1,sVal+(sY-e.clientY)/200));});
+      if(q==='center'){strike();return;} drag=q;sY=e.clientY;sVal=P[q];try{cv.setPointerCapture(e.pointerId);}catch(_){}});
+    cv.addEventListener('pointermove',function(e){if(!drag)return;P[drag]=Math.max(0,Math.min(1,sVal+(sY-e.clientY)/200));_wr(QSS[drag],P[drag]);});
     function endDrag(){drag=null;} cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
     // right-click menu (material + mix)
     function showMenu(e){ if(!menu)return; e.preventDefault();
@@ -7549,10 +7588,11 @@ window.__synArc = function (ring, n, bipolar) {
     cv.addEventListener('contextmenu',showMenu);
     if(menu){
       menu.addEventListener('click',function(e){var it=e.target.closest('.rm-item');if(!it)return;
-        family=+it.dataset.f; bloom=0.6;
+        family=+it.dataset.f; bloom=0.6; _wr(JS_MAT, family/3);
         [].forEach.call(menu.querySelectorAll('.rm-item'),function(x){x.classList.remove('on');}); it.classList.add('on');});
       var mt=document.getElementById('rm-mix-track'), mf=document.getElementById('rm-mix-fill'), mv=document.getElementById('rm-mix-val'), md=false;
-      function setMix(e){var r=mt.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));mf.style.width=(v*100)+'%';mv.textContent=Math.round(v*100)+'%';}
+      function setMix(e){var r=mt.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));mf.style.width=(v*100)+'%';mv.textContent=Math.round(v*100)+'%';_wr(JS_MIX,v);}
+      (function(){ var v=_rd(JS_MIX,0); mf.style.width=(v*100)+'%'; mv.textContent=Math.round(v*100)+'%'; })();   // init Mix fill from APVTS (default 0)
       mt.addEventListener('pointerdown',function(e){md=true;try{mt.setPointerCapture(e.pointerId);}catch(_){}setMix(e);e.stopPropagation();});
       mt.addEventListener('pointermove',function(e){if(md)setMix(e);});
       mt.addEventListener('pointerup',function(){md=false;});

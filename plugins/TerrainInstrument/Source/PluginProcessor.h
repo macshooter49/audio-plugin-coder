@@ -22,6 +22,7 @@
 #include "FlowChop.h"           // FLOW · CHOP engine  (mode 2) — audio insert
 #include "FlowGlitch.h"         // FLOW · GLITCH engine(mode 3) — audio insert
 #include "FlowDrift.h"          // FLOW · DRIFT engine (mode 4) — generative mod source
+#include "ResonatorNode.h"      // ANNULUS resonator — global key-tracked physical-modeling node
 #include "SynthLFO.h"          // block-rate global FLOW LFO bank (guarded; likely transitive)
 #include "TerrainConstants.h"
 #include "LayerState.h"
@@ -471,6 +472,9 @@ public:
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
     std::atomic<float> synthLfo1Vis { 0.f };   // Batch 1 — live L1 LFO value for the editor dot
+    // ANNULUS resonator — live feed read by the editor timer → purple audio-reactive harmonograph layer.
+    std::atomic<float> resoVizEnergy_[4] { {0.f}, {0.f}, {0.f}, {0.f} };   // per-band modal energy
+    std::atomic<float> resoVizOut_ { 0.f };                                 // resonator output level (purple glow/streaks)
     // Packed stage+fraction of the same voice (e.g. 2.37 = 37% through Attack), so the
     // UI dot rides the exact x-position on the curve. -1 = no voice sounding.
     std::atomic<float> ampEnvFollowVis { -1.f };
@@ -722,6 +726,9 @@ private:
     wc::FlowDrift               drift;                      // FLOW · DRIFT engine (mode 4) — generative mod source
     float                       driftLane_[wc::kDriftLanes] {};  // per-block DRIFT lane values (mod sources; matrix routing = phase-2)
     wc::SynthLFO                flowLfo_[wc::NUM_LFOS];     // block-rate global LFO bank for FLOW-knob mod
+    wc::ResonatorNode           reso;                       // ANNULUS resonator — global node, audio insert at end of processBlock
+    int                         resoHeld_[16] {};           // held MIDI notes (resonator polyphony — one voice per note)
+    int                         resoHeldN_ = 0;             // count of held notes (audio-thread only)
     juce::AudioBuffer<float>    synthScratch;
 
     // ── Synth wavetable bank (Phase 2A) ──────────────────────────────────

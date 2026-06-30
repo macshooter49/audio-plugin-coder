@@ -2215,6 +2215,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_DRF_VARY,"Drift Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_DRF_TRAJ,"Drift Traj",0.00f);
     addFlowKnob (ParameterIDs::FLOW_DRF_MORPH,"Drift Depth",0.50f);  // DEPTH = output amplitude; 0 = inert (no modulation), 0.5 = breathes out of the box
 
+    // ── ANNULUS resonator (global key-tracked physical-modeling node) ──
+    addFlowKnob (ParameterIDs::SYN_RESO_STRUCTURE,  "Reso Structure",  0.30f);
+    addFlowKnob (ParameterIDs::SYN_RESO_BRIGHTNESS, "Reso Brightness", 0.55f);
+    addFlowKnob (ParameterIDs::SYN_RESO_DAMPING,    "Reso Damping",    0.45f);
+    addFlowKnob (ParameterIDs::SYN_RESO_POSITION,   "Reso Position",   0.20f);
+    addFlowKnob (ParameterIDs::SYN_RESO_MIX,        "Reso Mix",        0.00f);  // default 0 = bypassed (load → turn up)
+    addFlowKnob (ParameterIDs::SYN_RESO_KEYTRACK,   "Reso Key Track",  1.00f);  // default fully pitched (matches played note)
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_RESO_MATERIAL, 1 }, "Reso Material",
+        juce::StringArray { "String", "Bar", "Drum", "Metal" }, 0));
+
     return layout;
 }
 
@@ -2309,6 +2320,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
     prevFlowMode_ = 0;                   // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
+    reso.prepare   (sampleRate);        // ANNULUS resonator — allocates mode/delay state here only
+    for (auto& e : resoVizEnergy_) e.store (0.0f, std::memory_order_relaxed);
+    resoVizOut_.store (0.0f, std::memory_order_relaxed);
     flowArp.reset();
     if (modStateJson.isNotEmpty())
         modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
@@ -2425,6 +2439,32 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const auto numChannels = buffer.getNumChannels();
 
     if (numSamples == 0) return;
+
+    // ANNULUS polyphony: track currently-held MIDI notes (read-only scan; does not
+    // consume midiMessages). The resonator tunes ONE voice per held note → polyphonic,
+    // pitched, no glide. note-on adds, note-off removes, all-notes-off clears.
+    for (const auto meta : midiMessages)
+    {
+        const auto m = meta.getMessage();
+        if (m.isNoteOn())
+        {
+            const int nn = m.getNoteNumber();
+            bool dup = false;
+            for (int j = 0; j < resoHeldN_; ++j) if (resoHeld_[j] == nn) { dup = true; break; }
+            if (! dup && resoHeldN_ < (int) (sizeof (resoHeld_) / sizeof (int)))
+                resoHeld_[resoHeldN_++] = nn;
+        }
+        else if (m.isNoteOff())
+        {
+            const int nn = m.getNoteNumber();
+            for (int j = 0; j < resoHeldN_; ++j)
+                if (resoHeld_[j] == nn) { resoHeld_[j] = resoHeld_[--resoHeldN_]; break; }
+        }
+        else if (m.isAllNotesOff() || m.isAllSoundOff())
+        {
+            resoHeldN_ = 0;
+        }
+    }
 
     // === Sampler engine (Terrain Instrument v0a + slicer v0b) ================
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
@@ -4160,6 +4200,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         drift.process (dRate, dGlide, dVary, dTraj, dDepth,
                        flowPpq, flowBpm, getSampleRate(), lanes, numSamples, flowPlaying);
         for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = lanes[i];
+    }
+
+    // ── ANNULUS RESONATOR — global key-tracked physical-modeling node ──────────
+    //    Runs ALWAYS (independent of FLOW mode), in place on the summed master out.
+    //    Bypassed (exact passthrough) at Mix 0, so it costs nothing until dialed in.
+    //    Params read through flowKnob() → modulatable destinations (LFO targeting is
+    //    wired & ready; the UI drag-to-reso surface is intentionally deferred).
+    //    There is NO master limiter after this point — the node owns its ceiling.
+    {
+        const float rStruct = flowKnob (ParameterIDs::SYN_RESO_STRUCTURE,  wc::ModDest::ResoStructure);
+        const float rBright = flowKnob (ParameterIDs::SYN_RESO_BRIGHTNESS, wc::ModDest::ResoBrightness);
+        const float rDamp   = flowKnob (ParameterIDs::SYN_RESO_DAMPING,    wc::ModDest::ResoDamping);
+        const float rPos    = flowKnob (ParameterIDs::SYN_RESO_POSITION,   wc::ModDest::ResoPosition);
+        const float rMix    = flowKnob (ParameterIDs::SYN_RESO_MIX,        wc::ModDest::ResoMix);
+        const float rKey    = flowBase (ParameterIDs::SYN_RESO_KEYTRACK);
+        const int   rMat    = (int) (apvts.getRawParameterValue (ParameterIDs::SYN_RESO_MATERIAL)->load() + 0.5f);
+        float* rl = buffer.getWritePointer (0);
+        float* rr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : rl;
+        reso.process (rStruct, rBright, rDamp, rPos, rMat, rMix, rKey,
+                      resoHeld_, resoHeldN_, getSampleRate(),
+                      rl, rr, numSamples);
+        for (int b = 0; b < 4; ++b) resoVizEnergy_[b].store (reso.vizEnergy[b], std::memory_order_relaxed);
+        resoVizOut_.store (reso.vizOut, std::memory_order_relaxed);
     }
 }
 
