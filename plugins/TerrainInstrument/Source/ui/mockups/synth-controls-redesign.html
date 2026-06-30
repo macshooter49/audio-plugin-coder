@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain — Synth Control Redesign (mockup)</title>
+<style>
+/* ════════════════════════════════════════════════════════════════════════
+   TERRAIN INSTRUMENT — synth control redesign mockup  ·  THIN + SHARP
+   Aesthetic target: Teenage Engineering / Apple / Orchestral Tools.
+   Hairline strokes, crisp pointers, depth as a whisper of light — no chunk, no bloom.
+   Drag any knob/slider. Double-click a knob to reset. Not wired to audio — a feel test.
+   ════════════════════════════════════════════════════════════════════════ */
+:root{
+  --purple-600:#9b6dff; --purple-500:#8b5cf6; --purple-400:#b794ff; --purple-300:#c4b5fd;
+  --accent:#a98bf0;                         /* slightly desaturated for refinement */
+  --text-primary:#e4e0ee; --text-secondary:#9b93b0; --text-muted:#6b6080;
+  --border:rgba(124,92,191,.14); --hair:rgba(168,150,220,.16);
+  --track:rgba(120,112,150,.20);
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--font); color:var(--text-primary);
+  background:
+    radial-gradient(1100px 480px at 24% -10%, #1c1838 0%, rgba(28,24,56,0) 58%),
+    linear-gradient(162deg,#131228 0%,#0f0e1d 62%,#0b0a16 100%);
+  min-height:100vh; padding:34px 30px 80px; -webkit-font-smoothing:antialiased;
+}
+
+/* ───────── header ───────── */
+.head{max-width:1180px;margin:0 auto 26px;}
+.brand{display:flex;align-items:center;gap:11px;margin-bottom:9px;}
+.brand .dot{width:18px;height:18px;border-radius:5px;border:1px solid rgba(196,181,253,.5);
+  background:linear-gradient(140deg,#9b6dff,#6d8bff);}
+.brand h1{font-size:17px;font-weight:600;letter-spacing:.3px;margin:0;}
+.brand h1 span{color:var(--text-muted);font-weight:400;}
+.sub{font-size:12.5px;line-height:1.6;color:var(--text-secondary);max-width:780px;}
+.sub b{color:var(--purple-300);font-weight:600;}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:13px;font-size:11px;color:var(--text-muted);}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+
+/* ───────── grid ───────── */
+.grid{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+.card{position:relative;background:linear-gradient(160deg,rgba(30,26,54,.7),rgba(18,16,36,.8));
+  border:1px solid var(--border);border-radius:11px;padding:20px 22px 24px;
+  box-shadow:0 8px 26px rgba(0,0,0,.34);
+  opacity:0;transform:translateY(10px);animation:rise .5s cubic-bezier(.2,.7,.2,1) forwards;}
+.card.wide{grid-column:1 / -1;}
+.card:nth-child(1){animation-delay:.03s;}.card:nth-child(2){animation-delay:.08s;}
+.card:nth-child(3){animation-delay:.13s;}.card:nth-child(4){animation-delay:.18s;}
+.card:nth-child(5){animation-delay:.23s;}.card:nth-child(6){animation-delay:.28s;}
+@keyframes rise{to{opacity:1;transform:none;}}
+.card h2{font-size:13px;font-weight:600;margin:0 0 2px;letter-spacing:.2px;}
+.card .ref{font-size:10px;color:var(--text-muted);letter-spacing:.2px;margin-bottom:4px;}
+.card p{font-size:11.5px;line-height:1.55;color:var(--text-secondary);margin:0 0 18px;max-width:440px;}
+.badge{position:absolute;top:17px;right:18px;font-size:9px;font-weight:600;letter-spacing:1px;
+  text-transform:uppercase;color:var(--purple-300);border:1px solid rgba(196,181,253,.45);
+  padding:3px 8px;border-radius:5px;}
+.bank{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-end;}
+
+/* ───────── knob scaffold (shared) — THIN ───────── */
+.kw{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.kval{font:500 11px/1 var(--font);color:var(--purple-300);font-variant-numeric:tabular-nums;
+  min-height:11px;letter-spacing:.2px;}
+.klab{font:400 10px/1 var(--font);color:#beb6cd;letter-spacing:.3px;}
+.k{--arc:var(--accent);--trk:var(--track);position:relative;width:60px;height:60px;
+  cursor:grab;touch-action:none;transition:transform .12s ease;}
+.k:hover{transform:translateY(-1px);}
+.k.drag{cursor:grabbing;}
+.k-arc{position:absolute;inset:0;border-radius:50%;
+  -webkit-mask:radial-gradient(circle,transparent 27px,#000 27.7px);
+          mask:radial-gradient(circle,transparent 27px,#000 27.7px);}   /* ~2px hairline ring */
+.k-body{position:absolute;inset:5px;border-radius:50%;}                 /* 50px face */
+.k-spec{position:absolute;inset:5px;border-radius:50%;pointer-events:none;}
+.k-ptr{position:absolute;left:calc(50% - .75px);top:50%;width:1.5px;height:19px;
+  transform-origin:.75px 0;transform:rotate(var(--a,225deg));pointer-events:none;}
+
+/* ═══ V1 · HAIRLINE ═══ thin arc, sharp white pointer, flat face w/ a 1px top light. RECOMMEND */
+.var-hair .k{--arc:var(--accent);}
+.var-hair .k-body{background:radial-gradient(circle at 50% 38%,#211c3c,#191430 70%,#15112a);
+  box-shadow:inset 0 1px 0 rgba(196,181,253,.14),inset 0 0 0 1px rgba(168,150,220,.07);}
+.var-hair .k-ptr{background:#f2ecff;border-radius:1px;}
+
+/* ═══ V2 · TE DOT ═══ flat face, no pointer line — one crisp accent dot rides the rim. Teenage Engineering */
+.var-dot .k{--arc:rgba(120,112,150,.28);}                /* arc stays neutral; the DOT is the value */
+.var-dot .k-body{background:#181430;box-shadow:inset 0 0 0 1px rgba(168,150,220,.10);}
+.var-dot .k-ptr{height:22px;background:transparent;}
+.var-dot .k-ptr::after{content:'';position:absolute;left:-2.25px;top:19px;width:6px;height:6px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 1px rgba(12,10,22,.8);}
+
+/* ═══ V3 · TICK ═══ near-bodiless; thin arc + a sharp ruler tick at value. Most minimal */
+.var-tick .k{--arc:var(--accent);}
+.var-tick .k-body{background:transparent;}
+.var-tick .k-spec{box-shadow:inset 0 0 0 1px rgba(168,150,220,.10);border-radius:50%;}
+.var-tick .k-ptr{height:9px;top:7px;width:2px;background:#f2ecff;border-radius:1px;}   /* short outer tick */
+
+/* ═══ V4 · SOFT BEVEL ═══ the depth option, still thin: faint domed light, thin pointer. Apple-refined */
+.var-bevel .k{--arc:var(--accent);}
+.var-bevel .k-body{background:radial-gradient(circle at 42% 32%,#2b2550,#201a3c 58%,#171231 100%);
+  box-shadow:inset 0 1px 1px rgba(208,194,255,.22),inset 0 -2px 4px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.35);}
+.var-bevel .k-spec{background:radial-gradient(circle at 40% 26%,rgba(214,202,255,.28),rgba(214,202,255,0) 46%);}
+.var-bevel .k-ptr{background:#f2ecff;border-radius:1px;}
+
+/* ═══ BEFORE · current bland ring ═══ */
+.var-current .k{--arc:var(--purple-500);width:46px;height:46px;}
+.var-current .k-arc{-webkit-mask:radial-gradient(circle,transparent 15px,#000 16px);
+          mask:radial-gradient(circle,transparent 15px,#000 16px);}
+.var-current .k-body,.var-current .k-spec,.var-current .k-ptr{display:none;}
+
+/* ───────── density strip (true ~26px) ───────── */
+.dense-wrap{display:flex;align-items:flex-end;gap:16px;padding:13px 16px;border-radius:9px;
+  background:linear-gradient(#161330,#121029);border:1px solid var(--border);}
+.dense .k{transform:scale(.44);transform-origin:bottom center;margin:0 -17px;}
+.dense .kw{gap:0;}
+.dense .kval{transform:scale(.44);height:0;min-height:0;margin-bottom:-2px;}
+.dense .klab{font-size:9px;color:#a99fbb;}
+.dense-note{font-size:10.5px;color:var(--text-muted);margin-top:11px;}
+
+/* ───────── sliders — thin ───────── */
+.slabs{display:flex;gap:42px;flex-wrap:wrap;align-items:flex-end;}
+.sl-h{width:230px;}
+.sl-label{font-size:10px;color:#beb6cd;letter-spacing:.3px;margin-bottom:9px;display:block;}
+.sl-val{font-size:11px;font-weight:500;color:var(--purple-300);font-variant-numeric:tabular-nums;margin-left:8px;}
+.track-h{position:relative;height:4px;border-radius:3px;cursor:pointer;touch-action:none;
+  background:#1a1636;box-shadow:inset 0 0 0 1px rgba(168,150,220,.10);}
+.fill-h{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--accent);}
+.thumb-h{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);
+  background:#ece6ff;box-shadow:0 1px 2px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.6);cursor:grab;}
+.sl-v{display:flex;flex-direction:column;align-items:center;}
+.track-v{position:relative;width:4px;height:120px;border-radius:3px;cursor:pointer;touch-action:none;
+  background:#1a1636;box-shadow:inset 0 0 0 1px rgba(168,150,220,.10);}
+.fill-v{position:absolute;left:0;right:0;bottom:0;border-radius:3px;background:var(--accent);}
+.thumb-v{position:absolute;left:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,50%);
+  background:#ece6ff;box-shadow:0 1px 2px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.6);cursor:grab;}
+
+/* ───────── toggles — flat, sharp ───────── */
+.pills{display:flex;gap:9px;flex-wrap:wrap;align-items:center;}
+.pill{font-size:11px;font-weight:500;letter-spacing:.3px;color:#bcb3cd;padding:7px 15px;border-radius:7px;
+  cursor:pointer;user-select:none;background:transparent;border:1px solid rgba(124,92,191,.26);transition:.14s;}
+.pill:hover{border-color:rgba(167,139,250,.55);color:#e6dffb;}
+.pill.on{color:#0e0b1a;background:var(--accent);border-color:transparent;}
+.seg{display:inline-flex;border-radius:8px;overflow:hidden;border:1px solid rgba(124,92,191,.26);}
+.seg .pill{border:none;border-radius:0;padding:7px 17px;}
+.seg .pill.on{background:rgba(169,139,240,.18);color:#efe9ff;}
+.sw{position:relative;width:38px;height:20px;border-radius:11px;cursor:pointer;
+  background:#1a1636;border:1px solid rgba(124,92,191,.26);transition:.16s;}
+.sw .knobdot{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+  background:#ece6ff;box-shadow:0 1px 2px rgba(0,0,0,.45);transition:.16s;}
+.sw.on{background:var(--accent);border-color:transparent;}
+.sw.on .knobdot{left:20px;}
+
+/* ───────── caps demo ───────── */
+.caps{display:flex;gap:36px;flex-wrap:wrap;}
+.caps .col h3{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin:0 0 9px;}
+.caps .row{display:flex;gap:18px;}
+.cap-old{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:#857a96;}
+.cap-new{font-size:11px;letter-spacing:.3px;color:#d9d1f0;}
+
+.foot{max-width:1180px;margin:30px auto 0;font-size:11px;color:var(--text-muted);line-height:1.7;}
+.foot b{color:var(--purple-300);} .foot code{color:#c8bdec;}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="brand"><div class="dot"></div><h1>Terrain <span>· synth control redesign — thin &amp; sharp</span></h1></div>
+  <div class="sub">
+    Four directions, all in a <b>precision-instrument language</b> (Teenage Engineering / Apple / Orchestral Tools):
+    <b>hairline strokes, crisp pointers, depth as a whisper of light — no chunk, no bloom</b>. Each drops into the existing
+    64-knob system (the arc stays a value-driven conic-gradient; body + pointer are new CSS layers).
+    <b>Drag a knob vertically</b> to feel it; double-click resets. Labels are <b>Title Case</b>.
+  </div>
+  <div class="legend">
+    <span><i></i>Drag = turn</span><span><i></i>Double-click = reset</span><span><i></i>Live dark synth background</span>
+  </div>
+</div>
+
+<div class="grid" id="grid">
+
+  <div class="card var-hair">
+    <div class="badge">My pick</div>
+    <h2>1 · Hairline</h2>
+    <div class="ref">Orchestral Tools / Apple — refined &amp; precise</div>
+    <p>A 2px arc, a sharp white pointer, a flat dark face with a single 1px top light for the faintest sense of
+       a surface. No glow. Reads instantly, sits quiet, scales razor-clean to tiny sizes.</p>
+    <div class="bank" data-variant="hair"></div>
+  </div>
+
+  <div class="card var-dot">
+    <h2>2 · TE Dot</h2>
+    <div class="ref">Teenage Engineering — flat, grid-precise</div>
+    <p>Completely flat face, no pointer line — a single crisp accent dot rides the rim and <em>is</em> the value.
+       The most "OP-1" of the set: minimal, confident, zero ornament.</p>
+    <div class="bank" data-variant="dot"></div>
+  </div>
+
+  <div class="card var-tick">
+    <h2>3 · Tick</h2>
+    <div class="ref">most minimal — near-bodiless</div>
+    <p>Barely a knob: a hairline outline, a thin value arc, and a short sharp ruler-tick at the position.
+       Maximum restraint — disappears into the panel until you reach for it.</p>
+    <div class="bank" data-variant="tick"></div>
+  </div>
+
+  <div class="card var-bevel">
+    <h2>4 · Soft Bevel</h2>
+    <div class="ref">Apple-refined — depth, kept thin</div>
+    <p>For when you want a touch more dimension: a faint domed light across the face (a hint, not a dome) under the
+       same thin pointer + arc. The bridge to your earlier "depth &amp; perspective" without going chunky.</p>
+    <div class="bank" data-variant="bevel"></div>
+  </div>
+
+  <div class="card wide">
+    <h2>Before → after, and real size</h2>
+    <p>Left: today's knob (a bare conic ring — the flat "default"). Right: the recommended <b>Hairline</b> at the
+       <b>true ~26px panel size</b>, in an oscillator row, so you judge it at shipping density.</p>
+    <div class="bank" style="gap:46px;align-items:center;">
+      <div style="text-align:center;">
+        <div class="bank var-current" data-variant="current" style="justify-content:center;"></div>
+        <div style="font-size:10.5px;color:var(--text-muted);margin-top:10px;">current ring</div>
+      </div>
+      <div style="font-size:20px;color:var(--text-muted);">→</div>
+      <div>
+        <div class="dense var-hair dense-wrap" data-variant="dense"></div>
+        <div class="dense-note">Hairline @ real size · oscillator A row</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>Matching sliders &amp; toggles</h2>
+    <div class="ref">same hairline language — one instrument, top to bottom</div>
+    <p>Thin recessed tracks, a small precise thumb, flat sharp toggles. No glow, no chunk.</p>
+
+    <div class="slabs">
+      <div class="sl-h">
+        <span class="sl-label">X-Fade<span class="sl-val" id="xfVal">38</span></span>
+        <div class="track-h" id="trackH"><div class="fill-h" id="fillH"></div><div class="thumb-h" id="thumbH"></div></div>
+      </div>
+      <div class="sl-v">
+        <span class="sl-label">Level</span>
+        <div class="track-v" id="trackV"><div class="fill-v" id="fillV"></div><div class="thumb-v" id="thumbV"></div></div>
+        <span class="sl-val" id="lvVal" style="margin:9px 0 0;">72</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <div><span class="sl-label" style="margin-bottom:9px;">Toggles</span>
+          <div class="pills"><div class="pill on">FM</div><div class="pill">Ring</div><div class="pill on">Sync</div></div>
+        </div>
+        <div><span class="sl-label" style="margin-bottom:9px;">Segmented + switch</span>
+          <div class="pills">
+            <div class="seg"><div class="pill on">LP</div><div class="pill">BP</div><div class="pill">HP</div></div>
+            <div class="sw on" id="sw1"><div class="knobdot"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:24px 0 20px;"></div>
+
+    <h2 style="margin-bottom:10px;">No-caps label fix</h2>
+    <div class="caps">
+      <div class="col"><h3>Before (forced uppercase)</h3>
+        <div class="row"><span class="cap-old">SCAN</span><span class="cap-old">WAVETABLE POSITION</span><span class="cap-old">FOLD</span><span class="cap-old">SPECTRAL</span></div></div>
+      <div class="col"><h3>After (Title Case · acronyms kept)</h3>
+        <div class="row"><span class="cap-new">Scan</span><span class="cap-new">WT Pos</span><span class="cap-new">Fold</span><span class="cap-new">Spectral</span></div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">
+  <b>How each ships:</b> the arc keeps the existing value→conic-gradient JS — untouched. <b>TE Dot / Tick / Hairline / Bevel</b>
+  add one tiny line: set a <code>--a</code> pointer/dot angle next to the arc write. All 64 knobs + the cross/vis/ribbon
+  variants upgrade at once via the shared <code>.knob-ring</code>. Pick a winner (or a hybrid — e.g. Hairline body + TE dot)
+  and I'll refine, then wire it into the real <code>index.html</code> and build both formats.
+</div>
+
+<script>
+(function(){
+  var BANKS={
+    hair:[['WT Pos',.62],['Warp',.35],['Fold',.5,true],['Scan',.8]],
+    dot:[['WT Pos',.62],['Warp',.35],['Fold',.5,true],['Scan',.8]],
+    tick:[['WT Pos',.62],['Warp',.35],['Fold',.5,true],['Scan',.8]],
+    bevel:[['WT Pos',.62],['Warp',.35],['Fold',.5,true],['Scan',.8]],
+    current:[['Scan',.8],['Warp',.35]],
+    dense:[['WT Pos',.62],['Warp',.35],['Spectral',.2],['Fold',.5,true],['Blur',.45]]
+  };
+  function makeKnob(label,value,bipolar){
+    value=(value==null?.5:value);
+    var kw=document.createElement('div');kw.className='kw';
+    var k=document.createElement('div');k.className='k';
+    k.innerHTML='<div class="k-arc"></div><div class="k-body"></div><div class="k-spec"></div><div class="k-ptr"></div>';
+    var val=document.createElement('div');val.className='kval';
+    var lab=document.createElement('div');lab.className='klab';lab.textContent=label;
+    kw.appendChild(k);kw.appendChild(val);kw.appendChild(lab);
+    var arc=k.querySelector('.k-arc');var p=value,def=value;
+    function render(){
+      k.style.setProperty('--a',(45+p*270)+'deg');
+      if(bipolar){
+        var lo=270*Math.min(p,.5),hi=270*Math.max(p,.5);
+        arc.style.background='conic-gradient(from 225deg, var(--trk) 0deg '+lo+'deg, var(--arc) '+lo+'deg '+hi+'deg, var(--trk) '+hi+'deg 270deg, transparent 270deg)';
+        var bv=Math.round((p-.5)*200);val.textContent=(bv>0?'+':'')+bv;
+      }else{
+        var d=270*p;
+        arc.style.background='conic-gradient(from 225deg, var(--arc) 0deg '+d+'deg, var(--trk) '+d+'deg 270deg, transparent 270deg)';
+        val.textContent=Math.round(p*100);
+      }
+    }
+    var drag=false,sY=0,sP=0;
+    k.addEventListener('pointerdown',function(e){drag=true;sY=e.clientY;sP=p;k.classList.add('drag');try{k.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();});
+    k.addEventListener('pointermove',function(e){if(!drag)return;p=Math.max(0,Math.min(1,sP+(sY-e.clientY)/180));render();});
+    function end(){drag=false;k.classList.remove('drag');}
+    k.addEventListener('pointerup',end);k.addEventListener('pointercancel',end);
+    k.addEventListener('dblclick',function(){p=def;render();});
+    render();return kw;
+  }
+  document.querySelectorAll('[data-variant]').forEach(function(host){
+    (BANKS[host.getAttribute('data-variant')]||[]).forEach(function(s){host.appendChild(makeKnob(s[0],s[1],s[2]));});
+  });
+  function slider(tid,fid,thid,vid,init,vert){
+    var t=document.getElementById(tid),f=document.getElementById(fid),th=document.getElementById(thid),v=document.getElementById(vid);
+    var p=init,drag=false;
+    function render(){ if(vert){f.style.height=(p*100)+'%';th.style.bottom=(p*100)+'%';}else{f.style.width=(p*100)+'%';th.style.left=(p*100)+'%';} v.textContent=Math.round(p*100);}
+    function set(e){var r=t.getBoundingClientRect();p=vert?Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height)):Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));render();}
+    t.addEventListener('pointerdown',function(e){drag=true;try{t.setPointerCapture(e.pointerId);}catch(_){}set(e);});
+    t.addEventListener('pointermove',function(e){if(drag)set(e);});
+    t.addEventListener('pointerup',function(){drag=false;});
+    render();
+  }
+  slider('trackH','fillH','thumbH','xfVal',.38,false);
+  slider('trackV','fillV','thumbV','lvVal',.72,true);
+  document.querySelectorAll('.pill').forEach(function(p){p.addEventListener('click',function(){
+    if(p.parentElement.classList.contains('seg')){p.parentElement.querySelectorAll('.pill').forEach(function(x){x.classList.remove('on');});p.classList.add('on');}
+    else{p.classList.toggle('on');}
+  });});
+  document.getElementById('sw1').addEventListener('click',function(){this.classList.toggle('on');});
+})();
+</script>
+</body>
+</html>

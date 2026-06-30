@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terrain — Annulus resonator (final)</title>
+<style>
+/* ANNULUS RESONATOR — alive harmonograph, PURE WHITE outlines, no glass, no glow.
+   Continuously morphing + breathing. Tamed so it never scribbles. Pie-grid quadrants
+   are the controls (no labels). Right-click = material + mix. Transparent. */
+:root{--font:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;--dim:#675d7a;--muted:#9b93b0;}
+*{box-sizing:border-box;}html,body{margin:0;height:100%;}
+body{background:radial-gradient(700px 400px at 50% 45%,#16142b 0,rgba(22,20,43,0) 70%),#0a0912;color:#e4e0ee;
+  font-family:var(--font);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;padding:22px;}
+.head{max-width:460px;margin-bottom:12px;}
+.head h1{font-size:14px;font-weight:600;margin:0 0 3px;}.head h1 span{color:var(--dim);font-weight:400;}
+.head p{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0;}.head b{color:#cdbef5;}
+.reso{position:relative;width:300px;height:230px;border:1px solid rgba(124,92,191,.14);border-radius:12px;background:#08070f;overflow:hidden;}
+canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab;}canvas:active{cursor:grabbing;}
+.menu{position:absolute;z-index:9;display:none;min-width:120px;padding:6px;background:rgba(26,26,46,.94);
+  -webkit-backdrop-filter:blur(14px);border:1px solid rgba(124,92,191,.4);border-radius:9px;box-shadow:0 8px 26px rgba(0,0,0,.5);}
+.menu.act{display:block;}
+.menu .h{font-size:8px;letter-spacing:1.4px;color:var(--dim);text-transform:uppercase;padding:3px 7px 5px;}
+.menu .i{font-size:11px;color:var(--muted);padding:5px 9px;border-radius:6px;cursor:pointer;}
+.menu .i:hover{background:rgba(183,148,255,.14);color:#fff;}.menu .i.on{color:#B794FF;}
+.hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:9px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;pointer-events:none;}
+</style></head>
+<body>
+<div class="head"><h1>Annulus <span>· alive harmonograph — pure white, no glass</span></h1>
+<p><b>Drag a quadrant</b> to shape (top-left Structure, TR Brightness, BR Damping, BL Position). <b>Right-click</b> for material + mix.
+It morphs and breathes on its own — tamed so it stays elegant, never a scribble.</p></div>
+<div class="reso" id="reso"><canvas id="cv"></canvas>
+<div class="menu" id="menu"><div class="h">Material</div>
+<div class="i on" data-f="0">String</div><div class="i" data-f="1">Bar</div><div class="i" data-f="2">Drum</div><div class="i" data-f="3">Metal</div></div>
+<div class="hint">drag to shape · right-click for material</div></div>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),menu=document.getElementById('menu'),DPR=Math.max(1,devicePixelRatio||1);
+  var P={structure:.18,brightness:.4,damping:.5,position:.1},family=0,bloom=0;
+  var QUAD=[{k:'structure',sx:-1,sy:-1},{k:'brightness',sx:1,sy:-1},{k:'damping',sx:1,sy:1},{k:'position',sx:-1,sy:1}];
+  // material ratio sets (tamed — kept low/moderate so the figure stays elegant)
+  var FAM=[[1,2,3,4],[1,2.0,2.76,3.4],[1,1.59,2.14,2.65],[1,2.0,2.4,3.0]];
+  var ph=[0,1.7,3.1,4.6], en=[1,.8,.6,.45];
+  function ratios(){var f=FAM[family],h=[1,2,3,4],s=P.structure,o=[];for(var i=0;i<4;i++)o.push(h[i]*(1-s)+f[i]*s);return o;}
+  var W=0,H=0,CX=0,CY=0,Rg=0;
+  function sz(){var w=cv.clientWidth,h=cv.clientHeight;if(!w||!h||(w==W&&h==H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*.44;}
+  var STEPS=1300,TSPAN=Math.PI*2*7,px=new Float32Array(STEPS+1),py=new Float32Array(STEPS+1);
+  function build(){
+    var r=ratios();
+    var a=[en[0]*(.6+bloom*.5),en[1]*.8,en[2]*.6,en[3]*.5];
+    var damp=.5+P.damping*2.2, br=P.brightness;
+    var sum=a[0]+a[1]+a[2]+a[3]||1, sc=Rg*.92/sum;
+    var f1=r[0],f2=r[1],f3=r[0]*1.004,f4=r[2];
+    for(var s=0;s<=STEPS;s++){
+      var u=s/STEPS,t=u*TSPAN,env=Math.exp(-damp*u);
+      var x=env*(a[0]*Math.sin(f1*t+ph[0])+a[1]*Math.sin(f2*t+ph[1])+br*.4*a[3]*Math.sin(r[3]*t+ph[3]));
+      var y=env*(a[2]*Math.sin(f3*t+ph[2]+1.5708)+a[1]*Math.sin(f4*t+ph[1])+br*.4*a[3]*Math.cos(r[3]*t+ph[3]));
+      px[s]=CX+x*sc;py[s]=CY+y*sc;
+    }
+  }
+  function frame(ts){
+    if(!frame._l)frame._l=ts;var dt=Math.min(.05,(ts-frame._l)/1000);frame._l=ts;sz();
+    bloom=Math.max(0,bloom-dt*(.5+(1-P.damping)*1.4));
+    for(var i=0;i<4;i++)ph[i]+=dt*(.05+i*.012); // slow precession → always morphing
+    build();
+    ctx.clearRect(0,0,W,H);
+    if(!W){requestAnimationFrame(frame);return;}
+    // faint pie grid + cross
+    ctx.lineWidth=1;ctx.strokeStyle='rgba(255,255,255,.055)';
+    for(var k=1;k<=3;k++){ctx.beginPath();ctx.arc(CX,CY,Rg*(k/3),0,6.2832);ctx.stroke();}
+    ctx.beginPath();ctx.moveTo(CX-Rg,CY);ctx.lineTo(CX+Rg,CY);ctx.moveTo(CX,CY-Rg);ctx.lineTo(CX,CY+Rg);ctx.stroke();
+    // quadrant param arcs (controls, no labels)
+    var arcs=[['structure',Math.PI,Math.PI*1.5],['brightness',Math.PI*1.5,Math.PI*2],['damping',0,Math.PI*.5],['position',Math.PI*.5,Math.PI]];
+    ctx.lineCap='round';
+    for(var i=0;i<4;i++){var A=arcs[i],v=P[A[0]];
+      ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.arc(CX,CY,Rg,A[1],A[2]);ctx.stroke();
+      ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.8)';ctx.beginPath();ctx.arc(CX,CY,Rg,A[1],A[1]+(A[2]-A[1])*v);ctx.stroke();}
+    ctx.lineCap='butt';
+    // the harmonograph — PURE WHITE, sharp stroke, rotated by POSITION
+    ctx.save();ctx.translate(CX,CY);ctx.rotate(P.position*Math.PI*2);ctx.translate(-CX,-CY);
+    ctx.lineWidth=1.3;ctx.lineJoin='round';ctx.strokeStyle='rgba(255,255,255,.85)';
+    ctx.beginPath();for(var s=0;s<=STEPS;s++){s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]);}ctx.stroke();
+    ctx.restore();
+    requestAnimationFrame(frame);
+  }
+  var drag=null,sY=0,sV=0;
+  function quad(e){var r=cv.getBoundingClientRect(),dx=e.clientX-r.left-CX,dy=e.clientY-r.top-CY;
+    if(Math.hypot(dx,dy)<Rg*.34)return 'center';for(var i=0;i<4;i++)if(Math.sign(dx)==QUAD[i].sx&&Math.sign(dy)==QUAD[i].sy)return QUAD[i].k;return null;}
+  cv.addEventListener('pointerdown',function(e){if(e.button===2)return;menu.classList.remove('act');var q=quad(e);if(!q)return;if(q=='center'){bloom=1;return;}drag=q;sY=e.clientY;sV=P[q];try{cv.setPointerCapture(e.pointerId);}catch(_){}});
+  cv.addEventListener('pointermove',function(e){if(!drag)return;P[drag]=Math.max(0,Math.min(1,sV+(sY-e.clientY)/200));});
+  cv.addEventListener('pointerup',function(){drag=null;});
+  cv.addEventListener('contextmenu',function(e){e.preventDefault();var r=document.getElementById('reso').getBoundingClientRect();
+    menu.style.left=(e.clientX-r.left)+'px';menu.style.top=(e.clientY-r.top)+'px';menu.classList.add('act');});
+  menu.addEventListener('click',function(e){var it=e.target.closest('.i');if(!it)return;family=+it.dataset.f;bloom=.6;
+    [].forEach.call(menu.querySelectorAll('.i'),function(x){x.classList.remove('on');});it.classList.add('on');menu.classList.remove('act');});
+  document.addEventListener('pointerdown',function(e){if(menu.classList.contains('act')&&!menu.contains(e.target)&&e.target!==cv)menu.classList.remove('act');});
+  sz();requestAnimationFrame(frame);
+})();
+</script></body></html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain — Annulus resonator (simple-shape morph)</title>
+<style>
+/* ════════════════════════════════════════════════════════════════════════
+   TERRAIN — ANNULUS RESONATOR · simple-shape morph (image-#13 vocabulary)
+   STRUCTURE = which figure (morphs through a library of clean simple shapes:
+   circle+dot, two circles, tilted ellipse, orbit, nested discs, atom…). It
+   becomes a DIFFERENT shape, never a busier one. No kaleidoscope.
+   BRIGHTNESS = subtle inner echo (dimension) · DAMPING = bloom/size ·
+   POSITION = rotation. The four grid quadrants are the four params. Thin
+   white + faint violet, stroke, NO glow.
+   ════════════════════════════════════════════════════════════════════════ */
+:root{
+  --muted:#9b93b0; --dim:#675d7a;
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text',system-ui,sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{
+  background:radial-gradient(820px 460px at 50% 44%, #16142b 0%, rgba(22,20,43,0) 70%), #0a0912;
+  color:#e4e0ee; font-family:var(--font); -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; align-items:center; padding:22px 16px 30px;
+}
+.head{width:100%;max-width:540px;margin-bottom:12px;}
+.head h1{font-size:14px;font-weight:600;letter-spacing:.3px;margin:0 0 3px;}
+.head h1 span{color:var(--dim);font-weight:400;}
+.head p{font-size:11.5px;line-height:1.55;color:var(--muted);margin:0;max-width:504px;}
+.head b{color:#cdbef5;font-weight:600;}
+
+.reso{position:relative;width:440px;height:440px;border-radius:14px;background:#08070f;
+  border:1px solid rgba(124,92,191,.14);overflow:hidden;}
+canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab;display:block;}
+canvas:active{cursor:grabbing;}
+.fam{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;
+  border:1px solid rgba(255,255,255,.13);border-radius:7px;overflow:hidden;z-index:2;}
+.fam button{font:500 9.5px/1 var(--font);letter-spacing:.6px;color:#bcb3cd;background:transparent;
+  border:none;border-right:1px solid rgba(255,255,255,.09);padding:6px 12px;cursor:pointer;transition:.14s;}
+.fam button:last-child{border-right:none;}
+.fam button.on{background:rgba(255,255,255,.11);color:#fff;}
+.fam button:hover{color:#fff;}
+.hint{position:absolute;bottom:9px;left:0;right:0;text-align:center;font-size:9px;color:var(--dim);
+  letter-spacing:.5px;pointer-events:none;text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Annulus <span>· resonator — simple-shape morph</span></h1>
+  <p><b>Drag the top-left quadrant (Structure)</b> to morph through different simple figures — circle, two
+     circles, ellipse, orbit, nested discs, atom. Each is its own clean shape, not a busier one. Top-right
+     <b>Brightness</b>, bottom-right <b>Damping</b>, bottom-left <b>Position</b> (rotation). Pick a material up top.</p>
+</div>
+
+<div class="reso" id="reso">
+  <div class="fam" id="fam">
+    <button data-f="0" class="on">String</button><button data-f="1">Bar</button>
+    <button data-f="2">Drum</button><button data-f="3">Metal</button>
+  </div>
+  <canvas id="cv"></canvas>
+  <div class="hint">drag a quadrant to shape · click center to strike</div>
+</div>
+
+<script>
+(function(){
+  var P={structure:0.0, brightness:0.35, damping:0.5, position:0.12};
+  var QUAD=[{key:'structure',sx:-1,sy:-1},{key:'brightness',sx:1,sy:-1},{key:'damping',sx:1,sy:1},{key:'position',sx:-1,sy:1}];
+  var family=0, bloom=0;
+
+  // ── shape library (image-#13 vocabulary). Each = up to 3 ellipses + 4 dots, normalized.
+  // {e:[cx,cy,r,ry,rot,alpha]}  {d:[cx,cy,alpha]}.  Morph = lerp params between neighbours. ──
+  var MAXE=3, MAXD=4;
+  function S(e,d){ e=e||[]; d=d||[];
+    while(e.length<MAXE) e.push([0,0,0.0001,0.0001,0,0]);   // collapsed = invisible, lerps cleanly
+    while(d.length<MAXD) d.push([0,0,0]);
+    return {e:e,d:d}; }
+  var LIB=[
+    S([[0,0,.9,.9,0,1]], [[0,-.9,1]]),                                   // circle + orbit dot
+    S([[-.42,0,.6,.6,0,1],[.42,0,.6,.6,0,1]], [[0,.46,1],[0,-.46,1]]),   // two intersecting circles
+    S([[0,0,.98,.38,-0.5,1]], [[.7,-.38,1],[-.7,.38,1]]),                // tilted ellipse + end dots
+    S([[0,0,.95,.36,0.55,1],[0,0,.95,.36,-0.55,1]], [[0,0,1]]),          // crossed orbits
+    S([[0,0,.9,.28,0,1],[0,0,.6,.19,0,.9],[0,0,.32,.1,0,.75]], [[0,-.5,1]]), // nested discs (stack)
+    S([[-.4,.26,.5,.5,0,1],[.4,.26,.5,.5,0,1],[0,-.42,.5,.5,0,1]], [[0,0,1]]), // three-circle cluster
+    S([[0,0,.92,.92,0,.45]], [[0,-.92,1],[.92,0,1],[0,.92,1],[-.92,0,1]]),     // atom (faint ring + 4 nodes)
+    S([[0,0,.5,.5,0,1],[0,0,1,.3,-0.28,1]], [[0,0,1]]),                  // saturn (circle + ring)
+    S([[0,-.42,.66,.66,0,1],[0,.42,.66,.66,0,1]], [[0,0,1]]),            // vesica (vertical lens)
+    S([[0,0,1,.5,0,1],[0,0,.26,.26,0,1]], [[.96,0,1],[-.96,0,1]])        // ellipse + core + axis dots
+  ];
+
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function morphed(){
+    var f=P.structure*(LIB.length-1), i=Math.floor(f), t=f-i, A=LIB[i], B=LIB[Math.min(LIB.length-1,i+1)];
+    var e=[],d=[];
+    for(var k=0;k<MAXE;k++){var x=A.e[k],y=B.e[k];e.push([lerp(x[0],y[0],t),lerp(x[1],y[1],t),lerp(x[2],y[2],t),lerp(x[3],y[3],t),lerp(x[4],y[4],t),lerp(x[5],y[5],t)]);}
+    for(var k=0;k<MAXD;k++){var x=A.d[k],y=B.d[k];d.push([lerp(x[0],y[0],t),lerp(x[1],y[1],t),lerp(x[2],y[2],t)]);}
+    return {e:e,d:d};
+  }
+
+  var cv=document.getElementById('cv'), ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
+  var W=0,H=0,CX=0,CY=0,Rg=0;
+  function resize(){var r=cv.getBoundingClientRect();W=r.width;H=r.height;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.42;}
+
+  function frame(ts){
+    if(!frame._l)frame._l=ts; var dt=Math.min(.05,(ts-frame._l)/1000); frame._l=ts;
+    bloom=Math.max(0,bloom-dt*(0.6+(1-P.damping)*1.6));
+    ctx.clearRect(0,0,W,H);
+
+    // pie grid (faint)
+    ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,.06)';
+    for(var k=1;k<=3;k++){ctx.beginPath();ctx.arc(CX,CY,Rg*(k/3),0,6.2832);ctx.stroke();}
+    ctx.beginPath();ctx.moveTo(CX-Rg,CY);ctx.lineTo(CX+Rg,CY);ctx.moveTo(CX,CY-Rg);ctx.lineTo(CX,CY+Rg);ctx.stroke();
+
+    // quadrant param arcs (the controller)
+    var arcs=[['structure',Math.PI,Math.PI*1.5],['brightness',Math.PI*1.5,Math.PI*2],['damping',0,Math.PI*0.5],['position',Math.PI*0.5,Math.PI]];
+    ctx.lineCap='round';
+    for(var i=0;i<arcs.length;i++){var A=arcs[i],v=P[A[0]];
+      ctx.lineWidth=2.4;ctx.strokeStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.arc(CX,CY,Rg,A[1],A[2]);ctx.stroke();
+      ctx.lineWidth=2.4;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.beginPath();ctx.arc(CX,CY,Rg,A[1],A[1]+(A[2]-A[1])*v);ctx.stroke();}
+    ctx.lineCap='butt';
+    ctx.font='600 8px '+getComputedStyle(document.body).fontFamily;ctx.fillStyle='rgba(255,255,255,.4)';ctx.textBaseline='middle';
+    var pd=Rg*0.82;ctx.textAlign='center';
+    ctx.fillText('STRUCT',CX-pd,CY-pd);ctx.fillText('BRIGHT',CX+pd,CY-pd);ctx.fillText('DAMP',CX+pd,CY+pd);ctx.fillText('POS',CX-pd,CY+pd);
+
+    // ── the figure ──
+    var sh=morphed();
+    var size=Rg*(0.56)*(1+bloom*0.22);
+    var rot=P.position*Math.PI*2 + 0; // POSITION rotates; (no idle spin so it's calm/simple)
+    ctx.save(); ctx.translate(CX,CY); ctx.rotate(rot);
+    var famSkew=[1,1.12,0.9,1][family], famRot=[0,0,0,0.0][family];   // material gives a subtle aspect feel
+    // brightness = faint inner echo (subtle dimension), drawn first
+    function drawSet(scale,alphaMul,vio){
+      for(var k=0;k<MAXE;k++){var E=sh.e[k];if(E[5]*alphaMul<0.02||E[2]<0.01)continue;
+        ctx.lineWidth=1.5;ctx.strokeStyle=vio?'rgba(167,139,250,'+(0.28*E[5]*alphaMul)+')':'rgba(255,255,255,'+(0.9*E[5]*alphaMul)+')';
+        ctx.beginPath();ctx.ellipse(E[0]*size*scale*famSkew,E[1]*size*scale,E[2]*size*scale,E[3]*size*scale,E[4],0,6.2832);ctx.stroke();}
+    }
+    if(P.brightness>0.02){ ctx.save(); drawSet(0.66,P.brightness*0.5,false); ctx.restore(); }  // inner echo
+    drawSet(1.0,1,true);    // violet twin (offset via translate)
+    drawSet(1.0,1,false);   // bold white
+    // dots
+    for(var k=0;k<MAXD;k++){var D=sh.d[k];if(D[2]<0.05)continue;
+      ctx.fillStyle='rgba(255,255,255,'+(0.92*D[2])+')';ctx.beginPath();ctx.arc(D[0]*size*famSkew,D[1]*size,2.4,0,6.2832);ctx.fill();}
+    ctx.restore();
+
+    requestAnimationFrame(frame);
+  }
+
+  // interaction
+  var drag=null,sY=0,sVal=0;
+  function quadAt(e){var r=cv.getBoundingClientRect();var dx=(e.clientX-r.left)-CX,dy=(e.clientY-r.top)-CY;
+    if(Math.hypot(dx,dy)<Rg*0.32)return 'center';
+    for(var i=0;i<QUAD.length;i++)if(Math.sign(dx)===QUAD[i].sx&&Math.sign(dy)===QUAD[i].sy)return QUAD[i].key;return null;}
+  cv.addEventListener('pointerdown',function(e){var q=quadAt(e);if(!q)return;if(q==='center'){bloom=1;return;}
+    drag=q;sY=e.clientY;sVal=P[q];try{cv.setPointerCapture(e.pointerId);}catch(_){}});
+  cv.addEventListener('pointermove',function(e){if(!drag)return;P[drag]=Math.max(0,Math.min(1,sVal+(sY-e.clientY)/240));});
+  function end(){drag=null;}cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+  document.getElementById('fam').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+    [].forEach.call(this.children,function(x){x.classList.remove('on');});b.classList.add('on');family=+b.dataset.f;bloom=0.6;});
+
+  resize();window.addEventListener('resize',resize);requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

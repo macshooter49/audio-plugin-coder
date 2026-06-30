@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain — Annulus resonator (harmonograph)</title>
+<style>
+/* ════════════════════════════════════════════════════════════════════════
+   TERRAIN — ANNULUS RESONATOR · harmonograph / standing-wave resonance figure
+   Gritty analog-scientific line art. The active modes drive a Lissajous/
+   harmonograph curve: harmonic (String) → clean closed figure; inharmonic
+   (Metal) → drifting alien scribble; beating modes → pinched standing-wave coil.
+   White line + faint violet energy twin + oscilloscope head. Stroke, NO glow.
+   This IS the physics: superposed modes literally trace these curves.
+   ════════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0b0a14; --violet:rgba(167,139,250,.85);
+  --syn-arc:rgba(255,255,255,.92); --syn-trk:rgba(255,255,255,.13);
+  --muted:#9b93b0; --dim:#675d7a;
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text',system-ui,sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{
+  background:radial-gradient(820px 440px at 50% 42%, #16142b 0%, rgba(22,20,43,0) 70%), #0a0912;
+  color:#e4e0ee; font-family:var(--font); -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; align-items:center; padding:24px 16px 38px;
+}
+.head{width:100%;max-width:520px;margin-bottom:14px;}
+.head h1{font-size:14px;font-weight:600;letter-spacing:.3px;margin:0 0 3px;}
+.head h1 span{color:var(--dim);font-weight:400;}
+.head p{font-size:11.5px;line-height:1.55;color:var(--muted);margin:0;max-width:486px;}
+.head b{color:#cdbef5;font-weight:600;}
+
+.reso{position:relative;width:380px;height:380px;border-radius:14px;background:#08070f;
+  border:1px solid rgba(124,92,191,.14);overflow:hidden;}
+canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;display:block;}
+.fam{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;
+  border:1px solid rgba(255,255,255,.13);border-radius:7px;overflow:hidden;z-index:2;}
+.fam button{font:500 9.5px/1 var(--font);letter-spacing:.6px;color:#bcb3cd;background:transparent;
+  border:none;border-right:1px solid rgba(255,255,255,.09);padding:6px 12px;cursor:pointer;transition:.14s;}
+.fam button:last-child{border-right:none;}
+.fam button.on{background:rgba(255,255,255,.11);color:#fff;}
+.fam button:hover{color:#fff;}
+.hint{position:absolute;bottom:9px;left:0;right:0;text-align:center;font-size:9px;color:var(--dim);
+  letter-spacing:.5px;pointer-events:none;text-transform:uppercase;}
+
+.knobs{display:flex;gap:30px;margin-top:20px;}
+.kw{display:flex;flex-direction:column;align-items:center;gap:7px;}
+.kval{font:500 11px/1 var(--font);color:#c4b5fd;font-variant-numeric:tabular-nums;min-height:11px;}
+.klab{font:400 10px/1 var(--font);color:#bcb3cd;letter-spacing:.3px;}
+.kr{position:relative;width:46px;height:46px;cursor:grab;touch-action:none;}
+.kr.drag{cursor:grabbing;}
+.kr .kr-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;}
+.kr .kr-t{fill:none;stroke:var(--syn-trk);stroke-width:2.2;stroke-linecap:round;stroke-dasharray:75 25;}
+.kr .kr-v{fill:none;stroke:var(--syn-arc);stroke-width:2.2;stroke-linecap:round;}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Annulus <span>· resonator — harmonograph resonance figure</span></h1>
+  <p><b>Drag anywhere</b> to strike the resonator — the figure blooms, then decays (Damping). <b>Structure</b>
+     bends it from a clean harmonic figure into a drifting inharmonic one. <b>Brightness</b> feeds the higher
+     modes, <b>Position</b> shifts the strike phase. <b>String</b> → tidy butterfly; <b>Metal</b> → alien scribble.</p>
+</div>
+
+<div class="reso" id="reso">
+  <div class="fam" id="fam">
+    <button data-f="0" class="on">String</button><button data-f="1">Bar</button>
+    <button data-f="2">Drum</button><button data-f="3">Metal</button>
+  </div>
+  <canvas id="cv"></canvas>
+  <div class="hint">drag to strike</div>
+</div>
+
+<div class="knobs" id="knobs"></div>
+
+<script>
+(function(){
+  // round-cap arc knob (synth language)
+  function ensureArc(ring){var v=ring.querySelector('.kr-v');if(v)return v;
+    ring.innerHTML='<svg class="kr-svg" viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet">'
+      +'<circle class="kr-t" cx="12" cy="12" r="10" pathLength="100" transform="rotate(135 12 12)"></circle>'
+      +'<circle class="kr-v" cx="12" cy="12" r="10" pathLength="100" transform="rotate(135 12 12)"></circle></svg>';
+    return ring.querySelector('.kr-v');}
+  function setArc(ring,n){var v=ensureArc(ring);n=Math.max(0,Math.min(1,n));v.style.strokeDasharray=(n*75)+' 100';}
+  function makeKnob(host,label,val,cb){
+    var kw=document.createElement('div');kw.className='kw';
+    var k=document.createElement('div');k.className='kr';
+    var vd=document.createElement('div');vd.className='kval';
+    var lb=document.createElement('div');lb.className='klab';lb.textContent=label;
+    kw.appendChild(k);kw.appendChild(vd);kw.appendChild(lb);host.appendChild(kw);
+    var p=val;function render(){setArc(k,p);vd.textContent=Math.round(p*100);cb&&cb(p);}
+    var drag=false,sY=0,sP=0;
+    k.addEventListener('pointerdown',function(e){drag=true;sY=e.clientY;sP=p;k.classList.add('drag');try{k.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();});
+    k.addEventListener('pointermove',function(e){if(!drag)return;p=Math.max(0,Math.min(1,sP+(sY-e.clientY)/170));render();});
+    function end(){drag=false;k.classList.remove('drag');}
+    k.addEventListener('pointerup',end);k.addEventListener('pointercancel',end);
+    render();return {set:function(x){p=x;render();}};
+  }
+
+  // ---- modal model ----
+  var N=8;   // harmonograph reads best with a handful of strong components
+  var FAMILIES=[
+    null,
+    [1,2.76,5.40,8.93,13.34,18.64,24.82,31.87],   // Bar
+    [1,1.59,2.14,2.30,2.65,2.92,3.16,3.50],       // Drum (Bessel)
+    [1,2.00,2.40,2.78,3.76,4.07,5.13,6.10]        // Metal/bell
+  ];
+  FAMILIES[0]=[]; for(var i=0;i<N;i++) FAMILIES[0].push(i+1);
+  var family=0;
+  var P={structure:0.25,brightness:0.55,damping:0.45,position:0.30};
+  var energy=new Float32Array(N), phase=new Float32Array(N);
+  for(var i=0;i<N;i++){energy[i]=0.12;phase[i]=Math.random()*6.283;}
+
+  function ratios(){var h=FAMILIES[0],f=FAMILIES[family],s=P.structure,o=new Array(N);
+    for(var i=0;i<N;i++)o[i]=h[i]*(1-s)+f[i]*s;return o;}
+  function strike(force){
+    for(var i=0;i<N;i++){var bright=0.5+P.brightness*(i/(N-1))*1.7;
+      energy[i]=Math.min(1.5,energy[i]+force*bright*(0.6+0.4*Math.cos(i)));}
+  }
+
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),DPR=Math.max(1,window.devicePixelRatio||1);
+  var W=0,H=0,CX=0,CY=0,RAD=0;
+  function resize(){var r=cv.getBoundingClientRect();W=r.width;H=r.height;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    CX=W/2;CY=H/2;RAD=Math.min(W,H)*0.36;}
+
+  // build the harmonograph path into arrays (so we can draw white + violet twin + head)
+  var STEPS=1700, TSPAN=Math.PI*2*9;
+  var px=new Float32Array(STEPS+1), py=new Float32Array(STEPS+1);
+  function buildPath(){
+    var rs=ratios();
+    // Damped 4-component harmonograph (lateral x pair · rotary y pair), driven by the
+    // strongest modes. A slight detune on one pair gives the rotary drift; the along-t
+    // decay envelope spirals the trace into a pinched waist (the iconic analog look).
+    var f1=rs[0], f2=rs[1], f3=rs[0]*1.004, f4=rs[2];
+    var a1=energy[0], a2=energy[1]*0.85, a3=energy[0]*0.9, a4=energy[2]*0.75;
+    var a5=energy[4]*P.brightness*0.7, f5=rs[4];                 // brightness lacework
+    var damp=0.45+P.damping*2.6;                                 // envelope tightness
+    var sum=a1+a2+a3+a4+a5||1, sc=RAD*0.92/sum;
+    for(var s=0;s<=STEPS;s++){
+      var u=s/STEPS, t=u*TSPAN, env=Math.exp(-damp*u);
+      var x=env*( a1*Math.sin(f1*t+phase[0]) + a2*Math.sin(f2*t+phase[1]) + a5*Math.sin(f5*t+phase[4]) );
+      var y=env*( a3*Math.sin(f3*t+phase[2]+1.5708) + a4*Math.sin(f4*t+phase[3]) + a5*Math.cos(f5*t+phase[4]) );
+      px[s]=CX+x*sc; py[s]=CY+y*sc;
+    }
+  }
+
+  var last=0;
+  function frame(ts){
+    if(!last)last=ts; var dt=Math.min(0.05,(ts-last)/1000); last=ts;
+    var decay=Math.pow(0.5, dt/(0.10+P.damping*2.0));
+    var rs=ratios();
+    for(var i=0;i<N;i++){ energy[i]=Math.max(0.07,energy[i]*decay);
+      phase[i]+= dt*(0.08 + rs[i]*0.012 + P.position*0.04); }   // slow precession = alive
+    buildPath();
+
+    ctx.clearRect(0,0,W,H);
+    // faint scientific framing: axis cross + outer circle
+    ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,.05)';
+    ctx.beginPath(); ctx.moveTo(CX,CY-RAD*1.25); ctx.lineTo(CX,CY+RAD*1.25);
+    ctx.moveTo(CX-RAD*1.25,CY); ctx.lineTo(CX+RAD*1.25,CY); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.beginPath(); ctx.arc(CX,CY,RAD*1.15,0,6.2832); ctx.stroke();
+
+    // violet energy twin (slightly offset, faint) — the "live" layer, on-brand, no glow
+    ctx.lineWidth=1; ctx.strokeStyle='rgba(167,139,250,.30)';
+    ctx.beginPath(); for(var s=0;s<=STEPS;s++){ var x=px[s]+1.4,y=py[s]-1.4; s?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke();
+
+    // primary white trace
+    ctx.lineWidth=1.25; ctx.strokeStyle='rgba(255,255,255,.85)';
+    ctx.beginPath(); for(var s=0;s<=STEPS;s++){ s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]);} ctx.stroke();
+
+    // oscilloscope head dot (the live pen)
+    var head=(Math.floor((ts*0.06)%STEPS));
+    ctx.fillStyle='rgba(255,255,255,.95)'; ctx.beginPath(); ctx.arc(px[head],py[head],2.2,0,6.2832); ctx.fill();
+
+    requestAnimationFrame(frame);
+  }
+
+  // interaction
+  var down=false;
+  function hit(e,f){ var r=cv.getBoundingClientRect();
+    P.position=Math.max(0,Math.min(1,(e.clientX-r.left)/W)); if(POS) POS.set(P.position);
+    strike(f); }
+  cv.addEventListener('pointerdown',function(e){down=true;try{cv.setPointerCapture(e.pointerId);}catch(_){}hit(e,1.0);});
+  cv.addEventListener('pointermove',function(e){if(down)hit(e,0.22);});
+  cv.addEventListener('pointerup',function(){down=false;});
+  cv.addEventListener('pointercancel',function(){down=false;});
+  document.getElementById('fam').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+    [].forEach.call(this.children,function(x){x.classList.remove('on');});b.classList.add('on');family=+b.dataset.f;strike(0.6);});
+
+  var knobs=document.getElementById('knobs'),POS=null;
+  makeKnob(knobs,'Structure',P.structure,function(v){P.structure=v;});
+  makeKnob(knobs,'Brightness',P.brightness,function(v){P.brightness=v;});
+  makeKnob(knobs,'Damping',P.damping,function(v){P.damping=v;});
+  POS=makeKnob(knobs,'Position',P.position,function(v){P.position=v;});
+
+  resize(); window.addEventListener('resize',resize); strike(0.8); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

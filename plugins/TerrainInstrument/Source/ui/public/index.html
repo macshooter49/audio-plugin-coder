@@ -19,6 +19,7 @@
   --bg-card-hover: #D8D2DE;
   --knob-body: #E8E4EF;
   --knob-track: rgba(124,92,191,0.15);
+  --syn-arc: var(--purple-500); --syn-trk: rgba(124,92,191,0.15);   /* light-theme fallback; dark overrides to white below */
   --purple-600: #7C3AED;
   --purple-500: #8B5CF6;
   --purple-400: #A78BFA;
@@ -43,6 +44,7 @@
   --bg-card-hover: #33335C;
   --knob-body: #2E2E4A;
   --knob-track: rgba(100,100,150,0.3);
+  --syn-arc: rgba(255,255,255,0.92); --syn-trk: rgba(255,255,255,0.13);   /* SYN knobs: white round-cap arc + faint track (matches FX exactly) */
   --purple-600: #9B6DFF;
   --purple-500: #8B5CF6;
   --purple-400: #B794FF;
@@ -3736,9 +3738,6 @@ body {
 }
 #syn-panel .engine-controls .knob .knob-ring {
   width: 22px; height: 22px;
-  background: conic-gradient(from 225deg, var(--purple-500) 0deg 0deg, var(--knob-track) 0deg 270deg, transparent 270deg);
-  -webkit-mask: radial-gradient(circle, transparent 7px, black 8px);
-          mask: radial-gradient(circle, transparent 7px, black 8px);
 }
 #syn-panel .engine-controls .ec-label {
   font-size: 8.5px; font-weight: 300; letter-spacing: 1.4px;
@@ -3798,15 +3797,21 @@ body {
 #syn-panel .osc-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
 #syn-panel .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .knob-ring {
+  position: relative;                 /* holds the arc SVG — no layout/flow change */
   width: 24px; height: 24px; border-radius: 50%;
-  background: conic-gradient(from 225deg, var(--purple-500) 0deg 0deg, var(--knob-track) 0deg 270deg, transparent 270deg);
-  -webkit-mask: radial-gradient(circle, transparent 7.5px, black 8.5px);
-          mask: radial-gradient(circle, transparent 7.5px, black 8.5px);
 }
-#syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; }
+/* SYN KNOB ARC — rounded-cap SVG, identical to the FX/Loop knobs (drawFxKnob), just smaller.
+   Faint 270° track + white value arc with round caps; a center notch shows for bipolar knobs.
+   The SVG fills the existing ring box and is pointer-events:none, so drag + readout are untouched. */
+#syn-panel .knob-ring .kr-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+#syn-panel .knob-ring .kr-t   { fill: none; stroke: var(--syn-trk); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 75 25; }
+#syn-panel .knob-ring .kr-v   { fill: none; stroke: var(--syn-arc); stroke-width: 2; stroke-linecap: round; }
+#syn-panel .knob-ring .kr-n   { fill: var(--syn-arc); opacity: .5; display: none; }
+#syn-panel .knob-ring.kr-bip .kr-n { display: block; }
+#syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; text-transform: none; }
 /* OSCFIX-READOUT-CSS — knob label swaps to live value while dragging (zero reflow) */
 #syn-panel .knob .knob-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
-#syn-panel .knob .knob-label.kv-live { letter-spacing: 0.6px; color: var(--purple-300, #c4b5fd); }
+#syn-panel .knob .knob-label.kv-live { letter-spacing: 0.3px; font-weight: 400; color: rgba(255,255,255,0.9); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
 
 /* ════════════ SAMPLE engine front (oscillator engine #2) ════════════
    Engine-conditional: shown when SYN_OSC_x_ENGINE == 1 (Sample) and not flipped.
@@ -3993,7 +3998,7 @@ body {
   align-items: center; justify-items: center;
 }
 #syn-panel .cross-knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-#syn-panel .cross-knob .knob-ring { width: 24px; height: 24px; -webkit-mask: radial-gradient(circle, transparent 7.5px, black 8.5px); mask: radial-gradient(circle, transparent 7.5px, black 8.5px); }
+#syn-panel .cross-knob .knob-ring { width: 24px; height: 24px; }
 #syn-panel .cross-knob .knob-label { font-size: 7.5px; letter-spacing: 0.6px; color: var(--text-primary); }
 
 /* ── FILTER + FLOW row ── */
@@ -4023,6 +4028,11 @@ body {
 #syn-panel .filter-display svg { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); }
 #syn-panel .filter-knobs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 
+/* ── FONT TRIAL (synth only) — rounded Apple face, less "robotic". Delete this one rule to revert. ── */
+#syn-panel, #syn-panel input, #syn-panel button, #syn-panel select {
+  font-family: ui-rounded, 'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+}
+
 /* ── FLOW (transparent, edge-to-edge, alive) ── */
 #syn-panel .device.flow { background: transparent; border: none; overflow: visible; padding: 8px 0 0; }
 #syn-panel .flow { display: grid; grid-template-columns: 1fr 200px; gap: 12px; }
@@ -4038,31 +4048,27 @@ body {
 #syn-panel .flow-glass .fg-track { position: relative; height: 6px; border-radius: 3px; background: rgba(120,118,160,0.30); cursor: ew-resize; overflow: hidden; }
 #syn-panel .flow-glass .fg-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 60%; background: var(--purple-500); box-shadow: 0 0 6px rgba(139,92,246,0.6); }
 #syn-panel .flow-mode {
-  position: relative; min-height: 56px; border-radius: 11px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.10);
+  position: relative; min-height: 58px; border-radius: 11px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.45);   /* white outline, not gray */
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-secondary); background: rgba(255,255,255,0.012);
+  color: var(--text-secondary); background: transparent;   /* no gray fill */
   transition: color .2s ease, background .2s ease, border-color .2s ease, box-shadow .25s ease;
 }
 #syn-panel .flow-mode:hover { color: var(--text-primary); }
 #syn-panel .flow-mode .clip { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; z-index: 0; pointer-events: none; }
-#syn-panel .flow-mode .orbit {
-  position: absolute; inset: -60%; will-change: transform;
-  background: conic-gradient(from 0deg, transparent 0deg 278deg, rgba(255,255,255,0.26) 320deg, transparent 352deg);
-  filter: blur(9px); opacity: .18; animation: flwOrbit 7.5s linear infinite;
-}
+#syn-panel .flow-mode .orbit { display: none; }   /* glassy glow removed — no glass on the mode tiles */
 #syn-panel .flow-mode:nth-child(2) .orbit { animation-delay: -1.1s; }
 #syn-panel .flow-mode:nth-child(3) .orbit { animation-delay: -2.3s; }
 #syn-panel .flow-mode:nth-child(4) .orbit { animation-delay: -3.4s; }
-#syn-panel .flow-mode .clip::after { content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: radial-gradient(closest-side, rgba(18,18,31,0.5) 52%, rgba(18,18,31,0.16) 82%, transparent 100%); }
+/* boxes no longer darkened by a vignette — sharp white emblems; SELECTED turns light purple (no glassy glow) */
+#syn-panel .flow-mode .clip::after { display: none; }   /* dark vignette removed — transparent tiles */
 #syn-panel .flow-mode .emb { width: 42px; height: 42px; display: block; position: relative; z-index: 2;
-  color: var(--text-secondary); filter: drop-shadow(0 0 2px rgba(255,255,255,0.22)); }
-#syn-panel .flow-mode.act { background: rgba(139,92,246,0.16); border-color: var(--purple-500); color: #fff;
-  box-shadow: 0 0 11px rgba(139,92,246,0.38); }
-#syn-panel .flow-mode.act .orbit { background: conic-gradient(from 0deg, transparent 0deg 278deg, rgba(255,255,255,0.4) 320deg, transparent 352deg); opacity: .28; }
-#syn-panel .flow-mode.act .clip::after { background: radial-gradient(closest-side, rgba(124,58,237,0.30) 40%, transparent 76%); }
-#syn-panel .flow-mode.act .emb { color: #fff; filter: drop-shadow(0 0 3px rgba(255,255,255,0.5)); }
+  color: rgba(255,255,255,0.92); filter: none; }
+#syn-panel .flow-mode.act { background: transparent; border-color: var(--purple-400); color: var(--purple-400);
+  box-shadow: none; }   /* selected: white outline + emblem turn purple, no glass */
+#syn-panel .flow-mode.act .orbit { background: conic-gradient(from 0deg, transparent 0deg 278deg, rgba(183,148,255,0.42) 320deg, transparent 352deg); opacity: .26; }
+#syn-panel .flow-mode.act .clip::after { display: none; }
+#syn-panel .flow-mode.act .emb { color: var(--purple-400); filter: none; }
 @keyframes flwOrbit { to { transform: rotate(360deg); } }
 #syn-panel .flow-mode .emb [stroke] { stroke: currentColor; }
 #syn-panel .flow-mode .emb circle { transform-box: fill-box; transform-origin: center; }
@@ -4089,7 +4095,7 @@ body {
 #syn-panel .flow-mode .particle { animation: flwDrift 6s ease-in-out infinite; will-change: transform; }
 
 /* FLOW visualizer (4 layers swap per mode) */
-#syn-panel .flow-vis { position: relative; border-radius: 9px; overflow: hidden; background: transparent; border: none; display: flex; flex-direction: column; }
+#syn-panel .flow-vis { position: relative; border-radius: 9px; overflow: visible; background: transparent; border: none; display: flex; flex-direction: column; }
 #syn-panel .flow-vis .vis-stage { position: relative; flex: 1; min-height: 78px; }
 #syn-panel .flow-vis .vis-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #syn-panel .flow-vis .vis-layer { display: none; } #syn-panel .flow-vis .vis-layer.show { display: block; }
@@ -4104,9 +4110,28 @@ body {
 #syn-panel .flow-vis .particle { animation: flwDrift 6s ease-in-out infinite; }
 #syn-panel .flow-vis circle { transform-box: fill-box; transform-origin: center; }
 
+/* ── ANNULUS RESONATOR — fills the FLOW visualizer slot, fully transparent, interactive ── */
+#syn-panel .flow-vis .vis-stage .vis-layer { display: none !important; }   /* old per-mode SVGs hidden (kept so mode-switch JS never errors) */
+#syn-panel .reso-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; cursor: grab; touch-action: none; background: transparent; }
+#syn-panel .reso-cv:active { cursor: grabbing; }
+#syn-panel .reso-menu { position: absolute; z-index: 70; display: none; min-width: 124px; padding: 6px;
+  background: rgba(26,26,46,0.94); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: 0 8px 26px rgba(0,0,0,0.5); }
+#syn-panel .reso-menu.act { display: block; }
+#syn-panel .reso-menu .rm-head { font-size: 8px; letter-spacing: 1.4px; color: var(--text-muted); text-transform: uppercase; padding: 3px 7px 5px; }
+#syn-panel .reso-menu .rm-item { font-size: 11px; color: var(--text-secondary); padding: 5px 9px; border-radius: 6px; cursor: pointer; }
+#syn-panel .reso-menu .rm-item:hover { background: rgba(183,148,255,0.14); color: #fff; }
+#syn-panel .reso-menu .rm-item.on { color: var(--purple-400); }
+#syn-panel .reso-menu .rm-sep { height: 1px; background: var(--border); margin: 5px 4px; }
+#syn-panel .reso-menu .rm-mix { padding: 5px 9px 3px; }
+#syn-panel .reso-menu .rm-mix .rm-mlab { display: flex; justify-content: space-between; font-size: 9px; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
+#syn-panel .reso-menu .rm-mix .rm-mlab span:last-child { color: #fff; letter-spacing: .3px; }
+#syn-panel .reso-menu .rm-mix .rm-track { position: relative; height: 5px; border-radius: 3px; background: rgba(120,118,160,0.30); cursor: ew-resize; }
+#syn-panel .reso-menu .rm-mix .rm-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--purple-400); }
+
 #syn-panel .vis-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 5px 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
 #syn-panel .vis-knob { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
-#syn-panel .vis-knob .knob-ring { width: 24px; height: 24px; -webkit-mask: radial-gradient(circle, transparent 7px, black 8px); mask: radial-gradient(circle, transparent 7px, black 8px); }
+#syn-panel .vis-knob .knob-ring { width: 24px; height: 24px; }
 /* fixed-size label cell: text swaps (label <-> live readout) with zero reflow */
 #syn-panel .vis-knob .knob-label { font-size: 7px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
 
@@ -4193,7 +4218,7 @@ body {
 #syn-panel .ribbon-mode-dd { height: 24px; padding: 0 10px; background: var(--purple-500); border: 1px solid var(--purple-500); border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 9.5px; letter-spacing: 1.6px; color: #FFFFFF; font-weight: 300; }
 #syn-panel .ribbon-mode-dd svg.dd-chev { width: 9px; height: 9px; margin-left: auto; color: #FFFFFF; }
 #syn-panel .ribbon-mini-knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-#syn-panel .ribbon-mini-knob .knob-ring { width: 26px; height: 26px; -webkit-mask: radial-gradient(circle, transparent 8px, black 9px); mask: radial-gradient(circle, transparent 8px, black 9px); }
+#syn-panel .ribbon-mini-knob .knob-ring { width: 26px; height: 26px; }
 #syn-panel .ribbon-mini-knob .knob-label { font-size: 8px; letter-spacing: 1.4px; color: var(--text-primary); font-weight: 300; }
 #syn-panel .ribbon-divider { background: var(--border); }
 #syn-panel .voice-meta { padding-top: 4px; display: flex; flex-direction: column; gap: 8px; font-size: 9px; color: var(--text-secondary); letter-spacing: 1px; font-weight: 200; }
@@ -5773,8 +5798,23 @@ body {
             </div>
 
             <div class="flow-vis">
-              <svg class="vis-exp" id="flow-exp" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2,5 V2 H5 M9,2 H12 V5 M12,9 V12 H9 M5,12 H2 V9"/></svg>
+              <!-- expand glyph removed — right-click a mode tile opens its extension card -->
+              <svg class="vis-exp" id="flow-exp" style="display:none" viewBox="0 0 14 14"></svg>
               <div class="vis-stage">
+                <!-- ANNULUS RESONATOR — interactive morphing figure + pie-grid controller (transparent) -->
+                <canvas class="reso-cv" id="reso-cv"></canvas>
+                <div class="reso-menu" id="reso-menu">
+                  <div class="rm-head">Material</div>
+                  <div class="rm-item on" data-f="0">String</div>
+                  <div class="rm-item" data-f="1">Bar</div>
+                  <div class="rm-item" data-f="2">Drum</div>
+                  <div class="rm-item" data-f="3">Metal</div>
+                  <div class="rm-sep"></div>
+                  <div class="rm-mix">
+                    <div class="rm-mlab"><span>Mix</span><span id="rm-mix-val">60%</span></div>
+                    <div class="rm-track" id="rm-mix-track"><div class="rm-fill" id="rm-mix-fill" style="width:60%"></div></div>
+                  </div>
+                </div>
                 <!-- ARP -->
                 <svg class="vis-layer show" data-vis="arp" viewBox="0 0 188 78" preserveAspectRatio="none">
                   <g stroke="rgba(236,232,242,0.10)" stroke-width="0.5">
@@ -5816,13 +5856,8 @@ body {
                   </g>
                 </svg>
               </div>
-              <div class="vis-knobs" id="flow-knobs">
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Rate</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Gate</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Vary</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Traj</div></div>
-                <div class="vis-knob"><div class="knob-ring"></div><div class="knob-label">Morph</div></div>
-              </div>
+              <!-- flow knobs removed — resonator fills the full slot; mode params live in the right-click extension cards -->
+              <div class="vis-knobs" id="flow-knobs" style="display:none"></div>
             </div>
           </div>
         </div>
@@ -7413,6 +7448,121 @@ function denormalizeOutput(norm) {
 
 // ---- Icon Rendering ----
 const DPR = window.devicePixelRatio || 1;
+
+// ── SYN KNOB ARC — rounded-cap SVG matching the FX/Loop knobs (drawFxKnob), just smaller ──
+// One SVG per #syn-panel .knob-ring: faint 270° track + white value arc with round caps
+// (+ a center notch for bipolar). Geometry mirrors drawFxKnob (start 7:30 / 135°, sweep 270°).
+// Injected lazily so it never depends on init ordering; the 4 knob painters just set the value.
+window.__synEnsureArc = function (ring) {
+  if (! ring) return null;
+  var v = ring.querySelector ('.kr-v');
+  if (v) return v;
+  ring.innerHTML =
+    '<svg class="kr-svg" viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet">'
+    + '<circle class="kr-t" cx="12" cy="12" r="10" pathLength="100" transform="rotate(135 12 12)"></circle>'
+    + '<circle class="kr-v" cx="12" cy="12" r="10" pathLength="100" transform="rotate(135 12 12)"></circle>'
+    + '<rect class="kr-n" x="11.2" y="0" width="1.6" height="3.4"></rect>'
+    + '</svg>';
+  return ring.querySelector ('.kr-v');
+};
+window.__synArc = function (ring, n, bipolar) {
+  var v = window.__synEnsureArc (ring); if (! v) return;
+  n = Math.max (0, Math.min (1, n || 0));
+  if (ring.classList) ring.classList.toggle ('kr-bip', !! bipolar);
+  if (bipolar) {
+    var lo = Math.min (n, 0.5), hi = Math.max (n, 0.5);
+    v.style.strokeDasharray  = ((hi - lo) * 75) + ' 100';
+    v.style.strokeDashoffset = (-(lo * 75));
+  } else {
+    v.style.strokeDasharray  = (n * 75) + ' 100';
+    v.style.strokeDashoffset = 0;
+  }
+};
+(function () {   // ensure every static SYN ring shows its track even if no painter ever touches it
+  var run = function () {
+    try { document.querySelectorAll ('#syn-panel .knob-ring').forEach (window.__synEnsureArc); } catch (e) {}
+  };
+  if (document.readyState === 'loading') document.addEventListener ('DOMContentLoaded', run); else run ();
+})();
+
+// ── ANNULUS RESONATOR — FLOW visualizer slot · simple-shape morph + pie-grid controller ──
+(function(){
+  function boot(){
+    var cv=document.getElementById('reso-cv'); if(!cv) return;
+    var menu=document.getElementById('reso-menu');
+    var ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
+    var P={structure:0.0,brightness:0.35,damping:0.55,position:0.12}, family=0, bloom=0;
+    var QUAD=[{k:'structure',sx:-1,sy:-1},{k:'brightness',sx:1,sy:-1},{k:'damping',sx:1,sy:1},{k:'position',sx:-1,sy:1}];
+    // ALIVE HARMONOGRAPH — tamed (stays elegant, never scribbles). Materials shift the ratio set.
+    var FAM=[[1,2,3,4],[1,2.0,2.76,3.4],[1,1.59,2.14,2.65],[1,2.0,2.4,3.0]];
+    var ph=[0,1.7,3.1,4.6], en=[1,.8,.6,.45];
+    function ratios(){var f=FAM[family],h=[1,2,3,4],s=P.structure,o=[];for(var i=0;i<4;i++)o.push(h[i]*(1-s)+f[i]*s);return o;}
+    var STEPS=1300,TSPAN=Math.PI*2*7,px=new Float32Array(STEPS+1),py=new Float32Array(STEPS+1);
+    function build(){
+      var r=ratios(), a=[en[0]*(.6+bloom*.5),en[1]*.8,en[2]*.6,en[3]*.5], damp=.5+P.damping*2.2, br=P.brightness;
+      var sum=a[0]+a[1]+a[2]+a[3]||1, sc=Rg*.92/sum, f1=r[0],f2=r[1],f3=r[0]*1.004,f4=r[2];
+      for(var s=0;s<=STEPS;s++){var u=s/STEPS,t=u*TSPAN,env=Math.exp(-damp*u);
+        var x=env*(a[0]*Math.sin(f1*t+ph[0])+a[1]*Math.sin(f2*t+ph[1])+br*.85*a[3]*Math.sin(r[3]*t+ph[3]));
+        var y=env*(a[2]*Math.sin(f3*t+ph[2]+1.5708)+a[1]*Math.sin(f4*t+ph[1])+br*.85*a[3]*Math.cos(r[3]*t+ph[3]));
+        px[s]=CX+x*sc;py[s]=CY+y*sc;}
+    }
+    var W=0,H=0,CX=0,CY=0,Rg=0;
+    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.50;}
+    function frame(ts){
+      if(!frame._l)frame._l=ts; var dt=Math.min(.05,(ts-frame._l)/1000); frame._l=ts; sz();
+      bloom=Math.max(0,bloom-dt*(0.6+(1-P.damping)*1.6));
+      ctx.clearRect(0,0,W,H);
+      if(!W||!H){requestAnimationFrame(frame);return;}
+      // (radar grid removed — only the four control arcs remain, forming the circle)
+      // quadrant param arcs (controller, no labels)
+      var arcs=[[ 'structure',Math.PI,Math.PI*1.5],['brightness',Math.PI*1.5,Math.PI*2],['damping',0,Math.PI*.5],['position',Math.PI*.5,Math.PI]];
+      ctx.lineCap='round';
+      for(var i=0;i<arcs.length;i++){var Aa=arcs[i],v=P[Aa[0]];
+        ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[2]);ctx.stroke();
+        ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[1]+(Aa[2]-Aa[1])*v);ctx.stroke();}
+      ctx.lineCap='butt';
+      // figure — alive harmonograph, PURE WHITE outline (no glass, no glow), rotated by POSITION
+      for(var i=0;i<4;i++) ph[i]+=dt*(.22+i*.06);   // continuous fluid morphing motion
+      build();
+      ctx.save(); ctx.translate(CX,CY); ctx.rotate(P.position*Math.PI*2); ctx.translate(-CX,-CY);
+      ctx.lineWidth=1.3; ctx.lineJoin='round'; ctx.strokeStyle='rgba(255,255,255,.86)';
+      ctx.beginPath(); for(var s=0;s<=STEPS;s++){ s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]); } ctx.stroke();
+      ctx.restore();
+      requestAnimationFrame(frame);
+    }
+    // interaction
+    var drag=null,sY=0,sVal=0;
+    function quadAt(e){var r=cv.getBoundingClientRect(),dx=(e.clientX-r.left)-CX,dy=(e.clientY-r.top)-CY;
+      if(Math.hypot(dx,dy)<Rg*0.34)return 'center';
+      for(var i=0;i<QUAD.length;i++)if(Math.sign(dx)===QUAD[i].sx&&Math.sign(dy)===QUAD[i].sy)return QUAD[i].k;return null;}
+    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); var q=quadAt(e); if(!q)return;
+      if(q==='center'){bloom=1;return;} drag=q;sY=e.clientY;sVal=P[q];try{cv.setPointerCapture(e.pointerId);}catch(_){}});
+    cv.addEventListener('pointermove',function(e){if(!drag)return;P[drag]=Math.max(0,Math.min(1,sVal+(sY-e.clientY)/200));});
+    function endDrag(){drag=null;} cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
+    // right-click menu (material + mix)
+    function showMenu(e){ if(!menu)return; e.preventDefault();
+      var host=cv.parentElement, hr=host.getBoundingClientRect();
+      menu.style.left=Math.max(2,Math.min(hr.width-128,(e.clientX-hr.left)))+'px';
+      menu.style.top=Math.max(2,Math.min(hr.height-20,(e.clientY-hr.top)))+'px';
+      menu.classList.add('act'); }
+    function hideMenu(){ if(menu)menu.classList.remove('act'); }
+    cv.addEventListener('contextmenu',showMenu);
+    if(menu){
+      menu.addEventListener('click',function(e){var it=e.target.closest('.rm-item');if(!it)return;
+        family=+it.dataset.f; bloom=0.6;
+        [].forEach.call(menu.querySelectorAll('.rm-item'),function(x){x.classList.remove('on');}); it.classList.add('on');});
+      var mt=document.getElementById('rm-mix-track'), mf=document.getElementById('rm-mix-fill'), mv=document.getElementById('rm-mix-val'), md=false;
+      function setMix(e){var r=mt.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));mf.style.width=(v*100)+'%';mv.textContent=Math.round(v*100)+'%';}
+      mt.addEventListener('pointerdown',function(e){md=true;try{mt.setPointerCapture(e.pointerId);}catch(_){}setMix(e);e.stopPropagation();});
+      mt.addEventListener('pointermove',function(e){if(md)setMix(e);});
+      mt.addEventListener('pointerup',function(){md=false;});
+    }
+    document.addEventListener('pointerdown',function(e){ if(menu&&menu.classList.contains('act')&&!menu.contains(e.target)&&e.target!==cv) hideMenu(); });
+    window.addEventListener('resize',sz);
+    sz(); requestAnimationFrame(frame);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
+})();
 
 function drawIcon(canvas, type, color, norm, time) {
   norm = norm || 0;
@@ -10001,11 +10151,7 @@ setTimeout(function wireSynControls () {
         var bip = /_SAMPLE_(SCAN|FORMANT)$/.test (pid);
         var name = lab ? lab.textContent : '';
         var v = bip ? 0.5 : (/_XFADE$/.test (pid) ? 0.12 : 0), tmr = null;
-        function fill (n) {
-          if (bip) { var sw = 270, c = 135, ang = (n - 0.5) * sw, a0 = ang >= 0 ? c : c + ang, a1 = ang >= 0 ? c + ang : c;
-            ring.style.background = 'conic-gradient(from 225deg, var(--knob-track) 0deg ' + a0 + 'deg, var(--purple-500) ' + a0 + 'deg ' + a1 + 'deg, var(--knob-track) ' + a1 + 'deg ' + sw + 'deg, transparent ' + sw + 'deg)';
-          } else { var d = 270 * n; ring.style.background = 'conic-gradient(from 225deg, var(--purple-500) 0deg ' + d + 'deg, var(--knob-track) ' + d + 'deg 270deg, transparent 270deg)'; }
-        }
+        function fill (n) { window.__synArc (ring, n, bip); }
         function live () { if (lab) { lab.textContent = sampFmt (pid, v); lab.classList.add ('kv-live'); } }
         function rest () { if (! lab) return; if (tmr) clearTimeout (tmr); tmr = setTimeout (function () { lab.textContent = name; lab.classList.remove ('kv-live'); }, 650); }
         fill (v); ring.style.cursor = 'grab';
@@ -10154,23 +10300,7 @@ setTimeout(function wireSynControls () {
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
           // Bipolar params (Sample SCAN / FORMANT) fill from 12 o'clock toward + or −.
           const isBipolar = /_SAMPLE_(SCAN|FORMANT)$/.test (paramId);
-          const applyFill = (n) => {
-            const clamped = Math.max (0, Math.min (1, n));
-            if (isBipolar) {
-              const sweep = 270, c = 135, ang = (clamped - 0.5) * sweep;
-              const a0 = ang >= 0 ? c : c + ang, a1 = ang >= 0 ? c + ang : c;
-              ring.style.background =
-                'conic-gradient(from 225deg, var(--knob-track) 0deg ' + a0 + 'deg, ' +
-                'var(--purple-500) ' + a0 + 'deg ' + a1 + 'deg, ' +
-                'var(--knob-track) ' + a1 + 'deg ' + sweep + 'deg, transparent ' + sweep + 'deg)';
-            } else {
-              const fillDeg = 270 * clamped;
-              ring.style.background =
-                'conic-gradient(from 225deg, var(--purple-500) 0deg ' + fillDeg + 'deg, ' +
-                'var(--knob-track) ' + fillDeg + 'deg 270deg, ' +
-                'transparent 270deg)';
-            }
-          };
+          const applyFill = (n) => { window.__synArc (ring, n, isBipolar); };
 
           // Initial fill from current APVTS value.
           try {
@@ -11963,26 +12093,7 @@ setTimeout(function wireSynControls () {
         const ring = el.querySelector('.knob-ring');
         if (! ring) return;
         const proxy = mkSlotState(base);
-        const applyFill = (n01) => {
-          if (bipolar) {
-            const c = 0.5, v = juce_clamp01(n01);
-            const lo = Math.min(c, v), hi = Math.max(c, v);
-            const p1 = lo * 270, p2 = hi * 270;
-            ring.style.background =
-              'conic-gradient(from 225deg, '
-              + 'var(--knob-track) 0deg ' + p1 + 'deg, '
-              + 'var(--purple-500) ' + p1 + 'deg ' + p2 + 'deg, '
-              + 'var(--knob-track) ' + p2 + 'deg 270deg, '
-              + 'transparent 270deg)';
-          } else {
-            const fillDeg = juce_clamp01(n01) * 270;
-            ring.style.background =
-              'conic-gradient(from 225deg, '
-              + 'var(--purple-500) 0deg ' + fillDeg + 'deg, '
-              + 'var(--knob-track) ' + fillDeg + 'deg 270deg, '
-              + 'transparent 270deg)';
-          }
-        };
+        const applyFill = (n01) => { window.__synArc (ring, juce_clamp01(n01), bipolar); };
         const refresh = () => { try { applyFill(proxy.getNormalisedValue()); } catch (e) {} };
         refresh();
         slotChangeHooks.push(refresh);
@@ -20171,8 +20282,7 @@ restoreThemeFromBackend();
     function setLabel(i,txt){ if(labels[i]) labels[i].textContent=txt; }
     function restoreLabel(i){ var labs=KLAB[displayMode]||KLAB.arp; setLabel(i, labs[i]||''); }
 
-    function applyFill(ring,n){ n=Math.max(0,Math.min(1,n||0)); var f=270*n;
-      ring.style.background='conic-gradient(from 225deg, var(--purple-500) 0deg '+f+'deg, var(--knob-track) '+f+'deg 270deg, transparent 270deg)'; }
+    function applyFill(ring,n){ window.__synArc(ring, Math.max(0,Math.min(1,n||0)), false); }
     function stOf(mode,i){ if(!J) return null; try{ return J.getSliderState(MP[mode]+'_'+SUF[i]); }catch(e){ return null; } }
     function refreshKnobs(){ for(var i=0;i<rings.length;i++){ var st=stOf(displayMode,i); rings[i]._state=st;
       if(st&&st.getNormalisedValue) applyFill(rings[i], st.getNormalisedValue()); else applyFill(rings[i],0); } }
@@ -20618,6 +20728,14 @@ restoreThemeFromBackend();
       else if(displayMode==='glitch') gliCard.open();
       else if(displayMode==='drift')  drfCard.open();
       else                            openCard(); });
+    // right-click a mode tile → open THAT mode's extension card (replaces the removed expand glyph)
+    [].forEach.call(document.querySelectorAll('#syn-panel .flow-mode'), function(tile){
+      tile.addEventListener('contextmenu', function(ev){ ev.preventDefault();
+        var m=tile.getAttribute('data-mode');
+        if(m==='chop')        openChopCard();
+        else if(m==='glitch') gliCard.open();
+        else if(m==='drift')  drfCard.open();
+        else                  openCard(); }); });
   }catch(e){}
 })();
 
