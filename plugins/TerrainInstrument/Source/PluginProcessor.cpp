@@ -2224,7 +2224,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::SYN_RESO_KEYTRACK,   "Reso Key Track",  1.00f);  // default fully pitched (matches played note)
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_RESO_MATERIAL, 1 }, "Reso Material",
-        juce::StringArray { "String", "Bar", "Drum", "Metal" }, 0));
+        juce::StringArray { "String", "Pluck", "Piano", "Bar", "Metal", "Drum" }, 0));
 
     return layout;
 }

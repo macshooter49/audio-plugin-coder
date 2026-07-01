@@ -3102,9 +3102,10 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         const float e2 = audioProcessor.resoVizEnergy_[2].load(std::memory_order_relaxed);
         const float e3 = audioProcessor.resoVizEnergy_[3].load(std::memory_order_relaxed);
         const float ro = audioProcessor.resoVizOut_.load(std::memory_order_relaxed);
+        const float rpos = audioProcessor.getAPVTS().getRawParameterValue(ParameterIDs::SYN_RESO_POSITION)->load();
         js << "if(window.__terrainReso){window.__terrainReso({energy:["
            << juce::String(e0, 3) << "," << juce::String(e1, 3) << "," << juce::String(e2, 3) << "," << juce::String(e3, 3)
-           << "],out:" << juce::String(ro, 3) << "});}";
+           << "],out:" << juce::String(ro, 3) << ",position:" << juce::String(rpos, 3) << "});}";
     }
 
     // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──

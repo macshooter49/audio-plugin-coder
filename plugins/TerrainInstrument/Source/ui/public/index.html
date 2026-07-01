@@ -5806,9 +5806,11 @@ body {
                 <div class="reso-menu" id="reso-menu">
                   <div class="rm-head">Material</div>
                   <div class="rm-item on" data-f="0">String</div>
-                  <div class="rm-item" data-f="1">Bar</div>
-                  <div class="rm-item" data-f="2">Drum</div>
-                  <div class="rm-item" data-f="3">Metal</div>
+                  <div class="rm-item" data-f="1">Pluck</div>
+                  <div class="rm-item" data-f="2">Piano</div>
+                  <div class="rm-item" data-f="3">Bar</div>
+                  <div class="rm-item" data-f="4">Metal</div>
+                  <div class="rm-item" data-f="5">Drum</div>
                   <div class="rm-sep"></div>
                   <div class="rm-mix">
                     <div class="rm-mlab"><span>Mix</span><span id="rm-mix-val">0%</span></div>
@@ -7485,13 +7487,177 @@ window.__synArc = function (ring, n, bipolar) {
   if (document.readyState === 'loading') document.addEventListener ('DOMContentLoaded', run); else run ();
 })();
 
+// ===== Annulus resonator fingerprint (lifted from resonator-viz-v2.html) =====
+/* =====================================================================================
+   DROP-IN START · ResonatorFingerprint  (lift this whole block into index.html)
+   -------------------------------------------------------------------------------------
+   Renders the Annulus resonator as a superformula silhouette driven by the engine's
+   live spectral fingerprint. Self-contained: one draw fn + a smoother + the data hook.
+   Wire it to the existing resonator canvas and it will animate from window.__terrainReso.
+   ===================================================================================== */
+(function(){
+  // ---- smoothed live state (fed by window.__terrainReso) ----------------------------
+  const RS = {
+    b:[0,0,0,0], level:0, pos:0.2,        // smoothed
+    tb:[0,0,0,0], tlevel:0, tpos:0.2,     // targets (latest message)
+    bloom:0                                // fast strike-bloom envelope
+  };
+
+  // latest values arrive here; smoothing happens in the RAF loop
+  window.__terrainReso = function(msg){
+    if(!msg) return;
+    const e = msg.energy || msg.e || [0,0,0,0];
+    for(let i=0;i<4;i++) RS.tb[i] = clamp01(+e[i]||0);
+    RS.tlevel = clamp01(+((msg.out!=null?msg.out:msg.level))||0);
+    if(msg.position!=null) RS.tpos = clamp01(+msg.position);
+  };
+
+  function clamp01(x){ return x<0?0:(x>1?1:x); }
+
+  // ---- superformula radius (a single 0..2π sweep = always one smooth closed curve) --
+  function superR(t, m, n1, n2, n3){
+    const c = Math.pow(Math.abs(Math.cos(m*t*0.25)), n2);
+    const s = Math.pow(Math.abs(Math.sin(m*t*0.25)), n3);
+    let r = Math.pow(c + s, -1/n1);
+    if(!isFinite(r)) r = 1;
+    return r;
+  }
+
+  // ---- map the 4-band fingerprint -> shape character --------------------------------
+  //   spectral centroid (0..3): dark→0, metallic→3. Drives lobe count + pointiness.
+  function shapeParams(b){
+    const sum = b[0]+b[1]+b[2]+b[3] + 1e-6;
+    const centroid = (b[1] + 2*b[2] + 3*b[3]) / sum;          // 0..3
+    const m  = 2 + centroid*2.1;                              // ~2 (round) .. ~8.3 (star)
+    const n1 = Math.max(2.0, 15.5 - centroid*4.0);            // round(dark) .. spiky(bright)
+    return { m, n1, centroid };
+  }
+
+  // ---- the render (call once per frame) ---------------------------------------------
+  // ctx: 2D context · cx,cy: centre · R: base radius (px) · already device-scaled
+  function drawResonatorFingerprint(ctx, cx, cy, R){
+    const b = RS.b, level = RS.level, pos = RS.pos, t = performance.now()*0.001;
+
+    const sp = shapeParams(b);
+    // symmetric base silhouette (m, n1); n2=n3 keeps it clean & closed
+    const m  = sp.m, n1 = sp.n1, n2 = n1, n3 = n1;
+    const rot = pos*Math.PI*2 + t*0.14;                       // POSITION rotates it + slow drift
+    const bloom = RS.bloom;                                   // strike pulse 0..~1
+    const radius = R * (0.52 + 0.30*level + 0.16*bloom);
+
+    // small spectral ripple at prime-ish symmetries: gentle "life", stays convex/closed
+    const rip = 0.11;
+    function ripple(a){
+      return 1
+        + rip*b[0]*Math.cos(2*a - t*0.7)
+        + rip*b[1]*Math.cos(3*a + t*0.5)
+        + rip*0.85*b[2]*Math.cos(5*a - t*0.9)
+        + rip*0.70*b[3]*Math.cos(8*a + t*1.3);
+    }
+
+    const N = 720, pts = new Array(N+1);
+    let rmax = 1e-6;
+    for(let i=0;i<=N;i++){
+      const a = (i/N)*Math.PI*2;
+      const rr = superR(a, m, n1, n2, n3) * ripple(a);
+      pts[i] = rr;  if(rr>rmax) rmax = rr;
+    }
+    const norm = radius / rmax;                               // fit the silhouette to radius
+
+    // colour: deep indigo → bright as level+brightness rise (on-brand)
+    const briteMix = clamp01(0.35*level + 0.28*(sp.centroid/3) + 0.4*bloom);
+    const lineCol  = mix3([120,124,255],[214,222,255], briteMix);
+    const glowCol  = mix3([ 70, 74,220],[150,160,255], briteMix);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+
+    // ---- grid behind (concentric rings + radial spokes) : OP-1 / Terrain aesthetic ---
+    ctx.lineWidth = 1;
+    for(let g=1; g<=4; g++){
+      const gr = radius * (0.42 + g*0.16);
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(90,96,170,'+(0.07 - g*0.008)+')';
+      ctx.arc(0,0,gr,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(80,86,150,0.06)';
+    for(let s=0;s<12;s++){
+      const a = s*Math.PI/6;
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.lineTo(Math.cos(a)*radius*1.15, Math.sin(a)*radius*1.15); ctx.stroke();
+    }
+
+    // ---- soft filled body when ringing (radial gradient) ------------------------------
+    const grad = ctx.createRadialGradient(0,0,radius*0.05, 0,0,radius);
+    grad.addColorStop(0, 'rgba('+glowCol[0]+','+glowCol[1]+','+glowCol[2]+','+(0.16+0.34*level)+')');
+    grad.addColorStop(1, 'rgba('+glowCol[0]+','+glowCol[1]+','+glowCol[2]+',0)');
+    tracePath(ctx, pts, norm, N);
+    ctx.fillStyle = grad; ctx.fill();
+
+    // ---- glowing outline --------------------------------------------------------------
+    ctx.shadowColor = 'rgba('+glowCol[0]+','+glowCol[1]+','+glowCol[2]+',0.9)';
+    ctx.shadowBlur  = 10 + 30*level + 14*bloom;
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.lineWidth = 1.5 + 2.4*level + 1.2*bloom;
+    ctx.strokeStyle = 'rgba('+lineCol[0]+','+lineCol[1]+','+lineCol[2]+','+(0.55+0.45*level)+')';
+    tracePath(ctx, pts, norm, N);
+    ctx.stroke();
+
+    // faint inner echo for depth
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba('+lineCol[0]+','+lineCol[1]+','+lineCol[2]+',0.16)';
+    tracePath(ctx, pts, norm*0.72, N);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function tracePath(ctx, pts, norm, N){
+    ctx.beginPath();
+    for(let i=0;i<=N;i++){
+      const a = (i/N)*Math.PI*2, rr = pts[i]*norm;
+      const x = Math.cos(a)*rr, y = Math.sin(a)*rr;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+  }
+  function mix3(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
+
+  // ---- per-frame smoothing (attack faster than release for a lively bloom) ----------
+  function stepSmoothing(){
+    let sumT=0, sumC=0;
+    for(let i=0;i<4;i++){
+      const tgt=RS.tb[i], cur=RS.b[i];
+      const k = (tgt>cur)?0.35:0.12;                 // fast rise, slow fall
+      RS.b[i] = cur + (tgt-cur)*k;
+      sumT+=RS.tb[i]; sumC+=RS.b[i];
+    }
+    const lk = (RS.tlevel>RS.level)?0.5:0.10;
+    RS.level += (RS.tlevel-RS.level)*lk;
+    RS.pos   += (RS.tpos  -RS.pos )*0.15;
+    // strike bloom: spike when the summed energy jumps, then decay
+    const jump = Math.max(0, sumT - sumC);
+    RS.bloom = Math.max(RS.bloom*0.90, Math.min(1, jump*1.6 + RS.tlevel*0.15*(RS.tlevel>RS.level?1:0)));
+  }
+
+  // expose for index.html's RAF/timer to call
+  window.__terrainResoStep = stepSmoothing;
+  window.__terrainResoDraw = drawResonatorFingerprint;
+})();
+/* =====================================================================================
+   DROP-IN END · ResonatorFingerprint
+   ===================================================================================== */
+
 // ── ANNULUS RESONATOR — FLOW visualizer slot · simple-shape morph + pie-grid controller ──
 (function(){
   function boot(){
     var cv=document.getElementById('reso-cv'); if(!cv) return;
     var menu=document.getElementById('reso-menu');
     var ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
-    var P={structure:0.0,brightness:0.35,damping:0.55,position:0.12}, family=0, bloom=0;
+    var P={structure:0.0,brightness:0.35,damping:0.55,position:0.12}, family=0;
+    var NMAT=6;   // String Pluck Piano Bar Metal Drum
     var QUAD=[{k:'structure',sx:-1,sy:-1},{k:'brightness',sx:1,sy:-1},{k:'damping',sx:1,sy:1},{k:'position',sx:-1,sy:1}];
     // ── JUCE param wiring (UI ↔ APVTS). No-ops gracefully outside a JUCE host. ──
     function _ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
@@ -7503,70 +7669,32 @@ window.__synArc = function (ring, n, bipolar) {
     function markMat(){ if(menu){ [].forEach.call(menu.querySelectorAll('.rm-item'),function(x){ x.classList.toggle('on',(+x.dataset.f)===family); }); } }
     // pull live APVTS values into the UI (preset/automation recall)
     P.structure=_rd(JS_STR,P.structure); P.brightness=_rd(JS_BRI,P.brightness); P.damping=_rd(JS_DMP,P.damping); P.position=_rd(JS_POS,P.position);
-    if(JS_MAT){ family=Math.round(_rd(JS_MAT,0)*3); }
+    if(JS_MAT){ family=Math.round(_rd(JS_MAT,0)*(NMAT-1)); }
     _sub(JS_STR,function(){P.structure=_rd(JS_STR,P.structure);}); _sub(JS_BRI,function(){P.brightness=_rd(JS_BRI,P.brightness);});
     _sub(JS_DMP,function(){P.damping=_rd(JS_DMP,P.damping);}); _sub(JS_POS,function(){P.position=_rd(JS_POS,P.position);});
-    _sub(JS_MAT,function(){family=Math.round(_rd(JS_MAT,0)*3); markMat();});
-    // strike — clicking the centre changes the sound: new material + reshaped params (your "every strike = new" idea)
-    function strike(){ bloom=1; family=Math.floor(Math.random()*4); _wr(JS_MAT,family/3); markMat();
+    _sub(JS_MAT,function(){family=Math.round(_rd(JS_MAT,0)*(NMAT-1)); markMat();});
+    // strike — clicking the centre changes the sound: new material + reshaped params ("every strike = new")
+    function strike(){ family=Math.floor(Math.random()*NMAT); _wr(JS_MAT,family/(NMAT-1)); markMat();
       P.structure=Math.random(); P.brightness=0.30+Math.random()*0.60; P.position=Math.random()*0.85;
       _wr(JS_STR,P.structure); _wr(JS_BRI,P.brightness); _wr(JS_POS,P.position); }
-    // audio-reactive feed from C++ — real modal energy + output level drive the PURPLE layer
-    var vizOut=0, vizEn=[0,0,0,0], gOut=0, gEn=[0,0,0,0];
-    window.__terrainReso=function(d){ try{ if(d){ if(d.energy&&d.energy.length>=4) vizEn=d.energy; if(typeof d.out==='number') vizOut=d.out; } }catch(e){} };
-    // ALIVE HARMONOGRAPH — tamed (stays elegant, never scribbles). Materials shift the ratio set.
-    var FAM=[[1,2,3,4],[1,2.0,2.76,3.4],[1,1.59,2.14,2.65],[1,2.0,2.4,3.0]];
-    var ph=[0,1.7,3.1,4.6], en=[1,.8,.6,.45];
-    function ratios(){var f=FAM[family],h=[1,2,3,4],s=P.structure,o=[];for(var i=0;i<4;i++)o.push(h[i]*(1-s)+f[i]*s);return o;}
-    var STEPS=1300,TSPAN=Math.PI*2*7,px=new Float32Array(STEPS+1),py=new Float32Array(STEPS+1);
-    function build(){
-      var r=ratios(), a=[en[0]*(.6+bloom*.5),en[1]*.8,en[2]*.6,en[3]*.5], damp=.5+P.damping*2.2, br=P.brightness;
-      var sum=a[0]+a[1]+a[2]+a[3]||1, sc=Rg*.92/sum, f1=r[0],f2=r[1],f3=r[0]*1.004,f4=r[2];
-      for(var s=0;s<=STEPS;s++){var u=s/STEPS,t=u*TSPAN,env=Math.exp(-damp*u);
-        var x=env*(a[0]*Math.sin(f1*t+ph[0])+a[1]*Math.sin(f2*t+ph[1])+br*.85*a[3]*Math.sin(r[3]*t+ph[3]));
-        var y=env*(a[2]*Math.sin(f3*t+ph[2]+1.5708)+a[1]*Math.sin(f4*t+ph[1])+br*.85*a[3]*Math.cos(r[3]*t+ph[3]));
-        px[s]=CX+x*sc;py[s]=CY+y*sc;}
-    }
+    // (old harmonograph + purple overlay removed — the lifted ResonatorFingerprint draws the
+    //  shape from the engine's live 4-band spectral fingerprint via window.__terrainReso.)
     var W=0,H=0,CX=0,CY=0,Rg=0;
-    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.46;}   /* 0.46 (was .50) leaves margin so the round-cap arcs never clip top/bottom */
-    function frame(ts){
-      if(!frame._l)frame._l=ts; var dt=Math.min(.05,(ts-frame._l)/1000); frame._l=ts; sz();
-      bloom=Math.max(0,bloom-dt*(0.6+(1-P.damping)*1.6));
-      // smooth the audio-reactive feed; let live audio energize the figure (purple follower)
-      gOut+=(vizOut-gOut)*0.18; for(var bi=0;bi<4;bi++) gEn[bi]+=(((vizEn[bi]||0))-gEn[bi])*0.18;
-      if(gOut*1.05>bloom) bloom=gOut*1.05;
+    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.46;}
+    function frame(){
+      sz();
       ctx.clearRect(0,0,W,H);
       if(!W||!H){requestAnimationFrame(frame);return;}
-      // (radar grid removed — only the four control arcs remain, forming the circle)
-      // quadrant param arcs (controller, no labels)
-      var arcs=[[ 'structure',Math.PI,Math.PI*1.5],['brightness',Math.PI*1.5,Math.PI*2],['damping',0,Math.PI*.5],['position',Math.PI*.5,Math.PI]];
+      // lifted ResonatorFingerprint — superformula silhouette driven by the engine's live spectrum
+      if(window.__terrainResoStep) window.__terrainResoStep();
+      if(window.__terrainResoDraw) window.__terrainResoDraw(ctx, CX, CY, Math.min(W,H)*0.40);
+      // thin control arcs = the 4 draggable quadrants (Structure/Brightness/Damping/Position)
+      var arcs=[['structure',Math.PI,Math.PI*1.5],['brightness',Math.PI*1.5,Math.PI*2],['damping',0,Math.PI*.5],['position',Math.PI*.5,Math.PI]];
       ctx.lineCap='round';
       for(var i=0;i<arcs.length;i++){var Aa=arcs[i],v=P[Aa[0]];
-        ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[2]);ctx.stroke();
-        ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[1]+(Aa[2]-Aa[1])*v);ctx.stroke();}
+        ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,.08)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[2]);ctx.stroke();
+        ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,.62)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[1]+(Aa[2]-Aa[1])*v);ctx.stroke();}
       ctx.lineCap='butt';
-      // figure — alive harmonograph, PURE WHITE outline (no glass, no glow), rotated by POSITION
-      for(var i=0;i<4;i++) ph[i]+=dt*(.22+i*.06);   // continuous fluid morphing motion
-      build();
-      ctx.save(); ctx.translate(CX,CY); ctx.rotate(P.position*Math.PI*2); ctx.translate(-CX,-CY);
-      ctx.lineWidth=1.3; ctx.lineJoin='round'; ctx.strokeStyle='rgba(255,255,255,.86)';
-      ctx.beginPath(); for(var s=0;s<=STEPS;s++){ s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]); } ctx.stroke();
-      ctx.restore();
-      // PURPLE audio-reactive overlay — glowing streaks that intensify with the live signal feeding in
-      if(gOut>0.012){
-        ctx.save(); ctx.translate(CX,CY); ctx.rotate(P.position*Math.PI*2); ctx.translate(-CX,-CY);
-        ctx.lineWidth=1.6; ctx.lineJoin='round';
-        ctx.strokeStyle='rgba(167,139,250,'+(0.55*gOut).toFixed(3)+')';
-        ctx.shadowColor='rgba(167,139,250,'+(0.6*gOut).toFixed(3)+')'; ctx.shadowBlur=10*gOut;
-        ctx.beginPath(); for(var s=0;s<=STEPS;s+=2){ s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]); } ctx.stroke();
-        ctx.shadowBlur=0; ctx.restore();
-        // per-quadrant purple energy pulse on the control arcs (band energy)
-        ctx.lineCap='round';
-        for(var qi=0;qi<arcs.length;qi++){ var e=gEn[qi]||0; if(e<0.03)continue; var Ab=arcs[qi];
-          ctx.lineWidth=2.6; ctx.strokeStyle='rgba(167,139,250,'+(0.55*e).toFixed(3)+')';
-          ctx.beginPath(); ctx.arc(CX,CY,Rg,Ab[1],Ab[1]+(Ab[2]-Ab[1])*P[Ab[0]]); ctx.stroke(); }
-        ctx.lineCap='butt';
-      }
       requestAnimationFrame(frame);
     }
     // interaction
@@ -7588,7 +7716,7 @@ window.__synArc = function (ring, n, bipolar) {
     cv.addEventListener('contextmenu',showMenu);
     if(menu){
       menu.addEventListener('click',function(e){var it=e.target.closest('.rm-item');if(!it)return;
-        family=+it.dataset.f; bloom=0.6; _wr(JS_MAT, family/3);
+        family=+it.dataset.f; _wr(JS_MAT, family/(NMAT-1));
         [].forEach.call(menu.querySelectorAll('.rm-item'),function(x){x.classList.remove('on');}); it.classList.add('on');});
       var mt=document.getElementById('rm-mix-track'), mf=document.getElementById('rm-mix-fill'), mv=document.getElementById('rm-mix-val'), md=false;
       function setMix(e){var r=mt.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));mf.style.width=(v*100)+'%';mv.textContent=Math.round(v*100)+'%';_wr(JS_MIX,v);}
