@@ -90,6 +90,25 @@ public:
         recomputeRegion();
     }
 
+    /** CPU: set ALL region/loop/xfade/fade fields at once and recompute ONCE.
+     *  recomputeRegion() is a pure function of these fields (it reads no prior output),
+     *  so this is BIT-IDENTICAL to calling setRegion+setLoop+setXFade+setFades in sequence
+     *  (which recomputes 4×; only the final recompute survives). Same clamps, same order.
+     *  Used per unison voice per block in the hot render path (4× fewer recomputes). */
+    void setRegionParams (float start01, float end01, float loopStart01, float loopEnd01,
+                          float xfade01, float fadeIn01, float fadeOut01) noexcept
+    {
+        start01_ = clamp01 (start01);
+        end01_   = clamp01 (end01);
+        if (end01_ < start01_ + kMinSpan01) end01_ = clampHi (start01_ + kMinSpan01);   // mirrors setRegion
+        loopStart01_ = clamp01 (loopStart01);
+        loopEnd01_   = clamp01 (loopEnd01);
+        xfade01_     = clamp01 (xfade01);
+        fadeIn01_    = clamp01 (fadeIn01);
+        fadeOut01_   = clamp01 (fadeOut01);
+        recomputeRegion();
+    }
+
     /** Bipolar SCAN [-1..+1] → signed rate multiplier.
      *  DESIGN CALL (flagged to Max): center 0 = NATURAL FORWARD play (so a
      *  freshly-loaded sample sounds the moment you hit a key), +1 ≈ 2× fast,

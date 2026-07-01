@@ -247,6 +247,23 @@ namespace tw
             spectralFilterDL_.reset(); spectralFilterDR_.reset();
             *spectralFilterCL_.coefficients = *passthrough; *spectralFilterCR_.coefficients = *passthrough;
             *spectralFilterDL_.coefficients = *passthrough; *spectralFilterDR_.coefficients = *passthrough;
+
+            // ── CPU / RT-SAFETY: PRE-SIZE the per-voice scratch buffers here (once, off the
+            //    audio thread) instead of letting them malloc on their FIRST render. With a large
+            //    voice pool, a chord/arp first-triggers many voices in ONE block → hundreds of
+            //    audio-thread allocations cluster into that block = the polyphony CPU spike. Same
+            //    setSize() flags as the in-render grow-guards (which stay as a fallback only for a
+            //    host that sends a block bigger than samplesPerBlock). Buffers are cleared/fully
+            //    written before any read every block, so pre-sizing is bit-identical to lazy sizing.
+            //    (warpSrc_: stretchRatio is always ≥1 so its source length ≤ numSamples.)
+            const int spb = juce::jmax (1, samplesPerBlock);
+            scratch_.setSize    (2, spb, false, true,  true);
+            envScratch_.setSize (5, spb, false, true,  true);
+            sampleBlkA_.setSize (2, spb, false, false, true);
+            sampleBlkB_.setSize (2, spb, false, false, true);
+            sampleBlkC_.setSize (2, spb, false, false, true);
+            sampleBlkD_.setSize (2, spb, false, false, true);
+            warpSrc_.setSize    (2, spb, false, false, true);
         }
 
         /** Batch 1 Filter — per-block from PluginProcessor. Cutoff/res are
@@ -3056,7 +3073,8 @@ namespace tw
                               juce::AudioBuffer<float>& blk,
                               const float*& outL, const float*& outR,
                               int numSamples, std::uint32_t seed, bool doNoteOn, double nativeOverOut,
-                              int uniCount, const float* detCents, const float* panL, const float* panR, float uNorm) noexcept
+                              int uniCount, const float* detCents, const float* panL, const float* panR, float uNorm,
+                              float level) noexcept
         {
             if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
                 blk.setSize (2, numSamples, false, false, true);
@@ -3064,6 +3082,17 @@ namespace tw
             float* wR = blk.getWritePointer (1);
             outL = wL; outR = wR;
             if (! isSamp) return;
+            // CPU: an osc at LEVEL 0 contributes exactly 0 to the sum (out × level_ × pan), and
+            // level_ is block-constant (not per-sample modulated — Level isn't a mod dest). So skip
+            // the whole tick/snap/region/warp render and just clear — bit-identical to ×0, but no
+            // phase-vocoder etc. for a silent/unused sample osc. (Mute is separate: its gate is
+            // per-sample smoothed, so it is NOT folded in here — only the true level knob at 0.)
+            if (level <= 0.0f)
+            {
+                juce::FloatVectorOperations::clear (wL, numSamples);
+                juce::FloatVectorOperations::clear (wR, numSamples);
+                return;
+            }
             if (! engs[0].hasSample())
             {
                 juce::FloatVectorOperations::clear (wL, numSamples);
@@ -3083,11 +3112,10 @@ namespace tw
             for (int u = 0; u < N; ++u)
             {
                 auto& e = engs[(size_t) u];
-                e.setRegion (p.start, p.end);
-                e.setLoop (ls, le);
+                // CPU: one combined region setter = ONE recomputeRegion() instead of 4 (setRegion/
+                // setLoop/setXFade/setFades each recomputed; only the last survived). Bit-identical.
+                e.setRegionParams (p.start, p.end, ls, le, p.xfade, p.fadeIn, p.fadeOut);
                 e.setLoopMode ((tw::SampleEngine::LoopMode) p.loopMode);
-                e.setXFade (p.xfade);
-                e.setFades (p.fadeIn, p.fadeOut);
                 e.setScan (p.scan);
                 const double ratio = (N <= 1) ? pitchRatio
                                               : pitchRatio * std::pow (2.0, (double) detCents[u] / 1200.0);
@@ -3215,10 +3243,10 @@ namespace tw
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_);
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_);
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_);
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_);
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, level_);
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, levelB_);
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, levelC_);
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, levelD_);
             sampleNoteOnPending_ = false;
         }
 
