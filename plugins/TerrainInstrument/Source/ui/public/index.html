@@ -4042,9 +4042,9 @@ body {
 }
 
 /* ── FLOW (transparent, edge-to-edge, alive) ── */
-#syn-panel .device.flow { background: transparent; border: none; overflow: visible; padding: 8px 0 0; }
+#syn-panel .device.flow { background: transparent; border: none; overflow: visible; padding: 0; }   /* no top pad → modes+reso top-align with the FILTER box */
 #syn-panel .flow { display: grid; grid-template-columns: 1fr 200px; gap: 12px; }
-#syn-panel .flow-modes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 9px; align-self: center; }   /* stay 58px tiles, center in the taller row — modes don't grow with the resonator */
+#syn-panel .flow-modes { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 9px; align-self: stretch; }   /* FILL the row → the 4 tiles' top+bottom match the FILTER panel; 2x2 = all tiles resize together (symmetrical) */
 /* CHOP glass menu — right-click the mode badge → BLEND dry/wet (product-emblem aesthetic) */
 #syn-panel .flow-glass { position: absolute; z-index: 60; display: none; min-width: 134px; padding: 9px 11px 11px;
   background: rgba(26,26,46,0.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
@@ -4103,7 +4103,7 @@ body {
 #syn-panel .flow-mode .particle { animation: flwDrift 6s ease-in-out infinite; will-change: transform; }
 
 /* FLOW visualizer (4 layers swap per mode) */
-#syn-panel .flow-vis { position: relative; border-radius: 9px; overflow: visible; background: transparent; border: none; display: flex; flex-direction: column; }
+#syn-panel .flow-vis { position: relative; z-index: 4; border-radius: 9px; overflow: visible; background: transparent; border: none; display: flex; flex-direction: column; }
 #syn-panel .flow-vis .vis-stage { position: relative; flex: 1; min-height: 146px; }   /* resonator gets a little more room than the 2x2 mode block */
 #syn-panel .flow-vis .vis-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #syn-panel .flow-vis .vis-layer { display: none; } #syn-panel .flow-vis .vis-layer.show { display: block; }
@@ -4120,9 +4120,9 @@ body {
 
 /* ── ANNULUS RESONATOR — fills the FLOW visualizer slot, fully transparent, interactive ── */
 #syn-panel .flow-vis .vis-stage .vis-layer { display: none !important; }   /* old per-mode SVGs hidden (kept so mode-switch JS never errors) */
-#syn-panel .reso-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; cursor: grab; touch-action: none; background: transparent; }
+#syn-panel .reso-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; cursor: crosshair; touch-action: none; background: transparent; }
 #syn-panel .reso-cv:active { cursor: grabbing; }
-#syn-panel .reso-menu { position: absolute; z-index: 70; display: none; min-width: 124px; padding: 6px;
+#syn-panel .reso-menu { position: absolute; z-index: 200; display: none; min-width: 132px; padding: 6px;
   background: rgba(26,26,46,0.94); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
   border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: 0 8px 26px rgba(0,0,0,0.5); }
 #syn-panel .reso-menu.act { display: block; }
@@ -4136,6 +4136,8 @@ body {
 #syn-panel .reso-menu .rm-mix .rm-mlab span:last-child { color: #fff; letter-spacing: .3px; }
 #syn-panel .reso-menu .rm-mix .rm-track { position: relative; height: 5px; border-radius: 3px; background: rgba(120,118,160,0.30); cursor: ew-resize; }
 #syn-panel .reso-menu .rm-mix .rm-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--purple-400); }
+/* white notch marker — same slider identity as the oscillator quick-menu (.oq-mark) + envelope notches */
+#syn-panel .reso-menu .rm-mix .rm-mark { position: absolute; top: 50%; width: 2px; height: 10px; border-radius: 1px; background: #fff; transform: translate(-50%,-50%); pointer-events: none; }
 
 #syn-panel .vis-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 5px 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
 #syn-panel .vis-knob { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
@@ -5816,13 +5818,18 @@ body {
                   <div class="rm-item on" data-f="0">String</div>
                   <div class="rm-item" data-f="1">Pluck</div>
                   <div class="rm-item" data-f="2">Piano</div>
-                  <div class="rm-item" data-f="3">Bar</div>
-                  <div class="rm-item" data-f="4">Metal</div>
-                  <div class="rm-item" data-f="5">Drum</div>
                   <div class="rm-sep"></div>
                   <div class="rm-mix">
+                    <div class="rm-mlab"><span>Damping</span><span id="rm-damping-val">45%</span></div>
+                    <div class="rm-track" id="rm-damping-track"><div class="rm-fill" id="rm-damping-fill" style="width:45%"></div><div class="rm-mark" id="rm-damping-mark" style="left:45%"></div></div>
+                  </div>
+                  <div class="rm-mix">
+                    <div class="rm-mlab"><span>Position</span><span id="rm-position-val">20%</span></div>
+                    <div class="rm-track" id="rm-position-track"><div class="rm-fill" id="rm-position-fill" style="width:20%"></div><div class="rm-mark" id="rm-position-mark" style="left:20%"></div></div>
+                  </div>
+                  <div class="rm-mix">
                     <div class="rm-mlab"><span>Mix</span><span id="rm-mix-val">0%</span></div>
-                    <div class="rm-track" id="rm-mix-track"><div class="rm-fill" id="rm-mix-fill" style="width:0%"></div></div>
+                    <div class="rm-track" id="rm-mix-track"><div class="rm-fill" id="rm-mix-fill" style="width:0%"></div><div class="rm-mark" id="rm-mix-mark" style="left:0%"></div></div>
                   </div>
                 </div>
                 <!-- ARP -->
@@ -7506,11 +7513,9 @@ window.__synArc = function (ring, n, bipolar) {
     var ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
     var P={structure:0.0,brightness:0.35,damping:0.55,position:0.12}, family=0, bloom=0;
     var NMAT=6;   // String Pluck Piano Bar Metal Drum
-    var QUAD=[{k:'structure',sx:-1,sy:-1},{k:'brightness',sx:1,sy:-1},{k:'damping',sx:1,sy:1},{k:'position',sx:-1,sy:1}];
     // ── JUCE param wiring (UI ↔ APVTS). No-ops gracefully outside a JUCE host. ──
     function _ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
     var JS_STR=_ss('SYN_RESO_STRUCTURE'),JS_BRI=_ss('SYN_RESO_BRIGHTNESS'),JS_DMP=_ss('SYN_RESO_DAMPING'),JS_POS=_ss('SYN_RESO_POSITION'),JS_MIX=_ss('SYN_RESO_MIX'),JS_MAT=_ss('SYN_RESO_MATERIAL');
-    var QSS={structure:JS_STR,brightness:JS_BRI,damping:JS_DMP,position:JS_POS};
     function _wr(s,v){ if(s){ try{ s.setNormalisedValue(Math.max(0,Math.min(1,v))); }catch(e){} } }
     function _rd(s,d){ if(s){ try{ var v=s.getNormalisedValue?s.getNormalisedValue():d; if(typeof v==='number'&&!isNaN(v)) return v; }catch(e){} } return d; }
     function _sub(s,fn){ try{ if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(fn); }catch(e){} }
@@ -7521,10 +7526,6 @@ window.__synArc = function (ring, n, bipolar) {
     _sub(JS_STR,function(){P.structure=_rd(JS_STR,P.structure);}); _sub(JS_BRI,function(){P.brightness=_rd(JS_BRI,P.brightness);});
     _sub(JS_DMP,function(){P.damping=_rd(JS_DMP,P.damping);}); _sub(JS_POS,function(){P.position=_rd(JS_POS,P.position);});
     _sub(JS_MAT,function(){family=Math.round(_rd(JS_MAT,0)*(NMAT-1)); markMat();});
-    // strike — clicking the centre changes the sound: new material + reshaped params ("every strike = new")
-    function strike(){ bloom=1; family=Math.floor(Math.random()*NMAT); _wr(JS_MAT,family/(NMAT-1)); markMat();
-      P.structure=Math.random(); P.brightness=0.30+Math.random()*0.60; P.position=Math.random()*0.85;
-      _wr(JS_STR,P.structure); _wr(JS_BRI,P.brightness); _wr(JS_POS,P.position); }
     // audio-reactive feed from C++ — real modal energy + output level drive the PURPLE follower
     var vizOut=0, vizEn=[0,0,0,0], gOut=0, gEn=[0,0,0,0];
     window.__terrainReso=function(d){ try{ if(d){ if(d.energy&&d.energy.length>=4) vizEn=d.energy; if(typeof d.out==='number') vizOut=d.out; } }catch(e){} };
@@ -7542,7 +7543,7 @@ window.__synArc = function (ring, n, bipolar) {
         px[s]=CX+x*sc;py[s]=CY+y*sc;}
     }
     var W=0,H=0,CX=0,CY=0,Rg=0;
-    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.46;}
+    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.66;}   /* no XY pad now → the figure fills bigger (.66) */
     function frame(ts){
       if(!frame._l)frame._l=ts; var dt=Math.min(.05,(ts-frame._l)/1000); frame._l=ts; sz();
       bloom=Math.max(0,bloom-dt*(0.6+(1-P.damping)*1.6));
@@ -7551,14 +7552,8 @@ window.__synArc = function (ring, n, bipolar) {
       if(gOut*1.05>bloom) bloom=gOut*1.05;
       ctx.clearRect(0,0,W,H);
       if(!W||!H){requestAnimationFrame(frame);return;}
-      // thin control arcs = the 4 draggable quadrants (Structure/Brightness/Damping/Position)
-      var arcs=[['structure',Math.PI,Math.PI*1.5],['brightness',Math.PI*1.5,Math.PI*2],['damping',0,Math.PI*.5],['position',Math.PI*.5,Math.PI]];
-      ctx.lineCap='round';
-      for(var i=0;i<arcs.length;i++){var Aa=arcs[i],v=P[Aa[0]];
-        ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[2]);ctx.stroke();
-        ctx.lineWidth=2.2;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.beginPath();ctx.arc(CX,CY,Rg,Aa[1],Aa[1]+(Aa[2]-Aa[1])*v);ctx.stroke();}
-      ctx.lineCap='butt';
-      // figure — alive harmonograph, PURE WHITE outline (no glass, no glow), rotated by POSITION
+      // PURE GAMIFIED figure — alive harmonograph, PURE WHITE, rotated by POSITION. No params on the
+      // face (no XY pad): TAP = randomize a new sound, DRAG = spin it. Menu holds the rest.
       for(var i=0;i<4;i++) ph[i]+=dt*(.22+i*.06);   // continuous fluid morphing motion
       build();
       ctx.save(); ctx.translate(CX,CY); ctx.rotate(P.position*Math.PI*2); ctx.translate(-CX,-CY);
@@ -7573,42 +7568,46 @@ window.__synArc = function (ring, n, bipolar) {
         ctx.shadowColor='rgba(167,139,250,'+(0.6*gOut).toFixed(3)+')'; ctx.shadowBlur=10*gOut;
         ctx.beginPath(); for(var s=0;s<=STEPS;s+=2){ s?ctx.lineTo(px[s],py[s]):ctx.moveTo(px[s],py[s]); } ctx.stroke();
         ctx.shadowBlur=0; ctx.restore();
-        // per-quadrant purple energy pulse on the control arcs (band energy)
-        ctx.lineCap='round';
-        for(var qi=0;qi<arcs.length;qi++){ var e=gEn[qi]||0; if(e<0.03)continue; var Ab=arcs[qi];
-          ctx.lineWidth=2.6; ctx.strokeStyle='rgba(167,139,250,'+(0.55*e).toFixed(3)+')';
-          ctx.beginPath(); ctx.arc(CX,CY,Rg,Ab[1],Ab[1]+(Ab[2]-Ab[1])*P[Ab[0]]); ctx.stroke(); }
-        ctx.lineCap='butt';
       }
       requestAnimationFrame(frame);
     }
-    // interaction
-    var drag=null,sY=0,sVal=0;
-    function quadAt(e){var r=cv.getBoundingClientRect(),dx=(e.clientX-r.left)-CX,dy=(e.clientY-r.top)-CY;
-      if(Math.hypot(dx,dy)<Rg*0.34)return 'center';
-      for(var i=0;i<QUAD.length;i++)if(Math.sign(dx)===QUAD[i].sx&&Math.sign(dy)===QUAD[i].sy)return QUAD[i].k;return null;}
-    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); var q=quadAt(e); if(!q)return;
-      if(q==='center'){strike();return;} drag=q;sY=e.clientY;sVal=P[q];try{cv.setPointerCapture(e.pointerId);}catch(_){}});
-    cv.addEventListener('pointermove',function(e){if(!drag)return;P[drag]=Math.max(0,Math.min(1,sVal+(sY-e.clientY)/200));_wr(QSS[drag],P[drag]);});
-    function endDrag(){drag=null;} cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
-    // right-click menu (material + mix)
+    // interaction — FULL GAMIFICATION, no params on the face:
+    //   TAP the figure  = RANDOMIZE (new material [String/Pluck/Piano] + Structure/Brightness/Position)
+    //   DRAG the figure = SPIN it (Position). Right-click = menu (Material/Damping/Position/Mix).
+    var drag=false, moved=false, sx0=0, pos0=0;
+    function randomize(){ bloom=1; family=Math.floor(Math.random()*3); _wr(JS_MAT,family/(NMAT-1)); markMat();
+      P.structure=Math.random(); P.brightness=0.30+Math.random()*0.60; P.position=Math.random()*0.9;
+      _wr(JS_STR,P.structure); _wr(JS_BRI,P.brightness); _wr(JS_POS,P.position); }
+    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); drag=true; moved=false; sx0=e.clientX; pos0=P.position; try{cv.setPointerCapture(e.pointerId);}catch(_){} });
+    cv.addEventListener('pointermove',function(e){ if(!drag)return; var dx=e.clientX-sx0; if(Math.abs(dx)>4)moved=true; if(moved){ var np=((pos0+dx/260)%1+1)%1; P.position=np; _wr(JS_POS,np); } });
+    function endDrag(){ if(!drag)return; drag=false; if(!moved) randomize(); }
+    cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',function(){drag=false;});
+    // right-click menu — Material + Damping + Position + Mix. Shown first (so we can MEASURE it),
+    // then clamped to stay fully inside the panel; high z-index (CSS) keeps it ON TOP of the LFO
+    // below (never clipped/underneath).
     function showMenu(e){ if(!menu)return; e.preventDefault();
       var host=cv.parentElement, hr=host.getBoundingClientRect();
-      menu.style.left=Math.max(2,Math.min(hr.width-128,(e.clientX-hr.left)))+'px';
-      menu.style.top=Math.max(2,Math.min(hr.height-20,(e.clientY-hr.top)))+'px';
-      menu.classList.add('act'); }
+      menu.classList.add('act');
+      var mw=menu.offsetWidth||150, mh=menu.offsetHeight||210;
+      menu.style.left=Math.max(2,Math.min(hr.width -mw-2,(e.clientX-hr.left)))+'px';
+      menu.style.top =Math.max(2,Math.min(hr.height-mh-2,(e.clientY-hr.top )))+'px'; }
     function hideMenu(){ if(menu)menu.classList.remove('act'); }
     cv.addEventListener('contextmenu',showMenu);
     if(menu){
       menu.addEventListener('click',function(e){var it=e.target.closest('.rm-item');if(!it)return;
         family=+it.dataset.f; bloom=0.6; _wr(JS_MAT, family/(NMAT-1));
         [].forEach.call(menu.querySelectorAll('.rm-item'),function(x){x.classList.remove('on');}); it.classList.add('on');});
-      var mt=document.getElementById('rm-mix-track'), mf=document.getElementById('rm-mix-fill'), mv=document.getElementById('rm-mix-val'), md=false;
-      function setMix(e){var r=mt.getBoundingClientRect();var v=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));mf.style.width=(v*100)+'%';mv.textContent=Math.round(v*100)+'%';_wr(JS_MIX,v);}
-      (function(){ var v=_rd(JS_MIX,0); mf.style.width=(v*100)+'%'; mv.textContent=Math.round(v*100)+'%'; })();   // init Mix fill from APVTS (default 0)
-      mt.addEventListener('pointerdown',function(e){md=true;try{mt.setPointerCapture(e.pointerId);}catch(_){}setMix(e);e.stopPropagation();});
-      mt.addEventListener('pointermove',function(e){if(md)setMix(e);});
-      mt.addEventListener('pointerup',function(){md=false;});
+      // generic glass slider (Damping / Position / Mix) → its SYN_RESO_* param, two-way synced
+      function wireSlider(id, ss, dflt){ var tk=document.getElementById('rm-'+id+'-track'), fl=document.getElementById('rm-'+id+'-fill'), vv=document.getElementById('rm-'+id+'-val'), mk=document.getElementById('rm-'+id+'-mark'); if(!tk)return; var md=false;
+        function paint(v){ v=Math.max(0,Math.min(1,v)); fl.style.width=(v*100)+'%'; if(mk)mk.style.left=(v*100)+'%'; vv.textContent=Math.round(v*100)+'%'; }
+        function set(e){ var r=tk.getBoundingClientRect(); var v=Math.max(0,Math.min(1,(e.clientX-r.left)/Math.max(1,r.width))); paint(v); _wr(ss,v); }
+        paint(_rd(ss,dflt));
+        tk.addEventListener('pointerdown',function(e){md=true;try{tk.setPointerCapture(e.pointerId);}catch(_){}set(e);e.stopPropagation();});
+        tk.addEventListener('pointermove',function(e){if(md)set(e);});
+        tk.addEventListener('pointerup',function(){md=false;});
+        _sub(ss,function(){paint(_rd(ss,dflt));});
+      }
+      wireSlider('damping', JS_DMP, 0.45); wireSlider('position', JS_POS, 0.20); wireSlider('mix', JS_MIX, 0.0);
     }
     document.addEventListener('pointerdown',function(e){ if(menu&&menu.classList.contains('act')&&!menu.contains(e.target)&&e.target!==cv) hideMenu(); });
     window.addEventListener('resize',sz);
