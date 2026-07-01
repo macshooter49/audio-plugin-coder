@@ -236,13 +236,23 @@ private:
     //    (1,1) exactly (normalized ratio) and is strictly monotonic. The SAME
     //    formula is mirrored in the WebUI renderer, so the graph is exactly what
     //    you hear. P = t·8 (the research-recommended 6–10 range). ───────────────
-    static double biasCurve (double p, double t) noexcept
+    //  CPU: exp(P) — the DENOMINATOR — depends only on the segment's curve t, not on p, so it
+    //  is constant across the whole segment yet was being recomputed EVERY sample. We cache it
+    //  and refresh only when t actually changes (a segment boundary). Result is identical (same
+    //  formula, same division) — just ONE exp() per sample instead of two. t stays live via the
+    //  `!=` compare, so mid-segment curve automation still applies (no behaviour change).
+    double biasCurve (double p, double t) noexcept
     {
         if (std::fabs (t) < 1.0e-3) return p;        // linear (removable singularity)
-        const double P = -t * 8.0;                   // t∈[-1,1] → P∈[8,-8]; +t = fast-rise (concave)
-        return (std::exp (P * p) - 1.0) / (std::exp (P) - 1.0);
+        if (t != curveDenomT_)                       // curve changed → refresh the constant terms
+        {
+            curveDenomT_ = t;
+            curveP_      = -t * 8.0;                  // t∈[-1,1] → P∈[8,-8]; +t = fast-rise (concave)
+            curveDenom_  = std::exp (curveP_) - 1.0;  // constant across the segment
+        }
+        return (std::exp (curveP_ * p) - 1.0) / curveDenom_;
     }
-    static double shape (double start, double target, double p, double t) noexcept
+    double shape (double start, double target, double p, double t) noexcept
     {
         p = clamp01 (p);
         const double e = biasCurve (p, t);
@@ -274,6 +284,11 @@ private:
     double segStart_  = 0.0;     // level at segment entry
     double segTarget_ = 0.0;     // level the segment ramps toward
     bool   gateOn_    = false;
+
+    // biasCurve constant-term cache (refreshed only when the curve tension t changes)
+    double curveDenomT_ = 2.0;   // last t seen (sentinel outside [-1,1] → forces first compute)
+    double curveP_      = 0.0;   // -t·8 for the cached t
+    double curveDenom_  = 1.0;   // exp(curveP_) − 1  (the per-segment constant denominator)
 };
 
 } // namespace terrain

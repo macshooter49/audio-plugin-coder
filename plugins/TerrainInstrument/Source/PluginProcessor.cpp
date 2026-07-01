@@ -914,6 +914,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f),
         0.0f));
 
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_MUTE, 1 }, "Osc A Mute", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SOLO, 1 }, "Osc A Solo", false));
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_FILTER1_CUT, 1 },
         "Synth Filter 1 Cutoff",
@@ -1460,6 +1465,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PAN, 1 },
         "Synth OSC B Pan",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_MUTE, 1 }, "Osc B Mute", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SOLO, 1 }, "Osc B Solo", false));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_PRESET, 1 },
         "Synth OSC B WT Preset",
@@ -1599,6 +1608,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PAN, 1 },
         "Synth OSC C Pan",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_MUTE, 1 }, "Osc C Mute", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SOLO, 1 }, "Osc C Solo", false));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WT_PRESET, 1 },
         "Synth OSC C WT Preset",
@@ -1738,6 +1751,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PAN, 1 },
         "Synth OSC D Pan",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_MUTE, 1 }, "Osc D Mute", false));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SOLO, 1 }, "Osc D Solo", false));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WT_PRESET, 1 },
         "Synth OSC D WT Preset",
@@ -3016,6 +3033,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   rtSrcD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_DEST);
         const float rtAmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_AMT);
 
+        // ── SOLO / MUTE per OSC — bool params (getRawParameterValue returns normalized 0..1 → >0.5) ──
+        const bool muteA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_MUTE) > 0.5f;
+        const bool soloA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SOLO) > 0.5f;
+        const bool muteB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_MUTE) > 0.5f;
+        const bool soloB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SOLO) > 0.5f;
+        const bool muteC = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_MUTE) > 0.5f;
+        const bool soloC = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SOLO) > 0.5f;
+        const bool muteD = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
+        const bool soloD = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
+        const bool anySolo = soloA || soloB || soloC || soloD;
+        auto oscGate = [anySolo](bool mute, bool solo){ return (mute || (anySolo && !solo)) ? 0.0f : 1.0f; };
+        const float gateA = oscGate(muteA, soloA), gateB = oscGate(muteB, soloB),
+                    gateC = oscGate(muteC, soloC), gateD = oscGate(muteD, soloD);
+
         // ════════ SAMPLE-ENGINE-PUSH — read per-OSC Sample params (Opus) ════════
         tw::SynthVoice::SampleEngineParams spA;
         spA.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SCAN);       spA.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH);
@@ -3196,6 +3227,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // ── OSC C / D pushes (4-osc) ──
                 sv->setTuningC (octC, semiC, centC);  sv->setTuningD (octD, semiD, centD);
                 sv->setLevelC (lvlC);                 sv->setLevelD (lvlD);
+                sv->setOscGates (gateA, gateB, gateC, gateD);   // SOLO/MUTE — click-free per-osc gate
                 sv->setPanC (panC);                   sv->setPanD (panD);
                 sv->setWavetableC (wtC);              sv->setWavetableD (wtD);
                 sv->setWavetableFrameC (wtFrameC);    sv->setWavetableFrameD (wtFrameD);
@@ -3557,6 +3589,35 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // brings the gain staging into the FX's design window.
     constexpr float kVoiceToFxPad = 0.5f; // -6 dB
     buffer.applyGain (kVoiceToFxPad);
+
+    // ── ANNULUS RESONATOR — on the SYNTH-SECTION output (PRE-FX). ───────────────
+    //    Moved here from end-of-block (2026-07-01, per Max). Reasons:
+    //      • The front-panel FX (delay / reverb / grain / tape) now process the
+    //        resonator's OUTPUT — so you actually hear delay/reverb ON the resonated
+    //        sound instead of the resonator swallowing them at the master.
+    //      • It RELEASES with the notes: it's fed the amp-enveloped voice mix, which
+    //        goes silent on note-off, so the ring decays (Damping) — instead of being
+    //        fed forever by the FX tails at the end of the chain (that end-of-chain
+    //        feed was exactly why it "never released").
+    //    Bypassed (exact passthrough) at Mix 0, so it costs nothing until dialed in.
+    //    Params via flowKnob() → modulatable. NOTE for Opus: fold this SYNTH-SECTION
+    //    placement (not the master end) into the next resonator drop.
+    {
+        const float rStruct = flowKnob (ParameterIDs::SYN_RESO_STRUCTURE,  wc::ModDest::ResoStructure);
+        const float rBright = flowKnob (ParameterIDs::SYN_RESO_BRIGHTNESS, wc::ModDest::ResoBrightness);
+        const float rDamp   = flowKnob (ParameterIDs::SYN_RESO_DAMPING,    wc::ModDest::ResoDamping);
+        const float rPos    = flowKnob (ParameterIDs::SYN_RESO_POSITION,   wc::ModDest::ResoPosition);
+        const float rMix    = flowKnob (ParameterIDs::SYN_RESO_MIX,        wc::ModDest::ResoMix);
+        const float rKey    = flowBase (ParameterIDs::SYN_RESO_KEYTRACK);
+        const int   rMat    = (int) (apvts.getRawParameterValue (ParameterIDs::SYN_RESO_MATERIAL)->load() + 0.5f);
+        float* rl = buffer.getWritePointer (0);
+        float* rr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : rl;
+        reso.process (rStruct, rBright, rDamp, rPos, rMat, rMix, rKey,
+                      resoHeld_, resoHeldN_, getSampleRate(),
+                      rl, rr, numSamples);
+        for (int b = 0; b < 4; ++b) resoVizEnergy_[b].store (reso.vizEnergy[b], std::memory_order_relaxed);
+        resoVizOut_.store (reso.vizOut, std::memory_order_relaxed);
+    }
 
     // Read BPM from DAW playhead
     if (auto* playHead = getPlayHead())
@@ -4202,28 +4263,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = lanes[i];
     }
 
-    // ── ANNULUS RESONATOR — global key-tracked physical-modeling node ──────────
-    //    Runs ALWAYS (independent of FLOW mode), in place on the summed master out.
-    //    Bypassed (exact passthrough) at Mix 0, so it costs nothing until dialed in.
-    //    Params read through flowKnob() → modulatable destinations (LFO targeting is
-    //    wired & ready; the UI drag-to-reso surface is intentionally deferred).
-    //    There is NO master limiter after this point — the node owns its ceiling.
-    {
-        const float rStruct = flowKnob (ParameterIDs::SYN_RESO_STRUCTURE,  wc::ModDest::ResoStructure);
-        const float rBright = flowKnob (ParameterIDs::SYN_RESO_BRIGHTNESS, wc::ModDest::ResoBrightness);
-        const float rDamp   = flowKnob (ParameterIDs::SYN_RESO_DAMPING,    wc::ModDest::ResoDamping);
-        const float rPos    = flowKnob (ParameterIDs::SYN_RESO_POSITION,   wc::ModDest::ResoPosition);
-        const float rMix    = flowKnob (ParameterIDs::SYN_RESO_MIX,        wc::ModDest::ResoMix);
-        const float rKey    = flowBase (ParameterIDs::SYN_RESO_KEYTRACK);
-        const int   rMat    = (int) (apvts.getRawParameterValue (ParameterIDs::SYN_RESO_MATERIAL)->load() + 0.5f);
-        float* rl = buffer.getWritePointer (0);
-        float* rr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : rl;
-        reso.process (rStruct, rBright, rDamp, rPos, rMat, rMix, rKey,
-                      resoHeld_, resoHeldN_, getSampleRate(),
-                      rl, rr, numSamples);
-        for (int b = 0; b < 4; ++b) resoVizEnergy_[b].store (reso.vizEnergy[b], std::memory_order_relaxed);
-        resoVizOut_.store (reso.vizOut, std::memory_order_relaxed);
-    }
+    // (ANNULUS RESONATOR moved UP to the synth-section output — pre-FX — see above.)
 }
 
 //==============================================================================

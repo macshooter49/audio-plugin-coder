@@ -33,10 +33,16 @@ namespace tw
             sampleRate = sampleRateHz;
             channels   = juce::jlimit (1, 2, numChannels);
 
-            // Configure stretcher for TONES character. The library's presetDefault
-            // picks sensible windowing for the SR. setFormantFactor(1.0) keeps
-            // formants where they belong even at non-unity pitch shifts.
-            stretcher.presetDefault (channels, (float) sampleRate);
+            // Configure stretcher for TONES character. We use presetCheaper (NOT
+            // presetDefault) deliberately (Max's all-4-oscs CPU fix, 2026-07-01):
+            //   • smaller FFT block (100 ms vs 120 ms) + larger hop (40 ms vs 30 ms)
+            //     → ~40 % less average STFT cost, and
+            //   • splitComputation=true → the FFT work is SPREAD across process() calls
+            //     instead of dumped on one hop, which FLATTENS the per-block CPU spikes.
+            // That's what lets STRETCH/FORMANT be turned up on all 4 oscillators (each
+            // owns a phase-vocoder) without a CPU spike. Near-identical on sustained
+            // sample material. setFormantFactor(1.0) keeps formants correct at any pitch.
+            stretcher.presetCheaper (channels, (float) sampleRate);
             stretcher.setFormantFactor (formantFactor);
 
             ready = true;

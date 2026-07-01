@@ -65,6 +65,7 @@ namespace tw
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
             airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
+            oscGateCoef_ = 1.0f - std::exp (-1.0f / (0.004f * (float) juce::jmax (1.0, sampleRate_)));  // ~4ms mute fade — click-free
         }
 
         /** Set AMP envelope params. attackMs/decayMs/releaseMs are milliseconds;
@@ -905,6 +906,12 @@ namespace tw
         void setTuningD (int oct, int semi, float cent) noexcept { octOffsetD_=oct; semiOffsetD_=semi; centsOffsetD_=cent; if (playing_) updateUnisonPhaseIncrementsD (glideNote_); }
         void setLevelC (float level) noexcept { levelC_ = juce::jlimit (0.0f, 1.0f, level); }
         void setLevelD (float level) noexcept { levelD_ = juce::jlimit (0.0f, 1.0f, level); }
+        // SOLO/MUTE — set per-osc gate targets (A,B,C,D). Click-free: smoothed toward target in render.
+        void setOscGates (float a, float b, float c, float d) noexcept
+        {
+            oscGateTarget_[0] = a; oscGateTarget_[1] = b; oscGateTarget_[2] = c; oscGateTarget_[3] = d;
+            if (! playing_) { for (int k = 0; k < 4; ++k) oscGate_[k] = oscGateTarget_[k]; }  // snap when idle → fresh notes respect gate from sample 0, no blip
+        }
         void setPanC (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLC_=std::cos(a); panRC_=std::sin(a); }
         void setPanD (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLD_=std::cos(a); panRD_=std::sin(a); }
         void setWavetableC (const tw::Wavetable* wt) noexcept { currentWavetableC_ = wt; }
@@ -1252,13 +1259,22 @@ namespace tw
                 float* ePit = envScratch_.getWritePointer (2);
                 float* eM1  = envScratch_.getWritePointer (3);
                 float* eM2  = envScratch_.getWritePointer (4);
+                // CPU: envs 2–5 (ch1..4) are consumed ONLY as envDepth_[c] × value in every
+                // routing site (amp/filter/pitch/mod). So depth 0 ⇒ that env contributes NOTHING
+                // anywhere — skip its per-sample tick and write 0 (bit-identical output). By
+                // default all four depths are 0, so an UNROUTED envelope now costs nothing
+                // instead of ticking (and exp'ing its curve) 48 000×/s per voice. AMP always ticks.
+                const bool needFlt = (envDepth_[1] != 0.0f);
+                const bool needPit = (envDepth_[2] != 0.0f);
+                const bool needM1  = (envDepth_[3] != 0.0f);
+                const bool needM2  = (envDepth_[4] != 0.0f);
                 for (int k = 0; k < numSamples; ++k)
                 {
                     eAmp[k] = (float) ampEnv_.tick();
-                    eFlt[k] = (float) fltEnvT_.tick();
-                    ePit[k] = (float) pitchEnvT_.tick();
-                    eM1[k]  = (float) mod1EnvT_.tick();
-                    eM2[k]  = (float) mod2EnvT_.tick();
+                    eFlt[k] = needFlt ? (float) fltEnvT_.tick() : 0.0f;
+                    ePit[k] = needPit ? (float) pitchEnvT_.tick() : 0.0f;
+                    eM1[k]  = needM1  ? (float) mod1EnvT_.tick() : 0.0f;
+                    eM2[k]  = needM2  ? (float) mod2EnvT_.tick() : 0.0f;
                 }
             }
             // PITCH + MOD-bus routing (per-block; block-end value of each free env).
@@ -2337,9 +2353,13 @@ namespace tw
                     scopeRingPos_ = (wp + 1) & kScopeRingMask;
                 }
 
-                // Sum to stereo with INDEPENDENT per-osc level + pan
-                scratchL[i] = (sA_L * level_ * panL_ + sB_L * levelB_ * panLB_ + sC_L * levelC_ * panLC_ + sD_L * levelD_ * panLD_) * velEnv;
-                scratchR[i] = (sA_R * level_ * panR_ + sB_R * levelB_ * panRB_ + sC_R * levelC_ * panRC_ + sD_R * levelD_ * panRD_) * velEnv;
+                // SOLO/MUTE — advance the per-osc click-free gates one sample (one-pole toward target)
+                for (int g = 0; g < 4; ++g) oscGate_[g] += (oscGateTarget_[g] - oscGate_[g]) * oscGateCoef_;
+                const float gA = oscGate_[0], gB = oscGate_[1], gC = oscGate_[2], gD = oscGate_[3];
+
+                // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate)
+                scratchL[i] = (sA_L * level_ * panL_ * gA + sB_L * levelB_ * panLB_ * gB + sC_L * levelC_ * panLC_ * gC + sD_L * levelD_ * panLD_ * gD) * velEnv;
+                scratchR[i] = (sA_R * level_ * panR_ * gA + sB_R * levelB_ * panRB_ * gB + sC_R * levelC_ * panRC_ * gC + sD_R * levelD_ * panRD_ * gD) * velEnv;
             }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
@@ -2981,6 +3001,11 @@ namespace tw
         float                          panL_  = 0.7071f;  // cos(pi/4)
         float                          panR_  = 0.7071f;  // sin(pi/4)
 
+        // SOLO/MUTE — per-osc (A,B,C,D) click-free gate (smoothed one-pole, ~4ms fade)
+        float oscGate_[4]       { 1.0f, 1.0f, 1.0f, 1.0f };   // smoothed solo/mute gate (click-free)
+        float oscGateTarget_[4] { 1.0f, 1.0f, 1.0f, 1.0f };
+        float oscGateCoef_ = 0.006f;                          // one-pole coef, set in setCurrentPlaybackSampleRate
+
         int   octOffset_   = 0;
         int   semiOffset_  = 0;
         float centsOffset_ = 0.0f;
@@ -3082,7 +3107,11 @@ namespace tw
             if (doNoteOn) warp.noteOnReset();
 
             // render — direct (resample) unless STRETCH/FORMANT engage the Warp (Tones) engine.
-            const bool useWarp = (p.stretch > 0.001f) || (std::fabs (p.formant) > 0.001f);
+            // DEAD-ZONE (Max's CPU fix, 2026-07-01): the phase-vocoder is a hard on/off cliff, so a
+            // barely-nudged knob used to spin up the FULL STFT for an INAUDIBLE shift. Snap tiny
+            // values to neutral (skip the vocoder): stretch < 0.3 % (ratio ~1.009) and formant < 2 %
+            // (~0.03 semitone) are inaudible, so stay on the cheap direct-resample path.
+            const bool useWarp = (p.stretch > 0.003f) || (std::fabs (p.formant) > 0.02f);
             if (useWarp)
             {
                 const tw::WarpMode wm = (p.stretchMode == 1) ? tw::WarpMode::Beats
