@@ -4134,10 +4134,14 @@ body {
 #syn-panel .reso-menu .rm-mix { padding: 5px 9px 3px; }
 #syn-panel .reso-menu .rm-mix .rm-mlab { display: flex; justify-content: space-between; font-size: 9px; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
 #syn-panel .reso-menu .rm-mix .rm-mlab span:last-child { color: #fff; letter-spacing: .3px; }
-#syn-panel .reso-menu .rm-mix .rm-track { position: relative; height: 5px; border-radius: 3px; background: rgba(120,118,160,0.30); cursor: ew-resize; }
-#syn-panel .reso-menu .rm-mix .rm-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--purple-400); }
-/* white notch marker — same slider identity as the oscillator quick-menu (.oq-mark) + envelope notches */
-#syn-panel .reso-menu .rm-mix .rm-mark { position: absolute; top: 50%; width: 2px; height: 10px; border-radius: 1px; background: #fff; transform: translate(-50%,-50%); pointer-events: none; }
+/* SLIDER IDENTITY = the oscillator quick-menu (.oscq) bar, EXACTLY: thin 2px transparent-white
+   track + faint center tick + purple-500 fill + 9px pure-white notch. Same visual language as the
+   envelope notches. (Was a chunky 5px purple-gray bar — wrong color/weight; corrected per Max.) */
+#syn-panel .reso-menu .rm-mix .rm-track { position: relative; height: 14px; background: none; cursor: ew-resize; }
+#syn-panel .reso-menu .rm-mix .rm-track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); height: 2px; border-radius: 1px; background: rgba(255,255,255,0.16); pointer-events: none; }
+#syn-panel .reso-menu .rm-mix .rm-track::after { content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 1px; height: 7px; background: rgba(255,255,255,0.28); pointer-events: none; }
+#syn-panel .reso-menu .rm-mix .rm-fill { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 2px; border-radius: 1px; background: var(--purple-500); pointer-events: none; }
+#syn-panel .reso-menu .rm-mix .rm-mark { position: absolute; top: 50%; width: 2px; height: 9px; border-radius: 1px; background: #fff; transform: translate(-50%,-50%); pointer-events: none; }
 
 #syn-panel .vis-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 5px 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
 #syn-panel .vis-knob { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
@@ -5820,8 +5824,8 @@ body {
                   <div class="rm-item" data-f="2">Piano</div>
                   <div class="rm-sep"></div>
                   <div class="rm-mix">
-                    <div class="rm-mlab"><span>Damping</span><span id="rm-damping-val">45%</span></div>
-                    <div class="rm-track" id="rm-damping-track"><div class="rm-fill" id="rm-damping-fill" style="width:45%"></div><div class="rm-mark" id="rm-damping-mark" style="left:45%"></div></div>
+                    <div class="rm-mlab"><span>Structure</span><span id="rm-structure-val">30%</span></div>
+                    <div class="rm-track" id="rm-structure-track"><div class="rm-fill" id="rm-structure-fill" style="width:30%"></div><div class="rm-mark" id="rm-structure-mark" style="left:30%"></div></div>
                   </div>
                   <div class="rm-mix">
                     <div class="rm-mlab"><span>Position</span><span id="rm-position-val">20%</span></div>
@@ -7511,7 +7515,7 @@ window.__synArc = function (ring, n, bipolar) {
     var cv=document.getElementById('reso-cv'); if(!cv) return;
     var menu=document.getElementById('reso-menu');
     var ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
-    var P={structure:0.0,brightness:0.35,damping:0.55,position:0.12}, family=0, bloom=0;
+    var P={structure:0.30,brightness:0.55,damping:0.45,position:0.20}, family=0, bloom=0;  // match APVTS defaults (PluginProcessor addFlowKnob) so the figure/menu don't flash a wrong pre-sync value
     var NMAT=6;   // String Pluck Piano Bar Metal Drum
     // ── JUCE param wiring (UI ↔ APVTS). No-ops gracefully outside a JUCE host. ──
     function _ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
@@ -7552,8 +7556,9 @@ window.__synArc = function (ring, n, bipolar) {
       if(gOut*1.05>bloom) bloom=gOut*1.05;
       ctx.clearRect(0,0,W,H);
       if(!W||!H){requestAnimationFrame(frame);return;}
-      // PURE GAMIFIED figure — alive harmonograph, PURE WHITE, rotated by POSITION. No params on the
-      // face (no XY pad): TAP = randomize a new sound, DRAG = spin it. Menu holds the rest.
+      // PURE GAMIFIED figure — alive harmonograph, PURE WHITE, rotated by POSITION (from the menu).
+      // The figure IS an XY pad you PLAY: DRAG morphs Brightness(X)×Damping(Y) — its shape/fullness
+      // morphs live (picture == sound), NO handle. TAP = randomize a fresh sound. Menu holds the rest.
       for(var i=0;i<4;i++) ph[i]+=dt*(.22+i*.06);   // continuous fluid morphing motion
       build();
       ctx.save(); ctx.translate(CX,CY); ctx.rotate(P.position*Math.PI*2); ctx.translate(-CX,-CY);
@@ -7571,15 +7576,20 @@ window.__synArc = function (ring, n, bipolar) {
       }
       requestAnimationFrame(frame);
     }
-    // interaction — FULL GAMIFICATION, no params on the face:
-    //   TAP the figure  = RANDOMIZE (new material [String/Pluck/Piano] + Structure/Brightness/Position)
-    //   DRAG the figure = SPIN it (Position). Right-click = menu (Material/Damping/Position/Mix).
-    var drag=false, moved=false, sx0=0, pos0=0;
+    // interaction — the figure IS an XY PAD you PLAY (no handle; the morphing figure is the feedback):
+    //   DRAG = morph the tone live → X: BRIGHTNESS (left dark ↔ right bright),
+    //                                 Y: DAMPING   (top long-ring/alive ↔ bottom damped/short)
+    //   TAP  = randomize a fresh sound.  Right-click = menu (Material / Structure / Position / Mix).
+    var drag=false, moved=false, sx0=0, sy0=0, XYPAD=10;
     function randomize(){ bloom=1; family=Math.floor(Math.random()*3); _wr(JS_MAT,family/(NMAT-1)); markMat();
-      P.structure=Math.random(); P.brightness=0.30+Math.random()*0.60; P.position=Math.random()*0.9;
-      _wr(JS_STR,P.structure); _wr(JS_BRI,P.brightness); _wr(JS_POS,P.position); }
-    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); drag=true; moved=false; sx0=e.clientX; pos0=P.position; try{cv.setPointerCapture(e.pointerId);}catch(_){} });
-    cv.addEventListener('pointermove',function(e){ if(!drag)return; var dx=e.clientX-sx0; if(Math.abs(dx)>4)moved=true; if(moved){ var np=((pos0+dx/260)%1+1)%1; P.position=np; _wr(JS_POS,np); } });
+      P.structure=Math.random(); P.brightness=0.15+Math.random()*0.80; P.damping=0.20+Math.random()*0.65; P.position=Math.random()*0.9;
+      _wr(JS_STR,P.structure); _wr(JS_BRI,P.brightness); _wr(JS_DMP,P.damping); _wr(JS_POS,P.position); }
+    function setXY(e){ var r=cv.getBoundingClientRect();
+      var bx=Math.max(0,Math.min(1,(e.clientX-r.left-XYPAD)/Math.max(1,(r.width -2*XYPAD))));   // X → BRIGHTNESS
+      var dy=Math.max(0,Math.min(1,(e.clientY-r.top -XYPAD)/Math.max(1,(r.height-2*XYPAD))));   // Y → DAMPING (top = long ring)
+      P.brightness=bx; P.damping=dy; _wr(JS_BRI,bx); _wr(JS_DMP,dy); }
+    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); drag=true; moved=false; sx0=e.clientX; sy0=e.clientY; try{cv.setPointerCapture(e.pointerId);}catch(_){} });
+    cv.addEventListener('pointermove',function(e){ if(!drag)return; if(!moved && Math.hypot(e.clientX-sx0,e.clientY-sy0)>4) moved=true; if(moved) setXY(e); });
     function endDrag(){ if(!drag)return; drag=false; if(!moved) randomize(); }
     cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',function(){drag=false;});
     // right-click menu — Material + Damping + Position + Mix. Shown first (so we can MEASURE it),
@@ -7607,7 +7617,7 @@ window.__synArc = function (ring, n, bipolar) {
         tk.addEventListener('pointerup',function(){md=false;});
         _sub(ss,function(){paint(_rd(ss,dflt));});
       }
-      wireSlider('damping', JS_DMP, 0.45); wireSlider('position', JS_POS, 0.20); wireSlider('mix', JS_MIX, 0.0);
+      wireSlider('structure', JS_STR, 0.30); wireSlider('position', JS_POS, 0.20); wireSlider('mix', JS_MIX, 0.0);
     }
     document.addEventListener('pointerdown',function(e){ if(menu&&menu.classList.contains('act')&&!menu.contains(e.target)&&e.target!==cv) hideMenu(); });
     window.addEventListener('resize',sz);

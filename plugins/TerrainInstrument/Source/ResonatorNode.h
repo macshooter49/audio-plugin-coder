@@ -357,7 +357,10 @@ private:
         // so String/Piano keep their body regardless of structure position.
         wgNoise_       = m.noiseAmt;
         wgNoiseLP_     = clamp01 (m.noiseLP * (0.55f + 0.90f * structSm_));  // structure = attack brightness
-        wgPosFrac_     = 0.05f + 0.42f * posSm_;
+        // POSITION = pickup-selector TONE sweep. Widened tap travel so the comb notches move
+        // across the whole harmonic range: near-bridge (bright/thin) → mid-string (hollow/woody).
+        // [CC patch 2026-07-01 — Max wants POSITION to audibly control timbre; fold into next drop]
+        wgPosFrac_     = 0.045f + 0.46f * posSm_;
         wgDrive_       = (1.0f - fb) * gainTgt;
         excSmoothCoef_ = (mat == kString) ? 1.00f : (mat == kPluck ? 0.90f : 0.55f); // String keeps its pluck
 
@@ -415,7 +418,9 @@ private:
             st.widx = (st.widx + 1 >= kMaxDelay) ? 0 : st.widx + 1;
 
             const float pick = readHermite (st.buf, kMaxDelay, st.widx, st.delay * wgPosFrac_);
-            out += (sig - 0.85f * pick) * st.gain;
+            // comb DEPTH also rides POSITION (0.72 direct → 0.92 hollow) so the tone morph is clearly
+            // audible across the sweep, not just near the top. Output-only tap — no loop-stability effect.
+            out += (sig - (0.72f + 0.20f * posSm_) * pick) * st.gain;
         }
         // STRUCTURE output drive: pitch-safe harmonic enrichment, UNITY at structure 0
         // (small-signal gain stays 1.0, peaks compress into harmonics as structure rises).
