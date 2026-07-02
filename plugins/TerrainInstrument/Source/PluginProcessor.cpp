@@ -2243,6 +2243,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_RESO_MATERIAL, 1 }, "Reso Material",
         juce::StringArray { "String", "Pluck", "Piano", "Bar", "Metal", "Drum" }, 0));
 
+    // ── STELLATE spectral shaper — Shape (basics + strictly-harmonic Terrain laws) + toolkit ── [STELLATE-CPP-V1][STELLATE-CPP-V2]
+    addFlowKnob (ParameterIDs::SYN_STELL_MIX,     "Stellate Mix",     0.00f);   // default 0 = bit-exact bypass (load → turn up)
+    addFlowKnob (ParameterIDs::SYN_STELL_REPLACE, "Stellate Replace", 0.55f);   // carve the source harmonics as the shape pours in
+    addFlowKnob (ParameterIDs::SYN_STELL_FEED,    "Stellate Feed",    0.00f);
+    addFlowKnob (ParameterIDs::SYN_STELL_WIDTH,   "Stellate Width",   0.25f);
+    addFlowKnob (ParameterIDs::SYN_STELL_QUALITY, "Stellate Quality", 0.80f);
+    addFlowKnob (ParameterIDs::SYN_STELL_TILT,    "Stellate Tilt",    0.50f);   // XY pad X (dark ↔ bright)
+    addFlowKnob (ParameterIDs::SYN_STELL_SHINE,   "Stellate Shine",   0.50f);   // XY pad Y (0..+2 oct; default +1 = the shine)
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_STELL_SHAPE, 1 }, "Stellate Shape",
+        juce::StringArray { "Sine", "Triangle", "Square", "Saw", "Prime", "Lattice",
+                            "Veil", "Halo", "Ember", "Crown", "Pillar", "Glacier" }, 3));
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIDs::SYN_STELL_TRACK, 1 }, "Stellate Pitch",
+        juce::StringArray { "Track", "Hard" }, 0));
+
     return layout;
 }
 
@@ -2338,6 +2354,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     prevFlowMode_ = 0;                   // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
     reso.prepare   (sampleRate);        // ANNULUS resonator — allocates mode/delay state here only
+    stell.prepare  (sampleRate);        // STELLATE spectral shaper — analyzer/partial banks (no allocation in process)
     for (auto& e : resoVizEnergy_) e.store (0.0f, std::memory_order_relaxed);
     resoVizOut_.store (0.0f, std::memory_order_relaxed);
     flowArp.reset();
@@ -3617,6 +3634,39 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                       rl, rr, numSamples);
         for (int b = 0; b < 4; ++b) resoVizEnergy_[b].store (reso.vizEnergy[b], std::memory_order_relaxed);
         resoVizOut_.store (reso.vizOut, std::memory_order_relaxed);
+    }
+
+    // ── STELLATE spectral shaper — Terrain's second global mode, fed the RESONATOR'S
+    //    OUTPUT (Annulus → Stellate, the classic resonator→spectral order): it MEASURES
+    //    the real harmonic energy of every held note in whatever audio flows through
+    //    (oscs, samples, the Annulus ring) and re-synthesizes it through the selected
+    //    shape — pitch-locked, zero latency, zero detuning, silence-in ⇒ silence-out.
+    //    Additive wet: Mix 0 = bit-exact bypass, costs ~nothing until dialed in. ──
+    {
+        // [STELLATE-CPP-V2] V2: full spectral toolkit — pitch-tracked (TRACK follows the
+        // AUDIO's real fundamental, so mis-rooted one-shots stay in tune), CARVE/REPLACE
+        // (phase-locked subtraction of the source harmonics), FEED regeneration, WIDTH,
+        // QUALITY degradation, TILT + SHINE (the invisible XY pad on the star).
+        const int   sShape = (int) (apvts.getRawParameterValue (ParameterIDs::SYN_STELL_SHAPE)->load() + 0.5f);
+        const int   sHard  = (int) (apvts.getRawParameterValue (ParameterIDs::SYN_STELL_TRACK)->load() + 0.5f);
+        const float sMix   = flowBase (ParameterIDs::SYN_STELL_MIX);
+        const float sRep   = flowBase (ParameterIDs::SYN_STELL_REPLACE);
+        const float sFeed  = flowBase (ParameterIDs::SYN_STELL_FEED);
+        const float sWid   = flowBase (ParameterIDs::SYN_STELL_WIDTH);
+        const float sQual  = flowBase (ParameterIDs::SYN_STELL_QUALITY);
+        const float sTilt  = flowBase (ParameterIDs::SYN_STELL_TILT);
+        const float sShine = flowBase (ParameterIDs::SYN_STELL_SHINE);
+        float* sl = buffer.getWritePointer (0);
+        float* sr2 = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : sl;
+        stell.process (sShape, sMix, sRep, sFeed, sWid, sQual, sTilt, sShine, sHard,
+                       resoHeld_, resoHeldN_, getSampleRate(), sl, sr2, numSamples);
+        for (int q = 0; q < wc::StellateNode::kViz; ++q)
+        {
+            stellVizF_[q].store (stell.vizF[q], std::memory_order_relaxed);
+            stellVizM_[q].store (stell.vizM[q], std::memory_order_relaxed);
+        }
+        stellVizN_.store (stell.vizN, std::memory_order_relaxed);
+        stellVizOut_.store (stell.vizOut, std::memory_order_relaxed);
     }
 
     // Read BPM from DAW playhead

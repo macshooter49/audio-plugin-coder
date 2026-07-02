@@ -163,6 +163,17 @@ namespace ParameterIDs
     constexpr char SYN_RESO_MIX[]        = "SYN_RESO_MIX";         // float 0..1 — dry→fully resonated; default 0 (bypassed)
     constexpr char SYN_RESO_KEYTRACK[]   = "SYN_RESO_KEYTRACK";    // float 0..1 — fundamental tracks played note; default 1 (pitched)
     constexpr char SYN_RESO_MATERIAL[]   = "SYN_RESO_MATERIAL";    // choice: String/Bar/Drum/Metal
+    // ── STELLATE spectral shaper (global mode, sibling of Annulus) ── [STELLATE-CPP-V1]
+    constexpr char SYN_STELL_SHAPE[]     = "SYN_STELL_SHAPE";      // choice: Prime/Lattice/Veil/Halo/Ember/Rift/Aurum/Glacier
+    constexpr char SYN_STELL_MIX[]       = "SYN_STELL_MIX";        // float 0..1 — additive wet; default 0 (bit-exact bypass)
+    // ── V2 spectral toolkit ── [STELLATE-CPP-V2]
+    constexpr char SYN_STELL_REPLACE[]   = "SYN_STELL_REPLACE";    // float 0..1 — phase-locked CARVE of the source harmonics (take away)
+    constexpr char SYN_STELL_FEED[]      = "SYN_STELL_FEED";       // float 0..1 — wet re-enters the analyzers (regeneration)
+    constexpr char SYN_STELL_WIDTH[]     = "SYN_STELL_WIDTH";      // float 0..1 — odd/even partials fan L/R
+    constexpr char SYN_STELL_QUALITY[]   = "SYN_STELL_QUALITY";    // float 0..1 — low = degraded/steppy/smeared, high = glassy
+    constexpr char SYN_STELL_TILT[]      = "SYN_STELL_TILT";       // float 0..1 — harmonic filter dark↔bright (XY pad X)
+    constexpr char SYN_STELL_SHINE[]     = "SYN_STELL_SHINE";      // float 0..1 — 0..+2 octave lift of the stack (XY pad Y)
+    constexpr char SYN_STELL_TRACK[]     = "SYN_STELL_TRACK";      // choice: Track (follow the audio) / Hard (strict MIDI)
     constexpr char SYN_ENV_AMP_A[]     = "SYN_ENV_AMP_A";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_D[]     = "SYN_ENV_AMP_D";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1

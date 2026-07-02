@@ -373,7 +373,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(flowChopBlendRelay).withOptionsFrom(flowGliBlendRelay).withOptionsFrom(flowArpBlendRelay)
             .withOptionsFrom(flowGliRateRelay).withOptionsFrom(flowGliGateRelay).withOptionsFrom(flowGliVaryRelay).withOptionsFrom(flowGliTrajRelay).withOptionsFrom(flowGliMorphRelay)
             .withOptionsFrom(flowDrfRateRelay).withOptionsFrom(flowDrfGateRelay).withOptionsFrom(flowDrfVaryRelay).withOptionsFrom(flowDrfTrajRelay).withOptionsFrom(flowDrfMorphRelay)
-            .withOptionsFrom(resoStructureRelay).withOptionsFrom(resoBrightnessRelay).withOptionsFrom(resoDampingRelay).withOptionsFrom(resoPositionRelay).withOptionsFrom(resoMixRelay).withOptionsFrom(resoKeyTrackRelay).withOptionsFrom(resoMaterialRelay)
+            .withOptionsFrom(resoStructureRelay).withOptionsFrom(resoBrightnessRelay).withOptionsFrom(resoDampingRelay).withOptionsFrom(resoPositionRelay).withOptionsFrom(resoMixRelay).withOptionsFrom(resoKeyTrackRelay).withOptionsFrom(resoMaterialRelay).withOptionsFrom(stellShapeRelay).withOptionsFrom(stellMixRelay).withOptionsFrom(stellReplaceRelay).withOptionsFrom(stellFeedRelay).withOptionsFrom(stellWidthRelay).withOptionsFrom(stellQualityRelay).withOptionsFrom(stellTiltRelay).withOptionsFrom(stellShineRelay).withOptionsFrom(stellTrackRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2868,6 +2868,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkF(resoMixAttachment,        ParameterIDs::SYN_RESO_MIX,        resoMixRelay);
         mkF(resoKeyTrackAttachment,   ParameterIDs::SYN_RESO_KEYTRACK,   resoKeyTrackRelay);
         mkF(resoMaterialAttachment,   ParameterIDs::SYN_RESO_MATERIAL,   resoMaterialRelay);
+        // ── STELLATE spectral shaper attachments ── [STELLATE-CPP-V1]
+        mkF(stellShapeAttachment,     ParameterIDs::SYN_STELL_SHAPE,     stellShapeRelay);
+        mkF(stellMixAttachment,       ParameterIDs::SYN_STELL_MIX,       stellMixRelay);
+        // [STELLATE-CPP-V2] V2 toolkit attachments
+        mkF(stellReplaceAttachment,   ParameterIDs::SYN_STELL_REPLACE,   stellReplaceRelay);
+        mkF(stellFeedAttachment,      ParameterIDs::SYN_STELL_FEED,      stellFeedRelay);
+        mkF(stellWidthAttachment,     ParameterIDs::SYN_STELL_WIDTH,     stellWidthRelay);
+        mkF(stellQualityAttachment,   ParameterIDs::SYN_STELL_QUALITY,   stellQualityRelay);
+        mkF(stellTiltAttachment,      ParameterIDs::SYN_STELL_TILT,      stellTiltRelay);
+        mkF(stellShineAttachment,     ParameterIDs::SYN_STELL_SHINE,     stellShineRelay);
+        mkF(stellTrackAttachment,     ParameterIDs::SYN_STELL_TRACK,     stellTrackRelay);
     }
 
     // ── OSC C + D attachments (4-osc) ──
@@ -3123,6 +3134,21 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         js << "if(window.__terrainReso){window.__terrainReso({energy:["
            << juce::String(e0, 3) << "," << juce::String(e1, 3) << "," << juce::String(e2, 3) << "," << juce::String(e3, 3)
            << "],out:" << juce::String(ro, 3) << ",position:" << juce::String(rpos, 3) << "});}";
+    }
+
+    // ── STELLATE spectral shaper live feed — the engine's real generated partials drive
+    //    the star (thin white rays; purple streaks follow the wet level). Flat [f,m] pairs. ──
+    {
+        int nP = audioProcessor.stellVizN_.load(std::memory_order_relaxed);
+        if (nP < 0) nP = 0; if (nP > wc::StellateNode::kViz) nP = wc::StellateNode::kViz;
+        js << "if(window.__terrainStellate){window.__terrainStellate({peaks:[";
+        for (int q = 0; q < nP; ++q)
+        {
+            if (q) js << ",";
+            js << juce::String(audioProcessor.stellVizF_[q].load(std::memory_order_relaxed), 1) << ","
+               << juce::String(audioProcessor.stellVizM_[q].load(std::memory_order_relaxed), 3);
+        }
+        js << "],out:" << juce::String(audioProcessor.stellVizOut_.load(std::memory_order_relaxed), 3) << "});}";
     }
 
     // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──

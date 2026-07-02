@@ -84,6 +84,9 @@ public:
         reset();
     }
 
+    // Future "Exciter" knob: depth of the internal note-on strike (0 = pure resonator, Max's default).
+    void setStrikeDepth (float d) noexcept { strikeDepth_ = clamp01 (d); }
+
     void reset() noexcept
     {
         for (int v = 0; v < kPoly; ++v) voices_[v].clear();
@@ -147,11 +150,10 @@ public:
             if (free < 0) { float lo = 1.0e30f; for (int v = 0; v < kPoly; ++v) if (voices_[v].energy < lo) { lo = voices_[v].energy; free = v; } }
             voices_[free].clear();
             voices_[free].note = nn; voices_[free].active = true;
-            // Max: KILL the note-on excitation burst — the per-fresh-voice pluck (waveguide) / mallet
-            // "snare" (modal) that fired on the first strike of each new note (round-robin spike). The
-            // resonator now rings ONLY the fed audio's harmonics, no internal strike. pitchEnv kept.
-            // (CC stopgap patch on Opus's engine — Opus to fold "disable note-on burst" into next drop.)
-            voices_[free].pluck = 0.0f; voices_[free].pitchEnv = 1.0f; voices_[free].strike = 0.0f;
+            // Note-on exciter is GATED by strikeDepth_ (default 0 = OFF, per Max: the resonator
+            // rings ONLY the fed audio — no internal pluck/mallet, no round-robin spike). Keeping
+            // the path behind a depth preserves a future modulatable "Exciter" knob (0..1).
+            voices_[free].pluck = strikeDepth_; voices_[free].pitchEnv = 1.0f; voices_[free].strike = strikeDepth_;
         }
 
         // ── shared envelope coefficients ─────────────────────────────────────
@@ -357,9 +359,8 @@ private:
         // so String/Piano keep their body regardless of structure position.
         wgNoise_       = m.noiseAmt;
         wgNoiseLP_     = clamp01 (m.noiseLP * (0.55f + 0.90f * structSm_));  // structure = attack brightness
-        // POSITION = pickup-selector TONE sweep. Widened tap travel so the comb notches move
-        // across the whole harmonic range: near-bridge (bright/thin) → mid-string (hollow/woody).
-        // [CC patch 2026-07-01 — Max wants POSITION to audibly control timbre; fold into next drop]
+        // POSITION = pickup-selector TONE sweep: widened tap travel so the comb notches move
+        // across the whole harmonic range (near-bridge bright/thin -> mid-string hollow/woody).
         wgPosFrac_     = 0.045f + 0.46f * posSm_;
         wgDrive_       = (1.0f - fb) * gainTgt;
         excSmoothCoef_ = (mat == kString) ? 1.00f : (mat == kPluck ? 0.90f : 0.55f); // String keeps its pluck
@@ -418,8 +419,8 @@ private:
             st.widx = (st.widx + 1 >= kMaxDelay) ? 0 : st.widx + 1;
 
             const float pick = readHermite (st.buf, kMaxDelay, st.widx, st.delay * wgPosFrac_);
-            // comb DEPTH also rides POSITION (0.72 direct → 0.92 hollow) so the tone morph is clearly
-            // audible across the sweep, not just near the top. Output-only tap — no loop-stability effect.
+            // comb DEPTH rides POSITION too (0.72 direct -> 0.92 hollow) so the morph is clearly
+            // audible across the sweep. Output-only tap (never written back) — no loop-stability effect.
             out += (sig - (0.72f + 0.20f * posSm_) * pick) * st.gain;
         }
         // STRUCTURE output drive: pitch-safe harmonic enrichment, UNITY at structure 0
@@ -583,6 +584,7 @@ private:
     float modalDrive_ = 1.0f, modalKick_ = 0.5f, malletCoef_ = 0.35f;
     // exciter transient softener (kills the resonant pluck-spike on non-string materials)
     float excSmooth_ = 0.0f, excSmoothCoef_ = 1.0f;
+    float strikeDepth_ = 0.0f;                 // gated note-on exciter (0 = off; future Exciter knob)
     // viz band-split state
     float vb0_ = 0.0f, vb1_ = 0.0f, vb2_ = 0.0f;
 };

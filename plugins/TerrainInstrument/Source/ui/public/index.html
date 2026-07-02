@@ -4143,6 +4143,26 @@ body {
 #syn-panel .reso-menu .rm-mix .rm-fill { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 2px; border-radius: 1px; background: var(--purple-500); pointer-events: none; }
 #syn-panel .reso-menu .rm-mix .rm-mark { position: absolute; top: 50%; width: 2px; height: 9px; border-radius: 1px; background: #fff; transform: translate(-50%,-50%); pointer-events: none; }
 
+/* ── STELLATE spectral shaper — mode emblems + canvas ── [STELLATE-UI-V1]
+   Boxed emblems = the SAME 16px box recipe as the OSC header emblems (A/S/N/+):
+   1px border-strong, 4px radius, muted → purple-400 when active. Ring = Annulus,
+   asterisk = Stellate. The stellate canvas shares the reso-cv slot (toggled). */
+#syn-panel .gm-embs { position: absolute; top: 4px; right: 4px; z-index: 6; display: inline-flex; align-items: center; gap: 4px; }
+#syn-panel .gm-emb { width: 16px; height: 16px; box-sizing: border-box; margin: 0;
+  border: 1px solid var(--border-strong); border-radius: 4px;
+  background: transparent; color: var(--text-muted);
+  display: inline-grid; place-items: center; cursor: pointer;
+  transition: color .12s ease, border-color .12s ease; }
+#syn-panel .gm-emb svg { width: 10px; height: 10px; display: block; }
+#syn-panel .gm-emb:hover { color: #FFFFFF; border-color: var(--purple-400); background: rgba(139,92,246,0.22); box-shadow: 0 0 7px rgba(167,139,250,0.45); }
+#syn-panel .gm-emb.on { color: var(--purple-400); border-color: var(--purple-400); background: transparent; box-shadow: none; }
+#syn-panel .stell-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: none; z-index: 2; cursor: crosshair; touch-action: none; background: transparent; }
+#syn-panel .stell-cv.on { display: block; }
+#syn-panel .reso-cv.off { display: none; }
+/* [STELLATE-UI-V2] 12 shapes fit as a 3-col grid inside the glass menu */
+#syn-panel .reso-menu .rm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 2px; }
+#syn-panel .reso-menu .rm-grid .rm-item { padding: 4px 6px; font-size: 10.5px; }
+
 #syn-panel .vis-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 5px 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
 #syn-panel .vis-knob { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
 #syn-panel .vis-knob .knob-ring { width: 24px; height: 24px; }
@@ -5835,6 +5855,62 @@ body {
                     <div class="rm-mlab"><span>Mix</span><span id="rm-mix-val">0%</span></div>
                     <div class="rm-track" id="rm-mix-track"><div class="rm-fill" id="rm-mix-fill" style="width:0%"></div><div class="rm-mark" id="rm-mix-mark" style="left:0%"></div></div>
                   </div>
+                </div>
+                <!-- STELLATE SPECTRAL SHAPER — sibling global mode of Annulus (star of generated partials). [STELLATE-UI-V1] -->
+                <div class="gm-embs" id="gm-embs">
+                  <div class="gm-emb on" id="emb-annulus" title="Annulus — resonator">
+                    <svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+                  </div>
+                  <div class="gm-emb" id="emb-stellate" title="Stellate — spectral shaper">
+                    <svg viewBox="0 0 10 10"><g stroke="currentColor" stroke-width="1" stroke-linecap="round">
+                      <line x1="5" y1="1.2" x2="5" y2="8.8"/><line x1="1.2" y1="5" x2="8.8" y2="5"/>
+                      <line x1="2.3" y1="2.3" x2="7.7" y2="7.7"/><line x1="7.7" y1="2.3" x2="2.3" y2="7.7"/>
+                    </g></svg>
+                  </div>
+                </div>
+                <canvas class="stell-cv" id="stell-cv"></canvas>
+                <div class="reso-menu" id="stell-menu">
+                  <!-- [STELLATE-UI-V2] 12 shapes (basics + strictly-harmonic Terrain laws) + spectral toolkit -->
+                  <div class="rm-head">Shape</div>
+                  <div class="rm-grid">
+                    <div class="rm-item" data-f="0">Sine</div>
+                    <div class="rm-item" data-f="1">Triangle</div>
+                    <div class="rm-item" data-f="2">Square</div>
+                    <div class="rm-item on" data-f="3">Saw</div>
+                    <div class="rm-item" data-f="4">Prime</div>
+                    <div class="rm-item" data-f="5">Lattice</div>
+                    <div class="rm-item" data-f="6">Veil</div>
+                    <div class="rm-item" data-f="7">Halo</div>
+                    <div class="rm-item" data-f="8">Ember</div>
+                    <div class="rm-item" data-f="9">Crown</div>
+                    <div class="rm-item" data-f="10">Pillar</div>
+                    <div class="rm-item" data-f="11">Glacier</div>
+                  </div>
+                  <div class="rm-sep"></div>
+                  <div class="rm-mix">
+                    <div class="rm-mlab"><span>Mix</span><span id="sm-mix-val">0%</span></div>
+                    <div class="rm-track" id="sm-mix-track"><div class="rm-fill" id="sm-mix-fill" style="width:0%"></div><div class="rm-mark" id="sm-mix-mark" style="left:0%"></div></div>
+                  </div>
+                  <div class="rm-mix">
+                    <div class="rm-mlab"><span>Replace</span><span id="sm-replace-val">55%</span></div>
+                    <div class="rm-track" id="sm-replace-track"><div class="rm-fill" id="sm-replace-fill" style="width:55%"></div><div class="rm-mark" id="sm-replace-mark" style="left:55%"></div></div>
+                  </div>
+                  <div class="rm-mix">
+                    <div class="rm-mlab"><span>Feed</span><span id="sm-feed-val">0%</span></div>
+                    <div class="rm-track" id="sm-feed-track"><div class="rm-fill" id="sm-feed-fill" style="width:0%"></div><div class="rm-mark" id="sm-feed-mark" style="left:0%"></div></div>
+                  </div>
+                  <div class="rm-mix">
+                    <div class="rm-mlab"><span>Width</span><span id="sm-width-val">25%</span></div>
+                    <div class="rm-track" id="sm-width-track"><div class="rm-fill" id="sm-width-fill" style="width:25%"></div><div class="rm-mark" id="sm-width-mark" style="left:25%"></div></div>
+                  </div>
+                  <div class="rm-mix">
+                    <div class="rm-mlab"><span>Quality</span><span id="sm-quality-val">80%</span></div>
+                    <div class="rm-track" id="sm-quality-track"><div class="rm-fill" id="sm-quality-fill" style="width:80%"></div><div class="rm-mark" id="sm-quality-mark" style="left:80%"></div></div>
+                  </div>
+                  <div class="rm-sep"></div>
+                  <div class="rm-head">Pitch</div>
+                  <div class="rm-item on" data-p="0">Track</div>
+                  <div class="rm-item" data-p="1">Hard</div>
                 </div>
                 <!-- ARP -->
                 <svg class="vis-layer show" data-vis="arp" viewBox="0 0 188 78" preserveAspectRatio="none">
@@ -7588,10 +7664,13 @@ window.__synArc = function (ring, n, bipolar) {
       var bx=Math.max(0,Math.min(1,(e.clientX-r.left-XYPAD)/Math.max(1,(r.width -2*XYPAD))));   // X → BRIGHTNESS
       var dy=Math.max(0,Math.min(1,(e.clientY-r.top -XYPAD)/Math.max(1,(r.height-2*XYPAD))));   // Y → DAMPING (top = long ring)
       P.brightness=bx; P.damping=dy; _wr(JS_BRI,bx); _wr(JS_DMP,dy); }
-    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); drag=true; moved=false; sx0=e.clientX; sy0=e.clientY; try{cv.setPointerCapture(e.pointerId);}catch(_){} });
-    cv.addEventListener('pointermove',function(e){ if(!drag)return; if(!moved && Math.hypot(e.clientX-sx0,e.clientY-sy0)>4) moved=true; if(moved) setXY(e); });
+    // NO setPointerCapture — WKWebView leaves capture stuck on the canvas, which then hijacks the
+    // mode-emblem clicks (couldn't switch Annulus↔Stellate — "stuck on Stellate"). Track the drag on
+    // `document` instead: the figure still drags anywhere, but the emblems/menus stay clickable.
+    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); drag=true; moved=false; sx0=e.clientX; sy0=e.clientY; });
+    document.addEventListener('pointermove',function(e){ if(!drag)return; if(!moved && Math.hypot(e.clientX-sx0,e.clientY-sy0)>4) moved=true; if(moved) setXY(e); });
     function endDrag(){ if(!drag)return; drag=false; if(!moved) randomize(); }
-    cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',function(){drag=false;});
+    document.addEventListener('pointerup',endDrag); document.addEventListener('pointercancel',function(){drag=false;});
     // right-click menu — Material + Damping + Position + Mix. Shown first (so we can MEASURE it),
     // then clamped to stay fully inside the panel; high z-index (CSS) keeps it ON TOP of the LFO
     // below (never clipped/underneath).
@@ -7618,6 +7697,182 @@ window.__synArc = function (ring, n, bipolar) {
         _sub(ss,function(){paint(_rd(ss,dflt));});
       }
       wireSlider('structure', JS_STR, 0.30); wireSlider('position', JS_POS, 0.20); wireSlider('mix', JS_MIX, 0.0);
+    }
+    document.addEventListener('pointerdown',function(e){ if(menu&&menu.classList.contains('act')&&!menu.contains(e.target)&&e.target!==cv) hideMenu(); });
+    window.addEventListener('resize',sz);
+    sz(); requestAnimationFrame(frame);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
+})();
+
+// ── STELLATE SPECTRAL SHAPER — star visualizer + glass menu + emblems + XY pad ── [STELLATE-UI-V1][STELLATE-UI-V2]
+//   V2: the star is also an INVISIBLE XY PAD you play (like the Annulus figure):
+//     DRAG → X = TILT (harmonic filter, dark ↔ bright) · Y = SHINE (0..+2 octave lift, top = high)
+//     TAP  → randomize shape + tilt + shine.   Right-click → glass menu (12 shapes,
+//     Mix/Replace/Feed/Width/Quality notch sliders, Pitch Track/Hard).
+//   Rays = REAL generated partials (window.__terrainStellate feed); a wandering subset
+//   turns Terrain purple rgba(167,139,250) while signal flows. No dot, no outer glow.
+(function(){
+  function boot(){
+    var cv=document.getElementById('stell-cv'); if(!cv) return;
+    var menu=document.getElementById('stell-menu');
+    var resoCv=document.getElementById('reso-cv'), resoMenu=document.getElementById('reso-menu');
+    var embA=document.getElementById('emb-annulus'), embS=document.getElementById('emb-stellate');
+    var ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
+    var NSHAPE=12, shape=3, on=false;
+    // RESTING-STAR templates for the 12 V2 shapes ([harmonic ratio, magnitude], integer grid per
+    // Opus's spec) — shown at rest so the star is VISIBLE the instant you click the emblem AND
+    // morphs as you drag the XY pad (TILT/SHINE), like the Annulus figure. The LIVE engine feed
+    // (pkF) overrides this the moment audio flows. [CC fix 2026-07-01 — Opus: please canonicalize a
+    // resting preview engine-side so this stops needing a re-patch each drop]
+    var IDLE=[
+      [[1,1]],                                                  // 0  Sine
+      [[1,1],[3,.33],[5,.18],[7,.11],[9,.07]],                  // 1  Triangle (odd, steep)
+      [[1,1],[3,.5],[5,.33],[7,.24],[9,.18]],                   // 2  Square (odd, 1/n)
+      [[1,1],[2,.5],[3,.33],[4,.25],[5,.2],[6,.17],[7,.14]],    // 3  Saw (all, 1/n) — DEFAULT
+      [[1,1],[2,.6],[3,.5],[5,.38],[7,.3],[11,.2],[13,.15]],    // 4  Prime
+      [[1,1],[3,.72],[6,.5],[9,.36],[12,.26]],                  // 5  Lattice (fifth-stack harmonics)
+      [[1,1],[0.5,.82],[0.25,.5]],                              // 6  Veil (pure sub-octaves)
+      [[1,1],[2,.8],[4,.6],[8,.4]],                             // 7  Halo (octaves)
+      [[1,.9],[2,.85],[3,.78],[4,.7],[5,.62],[6,.54],[7,.46]],  // 8  Ember (full bright)
+      [[5,1],[7,.8],[9,.62],[11,.48],[13,.36]],                 // 9  Crown (harmonics 5–13 only)
+      [[1,1],[2,.72],[3,.6],[4,.5],[6,.36]],                    // 10 Pillar (low stack)
+      [[1,.9],[2,.82],[3,.75],[4,.68],[5,.6],[6,.52],[8,.42]]   // 11 Glacier (dense smear)
+    ];
+    var IDLE_F0=261.63;   // nominal C4 for the resting preview
+    function _ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
+    var JS_SHP=_ss('SYN_STELL_SHAPE'), JS_MIX=_ss('SYN_STELL_MIX'), JS_REP=_ss('SYN_STELL_REPLACE'),
+        JS_FEED=_ss('SYN_STELL_FEED'), JS_WID=_ss('SYN_STELL_WIDTH'), JS_QUAL=_ss('SYN_STELL_QUALITY'),
+        JS_TILT=_ss('SYN_STELL_TILT'), JS_SHINE=_ss('SYN_STELL_SHINE'), JS_TRK=_ss('SYN_STELL_TRACK');
+    function _wr(s,v){ if(s){ try{ s.setNormalisedValue(Math.max(0,Math.min(1,v))); }catch(e){} } }
+    function _rd(s,d){ if(s){ try{ var v=s.getNormalisedValue?s.getNormalisedValue():d; if(typeof v==='number'&&!isNaN(v)) return v; }catch(e){} } return d; }
+    function _sub(s,fn){ try{ if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(fn); }catch(e){} }
+    function markShape(){ if(menu){ [].forEach.call(menu.querySelectorAll('.rm-item[data-f]'),function(x){ x.classList.toggle('on',(+x.dataset.f)===shape); }); } }
+    function markPitch(){ if(menu){ var h=Math.round(_rd(JS_TRK,0));
+      [].forEach.call(menu.querySelectorAll('.rm-item[data-p]'),function(x){ x.classList.toggle('on',(+x.dataset.p)===h); }); } }
+    shape=Math.round(_rd(JS_SHP,3/11)*(NSHAPE-1)); markShape(); markPitch();
+    _sub(JS_SHP,function(){ shape=Math.round(_rd(JS_SHP,3/11)*(NSHAPE-1)); markShape(); });
+    _sub(JS_TRK,markPitch);
+    // ── live feed from the engine ──
+    var pkF=[], pkM=[], vOut=0, gOut=0;
+    window.__terrainStellate=function(d){ try{ if(d){ if(d.peaks){ pkF.length=0; pkM.length=0;
+      for(var i=0;i+1<d.peaks.length;i+=2){ pkF.push(d.peaks[i]); pkM.push(d.peaks[i+1]); } }
+      if(typeof d.out==='number') vOut=d.out; } }catch(e){} };
+    // ── star state + draw (V1 look, unchanged) ──
+    var rays={};
+    var W=0,H=0,CX=0,CY=0,Rg=0;
+    function sz(){ var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;
+      if(!w||!h||(w===W&&h===H))return; W=w;H=h; cv.width=W*DPR; cv.height=H*DPR;
+      ctx.setTransform(DPR,0,0,DPR,0,0); CX=W/2; CY=H/2; Rg=Math.min(W,H)*0.46; }
+    function frac(x){ return x-Math.floor(x); }
+    function grain(x){ return 0.55+0.45*frac(Math.sin(x*127.1)*43758.5); }
+    function frame(ts){
+      if(!on){ requestAnimationFrame(frame); return; }
+      sz(); if(!W||!H){ requestAnimationFrame(frame); return; }
+      gOut+=(vOut-gOut)*0.18;
+      // SOURCE: live engine partials when signal flows; otherwise the RESTING preview of the shape,
+      // modulated by the XY pad — TILT tilts the spectrum dark↔bright, SHINE adds octave shimmer —
+      // so the star is visible AND morphs as you drag, same alive feel as the Annulus figure.
+      var srcF=pkF, srcM=pkM, idle=false;
+      if(pkF.length===0){ idle=true; var tpl=IDLE[shape]||IDLE[3];
+        var tilt=_rd(JS_TILT,0.5), shine=_rd(JS_SHINE,0.5), te=(tilt-0.5)*2.4;
+        srcF=[]; srcM=[];
+        for(var q=0;q<tpl.length;q++){ var rt=tpl[q][0], mg=tpl[q][1]*Math.pow(rt,te);
+          srcF.push(IDLE_F0*rt); srcM.push(mg);
+          if(shine>0.02){ srcF.push(IDLE_F0*rt*2); srcM.push(mg*shine*0.75); } } }
+      var seen={};
+      for(var i=0;i<srcF.length;i++){ var f=srcF[i], m=srcM[i]; if(!(f>18)||!(m>0.001)) continue;
+        var pc=Math.log2(f/16.3516);
+        var th=frac(pc)*Math.PI*2-Math.PI/2+Math.floor(pc)*0.045;
+        var key=Math.round(th*90/Math.PI);
+        var r=rays[key]; if(!r){ r=rays[key]={L:0,th:th,a:0}; }
+        r._t=Math.min(1,(r._t||0)+m); seen[key]=1;
+      }
+      for(var k in rays){ var r=rays[k];
+        if(seen[k]){ r.L+=((r._t||0)-r.L)*0.30; r.a+=(1-r.a)*0.30; }
+        else { r.L*=0.945; r.a*=0.93; if(r.a<0.01&&r.L<0.01){ delete rays[k]; continue; } }
+        r._t=0;
+      }
+      ctx.clearRect(0,0,W,H);
+      var t=ts*0.001;
+      for(var k2 in rays){ var r2=rays[k2]; if(r2.a<0.01) continue;
+        var L=Math.sqrt(Math.max(0,r2.L))*Rg; if(L<3) continue;
+        var dx=Math.cos(r2.th), dy=Math.sin(r2.th);
+        var isPurple = gOut>0.015 && frac(Math.sin((+k2)*12.9898)*43758.5 + t*0.35) < gOut*0.45;
+        for(var pass=0; pass<2; pass++){
+          var ox=(pass?-1:1)*0.35*-dy, oy=(pass?-1:1)*0.35*dx;
+          ctx.beginPath();
+          var SEG=12;
+          for(var s2=0;s2<SEG;s2++){ var g=grain((+k2)*0.7+s2*7+pass*13+ts*0.0004);
+            if(g<0.30&&s2>1) continue;
+            var a=s2/SEG, b=(s2+1)/SEG;
+            ctx.moveTo(CX+ox+dx*L*a, CY+oy+dy*L*a);
+            ctx.lineTo(CX+ox+dx*L*b, CY+oy+dy*L*b); }
+          ctx.lineWidth=0.75;
+          if(isPurple){ ctx.strokeStyle='rgba(167,139,250,'+(0.55*Math.min(1,gOut+0.25)*r2.a).toFixed(3)+')';
+                        ctx.shadowColor='rgba(167,139,250,'+(0.6*gOut).toFixed(3)+')'; ctx.shadowBlur=8*gOut; }
+          else { ctx.strokeStyle='rgba(255,255,255,'+((idle?0.52:0.30)*r2.a*(pass?1:1.35)).toFixed(3)+')'; ctx.shadowBlur=0; }
+          ctx.stroke(); ctx.shadowBlur=0;
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+    // ── mode emblems ──
+    function setMode(stell){ on=stell;
+      if(embA) embA.classList.toggle('on', !stell);
+      if(embS) embS.classList.toggle('on',  stell);
+      cv.classList.toggle('on', stell);
+      if(resoCv) resoCv.classList.toggle('off', stell);
+      if(resoMenu) resoMenu.classList.remove('act');
+      if(menu) menu.classList.remove('act');
+      if(!stell){ ctx.clearRect(0,0,W,H); } }
+    if(embA) embA.addEventListener('click',function(){ setMode(false); });
+    if(embS) embS.addEventListener('click',function(){ setMode(true); });
+    // ── INVISIBLE XY PAD (Annulus pattern): DRAG = X:TILT dark↔bright · Y:SHINE (top = high)
+    //    TAP = randomize a fresh spectral color (shape + tilt + shine). No handle drawn. ──
+    var drag=false, moved=false, sx0=0, sy0=0, XYPAD=10;
+    function randomize(){ shape=Math.floor(Math.random()*NSHAPE); _wr(JS_SHP, shape/(NSHAPE-1)); markShape();
+      _wr(JS_TILT, 0.25+Math.random()*0.6); _wr(JS_SHINE, 0.15+Math.random()*0.7); }
+    function setXY(e){ var r=cv.getBoundingClientRect();
+      var tx=Math.max(0,Math.min(1,(e.clientX-r.left-XYPAD)/Math.max(1,(r.width -2*XYPAD))));   // X → TILT
+      var sy=Math.max(0,Math.min(1,(e.clientY-r.top -XYPAD)/Math.max(1,(r.height-2*XYPAD))));   // Y → SHINE (top = +2 oct)
+      _wr(JS_TILT,tx); _wr(JS_SHINE,1-sy); }
+    // NO setPointerCapture — WKWebView leaves capture stuck on the canvas, which then hijacks the
+    // mode-emblem clicks (couldn't switch Annulus↔Stellate — "stuck on Stellate"). Track the drag on
+    // `document` instead: the figure still drags anywhere, but the emblems/menus stay clickable.
+    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); drag=true; moved=false; sx0=e.clientX; sy0=e.clientY; });
+    document.addEventListener('pointermove',function(e){ if(!drag)return; if(!moved && Math.hypot(e.clientX-sx0,e.clientY-sy0)>4) moved=true; if(moved) setXY(e); });
+    function endDrag(){ if(!drag)return; drag=false; if(!moved) randomize(); }
+    document.addEventListener('pointerup',endDrag); document.addEventListener('pointercancel',function(){drag=false;});
+    // ── right-click glass menu ──
+    function showMenu(e){ if(!menu)return; e.preventDefault();
+      var host=cv.parentElement, hr=host.getBoundingClientRect();
+      menu.classList.add('act');
+      var mw=menu.offsetWidth||150, mh=menu.offsetHeight||320;
+      menu.style.left=Math.max(2,Math.min(hr.width -mw-2,(e.clientX-hr.left)))+'px';
+      menu.style.top =Math.max(2,Math.min(hr.height-mh-2,(e.clientY-hr.top )))+'px'; }
+    function hideMenu(){ if(menu)menu.classList.remove('act'); }
+    cv.addEventListener('contextmenu',showMenu);
+    if(menu){
+      menu.addEventListener('click',function(e){
+        var it=e.target.closest('.rm-item'); if(!it)return;
+        if(it.dataset.f!==undefined){ shape=+it.dataset.f; _wr(JS_SHP, shape/(NSHAPE-1)); markShape(); }
+        else if(it.dataset.p!==undefined){ _wr(JS_TRK, (+it.dataset.p)); markPitch(); }
+      });
+      // the SAME notch slider as the Annulus/oscillator quick-menus, one per toolkit param
+      function wireSlider(id, ss, dflt){ var tk=document.getElementById('sm-'+id+'-track'), fl=document.getElementById('sm-'+id+'-fill'),
+                   vv=document.getElementById('sm-'+id+'-val'), mk=document.getElementById('sm-'+id+'-mark');
+        if(!tk) return; var md=false;
+        function paint(v){ v=Math.max(0,Math.min(1,v)); fl.style.width=(v*100)+'%'; if(mk)mk.style.left=(v*100)+'%'; vv.textContent=Math.round(v*100)+'%'; }
+        function set(e){ var r=tk.getBoundingClientRect(); var v=Math.max(0,Math.min(1,(e.clientX-r.left)/Math.max(1,r.width))); paint(v); _wr(ss,v); }
+        paint(_rd(ss,dflt));
+        tk.addEventListener('pointerdown',function(e){ md=true; try{tk.setPointerCapture(e.pointerId);}catch(_){} set(e); e.stopPropagation(); });
+        tk.addEventListener('pointermove',function(e){ if(md)set(e); });
+        tk.addEventListener('pointerup',function(){ md=false; });
+        _sub(ss,function(){ paint(_rd(ss,dflt)); });
+      }
+      wireSlider('mix',JS_MIX,0); wireSlider('replace',JS_REP,0.55); wireSlider('feed',JS_FEED,0);
+      wireSlider('width',JS_WID,0.25); wireSlider('quality',JS_QUAL,0.8);
     }
     document.addEventListener('pointerdown',function(e){ if(menu&&menu.classList.contains('act')&&!menu.contains(e.target)&&e.target!==cv) hideMenu(); });
     window.addEventListener('resize',sz);

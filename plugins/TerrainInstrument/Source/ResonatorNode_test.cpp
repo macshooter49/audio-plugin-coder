@@ -62,7 +62,7 @@ int main()
     // ── 1. Mix=0 EXACT bypass ───────────────────────────────────────────────
     std::printf ("\n[1] Mix=0 exact bypass\n");
     {
-        ResonatorNode rn; rn.prepare (FS);
+        ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
         int held[1] = { 60 };
         std::vector<float> in; std::mt19937 r2 (7); std::uniform_real_distribution<float> u2 (-1, 1);
         std::vector<float> L (bs), R (bs); bool exact = true; double md = 0;
@@ -77,9 +77,20 @@ int main()
 
     // ── 2. Playable strike rings with NO input + healthy level (not railed) ──
     std::printf ("\n[2] Note-on strike: rings, decays, level in healthy range\n");
+    {
+        // DEFAULT engine (strikeDepth 0): held note + silent input must be SILENT —
+        // Max's burst-kill guarantee (no internal pluck/mallet, no round-robin spike).
+        ResonatorNode rn; rn.prepare (FS);          // note: NO setStrikeDepth here
+        Params p; p.material = 0; p.mix = 1.0f;
+        int held[1] = { 60 };
+        std::vector<float> cap; run (rn, p, held, 1, 60, bs, silent, &cap, 0);
+        float pk = 0; for (float x : cap) pk = std::max (pk, std::fabs (x));
+        check (pk < 1.0e-5f, "DEFAULT: silent input + held note stays silent (burst-kill)",
+               "peak=" + std::to_string (pk));
+    }
     for (int m = 0; m < 6; ++m)
     {
-        ResonatorNode rn; rn.prepare (FS);
+        ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
         Params p; p.material=m; p.mix=1.0f; p.damp=0.35f;
         int held[1] = { 57 };
         std::vector<float> ring; run (rn,p,held,1, 60,bs, silent, &ring, 6);
@@ -102,7 +113,7 @@ int main()
         const int note = 60; const double f0 = noteHz (note);
         for (auto& t : tests)
         {
-            ResonatorNode rn; rn.prepare (FS);
+            ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
             Params p; p.material=t.mat; p.mix=1.0f; p.damp=0.18f; p.bright=1.0f; p.structure=0.0f; p.pos=0.3f;
             int held[1] = { note };
             std::vector<float> cap; run (rn,p,held,1, 70,bs, silent, &cap, 2);   // strike, capture full ring
@@ -123,7 +134,7 @@ int main()
     {
         const int note = 48; const double f0 = noteHz (note);
         {
-            ResonatorNode rn; rn.prepare (FS);
+            ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
             Params p; p.material=0; p.mix=1.0f; p.damp=0.2f; p.bright=0.8f; p.structure=0.0f;
             int held[1] = { note };
             std::vector<float> cap; run (rn,p,held,1, 120,bs, noise, &cap, 50);
@@ -134,7 +145,7 @@ int main()
         {
             // STRUCTURE=1 → heavy stiffness. The 4th partial must ride SHARP of 4*f0.
             // Scan a band and confirm the spectral peak sits above the harmonic, not on it.
-            ResonatorNode rn; rn.prepare (FS);
+            ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
             Params p; p.material=2; p.mix=1.0f; p.damp=0.15f; p.bright=0.85f; p.structure=1.0f;
             int held[1] = { note };
             std::vector<float> cap; run (rn,p,held,1, 140,bs, noise, &cap, 60);
@@ -151,7 +162,7 @@ int main()
     // ── 5. Polyphony — two struck notes both ring (off-point not a harmonic) ─
     std::printf ("\n[5] Polyphony\n");
     {
-        ResonatorNode rn; rn.prepare (FS);
+        ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
         Params p; p.material=0; p.mix=1.0f; p.damp=0.25f; p.bright=0.8f; p.structure=0.0f; // clean harmonic: isolates polyphony
         int held[2] = { 50, 57 };                       // D3 146.8, A3 220.0
         const double fA = noteHz(50), fB = noteHz(57);
@@ -167,7 +178,7 @@ int main()
     std::printf ("\n[6] Stability under stress\n");
     for (int m = 0; m < 6; ++m)
     {
-        ResonatorNode rn; rn.prepare (FS);
+        ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
         Params p; p.material=m; p.mix=1.0f; p.damp=0.0f; p.bright=1.0f; p.structure=1.0f; p.pos=0.7f;
         int held[6] = { 40, 47, 52, 55, 59, 64 };
         std::mt19937 r3 (m+3); std::uniform_real_distribution<float> u3 (-1,1);
@@ -180,7 +191,7 @@ int main()
     // ── 7. No portamento (pitch snaps) ──────────────────────────────────────
     std::printf ("\n[7] No portamento (pitch snaps on note change)\n");
     {
-        ResonatorNode rn; rn.prepare (FS);
+        ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
         Params p; p.material=0; p.mix=1.0f; p.damp=0.3f; p.bright=0.8f;
         int hA[1] = { 48 }; int hB[1] = { 60 };
         run (rn,p,hA,1, 30,bs, noise, nullptr);
@@ -194,7 +205,7 @@ int main()
     std::printf ("\n[8] Macro reactivity\n");
     {
         auto ringEnergy = [&] (int mat, float damp) {
-            ResonatorNode rn; rn.prepare (FS);
+            ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
             Params p; p.material=mat; p.mix=1.0f; p.damp=damp; p.bright=0.7f;
             int held[1] = { 57 };
             run (rn,p,held,1, 40,bs, noise, nullptr);
@@ -211,7 +222,7 @@ int main()
         {
             const std::vector<double> belR = { 0.5, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.2, 5.4 };
             auto upperLower = [&] (float bright) {
-                ResonatorNode rn; rn.prepare (FS);
+                ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
                 Params p; p.material=4; p.mix=1.0f; p.bright=bright; p.damp=0.22f; p.structure=1.0f;
                 std::vector<float> L (bs), R (bs);
                 for (int b = 0; b < 24; ++b)   // pre-roll: settle BRIGHTNESS with no note held
@@ -231,7 +242,7 @@ int main()
         {
             auto peakCents = [&] (int mat, int note, float structure) {
                 const double f0 = noteHz (note);
-                ResonatorNode rn; rn.prepare (FS);
+                ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
                 Params p; p.material=mat; p.mix=1.0f; p.damp=0.15f; p.bright=0.7f; p.structure=structure;
                 int held[1] = { note };
                 std::vector<float> cap; run (rn,p,held,1, 160,bs, silent, &cap, 6);   // struck tone → clean pitch
@@ -258,7 +269,7 @@ int main()
             const std::vector<double> barR = { 1.0, 4.0, 9.2, 16.7, 25.0 };
             const int note = 55; const double f0 = noteHz (55);
             auto upperRatio = [&] (float structure) {
-                ResonatorNode rn; rn.prepare (FS);
+                ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
                 Params p; p.material=3; p.mix=1.0f; p.damp=0.18f; p.bright=0.6f; p.structure=structure;
                 int held[1] = { note };
                 std::vector<float> cap; run (rn,p,held,1, 60,bs, silent, &cap, 2);
@@ -277,7 +288,7 @@ int main()
             const int note = 48; const double f0 = noteHz (48);
             for (int m = 0; m < 6; ++m)
             {
-                ResonatorNode rn; rn.prepare (FS);
+                ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
                 Params p; p.material=m; p.mix=1.0f; p.damp=0.20f; p.bright=0.6f; p.structure=0.30f;
                 int held[1] = { note };
                 std::vector<float> cap; run (rn,p,held,1, 140,bs, silent, &cap, 5);   // struck tone → clean pitch
@@ -297,7 +308,7 @@ int main()
             const std::vector<double> barR = { 1.0, 4.0, 9.2, 16.7, 25.0 };
             const int note = 55; const double f0 = noteHz (55);
             auto ratio2over1 = [&] (float pos) {
-                ResonatorNode rn; rn.prepare (FS);
+                ResonatorNode rn; rn.prepare (FS); rn.setStrikeDepth (1.0f);
                 Params p; p.material=3; p.mix=1.0f; p.damp=0.25f; p.bright=1.0f; p.structure=0.0f; p.pos=pos;
                 std::vector<float> L (bs), R (bs);
                 for (int b = 0; b < 24; ++b)   // pre-roll: settle POSITION with no note held
