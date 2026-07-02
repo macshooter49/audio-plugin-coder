@@ -428,6 +428,32 @@ private:
     juce::WebSliderRelay synOscDSampleSnapRelay { ParameterIDs::SYN_OSC_D_SAMPLE_SNAP };
     juce::WebSliderRelay synOscDSampleFadeInRelay { ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN };
     juce::WebSliderRelay synOscDSampleFadeOutRelay { ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT };
+
+    // ── GRAIN-ENGINE-RELAYS — per-OSC granular params (6 × 4 osc) ──
+    juce::WebSliderRelay synOscAGrainScanRelay    { ParameterIDs::SYN_OSC_A_GRAIN_SCAN };
+    juce::WebSliderRelay synOscAGrainDensityRelay { ParameterIDs::SYN_OSC_A_GRAIN_DENSITY };
+    juce::WebSliderRelay synOscAGrainSizeRelay    { ParameterIDs::SYN_OSC_A_GRAIN_SIZE };
+    juce::WebSliderRelay synOscAGrainSprayRelay   { ParameterIDs::SYN_OSC_A_GRAIN_SPRAY };
+    juce::WebSliderRelay synOscAGrainShapeRelay   { ParameterIDs::SYN_OSC_A_GRAIN_SHAPE };
+    juce::WebSliderRelay synOscAGrainKeyRelay     { ParameterIDs::SYN_OSC_A_GRAIN_KEY };
+    juce::WebSliderRelay synOscBGrainScanRelay    { ParameterIDs::SYN_OSC_B_GRAIN_SCAN };
+    juce::WebSliderRelay synOscBGrainDensityRelay { ParameterIDs::SYN_OSC_B_GRAIN_DENSITY };
+    juce::WebSliderRelay synOscBGrainSizeRelay    { ParameterIDs::SYN_OSC_B_GRAIN_SIZE };
+    juce::WebSliderRelay synOscBGrainSprayRelay   { ParameterIDs::SYN_OSC_B_GRAIN_SPRAY };
+    juce::WebSliderRelay synOscBGrainShapeRelay   { ParameterIDs::SYN_OSC_B_GRAIN_SHAPE };
+    juce::WebSliderRelay synOscBGrainKeyRelay     { ParameterIDs::SYN_OSC_B_GRAIN_KEY };
+    juce::WebSliderRelay synOscCGrainScanRelay    { ParameterIDs::SYN_OSC_C_GRAIN_SCAN };
+    juce::WebSliderRelay synOscCGrainDensityRelay { ParameterIDs::SYN_OSC_C_GRAIN_DENSITY };
+    juce::WebSliderRelay synOscCGrainSizeRelay    { ParameterIDs::SYN_OSC_C_GRAIN_SIZE };
+    juce::WebSliderRelay synOscCGrainSprayRelay   { ParameterIDs::SYN_OSC_C_GRAIN_SPRAY };
+    juce::WebSliderRelay synOscCGrainShapeRelay   { ParameterIDs::SYN_OSC_C_GRAIN_SHAPE };
+    juce::WebSliderRelay synOscCGrainKeyRelay     { ParameterIDs::SYN_OSC_C_GRAIN_KEY };
+    juce::WebSliderRelay synOscDGrainScanRelay    { ParameterIDs::SYN_OSC_D_GRAIN_SCAN };
+    juce::WebSliderRelay synOscDGrainDensityRelay { ParameterIDs::SYN_OSC_D_GRAIN_DENSITY };
+    juce::WebSliderRelay synOscDGrainSizeRelay    { ParameterIDs::SYN_OSC_D_GRAIN_SIZE };
+    juce::WebSliderRelay synOscDGrainSprayRelay   { ParameterIDs::SYN_OSC_D_GRAIN_SPRAY };
+    juce::WebSliderRelay synOscDGrainShapeRelay   { ParameterIDs::SYN_OSC_D_GRAIN_SHAPE };
+    juce::WebSliderRelay synOscDGrainKeyRelay     { ParameterIDs::SYN_OSC_D_GRAIN_KEY };
     juce::WebSliderRelay synOscDSpectralTypeRelay { ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE };
     juce::WebSliderRelay synOscDSpectralAmtRelay  { ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
     juce::WebSliderRelay synOscDFoldShapeRelay    { ParameterIDs::SYN_OSC_D_FOLD_SHAPE };
@@ -869,6 +895,32 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleSnapAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleFadeInAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSampleFadeOutAttachment;
+
+    // ── GRAIN-ENGINE-ATTACHMENTS — per-OSC granular params (6 × 4 osc) ──
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainScanAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainDensityAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainSizeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainSprayAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainShapeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainKeyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainScanAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainDensityAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainSizeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainSprayAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainShapeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainKeyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainScanAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainDensityAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainSizeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainSprayAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainShapeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainKeyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainScanAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainDensityAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainSizeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainSprayAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainShapeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainKeyAttachment;
 
     // Synth section — Phase 8a (Voice settings + flagship features)
     std::unique_ptr<juce::WebSliderParameterAttachment> synVoicesAttachment;

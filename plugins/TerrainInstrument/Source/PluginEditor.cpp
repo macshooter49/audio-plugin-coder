@@ -361,6 +361,31 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDSampleFormantModeRelay)
             .withOptionsFrom(synOscDSampleFadeInRelay)
             .withOptionsFrom(synOscDSampleFadeOutRelay)
+            // ════ GRAIN-ENGINE-WITHOPTIONS — per-OSC granular params ════
+            .withOptionsFrom(synOscAGrainScanRelay)
+            .withOptionsFrom(synOscAGrainDensityRelay)
+            .withOptionsFrom(synOscAGrainSizeRelay)
+            .withOptionsFrom(synOscAGrainSprayRelay)
+            .withOptionsFrom(synOscAGrainShapeRelay)
+            .withOptionsFrom(synOscAGrainKeyRelay)
+            .withOptionsFrom(synOscBGrainScanRelay)
+            .withOptionsFrom(synOscBGrainDensityRelay)
+            .withOptionsFrom(synOscBGrainSizeRelay)
+            .withOptionsFrom(synOscBGrainSprayRelay)
+            .withOptionsFrom(synOscBGrainShapeRelay)
+            .withOptionsFrom(synOscBGrainKeyRelay)
+            .withOptionsFrom(synOscCGrainScanRelay)
+            .withOptionsFrom(synOscCGrainDensityRelay)
+            .withOptionsFrom(synOscCGrainSizeRelay)
+            .withOptionsFrom(synOscCGrainSprayRelay)
+            .withOptionsFrom(synOscCGrainShapeRelay)
+            .withOptionsFrom(synOscCGrainKeyRelay)
+            .withOptionsFrom(synOscDGrainScanRelay)
+            .withOptionsFrom(synOscDGrainDensityRelay)
+            .withOptionsFrom(synOscDGrainSizeRelay)
+            .withOptionsFrom(synOscDGrainSprayRelay)
+            .withOptionsFrom(synOscDGrainShapeRelay)
+            .withOptionsFrom(synOscDGrainKeyRelay)
             .withOptionsFrom(synOscDSpectralTypeRelay)
             .withOptionsFrom(synOscDSpectralAmtRelay)
             .withOptionsFrom(synOscDFoldShapeRelay)
@@ -2281,6 +2306,31 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDSampleFormantModeAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE, synOscDSampleFormantModeRelay);
         mkAtt(synOscDSampleFadeInAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN, synOscDSampleFadeInRelay);
         mkAtt(synOscDSampleFadeOutAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT, synOscDSampleFadeOutRelay);
+        // ════ GRAIN-ENGINE-MKATT — per-OSC granular params ════
+        mkAtt(synOscAGrainScanAttachment,    ParameterIDs::SYN_OSC_A_GRAIN_SCAN,    synOscAGrainScanRelay);
+        mkAtt(synOscAGrainDensityAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, synOscAGrainDensityRelay);
+        mkAtt(synOscAGrainSizeAttachment,    ParameterIDs::SYN_OSC_A_GRAIN_SIZE,    synOscAGrainSizeRelay);
+        mkAtt(synOscAGrainSprayAttachment,   ParameterIDs::SYN_OSC_A_GRAIN_SPRAY,   synOscAGrainSprayRelay);
+        mkAtt(synOscAGrainShapeAttachment,   ParameterIDs::SYN_OSC_A_GRAIN_SHAPE,   synOscAGrainShapeRelay);
+        mkAtt(synOscAGrainKeyAttachment,     ParameterIDs::SYN_OSC_A_GRAIN_KEY,     synOscAGrainKeyRelay);
+        mkAtt(synOscBGrainScanAttachment,    ParameterIDs::SYN_OSC_B_GRAIN_SCAN,    synOscBGrainScanRelay);
+        mkAtt(synOscBGrainDensityAttachment, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, synOscBGrainDensityRelay);
+        mkAtt(synOscBGrainSizeAttachment,    ParameterIDs::SYN_OSC_B_GRAIN_SIZE,    synOscBGrainSizeRelay);
+        mkAtt(synOscBGrainSprayAttachment,   ParameterIDs::SYN_OSC_B_GRAIN_SPRAY,   synOscBGrainSprayRelay);
+        mkAtt(synOscBGrainShapeAttachment,   ParameterIDs::SYN_OSC_B_GRAIN_SHAPE,   synOscBGrainShapeRelay);
+        mkAtt(synOscBGrainKeyAttachment,     ParameterIDs::SYN_OSC_B_GRAIN_KEY,     synOscBGrainKeyRelay);
+        mkAtt(synOscCGrainScanAttachment,    ParameterIDs::SYN_OSC_C_GRAIN_SCAN,    synOscCGrainScanRelay);
+        mkAtt(synOscCGrainDensityAttachment, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, synOscCGrainDensityRelay);
+        mkAtt(synOscCGrainSizeAttachment,    ParameterIDs::SYN_OSC_C_GRAIN_SIZE,    synOscCGrainSizeRelay);
+        mkAtt(synOscCGrainSprayAttachment,   ParameterIDs::SYN_OSC_C_GRAIN_SPRAY,   synOscCGrainSprayRelay);
+        mkAtt(synOscCGrainShapeAttachment,   ParameterIDs::SYN_OSC_C_GRAIN_SHAPE,   synOscCGrainShapeRelay);
+        mkAtt(synOscCGrainKeyAttachment,     ParameterIDs::SYN_OSC_C_GRAIN_KEY,     synOscCGrainKeyRelay);
+        mkAtt(synOscDGrainScanAttachment,    ParameterIDs::SYN_OSC_D_GRAIN_SCAN,    synOscDGrainScanRelay);
+        mkAtt(synOscDGrainDensityAttachment, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, synOscDGrainDensityRelay);
+        mkAtt(synOscDGrainSizeAttachment,    ParameterIDs::SYN_OSC_D_GRAIN_SIZE,    synOscDGrainSizeRelay);
+        mkAtt(synOscDGrainSprayAttachment,   ParameterIDs::SYN_OSC_D_GRAIN_SPRAY,   synOscDGrainSprayRelay);
+        mkAtt(synOscDGrainShapeAttachment,   ParameterIDs::SYN_OSC_D_GRAIN_SHAPE,   synOscDGrainShapeRelay);
+        mkAtt(synOscDGrainKeyAttachment,     ParameterIDs::SYN_OSC_D_GRAIN_KEY,     synOscDGrainKeyRelay);
         mkAtt(lfo2RateAttachment, ParameterIDs::LFO2_RATE, lfo2RateRelay);  mkAtt(lfo2DepthAttachment, ParameterIDs::LFO2_DEPTH, lfo2DepthRelay);
         mkAtt(lfo2ShapeAttachment, ParameterIDs::LFO2_SHAPE, lfo2ShapeRelay); mkAtt(lfo2SyncAttachment, ParameterIDs::LFO2_SYNC, lfo2SyncRelay); mkAtt(lfo2DivAttachment, ParameterIDs::LFO2_DIV, lfo2DivRelay);
         mkAtt(lfo3RateAttachment, ParameterIDs::LFO3_RATE, lfo3RateRelay);  mkAtt(lfo3DepthAttachment, ParameterIDs::LFO3_DEPTH, lfo3DepthRelay);
@@ -3159,6 +3209,25 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 js << vi << "," << juce::String(p, 4);
             }
             js << "]);}";
+        }
+    }
+
+    // GRANULAR-FOLLOWER — push the grain cloud [pos,age,pos,age,…] + scan marker per osc.
+    {
+        static const char* oscId[4] = { "'a'", "'b'", "'c'", "'d'" };
+        for (int o = 0; o < 4; ++o)
+        {
+            const int   n    = audioProcessor.granCloudCount_[o].load(std::memory_order_relaxed);
+            const float scan = audioProcessor.granScanPos_[o].load(std::memory_order_relaxed);
+            js << "if(window.updateGranularCloud){window.updateGranularCloud(" << oscId[o] << ",[";
+            for (int k = 0; k < n; ++k)
+            {
+                const float p = audioProcessor.granCloudPos_[o][k].load(std::memory_order_relaxed);
+                const float a = audioProcessor.granCloudAge_[o][k].load(std::memory_order_relaxed);
+                if (k) js << ",";
+                js << juce::String(p, 4) << "," << juce::String(a, 3);
+            }
+            js << "]," << juce::String(scan, 4) << ");}";
         }
     }
 

@@ -3821,6 +3821,14 @@ body {
 #syn-panel .device .sample-view { display: none; }
 #syn-panel .device.osc.engine-sample:not(.swapped) .front-only { display: none; }
 #syn-panel .device.osc.engine-sample:not(.swapped) .sample-view { display: flex; }
+/* GRANULAR — reuses the sample-view shell (waveform / region handles / load); only the bottom
+   knob row swaps (samp-knobs -> gran-knobs) and the front hides, exactly like the Sample engine. */
+#syn-panel .device.osc.engine-granular:not(.swapped) .front-only { display: none; }
+#syn-panel .device.osc.engine-granular:not(.swapped) .sample-view { display: flex; }
+#syn-panel .osc-knobs.gran-knobs { grid-template-columns: repeat(6, 1fr); }
+#syn-panel .gran-knobs { flex: 0 0 auto; }
+#syn-panel .device.osc.engine-sample   .gran-knobs { display: none; }   /* Sample -> show samp row */
+#syn-panel .device.osc.engine-granular .samp-knobs { display: none; }   /* Granular -> show gran row */
 
 #syn-panel .samp-disp { flex: 1 1 auto; min-height: 65px; position: relative; overflow: hidden; border-radius: 8px; }
 #syn-panel .samp-disp canvas.samp-wave { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -3857,6 +3865,10 @@ body {
 #syn-panel .sample-view.loopoff .samp-band, #syn-panel .sample-view.loopoff .samp-xf { display: none; }
 /* playhead */
 #syn-panel .samp-ph { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(236,232,242,.5); z-index: 3; pointer-events: none; opacity: 0; transition: opacity .4s ease-out; }
+/* GRANULAR scatter follower — grain dots + scan marker on a canvas overlay (the ONE new granular visual). */
+#syn-panel .gran-cloud { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; opacity: 0; transition: opacity .3s ease-out; }
+#syn-panel .device.osc.engine-granular .gran-cloud { opacity: 1; }
+#syn-panel .device.osc:not(.engine-granular) .gran-cloud { display: none; }
 #syn-panel .samp-ph.on { opacity: 1; }
 #syn-panel .samp-ph i { position: absolute; left: -2px; top: 50%; margin-top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff;
   box-shadow: 0 0 7px rgba(255,255,255,.9), 0 0 13px rgba(167,139,250,.6); }
@@ -3916,6 +3928,8 @@ body {
 #syn-panel .device .samp-head { display: none; }
 #syn-panel .device.osc.engine-sample .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
 #syn-panel .device.osc.engine-sample .device-corner-preset .preset-wrap { display: none; }
+#syn-panel .device.osc.engine-granular .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
+#syn-panel .device.osc.engine-granular .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
 #syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
 #syn-panel .samp-sel::after { content: '▾'; font-size: 6px; color: var(--text-muted); margin-left: 3px; pointer-events: none; }
@@ -5118,6 +5132,7 @@ body {
             <div class="sample-view" data-osc="a" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
+                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5138,6 +5153,14 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs gran-knobs">
+                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
               </div>
             </div>
 
@@ -5287,6 +5310,7 @@ body {
             <div class="sample-view" data-osc="b" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
+                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5307,6 +5331,14 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs gran-knobs">
+                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
               </div>
             </div>
 
@@ -5472,6 +5504,7 @@ body {
             <div class="sample-view" data-osc="c" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
+                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5492,6 +5525,14 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs gran-knobs">
+                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
               </div>
             </div>
 
@@ -5641,6 +5682,7 @@ body {
             <div class="sample-view" data-osc="d" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
+                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5661,6 +5703,14 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs gran-knobs">
+                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
               </div>
             </div>
 
@@ -9766,7 +9816,7 @@ setTimeout(function wireSynControls () {
           // Engine-conditional front: Sample engine (index 1) swaps the wavetable
           // front for the .sample-view. Redraw its canvas when it becomes visible
           // (a hidden canvas has zero size, so the initial draw is a no-op).
-          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); dev.classList.toggle ('engine-sample', isSamp); if (isSamp && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
+          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); if ((isSamp || isGran) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
         function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 5); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {} }
         paint ();
         sel.addEventListener ('change', pick);
@@ -10195,6 +10245,42 @@ setTimeout(function wireSynControls () {
       // list is a FLAT [voiceIdx,pos01, voiceIdx,pos01, …] of every SOUNDING voice on that osc
       // (pos01 = 0..1 across the whole buffer). One white line per held note, each at its own speed
       // (higher notes scan faster). Lines are keyed by voiceIdx so a held note keeps the SAME line
+      // GRANULAR scatter follower — C++ pushes [pos,age,pos,age,…] + a scan marker at 60Hz; we
+      // draw grain dots (fading by age) + the scan-head line on the .gran-cloud canvas overlay.
+      // The ONE new granular visual — thin-white/purple grains, minimal (per Max). Unkillable:
+      // try/catch + <8px bail so a boot frame can never freeze a 1x1 canvas into a solid block.
+      window.updateGranularCloud = function (osc, arr, scan) {
+        try {
+          var sv = document.querySelector ('#syn-panel .sample-view[data-osc="' + osc + '"]');
+          if (! sv) return;
+          var cv = sv.querySelector ('.gran-cloud'); if (! cv) return;
+          var dpr = Math.max (1, window.devicePixelRatio || 1);
+          var r = cv.getBoundingClientRect ();
+          var W = Math.max (1, Math.round (r.width * dpr)), Hh = Math.max (1, Math.round (r.height * dpr));
+          if (cv.width !== W) cv.width = W; if (cv.height !== Hh) cv.height = Hh;
+          var ctx = cv.getContext ('2d'); if (! ctx) return;
+          ctx.setTransform (1, 0, 0, 1, 0, 0);
+          ctx.clearRect (0, 0, W, Hh);
+          if (r.width < 8 || r.height < 8) return;   // not laid out yet — bail (no 1x1 stretch)
+          arr = arr || [];
+          if (typeof scan === 'number' && scan >= 0) {
+            var sx = scan * W;
+            ctx.strokeStyle = 'rgba(236,232,242,.5)'; ctx.lineWidth = dpr;
+            ctx.beginPath (); ctx.moveTo (sx, 0); ctx.lineTo (sx, Hh); ctx.stroke ();
+          }
+          for (var i = 0; i + 1 < arr.length; i += 2) {
+            var p = arr[i], a = arr[i + 1];
+            if (p < 0 || p > 1) continue;
+            var x = p * W;
+            var y = Hh * (0.5 + 0.34 * Math.sin (p * 51.7 + i * 1.3));   // vertical scatter so grains don't stack on one line
+            var op = Math.max (0, 1 - a);
+            var rad = dpr * (1.5 + 1.3 * op);
+            ctx.beginPath (); ctx.arc (x, y, rad, 0, 6.2831853);
+            ctx.fillStyle = 'rgba(190,150,255,' + (0.28 + 0.55 * op).toFixed (3) + ')';   // purple grain, brighter when young
+            ctx.fill ();
+          }
+        } catch (e) {}
+      };
       // (no jump); when a voice stops it drops out of the list and its line fades out (CSS .4s).
       window.updateSampleFollower = function (osc, list) {
         try {
@@ -10404,6 +10490,12 @@ setTimeout(function wireSynControls () {
         if (paramId.indexOf ('_CENT') >= 0) { const v = Math.round (-100 + n * 200); return (v > 0 ? '+' : '') + v + ' ct'; }
         if (paramId.indexOf ('_LEVEL') >= 0) return pct + '%';
         if (paramId.indexOf ('_PAN')   >= 0) { const v = Math.round (-100 + n * 200); return v === 0 ? 'C' : (v < 0 ? 'L' + (-v) : 'R' + v); }
+        // GRANULAR readouts
+        if (paramId.indexOf ('_GRAIN_SCAN')    >= 0) { const s = -1 + n * 2; return (Math.abs (s) < 0.02) ? 'Freeze' : (s > 0 ? '+' : '') + Math.round (s * 100) + '%'; }
+        if (paramId.indexOf ('_GRAIN_DENSITY') >= 0) return Math.round (Math.pow (200, n)) + ' /s';
+        if (paramId.indexOf ('_GRAIN_SIZE')    >= 0) return Math.round (2 * Math.pow (250, n)) + ' ms';
+        if (paramId.indexOf ('_GRAIN_KEY')     >= 0) return ['Off','Oct','5th','Chord','Maj','Min','Penta'][Math.round (n * 6)] || 'Off';
+        if (paramId.indexOf ('_GRAIN_')        >= 0) return pct + '%';   // Spray / Shape
         return pct + '%';
       }
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
@@ -10446,7 +10538,7 @@ setTimeout(function wireSynControls () {
           // Helper: update the conic-gradient based on normalised value [0..1].
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
           // Bipolar params (Sample SCAN / FORMANT) fill from 12 o'clock toward + or −.
-          const isBipolar = /_SAMPLE_(SCAN|FORMANT)$/.test (paramId);
+          const isBipolar = /(_SAMPLE_(SCAN|FORMANT)|_GRAIN_SCAN)$/.test (paramId);
           const applyFill = (n) => { window.__synArc (ring, n, isBipolar); };
 
           // Initial fill from current APVTS value.

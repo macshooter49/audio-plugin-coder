@@ -2121,6 +2121,40 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "Synth OSC D Sample Warp Mode",
         juce::StringArray { "Off", "Sine Shaper", "Rectify", "Fold", "Drive", "Crush" }, 0));
 
+    // ════════ GRAIN-ENGINE-PARAMS — per-OSC Granular engine (2026-07-02) ════════
+    // 6 primary controls × 4 osc. Defaults = slow-drift (Scan 0.15, Density 0.4, Size 0.25, Spray 0.10, Shape 0.5, Key Off).
+    auto addGrainOsc = [&layout] (const char* scanId, const char* densId, const char* sizeId,
+                                  const char* sprayId, const char* shapeId, const char* keyId,
+                                  const juce::String& osc)
+    {
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { scanId, 1 },  "Synth OSC " + osc + " Grain Scan",
+            juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.15f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { densId, 1 },  "Synth OSC " + osc + " Grain Density",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.4f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { sizeId, 1 },  "Synth OSC " + osc + " Grain Size",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.25f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { sprayId, 1 }, "Synth OSC " + osc + " Grain Spray",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.10f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { shapeId, 1 }, "Synth OSC " + osc + " Grain Shape",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { keyId, 1 },   "Synth OSC " + osc + " Grain Key",
+            juce::StringArray { "Off", "Oct", "5th", "Chord", "Maj", "Min", "Penta" }, 0));
+    };
+    addGrainOsc (ParameterIDs::SYN_OSC_A_GRAIN_SCAN, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, ParameterIDs::SYN_OSC_A_GRAIN_SIZE,
+                 ParameterIDs::SYN_OSC_A_GRAIN_SPRAY, ParameterIDs::SYN_OSC_A_GRAIN_SHAPE, ParameterIDs::SYN_OSC_A_GRAIN_KEY, "A");
+    addGrainOsc (ParameterIDs::SYN_OSC_B_GRAIN_SCAN, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, ParameterIDs::SYN_OSC_B_GRAIN_SIZE,
+                 ParameterIDs::SYN_OSC_B_GRAIN_SPRAY, ParameterIDs::SYN_OSC_B_GRAIN_SHAPE, ParameterIDs::SYN_OSC_B_GRAIN_KEY, "B");
+    addGrainOsc (ParameterIDs::SYN_OSC_C_GRAIN_SCAN, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, ParameterIDs::SYN_OSC_C_GRAIN_SIZE,
+                 ParameterIDs::SYN_OSC_C_GRAIN_SPRAY, ParameterIDs::SYN_OSC_C_GRAIN_SHAPE, ParameterIDs::SYN_OSC_C_GRAIN_KEY, "C");
+    addGrainOsc (ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE,
+                 ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, "D");
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP_AMOUNT, 1 },
         "Synth OSC D Warp Amount",
@@ -3101,6 +3135,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spD.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_AIR);
         spD.warp      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
         spD.warpMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
+
+        // ── GRAIN engine: gather the 6 primary params per OSC (GRAIN-ENGINE-GATHER) ──
+        auto gatherGrain = [this] (const char* sc, const char* de, const char* si,
+                                   const char* sp, const char* sh, const char* ke)
+        {
+            tw::GranularEngineParams g;
+            g.scan    = *apvts.getRawParameterValue (sc);
+            g.density = *apvts.getRawParameterValue (de);
+            g.size    = *apvts.getRawParameterValue (si);
+            g.spray   = *apvts.getRawParameterValue (sp);
+            g.shape   = *apvts.getRawParameterValue (sh);
+            g.key     = (int) *apvts.getRawParameterValue (ke);   // choice → index (mirrors sample warpMode)
+            return g;
+        };
+        const tw::GranularEngineParams gpA = gatherGrain (ParameterIDs::SYN_OSC_A_GRAIN_SCAN, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, ParameterIDs::SYN_OSC_A_GRAIN_SIZE, ParameterIDs::SYN_OSC_A_GRAIN_SPRAY, ParameterIDs::SYN_OSC_A_GRAIN_SHAPE, ParameterIDs::SYN_OSC_A_GRAIN_KEY);
+        const tw::GranularEngineParams gpB = gatherGrain (ParameterIDs::SYN_OSC_B_GRAIN_SCAN, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, ParameterIDs::SYN_OSC_B_GRAIN_SIZE, ParameterIDs::SYN_OSC_B_GRAIN_SPRAY, ParameterIDs::SYN_OSC_B_GRAIN_SHAPE, ParameterIDs::SYN_OSC_B_GRAIN_KEY);
+        const tw::GranularEngineParams gpC = gatherGrain (ParameterIDs::SYN_OSC_C_GRAIN_SCAN, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, ParameterIDs::SYN_OSC_C_GRAIN_SIZE, ParameterIDs::SYN_OSC_C_GRAIN_SPRAY, ParameterIDs::SYN_OSC_C_GRAIN_SHAPE, ParameterIDs::SYN_OSC_C_GRAIN_KEY);
+        const tw::GranularEngineParams gpD = gatherGrain (ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE, ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY);
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
@@ -3242,6 +3294,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
                 sv->setSampleParamsA (spA);  sv->setSampleParamsB (spB);
                 sv->setSampleParamsC (spC);  sv->setSampleParamsD (spD);
+                sv->setGranParamsA (gpA);    sv->setGranParamsB (gpB);      // GRAIN-ENGINE-PUSH
+                sv->setGranParamsC (gpC);    sv->setGranParamsD (gpD);
                 sv->setSampleSources (&getOscSampleBuffer (0), &getOscSampleBuffer (1),
                                       &getOscSampleBuffer (2), &getOscSampleBuffer (3));   // PEROSC-PUSH
             }
@@ -3514,6 +3568,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
+
+        // GRANULAR-FOLLOWER — the most-active voice's grain cloud + scan marker per granular osc.
+        for (int o = 0; o < 4; ++o)
+        {
+            float gpos[kMaxGrainViz], gage[kMaxGrainViz];
+            int   gn   = 0;
+            float scan = -1.f;
+            if (bestVoice != nullptr) { gn = bestVoice->granCloudSnapshot (o, gpos, gage, kMaxGrainViz); scan = bestVoice->granScanPos01 (o); }
+            for (int k = 0; k < gn; ++k)
+            {
+                granCloudPos_[o][k].store (gpos[k], std::memory_order_relaxed);
+                granCloudAge_[o][k].store (gage[k], std::memory_order_relaxed);
+            }
+            granScanPos_[o].store   (scan, std::memory_order_relaxed);
+            granCloudCount_[o].store (gn,  std::memory_order_relaxed);   // count LAST = coherent list
+        }
 
         // ── OSC SCOPE — publish the SUM of ALL sounding voices' 4 osc windows ──
         // Still on the AUDIO thread, right after renderNextBlock: every active voice's

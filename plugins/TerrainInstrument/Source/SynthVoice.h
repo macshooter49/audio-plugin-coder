@@ -13,6 +13,7 @@
 #include "SynthModConfig.h"   // Batch 1 — per-voice LFOs + mod routing (namespace wc)
 #include "SampleEngine.h"          // SAMPLE-ENGINE-VOICE — per-OSC sample playback core
 #include "SampleBuffer.h"          // SAMPLE-ENGINE-VOICE — shared lock-free buffer
+#include "GranularEngine.h"        // GRANULAR-ENGINE-VOICE — per-OSC granular core
 #include "Warp/WarpProcessor.h"    // SAMPLE-ENGINE-VOICE — STRETCH + FORMANT (Signalsmith Tones)
 #include <atomic>
 #include <array>
@@ -62,6 +63,9 @@ namespace tw
             // SAMPLE-ENGINE-VOICE — prepare per-OSC sample engines + warp processors
             for (auto& e : sampleEngA_) e.prepare (sampleRate_);  for (auto& e : sampleEngB_) e.prepare (sampleRate_);
             for (auto& e : sampleEngC_) e.prepare (sampleRate_);  for (auto& e : sampleEngD_) e.prepare (sampleRate_);
+            // GRANULAR-ENGINE-VOICE — prepare per-OSC granular engines
+            for (auto& e : granEngA_) e.prepare (sampleRate_);  for (auto& e : granEngB_) e.prepare (sampleRate_);
+            for (auto& e : granEngC_) e.prepare (sampleRate_);  for (auto& e : granEngD_) e.prepare (sampleRate_);
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
             airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
@@ -122,6 +126,38 @@ namespace tw
                 case 1: return (engineB_ == Engine::SAMP && sampleEngB_[0].isActive()) ? (float) sampleEngB_[0].position01() : -1.f;
                 case 2: return (engineC_ == Engine::SAMP && sampleEngC_[0].isActive()) ? (float) sampleEngC_[0].position01() : -1.f;
                 case 3: return (engineD_ == Engine::SAMP && sampleEngD_[0].isActive()) ? (float) sampleEngD_[0].position01() : -1.f;
+                default: return -1.f;
+            }
+        }
+        // GRANULAR-FOLLOWER — most-active voice's grain cloud for osc; fills pos[]/age[] (0..1),
+        // returns grain count. 0 when that osc isn't a sounding Granular engine.
+        int granCloudSnapshot (int osc, float* pos, float* age, int maxN) const noexcept
+        {
+            const std::array<tw::GranularEngine, kMaxUnison>* eng = nullptr;
+            switch (osc)
+            {
+                case 0: if (engine_  == Engine::GRAN) eng = &granEngA_; break;
+                case 1: if (engineB_ == Engine::GRAN) eng = &granEngB_; break;
+                case 2: if (engineC_ == Engine::GRAN) eng = &granEngC_; break;
+                case 3: if (engineD_ == Engine::GRAN) eng = &granEngD_; break;
+                default: break;
+            }
+            if (eng == nullptr || ! (*eng)[0].isActive()) return 0;
+            tw::GrainViz buf[16];
+            const int cap = (maxN < 16) ? maxN : 16;
+            const int n = (*eng)[0].cloudSnapshot (buf, cap);
+            for (int i = 0; i < n; ++i) { pos[i] = buf[i].pos01; age[i] = buf[i].age01; }
+            return n;
+        }
+        // GRANULAR-FOLLOWER — scan-head marker 0..1 for osc, or -1 when not a sounding Granular engine.
+        float granScanPos01 (int osc) const noexcept
+        {
+            switch (osc)
+            {
+                case 0: return (engine_  == Engine::GRAN && granEngA_[0].isActive()) ? granEngA_[0].scanPos01() : -1.f;
+                case 1: return (engineB_ == Engine::GRAN && granEngB_[0].isActive()) ? granEngB_[0].scanPos01() : -1.f;
+                case 2: return (engineC_ == Engine::GRAN && granEngC_[0].isActive()) ? granEngC_[0].scanPos01() : -1.f;
+                case 3: return (engineD_ == Engine::GRAN && granEngD_[0].isActive()) ? granEngD_[0].scanPos01() : -1.f;
                 default: return -1.f;
             }
         }
@@ -263,6 +299,10 @@ namespace tw
             sampleBlkB_.setSize (2, spb, false, false, true);
             sampleBlkC_.setSize (2, spb, false, false, true);
             sampleBlkD_.setSize (2, spb, false, false, true);
+            granBlkA_.setSize   (2, spb, false, false, true);   // GRANULAR-ENGINE-VOICE
+            granBlkB_.setSize   (2, spb, false, false, true);
+            granBlkC_.setSize   (2, spb, false, false, true);
+            granBlkD_.setSize   (2, spb, false, false, true);
             warpSrc_.setSize    (2, spb, false, false, true);
         }
 
@@ -444,6 +484,11 @@ namespace tw
         void setSampleSources (tw::SampleBuffer* a, tw::SampleBuffer* b,
                                tw::SampleBuffer* c, tw::SampleBuffer* d) noexcept   // PEROSC-VOICE
         { sampleSource_[0] = a; sampleSource_[1] = b; sampleSource_[2] = c; sampleSource_[3] = d; }
+        // GRANULAR-ENGINE-VOICE — per-OSC granular params (granular reuses the same sampleSource_ buffers).
+        void setGranParamsA (const tw::GranularEngineParams& p) noexcept { granParamsA_ = p; }
+        void setGranParamsB (const tw::GranularEngineParams& p) noexcept { granParamsB_ = p; }
+        void setGranParamsC (const tw::GranularEngineParams& p) noexcept { granParamsC_ = p; }
+        void setGranParamsD (const tw::GranularEngineParams& p) noexcept { granParamsD_ = p; }
 
         // ── Phase 9 — OSC B setters (mirror of OSC A) ─────────────────────
 
@@ -1012,6 +1057,7 @@ namespace tw
             spraySeedA_ = sampleSprayRng_ ^ 0xA1u; spraySeedB_ = sampleSprayRng_ ^ 0xB2u;
             spraySeedC_ = sampleSprayRng_ ^ 0xC3u; spraySeedD_ = sampleSprayRng_ ^ 0xD4u;
             sampleNoteOnPending_ = true;
+            granNoteOnPending_   = true;   // GRANULAR-ENGINE-VOICE
 
             // PHASE — initialise each unison sine's phase accumulator per the selected
             // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
@@ -1412,6 +1458,7 @@ namespace tw
             // SAMPLE-ENGINE-VOICE — render any SAMP oscillators' stereo blocks for this
             // buffer (scan/loop/xfade/spray + STRETCH/FORMANT warp). Cheap no-op if none.
             renderSampleBlocks (numSamples);
+            renderGranularBlocks (numSamples);   // GRANULAR-ENGINE-VOICE — render any GRAN oscillators' blocks
 
             for (int i = 0; i < numSamples; ++i)
             {
@@ -1524,6 +1571,7 @@ namespace tw
                 if (engine_ == Engine::WT
                     && ((warpMode_ == 9 && warpAmount_ > 0.001f) || (warp2ModeA_ == 9 && warp2AmountA_ > 0.001f)))
                 { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
+                if (engine_ == Engine::GRAN) { sA_L = granBlkAL_[(size_t) i]; sA_R = granBlkAR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airA = sampleParamsA_.air;   // AIR exciter — add generated high harmonics
                     if (airA > 0.001f) {
@@ -1758,6 +1806,7 @@ namespace tw
                 if (engineB_ == Engine::WT
                     && ((warpModeB_ == 9 && warpAmountB_ > 0.001f) || (warp2ModeB_ == 9 && warp2AmountB_ > 0.001f)))
                 { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
+                if (engineB_ == Engine::GRAN) { sB_L = granBlkBL_[(size_t) i]; sB_R = granBlkBR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airB = sampleParamsB_.air;   // AIR exciter — add generated high harmonics
                     if (airB > 0.001f) {
@@ -1989,6 +2038,7 @@ namespace tw
                 if (engineC_ == Engine::WT
                     && ((warpModeC_ == 9 && warpAmountC_ > 0.001f) || (warp2ModeC_ == 9 && warp2AmountC_ > 0.001f)))
                 { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
+                if (engineC_ == Engine::GRAN) { sC_L = granBlkCL_[(size_t) i]; sC_R = granBlkCR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airC = sampleParamsC_.air;   // AIR exciter — add generated high harmonics
                     if (airC > 0.001f) {
@@ -2220,6 +2270,7 @@ namespace tw
                 if (engineD_ == Engine::WT
                     && ((warpModeD_ == 9 && warpAmountD_ > 0.001f) || (warp2ModeD_ == 9 && warp2AmountD_ > 0.001f)))
                 { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
+                if (engineD_ == Engine::GRAN) { sD_L = granBlkDL_[(size_t) i]; sD_R = granBlkDR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airD = sampleParamsD_.air;   // AIR exciter — add generated high harmonics
                     if (airD > 0.001f) {
@@ -3050,6 +3101,17 @@ namespace tw
         const float *sampBlkAL_ = nullptr, *sampBlkAR_ = nullptr, *sampBlkBL_ = nullptr, *sampBlkBR_ = nullptr,
                     *sampBlkCL_ = nullptr, *sampBlkCR_ = nullptr, *sampBlkDL_ = nullptr, *sampBlkDR_ = nullptr;
         bool          sampleNoteOnPending_ = false;
+
+        // ════════ GRANULAR-ENGINE-VOICE — per-OSC granular engines + state ════════
+        std::array<tw::GranularEngine, kMaxUnison> granEngA_, granEngB_, granEngC_, granEngD_;
+        tw::GranularEngineParams granParamsA_, granParamsB_, granParamsC_, granParamsD_;
+        tw::SampleBuffer::BufferPtr granHeldBuf_[4];                                      // pin each alive during render
+        const juce::AudioBuffer<float>* granBufLast_[4] = { nullptr, nullptr, nullptr, nullptr };
+        double granNativeOverOut_[4] = { 1.0, 1.0, 1.0, 1.0 };
+        juce::AudioBuffer<float> granBlkA_, granBlkB_, granBlkC_, granBlkD_;
+        const float *granBlkAL_ = nullptr, *granBlkAR_ = nullptr, *granBlkBL_ = nullptr, *granBlkBR_ = nullptr,
+                    *granBlkCL_ = nullptr, *granBlkCR_ = nullptr, *granBlkDL_ = nullptr, *granBlkDR_ = nullptr;
+        bool granNoteOnPending_ = false;
         std::uint32_t sampleSprayRng_ = 0x12345u, spraySeedA_ = 0, spraySeedB_ = 0, spraySeedC_ = 0, spraySeedD_ = 0;
         // AIR exciter — per-voice/per-channel one-pole HP-split state + coefficient.
         float sampAirLpAL_ = 0.f, sampAirLpAR_ = 0.f, sampAirLpBL_ = 0.f, sampAirLpBR_ = 0.f,
@@ -3248,6 +3310,95 @@ namespace tw
             renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, levelC_);
             renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, levelD_);
             sampleNoteOnPending_ = false;
+        }
+
+        // ════════ GRANULAR-ENGINE-VOICE — render granular OSCs' stereo blocks ════════
+        void renderGranularOsc (std::array<tw::GranularEngine, kMaxUnison>& engs,
+                                const tw::GranularEngineParams& p, bool isGran,
+                                int oct, int semi, float cent,
+                                juce::AudioBuffer<float>& blk,
+                                const float*& outL, const float*& outR,
+                                int numSamples, std::uint32_t seed, bool doNoteOn,
+                                double nativeOverOut, int uniCount, float uNorm, float level) noexcept
+        {
+            if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
+                blk.setSize (2, numSamples, false, false, true);
+            float* wL = blk.getWritePointer (0);
+            float* wR = blk.getWritePointer (1);
+            outL = wL; outR = wR;
+            if (! isGran || level <= 0.0f || ! engs[0].hasSample())
+            {
+                juce::FloatVectorOperations::clear (wL, numSamples);
+                juce::FloatVectorOperations::clear (wR, numSamples);
+                return;
+            }
+            // Base pitch: root MIDI 60 = C3; resample ratio incl native/output SR (mirrors renderSampleOsc).
+            const double noteSemis  = (double) (currentMidiNote_ - 60 + oct * 12 + semi) + (double) cent * 0.01;
+            const double pitchRatio = nativeOverOut * std::pow (2.0, noteSemis / 12.0);
+            const int    N          = juce::jlimit (1, kMaxUnison, uniCount);
+            for (int u = 0; u < N; ++u)
+            {
+                auto& e = engs[(size_t) u];
+                e.setParams (p);
+                e.setRegion (0.0f, 1.0f);          // whole buffer for v1 (region handles arrive in Phase 3)
+                e.setPitchRatio (pitchRatio);
+                if (doNoteOn)
+                {
+                    const std::uint32_t vSeed = (N <= 1) ? seed
+                                                         : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1)));
+                    e.noteOn (pitchRatio, vSeed);
+                }
+            }
+            if (N <= 1)
+            {
+                for (int k = 0; k < numSamples; ++k) engs[0].tick (wL[k], wR[k]);
+            }
+            else
+            {
+                juce::FloatVectorOperations::clear (wL, numSamples);
+                juce::FloatVectorOperations::clear (wR, numSamples);
+                for (int u = 0; u < N; ++u)
+                {
+                    auto& e = engs[(size_t) u];
+                    for (int k = 0; k < numSamples; ++k) { float l, r; e.tick (l, r); wL[k] += l; wR[k] += r; }
+                }
+                juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
+                juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
+            }
+        }
+
+        void renderGranularBlocks (int numSamples) noexcept
+        {
+            if (engine_ != Engine::GRAN && engineB_ != Engine::GRAN
+                && engineC_ != Engine::GRAN && engineD_ != Engine::GRAN)
+                return;   // no granular oscillators → free no-op (common case)
+
+            // Refresh each granular OSC from its OWN buffer (the SAME buffers the Sample engine uses).
+            // Pin the shared_ptr for the block so the buffer can't be freed mid-render (real-time safe).
+            std::array<tw::GranularEngine, kMaxUnison>* engs[4] = { &granEngA_, &granEngB_, &granEngC_, &granEngD_ };
+            const Engine oe[4] = { engine_, engineB_, engineC_, engineD_ };
+            for (int o = 0; o < 4; ++o)
+            {
+                if (oe[o] != Engine::GRAN || sampleSource_[o] == nullptr) continue;
+                auto bp = sampleSource_[o]->load();
+                if (bp.get() != granBufLast_[o])
+                {
+                    granHeldBuf_[o] = bp;
+                    granBufLast_[o] = bp.get();
+                    const int nCh = bp ? bp->getNumChannels() : 0;
+                    const int nSm = bp ? bp->getNumSamples()  : 0;
+                    const double nr = sampleSource_[o]->getSampleRate();
+                    const float* const* rp = (bp && nSm > 0) ? bp->getArrayOfReadPointers() : nullptr;
+                    for (auto& e : *engs[o]) e.setSample (rp, nCh, nSm, nr);
+                    granNativeOverOut_[o] = (nr > 0.0 && sampleRate_ > 0.0) ? (nr / sampleRate_) : 1.0;
+                }
+            }
+            const bool doOn = granNoteOnPending_;
+            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uNormA_, level_);
+            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uNormB_, levelB_);
+            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uNormC_, levelC_);
+            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uNormD_, levelD_);
+            granNoteOnPending_ = false;
         }
 
         Engine               engine_           = Engine::WT;

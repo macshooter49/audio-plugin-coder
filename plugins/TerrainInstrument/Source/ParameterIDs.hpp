@@ -488,4 +488,30 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_SAMPLE_AIR[]        = "SYN_OSC_D_SAMPLE_AIR";        // float 0..1 — Chebyshev high-harmonic exciter (timbral air)
     constexpr char SYN_OSC_D_SAMPLE_WARP[]       = "SYN_OSC_D_SAMPLE_WARP";       // float 0..1 — sample warp shaper amount
     constexpr char SYN_OSC_D_SAMPLE_WARPMODE[]   = "SYN_OSC_D_SAMPLE_WARPMODE";   // choice 0..5 — Off/Sine Shaper/Rectify/Fold/Drive/Crush
+
+    // ── GRAIN-ENGINE-IDS — per-OSC Granular engine params (2026-07-02) ──
+    constexpr char SYN_OSC_A_GRAIN_SCAN[]    = "SYN_OSC_A_GRAIN_SCAN";     // float -1..+1 — read-head rate (0=freeze, <0=reverse)
+    constexpr char SYN_OSC_A_GRAIN_DENSITY[] = "SYN_OSC_A_GRAIN_DENSITY";  // float 0..1 — grains/sec (log 1..200)
+    constexpr char SYN_OSC_A_GRAIN_SIZE[]    = "SYN_OSC_A_GRAIN_SIZE";     // float 0..1 — grain length (log 2..500 ms)
+    constexpr char SYN_OSC_A_GRAIN_SPRAY[]   = "SYN_OSC_A_GRAIN_SPRAY";    // float 0..1 — grain-birth position jitter
+    constexpr char SYN_OSC_A_GRAIN_SHAPE[]   = "SYN_OSC_A_GRAIN_SHAPE";    // float 0..1 — window morph Tukey<->Gaussian
+    constexpr char SYN_OSC_A_GRAIN_KEY[]     = "SYN_OSC_A_GRAIN_KEY";      // choice 0..6 — Off/Oct/5th/Chord/Maj/Min/Penta
+    constexpr char SYN_OSC_B_GRAIN_SCAN[]    = "SYN_OSC_B_GRAIN_SCAN";
+    constexpr char SYN_OSC_B_GRAIN_DENSITY[] = "SYN_OSC_B_GRAIN_DENSITY";
+    constexpr char SYN_OSC_B_GRAIN_SIZE[]    = "SYN_OSC_B_GRAIN_SIZE";
+    constexpr char SYN_OSC_B_GRAIN_SPRAY[]   = "SYN_OSC_B_GRAIN_SPRAY";
+    constexpr char SYN_OSC_B_GRAIN_SHAPE[]   = "SYN_OSC_B_GRAIN_SHAPE";
+    constexpr char SYN_OSC_B_GRAIN_KEY[]     = "SYN_OSC_B_GRAIN_KEY";
+    constexpr char SYN_OSC_C_GRAIN_SCAN[]    = "SYN_OSC_C_GRAIN_SCAN";
+    constexpr char SYN_OSC_C_GRAIN_DENSITY[] = "SYN_OSC_C_GRAIN_DENSITY";
+    constexpr char SYN_OSC_C_GRAIN_SIZE[]    = "SYN_OSC_C_GRAIN_SIZE";
+    constexpr char SYN_OSC_C_GRAIN_SPRAY[]   = "SYN_OSC_C_GRAIN_SPRAY";
+    constexpr char SYN_OSC_C_GRAIN_SHAPE[]   = "SYN_OSC_C_GRAIN_SHAPE";
+    constexpr char SYN_OSC_C_GRAIN_KEY[]     = "SYN_OSC_C_GRAIN_KEY";
+    constexpr char SYN_OSC_D_GRAIN_SCAN[]    = "SYN_OSC_D_GRAIN_SCAN";
+    constexpr char SYN_OSC_D_GRAIN_DENSITY[] = "SYN_OSC_D_GRAIN_DENSITY";
+    constexpr char SYN_OSC_D_GRAIN_SIZE[]    = "SYN_OSC_D_GRAIN_SIZE";
+    constexpr char SYN_OSC_D_GRAIN_SPRAY[]   = "SYN_OSC_D_GRAIN_SPRAY";
+    constexpr char SYN_OSC_D_GRAIN_SHAPE[]   = "SYN_OSC_D_GRAIN_SHAPE";
+    constexpr char SYN_OSC_D_GRAIN_KEY[]     = "SYN_OSC_D_GRAIN_KEY";
 }
