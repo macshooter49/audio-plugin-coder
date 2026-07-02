@@ -481,6 +481,7 @@ public:
     std::atomic<float> stellVizM_[wc::StellateNode::kViz] {};               // partial magnitude (0..1)
     std::atomic<int>   stellVizN_ { 0 };                                    // live partial count
     std::atomic<float> stellVizOut_ { 0.f };                                // wet level (purple streaks)
+    std::atomic<int>   stellVizLive_ { 1 };                                 // [STELLATE-CPP-V4] 1 = live partials, 0 = resting preview
     // Packed stage+fraction of the same voice (e.g. 2.37 = 37% through Attack), so the
     // UI dot rides the exact x-position on the curve. -1 = no voice sounding.
     std::atomic<float> ampEnvFollowVis { -1.f };

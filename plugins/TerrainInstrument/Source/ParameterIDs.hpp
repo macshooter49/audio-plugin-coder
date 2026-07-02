@@ -174,6 +174,14 @@ namespace ParameterIDs
     constexpr char SYN_STELL_TILT[]      = "SYN_STELL_TILT";       // float 0..1 — harmonic filter dark↔bright (XY pad X)
     constexpr char SYN_STELL_SHINE[]     = "SYN_STELL_SHINE";      // float 0..1 — 0..+2 octave lift of the stack (XY pad Y)
     constexpr char SYN_STELL_TRACK[]     = "SYN_STELL_TRACK";      // choice: Track (follow the audio) / Hard (strict MIDI)
+    // ── V3 FULL-REPLACEMENT architecture (the Contura/Botanica truth: NO mix) ── [STELLATE-CPP-V3]
+    constexpr char SYN_STELL_ENGAGE[]    = "SYN_STELL_ENGAGE";     // choice: Bypass/Engaged — 100% wet, bypass is the only off
+    constexpr char SYN_STELL_AIR[]       = "SYN_STELL_AIR";        // float 0..1 — the residual (transients/breath) back in; 0 = fully synthetic
+    constexpr char SYN_STELL_MOTION[]    = "SYN_STELL_MOTION";     // float 0..1 — per-partial organic undulation (the watery life)
+    // ── V4 spectral filters (harmonic domain — the ear-savers) ── [STELLATE-CPP-V4]
+    constexpr char SYN_STELL_LP[]        = "SYN_STELL_LP";         // float 0..1 — spectral LOWPASS (1 = open); XY-Y
+    constexpr char SYN_STELL_HP[]        = "SYN_STELL_HP";         // float 0..1 — spectral HIGHPASS (0 = open)
+    // SYN_STELL_MIX / SYN_STELL_REPLACE: param objects retired in V3 (IDs left for reference)
     constexpr char SYN_ENV_AMP_A[]     = "SYN_ENV_AMP_A";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_D[]     = "SYN_ENV_AMP_D";      // float ms (skewed)
     constexpr char SYN_ENV_AMP_S[]     = "SYN_ENV_AMP_S";      // float 0..1

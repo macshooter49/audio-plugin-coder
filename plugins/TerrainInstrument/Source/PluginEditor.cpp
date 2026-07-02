@@ -373,7 +373,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(flowChopBlendRelay).withOptionsFrom(flowGliBlendRelay).withOptionsFrom(flowArpBlendRelay)
             .withOptionsFrom(flowGliRateRelay).withOptionsFrom(flowGliGateRelay).withOptionsFrom(flowGliVaryRelay).withOptionsFrom(flowGliTrajRelay).withOptionsFrom(flowGliMorphRelay)
             .withOptionsFrom(flowDrfRateRelay).withOptionsFrom(flowDrfGateRelay).withOptionsFrom(flowDrfVaryRelay).withOptionsFrom(flowDrfTrajRelay).withOptionsFrom(flowDrfMorphRelay)
-            .withOptionsFrom(resoStructureRelay).withOptionsFrom(resoBrightnessRelay).withOptionsFrom(resoDampingRelay).withOptionsFrom(resoPositionRelay).withOptionsFrom(resoMixRelay).withOptionsFrom(resoKeyTrackRelay).withOptionsFrom(resoMaterialRelay).withOptionsFrom(stellShapeRelay).withOptionsFrom(stellMixRelay).withOptionsFrom(stellReplaceRelay).withOptionsFrom(stellFeedRelay).withOptionsFrom(stellWidthRelay).withOptionsFrom(stellQualityRelay).withOptionsFrom(stellTiltRelay).withOptionsFrom(stellShineRelay).withOptionsFrom(stellTrackRelay)
+            .withOptionsFrom(resoStructureRelay).withOptionsFrom(resoBrightnessRelay).withOptionsFrom(resoDampingRelay).withOptionsFrom(resoPositionRelay).withOptionsFrom(resoMixRelay).withOptionsFrom(resoKeyTrackRelay).withOptionsFrom(resoMaterialRelay).withOptionsFrom(stellShapeRelay).withOptionsFrom(stellEngageRelay).withOptionsFrom(stellAirRelay).withOptionsFrom(stellMotionRelay).withOptionsFrom(stellLpRelay).withOptionsFrom(stellHpRelay).withOptionsFrom(stellFeedRelay).withOptionsFrom(stellWidthRelay).withOptionsFrom(stellQualityRelay).withOptionsFrom(stellTiltRelay).withOptionsFrom(stellShineRelay).withOptionsFrom(stellTrackRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2870,9 +2870,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkF(resoMaterialAttachment,   ParameterIDs::SYN_RESO_MATERIAL,   resoMaterialRelay);
         // ── STELLATE spectral shaper attachments ── [STELLATE-CPP-V1]
         mkF(stellShapeAttachment,     ParameterIDs::SYN_STELL_SHAPE,     stellShapeRelay);
-        mkF(stellMixAttachment,       ParameterIDs::SYN_STELL_MIX,       stellMixRelay);
+        mkF(stellEngageAttachment,    ParameterIDs::SYN_STELL_ENGAGE,    stellEngageRelay);   // [STELLATE-CPP-V3]
         // [STELLATE-CPP-V2] V2 toolkit attachments
-        mkF(stellReplaceAttachment,   ParameterIDs::SYN_STELL_REPLACE,   stellReplaceRelay);
+        mkF(stellAirAttachment,       ParameterIDs::SYN_STELL_AIR,       stellAirRelay);
+        mkF(stellMotionAttachment,    ParameterIDs::SYN_STELL_MOTION,    stellMotionRelay);
+        mkF(stellLpAttachment,        ParameterIDs::SYN_STELL_LP,        stellLpRelay);      // [STELLATE-CPP-V4]
+        mkF(stellHpAttachment,        ParameterIDs::SYN_STELL_HP,        stellHpRelay);
         mkF(stellFeedAttachment,      ParameterIDs::SYN_STELL_FEED,      stellFeedRelay);
         mkF(stellWidthAttachment,     ParameterIDs::SYN_STELL_WIDTH,     stellWidthRelay);
         mkF(stellQualityAttachment,   ParameterIDs::SYN_STELL_QUALITY,   stellQualityRelay);
@@ -3148,7 +3151,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             js << juce::String(audioProcessor.stellVizF_[q].load(std::memory_order_relaxed), 1) << ","
                << juce::String(audioProcessor.stellVizM_[q].load(std::memory_order_relaxed), 3);
         }
-        js << "],out:" << juce::String(audioProcessor.stellVizOut_.load(std::memory_order_relaxed), 3) << "});}";
+        js << "],out:" << juce::String(audioProcessor.stellVizOut_.load(std::memory_order_relaxed), 3) << ",live:" << (audioProcessor.stellVizLive_.load(std::memory_order_relaxed) ? 1 : 0) << "});}";   // [STELLATE-CPP-V4]
     }
 
     // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──
