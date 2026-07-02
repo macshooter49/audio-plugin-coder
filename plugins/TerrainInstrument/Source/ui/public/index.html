@@ -4154,26 +4154,6 @@ body {
 #syn-panel .reso-menu .rm-mix .rm-fill { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 2px; border-radius: 1px; background: var(--purple-500); pointer-events: none; }
 #syn-panel .reso-menu .rm-mix .rm-mark { position: absolute; top: 50%; width: 2px; height: 9px; border-radius: 1px; background: #fff; transform: translate(-50%,-50%); pointer-events: none; }
 
-/* ── STELLATE spectral shaper — mode emblems + canvas ── [STELLATE-UI-V1]
-   Boxed emblems = the SAME 16px box recipe as the OSC header emblems (A/S/N/+):
-   1px border-strong, 4px radius, muted → purple-400 when active. Ring = Annulus,
-   asterisk = Stellate. The stellate canvas shares the reso-cv slot (toggled). */
-#syn-panel .gm-embs { position: absolute; top: 4px; right: 4px; z-index: 60; display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; }   /* [STELLATE-UI-V4] separate chips, like [A][S][N][+] */
-#syn-panel .gm-emb { width: 16px; height: 16px; box-sizing: border-box; margin: 0;
-  border: 1px solid var(--border-strong); border-radius: 4px;
-  background: transparent; color: var(--text-muted);
-  display: inline-grid; place-items: center; cursor: pointer;
-  transition: color .12s ease, border-color .12s ease; }
-#syn-panel .gm-emb svg { width: 10px; height: 10px; display: block; }
-#syn-panel .gm-emb:hover { color: #FFFFFF; border-color: var(--purple-400); background: rgba(139,92,246,0.22); box-shadow: 0 0 7px rgba(167,139,250,0.45); }
-#syn-panel .gm-emb.on { color: var(--purple-400); border-color: var(--purple-400); background: transparent; box-shadow: none; text-shadow: none; }
-#syn-panel .gm-emb.on:hover { background: transparent; box-shadow: none; }   /* the .on chip stays flat — no joined-glow look */
-#syn-panel .stell-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: none; z-index: 2; cursor: crosshair; touch-action: none; background: transparent; }
-#syn-panel .stell-cv.on { display: block; }
-#syn-panel .reso-cv.off { display: none; }
-/* [STELLATE-UI-V2] 12 shapes fit as a 3-col grid inside the glass menu */
-#syn-panel .reso-menu .rm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 2px; }
-#syn-panel .reso-menu .rm-grid .rm-item { padding: 4px 6px; font-size: 10.5px; }
 
 #syn-panel .vis-knobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 5px 8px 0; border-top: 1px solid rgba(255,255,255,0.06); }
 #syn-panel .vis-knob { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
@@ -5868,79 +5848,6 @@ body {
                   <div class="rm-item" data-e="1">Engaged</div>
                   <div class="rm-item on" data-e="0">Bypass</div>
                 </div>
-                <!-- STELLATE SPECTRAL SHAPER — sibling global mode of Annulus (star of generated partials). [STELLATE-UI-V1] -->
-                <div class="gm-embs" id="gm-embs">
-                  <div class="gm-emb on" id="emb-annulus" title="Annulus — resonator">
-                    <svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
-                  </div>
-                  <div class="gm-emb" id="emb-stellate" title="Stellate — spectral shaper">
-                    <svg viewBox="0 0 10 10"><g stroke="currentColor" stroke-width="1" stroke-linecap="round">
-                      <line x1="5" y1="1.2" x2="5" y2="8.8"/><line x1="1.2" y1="5" x2="8.8" y2="5"/>
-                      <line x1="2.3" y1="2.3" x2="7.7" y2="7.7"/><line x1="7.7" y1="2.3" x2="2.3" y2="7.7"/>
-                    </g></svg>
-                  </div>
-                </div>
-                <canvas class="stell-cv" id="stell-cv"></canvas>
-                <div class="reso-menu" id="stell-menu">
-                  <!-- [STELLATE-UI-V2] 12 shapes (basics + strictly-harmonic Terrain laws) + spectral toolkit -->
-                  <div class="rm-head">Shape</div>
-                  <div class="rm-grid">
-                    <div class="rm-item" data-f="0">Sine</div>
-                    <div class="rm-item" data-f="1">Triangle</div>
-                    <div class="rm-item" data-f="2">Square</div>
-                    <div class="rm-item on" data-f="3">Saw</div>
-                    <div class="rm-item" data-f="4">Hyper</div>
-                    <div class="rm-item" data-f="5">Pluck</div>
-                    <div class="rm-item" data-f="6">Ember</div>
-                    <div class="rm-item" data-f="7">Veil</div>
-                    <div class="rm-item" data-f="8">Crown</div>
-                    <div class="rm-item" data-f="9">Radio</div>
-                    <div class="rm-item" data-f="10">Razor</div>
-                    <div class="rm-item" data-f="11">Glacier</div>
-                  </div>
-                  <div class="rm-sep"></div>
-                  <!-- [STELLATE-UI-V3] V3: no mix — full replacement; bypass is the only off -->
-                  <div class="rm-head">Engine</div>
-                  <div class="rm-item" data-e="1">Engaged</div>
-                  <div class="rm-item on" data-e="0">Bypass</div>
-                  <div class="rm-sep"></div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Air</span><span id="sm-air-val">0%</span></div>
-                    <div class="rm-track" id="sm-air-track"><div class="rm-fill" id="sm-air-fill" style="width:0%"></div><div class="rm-mark" id="sm-air-mark" style="left:0%"></div></div>
-                  </div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Motion</span><span id="sm-motion-val">35%</span></div>
-                    <div class="rm-track" id="sm-motion-track"><div class="rm-fill" id="sm-motion-fill" style="width:35%"></div><div class="rm-mark" id="sm-motion-mark" style="left:35%"></div></div>
-                  </div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Shine</span><span id="sm-shine-val">50%</span></div>
-                    <div class="rm-track" id="sm-shine-track"><div class="rm-fill" id="sm-shine-fill" style="width:50%"></div><div class="rm-mark" id="sm-shine-mark" style="left:50%"></div></div>
-                  </div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Feed</span><span id="sm-feed-val">0%</span></div>
-                    <div class="rm-track" id="sm-feed-track"><div class="rm-fill" id="sm-feed-fill" style="width:0%"></div><div class="rm-mark" id="sm-feed-mark" style="left:0%"></div></div>
-                  </div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Width</span><span id="sm-width-val">25%</span></div>
-                    <div class="rm-track" id="sm-width-track"><div class="rm-fill" id="sm-width-fill" style="width:25%"></div><div class="rm-mark" id="sm-width-mark" style="left:25%"></div></div>
-                  </div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Quality</span><span id="sm-quality-val">80%</span></div>
-                    <div class="rm-track" id="sm-quality-track"><div class="rm-fill" id="sm-quality-fill" style="width:80%"></div><div class="rm-mark" id="sm-quality-mark" style="left:80%"></div></div>
-                  </div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Lowpass</span><span id="sm-lowpass-val">100%</span></div>
-                    <div class="rm-track" id="sm-lowpass-track"><div class="rm-fill" id="sm-lowpass-fill" style="width:100%"></div><div class="rm-mark" id="sm-lowpass-mark" style="left:100%"></div></div>
-                  </div>
-                  <div class="rm-mix">
-                    <div class="rm-mlab"><span>Highpass</span><span id="sm-highpass-val">0%</span></div>
-                    <div class="rm-track" id="sm-highpass-track"><div class="rm-fill" id="sm-highpass-fill" style="width:0%"></div><div class="rm-mark" id="sm-highpass-mark" style="left:0%"></div></div>
-                  </div>
-                  <div class="rm-sep"></div>
-                  <div class="rm-head">Pitch</div>
-                  <div class="rm-item on" data-p="0">Track</div>
-                  <div class="rm-item" data-p="1">Hard</div>
-                </div>
                 <!-- ARP -->
                 <svg class="vis-layer show" data-vis="arp" viewBox="0 0 188 78" preserveAspectRatio="none">
                   <g stroke="rgba(236,232,242,0.10)" stroke-width="0.5">
@@ -6748,7 +6655,8 @@ function saveSettings() {
     try {
       saveSettingsFn(JSON.stringify({
         theme: getTheme(),
-        xyEnabled: state.xyEnabled
+        xyEnabled: state.xyEnabled,
+        page: currentActivePanel   // SYN/EQ/DLY/MOD section → reopen where you left off
       }));
     } catch(e) {}
   }
@@ -6769,6 +6677,12 @@ function restoreSettings(json) {
       state.xyEnabled = s.xyEnabled;
       if (setXYEnabledFn) setXYEnabledFn(state.xyEnabled ? 1 : 0);
       if (typeof applyXYEnabledUI === 'function') applyXYEnabledUI();
+    }
+    // Restore the last active section (SYN/EQ/DLY/MOD) so reopening lands where you left off.
+    // Only act when the key exists (older settings files omit it → keep default behavior).
+    if (('page' in s) && typeof setActivePanel === 'function') {
+      var _pg = (s.page === 'syn' || s.page === 'eq' || s.page === 'dly' || s.page === 'mod') ? s.page : null;
+      setActivePanel(_pg);
     }
   } catch(e) {}
 }
@@ -7646,13 +7560,22 @@ window.__synArc = function (ring, n, bipolar) {
     function build(){
       var r=ratios(), a=[en[0]*(.6+bloom*.5),en[1]*.8,en[2]*.6,en[3]*.5], damp=.5+P.damping*2.2, br=P.brightness;
       var sum=a[0]+a[1]+a[2]+a[3]||1, sc=Rg*.92/sum, f1=r[0],f2=r[1],f3=r[0]*1.004,f4=r[2];
+      var mDX=0,mDY=0;
       for(var s=0;s<=STEPS;s++){var u=s/STEPS,t=u*TSPAN,env=Math.exp(-damp*u);
         var x=env*(a[0]*Math.sin(f1*t+ph[0])+a[1]*Math.sin(f2*t+ph[1])+br*.85*a[3]*Math.sin(r[3]*t+ph[3]));
         var y=env*(a[2]*Math.sin(f3*t+ph[2]+1.5708)+a[1]*Math.sin(f4*t+ph[1])+br*.85*a[3]*Math.cos(r[3]*t+ph[3]));
-        px[s]=CX+x*sc;py[s]=CY+y*sc;}
+        var dx=x*sc, dy=y*sc; px[s]=CX+dx; py[s]=CY+dy;
+        var ax=dx<0?-dx:dx; if(ax>mDX)mDX=ax; var ay=dy<0?-dy:dy; if(ay>mDY)mDY=ay;}
+      // AUTO-FIT — the harmonograph's excursion changes with the shape ("transforms bigger"); a fixed
+      // radius clipped the tall shapes at the canvas top/bottom. If the real bounds exceed the canvas
+      // (minus an 8px margin), scale the whole figure toward center so it ALWAYS fits — never cut off,
+      // never touching the mode tiles above or the LFO strip below. Only shrinks when it would overflow.
+      var MARG=8, halfX=Math.max(1,W/2-MARG), halfY=Math.max(1,H/2-MARG);
+      var fit=Math.min(mDX>halfX?halfX/mDX:1, mDY>halfY?halfY/mDY:1);
+      if(fit<1){ for(var s2=0;s2<=STEPS;s2++){ px[s2]=CX+(px[s2]-CX)*fit; py[s2]=CY+(py[s2]-CY)*fit; } }
     }
     var W=0,H=0,CX=0,CY=0,Rg=0;
-    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.66;}   /* no XY pad now → the figure fills bigger (.66) */
+    function sz(){var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;if(!w||!h||(w===W&&h===H))return;W=w;H=h;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);CX=W/2;CY=H/2;Rg=Math.min(W,H)*0.80;}   /* fills more of the slot (.80, bumped per Max — was .66) */
     function frame(ts){
       if(!frame._l)frame._l=ts; var dt=Math.min(.05,(ts-frame._l)/1000); frame._l=ts; sz();
       bloom=Math.max(0,bloom-dt*(0.6+(1-P.damping)*1.6));
@@ -7737,165 +7660,6 @@ window.__synArc = function (ring, n, bipolar) {
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
 })();
 
-// ── STELLATE SPECTRAL SHAPER — star visualizer + glass menu + emblems + XY pad ── [STELLATE-UI-V1][STELLATE-UI-V2]
-//   V2: the star is also an INVISIBLE XY PAD you play (like the Annulus figure):
-//     DRAG → X = TILT (harmonic filter, dark ↔ bright) · Y = SHINE (0..+2 octave lift, top = high)
-//     TAP  → randomize shape + tilt + shine.   Right-click → glass menu (12 shapes,
-//     Mix/Replace/Feed/Width/Quality notch sliders, Pitch Track/Hard).
-//   Rays = REAL generated partials (window.__terrainStellate feed); a wandering subset
-//   turns Terrain purple rgba(167,139,250) while signal flows. No dot, no outer glow.
-(function(){
-  function boot(){
-    var cv=document.getElementById('stell-cv'); if(!cv) return;
-    var menu=document.getElementById('stell-menu');
-    var resoCv=document.getElementById('reso-cv'), resoMenu=document.getElementById('reso-menu');
-    var embA=document.getElementById('emb-annulus'), embS=document.getElementById('emb-stellate');
-    var ctx=cv.getContext('2d'), DPR=Math.max(1,window.devicePixelRatio||1);
-    var NSHAPE=12, shape=3, on=false;
-    // [STELLATE-UI-V4] the resting preview is now ENGINE-SIDE (CC's canonicalization note —
-    // honored): when nothing is live the engine streams its own shape law (TILT/SHINE/LP/HP
-    // applied) through the same peaks feed, with live:0. One source of truth, no re-patching.
-    function _ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
-    var JS_SHP=_ss('SYN_STELL_SHAPE'), JS_ENG=_ss('SYN_STELL_ENGAGE'), JS_AIR=_ss('SYN_STELL_AIR'), JS_MOT=_ss('SYN_STELL_MOTION'),
-        JS_FEED=_ss('SYN_STELL_FEED'), JS_WID=_ss('SYN_STELL_WIDTH'), JS_QUAL=_ss('SYN_STELL_QUALITY'),
-        JS_LP=_ss('SYN_STELL_LP'), JS_HP=_ss('SYN_STELL_HP'),
-        JS_TILT=_ss('SYN_STELL_TILT'), JS_SHINE=_ss('SYN_STELL_SHINE'), JS_TRK=_ss('SYN_STELL_TRACK');
-    function _wr(s,v){ if(s){ try{ s.setNormalisedValue(Math.max(0,Math.min(1,v))); }catch(e){} } }
-    function _rd(s,d){ if(s){ try{ var v=s.getNormalisedValue?s.getNormalisedValue():d; if(typeof v==='number'&&!isNaN(v)) return v; }catch(e){} } return d; }
-    function _sub(s,fn){ try{ if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(fn); }catch(e){} }
-    function markShape(){ if(menu){ [].forEach.call(menu.querySelectorAll('.rm-item[data-f]'),function(x){ x.classList.toggle('on',(+x.dataset.f)===shape); }); } }
-    function markPitch(){ if(menu){ var h=Math.round(_rd(JS_TRK,0));
-      [].forEach.call(menu.querySelectorAll('.rm-item[data-p]'),function(x){ x.classList.toggle('on',(+x.dataset.p)===h); }); } }
-    function markEngine(){ if(menu){ var on=_rd(JS_ENG,0)>0.5; [].forEach.call(menu.querySelectorAll('.rm-item[data-e]'),function(x){ x.classList.toggle('on',(+x.dataset.e)===(on?1:0)); }); } }
-    shape=Math.round(_rd(JS_SHP,3/11)*(NSHAPE-1)); markShape(); markPitch(); markEngine();
-    _sub(JS_SHP,function(){ shape=Math.round(_rd(JS_SHP,3/11)*(NSHAPE-1)); markShape(); });
-    _sub(JS_TRK,markPitch); _sub(JS_ENG,markEngine);
-    // ── live feed from the engine ──
-    var pkF=[], pkM=[], vOut=0, gOut=0, vLive=1;
-    window.__terrainStellate=function(d){ try{ if(d){ if(d.peaks){ pkF.length=0; pkM.length=0;
-      for(var i=0;i+1<d.peaks.length;i+=2){ pkF.push(d.peaks[i]); pkM.push(d.peaks[i+1]); } }
-      if(typeof d.out==='number') vOut=d.out; if(typeof d.live==='number') vLive=d.live; } }catch(e){} };
-    // ── star state + draw (V1 look, unchanged) ──
-    var rays={};
-    var W=0,H=0,CX=0,CY=0,Rg=0;
-    function sz(){ var w=cv.clientWidth||cv.offsetWidth,h=cv.clientHeight||cv.offsetHeight;
-      if(!w||!h||(w===W&&h===H))return; W=w;H=h; cv.width=W*DPR; cv.height=H*DPR;
-      ctx.setTransform(DPR,0,0,DPR,0,0); CX=W/2; CY=H/2; Rg=Math.min(W,H)*0.62; }   /* [STELLATE-UI-V4] fills the space like the Annulus figure */
-    function frac(x){ return x-Math.floor(x); }
-    function grain(x){ return 0.55+0.45*frac(Math.sin(x*127.1)*43758.5); }
-    function frame(ts){
-      if(!on){ requestAnimationFrame(frame); return; }
-      sz(); if(!W||!H){ requestAnimationFrame(frame); return; }
-      gOut+=(vOut-gOut)*0.18;
-      // SOURCE: the engine ALWAYS streams partials — live resynthesis when singing, its own
-      // resting preview (shape law + TILT/SHINE/LP/HP) when quiet. idle drives the ambient motion.
-      var srcF=pkF, srcM=pkM, idle=(vLive<0.5);
-      var seen={};
-      for(var i=0;i<srcF.length;i++){ var f=srcF[i], m=srcM[i]; if(!(f>18)||!(m>0.001)) continue;
-        var pc=Math.log2(f/16.3516);
-        var th=frac(pc)*Math.PI*2-Math.PI/2+Math.floor(pc)*0.045;
-        var key=Math.round(th*90/Math.PI);
-        var r=rays[key]; if(!r){ r=rays[key]={L:0,th:th,a:0}; }
-        r._t=Math.min(1,(r._t||0)+m); seen[key]=1;
-      }
-      for(var k in rays){ var r=rays[k];
-        if(seen[k]){ r.L+=((r._t||0)-r.L)*0.30; r.a+=(1-r.a)*0.30; }
-        else { r.L*=0.945; r.a*=0.93; if(r.a<0.01&&r.L<0.01){ delete rays[k]; continue; } }
-        r._t=0;
-      }
-      ctx.clearRect(0,0,W,H);
-      var t=ts*0.001;
-      for(var k2 in rays){ var r2=rays[k2]; if(r2.a<0.01) continue;
-        var L=Math.sqrt(Math.max(0,r2.L))*Rg; if(L<3) continue;
-        if(idle){ L*=0.90+0.10*Math.sin(t*0.6+(+k2)*1.7); }                       // resting breath (the mockup)
-        var thA=r2.th+(idle? t*0.05+0.035*Math.sin(t*0.21+(+k2)) : 0);            // slow ambient drift
-        var dx=Math.cos(thA), dy=Math.sin(thA);
-        var isPurple = (idle && frac(Math.sin((+k2)*12.9898)*43758.5 + t*0.12) < 0.06)
-                    || (gOut>0.008 && frac(Math.sin((+k2)*12.9898)*43758.5 + t*0.35) < gOut*0.85);
-        for(var pass=0; pass<2; pass++){
-          var ox=(pass?-1:1)*0.35*-dy, oy=(pass?-1:1)*0.35*dx;
-          ctx.beginPath();
-          var SEG=12;
-          for(var s2=0;s2<SEG;s2++){ var g=grain((+k2)*0.7+s2*7+pass*13+ts*0.0004);
-            if(g<0.30&&s2>1) continue;
-            var a=s2/SEG, b=(s2+1)/SEG;
-            ctx.moveTo(CX+ox+dx*L*a, CY+oy+dy*L*a);
-            ctx.lineTo(CX+ox+dx*L*b, CY+oy+dy*L*b); }
-          ctx.lineWidth=0.75;
-          if(isPurple){ ctx.strokeStyle='rgba(167,139,250,'+(0.75*Math.min(1,gOut+0.30)*r2.a).toFixed(3)+')';
-                        ctx.shadowColor='rgba(167,139,250,'+(0.7*Math.min(1,gOut+0.15)).toFixed(3)+')'; ctx.shadowBlur=10*Math.max(gOut, idle?0.25:0); }
-          else { ctx.strokeStyle='rgba(255,255,255,'+((idle?0.52:0.30)*r2.a*(pass?1:1.35)).toFixed(3)+')'; ctx.shadowBlur=0; }
-          ctx.stroke(); ctx.shadowBlur=0;
-        }
-      }
-      requestAnimationFrame(frame);
-    }
-    // ── mode emblems ──
-    function setMode(stell){ on=stell;
-      if(embA) embA.classList.toggle('on', !stell);
-      if(embS) embS.classList.toggle('on',  stell);
-      cv.classList.toggle('on', stell);
-      if(resoCv) resoCv.classList.toggle('off', stell);
-      if(resoMenu) resoMenu.classList.remove('act');
-      if(menu) menu.classList.remove('act');
-      if(!stell){ ctx.clearRect(0,0,W,H); } }
-    function bindEmb(el,val){ if(!el) return;                             // [STELLATE-UI-V4] pointer-hardened:
-      el.addEventListener('pointerdown',function(e){ e.stopPropagation(); },true);   // the canvas never eats the tap
-      el.addEventListener('click',function(e){ e.stopPropagation(); setMode(val); }); }
-    bindEmb(embA,false); bindEmb(embS,true);
-    // ── INVISIBLE XY PAD (Annulus pattern): DRAG = X:TILT dark↔bright · Y:SHINE (top = high)
-    //    TAP = randomize a fresh spectral color (shape + tilt + shine). No handle drawn. ──
-    var drag=false, moved=false, sx0=0, sy0=0, XYPAD=10;
-    function randomize(){ shape=Math.floor(Math.random()*NSHAPE); _wr(JS_SHP, shape/(NSHAPE-1)); markShape();
-      _wr(JS_TILT, 0.25+Math.random()*0.6); _wr(JS_LP, 0.55+Math.random()*0.45); }
-    function setXY(e){ var r=cv.getBoundingClientRect();
-      var tx=Math.max(0,Math.min(1,(e.clientX-r.left-XYPAD)/Math.max(1,(r.width -2*XYPAD))));   // X → TILT
-      var sy=Math.max(0,Math.min(1,(e.clientY-r.top -XYPAD)/Math.max(1,(r.height-2*XYPAD))));   // Y → SHINE (top = +2 oct)
-      _wr(JS_TILT,tx); _wr(JS_LP,1-sy); }   // [STELLATE-UI-V4] Y = spectral LOWPASS (top = open) — safe to automate/LFO
-    // NO setPointerCapture — WKWebView leaves capture stuck on the canvas, which then hijacks the
-    // mode-emblem clicks (couldn't switch Annulus↔Stellate — "stuck on Stellate"). Track the drag on
-    // `document` instead: the figure still drags anywhere, but the emblems/menus stay clickable.
-    cv.addEventListener('pointerdown',function(e){ if(e.button===2)return; hideMenu(); drag=true; moved=false; sx0=e.clientX; sy0=e.clientY; });
-    document.addEventListener('pointermove',function(e){ if(!drag)return; if(!moved && Math.hypot(e.clientX-sx0,e.clientY-sy0)>4) moved=true; if(moved) setXY(e); });
-    function endDrag(){ if(!drag)return; drag=false; if(!moved) randomize(); }
-    document.addEventListener('pointerup',endDrag); document.addEventListener('pointercancel',function(){drag=false;});
-    // ── right-click glass menu ──
-    function showMenu(e){ if(!menu)return; e.preventDefault();
-      var host=cv.parentElement, hr=host.getBoundingClientRect();
-      menu.classList.add('act');
-      var mw=menu.offsetWidth||150, mh=menu.offsetHeight||320;
-      menu.style.left=Math.max(2,Math.min(hr.width -mw-2,(e.clientX-hr.left)))+'px';
-      menu.style.top =Math.max(2,Math.min(hr.height-mh-2,(e.clientY-hr.top )))+'px'; }
-    function hideMenu(){ if(menu)menu.classList.remove('act'); }
-    cv.addEventListener('contextmenu',showMenu);
-    if(menu){
-      menu.addEventListener('click',function(e){
-        var it=e.target.closest('.rm-item'); if(!it)return;
-        if(it.dataset.f!==undefined){ shape=+it.dataset.f; _wr(JS_SHP, shape/(NSHAPE-1)); markShape(); }
-        else if(it.dataset.p!==undefined){ _wr(JS_TRK, (+it.dataset.p)); markPitch(); }
-        else if(it.dataset.e!==undefined){ _wr(JS_ENG, (+it.dataset.e)); markEngine(); }
-      });
-      // the SAME notch slider as the Annulus/oscillator quick-menus, one per toolkit param
-      function wireSlider(id, ss, dflt){ var tk=document.getElementById('sm-'+id+'-track'), fl=document.getElementById('sm-'+id+'-fill'),
-                   vv=document.getElementById('sm-'+id+'-val'), mk=document.getElementById('sm-'+id+'-mark');
-        if(!tk) return; var md=false;
-        function paint(v){ v=Math.max(0,Math.min(1,v)); fl.style.width=(v*100)+'%'; if(mk)mk.style.left=(v*100)+'%'; vv.textContent=Math.round(v*100)+'%'; }
-        function set(e){ var r=tk.getBoundingClientRect(); var v=Math.max(0,Math.min(1,(e.clientX-r.left)/Math.max(1,r.width))); paint(v); _wr(ss,v); }
-        paint(_rd(ss,dflt));
-        tk.addEventListener('pointerdown',function(e){ md=true; set(e); e.stopPropagation(); });   // [CC] NO setPointerCapture — WKWebView sticks it on the track → hijacks the mode emblems. OPUS: remove the slider capture in the engine drop (emblem stopPropagation doesn't cover this).
-        document.addEventListener('pointermove',function(e){ if(md)set(e); });
-        document.addEventListener('pointerup',function(){ md=false; });
-        _sub(ss,function(){ paint(_rd(ss,dflt)); });
-      }
-      wireSlider('air',JS_AIR,0); wireSlider('motion',JS_MOT,0.35); wireSlider('shine',JS_SHINE,0.5); wireSlider('feed',JS_FEED,0);
-      wireSlider('width',JS_WID,0.25); wireSlider('quality',JS_QUAL,0.8); wireSlider('lowpass',JS_LP,1.0); wireSlider('highpass',JS_HP,0.0);
-    }
-    document.addEventListener('pointerdown',function(e){ if(menu&&menu.classList.contains('act')&&!menu.contains(e.target)&&e.target!==cv) hideMenu(); });
-    window.addEventListener('resize',sz);
-    sz(); requestAnimationFrame(frame);
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
-})();
 
 function drawIcon(canvas, type, color, norm, time) {
   norm = norm || 0;
@@ -9873,6 +9637,8 @@ function setActivePanel(which) {
   currentActivePanel = which;
   // Persist EQ-panel state to PluginSettings.json (only EQ has a native fn).
   if (juceMode && setEqPanelOpenFn) setEqPanelOpenFn(which === 'eq' ? 1 : 0);
+  // Persist the active section so a close/reopen restores it (see restoreSettings).
+  if (typeof saveSettings === 'function') saveSettings();
 }
 document.getElementById('eq-btn').addEventListener('click', () => {
   setActivePanel(currentActivePanel === 'eq' ? null : 'eq');
@@ -10109,7 +9875,10 @@ setTimeout(function wireSynControls () {
           '<div data-a="normalize">' + ic ('<path d="M2 13 V9 M6 13 V4 M10 13 V6 M14 13 V2"/>') + 'Normalize</div>' +
           '<div data-a="fade">' + ic ('<path d="M2 13 L14 3 M2 13 H14"/>') + 'Fade in / out</div>' +
           '<div class="sepd"></div>' +
-          '<div data-a="reset">' + ic ('<path d="M3 8 a5 5 0 1 0 1.6-3.7 M3 3 V5 H5"/>') + 'Reset region</div>';
+          '<div data-a="reset">' + ic ('<path d="M3 8 a5 5 0 1 0 1.6-3.7 M3 3 V5 H5"/>') + 'Reset region</div>' +
+          '<div class="sepd"></div>' +
+          '<div data-a="copy">'  + ic ('<rect x="6" y="6" width="7" height="7" rx="1"/><path d="M3 10 V3 H10"/>') + 'Copy sample</div>' +
+          '<div data-a="paste">' + ic ('<rect x="4" y="6" width="8" height="8" rx="1"/><path d="M6.5 6 V4 H10 V6"/>') + 'Paste sample</div>';
         // Quick-controls (Volume / Pan / Semitone) at the BOTTOM — same glass component the
         // wavetable osc uses, so the two right-click menus look identical.
         try { var qsep = document.createElement ('div'); qsep.className = 'sepd'; m.appendChild (qsep);
@@ -10125,6 +9894,9 @@ setTimeout(function wireSynControls () {
             else if (a === 'trim') { st.s = st.ls; st.e = st.le; }
             else if (a === 'fade') { st.fin = st.fin > 0 ? 0 : 0.15; st.fout = st.fout > 0 ? 0 : 0.20; }
             else if (a === 'reset') { st.s = 0; st.e = 100; st.ls = 0; st.le = 100; st.fin = 0; st.fout = 0; st.xfade = 0.12; st.mode = 1; st.loop = true; if (S.repaintHeader) S.repaintHeader (); }
+            else if (a === 'copy')  { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; if (_oc) window.__sampClip = _oc; } catch (e2) {} }
+            else if (a === 'paste') { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : '', _src = window.__sampClip;
+                                            if (_oc && _src && _src !== _oc) { var _cf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('copyOscSample') : null; if (_cf) _cf (_src, _oc); } } catch (e3) {} }
             if (S.syncParams) S.syncParams ();
             S.place (); sampMenuEl.classList.remove ('open');
           };
@@ -20387,6 +20159,7 @@ restoreThemeFromBackend();
     var r=cv.getBoundingClientRect(), W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
     if(cv.width!==W) cv.width=W; if(cv.height!==H) cv.height=H;
     ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H);
+    if(r.width<8||r.height<8) return;   // device not laid out yet — bail before drawing so a 1×1 buffer is never stretched into a solid block; next frame (once sized) draws the real curve
     ctx.strokeStyle='rgba(139,92,246,0.14)'; ctx.lineWidth=dpr*0.5;
     [100,1000,10000].forEach(function(fg){ var x=Math.log(fg/20)/Math.log(1000)*W; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); });
     ctx.strokeStyle='rgba(139,92,246,0.09)'; [0.25,0.5,0.75].forEach(function(gy){ ctx.beginPath(); ctx.moveTo(0,H*gy); ctx.lineTo(W,H*gy); ctx.stroke(); });
@@ -20459,7 +20232,10 @@ restoreThemeFromBackend();
     if(!emPrev||hudSlot!==curSlot){ hudSlot=curSlot; emPrev=emblems.map(function(e){ return e.ss?e.ss.getNormalisedValue():0; }); return; }
     for(var i=0;i<emblems.length;i++){ var e=emblems[i]; if(!e.ss)continue; var v=e.ss.getNormalisedValue();
       if(Math.abs(v-emPrev[i])>0.0006) showHud(fmtEm(e)); emPrev[i]=v; } }
-  function loop(ts){ var t=ts/1000; curT=t; drawAnalyzer(); drawEmblems(t); pollHud(); requestAnimationFrame(loop); }
+  // try/catch so ONE bad frame (e.g. a slider state not ready during boot) can never permanently
+  // kill the loop — a dead loop froze the canvas at a 1×1 buffer that CSS then stretched into a
+  // solid purple block (filter "messed up" on reopen). The loop always reschedules.
+  function loop(ts){ var t=ts/1000; curT=t; try{ drawAnalyzer(); drawEmblems(t); pollHud(); }catch(e){} requestAnimationFrame(loop); }
   function buildExt(){
     ext=document.createElement('div'); ext.className='filt-ext';
     ext.innerHTML='<div class="fe-h"><span class="fe-g">⠇</span><span class="fe-t">Filter 1</span><span class="fe-x">✕</span></div><div class="fe-b"><canvas></canvas></div>';

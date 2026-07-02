@@ -373,7 +373,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(flowChopBlendRelay).withOptionsFrom(flowGliBlendRelay).withOptionsFrom(flowArpBlendRelay)
             .withOptionsFrom(flowGliRateRelay).withOptionsFrom(flowGliGateRelay).withOptionsFrom(flowGliVaryRelay).withOptionsFrom(flowGliTrajRelay).withOptionsFrom(flowGliMorphRelay)
             .withOptionsFrom(flowDrfRateRelay).withOptionsFrom(flowDrfGateRelay).withOptionsFrom(flowDrfVaryRelay).withOptionsFrom(flowDrfTrajRelay).withOptionsFrom(flowDrfMorphRelay)
-            .withOptionsFrom(resoStructureRelay).withOptionsFrom(resoBrightnessRelay).withOptionsFrom(resoDampingRelay).withOptionsFrom(resoPositionRelay).withOptionsFrom(resoMixRelay).withOptionsFrom(resoKeyTrackRelay).withOptionsFrom(resoMaterialRelay).withOptionsFrom(stellShapeRelay).withOptionsFrom(stellEngageRelay).withOptionsFrom(stellAirRelay).withOptionsFrom(stellMotionRelay).withOptionsFrom(stellLpRelay).withOptionsFrom(stellHpRelay).withOptionsFrom(stellFeedRelay).withOptionsFrom(stellWidthRelay).withOptionsFrom(stellQualityRelay).withOptionsFrom(stellTiltRelay).withOptionsFrom(stellShineRelay).withOptionsFrom(stellTrackRelay)
+            .withOptionsFrom(resoStructureRelay).withOptionsFrom(resoBrightnessRelay).withOptionsFrom(resoDampingRelay).withOptionsFrom(resoPositionRelay).withOptionsFrom(resoMixRelay).withOptionsFrom(resoKeyTrackRelay).withOptionsFrom(resoMaterialRelay)
             .withNativeFunction("loadPreset", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -706,6 +706,21 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 pageReady = true;
+                // SAMPLE-RESYNC — a freshly (re)loaded WebView has no idea which samples are already
+                // loaded in the still-alive processor (in-session editor reopen). The old JS side
+                // relied on a few timed getOscSamplePayload polls that lost the WKWebView init race
+                // "sometimes" (blank waveform even though audio plays). Authoritatively PUSH each
+                // osc's cached waveform payload now that the page is ready — no poll, no race.
+                for (int oi = 0; oi < 4; ++oi)
+                {
+                    const juce::String payload = audioProcessor.getCachedOscPayload (oi);
+                    if (payload.isEmpty()) continue;
+                    const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
+                    if (webView != nullptr)
+                        webView->evaluateJavascript (
+                            juce::String ("if(window.onOscSampleLoaded)window.onOscSampleLoaded('")
+                            + letter + "'," + payload + ");", nullptr);
+                }
                 complete({});
             })
             .withNativeFunction("setWireSpaceNoise", [this](const juce::Array<juce::var>& args,
@@ -2047,6 +2062,48 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("copyOscSample", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // COPY/PASTE — duplicate a LOADED sample (audio buffer + waveform payload + source
+                // path) from one oscillator to another. Works off the live buffer, so it survives
+                // even when the original file is gone. args[0] = source letter, args[1] = dest letter.
+                if (args.size() < 2) { complete (juce::var ("badargs")); return; }
+                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, 3, s[0] - 'a') : 0; };
+                const int src = toIdx (args[0].toString());
+                const int dst = toIdx (args[1].toString());
+                if (src == dst) { complete (juce::var ("same")); return; }
+
+                auto srcBuf = audioProcessor.getOscSampleBuffer (src).load();
+                if (srcBuf == nullptr || srcBuf->getNumSamples() <= 0) { complete (juce::var ("empty")); return; }
+
+                // Duplicate the audio and atomic-publish it into the target (audio-thread safe).
+                audioProcessor.getOscSampleBuffer (dst).store (std::make_shared<juce::AudioBuffer<float>> (*srcBuf));
+                audioProcessor.oscSourcePath (dst) = audioProcessor.oscSourcePath (src);
+
+                // Copy the display payload so the target draws the identical waveform.
+                const juce::String payload = audioProcessor.getCachedOscPayload (src);
+                audioProcessor.setCachedOscPayload (payload, dst);
+
+                // Flip the target oscillator to the Sample engine (index 1 = "SAMP") so it plays + shows.
+                const char* engIds[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
+                                          ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+                if (auto* p = audioProcessor.getAPVTS().getParameter (engIds[dst]))
+                {
+                    p->beginChangeGesture();
+                    p->setValueNotifyingHost (p->convertTo0to1 (1.0f));   // 1 = SAMP
+                    p->endChangeGesture();
+                }
+
+                // Push the waveform to the target osc's UI (mirrors the load/normalize path).
+                const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + dst)));
+                if (webView != nullptr && payload.isNotEmpty())
+                    webView->evaluateJavascript (
+                        juce::String ("if(window.onOscSampleLoaded)window.onOscSampleLoaded('")
+                        + letter + "'," + payload + ");", nullptr);
+
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2868,20 +2925,6 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkF(resoMixAttachment,        ParameterIDs::SYN_RESO_MIX,        resoMixRelay);
         mkF(resoKeyTrackAttachment,   ParameterIDs::SYN_RESO_KEYTRACK,   resoKeyTrackRelay);
         mkF(resoMaterialAttachment,   ParameterIDs::SYN_RESO_MATERIAL,   resoMaterialRelay);
-        // ── STELLATE spectral shaper attachments ── [STELLATE-CPP-V1]
-        mkF(stellShapeAttachment,     ParameterIDs::SYN_STELL_SHAPE,     stellShapeRelay);
-        mkF(stellEngageAttachment,    ParameterIDs::SYN_STELL_ENGAGE,    stellEngageRelay);   // [STELLATE-CPP-V3]
-        // [STELLATE-CPP-V2] V2 toolkit attachments
-        mkF(stellAirAttachment,       ParameterIDs::SYN_STELL_AIR,       stellAirRelay);
-        mkF(stellMotionAttachment,    ParameterIDs::SYN_STELL_MOTION,    stellMotionRelay);
-        mkF(stellLpAttachment,        ParameterIDs::SYN_STELL_LP,        stellLpRelay);      // [STELLATE-CPP-V4]
-        mkF(stellHpAttachment,        ParameterIDs::SYN_STELL_HP,        stellHpRelay);
-        mkF(stellFeedAttachment,      ParameterIDs::SYN_STELL_FEED,      stellFeedRelay);
-        mkF(stellWidthAttachment,     ParameterIDs::SYN_STELL_WIDTH,     stellWidthRelay);
-        mkF(stellQualityAttachment,   ParameterIDs::SYN_STELL_QUALITY,   stellQualityRelay);
-        mkF(stellTiltAttachment,      ParameterIDs::SYN_STELL_TILT,      stellTiltRelay);
-        mkF(stellShineAttachment,     ParameterIDs::SYN_STELL_SHINE,     stellShineRelay);
-        mkF(stellTrackAttachment,     ParameterIDs::SYN_STELL_TRACK,     stellTrackRelay);
     }
 
     // ── OSC C + D attachments (4-osc) ──
@@ -3139,20 +3182,6 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
            << "],out:" << juce::String(ro, 3) << ",position:" << juce::String(rpos, 3) << "});}";
     }
 
-    // ── STELLATE spectral shaper live feed — the engine's real generated partials drive
-    //    the star (thin white rays; purple streaks follow the wet level). Flat [f,m] pairs. ──
-    {
-        int nP = audioProcessor.stellVizN_.load(std::memory_order_relaxed);
-        if (nP < 0) nP = 0; if (nP > wc::StellateNode::kViz) nP = wc::StellateNode::kViz;
-        js << "if(window.__terrainStellate){window.__terrainStellate({peaks:[";
-        for (int q = 0; q < nP; ++q)
-        {
-            if (q) js << ",";
-            js << juce::String(audioProcessor.stellVizF_[q].load(std::memory_order_relaxed), 1) << ","
-               << juce::String(audioProcessor.stellVizM_[q].load(std::memory_order_relaxed), 3);
-        }
-        js << "],out:" << juce::String(audioProcessor.stellVizOut_.load(std::memory_order_relaxed), 3) << ",live:" << (audioProcessor.stellVizLive_.load(std::memory_order_relaxed) ? 1 : 0) << "});}";   // [STELLATE-CPP-V4]
-    }
 
     // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──
     // Read the lock-free oscScope atoms published by the audio thread and hand them

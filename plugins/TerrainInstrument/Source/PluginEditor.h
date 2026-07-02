@@ -465,20 +465,6 @@ private:
     juce::WebSliderRelay resoMixRelay        { ParameterIDs::SYN_RESO_MIX };
     juce::WebSliderRelay resoKeyTrackRelay   { ParameterIDs::SYN_RESO_KEYTRACK };
     juce::WebSliderRelay resoMaterialRelay   { ParameterIDs::SYN_RESO_MATERIAL };
-    // ── STELLATE spectral shaper relays (Shape = choice via slider relay, like Material) ── [STELLATE-CPP-V1]
-    juce::WebSliderRelay stellShapeRelay     { ParameterIDs::SYN_STELL_SHAPE };
-    juce::WebSliderRelay stellEngageRelay    { ParameterIDs::SYN_STELL_ENGAGE };  // [STELLATE-CPP-V3] no mix — Bypass/Engaged
-    // [STELLATE-CPP-V2] V2 toolkit relays
-    juce::WebSliderRelay stellAirRelay       { ParameterIDs::SYN_STELL_AIR };
-    juce::WebSliderRelay stellMotionRelay    { ParameterIDs::SYN_STELL_MOTION };
-    juce::WebSliderRelay stellLpRelay        { ParameterIDs::SYN_STELL_LP };       // [STELLATE-CPP-V4]
-    juce::WebSliderRelay stellHpRelay        { ParameterIDs::SYN_STELL_HP };
-    juce::WebSliderRelay stellFeedRelay      { ParameterIDs::SYN_STELL_FEED };
-    juce::WebSliderRelay stellWidthRelay     { ParameterIDs::SYN_STELL_WIDTH };
-    juce::WebSliderRelay stellQualityRelay   { ParameterIDs::SYN_STELL_QUALITY };
-    juce::WebSliderRelay stellTiltRelay      { ParameterIDs::SYN_STELL_TILT };
-    juce::WebSliderRelay stellShineRelay     { ParameterIDs::SYN_STELL_SHINE };
-    juce::WebSliderRelay stellTrackRelay     { ParameterIDs::SYN_STELL_TRACK };
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
@@ -906,7 +892,6 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> flowGliRateAttachment, flowGliGateAttachment, flowGliVaryAttachment, flowGliTrajAttachment, flowGliMorphAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> flowDrfRateAttachment, flowDrfGateAttachment, flowDrfVaryAttachment, flowDrfTrajAttachment, flowDrfMorphAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> resoStructureAttachment, resoBrightnessAttachment, resoDampingAttachment, resoPositionAttachment, resoMixAttachment, resoKeyTrackAttachment, resoMaterialAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> stellShapeAttachment, stellEngageAttachment, stellAirAttachment, stellMotionAttachment, stellLpAttachment, stellHpAttachment, stellFeedAttachment, stellWidthAttachment, stellQualityAttachment, stellTiltAttachment, stellShineAttachment, stellTrackAttachment;   // STELLATE
 
     // Mod state lifecycle tick counter
     // RESTORE phase: push saved JSON to JS every tick until pageReady
