@@ -3869,6 +3869,11 @@ body {
 #syn-panel .gran-cloud { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; opacity: 0; transition: opacity .3s ease-out; }
 #syn-panel .device.osc.engine-granular .gran-cloud { opacity: 1; }
 #syn-panel .device.osc:not(.engine-granular) .gran-cloud { display: none; }
+/* GRANULAR reassign menu — right-click a grain knob → pick its function ("build your own grain controls"). */
+#syn-panel .gran-reassign-menu { position: absolute; z-index: 50; padding: 4px; background: rgba(14,14,26,.97); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.5); display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
+#syn-panel .gran-reassign-menu .gr-item { font-size: 10.5px; font-weight: 500; color: rgba(236,232,242,.82); padding: 6px 9px; border-radius: 5px; cursor: pointer; letter-spacing: .02em; white-space: nowrap; }
+#syn-panel .gran-reassign-menu .gr-item:hover { background: rgba(139,92,246,.28); color: #fff; }
+#syn-panel .gran-reassign-menu .gr-item.cur { color: #b98cff; }
 #syn-panel .samp-ph.on { opacity: 1; }
 #syn-panel .samp-ph i { position: absolute; left: -2px; top: 50%; margin-top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff;
   box-shadow: 0 0 7px rgba(255,255,255,.9), 0 0 13px rgba(167,139,250,.6); }
@@ -6706,7 +6711,8 @@ function saveSettings() {
       saveSettingsFn(JSON.stringify({
         theme: getTheme(),
         xyEnabled: state.xyEnabled,
-        page: currentActivePanel   // SYN/EQ/DLY/MOD section → reopen where you left off
+        page: currentActivePanel,  // SYN/EQ/DLY/MOD section → reopen where you left off
+        granSlots: window.__granSlotMap || null   // per-osc reassigned grain-slot layout
       }));
     } catch(e) {}
   }
@@ -6733,6 +6739,11 @@ function restoreSettings(json) {
     if (('page' in s) && typeof setActivePanel === 'function') {
       var _pg = (s.page === 'syn' || s.page === 'eq' || s.page === 'dly' || s.page === 'mod') ? s.page : null;
       setActivePanel(_pg);
+    }
+    // Restore reassigned grain-slot layout (delayed so the knobs + Juce params are wired first).
+    if (s.granSlots && window.__applyGranSlotMap) {
+      var _gs = s.granSlots;
+      setTimeout(function () { try { window.__applyGranSlotMap(_gs); } catch (e) {} }, 1200);
     }
   } catch(e) {}
 }
@@ -10495,9 +10506,116 @@ setTimeout(function wireSynControls () {
         if (paramId.indexOf ('_GRAIN_DENSITY') >= 0) return Math.round (Math.pow (200, n)) + ' /s';
         if (paramId.indexOf ('_GRAIN_SIZE')    >= 0) return Math.round (2 * Math.pow (250, n)) + ' ms';
         if (paramId.indexOf ('_GRAIN_KEY')     >= 0) return ['Off','Oct','5th','Chord','Maj','Min','Penta'][Math.round (n * 6)] || 'Off';
-        if (paramId.indexOf ('_GRAIN_')        >= 0) return pct + '%';   // Spray / Shape
+        if (paramId.indexOf ('_GRAIN_POSITION') >= 0) return pct + '%';
+        if (paramId.indexOf ('_GRAIN_PITCH')   >= 0) { const v = Math.round (-24 + n * 48); return (v > 0 ? '+' : '') + v + ' st'; }
+        if (paramId.indexOf ('_GRAIN_DIR')     >= 0) { const d = -1 + n * 2; return Math.abs (d) < 0.02 ? 'Rand' : (d > 0 ? 'Fwd ' : 'Rev ') + Math.round (Math.abs (d) * 100) + '%'; }
+        if (paramId.indexOf ('_GRAIN_SKEW')    >= 0) { const s = -1 + n * 2; return s < -0.02 ? 'Pluck ' + Math.round (-s * 100) + '%' : (s > 0.02 ? 'Swell ' + Math.round (s * 100) + '%' : 'Even'); }
+        if (paramId.indexOf ('_GRAIN_')        >= 0) return pct + '%';   // Spray / Shape / Width / P.Spray / Life / Jump
         return pct + '%';
       }
+      window.__fmtSynReadout = fmtSynReadout;   // exposed so reassigned grain knobs keep proper readouts
+
+      // ════════ GRANULAR reassignable slots — right-click a grain knob → pick its function ════════
+      // "Build your own grain controls." All 14 GRAIN functions are real params; a slot just chooses
+      // which param its knob controls. Reassign = clone the knob (drops old listeners) + re-bind live.
+      (function () {
+        var GRAIN_FUNCS = [
+          ['SCAN','Scan'], ['DENSITY','Density'], ['SIZE','Size'], ['SPRAY','Spray'], ['SHAPE','Shape'], ['KEY','Key'],
+          ['POSITION','Position'], ['PITCH','Pitch'], ['PSPRAY','P.Spray'], ['WIDTH','Width'], ['DIR','Dir'], ['SKEW','Skew'], ['LIFE','Life'], ['JUMP','Jump']
+        ];
+        var LABEL = {}; GRAIN_FUNCS.forEach (function (f) { LABEL[f[0]] = f[1]; });
+        function isBip (pid) { return /_GRAIN_(SCAN|PITCH|DIR|SKEW)$/.test (pid); }
+
+        // Compact self-contained binder for a (reassigned) grain knob — mirrors the general binder.
+        function wireLive (knob) {
+          try {
+            var pid = knob.dataset.syn; if (! pid || ! window.Juce || ! window.Juce.getSliderState) return;
+            var st = window.Juce.getSliderState (pid); if (! st) return;
+            var ring = knob.querySelector ('.knob-ring'); if (! ring) return;
+            var lab = knob.querySelector ('.knob-label'); var name = lab ? lab.textContent : '';
+            var bip = isBip (pid), tmr = null;
+            function nv () { try { return st.getNormalisedValue ? st.getNormalisedValue () : 0; } catch (e) { return 0; } }
+            function fill (n) { window.__synArc (ring, n, bip); }
+            function showV (n) { if (! lab) return; if (tmr) { clearTimeout (tmr); tmr = null; } lab.textContent = window.__fmtSynReadout ? window.__fmtSynReadout (pid, n) : name; lab.classList.add ('kv-live'); }
+            function rest () { if (! lab) return; if (tmr) clearTimeout (tmr); tmr = setTimeout (function () { lab.textContent = name; lab.classList.remove ('kv-live'); }, 650); }
+            fill (nv ()); ring.style.cursor = 'grab';
+            ring.addEventListener ('pointerdown', function (ev) {
+              ev.preventDefault (); try { ring.setPointerCapture (ev.pointerId); } catch (_) {}
+              var y0 = ev.clientY, v0 = nv (); ring.style.cursor = 'grabbing';
+              function mv (e) { var n = Math.max (0, Math.min (1, v0 + (y0 - e.clientY) / 200)); fill (n); showV (n); try { st.setNormalisedValue (n); } catch (_) {} }
+              function up () { try { ring.releasePointerCapture (ev.pointerId); } catch (_) {} ring.style.cursor = 'grab'; document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); rest (); }
+              document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
+            });
+            if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener (function () { fill (nv ()); });
+          } catch (e) {}
+        }
+
+        function reassign (knob, suf) {
+          try {
+            var m = /^SYN_OSC_([A-D])_GRAIN_/.exec (knob.dataset.syn); if (! m) return;
+            var clone = knob.cloneNode (true);                 // drops the old (default-binder) listeners
+            clone.dataset.syn = 'SYN_OSC_' + m[1] + '_GRAIN_' + suf;
+            var lab = clone.querySelector ('.knob-label'); if (lab) lab.textContent = LABEL[suf] || suf;
+            var kvl = clone.querySelector ('.knob-label'); if (kvl) kvl.classList.remove ('kv-live');
+            knob.replaceWith (clone);
+            wireLive (clone);
+            persist ();
+          } catch (e) {}
+        }
+
+        function persist () {
+          try {
+            var map = {};
+            document.querySelectorAll ('#syn-panel .sample-view[data-osc] .gran-knobs').forEach (function (row) {
+              var sv = row.closest ('.sample-view'); var osc = sv ? sv.getAttribute ('data-osc') : null; if (! osc) return;
+              var arr = []; row.querySelectorAll ('.knob[data-syn]').forEach (function (k) { var mm = /_GRAIN_(.+)$/.exec (k.dataset.syn); if (mm) arr.push (mm[1]); });
+              map[osc] = arr;
+            });
+            window.__granSlotMap = map;
+            if (typeof saveSettings === 'function') saveSettings ();
+          } catch (e) {}
+        }
+
+        // Boot restore — reapply a saved slot layout (called from restoreSettings, after knobs + Juce are up).
+        window.__applyGranSlotMap = function (map) {
+          try {
+            if (! map) return;
+            Object.keys (map).forEach (function (osc) {
+              var row = document.querySelector ('#syn-panel .sample-view[data-osc="' + osc + '"] .gran-knobs'); if (! row) return;
+              var ks = row.querySelectorAll ('.knob[data-syn]'), sufs = map[osc] || [];
+              for (var i = 0; i < ks.length && i < sufs.length; i++)
+                if (ks[i].dataset.syn.indexOf ('_GRAIN_' + sufs[i]) < 0) reassign (ks[i], sufs[i]);
+            });
+          } catch (e) {}
+        };
+
+        // The menu.
+        var menu = null;
+        function closeMenu () { if (menu) { menu.remove (); menu = null; document.removeEventListener ('pointerdown', onDoc, true); } }
+        function onDoc (e) { if (menu && ! menu.contains (e.target)) closeMenu (); }
+        function openMenu (knob, cx, cy) {
+          closeMenu ();
+          var sp = document.getElementById ('syn-panel'); if (! sp) return;
+          menu = document.createElement ('div'); menu.className = 'gran-reassign-menu';
+          var curSuf = (/_GRAIN_(.+)$/.exec (knob.dataset.syn) || [])[1];
+          GRAIN_FUNCS.forEach (function (f) {
+            var it = document.createElement ('div'); it.className = 'gr-item' + (f[0] === curSuf ? ' cur' : ''); it.textContent = f[1];
+            it.addEventListener ('click', function (ev) { ev.stopPropagation (); reassign (knob, f[0]); closeMenu (); });
+            menu.appendChild (it);
+          });
+          sp.appendChild (menu);
+          var r = sp.getBoundingClientRect (), mw = menu.offsetWidth || 150, mh = menu.offsetHeight || 230;
+          menu.style.left = Math.max (4, Math.min (cx - r.left, r.width - mw - 4)) + 'px';
+          menu.style.top  = Math.max (4, Math.min (cy - r.top,  r.height - mh - 4)) + 'px';
+          setTimeout (function () { document.addEventListener ('pointerdown', onDoc, true); }, 0);
+        }
+        document.addEventListener ('contextmenu', function (e) {
+          var knob = e.target.closest ? e.target.closest ('#syn-panel .gran-knobs .knob[data-syn]') : null;
+          if (! knob) return;
+          e.preventDefault (); e.stopPropagation (); openMenu (knob, e.clientX, e.clientY);
+        }, true);
+      })();
+
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
       knobEls.forEach ((knobEl) => {
         try {

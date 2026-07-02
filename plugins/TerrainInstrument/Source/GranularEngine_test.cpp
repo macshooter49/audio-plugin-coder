@@ -192,6 +192,18 @@ int main()
         check (rms > 0.005 && rms < 1.5, "Life=1 RMS stays in a sane band");
     }
 
+    // Jump — instant onset (1) reaches full density faster than soft-build (0)
+    {
+        auto earlyMax = [&] (float jump) {
+            GranularEngine e; e.prepare (48000.0); e.setSample (chans, 2, 48000, 48000.0);
+            GranularEngineParams p; p.jump = jump; p.density = 0.85f; p.size = 0.45f; e.setParams (p);
+            e.noteOn (1.0, 0x99);
+            int mx = 0; for (int i = 0; i < 3000; ++i) { float a, b; e.tick (a, b); int n = e.activeGrainsForTesting (); if (n > mx) mx = n; }
+            return mx;
+        };
+        check (earlyMax (1.f) >= earlyMax (0.f), "Jump: instant onset >= soft-build early grain count");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

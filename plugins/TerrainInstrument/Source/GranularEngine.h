@@ -39,7 +39,7 @@ struct GranularEngineParams
     float width      = 0.f;   // 0..1 per-grain stereo spread
     float dir        = 1.f;   // -1..+1 per-grain direction bias (-1 rev, 0 rand, +1 fwd)
     float life       = 0.15f; // 0..1 living-weather macro (Phase 5)
-    float jump       = 0.5f;  // 0..1 onset soft-build <-> instant (Phase 5)
+    float jump       = 1.f;   // 0..1 onset: 1 = instant (default), lower = soft build
     int   key        = 0;     // 0=Off 1=Oct 2=5th 3=Chord 4=Maj 5=Min 6=Penta (Phase 5)
 };
 
@@ -86,6 +86,8 @@ public:
         countdown_ = 0.0;
         active_    = true;
         releasing_ = false;
+        onsetRamp_ = (p_.jump >= 0.999f) ? 1.f : 0.f;    // Jump — full density immediately vs soft build
+        onsetInc_  = 1.f / (1.f + (1.f - clamp01 (p_.jump)) * 0.30f * (float) outRate_);   // ramp over up to ~0.3s
     }
     void noteOff() noexcept { releasing_ = true; }
 
@@ -107,11 +109,14 @@ public:
             lifeSp_ = 0.97f * lifeSp_ + 0.05f * (ouRand() * 2.f - 1.f);
         }
 
+        // Jump — advance the onset ramp (soft build after note-on; instant when jump=1)
+        if (onsetRamp_ < 1.f) { onsetRamp_ += onsetInc_; if (onsetRamp_ > 1.f) onsetRamp_ = 1.f; }
+
         // 1) async scheduler — spawn on a jittered countdown (async cloud, not periodic)
         countdown_ -= 1.0;
         while (countdown_ <= 0.0)
         {
-            if (! releasing_) spawnGrain();
+            if (! releasing_ && (onsetRamp_ >= 1.f || ouRand() < onsetRamp_)) spawnGrain();   // Jump gates the onset
             const double interval = outRate_ / densityHz();
             const double jit      = 0.5 * interval * (nextRand01() * 2.f - 1.f); // regularity jitter
             countdown_ += interval + jit;
@@ -353,6 +358,7 @@ private:
     uint32_t ouRng_ = 0x2545F491u;                       // Life drift RNG
     float  lifeD_ = 0.f, lifeSz_ = 0.f, lifeSp_ = 0.f;   // bounded OU drift state (density/size/spray)
     int    lifeTick_ = 0;
+    float  onsetRamp_ = 1.f, onsetInc_ = 1.f;            // Jump — soft-build (0) vs instant (1) onset
     bool   active_ = false, releasing_ = false;
     GranularEngineParams p_ {};
 };

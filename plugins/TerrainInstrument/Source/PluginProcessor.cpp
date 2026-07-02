@@ -2155,6 +2155,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addGrainOsc (ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE,
                  ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, "D");
 
+    // GRAIN-EXPANDED — the 8 reassignable-slot functions (defaults match GranularEngineParams).
+    auto addGrainExp = [&layout] (const char* posId, const char* pitchId, const char* psprayId, const char* widthId,
+                                  const char* dirId, const char* skewId, const char* lifeId, const char* jumpId,
+                                  const juce::String& osc)
+    {
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { posId, 1 },    "Synth OSC " + osc + " Grain Position",    juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { pitchId, 1 },  "Synth OSC " + osc + " Grain Pitch",       juce::NormalisableRange<float> (-24.0f, 24.0f, 1.0f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { psprayId, 1 }, "Synth OSC " + osc + " Grain Pitch Spray", juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { widthId, 1 },  "Synth OSC " + osc + " Grain Width",       juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { dirId, 1 },    "Synth OSC " + osc + " Grain Direction",   juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 1.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { skewId, 1 },   "Synth OSC " + osc + " Grain Skew",        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { lifeId, 1 },   "Synth OSC " + osc + " Grain Life",        juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 0.15f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { jumpId, 1 },   "Synth OSC " + osc + " Grain Jump",        juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 1.0f));
+    };
+    addGrainExp (ParameterIDs::SYN_OSC_A_GRAIN_POSITION, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, ParameterIDs::SYN_OSC_A_GRAIN_DIR, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, ParameterIDs::SYN_OSC_A_GRAIN_LIFE, ParameterIDs::SYN_OSC_A_GRAIN_JUMP, "A");
+    addGrainExp (ParameterIDs::SYN_OSC_B_GRAIN_POSITION, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, ParameterIDs::SYN_OSC_B_GRAIN_DIR, ParameterIDs::SYN_OSC_B_GRAIN_SKEW, ParameterIDs::SYN_OSC_B_GRAIN_LIFE, ParameterIDs::SYN_OSC_B_GRAIN_JUMP, "B");
+    addGrainExp (ParameterIDs::SYN_OSC_C_GRAIN_POSITION, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, ParameterIDs::SYN_OSC_C_GRAIN_DIR, ParameterIDs::SYN_OSC_C_GRAIN_SKEW, ParameterIDs::SYN_OSC_C_GRAIN_LIFE, ParameterIDs::SYN_OSC_C_GRAIN_JUMP, "C");
+    addGrainExp (ParameterIDs::SYN_OSC_D_GRAIN_POSITION, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, ParameterIDs::SYN_OSC_D_GRAIN_DIR, ParameterIDs::SYN_OSC_D_GRAIN_SKEW, ParameterIDs::SYN_OSC_D_GRAIN_LIFE, ParameterIDs::SYN_OSC_D_GRAIN_JUMP, "D");
+
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP_AMOUNT, 1 },
         "Synth OSC D Warp Amount",
@@ -3136,23 +3155,38 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spD.warp      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
         spD.warpMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
 
-        // ── GRAIN engine: gather the 6 primary params per OSC (GRAIN-ENGINE-GATHER) ──
-        auto gatherGrain = [this] (const char* sc, const char* de, const char* si,
-                                   const char* sp, const char* sh, const char* ke)
+        // ── GRAIN engine: gather all 14 functions per OSC (GRAIN-ENGINE-GATHER) ──
+        // ID order: scan,density,size,spray,shape,key, position,pitch,pspray,width,dir,skew,life,jump.
+        // 'key' is the only choice → cast to index. static table = built once (no per-block alloc).
+        static const char* const GRAIN_IDS[4][14] = {
+            { ParameterIDs::SYN_OSC_A_GRAIN_SCAN, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, ParameterIDs::SYN_OSC_A_GRAIN_SIZE, ParameterIDs::SYN_OSC_A_GRAIN_SPRAY, ParameterIDs::SYN_OSC_A_GRAIN_SHAPE, ParameterIDs::SYN_OSC_A_GRAIN_KEY, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, ParameterIDs::SYN_OSC_A_GRAIN_DIR, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, ParameterIDs::SYN_OSC_A_GRAIN_LIFE, ParameterIDs::SYN_OSC_A_GRAIN_JUMP },
+            { ParameterIDs::SYN_OSC_B_GRAIN_SCAN, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, ParameterIDs::SYN_OSC_B_GRAIN_SIZE, ParameterIDs::SYN_OSC_B_GRAIN_SPRAY, ParameterIDs::SYN_OSC_B_GRAIN_SHAPE, ParameterIDs::SYN_OSC_B_GRAIN_KEY, ParameterIDs::SYN_OSC_B_GRAIN_POSITION, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, ParameterIDs::SYN_OSC_B_GRAIN_DIR, ParameterIDs::SYN_OSC_B_GRAIN_SKEW, ParameterIDs::SYN_OSC_B_GRAIN_LIFE, ParameterIDs::SYN_OSC_B_GRAIN_JUMP },
+            { ParameterIDs::SYN_OSC_C_GRAIN_SCAN, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, ParameterIDs::SYN_OSC_C_GRAIN_SIZE, ParameterIDs::SYN_OSC_C_GRAIN_SPRAY, ParameterIDs::SYN_OSC_C_GRAIN_SHAPE, ParameterIDs::SYN_OSC_C_GRAIN_KEY, ParameterIDs::SYN_OSC_C_GRAIN_POSITION, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, ParameterIDs::SYN_OSC_C_GRAIN_DIR, ParameterIDs::SYN_OSC_C_GRAIN_SKEW, ParameterIDs::SYN_OSC_C_GRAIN_LIFE, ParameterIDs::SYN_OSC_C_GRAIN_JUMP },
+            { ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE, ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, ParameterIDs::SYN_OSC_D_GRAIN_POSITION, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, ParameterIDs::SYN_OSC_D_GRAIN_DIR, ParameterIDs::SYN_OSC_D_GRAIN_SKEW, ParameterIDs::SYN_OSC_D_GRAIN_LIFE, ParameterIDs::SYN_OSC_D_GRAIN_JUMP }
+        };
+        auto gatherGrain = [this] (const char* const* id)
         {
             tw::GranularEngineParams g;
-            g.scan    = *apvts.getRawParameterValue (sc);
-            g.density = *apvts.getRawParameterValue (de);
-            g.size    = *apvts.getRawParameterValue (si);
-            g.spray   = *apvts.getRawParameterValue (sp);
-            g.shape   = *apvts.getRawParameterValue (sh);
-            g.key     = (int) *apvts.getRawParameterValue (ke);   // choice → index (mirrors sample warpMode)
+            g.scan       = *apvts.getRawParameterValue (id[0]);
+            g.density    = *apvts.getRawParameterValue (id[1]);
+            g.size       = *apvts.getRawParameterValue (id[2]);
+            g.spray      = *apvts.getRawParameterValue (id[3]);
+            g.shape      = *apvts.getRawParameterValue (id[4]);
+            g.key        = (int) *apvts.getRawParameterValue (id[5]);   // choice → index
+            g.position   = *apvts.getRawParameterValue (id[6]);
+            g.pitch      = *apvts.getRawParameterValue (id[7]);
+            g.pitchSpray = *apvts.getRawParameterValue (id[8]);
+            g.width      = *apvts.getRawParameterValue (id[9]);
+            g.dir        = *apvts.getRawParameterValue (id[10]);
+            g.skew       = *apvts.getRawParameterValue (id[11]);
+            g.life       = *apvts.getRawParameterValue (id[12]);
+            g.jump       = *apvts.getRawParameterValue (id[13]);
             return g;
         };
-        const tw::GranularEngineParams gpA = gatherGrain (ParameterIDs::SYN_OSC_A_GRAIN_SCAN, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, ParameterIDs::SYN_OSC_A_GRAIN_SIZE, ParameterIDs::SYN_OSC_A_GRAIN_SPRAY, ParameterIDs::SYN_OSC_A_GRAIN_SHAPE, ParameterIDs::SYN_OSC_A_GRAIN_KEY);
-        const tw::GranularEngineParams gpB = gatherGrain (ParameterIDs::SYN_OSC_B_GRAIN_SCAN, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, ParameterIDs::SYN_OSC_B_GRAIN_SIZE, ParameterIDs::SYN_OSC_B_GRAIN_SPRAY, ParameterIDs::SYN_OSC_B_GRAIN_SHAPE, ParameterIDs::SYN_OSC_B_GRAIN_KEY);
-        const tw::GranularEngineParams gpC = gatherGrain (ParameterIDs::SYN_OSC_C_GRAIN_SCAN, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, ParameterIDs::SYN_OSC_C_GRAIN_SIZE, ParameterIDs::SYN_OSC_C_GRAIN_SPRAY, ParameterIDs::SYN_OSC_C_GRAIN_SHAPE, ParameterIDs::SYN_OSC_C_GRAIN_KEY);
-        const tw::GranularEngineParams gpD = gatherGrain (ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE, ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY);
+        const tw::GranularEngineParams gpA = gatherGrain (GRAIN_IDS[0]);
+        const tw::GranularEngineParams gpB = gatherGrain (GRAIN_IDS[1]);
+        const tw::GranularEngineParams gpC = gatherGrain (GRAIN_IDS[2]);
+        const tw::GranularEngineParams gpD = gatherGrain (GRAIN_IDS[3]);
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
