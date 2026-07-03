@@ -87,6 +87,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscASemiRelay)
             .withOptionsFrom(synOscACentRelay)
             .withOptionsFrom(synOscALevelRelay)
+            .withOptionsFrom(synOscAEnableRelay)
             .withOptionsFrom(synOscAMuteRelay)
             .withOptionsFrom(synOscASoloRelay)
             .withOptionsFrom(synOscAPanRelay)
@@ -188,6 +189,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBSemiRelay)
             .withOptionsFrom(synOscBCentRelay)
             .withOptionsFrom(synOscBLevelRelay)
+            .withOptionsFrom(synOscBEnableRelay)
             .withOptionsFrom(synOscBMuteRelay)
             .withOptionsFrom(synOscBSoloRelay)
             .withOptionsFrom(synOscBPanRelay)
@@ -237,6 +239,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscCSemiRelay)
             .withOptionsFrom(synOscCCentRelay)
             .withOptionsFrom(synOscCLevelRelay)
+            .withOptionsFrom(synOscCEnableRelay)
             .withOptionsFrom(synOscCMuteRelay)
             .withOptionsFrom(synOscCSoloRelay)
             .withOptionsFrom(synOscCPanRelay)
@@ -268,6 +271,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDSemiRelay)
             .withOptionsFrom(synOscDCentRelay)
             .withOptionsFrom(synOscDLevelRelay)
+            .withOptionsFrom(synOscDEnableRelay)
             .withOptionsFrom(synOscDMuteRelay)
             .withOptionsFrom(synOscDSoloRelay)
             .withOptionsFrom(synOscDPanRelay)
@@ -2248,12 +2252,16 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         auto mkAtt = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
         { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
         // ════ SOLO / MUTE per-osc attachments ════
+        mkAtt(synOscAEnableAttachment, ParameterIDs::SYN_OSC_A_ENABLE, synOscAEnableRelay);
         mkAtt(synOscAMuteAttachment, ParameterIDs::SYN_OSC_A_MUTE, synOscAMuteRelay);
         mkAtt(synOscASoloAttachment, ParameterIDs::SYN_OSC_A_SOLO, synOscASoloRelay);
+        mkAtt(synOscBEnableAttachment, ParameterIDs::SYN_OSC_B_ENABLE, synOscBEnableRelay);
         mkAtt(synOscBMuteAttachment, ParameterIDs::SYN_OSC_B_MUTE, synOscBMuteRelay);
         mkAtt(synOscBSoloAttachment, ParameterIDs::SYN_OSC_B_SOLO, synOscBSoloRelay);
+        mkAtt(synOscCEnableAttachment, ParameterIDs::SYN_OSC_C_ENABLE, synOscCEnableRelay);
         mkAtt(synOscCMuteAttachment, ParameterIDs::SYN_OSC_C_MUTE, synOscCMuteRelay);
         mkAtt(synOscCSoloAttachment, ParameterIDs::SYN_OSC_C_SOLO, synOscCSoloRelay);
+        mkAtt(synOscDEnableAttachment, ParameterIDs::SYN_OSC_D_ENABLE, synOscDEnableRelay);
         mkAtt(synOscDMuteAttachment, ParameterIDs::SYN_OSC_D_MUTE, synOscDMuteRelay);
         mkAtt(synOscDSoloAttachment, ParameterIDs::SYN_OSC_D_SOLO, synOscDSoloRelay);
         // ════ SAMPLE-ENGINE-MKATT (Opus) ════

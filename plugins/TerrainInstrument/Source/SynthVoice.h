@@ -497,6 +497,16 @@ namespace tw
                                tw::SampleBuffer* c, tw::SampleBuffer* d) noexcept   // PEROSC-VOICE
         { sampleSource_[0] = a; sampleSource_[1] = b; sampleSource_[2] = c; sampleSource_[3] = d; }
         // GRANULAR-ENGINE-VOICE — per-OSC granular params (granular reuses the same sampleSource_ buffers).
+        // GLOBAL grain budget — the processor shares ONE live-grain counter + cap across every
+        // granular engine in the instance (all 4 oscs × unison × voices), so stacked dense
+        // granulars thin gracefully instead of stacking to thousands of grains. Set once.
+        void setGrainBudget (int* used, int cap) noexcept
+        {
+            for (auto& e : granEngA_) e.setGrainBudget (used, cap);
+            for (auto& e : granEngB_) e.setGrainBudget (used, cap);
+            for (auto& e : granEngC_) e.setGrainBudget (used, cap);
+            for (auto& e : granEngD_) e.setGrainBudget (used, cap);
+        }
         void setGranParamsA (const tw::GranularEngineParams& p) noexcept { granParamsA_ = p; }
         void setGranParamsB (const tw::GranularEngineParams& p) noexcept { granParamsB_ = p; }
         void setGranParamsC (const tw::GranularEngineParams& p) noexcept { granParamsC_ = p; }
@@ -1473,6 +1483,13 @@ namespace tw
             const float* eAmpFree[4] = { envScratch_.getReadPointer (1), envScratch_.getReadPointer (2),
                                          envScratch_.getReadPointer (3), envScratch_.getReadPointer (4) };
 
+            // CPU: an osc whose gate has fully settled at silence — switched OFF (the white OSC
+            // letters), muted, or un-soloed — SKIPS its whole render path (engines, unison
+            // loop) instead of rendering into a ×0 gate. The 4 ms gate one-pole keeps on/off
+            // click-free; skipping only begins once the fade has actually finished.
+            for (int g = 0; g < 4; ++g)
+                oscDead_[g] = oscGateTarget_[g] <= 0.0f && oscGate_[g] < 1.0e-4f;
+
             // SAMPLE-ENGINE-VOICE — render any SAMP oscillators' stereo blocks for this
             // buffer (scan/loop/xfade/spray + STRETCH/FORMANT warp). Cheap no-op if none.
             renderSampleBlocks (numSamples);
@@ -1481,10 +1498,10 @@ namespace tw
             // CPU: SAMP/GRAN/SPEC oscs render whole blocks above and their result REPLACES the
             // unison sum below — the per-sine u-loop only produces zeros for them (fold of 0,
             // two pan MACs, discarded). Skip it entirely; the sums already start at 0.
-            const bool uLoopA = (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC);
-            const bool uLoopB = (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC);
-            const bool uLoopC = (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC);
-            const bool uLoopD = (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC);
+            const bool uLoopA = ! oscDead_[0] && (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC);
+            const bool uLoopB = ! oscDead_[1] && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC);
+            const bool uLoopC = ! oscDead_[2] && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC);
+            const bool uLoopD = ! oscDead_[3] && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC);
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
@@ -3145,6 +3162,7 @@ namespace tw
 
         // SOLO/MUTE — per-osc (A,B,C,D) click-free gate (smoothed one-pole, ~4ms fade)
         float oscGate_[4]       { 1.0f, 1.0f, 1.0f, 1.0f };   // smoothed solo/mute gate (click-free)
+        bool  oscDead_[4]       { false, false, false, false }; // gate fully settled at 0 → skip the osc's render entirely
         float oscGateTarget_[4] { 1.0f, 1.0f, 1.0f, 1.0f };
         float oscGateCoef_ = 0.006f;                          // one-pole coef, set in setCurrentPlaybackSampleRate
 
@@ -3379,10 +3397,10 @@ namespace tw
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, level_);
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, levelB_);
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, levelC_);
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, levelD_);
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             sampleNoteOnPending_ = false;
         }
 
@@ -3467,10 +3485,10 @@ namespace tw
                 }
             }
             const bool doOn = granNoteOnPending_;
-            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, level_);
-            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, levelB_);
-            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, levelC_);
-            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, levelD_);
+            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             granNoteOnPending_ = false;
         }
 

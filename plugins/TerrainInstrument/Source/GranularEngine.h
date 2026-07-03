@@ -82,10 +82,16 @@ public:
         // AIR high-pass corner ~3 kHz one-pole (matches the Sample engine's exciter feel)
         airCoef_ = 1.f - std::exp (-2.f * kPi * 3000.f / (float) outRate_);
         if (airCoef_ < 0.f) airCoef_ = 0.f; if (airCoef_ > 1.f) airCoef_ = 1.f;
+        normAlpha_ = 1.f - std::exp (-1.f / (0.003f * (float) outRate_));   // ~3 ms norm glide
         (void) windows();   // shared static LUTs — force the one-time build here, not mid-note
         resetPool();
         recomputeDerived();
+        normSm_ = norm_;
     }
+
+    // GLOBAL grain budget (optional) — `used` is owned by the processor and shared by every
+    // engine in the instance; all mutation happens on the audio thread (no atomics needed).
+    void setGrainBudget (int* used, int cap) noexcept { budgetUsed_ = used; budgetCap_ = cap; }
 
     void setSample (const float* const* ch, int numCh, int numSamples, double nativeRate) noexcept
     {
@@ -127,6 +133,7 @@ public:
         active_    = true;
         releasing_ = false;
         airHpL_ = airHpR_ = 0.f;
+        normSm_    = norm_;   // snap — a fresh note starts at the current target, no glide-in
         pingDir_   = 1.f;      // Ping-Pong starts moving toward the end
         oneShotDone_ = false;  // One-Shot / Tailed: not yet reached the far edge
         caught_    = false;    // loop modes: head not yet inside the loop bracket (lead-in from the anchor)
@@ -178,6 +185,7 @@ public:
             if (g.age >= g.len)                            // retire at window->0, no click
             {
                 g.active = false;
+                if (budgetUsed_ != nullptr) --(*budgetUsed_);
                 freeIdx_[numFree_++]  = activeIdx_[j];
                 activeIdx_[j] = activeIdx_[--numActive_];  // swap-remove — re-visit slot j
             }
@@ -185,9 +193,13 @@ public:
         }
 
         // 3) equal-power-ish normalization vs the expected overlap (stable, count-independent).
-        //    norm_ is cached per block (recomputeDerived) — no per-sample sqrt/pow.
-        outL = accL * norm_;
-        outR = accR * norm_;
+        //    norm_ is cached per block (recomputeDerived) — no per-sample sqrt/pow. The SMOOTHED
+        //    value is what actually scales the mix: dragging Size/Density sweeps norm_ over a
+        //    ~20× range in per-block steps, and applying those steps raw put an audible CLICK
+        //    on the whole playing cloud every block. One-pole glide (~3 ms) makes it seamless.
+        normSm_ += normAlpha_ * (norm_ - normSm_);
+        outL = accL * normSm_;
+        outR = accR * normSm_;
 
         // 4) AIR — Chebyshev-style high-harmonic exciter (identical math to the Sample osc's AIR)
         if (p_.air > 0.001f)
@@ -275,6 +287,7 @@ public:
                 if (g.age >= g.len)                      // retire at window->0, no click
                 {
                     g.active = false;
+                    if (budgetUsed_ != nullptr) --(*budgetUsed_);
                     freeIdx_[numFree_++]  = activeIdx_[j];
                     activeIdx_[j] = activeIdx_[--numActive_];   // swap-remove — re-visit slot j
                 }
@@ -287,7 +300,8 @@ public:
                 const float drv = 1.f + p_.air * 20.f;
                 for (int i = 0; i < len; ++i)
                 {
-                    float l = bufL[i] * norm_, r = bufR[i] * norm_;
+                    normSm_ += normAlpha_ * (norm_ - normSm_);   // same per-sample glide as tick()
+                    float l = bufL[i] * normSm_, r = bufR[i] * normSm_;
                     airHpL_ += airCoef_ * (l - airHpL_); const float hpL = l - airHpL_;
                     l += p_.air * 2.f * (std::tanh (hpL * drv) - hpL);
                     airHpR_ += airCoef_ * (r - airHpR_); const float hpR = r - airHpR_;
@@ -300,8 +314,9 @@ public:
             {
                 for (int i = 0; i < len; ++i)
                 {
-                    outL[base + i] += bufL[i] * norm_;
-                    outR[base + i] += bufR[i] * norm_;
+                    normSm_ += normAlpha_ * (norm_ - normSm_);   // same per-sample glide as tick()
+                    outL[base + i] += bufL[i] * normSm_;
+                    outR[base + i] += bufR[i] * normSm_;
                 }
             }
             base += len;
@@ -458,6 +473,7 @@ private:
     void spawnGrain (int bornAt = 0) noexcept
     {
         if (numFree_ <= 0) return; // Max-Grains reached -> skip-and-wait (graceful, no glitch)
+        if (budgetUsed_ != nullptr && *budgetUsed_ >= budgetCap_) return; // instance-wide budget full — skip-and-wait too
         const int slot = freeIdx_[--numFree_];   // O(1) — pop the free stack, no pool scan
 
         Grain& g = pool_[(size_t) slot];
@@ -506,6 +522,7 @@ private:
 
         g.active = true;
         activeIdx_[numActive_++] = slot;   // register on the compact active list
+        if (budgetUsed_ != nullptr) ++(*budgetUsed_);
     }
 
     // ── grain windows: Flat-top (bright/dense) <-> Hann (neutral) <-> Bell (soft/sparse) ──
@@ -554,6 +571,7 @@ private:
     // Reset the grain pool + the compact active/free slot lists (noteOn / prepare).
     void resetPool() noexcept
     {
+        if (budgetUsed_ != nullptr) *budgetUsed_ -= numActive_;   // release our live grains to the budget
         for (auto& g : pool_) g.active = false;
         numActive_ = 0;
         numFree_   = kPool;
@@ -687,6 +705,12 @@ private:
     uint32_t rng_ = 0x9E3779B9u;
     float  airCoef_ = 0.3f, airHpL_ = 0.f, airHpR_ = 0.f;   // AIR exciter high-pass state
     float  densHz_ = 8.f, grainLenSamp_ = 480.f, norm_ = 1.f;   // cached per-block derived values (CPU)
+    float  normSm_ = 1.f, normAlpha_ = 0.007f;   // norm_ glide (~3 ms) — declicks Size/Density knob moves
+    // Optional GLOBAL grain budget (shared across every engine in the instance, set by the
+    // processor): spawns are refused once the plugin-wide live-grain count hits the cap, so
+    // stacked dense voices thin gracefully instead of eating the whole core.
+    int*   budgetUsed_ = nullptr;
+    int    budgetCap_  = 0;
     float  pingDir_ = 1.f;         // Ping-Pong bounce direction (+1 → end, -1 → start)
     bool   oneShotDone_ = false;   // One-Shot/Tailed: head reached the far edge → stop spawning
     bool   active_ = false, releasing_ = false;

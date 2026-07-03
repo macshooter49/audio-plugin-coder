@@ -416,6 +416,34 @@ int main()
         check (! a.isActive() && ! b.isActive(), "parity: both paths free the engine after release drain");
     }
 
+    // ── GLOBAL GRAIN BUDGET: engines sharing one counter never exceed the cap combined ──
+    {
+        int used = 0;
+        GranularEngine e1, e2;
+        for (auto* e : { &e1, &e2 })
+        {
+            e->prepare (48000.0);
+            e->setGrainBudget (&used, 10);
+            e->setSample (chans, 2, 48000, 48000.0);
+            GranularEngineParams p; p.density = 0.9f; p.size = 0.7f;   // wants way more than 10
+            e->setParams (p); e->setRegion (0.f, 1.f);
+        }
+        e1.noteOn (1.0, 11); e2.noteOn (1.0, 22);
+        int maxCombined = 0; float l, r;
+        for (int i = 0; i < 48000; ++i)
+        {
+            e1.tick (l, r); e2.tick (l, r);
+            const int c = e1.activeGrainsForTesting() + e2.activeGrainsForTesting();
+            if (c > maxCombined) maxCombined = c;
+        }
+        check (maxCombined <= 10, "grain budget: combined active grains never exceed the shared cap");
+        check (maxCombined >= 8,  "grain budget: the cap is actually being used (not starving)");
+        check (used == e1.activeGrainsForTesting() + e2.activeGrainsForTesting(),
+               "grain budget: shared counter stays in sync with reality");
+        e1.noteOn (1.0, 33);   // resetPool must release e1's grains back to the budget
+        check (used == e2.activeGrainsForTesting(), "grain budget: noteOn/resetPool releases the engine's grains");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

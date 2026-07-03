@@ -742,6 +742,13 @@ private:
     // the constructor — the audio thread reads these instead of dynamic_cast'ing per voice.
     std::array<tw::SynthVoice*, kSynthVoiceCount> synthVoices_ {};
 
+    // CPU: instance-wide live-grain counter + cap, shared by every GranularEngine (audio-thread
+    // only — no atomics). ~8.5 ns per grain-sample → 256 grains ≈ 10% of a core, the ceiling
+    // for ALL granular oscs/voices/unison combined; spawns skip-and-wait past it (grain clouds
+    // thin gracefully, no click — window-at-birth is always 0).
+    static constexpr int kGranBudget = 256;
+    int granGrainsLive_ = 0;
+
     // CPU: change-gates for the HEAVY per-voice broadcast pushes. The ModConfig (~1KB copy +
     // 10 LFO reconfigs) and the 8 engine-param structs were pushed to all 96 voices EVERY
     // block; they're pure functions of params/BPM, so they now push only on actual change

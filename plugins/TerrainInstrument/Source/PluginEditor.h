@@ -121,6 +121,7 @@ private:
     juce::WebSliderRelay synOscASemiRelay     { ParameterIDs::SYN_OSC_A_SEMI };
     juce::WebSliderRelay synOscACentRelay     { ParameterIDs::SYN_OSC_A_CENT };
     juce::WebSliderRelay synOscALevelRelay    { ParameterIDs::SYN_OSC_A_LEVEL };
+    juce::WebSliderRelay synOscAEnableRelay   { ParameterIDs::SYN_OSC_A_ENABLE };
     juce::WebSliderRelay synOscAMuteRelay     { ParameterIDs::SYN_OSC_A_MUTE };
     juce::WebSliderRelay synOscASoloRelay     { ParameterIDs::SYN_OSC_A_SOLO };
     juce::WebSliderRelay synOscAPanRelay      { ParameterIDs::SYN_OSC_A_PAN };
@@ -263,6 +264,7 @@ private:
     juce::WebSliderRelay synOscBSemiRelay       { ParameterIDs::SYN_OSC_B_SEMI };
     juce::WebSliderRelay synOscBCentRelay       { ParameterIDs::SYN_OSC_B_CENT };
     juce::WebSliderRelay synOscBLevelRelay      { ParameterIDs::SYN_OSC_B_LEVEL };
+    juce::WebSliderRelay synOscBEnableRelay   { ParameterIDs::SYN_OSC_B_ENABLE };
     juce::WebSliderRelay synOscBMuteRelay       { ParameterIDs::SYN_OSC_B_MUTE };
     juce::WebSliderRelay synOscBSoloRelay       { ParameterIDs::SYN_OSC_B_SOLO };
     juce::WebSliderRelay synOscBPanRelay        { ParameterIDs::SYN_OSC_B_PAN };
@@ -304,6 +306,7 @@ private:
     juce::WebSliderRelay synOscCSemiRelay       { ParameterIDs::SYN_OSC_C_SEMI };
     juce::WebSliderRelay synOscCCentRelay       { ParameterIDs::SYN_OSC_C_CENT };
     juce::WebSliderRelay synOscCLevelRelay      { ParameterIDs::SYN_OSC_C_LEVEL };
+    juce::WebSliderRelay synOscCEnableRelay   { ParameterIDs::SYN_OSC_C_ENABLE };
     juce::WebSliderRelay synOscCMuteRelay       { ParameterIDs::SYN_OSC_C_MUTE };
     juce::WebSliderRelay synOscCSoloRelay       { ParameterIDs::SYN_OSC_C_SOLO };
     juce::WebSliderRelay synOscCPanRelay        { ParameterIDs::SYN_OSC_C_PAN };
@@ -335,6 +338,7 @@ private:
     juce::WebSliderRelay synOscDSemiRelay       { ParameterIDs::SYN_OSC_D_SEMI };
     juce::WebSliderRelay synOscDCentRelay       { ParameterIDs::SYN_OSC_D_CENT };
     juce::WebSliderRelay synOscDLevelRelay      { ParameterIDs::SYN_OSC_D_LEVEL };
+    juce::WebSliderRelay synOscDEnableRelay   { ParameterIDs::SYN_OSC_D_ENABLE };
     juce::WebSliderRelay synOscDMuteRelay       { ParameterIDs::SYN_OSC_D_MUTE };
     juce::WebSliderRelay synOscDSoloRelay       { ParameterIDs::SYN_OSC_D_SOLO };
     juce::WebSliderRelay synOscDPanRelay        { ParameterIDs::SYN_OSC_D_PAN };
@@ -641,6 +645,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASemiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscACentAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscALevelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAEnableAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAMuteAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASoloAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAPanAttachment;
@@ -751,6 +756,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSemiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBCentAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBLevelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBEnableAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBMuteAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSoloAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBPanAttachment;
@@ -790,6 +796,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSemiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCCentAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCLevelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCEnableAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCMuteAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSoloAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCPanAttachment;
@@ -821,6 +828,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSemiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDCentAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDLevelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDEnableAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDMuteAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSoloAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDPanAttachment;

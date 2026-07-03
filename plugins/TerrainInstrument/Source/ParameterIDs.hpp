@@ -101,6 +101,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_CENT[]    = "SYN_OSC_A_CENT";     // float -100..+100
     constexpr char SYN_OSC_A_LEVEL[]   = "SYN_OSC_A_LEVEL";    // float 0..1
     constexpr char SYN_OSC_A_PAN[]     = "SYN_OSC_A_PAN";      // float -1..+1
+    constexpr char SYN_OSC_A_ENABLE[]  = "SYN_OSC_A_ENABLE";   // bool — osc A ON/OFF (the white OSC letters); off = render fully skipped
     constexpr char SYN_OSC_A_MUTE[]    = "SYN_OSC_A_MUTE";     // bool — osc A silent
     constexpr char SYN_OSC_A_SOLO[]    = "SYN_OSC_A_SOLO";     // bool — solo osc A
     constexpr char SYN_FILTER1_CUT[]   = "SYN_FILTER1_CUT";    // float 20..20000 Hz (skewed)
@@ -283,6 +284,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_CENT[]        = "SYN_OSC_B_CENT";         // float -100..+100
     constexpr char SYN_OSC_B_LEVEL[]       = "SYN_OSC_B_LEVEL";        // float 0..1
     constexpr char SYN_OSC_B_PAN[]         = "SYN_OSC_B_PAN";          // float -1..+1
+    constexpr char SYN_OSC_B_ENABLE[]  = "SYN_OSC_B_ENABLE";   // bool — osc B ON/OFF (the white OSC letters); off = render fully skipped
     constexpr char SYN_OSC_B_MUTE[]        = "SYN_OSC_B_MUTE";         // bool — osc B silent
     constexpr char SYN_OSC_B_SOLO[]        = "SYN_OSC_B_SOLO";         // bool — solo osc B
     constexpr char SYN_OSC_B_WT_PRESET[]   = "SYN_OSC_B_WT_PRESET";    // choice 0..19
@@ -355,6 +357,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_CENT[]        = "SYN_OSC_C_CENT";         // float -100..+100
     constexpr char SYN_OSC_C_LEVEL[]       = "SYN_OSC_C_LEVEL";        // float 0..1
     constexpr char SYN_OSC_C_PAN[]         = "SYN_OSC_C_PAN";          // float -1..+1
+    constexpr char SYN_OSC_C_ENABLE[]  = "SYN_OSC_C_ENABLE";   // bool — osc C ON/OFF (the white OSC letters); off = render fully skipped
     constexpr char SYN_OSC_C_MUTE[]        = "SYN_OSC_C_MUTE";         // bool — osc C silent
     constexpr char SYN_OSC_C_SOLO[]        = "SYN_OSC_C_SOLO";         // bool — solo osc C
     constexpr char SYN_OSC_C_WT_PRESET[]   = "SYN_OSC_C_WT_PRESET";    // choice 0..19
@@ -386,6 +389,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_CENT[]        = "SYN_OSC_D_CENT";         // float -100..+100
     constexpr char SYN_OSC_D_LEVEL[]       = "SYN_OSC_D_LEVEL";        // float 0..1
     constexpr char SYN_OSC_D_PAN[]         = "SYN_OSC_D_PAN";          // float -1..+1
+    constexpr char SYN_OSC_D_ENABLE[]  = "SYN_OSC_D_ENABLE";   // bool — osc D ON/OFF (the white OSC letters); off = render fully skipped
     constexpr char SYN_OSC_D_MUTE[]        = "SYN_OSC_D_MUTE";         // bool — osc D silent
     constexpr char SYN_OSC_D_SOLO[]        = "SYN_OSC_D_SOLO";         // bool — solo osc D
     constexpr char SYN_OSC_D_WT_PRESET[]   = "SYN_OSC_D_WT_PRESET";    // choice 0..19

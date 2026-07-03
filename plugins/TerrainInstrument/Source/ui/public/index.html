@@ -3565,6 +3565,18 @@ body {
 
 /* ── OSCFIX-HEADER-EMBLEMS: OSC caps + muted header; A/S/N/+ uniform boxed emblems (right cluster); knob baseline lock ── */
 #syn-panel .device.osc .device-label { color: var(--text-muted); text-transform: uppercase; }
+/* ── OSC ON/OFF — the white OSC letters (SYN_OSC_x_ENABLE) ─────────────────────────────
+   Click the "OSC ·" label to toggle the oscillator. ON = white letters; OFF = gray letters
+   + the rest of the oscillator grayed out (the front panel's section-disabled idiom) and
+   its DSP fully skipped. The label itself stays live so the osc can be switched back on. */
+#syn-panel .device.osc .device-label { cursor: pointer; transition: color 0.25s ease; }
+#syn-panel .device.osc:not(.osc-off) .device-label { color: #FFFFFF; }
+#syn-panel .device.osc.osc-off .device-label { color: var(--text-muted); }
+#syn-panel .device.osc > :not(.device-label-row),
+#syn-panel .device.osc .device-label-row > :not(.device-label) { transition: opacity 0.3s ease, filter 0.3s ease; }
+#syn-panel .device.osc.osc-off > :not(.device-label-row),
+#syn-panel .device.osc.osc-off .device-label-row > :not(.device-label)
+  { opacity: 0.4; filter: grayscale(1); pointer-events: none; }
 #syn-panel .device.osc .engine-display { color: var(--text-muted); font-weight: 400; }
 #syn-panel .device.osc .device-corner-preset { gap: 4px; }
 #syn-panel .device.osc .osc-emblems { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
@@ -9756,6 +9768,34 @@ document.getElementById('eq-bypass-btn').addEventListener('click', () => {
   pushEqParam('EQ_MASTER_BYPASS', eqState.masterBypass ? 1 : 0);
   redrawEqCanvas();
 });
+
+// ── OSC ON/OFF — the white OSC letters (SYN_OSC_x_ENABLE) ───────────────
+// Click an oscillator's "OSC ·" label to toggle it. OFF grays the whole
+// oscillator (front-panel section-disabled idiom) and the DSP skips it
+// entirely — unlike volume 0, which kept it silently burning CPU.
+setTimeout(function wireOscEnable () {
+  try {
+    ['a', 'b', 'c', 'd'].forEach(function (o) {
+      var dev = document.getElementById('osc-' + o + '-device'); if (! dev) return;
+      var lab = dev.querySelector('.device-label'); if (! lab) return;
+      var st = null;
+      try { st = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_OSC_' + o.toUpperCase() + '_ENABLE') : null; } catch (e) {}
+      function apply (on) { dev.classList.toggle('osc-off', ! on); }
+      if (st) {
+        apply(st.getNormalisedValue() > 0.5);
+        try { st.valueChangedEvent.addListener(function () { apply(st.getNormalisedValue() > 0.5); }); } catch (e) {}
+      }
+      lab.title = 'Oscillator ' + o.toUpperCase() + ' on/off';
+      lab.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        if (! st) { dev.classList.toggle('osc-off'); return; }   // mockup fallback
+        var on = st.getNormalisedValue() > 0.5;
+        st.setNormalisedValue(on ? 0 : 1);
+        apply(! on);
+      });
+    });
+  } catch (e) {}
+}, 0);
 
 // ── SYN button: open/close the synth panel ──────────────────────────────
 // Uses the existing setActivePanel manager so opening SYN closes any other

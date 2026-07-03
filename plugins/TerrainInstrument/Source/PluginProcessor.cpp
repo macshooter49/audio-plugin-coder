@@ -56,6 +56,10 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     {
         auto* v = new tw::SynthVoice();
         synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
+        // CPU: instance-wide grain budget — every granular engine shares one live-grain
+        // counter, so 4 dense granular oscs × polyphony thin gracefully at kGranBudget
+        // instead of multiplying to thousands of grains (≈8.5 ns per grain-sample each).
+        v->setGrainBudget (&granGrainsLive_, kGranBudget);
         synthEngine.addVoice (v);
     }
 
@@ -921,6 +925,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
 
     layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_ENABLE, 1 }, "Osc A Enable", true));   // fresh instance: only OSC A on
+    layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_MUTE, 1 }, "Osc A Mute", false));
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SOLO, 1 }, "Osc A Solo", false));
@@ -1466,11 +1472,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_LEVEL, 1 },
         "Synth OSC B Level",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));   // start silent like C/D — only OSC A sounds on a fresh instance
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));   // audible default — OFF now lives in SYN_OSC_B_ENABLE, so switching on sounds immediately
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PAN, 1 },
         "Synth OSC B Pan",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_ENABLE, 1 }, "Osc B Enable", false));   // fresh instance: only OSC A on
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_MUTE, 1 }, "Osc B Mute", false));
     layout.add (std::make_unique<juce::AudioParameterBool> (
@@ -1609,11 +1617,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_LEVEL, 1 },
         "Synth OSC C Level",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));   // start silent (spec)
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));   // audible default — OFF now lives in SYN_OSC_C_ENABLE
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PAN, 1 },
         "Synth OSC C Pan",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_ENABLE, 1 }, "Osc C Enable", false));   // fresh instance: only OSC A on
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_MUTE, 1 }, "Osc C Mute", false));
     layout.add (std::make_unique<juce::AudioParameterBool> (
@@ -1752,11 +1762,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_LEVEL, 1 },
         "Synth OSC D Level",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));   // start silent (spec)
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));   // audible default — OFF now lives in SYN_OSC_D_ENABLE
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PAN, 1 },
         "Synth OSC D Pan",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_ENABLE, 1 }, "Osc D Enable", false));   // fresh instance: only OSC A on
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_MUTE, 1 }, "Osc D Mute", false));
     layout.add (std::make_unique<juce::AudioParameterBool> (
@@ -3133,9 +3145,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const bool muteD = *rawParam (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
         const bool soloD = *rawParam (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
         const bool anySolo = soloA || soloB || soloC || soloD;
-        auto oscGate = [anySolo](bool mute, bool solo){ return (mute || (anySolo && !solo)) ? 0.0f : 1.0f; };
-        const float gateA = oscGate(muteA, soloA), gateB = oscGate(muteB, soloB),
-                    gateC = oscGate(muteC, soloC), gateD = oscGate(muteD, soloD);
+        // OSC ENABLE — the real per-osc ON/OFF (the white OSC letters in the UI). Rides the
+        // same click-free gate one-pole as solo/mute; once the gate settles at silence the
+        // voice SKIPS the osc's whole render path (engines included), so OFF costs ~nothing —
+        // unlike volume 0, which kept the osc silently burning CPU.
+        const bool enA = *rawParam (ParameterIDs::SYN_OSC_A_ENABLE) > 0.5f;
+        const bool enB = *rawParam (ParameterIDs::SYN_OSC_B_ENABLE) > 0.5f;
+        const bool enC = *rawParam (ParameterIDs::SYN_OSC_C_ENABLE) > 0.5f;
+        const bool enD = *rawParam (ParameterIDs::SYN_OSC_D_ENABLE) > 0.5f;
+        auto oscGate = [anySolo](bool en, bool mute, bool solo){ return (! en || mute || (anySolo && !solo)) ? 0.0f : 1.0f; };
+        const float gateA = oscGate(enA, muteA, soloA), gateB = oscGate(enB, muteB, soloB),
+                    gateC = oscGate(enC, muteC, soloC), gateD = oscGate(enD, muteD, soloD);
 
         // ════════ SAMPLE-ENGINE-PUSH — read per-OSC Sample params (Opus) ════════
         tw::SynthVoice::SampleEngineParams spA;
