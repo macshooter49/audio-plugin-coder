@@ -173,7 +173,7 @@ int main()
         check (wentInactive, "voice frees after release when all grains retire");
     }
 
-    // ── Phase 5: Key snap + Life (flagship) ──
+    // ── Key: snap correctness + audible in-key shimmer (the point of Key) ──
     {
         check (std::fabs (GranularEngine::snapToKeyForTesting (3.3, 0) - 3.3) < 1e-6, "Key Off = passthrough");
         check (std::fabs (GranularEngine::snapToKeyForTesting (1.0, 4) - 0.0) < 1e-6, "Maj snaps C#(1) to C(0)");
@@ -181,27 +181,81 @@ int main()
         check (std::fabs (GranularEngine::snapToKeyForTesting (13.0, 4) - 12.0) < 1e-6, "Maj keeps octave: 13 -> 12");
         check (std::fabs (GranularEngine::snapToKeyForTesting (7.0, 2) - 7.0) < 1e-6, "5th keeps the fifth (7)");
 
+        // Key ON with pitchSpray=0 must STILL create in-key pitch variety (the shimmer) → audible + finite.
         GranularEngine ge; ge.prepare (48000.0);
         ge.setSample (chans, 2, 48000, 48000.0);
-        GranularEngineParams p; p.life = 1.f; p.density = 0.6f; p.size = 0.3f; ge.setParams (p);
+        GranularEngineParams p; p.key = 4; p.pitchSpray = 0.f; p.density = 0.7f; p.size = 0.3f; ge.setParams (p);
         ge.noteOn (1.0, 0x5151);
-        double sumSq = 0; bool finite = true; const int N = 96000;
+        double sumSq = 0; bool finite = true; const int N = 48000;
         for (int i = 0; i < N; ++i) { float a, b; ge.tick (a, b); if (! std::isfinite (a)) finite = false; sumSq += a * a; }
-        check (finite, "Life=1 stays finite (bounded drift, no blowup)");
-        double rms = std::sqrt (sumSq / N);
-        check (rms > 0.005 && rms < 1.5, "Life=1 RMS stays in a sane band");
+        check (finite, "Key shimmer stays finite");
+        check (std::sqrt (sumSq / N) > 0.01, "Key shimmer is audible even at pitchSpray=0");
     }
 
-    // Jump — instant onset (1) reaches full density faster than soft-build (0)
+    // ── Window: all three Shape morph endpoints are ~0 at grain edges (declick) + Shape is dramatic ──
     {
-        auto earlyMax = [&] (float jump) {
+        GranularEngine w; w.prepare (48000.0);
+        check (w.windowForTesting (0.f, 0.f, 0.f) < 1e-3f && w.windowForTesting (0.f, 0.f, 1.f) < 1e-3f, "Flat-top window is 0 at both ends");
+        check (w.windowForTesting (0.5f, 0.f, 0.f) < 1e-3f && w.windowForTesting (0.5f, 0.f, 1.f) < 1e-3f, "Hann window is 0 at both ends");
+        check (w.windowForTesting (1.f, 0.f, 0.f) < 1e-3f && w.windowForTesting (1.f, 0.f, 1.f) < 1e-3f, "Bell window is 0 at both ends");
+        // Flat-top holds ~1 off-centre; the Bell is much narrower there → Shape is audibly different.
+        const float flatMid = w.windowForTesting (0.f, 0.f, 0.22f);
+        const float bellMid = w.windowForTesting (1.f, 0.f, 0.22f);
+        check (flatMid > bellMid + 0.3f, "Shape morph is dramatic (flat-top >> bell off-centre)");
+    }
+
+    // ── Air: exciter adds high-harmonic energy without blowing up ──
+    {
+        GranularEngine dry, wet; dry.prepare (48000.0); wet.prepare (48000.0);
+        dry.setSample (chans, 2, 48000, 48000.0); wet.setSample (chans, 2, 48000, 48000.0);
+        GranularEngineParams pd; pd.density = 0.6f; pd.size = 0.3f; pd.air = 0.f; dry.setParams (pd);
+        GranularEngineParams pw = pd; pw.air = 1.f; wet.setParams (pw);
+        dry.noteOn (1.0, 7); wet.noteOn (1.0, 7);
+        double eDry = 0, eWet = 0; bool finite = true;
+        for (int i = 0; i < 24000; ++i) { float a, b; dry.tick (a, b); eDry += a * a; wet.tick (a, b); if (! std::isfinite (a)) finite = false; eWet += a * a; }
+        check (finite, "Air stays finite at max");
+        check (eWet > eDry, "Air adds energy (exciter engaged)");
+    }
+
+    // ── Stretch: raises grain overlap (longer + denser) → more simultaneous grains ──
+    {
+        auto avgGrains = [&] (float stretch, int mode) {
             GranularEngine e; e.prepare (48000.0); e.setSample (chans, 2, 48000, 48000.0);
-            GranularEngineParams p; p.jump = jump; p.density = 0.85f; p.size = 0.45f; e.setParams (p);
-            e.noteOn (1.0, 0x99);
-            int mx = 0; for (int i = 0; i < 3000; ++i) { float a, b; e.tick (a, b); int n = e.activeGrainsForTesting (); if (n > mx) mx = n; }
-            return mx;
+            GranularEngineParams p; p.density = 0.4f; p.size = 0.3f; p.stretch = stretch; p.stretchMode = mode; e.setParams (p);
+            e.noteOn (1.0, 0x321);
+            long sum = 0; const int N = 24000;
+            for (int i = 0; i < N; ++i) { float a, b; e.tick (a, b); sum += e.activeGrainsForTesting (); }
+            return (double) sum / N;
         };
-        check (earlyMax (1.f) >= earlyMax (0.f), "Jump: instant onset >= soft-build early grain count");
+        check (avgGrains (1.f, 0) > avgGrains (0.f, 0), "Stretch (Tones) raises average grain overlap");
+    }
+
+    // ── Loop modes: One-Shot stops at the edge; Ping-Pong bounces and stays in bounds ──
+    {
+        // One-Shot (mode 0): fast scan from position 0.9 reaches the end and STOPS spawning → grains empty out.
+        GranularEngine os; os.prepare (48000.0); os.setSample (chans, 2, 48000, 48000.0);
+        GranularEngineParams p; p.loopMode = 0; p.scan = 1.0f; p.density = 0.6f; p.size = 0.2f; p.position = 0.9f; os.setParams (p);
+        os.noteOn (1.0, 0x0501);
+        for (int i = 0; i < 48000 * 3; ++i) { float a, b; os.tick (a, b); }
+        check (os.activeGrainsForTesting () == 0, "One-Shot: grains empty out after the head reaches the end");
+        check (os.scanPos01 () <= 1.0001f && os.scanPos01 () >= -1e-4f, "One-Shot: head clamped in range");
+
+        // Ping-Pong (mode 3): head stays within [start,end] and reverses direction (bounces).
+        GranularEngine pp; pp.prepare (48000.0); pp.setSample (chans, 2, 48000, 48000.0);
+        GranularEngineParams q; q.loopMode = 3; q.scan = 0.8f; q.density = 0.5f; q.size = 0.2f; q.position = 0.5f; pp.setParams (q);
+        pp.noteOn (1.0, 0x0303);
+        bool inBounds = true, wentUp = false, wentDown = false; float prev = pp.scanPos01 ();
+        for (int i = 0; i < 48000 * 2; ++i)
+        {
+            float a, b; pp.tick (a, b);
+            const float sp = pp.scanPos01 ();
+            if (sp < -1e-4f || sp > 1.0001f) inBounds = false;
+            if (sp > prev + 1e-7f) wentUp = true;
+            if (sp < prev - 1e-7f) wentDown = true;
+            prev = sp;
+        }
+        check (inBounds, "Ping-Pong: head stays within [start,end]");
+        check (wentUp && wentDown, "Ping-Pong: head reverses (bounces both ways)");
     }
 
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);

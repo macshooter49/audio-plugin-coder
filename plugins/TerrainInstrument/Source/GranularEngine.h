@@ -10,7 +10,12 @@
 //  Design: a fixed 64-grain pool + an async, jitter-scheduled spawner. A master
 //  read-head (Scan) is DECOUPLED from grain pitch — Scan=0 freezes (grains keep
 //  spraying from the held slice = the "living freeze"), Scan<0 reverses. Grains
-//  are windowed by construction, so grain start/stop physically cannot click.
+//  are windowed by construction (window is 0 at both ends), so grain start/stop
+//  physically cannot click — even sustained as a pad.
+//
+//  Controls (front knobs): Scan · Density · Size · Spray · Shape · Key
+//                (page 2): Position · Pitch · P.Spray · Width · Dir · Skew
+//  Waveform right-click (ported from the Sample osc): Air · Stretch(+ Tones/Beats/Texture)
 //
 //  Offline proof loop (Pattern A — NOT in CMakeLists):
 //    c++ -std=c++17 -Wall -Wextra -ISource Source/GranularEngine_test.cpp -o /tmp/ge && /tmp/ge
@@ -29,18 +34,27 @@ struct GranularEngineParams
 {
     float scan       = 0.15f; // -1..+1 read-head rate; 0 = freeze, <0 = reverse
     float position   = 0.f;   // 0..1 grain-birth anchor within the region
-    float density    = 0.4f;  // 0..1 -> 1..200 grains/sec (log)
-    float size       = 0.25f; // 0..1 -> 2..500 ms grain length (log)
-    float spray      = 0.10f; // 0..1 grain-birth position jitter
-    float shape      = 0.5f;  // 0..1 window morph Tukey(0) -> Gaussian(1)
+    float density    = 0.4f;  // 0..1 -> 1..220 grains/sec (log)
+    float size       = 0.25f; // 0..1 -> 2..900 ms grain length (log)
+    float spray      = 0.10f; // 0..1 grain-birth position jitter (AMPLIFIED: full = ±half the region)
+    float shape      = 0.5f;  // 0..1 window morph Flat-top(0) -> Hann(.5) -> Bell(1)
     float skew       = 0.f;   // -1..+1 window asymmetry (pluck <-> swell)
     float pitch      = 0.f;   // base grain transpose, semitones
-    float pitchSpray = 0.f;   // 0..1 per-grain pitch scatter (up to +/-12 st)
+    float pitchSpray = 0.f;   // 0..1 per-grain pitch scatter (AMPLIFIED: up to ±24 st)
     float width      = 0.f;   // 0..1 per-grain stereo spread
     float dir        = 1.f;   // -1..+1 per-grain direction bias (-1 rev, 0 rand, +1 fwd)
-    float life       = 0.15f; // 0..1 living-weather macro (Phase 5)
-    float jump       = 1.f;   // 0..1 onset: 1 = instant (default), lower = soft build
-    int   key        = 0;     // 0=Off 1=Oct 2=5th 3=Chord 4=Maj 5=Min 6=Penta (Phase 5)
+    int   key        = 0;     // 0=Off 1=Oct 2=5th 3=Chord 4=Maj 5=Min 6=Penta — in-key shimmer
+
+    // ── ported from the Sample osc, exposed on the waveform right-click ──
+    float air        = 0.f;   // 0..1 Chebyshev-style high-harmonic exciter (identical to Sample AIR)
+    float stretch    = 0.f;   // 0..1 grain-domain time-stretch / smear
+    int   stretchMode= 0;     // 0=Tones 1=Beats 2=Texture (stretch character)
+
+    // ── region (start/end handles on the waveform) — travels with the params so the voice
+    //    can setRegion() each block; fixes the old hardcoded whole-buffer region ──
+    float regStart   = 0.f;   // 0..1
+    float regEnd     = 1.f;   // 0..1
+    int   loopMode   = 1;     // 0=One-Shot 1=Forward 2=Reverse 3=Ping-Pong 4=Tailed (from SAMPLE_LOOP_MODE)
 };
 
 class GranularEngine
@@ -52,7 +66,11 @@ public:
     void prepare (double outputSampleRate) noexcept
     {
         outRate_ = outputSampleRate > 0.0 ? outputSampleRate : 48000.0;
+        // AIR high-pass corner ~3 kHz one-pole (matches the Sample engine's exciter feel)
+        airCoef_ = 1.f - std::exp (-2.f * kPi * 3000.f / (float) outRate_);
+        if (airCoef_ < 0.f) airCoef_ = 0.f; if (airCoef_ > 1.f) airCoef_ = 1.f;
         buildWindows();
+        recomputeDerived();
     }
 
     void setSample (const float* const* ch, int numCh, int numSamples, double nativeRate) noexcept
@@ -72,8 +90,9 @@ public:
         regStart01_ = clamp01 (start01);
         regEnd01_   = clamp01 (end01);
         if (regEnd01_ < regStart01_) { float t = regStart01_; regStart01_ = regEnd01_; regEnd01_ = t; }
+        if (regEnd01_ - regStart01_ < 0.001f) regEnd01_ = clamp01 (regStart01_ + 0.001f);
     }
-    void setParams (const GranularEngineParams& p) noexcept { p_ = p; }
+    void setParams (const GranularEngineParams& p) noexcept { p_ = p; recomputeDerived(); }
     void setPitchRatio (double r) noexcept { basePitch_ = r; }
 
     // ── note lifecycle ──
@@ -86,8 +105,9 @@ public:
         countdown_ = 0.0;
         active_    = true;
         releasing_ = false;
-        onsetRamp_ = (p_.jump >= 0.999f) ? 1.f : 0.f;    // Jump — full density immediately vs soft build
-        onsetInc_  = 1.f / (1.f + (1.f - clamp01 (p_.jump)) * 0.30f * (float) outRate_);   // ramp over up to ~0.3s
+        airHpL_ = airHpR_ = 0.f;
+        pingDir_   = 1.f;      // Ping-Pong starts moving toward the end
+        oneShotDone_ = false;  // One-Shot / Tailed: not yet reached the far edge
     }
     void noteOff() noexcept { releasing_ = true; }
 
@@ -100,24 +120,12 @@ public:
         outL = outR = 0.f;
         if (! active_ || ! hasSample()) return active_;
 
-        // 0) Life — slow bounded drift on density/size/spray (the "living" weather; ~5 Hz update)
-        if (p_.life > 0.f && --lifeTick_ <= 0)
-        {
-            lifeTick_ = 256;
-            lifeD_  = 0.97f * lifeD_  + 0.05f * (ouRand() * 2.f - 1.f);
-            lifeSz_ = 0.97f * lifeSz_ + 0.05f * (ouRand() * 2.f - 1.f);
-            lifeSp_ = 0.97f * lifeSp_ + 0.05f * (ouRand() * 2.f - 1.f);
-        }
-
-        // Jump — advance the onset ramp (soft build after note-on; instant when jump=1)
-        if (onsetRamp_ < 1.f) { onsetRamp_ += onsetInc_; if (onsetRamp_ > 1.f) onsetRamp_ = 1.f; }
-
         // 1) async scheduler — spawn on a jittered countdown (async cloud, not periodic)
         countdown_ -= 1.0;
         while (countdown_ <= 0.0)
         {
-            if (! releasing_ && (onsetRamp_ >= 1.f || ouRand() < onsetRamp_)) spawnGrain();   // Jump gates the onset
-            const double interval = outRate_ / densityHz();
+            if (! releasing_ && ! oneShotDone_) spawnGrain();   // One-Shot: stop spawning once the head hits the far edge
+            const double interval = outRate_ / (double) densHz_;
             const double jit      = 0.5 * interval * (nextRand01() * 2.f - 1.f); // regularity jitter
             countdown_ += interval + jit;
             if (countdown_ < 1.0) countdown_ = 1.0;
@@ -146,18 +154,46 @@ public:
             if (g.age >= g.len) g.active = false; // retire at window->0, no click
         }
 
-        // 3) equal-power-ish normalization vs the expected overlap (stable, count-independent)
-        const float norm = 1.f / std::sqrt (overlapEstimate());
-        outL = accL * norm;
-        outR = accR * norm;
+        // 3) equal-power-ish normalization vs the expected overlap (stable, count-independent).
+        //    norm_ is cached per block (recomputeDerived) — no per-sample sqrt/pow.
+        outL = accL * norm_;
+        outR = accR * norm_;
 
-        // 4) advance the read-head — Scan=0 stays frozen (grains keep spraying from here)
-        if (p_.scan != 0.f)
+        // 4) AIR — Chebyshev-style high-harmonic exciter (identical math to the Sample osc's AIR)
+        if (p_.air > 0.001f)
+        {
+            const float drv = 1.f + p_.air * 20.f;
+            airHpL_ += airCoef_ * (outL - airHpL_); const float hpL = outL - airHpL_;
+            outL += p_.air * 2.f * (std::tanh (hpL * drv) - hpL);
+            airHpR_ += airCoef_ * (outR - airHpR_); const float hpR = outR - airHpR_;
+            outR += p_.air * 2.f * (std::tanh (hpR * drv) - hpR);
+        }
+
+        // 5) advance the read-head per LOOP MODE — Scan=0 stays frozen (grains keep spraying from here).
+        //    0=One-Shot (clamp+stop), 1=Forward loop, 2=Reverse loop, 3=Ping-Pong (bounce), 4=Tailed(=One-Shot).
+        if (p_.scan != 0.f && ! oneShotDone_)
         {
             const double range = (regEnd01_ - regStart01_) > 0.f ? (regEnd01_ - regStart01_) : 1.0;
-            scanPos_ += (double) p_.scan * 2.0 / outRate_ * range;
-            if (scanPos_ > regEnd01_) scanPos_ = regStart01_ + (scanPos_ - regEnd01_);
-            if (scanPos_ < regStart01_) scanPos_ = regEnd01_ - (regStart01_ - scanPos_);
+            double rate = (double) p_.scan;
+            if      (p_.loopMode == 2) rate = -std::fabs (rate);              // Reverse — always toward start
+            else if (p_.loopMode == 3) rate =  std::fabs (rate) * pingDir_;   // Ping-Pong — |scan| × bounce dir
+            scanPos_ += rate * 2.0 / outRate_ * range;
+
+            if (p_.loopMode == 0 || p_.loopMode == 4)            // One-Shot / Tailed — clamp at the edge, stop spawning
+            {
+                if (scanPos_ >= regEnd01_)   { scanPos_ = regEnd01_;   oneShotDone_ = true; }
+                if (scanPos_ <= regStart01_) { scanPos_ = regStart01_; oneShotDone_ = true; }
+            }
+            else if (p_.loopMode == 3)                            // Ping-Pong — bounce at both edges
+            {
+                if (scanPos_ >= regEnd01_)   { scanPos_ = regEnd01_;   pingDir_ = -1.f; }
+                if (scanPos_ <= regStart01_) { scanPos_ = regStart01_; pingDir_ =  1.f; }
+            }
+            else                                                  // Forward (1) / Reverse (2) — wrap around
+            {
+                if (scanPos_ > regEnd01_) scanPos_ = regStart01_ + (scanPos_ - regEnd01_);
+                if (scanPos_ < regStart01_) scanPos_ = regEnd01_ - (regStart01_ - scanPos_);
+            }
         }
 
         if (releasing_ && ! any) active_ = false; // freed once every grain has retired
@@ -185,6 +221,7 @@ public:
     int  activeGrainsForTesting()   const noexcept { int n = 0; for (auto& g : pool_) n += g.active ? 1 : 0; return n; }
     bool anyGrainReversedForTesting() const noexcept { for (auto& g : pool_) if (g.active && g.readInc < 0.0) return true; return false; }
     static double snapToKeyForTesting (double semis, int key) noexcept { return snapToKey (semis, key); }
+    float windowForTesting (float shape, float skew, float phase) const noexcept { return windowAt (shape, skew, phase); }
 
 private:
     struct Grain
@@ -195,13 +232,35 @@ private:
         bool   active = false;
     };
 
-    // ── range maps (research-grounded) ──
-    float densityHz()  const noexcept { const float d = clamp01 (p_.density + p_.life * lifeD_  * 0.35f); return 1.f * std::pow (200.f, d); }   // 1..200 g/s (+Life)
-    float grainLenSec() const noexcept { const float s = clamp01 (p_.size    + p_.life * lifeSz_ * 0.35f); return 0.002f * std::pow (250.f, s); } // 2..500 ms (+Life)
-    float overlapEstimate() const noexcept
+    // ── range maps (research-grounded, AMPLIFIED + Stretch-coupled) ──
+    // Stretch elongates grains (and fills the gaps with density) for a smooth time-stretch/freeze
+    // pad; the mode biases the character: Tones = long+smooth, Beats = short+dense, Texture = mid+diffuse.
+    float stretchLenMul() const noexcept
     {
-        const float o = densityHz() * grainLenSec();
-        return o < 1.f ? 1.f : o;
+        const float s = clamp01 (p_.stretch);
+        switch (p_.stretchMode) { case 1: return 1.f + s * 0.6f;   // Beats — stay punchy
+                                  case 2: return 1.f + s * 2.5f;   // Texture — diffuse
+                                  default: return 1.f + s * 4.0f; } // Tones — long & smooth
+    }
+    float stretchDensMul() const noexcept
+    {
+        const float s = clamp01 (p_.stretch);
+        switch (p_.stretchMode) { case 1: return 1.f + s * 3.0f;   // Beats — more grains = stutter fill
+                                  case 2: return 1.f + s * 1.6f;   // Texture
+                                  default: return 1.f + s * 2.2f; } // Tones
+    }
+    // CPU: derive densHz_ / grainLenSamp_ / norm_ ONCE per block (setParams), not per sample.
+    // p_ is constant within a block, so these are bit-identical to the old per-sample recompute —
+    // this just stops re-evaluating pow()/sqrt() on every tick(). (Was densityHz/grainLenSec/overlap.)
+    void recomputeDerived() noexcept
+    {
+        const float d = clamp01 (p_.density);
+        densHz_ = std::pow (220.f, d) * stretchDensMul();                     // 1..220 g/s (+Stretch)
+        const float s = clamp01 (p_.size);
+        const float glenSec = 0.002f * std::pow (450.f, s) * stretchLenMul(); // 2..900 ms (+Stretch)
+        grainLenSamp_ = glenSec * (float) outRate_;
+        const float ov = densHz_ * glenSec;
+        norm_ = 1.f / std::sqrt (ov < 1.f ? 1.f : ov);
     }
 
     void spawnGrain() noexcept
@@ -212,15 +271,21 @@ private:
 
         Grain& g = pool_[slot];
 
-        // birth position: scan head + sprayed jitter (+Life drift), clamped into the region
-        const float sprayAmt = clamp01 (p_.spray + p_.life * lifeSp_ * 0.35f);
-        double birth01 = scanPos_ + sprayAmt * (nextRand01() * 2.f - 1.f) * 0.25;
+        // birth position: scan head + sprayed jitter, clamped into the region.
+        // AMPLIFIED — full Spray reaches ±half the region (Texture stretch adds extra scatter).
+        float sprayAmt = clamp01 (p_.spray);
+        if (p_.stretchMode == 2) sprayAmt = clamp01 (sprayAmt + p_.stretch * 0.4f);
+        double birth01 = scanPos_ + sprayAmt * (nextRand01() * 2.f - 1.f) * 0.5;
         birth01 = birth01 < regStart01_ ? regStart01_ : (birth01 > regEnd01_ ? regEnd01_ : birth01);
         g.readPos = birth01 * (numSamples_ - 1);
 
-        // per-grain pitch (base + spray), decoupled from the scan head; Key snaps it to a scale
-        double semis = (double) p_.pitch + (double) p_.pitchSpray * (nextRand01() * 2.f - 1.f) * 12.0;
-        semis = snapToKey (semis, p_.key);
+        // per-grain pitch (base + spray), decoupled from the scan head.
+        // Key OFF: pitch + wide free spray. Key ON: pitch + an in-key octave/degree draw
+        // (the "shimmer" — audible even at pitchSpray=0), then snapped back to the scale.
+        double semis = (double) p_.pitch;
+        if (p_.key > 0) semis += randKeyOffset (p_.key);
+        semis += (double) p_.pitchSpray * (nextRand01() * 2.f - 1.f) * 24.0;   // AMPLIFIED ±24 st
+        if (p_.key > 0) semis = snapToKey (semis, p_.key);
         const double pr = basePitch_ * std::pow (2.0, semis / 12.0);
 
         // per-grain direction bias: -1 all-reverse, +1 all-forward, 0 = coin-flip
@@ -229,9 +294,14 @@ private:
                        : (nextRand01() > (p_.dir * 0.5f + 0.5f));
         g.readInc = pr * (rev ? -1.0 : 1.0);
 
-        // grain length from Size
-        g.len = (int) (grainLenSec() * outRate_);
-        if (g.len < 4) g.len = 4;
+        // grain length from Size (+Stretch), clamped so it can't exceed the region span.
+        // grainLenSamp_ is cached per block (recomputeDerived) — no per-spawn pow.
+        int len = (int) grainLenSamp_;
+        const int spanSamp = (int) ((regEnd01_ - regStart01_) * (numSamples_ - 1));
+        const int maxLen = spanSamp > 8 ? spanSamp * 4 : 8;   // grains may re-scan the region a few times
+        if (len < 4)      len = 4;
+        if (len > maxLen) len = maxLen;
+        g.len = len;
         g.age = 0;
 
         // per-grain equal-power pan from Width spray
@@ -244,25 +314,42 @@ private:
         g.active = true;
     }
 
-    // ── grain window: Tukey (flat-top) <-> Gaussian (bell), with phase-skew ──
+    // ── grain windows: Flat-top (bright/dense) <-> Hann (neutral) <-> Bell (soft/sparse) ──
+    // All three are exactly 0 at both ends → grain births/deaths physically cannot click,
+    // even sustained as a pad. Shape morphs across them for a dramatic, audible timbre sweep.
     void buildWindows() noexcept
     {
-        const float alpha = 0.5f; // Tukey taper fraction
+        double sf = 0, sh = 0, sb = 0;   // window energies, for the RMS match below
         for (int i = 0; i < kWin; ++i)
         {
             const float x = (float) i / (float) (kWin - 1);
-            float t;
-            if (x < alpha * 0.5f)
-                t = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 1.f)));
-            else if (x > 1.f - alpha * 0.5f)
-                t = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 2.f / alpha + 1.f)));
-            else
-                t = 1.f;
-            tukey_[i] = t;
+            const float hann = 0.5f - 0.5f * std::cos (2.f * kPi * x);
 
-            const float d = (x - 0.5f) / 0.20f;
-            gauss_[i] = std::exp (-0.5f * d * d);
+            // Flat-top = Tukey with a small taper (mostly flat, sharp-ish zero-edges → brighter/buzzier)
+            const float alpha = 0.12f;
+            float flat;
+            if (x < alpha * 0.5f)
+                flat = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 1.f)));
+            else if (x > 1.f - alpha * 0.5f)
+                flat = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 2.f / alpha + 1.f)));
+            else
+                flat = 1.f;
+
+            // Bell = tight Gaussian, multiplied by Hann so the ends are guaranteed 0 (peak stays 1)
+            const float d = (x - 0.5f) / 0.16f;
+            const float bell = std::exp (-0.5f * d * d) * hann;
+
+            winFlat_[i] = flat;
+            winHann_[i] = hann;
+            winBell_[i] = bell;
+            sf += (double) flat * flat; sh += (double) hann * hann; sb += (double) bell * bell;
         }
+        // RMS-match Flat and Bell to the Hann window so SHAPE morphs TIMBRE, NOT loudness. (This is why
+        // Shape=0 felt like it "disappeared": the flat window was simply louder. Now all shapes are equal
+        // energy — the difference is purely tonal: flat = brighter/fuller, bell = softer/grainier.)
+        const float rf = (sf > 1e-9) ? (float) std::sqrt (sh / sf) : 1.f;
+        const float rb = (sb > 1e-9) ? (float) std::sqrt (sh / sb) : 1.f;
+        for (int i = 0; i < kWin; ++i) { winFlat_[i] *= rf; winBell_[i] *= rb; }
     }
 
     float windowAt (float shape01, float skew, float phase01) const noexcept
@@ -277,9 +364,9 @@ private:
         }
         ph = ph < 0.f ? 0.f : (ph > 1.f ? 1.f : ph);
         const int idx = (int) (ph * (float) (kWin - 1));
-        const float a = tukey_[idx];
-        const float b = gauss_[idx];
-        return a + (b - a) * shape01;
+        const float s = shape01 < 0.f ? 0.f : (shape01 > 1.f ? 1.f : shape01);
+        if (s < 0.5f)  { const float t = s * 2.f;          return winFlat_[idx] + (winHann_[idx] - winFlat_[idx]) * t; }
+        else           { const float t = (s - 0.5f) * 2.f; return winHann_[idx] + (winBell_[idx] - winHann_[idx]) * t; }
     }
 
     // ── interpolation (reused verbatim from SampleEngine) ──
@@ -303,24 +390,29 @@ private:
         rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5;
         return (float) ((rng_ & 0x00FFFFFFu) / (double) 0x01000000);
     }
-    inline float ouRand() noexcept   // separate stream for Life — leaves grain determinism untouched
-    {
-        ouRng_ ^= ouRng_ << 13; ouRng_ ^= ouRng_ >> 17; ouRng_ ^= ouRng_ << 5;
-        return (float) ((ouRng_ & 0x00FFFFFFu) / (double) 0x01000000);
-    }
     static inline float clamp01 (float x) noexcept { return x < 0.f ? 0.f : (x > 1.f ? 1.f : x); }
 
-    // Key — snap a per-grain semitone offset to the nearest scale degree (0 = Off).
+    // Key — snap a semitone offset to the nearest scale degree (0 = Off).
     static double snapToKey (double semis, int key) noexcept
     {
         if (key <= 0) return semis;
+        const int* tbl; int n; keyTable (key, tbl, n);
+        const double oc = std::floor (semis / 12.0);
+        const double pc = semis - oc * 12.0;
+        double best = tbl[0], bd = 1.0e9;
+        for (int i = 0; i < n; ++i) { const double d = std::fabs (pc - (double) tbl[i]); if (d < bd) { bd = d; best = (double) tbl[i]; } }
+        const double dWrap = std::fabs (pc - 12.0); if (dWrap < bd) best = 12.0;
+        return oc * 12.0 + best;
+    }
+
+    static void keyTable (int key, const int*& tbl, int& n) noexcept
+    {
         static const int oct[]   = { 0 };
         static const int fifth[] = { 0, 7 };
         static const int chord[] = { 0, 4, 7 };
         static const int maj[]   = { 0, 2, 4, 5, 7, 9, 11 };
         static const int minr[]  = { 0, 2, 3, 5, 7, 8, 10 };
         static const int pent[]  = { 0, 2, 4, 7, 9 };
-        const int* tbl; int n;
         switch (key)
         {
             case 1:  tbl = oct;   n = 1; break;
@@ -330,12 +422,18 @@ private:
             case 5:  tbl = minr;  n = 7; break;
             default: tbl = pent;  n = 5; break;   // 6 = Penta
         }
-        const double oc = std::floor (semis / 12.0);
-        const double pc = semis - oc * 12.0;
-        double best = tbl[0], bd = 1.0e9;
-        for (int i = 0; i < n; ++i) { const double d = std::fabs (pc - (double) tbl[i]); if (d < bd) { bd = d; best = (double) tbl[i]; } }
-        const double dWrap = std::fabs (pc - 12.0); if (dWrap < bd) best = 12.0;
-        return oc * 12.0 + best;
+    }
+
+    // A random in-key interval spanning a musical range of octaves — THIS is what makes Key
+    // audible: it turns the grain cloud into a shimmering in-key chord/shimmer even when
+    // pitchSpray is 0. Octave weighting leans on the root/+1 octave so it stays musical.
+    double randKeyOffset (int key) noexcept
+    {
+        const int* tbl; int n; keyTable (key, tbl, n);
+        const int deg = tbl[(int) (nextRand01() * (float) n) % (n > 0 ? n : 1)];
+        static const int octWeighted[] = { -12, 0, 0, 0, 12, 12, 12, 24 };   // mostly root/+1 oct
+        const int oc = octWeighted[(int) (nextRand01() * 8.f) & 7];
+        return (double) (oc + deg);
     }
 
     static constexpr int   kPool = 64;
@@ -343,8 +441,9 @@ private:
     static constexpr float kPi   = 3.14159265358979f;
 
     std::array<Grain, kPool> pool_ {};
-    std::array<float, kWin>  tukey_ {};
-    std::array<float, kWin>  gauss_ {};
+    std::array<float, kWin>  winFlat_ {};
+    std::array<float, kWin>  winHann_ {};
+    std::array<float, kWin>  winBell_ {};
 
     const float* ch0_ = nullptr;
     const float* ch1_ = nullptr;
@@ -355,10 +454,10 @@ private:
     double countdown_ = 0.0;
     float  regStart01_ = 0.f, regEnd01_ = 1.f;
     uint32_t rng_ = 0x9E3779B9u;
-    uint32_t ouRng_ = 0x2545F491u;                       // Life drift RNG
-    float  lifeD_ = 0.f, lifeSz_ = 0.f, lifeSp_ = 0.f;   // bounded OU drift state (density/size/spray)
-    int    lifeTick_ = 0;
-    float  onsetRamp_ = 1.f, onsetInc_ = 1.f;            // Jump — soft-build (0) vs instant (1) onset
+    float  airCoef_ = 0.3f, airHpL_ = 0.f, airHpR_ = 0.f;   // AIR exciter high-pass state
+    float  densHz_ = 8.f, grainLenSamp_ = 480.f, norm_ = 1.f;   // cached per-block derived values (CPU)
+    float  pingDir_ = 1.f;         // Ping-Pong bounce direction (+1 → end, -1 → start)
+    bool   oneShotDone_ = false;   // One-Shot/Tailed: head reached the far edge → stop spawning
     bool   active_ = false, releasing_ = false;
     GranularEngineParams p_ {};
 };

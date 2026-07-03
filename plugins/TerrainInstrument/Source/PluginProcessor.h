@@ -486,13 +486,8 @@ public:
     std::atomic<int>   sampleFollowIdx_[4][kMaxFollowers] {};   // voice index (identity)
     std::atomic<float> sampleFollowPos_[4][kMaxFollowers] {};   // read position 0..1
     std::atomic<int>   sampleFollowCount_[4] {};               // active count per osc
-
-    // GRANULAR-FOLLOWER — the most-active voice's grain cloud per osc (dots + a scan marker).
-    static constexpr int kMaxGrainViz = 12;
-    std::atomic<float> granCloudPos_[4][kMaxGrainViz] {};   // grain read pos 0..1
-    std::atomic<float> granCloudAge_[4][kMaxGrainViz] {};   // grain age 0..1 (fades as it dies)
-    std::atomic<int>   granCloudCount_[4] {};
-    std::atomic<float> granScanPos_[4] {};                  // scan marker 0..1; -1 = not granular/active
+    // (GRANULAR-FOLLOWER grain-cloud atomics retired 2026-07-02 — granular now rides the sampleFollow_
+    //  arrays above via SynthVoice::granScanPos01, drawn as reactive white lines in the UI.)
 
     // ── OSC SCOPE — published per-osc live waveform windows (A/B/C/D) ──────────
     // SPSC seqlock handoff: the audio thread brackets its window stores with an odd/even

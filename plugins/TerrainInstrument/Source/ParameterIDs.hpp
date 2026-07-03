@@ -515,37 +515,30 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_GRAIN_SHAPE[]   = "SYN_OSC_D_GRAIN_SHAPE";
     constexpr char SYN_OSC_D_GRAIN_KEY[]     = "SYN_OSC_D_GRAIN_KEY";
 
-    // ── GRAIN-EXPANDED-IDS — the 8 reassignable-slot functions beyond the default 6 ──
+    // ── GRAIN-EXPANDED-IDS — the 6 page-2 functions beyond the default 6 (Life/Jump removed 2026-07-02;
+    //    Air/Stretch now reuse the Sample osc's SYN_OSC_x_SAMPLE_AIR/_STRETCH/_STRETCH_MODE params) ──
     constexpr char SYN_OSC_A_GRAIN_POSITION[] = "SYN_OSC_A_GRAIN_POSITION"; // float 0..1 grain-birth anchor
     constexpr char SYN_OSC_A_GRAIN_PITCH[]    = "SYN_OSC_A_GRAIN_PITCH";    // float -24..24 st base transpose
     constexpr char SYN_OSC_A_GRAIN_PSPRAY[]   = "SYN_OSC_A_GRAIN_PSPRAY";   // float 0..1 per-grain pitch scatter
     constexpr char SYN_OSC_A_GRAIN_WIDTH[]    = "SYN_OSC_A_GRAIN_WIDTH";    // float 0..1 per-grain stereo spread
     constexpr char SYN_OSC_A_GRAIN_DIR[]      = "SYN_OSC_A_GRAIN_DIR";      // float -1..1 direction bias
     constexpr char SYN_OSC_A_GRAIN_SKEW[]     = "SYN_OSC_A_GRAIN_SKEW";     // float -1..1 window skew
-    constexpr char SYN_OSC_A_GRAIN_LIFE[]     = "SYN_OSC_A_GRAIN_LIFE";     // float 0..1 living-weather macro
-    constexpr char SYN_OSC_A_GRAIN_JUMP[]     = "SYN_OSC_A_GRAIN_JUMP";     // float 0..1 onset soft-build<->instant
     constexpr char SYN_OSC_B_GRAIN_POSITION[] = "SYN_OSC_B_GRAIN_POSITION";
     constexpr char SYN_OSC_B_GRAIN_PITCH[]    = "SYN_OSC_B_GRAIN_PITCH";
     constexpr char SYN_OSC_B_GRAIN_PSPRAY[]   = "SYN_OSC_B_GRAIN_PSPRAY";
     constexpr char SYN_OSC_B_GRAIN_WIDTH[]    = "SYN_OSC_B_GRAIN_WIDTH";
     constexpr char SYN_OSC_B_GRAIN_DIR[]      = "SYN_OSC_B_GRAIN_DIR";
     constexpr char SYN_OSC_B_GRAIN_SKEW[]     = "SYN_OSC_B_GRAIN_SKEW";
-    constexpr char SYN_OSC_B_GRAIN_LIFE[]     = "SYN_OSC_B_GRAIN_LIFE";
-    constexpr char SYN_OSC_B_GRAIN_JUMP[]     = "SYN_OSC_B_GRAIN_JUMP";
     constexpr char SYN_OSC_C_GRAIN_POSITION[] = "SYN_OSC_C_GRAIN_POSITION";
     constexpr char SYN_OSC_C_GRAIN_PITCH[]    = "SYN_OSC_C_GRAIN_PITCH";
     constexpr char SYN_OSC_C_GRAIN_PSPRAY[]   = "SYN_OSC_C_GRAIN_PSPRAY";
     constexpr char SYN_OSC_C_GRAIN_WIDTH[]    = "SYN_OSC_C_GRAIN_WIDTH";
     constexpr char SYN_OSC_C_GRAIN_DIR[]      = "SYN_OSC_C_GRAIN_DIR";
     constexpr char SYN_OSC_C_GRAIN_SKEW[]     = "SYN_OSC_C_GRAIN_SKEW";
-    constexpr char SYN_OSC_C_GRAIN_LIFE[]     = "SYN_OSC_C_GRAIN_LIFE";
-    constexpr char SYN_OSC_C_GRAIN_JUMP[]     = "SYN_OSC_C_GRAIN_JUMP";
     constexpr char SYN_OSC_D_GRAIN_POSITION[] = "SYN_OSC_D_GRAIN_POSITION";
     constexpr char SYN_OSC_D_GRAIN_PITCH[]    = "SYN_OSC_D_GRAIN_PITCH";
     constexpr char SYN_OSC_D_GRAIN_PSPRAY[]   = "SYN_OSC_D_GRAIN_PSPRAY";
     constexpr char SYN_OSC_D_GRAIN_WIDTH[]    = "SYN_OSC_D_GRAIN_WIDTH";
     constexpr char SYN_OSC_D_GRAIN_DIR[]      = "SYN_OSC_D_GRAIN_DIR";
     constexpr char SYN_OSC_D_GRAIN_SKEW[]     = "SYN_OSC_D_GRAIN_SKEW";
-    constexpr char SYN_OSC_D_GRAIN_LIFE[]     = "SYN_OSC_D_GRAIN_LIFE";
-    constexpr char SYN_OSC_D_GRAIN_JUMP[]     = "SYN_OSC_D_GRAIN_JUMP";
 }

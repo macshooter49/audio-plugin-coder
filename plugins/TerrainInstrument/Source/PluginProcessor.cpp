@@ -2155,9 +2155,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addGrainOsc (ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE,
                  ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, "D");
 
-    // GRAIN-EXPANDED — the 8 reassignable-slot functions (defaults match GranularEngineParams).
+    // GRAIN-EXPANDED — the 6 page-2 functions (defaults match GranularEngineParams).
+    // Life + Jump removed (2026-07-02); Air + Stretch live on the waveform right-click, reusing
+    // the Sample osc's SYN_OSC_x_SAMPLE_AIR / _STRETCH / _STRETCH_MODE params (no new params).
     auto addGrainExp = [&layout] (const char* posId, const char* pitchId, const char* psprayId, const char* widthId,
-                                  const char* dirId, const char* skewId, const char* lifeId, const char* jumpId,
+                                  const char* dirId, const char* skewId,
                                   const juce::String& osc)
     {
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { posId, 1 },    "Synth OSC " + osc + " Grain Position",    juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 0.0f));
@@ -2166,13 +2168,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { widthId, 1 },  "Synth OSC " + osc + " Grain Width",       juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 0.0f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { dirId, 1 },    "Synth OSC " + osc + " Grain Direction",   juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 1.0f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { skewId, 1 },   "Synth OSC " + osc + " Grain Skew",        juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
-        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { lifeId, 1 },   "Synth OSC " + osc + " Grain Life",        juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 0.15f));
-        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { jumpId, 1 },   "Synth OSC " + osc + " Grain Jump",        juce::NormalisableRange<float> ( 0.0f, 1.0f, 0.001f), 1.0f));
     };
-    addGrainExp (ParameterIDs::SYN_OSC_A_GRAIN_POSITION, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, ParameterIDs::SYN_OSC_A_GRAIN_DIR, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, ParameterIDs::SYN_OSC_A_GRAIN_LIFE, ParameterIDs::SYN_OSC_A_GRAIN_JUMP, "A");
-    addGrainExp (ParameterIDs::SYN_OSC_B_GRAIN_POSITION, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, ParameterIDs::SYN_OSC_B_GRAIN_DIR, ParameterIDs::SYN_OSC_B_GRAIN_SKEW, ParameterIDs::SYN_OSC_B_GRAIN_LIFE, ParameterIDs::SYN_OSC_B_GRAIN_JUMP, "B");
-    addGrainExp (ParameterIDs::SYN_OSC_C_GRAIN_POSITION, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, ParameterIDs::SYN_OSC_C_GRAIN_DIR, ParameterIDs::SYN_OSC_C_GRAIN_SKEW, ParameterIDs::SYN_OSC_C_GRAIN_LIFE, ParameterIDs::SYN_OSC_C_GRAIN_JUMP, "C");
-    addGrainExp (ParameterIDs::SYN_OSC_D_GRAIN_POSITION, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, ParameterIDs::SYN_OSC_D_GRAIN_DIR, ParameterIDs::SYN_OSC_D_GRAIN_SKEW, ParameterIDs::SYN_OSC_D_GRAIN_LIFE, ParameterIDs::SYN_OSC_D_GRAIN_JUMP, "D");
+    addGrainExp (ParameterIDs::SYN_OSC_A_GRAIN_POSITION, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, ParameterIDs::SYN_OSC_A_GRAIN_DIR, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, "A");
+    addGrainExp (ParameterIDs::SYN_OSC_B_GRAIN_POSITION, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, ParameterIDs::SYN_OSC_B_GRAIN_DIR, ParameterIDs::SYN_OSC_B_GRAIN_SKEW, "B");
+    addGrainExp (ParameterIDs::SYN_OSC_C_GRAIN_POSITION, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, ParameterIDs::SYN_OSC_C_GRAIN_DIR, ParameterIDs::SYN_OSC_C_GRAIN_SKEW, "C");
+    addGrainExp (ParameterIDs::SYN_OSC_D_GRAIN_POSITION, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, ParameterIDs::SYN_OSC_D_GRAIN_DIR, ParameterIDs::SYN_OSC_D_GRAIN_SKEW, "D");
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP_AMOUNT, 1 },
@@ -3155,14 +3155,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spD.warp      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
         spD.warpMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
 
-        // ── GRAIN engine: gather all 14 functions per OSC (GRAIN-ENGINE-GATHER) ──
-        // ID order: scan,density,size,spray,shape,key, position,pitch,pspray,width,dir,skew,life,jump.
+        // ── GRAIN engine: gather the 12 grain functions per OSC (GRAIN-ENGINE-GATHER) ──
+        // ID order: scan,density,size,spray,shape,key, position,pitch,pspray,width,dir,skew.
         // 'key' is the only choice → cast to index. static table = built once (no per-block alloc).
-        static const char* const GRAIN_IDS[4][14] = {
-            { ParameterIDs::SYN_OSC_A_GRAIN_SCAN, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, ParameterIDs::SYN_OSC_A_GRAIN_SIZE, ParameterIDs::SYN_OSC_A_GRAIN_SPRAY, ParameterIDs::SYN_OSC_A_GRAIN_SHAPE, ParameterIDs::SYN_OSC_A_GRAIN_KEY, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, ParameterIDs::SYN_OSC_A_GRAIN_DIR, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, ParameterIDs::SYN_OSC_A_GRAIN_LIFE, ParameterIDs::SYN_OSC_A_GRAIN_JUMP },
-            { ParameterIDs::SYN_OSC_B_GRAIN_SCAN, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, ParameterIDs::SYN_OSC_B_GRAIN_SIZE, ParameterIDs::SYN_OSC_B_GRAIN_SPRAY, ParameterIDs::SYN_OSC_B_GRAIN_SHAPE, ParameterIDs::SYN_OSC_B_GRAIN_KEY, ParameterIDs::SYN_OSC_B_GRAIN_POSITION, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, ParameterIDs::SYN_OSC_B_GRAIN_DIR, ParameterIDs::SYN_OSC_B_GRAIN_SKEW, ParameterIDs::SYN_OSC_B_GRAIN_LIFE, ParameterIDs::SYN_OSC_B_GRAIN_JUMP },
-            { ParameterIDs::SYN_OSC_C_GRAIN_SCAN, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, ParameterIDs::SYN_OSC_C_GRAIN_SIZE, ParameterIDs::SYN_OSC_C_GRAIN_SPRAY, ParameterIDs::SYN_OSC_C_GRAIN_SHAPE, ParameterIDs::SYN_OSC_C_GRAIN_KEY, ParameterIDs::SYN_OSC_C_GRAIN_POSITION, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, ParameterIDs::SYN_OSC_C_GRAIN_DIR, ParameterIDs::SYN_OSC_C_GRAIN_SKEW, ParameterIDs::SYN_OSC_C_GRAIN_LIFE, ParameterIDs::SYN_OSC_C_GRAIN_JUMP },
-            { ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE, ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, ParameterIDs::SYN_OSC_D_GRAIN_POSITION, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, ParameterIDs::SYN_OSC_D_GRAIN_DIR, ParameterIDs::SYN_OSC_D_GRAIN_SKEW, ParameterIDs::SYN_OSC_D_GRAIN_LIFE, ParameterIDs::SYN_OSC_D_GRAIN_JUMP }
+        // Air/Stretch/StretchMode + region(start/end) are patched in AFTER from the already-gathered
+        // Sample params (spA..spD) — they reuse the Sample osc's params (waveform right-click + handles).
+        static const char* const GRAIN_IDS[4][12] = {
+            { ParameterIDs::SYN_OSC_A_GRAIN_SCAN, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, ParameterIDs::SYN_OSC_A_GRAIN_SIZE, ParameterIDs::SYN_OSC_A_GRAIN_SPRAY, ParameterIDs::SYN_OSC_A_GRAIN_SHAPE, ParameterIDs::SYN_OSC_A_GRAIN_KEY, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, ParameterIDs::SYN_OSC_A_GRAIN_DIR, ParameterIDs::SYN_OSC_A_GRAIN_SKEW },
+            { ParameterIDs::SYN_OSC_B_GRAIN_SCAN, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, ParameterIDs::SYN_OSC_B_GRAIN_SIZE, ParameterIDs::SYN_OSC_B_GRAIN_SPRAY, ParameterIDs::SYN_OSC_B_GRAIN_SHAPE, ParameterIDs::SYN_OSC_B_GRAIN_KEY, ParameterIDs::SYN_OSC_B_GRAIN_POSITION, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, ParameterIDs::SYN_OSC_B_GRAIN_DIR, ParameterIDs::SYN_OSC_B_GRAIN_SKEW },
+            { ParameterIDs::SYN_OSC_C_GRAIN_SCAN, ParameterIDs::SYN_OSC_C_GRAIN_DENSITY, ParameterIDs::SYN_OSC_C_GRAIN_SIZE, ParameterIDs::SYN_OSC_C_GRAIN_SPRAY, ParameterIDs::SYN_OSC_C_GRAIN_SHAPE, ParameterIDs::SYN_OSC_C_GRAIN_KEY, ParameterIDs::SYN_OSC_C_GRAIN_POSITION, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, ParameterIDs::SYN_OSC_C_GRAIN_DIR, ParameterIDs::SYN_OSC_C_GRAIN_SKEW },
+            { ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE, ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, ParameterIDs::SYN_OSC_D_GRAIN_POSITION, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, ParameterIDs::SYN_OSC_D_GRAIN_DIR, ParameterIDs::SYN_OSC_D_GRAIN_SKEW }
         };
         auto gatherGrain = [this] (const char* const* id)
         {
@@ -3179,14 +3181,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.width      = *apvts.getRawParameterValue (id[9]);
             g.dir        = *apvts.getRawParameterValue (id[10]);
             g.skew       = *apvts.getRawParameterValue (id[11]);
-            g.life       = *apvts.getRawParameterValue (id[12]);
-            g.jump       = *apvts.getRawParameterValue (id[13]);
             return g;
         };
-        const tw::GranularEngineParams gpA = gatherGrain (GRAIN_IDS[0]);
-        const tw::GranularEngineParams gpB = gatherGrain (GRAIN_IDS[1]);
-        const tw::GranularEngineParams gpC = gatherGrain (GRAIN_IDS[2]);
-        const tw::GranularEngineParams gpD = gatherGrain (GRAIN_IDS[3]);
+        // Patch Air/Stretch/StretchMode + region from the Sample params so the granular engine
+        // hears the waveform right-click controls AND the region (start/end) handles.
+        auto withSampleExtras = [] (tw::GranularEngineParams g, const tw::SynthVoice::SampleEngineParams& sp)
+        {
+            g.air         = sp.air;
+            g.stretch     = sp.stretch;
+            g.stretchMode = sp.stretchMode;
+            g.regStart    = sp.start;
+            g.regEnd      = sp.end;
+            g.loopMode    = sp.loopMode;   // One-Shot/Fwd/Rev/Ping-Pong/Tailed → granular scan behavior
+            return g;
+        };
+        const tw::GranularEngineParams gpA = withSampleExtras (gatherGrain (GRAIN_IDS[0]), spA);
+        const tw::GranularEngineParams gpB = withSampleExtras (gatherGrain (GRAIN_IDS[1]), spB);
+        const tw::GranularEngineParams gpC = withSampleExtras (gatherGrain (GRAIN_IDS[2]), spC);
+        const tw::GranularEngineParams gpD = withSampleExtras (gatherGrain (GRAIN_IDS[3]), spD);
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
@@ -3592,7 +3604,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     for (int o = 0; o < 4; ++o)
                         if (cnt[o] < kMaxFollowers)
                         {
-                            const float p = sv->sampleFollowPos01 (o);
+                            float p = sv->sampleFollowPos01 (o);
+                            if (p < 0.f) p = sv->granScanPos01 (o);   // GRANULAR: the voice's scan head IS its follower (drawn purple in the UI)
                             if (p >= 0.f) { sampleFollowIdx_[o][cnt[o]].store (i, std::memory_order_relaxed);
                                             sampleFollowPos_[o][cnt[o]].store (p, std::memory_order_relaxed); ++cnt[o]; }
                         }
@@ -3603,21 +3616,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
 
-        // GRANULAR-FOLLOWER — the most-active voice's grain cloud + scan marker per granular osc.
-        for (int o = 0; o < 4; ++o)
-        {
-            float gpos[kMaxGrainViz], gage[kMaxGrainViz];
-            int   gn   = 0;
-            float scan = -1.f;
-            if (bestVoice != nullptr) { gn = bestVoice->granCloudSnapshot (o, gpos, gage, kMaxGrainViz); scan = bestVoice->granScanPos01 (o); }
-            for (int k = 0; k < gn; ++k)
-            {
-                granCloudPos_[o][k].store (gpos[k], std::memory_order_relaxed);
-                granCloudAge_[o][k].store (gage[k], std::memory_order_relaxed);
-            }
-            granScanPos_[o].store   (scan, std::memory_order_relaxed);
-            granCloudCount_[o].store (gn,  std::memory_order_relaxed);   // count LAST = coherent list
-        }
+        // GRANULAR-FOLLOWER — retired 2026-07-02. The grain-dot scatter cloud is gone; granular
+        // now rides the SAME multi-playhead follower system as the Sample engine (aggregated above via
+        // granScanPos01), drawn PURPLE in the UI. One purple line per sounding voice = the new visual.
 
         // ── OSC SCOPE — publish the SUM of ALL sounding voices' 4 osc windows ──
         // Still on the AUDIO thread, right after renderNextBlock: every active voice's

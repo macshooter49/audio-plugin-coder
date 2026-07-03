@@ -3319,14 +3319,15 @@ namespace tw
                                 juce::AudioBuffer<float>& blk,
                                 const float*& outL, const float*& outR,
                                 int numSamples, std::uint32_t seed, bool doNoteOn,
-                                double nativeOverOut, int uniCount, float uNorm, float level) noexcept
+                                double nativeOverOut, int uniCount, const float* uDetuneCents, float uNorm, float level) noexcept
         {
             if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
                 blk.setSize (2, numSamples, false, false, true);
             float* wL = blk.getWritePointer (0);
             float* wR = blk.getWritePointer (1);
             outL = wL; outR = wR;
-            if (! isGran || level <= 0.0f || ! engs[0].hasSample())
+            if (! isGran) return;   // CPU: this block is never read for a non-granular osc (outL/outR already point at it)
+            if (level <= 0.0f || ! engs[0].hasSample())
             {
                 juce::FloatVectorOperations::clear (wL, numSamples);
                 juce::FloatVectorOperations::clear (wR, numSamples);
@@ -3340,13 +3341,16 @@ namespace tw
             {
                 auto& e = engs[(size_t) u];
                 e.setParams (p);
-                e.setRegion (0.0f, 1.0f);          // whole buffer for v1 (region handles arrive in Phase 3)
-                e.setPitchRatio (pitchRatio);
+                e.setRegion (p.regStart, p.regEnd);   // region handles now wired (start/end travel via params)
+                // UNISON — per-voice detune so granular unison actually fattens (was flat: all one pitch)
+                const double det = (uDetuneCents != nullptr) ? std::pow (2.0, (double) uDetuneCents[(size_t) u] / 1200.0) : 1.0;
+                const double prU = pitchRatio * det;
+                e.setPitchRatio (prU);
                 if (doNoteOn)
                 {
                     const std::uint32_t vSeed = (N <= 1) ? seed
                                                          : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1)));
-                    e.noteOn (pitchRatio, vSeed);
+                    e.noteOn (prU, vSeed);
                 }
             }
             if (N <= 1)
@@ -3355,12 +3359,11 @@ namespace tw
             }
             else
             {
-                juce::FloatVectorOperations::clear (wL, numSamples);
-                juce::FloatVectorOperations::clear (wR, numSamples);
-                for (int u = 0; u < N; ++u)
+                for (int u = 0; u < N; ++u)   // CPU: first voice writes (no clear), rest accumulate — 0+x == x
                 {
                     auto& e = engs[(size_t) u];
-                    for (int k = 0; k < numSamples; ++k) { float l, r; e.tick (l, r); wL[k] += l; wR[k] += r; }
+                    if (u == 0) { for (int k = 0; k < numSamples; ++k) e.tick (wL[k], wR[k]); }
+                    else        { for (int k = 0; k < numSamples; ++k) { float l, r; e.tick (l, r); wL[k] += l; wR[k] += r; } }
                 }
                 juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
                 juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
@@ -3394,10 +3397,10 @@ namespace tw
                 }
             }
             const bool doOn = granNoteOnPending_;
-            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uNormA_, level_);
-            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uNormB_, levelB_);
-            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uNormC_, levelC_);
-            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uNormD_, levelD_);
+            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, level_);
+            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, levelB_);
+            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, levelC_);
+            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, levelD_);
             granNoteOnPending_ = false;
         }
 

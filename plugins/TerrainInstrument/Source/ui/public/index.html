@@ -3825,10 +3825,21 @@ body {
    knob row swaps (samp-knobs -> gran-knobs) and the front hides, exactly like the Sample engine. */
 #syn-panel .device.osc.engine-granular:not(.swapped) .front-only { display: none; }
 #syn-panel .device.osc.engine-granular:not(.swapped) .sample-view { display: flex; }
-#syn-panel .osc-knobs.gran-knobs { grid-template-columns: repeat(6, 1fr); }
-#syn-panel .gran-knobs { flex: 0 0 auto; }
-#syn-panel .device.osc.engine-sample   .gran-knobs { display: none; }   /* Sample -> show samp row */
-#syn-panel .device.osc.engine-granular .samp-knobs { display: none; }   /* Granular -> show gran row */
+/* GRANULAR two-page knob rows (page 1 = essentials, page 2 = the rest) + a far-right page arrow.
+   minmax(0,1fr) + clamped labels = a readout (e.g. Skew "Pluck 40%") NEVER reflows its neighbours. */
+#syn-panel .gran-knob-wrap { flex: 0 0 auto; position: relative; display: flex; align-items: stretch; gap: 3px; }
+#syn-panel .device.osc:not(.engine-granular) .gran-knob-wrap { display: none; }   /* granular only */
+#syn-panel .device.osc.engine-granular .samp-knobs { display: none; }             /* Granular -> gran rows */
+#syn-panel .osc-knobs.gran-knobs { display: grid; flex: 1 1 auto; min-width: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#syn-panel .gran-knob-wrap .osc-knobs.gk-p2 { display: none; }
+#syn-panel .gran-knob-wrap.pg2 .osc-knobs.gk-p1 { display: none; }
+#syn-panel .gran-knob-wrap.pg2 .osc-knobs.gk-p2 { display: grid; }
+#syn-panel .gran-knobs .knob-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
+/* far-right page-toggle arrow — thin transparent-white chevron, flips to point back on page 2 */
+#syn-panel .gk-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
+#syn-panel .gk-arrow:hover { opacity: .95; }
+#syn-panel .gk-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
+#syn-panel .gran-knob-wrap.pg2 .gk-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 
 #syn-panel .samp-disp { flex: 1 1 auto; min-height: 65px; position: relative; overflow: hidden; border-radius: 8px; }
 #syn-panel .samp-disp canvas.samp-wave { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -3865,15 +3876,6 @@ body {
 #syn-panel .sample-view.loopoff .samp-band, #syn-panel .sample-view.loopoff .samp-xf { display: none; }
 /* playhead */
 #syn-panel .samp-ph { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(236,232,242,.5); z-index: 3; pointer-events: none; opacity: 0; transition: opacity .4s ease-out; }
-/* GRANULAR scatter follower — grain dots + scan marker on a canvas overlay (the ONE new granular visual). */
-#syn-panel .gran-cloud { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; opacity: 0; transition: opacity .3s ease-out; }
-#syn-panel .device.osc.engine-granular .gran-cloud { opacity: 1; }
-#syn-panel .device.osc:not(.engine-granular) .gran-cloud { display: none; }
-/* GRANULAR reassign menu — right-click a grain knob → pick its function ("build your own grain controls"). */
-#syn-panel .gran-reassign-menu { position: absolute; z-index: 50; padding: 4px; background: rgba(14,14,26,.97); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.5); display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
-#syn-panel .gran-reassign-menu .gr-item { font-size: 10.5px; font-weight: 500; color: rgba(236,232,242,.82); padding: 6px 9px; border-radius: 5px; cursor: pointer; letter-spacing: .02em; white-space: nowrap; }
-#syn-panel .gran-reassign-menu .gr-item:hover { background: rgba(139,92,246,.28); color: #fff; }
-#syn-panel .gran-reassign-menu .gr-item.cur { color: #b98cff; }
 #syn-panel .samp-ph.on { opacity: 1; }
 #syn-panel .samp-ph i { position: absolute; left: -2px; top: 50%; margin-top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff;
   box-shadow: 0 0 7px rgba(255,255,255,.9), 0 0 13px rgba(167,139,250,.6); }
@@ -3901,7 +3903,13 @@ body {
 
 /* ── refinements: no markers, line-ramp fades, header dropdowns, drop affordance ── */
 #syn-panel .samp-h i { display: none; }   /* markers removed — keep only the separator lines */
-#syn-panel .samp-ph i { display: none; }  /* follower dot removed — keep only the white scan line */
+#syn-panel .samp-ph i { display: none; }  /* follower dot removed — keep only the scan line */
+/* GRANULAR identity is now the REACTIVE follower behaviour (jitter/thickness/grain from Spray/Size/Density),
+   NOT colour — loop band + followers stay the SAME colour as the Sample engine (white follower, purple band).
+   The thin white base line (.samp-ph) always shows; a .gph overlay rides it and does the grain reaction. */
+#syn-panel .samp-ph > .gph { display: none; }
+#syn-panel .device.osc.engine-granular .samp-ph.on > .gph { display: block; position: absolute; left: 50%; top: 0;
+  width: 1px; height: 100%; background: rgba(236,232,242,.95); will-change: transform; pointer-events: none; }
 /* fades = thin LFO-style ramp lines (shift+drag a region edge to set); 100%-viewBox SVG */
 #syn-panel .samp-env { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 #syn-panel .samp-env polyline { fill: none; vector-effect: non-scaling-stroke; stroke-width: 1.3; stroke-linecap: round; }
@@ -3944,7 +3952,7 @@ body {
 #syn-panel .samp-sel select:focus { outline: none; }
 
 /* body-level glass menu for the sample waveform (own, unscoped styling like .mv-menu) */
-.samp-menu { position: fixed; z-index: 2147483646; background: rgba(24,24,38,0.52);
+.samp-menu { position: fixed; z-index: 2147483646; background: rgba(24,24,38,0.52); max-height: 88vh; overflow-y: auto;
   -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
   border: 1px solid rgba(255,255,255,0.10); border-radius: 11px;
   box-shadow: 0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
@@ -5137,7 +5145,6 @@ body {
             <div class="sample-view" data-osc="a" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
-                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5159,13 +5166,24 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
               </div>
-              <div class="osc-knobs gran-knobs">
-                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+              <div class="gran-knob-wrap">
+                <div class="osc-knobs gran-knobs gk-p1">
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+                </div>
+                <div class="osc-knobs gran-knobs gk-p2">
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_POSITION"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_PITCH"><div class="knob-ring"></div><div class="knob-label">Pitch</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_PSPRAY"><div class="knob-ring"></div><div class="knob-label">P.Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_WIDTH"><div class="knob-ring"></div><div class="knob-label">Width</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_DIR"><div class="knob-ring"></div><div class="knob-label">Dir</div></div>
+                  <div class="knob" data-syn="SYN_OSC_A_GRAIN_SKEW"><div class="knob-ring"></div><div class="knob-label">Skew</div></div>
+                </div>
+                <div class="gk-arrow" role="button" tabindex="0" title="More grain controls" aria-label="More grain controls"></div>
               </div>
             </div>
 
@@ -5315,7 +5333,6 @@ body {
             <div class="sample-view" data-osc="b" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
-                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5337,13 +5354,24 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
               </div>
-              <div class="osc-knobs gran-knobs">
-                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+              <div class="gran-knob-wrap">
+                <div class="osc-knobs gran-knobs gk-p1">
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+                </div>
+                <div class="osc-knobs gran-knobs gk-p2">
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_POSITION"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_PITCH"><div class="knob-ring"></div><div class="knob-label">Pitch</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_PSPRAY"><div class="knob-ring"></div><div class="knob-label">P.Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_WIDTH"><div class="knob-ring"></div><div class="knob-label">Width</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_DIR"><div class="knob-ring"></div><div class="knob-label">Dir</div></div>
+                  <div class="knob" data-syn="SYN_OSC_B_GRAIN_SKEW"><div class="knob-ring"></div><div class="knob-label">Skew</div></div>
+                </div>
+                <div class="gk-arrow" role="button" tabindex="0" title="More grain controls" aria-label="More grain controls"></div>
               </div>
             </div>
 
@@ -5509,7 +5537,6 @@ body {
             <div class="sample-view" data-osc="c" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
-                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5531,13 +5558,24 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
               </div>
-              <div class="osc-knobs gran-knobs">
-                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+              <div class="gran-knob-wrap">
+                <div class="osc-knobs gran-knobs gk-p1">
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+                </div>
+                <div class="osc-knobs gran-knobs gk-p2">
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_POSITION"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_PITCH"><div class="knob-ring"></div><div class="knob-label">Pitch</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_PSPRAY"><div class="knob-ring"></div><div class="knob-label">P.Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_WIDTH"><div class="knob-ring"></div><div class="knob-label">Width</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_DIR"><div class="knob-ring"></div><div class="knob-label">Dir</div></div>
+                  <div class="knob" data-syn="SYN_OSC_C_GRAIN_SKEW"><div class="knob-ring"></div><div class="knob-label">Skew</div></div>
+                </div>
+                <div class="gk-arrow" role="button" tabindex="0" title="More grain controls" aria-label="More grain controls"></div>
               </div>
             </div>
 
@@ -5687,7 +5725,6 @@ body {
             <div class="sample-view" data-osc="d" style="flex-direction:column; gap:7px; flex:1; min-height:0;">
               <div class="samp-disp">
                 <canvas class="samp-wave"></canvas>
-                <canvas class="gran-cloud"></canvas>
                 <div class="samp-grid"></div>
                 <div class="samp-shade sh-l"></div>
                 <div class="samp-shade sh-r"></div>
@@ -5709,13 +5746,24 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
               </div>
-              <div class="osc-knobs gran-knobs">
-                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+              <div class="gran-knob-wrap">
+                <div class="osc-knobs gran-knobs gk-p1">
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_DENSITY"><div class="knob-ring"></div><div class="knob-label">Density</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_SIZE"><div class="knob-ring"></div><div class="knob-label">Size</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_SHAPE"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_KEY"><div class="knob-ring"></div><div class="knob-label">Key</div></div>
+                </div>
+                <div class="osc-knobs gran-knobs gk-p2">
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_POSITION"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_PITCH"><div class="knob-ring"></div><div class="knob-label">Pitch</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_PSPRAY"><div class="knob-ring"></div><div class="knob-label">P.Spray</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_WIDTH"><div class="knob-ring"></div><div class="knob-label">Width</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_DIR"><div class="knob-ring"></div><div class="knob-label">Dir</div></div>
+                  <div class="knob" data-syn="SYN_OSC_D_GRAIN_SKEW"><div class="knob-ring"></div><div class="knob-label">Skew</div></div>
+                </div>
+                <div class="gk-arrow" role="button" tabindex="0" title="More grain controls" aria-label="More grain controls"></div>
               </div>
             </div>
 
@@ -6711,8 +6759,7 @@ function saveSettings() {
       saveSettingsFn(JSON.stringify({
         theme: getTheme(),
         xyEnabled: state.xyEnabled,
-        page: currentActivePanel,  // SYN/EQ/DLY/MOD section → reopen where you left off
-        granSlots: window.__granSlotMap || null   // per-osc reassigned grain-slot layout
+        page: currentActivePanel   // SYN/EQ/DLY/MOD section → reopen where you left off
       }));
     } catch(e) {}
   }
@@ -6739,11 +6786,6 @@ function restoreSettings(json) {
     if (('page' in s) && typeof setActivePanel === 'function') {
       var _pg = (s.page === 'syn' || s.page === 'eq' || s.page === 'dly' || s.page === 'mod') ? s.page : null;
       setActivePanel(_pg);
-    }
-    // Restore reassigned grain-slot layout (delayed so the knobs + Juce params are wired first).
-    if (s.granSlots && window.__applyGranSlotMap) {
-      var _gs = s.granSlots;
-      setTimeout(function () { try { window.__applyGranSlotMap(_gs); } catch (e) {} }, 1200);
     }
   } catch(e) {}
 }
@@ -7710,6 +7752,7 @@ window.__synArc = function (ring, n, bipolar) {
         tk.addEventListener('pointerdown',function(e){md=true;set(e);e.stopPropagation();});   // [CC] NO setPointerCapture — WKWebView sticks it on the track → hijacks the mode emblems. OPUS: remove the slider capture in the engine drop (emblem stopPropagation doesn't cover this).
         document.addEventListener('pointermove',function(e){if(md)set(e);});
         document.addEventListener('pointerup',function(){md=false;});
+        tk.addEventListener('dblclick',function(e){e.preventDefault();e.stopPropagation();paint(dflt);_wr(ss,dflt);});   // dblclick → reset to default
         _sub(ss,function(){paint(_rd(ss,dflt));});
       }
       wireSlider('structure', JS_STR, 0.30); wireSlider('position', JS_POS, 0.20);
@@ -9912,9 +9955,14 @@ setTimeout(function wireSynControls () {
         if (! osc || ! file) return;
         var U = osc.toUpperCase ();
         function ss (id) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (id) : null; } catch (_) { return null; } }
-        var es = ss ('SYN_OSC_' + U + '_ENGINE');            if (es) { try { es.setNormalisedValue (1 / 5); } catch (_) {} }  // index 1 = Sample (6-choice)
-        var pm = ss ('SYN_OSC_' + U + '_SAMPLE_LOOP_MODE');  if (pm) { try { pm.setNormalisedValue (0); } catch (_) {} }        // index 0 = One-Shot (5-choice)
-        try { var S = SAMP[osc]; if (S && S.st) { S.st.mode = 0; S.st.loop = false; if (S.repaintHeader) S.repaintHeader (); if (S.place) S.place (); } } catch (_) {}
+        var es = ss ('SYN_OSC_' + U + '_ENGINE');
+        var curEng = -1; if (es) { try { curEng = Math.round (es.getNormalisedValue () * 5); } catch (_) {} }  // 0=WT 1=SAMP 2=GRAN 3=SPEC 4=FM 5=NOISE
+        var keepGran = (curEng === 2);   // dropping a sample onto a GRANULAR osc keeps it granular — just load the buffer
+        if (es && ! keepGran) { try { es.setNormalisedValue (1 / 5); } catch (_) {} }   // else flip to Sample (index 1)
+        if (! keepGran) {
+          var pm = ss ('SYN_OSC_' + U + '_SAMPLE_LOOP_MODE');  if (pm) { try { pm.setNormalisedValue (0); } catch (_) {} }        // One-Shot (5-choice index 0)
+          try { var S = SAMP[osc]; if (S && S.st) { S.st.mode = 0; S.st.loop = false; if (S.repaintHeader) S.repaintHeader (); if (S.place) S.place (); } } catch (_) {}
+        }
         sampReadB64 (file, function (b64) { if (! b64) return;
           try { var fn = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('loadSampleForOsc') : null; if (fn) fn (osc, file.name, b64); } catch (_) {} });
       }
@@ -9944,9 +9992,19 @@ setTimeout(function wireSynControls () {
         // wavetable osc uses, so the two right-click menus look identical.
         try { var qsep = document.createElement ('div'); qsep.className = 'sepd'; m.appendChild (qsep);
               m.appendChild (buildOscQuick (S.view ? S.view.dataset.osc : 'a')); } catch (eq) {}
-        m.style.left = Math.min (e.clientX, window.innerWidth - 178) + 'px';
-        m.style.top = Math.max (8, Math.min (e.clientY, window.innerHeight - 372)) + 'px';
+        // GRANULAR — append Stretch (+ Tones/Beats/Texture) and Air sliders on the waveform right-click.
+        try { var _dev = S.view ? S.view.closest ('.device.osc') : null;
+              if (_dev && _dev.classList.contains ('engine-granular')) {
+                var gsep = document.createElement ('div'); gsep.className = 'sepd'; m.appendChild (gsep);
+                m.appendChild (buildGranExtras (S.view ? S.view.dataset.osc : 'a'));
+              } } catch (eg) {}
         m.classList.add ('open');
+        // Measure the ACTUAL menu (now visible + fully populated with the granular extras) and clamp so
+        // the WHOLE menu — including Air at the very bottom — stays on screen. If it's taller than the
+        // viewport, max-height:88vh + overflow-y:auto lets it scroll. (Fixes: couldn't reach Air.)
+        var _mw = m.offsetWidth || 178, _mh = m.offsetHeight || 372;
+        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth - _mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - _mh - 6)) + 'px';
         m.querySelectorAll ('div[data-a]').forEach (function (d) {
           d.onclick = function () {
             var a = d.dataset.a, st = S.st;
@@ -10046,6 +10104,53 @@ setTimeout(function wireSynControls () {
         });
         return wrap;
       }
+
+      // GRANULAR waveform right-click extras — Stretch (+ Tones/Beats/Texture subtype) and Air, using
+      // the EXACT same .oscq notch-sliders the Sample osc uses, bound to the Sample osc's own
+      // SYN_OSC_x_SAMPLE_STRETCH / _STRETCH_MODE / _AIR params (the granular engine reads them).
+      var GRAN_STRETCH_MODES = ['Tones', 'Beats', 'Texture'];
+      function buildGranExtras (oscLetter) {
+        var L = (oscLetter || 'a').toUpperCase ();
+        var wrap = document.createElement ('div'); wrap.className = 'oscq';
+        // Stretch-type selector (3-way) — same pill style as Solo / Mute.
+        var smPid = 'SYN_OSC_' + L + '_SAMPLE_STRETCH_MODE';
+        var ms = null; try { ms = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (smPid) : null; } catch (e) {}
+        var mRow = document.createElement ('div'); mRow.className = 'oq-sm'; var mBtns = [];
+        function paintModes () { var cur = 0; try { cur = ms ? Math.round (ms.getNormalisedValue () * 2) : 0; } catch (e) {} mBtns.forEach (function (b, i) { b.classList.toggle ('on', i === cur); }); }
+        GRAN_STRETCH_MODES.forEach (function (name, idx) {
+          var btn = document.createElement ('div'); btn.className = 'oq-sm-btn'; btn.textContent = name;
+          btn.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); if (ms) { try { ms.setNormalisedValue (idx / 2); } catch (e) {} } paintModes (); });
+          mRow.appendChild (btn); mBtns.push (btn);
+        });
+        paintModes (); wrap.appendChild (mRow);
+        // Stretch + Air sliders (unipolar, readout = %).
+        [ { suf: 'SAMPLE_STRETCH', lab: 'Stretch' }, { suf: 'SAMPLE_AIR', lab: 'Air' } ].forEach (function (R) {
+          var pid = 'SYN_OSC_' + L + '_' + R.suf;
+          var st = null; try { st = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (pid) : null; } catch (e) {}
+          var slot = document.createElement ('div'); slot.className = 'oq-slot';
+          var row = document.createElement ('div'); row.className = 'oq-row';
+          var lab = document.createElement ('span'); lab.className = 'oq-lab'; lab.textContent = R.lab;
+          var val = document.createElement ('span'); val.className = 'oq-val';
+          row.appendChild (lab); row.appendChild (val);
+          var hit = document.createElement ('div'); hit.className = 'oq-hit';
+          var track = document.createElement ('div'); track.className = 'oq-track';
+          var fill = document.createElement ('div'); fill.className = 'oq-fill';
+          var mark = document.createElement ('div'); mark.className = 'oq-mark';
+          track.appendChild (fill); track.appendChild (mark); hit.appendChild (track);
+          slot.appendChild (row); slot.appendChild (hit); wrap.appendChild (slot);
+          function curN () { try { return st ? st.getNormalisedValue () : 0; } catch (e) { return 0; } }
+          function render (n) { var pct = n * 100; mark.style.left = pct + '%'; fill.style.left = '0%'; fill.style.width = pct + '%'; val.textContent = Math.round (pct) + '%'; }
+          render (curN ());
+          function fromX (cx) { var r = hit.getBoundingClientRect (); var t = Math.max (0, Math.min (1, (cx - r.left) / Math.max (1, r.width))); if (st) { try { st.setNormalisedValue (t); } catch (e) {} } render (t); }
+          var drag = false;
+          hit.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); drag = true; try { hit.setPointerCapture (ev.pointerId); } catch (e) {} fromX (ev.clientX); });
+          hit.addEventListener ('pointermove', function (ev) { if (drag) { ev.preventDefault (); fromX (ev.clientX); } });
+          function up (ev) { if (drag) { drag = false; try { hit.releasePointerCapture (ev.pointerId); } catch (e) {} } }
+          hit.addEventListener ('pointerup', up); hit.addEventListener ('pointercancel', up);
+          hit.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation (); if (st) { try { st.setNormalisedValue (0); } catch (e) {} } render (0); });
+        });
+        return wrap;
+      }
       // Wavetable osc has no right-click today — give it its own body-level glass popup
       // (same .samp-menu glass as the sample menu, so they look identical).
       var oscQuickEl = null;
@@ -10079,7 +10184,12 @@ setTimeout(function wireSynControls () {
         // via the CSS opacity transition. C++ pushes [voiceIdx,pos,…]; updateSampleFollower maps each.
         var phPool = ph ? [ph] : [];
         if (ph && ph.parentNode) { for (var _pi = 1; _pi < 16; _pi++) { var _c = ph.cloneNode (true); ph.parentNode.appendChild (_c); phPool.push (_c); } }
-        phPool.forEach (function (L) { L._on = false; L._vi = -1; L.classList.remove ('on'); });
+        phPool.forEach (function (L) { L._on = false; L._vi = -1; L.classList.remove ('on');
+          var g = document.createElement ('b'); g.className = 'gph'; L.appendChild (g); L._g = g; });   // GRAIN-REACT overlay
+        // Live GRAIN knob params for the reactive follower (read straight from the WebView param bridge).
+        var _GU = (osc || 'a').toUpperCase ();
+        function _grainState (fn) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState ('SYN_OSC_' + _GU + '_GRAIN_' + fn) : null; } catch (e) { return null; } }
+        var gm = { spray: _grainState ('SPRAY'), size: _grainState ('SIZE') };   // follower reacts to Spray (scatter) + Size (height)
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
         var envFadeInLine = view.querySelector ('.env-fadein-line'), envFadeOutLine = view.querySelector ('.env-fadeout-line');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
@@ -10247,7 +10357,7 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
 
-        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded,
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded, gm: gm,
           syncParams: syncParams, repaintHeader: function () { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } };
         place (); redraw ();
       }
@@ -10256,42 +10366,6 @@ setTimeout(function wireSynControls () {
       // list is a FLAT [voiceIdx,pos01, voiceIdx,pos01, …] of every SOUNDING voice on that osc
       // (pos01 = 0..1 across the whole buffer). One white line per held note, each at its own speed
       // (higher notes scan faster). Lines are keyed by voiceIdx so a held note keeps the SAME line
-      // GRANULAR scatter follower — C++ pushes [pos,age,pos,age,…] + a scan marker at 60Hz; we
-      // draw grain dots (fading by age) + the scan-head line on the .gran-cloud canvas overlay.
-      // The ONE new granular visual — thin-white/purple grains, minimal (per Max). Unkillable:
-      // try/catch + <8px bail so a boot frame can never freeze a 1x1 canvas into a solid block.
-      window.updateGranularCloud = function (osc, arr, scan) {
-        try {
-          var sv = document.querySelector ('#syn-panel .sample-view[data-osc="' + osc + '"]');
-          if (! sv) return;
-          var cv = sv.querySelector ('.gran-cloud'); if (! cv) return;
-          var dpr = Math.max (1, window.devicePixelRatio || 1);
-          var r = cv.getBoundingClientRect ();
-          var W = Math.max (1, Math.round (r.width * dpr)), Hh = Math.max (1, Math.round (r.height * dpr));
-          if (cv.width !== W) cv.width = W; if (cv.height !== Hh) cv.height = Hh;
-          var ctx = cv.getContext ('2d'); if (! ctx) return;
-          ctx.setTransform (1, 0, 0, 1, 0, 0);
-          ctx.clearRect (0, 0, W, Hh);
-          if (r.width < 8 || r.height < 8) return;   // not laid out yet — bail (no 1x1 stretch)
-          arr = arr || [];
-          if (typeof scan === 'number' && scan >= 0) {
-            var sx = scan * W;
-            ctx.strokeStyle = 'rgba(236,232,242,.5)'; ctx.lineWidth = dpr;
-            ctx.beginPath (); ctx.moveTo (sx, 0); ctx.lineTo (sx, Hh); ctx.stroke ();
-          }
-          for (var i = 0; i + 1 < arr.length; i += 2) {
-            var p = arr[i], a = arr[i + 1];
-            if (p < 0 || p > 1) continue;
-            var x = p * W;
-            var y = Hh * (0.5 + 0.34 * Math.sin (p * 51.7 + i * 1.3));   // vertical scatter so grains don't stack on one line
-            var op = Math.max (0, 1 - a);
-            var rad = dpr * (1.5 + 1.3 * op);
-            ctx.beginPath (); ctx.arc (x, y, rad, 0, 6.2831853);
-            ctx.fillStyle = 'rgba(190,150,255,' + (0.28 + 0.55 * op).toFixed (3) + ')';   // purple grain, brighter when young
-            ctx.fill ();
-          }
-        } catch (e) {}
-      };
       // (no jump); when a voice stops it drops out of the list and its line fades out (CSS .4s).
       window.updateSampleFollower = function (osc, list) {
         try {
@@ -10307,9 +10381,42 @@ setTimeout(function wireSynControls () {
             L.style.left = (Math.max (0, Math.min (1, p)) * 100) + '%';
           }
           for (var k = 0; k < pool.length; k++)                              // voices that stopped → fade out
-            if (pool[k]._on && ! seen[pool[k]._vi]) { pool[k]._on = false; pool[k]._vi = -1; pool[k].classList.remove ('on'); }
+            if (pool[k]._on && ! seen[pool[k]._vi]) { pool[k]._on = false; pool[k]._vi = -1; pool[k].classList.remove ('on');
+              if (pool[k]._g) { pool[k]._g.style.transform = ''; pool[k]._g.style.height = ''; pool[k]._g.style.top = ''; } }
+          var _dev = S.view ? S.view.closest ('.device.osc') : null;   // GRANULAR: kick the reactive-grain animator
+          if (_dev && _dev.classList.contains ('engine-granular')) granKick ();
         } catch (e) {}
       };
+
+      // GRAIN-REACT — one self-gating rAF. Minimalist, exactly like the grains: the thin white follower
+      // line's HEIGHT tracks Size (short↔tall) and it SCATTERS with Spray. Thickness NEVER changes; no
+      // dashes/holes/opacity tricks. Reads the live GRAIN knobs from the WebView bridge; stops itself
+      // when no granular line is active (idle cost = 0); granKick() restarts it.
+      var granRAF = 0, granOscList = ['a', 'b', 'c', 'd'];
+      function granKick () { if (! granRAF) granRAF = requestAnimationFrame (granTick); }
+      function granTick () {
+        granRAF = 0;
+        var anyActive = false;
+        for (var oi = 0; oi < 4; oi++) {
+          var S = SAMP[granOscList[oi]]; if (! S || ! S.phPool || ! S.gm) continue;
+          var dev = S.view ? S.view.closest ('.device.osc') : null;
+          if (! dev || ! dev.classList.contains ('engine-granular')) continue;
+          var spray = S.gm.spray ? S.gm.spray.getNormalisedValue () : 0;
+          var size  = S.gm.size  ? S.gm.size.getNormalisedValue ()  : 0;
+          var hPct  = (0.18 + size * 0.82) * 100;   // Size → HEIGHT (short 18% → tall 100%). Thickness fixed.
+          var topPct = (100 - hPct) * 0.5;
+          for (var j = 0; j < S.phPool.length; j++) {
+            var L = S.phPool[j]; if (! L._on) continue; var g = L._g; if (! g) continue;
+            anyActive = true;
+            var jx = (Math.random () * 2 - 1) * spray * 22;   // Spray → horizontal scatter (grain-like)
+            var jy = (Math.random () * 2 - 1) * spray * 10;   // + a little vertical scatter
+            g.style.height = hPct.toFixed (1) + '%';
+            g.style.top = topPct.toFixed (1) + '%';
+            g.style.transform = 'translate(-50%,0) translate(' + jx.toFixed (1) + 'px,' + jy.toFixed (1) + 'px)';
+          }
+        }
+        if (anyActive) granRAF = requestAnimationFrame (granTick);
+      }
 
       // C++ → JS: a real sample finished loading for an oscillator → draw it.
       window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {} };
@@ -10484,6 +10591,27 @@ setTimeout(function wireSynControls () {
         SYN_ENV_AMP_S:         0.7,   // 0.7 in [0, 1] linear
         SYN_ENV_AMP_R:         0.50,  // ~200 ms
       };
+      // Fill EVERY remaining per-OSC knob default so ALL knobs get double-click-to-reset (the general
+      // binder no-ops when a paramId is absent from this map). Granular 12 fns + OSC C/D wavetable +
+      // Fold/Spread/Spectral + back-panel Air. Defaults mirror PluginProcessor.cpp createParameterLayout.
+      (function () {
+        var K = KNOB_DEFAULTS_NORMALISED;
+        ['A', 'B', 'C', 'D'].forEach (function (L) {
+          var P = 'SYN_OSC_' + L + '_', set = function (k, v) { if (K[k] === undefined) K[k] = v; };
+          // Granular page 1 (Scan is bipolar → 0.575 = +0.15)
+          set (P + 'GRAIN_SCAN', 0.575); set (P + 'GRAIN_DENSITY', 0.40); set (P + 'GRAIN_SIZE', 0.25);
+          set (P + 'GRAIN_SPRAY', 0.10); set (P + 'GRAIN_SHAPE', 0.50); set (P + 'GRAIN_KEY', 0.0);
+          // Granular page 2 (Pitch/Skew bipolar → 0.5; Dir default +1 → 1.0)
+          set (P + 'GRAIN_POSITION', 0.0); set (P + 'GRAIN_PITCH', 0.5); set (P + 'GRAIN_PSPRAY', 0.0);
+          set (P + 'GRAIN_WIDTH', 0.0); set (P + 'GRAIN_DIR', 1.0); set (P + 'GRAIN_SKEW', 0.5);
+          // Shared osc knobs missing from the literal above
+          set (P + 'FOLD_AMT', 0.0); set (P + 'FRAME_SPREAD', 0.0); set (P + 'SPECTRAL_AMT', 0.0); set (P + 'SAMPLE_AIR', 0.0);
+          // OSC C/D wavetable knobs (A/B already covered)
+          set (P + 'OCT', 0.5); set (P + 'SEMI', 0.5); set (P + 'CENT', 0.5); set (P + 'PAN', 0.5);
+          set (P + 'WT_FRAME', 0.0); set (P + 'WARP_AMOUNT', 0.0);
+          set (P + 'LEVEL', (L === 'A') ? 0.7 : (L === 'B') ? 0.5 : 0.0);
+        });
+      })();
 
       // Formats a normalised [0..1] knob value into a compact label readout.
       // Engine ranges mirrored exactly (see PluginProcessor param ranges).
@@ -10510,111 +10638,21 @@ setTimeout(function wireSynControls () {
         if (paramId.indexOf ('_GRAIN_PITCH')   >= 0) { const v = Math.round (-24 + n * 48); return (v > 0 ? '+' : '') + v + ' st'; }
         if (paramId.indexOf ('_GRAIN_DIR')     >= 0) { const d = -1 + n * 2; return Math.abs (d) < 0.02 ? 'Rand' : (d > 0 ? 'Fwd ' : 'Rev ') + Math.round (Math.abs (d) * 100) + '%'; }
         if (paramId.indexOf ('_GRAIN_SKEW')    >= 0) { const s = -1 + n * 2; return s < -0.02 ? 'Pluck ' + Math.round (-s * 100) + '%' : (s > 0.02 ? 'Swell ' + Math.round (s * 100) + '%' : 'Even'); }
-        if (paramId.indexOf ('_GRAIN_')        >= 0) return pct + '%';   // Spray / Shape / Width / P.Spray / Life / Jump
+        if (paramId.indexOf ('_GRAIN_SHAPE')   >= 0) return n < 0.12 ? 'Flat' : n < 0.44 ? 'Flat→Dome' : n < 0.56 ? 'Dome' : n < 0.88 ? 'Dome→Bell' : 'Bell';   // grain window morph
+        if (paramId.indexOf ('_GRAIN_')        >= 0) return pct + '%';   // Spray / Width / P.Spray
         return pct + '%';
       }
       window.__fmtSynReadout = fmtSynReadout;   // exposed so reassigned grain knobs keep proper readouts
 
-      // ════════ GRANULAR reassignable slots — right-click a grain knob → pick its function ════════
-      // "Build your own grain controls." All 14 GRAIN functions are real params; a slot just chooses
-      // which param its knob controls. Reassign = clone the knob (drops old listeners) + re-bind live.
-      (function () {
-        var GRAIN_FUNCS = [
-          ['SCAN','Scan'], ['DENSITY','Density'], ['SIZE','Size'], ['SPRAY','Spray'], ['SHAPE','Shape'], ['KEY','Key'],
-          ['POSITION','Position'], ['PITCH','Pitch'], ['PSPRAY','P.Spray'], ['WIDTH','Width'], ['DIR','Dir'], ['SKEW','Skew'], ['LIFE','Life'], ['JUMP','Jump']
-        ];
-        var LABEL = {}; GRAIN_FUNCS.forEach (function (f) { LABEL[f[0]] = f[1]; });
-        function isBip (pid) { return /_GRAIN_(SCAN|PITCH|DIR|SKEW)$/.test (pid); }
-
-        // Compact self-contained binder for a (reassigned) grain knob — mirrors the general binder.
-        function wireLive (knob) {
-          try {
-            var pid = knob.dataset.syn; if (! pid || ! window.Juce || ! window.Juce.getSliderState) return;
-            var st = window.Juce.getSliderState (pid); if (! st) return;
-            var ring = knob.querySelector ('.knob-ring'); if (! ring) return;
-            var lab = knob.querySelector ('.knob-label'); var name = lab ? lab.textContent : '';
-            var bip = isBip (pid), tmr = null;
-            function nv () { try { return st.getNormalisedValue ? st.getNormalisedValue () : 0; } catch (e) { return 0; } }
-            function fill (n) { window.__synArc (ring, n, bip); }
-            function showV (n) { if (! lab) return; if (tmr) { clearTimeout (tmr); tmr = null; } lab.textContent = window.__fmtSynReadout ? window.__fmtSynReadout (pid, n) : name; lab.classList.add ('kv-live'); }
-            function rest () { if (! lab) return; if (tmr) clearTimeout (tmr); tmr = setTimeout (function () { lab.textContent = name; lab.classList.remove ('kv-live'); }, 650); }
-            fill (nv ()); ring.style.cursor = 'grab';
-            ring.addEventListener ('pointerdown', function (ev) {
-              ev.preventDefault (); try { ring.setPointerCapture (ev.pointerId); } catch (_) {}
-              var y0 = ev.clientY, v0 = nv (); ring.style.cursor = 'grabbing';
-              function mv (e) { var n = Math.max (0, Math.min (1, v0 + (y0 - e.clientY) / 200)); fill (n); showV (n); try { st.setNormalisedValue (n); } catch (_) {} }
-              function up () { try { ring.releasePointerCapture (ev.pointerId); } catch (_) {} ring.style.cursor = 'grab'; document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); rest (); }
-              document.addEventListener ('pointermove', mv); document.addEventListener ('pointerup', up);
-            });
-            if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener (function () { fill (nv ()); });
-          } catch (e) {}
-        }
-
-        function reassign (knob, suf) {
-          try {
-            var m = /^SYN_OSC_([A-D])_GRAIN_/.exec (knob.dataset.syn); if (! m) return;
-            var clone = knob.cloneNode (true);                 // drops the old (default-binder) listeners
-            clone.dataset.syn = 'SYN_OSC_' + m[1] + '_GRAIN_' + suf;
-            var lab = clone.querySelector ('.knob-label'); if (lab) lab.textContent = LABEL[suf] || suf;
-            var kvl = clone.querySelector ('.knob-label'); if (kvl) kvl.classList.remove ('kv-live');
-            knob.replaceWith (clone);
-            wireLive (clone);
-            persist ();
-          } catch (e) {}
-        }
-
-        function persist () {
-          try {
-            var map = {};
-            document.querySelectorAll ('#syn-panel .sample-view[data-osc] .gran-knobs').forEach (function (row) {
-              var sv = row.closest ('.sample-view'); var osc = sv ? sv.getAttribute ('data-osc') : null; if (! osc) return;
-              var arr = []; row.querySelectorAll ('.knob[data-syn]').forEach (function (k) { var mm = /_GRAIN_(.+)$/.exec (k.dataset.syn); if (mm) arr.push (mm[1]); });
-              map[osc] = arr;
-            });
-            window.__granSlotMap = map;
-            if (typeof saveSettings === 'function') saveSettings ();
-          } catch (e) {}
-        }
-
-        // Boot restore — reapply a saved slot layout (called from restoreSettings, after knobs + Juce are up).
-        window.__applyGranSlotMap = function (map) {
-          try {
-            if (! map) return;
-            Object.keys (map).forEach (function (osc) {
-              var row = document.querySelector ('#syn-panel .sample-view[data-osc="' + osc + '"] .gran-knobs'); if (! row) return;
-              var ks = row.querySelectorAll ('.knob[data-syn]'), sufs = map[osc] || [];
-              for (var i = 0; i < ks.length && i < sufs.length; i++)
-                if (ks[i].dataset.syn.indexOf ('_GRAIN_' + sufs[i]) < 0) reassign (ks[i], sufs[i]);
-            });
-          } catch (e) {}
-        };
-
-        // The menu.
-        var menu = null;
-        function closeMenu () { if (menu) { menu.remove (); menu = null; document.removeEventListener ('pointerdown', onDoc, true); } }
-        function onDoc (e) { if (menu && ! menu.contains (e.target)) closeMenu (); }
-        function openMenu (knob, cx, cy) {
-          closeMenu ();
-          var sp = document.getElementById ('syn-panel'); if (! sp) return;
-          menu = document.createElement ('div'); menu.className = 'gran-reassign-menu';
-          var curSuf = (/_GRAIN_(.+)$/.exec (knob.dataset.syn) || [])[1];
-          GRAIN_FUNCS.forEach (function (f) {
-            var it = document.createElement ('div'); it.className = 'gr-item' + (f[0] === curSuf ? ' cur' : ''); it.textContent = f[1];
-            it.addEventListener ('click', function (ev) { ev.stopPropagation (); reassign (knob, f[0]); closeMenu (); });
-            menu.appendChild (it);
-          });
-          sp.appendChild (menu);
-          var r = sp.getBoundingClientRect (), mw = menu.offsetWidth || 150, mh = menu.offsetHeight || 230;
-          menu.style.left = Math.max (4, Math.min (cx - r.left, r.width - mw - 4)) + 'px';
-          menu.style.top  = Math.max (4, Math.min (cy - r.top,  r.height - mh - 4)) + 'px';
-          setTimeout (function () { document.addEventListener ('pointerdown', onDoc, true); }, 0);
-        }
-        document.addEventListener ('contextmenu', function (e) {
-          var knob = e.target.closest ? e.target.closest ('#syn-panel .gran-knobs .knob[data-syn]') : null;
-          if (! knob) return;
-          e.preventDefault (); e.stopPropagation (); openMenu (knob, e.clientX, e.clientY);
-        }, true);
-      })();
+      // ════════ GRANULAR two-page knob rows — the far-right arrow toggles page 1 <-> page 2 ════════
+      // (The old right-click "reassign" menu was removed 2026-07-02. Page 1 = essentials, page 2 =
+      //  the rest. All page-2 knobs are bound by the general .knob[data-syn] binder even while hidden,
+      //  so they just work the moment they are revealed — no reflow, no re-bind.)
+      document.querySelectorAll ('#syn-panel .gran-knob-wrap .gk-arrow').forEach (function (arrow) {
+        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.gran-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
+        arrow.addEventListener ('click', toggle);
+        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
+      });
 
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
       knobEls.forEach ((knobEl) => {
@@ -11461,6 +11499,12 @@ setTimeout(function wireSynControls () {
                 ev.preventDefault(); ev.stopPropagation();
               } catch (e) {}
             });
+            // dblclick the value -> reset the ACTIVE param to its factory default (norm).
+            const UNI_DEF = { voices: 0.0, detune: 0.25, blend: 1.0, width: 0.5 };
+            valEl.addEventListener('dblclick', function(ev) {
+              ev.preventDefault(); ev.stopPropagation();
+              try { const st = states[getActive()]; if (st) st.setNormalisedValue(UNI_DEF[getActive()] || 0); refresh(); } catch (e) {}
+            });
             refresh();
           } catch (perPill) { console.warn('[UNI] pill init failed', perPill); }
         });
@@ -11563,6 +11607,11 @@ setTimeout(function wireSynControls () {
                 document.addEventListener('pointerup', onUp);
                 ev.preventDefault(); ev.stopPropagation();
               } catch (e) {}
+            });
+            // dblclick the value -> reset the active-engine warp amount to 0 (both defaults are 0).
+            valEl.addEventListener('dblclick', function(ev) {
+              ev.preventDefault(); ev.stopPropagation();
+              try { var as = ctx().amtState; if (as) as.setNormalisedValue(0); refresh(); } catch (e) {}
             });
             refresh();
           } catch (perPill) { console.warn('[WARP2] pill init failed', perPill); }

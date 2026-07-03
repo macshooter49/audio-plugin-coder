@@ -461,32 +461,24 @@ private:
     juce::WebSliderRelay synOscAGrainWidthRelay    { ParameterIDs::SYN_OSC_A_GRAIN_WIDTH };
     juce::WebSliderRelay synOscAGrainDirRelay      { ParameterIDs::SYN_OSC_A_GRAIN_DIR };
     juce::WebSliderRelay synOscAGrainSkewRelay     { ParameterIDs::SYN_OSC_A_GRAIN_SKEW };
-    juce::WebSliderRelay synOscAGrainLifeRelay     { ParameterIDs::SYN_OSC_A_GRAIN_LIFE };
-    juce::WebSliderRelay synOscAGrainJumpRelay     { ParameterIDs::SYN_OSC_A_GRAIN_JUMP };
     juce::WebSliderRelay synOscBGrainPositionRelay { ParameterIDs::SYN_OSC_B_GRAIN_POSITION };
     juce::WebSliderRelay synOscBGrainPitchRelay    { ParameterIDs::SYN_OSC_B_GRAIN_PITCH };
     juce::WebSliderRelay synOscBGrainPsprayRelay   { ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY };
     juce::WebSliderRelay synOscBGrainWidthRelay    { ParameterIDs::SYN_OSC_B_GRAIN_WIDTH };
     juce::WebSliderRelay synOscBGrainDirRelay      { ParameterIDs::SYN_OSC_B_GRAIN_DIR };
     juce::WebSliderRelay synOscBGrainSkewRelay     { ParameterIDs::SYN_OSC_B_GRAIN_SKEW };
-    juce::WebSliderRelay synOscBGrainLifeRelay     { ParameterIDs::SYN_OSC_B_GRAIN_LIFE };
-    juce::WebSliderRelay synOscBGrainJumpRelay     { ParameterIDs::SYN_OSC_B_GRAIN_JUMP };
     juce::WebSliderRelay synOscCGrainPositionRelay { ParameterIDs::SYN_OSC_C_GRAIN_POSITION };
     juce::WebSliderRelay synOscCGrainPitchRelay    { ParameterIDs::SYN_OSC_C_GRAIN_PITCH };
     juce::WebSliderRelay synOscCGrainPsprayRelay   { ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY };
     juce::WebSliderRelay synOscCGrainWidthRelay    { ParameterIDs::SYN_OSC_C_GRAIN_WIDTH };
     juce::WebSliderRelay synOscCGrainDirRelay      { ParameterIDs::SYN_OSC_C_GRAIN_DIR };
     juce::WebSliderRelay synOscCGrainSkewRelay     { ParameterIDs::SYN_OSC_C_GRAIN_SKEW };
-    juce::WebSliderRelay synOscCGrainLifeRelay     { ParameterIDs::SYN_OSC_C_GRAIN_LIFE };
-    juce::WebSliderRelay synOscCGrainJumpRelay     { ParameterIDs::SYN_OSC_C_GRAIN_JUMP };
     juce::WebSliderRelay synOscDGrainPositionRelay { ParameterIDs::SYN_OSC_D_GRAIN_POSITION };
     juce::WebSliderRelay synOscDGrainPitchRelay    { ParameterIDs::SYN_OSC_D_GRAIN_PITCH };
     juce::WebSliderRelay synOscDGrainPsprayRelay   { ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY };
     juce::WebSliderRelay synOscDGrainWidthRelay    { ParameterIDs::SYN_OSC_D_GRAIN_WIDTH };
     juce::WebSliderRelay synOscDGrainDirRelay      { ParameterIDs::SYN_OSC_D_GRAIN_DIR };
     juce::WebSliderRelay synOscDGrainSkewRelay     { ParameterIDs::SYN_OSC_D_GRAIN_SKEW };
-    juce::WebSliderRelay synOscDGrainLifeRelay     { ParameterIDs::SYN_OSC_D_GRAIN_LIFE };
-    juce::WebSliderRelay synOscDGrainJumpRelay     { ParameterIDs::SYN_OSC_D_GRAIN_JUMP };
     juce::WebSliderRelay synOscDSpectralTypeRelay { ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE };
     juce::WebSliderRelay synOscDSpectralAmtRelay  { ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
     juce::WebSliderRelay synOscDFoldShapeRelay    { ParameterIDs::SYN_OSC_D_FOLD_SHAPE };
@@ -955,10 +947,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainShapeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainKeyAttachment;
     // ── GRAIN-EXPANDED-ATTACHMENTS (8 × 4 osc) ──
-    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainPositionAttachment, synOscAGrainPitchAttachment, synOscAGrainPsprayAttachment, synOscAGrainWidthAttachment, synOscAGrainDirAttachment, synOscAGrainSkewAttachment, synOscAGrainLifeAttachment, synOscAGrainJumpAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainPositionAttachment, synOscBGrainPitchAttachment, synOscBGrainPsprayAttachment, synOscBGrainWidthAttachment, synOscBGrainDirAttachment, synOscBGrainSkewAttachment, synOscBGrainLifeAttachment, synOscBGrainJumpAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainPositionAttachment, synOscCGrainPitchAttachment, synOscCGrainPsprayAttachment, synOscCGrainWidthAttachment, synOscCGrainDirAttachment, synOscCGrainSkewAttachment, synOscCGrainLifeAttachment, synOscCGrainJumpAttachment;
-    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainPositionAttachment, synOscDGrainPitchAttachment, synOscDGrainPsprayAttachment, synOscDGrainWidthAttachment, synOscDGrainDirAttachment, synOscDGrainSkewAttachment, synOscDGrainLifeAttachment, synOscDGrainJumpAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainPositionAttachment, synOscAGrainPitchAttachment, synOscAGrainPsprayAttachment, synOscAGrainWidthAttachment, synOscAGrainDirAttachment, synOscAGrainSkewAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainPositionAttachment, synOscBGrainPitchAttachment, synOscBGrainPsprayAttachment, synOscBGrainWidthAttachment, synOscBGrainDirAttachment, synOscBGrainSkewAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCGrainPositionAttachment, synOscCGrainPitchAttachment, synOscCGrainPsprayAttachment, synOscCGrainWidthAttachment, synOscCGrainDirAttachment, synOscCGrainSkewAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainPositionAttachment, synOscDGrainPitchAttachment, synOscDGrainPsprayAttachment, synOscDGrainWidthAttachment, synOscDGrainDirAttachment, synOscDGrainSkewAttachment;
 
     // Synth section — Phase 8a (Voice settings + flagship features)
     std::unique_ptr<juce::WebSliderParameterAttachment> synVoicesAttachment;

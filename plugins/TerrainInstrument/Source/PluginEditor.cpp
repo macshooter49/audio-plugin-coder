@@ -388,13 +388,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDGrainKeyRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
-            .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay).withOptionsFrom(synOscAGrainLifeRelay).withOptionsFrom(synOscAGrainJumpRelay)
+            .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
             .withOptionsFrom(synOscBGrainPositionRelay).withOptionsFrom(synOscBGrainPitchRelay).withOptionsFrom(synOscBGrainPsprayRelay).withOptionsFrom(synOscBGrainWidthRelay)
-            .withOptionsFrom(synOscBGrainDirRelay).withOptionsFrom(synOscBGrainSkewRelay).withOptionsFrom(synOscBGrainLifeRelay).withOptionsFrom(synOscBGrainJumpRelay)
+            .withOptionsFrom(synOscBGrainDirRelay).withOptionsFrom(synOscBGrainSkewRelay)
             .withOptionsFrom(synOscCGrainPositionRelay).withOptionsFrom(synOscCGrainPitchRelay).withOptionsFrom(synOscCGrainPsprayRelay).withOptionsFrom(synOscCGrainWidthRelay)
-            .withOptionsFrom(synOscCGrainDirRelay).withOptionsFrom(synOscCGrainSkewRelay).withOptionsFrom(synOscCGrainLifeRelay).withOptionsFrom(synOscCGrainJumpRelay)
+            .withOptionsFrom(synOscCGrainDirRelay).withOptionsFrom(synOscCGrainSkewRelay)
             .withOptionsFrom(synOscDGrainPositionRelay).withOptionsFrom(synOscDGrainPitchRelay).withOptionsFrom(synOscDGrainPsprayRelay).withOptionsFrom(synOscDGrainWidthRelay)
-            .withOptionsFrom(synOscDGrainDirRelay).withOptionsFrom(synOscDGrainSkewRelay).withOptionsFrom(synOscDGrainLifeRelay).withOptionsFrom(synOscDGrainJumpRelay)
+            .withOptionsFrom(synOscDGrainDirRelay).withOptionsFrom(synOscDGrainSkewRelay)
             .withOptionsFrom(synOscDSpectralTypeRelay)
             .withOptionsFrom(synOscDSpectralAmtRelay)
             .withOptionsFrom(synOscDFoldShapeRelay)
@@ -2342,13 +2342,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDGrainKeyAttachment,     ParameterIDs::SYN_OSC_D_GRAIN_KEY,     synOscDGrainKeyRelay);
         // GRAIN-EXPANDED-MKATT (8 × 4 osc)
         mkAtt(synOscAGrainPositionAttachment, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, synOscAGrainPositionRelay); mkAtt(synOscAGrainPitchAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, synOscAGrainPitchRelay); mkAtt(synOscAGrainPsprayAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, synOscAGrainPsprayRelay); mkAtt(synOscAGrainWidthAttachment, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, synOscAGrainWidthRelay);
-        mkAtt(synOscAGrainDirAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DIR, synOscAGrainDirRelay); mkAtt(synOscAGrainSkewAttachment, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, synOscAGrainSkewRelay); mkAtt(synOscAGrainLifeAttachment, ParameterIDs::SYN_OSC_A_GRAIN_LIFE, synOscAGrainLifeRelay); mkAtt(synOscAGrainJumpAttachment, ParameterIDs::SYN_OSC_A_GRAIN_JUMP, synOscAGrainJumpRelay);
+        mkAtt(synOscAGrainDirAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DIR, synOscAGrainDirRelay); mkAtt(synOscAGrainSkewAttachment, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, synOscAGrainSkewRelay);
         mkAtt(synOscBGrainPositionAttachment, ParameterIDs::SYN_OSC_B_GRAIN_POSITION, synOscBGrainPositionRelay); mkAtt(synOscBGrainPitchAttachment, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, synOscBGrainPitchRelay); mkAtt(synOscBGrainPsprayAttachment, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, synOscBGrainPsprayRelay); mkAtt(synOscBGrainWidthAttachment, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, synOscBGrainWidthRelay);
-        mkAtt(synOscBGrainDirAttachment, ParameterIDs::SYN_OSC_B_GRAIN_DIR, synOscBGrainDirRelay); mkAtt(synOscBGrainSkewAttachment, ParameterIDs::SYN_OSC_B_GRAIN_SKEW, synOscBGrainSkewRelay); mkAtt(synOscBGrainLifeAttachment, ParameterIDs::SYN_OSC_B_GRAIN_LIFE, synOscBGrainLifeRelay); mkAtt(synOscBGrainJumpAttachment, ParameterIDs::SYN_OSC_B_GRAIN_JUMP, synOscBGrainJumpRelay);
+        mkAtt(synOscBGrainDirAttachment, ParameterIDs::SYN_OSC_B_GRAIN_DIR, synOscBGrainDirRelay); mkAtt(synOscBGrainSkewAttachment, ParameterIDs::SYN_OSC_B_GRAIN_SKEW, synOscBGrainSkewRelay);
         mkAtt(synOscCGrainPositionAttachment, ParameterIDs::SYN_OSC_C_GRAIN_POSITION, synOscCGrainPositionRelay); mkAtt(synOscCGrainPitchAttachment, ParameterIDs::SYN_OSC_C_GRAIN_PITCH, synOscCGrainPitchRelay); mkAtt(synOscCGrainPsprayAttachment, ParameterIDs::SYN_OSC_C_GRAIN_PSPRAY, synOscCGrainPsprayRelay); mkAtt(synOscCGrainWidthAttachment, ParameterIDs::SYN_OSC_C_GRAIN_WIDTH, synOscCGrainWidthRelay);
-        mkAtt(synOscCGrainDirAttachment, ParameterIDs::SYN_OSC_C_GRAIN_DIR, synOscCGrainDirRelay); mkAtt(synOscCGrainSkewAttachment, ParameterIDs::SYN_OSC_C_GRAIN_SKEW, synOscCGrainSkewRelay); mkAtt(synOscCGrainLifeAttachment, ParameterIDs::SYN_OSC_C_GRAIN_LIFE, synOscCGrainLifeRelay); mkAtt(synOscCGrainJumpAttachment, ParameterIDs::SYN_OSC_C_GRAIN_JUMP, synOscCGrainJumpRelay);
+        mkAtt(synOscCGrainDirAttachment, ParameterIDs::SYN_OSC_C_GRAIN_DIR, synOscCGrainDirRelay); mkAtt(synOscCGrainSkewAttachment, ParameterIDs::SYN_OSC_C_GRAIN_SKEW, synOscCGrainSkewRelay);
         mkAtt(synOscDGrainPositionAttachment, ParameterIDs::SYN_OSC_D_GRAIN_POSITION, synOscDGrainPositionRelay); mkAtt(synOscDGrainPitchAttachment, ParameterIDs::SYN_OSC_D_GRAIN_PITCH, synOscDGrainPitchRelay); mkAtt(synOscDGrainPsprayAttachment, ParameterIDs::SYN_OSC_D_GRAIN_PSPRAY, synOscDGrainPsprayRelay); mkAtt(synOscDGrainWidthAttachment, ParameterIDs::SYN_OSC_D_GRAIN_WIDTH, synOscDGrainWidthRelay);
-        mkAtt(synOscDGrainDirAttachment, ParameterIDs::SYN_OSC_D_GRAIN_DIR, synOscDGrainDirRelay); mkAtt(synOscDGrainSkewAttachment, ParameterIDs::SYN_OSC_D_GRAIN_SKEW, synOscDGrainSkewRelay); mkAtt(synOscDGrainLifeAttachment, ParameterIDs::SYN_OSC_D_GRAIN_LIFE, synOscDGrainLifeRelay); mkAtt(synOscDGrainJumpAttachment, ParameterIDs::SYN_OSC_D_GRAIN_JUMP, synOscDGrainJumpRelay);
+        mkAtt(synOscDGrainDirAttachment, ParameterIDs::SYN_OSC_D_GRAIN_DIR, synOscDGrainDirRelay); mkAtt(synOscDGrainSkewAttachment, ParameterIDs::SYN_OSC_D_GRAIN_SKEW, synOscDGrainSkewRelay);
         mkAtt(lfo2RateAttachment, ParameterIDs::LFO2_RATE, lfo2RateRelay);  mkAtt(lfo2DepthAttachment, ParameterIDs::LFO2_DEPTH, lfo2DepthRelay);
         mkAtt(lfo2ShapeAttachment, ParameterIDs::LFO2_SHAPE, lfo2ShapeRelay); mkAtt(lfo2SyncAttachment, ParameterIDs::LFO2_SYNC, lfo2SyncRelay); mkAtt(lfo2DivAttachment, ParameterIDs::LFO2_DIV, lfo2DivRelay);
         mkAtt(lfo3RateAttachment, ParameterIDs::LFO3_RATE, lfo3RateRelay);  mkAtt(lfo3DepthAttachment, ParameterIDs::LFO3_DEPTH, lfo3DepthRelay);
@@ -3230,24 +3230,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         }
     }
 
-    // GRANULAR-FOLLOWER — push the grain cloud [pos,age,pos,age,…] + scan marker per osc.
-    {
-        static const char* oscId[4] = { "'a'", "'b'", "'c'", "'d'" };
-        for (int o = 0; o < 4; ++o)
-        {
-            const int   n    = audioProcessor.granCloudCount_[o].load(std::memory_order_relaxed);
-            const float scan = audioProcessor.granScanPos_[o].load(std::memory_order_relaxed);
-            js << "if(window.updateGranularCloud){window.updateGranularCloud(" << oscId[o] << ",[";
-            for (int k = 0; k < n; ++k)
-            {
-                const float p = audioProcessor.granCloudPos_[o][k].load(std::memory_order_relaxed);
-                const float a = audioProcessor.granCloudAge_[o][k].load(std::memory_order_relaxed);
-                if (k) js << ",";
-                js << juce::String(p, 4) << "," << juce::String(a, 3);
-            }
-            js << "]," << juce::String(scan, 4) << ");}";
-        }
-    }
+    // GRANULAR-FOLLOWER — retired 2026-07-02. Granular now rides the Sample multi-playhead follower
+    // push above (updateSampleFollower), drawn PURPLE in the UI — no separate grain-cloud stream.
 
     // ── Synth LFO 1 live value (Batch 1) — drives the modulation strip's scope/dot. ──
     {
