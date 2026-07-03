@@ -2227,6 +2227,34 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 startBlend (oscIdx, tempFile);
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("clearOscSample", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // DELETE SAMPLE — full reset for one osc: empty the buffer (atomic swap — the
+                // voice goes silent, no click risk since hasSample() gates the whole engine),
+                // wipe the cached waveform + source path (nothing to restore on reopen), and
+                // kill any live blend (sources, engine, persisted pair). Fresh as a new instance.
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+
+                audioProcessor.getOscSampleBuffer (oscIdx).store (nullptr);
+                audioProcessor.oscSourcePath (oscIdx).clear();
+                audioProcessor.setCachedOscPayload ({}, oscIdx);
+
+                auto& bl = oscBlends_[oscIdx];
+                bl.live = false;
+                bl.srcA.reset(); bl.srcB.reset(); bl.engine.reset();
+                bl.dirty = false;
+                audioProcessor.blendSrcPath (oscIdx, 0).clear();
+                audioProcessor.blendSrcPath (oscIdx, 1).clear();
+
+                const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)));
+                if (webView != nullptr)
+                    webView->evaluateJavascript (
+                        juce::String ("if(window.onBlendState)window.onBlendState('") + letter + "',false);"
+                        + "if(window.onOscSampleCleared)window.onOscSampleCleared('" + letter + "');", nullptr);
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("exportBlendedSample", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -10338,7 +10366,8 @@ void TerrainInstrumentAudioProcessorEditor::queueBlendBake (int oscIdx)
         {
             if (safe == nullptr) return;
             safe->oscBlends_[oscIdx].baking = false;
-            if (ok) safe->publishBlend (oscIdx, outFile);
+            // live check: a Delete-sample while this bake was in flight must NOT resurrect it
+            if (ok && safe->oscBlends_[oscIdx].live) safe->publishBlend (oscIdx, outFile);
             if (safe->oscBlends_[oscIdx].dirty.exchange (false))
                 safe->queueBlendBake (oscIdx);   // params moved while baking → go again
         });

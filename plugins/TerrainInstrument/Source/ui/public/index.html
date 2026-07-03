@@ -10122,7 +10122,9 @@ setTimeout(function wireSynControls () {
           '<div class="sepd"></div>' +
           '<div data-a="copy">'  + ic ('<rect x="6" y="6" width="7" height="7" rx="1"/><path d="M3 10 V3 H10"/>') + 'Copy sample</div>' +
           '<div data-a="paste">' + ic ('<rect x="4" y="6" width="8" height="8" rx="1"/><path d="M6.5 6 V4 H10 V6"/>') + 'Paste sample</div>' +
-          '<div data-a="exportshot">' + ic ('<path d="M8 2 V10 M5 7 L8 10 L11 7 M3 13 H13"/>') + 'Export one-shot</div>';
+          '<div data-a="exportshot">' + ic ('<path d="M8 2 V10 M5 7 L8 10 L11 7 M3 13 H13"/>') + 'Export one-shot</div>' +
+          '<div class="sepd"></div>' +
+          '<div data-a="delsample">' + ic ('<path d="M3 4.5 H13 M6.5 4.5 V3 H9.5 V4.5 M4.5 4.5 L5.2 13.5 H10.8 L11.5 4.5 M6.8 7 V11 M9.2 7 V11"/>') + 'Delete sample</div>';
         // Quick-controls (Volume / Pan / Semitone) at the BOTTOM — same glass component the
         // wavetable osc uses, so the two right-click menus look identical.
         try { var qsep = document.createElement ('div'); qsep.className = 'sepd'; m.appendChild (qsep);
@@ -10150,6 +10152,7 @@ setTimeout(function wireSynControls () {
             else if (a === 'reset') { st.s = 0; st.e = 100; st.ls = 0; st.le = 100; st.fin = 0; st.fout = 0; st.xfade = 0.12; st.mode = 1; st.loop = true; if (S.repaintHeader) S.repaintHeader (); }
             else if (a === 'copy')  { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; if (_oc) window.__sampClip = _oc; } catch (e2) {} }
             else if (a === 'exportshot') { try { var _ox = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; var xf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('exportBlendedSample') : null; if (xf && _ox) xf (_ox); /* C++ copies the current one-shot (blend bakes included) to the export dir + reveals it in Finder */ } catch (e5) {} }
+            else if (a === 'delsample') { try { var _od = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; var df = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('clearOscSample') : null; if (df && _od) df (_od); if (S.clearLoaded) S.clearLoaded (); /* full reset: buffer + waveform + region + blend, back to Drop-sample-here */ } catch (e6) {} }
             else if (a === 'paste') { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : '', _src = window.__sampClip;
                                             if (_oc && _src && _src !== _oc) { var _cf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('copyOscSample') : null; if (_cf) _cf (_src, _oc); } } catch (e3) {} }
             if (S.syncParams) S.syncParams ();
@@ -10429,6 +10432,16 @@ setTimeout(function wireSynControls () {
           if (payload.peaksMin && payload.peaksMax) peaks = { min: payload.peaksMin, max: payload.peaksMax };
           view.classList.add ('loaded'); redraw ();
         }
+        // DELETE SAMPLE — full reset/refresh: waveform gone, region/loop/fades back to
+        // defaults, blend row hidden. C++ side (clearOscSample) empties the buffer + state.
+        function clearLoaded () {
+          peaks = null;
+          view.classList.remove ('loaded');
+          st.s = 0; st.e = 100; st.ls = 0; st.le = 100; st.fin = 0; st.fout = 0;
+          st.xfade = 0.12; st.mode = 1; st.loop = true;
+          try { var dv = view.closest ('.device.osc'); if (dv) { dv.classList.remove ('blend-on'); dv.classList.remove ('blend-pg2'); } } catch (e) {}
+          syncParams (); place (); redraw ();
+        }
         function pctOf (e) { var r = disp.getBoundingClientRect (); return Math.max (0, Math.min (100, ((e.clientX - r.left) / r.width) * 100)); }
         function syncParams () { wr (pStart, st.s / 100); wr (pEnd, st.e / 100); wr (pLS, st.ls / 100); wr (pLE, st.le / 100); wr (pFadeIn, st.fin); wr (pFadeOut, st.fout); wr (pXfade, st.xfade); wrChoice (pMode, st.mode, 5); }
 
@@ -10512,7 +10525,7 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
 
-        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded,
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded, clearLoaded: clearLoaded,
           syncParams: syncParams, repaintHeader: function () { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } };
         place (); redraw ();
       }
@@ -10542,6 +10555,7 @@ setTimeout(function wireSynControls () {
 
       // C++ → JS: a real sample finished loading for an oscillator → draw it.
       window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {} };
+      window.onOscSampleCleared = function (osc) { try { var S = SAMP[osc]; if (S && S.clearLoaded) S.clearLoaded (); } catch (e) {} };
       window.__terrainSampleRedraw = function (osc) {
         var S = SAMP[osc]; if (! S) return;
         requestAnimationFrame (function () { S.redraw (); S.place (); });
