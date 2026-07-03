@@ -57,6 +57,17 @@ struct GranularEngineParams
     float loopStart  = 0.f;   // 0..1 — the LOOP bracket (from SAMPLE_LOOP_START). Loop modes catch
     float loopEnd    = 1.f;   // 0..1 — then loop INSIDE [loopStart,loopEnd], like the Sample engine.
     int   loopMode   = 1;     // 0=One-Shot 1=Forward 2=Reverse 3=Ping-Pong 4=Tailed (from SAMPLE_LOOP_MODE)
+
+    // CPU: the processor change-gates its per-block 96-voice push on this (skip when unchanged).
+    bool operator== (const GranularEngineParams& o) const noexcept
+    {
+        return scan == o.scan && position == o.position && density == o.density && size == o.size
+            && spray == o.spray && shape == o.shape && skew == o.skew && pitch == o.pitch
+            && pitchSpray == o.pitchSpray && width == o.width && dir == o.dir && key == o.key
+            && air == o.air && stretch == o.stretch && stretchMode == o.stretchMode
+            && regStart == o.regStart && regEnd == o.regEnd
+            && loopStart == o.loopStart && loopEnd == o.loopEnd && loopMode == o.loopMode;
+    }
 };
 
 class GranularEngine
@@ -188,57 +199,114 @@ public:
             outR += p_.air * 2.f * (std::tanh (hpR * drv) - hpR);
         }
 
-        // 5) advance the read-head per LOOP MODE — Scan=0 stays frozen (grains keep spraying from here).
-        //    0=One-Shot (clamp+stop), 1=Forward loop, 2=Reverse loop, 3=Ping-Pong (bounce), 4=Tailed(=One-Shot).
-        if (p_.scan != 0.f && ! oneShotDone_)
-        {
-            const double range = (regEnd01_ - regStart01_) > 0.f ? (regEnd01_ - regStart01_) : 1.0;
-            double rate = (double) p_.scan;
-            if      (p_.loopMode == 2) rate = -std::fabs (rate);              // Reverse — always toward start
-            else if (p_.loopMode == 3) rate =  std::fabs (rate) * pingDir_;   // Ping-Pong — |scan| × bounce dir
-            scanPos_ += rate * 2.0 / outRate_ * range;
-
-            if (p_.loopMode == 0 || p_.loopMode == 4)            // One-Shot / Tailed — clamp at the REGION edge, stop spawning
-            {
-                if (scanPos_ >= regEnd01_)   { scanPos_ = regEnd01_;   oneShotDone_ = true; }
-                if (scanPos_ <= regStart01_) { scanPos_ = regStart01_; oneShotDone_ = true; }
-            }
-            else
-            {
-                // LOOP modes honour the LOOP BRACKET (loopLo_/loopHi_), Sample-engine style:
-                // the head leads in from the Position anchor, is "caught" the moment it enters
-                // the bracket (forward from below, reverse from above), then loops INSIDE it.
-                // Default bracket = whole region → caught on the first tick → legacy behaviour.
-                if (! caught_)
-                {
-                    caught_ = (rate >= 0.0) ? (scanPos_ >= loopLo_) : (scanPos_ <= loopHi_);
-                    if (! caught_)   // still leading in — wrap at the REGION edges so the head can reach the bracket
-                    {
-                        if (scanPos_ > regEnd01_)   scanPos_ = regStart01_ + (scanPos_ - regEnd01_);
-                        if (scanPos_ < regStart01_) scanPos_ = regEnd01_   - (regStart01_ - scanPos_);
-                    }
-                }
-                if (caught_)
-                {
-                    if (p_.loopMode == 3)                         // Ping-Pong — bounce at the bracket edges
-                    {
-                        if (scanPos_ >= loopHi_) { scanPos_ = loopHi_; pingDir_ = -1.f; }
-                        if (scanPos_ <= loopLo_) { scanPos_ = loopLo_; pingDir_ =  1.f; }
-                    }
-                    else                                          // Forward (1) / Reverse (2) — wrap inside the bracket
-                    {
-                        // fmod fold (not a single subtract) so a head caught far outside — or a
-                        // bracket dragged away mid-note — lands inside in ONE step, no spiral.
-                        const double lspan = loopHi_ - loopLo_;   // refreshLoopBounds guarantees > 0
-                        if (scanPos_ > loopHi_) scanPos_ = loopLo_ + std::fmod (scanPos_ - loopLo_, lspan);
-                        if (scanPos_ < loopLo_) scanPos_ = loopHi_ - std::fmod (loopHi_ - scanPos_, lspan);
-                    }
-                }
-            }
-        }
+        // 5) advance the read-head per LOOP MODE (factored — renderBlockAdd uses the same helper).
+        advanceHead();
 
         if (releasing_ && ! any) active_ = false; // freed once every grain has retired
         return active_;
+    }
+
+    // ── render a whole block GRAIN-MAJOR, ADDING into outL/outR (caller pre-zeroes/sums) ──
+    // CPU: replaces the per-sample tick() call in the voice. Loop 1 keeps the head/scheduler
+    // SAMPLE-ACCURATE (same order as tick(): spawn-check, then advance); loop 2 renders each
+    // live grain over its whole span in a tight inner loop (grain state stays in registers,
+    // window/sample reads go sequential); loop 3 applies norm + AIR. Chunked at kChunk so the
+    // AIR exciter (nonlinear — must see only THIS engine's signal) runs on stack scratch.
+    // tick() remains as the golden reference; the harness asserts both produce the same audio.
+    void renderBlockAdd (float* outL, float* outR, int n) noexcept
+    {
+        if (! active_ || ! hasSample()) return;
+        float bufL[kChunk], bufR[kChunk];
+        int base = 0;
+        while (base < n)
+        {
+            const int len = (n - base) < kChunk ? (n - base) : kChunk;
+
+            // 1) head + scheduler, per sample (cheap — no grain work here). The bracket-catch
+            //    can flip effLo/effHi MID-CHUNK; record the flip offset so loop 2 applies the
+            //    pre/post bounds to exactly the same samples tick() would (exact parity).
+            const double preLo = effLo01() * (numSamples_ - 1);
+            const double preHi = effHi01() * (numSamples_ - 1);
+            int catchAt = caught_ ? 0 : len;   // len = "never this chunk" (all samples use pre-bounds)
+            for (int i = 0; i < len; ++i)
+            {
+                countdown_ -= 1.0;
+                while (countdown_ <= 0.0)
+                {
+                    if (! releasing_ && ! oneShotDone_) spawnGrain (i);
+                    const double interval = outRate_ / (double) densHz_;
+                    const double jit      = 0.5 * interval * (nextRand01() * 2.f - 1.f); // regularity jitter
+                    countdown_ += interval + jit;
+                    if (countdown_ < 1.0) countdown_ = 1.0;
+                }
+                const bool wasCaught = caught_;
+                advanceHead();
+                if (! wasCaught && caught_ && catchAt == len) catchAt = i + 1;   // bounds flip AFTER this sample's advance
+            }
+
+            // 2) grain-major mix into the chunk scratch
+            for (int i = 0; i < len; ++i) { bufL[i] = 0.f; bufR[i] = 0.f; }
+            const double postLo = effLo01() * (numSamples_ - 1);
+            const double postHi = effHi01() * (numSamples_ - 1);
+            const double preSpan  = (preHi  - preLo)  > 1.0 ? (preHi  - preLo)  : 1.0;
+            const double postSpan = (postHi - postLo) > 1.0 ? (postHi - postLo) : 1.0;
+            for (int j = 0; j < numActive_; )
+            {
+                Grain& g  = pool_[(size_t) activeIdx_[j]];
+                int    i  = g.bornAt;                    // >0 only for grains born this chunk
+                g.bornAt  = 0;
+                int stop  = i + (g.len - g.age);         // sample where this grain retires
+                if (stop > len) stop = len;
+                for (; i < stop; ++i)
+                {
+                    const float ph = (float) g.age / (float) g.len;
+                    const float w  = windowAt (p_.shape, p_.skew, ph);
+                    float sl, sr; readHermite (g.readPos, sl, sr);
+                    bufL[i] += w * g.gain * g.panL * sl;
+                    bufR[i] += w * g.gain * g.panR * sr;
+                    g.readPos += g.readInc;
+                    ++g.age;
+                    const double lo   = (i < catchAt) ? preLo   : postLo;
+                    const double hi   = (i < catchAt) ? preHi   : postHi;
+                    const double span = (i < catchAt) ? preSpan : postSpan;
+                    if (g.readPos > hi) g.readPos = lo + std::fmod (g.readPos - lo, span);
+                    if (g.readPos < lo) g.readPos = hi - std::fmod (hi - g.readPos, span);
+                }
+                if (g.age >= g.len)                      // retire at window->0, no click
+                {
+                    g.active = false;
+                    freeIdx_[numFree_++]  = activeIdx_[j];
+                    activeIdx_[j] = activeIdx_[--numActive_];   // swap-remove — re-visit slot j
+                }
+                else ++j;
+            }
+
+            // 3) normalization + AIR (identical math/order to tick steps 3-4), accumulate out
+            if (p_.air > 0.001f)
+            {
+                const float drv = 1.f + p_.air * 20.f;
+                for (int i = 0; i < len; ++i)
+                {
+                    float l = bufL[i] * norm_, r = bufR[i] * norm_;
+                    airHpL_ += airCoef_ * (l - airHpL_); const float hpL = l - airHpL_;
+                    l += p_.air * 2.f * (std::tanh (hpL * drv) - hpL);
+                    airHpR_ += airCoef_ * (r - airHpR_); const float hpR = r - airHpR_;
+                    r += p_.air * 2.f * (std::tanh (hpR * drv) - hpR);
+                    outL[base + i] += l;
+                    outR[base + i] += r;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < len; ++i)
+                {
+                    outL[base + i] += bufL[i] * norm_;
+                    outR[base + i] += bufR[i] * norm_;
+                }
+            }
+            base += len;
+        }
+        if (releasing_ && numActive_ == 0) active_ = false; // freed once every grain has retired
     }
 
     // ── UI follower: fill up to maxOut recent grain births ──
@@ -272,12 +340,14 @@ private:
     static constexpr int   kPool    = 64;
     static constexpr int   kWin     = 2048;
     static constexpr int   kSkewTab = 257;   // skew phase-warp LUT resolution
+    static constexpr int   kChunk   = 128;   // renderBlockAdd stack-scratch chunk size
     static constexpr float kPi      = 3.14159265358979f;
 
     struct Grain
     {
         double readPos = 0.0, readInc = 0.0;
         int    age = 0, len = 0;
+        int    bornAt = 0;   // birth offset within the CURRENT chunk (renderBlockAdd); 0 once past it
         float  gain = 0.f, panL = 0.f, panR = 0.f;
         bool   active = false;
     };
@@ -332,12 +402,66 @@ private:
     double effLo01() const noexcept { return caught_ ? loopLo_ : (double) regStart01_; }
     double effHi01() const noexcept { return caught_ ? loopHi_ : (double) regEnd01_; }
 
-    void spawnGrain() noexcept
+    // ── advance the read-head one sample per LOOP MODE (tick step 5, factored so
+    //    renderBlockAdd shares the exact same semantics) — Scan=0 stays frozen.
+    //    0=One-Shot (clamp+stop), 1=Forward loop, 2=Reverse loop, 3=Ping-Pong (bounce), 4=Tailed(=One-Shot).
+    void advanceHead() noexcept
+    {
+        if (p_.scan == 0.f || oneShotDone_) return;
+
+        const double range = (regEnd01_ - regStart01_) > 0.f ? (regEnd01_ - regStart01_) : 1.0;
+        double rate = (double) p_.scan;
+        if      (p_.loopMode == 2) rate = -std::fabs (rate);              // Reverse — always toward start
+        else if (p_.loopMode == 3) rate =  std::fabs (rate) * pingDir_;   // Ping-Pong — |scan| × bounce dir
+        scanPos_ += rate * 2.0 / outRate_ * range;
+
+        if (p_.loopMode == 0 || p_.loopMode == 4)            // One-Shot / Tailed — clamp at the REGION edge, stop spawning
+        {
+            if (scanPos_ >= regEnd01_)   { scanPos_ = regEnd01_;   oneShotDone_ = true; }
+            if (scanPos_ <= regStart01_) { scanPos_ = regStart01_; oneShotDone_ = true; }
+        }
+        else
+        {
+            // LOOP modes honour the LOOP BRACKET (loopLo_/loopHi_), Sample-engine style:
+            // the head leads in from the Position anchor, is "caught" the moment it enters
+            // the bracket (forward from below, reverse from above), then loops INSIDE it.
+            // Default bracket = whole region → caught on the first tick → legacy behaviour.
+            if (! caught_)
+            {
+                caught_ = (rate >= 0.0) ? (scanPos_ >= loopLo_) : (scanPos_ <= loopHi_);
+                if (! caught_)   // still leading in — wrap at the REGION edges so the head can reach the bracket
+                {
+                    if (scanPos_ > regEnd01_)   scanPos_ = regStart01_ + (scanPos_ - regEnd01_);
+                    if (scanPos_ < regStart01_) scanPos_ = regEnd01_   - (regStart01_ - scanPos_);
+                }
+            }
+            if (caught_)
+            {
+                if (p_.loopMode == 3)                         // Ping-Pong — bounce at the bracket edges
+                {
+                    if (scanPos_ >= loopHi_) { scanPos_ = loopHi_; pingDir_ = -1.f; }
+                    if (scanPos_ <= loopLo_) { scanPos_ = loopLo_; pingDir_ =  1.f; }
+                }
+                else                                          // Forward (1) / Reverse (2) — wrap inside the bracket
+                {
+                    // fmod fold (not a single subtract) so a head caught far outside — or a
+                    // bracket dragged away mid-note — lands inside in ONE step, no spiral.
+                    const double lspan = loopHi_ - loopLo_;   // refreshLoopBounds guarantees > 0
+                    if (scanPos_ > loopHi_) scanPos_ = loopLo_ + std::fmod (scanPos_ - loopLo_, lspan);
+                    if (scanPos_ < loopLo_) scanPos_ = loopHi_ - std::fmod (loopHi_ - scanPos_, lspan);
+                }
+            }
+        }
+    }
+
+    // bornAt = offset within the CURRENT renderBlockAdd chunk (0 from per-sample tick()).
+    void spawnGrain (int bornAt = 0) noexcept
     {
         if (numFree_ <= 0) return; // Max-Grains reached -> skip-and-wait (graceful, no glitch)
         const int slot = freeIdx_[--numFree_];   // O(1) — pop the free stack, no pool scan
 
         Grain& g = pool_[(size_t) slot];
+        g.bornAt = bornAt;
 
         // birth position: scan head + sprayed jitter, clamped into the region.
         // AMPLIFIED — full Spray reaches ±half the region (Texture stretch adds extra scatter).

@@ -342,50 +342,50 @@ juce::String TerrainInstrumentAudioProcessor::getPresetName(int index) const
 PresetData TerrainInstrumentAudioProcessor::captureCurrentParams() const
 {
     PresetData p;
-    p.grainSize  = apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load();
-    p.density    = apvts.getRawParameterValue(ParameterIDs::DENSITY)->load();
-    p.spray      = apvts.getRawParameterValue(ParameterIDs::SPRAY)->load();
-    p.pitch      = apvts.getRawParameterValue(ParameterIDs::PITCH)->load();
-    p.drift      = apvts.getRawParameterValue(ParameterIDs::WANDER)->load();
-    p.freeze     = apvts.getRawParameterValue(ParameterIDs::FREEZE)->load();
-    p.grainFilter = apvts.getRawParameterValue(ParameterIDs::GRAIN_FILTER)->load();
-    p.mix        = apvts.getRawParameterValue(ParameterIDs::MIX)->load();
-    p.wowFlutter = apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load();
-    p.saturation = apvts.getRawParameterValue(ParameterIDs::SATURATION)->load();
-    p.hiss       = apvts.getRawParameterValue(ParameterIDs::HISS)->load();
-    p.wireWow        = apvts.getRawParameterValue (ParameterIDs::WIRE_WOW)       ->load();
-    p.wireSaturation = apvts.getRawParameterValue (ParameterIDs::WIRE_SATURATION)->load();
-    p.wireHiss       = apvts.getRawParameterValue (ParameterIDs::WIRE_HISS)      ->load();
-    p.studioSculpt = apvts.getRawParameterValue (ParameterIDs::STUDIO_SCULPT)->load();
-    p.studioWeave  = apvts.getRawParameterValue (ParameterIDs::STUDIO_WEAVE) ->load();
-    p.studioTilt   = apvts.getRawParameterValue (ParameterIDs::STUDIO_TILT)  ->load();
-    p.outputGain = apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load();
-    p.masterMix  = apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load();
-    p.loopLength   = apvts.getRawParameterValue(ParameterIDs::LOOP_LENGTH)->load();
-    p.loopFeedback = apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load();
-    p.loopDegrade  = apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load();
-    p.loopSpeed    = apvts.getRawParameterValue(ParameterIDs::LOOP_SPEED)->load();
-    p.spaceSize    = apvts.getRawParameterValue(ParameterIDs::SPACE_SIZE)->load();
-    p.spaceDecay   = apvts.getRawParameterValue(ParameterIDs::SPACE_DECAY)->load();
-    p.spaceTone    = apvts.getRawParameterValue(ParameterIDs::SPACE_TONE)->load();
-    p.spaceMix     = apvts.getRawParameterValue(ParameterIDs::SPACE_MIX)->load();
+    p.grainSize  = rawParam (ParameterIDs::GRAIN_SIZE)->load();
+    p.density    = rawParam (ParameterIDs::DENSITY)->load();
+    p.spray      = rawParam (ParameterIDs::SPRAY)->load();
+    p.pitch      = rawParam (ParameterIDs::PITCH)->load();
+    p.drift      = rawParam (ParameterIDs::WANDER)->load();
+    p.freeze     = rawParam (ParameterIDs::FREEZE)->load();
+    p.grainFilter = rawParam (ParameterIDs::GRAIN_FILTER)->load();
+    p.mix        = rawParam (ParameterIDs::MIX)->load();
+    p.wowFlutter = rawParam (ParameterIDs::WOW_FLUTTER)->load();
+    p.saturation = rawParam (ParameterIDs::SATURATION)->load();
+    p.hiss       = rawParam (ParameterIDs::HISS)->load();
+    p.wireWow        = rawParam (ParameterIDs::WIRE_WOW)       ->load();
+    p.wireSaturation = rawParam (ParameterIDs::WIRE_SATURATION)->load();
+    p.wireHiss       = rawParam (ParameterIDs::WIRE_HISS)      ->load();
+    p.studioSculpt = rawParam (ParameterIDs::STUDIO_SCULPT)->load();
+    p.studioWeave  = rawParam (ParameterIDs::STUDIO_WEAVE) ->load();
+    p.studioTilt   = rawParam (ParameterIDs::STUDIO_TILT)  ->load();
+    p.outputGain = rawParam (ParameterIDs::OUTPUT_GAIN)->load();
+    p.masterMix  = rawParam (ParameterIDs::MASTER_MIX)->load();
+    p.loopLength   = rawParam (ParameterIDs::LOOP_LENGTH)->load();
+    p.loopFeedback = rawParam (ParameterIDs::LOOP_FEEDBACK)->load();
+    p.loopDegrade  = rawParam (ParameterIDs::LOOP_DEGRADE)->load();
+    p.loopSpeed    = rawParam (ParameterIDs::LOOP_SPEED)->load();
+    p.spaceSize    = rawParam (ParameterIDs::SPACE_SIZE)->load();
+    p.spaceDecay   = rawParam (ParameterIDs::SPACE_DECAY)->load();
+    p.spaceTone    = rawParam (ParameterIDs::SPACE_TONE)->load();
+    p.spaceMix     = rawParam (ParameterIDs::SPACE_MIX)->load();
     // Parametric EQ — 35 APVTS params + 2 UI-only filter-mode flags.
-    p.eqMasterBypass = apvts.getRawParameterValue (ParameterIDs::EQ_MASTER_BYPASS)->load();
-    p.eqHpFreq    = apvts.getRawParameterValue (ParameterIDs::EQ_HP_FREQ)  ->load();
-    p.eqHpSlope   = apvts.getRawParameterValue (ParameterIDs::EQ_HP_SLOPE) ->load();
-    p.eqHpBypass  = apvts.getRawParameterValue (ParameterIDs::EQ_HP_BYPASS)->load();
-    p.eqLpFreq    = apvts.getRawParameterValue (ParameterIDs::EQ_LP_FREQ)  ->load();
-    p.eqLpSlope   = apvts.getRawParameterValue (ParameterIDs::EQ_LP_SLOPE) ->load();
-    p.eqLpBypass  = apvts.getRawParameterValue (ParameterIDs::EQ_LP_BYPASS)->load();
-    p.eqB1Freq = apvts.getRawParameterValue (ParameterIDs::EQ_B1_FREQ)->load(); p.eqB1Gain = apvts.getRawParameterValue (ParameterIDs::EQ_B1_GAIN)->load(); p.eqB1Q = apvts.getRawParameterValue (ParameterIDs::EQ_B1_Q)->load(); p.eqB1Bypass = apvts.getRawParameterValue (ParameterIDs::EQ_B1_BYPASS)->load();
-    p.eqB2Freq = apvts.getRawParameterValue (ParameterIDs::EQ_B2_FREQ)->load(); p.eqB2Gain = apvts.getRawParameterValue (ParameterIDs::EQ_B2_GAIN)->load(); p.eqB2Q = apvts.getRawParameterValue (ParameterIDs::EQ_B2_Q)->load(); p.eqB2Bypass = apvts.getRawParameterValue (ParameterIDs::EQ_B2_BYPASS)->load();
-    p.eqB3Freq = apvts.getRawParameterValue (ParameterIDs::EQ_B3_FREQ)->load(); p.eqB3Gain = apvts.getRawParameterValue (ParameterIDs::EQ_B3_GAIN)->load(); p.eqB3Q = apvts.getRawParameterValue (ParameterIDs::EQ_B3_Q)->load(); p.eqB3Bypass = apvts.getRawParameterValue (ParameterIDs::EQ_B3_BYPASS)->load();
-    p.eqB4Freq = apvts.getRawParameterValue (ParameterIDs::EQ_B4_FREQ)->load(); p.eqB4Gain = apvts.getRawParameterValue (ParameterIDs::EQ_B4_GAIN)->load(); p.eqB4Q = apvts.getRawParameterValue (ParameterIDs::EQ_B4_Q)->load(); p.eqB4Bypass = apvts.getRawParameterValue (ParameterIDs::EQ_B4_BYPASS)->load();
-    p.eqB5Freq = apvts.getRawParameterValue (ParameterIDs::EQ_B5_FREQ)->load(); p.eqB5Gain = apvts.getRawParameterValue (ParameterIDs::EQ_B5_GAIN)->load(); p.eqB5Q = apvts.getRawParameterValue (ParameterIDs::EQ_B5_Q)->load(); p.eqB5Bypass = apvts.getRawParameterValue (ParameterIDs::EQ_B5_BYPASS)->load();
-    p.eqB6Freq = apvts.getRawParameterValue (ParameterIDs::EQ_B6_FREQ)->load(); p.eqB6Gain = apvts.getRawParameterValue (ParameterIDs::EQ_B6_GAIN)->load(); p.eqB6Q = apvts.getRawParameterValue (ParameterIDs::EQ_B6_Q)->load(); p.eqB6Bypass = apvts.getRawParameterValue (ParameterIDs::EQ_B6_BYPASS)->load();
-    p.eqB7Freq = apvts.getRawParameterValue (ParameterIDs::EQ_B7_FREQ)->load(); p.eqB7Gain = apvts.getRawParameterValue (ParameterIDs::EQ_B7_GAIN)->load(); p.eqB7Q = apvts.getRawParameterValue (ParameterIDs::EQ_B7_Q)->load(); p.eqB7Bypass = apvts.getRawParameterValue (ParameterIDs::EQ_B7_BYPASS)->load();
-    p.eqB1HpMode = apvts.getRawParameterValue (ParameterIDs::EQ_B1_HP_MODE)->load();
-    p.eqB7LpMode = apvts.getRawParameterValue (ParameterIDs::EQ_B7_LP_MODE)->load();
+    p.eqMasterBypass = rawParam (ParameterIDs::EQ_MASTER_BYPASS)->load();
+    p.eqHpFreq    = rawParam (ParameterIDs::EQ_HP_FREQ)  ->load();
+    p.eqHpSlope   = rawParam (ParameterIDs::EQ_HP_SLOPE) ->load();
+    p.eqHpBypass  = rawParam (ParameterIDs::EQ_HP_BYPASS)->load();
+    p.eqLpFreq    = rawParam (ParameterIDs::EQ_LP_FREQ)  ->load();
+    p.eqLpSlope   = rawParam (ParameterIDs::EQ_LP_SLOPE) ->load();
+    p.eqLpBypass  = rawParam (ParameterIDs::EQ_LP_BYPASS)->load();
+    p.eqB1Freq = rawParam (ParameterIDs::EQ_B1_FREQ)->load(); p.eqB1Gain = rawParam (ParameterIDs::EQ_B1_GAIN)->load(); p.eqB1Q = rawParam (ParameterIDs::EQ_B1_Q)->load(); p.eqB1Bypass = rawParam (ParameterIDs::EQ_B1_BYPASS)->load();
+    p.eqB2Freq = rawParam (ParameterIDs::EQ_B2_FREQ)->load(); p.eqB2Gain = rawParam (ParameterIDs::EQ_B2_GAIN)->load(); p.eqB2Q = rawParam (ParameterIDs::EQ_B2_Q)->load(); p.eqB2Bypass = rawParam (ParameterIDs::EQ_B2_BYPASS)->load();
+    p.eqB3Freq = rawParam (ParameterIDs::EQ_B3_FREQ)->load(); p.eqB3Gain = rawParam (ParameterIDs::EQ_B3_GAIN)->load(); p.eqB3Q = rawParam (ParameterIDs::EQ_B3_Q)->load(); p.eqB3Bypass = rawParam (ParameterIDs::EQ_B3_BYPASS)->load();
+    p.eqB4Freq = rawParam (ParameterIDs::EQ_B4_FREQ)->load(); p.eqB4Gain = rawParam (ParameterIDs::EQ_B4_GAIN)->load(); p.eqB4Q = rawParam (ParameterIDs::EQ_B4_Q)->load(); p.eqB4Bypass = rawParam (ParameterIDs::EQ_B4_BYPASS)->load();
+    p.eqB5Freq = rawParam (ParameterIDs::EQ_B5_FREQ)->load(); p.eqB5Gain = rawParam (ParameterIDs::EQ_B5_GAIN)->load(); p.eqB5Q = rawParam (ParameterIDs::EQ_B5_Q)->load(); p.eqB5Bypass = rawParam (ParameterIDs::EQ_B5_BYPASS)->load();
+    p.eqB6Freq = rawParam (ParameterIDs::EQ_B6_FREQ)->load(); p.eqB6Gain = rawParam (ParameterIDs::EQ_B6_GAIN)->load(); p.eqB6Q = rawParam (ParameterIDs::EQ_B6_Q)->load(); p.eqB6Bypass = rawParam (ParameterIDs::EQ_B6_BYPASS)->load();
+    p.eqB7Freq = rawParam (ParameterIDs::EQ_B7_FREQ)->load(); p.eqB7Gain = rawParam (ParameterIDs::EQ_B7_GAIN)->load(); p.eqB7Q = rawParam (ParameterIDs::EQ_B7_Q)->load(); p.eqB7Bypass = rawParam (ParameterIDs::EQ_B7_BYPASS)->load();
+    p.eqB1HpMode = rawParam (ParameterIDs::EQ_B1_HP_MODE)->load();
+    p.eqB7LpMode = rawParam (ParameterIDs::EQ_B7_LP_MODE)->load();
     p.xyAutoEnabled    = xyAutoEnabled.load();
     p.xyAutoMode       = xyAutoMode.load();
     p.xyAutoSpeed      = xyAutoSpeed.load();
@@ -393,26 +393,26 @@ PresetData TerrainInstrumentAudioProcessor::captureCurrentParams() const
     p.grainEngineEnabled = grainEngineEnabled.load();
     p.tapeEnabled        = tapeEnabled.load();
     p.tapeLoopEnabled    = tapeLoopEnabled.load();
-    p.tapeMachine        = apvts.getRawParameterValue(ParameterIDs::TAPE_MACHINE)->load();
+    p.tapeMachine        = rawParam (ParameterIDs::TAPE_MACHINE)->load();
     p.wanderLinked        = wanderLinked.load();
     p.tapeLinkEnabled    = tapeLinkEnabled.load();
     p.modState            = modStateJson;  // Capture current LFO/mod config
-    p.dlyTime      = apvts.getRawParameterValue (ParameterIDs::DLY_TIME)->load();
-    p.dlyFeedback  = apvts.getRawParameterValue (ParameterIDs::DLY_FEEDBACK)->load();
-    p.dlyTone      = apvts.getRawParameterValue (ParameterIDs::DLY_TONE)->load();
-    p.dlyCharacter = apvts.getRawParameterValue (ParameterIDs::DLY_CHARACTER)->load();
-    p.dlyMod       = apvts.getRawParameterValue (ParameterIDs::DLY_MOD)->load();
-    p.dlyModRate   = apvts.getRawParameterValue (ParameterIDs::DLY_MOD_RATE)->load();
-    p.dlyMix       = apvts.getRawParameterValue (ParameterIDs::DLY_MIX)->load();
-    p.dlyDuck      = apvts.getRawParameterValue (ParameterIDs::DLY_DUCK)->load();
-    p.dlyModWave   = apvts.getRawParameterValue (ParameterIDs::DLY_MOD_WAVE)->load();
-    p.dlySync      = apvts.getRawParameterValue (ParameterIDs::DLY_SYNC)->load();
-    p.dlySyncDiv   = apvts.getRawParameterValue (ParameterIDs::DLY_SYNC_DIV)->load();
-    p.dlyPitch     = apvts.getRawParameterValue (ParameterIDs::DLY_PITCH)->load();
-    p.dlyWidth     = apvts.getRawParameterValue (ParameterIDs::DLY_WIDTH)->load();
-    p.chorusAmount    = apvts.getRawParameterValue (ParameterIDs::CHORUS_AMOUNT)   ->load();
-    p.chorusWidth     = apvts.getRawParameterValue (ParameterIDs::CHORUS_WIDTH)    ->load();
-    p.chorusCharacter = apvts.getRawParameterValue (ParameterIDs::CHORUS_CHARACTER)->load();
+    p.dlyTime      = rawParam (ParameterIDs::DLY_TIME)->load();
+    p.dlyFeedback  = rawParam (ParameterIDs::DLY_FEEDBACK)->load();
+    p.dlyTone      = rawParam (ParameterIDs::DLY_TONE)->load();
+    p.dlyCharacter = rawParam (ParameterIDs::DLY_CHARACTER)->load();
+    p.dlyMod       = rawParam (ParameterIDs::DLY_MOD)->load();
+    p.dlyModRate   = rawParam (ParameterIDs::DLY_MOD_RATE)->load();
+    p.dlyMix       = rawParam (ParameterIDs::DLY_MIX)->load();
+    p.dlyDuck      = rawParam (ParameterIDs::DLY_DUCK)->load();
+    p.dlyModWave   = rawParam (ParameterIDs::DLY_MOD_WAVE)->load();
+    p.dlySync      = rawParam (ParameterIDs::DLY_SYNC)->load();
+    p.dlySyncDiv   = rawParam (ParameterIDs::DLY_SYNC_DIV)->load();
+    p.dlyPitch     = rawParam (ParameterIDs::DLY_PITCH)->load();
+    p.dlyWidth     = rawParam (ParameterIDs::DLY_WIDTH)->load();
+    p.chorusAmount    = rawParam (ParameterIDs::CHORUS_AMOUNT)   ->load();
+    p.chorusWidth     = rawParam (ParameterIDs::CHORUS_WIDTH)    ->load();
+    p.chorusCharacter = rawParam (ParameterIDs::CHORUS_CHARACTER)->load();
     return p;
 }
 
@@ -2309,6 +2309,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
 //==============================================================================
 void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    // CPU: prepare resets voice state — force the change-gated broadcasts (ModConfig +
+    // engine params) to re-push on the first block after any prepare.
+    synCfgPushed_    = false;
+    engParamsPushed_ = false;
+
     // Task 5: singleton synth removed. Prep all layer synths instead.
     // Mark 2 task 4: prep per-layer scratch buffers and per-layer synth rates.
     // Each layer synth renders into its own scratch buffer in processBlock,
@@ -2357,9 +2362,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     smoothedChorusAmount.reset    (sampleRate, 0.02);
     smoothedChorusWidth.reset     (sampleRate, 0.02);
     smoothedChorusCharacter.reset (sampleRate, 0.05);  // CHARACTER changes more dramatically
-    smoothedChorusAmount.setCurrentAndTargetValue    (apvts.getRawParameterValue (ParameterIDs::CHORUS_AMOUNT)->load());
-    smoothedChorusWidth.setCurrentAndTargetValue     (apvts.getRawParameterValue (ParameterIDs::CHORUS_WIDTH)->load());
-    smoothedChorusCharacter.setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::CHORUS_CHARACTER)->load());
+    smoothedChorusAmount.setCurrentAndTargetValue    (rawParam (ParameterIDs::CHORUS_AMOUNT)->load());
+    smoothedChorusWidth.setCurrentAndTargetValue     (rawParam (ParameterIDs::CHORUS_WIDTH)->load());
+    smoothedChorusCharacter.setCurrentAndTargetValue (rawParam (ParameterIDs::CHORUS_CHARACTER)->load());
 
     eqL.prepare(sampleRate, samplesPerBlock);
     eqR.prepare(sampleRate, samplesPerBlock);
@@ -2377,14 +2382,14 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
             smoothedEqBandFreq[b].reset (sampleRate, 0.005);
             smoothedEqBandGain[b].reset (sampleRate, 0.005);
             smoothedEqBandQ[b]   .reset (sampleRate, 0.005);
-            smoothedEqBandFreq[b].setCurrentAndTargetValue (apvts.getRawParameterValue (freqIds[b])->load());
-            smoothedEqBandGain[b].setCurrentAndTargetValue (apvts.getRawParameterValue (gainIds[b])->load());
-            smoothedEqBandQ[b]   .setCurrentAndTargetValue (apvts.getRawParameterValue (qIds[b])->load());
+            smoothedEqBandFreq[b].setCurrentAndTargetValue (rawParam (freqIds[b])->load());
+            smoothedEqBandGain[b].setCurrentAndTargetValue (rawParam (gainIds[b])->load());
+            smoothedEqBandQ[b]   .setCurrentAndTargetValue (rawParam (qIds[b])->load());
         }
         smoothedEqHpFreq.reset (sampleRate, 0.005);
         smoothedEqLpFreq.reset (sampleRate, 0.005);
-        smoothedEqHpFreq.setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::EQ_HP_FREQ)->load());
-        smoothedEqLpFreq.setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::EQ_LP_FREQ)->load());
+        smoothedEqHpFreq.setCurrentAndTargetValue (rawParam (ParameterIDs::EQ_HP_FREQ)->load());
+        smoothedEqLpFreq.setCurrentAndTargetValue (rawParam (ParameterIDs::EQ_LP_FREQ)->load());
     }
     captureBuffer.prepare(sampleRate, samplesPerBlock);
 
@@ -2445,44 +2450,44 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     smoothedDelayFreeze.reset(sampleRate, 0.005); // 5ms — fast since freeze is binary-ish
 
     // Set initial values
-    smoothedGrainSize.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load());
-    smoothedDensity.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DENSITY)->load());
-    smoothedSpray.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPRAY)->load());
-    smoothedPitch.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::PITCH)->load());
-    smoothedWander.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
-    smoothedFreeze.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::FREEZE)->load());
-    smoothedMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
-    smoothedGrainFilter.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_FILTER)->load());
-    smoothedWowFlutter.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
-    smoothedSaturation.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
-    smoothedHiss.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::HISS)->load());
-    smoothedStudioSculpt.setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::STUDIO_SCULPT)->load());
-    smoothedStudioWeave .setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::STUDIO_WEAVE) ->load());
-    smoothedStudioTilt  .setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::STUDIO_TILT)  ->load());
-    smoothedWireWow .setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::WIRE_WOW)       ->load());
-    smoothedWireSat .setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::WIRE_SATURATION)->load());
-    smoothedWireHiss.setCurrentAndTargetValue (apvts.getRawParameterValue (ParameterIDs::WIRE_HISS)      ->load());
-    smoothedOutputGain.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load());
-    smoothedMasterMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load());
-    smoothedLoopFeedback.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load());
-    smoothedLoopDegrade.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load());
+    smoothedGrainSize.setCurrentAndTargetValue(rawParam (ParameterIDs::GRAIN_SIZE)->load());
+    smoothedDensity.setCurrentAndTargetValue(rawParam (ParameterIDs::DENSITY)->load());
+    smoothedSpray.setCurrentAndTargetValue(rawParam (ParameterIDs::SPRAY)->load());
+    smoothedPitch.setCurrentAndTargetValue(rawParam (ParameterIDs::PITCH)->load());
+    smoothedWander.setCurrentAndTargetValue(rawParam (ParameterIDs::WANDER)->load());
+    smoothedFreeze.setCurrentAndTargetValue(rawParam (ParameterIDs::FREEZE)->load());
+    smoothedMix.setCurrentAndTargetValue(rawParam (ParameterIDs::MIX)->load());
+    smoothedGrainFilter.setCurrentAndTargetValue(rawParam (ParameterIDs::GRAIN_FILTER)->load());
+    smoothedWowFlutter.setCurrentAndTargetValue(rawParam (ParameterIDs::WOW_FLUTTER)->load());
+    smoothedSaturation.setCurrentAndTargetValue(rawParam (ParameterIDs::SATURATION)->load());
+    smoothedHiss.setCurrentAndTargetValue(rawParam (ParameterIDs::HISS)->load());
+    smoothedStudioSculpt.setCurrentAndTargetValue (rawParam (ParameterIDs::STUDIO_SCULPT)->load());
+    smoothedStudioWeave .setCurrentAndTargetValue (rawParam (ParameterIDs::STUDIO_WEAVE) ->load());
+    smoothedStudioTilt  .setCurrentAndTargetValue (rawParam (ParameterIDs::STUDIO_TILT)  ->load());
+    smoothedWireWow .setCurrentAndTargetValue (rawParam (ParameterIDs::WIRE_WOW)       ->load());
+    smoothedWireSat .setCurrentAndTargetValue (rawParam (ParameterIDs::WIRE_SATURATION)->load());
+    smoothedWireHiss.setCurrentAndTargetValue (rawParam (ParameterIDs::WIRE_HISS)      ->load());
+    smoothedOutputGain.setCurrentAndTargetValue(rawParam (ParameterIDs::OUTPUT_GAIN)->load());
+    smoothedMasterMix.setCurrentAndTargetValue(rawParam (ParameterIDs::MASTER_MIX)->load());
+    smoothedLoopFeedback.setCurrentAndTargetValue(rawParam (ParameterIDs::LOOP_FEEDBACK)->load());
+    smoothedLoopDegrade.setCurrentAndTargetValue(rawParam (ParameterIDs::LOOP_DEGRADE)->load());
 
     // Space reverb initial values
-    smoothedSpaceSize.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_SIZE)->load());
-    smoothedSpaceDecay.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_DECAY)->load());
-    smoothedSpaceTone.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_TONE)->load());
-    smoothedSpaceMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_MIX)->load());
+    smoothedSpaceSize.setCurrentAndTargetValue(rawParam (ParameterIDs::SPACE_SIZE)->load());
+    smoothedSpaceDecay.setCurrentAndTargetValue(rawParam (ParameterIDs::SPACE_DECAY)->load());
+    smoothedSpaceTone.setCurrentAndTargetValue(rawParam (ParameterIDs::SPACE_TONE)->load());
+    smoothedSpaceMix.setCurrentAndTargetValue(rawParam (ParameterIDs::SPACE_MIX)->load());
 
     // Delay initial values
-    smoothedDlyTime.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_TIME)->load());
-    smoothedDlyFeedback.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_FEEDBACK)->load());
-    smoothedDlyTone.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_TONE)->load());
-    smoothedDlyCharacter.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_CHARACTER)->load());
-    smoothedDlyMod.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_MOD)->load());
-    smoothedDlyModRate.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_MOD_RATE)->load());
-    smoothedDlyMix.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_MIX)->load());
-    smoothedDlyDuck.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_DUCK)->load());
-    smoothedDelayFreeze.setCurrentAndTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_FREEZE)->load());
+    smoothedDlyTime.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_TIME)->load());
+    smoothedDlyFeedback.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_FEEDBACK)->load());
+    smoothedDlyTone.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_TONE)->load());
+    smoothedDlyCharacter.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_CHARACTER)->load());
+    smoothedDlyMod.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_MOD)->load());
+    smoothedDlyModRate.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_MOD_RATE)->load());
+    smoothedDlyMix.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_MIX)->load());
+    smoothedDlyDuck.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_DUCK)->load());
+    smoothedDelayFreeze.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_FREEZE)->load());
 
 }
 
@@ -2506,6 +2511,31 @@ bool TerrainInstrumentAudioProcessor::isBusesLayoutSupported (const BusesLayout&
     // instruments don't have an audio input bus (host disables it).
     const auto out = layouts.getMainOutputChannelSet();
     return out == juce::AudioChannelSet::mono() || out == juce::AudioChannelSet::stereo();
+}
+
+// ── CPU: equality for the ModConfig broadcast change-gate (field-wise — memcmp is unsafe
+//    on structs with padding). Assignments compared only up to numAssignments.
+static bool lfoSettingsEq (const wc::LFOSettings& a, const wc::LFOSettings& b) noexcept
+{
+    return a.shape == b.shape && a.sync == b.sync && a.rateHz == b.rateHz
+        && a.syncIdx == b.syncIdx && a.startPhase == b.startPhase
+        && a.phaseOffset == b.phaseOffset && a.trigger == b.trigger && a.polarity == b.polarity;
+}
+static bool modCfgEq (const wc::ModConfig& a, const wc::ModConfig& b) noexcept
+{
+    if (a.numAssignments != b.numAssignments) return false;
+    for (int i = 0; i < wc::NUM_LFOS; ++i)
+        if (! lfoSettingsEq (a.lfos[i], b.lfos[i])) return false;
+    for (int i = 0; i < a.numAssignments; ++i)
+    {
+        const auto& x = a.assignments[i]; const auto& y = b.assignments[i];
+        if (x.source != y.source || x.dest != y.dest || x.depth != y.depth
+            || x.auxSource != y.auxSource || x.useAux != y.useAux || x.enabled != y.enabled)
+            return false;
+    }
+    for (int i = 0; i < 8; ++i)
+        if (a.driftLanes[i] != b.driftLanes[i]) return false;
+    return true;
 }
 
 void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -2553,10 +2583,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // native fn directly, V1 preset compat handled in setStateInformation).
     // Without this, switching LOOP on layer A also forced B/C/D into LOOP.
     {
-        const int   rootMidi   = (int) *apvts.getRawParameterValue (ParameterIDs::ROOT_NOTE);
-        const float attackMs   = *apvts.getRawParameterValue (ParameterIDs::ATTACK_MS);
-        const float releaseMs  = *apvts.getRawParameterValue (ParameterIDs::RELEASE_MS);
-        const float chopFadeMs = *apvts.getRawParameterValue (ParameterIDs::CHOP_FADE_MS);
+        const int   rootMidi   = (int) *rawParam (ParameterIDs::ROOT_NOTE);
+        const float attackMs   = *rawParam (ParameterIDs::ATTACK_MS);
+        const float releaseMs  = *rawParam (ParameterIDs::RELEASE_MS);
+        const float chopFadeMs = *rawParam (ParameterIDs::CHOP_FADE_MS);
 
         for (auto& layer : layers)
         {
@@ -2571,7 +2601,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // layer.sliceMode inside the layer loop below). sliceSubMode is still
     // global for Phase 1 — only matters when 2+ layers are simultaneously
     // in SLICE mode with different sub-modes (edge case to address later).
-    const int sliceSubModeIdx_blk = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_SUB_MODE);
+    const int sliceSubModeIdx_blk = (int) *rawParam (ParameterIDs::SLICE_SUB_MODE);
     const size_t elIdx = (size_t) editingLayer.load();
 
     // Helper: derive the SliceContext::Mode enum from a per-layer slice mode +
@@ -2932,176 +2962,176 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     wc::ModConfig synModCfg;
     float         synModBpm = 0.0f;
     {
-        const int   oct     = (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_OCT);
-        const int   semi    = (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SEMI);
-        const float cent    =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_CENT);
-        const float lvl     =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_LEVEL);
-        const float pan     =         *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_PAN);
-        const float cut     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_CUT);
-        const float res     =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_RES);
-        const float fltKt1  =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_KEYTRACK);
+        const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
+        const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
+        const float cent    =         *rawParam (ParameterIDs::SYN_OSC_A_CENT);
+        const float lvl     =         *rawParam (ParameterIDs::SYN_OSC_A_LEVEL);
+        const float pan     =         *rawParam (ParameterIDs::SYN_OSC_A_PAN);
+        const float cut     =         *rawParam (ParameterIDs::SYN_FILTER1_CUT);
+        const float res     =         *rawParam (ParameterIDs::SYN_FILTER1_RES);
+        const float fltKt1  =         *rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK);
         // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
-        const int   filtType= (int)   *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_TYPE);
-        const float filtDrv =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_DRV);
-        const float filtEnv =         *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_ENV);
+        const int   filtType= (int)   *rawParam (ParameterIDs::SYN_FILTER1_TYPE);
+        const float filtDrv =         *rawParam (ParameterIDs::SYN_FILTER1_DRV);
+        const float filtEnv =         *rawParam (ParameterIDs::SYN_FILTER1_ENV);
         // Filter 2 (independent) + per-filter mix + routing.
-        const float cut2     =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_CUT);
-        const float res2     =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_RES);
-        const float fltKt2   =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_KEYTRACK);
-        const int   filtType2= (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_TYPE);
-        const float filtDrv2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_DRV);
-        const float filtEnv2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_ENV);
-        const float filtMix1 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER1_MIX);
-        const float filtMix2 =        *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER2_MIX);
-        const int   filtRoute= (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_FILTER_ROUTING);
-        const float fltEnvA =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_A);
-        const float fltEnvD =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_D);
-        const float fltEnvS =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_S);
-        const float fltEnvR =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_R);
-        const float ampA    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_A);
-        const float ampD    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_D);
-        const float ampS    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_S);
-        const float ampR    =         *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_R);
+        const float cut2     =        *rawParam (ParameterIDs::SYN_FILTER2_CUT);
+        const float res2     =        *rawParam (ParameterIDs::SYN_FILTER2_RES);
+        const float fltKt2   =        *rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK);
+        const int   filtType2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_TYPE);
+        const float filtDrv2 =        *rawParam (ParameterIDs::SYN_FILTER2_DRV);
+        const float filtEnv2 =        *rawParam (ParameterIDs::SYN_FILTER2_ENV);
+        const float filtMix1 =        *rawParam (ParameterIDs::SYN_FILTER1_MIX);
+        const float filtMix2 =        *rawParam (ParameterIDs::SYN_FILTER2_MIX);
+        const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
+        const float fltEnvA =         *rawParam (ParameterIDs::SYN_ENV_FLT_A);
+        const float fltEnvD =         *rawParam (ParameterIDs::SYN_ENV_FLT_D);
+        const float fltEnvS =         *rawParam (ParameterIDs::SYN_ENV_FLT_S);
+        const float fltEnvR =         *rawParam (ParameterIDs::SYN_ENV_FLT_R);
+        const float ampA    =         *rawParam (ParameterIDs::SYN_ENV_AMP_A);
+        const float ampD    =         *rawParam (ParameterIDs::SYN_ENV_AMP_D);
+        const float ampS    =         *rawParam (ParameterIDs::SYN_ENV_AMP_S);
+        const float ampR    =         *rawParam (ParameterIDs::SYN_ENV_AMP_R);
 
         // ── Envelope DAHDSR extension reads (Batch 2/3) ──
-        const float ampDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_DLY);
-        const float ampHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_H);
-        const float ampCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_CA);
-        const float ampCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_CD);
-        const float ampCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_CR);
-        const bool  ampLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_AMP_LOOP) > 0.5f;
-        const float fltDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_DLY);
-        const float fltHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_H);
-        const float fltCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_CA);
-        const float fltCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_CD);
-        const float fltCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_CR);
-        const bool  fltLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_FLT_LOOP) > 0.5f;
-        const float pitDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_DLY);
-        const float pitA = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_A);
-        const float pitHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_H);
-        const float pitD = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_D);
-        const float pitS = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_S);
-        const float pitR = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_R);
-        const float pitCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_CA);
-        const float pitCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_CD);
-        const float pitCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_CR);
-        const bool  pitLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_LOOP) > 0.5f;
-        const float pitDepth = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_PIT_DEPTH);
-        const float m1eDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_DLY);
-        const float m1eA = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_A);
-        const float m1eHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_H);
-        const float m1eD = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_D);
-        const float m1eS = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_S);
-        const float m1eR = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_R);
-        const float m1eCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_CA);
-        const float m1eCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_CD);
-        const float m1eCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_CR);
-        const bool  m1eLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M1_LOOP) > 0.5f;
-        const float m2eDly = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_DLY);
-        const float m2eA = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_A);
-        const float m2eHld = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_H);
-        const float m2eD = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_D);
-        const float m2eS = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_S);
-        const float m2eR = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_R);
-        const float m2eCa = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CA);
-        const float m2eCd = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CD);
-        const float m2eCr = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_CR);
-        const bool  m2eLoop = *apvts.getRawParameterValue (ParameterIDs::SYN_ENV_M2_LOOP) > 0.5f;
+        const float ampDly = *rawParam (ParameterIDs::SYN_ENV_AMP_DLY);
+        const float ampHld = *rawParam (ParameterIDs::SYN_ENV_AMP_H);
+        const float ampCa = *rawParam (ParameterIDs::SYN_ENV_AMP_CA);
+        const float ampCd = *rawParam (ParameterIDs::SYN_ENV_AMP_CD);
+        const float ampCr = *rawParam (ParameterIDs::SYN_ENV_AMP_CR);
+        const bool  ampLoop = *rawParam (ParameterIDs::SYN_ENV_AMP_LOOP) > 0.5f;
+        const float fltDly = *rawParam (ParameterIDs::SYN_ENV_FLT_DLY);
+        const float fltHld = *rawParam (ParameterIDs::SYN_ENV_FLT_H);
+        const float fltCa = *rawParam (ParameterIDs::SYN_ENV_FLT_CA);
+        const float fltCd = *rawParam (ParameterIDs::SYN_ENV_FLT_CD);
+        const float fltCr = *rawParam (ParameterIDs::SYN_ENV_FLT_CR);
+        const bool  fltLoop = *rawParam (ParameterIDs::SYN_ENV_FLT_LOOP) > 0.5f;
+        const float pitDly = *rawParam (ParameterIDs::SYN_ENV_PIT_DLY);
+        const float pitA = *rawParam (ParameterIDs::SYN_ENV_PIT_A);
+        const float pitHld = *rawParam (ParameterIDs::SYN_ENV_PIT_H);
+        const float pitD = *rawParam (ParameterIDs::SYN_ENV_PIT_D);
+        const float pitS = *rawParam (ParameterIDs::SYN_ENV_PIT_S);
+        const float pitR = *rawParam (ParameterIDs::SYN_ENV_PIT_R);
+        const float pitCa = *rawParam (ParameterIDs::SYN_ENV_PIT_CA);
+        const float pitCd = *rawParam (ParameterIDs::SYN_ENV_PIT_CD);
+        const float pitCr = *rawParam (ParameterIDs::SYN_ENV_PIT_CR);
+        const bool  pitLoop = *rawParam (ParameterIDs::SYN_ENV_PIT_LOOP) > 0.5f;
+        const float pitDepth = *rawParam (ParameterIDs::SYN_ENV_PIT_DEPTH);
+        const float m1eDly = *rawParam (ParameterIDs::SYN_ENV_M1_DLY);
+        const float m1eA = *rawParam (ParameterIDs::SYN_ENV_M1_A);
+        const float m1eHld = *rawParam (ParameterIDs::SYN_ENV_M1_H);
+        const float m1eD = *rawParam (ParameterIDs::SYN_ENV_M1_D);
+        const float m1eS = *rawParam (ParameterIDs::SYN_ENV_M1_S);
+        const float m1eR = *rawParam (ParameterIDs::SYN_ENV_M1_R);
+        const float m1eCa = *rawParam (ParameterIDs::SYN_ENV_M1_CA);
+        const float m1eCd = *rawParam (ParameterIDs::SYN_ENV_M1_CD);
+        const float m1eCr = *rawParam (ParameterIDs::SYN_ENV_M1_CR);
+        const bool  m1eLoop = *rawParam (ParameterIDs::SYN_ENV_M1_LOOP) > 0.5f;
+        const float m2eDly = *rawParam (ParameterIDs::SYN_ENV_M2_DLY);
+        const float m2eA = *rawParam (ParameterIDs::SYN_ENV_M2_A);
+        const float m2eHld = *rawParam (ParameterIDs::SYN_ENV_M2_H);
+        const float m2eD = *rawParam (ParameterIDs::SYN_ENV_M2_D);
+        const float m2eS = *rawParam (ParameterIDs::SYN_ENV_M2_S);
+        const float m2eR = *rawParam (ParameterIDs::SYN_ENV_M2_R);
+        const float m2eCa = *rawParam (ParameterIDs::SYN_ENV_M2_CA);
+        const float m2eCd = *rawParam (ParameterIDs::SYN_ENV_M2_CD);
+        const float m2eCr = *rawParam (ParameterIDs::SYN_ENV_M2_CR);
+        const bool  m2eLoop = *rawParam (ParameterIDs::SYN_ENV_M2_LOOP) > 0.5f;
         // Per-envelope routing (envs 2–5): destination index + bipolar depth.
-        const int   env2Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV2_DEST);
-        const float env2Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV2_DEPTH);
-        const int   env3Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV3_DEST);
-        const float env3Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV3_DEPTH);
-        const int   env4Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV4_DEST);
-        const float env4Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV4_DEPTH);
-        const int   env5Dest  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_ENV5_DEST);
-        const float env5Depth =       *apvts.getRawParameterValue (ParameterIDs::SYN_ENV5_DEPTH);
+        const int   env2Dest  = (int) *rawParam (ParameterIDs::SYN_ENV2_DEST);
+        const float env2Depth =       *rawParam (ParameterIDs::SYN_ENV2_DEPTH);
+        const int   env3Dest  = (int) *rawParam (ParameterIDs::SYN_ENV3_DEST);
+        const float env3Depth =       *rawParam (ParameterIDs::SYN_ENV3_DEPTH);
+        const int   env4Dest  = (int) *rawParam (ParameterIDs::SYN_ENV4_DEST);
+        const float env4Depth =       *rawParam (ParameterIDs::SYN_ENV4_DEPTH);
+        const int   env5Dest  = (int) *rawParam (ParameterIDs::SYN_ENV5_DEST);
+        const float env5Depth =       *rawParam (ParameterIDs::SYN_ENV5_DEPTH);
         // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
-        const int            wtPreset = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_PRESET);
-        const float          wtFrame  =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WT_FRAME);
+        const int            wtPreset = (int) *rawParam (ParameterIDs::SYN_OSC_A_WT_PRESET);
+        const float          wtFrame  =       *rawParam (ParameterIDs::SYN_OSC_A_WT_FRAME);
         const tw::Wavetable* wt       = resolveMorphTable (morphA_, wtPreset);
         // Phase 2C — warp mode + amount
-        const int   warpMode   = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_MODE);
-        const int   phaseModeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_PHASE_MODE);
-        const float warpAmount =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
+        const int   warpMode   = (int) *rawParam (ParameterIDs::SYN_OSC_A_WARP_MODE);
+        const int   phaseModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_PHASE_MODE);
+        const float warpAmount =       *rawParam (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
         // Phase 3 — OSC A engine choice
-        const int engineIdx = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ENGINE);
+        const int engineIdx = (int) *rawParam (ParameterIDs::SYN_OSC_A_ENGINE);
 
         // Phase 9 — OSC B params
-        const int   octB       = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_OCT);
-        const int   semiB      = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SEMI);
-        const float centB      =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_CENT);
-        const float lvlB       =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_LEVEL);
-        const float panB       =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_PAN);
-        const int   wtPresetB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WT_PRESET);
-        const float wtFrameB   =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WT_FRAME);
+        const int   octB       = (int)  *rawParam (ParameterIDs::SYN_OSC_B_OCT);
+        const int   semiB      = (int)  *rawParam (ParameterIDs::SYN_OSC_B_SEMI);
+        const float centB      =        *rawParam (ParameterIDs::SYN_OSC_B_CENT);
+        const float lvlB       =        *rawParam (ParameterIDs::SYN_OSC_B_LEVEL);
+        const float panB       =        *rawParam (ParameterIDs::SYN_OSC_B_PAN);
+        const int   wtPresetB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WT_PRESET);
+        const float wtFrameB   =        *rawParam (ParameterIDs::SYN_OSC_B_WT_FRAME);
         const tw::Wavetable* wtB = resolveMorphTable (morphB_, wtPresetB);
-        const int   warpModeB  = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_MODE);
-        const int   phaseModeB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_PHASE_MODE);
-        const float warpAmountB =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
+        const int   warpModeB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP_MODE);
+        const int   phaseModeB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_PHASE_MODE);
+        const float warpAmountB =       *rawParam (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
         // WARP 2 — chained second slot per OSC
-        const int   warp2ModeA = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP2_MODE);
-        const float warp2AmtA  =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP2_AMT);
-        const int   warp2ModeB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP2_MODE);
-        const float warp2AmtB  =        *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WARP2_AMT);
-        const int   engineIdxB = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ENGINE);
+        const int   warp2ModeA = (int)  *rawParam (ParameterIDs::SYN_OSC_A_WARP2_MODE);
+        const float warp2AmtA  =        *rawParam (ParameterIDs::SYN_OSC_A_WARP2_AMT);
+        const int   warp2ModeB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP2_MODE);
+        const float warp2AmtB  =        *rawParam (ParameterIDs::SYN_OSC_B_WARP2_AMT);
+        const int   engineIdxB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ENGINE);
         // WAVER — per-OSC analog pitch-drift depth (0..100 %). Pushed per voice below.
-        const float waverA      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WAVER);
-        const float waverB      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_WAVER);
+        const float waverA      =       *rawParam (ParameterIDs::SYN_OSC_A_WAVER);
+        const float waverB      =       *rawParam (ParameterIDs::SYN_OSC_B_WAVER);
         // KEYTRACK — per-OSC note->destination depth (0..100 %) + destination choice.
-        const float ktDepthA    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_KEYTRACK);
-        const int   ktDestA     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_KEYTRACK_DEST);
-        const float ktDepthB    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_KEYTRACK);
-        const int   ktDestB     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_KEYTRACK_DEST);
+        const float ktDepthA    =       *rawParam (ParameterIDs::SYN_OSC_A_KEYTRACK);
+        const int   ktDestA     = (int)  *rawParam (ParameterIDs::SYN_OSC_A_KEYTRACK_DEST);
+        const float ktDepthB    =       *rawParam (ParameterIDs::SYN_OSC_B_KEYTRACK);
+        const int   ktDestB     = (int)  *rawParam (ParameterIDs::SYN_OSC_B_KEYTRACK_DEST);
         // ROUTE — per-OSC source + destination + bipolar amount (-100..100 %).
-        const int   rtSrcA      = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ROUTE_SRC);
-        const int   rtDestA     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ROUTE_DEST);
-        const float rtAmtA      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_ROUTE_AMT);
-        const int   rtSrcB      = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_SRC);
-        const int   rtDestB     = (int)  *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
-        const float rtAmtB      =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
+        const int   rtSrcA      = (int)  *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_SRC);
+        const int   rtDestA     = (int)  *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_DEST);
+        const float rtAmtA      =       *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_AMT);
+        const int   rtSrcB      = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_SRC);
+        const int   rtDestB     = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
+        const float rtAmtB      =       *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
 
         // ── OSC C / D params (4-osc) — mirror OSC B; pushed per voice below ──
-        const int   octC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_OCT), semiC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_SEMI);
-        const float centC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_CENT), lvlC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_LEVEL), panC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_PAN);
-        const int   wtPresetC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WT_PRESET);
-        const float wtFrameC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WT_FRAME);
+        const int   octC=(int)*rawParam (ParameterIDs::SYN_OSC_C_OCT), semiC=(int)*rawParam (ParameterIDs::SYN_OSC_C_SEMI);
+        const float centC=*rawParam (ParameterIDs::SYN_OSC_C_CENT), lvlC=*rawParam (ParameterIDs::SYN_OSC_C_LEVEL), panC=*rawParam (ParameterIDs::SYN_OSC_C_PAN);
+        const int   wtPresetC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WT_PRESET);
+        const float wtFrameC=*rawParam (ParameterIDs::SYN_OSC_C_WT_FRAME);
         const tw::Wavetable* wtC = resolveMorphTable(morphC_, wtPresetC);
-        const int   warpModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_PHASE_MODE);
-        const float warpAmountC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
-        const int   warp2ModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP2_MODE);
-        const float warp2AmtC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WARP2_AMT);
-        const int   engineIdxC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ENGINE);
-        const float waverC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_WAVER);
-        const float ktDepthC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_KEYTRACK);
-        const int   ktDestC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_KEYTRACK_DEST);
-        const int   rtSrcC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ROUTE_SRC), rtDestC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ROUTE_DEST);
-        const float rtAmtC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_ROUTE_AMT);
-        const int   octD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_OCT), semiD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_SEMI);
-        const float centD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_CENT), lvlD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_LEVEL), panD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_PAN);
-        const int   wtPresetD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WT_PRESET);
-        const float wtFrameD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WT_FRAME);
+        const int   warpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_PHASE_MODE);
+        const float warpAmountC=*rawParam (ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
+        const int   warp2ModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP2_MODE);
+        const float warp2AmtC=*rawParam (ParameterIDs::SYN_OSC_C_WARP2_AMT);
+        const int   engineIdxC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ENGINE);
+        const float waverC=*rawParam (ParameterIDs::SYN_OSC_C_WAVER);
+        const float ktDepthC=*rawParam (ParameterIDs::SYN_OSC_C_KEYTRACK);
+        const int   ktDestC=(int)*rawParam (ParameterIDs::SYN_OSC_C_KEYTRACK_DEST);
+        const int   rtSrcC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_SRC), rtDestC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_DEST);
+        const float rtAmtC=*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_AMT);
+        const int   octD=(int)*rawParam (ParameterIDs::SYN_OSC_D_OCT), semiD=(int)*rawParam (ParameterIDs::SYN_OSC_D_SEMI);
+        const float centD=*rawParam (ParameterIDs::SYN_OSC_D_CENT), lvlD=*rawParam (ParameterIDs::SYN_OSC_D_LEVEL), panD=*rawParam (ParameterIDs::SYN_OSC_D_PAN);
+        const int   wtPresetD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WT_PRESET);
+        const float wtFrameD=*rawParam (ParameterIDs::SYN_OSC_D_WT_FRAME);
         const tw::Wavetable* wtD = resolveMorphTable(morphD_, wtPresetD);
-        const int   warpModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_PHASE_MODE);
-        const float warpAmountD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
-        const int   warp2ModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP2_MODE);
-        const float warp2AmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WARP2_AMT);
-        const int   engineIdxD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ENGINE);
-        const float waverD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_WAVER);
-        const float ktDepthD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_KEYTRACK);
-        const int   ktDestD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_KEYTRACK_DEST);
-        const int   rtSrcD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_DEST);
-        const float rtAmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_ROUTE_AMT);
+        const int   warpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_PHASE_MODE);
+        const float warpAmountD=*rawParam (ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
+        const int   warp2ModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP2_MODE);
+        const float warp2AmtD=*rawParam (ParameterIDs::SYN_OSC_D_WARP2_AMT);
+        const int   engineIdxD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ENGINE);
+        const float waverD=*rawParam (ParameterIDs::SYN_OSC_D_WAVER);
+        const float ktDepthD=*rawParam (ParameterIDs::SYN_OSC_D_KEYTRACK);
+        const int   ktDestD=(int)*rawParam (ParameterIDs::SYN_OSC_D_KEYTRACK_DEST);
+        const int   rtSrcD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_DEST);
+        const float rtAmtD=*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_AMT);
 
         // ── SOLO / MUTE per OSC — bool params (getRawParameterValue returns normalized 0..1 → >0.5) ──
-        const bool muteA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_MUTE) > 0.5f;
-        const bool soloA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SOLO) > 0.5f;
-        const bool muteB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_MUTE) > 0.5f;
-        const bool soloB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SOLO) > 0.5f;
-        const bool muteC = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_MUTE) > 0.5f;
-        const bool soloC = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SOLO) > 0.5f;
-        const bool muteD = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
-        const bool soloD = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
+        const bool muteA = *rawParam (ParameterIDs::SYN_OSC_A_MUTE) > 0.5f;
+        const bool soloA = *rawParam (ParameterIDs::SYN_OSC_A_SOLO) > 0.5f;
+        const bool muteB = *rawParam (ParameterIDs::SYN_OSC_B_MUTE) > 0.5f;
+        const bool soloB = *rawParam (ParameterIDs::SYN_OSC_B_SOLO) > 0.5f;
+        const bool muteC = *rawParam (ParameterIDs::SYN_OSC_C_MUTE) > 0.5f;
+        const bool soloC = *rawParam (ParameterIDs::SYN_OSC_C_SOLO) > 0.5f;
+        const bool muteD = *rawParam (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
+        const bool soloD = *rawParam (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
         const bool anySolo = soloA || soloB || soloC || soloD;
         auto oscGate = [anySolo](bool mute, bool solo){ return (mute || (anySolo && !solo)) ? 0.0f : 1.0f; };
         const float gateA = oscGate(muteA, soloA), gateB = oscGate(muteB, soloB),
@@ -3109,57 +3139,57 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         // ════════ SAMPLE-ENGINE-PUSH — read per-OSC Sample params (Opus) ════════
         tw::SynthVoice::SampleEngineParams spA;
-        spA.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SCAN);       spA.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH);
-        spA.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT);    spA.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY);
-        spA.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_XFADE);      spA.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_START);
-        spA.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_END);        spA.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START);
-        spA.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END);   spA.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE);
-        spA.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE);
-        spA.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE);
-        spA.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_SNAP);      spA.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN);
-        spA.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT);
-        spA.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_AIR);
-        spA.warp      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_WARP);
-        spA.warpMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_SAMPLE_WARPMODE);
+        spA.scan      = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_SCAN);       spA.stretch = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH);
+        spA.formant   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT);    spA.spray   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_SPRAY);
+        spA.xfade     = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_XFADE);      spA.start   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_START);
+        spA.end       = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_END);        spA.loopStart = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START);
+        spA.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END);   spA.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE);
+        spA.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH_MODE);
+        spA.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FORMANT_MODE);
+        spA.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_SNAP);      spA.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_IN);
+        spA.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADE_OUT);
+        spA.air       = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_AIR);
+        spA.warp      = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_WARP);
+        spA.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_WARPMODE);
         tw::SynthVoice::SampleEngineParams spB;
-        spB.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SCAN);       spB.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH);
-        spB.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT);    spB.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY);
-        spB.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_XFADE);      spB.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_START);
-        spB.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_END);        spB.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START);
-        spB.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END);   spB.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE);
-        spB.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE);
-        spB.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE);
-        spB.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_SNAP);      spB.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN);
-        spB.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT);
-        spB.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_AIR);
-        spB.warp      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_WARP);
-        spB.warpMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_SAMPLE_WARPMODE);
+        spB.scan      = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SCAN);       spB.stretch = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH);
+        spB.formant   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT);    spB.spray   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY);
+        spB.xfade     = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_XFADE);      spB.start   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_START);
+        spB.end       = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_END);        spB.loopStart = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START);
+        spB.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END);   spB.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE);
+        spB.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH_MODE);
+        spB.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT_MODE);
+        spB.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SNAP);      spB.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_IN);
+        spB.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADE_OUT);
+        spB.air       = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_AIR);
+        spB.warp      = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_WARP);
+        spB.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_WARPMODE);
         tw::SynthVoice::SampleEngineParams spC;
-        spC.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SCAN);       spC.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH);
-        spC.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT);    spC.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY);
-        spC.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_XFADE);      spC.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_START);
-        spC.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_END);        spC.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START);
-        spC.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END);   spC.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE);
-        spC.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE);
-        spC.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE);
-        spC.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_SNAP);      spC.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN);
-        spC.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT);
-        spC.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_AIR);
-        spC.warp      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_WARP);
-        spC.warpMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_C_SAMPLE_WARPMODE);
+        spC.scan      = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SCAN);       spC.stretch = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH);
+        spC.formant   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT);    spC.spray   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY);
+        spC.xfade     = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_XFADE);      spC.start   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_START);
+        spC.end       = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_END);        spC.loopStart = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START);
+        spC.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END);   spC.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE);
+        spC.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH_MODE);
+        spC.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT_MODE);
+        spC.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SNAP);      spC.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_IN);
+        spC.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADE_OUT);
+        spC.air       = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_AIR);
+        spC.warp      = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_WARP);
+        spC.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_WARPMODE);
         tw::SynthVoice::SampleEngineParams spD;
-        spD.scan      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SCAN);       spD.stretch = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH);
-        spD.formant   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT);    spD.spray   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY);
-        spD.xfade     = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_XFADE);      spD.start   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_START);
-        spD.end       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_END);        spD.loopStart = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START);
-        spD.loopEnd   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END);   spD.loopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE);
-        spD.stretchMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE);
-        spD.formantMode = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE);
-        spD.snap      = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
-        spD.fadeOut   = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
-        spD.air       = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_AIR);
-        spD.warp      = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
-        spD.warpMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
+        spD.scan      = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SCAN);       spD.stretch = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH);
+        spD.formant   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT);    spD.spray   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY);
+        spD.xfade     = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_XFADE);      spD.start   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_START);
+        spD.end       = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_END);        spD.loopStart = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START);
+        spD.loopEnd   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END);   spD.loopMode  = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE);
+        spD.stretchMode = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH_MODE);
+        spD.formantMode = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT_MODE);
+        spD.snap      = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SNAP);      spD.fadeIn    = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_IN);
+        spD.fadeOut   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADE_OUT);
+        spD.air       = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_AIR);
+        spD.warp      = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
+        spD.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
 
         // ── GRAIN engine: gather the 12 grain functions per OSC (GRAIN-ENGINE-GATHER) ──
         // ID order: scan,density,size,spray,shape,key, position,pitch,pspray,width,dir,skew.
@@ -3175,18 +3205,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         auto gatherGrain = [this] (const char* const* id)
         {
             tw::GranularEngineParams g;
-            g.scan       = *apvts.getRawParameterValue (id[0]);
-            g.density    = *apvts.getRawParameterValue (id[1]);
-            g.size       = *apvts.getRawParameterValue (id[2]);
-            g.spray      = *apvts.getRawParameterValue (id[3]);
-            g.shape      = *apvts.getRawParameterValue (id[4]);
-            g.key        = (int) *apvts.getRawParameterValue (id[5]);   // choice → index
-            g.position   = *apvts.getRawParameterValue (id[6]);
-            g.pitch      = *apvts.getRawParameterValue (id[7]);
-            g.pitchSpray = *apvts.getRawParameterValue (id[8]);
-            g.width      = *apvts.getRawParameterValue (id[9]);
-            g.dir        = *apvts.getRawParameterValue (id[10]);
-            g.skew       = *apvts.getRawParameterValue (id[11]);
+            g.scan       = *rawParam (id[0]);
+            g.density    = *rawParam (id[1]);
+            g.size       = *rawParam (id[2]);
+            g.spray      = *rawParam (id[3]);
+            g.shape      = *rawParam (id[4]);
+            g.key        = (int) *rawParam (id[5]);   // choice → index
+            g.position   = *rawParam (id[6]);
+            g.pitch      = *rawParam (id[7]);
+            g.pitchSpray = *rawParam (id[8]);
+            g.width      = *rawParam (id[9]);
+            g.dir        = *rawParam (id[10]);
+            g.skew       = *rawParam (id[11]);
             return g;
         };
         // Patch Air/Stretch/StretchMode + region from the Sample params so the granular engine
@@ -3231,14 +3261,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             int na = 0;
             for (int i = 0; i < wc::NUM_LFOS; ++i)
             {
-                const int  sh = (int) *apvts.getRawParameterValue (lp[i].shape);
-                const bool sy =       *apvts.getRawParameterValue (lp[i].sync) > 0.5f;
-                const int  dv = (int) *apvts.getRawParameterValue (lp[i].div);
+                const int  sh = (int) *rawParam (lp[i].shape);
+                const bool sy =       *rawParam (lp[i].sync) > 0.5f;
+                const int  dv = (int) *rawParam (lp[i].div);
                 synModCfg.lfos[i].shape       = (wc::LFOShape) juce::jlimit (0, (int) wc::LFOShape::NumShapes - 1, sh);
                 synModCfg.lfos[i].sync        = sy;
-                synModCfg.lfos[i].rateHz      = *apvts.getRawParameterValue (lp[i].rate);
+                synModCfg.lfos[i].rateHz      = *rawParam (lp[i].rate);
                 synModCfg.lfos[i].syncIdx     = juce::jlimit (0, wc::kNumSyncDivisions - 1, dv);
-                synModCfg.lfos[i].phaseOffset = *apvts.getRawParameterValue (lp[i].phase);
+                synModCfg.lfos[i].phaseOffset = *rawParam (lp[i].phase);
                 synModCfg.lfos[i].trigger     = wc::LFOTrigger::Free;
                 synModCfg.lfos[i].polarity    = wc::LFOPolarity::Bipolar;
             }
@@ -3252,7 +3282,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {
                     if (na >= wc::MAX_ASSIGNMENTS) break;
                     if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
-                    const float master = *apvts.getRawParameterValue (lp[r.src].depth);
+                    const float master = *rawParam (lp[r.src].depth);
                     synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + r.src);
                     synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                     synModCfg.assignments[na].depth   = r.depth * master;
@@ -3264,9 +3294,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             //    DRIFT is the active mode, inject default routes so it audibly modulates the wavetable
             //    timbre — DEPTH (FLOW_DRF_MORPH) scales it. (Full per-lane custom routing = mod-matrix phase.)
             for (int i = 0; i < 8; ++i) synModCfg.driftLanes[i] = driftLane_[i];
-            if ((int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() == 4)
+            if ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4)
             {
-                const float dDepth = juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (ParameterIDs::FLOW_DRF_MORPH)->load());
+                const float dDepth = juce::jlimit (0.0f, 1.0f, rawParam (ParameterIDs::FLOW_DRF_MORPH)->load());
                 if (dDepth > 0.001f)
                 {
                     const wc::ModSource dsrc[] = { wc::ModSource::Drift1, wc::ModSource::Drift2, wc::ModSource::Drift3, wc::ModSource::Drift4 };
@@ -3285,11 +3315,30 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
         synModBpm = currentBPM.load();   // (declared in outer scope — hoisted for FLOW ARP)
 
+        // CPU: change-gates for the HEAVY pushes below. Idle blocks (no knob/BPM movement —
+        // the overwhelming majority) skip the ModConfig copy + 10 LFO reconfigs and the 8
+        // engine-param struct copies on all 96 voices. Any change re-broadcasts to the FULL
+        // pool, so a voice can never render with stale config.
+        const bool synCfgChanged = ! synCfgPushed_
+                                   || synModBpm != lastSynModBpm_
+                                   || ! modCfgEq (synModCfg, lastSynModCfg_);
+        if (synCfgChanged) { lastSynModCfg_ = synModCfg; lastSynModBpm_ = synModBpm; synCfgPushed_ = true; }
+        const bool engChanged = ! engParamsPushed_
+                                || ! (spA == lastSpA_) || ! (spB == lastSpB_) || ! (spC == lastSpC_) || ! (spD == lastSpD_)
+                                || ! (gpA == lastGpA_) || ! (gpB == lastGpB_) || ! (gpC == lastGpC_) || ! (gpD == lastGpD_);
+        if (engChanged)
+        {
+            lastSpA_ = spA; lastSpB_ = spB; lastSpC_ = spC; lastSpD_ = spD;
+            lastGpA_ = gpA; lastGpB_ = gpB; lastGpC_ = gpC; lastGpD_ = gpD;
+            engParamsPushed_ = true;
+        }
+
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
             if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
             {
-                sv->setModConfig              (synModCfg, synModBpm);
+                if (synCfgChanged)
+                    sv->setModConfig          (synModCfg, synModBpm);
                 sv->setTuning                 (oct, semi, cent);
                 sv->setLevel                  (lvl);
                 sv->setPan                    (pan);
@@ -3346,10 +3395,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setRouteCD (rtSrcC, rtDestC, rtAmtC / 100.0f, rtSrcD, rtDestD, rtAmtD / 100.0f);
                 sv->setEngineC (engineIdxC);          sv->setEngineD (engineIdxD);
                 // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
-                sv->setSampleParamsA (spA);  sv->setSampleParamsB (spB);
-                sv->setSampleParamsC (spC);  sv->setSampleParamsD (spD);
-                sv->setGranParamsA (gpA);    sv->setGranParamsB (gpB);      // GRAIN-ENGINE-PUSH
-                sv->setGranParamsC (gpC);    sv->setGranParamsD (gpD);
+                if (engChanged)
+                {
+                    sv->setSampleParamsA (spA);  sv->setSampleParamsB (spB);
+                    sv->setSampleParamsC (spC);  sv->setSampleParamsD (spD);
+                    sv->setGranParamsA (gpA);    sv->setGranParamsB (gpB);      // GRAIN-ENGINE-PUSH
+                    sv->setGranParamsC (gpC);    sv->setGranParamsD (gpD);
+                }
                 sv->setSampleSources (&getOscSampleBuffer (0), &getOscSampleBuffer (1),
                                       &getOscSampleBuffer (2), &getOscSampleBuffer (3));   // PEROSC-PUSH
             }
@@ -3357,72 +3409,72 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         // Phase 8b — Voice settings: UNISON+SPREAD pushed per-voice (in-voice unison).
         // The voice computes per-sine detune+pan internally and renders all sines as one note.
-        const int   unisonCount = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_UNISON);
-        const float spreadPct   =       *apvts.getRawParameterValue (ParameterIDs::SYN_SPREAD);
-        const float erosionPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_EROSION);
-        const float horizonPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_HORIZON);
+        const int   unisonCount = (int) *rawParam (ParameterIDs::SYN_UNISON);
+        const float spreadPct   =       *rawParam (ParameterIDs::SYN_SPREAD);
+        const float erosionPct  =       *rawParam (ParameterIDs::SYN_EROSION);
+        const float horizonPct  =       *rawParam (ParameterIDs::SYN_HORIZON);
         const float unisonSpread01 = spreadPct / 100.0f;
         juce::ignoreUnused (unisonCount, unisonSpread01);   // global UNISON/SPREAD retired → per-OSC below
 
         // Per-OSC UNISON (replaces global). Voices 1..16 + Detune/Blend/Width (0..100 %→0..1).
-        const int   uniCountA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UNISON);
-        const float uniDetA   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f;
-        const float uniBlnA   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f;
-        const float uniWidA   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f;
-        const int   uniCountB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UNISON);
-        const float uniDetB   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f;
-        const float uniBlnB   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f;
-        const float uniWidB   =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f;
+        const int   uniCountA = (int) *rawParam (ParameterIDs::SYN_OSC_A_UNISON);
+        const float uniDetA   =       *rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f;
+        const float uniBlnA   =       *rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f;
+        const float uniWidA   =       *rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f;
+        const int   uniCountB = (int) *rawParam (ParameterIDs::SYN_OSC_B_UNISON);
+        const float uniDetB   =       *rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f;
+        const float uniBlnB   =       *rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f;
+        const float uniWidB   =       *rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f;
 
         // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
         // have no audio-thread effect yet — render path will start reading them
         // in Phase 11c (SPECTRAL) and 11d (FOLD).
-        const float blurA = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_FRAME_SPREAD);
-        const float blurB = *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FRAME_SPREAD);
+        const float blurA = *rawParam (ParameterIDs::SYN_OSC_A_FRAME_SPREAD);
+        const float blurB = *rawParam (ParameterIDs::SYN_OSC_B_FRAME_SPREAD);
 
         // Phase 11d — FOLD per OSC.
-        const int   foldShapeA  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_FOLD_SHAPE);
-        const float foldAmtA    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_FOLD_AMT);
-        const int   foldShapeB  = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FOLD_SHAPE);
-        const float foldAmtB    =       *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_FOLD_AMT);
+        const int   foldShapeA  = (int) *rawParam (ParameterIDs::SYN_OSC_A_FOLD_SHAPE);
+        const float foldAmtA    =       *rawParam (ParameterIDs::SYN_OSC_A_FOLD_AMT);
+        const int   foldShapeB  = (int) *rawParam (ParameterIDs::SYN_OSC_B_FOLD_SHAPE);
+        const float foldAmtB    =       *rawParam (ParameterIDs::SYN_OSC_B_FOLD_AMT);
 
         // Phase 11c — SPECTRAL MORPH per OSC is now applied to the wavetable spectrum
         // off the audio thread (see timerCallback / resolveMorphTable). The TYPE/AMT
         // params are read on the message thread; nothing to push per-voice here.
 
         // Phase 11g — INTERP per OSC.
-        const int interpModeA = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_INTERP_MODE);
-        const int interpModeB = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_OSC_B_INTERP_MODE);
+        const int interpModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_INTERP_MODE);
+        const int interpModeB = (int) *rawParam (ParameterIDs::SYN_OSC_B_INTERP_MODE);
         // OSC C / D — unison / blur / fold / interp (4-osc)
-        const int   uniCountC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UNISON);
-        const float uniDetC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, uniBlnC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, uniWidC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f;
-        const float blurC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_FRAME_SPREAD);
-        const int   foldShapeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
-        const float foldAmtC=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_FOLD_AMT);
-        const int   interpModeC=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_C_INTERP_MODE);
-        const int   uniCountD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UNISON);
-        const float uniDetD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, uniBlnD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, uniWidD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f;
-        const float blurD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_FRAME_SPREAD);
-        const int   foldShapeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
-        const float foldAmtD=*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_FOLD_AMT);
-        const int   interpModeD=(int)*apvts.getRawParameterValue(ParameterIDs::SYN_OSC_D_INTERP_MODE);
+        const int   uniCountC=(int)*rawParam (ParameterIDs::SYN_OSC_C_UNISON);
+        const float uniDetC=*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, uniBlnC=*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, uniWidC=*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f;
+        const float blurC=*rawParam (ParameterIDs::SYN_OSC_C_FRAME_SPREAD);
+        const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
+        const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
+        const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
+        const int   uniCountD=(int)*rawParam (ParameterIDs::SYN_OSC_D_UNISON);
+        const float uniDetD=*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, uniBlnD=*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, uniWidD=*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f;
+        const float blurD=*rawParam (ParameterIDs::SYN_OSC_D_FRAME_SPREAD);
+        const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
+        const float foldAmtD=*rawParam (ParameterIDs::SYN_OSC_D_FOLD_AMT);
+        const int   interpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_INTERP_MODE);
 
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
-        const int voiceCap = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_VOICES);
+        const int voiceCap = (int) *rawParam (ParameterIDs::SYN_VOICES);
         synthEngine.setVoiceCap (voiceCap);
 
         // VOICING — MONO/LEGATO voice modes (last-note priority + legato retarget).
-        const bool synMono   = (*apvts.getRawParameterValue (ParameterIDs::SYN_MONO))   > 0.5f;
-        const bool synLegato = (*apvts.getRawParameterValue (ParameterIDs::SYN_LEGATO)) > 0.5f;
+        const bool synMono   = (*rawParam (ParameterIDs::SYN_MONO))   > 0.5f;
+        const bool synLegato = (*rawParam (ParameterIDs::SYN_LEGATO)) > 0.5f;
         synthEngine.setVoiceModes (synMono, synLegato);
 
         // VOICING / PORTAMENTO — glide context broadcast to every voice this block.
-        const float portaPct  =       *apvts.getRawParameterValue (ParameterIDs::SYN_PORTA);
-        const float glCurvePct =      *apvts.getRawParameterValue (ParameterIDs::SYN_GLIDE_CURVE);
-        const bool  glAlways  = (*apvts.getRawParameterValue (ParameterIDs::SYN_GLIDE_ALWAYS)) > 0.5f;
-        const bool  glScaled  = (*apvts.getRawParameterValue (ParameterIDs::SYN_GLIDE_SCALED)) > 0.5f;
+        const float portaPct  =       *rawParam (ParameterIDs::SYN_PORTA);
+        const float glCurvePct =      *rawParam (ParameterIDs::SYN_GLIDE_CURVE);
+        const bool  glAlways  = (*rawParam (ParameterIDs::SYN_GLIDE_ALWAYS)) > 0.5f;
+        const bool  glScaled  = (*rawParam (ParameterIDs::SYN_GLIDE_SCALED)) > 0.5f;
         const float portaSec  = std::pow (portaPct * 0.01f, 2.0f) * 2.0f;   // squared → fine low end, ~2 s max
         const float glCurve01 = glCurvePct / 100.0f;
         const bool  glAnyHeld = synthNotesHeld_ > 0;
@@ -3440,6 +3492,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 tv->setFoldCD (foldShapeC, foldAmtC, foldShapeD, foldAmtD);
                 tv->setInterpModeCD (interpModeC, interpModeD);
                 tv->setGlide (portaSec, glCurve01, glAlways, glScaled, synthGlideFrom_, glAnyHeld);   // PORTAMENTO
+                tv->setHorizonAmount (horizonPct  / 100.0f);   // (merged third pass — CPU: one 96-voice loop fewer)
+                // SYN_EROSION now drives the FILTER cutoff drift only — the per-voice
+                // PITCH drift it used to add is superseded by per-OSC WAVER (setWaver above).
+                tv->setErosionAmount_filter (erosionPct / 100.0f);
             }
         }
 
@@ -3450,17 +3506,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const auto m = meta.getMessage();
             if (m.isNoteOn())       { synthGlideFrom_ = (float) m.getNoteNumber(); ++synthNotesHeld_; }
             else if (m.isNoteOff()) { synthNotesHeld_ = juce::jmax (0, synthNotesHeld_ - 1); }
-        }
-
-        for (int i = 0; i < synthEngine.getNumVoices(); ++i)
-        {
-            if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
-            {
-                sv->setHorizonAmount (horizonPct  / 100.0f);
-                // SYN_EROSION now drives the FILTER cutoff drift only — the per-voice
-                // PITCH drift it used to add is superseded by per-OSC WAVER (setWaver above).
-                sv->setErosionAmount_filter (erosionPct / 100.0f);
-            }
         }
     }
 
@@ -3496,7 +3541,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     synthScratch.clear();
 
     // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
-    const int flowMode = (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load();
+    const int flowMode = (int) rawParam (ParameterIDs::FLOW_MODE)->load();
 
     // FLOW · GLITCH (mode 3): reset the engine on the ENABLE EDGE so its step clock re-anchors to
     // the live transport ppq instead of resuming from a stale free-run phase (fired late / "whenever",
@@ -3508,7 +3553,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // EFFECTIVE FLOW knobs = base param + Σ(global-LFO × depth), clamp once. Shared by ARP + SEQ —
     // SEQ reuses the same FLOW_ARP_* params (per-mode memory lives in the JS).  (proven: 35/35)
-    auto flowBase = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (id)->load()); };  // ->load(): atomic<float> can't deduce in jlimit
+    auto flowBase = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, rawParam (id)->load()); };  // ->load(): atomic<float> can't deduce in jlimit
     auto flowMod  = [&] (wc::ModDest dest) -> float {
         float sum = 0.0f; const auto& info = wc::kDestInfo[(int) dest];
         for (int a = 0; a < synModCfg.numAssignments; ++a) {
@@ -3523,7 +3568,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // The FLOW mod-dests are shared, so the LFO→FLOW-knob contribution is added on top of whichever
     // mode's base value. Latch is a single shared param (no per-mode latch exists).
     auto flowKnob = [&] (const char* id, wc::ModDest d) { return juce::jlimit (0.f, 1.f, flowBase (id) + flowMod (d)); };
-    const bool  kLatch = *apvts.getRawParameterValue (ParameterIDs::FLOW_ARP_LATCH) > 0.5f;
+    const bool  kLatch = *rawParam (ParameterIDs::FLOW_ARP_LATCH) > 0.5f;
 
     if (flowMode == 1)   // ── ARP (mode 1) ──
     {
@@ -3723,7 +3768,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float rPos    = flowKnob (ParameterIDs::SYN_RESO_POSITION,   wc::ModDest::ResoPosition);
         const float rMix    = flowKnob (ParameterIDs::SYN_RESO_MIX,        wc::ModDest::ResoMix);
         const float rKey    = flowBase (ParameterIDs::SYN_RESO_KEYTRACK);
-        const int   rMat    = (int) (apvts.getRawParameterValue (ParameterIDs::SYN_RESO_MATERIAL)->load() + 0.5f);
+        const int   rMat    = (int) (rawParam (ParameterIDs::SYN_RESO_MATERIAL)->load() + 0.5f);
         float* rl = buffer.getWritePointer (0);
         float* rr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : rl;
         reso.process (rStruct, rBright, rDamp, rPos, rMat, rMix, rKey,
@@ -3745,7 +3790,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     }
 
     // Update smoothing targets from APVTS
-    float grainSizeMs = apvts.getRawParameterValue(ParameterIDs::GRAIN_SIZE)->load();
+    float grainSizeMs = rawParam (ParameterIDs::GRAIN_SIZE)->load();
 
     // BPM sync: override grain size with note-division-based ms
     if (grainSyncEnabled.load() > 0.5f)
@@ -3768,49 +3813,49 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     }
 
     smoothedGrainSize.setTargetValue(grainSizeMs);
-    smoothedDensity.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DENSITY)->load());
-    smoothedSpray.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPRAY)->load());
-    smoothedPitch.setTargetValue(apvts.getRawParameterValue(ParameterIDs::PITCH)->load());
-    smoothedWander.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WANDER)->load());
-    smoothedFreeze.setTargetValue(apvts.getRawParameterValue(ParameterIDs::FREEZE)->load());
-    smoothedMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::MIX)->load());
-    smoothedGrainFilter.setTargetValue(apvts.getRawParameterValue(ParameterIDs::GRAIN_FILTER)->load());
-    smoothedWowFlutter.setTargetValue(apvts.getRawParameterValue(ParameterIDs::WOW_FLUTTER)->load());
-    smoothedSaturation.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SATURATION)->load());
-    smoothedHiss.setTargetValue(apvts.getRawParameterValue(ParameterIDs::HISS)->load());
-    smoothedStudioSculpt.setTargetValue (apvts.getRawParameterValue (ParameterIDs::STUDIO_SCULPT)->load());
-    smoothedStudioWeave .setTargetValue (apvts.getRawParameterValue (ParameterIDs::STUDIO_WEAVE) ->load());
-    smoothedStudioTilt  .setTargetValue (apvts.getRawParameterValue (ParameterIDs::STUDIO_TILT)  ->load());
-    smoothedWireWow .setTargetValue (apvts.getRawParameterValue (ParameterIDs::WIRE_WOW)       ->load());
-    smoothedWireSat .setTargetValue (apvts.getRawParameterValue (ParameterIDs::WIRE_SATURATION)->load());
-    smoothedWireHiss.setTargetValue (apvts.getRawParameterValue (ParameterIDs::WIRE_HISS)      ->load());
-    smoothedOutputGain.setTargetValue(apvts.getRawParameterValue(ParameterIDs::OUTPUT_GAIN)->load());
-    smoothedMasterMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::MASTER_MIX)->load());
+    smoothedDensity.setTargetValue(rawParam (ParameterIDs::DENSITY)->load());
+    smoothedSpray.setTargetValue(rawParam (ParameterIDs::SPRAY)->load());
+    smoothedPitch.setTargetValue(rawParam (ParameterIDs::PITCH)->load());
+    smoothedWander.setTargetValue(rawParam (ParameterIDs::WANDER)->load());
+    smoothedFreeze.setTargetValue(rawParam (ParameterIDs::FREEZE)->load());
+    smoothedMix.setTargetValue(rawParam (ParameterIDs::MIX)->load());
+    smoothedGrainFilter.setTargetValue(rawParam (ParameterIDs::GRAIN_FILTER)->load());
+    smoothedWowFlutter.setTargetValue(rawParam (ParameterIDs::WOW_FLUTTER)->load());
+    smoothedSaturation.setTargetValue(rawParam (ParameterIDs::SATURATION)->load());
+    smoothedHiss.setTargetValue(rawParam (ParameterIDs::HISS)->load());
+    smoothedStudioSculpt.setTargetValue (rawParam (ParameterIDs::STUDIO_SCULPT)->load());
+    smoothedStudioWeave .setTargetValue (rawParam (ParameterIDs::STUDIO_WEAVE) ->load());
+    smoothedStudioTilt  .setTargetValue (rawParam (ParameterIDs::STUDIO_TILT)  ->load());
+    smoothedWireWow .setTargetValue (rawParam (ParameterIDs::WIRE_WOW)       ->load());
+    smoothedWireSat .setTargetValue (rawParam (ParameterIDs::WIRE_SATURATION)->load());
+    smoothedWireHiss.setTargetValue (rawParam (ParameterIDs::WIRE_HISS)      ->load());
+    smoothedOutputGain.setTargetValue(rawParam (ParameterIDs::OUTPUT_GAIN)->load());
+    smoothedMasterMix.setTargetValue(rawParam (ParameterIDs::MASTER_MIX)->load());
 
-    smoothedLoopFeedback.setTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_FEEDBACK)->load());
-    smoothedLoopDegrade.setTargetValue(apvts.getRawParameterValue(ParameterIDs::LOOP_DEGRADE)->load());
+    smoothedLoopFeedback.setTargetValue(rawParam (ParameterIDs::LOOP_FEEDBACK)->load());
+    smoothedLoopDegrade.setTargetValue(rawParam (ParameterIDs::LOOP_DEGRADE)->load());
 
     // Space reverb targets
-    smoothedSpaceSize.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_SIZE)->load());
-    smoothedSpaceDecay.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_DECAY)->load());
-    smoothedSpaceTone.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_TONE)->load());
-    smoothedSpaceMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::SPACE_MIX)->load());
+    smoothedSpaceSize.setTargetValue(rawParam (ParameterIDs::SPACE_SIZE)->load());
+    smoothedSpaceDecay.setTargetValue(rawParam (ParameterIDs::SPACE_DECAY)->load());
+    smoothedSpaceTone.setTargetValue(rawParam (ParameterIDs::SPACE_TONE)->load());
+    smoothedSpaceMix.setTargetValue(rawParam (ParameterIDs::SPACE_MIX)->load());
 
     // Delay targets (MF-104S)
-    smoothedDlyTime.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_TIME)->load());
-    smoothedDlyFeedback.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_FEEDBACK)->load());
-    smoothedDlyTone.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_TONE)->load());
-    smoothedDlyCharacter.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_CHARACTER)->load());
-    smoothedDlyMod.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_MOD)->load());
-    smoothedDlyModRate.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_MOD_RATE)->load());
-    smoothedDlyMix.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_MIX)->load());
-    smoothedDlyDuck.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_DUCK)->load());
-    smoothedDelayFreeze.setTargetValue(apvts.getRawParameterValue(ParameterIDs::DLY_FREEZE)->load());
+    smoothedDlyTime.setTargetValue(rawParam (ParameterIDs::DLY_TIME)->load());
+    smoothedDlyFeedback.setTargetValue(rawParam (ParameterIDs::DLY_FEEDBACK)->load());
+    smoothedDlyTone.setTargetValue(rawParam (ParameterIDs::DLY_TONE)->load());
+    smoothedDlyCharacter.setTargetValue(rawParam (ParameterIDs::DLY_CHARACTER)->load());
+    smoothedDlyMod.setTargetValue(rawParam (ParameterIDs::DLY_MOD)->load());
+    smoothedDlyModRate.setTargetValue(rawParam (ParameterIDs::DLY_MOD_RATE)->load());
+    smoothedDlyMix.setTargetValue(rawParam (ParameterIDs::DLY_MIX)->load());
+    smoothedDlyDuck.setTargetValue(rawParam (ParameterIDs::DLY_DUCK)->load());
+    smoothedDelayFreeze.setTargetValue(rawParam (ParameterIDs::DLY_FREEZE)->load());
 
     // Chorus targets
-    smoothedChorusAmount.setTargetValue    (apvts.getRawParameterValue (ParameterIDs::CHORUS_AMOUNT)   ->load());
-    smoothedChorusWidth.setTargetValue     (apvts.getRawParameterValue (ParameterIDs::CHORUS_WIDTH)    ->load());
-    smoothedChorusCharacter.setTargetValue (apvts.getRawParameterValue (ParameterIDs::CHORUS_CHARACTER)->load());
+    smoothedChorusAmount.setTargetValue    (rawParam (ParameterIDs::CHORUS_AMOUNT)   ->load());
+    smoothedChorusWidth.setTargetValue     (rawParam (ParameterIDs::CHORUS_WIDTH)    ->load());
+    smoothedChorusCharacter.setTargetValue (rawParam (ParameterIDs::CHORUS_CHARACTER)->load());
 
     // Parametric EQ targets
     {
@@ -3819,17 +3864,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const char* qIds    [7] = { ParameterIDs::EQ_B1_Q,    ParameterIDs::EQ_B2_Q,    ParameterIDs::EQ_B3_Q,    ParameterIDs::EQ_B4_Q,    ParameterIDs::EQ_B5_Q,    ParameterIDs::EQ_B6_Q,    ParameterIDs::EQ_B7_Q };
         for (int b = 0; b < 7; ++b)
         {
-            smoothedEqBandFreq[b].setTargetValue (apvts.getRawParameterValue (freqIds[b])->load());
-            smoothedEqBandGain[b].setTargetValue (apvts.getRawParameterValue (gainIds[b])->load());
-            smoothedEqBandQ[b]   .setTargetValue (apvts.getRawParameterValue (qIds[b])->load());
+            smoothedEqBandFreq[b].setTargetValue (rawParam (freqIds[b])->load());
+            smoothedEqBandGain[b].setTargetValue (rawParam (gainIds[b])->load());
+            smoothedEqBandQ[b]   .setTargetValue (rawParam (qIds[b])->load());
         }
-        smoothedEqHpFreq.setTargetValue (apvts.getRawParameterValue (ParameterIDs::EQ_HP_FREQ)->load());
-        smoothedEqLpFreq.setTargetValue (apvts.getRawParameterValue (ParameterIDs::EQ_LP_FREQ)->load());
+        smoothedEqHpFreq.setTargetValue (rawParam (ParameterIDs::EQ_HP_FREQ)->load());
+        smoothedEqLpFreq.setTargetValue (rawParam (ParameterIDs::EQ_LP_FREQ)->load());
     }
 
     // Tape loop discrete params (no smoothing needed)
-    const float loopLengthParam = apvts.getRawParameterValue(ParameterIDs::LOOP_LENGTH)->load();
-    const float loopSpeedBase   = apvts.getRawParameterValue(ParameterIDs::LOOP_SPEED)->load();
+    const float loopLengthParam = rawParam (ParameterIDs::LOOP_LENGTH)->load();
+    const float loopSpeedBase   = rawParam (ParameterIDs::LOOP_SPEED)->load();
 
     // Tape loop transport state (may be modified by auto-stop)
     bool wantRecord = tapeLoopRecording.load() > 0.5f;
@@ -3988,11 +4033,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float dlyFreezeRaw    = dlyFreezeEngaged ? 1.0f : 0.0f;
 
         // Choice params: read raw indices.
-        const int dlyModWaveIdx = static_cast<int> (apvts.getRawParameterValue (ParameterIDs::DLY_MOD_WAVE)->load());
-        const int dlySyncIdx    = static_cast<int> (apvts.getRawParameterValue (ParameterIDs::DLY_SYNC)->load());
-        const int dlySyncDivIdx = static_cast<int> (apvts.getRawParameterValue (ParameterIDs::DLY_SYNC_DIV)->load());
-        const int dlyPitchIdx   = static_cast<int> (apvts.getRawParameterValue (ParameterIDs::DLY_PITCH)->load());
-        const int dlyWidthIdx   = static_cast<int> (apvts.getRawParameterValue (ParameterIDs::DLY_WIDTH)->load());
+        const int dlyModWaveIdx = static_cast<int> (rawParam (ParameterIDs::DLY_MOD_WAVE)->load());
+        const int dlySyncIdx    = static_cast<int> (rawParam (ParameterIDs::DLY_SYNC)->load());
+        const int dlySyncDivIdx = static_cast<int> (rawParam (ParameterIDs::DLY_SYNC_DIV)->load());
+        const int dlyPitchIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_PITCH)->load());
+        const int dlyWidthIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_WIDTH)->load());
 
         // If sync mode is on, replace TIME with the BPM-derived ms.
         float dlyTimeMs = dlyTimeRaw;
@@ -4234,9 +4279,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float lpF    = smoothedEqLpFreq.getNextValue();
             const auto* hpSlope = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_HP_SLOPE));
             const auto* lpSlope = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_LP_SLOPE));
-            const bool hpByp  = apvts.getRawParameterValue (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
-            const bool lpByp  = apvts.getRawParameterValue (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
-            const bool eqByp  = apvts.getRawParameterValue (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
+            const bool hpByp  = rawParam (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
+            const bool lpByp  = rawParam (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
+            const bool eqByp  = rawParam (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
             eqL.setMasterBypass (eqByp); eqR.setMasterBypass (eqByp);
             eqL.setHp (hpF, hpSlope ? hpSlope->getIndex() : 1, hpByp);
             eqR.setHp (hpF, hpSlope ? hpSlope->getIndex() : 1, hpByp);
@@ -4248,7 +4293,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 const float bf = modulationEngine.getModulatedValue (ModulationEngine::pEqB1Freq + b * 3, smoothedEqBandFreq[b].getNextValue());
                 const float bg = modulationEngine.getModulatedValue (ModulationEngine::pEqB1Gain + b * 3, smoothedEqBandGain[b].getNextValue());
                 const float bq = modulationEngine.getModulatedValue (ModulationEngine::pEqB1Q    + b * 3, smoothedEqBandQ[b].getNextValue());
-                const bool bByp = apvts.getRawParameterValue (
+                const bool bByp = rawParam (
                                        b == 0 ? ParameterIDs::EQ_B1_BYPASS : b == 1 ? ParameterIDs::EQ_B2_BYPASS :
                                        b == 2 ? ParameterIDs::EQ_B3_BYPASS : b == 3 ? ParameterIDs::EQ_B4_BYPASS :
                                        b == 4 ? ParameterIDs::EQ_B5_BYPASS : b == 5 ? ParameterIDs::EQ_B6_BYPASS :
@@ -5040,8 +5085,8 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             // in loadV2State.
             if (version < 2)
             {
-                const int v1SliceMode = (int) *apvts.getRawParameterValue (ParameterIDs::SLICE_MODE);
-                const int v1LoopMode  = (int) *apvts.getRawParameterValue (ParameterIDs::SAMPLE_LOOP_MODE);
+                const int v1SliceMode = (int) *rawParam (ParameterIDs::SLICE_MODE);
+                const int v1LoopMode  = (int) *rawParam (ParameterIDs::SAMPLE_LOOP_MODE);
                 layers[0].sliceMode.store      (v1SliceMode);
                 layers[0].sampleLoopMode.store (v1LoopMode);
             }
@@ -5581,73 +5626,73 @@ TerrainInstrumentAudioProcessor::snapshotFxParamTargets() const noexcept
     tw::IndyFxChain::ParamTargets t;
 
     // Grain — density / spray are RAW (matching global chain's per-sample loop)
-    t.grainSize = apvts.getRawParameterValue (ParameterIDs::GRAIN_SIZE)->load();
-    t.density   = apvts.getRawParameterValue (ParameterIDs::DENSITY)->load();
-    t.spray     = apvts.getRawParameterValue (ParameterIDs::SPRAY)->load();
-    t.pitch     = apvts.getRawParameterValue (ParameterIDs::PITCH)->load();
-    t.wander01  = apvts.getRawParameterValue (ParameterIDs::WANDER)->load() * 0.01f;
+    t.grainSize = rawParam (ParameterIDs::GRAIN_SIZE)->load();
+    t.density   = rawParam (ParameterIDs::DENSITY)->load();
+    t.spray     = rawParam (ParameterIDs::SPRAY)->load();
+    t.pitch     = rawParam (ParameterIDs::PITCH)->load();
+    t.wander01  = rawParam (ParameterIDs::WANDER)->load() * 0.01f;
     // Freeze uses the global chain's concave curve: pow(raw * 0.01f, 1.5f).
     {
-        const float raw = apvts.getRawParameterValue (ParameterIDs::FREEZE)->load() * 0.01f;
+        const float raw = rawParam (ParameterIDs::FREEZE)->load() * 0.01f;
         t.freeze01 = std::pow (raw, 1.5f);
     }
-    t.mix = apvts.getRawParameterValue (ParameterIDs::MIX)->load();
+    t.mix = rawParam (ParameterIDs::MIX)->load();
 
     // Tape (cassette params *0.01f to match global chain per-sample scaling)
-    t.wowFlutter01 = apvts.getRawParameterValue (ParameterIDs::WOW_FLUTTER)->load() * 0.01f;
-    t.saturation01 = apvts.getRawParameterValue (ParameterIDs::SATURATION)->load() * 0.01f;
-    t.hiss01       = apvts.getRawParameterValue (ParameterIDs::HISS)->load() * 0.01f;
+    t.wowFlutter01 = rawParam (ParameterIDs::WOW_FLUTTER)->load() * 0.01f;
+    t.saturation01 = rawParam (ParameterIDs::SATURATION)->load() * 0.01f;
+    t.hiss01       = rawParam (ParameterIDs::HISS)->load() * 0.01f;
     // Studio sculpt/weave/tilt: global chain computes sculptAmt = raw*0.01f,
     // then passes sculptAmt to tapeProcessor. IndyFxChain passes these directly
     // to tapeL.processSample in the same argument position — must match.
-    t.studioSculpt = apvts.getRawParameterValue (ParameterIDs::STUDIO_SCULPT)->load() * 0.01f;
-    t.studioWeave  = apvts.getRawParameterValue (ParameterIDs::STUDIO_WEAVE)->load() * 0.01f;
-    t.studioTilt   = apvts.getRawParameterValue (ParameterIDs::STUDIO_TILT)->load() * 0.01f;
+    t.studioSculpt = rawParam (ParameterIDs::STUDIO_SCULPT)->load() * 0.01f;
+    t.studioWeave  = rawParam (ParameterIDs::STUDIO_WEAVE)->load() * 0.01f;
+    t.studioTilt   = rawParam (ParameterIDs::STUDIO_TILT)->load() * 0.01f;
     // Wire wow/sat/hiss: global chain uses wireWowAmt = raw*0.01f.
     // IndyFxChain passes these in the same wire argument position.
-    t.wireWow  = apvts.getRawParameterValue (ParameterIDs::WIRE_WOW)->load() * 0.01f;
-    t.wireSat  = apvts.getRawParameterValue (ParameterIDs::WIRE_SATURATION)->load() * 0.01f;
-    t.wireHiss = apvts.getRawParameterValue (ParameterIDs::WIRE_HISS)->load() * 0.01f;
+    t.wireWow  = rawParam (ParameterIDs::WIRE_WOW)->load() * 0.01f;
+    t.wireSat  = rawParam (ParameterIDs::WIRE_SATURATION)->load() * 0.01f;
+    t.wireHiss = rawParam (ParameterIDs::WIRE_HISS)->load() * 0.01f;
     t.wireSpaceNoise = wireSpaceNoiseEnabled.load() > 0.5f;
     t.wireTubeSat    = wireTubeSatEnabled.load() > 0.5f;
 
     // Space — global chain scales ALL FOUR by * 0.01f (see PluginProcessor.cpp
     // lines 1663-1666). Passing raw 0..100 values causes SpaceReverb to silence
     // / NaN out at typical user knob settings.
-    t.spaceSize  = apvts.getRawParameterValue (ParameterIDs::SPACE_SIZE)->load() * 0.01f;
-    t.spaceDecay = apvts.getRawParameterValue (ParameterIDs::SPACE_DECAY)->load() * 0.01f;
-    t.spaceTone  = apvts.getRawParameterValue (ParameterIDs::SPACE_TONE)->load() * 0.01f;
-    t.spaceMix   = apvts.getRawParameterValue (ParameterIDs::SPACE_MIX)->load() * 0.01f;
+    t.spaceSize  = rawParam (ParameterIDs::SPACE_SIZE)->load() * 0.01f;
+    t.spaceDecay = rawParam (ParameterIDs::SPACE_DECAY)->load() * 0.01f;
+    t.spaceTone  = rawParam (ParameterIDs::SPACE_TONE)->load() * 0.01f;
+    t.spaceMix   = rawParam (ParameterIDs::SPACE_MIX)->load() * 0.01f;
 
     // Delay (MoogDelay::Params field names verified from MoogDelay.h)
-    t.dlyTime       = apvts.getRawParameterValue (ParameterIDs::DLY_TIME)->load();
-    t.dlyFeedback   = apvts.getRawParameterValue (ParameterIDs::DLY_FEEDBACK)->load();
-    t.dlyTone       = apvts.getRawParameterValue (ParameterIDs::DLY_TONE)->load();
-    t.dlyCharacter  = apvts.getRawParameterValue (ParameterIDs::DLY_CHARACTER)->load();
-    t.dlyMod        = apvts.getRawParameterValue (ParameterIDs::DLY_MOD)->load();
-    t.dlyModRate    = apvts.getRawParameterValue (ParameterIDs::DLY_MOD_RATE)->load();
-    t.dlyModWave    = (int) apvts.getRawParameterValue (ParameterIDs::DLY_MOD_WAVE)->load();
-    t.dlyMix        = apvts.getRawParameterValue (ParameterIDs::DLY_MIX)->load();
-    t.dlyDuck       = apvts.getRawParameterValue (ParameterIDs::DLY_DUCK)->load();
-    t.dlyPitch      = (int) apvts.getRawParameterValue (ParameterIDs::DLY_PITCH)->load();
-    t.dlyWidth      = (int) apvts.getRawParameterValue (ParameterIDs::DLY_WIDTH)->load();
-    t.dlyFreezeHeld = apvts.getRawParameterValue (ParameterIDs::DLY_FREEZE)->load() > 0.5f;
+    t.dlyTime       = rawParam (ParameterIDs::DLY_TIME)->load();
+    t.dlyFeedback   = rawParam (ParameterIDs::DLY_FEEDBACK)->load();
+    t.dlyTone       = rawParam (ParameterIDs::DLY_TONE)->load();
+    t.dlyCharacter  = rawParam (ParameterIDs::DLY_CHARACTER)->load();
+    t.dlyMod        = rawParam (ParameterIDs::DLY_MOD)->load();
+    t.dlyModRate    = rawParam (ParameterIDs::DLY_MOD_RATE)->load();
+    t.dlyModWave    = (int) rawParam (ParameterIDs::DLY_MOD_WAVE)->load();
+    t.dlyMix        = rawParam (ParameterIDs::DLY_MIX)->load();
+    t.dlyDuck       = rawParam (ParameterIDs::DLY_DUCK)->load();
+    t.dlyPitch      = (int) rawParam (ParameterIDs::DLY_PITCH)->load();
+    t.dlyWidth      = (int) rawParam (ParameterIDs::DLY_WIDTH)->load();
+    t.dlyFreezeHeld = rawParam (ParameterIDs::DLY_FREEZE)->load() > 0.5f;
 
     // June (chorus)
-    t.chAmount    = apvts.getRawParameterValue (ParameterIDs::CHORUS_AMOUNT)->load();
-    t.chWidth     = apvts.getRawParameterValue (ParameterIDs::CHORUS_WIDTH)->load();
-    t.chCharacter = apvts.getRawParameterValue (ParameterIDs::CHORUS_CHARACTER)->load();
+    t.chAmount    = rawParam (ParameterIDs::CHORUS_AMOUNT)->load();
+    t.chWidth     = rawParam (ParameterIDs::CHORUS_WIDTH)->load();
+    t.chCharacter = rawParam (ParameterIDs::CHORUS_CHARACTER)->load();
 
     // EQ — bypass args are bool
-    t.eqMasterBypass = apvts.getRawParameterValue (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
-    t.eqHpFreq   = apvts.getRawParameterValue (ParameterIDs::EQ_HP_FREQ)->load();
+    t.eqMasterBypass = rawParam (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
+    t.eqHpFreq   = rawParam (ParameterIDs::EQ_HP_FREQ)->load();
     if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_HP_SLOPE)))
         t.eqHpSlope = p->getIndex();
-    t.eqHpBypass = apvts.getRawParameterValue (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
-    t.eqLpFreq   = apvts.getRawParameterValue (ParameterIDs::EQ_LP_FREQ)->load();
+    t.eqHpBypass = rawParam (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
+    t.eqLpFreq   = rawParam (ParameterIDs::EQ_LP_FREQ)->load();
     if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_LP_SLOPE)))
         t.eqLpSlope = p->getIndex();
-    t.eqLpBypass = apvts.getRawParameterValue (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
+    t.eqLpBypass = rawParam (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
 
     static const char* freqIds[7] { ParameterIDs::EQ_B1_FREQ, ParameterIDs::EQ_B2_FREQ, ParameterIDs::EQ_B3_FREQ, ParameterIDs::EQ_B4_FREQ, ParameterIDs::EQ_B5_FREQ, ParameterIDs::EQ_B6_FREQ, ParameterIDs::EQ_B7_FREQ };
     static const char* gainIds[7] { ParameterIDs::EQ_B1_GAIN, ParameterIDs::EQ_B2_GAIN, ParameterIDs::EQ_B3_GAIN, ParameterIDs::EQ_B4_GAIN, ParameterIDs::EQ_B5_GAIN, ParameterIDs::EQ_B6_GAIN, ParameterIDs::EQ_B7_GAIN };
@@ -5655,10 +5700,10 @@ TerrainInstrumentAudioProcessor::snapshotFxParamTargets() const noexcept
     static const char* bypIds[7]  { ParameterIDs::EQ_B1_BYPASS, ParameterIDs::EQ_B2_BYPASS, ParameterIDs::EQ_B3_BYPASS, ParameterIDs::EQ_B4_BYPASS, ParameterIDs::EQ_B5_BYPASS, ParameterIDs::EQ_B6_BYPASS, ParameterIDs::EQ_B7_BYPASS };
     for (int b = 0; b < 7; ++b)
     {
-        t.bandFreq[b]   = apvts.getRawParameterValue (freqIds[b])->load();
-        t.bandGain[b]   = apvts.getRawParameterValue (gainIds[b])->load();
-        t.bandQ[b]      = apvts.getRawParameterValue (qIds[b])->load();
-        t.bandBypass[b] = apvts.getRawParameterValue (bypIds[b])->load() > 0.5f;
+        t.bandFreq[b]   = rawParam (freqIds[b])->load();
+        t.bandGain[b]   = rawParam (gainIds[b])->load();
+        t.bandQ[b]      = rawParam (qIds[b])->load();
+        t.bandBypass[b] = rawParam (bypIds[b])->load() > 0.5f;
     }
 
     return t;

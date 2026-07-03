@@ -477,6 +477,17 @@ namespace tw
             float air = 0.f;   // AIR exciter amount 0..1
             float warp = 0.f;  // sample warp shaper amount 0..1
             int   warpMode = 0;  // 0=Off 1=Sine Shaper 2=Rectify 3=Fold 4=Drive 5=Crush
+
+            // CPU: the processor change-gates its per-block 96-voice push on this.
+            bool operator== (const SampleEngineParams& o) const noexcept
+            {
+                return scan == o.scan && stretch == o.stretch && formant == o.formant
+                    && spray == o.spray && xfade == o.xfade && start == o.start && end == o.end
+                    && loopStart == o.loopStart && loopEnd == o.loopEnd && loopMode == o.loopMode
+                    && snap == o.snap && stretchMode == o.stretchMode && formantMode == o.formantMode
+                    && fadeIn == o.fadeIn && fadeOut == o.fadeOut && air == o.air
+                    && warp == o.warp && warpMode == o.warpMode;
+            }
         };
         void setSampleParamsA (const SampleEngineParams& p) noexcept { sampleParamsA_ = p; }
         void setSampleParamsB (const SampleEngineParams& p) noexcept { sampleParamsB_ = p; }
@@ -2085,8 +2096,8 @@ namespace tw
                     if (spectralTypeC_ <= 2)
                     {
                         // LP, HP, Smear — biquad
-                        sC_L = spectralFilterBL_.processSample (sC_L);
-                        sC_R = spectralFilterBR_.processSample (sC_R);
+                        sC_L = spectralFilterCL_.processSample (sC_L);
+                        sC_R = spectralFilterCR_.processSample (sC_R);
                     }
                     else if (spectralTypeC_ == 3)
                     {
@@ -2096,10 +2107,10 @@ namespace tw
                         const int readIdx = (spectralCombWriteC_ - N + kSpectralCombSize) % kSpectralCombSize;
                         const float dryL = sC_L;
                         const float dryR = sC_R;
-                        sC_L = dryL + spectralCombBL_[(size_t) readIdx] * spectralAmtC_;
-                        sC_R = dryR + spectralCombBR_[(size_t) readIdx] * spectralAmtC_;
-                        spectralCombBL_[(size_t) spectralCombWriteC_] = dryL;
-                        spectralCombBR_[(size_t) spectralCombWriteC_] = dryR;
+                        sC_L = dryL + spectralCombCL_[(size_t) readIdx] * spectralAmtC_;
+                        sC_R = dryR + spectralCombCR_[(size_t) readIdx] * spectralAmtC_;
+                        spectralCombCL_[(size_t) spectralCombWriteC_] = dryL;
+                        spectralCombCR_[(size_t) spectralCombWriteC_] = dryR;
                         spectralCombWriteC_ = (spectralCombWriteC_ + 1) % kSpectralCombSize;
                         sC_L *= 0.5f;
                         sC_R *= 0.5f;
@@ -2130,12 +2141,12 @@ namespace tw
                         spectralDsCounterC_ += 1.0f;
                         if (spectralDsCounterC_ >= divisor)
                         {
-                            spectralDsHeldBL_ = sC_L;
-                            spectralDsHeldBR_ = sC_R;
+                            spectralDsHeldCL_ = sC_L;
+                            spectralDsHeldCR_ = sC_R;
                             spectralDsCounterC_ -= divisor;
                         }
-                        sC_L = spectralDsHeldBL_;
-                        sC_R = spectralDsHeldBR_;
+                        sC_L = spectralDsHeldCL_;
+                        sC_R = spectralDsHeldCR_;
                     }
                     else if (spectralTypeC_ == 7)
                     {
@@ -2150,10 +2161,10 @@ namespace tw
                     {
                         // Tilt — low-shelf cut + high-shelf boost, one-pole based
                         const float alpha = 0.005f;
-                        spectralTiltLowBL_ += alpha * (sC_L - spectralTiltLowBL_);
-                        spectralTiltLowBR_ += alpha * (sC_R - spectralTiltLowBR_);
-                        const float lowL = spectralTiltLowBL_;
-                        const float lowR = spectralTiltLowBR_;
+                        spectralTiltLowCL_ += alpha * (sC_L - spectralTiltLowCL_);
+                        spectralTiltLowCR_ += alpha * (sC_R - spectralTiltLowCR_);
+                        const float lowL = spectralTiltLowCL_;
+                        const float lowR = spectralTiltLowCR_;
                         const float highL = sC_L - lowL;
                         const float highR = sC_R - lowR;
                         const float lowGain  = 1.0f - spectralAmtC_;
@@ -2174,10 +2185,10 @@ namespace tw
                         const int   intDel       = juce::jlimit (1, kSpectralVibSize - 2, (int) delaySamples);
                         const int   readIdx      = (spectralVibWriteC_ - intDel + kSpectralVibSize) % kSpectralVibSize;
                         const float dryL = sC_L, dryR = sC_R;
-                        sC_L = dryL * (1.0f - spectralAmtC_) + spectralVibBL_[(size_t) readIdx] * spectralAmtC_;
-                        sC_R = dryR * (1.0f - spectralAmtC_) + spectralVibBR_[(size_t) readIdx] * spectralAmtC_;
-                        spectralVibBL_[(size_t) spectralVibWriteC_] = dryL;
-                        spectralVibBR_[(size_t) spectralVibWriteC_] = dryR;
+                        sC_L = dryL * (1.0f - spectralAmtC_) + spectralVibCL_[(size_t) readIdx] * spectralAmtC_;
+                        sC_R = dryR * (1.0f - spectralAmtC_) + spectralVibCR_[(size_t) readIdx] * spectralAmtC_;
+                        spectralVibCL_[(size_t) spectralVibWriteC_] = dryL;
+                        spectralVibCR_[(size_t) spectralVibWriteC_] = dryR;
                         spectralVibWriteC_ = (spectralVibWriteC_ + 1) % kSpectralVibSize;
                     }
                 }
@@ -2317,8 +2328,8 @@ namespace tw
                     if (spectralTypeD_ <= 2)
                     {
                         // LP, HP, Smear — biquad
-                        sD_L = spectralFilterBL_.processSample (sD_L);
-                        sD_R = spectralFilterBR_.processSample (sD_R);
+                        sD_L = spectralFilterDL_.processSample (sD_L);
+                        sD_R = spectralFilterDR_.processSample (sD_R);
                     }
                     else if (spectralTypeD_ == 3)
                     {
@@ -2328,10 +2339,10 @@ namespace tw
                         const int readIdx = (spectralCombWriteD_ - N + kSpectralCombSize) % kSpectralCombSize;
                         const float dryL = sD_L;
                         const float dryR = sD_R;
-                        sD_L = dryL + spectralCombBL_[(size_t) readIdx] * spectralAmtD_;
-                        sD_R = dryR + spectralCombBR_[(size_t) readIdx] * spectralAmtD_;
-                        spectralCombBL_[(size_t) spectralCombWriteD_] = dryL;
-                        spectralCombBR_[(size_t) spectralCombWriteD_] = dryR;
+                        sD_L = dryL + spectralCombDL_[(size_t) readIdx] * spectralAmtD_;
+                        sD_R = dryR + spectralCombDR_[(size_t) readIdx] * spectralAmtD_;
+                        spectralCombDL_[(size_t) spectralCombWriteD_] = dryL;
+                        spectralCombDR_[(size_t) spectralCombWriteD_] = dryR;
                         spectralCombWriteD_ = (spectralCombWriteD_ + 1) % kSpectralCombSize;
                         sD_L *= 0.5f;
                         sD_R *= 0.5f;
@@ -2362,12 +2373,12 @@ namespace tw
                         spectralDsCounterD_ += 1.0f;
                         if (spectralDsCounterD_ >= divisor)
                         {
-                            spectralDsHeldBL_ = sD_L;
-                            spectralDsHeldBR_ = sD_R;
+                            spectralDsHeldDL_ = sD_L;
+                            spectralDsHeldDR_ = sD_R;
                             spectralDsCounterD_ -= divisor;
                         }
-                        sD_L = spectralDsHeldBL_;
-                        sD_R = spectralDsHeldBR_;
+                        sD_L = spectralDsHeldDL_;
+                        sD_R = spectralDsHeldDR_;
                     }
                     else if (spectralTypeD_ == 7)
                     {
@@ -2382,10 +2393,10 @@ namespace tw
                     {
                         // Tilt — low-shelf cut + high-shelf boost, one-pole based
                         const float alpha = 0.005f;
-                        spectralTiltLowBL_ += alpha * (sD_L - spectralTiltLowBL_);
-                        spectralTiltLowBR_ += alpha * (sD_R - spectralTiltLowBR_);
-                        const float lowL = spectralTiltLowBL_;
-                        const float lowR = spectralTiltLowBR_;
+                        spectralTiltLowDL_ += alpha * (sD_L - spectralTiltLowDL_);
+                        spectralTiltLowDR_ += alpha * (sD_R - spectralTiltLowDR_);
+                        const float lowL = spectralTiltLowDL_;
+                        const float lowR = spectralTiltLowDR_;
                         const float highL = sD_L - lowL;
                         const float highR = sD_R - lowR;
                         const float lowGain  = 1.0f - spectralAmtD_;
@@ -2406,10 +2417,10 @@ namespace tw
                         const int   intDel       = juce::jlimit (1, kSpectralVibSize - 2, (int) delaySamples);
                         const int   readIdx      = (spectralVibWriteD_ - intDel + kSpectralVibSize) % kSpectralVibSize;
                         const float dryL = sD_L, dryR = sD_R;
-                        sD_L = dryL * (1.0f - spectralAmtD_) + spectralVibBL_[(size_t) readIdx] * spectralAmtD_;
-                        sD_R = dryR * (1.0f - spectralAmtD_) + spectralVibBR_[(size_t) readIdx] * spectralAmtD_;
-                        spectralVibBL_[(size_t) spectralVibWriteD_] = dryL;
-                        spectralVibBR_[(size_t) spectralVibWriteD_] = dryR;
+                        sD_L = dryL * (1.0f - spectralAmtD_) + spectralVibDL_[(size_t) readIdx] * spectralAmtD_;
+                        sD_R = dryR * (1.0f - spectralAmtD_) + spectralVibDR_[(size_t) readIdx] * spectralAmtD_;
+                        spectralVibDL_[(size_t) spectralVibWriteD_] = dryL;
+                        spectralVibDR_[(size_t) spectralVibWriteD_] = dryR;
                         spectralVibWriteD_ = (spectralVibWriteD_ + 1) % kSpectralVibSize;
                     }
                 }
@@ -3416,18 +3427,14 @@ namespace tw
                     e.noteOn (prU, vSeed);
                 }
             }
-            if (N <= 1)
+            // CPU: grain-major block render (renderBlockAdd) — was a per-sample tick() call per
+            // engine. The engine adds into the cleared buffers; unison engines just stack.
+            juce::FloatVectorOperations::clear (wL, numSamples);
+            juce::FloatVectorOperations::clear (wR, numSamples);
+            for (int u = 0; u < N; ++u)
+                engs[(size_t) u].renderBlockAdd (wL, wR, numSamples);
+            if (N > 1)
             {
-                for (int k = 0; k < numSamples; ++k) engs[0].tick (wL[k], wR[k]);
-            }
-            else
-            {
-                for (int u = 0; u < N; ++u)   // CPU: first voice writes (no clear), rest accumulate — 0+x == x
-                {
-                    auto& e = engs[(size_t) u];
-                    if (u == 0) { for (int k = 0; k < numSamples; ++k) e.tick (wL[k], wR[k]); }
-                    else        { for (int k = 0; k < numSamples; ++k) { float l, r; e.tick (l, r); wL[k] += l; wR[k] += r; } }
-                }
                 juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
                 juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
             }

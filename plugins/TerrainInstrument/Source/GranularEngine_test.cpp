@@ -370,6 +370,52 @@ int main()
         check (mn >= 0.2 - 1e-5 && mx <= 0.8 + 1e-5, "loop bracket: default bracket never leaves the region");
     }
 
+    // ── GRAIN-MAJOR PARITY: renderBlockAdd must produce the same audio as tick() ──
+    // Same params/seed/sample; A ticks per sample (golden reference), B renders in odd-sized
+    // blocks (odd on purpose — exercises the kChunk boundaries). Same RNG call order → the
+    // only difference is float accumulation order, so the outputs match to ~1e-4.
+    {
+        GranularEngineParams p;
+        p.density = 0.7f; p.size = 0.5f; p.spray = 0.6f; p.scan = 0.5f;
+        p.loopMode = 3; p.loopStart = 0.3f; p.loopEnd = 0.7f;
+        p.skew = 0.4f; p.shape = 0.3f; p.width = 0.5f; p.air = 0.4f; p.pitchSpray = 0.3f;
+
+        GranularEngine a, b;
+        a.prepare (48000.0); b.prepare (48000.0);
+        a.setSample (chans, 2, 48000, 48000.0);
+        b.setSample (chans, 2, 48000, 48000.0);
+        a.setParams (p); b.setParams (p);
+        a.setRegion (0.05f, 0.95f); b.setRegion (0.05f, 0.95f);
+        a.noteOn (1.0, 777); b.noteOn (1.0, 777);
+
+        const int N = 48000;
+        std::vector<float> aL (N), aR (N), bL ((size_t) N, 0.f), bR ((size_t) N, 0.f);
+        for (int i = 0; i < N; ++i) a.tick (aL[(size_t) i], aR[(size_t) i]);
+        for (int base = 0; base < N; )
+        {
+            const int blk = (base % 2 == 0) ? 173 : 391;             // odd sizes straddle chunks
+            const int n = (N - base) < blk ? (N - base) : blk;
+            b.renderBlockAdd (bL.data() + base, bR.data() + base, n);
+            base += n;
+        }
+        float maxDiff = 0.f; double refRms = 0.0;
+        for (int i = 0; i < N; ++i)
+        {
+            const float d = std::fabs (aL[(size_t) i] - bL[(size_t) i]);
+            if (d > maxDiff) maxDiff = d;
+            refRms += (double) aL[(size_t) i] * aL[(size_t) i];
+        }
+        refRms = std::sqrt (refRms / N);
+        check (refRms > 0.01, "parity: reference tick() output is non-silent");
+        check (maxDiff < 1.0e-4f, "parity: renderBlockAdd matches tick() (grain-major == per-sample)");
+        // release drain parity: both stop spawning and both eventually free
+        a.noteOff(); b.noteOff();
+        for (int i = 0; i < 48000; ++i) { float l, r; a.tick (l, r); }
+        std::vector<float> tl (4800, 0.f), tr (4800, 0.f);
+        for (int k = 0; k < 10; ++k) b.renderBlockAdd (tl.data(), tr.data(), 4800);
+        check (! a.isActive() && ! b.isActive(), "parity: both paths free the engine after release drain");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

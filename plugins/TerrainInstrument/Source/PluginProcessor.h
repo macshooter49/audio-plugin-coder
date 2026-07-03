@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <unordered_map>
 #include "GrainEngine.h"
 #include "TapeProcessor.h"
 #include "TapeLoopProcessor.h"
@@ -714,6 +715,22 @@ public:
 private:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    // CPU: pointer-keyed memo over getRawParameterValue — each raw call builds a juce::String
+    // (heap alloc) + hash lookup, and processBlock made ~260 of them PER BLOCK. Keys are the
+    // ADDRESSES of the ParameterIDs string constants (stable for the process lifetime), so a
+    // hit costs one pointer-hash lookup, no allocation. Populated lazily during the first
+    // blocks (each unique call site inserts once), read-only forever after. Do NOT call this
+    // with a temporary/dynamic string — juce::String args won't compile, by design.
+    mutable std::unordered_map<const void*, std::atomic<float>*> rawParamCache_;   // mutable: memo, called from const getters too
+    std::atomic<float>* rawParam (const char* id) const
+    {
+        const auto it = rawParamCache_.find ((const void*) id);
+        if (it != rawParamCache_.end()) return it->second;
+        auto* p = const_cast<juce::AudioProcessorValueTreeState&> (apvts).getRawParameterValue (id);
+        rawParamCache_.emplace ((const void*) id, p);
+        return p;
+    }
     static constexpr int kNumVoices = 32;  // bumped 16→32 for LAYER mode headroom (4 slices × 8 keys)
 
     // ── Synth section (Phase 1 MPV — see Design/v1-syn-spec.md) ──────────
@@ -724,6 +741,18 @@ private:
     // Typed views of synthEngine's voices (same order/indices as getVoice(i)); filled once in
     // the constructor — the audio thread reads these instead of dynamic_cast'ing per voice.
     std::array<tw::SynthVoice*, kSynthVoiceCount> synthVoices_ {};
+
+    // CPU: change-gates for the HEAVY per-voice broadcast pushes. The ModConfig (~1KB copy +
+    // 10 LFO reconfigs) and the 8 engine-param structs were pushed to all 96 voices EVERY
+    // block; they're pure functions of params/BPM, so they now push only on actual change
+    // (every change still broadcasts to the FULL pool, so voices are never stale). The
+    // pushed_ flags force the first push (and re-push after prepareToPlay resets voices).
+    wc::ModConfig lastSynModCfg_;
+    float         lastSynModBpm_    = -1.0f;
+    bool          synCfgPushed_     = false;
+    tw::SynthVoice::SampleEngineParams   lastSpA_, lastSpB_, lastSpC_, lastSpD_;
+    tw::GranularEngineParams             lastGpA_, lastGpB_, lastGpC_, lastGpD_;
+    bool          engParamsPushed_  = false;
 
     // PORTAMENTO — audio-thread glide tracking (origin note + held count for ALWAYS-off gating).
     float synthGlideFrom_  = -1.0f;   // last synth note (pitch to glide FROM); -1 = none yet
