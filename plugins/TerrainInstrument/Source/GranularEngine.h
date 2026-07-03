@@ -123,18 +123,20 @@ public:
         rng_       = seed ? seed : 0x9E3779B9u;
         resetPool();
         scanPos_   = regStart01_ + p_.position * (regEnd01_ - regStart01_);
-        // SCAN reverse (parity with SampleEngine::noteOn): in One-Shot/Tailed a reverse head
-        // anchored at the region Start dead-stops on frame one (the edge clamp fires
-        // oneShotDone_ and spawning halts). Mirror the anchor from the region END instead so
-        // reverse plays end -> start — the follower rides scanPos01(), so it runs backward too.
-        if (p_.scan < 0.f && (p_.loopMode == 0 || p_.loopMode == 4))
+        // SCAN reverse (parity with SampleEngine::noteOn): a reverse head anchored at the
+        // region Start either dead-stops on frame one (One-Shot/Tailed — the edge clamp fires
+        // oneShotDone_) or instantly bounces back rightward (Ping-Pong). Mirror the anchor
+        // from the region END instead so reverse PLAYS end -> start — the follower rides
+        // scanPos01(), so it visibly runs backward too. (Forward loop needs no mirror: its
+        // first leftward step wraps to the end on its own.)
+        if (p_.scan < 0.f && (p_.loopMode == 0 || p_.loopMode == 3 || p_.loopMode == 4))
             scanPos_ = regEnd01_ - p_.position * (regEnd01_ - regStart01_);
         countdown_ = 0.0;
         active_    = true;
         releasing_ = false;
         airHpL_ = airHpR_ = 0.f;
         normSm_    = norm_;   // snap — a fresh note starts at the current target, no glide-in
-        pingDir_   = 1.f;      // Ping-Pong starts moving toward the end
+        pingDir_   = (p_.scan < 0.f) ? -1.f : 1.f;   // Ping-Pong launches in the SCAN direction — full-left scan starts LEFT
         oneShotDone_ = false;  // One-Shot / Tailed: not yet reached the far edge
         caught_    = false;    // loop modes: head not yet inside the loop bracket (lead-in from the anchor)
     }

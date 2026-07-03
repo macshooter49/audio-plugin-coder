@@ -161,6 +161,22 @@ int main()
         check (f.scanPos01() > 0.99f, "One-Shot reverse: head anchors at the region END");
         for (int i = 0; i < 2400; ++i) { float a, b; f.tick (a, b); }
         check (f.scanPos01() < 0.99f && f.scanPos01() > 0.5f, "One-Shot reverse: head moves backward (no dead-stop)");
+
+        // Ping-Pong reverse: pingDir_ used to launch +1 regardless of the knob, and the
+        // start-anchored head bounced right on frame one — full-left scan LOOKED forward.
+        // Now: anchor mirrors to the END and the launch direction follows the scan sign.
+        GranularEngineParams p6 = p; p6.scan = -0.5f; p6.position = 0.f; p6.loopMode = 3;
+        f.setParams (p6);
+        f.noteOn (1.0, 7);
+        check (f.scanPos01() > 0.99f, "Ping-Pong reverse: head anchors at the region END");
+        bool pongDown = true; float prevPP = f.scanPos01();
+        for (int i = 0; i < 2400; ++i)
+        {
+            float a, b; f.tick (a, b);
+            if (f.scanPos01() >= prevPP) { pongDown = false; break; }
+            prevPP = f.scanPos01();
+        }
+        check (pongDown, "Ping-Pong reverse: head launches LEFT (follower runs backward)");
     }
 
     // ── Task 6: per-grain pitch + direction ──

@@ -3577,6 +3577,10 @@ body {
 #syn-panel .device.osc.osc-off > :not(.device-label-row),
 #syn-panel .device.osc.osc-off .device-label-row > :not(.device-label)
   { opacity: 0.4; filter: grayscale(1); pointer-events: none; }
+/* The A/B/C/D view-toggle letter stays LIVE while the osc is off — switching between the
+   paired oscillators must always work (pointer-events:auto re-enables hit-testing under a
+   none ancestor). Everything else stays locked until the osc is switched back on. */
+#syn-panel .device.osc.osc-off .osc-emblems .osc-letter { pointer-events: auto; cursor: pointer; }
 #syn-panel .device.osc .engine-display { color: var(--text-muted); font-weight: 400; }
 #syn-panel .device.osc .device-corner-preset { gap: 4px; }
 #syn-panel .device.osc .osc-emblems { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
