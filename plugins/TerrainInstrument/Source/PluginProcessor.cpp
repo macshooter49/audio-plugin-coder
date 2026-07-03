@@ -49,9 +49,15 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     }
 
     // Synth engine — Phase 1 MPV (one SynthSound + kSynthVoiceCount voices)
+    // CPU: keep TYPED pointers alongside — the audio thread iterates all 96 voices several
+    // times per block, and each dynamic_cast is a real RTTI walk (~300 casts/block killed).
     synthEngine.addSound (new tw::SynthSound());
     for (int i = 0; i < kSynthVoiceCount; ++i)
-        synthEngine.addVoice (new tw::SynthVoice());
+    {
+        auto* v = new tw::SynthVoice();
+        synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
+        synthEngine.addVoice (v);
+    }
 
     // Spectral-morph rebuild runs on the message thread (the rebuild is ~5.6ms,
     // far too heavy for the audio thread). 60Hz polling keeps the morph knob
@@ -2318,7 +2324,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     synthEngine.setCurrentPlaybackSampleRate (sampleRate);
     for (int i = 0; i < synthEngine.getNumVoices(); ++i)
     {
-        if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+        if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
             sv->prepareToPlay (sampleRate, samplesPerBlock, 2);
     }
 
@@ -3281,7 +3287,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
-            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+            if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
             {
                 sv->setModConfig              (synModCfg, synModBpm);
                 sv->setTuning                 (oct, semi, cent);
@@ -3422,7 +3428,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const bool  glAnyHeld = synthNotesHeld_ > 0;
         for (int v = 0; v < synthEngine.getNumVoices(); ++v)
         {
-            if (auto* tv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (v)))
+            if (auto* tv = synthVoices_[(size_t) v])   // typed array — no per-voice RTTI
             {
                 tv->setUnisonA (uniCountA, uniDetA, uniBlnA, uniWidA);   // per-OSC UNISON
                 tv->setUnisonB (uniCountB, uniDetB, uniBlnB, uniWidB);
@@ -3448,7 +3454,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
-            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+            if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
             {
                 sv->setHorizonAmount (horizonPct  / 100.0f);
                 // SYN_EROSION now drives the FILTER cutoff drift only — the per-voice
@@ -3598,7 +3604,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // capped at kMaxFollowers, so the editor draws one fading white playhead per held note.
         int cnt[4] = { 0, 0, 0, 0 };
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
-            if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+            if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
                 if (sv->isAmpEnvActive())
                 {
                     const float lv = sv->getAmpEnvLevel();
@@ -3647,7 +3653,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // Count the voices we will sum (same iteration discipline as bestVoice above).
             int nActive = 0;
             for (int i = 0; i < synthEngine.getNumVoices(); ++i)
-                if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+                if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
                     if (sv->isAmpEnvActive())
                         ++nActive;
             if (nActive < 1) nActive = 1;
@@ -3662,7 +3668,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 for (int s = 0; s < OSC_SCOPE_SIZE; ++s) acc[s] = 0.0f;
                 for (int i = 0; i < synthEngine.getNumVoices(); ++i)
-                    if (auto* sv = dynamic_cast<tw::SynthVoice*> (synthEngine.getVoice (i)))
+                    if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
                         if (sv->isAmpEnvActive())
                         {
                             sv->copyScopeWindow (o, tmp, OSC_SCOPE_SIZE);

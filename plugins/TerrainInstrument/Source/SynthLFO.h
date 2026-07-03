@@ -133,6 +133,26 @@ public:
         return applyPolarity (out);
     }
 
+    // CPU: advance the phase by n samples WITHOUT evaluating the shape — for LFOs that
+    // nothing consumes per-sample this block (the per-block mod matrix reads peek(), which
+    // only needs phase). S&H/Random roll one new step per wrap so peek() stays plausible.
+    void skipSamples (int n) noexcept
+    {
+        if (s_.trigger == LFOTrigger::Env && finished_) return;
+        const float inc = hz_ / static_cast<float> (sr_);
+        phase_ += inc * (float) n;
+        if (phase_ >= 1.0f)
+        {
+            if (s_.trigger == LFOTrigger::Env) { phase_ = 1.0f; finished_ = true; }
+            else
+            {
+                phase_ -= std::floor (phase_);
+                stepPrev_ = stepHeld_;
+                stepHeld_ = nextRandom();
+            }
+        }
+    }
+
     // For tempo-sync mode: set phase directly from host transport (Batch 2 uses this).
     void setPhaseFromTransport (float phase01) noexcept { phase_ = wrap01 (phase01); }
 

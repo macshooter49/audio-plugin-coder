@@ -721,6 +721,9 @@ private:
     // SynthVoices + 1 SynthSound. Renders into synthScratch each block,
     // summed into the master `buffer` before the FX chain.
     static constexpr int kSynthVoiceCount = 96;  // 8a polish-2: bumped from 32 — UNISON=8 × polyphony=8 fits without steal
+    // Typed views of synthEngine's voices (same order/indices as getVoice(i)); filled once in
+    // the constructor — the audio thread reads these instead of dynamic_cast'ing per voice.
+    std::array<tw::SynthVoice*, kSynthVoiceCount> synthVoices_ {};
 
     // PORTAMENTO — audio-thread glide tracking (origin note + held count for ALWAYS-off gating).
     float synthGlideFrom_  = -1.0f;   // last synth note (pitch to glide FROM); -1 = none yet

@@ -260,6 +260,7 @@ namespace tw
             horizonShelfR_.reset();
             *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (sr, 2500.0f, 0.7071f, 1.0f);
             *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (sr, 2500.0f, 0.7071f, 1.0f);
+            lastHorizonTilt_ = -1.0e9f;   // sample rate changed → force the shelf recompute gate
 
             // Phase 11c — SPECTRAL filter init (per OSC per channel)
             spectralFilterAL_.prepare (monoSpec);
@@ -1439,14 +1440,20 @@ namespace tw
             // Phase 8a — HORIZON: per-note tilt depending on midiNote and amount.
             // midiNote 60 = neutral; lower notes get high-shelf cut (warmer),
             // higher notes get high-shelf boost (airier).
+            // CPU: makeHighShelf heap-allocates a ref-counted temp — it used to run TWICE per
+            // block per voice (even at amount 0). Recompute only when the tilt actually changes.
             {
                 // Phase 8a polish — boost HORIZON range so it's audible at normal MIDI notes
                 const float horizonTilt = horizonAmount_ * static_cast<float>(currentMidiNote_ - 60) / 24.0f;
-                const float shelfGain   = std::pow (2.0f, horizonTilt);  // ±12dB at extremes
-                *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
-                    sampleRate_, 2500.0f, 0.7071f, shelfGain);
-                *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
-                    sampleRate_, 2500.0f, 0.7071f, shelfGain);
+                if (horizonTilt != lastHorizonTilt_)
+                {
+                    lastHorizonTilt_ = horizonTilt;
+                    const float shelfGain = std::pow (2.0f, horizonTilt);  // ±12dB at extremes
+                    *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
+                        sampleRate_, 2500.0f, 0.7071f, shelfGain);
+                    *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
+                        sampleRate_, 2500.0f, 0.7071f, shelfGain);
+                }
             }
 
             // Pre-pass env values for this loop: ch0 = AMP (the VCA); ch1..4 = the
@@ -1460,12 +1467,19 @@ namespace tw
             renderSampleBlocks (numSamples);
             renderGranularBlocks (numSamples);   // GRANULAR-ENGINE-VOICE — render any GRAN oscillators' blocks
 
+            // CPU: SAMP/GRAN/SPEC oscs render whole blocks above and their result REPLACES the
+            // unison sum below — the per-sine u-loop only produces zeros for them (fold of 0,
+            // two pan MACs, discarded). Skip it entirely; the sums already start at 0.
+            const bool uLoopA = (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC);
+            const bool uLoopB = (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC);
+            const bool uLoopC = (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC);
+            const bool uLoopD = (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC);
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
                 float sumAL = 0.0f, sumAR = 0.0f;
 
-                for (int u = 0; u < activeUnisonA_; ++u)
+                for (int u = 0; uLoopA && u < activeUnisonA_; ++u)
                 {
                     float sAu = 0.0f;
 
@@ -1706,7 +1720,7 @@ namespace tw
                 // ── OSC B — sum across activeUnisonB_ sines (per-OSC unison) ─────
                 float sumBL = 0.0f, sumBR = 0.0f;
 
-                for (int u = 0; u < activeUnisonB_; ++u)
+                for (int u = 0; uLoopB && u < activeUnisonB_; ++u)
                 {
                     float sBu = 0.0f;
 
@@ -1938,7 +1952,7 @@ namespace tw
                 // ── OSC C — sum across activeUnisonC_ sines (per-OSC unison) ─────
                 float sumCL = 0.0f, sumCR = 0.0f;
 
-                for (int u = 0; u < activeUnisonC_; ++u)
+                for (int u = 0; uLoopC && u < activeUnisonC_; ++u)
                 {
                     float sCu = 0.0f;
 
@@ -2170,7 +2184,7 @@ namespace tw
                 // ── OSC D — sum across activeUnisonD_ sines (per-OSC unison) ─────
                 float sumDL = 0.0f, sumDR = 0.0f;
 
-                for (int u = 0; u < activeUnisonD_; ++u)
+                for (int u = 0; uLoopD && u < activeUnisonD_; ++u)
                 {
                     float sDu = 0.0f;
 
@@ -2488,17 +2502,37 @@ namespace tw
                 // Free-envelope per-sample values (ch1..4 = envs 2–5) for filter routing.
                 const float* eFltFree[4] = { envScratch_.getReadPointer (1), envScratch_.getReadPointer (2),
                                              envScratch_.getReadPointer (3), envScratch_.getReadPointer (4) };
+                // CPU: only LFOs consumed PER SAMPLE in this loop need ticking — the sources of
+                // enabled Cut1/Cut2 routes and both ends of any LfoAmt chain, plus L1 (the editor
+                // viz dot). Every other LFO advances its phase ONCE per block (skipSamples below)
+                // so the per-block mod matrix's peek() stays correct. With nothing routed this
+                // drops 10 sin() calls per sample per voice to 1.
+                unsigned lfoTickMask = 1u;   // L1 always (viz dot)
+                bool anyCutRoute = false, anyAmtRoute = false;
+                for (int a = 0; a < modConfig_.numAssignments; ++a)
+                {
+                    const auto& as = modConfig_.assignments[a];
+                    if (! as.enabled) continue;
+                    const int sI = (int) as.source, dI = (int) as.dest;
+                    if (sI < 0 || sI >= wc::NUM_LFOS) continue;
+                    if (as.dest == wc::ModDest::Cut1 || as.dest == wc::ModDest::Cut2)
+                    { lfoTickMask |= (1u << sI); anyCutRoute = true; }
+                    else if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
+                    { lfoTickMask |= (1u << sI) | (1u << (dI - (int) wc::ModDest::LfoAmt1)); anyAmtRoute = true; }
+                }
                 for (int i = 0; i < numSamples; ++i)
                 {
                     // ── Batch 1 — per-voice LFO tick + route accumulation ──
-                    // Tick every LFO once per output sample (free/synced Hz already
+                    // Tick the NEEDED LFOs once per output sample (free/synced Hz already
                     // resolved in setModConfig), then sum any enabled LFO→cutoff routes
                     // in semitone space. Other destinations (frame/warp/pitch/level…)
-                    // join in Batch 3, once the tick is hoisted ahead of the OSC render.
+                    // are per-block via peek() — their LFOs are skip-advanced after the loop.
                     float lfoOut_[wc::NUM_LFOS];
-                    for (int L = 0; L < wc::NUM_LFOS; ++L) lfoOut_[L] = synthLfo_[L].processSample();
+                    for (int L = 0; L < wc::NUM_LFOS; ++L)
+                        lfoOut_[L] = (lfoTickMask & (1u << L)) ? synthLfo_[L].processSample() : 0.0f;
                     lfoVisValue_ = lfoOut_[0];                 // L1 → editor viz dot
                     // LFO→LFO amt scales each source before it routes (per-sample).
+                    if (anyAmtRoute)
                     {
                         float amt[wc::NUM_LFOS] = { 0.0f };
                         for (int a = 0; a < modConfig_.numAssignments; ++a)
@@ -2513,17 +2547,18 @@ namespace tw
                         for (int L = 0; L < wc::NUM_LFOS; ++L) lfoOut_[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                     }
                     float lfoSemis1 = 0.0f, lfoSemis2 = 0.0f;
-                    for (int a = 0; a < modConfig_.numAssignments; ++a)
-                    {
-                        const auto& as = modConfig_.assignments[a];
-                        if (! as.enabled) continue;
-                        const int sIdx = (int) as.source;
-                        if (sIdx < 0 || sIdx >= wc::NUM_LFOS) continue;   // Batch 1: LFO sources only
-                        const wc::DestInfo& info = wc::kDestInfo[(int) as.dest];
-                        const float contrib = wc::routeContribution (info, lfoOut_[sIdx], as.depth);
-                        if      (as.dest == wc::ModDest::Cut1) lfoSemis1 += contrib;
-                        else if (as.dest == wc::ModDest::Cut2) lfoSemis2 += contrib;
-                    }
+                    if (anyCutRoute)
+                        for (int a = 0; a < modConfig_.numAssignments; ++a)
+                        {
+                            const auto& as = modConfig_.assignments[a];
+                            if (! as.enabled) continue;
+                            const int sIdx = (int) as.source;
+                            if (sIdx < 0 || sIdx >= wc::NUM_LFOS) continue;   // Batch 1: LFO sources only
+                            const wc::DestInfo& info = wc::kDestInfo[(int) as.dest];
+                            const float contrib = wc::routeContribution (info, lfoOut_[sIdx], as.depth);
+                            if      (as.dest == wc::ModDest::Cut1) lfoSemis1 += contrib;
+                            else if (as.dest == wc::ModDest::Cut2) lfoSemis2 += contrib;
+                        }
 
                     // Per-envelope ROUTING → filter cutoff (semitone space). Sum any
                     // of envs 2–5 routed to Filter 1 / Filter 2 / Filter 1+2.
@@ -2546,20 +2581,28 @@ namespace tw
                     const float fmax = juce::jmin (20000.0f, 0.45f * (float) coefSr);
 
                     // Filter 1 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
+                    // CPU: the semitone→Hz pow(2,x) is gated on change — with nothing modulating,
+                    // cutSemis is bit-identical every sample and the pow never re-runs.
                     const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + driftSemis + ktCutSemis1;
-                    float cutHz1 = 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f);
-                    cutHz1 = juce::jlimit (20.0f, fmax, cutHz1);
+                    if (cutSemis1 != lastCutSemis1_)
+                    {
+                        lastCutSemis1_ = cutSemis1;
+                        lastCutHz1_ = juce::jlimit (20.0f, fmax, 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f));
+                    }
                     const float res1 = juce::jlimit (0.0f, 1.0f,
                         baseRes01_ + resWander * driftState_ * 0.5f);
-                    filterSlot_.setParams (cutHz1, res1, drv01_, coefSr);
+                    filterSlot_.setParams (lastCutHz1_, res1, drv01_, coefSr);
 
                     // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
                     const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis + ktCutSemis2;
-                    float cutHz2 = 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f);
-                    cutHz2 = juce::jlimit (20.0f, fmax, cutHz2);
+                    if (cutSemis2 != lastCutSemis2_)
+                    {
+                        lastCutSemis2_ = cutSemis2;
+                        lastCutHz2_ = juce::jlimit (20.0f, fmax, 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f));
+                    }
                     const float res2 = juce::jlimit (0.0f, 1.0f,
                         baseRes012_ + resWander * driftState_ * 0.5f);
-                    filterSlot2_.setParams (cutHz2, res2, drv012_, coefSr);
+                    filterSlot2_.setParams (lastCutHz2_, res2, drv012_, coefSr);
 
                     // Routing + per-filter wet/dry mix. NONE-aware so a bypassed
                     // slot drops out of the sum cleanly. Filters are independent.
@@ -2611,6 +2654,11 @@ namespace tw
                         applyFilters (sL[i], sR[i]);
                     }
                 }
+                // CPU: unticked LFOs advance phase once for the whole block — peek() (the
+                // per-block mod matrix) and any mid-note re-routing stay phase-correct.
+                for (int L = 0; L < wc::NUM_LFOS; ++L)
+                    if (! (lfoTickMask & (1u << L)))
+                        synthLfo_[L].skipSamples (numSamples);
 
                 // NaN/Inf guard — Pirkle/Stilson note that ZDF ladders can blow
                 // up under pathological coefficient updates. One bad sample
@@ -2629,6 +2677,10 @@ namespace tw
             }
 
             // Phase 8a — HORIZON tilt filter (per-channel high-shelf).
+            // CPU: at amount 0 the shelf is unity gain — pure pass-through — so skip the two
+            // biquads entirely (their state is irrelevant while bypassed; a later non-zero
+            // amount just starts the shelves clean).
+            if (horizonAmount_ != 0.0f)
             {
                 float* chL = scratch_.getWritePointer (0);
                 float* chR = scratch_.getWritePointer (1);
@@ -2646,7 +2698,14 @@ namespace tw
             // instant the env goes idle (→ click, and a click machine-guns through the
             // granular engine), ramp the FINAL post-filter signal to true zero over
             // ~8 ms, then release the slot. Click-free at any release/decay length & Q.
-            if (! ampEnv_.isActive() && ! stealing_ && playing_)
+            // CPU fast-kill: a Release tail below -80 dBFS is inaudible but still burns the
+            // FULL voice cost (grain cloud + filters + LFOs + envelopes) until the exponential
+            // release actually crawls to zero — often seconds on a pad. Arm the same declick
+            // ramp the moment the release drops under -80 dB: fading to zero FROM silence is
+            // silent by construction, and the slot frees for the pool immediately after.
+            const bool releaseInaudible = ampEnv_.stage() == terrain::TerrainEnvelope::Stage::Release
+                                          && ampEnv_.level() < 1.0e-4;
+            if ((! ampEnv_.isActive() || releaseInaudible) && ! stealing_ && playing_)
             {
                 if (! finishing_)
                 {
@@ -3040,6 +3099,10 @@ namespace tw
         float                   envAmount2_  = 0.0f;   // -1..+1 (bipolar)
         int                     filterType1_ = 0;      // tracked for NONE-aware routing
         int                     filterType2_ = (int) tw::filters::Type::NONE;
+        // CPU: semitone→Hz pow() change-gates (unmodulated cutoff = bit-identical per sample).
+        // Sentinel -1e9 never matches a real semitone sum, so the first sample always computes.
+        float                   lastCutSemis1_ = -1.0e9f, lastCutHz1_ = 20000.0f;
+        float                   lastCutSemis2_ = -1.0e9f, lastCutHz2_ = 20000.0f;
         // Routing between the two filters + per-filter wet/dry mix.
         int                     filterRouting_ = 0;    // 0 = series, 1 = parallel
         float                   filterMix1_  = 1.0f;   // 0 = dry, 1 = fully filtered
@@ -3679,6 +3742,7 @@ namespace tw
         float horizonAmount_   = 0.0f;  // -1..+1 from SYN_HORIZON/100
         juce::dsp::IIR::Filter<float> horizonShelfL_;
         juce::dsp::IIR::Filter<float> horizonShelfR_;
+        float lastHorizonTilt_ = -1.0e9f;   // change-gate for the shelf coefficient recompute
 
         // Phase 8a polish — exponential fade on voice steal (~30ms, Phase 12) to avoid clicks
         float stealingFade_     = 1.0f;     // 1.0 = no fade, 0.0 = silent

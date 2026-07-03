@@ -1297,6 +1297,15 @@ public:
     void setParams (float cutHz, float res01, float drv01, double fs) noexcept
     {
         cutHz_ = cutHz; res01_ = res01; drv01_ = drv01;
+        // CPU: coefficients are a pure function of (type, cut, res, drive, morph, fs) — the voice
+        // calls this PER SAMPLE, but with nothing modulating, the inputs are block-constant. Gate
+        // the tan()/pow()/exp() coefficient recompute on actual change; NONE has no coefficients.
+        if (type_ == Type::NONE) { preDrive_ = 1.0f; postMakeup_ = 1.0f; return; }
+        if (cutHz == lastCut_ && res01 == lastRes_ && drv01 == lastDrv_
+            && fs == lastFs_ && type_ == lastType_ && morph_ == lastMorph_)
+            return;
+        lastCut_ = cutHz; lastRes_ = res01; lastDrv_ = drv01;
+        lastFs_ = fs; lastType_ = type_; lastMorph_ = morph_;
         const float driveLin = driveLinear (drv01);
         switch (type_)
         {
@@ -1597,6 +1606,11 @@ private:
     }
 
     float  morph_     = 0.0f;     // OB-X / SEM morph (UI-bindable)
+
+    // setParams change-gate memo (lastFs_ = -1 → first call always recomputes)
+    float  lastCut_   = -1.0f, lastRes_ = -1.0f, lastDrv_ = -1.0f, lastMorph_ = -1.0f;
+    double lastFs_    = -1.0;
+    Type   lastType_  = Type::NONE;
 
     Type   type_      = Type::NONE;
     double fsLocal_   = 48000.0;

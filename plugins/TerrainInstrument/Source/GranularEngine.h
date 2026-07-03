@@ -71,7 +71,8 @@ public:
         // AIR high-pass corner ~3 kHz one-pole (matches the Sample engine's exciter feel)
         airCoef_ = 1.f - std::exp (-2.f * kPi * 3000.f / (float) outRate_);
         if (airCoef_ < 0.f) airCoef_ = 0.f; if (airCoef_ > 1.f) airCoef_ = 1.f;
-        buildWindows();
+        (void) windows();   // shared static LUTs — force the one-time build here, not mid-note
+        resetPool();
         recomputeDerived();
     }
 
@@ -103,7 +104,7 @@ public:
     {
         basePitch_ = pitchRatio > 0.0 ? pitchRatio : 1.0;
         rng_       = seed ? seed : 0x9E3779B9u;
-        for (auto& g : pool_) g.active = false;
+        resetPool();
         scanPos_   = regStart01_ + p_.position * (regEnd01_ - regStart01_);
         // SCAN reverse (parity with SampleEngine::noteOn): in One-Shot/Tailed a reverse head
         // anchored at the region Start dead-stops on frame one (the edge clamp fires
@@ -141,16 +142,18 @@ public:
             if (countdown_ < 1.0) countdown_ = 1.0;
         }
 
-        // 2) grain mix + retire
+        // 2) grain mix + retire — COMPACT ACTIVE LIST: touch only live grains instead of
+        //    scanning all 64 pool slots per sample (that scan was 72% of engine cost at
+        //    default settings — measured). Retire = swap-remove + return the slot to the
+        //    free stack; order within the list is irrelevant (grains just sum).
         float accL = 0.f, accR = 0.f;
-        bool  any  = false;
+        const bool any = numActive_ > 0;
         const double lo = effLo01() * (numSamples_ - 1);   // caught by the loop bracket → grains live in it
         const double hi = effHi01() * (numSamples_ - 1);
         const double span = (hi - lo) > 1.0 ? (hi - lo) : 1.0;
-        for (auto& g : pool_)
+        for (int j = 0; j < numActive_; )
         {
-            if (! g.active) continue;
-            any = true;
+            Grain& g = pool_[(size_t) activeIdx_[j]];
             const float ph = (float) g.age / (float) g.len;
             const float w  = windowAt (p_.shape, p_.skew, ph);
             float sl, sr; readHermite (g.readPos, sl, sr);
@@ -161,7 +164,13 @@ public:
             // wrap the read within the region so long/scanning grains never run off the buffer
             if (g.readPos > hi) g.readPos = lo + std::fmod (g.readPos - lo, span);
             if (g.readPos < lo) g.readPos = hi - std::fmod (hi - g.readPos, span);
-            if (g.age >= g.len) g.active = false; // retire at window->0, no click
+            if (g.age >= g.len)                            // retire at window->0, no click
+            {
+                g.active = false;
+                freeIdx_[numFree_++]  = activeIdx_[j];
+                activeIdx_[j] = activeIdx_[--numActive_];  // swap-remove — re-visit slot j
+            }
+            else ++j;
         }
 
         // 3) equal-power-ish normalization vs the expected overlap (stable, count-independent).
@@ -256,9 +265,15 @@ public:
     double loopHiForTesting()       const noexcept { return loopHi_; }
     bool anyGrainReversedForTesting() const noexcept { for (auto& g : pool_) if (g.active && g.readInc < 0.0) return true; return false; }
     static double snapToKeyForTesting (double semis, int key) noexcept { return snapToKey (semis, key); }
-    float windowForTesting (float shape, float skew, float phase) const noexcept { return windowAt (shape, skew, phase); }
+    float windowForTesting (float shape, float skew, float phase) noexcept
+    { refreshSkewWarp (skew); return windowAt (shape, skew, phase); }   // non-const: primes the skew LUT for direct probes
 
 private:
+    static constexpr int   kPool    = 64;
+    static constexpr int   kWin     = 2048;
+    static constexpr int   kSkewTab = 257;   // skew phase-warp LUT resolution
+    static constexpr float kPi      = 3.14159265358979f;
+
     struct Grain
     {
         double readPos = 0.0, readInc = 0.0;
@@ -297,6 +312,7 @@ private:
         const float ov = densHz_ * glenSec;
         norm_ = 1.f / std::sqrt (ov < 1.f ? 1.f : ov);
         refreshLoopBounds();
+        refreshSkewWarp (p_.skew);   // rebuilds only when the Skew knob actually moved
     }
 
     // Effective LOOP bracket = [loopStart,loopEnd] sorted, intersected with the region; a
@@ -318,11 +334,10 @@ private:
 
     void spawnGrain() noexcept
     {
-        int slot = -1;
-        for (int i = 0; i < kPool; ++i) if (! pool_[i].active) { slot = i; break; }
-        if (slot < 0) return; // Max-Grains reached -> skip-and-wait (graceful, no glitch)
+        if (numFree_ <= 0) return; // Max-Grains reached -> skip-and-wait (graceful, no glitch)
+        const int slot = freeIdx_[--numFree_];   // O(1) — pop the free stack, no pool scan
 
-        Grain& g = pool_[slot];
+        Grain& g = pool_[(size_t) slot];
 
         // birth position: scan head + sprayed jitter, clamped into the region.
         // AMPLIFIED — full Spray reaches ±half the region (Texture stretch adds extra scatter).
@@ -366,61 +381,94 @@ private:
         g.gain = 1.f;
 
         g.active = true;
+        activeIdx_[numActive_++] = slot;   // register on the compact active list
     }
 
     // ── grain windows: Flat-top (bright/dense) <-> Hann (neutral) <-> Bell (soft/sparse) ──
     // All three are exactly 0 at both ends → grain births/deaths physically cannot click,
     // even sustained as a pad. Shape morphs across them for a dramatic, audible timbre sweep.
-    void buildWindows() noexcept
+    // CPU/RAM: the tables are identical in EVERY engine instance (pure functions of kWin) —
+    // shared statics built once. Was 24 KB × 64 engines × 96 voices ≈ 140 MB of duplicates.
+    struct Windows
     {
-        double sf = 0, sh = 0, sb = 0;   // window energies, for the RMS match below
-        for (int i = 0; i < kWin; ++i)
+        std::array<float, kWin> flat {}, hann {}, bell {};
+        Windows() noexcept
         {
-            const float x = (float) i / (float) (kWin - 1);
-            const float hann = 0.5f - 0.5f * std::cos (2.f * kPi * x);
+            double sf = 0, sh = 0, sb = 0;   // window energies, for the RMS match below
+            for (int i = 0; i < kWin; ++i)
+            {
+                const float x = (float) i / (float) (kWin - 1);
+                const float h = 0.5f - 0.5f * std::cos (2.f * kPi * x);
 
-            // Flat-top = Tukey with a small taper (mostly flat, sharp-ish zero-edges → brighter/buzzier)
-            const float alpha = 0.12f;
-            float flat;
-            if (x < alpha * 0.5f)
-                flat = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 1.f)));
-            else if (x > 1.f - alpha * 0.5f)
-                flat = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 2.f / alpha + 1.f)));
-            else
-                flat = 1.f;
+                // Flat-top = Tukey with a small taper (mostly flat, sharp-ish zero-edges → brighter/buzzier)
+                const float alpha = 0.12f;
+                float f;
+                if (x < alpha * 0.5f)
+                    f = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 1.f)));
+                else if (x > 1.f - alpha * 0.5f)
+                    f = 0.5f * (1.f + std::cos (kPi * (2.f * x / alpha - 2.f / alpha + 1.f)));
+                else
+                    f = 1.f;
 
-            // Bell = tight Gaussian, multiplied by Hann so the ends are guaranteed 0 (peak stays 1)
-            const float d = (x - 0.5f) / 0.16f;
-            const float bell = std::exp (-0.5f * d * d) * hann;
+                // Bell = tight Gaussian, multiplied by Hann so the ends are guaranteed 0 (peak stays 1)
+                const float d = (x - 0.5f) / 0.16f;
+                const float b = std::exp (-0.5f * d * d) * h;
 
-            winFlat_[i] = flat;
-            winHann_[i] = hann;
-            winBell_[i] = bell;
-            sf += (double) flat * flat; sh += (double) hann * hann; sb += (double) bell * bell;
+                flat[i] = f; hann[i] = h; bell[i] = b;
+                sf += (double) f * f; sh += (double) h * h; sb += (double) b * b;
+            }
+            // RMS-match Flat and Bell to the Hann window so SHAPE morphs TIMBRE, NOT loudness. (This is why
+            // Shape=0 felt like it "disappeared": the flat window was simply louder. Now all shapes are equal
+            // energy — the difference is purely tonal: flat = brighter/fuller, bell = softer/grainier.)
+            const float rf = (sf > 1e-9) ? (float) std::sqrt (sh / sf) : 1.f;
+            const float rb = (sb > 1e-9) ? (float) std::sqrt (sh / sb) : 1.f;
+            for (int i = 0; i < kWin; ++i) { flat[i] *= rf; bell[i] *= rb; }
         }
-        // RMS-match Flat and Bell to the Hann window so SHAPE morphs TIMBRE, NOT loudness. (This is why
-        // Shape=0 felt like it "disappeared": the flat window was simply louder. Now all shapes are equal
-        // energy — the difference is purely tonal: flat = brighter/fuller, bell = softer/grainier.)
-        const float rf = (sf > 1e-9) ? (float) std::sqrt (sh / sf) : 1.f;
-        const float rb = (sb > 1e-9) ? (float) std::sqrt (sh / sb) : 1.f;
-        for (int i = 0; i < kWin; ++i) { winFlat_[i] *= rf; winBell_[i] *= rb; }
+    };
+    static const Windows& windows() noexcept { static const Windows w; return w; }   // C++11 magic static — thread-safe one-time build
+
+    // Reset the grain pool + the compact active/free slot lists (noteOn / prepare).
+    void resetPool() noexcept
+    {
+        for (auto& g : pool_) g.active = false;
+        numActive_ = 0;
+        numFree_   = kPool;
+        for (int i = 0; i < kPool; ++i) freeIdx_[i] = i;
+    }
+
+    // Rebuild the skew phase-warp LUT when the Skew knob actually moves. pow(phase, k) per
+    // GRAIN-SAMPLE was the single hottest op in the engine (it DOUBLED dense-cloud cost —
+    // measured); k is block-constant, so the warp bakes into a 257-entry table + lerp.
+    void refreshSkewWarp (float skew) noexcept
+    {
+        if (skew == 0.f) return;
+        // +skew pushes the peak later (swell), -skew earlier (pluck)
+        float k = 1.f + (skew < 0.f ? skew * 0.6f : skew * 1.5f);
+        if (k < 0.05f) k = 0.05f;
+        if (k == skewKCached_) return;
+        skewKCached_ = k;
+        for (int i = 0; i < kSkewTab; ++i)
+            skewWarp_[i] = std::pow ((float) i / (float) (kSkewTab - 1), k);
     }
 
     float windowAt (float shape01, float skew, float phase01) const noexcept
     {
-        float ph = phase01;
+        float ph = phase01 < 0.f ? 0.f : (phase01 > 1.f ? 1.f : phase01);
         if (skew != 0.f)
         {
-            // +skew pushes the peak later (swell), -skew earlier (pluck)
-            float k = 1.f + (skew < 0.f ? skew * 0.6f : skew * 1.5f);
-            if (k < 0.05f) k = 0.05f;
-            ph = std::pow (phase01 < 0.f ? 0.f : phase01, k);
+            // skew warp via the LUT (refreshSkewWarp, per block) — no per-sample pow
+            const float x  = ph * (float) (kSkewTab - 1);
+            const int   xi = (int) x;
+            const float xf = x - (float) xi;
+            const float a  = skewWarp_[xi];
+            const float b  = skewWarp_[xi + 1 < kSkewTab ? xi + 1 : kSkewTab - 1];
+            ph = a + (b - a) * xf;
         }
-        ph = ph < 0.f ? 0.f : (ph > 1.f ? 1.f : ph);
         const int idx = (int) (ph * (float) (kWin - 1));
+        const Windows& W = windows();
         const float s = shape01 < 0.f ? 0.f : (shape01 > 1.f ? 1.f : shape01);
-        if (s < 0.5f)  { const float t = s * 2.f;          return winFlat_[idx] + (winHann_[idx] - winFlat_[idx]) * t; }
-        else           { const float t = (s - 0.5f) * 2.f; return winHann_[idx] + (winBell_[idx] - winHann_[idx]) * t; }
+        if (s < 0.5f)  { const float t = s * 2.f;          return W.flat[idx] + (W.hann[idx] - W.flat[idx]) * t; }
+        else           { const float t = (s - 0.5f) * 2.f; return W.hann[idx] + (W.bell[idx] - W.hann[idx]) * t; }
     }
 
     // ── interpolation (reused verbatim from SampleEngine) ──
@@ -490,14 +538,17 @@ private:
         return (double) (oc + deg);
     }
 
-    static constexpr int   kPool = 64;
-    static constexpr int   kWin  = 2048;
-    static constexpr float kPi   = 3.14159265358979f;
-
+    // (kPool/kWin/kSkewTab/kPi are declared at the top of the private section — the shared
+    //  Windows struct needs them visible at declaration time.)
     std::array<Grain, kPool> pool_ {};
-    std::array<float, kWin>  winFlat_ {};
-    std::array<float, kWin>  winHann_ {};
-    std::array<float, kWin>  winBell_ {};
+    // CPU: compact active/free slot lists — tick() touches only LIVE grains; spawn/retire are
+    // O(1) stack ops. (The old code scanned all 64 pool slots per sample per engine.)
+    int activeIdx_[kPool] {};
+    int freeIdx_[kPool] {};
+    int numActive_ = 0, numFree_ = 0;   // resetPool() fills the free stack (prepare/noteOn)
+    // Skew phase-warp LUT (refreshSkewWarp) — replaces the per-grain-sample pow().
+    float skewWarp_[kSkewTab] {};
+    float skewKCached_ = -1.f;   // last k the table was built for (-1 = never)
 
     const float* ch0_ = nullptr;
     const float* ch1_ = nullptr;
