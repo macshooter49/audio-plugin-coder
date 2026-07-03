@@ -127,6 +127,40 @@ int main()
         float b0 = f.scanPos01();
         for (int i = 0; i < 2400; ++i) { float a, b; f.tick (a, b); }
         check (f.scanPos01() < b0, "scan<0 moves the head backward");
+
+        // SCAN parity with the Sample engine (±1 -> ±200%): Forward loop at full reverse —
+        // the head strictly DECREASES from the anchor, every single tick.
+        GranularEngineParams p3 = p; p3.scan = -1.0f; p3.position = 0.5f; p3.loopMode = 1;
+        f.setParams (p3);
+        f.noteOn (1.0, 7);
+        bool strictlyDown = true; float prevPos = f.scanPos01();
+        for (int i = 0; i < 2400; ++i)
+        {
+            float a, b; f.tick (a, b);
+            const float sp = f.scanPos01();
+            if (sp >= prevPos) { strictlyDown = false; break; }
+            prevPos = sp;
+        }
+        check (strictlyDown, "loopMode=1 scan=-1: head strictly decreases from the anchor");
+
+        // Faster scan = more travel (rates past ±1 just scan faster — no clamp in the engine).
+        GranularEngineParams p4 = p; p4.position = 0.1f; p4.loopMode = 1;
+        p4.scan = 1.0f; f.setParams (p4); f.noteOn (1.0, 7);
+        for (int i = 0; i < 2400; ++i) { float a, b; f.tick (a, b); }
+        const float trav1 = f.scanPos01() - 0.1f;
+        p4.scan = 2.0f; f.setParams (p4); f.noteOn (1.0, 7);
+        for (int i = 0; i < 2400; ++i) { float a, b; f.tick (a, b); }
+        const float trav2 = f.scanPos01() - 0.1f;
+        check (trav2 > trav1 * 1.5f, "scan=+2 travels farther than scan=+1");
+
+        // One-Shot reverse (the old frame-one dead-stop): scan<0 mirrors the anchor to the
+        // region END (SampleEngine::noteOn parity) so reverse plays end -> start.
+        GranularEngineParams p5 = p; p5.scan = -0.5f; p5.position = 0.f; p5.loopMode = 0;
+        f.setParams (p5);
+        f.noteOn (1.0, 7);
+        check (f.scanPos01() > 0.99f, "One-Shot reverse: head anchors at the region END");
+        for (int i = 0; i < 2400; ++i) { float a, b; f.tick (a, b); }
+        check (f.scanPos01() < 0.99f && f.scanPos01() > 0.5f, "One-Shot reverse: head moves backward (no dead-stop)");
     }
 
     // ── Task 6: per-grain pitch + direction ──

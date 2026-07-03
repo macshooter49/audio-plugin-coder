@@ -595,6 +595,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.eqPanelOpen.load());
             })
+            // Last-viewed page for THIS instance (0=front 1=syn 2=eq 3=dly 4=mod). In-memory only:
+            // close/reopen the editor → same page; a brand-new instance always starts on the front page.
+            .withNativeFunction("setUiPage", [this](const juce::Array<juce::var>& args,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0)
+                    audioProcessor.uiPage.store(static_cast<int>(args[0]));
+                complete(audioProcessor.uiPage.load());
+            })
+            .withNativeFunction("getUiPage", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete(audioProcessor.uiPage.load());
+            })
             .withNativeFunction("setEqSolo", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -3336,6 +3350,11 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
            << juce::String(pitchLock, 1) << ","
            << juce::String(wireSpace, 1) << ","
            << juce::String(wireTube, 1) << ");}";
+
+        // Restore THIS instance's last-viewed page (close/reopen only — a fresh instance's
+        // uiPage is 0 = front page, so new instances always land on the front).
+        js << "if(typeof restoreUiPage==='function'){restoreUiPage("
+           << juce::String(audioProcessor.uiPage.load()) << ");}";
 
         // Push plugin settings (theme) during restore window
         auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)

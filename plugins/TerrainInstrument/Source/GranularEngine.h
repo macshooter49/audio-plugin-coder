@@ -32,7 +32,7 @@ struct GrainViz { float pos01 = 0.f; float age01 = 0.f; float pan = 0.f; };
 // All granular params, gathered per-block by the voice (mirrors SampleEngineParams).
 struct GranularEngineParams
 {
-    float scan       = 0.15f; // -1..+1 read-head rate; 0 = freeze, <0 = reverse
+    float scan       = 0.15f; // -1..+1 read-head rate (x2 in tick -> ±200%, like Sample SCAN); 0 = freeze, <0 = reverse
     float position   = 0.f;   // 0..1 grain-birth anchor within the region
     float density    = 0.4f;  // 0..1 -> 1..220 grains/sec (log)
     float size       = 0.25f; // 0..1 -> 2..900 ms grain length (log)
@@ -105,6 +105,12 @@ public:
         rng_       = seed ? seed : 0x9E3779B9u;
         for (auto& g : pool_) g.active = false;
         scanPos_   = regStart01_ + p_.position * (regEnd01_ - regStart01_);
+        // SCAN reverse (parity with SampleEngine::noteOn): in One-Shot/Tailed a reverse head
+        // anchored at the region Start dead-stops on frame one (the edge clamp fires
+        // oneShotDone_ and spawning halts). Mirror the anchor from the region END instead so
+        // reverse plays end -> start — the follower rides scanPos01(), so it runs backward too.
+        if (p_.scan < 0.f && (p_.loopMode == 0 || p_.loopMode == 4))
+            scanPos_ = regEnd01_ - p_.position * (regEnd01_ - regStart01_);
         countdown_ = 0.0;
         active_    = true;
         releasing_ = false;

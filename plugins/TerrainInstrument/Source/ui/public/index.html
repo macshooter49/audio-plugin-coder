@@ -6744,8 +6744,9 @@ function saveSettings() {
     try {
       saveSettingsFn(JSON.stringify({
         theme: getTheme(),
-        xyEnabled: state.xyEnabled,
-        page: currentActivePanel   // SYN/EQ/DLY/MOD section → reopen where you left off
+        xyEnabled: state.xyEnabled
+        // NOTE: no 'page' here — the settings file is GLOBAL (all instances). The active page
+        // persists PER INSTANCE via the uiPage native fns, so new instances start on the front page.
       }));
     } catch(e) {}
   }
@@ -6767,12 +6768,8 @@ function restoreSettings(json) {
       if (setXYEnabledFn) setXYEnabledFn(state.xyEnabled ? 1 : 0);
       if (typeof applyXYEnabledUI === 'function') applyXYEnabledUI();
     }
-    // Restore the last active section (SYN/EQ/DLY/MOD) so reopening lands where you left off.
-    // Only act when the key exists (older settings files omit it → keep default behavior).
-    if (('page' in s) && typeof setActivePanel === 'function') {
-      var _pg = (s.page === 'syn' || s.page === 'eq' || s.page === 'dly' || s.page === 'mod') ? s.page : null;
-      setActivePanel(_pg);
-    }
+    // (The 'page' key is deliberately IGNORED here — older settings files carried it, but the
+    // settings file is global to every instance. Per-instance page restore = restoreUiPage.)
   } catch(e) {}
 }
 
@@ -7076,7 +7073,7 @@ let setGrainEngineEnabledFn, getGrainEngineEnabledFn;
 let setGrainSyncFn, getGrainSyncFn;
 let setTapeEnabledFn, getTapeEnabledFn;
 let setTapeLoopEnabledFn, getTapeLoopEnabledFn;
-let setEqPanelOpenFn, getEqPanelOpenFn;
+let setEqPanelOpenFn, getEqPanelOpenFn, setUiPageFn;
 let setSynthViewFn;
 let setTapeMachineFn, getTapeMachineFn;
 let setTapeLoopRecordFn, getTapeLoopRecordFn;
@@ -7159,14 +7156,11 @@ async function initJuceBindings() {
     setTapeLoopEnabledFn = window.Juce.getNativeFunction('setTapeLoopEnabled');
     getTapeLoopEnabledFn = window.Juce.getNativeFunction('getTapeLoopEnabled');
     setEqPanelOpenFn = window.Juce.getNativeFunction('setEqPanelOpen');
+    setUiPageFn = window.Juce.getNativeFunction('setUiPage');
     setSynthViewFn = window.Juce.getNativeFunction('setSynthView');
     getEqPanelOpenFn = window.Juce.getNativeFunction('getEqPanelOpen');
-    if (getEqPanelOpenFn) {
-      getEqPanelOpenFn().then(v => {
-        const open = v > 0.5;
-        applyEqPanelOpen(open);
-      });
-    }
+    // (No boot-time applyEqPanelOpen here anymore — restoreUiPage() is the single authority for
+    // which section opens on editor load; racing it here could re-open EQ over the restored page.)
     getTapeMachineFn = window.Juce.getNativeFunction('getTapeMachine');
     setTapeMachineFn = window.Juce.getNativeFunction('setTapeMachine');
 
@@ -9727,8 +9721,19 @@ function setActivePanel(which) {
   currentActivePanel = which;
   // Persist EQ-panel state to PluginSettings.json (only EQ has a native fn).
   if (juceMode && setEqPanelOpenFn) setEqPanelOpenFn(which === 'eq' ? 1 : 0);
-  // Persist the active section so a close/reopen restores it (see restoreSettings).
+  // Persist the active section PER INSTANCE (processor atomic, in-memory): close/reopen the
+  // editor lands back here, while a brand-new instance always starts on the front page.
+  if (juceMode && setUiPageFn) setUiPageFn(UI_PAGE_IDS.indexOf(which) + 1 || 0);
   if (typeof saveSettings === 'function') saveSettings();
+}
+// Page codes shared with C++ (uiPage atomic): 0=front, then 1-based index into this list.
+var UI_PAGE_IDS = ['syn', 'eq', 'dly', 'mod'];
+var _uiPageRestored = -1;   // last applied restore (the C++ tick re-pushes until pageReady)
+function restoreUiPage(n) {
+  n = n | 0;
+  if (n === _uiPageRestored) return;   // idempotent — the restore push repeats every tick
+  _uiPageRestored = n;
+  if (typeof setActivePanel === 'function') setActivePanel(n >= 1 && n <= 4 ? UI_PAGE_IDS[n - 1] : null);
 }
 document.getElementById('eq-btn').addEventListener('click', () => {
   setActivePanel(currentActivePanel === 'eq' ? null : 'eq');
@@ -10577,8 +10582,9 @@ setTimeout(function wireSynControls () {
         if (paramId.indexOf ('_CENT') >= 0) { const v = Math.round (-100 + n * 200); return (v > 0 ? '+' : '') + v + ' ct'; }
         if (paramId.indexOf ('_LEVEL') >= 0) return pct + '%';
         if (paramId.indexOf ('_PAN')   >= 0) { const v = Math.round (-100 + n * 200); return v === 0 ? 'C' : (v < 0 ? 'L' + (-v) : 'R' + v); }
+        if (paramId.indexOf ('_SAMPLE_SCAN') >= 0) { const s = -1 + n * 2; return (Math.abs (s) < 0.02) ? 'Freeze' : (s > 0 ? '+' : '') + Math.round (s * 200) + '%'; }   // same ±200% readout as GRAIN_SCAN (scanRate_ = 2·s)
         // GRANULAR readouts
-        if (paramId.indexOf ('_GRAIN_SCAN')    >= 0) { const s = -1 + n * 2; return (Math.abs (s) < 0.02) ? 'Freeze' : (s > 0 ? '+' : '') + Math.round (s * 100) + '%'; }
+        if (paramId.indexOf ('_GRAIN_SCAN')    >= 0) { const s = -1 + n * 2; return (Math.abs (s) < 0.02) ? 'Freeze' : (s > 0 ? '+' : '') + Math.round (s * 200) + '%'; }   // ±200% — same x2 rate model as Sample SCAN
         if (paramId.indexOf ('_GRAIN_DENSITY') >= 0) return Math.round (Math.pow (200, n)) + ' /s';
         if (paramId.indexOf ('_GRAIN_SIZE')    >= 0) return Math.round (2 * Math.pow (250, n)) + ' ms';
         if (paramId.indexOf ('_GRAIN_KEY')     >= 0) return ['Off','Oct','5th','Chord','Maj','Min','Penta'][Math.round (n * 6)] || 'Off';

@@ -515,10 +515,10 @@ public:
     std::atomic<float> currentBPM { 120.f }; // populated from playhead
 
     // Grain engine master on/off (synced from JS, captured into presets)
-    std::atomic<float> grainEngineEnabled { 1.f }; // 1 = on, 0 = bypass
+    std::atomic<float> grainEngineEnabled { 0.f }; // fresh instance: OFF (user powers it on). Old projects restore their saved value (fallback 1 = legacy behaviour).
 
     // Tape engine master on/off (synced from JS, captured into presets)
-    std::atomic<float> tapeEnabled { 1.f }; // 1 = on, 0 = bypass
+    std::atomic<float> tapeEnabled { 0.f }; // fresh instance: effects OFF (user powers them on). Old projects restore their saved value (fallback 1 = legacy behaviour).
 
     // Tape LOOP transport on/off — independent of tapeEnabled. Toggling tape
     // FX off no longer freezes the loop transport; users wanted these split
@@ -527,6 +527,11 @@ public:
 
     // EQ panel open/closed UI state (editor-side only, persists via PluginSettings.json)
     std::atomic<float> eqPanelOpen { 0.f };  // editor UI state, persists via PluginSettings.json
+
+    // Last-viewed UI page for THIS instance (0=front 1=syn 2=eq 3=dly 4=mod). In-memory ONLY —
+    // deliberately NOT saved in getStateInformation or the settings file: closing/reopening the
+    // editor restores the page, while every NEW instance (or project reload) starts on the front page.
+    std::atomic<int> uiPage { 0 };
 
     // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)
     SpectrumAnalyzer analyzerPre, analyzerPost;

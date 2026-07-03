@@ -531,7 +531,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::MIX, 1 },
         "Mix",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-        50.0f,
+        50.0f,   // stays 50 — the OFF default lives in grainEngineEnabled, so powering on is instantly audible
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
     // Grain filter: 0 = HP, 50 = bypass, 100 = LP
@@ -771,7 +771,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::DLY_MIX, 1 },
         "Delay Mix",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
-        0.30f,
+        0.0f,   // fresh instance: effects OFF (was 0.30 — a new instance shipped 30% wet delay)
         juce::AudioParameterFloatAttributes()));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
@@ -1460,7 +1460,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_LEVEL, 1 },
         "Synth OSC B Level",
-        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));   // start silent like C/D — only OSC A sounds on a fresh instance
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PAN, 1 },
         "Synth OSC B Pan",
