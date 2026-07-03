@@ -54,6 +54,8 @@ struct GranularEngineParams
     //    can setRegion() each block; fixes the old hardcoded whole-buffer region ──
     float regStart   = 0.f;   // 0..1
     float regEnd     = 1.f;   // 0..1
+    float loopStart  = 0.f;   // 0..1 — the LOOP bracket (from SAMPLE_LOOP_START). Loop modes catch
+    float loopEnd    = 1.f;   // 0..1 — then loop INSIDE [loopStart,loopEnd], like the Sample engine.
     int   loopMode   = 1;     // 0=One-Shot 1=Forward 2=Reverse 3=Ping-Pong 4=Tailed (from SAMPLE_LOOP_MODE)
 };
 
@@ -91,6 +93,7 @@ public:
         regEnd01_   = clamp01 (end01);
         if (regEnd01_ < regStart01_) { float t = regStart01_; regStart01_ = regEnd01_; regEnd01_ = t; }
         if (regEnd01_ - regStart01_ < 0.001f) regEnd01_ = clamp01 (regStart01_ + 0.001f);
+        refreshLoopBounds();   // bracket ∩ region depends on both — refresh whenever either moves
     }
     void setParams (const GranularEngineParams& p) noexcept { p_ = p; recomputeDerived(); }
     void setPitchRatio (double r) noexcept { basePitch_ = r; }
@@ -108,6 +111,7 @@ public:
         airHpL_ = airHpR_ = 0.f;
         pingDir_   = 1.f;      // Ping-Pong starts moving toward the end
         oneShotDone_ = false;  // One-Shot / Tailed: not yet reached the far edge
+        caught_    = false;    // loop modes: head not yet inside the loop bracket (lead-in from the anchor)
     }
     void noteOff() noexcept { releasing_ = true; }
 
@@ -134,8 +138,8 @@ public:
         // 2) grain mix + retire
         float accL = 0.f, accR = 0.f;
         bool  any  = false;
-        const double lo = regStart01_ * (numSamples_ - 1);
-        const double hi = regEnd01_   * (numSamples_ - 1);
+        const double lo = effLo01() * (numSamples_ - 1);   // caught by the loop bracket → grains live in it
+        const double hi = effHi01() * (numSamples_ - 1);
         const double span = (hi - lo) > 1.0 ? (hi - lo) : 1.0;
         for (auto& g : pool_)
         {
@@ -179,20 +183,42 @@ public:
             else if (p_.loopMode == 3) rate =  std::fabs (rate) * pingDir_;   // Ping-Pong — |scan| × bounce dir
             scanPos_ += rate * 2.0 / outRate_ * range;
 
-            if (p_.loopMode == 0 || p_.loopMode == 4)            // One-Shot / Tailed — clamp at the edge, stop spawning
+            if (p_.loopMode == 0 || p_.loopMode == 4)            // One-Shot / Tailed — clamp at the REGION edge, stop spawning
             {
                 if (scanPos_ >= regEnd01_)   { scanPos_ = regEnd01_;   oneShotDone_ = true; }
                 if (scanPos_ <= regStart01_) { scanPos_ = regStart01_; oneShotDone_ = true; }
             }
-            else if (p_.loopMode == 3)                            // Ping-Pong — bounce at both edges
+            else
             {
-                if (scanPos_ >= regEnd01_)   { scanPos_ = regEnd01_;   pingDir_ = -1.f; }
-                if (scanPos_ <= regStart01_) { scanPos_ = regStart01_; pingDir_ =  1.f; }
-            }
-            else                                                  // Forward (1) / Reverse (2) — wrap around
-            {
-                if (scanPos_ > regEnd01_) scanPos_ = regStart01_ + (scanPos_ - regEnd01_);
-                if (scanPos_ < regStart01_) scanPos_ = regEnd01_ - (regStart01_ - scanPos_);
+                // LOOP modes honour the LOOP BRACKET (loopLo_/loopHi_), Sample-engine style:
+                // the head leads in from the Position anchor, is "caught" the moment it enters
+                // the bracket (forward from below, reverse from above), then loops INSIDE it.
+                // Default bracket = whole region → caught on the first tick → legacy behaviour.
+                if (! caught_)
+                {
+                    caught_ = (rate >= 0.0) ? (scanPos_ >= loopLo_) : (scanPos_ <= loopHi_);
+                    if (! caught_)   // still leading in — wrap at the REGION edges so the head can reach the bracket
+                    {
+                        if (scanPos_ > regEnd01_)   scanPos_ = regStart01_ + (scanPos_ - regEnd01_);
+                        if (scanPos_ < regStart01_) scanPos_ = regEnd01_   - (regStart01_ - scanPos_);
+                    }
+                }
+                if (caught_)
+                {
+                    if (p_.loopMode == 3)                         // Ping-Pong — bounce at the bracket edges
+                    {
+                        if (scanPos_ >= loopHi_) { scanPos_ = loopHi_; pingDir_ = -1.f; }
+                        if (scanPos_ <= loopLo_) { scanPos_ = loopLo_; pingDir_ =  1.f; }
+                    }
+                    else                                          // Forward (1) / Reverse (2) — wrap inside the bracket
+                    {
+                        // fmod fold (not a single subtract) so a head caught far outside — or a
+                        // bracket dragged away mid-note — lands inside in ONE step, no spiral.
+                        const double lspan = loopHi_ - loopLo_;   // refreshLoopBounds guarantees > 0
+                        if (scanPos_ > loopHi_) scanPos_ = loopLo_ + std::fmod (scanPos_ - loopLo_, lspan);
+                        if (scanPos_ < loopLo_) scanPos_ = loopHi_ - std::fmod (loopHi_ - scanPos_, lspan);
+                    }
+                }
             }
         }
 
@@ -219,6 +245,9 @@ public:
 
     // ── testing accessors (offline harness only) ──
     int  activeGrainsForTesting()   const noexcept { int n = 0; for (auto& g : pool_) n += g.active ? 1 : 0; return n; }
+    bool caughtForTesting()         const noexcept { return caught_; }
+    double loopLoForTesting()       const noexcept { return loopLo_; }
+    double loopHiForTesting()       const noexcept { return loopHi_; }
     bool anyGrainReversedForTesting() const noexcept { for (auto& g : pool_) if (g.active && g.readInc < 0.0) return true; return false; }
     static double snapToKeyForTesting (double semis, int key) noexcept { return snapToKey (semis, key); }
     float windowForTesting (float shape, float skew, float phase) const noexcept { return windowAt (shape, skew, phase); }
@@ -261,7 +290,25 @@ private:
         grainLenSamp_ = glenSec * (float) outRate_;
         const float ov = densHz_ * glenSec;
         norm_ = 1.f / std::sqrt (ov < 1.f ? 1.f : ov);
+        refreshLoopBounds();
     }
+
+    // Effective LOOP bracket = [loopStart,loopEnd] sorted, intersected with the region; a
+    // degenerate bracket (<0.001 span) falls back to the whole region, so the default 0..1
+    // bracket makes every loop mode behave exactly as before this fix.
+    void refreshLoopBounds() noexcept
+    {
+        float ls = clamp01 (p_.loopStart), le = clamp01 (p_.loopEnd);
+        if (le < ls) { const float t = ls; ls = le; le = t; }
+        loopLo_ = ls > regStart01_ ? (double) ls : (double) regStart01_;
+        loopHi_ = le < regEnd01_   ? (double) le : (double) regEnd01_;
+        if (loopHi_ - loopLo_ < 0.001) { loopLo_ = (double) regStart01_; loopHi_ = (double) regEnd01_; }
+    }
+
+    // Bounds the cloud lives in RIGHT NOW: the region until the head is caught by the
+    // bracket, then the bracket — births, grain read-wrap and the scan head all use these.
+    double effLo01() const noexcept { return caught_ ? loopLo_ : (double) regStart01_; }
+    double effHi01() const noexcept { return caught_ ? loopHi_ : (double) regEnd01_; }
 
     void spawnGrain() noexcept
     {
@@ -276,7 +323,8 @@ private:
         float sprayAmt = clamp01 (p_.spray);
         if (p_.stretchMode == 2) sprayAmt = clamp01 (sprayAmt + p_.stretch * 0.4f);
         double birth01 = scanPos_ + sprayAmt * (nextRand01() * 2.f - 1.f) * 0.5;
-        birth01 = birth01 < regStart01_ ? regStart01_ : (birth01 > regEnd01_ ? regEnd01_ : birth01);
+        const double bLo = effLo01(), bHi = effHi01();   // caught by the loop bracket → births stay inside it
+        birth01 = birth01 < bLo ? bLo : (birth01 > bHi ? bHi : birth01);
         g.readPos = birth01 * (numSamples_ - 1);
 
         // per-grain pitch (base + spray), decoupled from the scan head.
@@ -453,6 +501,8 @@ private:
     double scanPos_ = 0.0;
     double countdown_ = 0.0;
     float  regStart01_ = 0.f, regEnd01_ = 1.f;
+    double loopLo_ = 0.0, loopHi_ = 1.0;   // effective LOOP bracket = [loopStart,loopEnd] ∩ region (refreshLoopBounds)
+    bool   caught_ = false;                // sample-engine "catch": true once the scan head has entered the bracket
     uint32_t rng_ = 0x9E3779B9u;
     float  airCoef_ = 0.3f, airHpL_ = 0.f, airHpR_ = 0.f;   // AIR exciter high-pass state
     float  densHz_ = 8.f, grainLenSamp_ = 480.f, norm_ = 1.f;   // cached per-block derived values (CPU)

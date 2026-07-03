@@ -3192,6 +3192,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.stretchMode = sp.stretchMode;
             g.regStart    = sp.start;
             g.regEnd      = sp.end;
+            g.loopStart   = sp.loopStart;  // the LOOP bracket — loop modes catch + loop INSIDE it
+            g.loopEnd     = sp.loopEnd;    // (was missing → Ping-Pong bounced at the trim ends, sailing past the bracket)
             g.loopMode    = sp.loopMode;   // One-Shot/Fwd/Rev/Ping-Pong/Tailed → granular scan behavior
             return g;
         };

@@ -3904,12 +3904,8 @@ body {
 /* ── refinements: no markers, line-ramp fades, header dropdowns, drop affordance ── */
 #syn-panel .samp-h i { display: none; }   /* markers removed — keep only the separator lines */
 #syn-panel .samp-ph i { display: none; }  /* follower dot removed — keep only the scan line */
-/* GRANULAR identity is now the REACTIVE follower behaviour (jitter/thickness/grain from Spray/Size/Density),
-   NOT colour — loop band + followers stay the SAME colour as the Sample engine (white follower, purple band).
-   The thin white base line (.samp-ph) always shows; a .gph overlay rides it and does the grain reaction. */
-#syn-panel .samp-ph > .gph { display: none; }
-#syn-panel .device.osc.engine-granular .samp-ph.on > .gph { display: block; position: absolute; left: 50%; top: 0;
-  width: 1px; height: 100%; background: rgba(236,232,242,.95); will-change: transform; pointer-events: none; }
+/* GRANULAR follower = the SAME plain white .samp-ph line as the Sample engine (the reactive
+   Size/Spray .gph overlay was retired 2026-07-02 — Max: "just give us a regular follower"). */
 /* fades = thin LFO-style ramp lines (shift+drag a region edge to set); 100%-viewBox SVG */
 #syn-panel .samp-env { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 #syn-panel .samp-env polyline { fill: none; vector-effect: non-scaling-stroke; stroke-width: 1.3; stroke-linecap: round; }
@@ -10174,12 +10170,7 @@ setTimeout(function wireSynControls () {
         // via the CSS opacity transition. C++ pushes [voiceIdx,pos,…]; updateSampleFollower maps each.
         var phPool = ph ? [ph] : [];
         if (ph && ph.parentNode) { for (var _pi = 1; _pi < 16; _pi++) { var _c = ph.cloneNode (true); ph.parentNode.appendChild (_c); phPool.push (_c); } }
-        phPool.forEach (function (L) { L._on = false; L._vi = -1; L.classList.remove ('on');
-          var g = document.createElement ('b'); g.className = 'gph'; L.appendChild (g); L._g = g; });   // GRAIN-REACT overlay
-        // Live GRAIN knob params for the reactive follower (read straight from the WebView param bridge).
-        var _GU = (osc || 'a').toUpperCase ();
-        function _grainState (fn) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState ('SYN_OSC_' + _GU + '_GRAIN_' + fn) : null; } catch (e) { return null; } }
-        var gm = { spray: _grainState ('SPRAY'), size: _grainState ('SIZE') };   // follower reacts to Spray (scatter) + Size (height)
+        phPool.forEach (function (L) { L._on = false; L._vi = -1; L.classList.remove ('on'); });
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
         var envFadeInLine = view.querySelector ('.env-fadein-line'), envFadeOutLine = view.querySelector ('.env-fadeout-line');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
@@ -10347,7 +10338,7 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
 
-        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded, gm: gm,
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded,
           syncParams: syncParams, repaintHeader: function () { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } };
         place (); redraw ();
       }
@@ -10371,42 +10362,9 @@ setTimeout(function wireSynControls () {
             L.style.left = (Math.max (0, Math.min (1, p)) * 100) + '%';
           }
           for (var k = 0; k < pool.length; k++)                              // voices that stopped → fade out
-            if (pool[k]._on && ! seen[pool[k]._vi]) { pool[k]._on = false; pool[k]._vi = -1; pool[k].classList.remove ('on');
-              if (pool[k]._g) { pool[k]._g.style.transform = ''; pool[k]._g.style.height = ''; pool[k]._g.style.top = ''; } }
-          var _dev = S.view ? S.view.closest ('.device.osc') : null;   // GRANULAR: kick the reactive-grain animator
-          if (_dev && _dev.classList.contains ('engine-granular')) granKick ();
+            if (pool[k]._on && ! seen[pool[k]._vi]) { pool[k]._on = false; pool[k]._vi = -1; pool[k].classList.remove ('on'); }
         } catch (e) {}
       };
-
-      // GRAIN-REACT — one self-gating rAF. Minimalist, exactly like the grains: the thin white follower
-      // line's HEIGHT tracks Size (short↔tall) and it SCATTERS with Spray. Thickness NEVER changes; no
-      // dashes/holes/opacity tricks. Reads the live GRAIN knobs from the WebView bridge; stops itself
-      // when no granular line is active (idle cost = 0); granKick() restarts it.
-      var granRAF = 0, granOscList = ['a', 'b', 'c', 'd'];
-      function granKick () { if (! granRAF) granRAF = requestAnimationFrame (granTick); }
-      function granTick () {
-        granRAF = 0;
-        var anyActive = false;
-        for (var oi = 0; oi < 4; oi++) {
-          var S = SAMP[granOscList[oi]]; if (! S || ! S.phPool || ! S.gm) continue;
-          var dev = S.view ? S.view.closest ('.device.osc') : null;
-          if (! dev || ! dev.classList.contains ('engine-granular')) continue;
-          var spray = S.gm.spray ? S.gm.spray.getNormalisedValue () : 0;
-          var size  = S.gm.size  ? S.gm.size.getNormalisedValue ()  : 0;
-          var hPct  = (0.18 + size * 0.82) * 100;   // Size → HEIGHT (short 18% → tall 100%). Thickness fixed.
-          var topPct = (100 - hPct) * 0.5;
-          for (var j = 0; j < S.phPool.length; j++) {
-            var L = S.phPool[j]; if (! L._on) continue; var g = L._g; if (! g) continue;
-            anyActive = true;
-            var jx = (Math.random () * 2 - 1) * spray * 22;   // Spray → horizontal scatter (grain-like)
-            var jy = (Math.random () * 2 - 1) * spray * 10;   // + a little vertical scatter
-            g.style.height = hPct.toFixed (1) + '%';
-            g.style.top = topPct.toFixed (1) + '%';
-            g.style.transform = 'translate(-50%,0) translate(' + jx.toFixed (1) + 'px,' + jy.toFixed (1) + 'px)';
-          }
-        }
-        if (anyActive) granRAF = requestAnimationFrame (granTick);
-      }
 
       // C++ → JS: a real sample finished loading for an oscillator → draw it.
       window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {} };

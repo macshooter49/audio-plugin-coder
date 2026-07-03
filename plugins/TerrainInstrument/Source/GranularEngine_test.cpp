@@ -258,6 +258,84 @@ int main()
         check (wentUp && wentDown, "Ping-Pong: head reverses (bounces both ways)");
     }
 
+    // ── LOOP BRACKET (2026-07-02 fix): loop modes catch + loop INSIDE [loopStart,loopEnd] ──
+    {
+        // Ping-Pong: bracket [0.4,0.6], anchor at 0 → lead-in from below, catch at 0.4,
+        // then bounce INSIDE the bracket forever (the "sails past the loop end" bug).
+        GranularEngine ge; ge.prepare (48000.0); ge.setSample (chans, 2, 48000, 48000.0);
+        GranularEngineParams p;
+        p.scan = 0.5f; p.position = 0.f; p.loopMode = 3;
+        p.loopStart = 0.4f; p.loopEnd = 0.6f;
+        ge.setParams (p); ge.setRegion (0.f, 1.f); ge.noteOn (1.0, 1234);
+        float l, r; bool everCaught = false;
+        double minAfter = 1e9, maxAfter = -1e9, prevPos = 0.0, prevDir = 0.0;
+        int bounces = 0;
+        for (int i = 0; i < 48000 * 6; ++i)
+        {
+            ge.tick (l, r);
+            const double sp = (double) ge.scanPos01();
+            if (! everCaught && ge.caughtForTesting()) everCaught = true;
+            if (everCaught)
+            {
+                if (sp < minAfter) minAfter = sp;
+                if (sp > maxAfter) maxAfter = sp;
+                const double dir = sp - prevPos;
+                if (dir != 0.0 && prevDir != 0.0 && ((dir > 0.0) != (prevDir > 0.0))) ++bounces;
+                if (dir != 0.0) prevDir = dir;
+            }
+            prevPos = sp;
+        }
+        check (everCaught, "loop bracket: ping-pong lead-in reaches the bracket (caught)");
+        check (minAfter >= 0.4 - 1e-5 && maxAfter <= 0.6 + 1e-5, "loop bracket: ping-pong head confined after catch");
+        check (bounces >= 2, "loop bracket: ping-pong head actually bounces inside the bracket");
+        check (maxAfter > 0.55 && minAfter < 0.45, "loop bracket: ping-pong head traverses the bracket");
+    }
+    {
+        // Forward loop: bracket [0.3,0.5], anchor ABOVE it (0.9) → immediate catch + one-step
+        // fmod fold into the bracket; full Spray births must STILL read inside the bracket.
+        GranularEngine ge; ge.prepare (48000.0); ge.setSample (chans, 2, 48000, 48000.0);
+        GranularEngineParams p;
+        p.scan = 0.5f; p.position = 0.9f; p.loopMode = 1; p.spray = 1.0f;
+        p.density = 0.8f; p.size = 0.7f;   // dense + long grains → the cloud is never momentarily empty
+        p.loopStart = 0.3f; p.loopEnd = 0.5f;
+        ge.setParams (p); ge.setRegion (0.f, 1.f); ge.noteOn (1.0, 99);
+        float l, r; bool headInside = true, birthsInside = true;
+        for (int i = 0; i < 48000 * 2; ++i)
+        {
+            ge.tick (l, r);
+            if (i > 4800)   // after 0.1 s the head must be captured + folded
+            {
+                const double sp = (double) ge.scanPos01();
+                if (sp < 0.3 - 1e-5 || sp > 0.5 + 1e-5) headInside = false;
+            }
+        }
+        tw::GrainViz viz[16];
+        const int n = ge.cloudSnapshot (viz, 16);
+        for (int i = 0; i < n; ++i)
+            if (viz[i].pos01 < 0.3f - 0.01f || viz[i].pos01 > 0.5f + 0.01f) birthsInside = false;
+        check (headInside, "loop bracket: forward loop head wraps INSIDE the bracket");
+        check (n > 0, "loop bracket: grains alive for the cloud check");
+        check (birthsInside, "loop bracket: grain reads confined to the bracket at full spray");
+    }
+    {
+        // Regression: DEFAULT bracket (0..1) intersects down to the region → caught on the very
+        // first tick and ping-pong bounces at the REGION edges, exactly the pre-fix behaviour.
+        GranularEngine ge; ge.prepare (48000.0); ge.setSample (chans, 2, 48000, 48000.0);
+        GranularEngineParams p; p.scan = 1.0f; p.position = 0.5f; p.loopMode = 3;
+        ge.setParams (p); ge.setRegion (0.2f, 0.8f); ge.noteOn (1.0, 7);
+        float l, r; double mn = 1e9, mx = -1e9; bool caughtFirstTick = false;
+        for (int i = 0; i < 48000 * 3; ++i)
+        {
+            ge.tick (l, r);
+            if (i == 0) caughtFirstTick = ge.caughtForTesting();
+            const double sp = (double) ge.scanPos01();
+            if (sp < mn) mn = sp; if (sp > mx) mx = sp;
+        }
+        check (caughtFirstTick, "loop bracket: default bracket caught on the first tick (legacy)");
+        check (mn <= 0.2 + 1e-3 && mx >= 0.8 - 1e-3, "loop bracket: default bracket sweeps the whole region");
+        check (mn >= 0.2 - 1e-5 && mx <= 0.8 + 1e-5, "loop bracket: default bracket never leaves the region");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }
