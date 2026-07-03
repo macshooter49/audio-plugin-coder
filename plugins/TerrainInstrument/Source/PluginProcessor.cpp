@@ -2325,6 +2325,10 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // engine params) to re-push on the first block after any prepare.
     synCfgPushed_    = false;
     engParamsPushed_ = false;
+    // Grain-budget drift insurance: every engine resetPool()s during the synth prep below
+    // (each releasing its live grains), so the shared counter lands at 0 anyway — this zero
+    // just guarantees a missed path can never leak the budget permanently.
+    granGrainsLive_  = 0;
 
     // Task 5: singleton synth removed. Prep all layer synths instead.
     // Mark 2 task 4: prep per-layer scratch buffers and per-layer synth rates.

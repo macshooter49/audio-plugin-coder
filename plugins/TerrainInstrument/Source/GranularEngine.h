@@ -571,7 +571,11 @@ private:
     // Reset the grain pool + the compact active/free slot lists (noteOn / prepare).
     void resetPool() noexcept
     {
-        if (budgetUsed_ != nullptr) *budgetUsed_ -= numActive_;   // release our live grains to the budget
+        if (budgetUsed_ != nullptr)
+        {
+            *budgetUsed_ -= numActive_;   // release our live grains to the budget
+            if (*budgetUsed_ < 0) *budgetUsed_ = 0;   // the processor zeroes the counter in prepareToPlay BEFORE voices prep — never go negative
+        }
         for (auto& g : pool_) g.active = false;
         numActive_ = 0;
         numFree_   = kPool;
