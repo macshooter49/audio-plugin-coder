@@ -10199,6 +10199,24 @@ setTimeout(function wireSynControls () {
       function openOscQuick (e, oscLetter) {
         var m = buildOscQuickMenu ();
         m.innerHTML = '';
+        // PASTE SAMPLE onto a non-sample osc (UX: copy on osc A's sample view, right-click a
+        // WAVETABLE osc, paste → the osc flips to the Sample engine and plays the copied buffer).
+        // Native copyOscSample does the engine flip + waveform push; the row only shows when the
+        // clipboard holds a DIFFERENT osc's sample (same rule as the sample menu's paste).
+        try {
+          var _clip = window.__sampClip;
+          if (_clip && _clip !== oscLetter) {
+            var pr = document.createElement ('div');
+            pr.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="6" width="8" height="8" rx="1"/><path d="M6.5 6 V4 H10 V6"/></svg>Paste sample';
+            pr.addEventListener ('click', function () {
+              try { var cf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('copyOscSample') : null;
+                    if (cf) cf (_clip, oscLetter); } catch (_) {}
+              m.classList.remove ('open');
+            });
+            m.appendChild (pr);
+            var ps = document.createElement ('div'); ps.className = 'sepd'; m.appendChild (ps);
+          }
+        } catch (_) {}
         m.appendChild (buildOscQuick (oscLetter));
         m.style.left = Math.min (e.clientX, window.innerWidth - 200) + 'px';
         m.style.top  = Math.max (8, Math.min (e.clientY, window.innerHeight - 150)) + 'px';

@@ -16,6 +16,9 @@
 //  Controls (front knobs): Scan · Density · Size · Spray · Shape · Key
 //                (page 2): Position · Pitch · P.Spray · Width · Dir · Skew
 //  Waveform right-click (ported from the Sample osc): Air · Stretch(+ Tones/Beats/Texture)
+//    Stretch = REAL time-stretch (Sample parity): head slows 1/(1+3s); modes flavor the grains.
+//  Click-safety: grains carry their birth bounds and REFLECT at them — no read teleports,
+//    so loop-bracket catches, loop wraps and Start/End drags are value-continuous by law.
 //
 //  Offline proof loop (Pattern A — NOT in CMakeLists):
 //    c++ -std=c++17 -Wall -Wextra -ISource Source/GranularEngine_test.cpp -o /tmp/ge && /tmp/ge
@@ -168,9 +171,6 @@ public:
         //    free stack; order within the list is irrelevant (grains just sum).
         float accL = 0.f, accR = 0.f;
         const bool any = numActive_ > 0;
-        const double lo = effLo01() * (numSamples_ - 1);   // caught by the loop bracket → grains live in it
-        const double hi = effHi01() * (numSamples_ - 1);
-        const double span = (hi - lo) > 1.0 ? (hi - lo) : 1.0;
         for (int j = 0; j < numActive_; )
         {
             Grain& g = pool_[(size_t) activeIdx_[j]];
@@ -181,9 +181,9 @@ public:
             accR += w * g.gain * g.panR * sr;
             g.readPos += g.readInc;
             ++g.age;
-            // wrap the read within the region so long/scanning grains never run off the buffer
-            if (g.readPos > hi) g.readPos = lo + std::fmod (g.readPos - lo, span);
-            if (g.readPos < lo) g.readPos = hi - std::fmod (hi - g.readPos, span);
+            // keep long/scanning grains in-bounds: reflect at the grain's OWN birth bounds
+            // (value-continuous; the old shared-bounds fmod teleport was the loop crackle)
+            reflectAtBounds (g);
             if (g.age >= g.len)                            // retire at window->0, no click
             {
                 g.active = false;
@@ -236,12 +236,9 @@ public:
         {
             const int len = (n - base) < kChunk ? (n - base) : kChunk;
 
-            // 1) head + scheduler, per sample (cheap — no grain work here). The bracket-catch
-            //    can flip effLo/effHi MID-CHUNK; record the flip offset so loop 2 applies the
-            //    pre/post bounds to exactly the same samples tick() would (exact parity).
-            const double preLo = effLo01() * (numSamples_ - 1);
-            const double preHi = effHi01() * (numSamples_ - 1);
-            int catchAt = caught_ ? 0 : len;   // len = "never this chunk" (all samples use pre-bounds)
+            // 1) head + scheduler, per sample (cheap — no grain work here). Grains capture
+            //    their bounds AT SPAWN (same caught_ state as tick() sees), so a mid-chunk
+            //    bracket-catch needs no special handling — parity is structural now.
             for (int i = 0; i < len; ++i)
             {
                 countdown_ -= 1.0;
@@ -253,17 +250,11 @@ public:
                     countdown_ += interval + jit;
                     if (countdown_ < 1.0) countdown_ = 1.0;
                 }
-                const bool wasCaught = caught_;
                 advanceHead();
-                if (! wasCaught && caught_ && catchAt == len) catchAt = i + 1;   // bounds flip AFTER this sample's advance
             }
 
             // 2) grain-major mix into the chunk scratch
             for (int i = 0; i < len; ++i) { bufL[i] = 0.f; bufR[i] = 0.f; }
-            const double postLo = effLo01() * (numSamples_ - 1);
-            const double postHi = effHi01() * (numSamples_ - 1);
-            const double preSpan  = (preHi  - preLo)  > 1.0 ? (preHi  - preLo)  : 1.0;
-            const double postSpan = (postHi - postLo) > 1.0 ? (postHi - postLo) : 1.0;
             for (int j = 0; j < numActive_; )
             {
                 Grain& g  = pool_[(size_t) activeIdx_[j]];
@@ -280,11 +271,7 @@ public:
                     bufR[i] += w * g.gain * g.panR * sr;
                     g.readPos += g.readInc;
                     ++g.age;
-                    const double lo   = (i < catchAt) ? preLo   : postLo;
-                    const double hi   = (i < catchAt) ? preHi   : postHi;
-                    const double span = (i < catchAt) ? preSpan : postSpan;
-                    if (g.readPos > hi) g.readPos = lo + std::fmod (g.readPos - lo, span);
-                    if (g.readPos < lo) g.readPos = hi - std::fmod (hi - g.readPos, span);
+                    reflectAtBounds (g);   // same per-grain reflection as tick() — exact parity
                 }
                 if (g.age >= g.len)                      // retire at window->0, no click
                 {
@@ -363,28 +350,58 @@ private:
     struct Grain
     {
         double readPos = 0.0, readInc = 0.0;
+        // PER-GRAIN read bounds, captured at spawn (samples). The old code wrapped every live
+        // grain at the CURRENT shared bounds — an fmod TELEPORT mid-window (value jump = click),
+        // and when the head got caught by the loop bracket (or Start/End was dragged) the bounds
+        // flipped under the whole flying cloud at once = Max's "fire crackle". Grains now keep
+        // the bounds they were born with (they window out in ≤ a grain length), and crossings
+        // REFLECT (value-continuous) instead of teleporting. See reflectAtBounds().
+        double lo = 0.0, hi = 1.0;
         int    age = 0, len = 0;
         int    bornAt = 0;   // birth offset within the CURRENT chunk (renderBlockAdd); 0 once past it
         float  gain = 0.f, panL = 0.f, panR = 0.f;
         bool   active = false;
     };
 
+    // Reflect a grain's read at its own bounds — value-continuous (no mid-window teleport).
+    // The slope flips sign (a corner), but inside a window at a random phase that's inaudible;
+    // a position JUMP is not. Cheaper than the old fmod fold too (no libm call).
+    static inline void reflectAtBounds (Grain& g) noexcept
+    {
+        if (g.readPos > g.hi)
+        {
+            g.readPos = g.hi - (g.readPos - g.hi);
+            g.readInc = -g.readInc;
+            if (g.readPos < g.lo) g.readPos = g.lo;   // degenerate span (overshoot > span): pin
+        }
+        else if (g.readPos < g.lo)
+        {
+            g.readPos = g.lo + (g.lo - g.readPos);
+            g.readInc = -g.readInc;
+            if (g.readPos > g.hi) g.readPos = g.hi;
+        }
+    }
+
     // ── range maps (research-grounded, AMPLIFIED + Stretch-coupled) ──
-    // Stretch elongates grains (and fills the gaps with density) for a smooth time-stretch/freeze
-    // pad; the mode biases the character: Tones = long+smooth, Beats = short+dense, Texture = mid+diffuse.
+    // STRETCH is a real TIME-STRETCH now (2026-07-03): the heavy lifting is the scan-head
+    // slowdown in advanceHead() (1/(1+3s), exact Sample-engine ratio). These multipliers only
+    // FLAVOR the texture per mode — Tones = long+smooth, Beats = short+dense, Texture = mid+
+    // diffuse. Retuned DOWN from the old ×5·×3.2 overlap explosion (which tried to fake the
+    // stretch with grain mass): full Tones stretch now grows overlap ~4× instead of ~16× —
+    // audibly smoother AND ~4× cheaper at full Stretch.
     float stretchLenMul() const noexcept
     {
         const float s = clamp01 (p_.stretch);
-        switch (p_.stretchMode) { case 1: return 1.f + s * 0.6f;   // Beats — stay punchy
-                                  case 2: return 1.f + s * 2.5f;   // Texture — diffuse
-                                  default: return 1.f + s * 4.0f; } // Tones — long & smooth
+        switch (p_.stretchMode) { case 1: return 1.f + s * 0.3f;   // Beats — stay punchy
+                                  case 2: return 1.f + s * 1.2f;   // Texture — diffuse
+                                  default: return 1.f + s * 2.0f; } // Tones — long & smooth
     }
     float stretchDensMul() const noexcept
     {
         const float s = clamp01 (p_.stretch);
-        switch (p_.stretchMode) { case 1: return 1.f + s * 3.0f;   // Beats — more grains = stutter fill
-                                  case 2: return 1.f + s * 1.6f;   // Texture
-                                  default: return 1.f + s * 2.2f; } // Tones
+        switch (p_.stretchMode) { case 1: return 1.f + s * 1.2f;   // Beats — more grains = stutter fill
+                                  case 2: return 1.f + s * 0.7f;   // Texture
+                                  default: return 1.f + s * 0.35f; } // Tones — the length does the smoothing
     }
     // CPU: derive densHz_ / grainLenSamp_ / norm_ ONCE per block (setParams), not per sample.
     // p_ is constant within a block, so these are bit-identical to the old per-sample recompute —
@@ -393,6 +410,7 @@ private:
     {
         const float d = clamp01 (p_.density);
         densHz_ = std::pow (220.f, d) * stretchDensMul();                     // 1..220 g/s (+Stretch)
+        headDiv_ = 1.f + clamp01 (p_.stretch) * 3.f;   // scan-head time-stretch divisor (Sample: 1+3s)
         const float s = clamp01 (p_.size);
         const float glenSec = 0.002f * std::pow (450.f, s) * stretchLenMul(); // 2..900 ms (+Stretch)
         grainLenSamp_ = glenSec * (float) outRate_;
@@ -430,7 +448,11 @@ private:
         double rate = (double) p_.scan;
         if      (p_.loopMode == 2) rate = -std::fabs (rate);              // Reverse — always toward start
         else if (p_.loopMode == 3) rate =  std::fabs (rate) * pingDir_;   // Ping-Pong — |scan| × bounce dir
-        scanPos_ += rate * 2.0 / outRate_ * range;
+        // STRETCH = TIME-STRETCH (Sample-engine parity): the Sample osc runs the Warp engine at
+        // setStretchRatio(1 + stretch·3) — material 1×..4× slower, pitch held. The granular
+        // equivalent is literal and FREE: the scan head advances 1/(1+3s) as fast while grains
+        // keep their own pitch. headDiv_ is cached per block (recomputeDerived).
+        scanPos_ += rate * 2.0 / outRate_ * range / (double) headDiv_;
 
         if (p_.loopMode == 0 || p_.loopMode == 4)            // One-Shot / Tailed — clamp at the REGION edge, stop spawning
         {
@@ -489,6 +511,11 @@ private:
         const double bLo = effLo01(), bHi = effHi01();   // caught by the loop bracket → births stay inside it
         birth01 = birth01 < bLo ? bLo : (birth01 > bHi ? bHi : birth01);
         g.readPos = birth01 * (numSamples_ - 1);
+        // the grain OWNS these bounds for life (reflectAtBounds) — later catch-flips or
+        // Start/End drags can't teleport it; it just windows out where it was born
+        g.lo = bLo * (numSamples_ - 1);
+        g.hi = bHi * (numSamples_ - 1);
+        if (g.hi < g.lo + 1.0) g.hi = g.lo + 1.0;
 
         // per-grain pitch (base + spray), decoupled from the scan head.
         // Key OFF: pitch + wide free spray. Key ON: pitch + an in-key octave/degree draw
@@ -711,6 +738,7 @@ private:
     uint32_t rng_ = 0x9E3779B9u;
     float  airCoef_ = 0.3f, airHpL_ = 0.f, airHpR_ = 0.f;   // AIR exciter high-pass state
     float  densHz_ = 8.f, grainLenSamp_ = 480.f, norm_ = 1.f;   // cached per-block derived values (CPU)
+    float  headDiv_ = 1.f;   // Stretch time divisor for the scan head: 1 + stretch·3 (Sample parity)
     float  normSm_ = 1.f, normAlpha_ = 0.007f;   // norm_ glide (~3 ms) — declicks Size/Density knob moves
     // Optional GLOBAL grain budget (shared across every engine in the instance, set by the
     // processor): spawns are refused once the plugin-wide live-grain count hits the cap, so

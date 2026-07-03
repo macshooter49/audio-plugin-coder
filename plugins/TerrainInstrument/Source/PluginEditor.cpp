@@ -2137,14 +2137,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const juce::String payload = audioProcessor.getCachedOscPayload (src);
                 audioProcessor.setCachedOscPayload (payload, dst);
 
-                // Flip the target oscillator to the Sample engine (index 1 = "SAMP") so it plays + shows.
+                // Flip the target oscillator to the Sample engine (index 1 = "SAMP") so it plays +
+                // shows — UNLESS it's already a sample-consuming engine: pasting onto a GRANULAR
+                // osc keeps it granular and just feeds it the buffer (same rule as drag-and-drop).
                 const char* engIds[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
                                           ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
                 if (auto* p = audioProcessor.getAPVTS().getParameter (engIds[dst]))
                 {
-                    p->beginChangeGesture();
-                    p->setValueNotifyingHost (p->convertTo0to1 (1.0f));   // 1 = SAMP
-                    p->endChangeGesture();
+                    const int curEng = (int) std::lround (p->convertFrom0to1 (p->getValue()));   // 0=WT 1=SAMP 2=GRAN…
+                    if (curEng != 1 && curEng != 2)
+                    {
+                        p->beginChangeGesture();
+                        p->setValueNotifyingHost (p->convertTo0to1 (1.0f));   // 1 = SAMP
+                        p->endChangeGesture();
+                    }
                 }
 
                 // Push the waveform to the target osc's UI (mirrors the load/normalize path).

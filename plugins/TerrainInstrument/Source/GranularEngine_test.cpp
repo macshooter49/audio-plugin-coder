@@ -189,7 +189,9 @@ int main()
         for (int i = 0; i < 24000; ++i) { float a, b; g.tick (a, b); sumSq += a * a; }
         check (std::sqrt (sumSq / 24000) > 0.01, "pitched cloud audible");
 
-        GranularEngineParams p2; p2.dir = -1.f; p2.density = 0.6f; g.setParams (p2);
+        // position 0.5 gives reversed grains room: at the region edge they now REFLECT
+        // (declick law) — born at position 0 they'd legally flip forward within a few ticks.
+        GranularEngineParams p2; p2.dir = -1.f; p2.density = 0.6f; p2.position = 0.5f; g.setParams (p2);
         g.noteOn (1.0, 42);
         for (int i = 0; i < 2000; ++i) { float a, b; g.tick (a, b); }
         check (g.anyGrainReversedForTesting(), "dir=-1 spawns reversed grains");
@@ -458,6 +460,78 @@ int main()
                "grain budget: shared counter stays in sync with reality");
         e1.noteOn (1.0, 33);   // resetPool must release e1's grains back to the budget
         check (used == e2.activeGrainsForTesting(), "grain budget: noteOn/resetPool releases the engine's grains");
+    }
+
+    // ── LOOP CRACKLE (2026-07-03 fix): entering/looping a bracket must not click ──
+    // Repro of Max's "fire crackle": a sub-region loop bracket, a lead-in, then sustained
+    // looping. The old wrap TELEPORTED grain reads (fmod fold) mid-window — a value jump on
+    // every bracket crossing, and the whole lead-in cloud snapped at the catch flip. With
+    // per-grain bounds + reflection the output stays value-continuous: bounded deltas, like
+    // the plain no-click check in Task 4 but across the catch and hundreds of wraps.
+    {
+        // 105 Hz content (not the 220 Hz sine): the bracket span (0.1 × 48000 = 4800 samples)
+        // is 10.5 periods of 105 Hz, so a wrap TELEPORT lands half a period out of phase —
+        // a ~full-swing value jump — while the content's own per-sample delta stays ~0.01.
+        // (220 Hz hides the bug: 4800 samples ≈ 22.0 periods → folds land back in-phase.)
+        std::vector<float> nl (48000), nr (48000);
+        for (int i = 0; i < 48000; ++i)
+            nl[(size_t) i] = nr[(size_t) i] = std::sin (6.2831853f * 105.f * (float) i / 48000.f);
+        const float* nch[2] = { nl.data(), nr.data() };
+        GranularEngine ge; ge.prepare (48000.0); ge.setSample (nch, 2, 48000, 48000.0);
+        GranularEngineParams p;
+        p.scan = 1.0f; p.position = 0.f; p.loopMode = 1;      // fast forward loop
+        p.loopStart = 0.45f; p.loopEnd = 0.55f;               // tight bracket → constant wrapping
+        p.density = 0.7f; p.size = 0.6f; p.spray = 0.3f;      // long overlapping grains cross the edges
+        ge.setParams (p); ge.setRegion (0.f, 1.f); ge.noteOn (1.0, 0xC0FFEE);
+        float prev = 0.f, maxJump = 0.f; bool finite = true; bool sawCatch = false;
+        for (int i = 0; i < 48000 * 4; ++i)
+        {
+            float l, r; ge.tick (l, r);
+            if (! std::isfinite (l)) finite = false;
+            if (ge.caughtForTesting()) sawCatch = true;
+            const float d = std::fabs (l - prev); if (d > maxJump) maxJump = d;
+            prev = l;
+        }
+        check (finite, "loop crackle: output finite across catch + wraps");
+        check (sawCatch, "loop crackle: the head actually got caught by the bracket");
+        check (maxJump < 0.15f, "loop crackle: value-continuous through catch + hundreds of loop wraps");
+
+        // Start/End drag while sounding: live grains keep their birth bounds (windowed out),
+        // so sweeping the region/bracket under a playing cloud stays click-free too.
+        GranularEngine dr; dr.prepare (48000.0); dr.setSample (nch, 2, 48000, 48000.0);
+        GranularEngineParams q = p; q.loopStart = 0.f; q.loopEnd = 1.f;
+        dr.setParams (q); dr.setRegion (0.f, 1.f); dr.noteOn (1.0, 0xD0D0);
+        prev = 0.f; maxJump = 0.f;
+        for (int i = 0; i < 48000 * 2; ++i)
+        {
+            if (i % 480 == 0)   // sweep the region edges like a mouse drag (every 10 ms)
+            {
+                const float t = (float) i / (48000.f * 2.f);
+                dr.setRegion (0.2f * t, 1.f - 0.4f * t);
+            }
+            float l, r; dr.tick (l, r);
+            const float d = std::fabs (l - prev); if (d > maxJump) maxJump = d;
+            prev = l;
+        }
+        check (maxJump < 0.15f, "loop crackle: dragging Start/End under a playing cloud is click-free");
+    }
+
+    // ── STRETCH = TIME-STRETCH (2026-07-03 fix): the head slows 1×→4×, Sample-engine parity ──
+    // Sample engine: setStretchRatio(1 + stretch·3) — pitch held, material 1×..4× slower.
+    // Granular now does the literal granular equivalent: the SCAN head advances 1/(1+3s)
+    // as fast (grains keep their own pitch). stretch=1 → the head travels ~1/4 the distance.
+    {
+        auto headTravel = [&] (float stretch) {
+            GranularEngine e; e.prepare (48000.0); e.setSample (chans, 2, 48000, 48000.0);
+            GranularEngineParams p; p.scan = 0.5f; p.position = 0.1f; p.loopMode = 1;
+            p.stretch = stretch; p.stretchMode = 0;
+            e.setParams (p); e.setRegion (0.f, 1.f); e.noteOn (1.0, 3);
+            for (int i = 0; i < 4800; ++i) { float l, r; e.tick (l, r); }
+            return (double) e.scanPos01() - 0.1;
+        };
+        const double t0 = headTravel (0.f), t1 = headTravel (1.f);
+        check (t0 > 0.0 && t1 > 0.0, "stretch: head still moves at both extremes");
+        check (std::fabs (t1 - t0 / 4.0) < t0 * 0.02, "stretch: full Stretch slows the head exactly 4x (Sample parity)");
     }
 
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
