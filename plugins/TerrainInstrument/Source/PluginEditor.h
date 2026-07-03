@@ -5,6 +5,7 @@
 #include <array>
 #include "PluginProcessor.h"
 #include "ParameterIDs.hpp"
+#include "BlendEngine.h"
 
 class TerrainInstrumentAudioProcessorEditor  : public juce::AudioProcessorEditor,
                                      public juce::FileDragAndDropTarget,
@@ -458,6 +459,31 @@ private:
     juce::WebSliderRelay synOscDGrainSprayRelay   { ParameterIDs::SYN_OSC_D_GRAIN_SPRAY };
     juce::WebSliderRelay synOscDGrainShapeRelay   { ParameterIDs::SYN_OSC_D_GRAIN_SHAPE };
     juce::WebSliderRelay synOscDGrainKeyRelay     { ParameterIDs::SYN_OSC_D_GRAIN_KEY };
+    // ════ BLEND relays (per-osc one-shot blend knobs) ════
+    juce::WebSliderRelay synOscABlendMorphRelay            { ParameterIDs::SYN_OSC_A_BLEND_MORPH };
+    juce::WebSliderRelay synOscABlendAttackRelay           { ParameterIDs::SYN_OSC_A_BLEND_ATTACK };
+    juce::WebSliderRelay synOscABlendBodyRelay             { ParameterIDs::SYN_OSC_A_BLEND_BODY };
+    juce::WebSliderRelay synOscABlendBreathRelay           { ParameterIDs::SYN_OSC_A_BLEND_BREATH };
+    juce::WebSliderRelay synOscABlendSculptRelay           { ParameterIDs::SYN_OSC_A_BLEND_SCULPT };
+    juce::WebSliderRelay synOscABlendDiceRelay             { ParameterIDs::SYN_OSC_A_BLEND_DICE };
+    juce::WebSliderRelay synOscBBlendMorphRelay            { ParameterIDs::SYN_OSC_B_BLEND_MORPH };
+    juce::WebSliderRelay synOscBBlendAttackRelay           { ParameterIDs::SYN_OSC_B_BLEND_ATTACK };
+    juce::WebSliderRelay synOscBBlendBodyRelay             { ParameterIDs::SYN_OSC_B_BLEND_BODY };
+    juce::WebSliderRelay synOscBBlendBreathRelay           { ParameterIDs::SYN_OSC_B_BLEND_BREATH };
+    juce::WebSliderRelay synOscBBlendSculptRelay           { ParameterIDs::SYN_OSC_B_BLEND_SCULPT };
+    juce::WebSliderRelay synOscBBlendDiceRelay             { ParameterIDs::SYN_OSC_B_BLEND_DICE };
+    juce::WebSliderRelay synOscCBlendMorphRelay            { ParameterIDs::SYN_OSC_C_BLEND_MORPH };
+    juce::WebSliderRelay synOscCBlendAttackRelay           { ParameterIDs::SYN_OSC_C_BLEND_ATTACK };
+    juce::WebSliderRelay synOscCBlendBodyRelay             { ParameterIDs::SYN_OSC_C_BLEND_BODY };
+    juce::WebSliderRelay synOscCBlendBreathRelay           { ParameterIDs::SYN_OSC_C_BLEND_BREATH };
+    juce::WebSliderRelay synOscCBlendSculptRelay           { ParameterIDs::SYN_OSC_C_BLEND_SCULPT };
+    juce::WebSliderRelay synOscCBlendDiceRelay             { ParameterIDs::SYN_OSC_C_BLEND_DICE };
+    juce::WebSliderRelay synOscDBlendMorphRelay            { ParameterIDs::SYN_OSC_D_BLEND_MORPH };
+    juce::WebSliderRelay synOscDBlendAttackRelay           { ParameterIDs::SYN_OSC_D_BLEND_ATTACK };
+    juce::WebSliderRelay synOscDBlendBodyRelay             { ParameterIDs::SYN_OSC_D_BLEND_BODY };
+    juce::WebSliderRelay synOscDBlendBreathRelay           { ParameterIDs::SYN_OSC_D_BLEND_BREATH };
+    juce::WebSliderRelay synOscDBlendSculptRelay           { ParameterIDs::SYN_OSC_D_BLEND_SCULPT };
+    juce::WebSliderRelay synOscDBlendDiceRelay             { ParameterIDs::SYN_OSC_D_BLEND_DICE };
     // ── GRAIN-EXPANDED-RELAYS — the 8 reassignable functions (8 × 4 osc) ──
     juce::WebSliderRelay synOscAGrainPositionRelay { ParameterIDs::SYN_OSC_A_GRAIN_POSITION };
     juce::WebSliderRelay synOscAGrainPitchRelay    { ParameterIDs::SYN_OSC_A_GRAIN_PITCH };
@@ -954,6 +980,30 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainSprayAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainShapeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainKeyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendAttackAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendBodyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendBreathAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendSculptAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendDiceAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBBlendMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBBlendAttackAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBBlendBodyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBBlendBreathAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBBlendSculptAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBBlendDiceAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCBlendMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCBlendAttackAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCBlendBodyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCBlendBreathAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCBlendSculptAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCBlendDiceAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDBlendMorphAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDBlendAttackAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDBlendBodyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDBlendBreathAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDBlendSculptAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDBlendDiceAttachment;
     // ── GRAIN-EXPANDED-ATTACHMENTS (8 × 4 osc) ──
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainPositionAttachment, synOscAGrainPitchAttachment, synOscAGrainPsprayAttachment, synOscAGrainWidthAttachment, synOscAGrainDirAttachment, synOscAGrainSkewAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainPositionAttachment, synOscBGrainPitchAttachment, synOscBGrainPsprayAttachment, synOscBGrainWidthAttachment, synOscBGrainDirAttachment, synOscBGrainSkewAttachment;
@@ -991,6 +1041,36 @@ private:
 
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);
+
+    // ═══ BLEND — one-shot morph baker (offline; audio thread only plays the published result) ═══
+    // A live blend holds the source pair in RAM + an analyzed BlendEngine; knob moves re-render
+    // (debounced, ~ms) and re-publish through loadOscSampleAsync — waveform + persistence free.
+    struct OscBlend
+    {
+        std::shared_ptr<juce::AudioBuffer<float>> srcA, srcB;
+        double rateA = 48000.0, rateB = 48000.0;
+        std::shared_ptr<tw::BlendEngine> engine;
+        bool live = false;                     // message-thread flag: pair loaded + analyzed
+        std::atomic<bool> baking { false };    // one bake in flight per osc
+        std::atomic<bool> dirty  { false };    // params moved while baking → chain another
+        int outSlot = 0;                       // alternating output file slot (0/1)
+        float lastVals[6] = { -1.f, -1.f, -1.f, -1.f, -1.f, -1.f };   // param poll cache
+        juce::int64 lastMoveMs = 0;            // debounce timestamp
+    };
+    OscBlend oscBlends_[4];
+    bool blendRestoreTried_ = false;           // lazy one-shot state-restore (first timer tick)
+    void startBlend (int oscIdx, const juce::File& srcBFile);   // drop → "Blend" clicked
+    void queueBlendBake (int oscIdx);                           // analyze-if-needed + render on the pool
+    void publishBlend (int oscIdx, const juce::File& baked);    // message thread: load + UI push
+    void pollBlendKnobs();                                      // timerCallback: debounce re-bakes
+    void restoreBlendsFromState();                              // reload persisted source pairs
+    tw::BlendParams currentBlendParams (int oscIdx) const;
+    juce::File blendCacheDir() const;
+    static std::shared_ptr<juce::AudioBuffer<float>> readAudioFile (const juce::File& f, double& rateOut);
+    static bool writeWav24 (const juce::File& f, const juce::AudioBuffer<float>& b, double rate);
+    // Declared LAST → destroyed FIRST: the pool must drain its jobs (which touch members
+    // above) before anything else in this editor dies.
+    juce::ThreadPool blendPool_ { 1 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainInstrumentAudioProcessorEditor)
 };

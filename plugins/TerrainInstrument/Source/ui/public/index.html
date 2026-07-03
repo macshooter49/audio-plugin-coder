@@ -3856,6 +3856,20 @@ body {
 #syn-panel .gk-arrow:hover { opacity: .95; }
 #syn-panel .gk-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
 #syn-panel .gran-knob-wrap.pg2 .gk-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+/* BLEND — secret second knob row on the Sample view (samp-knob-wrap mirrors gran-knob-wrap).
+   .blend-on (a live blend exists, pushed by C++) reveals the flip arrow; .blend-pg2 swaps rows. */
+#syn-panel .samp-knob-wrap { display: flex; align-items: stretch; gap: 2px; flex: 0 0 auto; }
+#syn-panel .samp-knob-wrap .osc-knobs { flex: 1 1 auto; }
+#syn-panel .device.osc.engine-granular .samp-knob-wrap { display: none; }
+#syn-panel .blend-knobs { display: none; }
+#syn-panel .osc-knobs.blend-knobs { grid-template-columns: repeat(6, 1fr); }
+#syn-panel .bl-arrow { display: none; flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
+#syn-panel .bl-arrow:hover { opacity: .95; }
+#syn-panel .bl-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
+#syn-panel .device.osc.blend-on .bl-arrow { display: block; }
+#syn-panel .device.osc.blend-pg2 .bl-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+#syn-panel .device.osc.blend-pg2 .samp-knobs { display: none; }
+#syn-panel .device.osc.blend-pg2 .blend-knobs { display: grid; }
 
 #syn-panel .samp-disp { flex: 1 1 auto; min-height: 65px; position: relative; overflow: hidden; border-radius: 8px; }
 #syn-panel .samp-disp canvas.samp-wave { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -5160,6 +5174,7 @@ body {
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
+              <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
@@ -5167,6 +5182,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs blend-knobs">
+                <div class="knob" data-syn="SYN_OSC_A_BLEND_MORPH"><div class="knob-ring"></div><div class="knob-label">Morph</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_BLEND_ATTACK"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_BLEND_BODY"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_BLEND_BREATH"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_BLEND_SCULPT"><div class="knob-ring"></div><div class="knob-label">Sculpt</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_BLEND_DICE"><div class="knob-ring"></div><div class="knob-label">Dice</div></div>
+              </div>
+              <div class="bl-arrow" role="button" tabindex="0" title="Blend controls" aria-label="Blend controls"></div>
               </div>
               <div class="gran-knob-wrap">
                 <div class="osc-knobs gran-knobs gk-p1">
@@ -5348,6 +5373,7 @@ body {
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
+              <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
@@ -5355,6 +5381,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs blend-knobs">
+                <div class="knob" data-syn="SYN_OSC_B_BLEND_MORPH"><div class="knob-ring"></div><div class="knob-label">Morph</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_BLEND_ATTACK"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_BLEND_BODY"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_BLEND_BREATH"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_BLEND_SCULPT"><div class="knob-ring"></div><div class="knob-label">Sculpt</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_BLEND_DICE"><div class="knob-ring"></div><div class="knob-label">Dice</div></div>
+              </div>
+              <div class="bl-arrow" role="button" tabindex="0" title="Blend controls" aria-label="Blend controls"></div>
               </div>
               <div class="gran-knob-wrap">
                 <div class="osc-knobs gran-knobs gk-p1">
@@ -5552,6 +5588,7 @@ body {
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
+              <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
@@ -5559,6 +5596,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs blend-knobs">
+                <div class="knob" data-syn="SYN_OSC_C_BLEND_MORPH"><div class="knob-ring"></div><div class="knob-label">Morph</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_BLEND_ATTACK"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_BLEND_BODY"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_BLEND_BREATH"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_BLEND_SCULPT"><div class="knob-ring"></div><div class="knob-label">Sculpt</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_BLEND_DICE"><div class="knob-ring"></div><div class="knob-label">Dice</div></div>
+              </div>
+              <div class="bl-arrow" role="button" tabindex="0" title="Blend controls" aria-label="Blend controls"></div>
               </div>
               <div class="gran-knob-wrap">
                 <div class="osc-knobs gran-knobs gk-p1">
@@ -5740,6 +5787,7 @@ body {
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
+              <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_SCAN"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_STRETCH"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
@@ -5747,6 +5795,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_SPRAY"><div class="knob-ring"></div><div class="knob-label">Spray</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_XFADE"><div class="knob-ring"></div><div class="knob-label">X-Fade</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SAMPLE_AIR"><div class="knob-ring"></div><div class="knob-label">Air</div></div>
+              </div>
+              <div class="osc-knobs blend-knobs">
+                <div class="knob" data-syn="SYN_OSC_D_BLEND_MORPH"><div class="knob-ring"></div><div class="knob-label">Morph</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_BLEND_ATTACK"><div class="knob-ring"></div><div class="knob-label">Attack</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_BLEND_BODY"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_BLEND_BREATH"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_BLEND_SCULPT"><div class="knob-ring"></div><div class="knob-label">Sculpt</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_BLEND_DICE"><div class="knob-ring"></div><div class="knob-label">Dice</div></div>
+              </div>
+              <div class="bl-arrow" role="button" tabindex="0" title="Blend controls" aria-label="Blend controls"></div>
               </div>
               <div class="gran-knob-wrap">
                 <div class="osc-knobs gran-knobs gk-p1">
@@ -10002,6 +10060,47 @@ setTimeout(function wireSynControls () {
           try { var fn = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('loadSampleForOsc') : null; if (fn) fn (osc, file.name, b64); } catch (_) {} });
       }
 
+      // ── BLEND: Replace | Blend choice on every drop onto a loaded sample osc ──
+      // Same .samp-menu glass as everything else. Blend ships the file to C++ (blendOscSample):
+      // the current sound becomes source A, the drop becomes B, and the baked morph republishes
+      // through the normal sample-load path (the waveform visibly becomes the blend).
+      var blendChoiceEl = null;
+      function openBlendChoice (e, osc, file) {
+        if (! blendChoiceEl) {
+          blendChoiceEl = document.createElement ('div');
+          blendChoiceEl.className = 'samp-menu';
+          document.body.appendChild (blendChoiceEl);
+          document.addEventListener ('pointerdown', function (ev) { if (blendChoiceEl && ! blendChoiceEl.contains (ev.target)) blendChoiceEl.classList.remove ('open'); });
+        }
+        var m = blendChoiceEl;
+        var ic = function (p) { return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">' + p + '</svg>'; };
+        m.innerHTML =
+          '<div data-a="replace">' + ic ('<path d="M3 8 a5 5 0 1 0 1.6-3.7 M3 3 V5 H5"/>') + 'Replace</div>' +
+          '<div data-a="blend">'   + ic ('<circle cx="6.2" cy="8" r="3.8"/><circle cx="9.8" cy="8" r="3.8"/>') + 'Blend</div>';
+        m.classList.add ('open');
+        var mw = m.offsetWidth || 140, mh = m.offsetHeight || 76;
+        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth  - mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - mh - 6)) + 'px';
+        m.querySelectorAll ('div[data-a]').forEach (function (d) {
+          d.onclick = function () {
+            m.classList.remove ('open');
+            if (d.dataset.a === 'replace') { dropSampleToOsc (osc, file); return; }
+            sampReadB64 (file, function (b64) { if (! b64) return;
+              try { var fn = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('blendOscSample') : null;
+                    if (fn) fn (osc, file.name, b64); } catch (_) {} });
+          };
+        });
+      }
+      // C++ pushes blend state (bake published / editor reopen): reveal or hide the flip arrow.
+      window.onBlendState = function (osc, on) {
+        try {
+          var S = SAMP[osc]; if (! S || ! S.view) return;
+          var dev = S.view.closest ('.device.osc'); if (! dev) return;
+          dev.classList.toggle ('blend-on', !! on);
+          if (! on) dev.classList.remove ('blend-pg2');
+        } catch (e) {}
+      };
+
       function buildSampMenu () {
         if (sampMenuEl) return sampMenuEl;
         var m = document.createElement ('div'); m.className = 'samp-menu';
@@ -10022,7 +10121,8 @@ setTimeout(function wireSynControls () {
           '<div data-a="reset">' + ic ('<path d="M3 8 a5 5 0 1 0 1.6-3.7 M3 3 V5 H5"/>') + 'Reset region</div>' +
           '<div class="sepd"></div>' +
           '<div data-a="copy">'  + ic ('<rect x="6" y="6" width="7" height="7" rx="1"/><path d="M3 10 V3 H10"/>') + 'Copy sample</div>' +
-          '<div data-a="paste">' + ic ('<rect x="4" y="6" width="8" height="8" rx="1"/><path d="M6.5 6 V4 H10 V6"/>') + 'Paste sample</div>';
+          '<div data-a="paste">' + ic ('<rect x="4" y="6" width="8" height="8" rx="1"/><path d="M6.5 6 V4 H10 V6"/>') + 'Paste sample</div>' +
+          '<div data-a="exportshot">' + ic ('<path d="M8 2 V10 M5 7 L8 10 L11 7 M3 13 H13"/>') + 'Export one-shot</div>';
         // Quick-controls (Volume / Pan / Semitone) at the BOTTOM — same glass component the
         // wavetable osc uses, so the two right-click menus look identical.
         try { var qsep = document.createElement ('div'); qsep.className = 'sepd'; m.appendChild (qsep);
@@ -10049,6 +10149,7 @@ setTimeout(function wireSynControls () {
             else if (a === 'fade') { st.fin = st.fin > 0 ? 0 : 0.15; st.fout = st.fout > 0 ? 0 : 0.20; }
             else if (a === 'reset') { st.s = 0; st.e = 100; st.ls = 0; st.le = 100; st.fin = 0; st.fout = 0; st.xfade = 0.12; st.mode = 1; st.loop = true; if (S.repaintHeader) S.repaintHeader (); }
             else if (a === 'copy')  { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; if (_oc) window.__sampClip = _oc; } catch (e2) {} }
+            else if (a === 'exportshot') { try { var _ox = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; var xf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('exportBlendedSample') : null; if (xf && _ox) xf (_ox); /* C++ copies the current one-shot (blend bakes included) to the export dir + reveals it in Finder */ } catch (e5) {} }
             else if (a === 'paste') { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : '', _src = window.__sampClip;
                                             if (_oc && _src && _src !== _oc) { var _cf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('copyOscSample') : null; if (_cf) _cf (_src, _oc); } } catch (e3) {} }
             if (S.syncParams) S.syncParams ();
@@ -10399,8 +10500,14 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('drop', function (e) {
           e.preventDefault (); e.stopPropagation (); disp.classList.remove ('dragover');
           var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (! f) return;
+          // BLEND — a drop onto a LOADED sample asks Replace | Blend (every drop, no surprises,
+          // one extra click). An empty osc just loads like before.
+          if (view.classList.contains ('loaded')) { openBlendChoice (e, osc, f); return; }
           dropSampleToOsc (osc, f);   // Sample engine + One-Shot + load (uniform with the wavetable drop)
         });
+        // arrow revealed by .blend-on flips Sample knobs <-> the 6 blend knobs (secret menu)
+        var blArrow = view.querySelector ('.bl-arrow');
+        if (blArrow && dev) blArrow.addEventListener ('click', function () { dev.classList.toggle ('blend-pg2'); });
 
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
@@ -10621,6 +10728,9 @@ setTimeout(function wireSynControls () {
           set (P + 'GRAIN_WIDTH', 0.0); set (P + 'GRAIN_DIR', 1.0); set (P + 'GRAIN_SKEW', 0.5);
           // Shared osc knobs missing from the literal above
           set (P + 'FOLD_AMT', 0.0); set (P + 'FRAME_SPREAD', 0.0); set (P + 'SPECTRAL_AMT', 0.0); set (P + 'SAMPLE_AIR', 0.0);
+          // Blend knobs (secret second row on the Sample view) — Dice resets to 0 (off)
+          set (P + 'BLEND_MORPH', 0.5); set (P + 'BLEND_ATTACK', 0.5); set (P + 'BLEND_BODY', 0.5);
+          set (P + 'BLEND_BREATH', 0.5); set (P + 'BLEND_SCULPT', 0.5); set (P + 'BLEND_DICE', 0.0);
           // OSC C/D wavetable knobs (A/B already covered)
           set (P + 'OCT', 0.5); set (P + 'SEMI', 0.5); set (P + 'CENT', 0.5); set (P + 'PAN', 0.5);
           set (P + 'WT_FRAME', 0.0); set (P + 'WARP_AMOUNT', 0.0);

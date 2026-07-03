@@ -360,6 +360,9 @@ public:
     tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, 3, idx)]; }
     tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
     juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
+    /** BLEND — persisted source-pair paths (which: 0 = A, 1 = B). Empty = no live blend.
+     *  The editor reloads both files on reopen so the blend knobs stay LIVE across sessions. */
+    juce::String&     blendSrcPath (int idx, int which) noexcept { return blendSrcPaths_[(size_t) juce::jlimit (0, 3, idx)][(size_t) (which & 1)]; }
     void setCachedOscPayload (const juce::String& json, int idx)
     { if (idx < 0 || idx > 3) return; juce::ScopedLock sl (samplePayloadLock); cachedOscPayloads_[(size_t) idx] = json; }
     juce::String getCachedOscPayload (int idx) const
@@ -842,6 +845,7 @@ private:
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
     std::array<juce::String, 4>               oscSourcePaths_;
+    std::array<std::array<juce::String, 2>, 4> blendSrcPaths_;   // BLEND source pair (A/B) per osc
 
     // Grain engines (one per channel)
     GrainEngine grainEngineL;

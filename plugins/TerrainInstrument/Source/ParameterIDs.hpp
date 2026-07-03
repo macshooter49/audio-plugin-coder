@@ -519,6 +519,32 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_GRAIN_SHAPE[]   = "SYN_OSC_D_GRAIN_SHAPE";
     constexpr char SYN_OSC_D_GRAIN_KEY[]     = "SYN_OSC_D_GRAIN_KEY";
 
+    // ── BLEND (per-osc one-shot blend/morph — OFFLINE bake knobs; audio thread never reads these) ──
+    constexpr char SYN_OSC_A_BLEND_MORPH[]  = "SYN_OSC_A_BLEND_MORPH";
+    constexpr char SYN_OSC_A_BLEND_ATTACK[] = "SYN_OSC_A_BLEND_ATTACK";
+    constexpr char SYN_OSC_A_BLEND_BODY[]   = "SYN_OSC_A_BLEND_BODY";
+    constexpr char SYN_OSC_A_BLEND_BREATH[] = "SYN_OSC_A_BLEND_BREATH";
+    constexpr char SYN_OSC_A_BLEND_SCULPT[] = "SYN_OSC_A_BLEND_SCULPT";
+    constexpr char SYN_OSC_A_BLEND_DICE[]   = "SYN_OSC_A_BLEND_DICE";
+    constexpr char SYN_OSC_B_BLEND_MORPH[]  = "SYN_OSC_B_BLEND_MORPH";
+    constexpr char SYN_OSC_B_BLEND_ATTACK[] = "SYN_OSC_B_BLEND_ATTACK";
+    constexpr char SYN_OSC_B_BLEND_BODY[]   = "SYN_OSC_B_BLEND_BODY";
+    constexpr char SYN_OSC_B_BLEND_BREATH[] = "SYN_OSC_B_BLEND_BREATH";
+    constexpr char SYN_OSC_B_BLEND_SCULPT[] = "SYN_OSC_B_BLEND_SCULPT";
+    constexpr char SYN_OSC_B_BLEND_DICE[]   = "SYN_OSC_B_BLEND_DICE";
+    constexpr char SYN_OSC_C_BLEND_MORPH[]  = "SYN_OSC_C_BLEND_MORPH";
+    constexpr char SYN_OSC_C_BLEND_ATTACK[] = "SYN_OSC_C_BLEND_ATTACK";
+    constexpr char SYN_OSC_C_BLEND_BODY[]   = "SYN_OSC_C_BLEND_BODY";
+    constexpr char SYN_OSC_C_BLEND_BREATH[] = "SYN_OSC_C_BLEND_BREATH";
+    constexpr char SYN_OSC_C_BLEND_SCULPT[] = "SYN_OSC_C_BLEND_SCULPT";
+    constexpr char SYN_OSC_C_BLEND_DICE[]   = "SYN_OSC_C_BLEND_DICE";
+    constexpr char SYN_OSC_D_BLEND_MORPH[]  = "SYN_OSC_D_BLEND_MORPH";
+    constexpr char SYN_OSC_D_BLEND_ATTACK[] = "SYN_OSC_D_BLEND_ATTACK";
+    constexpr char SYN_OSC_D_BLEND_BODY[]   = "SYN_OSC_D_BLEND_BODY";
+    constexpr char SYN_OSC_D_BLEND_BREATH[] = "SYN_OSC_D_BLEND_BREATH";
+    constexpr char SYN_OSC_D_BLEND_SCULPT[] = "SYN_OSC_D_BLEND_SCULPT";
+    constexpr char SYN_OSC_D_BLEND_DICE[]   = "SYN_OSC_D_BLEND_DICE";
+
     // ── GRAIN-EXPANDED-IDS — the 6 page-2 functions beyond the default 6 (Life/Jump removed 2026-07-02;
     //    Air/Stretch now reuse the Sample osc's SYN_OSC_x_SAMPLE_AIR/_STRETCH/_STRETCH_MODE params) ──
     constexpr char SYN_OSC_A_GRAIN_POSITION[] = "SYN_OSC_A_GRAIN_POSITION"; // float 0..1 grain-birth anchor

@@ -2173,6 +2173,41 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addGrainOsc (ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE,
                  ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, "D");
 
+    // BLEND — the 6 one-shot blend/morph knobs per osc (Morph Attack Body Breath Sculpt Dice).
+    // OFFLINE-BAKE params: the editor listens and re-renders the blended buffer; the audio
+    // thread only ever plays the published result. DICE defaults 0 (off), the rest centered.
+    auto addBlendOsc = [&layout] (const char* morphId, const char* attackId, const char* bodyId,
+                                  const char* breathId, const char* sculptId, const char* diceId,
+                                  const juce::String& osc)
+    {
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { morphId, 1 }, "Synth OSC " + osc + " Blend Morph",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { attackId, 1 }, "Synth OSC " + osc + " Blend Attack",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { bodyId, 1 }, "Synth OSC " + osc + " Blend Body",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { breathId, 1 }, "Synth OSC " + osc + " Blend Breath",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { sculptId, 1 }, "Synth OSC " + osc + " Blend Sculpt",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { diceId, 1 }, "Synth OSC " + osc + " Blend Dice",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    };
+    addBlendOsc (ParameterIDs::SYN_OSC_A_BLEND_MORPH, ParameterIDs::SYN_OSC_A_BLEND_ATTACK, ParameterIDs::SYN_OSC_A_BLEND_BODY,
+                 ParameterIDs::SYN_OSC_A_BLEND_BREATH, ParameterIDs::SYN_OSC_A_BLEND_SCULPT, ParameterIDs::SYN_OSC_A_BLEND_DICE, "A");
+    addBlendOsc (ParameterIDs::SYN_OSC_B_BLEND_MORPH, ParameterIDs::SYN_OSC_B_BLEND_ATTACK, ParameterIDs::SYN_OSC_B_BLEND_BODY,
+                 ParameterIDs::SYN_OSC_B_BLEND_BREATH, ParameterIDs::SYN_OSC_B_BLEND_SCULPT, ParameterIDs::SYN_OSC_B_BLEND_DICE, "B");
+    addBlendOsc (ParameterIDs::SYN_OSC_C_BLEND_MORPH, ParameterIDs::SYN_OSC_C_BLEND_ATTACK, ParameterIDs::SYN_OSC_C_BLEND_BODY,
+                 ParameterIDs::SYN_OSC_C_BLEND_BREATH, ParameterIDs::SYN_OSC_C_BLEND_SCULPT, ParameterIDs::SYN_OSC_C_BLEND_DICE, "C");
+    addBlendOsc (ParameterIDs::SYN_OSC_D_BLEND_MORPH, ParameterIDs::SYN_OSC_D_BLEND_ATTACK, ParameterIDs::SYN_OSC_D_BLEND_BODY,
+                 ParameterIDs::SYN_OSC_D_BLEND_BREATH, ParameterIDs::SYN_OSC_D_BLEND_SCULPT, ParameterIDs::SYN_OSC_D_BLEND_DICE, "D");
+
     // GRAIN-EXPANDED — the 6 page-2 functions (defaults match GranularEngineParams).
     // Life + Jump removed (2026-07-02); Air + Stretch live on the waveform right-click, reusing
     // the Sample osc's SYN_OSC_x_SAMPLE_AIR / _STRETCH / _STRETCH_MODE params (no new params).
@@ -4988,6 +5023,14 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
             if (oscSourcePaths_[(size_t) oi].isNotEmpty())
                 state.setProperty ("oscSamplePath" + juce::String (oi), oscSourcePaths_[(size_t) oi], nullptr);
 
+        // BLEND-STATE — persist each osc's live blend source pair; the editor reloads both
+        // files on reopen so the blend knobs stay live (knob values ride in the APVTS).
+        for (int oi = 0; oi < 4; ++oi)
+            for (int w = 0; w < 2; ++w)
+                if (blendSrcPaths_[(size_t) oi][(size_t) w].isNotEmpty())
+                    state.setProperty ("blendSrc" + juce::String (w ? "B" : "A") + juce::String (oi),
+                                       blendSrcPaths_[(size_t) oi][(size_t) w], nullptr);
+
         // Full path for the V1 sample-path restore path (layers[0] only).
         if (layers[0].sourcePath.isNotEmpty())
             state.setProperty ("sampleSourcePath", layers[0].sourcePath, nullptr);
@@ -5201,6 +5244,11 @@ void TerrainInstrumentAudioProcessor::loadV1State (const juce::ValueTree& loaded
     // PEROSC-STATE — restore each oscillator's sample path; the editor reload loop re-decodes it.
     for (int oi = 0; oi < 4; ++oi)
         oscSourcePaths_[(size_t) oi] = loaded.getProperty ("oscSamplePath" + juce::String (oi), "").toString();
+    // BLEND-STATE — restore the blend source pairs (editor re-analyzes lazily on reopen).
+    for (int oi = 0; oi < 4; ++oi)
+        for (int w = 0; w < 2; ++w)
+            blendSrcPaths_[(size_t) oi][(size_t) w] =
+                loaded.getProperty ("blendSrc" + juce::String (w ? "B" : "A") + juce::String (oi), "").toString();
     A.sourceFileName = loaded.getProperty ("sourceFileName",   "").toString();
 
     // Persist the path via the legacy singleton so the editor constructor's

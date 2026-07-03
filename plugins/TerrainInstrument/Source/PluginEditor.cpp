@@ -390,6 +390,31 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDGrainSprayRelay)
             .withOptionsFrom(synOscDGrainShapeRelay)
             .withOptionsFrom(synOscDGrainKeyRelay)
+            // ════ BLEND-WITHOPTIONS — per-OSC one-shot blend knobs ════
+            .withOptionsFrom(synOscABlendMorphRelay)
+            .withOptionsFrom(synOscABlendAttackRelay)
+            .withOptionsFrom(synOscABlendBodyRelay)
+            .withOptionsFrom(synOscABlendBreathRelay)
+            .withOptionsFrom(synOscABlendSculptRelay)
+            .withOptionsFrom(synOscABlendDiceRelay)
+            .withOptionsFrom(synOscBBlendMorphRelay)
+            .withOptionsFrom(synOscBBlendAttackRelay)
+            .withOptionsFrom(synOscBBlendBodyRelay)
+            .withOptionsFrom(synOscBBlendBreathRelay)
+            .withOptionsFrom(synOscBBlendSculptRelay)
+            .withOptionsFrom(synOscBBlendDiceRelay)
+            .withOptionsFrom(synOscCBlendMorphRelay)
+            .withOptionsFrom(synOscCBlendAttackRelay)
+            .withOptionsFrom(synOscCBlendBodyRelay)
+            .withOptionsFrom(synOscCBlendBreathRelay)
+            .withOptionsFrom(synOscCBlendSculptRelay)
+            .withOptionsFrom(synOscCBlendDiceRelay)
+            .withOptionsFrom(synOscDBlendMorphRelay)
+            .withOptionsFrom(synOscDBlendAttackRelay)
+            .withOptionsFrom(synOscDBlendBodyRelay)
+            .withOptionsFrom(synOscDBlendBreathRelay)
+            .withOptionsFrom(synOscDBlendSculptRelay)
+            .withOptionsFrom(synOscDBlendDiceRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
             .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
@@ -772,6 +797,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         webView->evaluateJavascript (
                             juce::String ("if(window.onOscSampleLoaded)window.onOscSampleLoaded('")
                             + letter + "'," + payload + ");", nullptr);
+                }
+                // BLEND-RESYNC — re-show the blend knob row for any osc with a live blend
+                for (int oi = 0; oi < 4; ++oi)
+                {
+                    if (! oscBlends_[oi].live) continue;
+                    const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
+                    if (webView != nullptr)
+                        webView->evaluateJavascript (
+                            juce::String ("if(window.onBlendState)window.onBlendState('") + letter + "',true);", nullptr);
                 }
                 complete({});
             })
@@ -2162,6 +2196,52 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("blendOscSample", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // BLEND — args[0]=osc letter, args[1]=filename, args[2]=base64. The dropped file
+                // becomes source B; the osc's CURRENT sound becomes source A (so dropping onto a
+                // baked blend STACKS — combine as many as you like, constant cost). The bake runs
+                // on a background pool and republishes through loadOscSampleAsync (waveform morphs).
+                if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const auto filename = args[1].toString();
+
+                juce::MemoryOutputStream decodedStream;
+                if (! juce::Base64::convertFromBase64 (decodedStream, args[2].toString()))
+                { complete (juce::var ("decode-failed")); return; }
+
+                auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                  .getChildFile ("Terrain-Instrument-Drops");
+                tempDir.createDirectory();
+                auto safeName = juce::File::createLegalFileName (filename);
+                if (safeName.isEmpty()) safeName = "blend-src.wav";
+                auto tempFile = tempDir.getNonexistentChildFile (
+                                   safeName.upToLastOccurrenceOf (".", false, false),
+                                   safeName.fromLastOccurrenceOf (".", true, false),
+                                   true);
+                tempFile.replaceWithData (decodedStream.getData(), decodedStream.getDataSize());
+                if (! tempFile.existsAsFile()) { complete (juce::var ("temp-write-failed")); return; }
+
+                startBlend (oscIdx, tempFile);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("exportBlendedSample", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // EXPORT — copy the osc's current one-shot (typically a bake) to a friendly name
+                // in the blend cache and reveal it in Finder: one drag away from the DAW.
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const juce::File src (audioProcessor.oscSourcePath (oscIdx));
+                if (! src.existsAsFile()) { complete (juce::var ("none")); return; }
+                auto dir = blendCacheDir().getChildFile ("Exports");
+                dir.createDirectory();
+                auto dst = dir.getNonexistentChildFile ("Terrain-" + src.getFileNameWithoutExtension(), ".wav", true);
+                if (src.copyFileTo (dst)) { dst.revealToUser(); complete (juce::var ("ok")); }
+                else complete (juce::var ("copy-failed"));
+            })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2368,6 +2448,31 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDGrainSprayAttachment,   ParameterIDs::SYN_OSC_D_GRAIN_SPRAY,   synOscDGrainSprayRelay);
         mkAtt(synOscDGrainShapeAttachment,   ParameterIDs::SYN_OSC_D_GRAIN_SHAPE,   synOscDGrainShapeRelay);
         mkAtt(synOscDGrainKeyAttachment,     ParameterIDs::SYN_OSC_D_GRAIN_KEY,     synOscDGrainKeyRelay);
+        // ════ BLEND attachments ════
+        mkAtt(synOscABlendMorphAttachment, ParameterIDs::SYN_OSC_A_BLEND_MORPH, synOscABlendMorphRelay);
+        mkAtt(synOscABlendAttackAttachment, ParameterIDs::SYN_OSC_A_BLEND_ATTACK, synOscABlendAttackRelay);
+        mkAtt(synOscABlendBodyAttachment, ParameterIDs::SYN_OSC_A_BLEND_BODY, synOscABlendBodyRelay);
+        mkAtt(synOscABlendBreathAttachment, ParameterIDs::SYN_OSC_A_BLEND_BREATH, synOscABlendBreathRelay);
+        mkAtt(synOscABlendSculptAttachment, ParameterIDs::SYN_OSC_A_BLEND_SCULPT, synOscABlendSculptRelay);
+        mkAtt(synOscABlendDiceAttachment, ParameterIDs::SYN_OSC_A_BLEND_DICE, synOscABlendDiceRelay);
+        mkAtt(synOscBBlendMorphAttachment, ParameterIDs::SYN_OSC_B_BLEND_MORPH, synOscBBlendMorphRelay);
+        mkAtt(synOscBBlendAttackAttachment, ParameterIDs::SYN_OSC_B_BLEND_ATTACK, synOscBBlendAttackRelay);
+        mkAtt(synOscBBlendBodyAttachment, ParameterIDs::SYN_OSC_B_BLEND_BODY, synOscBBlendBodyRelay);
+        mkAtt(synOscBBlendBreathAttachment, ParameterIDs::SYN_OSC_B_BLEND_BREATH, synOscBBlendBreathRelay);
+        mkAtt(synOscBBlendSculptAttachment, ParameterIDs::SYN_OSC_B_BLEND_SCULPT, synOscBBlendSculptRelay);
+        mkAtt(synOscBBlendDiceAttachment, ParameterIDs::SYN_OSC_B_BLEND_DICE, synOscBBlendDiceRelay);
+        mkAtt(synOscCBlendMorphAttachment, ParameterIDs::SYN_OSC_C_BLEND_MORPH, synOscCBlendMorphRelay);
+        mkAtt(synOscCBlendAttackAttachment, ParameterIDs::SYN_OSC_C_BLEND_ATTACK, synOscCBlendAttackRelay);
+        mkAtt(synOscCBlendBodyAttachment, ParameterIDs::SYN_OSC_C_BLEND_BODY, synOscCBlendBodyRelay);
+        mkAtt(synOscCBlendBreathAttachment, ParameterIDs::SYN_OSC_C_BLEND_BREATH, synOscCBlendBreathRelay);
+        mkAtt(synOscCBlendSculptAttachment, ParameterIDs::SYN_OSC_C_BLEND_SCULPT, synOscCBlendSculptRelay);
+        mkAtt(synOscCBlendDiceAttachment, ParameterIDs::SYN_OSC_C_BLEND_DICE, synOscCBlendDiceRelay);
+        mkAtt(synOscDBlendMorphAttachment, ParameterIDs::SYN_OSC_D_BLEND_MORPH, synOscDBlendMorphRelay);
+        mkAtt(synOscDBlendAttackAttachment, ParameterIDs::SYN_OSC_D_BLEND_ATTACK, synOscDBlendAttackRelay);
+        mkAtt(synOscDBlendBodyAttachment, ParameterIDs::SYN_OSC_D_BLEND_BODY, synOscDBlendBodyRelay);
+        mkAtt(synOscDBlendBreathAttachment, ParameterIDs::SYN_OSC_D_BLEND_BREATH, synOscDBlendBreathRelay);
+        mkAtt(synOscDBlendSculptAttachment, ParameterIDs::SYN_OSC_D_BLEND_SCULPT, synOscDBlendSculptRelay);
+        mkAtt(synOscDBlendDiceAttachment, ParameterIDs::SYN_OSC_D_BLEND_DICE, synOscDBlendDiceRelay);
         // GRAIN-EXPANDED-MKATT (8 × 4 osc)
         mkAtt(synOscAGrainPositionAttachment, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, synOscAGrainPositionRelay); mkAtt(synOscAGrainPitchAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, synOscAGrainPitchRelay); mkAtt(synOscAGrainPsprayAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, synOscAGrainPsprayRelay); mkAtt(synOscAGrainWidthAttachment, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, synOscAGrainWidthRelay);
         mkAtt(synOscAGrainDirAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DIR, synOscAGrainDirRelay); mkAtt(synOscAGrainSkewAttachment, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, synOscAGrainSkewRelay);
@@ -3155,12 +3260,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 {
     stopTimer();
+    blendPool_.removeAllJobs (true, 4000);   // drain bakes before members die
 }
 
 //==============================================================================
 void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
+
+    pollBlendKnobs();   // BLEND — debounced re-bake on knob moves (offline; ~ms renders)
 
     // Read grain count
     int grainCount = audioProcessor.activeGrainCount.load();
@@ -10088,6 +10196,223 @@ void TerrainInstrumentAudioProcessorEditor::loadOscSampleAsync (int oscIdx, cons
                     + oscLetter + "', " + json + ");",
                     nullptr);
         });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BLEND — one-shot morph baker (see BlendEngine.h for the DSP; everything here
+// is message-thread + one background pool thread; the audio thread only ever
+// plays the published bake through the normal SampleBuffer atomic swap).
+// ═══════════════════════════════════════════════════════════════════════════
+
+static const char* kBlendSuffixes[6] = { "MORPH", "ATTACK", "BODY", "BREATH", "SCULPT", "DICE" };
+
+juce::File TerrainInstrumentAudioProcessorEditor::blendCacheDir() const
+{
+    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                 .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Blends");
+    dir.createDirectory();
+    return dir;
+}
+
+std::shared_ptr<juce::AudioBuffer<float>> TerrainInstrumentAudioProcessorEditor::readAudioFile (const juce::File& f, double& rateOut)
+{
+    rateOut = 0.0;
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
+    if (reader == nullptr || reader->lengthInSamples <= 0) return nullptr;
+    const int n  = (int) std::min<juce::int64> (reader->lengthInSamples, (juce::int64) (reader->sampleRate * 600.0));
+    const int ch = (int) std::min (2u, reader->numChannels);
+    auto buf = std::make_shared<juce::AudioBuffer<float>> (ch, n);
+    reader->read (buf.get(), 0, n, 0, true, ch > 1);
+    rateOut = reader->sampleRate;
+    return buf;
+}
+
+bool TerrainInstrumentAudioProcessorEditor::writeWav24 (const juce::File& f, const juce::AudioBuffer<float>& b, double rate)
+{
+    f.deleteFile();
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::FileOutputStream> os (f.createOutputStream());
+    if (os == nullptr) return false;
+    std::unique_ptr<juce::AudioFormatWriter> w (
+        wav.createWriterFor (os.get(), rate > 0.0 ? rate : 48000.0,
+                             (unsigned int) b.getNumChannels(), 24, {}, 0));
+    if (w == nullptr) return false;
+    os.release();   // writer owns the stream now
+    const bool ok = w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples());
+    w->flush();
+    return ok;
+}
+
+tw::BlendParams TerrainInstrumentAudioProcessorEditor::currentBlendParams (int oscIdx) const
+{
+    tw::BlendParams p;
+    float* dst[6] = { &p.morph, &p.attack, &p.body, &p.breath, &p.sculpt, &p.dice };
+    for (int k = 0; k < 6; ++k)
+    {
+        const juce::String pid = juce::String ("SYN_OSC_") + juce::String::charToString ((juce::juce_wchar) ('A' + oscIdx))
+                               + "_BLEND_" + kBlendSuffixes[k];
+        if (auto* raw = audioProcessor.getAPVTS().getRawParameterValue (pid))
+            *dst[k] = raw->load();
+    }
+    return p;
+}
+
+void TerrainInstrumentAudioProcessorEditor::startBlend (int oscIdx, const juce::File& srcBFile)
+{
+    if (oscIdx < 0 || oscIdx > 3) return;
+    auto cur = audioProcessor.getOscSampleBuffer (oscIdx).load();
+    if (cur == nullptr || cur->getNumSamples() < 256) { loadOscSampleAsync (oscIdx, srcBFile); return; }   // nothing to blend with — plain load
+    double rateB = 0.0;
+    auto bufB = readAudioFile (srcBFile, rateB);
+    if (bufB == nullptr || bufB->getNumSamples() < 256) return;
+
+    auto& bl  = oscBlends_[oscIdx];
+    bl.srcA   = cur;   // the CURRENT sound — a previous bake when stacking
+    const double curRate = audioProcessor.getOscSampleBuffer (oscIdx).getSampleRate();
+    bl.rateA  = curRate > 0.0 ? curRate : 48000.0;
+    bl.srcB   = bufB;
+    bl.rateB  = rateB > 0.0 ? rateB : bl.rateA;
+    bl.engine = std::make_shared<tw::BlendEngine>();   // fresh pair → analyze on first bake
+    bl.live   = true;
+
+    // persist the pair: snapshot both sources into the cache (survives temp cleanup + stacking)
+    const juce::String letter = juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx));
+    const juce::File fa = blendCacheDir().getChildFile ("Blend-" + letter + "-srcA.wav");
+    const juce::File fb = blendCacheDir().getChildFile ("Blend-" + letter + "-srcB.wav");
+    { auto sa = bl.srcA; auto sb = bl.srcB; const double ra = bl.rateA, rb = bl.rateB;
+      blendPool_.addJob ([sa, sb, ra, rb, fa, fb] { writeWav24 (fa, *sa, ra); writeWav24 (fb, *sb, rb); }); }
+    audioProcessor.blendSrcPath (oscIdx, 0) = fa.getFullPathName();
+    audioProcessor.blendSrcPath (oscIdx, 1) = fb.getFullPathName();
+
+    // a fresh blend starts centered (dice off) — reset the 6 knobs without tripping the poller
+    for (int k = 0; k < 6; ++k)
+    {
+        const float def = (k == 5) ? 0.f : 0.5f;
+        const juce::String pid = juce::String ("SYN_OSC_") + juce::String::charToString ((juce::juce_wchar) ('A' + oscIdx))
+                               + "_BLEND_" + kBlendSuffixes[k];
+        if (auto* p = audioProcessor.getAPVTS().getParameter (pid))
+        { p->beginChangeGesture(); p->setValueNotifyingHost (def); p->endChangeGesture(); }
+        bl.lastVals[k] = def;
+    }
+    queueBlendBake (oscIdx);
+}
+
+void TerrainInstrumentAudioProcessorEditor::queueBlendBake (int oscIdx)
+{
+    auto& bl = oscBlends_[oscIdx];
+    if (! bl.live || bl.srcA == nullptr || bl.srcB == nullptr || bl.engine == nullptr) return;
+    bool expected = false;
+    if (! bl.baking.compare_exchange_strong (expected, true)) { bl.dirty = true; return; }
+
+    const auto params = currentBlendParams (oscIdx);
+    auto engine = bl.engine;   // shared_ptrs ride into the job — safe against re-drops mid-bake
+    auto srcA = bl.srcA; auto srcB = bl.srcB;
+    const double rateA = bl.rateA, rateB = bl.rateB;
+    const juce::String letter = juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx));
+    const juce::File outFile = blendCacheDir().getChildFile ("Blend-" + letter + "-out" + juce::String (bl.outSlot) + ".wav");
+    bl.outSlot ^= 1;   // alternate slots so the loader never reads a file mid-overwrite
+
+    juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+    blendPool_.addJob ([safe, oscIdx, params, engine, srcA, srcB, rateA, rateB, outFile]
+    {
+        if (! engine->isAnalyzed())
+            engine->analyze (srcA->getReadPointer (0),
+                             srcA->getNumChannels() > 1 ? srcA->getReadPointer (1) : nullptr,
+                             srcA->getNumSamples(), rateA,
+                             srcB->getReadPointer (0),
+                             srcB->getNumChannels() > 1 ? srcB->getReadPointer (1) : nullptr,
+                             srcB->getNumSamples(), rateB);
+        std::vector<float> oL, oR;
+        engine->render (params, oL, oR);
+        bool ok = oL.size() >= 64;
+        if (ok)
+        {
+            juce::AudioBuffer<float> buf (2, (int) oL.size());
+            buf.copyFrom (0, 0, oL.data(), (int) oL.size());
+            buf.copyFrom (1, 0, oR.data(), (int) oR.size());
+            ok = writeWav24 (outFile, buf, engine->outRate());
+        }
+        juce::MessageManager::callAsync ([safe, oscIdx, outFile, ok]
+        {
+            if (safe == nullptr) return;
+            safe->oscBlends_[oscIdx].baking = false;
+            if (ok) safe->publishBlend (oscIdx, outFile);
+            if (safe->oscBlends_[oscIdx].dirty.exchange (false))
+                safe->queueBlendBake (oscIdx);   // params moved while baking → go again
+        });
+    });
+}
+
+void TerrainInstrumentAudioProcessorEditor::publishBlend (int oscIdx, const juce::File& baked)
+{
+    loadOscSampleAsync (oscIdx, baked);   // decode → buffer swap → peaks push (waveform morphs)
+    if (webView != nullptr)
+        webView->evaluateJavascript (
+            juce::String ("if(window.onBlendState)window.onBlendState('")
+            + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "',true);", nullptr);
+}
+
+void TerrainInstrumentAudioProcessorEditor::pollBlendKnobs()
+{
+    if (! blendRestoreTried_) { blendRestoreTried_ = true; restoreBlendsFromState(); }
+
+    const juce::int64 now = juce::Time::currentTimeMillis();
+    for (int oi = 0; oi < 4; ++oi)
+    {
+        auto& bl = oscBlends_[oi];
+        if (! bl.live) continue;
+        bool moved = false;
+        for (int k = 0; k < 6; ++k)
+        {
+            const juce::String pid = juce::String ("SYN_OSC_") + juce::String::charToString ((juce::juce_wchar) ('A' + oi))
+                                   + "_BLEND_" + kBlendSuffixes[k];
+            if (auto* raw = audioProcessor.getAPVTS().getRawParameterValue (pid))
+            {
+                const float v = raw->load();
+                if (std::fabs (v - bl.lastVals[k]) > 1e-4f) { bl.lastVals[k] = v; moved = true; }
+            }
+        }
+        if (moved) { bl.lastMoveMs = now; bl.dirty = true; }
+        // debounce: bake once the knobs settle for ~90 ms and nothing is in flight
+        if (bl.dirty.load() && ! bl.baking.load() && now - bl.lastMoveMs > 90)
+        { bl.dirty = false; queueBlendBake (oi); }
+    }
+}
+
+void TerrainInstrumentAudioProcessorEditor::restoreBlendsFromState()
+{
+    for (int oi = 0; oi < 4; ++oi)
+    {
+        auto& bl = oscBlends_[oi];
+        if (bl.live) continue;
+        const juce::File fa (audioProcessor.blendSrcPath (oi, 0));
+        const juce::File fb (audioProcessor.blendSrcPath (oi, 1));
+        if (audioProcessor.blendSrcPath (oi, 0).isEmpty()
+            || ! fa.existsAsFile() || ! fb.existsAsFile()) continue;
+        double ra = 0.0, rb = 0.0;
+        auto A = readAudioFile (fa, ra);
+        auto B = readAudioFile (fb, rb);
+        if (A == nullptr || B == nullptr) continue;
+        bl.srcA = A; bl.rateA = ra > 0.0 ? ra : 48000.0;
+        bl.srcB = B; bl.rateB = rb > 0.0 ? rb : bl.rateA;
+        bl.engine = std::make_shared<tw::BlendEngine>();
+        bl.live = true;
+        // seed the poll cache so restoring does NOT trigger a re-bake (the published sample
+        // already IS the last bake); analyze runs lazily on the first knob move.
+        for (int k = 0; k < 6; ++k)
+        {
+            const juce::String pid = juce::String ("SYN_OSC_") + juce::String::charToString ((juce::juce_wchar) ('A' + oi))
+                                   + "_BLEND_" + kBlendSuffixes[k];
+            if (auto* raw = audioProcessor.getAPVTS().getRawParameterValue (pid))
+                bl.lastVals[k] = raw->load();
+        }
+        if (webView != nullptr)
+            webView->evaluateJavascript (
+                juce::String ("if(window.onBlendState)window.onBlendState('")
+                + juce::String::charToString ((juce::juce_wchar) ('a' + oi)) + "',true);", nullptr);
+    }
 }
 
 // ── Stubs (real implementations land in Tasks 18 and 22 of the v0a plan) ────
