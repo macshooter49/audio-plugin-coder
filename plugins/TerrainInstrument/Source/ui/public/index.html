@@ -3952,17 +3952,15 @@ body {
    start/end) + one riding the fade line (drag vertically = curve). GHOSTS by default:
    they only ARM when the pointer is near the region's TOP CORNERS (.fade-arm-l/-r, set by
    JS) or while a drag is live — pointer-events off while hidden so nothing can snag. */
-#syn-panel .fade-sq, #syn-panel .fade-cv { position: absolute; width: 7px; height: 7px;
-  border-radius: 50%; background: #FFFFFF; box-shadow: 0 0 5px rgba(236,232,242,.45);
+#syn-panel .fade-sq, #syn-panel .fade-cv { position: absolute; width: 13px; height: 13px;
+  border: 4px solid transparent; border-radius: 50%; background: #FFFFFF; background-clip: padding-box;
   z-index: 7; opacity: 0; pointer-events: none; transition: opacity .1s; }
-#syn-panel .fade-sq { top: 2px; margin-left: -3.5px; cursor: ew-resize; }
-#syn-panel .fade-cv { margin: -3.5px 0 0 -3.5px; cursor: ns-resize; display: none; }
+#syn-panel .fade-sq { top: 3%; margin: -6.5px 0 0 -6.5px; cursor: ew-resize; }
+#syn-panel .fade-cv { margin: -6.5px 0 0 -6.5px; cursor: ns-resize; display: none; }
 #syn-panel .fade-cv.on { display: block; }
 #syn-panel .sample-view.fade-arm-l .fade-sq.fi, #syn-panel .sample-view.fade-arm-l .fade-cv.fi.on,
 #syn-panel .sample-view.fade-arm-r .fade-sq.fo, #syn-panel .sample-view.fade-arm-r .fade-cv.fo.on,
 #syn-panel .fade-sq.drag, #syn-panel .fade-cv.drag { opacity: 1; pointer-events: auto; }
-#syn-panel .fade-sq:hover, #syn-panel .fade-sq.drag,
-#syn-panel .fade-cv:hover, #syn-panel .fade-cv.drag { box-shadow: 0 0 7px rgba(255,255,255,.85); }
 #syn-panel .device.osc.engine-granular .fade-sq, #syn-panel .device.osc.engine-granular .fade-cv { display: none; }
 /* drop affordance (shown on dragover / empty) */
 #syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
@@ -10665,6 +10663,13 @@ setTimeout(function wireSynControls () {
         // GHOST-ARMING — the fade dots only appear when the pointer is in the TOP band near
         // a region corner (or out to the fade's current reach). Class-driven (not :hover) so
         // hidden dots have pointer-events:none and can never snag a drag = no glitching.
+        // The curve dot RIDES the fade line, so a dragged-down curve can sit far below the
+        // top band — nearDot() arms it at its ACTUAL position so it's always re-grabbable.
+        function nearDot (el, x, y) {
+          if (! el) return false;
+          var b = el.getBoundingClientRect (); if (b.width < 1) return false;
+          return Math.abs (x - (b.left + b.width / 2)) <= 11 && Math.abs (y - (b.top + b.height / 2)) <= 11;
+        }
         disp.addEventListener ('pointermove', function (e) {
           try {
             var r = disp.getBoundingClientRect (); if (r.width < 2) return;
@@ -10672,8 +10677,13 @@ setTimeout(function wireSynControls () {
             var RL = Math.max (0.001, st.e - st.s);
             var fiX = st.s + st.fin * RL, foX = st.e - st.fout * RL;
             var top = py < 0.34;
-            var armL = top && px >= st.s - 3 && px <= Math.max (fiX + 5, st.s + 12);
-            var armR = top && px <= st.e + 3 && px >= Math.min (foX - 5, st.e - 12);
+            // hysteresis: ARM in the top band (or right at the dot); once armed, HOLD while the
+            // pointer stays in the fade's x-span at ANY height — so gliding down the fade line
+            // to a low curve dot never blinks the dots out mid-approach.
+            var inSpanL = px >= st.s - 4 && px <= Math.max (fiX + 5, st.s + 12);
+            var inSpanR = px <= st.e + 4 && px >= Math.min (foX - 5, st.e - 12);
+            var armL = (top && inSpanL) || nearDot (fadeCvI, e.clientX, e.clientY) || (view.classList.contains ('fade-arm-l') && inSpanL);
+            var armR = (top && inSpanR) || nearDot (fadeCvO, e.clientX, e.clientY) || (view.classList.contains ('fade-arm-r') && inSpanR);
             if (view.classList.contains ('fade-arm-l') !== armL) view.classList.toggle ('fade-arm-l', armL);
             if (view.classList.contains ('fade-arm-r') !== armR) view.classList.toggle ('fade-arm-r', armR);
           } catch (_) {}
