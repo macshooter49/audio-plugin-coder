@@ -3947,6 +3947,22 @@ body {
 #syn-panel .samp-env .env-loopin, #syn-panel .samp-env .env-loopout { stroke: var(--purple-400); opacity: .72; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
 #syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { fill: rgba(8,8,18,.5); }
 #syn-panel .sample-view.dragfade .samp-env .env-fadein-line, #syn-panel .sample-view.dragfade .samp-env .env-fadeout-line { opacity: 1; stroke-width: 1.6; }
+/* ABLETON-STYLE FADES — small transparent corner SQUARES (drag horizontally = fade length,
+   no Shift needed; drag back to the corner = plain start/end again) + a rotated-square CURVE
+   handle mid-fade (drag vertically = curve shape). FL-style hover chrome: invisible until the
+   display is hovered or a drag is live. Thin-white aesthetic, no glass. */
+#syn-panel .fade-sq { position: absolute; top: 1px; width: 9px; height: 9px; margin-left: -4.5px;
+  border: 1px solid rgba(236,232,242,.95); background: rgba(24,24,38,.35); border-radius: 1.5px;
+  cursor: ew-resize; z-index: 7; opacity: 0; transition: opacity .12s, background .12s; }
+#syn-panel .fade-cv { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px;
+  border: 1px solid rgba(236,232,242,.95); background: rgba(24,24,38,.35); transform: rotate(45deg);
+  cursor: ns-resize; z-index: 7; opacity: 0; transition: opacity .12s, background .12s; display: none; }
+#syn-panel .fade-cv.on { display: block; }
+#syn-panel .samp-disp:hover .fade-sq, #syn-panel .fade-sq.drag,
+#syn-panel .samp-disp:hover .fade-cv.on, #syn-panel .fade-cv.drag { opacity: 1; }
+#syn-panel .fade-sq:hover, #syn-panel .fade-sq.drag,
+#syn-panel .fade-cv:hover, #syn-panel .fade-cv.drag { background: rgba(183,148,255,.55); }
+#syn-panel .device.osc.engine-granular .fade-sq, #syn-panel .device.osc.engine-granular .fade-cv { display: none; }
 /* drop affordance (shown on dragover / empty) */
 #syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
   font-size: 9px; letter-spacing: 1.5px; color: var(--text-muted); pointer-events: none; opacity: 0; transition: opacity .15s; }
@@ -5171,6 +5187,10 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
+                <div class="fade-sq fi" title="Fade in — drag from the corner"></div>
+                <div class="fade-sq fo" title="Fade out — drag from the corner"></div>
+                <div class="fade-cv fi" title="Fade curve — drag up / down"></div>
+                <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
@@ -5370,6 +5390,10 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
+                <div class="fade-sq fi" title="Fade in — drag from the corner"></div>
+                <div class="fade-sq fo" title="Fade out — drag from the corner"></div>
+                <div class="fade-cv fi" title="Fade curve — drag up / down"></div>
+                <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
@@ -5585,6 +5609,10 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
+                <div class="fade-sq fi" title="Fade in — drag from the corner"></div>
+                <div class="fade-sq fo" title="Fade out — drag from the corner"></div>
+                <div class="fade-cv fi" title="Fade curve — drag up / down"></div>
+                <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
@@ -5784,6 +5812,10 @@ body {
                 <div class="samp-h e"></div>
                 <div class="samp-h ls"></div>
                 <div class="samp-h le"></div>
+                <div class="fade-sq fi" title="Fade in — drag from the corner"></div>
+                <div class="fade-sq fo" title="Fade out — drag from the corner"></div>
+                <div class="fade-cv fi" title="Fade curve — drag up / down"></div>
+                <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
               </div>
@@ -10342,6 +10374,8 @@ setTimeout(function wireSynControls () {
         var phPool = ph ? [ph] : [];
         if (ph && ph.parentNode) { for (var _pi = 1; _pi < 16; _pi++) { var _c = ph.cloneNode (true); ph.parentNode.appendChild (_c); phPool.push (_c); } }
         phPool.forEach (function (L) { L._on = false; L._vi = -1; L.classList.remove ('on'); });
+        var fadeSqI = view.querySelector ('.fade-sq.fi'), fadeSqO = view.querySelector ('.fade-sq.fo');
+        var fadeCvI = view.querySelector ('.fade-cv.fi'), fadeCvO = view.querySelector ('.fade-cv.fo');
         var envFadeIn = view.querySelector ('.env-fadein'), envFadeOut = view.querySelector ('.env-fadeout');
         var envFadeInLine = view.querySelector ('.env-fadein-line'), envFadeOutLine = view.querySelector ('.env-fadeout-line');
         var envLoopIn = view.querySelector ('.env-loopin'), envLoopOut = view.querySelector ('.env-loopout');
@@ -10356,6 +10390,7 @@ setTimeout(function wireSynControls () {
         function P (f) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (PRE + f) : null; } catch (e) { return null; } }
         var pStart = P ('START'), pEnd = P ('END'), pLS = P ('LOOP_START'), pLE = P ('LOOP_END'),
             pMode = P ('LOOP_MODE'), pSnap = P ('SNAP'), pFadeIn = P ('FADE_IN'), pFadeOut = P ('FADE_OUT'), pXfade = P ('XFADE');
+        var pFinCurve = P ('FADEIN_CURVE'), pFoutCurve = P ('FADEOUT_CURVE');   // fade curve diamonds
         function rd (p, d) { try { return p ? p.getNormalisedValue () : d; } catch (e) { return d; } }
         function rdChoice (p, n, d) { try { return p ? Math.max (0, Math.min (n - 1, Math.round (p.getScaledValue ()))) : d; } catch (e) { return d; } }
         function wr (p, v) { try { if (p) p.setNormalisedValue (Math.max (0, Math.min (1, v))); } catch (e) {} }
@@ -10365,6 +10400,7 @@ setTimeout(function wireSynControls () {
           s: rd (pStart, 0.05) * 100, e: rd (pEnd, 0.96) * 100,
           ls: rd (pLS, 0.0) * 100, le: rd (pLE, 1.0) * 100,
           fin: rd (pFadeIn, 0), fout: rd (pFadeOut, 0), xfade: rd (pXfade, 0.12),
+          finc: rd (pFinCurve, 0.5), foutc: rd (pFoutCurve, 0.5),
           mode: rdChoice (pMode, 5, 0), snap: rdChoice (pSnap, 3, 0), loop: true, t: 0, dir: 1
         };
         st.loop = (SAMP_MODES[st.mode] !== 'One-Shot');
@@ -10376,14 +10412,21 @@ setTimeout(function wireSynControls () {
         // fadePath builds the curve from the marker (gain 0, y=100) inward to (gain 1, y≈3); fill=true
         // closes it into the subtle dark "unavailable" wedge, fill=false leaves it OPEN = the clean
         // white line (drawn as a SEPARATE element so the fill never cuts it). Picture==sound.
-        function fadePath (mark, inner, fill) {
-          // Sample the equal-power curve y = 100 − 97·sin(u·π/2), then connect the points with
-          // quadratic Béziers through their midpoints → a genuinely SMOOTH curve (no faceted
-          // polyline). 16 samples is plenty once it's Bézier-smoothed.
+        // EXACT mirror of SampleEngine::fadeShape — curve 0.5 = the classic equal-power sin,
+        // above = slow start (exponential swell), below = fast start (log). Picture == sound.
+        function fadeShapeUi (t, c) {
+          var B = (c - 0.5) * 2;
+          if (B > -0.02 && B < 0.02) return Math.sin (t * Math.PI / 2);
+          var Pk = B * 6;
+          return (Math.exp (Pk * t) - 1) / (Math.exp (Pk) - 1);
+        }
+        function fadePath (mark, inner, fill, curve) {
+          // Sample the fade curve, then connect the points with quadratic Béziers through
+          // their midpoints → a genuinely SMOOTH curve (no faceted polyline).
           var N = 16, pts = [];
           for (var k = 0; k <= N; k++) {
             var u = k / N;
-            pts.push ([mark + (inner - mark) * u, 100 - 97 * Math.sin (u * Math.PI / 2)]);
+            pts.push ([mark + (inner - mark) * u, 100 - 97 * fadeShapeUi (u, curve === undefined ? 0.5 : curve)]);
           }
           var d = 'M' + pts[0][0].toFixed (2) + ',' + pts[0][1].toFixed (2);
           for (var i = 1; i < pts.length - 1; i++) {
@@ -10401,15 +10444,26 @@ setTimeout(function wireSynControls () {
           var xf = Math.min (st.xfade * LL, LL / 2);          // fraction-of-loop → buffer %, half-cap
           // FADE-IN: curve from the start marker inward. Clamp to the loop start when a real
           // lead-in exists (ls > s) — past the loop the playhead is caught and the fade is moot.
+          var finX = st.s + fi; if (st.loop && st.ls > st.s + 0.5) finX = Math.min (finX, st.ls);
+          var foutX = st.e - fo; if (st.loop && st.le < st.e - 0.5) foutX = Math.max (foutX, st.le);
           if (fi > 0.3) {
-            var finX = st.s + fi; if (st.loop && st.ls > st.s + 0.5) finX = Math.min (finX, st.ls);
-            setPath (envFadeIn, fadePath (st.s, finX, true)); setPath (envFadeInLine, fadePath (st.s, finX, false));
+            setPath (envFadeIn, fadePath (st.s, finX, true, st.finc)); setPath (envFadeInLine, fadePath (st.s, finX, false, st.finc));
           } else { setPath (envFadeIn, ''); setPath (envFadeInLine, ''); }
           // FADE-OUT: curve from the end marker inward. Clamp to the loop end (tail-out only).
           if (fo > 0.3) {
-            var foutX = st.e - fo; if (st.loop && st.le < st.e - 0.5) foutX = Math.max (foutX, st.le);
-            setPath (envFadeOut, fadePath (st.e, foutX, true)); setPath (envFadeOutLine, fadePath (st.e, foutX, false));
+            setPath (envFadeOut, fadePath (st.e, foutX, true, st.foutc)); setPath (envFadeOutLine, fadePath (st.e, foutX, false, st.foutc));
           } else { setPath (envFadeOut, ''); setPath (envFadeOutLine, ''); }
+          // ABLETON-STYLE handles: corner SQUARE marks the fade's inner edge (sits at the
+          // region's top corner when the fade is 0); the curve DIAMOND rides the fade line
+          // at its midpoint and only exists once a fade is real.
+          if (fadeSqI) fadeSqI.style.left = finX + '%';
+          if (fadeSqO) fadeSqO.style.left = foutX + '%';
+          if (fadeCvI) { fadeCvI.classList.toggle ('on', fi > 0.8);
+            fadeCvI.style.left = (st.s + (finX - st.s) * 0.5) + '%';
+            fadeCvI.style.top  = (100 - 97 * fadeShapeUi (0.5, st.finc)) + '%'; }
+          if (fadeCvO) { fadeCvO.classList.toggle ('on', fo > 0.8);
+            fadeCvO.style.left = (st.e - (st.e - foutX) * 0.5) + '%';
+            fadeCvO.style.top  = (100 - 97 * fadeShapeUi (0.5, st.foutc)) + '%'; }
           if (st.loop && xf > 0.3) {
             setPts (envLoopIn,  st.ls + ',100 ' + (st.ls + xf) + ',0');
             setPts (envLoopOut, (st.le - xf) + ',0 ' + st.le + ',100');
@@ -10443,7 +10497,7 @@ setTimeout(function wireSynControls () {
           syncParams (); place (); redraw ();
         }
         function pctOf (e) { var r = disp.getBoundingClientRect (); return Math.max (0, Math.min (100, ((e.clientX - r.left) / r.width) * 100)); }
-        function syncParams () { wr (pStart, st.s / 100); wr (pEnd, st.e / 100); wr (pLS, st.ls / 100); wr (pLE, st.le / 100); wr (pFadeIn, st.fin); wr (pFadeOut, st.fout); wr (pXfade, st.xfade); wrChoice (pMode, st.mode, 5); }
+        function syncParams () { wr (pStart, st.s / 100); wr (pEnd, st.e / 100); wr (pLS, st.ls / 100); wr (pLE, st.le / 100); wr (pFadeIn, st.fin); wr (pFadeOut, st.fout); wr (pFinCurve, st.finc); wr (pFoutCurve, st.foutc); wr (pXfade, st.xfade); wrChoice (pMode, st.mode, 5); }
 
         var syncing = false;   // guard reverse-sync during a local drag
         // Region drag. Shift+drag = set a fade ramp from that edge (writes the fade/xfade param).
@@ -10495,6 +10549,8 @@ setTimeout(function wireSynControls () {
         onParam (pLE,      function () { st.le = rd (pLE, st.le / 100) * 100; });
         onParam (pFadeIn,  function () { st.fin = rd (pFadeIn, st.fin); });
         onParam (pFadeOut, function () { st.fout = rd (pFadeOut, st.fout); });
+        onParam (pFinCurve,  function () { st.finc  = rd (pFinCurve,  st.finc);  });
+        onParam (pFoutCurve, function () { st.foutc = rd (pFoutCurve, st.foutc); });
         onParam (pXfade,   function () { st.xfade = rd (pXfade, st.xfade); });
         onParam (pMode, function () { st.mode = rdChoice (pMode, 5, st.mode); st.loop = (SAMP_MODES[st.mode] !== 'One-Shot'); if (modePaint) modePaint (); });
         onParam (pSnap, function () { st.snap = rdChoice (pSnap, 3, st.snap); if (snapPaint) snapPaint (); });
@@ -10521,6 +10577,52 @@ setTimeout(function wireSynControls () {
         // arrow revealed by .blend-on flips Sample knobs <-> the 6 blend knobs (secret menu)
         var blArrow = view.querySelector ('.bl-arrow');
         if (blArrow && dev) blArrow.addEventListener ('click', function () { dev.classList.toggle ('blend-pg2'); });
+
+        // ── ABLETON-STYLE FADE HANDLES (no Shift needed; Shift+drag on the markers still
+        //    works as the fallback). Square = fade length; drag it back to the corner and the
+        //    edge is a plain start/end again. Diamond = curve (up = faster start, down = slower).
+        function wireFadeSq (h, isIn) {
+          if (! h) return;
+          h.addEventListener ('pointerdown', function (ev) {
+            ev.preventDefault (); ev.stopPropagation ();
+            try { h.setPointerCapture (ev.pointerId); } catch (_) {}
+            h.classList.add ('drag'); view.classList.add ('dragfade'); syncing = true;
+            function mv (e) {
+              var pp = pctOf (e), RL = Math.max (0.001, st.e - st.s);
+              var fr = Math.max (0, Math.min (1, (isIn ? (pp - st.s) : (st.e - pp)) / RL));
+              if (fr < 0.006) fr = 0;   // snap-to-corner = plain start/end again
+              if (isIn) { st.fin = fr; wr (pFadeIn, fr); } else { st.fout = fr; wr (pFadeOut, fr); }
+              place ();
+            }
+            function up () { syncing = false; view.classList.remove ('dragfade'); try { h.releasePointerCapture (ev.pointerId); } catch (_) {} h.classList.remove ('drag'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
+            document.addEventListener ('pointermove', mv);
+            document.addEventListener ('pointerup', up);
+          });
+          h.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation ();
+            if (isIn) { st.fin = 0; wr (pFadeIn, 0); } else { st.fout = 0; wr (pFadeOut, 0); } place (); });
+        }
+        function wireFadeCv (h, isIn) {
+          if (! h) return;
+          h.addEventListener ('pointerdown', function (ev) {
+            ev.preventDefault (); ev.stopPropagation ();
+            try { h.setPointerCapture (ev.pointerId); } catch (_) {}
+            h.classList.add ('drag'); view.classList.add ('dragfade'); syncing = true;
+            var y0 = ev.clientY, c0 = isIn ? st.finc : st.foutc;
+            function mv (e) {
+              // drag UP = faster start (curve bulges up), DOWN = slower (exponential swell)
+              var c = Math.max (0, Math.min (1, c0 + (e.clientY - y0) / 110));
+              if (isIn) { st.finc = c; wr (pFinCurve, c); } else { st.foutc = c; wr (pFoutCurve, c); }
+              place ();
+            }
+            function up () { syncing = false; view.classList.remove ('dragfade'); try { h.releasePointerCapture (ev.pointerId); } catch (_) {} h.classList.remove ('drag'); document.removeEventListener ('pointermove', mv); document.removeEventListener ('pointerup', up); }
+            document.addEventListener ('pointermove', mv);
+            document.addEventListener ('pointerup', up);
+          });
+          h.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation ();
+            if (isIn) { st.finc = 0.5; wr (pFinCurve, 0.5); } else { st.foutc = 0.5; wr (pFoutCurve, 0.5); } place (); });
+        }
+        wireFadeSq (fadeSqI, true);  wireFadeSq (fadeSqO, false);
+        wireFadeCv (fadeCvI, true);  wireFadeCv (fadeCvO, false);
 
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });

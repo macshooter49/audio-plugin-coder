@@ -545,6 +545,16 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_BLEND_SCULPT[] = "SYN_OSC_D_BLEND_SCULPT";
     constexpr char SYN_OSC_D_BLEND_DICE[]   = "SYN_OSC_D_BLEND_DICE";
 
+    // ── FADE CURVES (Ableton-style curve diamond per region-fade edge; 0.5 = classic sin) ──
+    constexpr char SYN_OSC_A_SAMPLE_FADEIN_CURVE[]  = "SYN_OSC_A_SAMPLE_FADEIN_CURVE";
+    constexpr char SYN_OSC_A_SAMPLE_FADEOUT_CURVE[] = "SYN_OSC_A_SAMPLE_FADEOUT_CURVE";
+    constexpr char SYN_OSC_B_SAMPLE_FADEIN_CURVE[]  = "SYN_OSC_B_SAMPLE_FADEIN_CURVE";
+    constexpr char SYN_OSC_B_SAMPLE_FADEOUT_CURVE[] = "SYN_OSC_B_SAMPLE_FADEOUT_CURVE";
+    constexpr char SYN_OSC_C_SAMPLE_FADEIN_CURVE[]  = "SYN_OSC_C_SAMPLE_FADEIN_CURVE";
+    constexpr char SYN_OSC_C_SAMPLE_FADEOUT_CURVE[] = "SYN_OSC_C_SAMPLE_FADEOUT_CURVE";
+    constexpr char SYN_OSC_D_SAMPLE_FADEIN_CURVE[]  = "SYN_OSC_D_SAMPLE_FADEIN_CURVE";
+    constexpr char SYN_OSC_D_SAMPLE_FADEOUT_CURVE[] = "SYN_OSC_D_SAMPLE_FADEOUT_CURVE";
+
     // ── GRAIN-EXPANDED-IDS — the 6 page-2 functions beyond the default 6 (Life/Jump removed 2026-07-02;
     //    Air/Stretch now reuse the Sample osc's SYN_OSC_x_SAMPLE_AIR/_STRETCH/_STRETCH_MODE params) ──
     constexpr char SYN_OSC_A_GRAIN_POSITION[] = "SYN_OSC_A_GRAIN_POSITION"; // float 0..1 grain-birth anchor

@@ -2208,6 +2208,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addBlendOsc (ParameterIDs::SYN_OSC_D_BLEND_MORPH, ParameterIDs::SYN_OSC_D_BLEND_ATTACK, ParameterIDs::SYN_OSC_D_BLEND_BODY,
                  ParameterIDs::SYN_OSC_D_BLEND_BREATH, ParameterIDs::SYN_OSC_D_BLEND_SCULPT, ParameterIDs::SYN_OSC_D_BLEND_DICE, "D");
 
+    // FADE CURVES — Ableton-style curve diamond per region fade edge (0.5 = classic sin).
+    auto addFadeCurve = [&layout] (const char* id, const juce::String& nm)
+    {
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { id, 1 }, "Synth OSC " + nm,
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+    };
+    addFadeCurve (ParameterIDs::SYN_OSC_A_SAMPLE_FADEIN_CURVE,  "A Fade-In Curve");
+    addFadeCurve (ParameterIDs::SYN_OSC_A_SAMPLE_FADEOUT_CURVE, "A Fade-Out Curve");
+    addFadeCurve (ParameterIDs::SYN_OSC_B_SAMPLE_FADEIN_CURVE,  "B Fade-In Curve");
+    addFadeCurve (ParameterIDs::SYN_OSC_B_SAMPLE_FADEOUT_CURVE, "B Fade-Out Curve");
+    addFadeCurve (ParameterIDs::SYN_OSC_C_SAMPLE_FADEIN_CURVE,  "C Fade-In Curve");
+    addFadeCurve (ParameterIDs::SYN_OSC_C_SAMPLE_FADEOUT_CURVE, "C Fade-Out Curve");
+    addFadeCurve (ParameterIDs::SYN_OSC_D_SAMPLE_FADEIN_CURVE,  "D Fade-In Curve");
+    addFadeCurve (ParameterIDs::SYN_OSC_D_SAMPLE_FADEOUT_CURVE, "D Fade-Out Curve");
+
     // GRAIN-EXPANDED — the 6 page-2 functions (defaults match GranularEngineParams).
     // Life + Jump removed (2026-07-02); Air + Stretch live on the waveform right-click, reusing
     // the Sample osc's SYN_OSC_x_SAMPLE_AIR / _STRETCH / _STRETCH_MODE params (no new params).
@@ -3210,6 +3226,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spA.air       = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_AIR);
         spA.warp      = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_WARP);
         spA.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_WARPMODE);
+        spA.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADEIN_CURVE);
+        spA.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_FADEOUT_CURVE);
         tw::SynthVoice::SampleEngineParams spB;
         spB.scan      = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SCAN);       spB.stretch = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_STRETCH);
         spB.formant   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FORMANT);    spB.spray   = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_SPRAY);
@@ -3223,6 +3241,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spB.air       = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_AIR);
         spB.warp      = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_WARP);
         spB.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_WARPMODE);
+        spB.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADEIN_CURVE);
+        spB.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_B_SAMPLE_FADEOUT_CURVE);
         tw::SynthVoice::SampleEngineParams spC;
         spC.scan      = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SCAN);       spC.stretch = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_STRETCH);
         spC.formant   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FORMANT);    spC.spray   = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_SPRAY);
@@ -3236,6 +3256,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spC.air       = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_AIR);
         spC.warp      = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_WARP);
         spC.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_WARPMODE);
+        spC.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADEIN_CURVE);
+        spC.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_C_SAMPLE_FADEOUT_CURVE);
         tw::SynthVoice::SampleEngineParams spD;
         spD.scan      = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SCAN);       spD.stretch = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_STRETCH);
         spD.formant   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FORMANT);    spD.spray   = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_SPRAY);
@@ -3249,6 +3271,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         spD.air       = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_AIR);
         spD.warp      = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_WARP);
         spD.warpMode  = (int) *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_WARPMODE);
+        spD.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADEIN_CURVE);
+        spD.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADEOUT_CURVE);
 
         // ── GRAIN engine: gather the 12 grain functions per OSC (GRAIN-ENGINE-GATHER) ──
         // ID order: scan,density,size,spray,shape,key, position,pitch,pspray,width,dir,skew.

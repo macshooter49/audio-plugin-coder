@@ -474,6 +474,7 @@ namespace tw
             int   stretchMode = 0;   // 0=Tones 1=Beats 2=Texture (warp algorithm)
             int   formantMode = 0;   // 0=Normal 1=Inverted 2=Cross-Formant 3=Spectral-Tilt
             float fadeIn = 0.f, fadeOut = 0.f;
+            float fadeInCurve = 0.5f, fadeOutCurve = 0.5f;   // fade shape (0.5 = classic sin)
             float air = 0.f;   // AIR exciter amount 0..1
             float warp = 0.f;  // sample warp shaper amount 0..1
             int   warpMode = 0;  // 0=Off 1=Sine Shaper 2=Rectify 3=Fold 4=Drive 5=Crush
@@ -486,6 +487,7 @@ namespace tw
                     && loopStart == o.loopStart && loopEnd == o.loopEnd && loopMode == o.loopMode
                     && snap == o.snap && stretchMode == o.stretchMode && formantMode == o.formantMode
                     && fadeIn == o.fadeIn && fadeOut == o.fadeOut && air == o.air
+                    && fadeInCurve == o.fadeInCurve && fadeOutCurve == o.fadeOutCurve
                     && warp == o.warp && warpMode == o.warpMode;
             }
         };
@@ -3289,6 +3291,7 @@ namespace tw
                 // CPU: one combined region setter = ONE recomputeRegion() instead of 4 (setRegion/
                 // setLoop/setXFade/setFades each recomputed; only the last survived). Bit-identical.
                 e.setRegionParams (p.start, p.end, ls, le, p.xfade, p.fadeIn, p.fadeOut);
+                e.setFadeCurves (p.fadeInCurve, p.fadeOutCurve);   // Ableton-style curve diamonds
                 e.setLoopMode ((tw::SampleEngine::LoopMode) p.loopMode);
                 e.setScan (p.scan);
                 const double ratio = (N <= 1) ? pitchRatio

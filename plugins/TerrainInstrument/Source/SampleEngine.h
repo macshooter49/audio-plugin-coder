@@ -82,12 +82,21 @@ public:
     }
     /** 0..1 → loop crossfade as a fraction of loop length (capped to half-loop). */
     void setXFade (float x01) noexcept { xfade01_ = clamp01 (x01); recomputeRegion(); }
-    /** Region edge amplitude fades (shift-drag Start/End in the UI). 0..1 of region. */
+    /** Region edge amplitude fades (Ableton-style corner handles / shift-drag). 0..1 of region. */
     void setFades (float fadeIn01, float fadeOut01) noexcept
     {
         fadeIn01_  = clamp01 (fadeIn01);
         fadeOut01_ = clamp01 (fadeOut01);
         recomputeRegion();
+    }
+
+    /** Fade CURVE per edge (the Ableton curve-diamond). 0.5 = the classic equal-power sin
+     *  ramp (bit-identical default); below = faster start (log-like), above = slower start
+     *  (exponential). Pure gain shaping — no region recompute needed. */
+    void setFadeCurves (float in01, float out01) noexcept
+    {
+        fadeInCurve01_  = clamp01 (in01);
+        fadeOutCurve01_ = clamp01 (out01);
     }
 
     /** CPU: set ALL region/loop/xfade/fade fields at once and recompute ONCE.
@@ -608,20 +617,33 @@ private:
     double clampPos  (double p) const noexcept { return (p < regStart_) ? regStart_ : (p > regEnd_ - 1.0 ? regEnd_ - 1.0 : p); }
     double clampLoop (double p) const noexcept { return (p < loopStart_) ? loopStart_ : (p > loopEnd_ ? loopEnd_ : p); }
 
+    /** One fade ramp value: t in [0,1] → gain [0,1] per the curve control.
+     *  curve == 0.5 → the classic equal-power sin ramp (bit-identical default).
+     *  Else EXPONENTIAL BIAS (exp(P·t)−1)/(exp(P)−1) — the house curve law (finite slope
+     *  at 0, unlike pow): curve > 0.5 = slow start ("exponential" swell), < 0.5 = fast
+     *  start (log-like). Matches the UI's fadePath sampling exactly (picture == sound). */
+    static float fadeShape (double t, float curve01) noexcept
+    {
+        const float B = (curve01 - 0.5f) * 2.f;                    // -1 .. +1
+        if (B > -0.02f && B < 0.02f) return (float) std::sin (t * kHalfPi);
+        const double P = (double) B * 6.0;                          // bias strength
+        return (float) ((std::exp (P * t) - 1.0) / (std::exp (P) - 1.0));
+    }
+
     /** Region-edge amplitude fade: 1.0 in the middle, ramps from 0 at Start over
-     *  fadeInLen, and down to 0 at End over fadeOutLen. Equal-power (sin) curve. */
+     *  fadeInLen, and down to 0 at End over fadeOutLen. Curve per edge (fadeShape). */
     float edgeGain (double p) const noexcept
     {
         float g = 1.f;
         if (fadeInLen_ > 1.0)
         {
             const double d = p - regStart_;
-            if (d >= 0.0 && d < fadeInLen_) g *= (float) std::sin ((d / fadeInLen_) * kHalfPi);
+            if (d >= 0.0 && d < fadeInLen_) g *= fadeShape (d / fadeInLen_, fadeInCurve01_);
         }
         if (fadeOutLen_ > 1.0)
         {
             const double d = regEnd_ - p;
-            if (d >= 0.0 && d < fadeOutLen_) g *= (float) std::sin ((d / fadeOutLen_) * kHalfPi);
+            if (d >= 0.0 && d < fadeOutLen_) g *= fadeShape (d / fadeOutLen_, fadeOutCurve01_);
         }
         return g;
     }
@@ -641,6 +663,7 @@ private:
     float    loopStart01_ = 0.f, loopEnd01_ = 1.f;
     float    xfade01_ = 0.12f;
     float    fadeIn01_ = 0.f, fadeOut01_ = 0.f;
+    float    fadeInCurve01_ = 0.5f, fadeOutCurve01_ = 0.5f;   // 0.5 = classic sin (default)
     float    scanRate_ = 1.f;                 // signed rate from SCAN (default natural fwd)
     LoopMode mode_ = LoopMode::Forward;
 

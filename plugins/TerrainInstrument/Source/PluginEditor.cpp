@@ -390,6 +390,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDGrainSprayRelay)
             .withOptionsFrom(synOscDGrainShapeRelay)
             .withOptionsFrom(synOscDGrainKeyRelay)
+            // ════ FADE-CURVE-WITHOPTIONS ════
+            .withOptionsFrom(synOscAFadeInCurveRelay)
+            .withOptionsFrom(synOscAFadeOutCurveRelay)
+            .withOptionsFrom(synOscBFadeInCurveRelay)
+            .withOptionsFrom(synOscBFadeOutCurveRelay)
+            .withOptionsFrom(synOscCFadeInCurveRelay)
+            .withOptionsFrom(synOscCFadeOutCurveRelay)
+            .withOptionsFrom(synOscDFadeInCurveRelay)
+            .withOptionsFrom(synOscDFadeOutCurveRelay)
             // ════ BLEND-WITHOPTIONS — per-OSC one-shot blend knobs ════
             .withOptionsFrom(synOscABlendMorphRelay)
             .withOptionsFrom(synOscABlendAttackRelay)
@@ -2476,6 +2485,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDGrainSprayAttachment,   ParameterIDs::SYN_OSC_D_GRAIN_SPRAY,   synOscDGrainSprayRelay);
         mkAtt(synOscDGrainShapeAttachment,   ParameterIDs::SYN_OSC_D_GRAIN_SHAPE,   synOscDGrainShapeRelay);
         mkAtt(synOscDGrainKeyAttachment,     ParameterIDs::SYN_OSC_D_GRAIN_KEY,     synOscDGrainKeyRelay);
+        // ════ FADE CURVE attachments ════
+        mkAtt(synOscAFadeInCurveAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_FADEIN_CURVE, synOscAFadeInCurveRelay);
+        mkAtt(synOscAFadeOutCurveAttachment, ParameterIDs::SYN_OSC_A_SAMPLE_FADEOUT_CURVE, synOscAFadeOutCurveRelay);
+        mkAtt(synOscBFadeInCurveAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_FADEIN_CURVE, synOscBFadeInCurveRelay);
+        mkAtt(synOscBFadeOutCurveAttachment, ParameterIDs::SYN_OSC_B_SAMPLE_FADEOUT_CURVE, synOscBFadeOutCurveRelay);
+        mkAtt(synOscCFadeInCurveAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_FADEIN_CURVE, synOscCFadeInCurveRelay);
+        mkAtt(synOscCFadeOutCurveAttachment, ParameterIDs::SYN_OSC_C_SAMPLE_FADEOUT_CURVE, synOscCFadeOutCurveRelay);
+        mkAtt(synOscDFadeInCurveAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FADEIN_CURVE, synOscDFadeInCurveRelay);
+        mkAtt(synOscDFadeOutCurveAttachment, ParameterIDs::SYN_OSC_D_SAMPLE_FADEOUT_CURVE, synOscDFadeOutCurveRelay);
         // ════ BLEND attachments ════
         mkAtt(synOscABlendMorphAttachment, ParameterIDs::SYN_OSC_A_BLEND_MORPH, synOscABlendMorphRelay);
         mkAtt(synOscABlendAttackAttachment, ParameterIDs::SYN_OSC_A_BLEND_ATTACK, synOscABlendAttackRelay);

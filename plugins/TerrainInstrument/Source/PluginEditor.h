@@ -459,6 +459,15 @@ private:
     juce::WebSliderRelay synOscDGrainSprayRelay   { ParameterIDs::SYN_OSC_D_GRAIN_SPRAY };
     juce::WebSliderRelay synOscDGrainShapeRelay   { ParameterIDs::SYN_OSC_D_GRAIN_SHAPE };
     juce::WebSliderRelay synOscDGrainKeyRelay     { ParameterIDs::SYN_OSC_D_GRAIN_KEY };
+    // ════ FADE CURVE relays ════
+    juce::WebSliderRelay synOscAFadeInCurveRelay { ParameterIDs::SYN_OSC_A_SAMPLE_FADEIN_CURVE };
+    juce::WebSliderRelay synOscAFadeOutCurveRelay { ParameterIDs::SYN_OSC_A_SAMPLE_FADEOUT_CURVE };
+    juce::WebSliderRelay synOscBFadeInCurveRelay { ParameterIDs::SYN_OSC_B_SAMPLE_FADEIN_CURVE };
+    juce::WebSliderRelay synOscBFadeOutCurveRelay { ParameterIDs::SYN_OSC_B_SAMPLE_FADEOUT_CURVE };
+    juce::WebSliderRelay synOscCFadeInCurveRelay { ParameterIDs::SYN_OSC_C_SAMPLE_FADEIN_CURVE };
+    juce::WebSliderRelay synOscCFadeOutCurveRelay { ParameterIDs::SYN_OSC_C_SAMPLE_FADEOUT_CURVE };
+    juce::WebSliderRelay synOscDFadeInCurveRelay { ParameterIDs::SYN_OSC_D_SAMPLE_FADEIN_CURVE };
+    juce::WebSliderRelay synOscDFadeOutCurveRelay { ParameterIDs::SYN_OSC_D_SAMPLE_FADEOUT_CURVE };
     // ════ BLEND relays (per-osc one-shot blend knobs) ════
     juce::WebSliderRelay synOscABlendMorphRelay            { ParameterIDs::SYN_OSC_A_BLEND_MORPH };
     juce::WebSliderRelay synOscABlendAttackRelay           { ParameterIDs::SYN_OSC_A_BLEND_ATTACK };
@@ -980,6 +989,14 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainSprayAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainShapeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDGrainKeyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFadeInCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFadeOutCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFadeInCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFadeOutCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCFadeInCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCFadeOutCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDFadeInCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDFadeOutCurveAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendMorphAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendAttackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscABlendBodyAttachment;
