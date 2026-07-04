@@ -1081,6 +1081,8 @@ private:
     void publishBlend (int oscIdx, const juce::File& baked);    // message thread: load + UI push
     void pollBlendKnobs();                                      // timerCallback: debounce re-bakes
     void restoreBlendsFromState();                              // reload persisted source pairs
+    void resetBlend (int oscIdx, bool pushUi);                  // end a live blend (Replace / undo / delete)
+    std::array<std::vector<juce::File>, 4> blendHistory_;       // UNDO — pre-blend snapshots, ≤100 deep
     tw::BlendParams currentBlendParams (int oscIdx) const;
     juce::File blendCacheDir() const;
     static std::shared_ptr<juce::AudioBuffer<float>> readAudioFile (const juce::File& f, double& rateOut);

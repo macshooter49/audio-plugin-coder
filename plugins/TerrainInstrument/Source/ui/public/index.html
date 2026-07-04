@@ -3863,7 +3863,7 @@ body {
 #syn-panel .device.osc.engine-granular .samp-knob-wrap { display: none; }
 #syn-panel .blend-knobs { display: none; }
 #syn-panel .osc-knobs.blend-knobs { grid-template-columns: repeat(6, 1fr); }
-#syn-panel .bl-arrow { display: none; flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
+#syn-panel .bl-arrow { display: none; flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .9; transition: opacity .15s; }
 #syn-panel .bl-arrow:hover { opacity: .95; }
 #syn-panel .bl-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
 #syn-panel .device.osc.blend-on .bl-arrow { display: block; }
@@ -3947,21 +3947,22 @@ body {
 #syn-panel .samp-env .env-loopin, #syn-panel .samp-env .env-loopout { stroke: var(--purple-400); opacity: .72; filter: drop-shadow(0 0 3px rgba(183,148,255,.7)); }
 #syn-panel .sample-view.dragfade .samp-env .env-fadein, #syn-panel .sample-view.dragfade .samp-env .env-fadeout { fill: rgba(8,8,18,.5); }
 #syn-panel .sample-view.dragfade .samp-env .env-fadein-line, #syn-panel .sample-view.dragfade .samp-env .env-fadeout-line { opacity: 1; stroke-width: 1.6; }
-/* ABLETON-STYLE FADES — small transparent corner SQUARES (drag horizontally = fade length,
-   no Shift needed; drag back to the corner = plain start/end again) + a rotated-square CURVE
-   handle mid-fade (drag vertically = curve shape). FL-style hover chrome: invisible until the
-   display is hovered or a drag is live. Thin-white aesthetic, no glass. */
-#syn-panel .fade-sq { position: absolute; top: 1px; width: 9px; height: 9px; margin-left: -4.5px;
-  border: 1px solid rgba(236,232,242,.95); background: rgba(24,24,38,.35); border-radius: 1.5px;
-  cursor: ew-resize; z-index: 7; opacity: 0; transition: opacity .12s, background .12s; }
-#syn-panel .fade-cv { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px;
-  border: 1px solid rgba(236,232,242,.95); background: rgba(24,24,38,.35); transform: rotate(45deg);
-  cursor: ns-resize; z-index: 7; opacity: 0; transition: opacity .12s, background .12s; display: none; }
+/* ABLETON-STYLE FADES — small WHITE DOTS (same look as the envelope .env-node): one at the
+   fade's inner top edge (drag horizontally = fade length; back to the corner = plain
+   start/end) + one riding the fade line (drag vertically = curve). GHOSTS by default:
+   they only ARM when the pointer is near the region's TOP CORNERS (.fade-arm-l/-r, set by
+   JS) or while a drag is live — pointer-events off while hidden so nothing can snag. */
+#syn-panel .fade-sq, #syn-panel .fade-cv { position: absolute; width: 7px; height: 7px;
+  border-radius: 50%; background: #FFFFFF; box-shadow: 0 0 5px rgba(236,232,242,.45);
+  z-index: 7; opacity: 0; pointer-events: none; transition: opacity .1s; }
+#syn-panel .fade-sq { top: 2px; margin-left: -3.5px; cursor: ew-resize; }
+#syn-panel .fade-cv { margin: -3.5px 0 0 -3.5px; cursor: ns-resize; display: none; }
 #syn-panel .fade-cv.on { display: block; }
-#syn-panel .samp-disp:hover .fade-sq, #syn-panel .fade-sq.drag,
-#syn-panel .samp-disp:hover .fade-cv.on, #syn-panel .fade-cv.drag { opacity: 1; }
+#syn-panel .sample-view.fade-arm-l .fade-sq.fi, #syn-panel .sample-view.fade-arm-l .fade-cv.fi.on,
+#syn-panel .sample-view.fade-arm-r .fade-sq.fo, #syn-panel .sample-view.fade-arm-r .fade-cv.fo.on,
+#syn-panel .fade-sq.drag, #syn-panel .fade-cv.drag { opacity: 1; pointer-events: auto; }
 #syn-panel .fade-sq:hover, #syn-panel .fade-sq.drag,
-#syn-panel .fade-cv:hover, #syn-panel .fade-cv.drag { background: rgba(183,148,255,.55); }
+#syn-panel .fade-cv:hover, #syn-panel .fade-cv.drag { box-shadow: 0 0 7px rgba(255,255,255,.85); }
 #syn-panel .device.osc.engine-granular .fade-sq, #syn-panel .device.osc.engine-granular .fade-cv { display: none; }
 /* drop affordance (shown on dragover / empty) */
 #syn-panel .samp-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 4;
@@ -10078,6 +10079,9 @@ setTimeout(function wireSynControls () {
       // so the behaviour is identical everywhere. Engine write triggers the view-swap listener.
       function dropSampleToOsc (osc, file) {
         if (! osc || ! file) return;
+        // a plain load/REPLACE ends any live blend: arrow + secret knob row disappear,
+        // back to regular sample mode (C++ clears the pair + persistence, pushes onBlendState false)
+        try { var rb = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('resetBlendState') : null; if (rb) rb (osc); } catch (_) {}
         var U = osc.toUpperCase ();
         function ss (id) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (id) : null; } catch (_) { return null; } }
         var es = ss ('SYN_OSC_' + U + '_ENGINE');
@@ -10156,6 +10160,7 @@ setTimeout(function wireSynControls () {
           '<div data-a="paste">' + ic ('<rect x="4" y="6" width="8" height="8" rx="1"/><path d="M6.5 6 V4 H10 V6"/>') + 'Paste sample</div>' +
           '<div data-a="exportshot">' + ic ('<path d="M8 2 V10 M5 7 L8 10 L11 7 M3 13 H13"/>') + 'Export one-shot</div>' +
           '<div class="sepd"></div>' +
+          '<div data-a="undoblend">' + ic ('<path d="M4 6 H10 a3.5 3.5 0 1 1 0 7 H6 M4 6 L6.5 3.5 M4 6 L6.5 8.5"/>') + 'Undo blend</div>' +
           '<div data-a="delsample">' + ic ('<path d="M3 4.5 H13 M6.5 4.5 V3 H9.5 V4.5 M4.5 4.5 L5.2 13.5 H10.8 L11.5 4.5 M6.8 7 V11 M9.2 7 V11"/>') + 'Delete sample</div>';
         // Quick-controls (Volume / Pan / Semitone) at the BOTTOM — same glass component the
         // wavetable osc uses, so the two right-click menus look identical.
@@ -10184,6 +10189,7 @@ setTimeout(function wireSynControls () {
             else if (a === 'reset') { st.s = 0; st.e = 100; st.ls = 0; st.le = 100; st.fin = 0; st.fout = 0; st.xfade = 0.12; st.mode = 1; st.loop = true; if (S.repaintHeader) S.repaintHeader (); }
             else if (a === 'copy')  { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; if (_oc) window.__sampClip = _oc; } catch (e2) {} }
             else if (a === 'exportshot') { try { var _ox = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; var xf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('exportBlendedSample') : null; if (xf && _ox) xf (_ox); /* C++ copies the current one-shot (blend bakes included) to the export dir + reveals it in Finder */ } catch (e5) {} }
+            else if (a === 'undoblend') { try { var _ou = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; var uf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('undoBlend') : null; if (uf && _ou) uf (_ou); /* pops one blend layer: restores the pre-blend one-shot (repeat to walk the whole stack back to the first) */ } catch (e7) {} }
             else if (a === 'delsample') { try { var _od = (S.view && S.view.dataset) ? S.view.dataset.osc : ''; var df = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('clearOscSample') : null; if (df && _od) df (_od); if (S.clearLoaded) S.clearLoaded (); /* full reset: buffer + waveform + region + blend, back to Drop-sample-here */ } catch (e6) {} }
             else if (a === 'paste') { try { var _oc = (S.view && S.view.dataset) ? S.view.dataset.osc : '', _src = window.__sampClip;
                                             if (_oc && _src && _src !== _oc) { var _cf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('copyOscSample') : null; if (_cf) _cf (_src, _oc); } } catch (e3) {} }
@@ -10480,10 +10486,43 @@ setTimeout(function wireSynControls () {
         }
         var peaks = null;   // {min,max} once a real sample loads; else synthetic placeholder
         function redraw () { if (peaks) { drawPeaks (canvas, peaks.min, peaks.max); } else { try { var cx = canvas.getContext ('2d'); cx.clearRect (0, 0, canvas.width, canvas.height); } catch (e) {} } }
+        // 60-FPS MORPH — successive peak pushes (blend re-bakes) TWEEN into place instead of
+        // snapping: the waveform visibly morphs while a blend knob turns. Retargets mid-flight
+        // (from = the currently displayed interpolated shape). First load stays instant.
+        var peaksTweenTo = null;
+        function lerpPeaks (a, b, t) {
+          var n = b.min.length, mn = new Array (n), mx = new Array (n);
+          var am = a.min.length - 1;
+          for (var i = 0; i < n; i++) {
+            var ai = am > 0 ? Math.round ((i / Math.max (1, n - 1)) * am) : 0;
+            mn[i] = a.min[ai] + (b.min[i] - a.min[ai]) * t;
+            mx[i] = a.max[ai] + (b.max[i] - a.max[ai]) * t;
+          }
+          return { min: mn, max: mx };
+        }
+        function tweenPeaks (to) {
+          var from = peaks, t0 = performance.now (), DUR = 110;
+          peaksTweenTo = to;
+          function step (now) {
+            try {
+              if (peaksTweenTo !== to) return;                 // retargeted by a newer push
+              var t = Math.min (1, (now - t0) / DUR);
+              var ss = t * t * (3 - 2 * t);
+              peaks = (t >= 1) ? to : lerpPeaks (from, to, ss);
+              redraw ();
+              if (t < 1) requestAnimationFrame (step); else peaksTweenTo = null;
+            } catch (e) { peaks = to; peaksTweenTo = null; try { redraw (); } catch (_) {} }
+          }
+          requestAnimationFrame (step);
+        }
         function setLoaded (payload) {
           if (! payload) return;
           try { if (typeof payload === 'string') payload = JSON.parse (payload); } catch (e) { return; }
-          if (payload.peaksMin && payload.peaksMax) peaks = { min: payload.peaksMin, max: payload.peaksMax };
+          if (payload.peaksMin && payload.peaksMax) {
+            var to = { min: payload.peaksMin, max: payload.peaksMax };
+            if (peaks && view.classList.contains ('loaded')) { tweenPeaks (to); view.classList.add ('loaded'); return; }
+            peaks = to;
+          }
           view.classList.add ('loaded'); redraw ();
         }
         // DELETE SAMPLE — full reset/refresh: waveform gone, region/loop/fades back to
@@ -10623,6 +10662,23 @@ setTimeout(function wireSynControls () {
         }
         wireFadeSq (fadeSqI, true);  wireFadeSq (fadeSqO, false);
         wireFadeCv (fadeCvI, true);  wireFadeCv (fadeCvO, false);
+        // GHOST-ARMING — the fade dots only appear when the pointer is in the TOP band near
+        // a region corner (or out to the fade's current reach). Class-driven (not :hover) so
+        // hidden dots have pointer-events:none and can never snag a drag = no glitching.
+        disp.addEventListener ('pointermove', function (e) {
+          try {
+            var r = disp.getBoundingClientRect (); if (r.width < 2) return;
+            var px = ((e.clientX - r.left) / r.width) * 100, py = (e.clientY - r.top) / Math.max (1, r.height);
+            var RL = Math.max (0.001, st.e - st.s);
+            var fiX = st.s + st.fin * RL, foX = st.e - st.fout * RL;
+            var top = py < 0.34;
+            var armL = top && px >= st.s - 3 && px <= Math.max (fiX + 5, st.s + 12);
+            var armR = top && px <= st.e + 3 && px >= Math.min (foX - 5, st.e - 12);
+            if (view.classList.contains ('fade-arm-l') !== armL) view.classList.toggle ('fade-arm-l', armL);
+            if (view.classList.contains ('fade-arm-r') !== armR) view.classList.toggle ('fade-arm-r', armR);
+          } catch (_) {}
+        });
+        disp.addEventListener ('pointerleave', function () { view.classList.remove ('fade-arm-l'); view.classList.remove ('fade-arm-r'); });
 
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });

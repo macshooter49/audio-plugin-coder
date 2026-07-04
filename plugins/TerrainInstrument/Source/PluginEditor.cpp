@@ -2250,18 +2250,39 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.oscSourcePath (oscIdx).clear();
                 audioProcessor.setCachedOscPayload ({}, oscIdx);
 
-                auto& bl = oscBlends_[oscIdx];
-                bl.live = false;
-                bl.srcA.reset(); bl.srcB.reset(); bl.engine.reset();
-                bl.dirty = false;
-                audioProcessor.blendSrcPath (oscIdx, 0).clear();
-                audioProcessor.blendSrcPath (oscIdx, 1).clear();
+                resetBlend (oscIdx, false);   // UI push happens in the combined eval below
+                blendHistory_[(size_t) oscIdx].clear();   // a deleted osc has no undo trail
 
                 const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)));
                 if (webView != nullptr)
                     webView->evaluateJavascript (
                         juce::String ("if(window.onBlendState)window.onBlendState('") + letter + "',false);"
                         + "if(window.onOscSampleCleared)window.onOscSampleCleared('" + letter + "');", nullptr);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("resetBlendState", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // REPLACE — a plain load ends the blend: knob row + arrow disappear, regular
+                // sample mode again. (The incoming load overwrites the audio right after.)
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                resetBlend (oscIdx, true);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("undoBlend", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // UNDO — pop one blend layer: restore the pre-blend one-shot snapshot and end
+                // the live blend. Repeat to walk a 100-deep stack back to the first one-shot.
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                auto& hist = blendHistory_[(size_t) oscIdx];
+                if (hist.empty()) { complete (juce::var ("none")); return; }
+                const juce::File f = hist.back();
+                hist.pop_back();
+                resetBlend (oscIdx, true);
+                if (f.existsAsFile()) loadOscSampleAsync (oscIdx, f);
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("exportBlendedSample", [this](const juce::Array<juce::var>& args,
@@ -10305,6 +10326,23 @@ tw::BlendParams TerrainInstrumentAudioProcessorEditor::currentBlendParams (int o
     return p;
 }
 
+// End a live blend: drop the pair + engine, wipe the persisted paths, hide the knob row.
+// Used by Replace (any plain load), Undo, and Delete sample. The published audio is untouched.
+void TerrainInstrumentAudioProcessorEditor::resetBlend (int oscIdx, bool pushUi)
+{
+    if (oscIdx < 0 || oscIdx > 3) return;
+    auto& bl = oscBlends_[oscIdx];
+    bl.live = false;
+    bl.srcA.reset(); bl.srcB.reset(); bl.engine.reset();
+    bl.dirty = false;
+    audioProcessor.blendSrcPath (oscIdx, 0).clear();
+    audioProcessor.blendSrcPath (oscIdx, 1).clear();
+    if (pushUi && webView != nullptr)
+        webView->evaluateJavascript (
+            juce::String ("if(window.onBlendState)window.onBlendState('")
+            + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "',false);", nullptr);
+}
+
 void TerrainInstrumentAudioProcessorEditor::startBlend (int oscIdx, const juce::File& srcBFile)
 {
     if (oscIdx < 0 || oscIdx > 3) return;
@@ -10314,9 +10352,29 @@ void TerrainInstrumentAudioProcessorEditor::startBlend (int oscIdx, const juce::
     auto bufB = readAudioFile (srcBFile, rateB);
     if (bufB == nullptr || bufB->getNumSamples() < 256) return;
 
+    const double curRate = audioProcessor.getOscSampleBuffer (oscIdx).getSampleRate();
+
+    // UNDO — snapshot the CURRENT one-shot before this blend layer goes on top. Each layer
+    // gets its own history WAV (bake slot files get overwritten, so a copy is mandatory);
+    // undoBlend pops one layer at a time all the way back to the very first one-shot.
+    {
+        auto hDir = blendCacheDir().getChildFile ("History");
+        hDir.createDirectory();
+        auto hFile = hDir.getNonexistentChildFile (
+            "Undo-" + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)), ".wav", true);
+        const juce::File curFile (audioProcessor.oscSourcePath (oscIdx));
+        bool snapped = curFile.existsAsFile() && curFile.copyFileTo (hFile);
+        if (! snapped) snapped = writeWav24 (hFile, *cur, curRate > 0.0 ? curRate : 48000.0);
+        if (snapped)
+        {
+            auto& hist = blendHistory_[(size_t) oscIdx];
+            hist.push_back (hFile);
+            if (hist.size() > 100) { hist.front().deleteFile(); hist.erase (hist.begin()); }
+        }
+    }
+
     auto& bl  = oscBlends_[oscIdx];
     bl.srcA   = cur;   // the CURRENT sound — a previous bake when stacking
-    const double curRate = audioProcessor.getOscSampleBuffer (oscIdx).getSampleRate();
     bl.rateA  = curRate > 0.0 ? curRate : 48000.0;
     bl.srcB   = bufB;
     bl.rateB  = rateB > 0.0 ? rateB : bl.rateA;
@@ -10422,8 +10480,9 @@ void TerrainInstrumentAudioProcessorEditor::pollBlendKnobs()
             }
         }
         if (moved) { bl.lastMoveMs = now; bl.dirty = true; }
-        // debounce: bake once the knobs settle for ~90 ms and nothing is in flight
-        if (bl.dirty.load() && ! bl.baking.load() && now - bl.lastMoveMs > 90)
+        // near-live morph: short 40 ms settle → bakes CHAIN while a knob drags, each
+        // publish tweens the waveform (60 fps morph on the UI side)
+        if (bl.dirty.load() && ! bl.baking.load() && now - bl.lastMoveMs > 40)
         { bl.dirty = false; queueBlendBake (oi); }
     }
 }
