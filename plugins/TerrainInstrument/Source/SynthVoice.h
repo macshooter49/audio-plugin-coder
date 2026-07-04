@@ -1623,7 +1623,12 @@ namespace tw
                         sampAirLpAR_ += airHpCoef_ * (sA_R - sampAirLpAR_); const float hpR = sA_R - sampAirLpAR_;
                         sA_R += airA * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
-                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                }
+                // ── SAMPLE WARP shaper — shared by SAMPLE *and* GRANULAR (grain clouds run
+                //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
+                //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
+                //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
+                if (engine_ == Engine::SAMP || engine_ == Engine::GRAN) {
                     const float warpA = sampleParamsA_.warp;
                     if (warpA > 0.001f) {
                         switch (sampleParamsA_.warpMode) {
@@ -1858,7 +1863,12 @@ namespace tw
                         sampAirLpBR_ += airHpCoef_ * (sB_R - sampAirLpBR_); const float hpR = sB_R - sampAirLpBR_;
                         sB_R += airB * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
-                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                }
+                // ── SAMPLE WARP shaper — shared by SAMPLE *and* GRANULAR (grain clouds run
+                //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
+                //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
+                //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
+                if (engineB_ == Engine::SAMP || engineB_ == Engine::GRAN) {
                     const float warpB = sampleParamsB_.warp;
                     if (warpB > 0.001f) {
                         switch (sampleParamsB_.warpMode) {
@@ -2090,7 +2100,12 @@ namespace tw
                         sampAirLpCR_ += airHpCoef_ * (sC_R - sampAirLpCR_); const float hpR = sC_R - sampAirLpCR_;
                         sC_R += airC * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
-                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                }
+                // ── SAMPLE WARP shaper — shared by SAMPLE *and* GRANULAR (grain clouds run
+                //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
+                //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
+                //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
+                if (engineC_ == Engine::SAMP || engineC_ == Engine::GRAN) {
                     const float warpC = sampleParamsC_.warp;
                     if (warpC > 0.001f) {
                         switch (sampleParamsC_.warpMode) {
@@ -2322,7 +2337,12 @@ namespace tw
                         sampAirLpDR_ += airHpCoef_ * (sD_R - sampAirLpDR_); const float hpR = sD_R - sampAirLpDR_;
                         sD_R += airD * 2.0f * (std::tanh (hpR * drv) - hpR);
                     }
-                    // ── SAMPLE WARP shaper — engine-conditional sample-domain warp (reuses existing DSP) ──
+                }
+                // ── SAMPLE WARP shaper — shared by SAMPLE *and* GRANULAR (grain clouds run
+                //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
+                //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
+                //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
+                if (engineD_ == Engine::SAMP || engineD_ == Engine::GRAN) {
                     const float warpD = sampleParamsD_.warp;
                     if (warpD > 0.001f) {
                         switch (sampleParamsD_.warpMode) {
@@ -3331,7 +3351,12 @@ namespace tw
                     for (int u = 0; u < N; ++u)
                     {
                         auto& e = engs[(size_t) u];
-                        const float pl = panL[u], pr = panR[u];
+                        // VOICE-0-ANCHORED gain (Max: "unison turns shit down"): the dry voice —
+                        // the only one carrying the un-sprayed attack — keeps single-voice level;
+                        // only the detuned BED voices are RMS-normalised. Unison now adds around
+                        // the dry sound instead of ducking it (≤ ~+3 dB total, no 1/√N punch loss).
+                        const float gu = (u == 0) ? 1.0f : uNorm;
+                        const float pl = panL[u] * gu, pr = panR[u] * gu;
                         for (int k = 0; k < srcN; ++k)
                         {
                             float l, r; e.tick (l, r);
@@ -3339,8 +3364,6 @@ namespace tw
                             sL[k] += m * pl; sR[k] += m * pr;
                         }
                     }
-                    juce::FloatVectorOperations::multiply (sL, uNorm, srcN);
-                    juce::FloatVectorOperations::multiply (sR, uNorm, srcN);
                 }
                 warp.process (sL, sR, wL, wR, numSamples);            // distinct in/out (Signalsmith requires)
                 warp.processTilt (wL, wR, numSamples, fmTilt, sampleRate_);   // FORMANT-MODE — spectral tilt post-process
@@ -3358,7 +3381,10 @@ namespace tw
                 for (int u = 0; u < N; ++u)
                 {
                     auto& e = engs[(size_t) u];
-                    const float pl = panL[u], pr = panR[u];
+                    // VOICE-0-ANCHORED gain — see the warp-path comment above: dry voice at
+                    // single-voice level, RMS-normalised bed around it. No 1/√N punch loss.
+                    const float gu = (u == 0) ? 1.0f : uNorm;
+                    const float pl = panL[u] * gu, pr = panR[u] * gu;
                     for (int k = 0; k < numSamples; ++k)
                     {
                         float l, r; e.tick (l, r);
@@ -3366,8 +3392,6 @@ namespace tw
                         wL[k] += m * pl; wR[k] += m * pr;
                     }
                 }
-                juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
-                juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
             }
         }
 
@@ -3449,13 +3473,17 @@ namespace tw
             // engine. The engine adds into the cleared buffers; unison engines just stack.
             juce::FloatVectorOperations::clear (wL, numSamples);
             juce::FloatVectorOperations::clear (wR, numSamples);
-            for (int u = 0; u < N; ++u)
+            // VOICE-0-ANCHORED gain (matches renderSampleOsc): render the detuned BED voices
+            // first and RMS-normalise them, then the dry voice 0 adds LAST at full level —
+            // unison fattens AROUND the dry cloud instead of ducking it by 1/√N.
+            for (int u = 1; u < N; ++u)
                 engs[(size_t) u].renderBlockAdd (wL, wR, numSamples);
             if (N > 1)
             {
                 juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
                 juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
             }
+            engs[0].renderBlockAdd (wL, wR, numSamples);
         }
 
         void renderGranularBlocks (int numSamples) noexcept

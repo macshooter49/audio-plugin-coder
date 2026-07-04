@@ -11687,14 +11687,19 @@ setTimeout(function wireSynControls () {
             }
             // Is this osc currently in the SAMPLE engine? (the back panel is shared.)
             const isSample = function() {
-              try { const dev = pill.closest('.device.osc'); return !!(dev && dev.classList.contains('engine-sample') && smModeState && smAmtState); }
+              // SAMPLE *and* GRANULAR use the sample warp shaper (the DSP now runs it for both) —
+              // granular used to fall through to the wavetable WARP 2 list, which did nothing.
+              try { const dev = pill.closest('.device.osc'); return !!(dev && (dev.classList.contains('engine-sample') || dev.classList.contains('engine-granular')) && smModeState && smAmtState); }
               catch (e) { return false; }
             };
             // Active context — choose the param set + mode list per engine.
             const ctx = function() {
-              return isSample()
-                ? { modeState: smModeState, amtState: smAmtState, modes: SAMPLE_MODES, header: 'SAMPLE WARP' }
-                : { modeState: wtModeState, amtState: wtAmtState, modes: MODES,        header: 'WARP 2' };
+              if (isSample()) {
+                let hdr = 'SAMPLE WARP';
+                try { const dev = pill.closest('.device.osc'); if (dev && dev.classList.contains('engine-granular')) hdr = 'GRAIN WARP'; } catch (e) {}
+                return { modeState: smModeState, amtState: smAmtState, modes: SAMPLE_MODES, header: hdr };
+              }
+              return { modeState: wtModeState, amtState: wtAmtState, modes: MODES,        header: 'WARP 2' };
             };
             const modeIdxOf = function(c) {
               try { return Math.round((c.modeState.getNormalisedValue ? c.modeState.getNormalisedValue() : 0) * (c.modes.length - 1)); }
