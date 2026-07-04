@@ -581,4 +581,33 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_GRAIN_WIDTH[]    = "SYN_OSC_D_GRAIN_WIDTH";
     constexpr char SYN_OSC_D_GRAIN_DIR[]      = "SYN_OSC_D_GRAIN_DIR";
     constexpr char SYN_OSC_D_GRAIN_SKEW[]     = "SYN_OSC_D_GRAIN_SKEW";
+
+    // ── FM-ENGINE-IDS — per-OSC wavetable-carrier FM (2026-07-04). The osc's own
+    //    wavetable IS the carrier (frame morph / blur / spectral still live); two sine
+    //    modulators + DX-style averaged self-feedback on M1. Ratios keytrack via the
+    //    carrier's phase increment. ──
+    constexpr char SYN_OSC_A_FM_ALGO[]   = "SYN_OSC_A_FM_ALGO";     // choice 0..2 — Stack (M2→M1→carrier) / Split (M1,M2→carrier) / Ring (M2→M1; M1 rings the output)
+    constexpr char SYN_OSC_A_FM_RATIO1[] = "SYN_OSC_A_FM_RATIO1";   // float 0.25..16 — M1 freq ratio
+    constexpr char SYN_OSC_A_FM_DEPTH1[] = "SYN_OSC_A_FM_DEPTH1";   // float 0..1 — M1 index (squared taper)
+    constexpr char SYN_OSC_A_FM_RATIO2[] = "SYN_OSC_A_FM_RATIO2";   // float 0.25..16 — M2 freq ratio
+    constexpr char SYN_OSC_A_FM_DEPTH2[] = "SYN_OSC_A_FM_DEPTH2";   // float 0..1 — M2 index (squared taper)
+    constexpr char SYN_OSC_A_FM_FB[]     = "SYN_OSC_A_FM_FB";       // float 0..1 — M1 self-feedback
+    constexpr char SYN_OSC_B_FM_ALGO[]   = "SYN_OSC_B_FM_ALGO";
+    constexpr char SYN_OSC_B_FM_RATIO1[] = "SYN_OSC_B_FM_RATIO1";
+    constexpr char SYN_OSC_B_FM_DEPTH1[] = "SYN_OSC_B_FM_DEPTH1";
+    constexpr char SYN_OSC_B_FM_RATIO2[] = "SYN_OSC_B_FM_RATIO2";
+    constexpr char SYN_OSC_B_FM_DEPTH2[] = "SYN_OSC_B_FM_DEPTH2";
+    constexpr char SYN_OSC_B_FM_FB[]     = "SYN_OSC_B_FM_FB";
+    constexpr char SYN_OSC_C_FM_ALGO[]   = "SYN_OSC_C_FM_ALGO";
+    constexpr char SYN_OSC_C_FM_RATIO1[] = "SYN_OSC_C_FM_RATIO1";
+    constexpr char SYN_OSC_C_FM_DEPTH1[] = "SYN_OSC_C_FM_DEPTH1";
+    constexpr char SYN_OSC_C_FM_RATIO2[] = "SYN_OSC_C_FM_RATIO2";
+    constexpr char SYN_OSC_C_FM_DEPTH2[] = "SYN_OSC_C_FM_DEPTH2";
+    constexpr char SYN_OSC_C_FM_FB[]     = "SYN_OSC_C_FM_FB";
+    constexpr char SYN_OSC_D_FM_ALGO[]   = "SYN_OSC_D_FM_ALGO";
+    constexpr char SYN_OSC_D_FM_RATIO1[] = "SYN_OSC_D_FM_RATIO1";
+    constexpr char SYN_OSC_D_FM_DEPTH1[] = "SYN_OSC_D_FM_DEPTH1";
+    constexpr char SYN_OSC_D_FM_RATIO2[] = "SYN_OSC_D_FM_RATIO2";
+    constexpr char SYN_OSC_D_FM_DEPTH2[] = "SYN_OSC_D_FM_DEPTH2";
+    constexpr char SYN_OSC_D_FM_FB[]     = "SYN_OSC_D_FM_FB";
 }

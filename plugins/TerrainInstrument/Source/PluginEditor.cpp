@@ -424,6 +424,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDBlendBreathRelay)
             .withOptionsFrom(synOscDBlendSculptRelay)
             .withOptionsFrom(synOscDBlendDiceRelay)
+            // FM-ENGINE-WITHOPTIONS (6 × 4 osc) — wavetable-carrier FM
+            .withOptionsFrom(synOscAFmAlgoRelay).withOptionsFrom(synOscAFmRatio1Relay).withOptionsFrom(synOscAFmDepth1Relay)
+            .withOptionsFrom(synOscAFmRatio2Relay).withOptionsFrom(synOscAFmDepth2Relay).withOptionsFrom(synOscAFmFbRelay)
+            .withOptionsFrom(synOscBFmAlgoRelay).withOptionsFrom(synOscBFmRatio1Relay).withOptionsFrom(synOscBFmDepth1Relay)
+            .withOptionsFrom(synOscBFmRatio2Relay).withOptionsFrom(synOscBFmDepth2Relay).withOptionsFrom(synOscBFmFbRelay)
+            .withOptionsFrom(synOscCFmAlgoRelay).withOptionsFrom(synOscCFmRatio1Relay).withOptionsFrom(synOscCFmDepth1Relay)
+            .withOptionsFrom(synOscCFmRatio2Relay).withOptionsFrom(synOscCFmDepth2Relay).withOptionsFrom(synOscCFmFbRelay)
+            .withOptionsFrom(synOscDFmAlgoRelay).withOptionsFrom(synOscDFmRatio1Relay).withOptionsFrom(synOscDFmDepth1Relay)
+            .withOptionsFrom(synOscDFmRatio2Relay).withOptionsFrom(synOscDFmDepth2Relay).withOptionsFrom(synOscDFmFbRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
             .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
@@ -2540,6 +2549,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDBlendBreathAttachment, ParameterIDs::SYN_OSC_D_BLEND_BREATH, synOscDBlendBreathRelay);
         mkAtt(synOscDBlendSculptAttachment, ParameterIDs::SYN_OSC_D_BLEND_SCULPT, synOscDBlendSculptRelay);
         mkAtt(synOscDBlendDiceAttachment, ParameterIDs::SYN_OSC_D_BLEND_DICE, synOscDBlendDiceRelay);
+        // FM-ENGINE-MKATT (6 × 4 osc) — wavetable-carrier FM
+        mkAtt(synOscAFmAlgoAttachment,   ParameterIDs::SYN_OSC_A_FM_ALGO,   synOscAFmAlgoRelay);   mkAtt(synOscAFmRatio1Attachment, ParameterIDs::SYN_OSC_A_FM_RATIO1, synOscAFmRatio1Relay); mkAtt(synOscAFmDepth1Attachment, ParameterIDs::SYN_OSC_A_FM_DEPTH1, synOscAFmDepth1Relay);
+        mkAtt(synOscAFmRatio2Attachment, ParameterIDs::SYN_OSC_A_FM_RATIO2, synOscAFmRatio2Relay); mkAtt(synOscAFmDepth2Attachment, ParameterIDs::SYN_OSC_A_FM_DEPTH2, synOscAFmDepth2Relay); mkAtt(synOscAFmFbAttachment,     ParameterIDs::SYN_OSC_A_FM_FB,     synOscAFmFbRelay);
+        mkAtt(synOscBFmAlgoAttachment,   ParameterIDs::SYN_OSC_B_FM_ALGO,   synOscBFmAlgoRelay);   mkAtt(synOscBFmRatio1Attachment, ParameterIDs::SYN_OSC_B_FM_RATIO1, synOscBFmRatio1Relay); mkAtt(synOscBFmDepth1Attachment, ParameterIDs::SYN_OSC_B_FM_DEPTH1, synOscBFmDepth1Relay);
+        mkAtt(synOscBFmRatio2Attachment, ParameterIDs::SYN_OSC_B_FM_RATIO2, synOscBFmRatio2Relay); mkAtt(synOscBFmDepth2Attachment, ParameterIDs::SYN_OSC_B_FM_DEPTH2, synOscBFmDepth2Relay); mkAtt(synOscBFmFbAttachment,     ParameterIDs::SYN_OSC_B_FM_FB,     synOscBFmFbRelay);
+        mkAtt(synOscCFmAlgoAttachment,   ParameterIDs::SYN_OSC_C_FM_ALGO,   synOscCFmAlgoRelay);   mkAtt(synOscCFmRatio1Attachment, ParameterIDs::SYN_OSC_C_FM_RATIO1, synOscCFmRatio1Relay); mkAtt(synOscCFmDepth1Attachment, ParameterIDs::SYN_OSC_C_FM_DEPTH1, synOscCFmDepth1Relay);
+        mkAtt(synOscCFmRatio2Attachment, ParameterIDs::SYN_OSC_C_FM_RATIO2, synOscCFmRatio2Relay); mkAtt(synOscCFmDepth2Attachment, ParameterIDs::SYN_OSC_C_FM_DEPTH2, synOscCFmDepth2Relay); mkAtt(synOscCFmFbAttachment,     ParameterIDs::SYN_OSC_C_FM_FB,     synOscCFmFbRelay);
+        mkAtt(synOscDFmAlgoAttachment,   ParameterIDs::SYN_OSC_D_FM_ALGO,   synOscDFmAlgoRelay);   mkAtt(synOscDFmRatio1Attachment, ParameterIDs::SYN_OSC_D_FM_RATIO1, synOscDFmRatio1Relay); mkAtt(synOscDFmDepth1Attachment, ParameterIDs::SYN_OSC_D_FM_DEPTH1, synOscDFmDepth1Relay);
+        mkAtt(synOscDFmRatio2Attachment, ParameterIDs::SYN_OSC_D_FM_RATIO2, synOscDFmRatio2Relay); mkAtt(synOscDFmDepth2Attachment, ParameterIDs::SYN_OSC_D_FM_DEPTH2, synOscDFmDepth2Relay); mkAtt(synOscDFmFbAttachment,     ParameterIDs::SYN_OSC_D_FM_FB,     synOscDFmFbRelay);
         // GRAIN-EXPANDED-MKATT (8 × 4 osc)
         mkAtt(synOscAGrainPositionAttachment, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, synOscAGrainPositionRelay); mkAtt(synOscAGrainPitchAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, synOscAGrainPitchRelay); mkAtt(synOscAGrainPsprayAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, synOscAGrainPsprayRelay); mkAtt(synOscAGrainWidthAttachment, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, synOscAGrainWidthRelay);
         mkAtt(synOscAGrainDirAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DIR, synOscAGrainDirRelay); mkAtt(synOscAGrainSkewAttachment, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, synOscAGrainSkewRelay);

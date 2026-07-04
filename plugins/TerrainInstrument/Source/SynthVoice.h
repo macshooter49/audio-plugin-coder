@@ -1011,6 +1011,20 @@ namespace tw
         void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonC_, uDetuneCentsC_, uPanLC_, uPanRC_, uNormC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
         void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonD_, uDetuneCentsD_, uPanLD_, uPanRD_, uNormD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
         void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,10,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,10,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
+
+        /** FM-ENGINE-VOICE — per-OSC wavetable-carrier FM params (osc 0..3 = A..D).
+         *  algo: 0 Stack (M2→M1→carrier) / 1 Split (M1,M2→carrier) / 2 Ring (M2→M1; M1 rings output). */
+        void setFMOsc (int osc, int algo, float r1, float d1, float r2, float d2, float fb) noexcept
+        {
+            if (osc < 0 || osc > 3) return;
+            const auto o = (size_t) osc;
+            fmAlgo_[o]   = juce::jlimit (0, 2, algo);
+            fmRatio1_[o] = juce::jlimit (0.25f, 16.0f, r1);
+            fmDepth1_[o] = juce::jlimit (0.0f, 1.0f, d1);
+            fmRatio2_[o] = juce::jlimit (0.25f, 16.0f, r2);
+            fmDepth2_[o] = juce::jlimit (0.0f, 1.0f, d2);
+            fmFbAmt_[o]  = juce::jlimit (0.0f, 1.0f, fb);
+        }
         void setBlurCD (float blurC01, float blurD01) noexcept { blurTargetC_=juce::jlimit(0.0f,1.0f,blurC01); blurTargetD_=juce::jlimit(0.0f,1.0f,blurD01); }
         void setPhaseModeCD (int modeC, int modeD) noexcept { phaseModeC_=juce::jlimit(0,3,modeC); phaseModeD_=juce::jlimit(0,3,modeD); }
         void setWaverCD (float c, float d) noexcept { waverC_=juce::jlimit(0.0f,1.0f,c); waverD_=juce::jlimit(0.0f,1.0f,d); }
@@ -1104,6 +1118,11 @@ namespace tw
                 uPhaseD_[(size_t) u]      = resolvePhase (phaseModeD_, u, 3, uPhaseD_[(size_t) u]);
                 uModPhaseD_[(size_t) u]   = 0.0;
                 uSyncPhaseD_[(size_t) u]  = 0.0;
+                // FM-ENGINE-VOICE — M2 phases + M1 feedback memory start clean each note
+                uMod2PhaseA_[(size_t) u] = 0.0;  uMod2PhaseB_[(size_t) u] = 0.0;
+                uMod2PhaseC_[(size_t) u] = 0.0;  uMod2PhaseD_[(size_t) u] = 0.0;
+                fmFbA_[(size_t) u] = 0.0f;  fmFbB_[(size_t) u] = 0.0f;
+                fmFbC_[(size_t) u] = 0.0f;  fmFbD_[(size_t) u] = 0.0f;
             }
             phaseSeeded_ = true;
 
@@ -1400,10 +1419,30 @@ namespace tw
                 if (mode == 7)              return 1.0 + (double) amt * 7.0;            // FRACTALIZE (1..8x)
                 return 1.0;
             };
-            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_));
-            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_) * warpRateMul (warp2ModeB_, warp2AmountB_));
-            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpAmountC_) * warpRateMul (warp2ModeC_, warp2AmountC_));
-            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpAmountD_) * warpRateMul (warp2ModeD_, warp2AmountD_));
+            // FM-ENGINE-VOICE — smooth depth/feedback at block rate (zipper-free index moves)
+            for (size_t o = 0; o < 4; ++o)
+            {
+                fmD1Sm_[o] += (fmDepth1_[o] - fmD1Sm_[o]) * 0.35f;
+                fmD2Sm_[o] += (fmDepth2_[o] - fmD2Sm_[o]) * 0.35f;
+                fmFbSm_[o] += (fmFbAmt_[o]  - fmFbSm_[o]) * 0.35f;
+            }
+            // FM-aware mip pick — phase modulation widens the carrier's instantaneous rate
+            // (Carson-ish: 1 + 2π·D·ratio), so pick a duller mip under heavy FM or the
+            // table's upper harmonics alias hard. Ring only shifts by ±f_m1 (linear term).
+            auto fmRateMul = [this] (Engine eng, size_t o) -> double
+            {
+                if (eng != Engine::FM) return 1.0;
+                const double d1 = (double) (fmD1Sm_[o] * fmD1Sm_[o]) * 1.5;
+                const double d2 = (double) (fmD2Sm_[o] * fmD2Sm_[o]) * 1.5;
+                if (fmAlgo_[o] == 2) return 1.0 + (double) fmD1Sm_[o] * (double) fmRatio1_[o];
+                double m = 1.0 + 6.2832 * d1 * (double) fmRatio1_[o];
+                if (fmAlgo_[o] == 1) m += 6.2832 * d2 * (double) fmRatio2_[o];
+                return m;
+            };
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_) * fmRateMul (engine_,  0));
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_) * warpRateMul (warp2ModeB_, warp2AmountB_) * fmRateMul (engineB_, 1));
+            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpAmountC_) * warpRateMul (warp2ModeC_, warp2AmountC_) * fmRateMul (engineC_, 2));
+            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpAmountD_) * warpRateMul (warp2ModeD_, warp2AmountD_) * fmRateMul (engineD_, 3));
 
             // ── WT BLUR — smooth the amount, then (re)build each OSC's blended single-
             // cycle buffer ONCE per block (only when frame pos / blur / mip changed). Every
@@ -1578,15 +1617,39 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            const double ratio  = 0.25 + std::pow (32.0, (double) framePos_) * 0.234375;
-                            const double modInc = uPhaseIncA_[(size_t) u] * ratio;
-                            const double depth  = (double) warpAmount_ * 6.2831853071795865;
-                            const double pi2    = 6.2831853071795865;
-                            const double modOut = std::sin (pi2 * uModPhaseA_[(size_t) u]);
-                            sAu = static_cast<float> (std::sin (pi2 * uPhaseA_[(size_t) u] + depth * modOut));
-                            uModPhaseA_[(size_t) u] += modInc;
-                            if (uModPhaseA_[(size_t) u] >= 1.0) uModPhaseA_[(size_t) u] -= std::floor (uModPhaseA_[(size_t) u]);
-                            uPhaseA_[(size_t) u] += uPhaseIncA_[(size_t) u];
+                            // FM-ENGINE-VOICE — WAVETABLE-CARRIER FM: this osc's blended
+                            // wavetable cycle IS the carrier (frame morph / blur / spectral
+                            // all still live); M1/M2 are sine modulators, phases in turns.
+                            //   0 STACK — M2 → M1 → carrier phase (3-op serial)
+                            //   1 SPLIT — M1 and M2 both → carrier phase (parallel)
+                            //   2 RING  — M2 → M1; M1 ring-modulates the carrier OUTPUT
+                            // Depth² taper → max ~1.5 turns of deviation; M1 self-feedback
+                            // is the DX half-sum average (stable, tips into growl at full).
+                            const double pi2 = 6.2831853071795865;
+                            const double inc = uPhaseIncA_[(size_t) u];
+                            const float  d1  = fmD1Sm_[0] * fmD1Sm_[0] * 1.5f;
+                            const float  d2  = fmD2Sm_[0] * fmD2Sm_[0] * 1.5f;
+                            const float  fbk = fmFbSm_[0] * fmFbSm_[0];
+                            const int    alg = fmAlgo_[0];
+                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseA_[(size_t) u]));
+                            double m1Arg = uModPhaseA_[(size_t) u] + (double) (fbk * fmFbA_[(size_t) u]);
+                            if (alg == 0) m1Arg += (double) (d2 * m2);
+                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            fmFbA_[(size_t) u] = 0.5f * (fmFbA_[(size_t) u] + m1);
+                            double cPh = uPhaseA_[(size_t) u];
+                            if (alg != 2) cPh += (double) (d1 * m1);
+                            if (alg == 1) cPh += (double) (d2 * m2);
+                            cPh -= std::floor (cPh);
+                            sAu = (currentWavetable_ != nullptr)
+                                    ? tw::Wavetable::readCycle (blendA_.data(), (float) cPh)
+                                    : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
+                            if (alg == 2)
+                                sAu *= (1.0f - fmD1Sm_[0]) + fmD1Sm_[0] * m1;      // ring dry→wet on depth 1
+                            uModPhaseA_[(size_t) u]  += inc * (double) fmRatio1_[0];
+                            uModPhaseA_[(size_t) u]  -= std::floor (uModPhaseA_[(size_t) u]);
+                            uMod2PhaseA_[(size_t) u] += inc * (double) fmRatio2_[0];
+                            uMod2PhaseA_[(size_t) u] -= std::floor (uMod2PhaseA_[(size_t) u]);
+                            uPhaseA_[(size_t) u] += inc;
                             if (uPhaseA_[(size_t) u] >= 1.0) uPhaseA_[(size_t) u] -= 1.0;
                             break;
                         }
@@ -1819,15 +1882,32 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            const double ratio  = 0.25 + std::pow (32.0, (double) framePosB_) * 0.234375;
-                            const double modInc = uPhaseIncB_[(size_t) u] * ratio;
-                            const double depth  = (double) warpAmountB_ * 6.2831853071795865;
-                            const double pi2    = 6.2831853071795865;
-                            const double modOut = std::sin (pi2 * uModPhaseB_[(size_t) u]);
-                            sBu = static_cast<float> (std::sin (pi2 * uPhaseB_[(size_t) u] + depth * modOut));
-                            uModPhaseB_[(size_t) u] += modInc;
-                            if (uModPhaseB_[(size_t) u] >= 1.0) uModPhaseB_[(size_t) u] -= std::floor (uModPhaseB_[(size_t) u]);
-                            uPhaseB_[(size_t) u] += uPhaseIncB_[(size_t) u];
+                            // FM-ENGINE-VOICE — wavetable-carrier FM (see OSC A for the map)
+                            const double pi2 = 6.2831853071795865;
+                            const double inc = uPhaseIncB_[(size_t) u];
+                            const float  d1  = fmD1Sm_[1] * fmD1Sm_[1] * 1.5f;
+                            const float  d2  = fmD2Sm_[1] * fmD2Sm_[1] * 1.5f;
+                            const float  fbk = fmFbSm_[1] * fmFbSm_[1];
+                            const int    alg = fmAlgo_[1];
+                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseB_[(size_t) u]));
+                            double m1Arg = uModPhaseB_[(size_t) u] + (double) (fbk * fmFbB_[(size_t) u]);
+                            if (alg == 0) m1Arg += (double) (d2 * m2);
+                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            fmFbB_[(size_t) u] = 0.5f * (fmFbB_[(size_t) u] + m1);
+                            double cPh = uPhaseB_[(size_t) u];
+                            if (alg != 2) cPh += (double) (d1 * m1);
+                            if (alg == 1) cPh += (double) (d2 * m2);
+                            cPh -= std::floor (cPh);
+                            sBu = (currentWavetableB_ != nullptr)
+                                    ? tw::Wavetable::readCycle (blendB_.data(), (float) cPh)
+                                    : static_cast<float> (std::sin (pi2 * cPh));
+                            if (alg == 2)
+                                sBu *= (1.0f - fmD1Sm_[1]) + fmD1Sm_[1] * m1;
+                            uModPhaseB_[(size_t) u]  += inc * (double) fmRatio1_[1];
+                            uModPhaseB_[(size_t) u]  -= std::floor (uModPhaseB_[(size_t) u]);
+                            uMod2PhaseB_[(size_t) u] += inc * (double) fmRatio2_[1];
+                            uMod2PhaseB_[(size_t) u] -= std::floor (uMod2PhaseB_[(size_t) u]);
+                            uPhaseB_[(size_t) u] += inc;
                             if (uPhaseB_[(size_t) u] >= 1.0) uPhaseB_[(size_t) u] -= 1.0;
                             break;
                         }
@@ -2056,15 +2136,32 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            const double ratio  = 0.25 + std::pow (32.0, (double) framePosC_) * 0.234375;
-                            const double modInc = uPhaseIncC_[(size_t) u] * ratio;
-                            const double depth  = (double) warpAmountC_ * 6.2831853071795865;
-                            const double pi2    = 6.2831853071795865;
-                            const double modOut = std::sin (pi2 * uModPhaseC_[(size_t) u]);
-                            sCu = static_cast<float> (std::sin (pi2 * uPhaseC_[(size_t) u] + depth * modOut));
-                            uModPhaseC_[(size_t) u] += modInc;
-                            if (uModPhaseC_[(size_t) u] >= 1.0) uModPhaseC_[(size_t) u] -= std::floor (uModPhaseC_[(size_t) u]);
-                            uPhaseC_[(size_t) u] += uPhaseIncC_[(size_t) u];
+                            // FM-ENGINE-VOICE — wavetable-carrier FM (see OSC A for the map)
+                            const double pi2 = 6.2831853071795865;
+                            const double inc = uPhaseIncC_[(size_t) u];
+                            const float  d1  = fmD1Sm_[2] * fmD1Sm_[2] * 1.5f;
+                            const float  d2  = fmD2Sm_[2] * fmD2Sm_[2] * 1.5f;
+                            const float  fbk = fmFbSm_[2] * fmFbSm_[2];
+                            const int    alg = fmAlgo_[2];
+                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseC_[(size_t) u]));
+                            double m1Arg = uModPhaseC_[(size_t) u] + (double) (fbk * fmFbC_[(size_t) u]);
+                            if (alg == 0) m1Arg += (double) (d2 * m2);
+                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            fmFbC_[(size_t) u] = 0.5f * (fmFbC_[(size_t) u] + m1);
+                            double cPh = uPhaseC_[(size_t) u];
+                            if (alg != 2) cPh += (double) (d1 * m1);
+                            if (alg == 1) cPh += (double) (d2 * m2);
+                            cPh -= std::floor (cPh);
+                            sCu = (currentWavetableC_ != nullptr)
+                                    ? tw::Wavetable::readCycle (blendC_.data(), (float) cPh)
+                                    : static_cast<float> (std::sin (pi2 * cPh));
+                            if (alg == 2)
+                                sCu *= (1.0f - fmD1Sm_[2]) + fmD1Sm_[2] * m1;
+                            uModPhaseC_[(size_t) u]  += inc * (double) fmRatio1_[2];
+                            uModPhaseC_[(size_t) u]  -= std::floor (uModPhaseC_[(size_t) u]);
+                            uMod2PhaseC_[(size_t) u] += inc * (double) fmRatio2_[2];
+                            uMod2PhaseC_[(size_t) u] -= std::floor (uMod2PhaseC_[(size_t) u]);
+                            uPhaseC_[(size_t) u] += inc;
                             if (uPhaseC_[(size_t) u] >= 1.0) uPhaseC_[(size_t) u] -= 1.0;
                             break;
                         }
@@ -2293,15 +2390,32 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            const double ratio  = 0.25 + std::pow (32.0, (double) framePosD_) * 0.234375;
-                            const double modInc = uPhaseIncD_[(size_t) u] * ratio;
-                            const double depth  = (double) warpAmountD_ * 6.2831853071795865;
-                            const double pi2    = 6.2831853071795865;
-                            const double modOut = std::sin (pi2 * uModPhaseD_[(size_t) u]);
-                            sDu = static_cast<float> (std::sin (pi2 * uPhaseD_[(size_t) u] + depth * modOut));
-                            uModPhaseD_[(size_t) u] += modInc;
-                            if (uModPhaseD_[(size_t) u] >= 1.0) uModPhaseD_[(size_t) u] -= std::floor (uModPhaseD_[(size_t) u]);
-                            uPhaseD_[(size_t) u] += uPhaseIncD_[(size_t) u];
+                            // FM-ENGINE-VOICE — wavetable-carrier FM (see OSC A for the map)
+                            const double pi2 = 6.2831853071795865;
+                            const double inc = uPhaseIncD_[(size_t) u];
+                            const float  d1  = fmD1Sm_[3] * fmD1Sm_[3] * 1.5f;
+                            const float  d2  = fmD2Sm_[3] * fmD2Sm_[3] * 1.5f;
+                            const float  fbk = fmFbSm_[3] * fmFbSm_[3];
+                            const int    alg = fmAlgo_[3];
+                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseD_[(size_t) u]));
+                            double m1Arg = uModPhaseD_[(size_t) u] + (double) (fbk * fmFbD_[(size_t) u]);
+                            if (alg == 0) m1Arg += (double) (d2 * m2);
+                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            fmFbD_[(size_t) u] = 0.5f * (fmFbD_[(size_t) u] + m1);
+                            double cPh = uPhaseD_[(size_t) u];
+                            if (alg != 2) cPh += (double) (d1 * m1);
+                            if (alg == 1) cPh += (double) (d2 * m2);
+                            cPh -= std::floor (cPh);
+                            sDu = (currentWavetableD_ != nullptr)
+                                    ? tw::Wavetable::readCycle (blendD_.data(), (float) cPh)
+                                    : static_cast<float> (std::sin (pi2 * cPh));
+                            if (alg == 2)
+                                sDu *= (1.0f - fmD1Sm_[3]) + fmD1Sm_[3] * m1;
+                            uModPhaseD_[(size_t) u]  += inc * (double) fmRatio1_[3];
+                            uModPhaseD_[(size_t) u]  -= std::floor (uModPhaseD_[(size_t) u]);
+                            uMod2PhaseD_[(size_t) u] += inc * (double) fmRatio2_[3];
+                            uMod2PhaseD_[(size_t) u] -= std::floor (uMod2PhaseD_[(size_t) u]);
+                            uPhaseD_[(size_t) u] += inc;
                             if (uPhaseD_[(size_t) u] >= 1.0) uPhaseD_[(size_t) u] -= 1.0;
                             break;
                         }
@@ -3577,6 +3691,19 @@ namespace tw
         std::array<double, kMaxUnison> uPhaseIncB_    {};
         std::array<double, kMaxUnison> uModPhaseB_    {};
         std::array<double, kMaxUnison> uSyncPhaseB_   {};
+
+        // ── FM-ENGINE-VOICE — wavetable-carrier FM (per-osc, indexed 0..3 = A..D) ──
+        // M1 phase reuses uModPhase*_; M2 gets its own accumulator; fmFb*_ is M1's
+        // averaged self-feedback memory. Depth/feedback smoothed at block rate.
+        std::array<int, 4>   fmAlgo_   {};
+        std::array<float, 4> fmRatio1_ { 1.0f, 1.0f, 1.0f, 1.0f };
+        std::array<float, 4> fmDepth1_ {};
+        std::array<float, 4> fmRatio2_ { 2.0f, 2.0f, 2.0f, 2.0f };
+        std::array<float, 4> fmDepth2_ {};
+        std::array<float, 4> fmFbAmt_  {};
+        std::array<float, 4> fmD1Sm_ {}, fmD2Sm_ {}, fmFbSm_ {};
+        std::array<double, kMaxUnison> uMod2PhaseA_ {}, uMod2PhaseB_ {}, uMod2PhaseC_ {}, uMod2PhaseD_ {};
+        std::array<float, kMaxUnison>  fmFbA_ {}, fmFbB_ {}, fmFbC_ {}, fmFbD_ {};
 
         // ── KEYTRACK — note→destination modulation (the mod-matrix embryo) ──────────
         //   The render path keeps reading the EFFECTIVE members (framePos_/warpAmount_/

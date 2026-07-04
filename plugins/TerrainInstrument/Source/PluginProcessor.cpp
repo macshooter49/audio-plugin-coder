@@ -2173,6 +2173,43 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addGrainOsc (ParameterIDs::SYN_OSC_D_GRAIN_SCAN, ParameterIDs::SYN_OSC_D_GRAIN_DENSITY, ParameterIDs::SYN_OSC_D_GRAIN_SIZE,
                  ParameterIDs::SYN_OSC_D_GRAIN_SPRAY, ParameterIDs::SYN_OSC_D_GRAIN_SHAPE, ParameterIDs::SYN_OSC_D_GRAIN_KEY, "D");
 
+    // ════════ FM-ENGINE-PARAMS — per-OSC wavetable-carrier FM (2026-07-04) ════════
+    // Carrier = the osc's own wavetable; M1/M2 = sine modulators. Ratio 0.25..16 skewed
+    // so the musical 0.5..4 zone gets most of the knob throw; depth/feedback are squared
+    // in the voice for a musical taper. Defaults (Ratio1 1, Depth1 0.35) = instant
+    // classic 1:1 FM warmth the moment the engine is selected.
+    auto addFmOsc = [&layout] (const char* algoId, const char* r1Id, const char* d1Id,
+                               const char* r2Id, const char* d2Id, const char* fbId,
+                               const juce::String& osc)
+    {
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { algoId, 1 }, "Synth OSC " + osc + " FM Algo",
+            juce::StringArray { "Stack", "Split", "Ring" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { r1Id, 1 },   "Synth OSC " + osc + " FM Ratio 1",
+            juce::NormalisableRange<float> (0.25f, 16.0f, 0.0f, 0.5f), 1.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { d1Id, 1 },   "Synth OSC " + osc + " FM Depth 1",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.35f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { r2Id, 1 },   "Synth OSC " + osc + " FM Ratio 2",
+            juce::NormalisableRange<float> (0.25f, 16.0f, 0.0f, 0.5f), 2.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { d2Id, 1 },   "Synth OSC " + osc + " FM Depth 2",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { fbId, 1 },   "Synth OSC " + osc + " FM Feedback",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    };
+    addFmOsc (ParameterIDs::SYN_OSC_A_FM_ALGO, ParameterIDs::SYN_OSC_A_FM_RATIO1, ParameterIDs::SYN_OSC_A_FM_DEPTH1,
+              ParameterIDs::SYN_OSC_A_FM_RATIO2, ParameterIDs::SYN_OSC_A_FM_DEPTH2, ParameterIDs::SYN_OSC_A_FM_FB, "A");
+    addFmOsc (ParameterIDs::SYN_OSC_B_FM_ALGO, ParameterIDs::SYN_OSC_B_FM_RATIO1, ParameterIDs::SYN_OSC_B_FM_DEPTH1,
+              ParameterIDs::SYN_OSC_B_FM_RATIO2, ParameterIDs::SYN_OSC_B_FM_DEPTH2, ParameterIDs::SYN_OSC_B_FM_FB, "B");
+    addFmOsc (ParameterIDs::SYN_OSC_C_FM_ALGO, ParameterIDs::SYN_OSC_C_FM_RATIO1, ParameterIDs::SYN_OSC_C_FM_DEPTH1,
+              ParameterIDs::SYN_OSC_C_FM_RATIO2, ParameterIDs::SYN_OSC_C_FM_DEPTH2, ParameterIDs::SYN_OSC_C_FM_FB, "C");
+    addFmOsc (ParameterIDs::SYN_OSC_D_FM_ALGO, ParameterIDs::SYN_OSC_D_FM_RATIO1, ParameterIDs::SYN_OSC_D_FM_DEPTH1,
+              ParameterIDs::SYN_OSC_D_FM_RATIO2, ParameterIDs::SYN_OSC_D_FM_DEPTH2, ParameterIDs::SYN_OSC_D_FM_FB, "D");
+
     // BLEND — the 6 one-shot blend/morph knobs per osc (Morph Attack Body Breath Sculpt Dice).
     // OFFLINE-BAKE params: the editor listens and re-renders the blended buffer; the audio
     // thread only ever plays the published result. DICE defaults 0 (off), the rest centered.
@@ -3320,6 +3357,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const tw::GranularEngineParams gpB = withSampleExtras (gatherGrain (GRAIN_IDS[1]), spB);
         const tw::GranularEngineParams gpC = withSampleExtras (gatherGrain (GRAIN_IDS[2]), spC);
         const tw::GranularEngineParams gpD = withSampleExtras (gatherGrain (GRAIN_IDS[3]), spD);
+
+        // ── FM engine: gather the 6 wavetable-carrier FM params per OSC (FM-ENGINE-GATHER) ──
+        // ID order: algo, ratio1, depth1, ratio2, depth2, feedback. 'algo' is the only choice.
+        static const char* const FM_IDS[4][6] = {
+            { ParameterIDs::SYN_OSC_A_FM_ALGO, ParameterIDs::SYN_OSC_A_FM_RATIO1, ParameterIDs::SYN_OSC_A_FM_DEPTH1, ParameterIDs::SYN_OSC_A_FM_RATIO2, ParameterIDs::SYN_OSC_A_FM_DEPTH2, ParameterIDs::SYN_OSC_A_FM_FB },
+            { ParameterIDs::SYN_OSC_B_FM_ALGO, ParameterIDs::SYN_OSC_B_FM_RATIO1, ParameterIDs::SYN_OSC_B_FM_DEPTH1, ParameterIDs::SYN_OSC_B_FM_RATIO2, ParameterIDs::SYN_OSC_B_FM_DEPTH2, ParameterIDs::SYN_OSC_B_FM_FB },
+            { ParameterIDs::SYN_OSC_C_FM_ALGO, ParameterIDs::SYN_OSC_C_FM_RATIO1, ParameterIDs::SYN_OSC_C_FM_DEPTH1, ParameterIDs::SYN_OSC_C_FM_RATIO2, ParameterIDs::SYN_OSC_C_FM_DEPTH2, ParameterIDs::SYN_OSC_C_FM_FB },
+            { ParameterIDs::SYN_OSC_D_FM_ALGO, ParameterIDs::SYN_OSC_D_FM_RATIO1, ParameterIDs::SYN_OSC_D_FM_DEPTH1, ParameterIDs::SYN_OSC_D_FM_RATIO2, ParameterIDs::SYN_OSC_D_FM_DEPTH2, ParameterIDs::SYN_OSC_D_FM_FB }
+        };
+        float fmVals[4][6];
+        for (int o = 0; o < 4; ++o)
+            for (int k = 0; k < 6; ++k)
+                fmVals[o][k] = *rawParam (FM_IDS[o][k]);
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
@@ -3485,6 +3535,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     sv->setGranParamsA (gpA);    sv->setGranParamsB (gpB);      // GRAIN-ENGINE-PUSH
                     sv->setGranParamsC (gpC);    sv->setGranParamsD (gpD);
                 }
+                for (int o = 0; o < 4; ++o)   // FM-ENGINE-PUSH — wavetable-carrier FM knobs (cheap stores; ungated)
+                    sv->setFMOsc (o, (int) fmVals[o][0], fmVals[o][1], fmVals[o][2],
+                                  fmVals[o][3], fmVals[o][4], fmVals[o][5]);
                 sv->setSampleSources (&getOscSampleBuffer (0), &getOscSampleBuffer (1),
                                       &getOscSampleBuffer (2), &getOscSampleBuffer (3));   // PEROSC-PUSH
             }
