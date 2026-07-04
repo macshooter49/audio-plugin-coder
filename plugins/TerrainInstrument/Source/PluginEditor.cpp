@@ -3358,6 +3358,13 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // Read grain count
     int grainCount = audioProcessor.activeGrainCount.load();
 
+    // VIZ-BULLETPROOF — every float printed into the tick script MUST be finite: a NaN/Inf
+    // prints as the bare token `nan`/`inf`, which is a JS ReferenceError that kills EVERY
+    // segment after it in this one evaluateJavascript string. (This is how the osc scope
+    // flatlined forever while audio kept playing — an upstream segment threw each tick, so
+    // the parked scope never received another active:true push.) Sanitize at the source.
+    auto SF = [] (float v, int dp) { return juce::String (std::isfinite (v) ? v : 0.0f, dp); };
+
     // Read scope buffer
     juce::String scopeData;
     scopeData.preallocateBytes(2048);
@@ -3366,7 +3373,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     {
         if (i > 0) scopeData << ",";
         float val = audioProcessor.scopeBuffer[static_cast<size_t>(i)].load(std::memory_order_relaxed);
-        scopeData << juce::String(val, 4);
+        scopeData << SF(val, 4);
     }
     scopeData << "]";
 
@@ -3382,26 +3389,30 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     int   countInBeat  = audioProcessor.getTapeLoopCountInBeat();
     bool  feedToGrain  = audioProcessor.tapeLoopFeedToGrain.load() > 0.5f;
 
-    // Push visualization data to JS
+    // Push visualization data to JS.
+    // VIZ-BULLETPROOF — every segment rides in ONE evaluateJavascript string, so each one is
+    // wrapped in its own try{}catch(e){}: a handler that throws (or any malformed value) must
+    // never take down the segments after it. The osc scope sits LAST in this chain and used
+    // to die whenever anything upstream threw.
     juce::String js;
-    js << "if(window.updateVisualization){"
-       << "window.updateVisualization(" << grainCount << "," << scopeData << "," << juce::String(bpm, 1) << ");}";
-    js << "if(window.updateTapeLoopState){"
+    js << "try{if(window.updateVisualization){"
+       << "window.updateVisualization(" << grainCount << "," << scopeData << "," << SF(bpm, 1) << ");}}catch(e){}";
+    js << "try{if(window.updateTapeLoopState){"
        << "window.updateTapeLoopState("
        << (tapeLoopRec > 0.5f ? "true" : "false") << ","
        << (tapeLoopPlay > 0.5f ? "true" : "false") << ","
        << (tapeLoopHas ? "true" : "false") << ","
-       << juce::String(tapeLoopProg, 4) << ","
+       << SF(tapeLoopProg, 4) << ","
        << (tapeLoopUndo ? "true" : "false") << ","
-       << countInBeat << ");}";
-    js << "if(window.updateFeedState){"
-       << "window.updateFeedState(" << (feedToGrain ? "true" : "false") << ");}";
+       << countInBeat << ");}}catch(e){}";
+    js << "try{if(window.updateFeedState){"
+       << "window.updateFeedState(" << (feedToGrain ? "true" : "false") << ");}}catch(e){}";
     int captureState = audioProcessor.captureExportState.load();
     float captureAvail = audioProcessor.getCaptureAvailableSeconds();
-    js << "if(window.updateCaptureState){"
+    js << "try{if(window.updateCaptureState){"
        << "window.updateCaptureState("
        << captureState << ","
-       << juce::String(captureAvail, 1) << ");}";
+       << SF(captureAvail, 1) << ");}}catch(e){}";
 
     // Update native drag strip state
     captureDragStrip.updateState(captureState, captureAvail);
@@ -3414,9 +3425,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         float p0 = audioProcessor.modulationEngine.lfoPhasesAtomic[0].load(std::memory_order_relaxed);
         float p1 = audioProcessor.modulationEngine.lfoPhasesAtomic[1].load(std::memory_order_relaxed);
         float p2 = audioProcessor.modulationEngine.lfoPhasesAtomic[2].load(std::memory_order_relaxed);
-        js << "if(window.updateLFOOutputs){window.updateLFOOutputs("
-           << juce::String(lfo0, 4) << "," << juce::String(lfo1, 4) << "," << juce::String(lfo2, 4) << ","
-           << juce::String(p0, 4) << "," << juce::String(p1, 4) << "," << juce::String(p2, 4) << ");}";
+        js << "try{if(window.updateLFOOutputs){window.updateLFOOutputs("
+           << SF(lfo0, 4) << "," << SF(lfo1, 4) << "," << SF(lfo2, 4) << ","
+           << SF(p0, 4) << "," << SF(p1, 4) << "," << SF(p2, 4) << ");}}catch(e){}";
     }
 
     // ── Envelope follower (playhead dot) ──
@@ -3426,8 +3437,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     {
         float envFollow = audioProcessor.ampEnvVis.load(std::memory_order_relaxed);
         float envStage  = audioProcessor.ampEnvFollowVis.load(std::memory_order_relaxed);
-        js << "if(window.updateEnvFollower){window.updateEnvFollower("
-           << juce::String(envFollow, 4) << "," << juce::String(envStage, 4) << ");}";
+        js << "try{if(window.updateEnvFollower){window.updateEnvFollower("
+           << SF(envFollow, 4) << "," << SF(envStage, 4) << ");}}catch(e){}";
     }
 
     // ── Sample engine MIDI followers (one playhead per held note) ──
@@ -3439,15 +3450,15 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         for (int o = 0; o < 4; ++o)
         {
             const int n = audioProcessor.sampleFollowCount_[o].load(std::memory_order_relaxed);
-            js << "if(window.updateSampleFollower){window.updateSampleFollower(" << oscId[o] << ",[";
+            js << "try{if(window.updateSampleFollower){window.updateSampleFollower(" << oscId[o] << ",[";
             for (int k = 0; k < n; ++k)
             {
                 const int   vi = audioProcessor.sampleFollowIdx_[o][k].load(std::memory_order_relaxed);
                 const float p  = audioProcessor.sampleFollowPos_[o][k].load(std::memory_order_relaxed);
                 if (k) js << ",";
-                js << vi << "," << juce::String(p, 4);
+                js << vi << "," << SF(p, 4);
             }
-            js << "]);}";
+            js << "]);}}catch(e){}";
         }
     }
 
@@ -3457,7 +3468,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // ── Synth LFO 1 live value (Batch 1) — drives the modulation strip's scope/dot. ──
     {
         float lfo1 = audioProcessor.synthLfo1Vis.load(std::memory_order_relaxed);
-        js << "if(window.updateSynthLFO){window.updateSynthLFO(" << juce::String(lfo1, 4) << ");}";
+        js << "try{if(window.updateSynthLFO){window.updateSynthLFO(" << SF(lfo1, 4) << ");}}catch(e){}";
     }
 
     // ── ANNULUS resonator live feed — real modal energy + output level drive the
@@ -3469,9 +3480,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         const float e3 = audioProcessor.resoVizEnergy_[3].load(std::memory_order_relaxed);
         const float ro = audioProcessor.resoVizOut_.load(std::memory_order_relaxed);
         const float rpos = audioProcessor.getAPVTS().getRawParameterValue(ParameterIDs::SYN_RESO_POSITION)->load();
-        js << "if(window.__terrainReso){window.__terrainReso({energy:["
-           << juce::String(e0, 3) << "," << juce::String(e1, 3) << "," << juce::String(e2, 3) << "," << juce::String(e3, 3)
-           << "],out:" << juce::String(ro, 3) << ",position:" << juce::String(rpos, 3) << "});}";
+        js << "try{if(window.__terrainReso){window.__terrainReso({energy:["
+           << SF(e0, 3) << "," << SF(e1, 3) << "," << SF(e2, 3) << "," << SF(e3, 3)
+           << "],out:" << SF(ro, 3) << ",position:" << SF(rpos, 3) << "});}}catch(e){}";
     }
 
 
@@ -3504,7 +3515,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             }
             juce::String os;
             os.preallocateBytes(40000);   // 4×1024 floats @3dp ≈ 30 KB (still well under the EQ push)
-            os << "if(window.updateOscScope){window.updateOscScope({";
+            os << "try{if(window.updateOscScope){window.updateOscScope({";
             static const char* oscKey[4] = { "a", "b", "c", "d" };
             for (int o = 0; o < 4; ++o)
             {
@@ -3512,17 +3523,17 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 for (int s = 0; s < N; ++s)
                 {
                     if (s > 0) os << ",";
-                    os << juce::String(win[o][s], 3);
+                    os << SF(win[o][s], 3);
                 }
                 os << "],";
             }
-            os << "hz:" << juce::String(oscHz, 3) << ",sr:" << juce::String(oscSr, 1)
-               << ",active:true});}";
+            os << "hz:" << SF(oscHz, 3) << ",sr:" << SF(oscSr, 1)
+               << ",active:true});}}catch(e){}";
             js << os;
         }
         else
         {
-            js << "if(window.updateOscScope){window.updateOscScope({active:false});}";
+            js << "try{if(window.updateOscScope){window.updateOscScope({active:false});}}catch(e){}";
         }
     }
 
