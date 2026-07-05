@@ -21930,6 +21930,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if (fp < 0) fp = 0; else if (fp > DLEN - 1) fp = DLEN - 1;
       var i = fp | 0, fr = fp - i, i2 = (i + 1 < DLEN) ? i + 1 : i;
       var v = (disp[i] + (disp[i2] - disp[i]) * fr) * g;
+      if (v > 1.2) v = 1.2; else if (v < -1.2) v = -1.2;   // wd9 — tame the AGC attack flash (no full-rail spike frames)
       // the EXISTING subtle analog grit, scaled by |v| (the SCALED value) so it doesn't fuzz the quiet tail.
       var hsh = Math.sin((t * DLEN) * 12.9898) * 43758.5453; hsh -= Math.floor(hsh);
       return v + (hsh * 2 - 1) * GRIT_AMP * Math.min(1, Math.abs(v) + 0.15);
@@ -22043,6 +22044,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       for (var x = 0; x < DLEN; x++) {
         var tg = target ? target[(x + bestShift) % DLEN] : 0;
         if (!isFinite(tg)) tg = 0;                       // NaN in a push must not poison disp
+        else if (tg > 8) tg = 8; else if (tg < -8) tg = -8;   // wd9 — one rogue huge sample must not crush the auto-gain
         var atg = tg < 0 ? -tg : tg; if (atg > scopeDbg.tpk) scopeDbg.tpk = atg;   // VIZDBG
         disp[x] += (tg - disp[x]) * a;
         if (!isFinite(disp[x])) disp[x] = 0;             // heal an already-poisoned buffer
@@ -22060,8 +22062,19 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       // we FREEZE peak/gain so disp→0 fades smoothly to flat at the held gain (a shrinking disp must not
       // get re-amplified, which would fight the fade).
       if (hasData) {
-        var pk = scope.peak[o]; pk += (dpk - pk) * (dpk > pk ? 0.5 : 0.04); scope.peak[o] = pk;
-        scope.gain[o] = SHAPE_FILL / Math.max(pk, 0.06);
+        var pk = scope.peak[o];
+        if (!isFinite(pk) || pk < 0) pk = 0;             // wd9 — the tracker itself must be unpoisonable
+        pk += (dpk - pk) * (dpk > pk ? 0.5 : 0.04);
+        if (pk > 8) pk = 8;
+        // wd9 FAST-RECOVER — a spike leaves pk far above the real content and the 4%%-per-
+        // frame release used to mute the scope for tens of seconds. If pk sits at >4× the
+        // actual content for ~1/3s, snap it down to the content — visible again instantly.
+        if (!scope.pkHi) scope.pkHi = { a: 0, b: 0, c: 0, d: 0 };
+        if (pk > 4 * Math.max(dpk, 0.03)) { if (++scope.pkHi[o] > 20) { pk = Math.max(dpk, 0.06); scope.pkHi[o] = 0; } }
+        else scope.pkHi[o] = 0;
+        scope.peak[o] = pk;
+        var g2 = SHAPE_FILL / Math.max(pk, 0.06);
+        scope.gain[o] = isFinite(g2) ? g2 : 1;
       }
       if (oscVisible(o)) drawShaper(o);                  // drawShaper paints the flat case too (gain applied there)
     }
@@ -22079,7 +22092,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'wd8';   // bump per ship — printed in the overlay so screenshots prove which build
+  var TERRAIN_BUILD = 'wd9';   // bump per ship — printed in the overlay so screenshots prove which build
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
@@ -22096,6 +22109,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if (f.au)  scopeDbg.au  = f.au;  if (f.mip) scopeDbg.mip = f.mip;
       if (f.d1e) scopeDbg.d1e = f.d1e; if (f.un)  scopeDbg.un  = f.un;
       if (f.gt)  scopeDbg.gt  = f.gt;
+      if (typeof f.bad === 'number') scopeDbg.bad = f.bad;
       if (f.active) scopeDbg.activeT = scopeDbg.pushT;
       var wasActive = scope.active;
       scope.active = !!f.active;
@@ -22153,7 +22167,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var pushAge = scopeDbg.pushT ? (n - scopeDbg.pushT) : -1;
       var frameAge = scopeLastFrameT ? (n - scopeLastFrameT) : -1;
       var anomaly = null;
-      if (scopeDbg.pushT && pushAge > 2000) anomaly = 'A:PUSH-STALE';
+      var tickAge = window.__tickT ? (n - window.__tickT) : -1;   // wd9 heartbeat (stamped by its OWN tiny eval)
+      if (scopeDbg.pushT && pushAge > 2000)
+        // tick fresh + push stale = the BIG eval specifically is dying (data-dependent);
+        // both stale = the whole channel/timer is dead (the editor self-reloads at >3s).
+        anomaly = (tickAge >= 0 && tickAge < 1500) ? 'H:SCOPE-EVAL-DEAD' : 'A:PUSH-STALE';
       else if (!scope.active && scopeDbg.orms > 0.0012 && pushAge >= 0 && pushAge < 2000 && (n - scopeDbg.activeT) > 2500) anomaly = 'B:INACTIVE-BUT-AUDIBLE';
       else if (scope.active && anyOscVisible() && frameAge > 2000) anomaly = 'C:LOOP-STALLED';
       else if (scope.active && anyOscVisible() && frameAge < 1500 && scopeDbg.tl !== 1 && scopeDbg.nv >= 1
@@ -22171,7 +22189,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         }
         if (!anomaly && scopeDbg.tpk < 0.003) anomaly = 'D:WINDOW-SILENT';   // legacy all-window check
       }
+      if (!anomaly && scopeDbg.bad > 0) anomaly = 'F:PUSH-POISON×' + scopeDbg.bad;         // wd9 — non-finite samples were sanitized at publish
       if (scopeDbg.heals > 0 && !anomaly) anomaly = 'E:CANVAS-HEALED×' + scopeDbg.heals;   // breadcrumb after a context-loss heal
+      if (!anomaly && window.__terrainRecovered > 0) anomaly = 'R:CHANNEL-RECOVERED×' + window.__terrainRecovered;   // wd9 — editor auto-reloaded a dead eval channel
       // 60s LATCH — anomalies can be transient (Max had to twitch-screenshot one); once
       // anything fires, keep the LAST report on screen for a minute with its age, and
       // log every fresh report into window.__vizLog (ring of 12) for post-mortems.
@@ -22207,7 +22227,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       vizDbgEl.textContent = (anomaly ? scopeDbg.lastSnap
                                       : scopeDbg.lastSnap + ' · seen ' + ((n - scopeDbg.lastAnomalyT)/1000).toFixed(0) + 's ago')
         + ' frame ' + (frameAge < 0 ? 'never' : (frameAge/1000).toFixed(1) + 's')
-        + ' eq ' + (window.__eqDbgT ? ((n - window.__eqDbgT)/1000).toFixed(1) + 's' : 'never');
+        + ' eq ' + (window.__eqDbgT ? ((n - window.__eqDbgT)/1000).toFixed(1) + 's' : 'never')
+        + ' tick ' + (window.__tickT ? ((n - window.__tickT)/1000).toFixed(1) + 's' : 'never');
     } catch (e) {}
   }, 1000);
   // CANVAS CONTEXT-LOSS HEALER — Safari/WKWebView can put a 2D canvas into a LOST state

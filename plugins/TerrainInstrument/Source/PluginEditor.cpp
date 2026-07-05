@@ -3371,6 +3371,28 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
 
+    // ── CHANNEL WATCHDOG (wd9) ── the eval channel to the WebContent process can die
+    // silently: evals stop executing, no error surfaces, and the scopes freeze/flatline
+    // until the editor is closed and reopened (Max's 2026-07-05 "spike then flat forever").
+    // Heartbeat every tick WITH a completion callback = proof of life. If the callback
+    // hasn't fired for >3s while this 60Hz timer is demonstrably running, the channel is
+    // dead → reload the page ourselves — the exact manual fix, automated. pageReady=false
+    // re-enters the existing RESTORE machinery so all UI state re-pushes after the reload.
+    const double wdNowMs = juce::Time::getMillisecondCounterHiRes();
+    if (lastEvalOkMs_ <= 0.0) lastEvalOkMs_ = wdNowMs;   // arm on first tick
+    webView->evaluateJavascript ("window.__tickT=(window.performance&&performance.now)?performance.now():0;",
+                                 [this] (juce::WebBrowserComponent::EvaluationResult)
+                                 { lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes(); });
+    if (wdNowMs - lastEvalOkMs_ > 3000.0 && wdNowMs - lastRecoveryMs_ > 10000.0)
+    {
+        ++channelRecoveries_;
+        lastRecoveryMs_ = wdNowMs;
+        lastEvalOkMs_   = wdNowMs;    // re-arm — the reload needs a moment to come up
+        pageReady = false;            // RESTORE machinery re-pushes saved state on ready
+        webView->goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+        return;                       // nothing to push into a page that is reloading
+    }
+
     pollBlendKnobs();   // BLEND — debounced re-bake on knob moves (offline; ~ms renders)
 
     // Read grain count
@@ -3565,7 +3587,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeUn[(size_t) o].load(std::memory_order_relaxed), 2); }
             os << "],gt:[";
             for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeGt[(size_t) o].load(std::memory_order_relaxed), 2); }
-            os << "],active:true});}}catch(e){}";
+            os << "],bad:" << audioProcessor.oscScopeBad.load(std::memory_order_relaxed)
+               << ",active:true});}}catch(e){}";
             js << os;
         }
         else
@@ -3624,6 +3647,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         }
     }
 
+    js << "try{window.__terrainRecovered=" << channelRecoveries_ << ";}catch(e){}";
     webView->evaluateJavascript(js);
 
     // Only save AFTER the page has signaled ready (prevents overwriting stored state with defaults)

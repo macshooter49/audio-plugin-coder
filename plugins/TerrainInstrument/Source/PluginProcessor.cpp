@@ -3916,6 +3916,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // can detect a torn snapshot and retry (see PluginEditor timerCallback).
             float acc[OSC_SCOPE_SIZE];
             float tmp[OSC_SCOPE_SIZE];
+            int badWin = 0;   // non-finite samples sanitized this publish (→ oscScopeBad → overlay F:PUSH-POISON)
             oscScopeSeq.fetch_add (1, std::memory_order_release);   // → odd: window write begins
             for (int o = 0; o < 4; ++o)
             {
@@ -3930,7 +3931,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 float wpk = 0.0f;
                 for (int s = 0; s < OSC_SCOPE_SIZE; ++s)
                 {
-                    const float v = acc[s] * norm;
+                    float v = acc[s] * norm;
+                    // WINDOW SANITIZE (wd9) — a non-finite sample would SF()-serialize as 0
+                    // (silent flat); a huge-finite one crushes the JS auto-gain for seconds.
+                    // Zero the former (counted → overlay names it), clamp the latter.
+                    if (! std::isfinite (v)) { v = 0.0f; ++badWin; }
+                    else if (v > 8.0f)  v = 8.0f;
+                    else if (v < -8.0f) v = -8.0f;
                     const float a = v < 0.0f ? -v : v;
                     if (a > wpk) wpk = a;
                     oscScope[(size_t) o][(size_t) s].store (v, std::memory_order_relaxed);
@@ -3947,8 +3954,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 oscScopeGt[(size_t) o].store  (bestVoice->oscGateTargetVal (o), std::memory_order_relaxed);
             }
             // Anchor the display period on the loudest/most-active voice's fundamental.
-            oscScopeHz.store     (bestVoice->getFundamentalHz(), std::memory_order_relaxed);
+            // (sanitized — a non-finite/negative hz would corrupt the JS period math)
+            float pubHz = bestVoice->getFundamentalHz();
+            if (! std::isfinite (pubHz) || pubHz < 0.0f) pubHz = 0.0f;
+            oscScopeHz.store     (pubHz,                         std::memory_order_relaxed);
             oscScopeSr.store     ((float) getSampleRate(),       std::memory_order_relaxed);
+            oscScopeBad.store    (badWin,                        std::memory_order_relaxed);
             oscScopeSeq.fetch_add (1, std::memory_order_release);   // → even: window complete
             oscScopeNv.store     (nActive, std::memory_order_relaxed);
             oscScopeLv.store     (best,    std::memory_order_relaxed);

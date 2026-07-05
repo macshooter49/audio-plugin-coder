@@ -524,6 +524,7 @@ public:
     std::array<std::atomic<float>, 4> oscScopeD1e {};   // FM d1 effective per osc
     std::array<std::atomic<float>, 4> oscScopeUn  {};   // unison auto-gain per osc
     std::array<std::atomic<float>, 4> oscScopeGt  {};   // solo/mute/enable gate target per osc (0 = configured silent)
+    std::atomic<int>                  oscScopeBad { 0 };// non-finite window samples sanitized at the last publish (overlay: F:PUSH-POISON)
 
     std::atomic<int> currentPresetIndex { 0 };
 

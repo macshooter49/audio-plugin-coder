@@ -1120,6 +1120,15 @@ private:
     int modStateTickCount { 0 };
     bool pageReady { false };
 
+    // CHANNEL WATCHDOG (wd9) — the WKWebView eval channel can die silently (evals
+    // no-op, callbacks stop; scopes freeze/flatline until the editor is reopened).
+    // A tiny heartbeat eval with a completion callback = proof of life; >3s of
+    // silence while the 60Hz timer demonstrably runs ⇒ reload the page ourselves
+    // (the manual close/reopen fix, automated). See timerCallback.
+    double lastEvalOkMs_      = 0;
+    double lastRecoveryMs_    = 0;
+    int    channelRecoveries_ = 0;
+
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);
 
