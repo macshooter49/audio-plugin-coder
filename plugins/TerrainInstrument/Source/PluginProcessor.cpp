@@ -3865,6 +3865,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         oscScopePubAccum_ += (double) numSamples;
         const bool oscDoPub = (oscScopePubAccum_ >= getSampleRate() / 60.0);
         if (oscDoPub) oscScopePubAccum_ -= getSampleRate() / 60.0;
+        // Output-ring RMS every publish tick (256 relaxed loads, trivial): drives the
+        // TAIL-MODE gate below and the VIZDBG overlay's "is audio actually audible" truth.
+        float tailRing[SCOPE_SIZE];
+        float outRms = 0.0f;
+        if (oscDoPub)
+        {
+            const int wp = scopeWritePos.load (std::memory_order_relaxed);   // next write = oldest sample
+            double e = 0.0;
+            for (int s = 0; s < SCOPE_SIZE; ++s)
+            {
+                tailRing[s] = scopeBuffer[(size_t) ((wp + s) % SCOPE_SIZE)].load (std::memory_order_relaxed);
+                e += (double) tailRing[s] * (double) tailRing[s];
+            }
+            outRms = (float) std::sqrt (e / (double) SCOPE_SIZE);
+            oscScopeORms.store (outRms, std::memory_order_relaxed);
+        }
         if (oscDoPub && bestVoice != nullptr)
         {
             // Count the voices we will sum (same iteration discipline as bestVoice above).
@@ -3898,11 +3914,50 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             oscScopeHz.store     (bestVoice->getFundamentalHz(), std::memory_order_relaxed);
             oscScopeSr.store     ((float) getSampleRate(),       std::memory_order_relaxed);
             oscScopeSeq.fetch_add (1, std::memory_order_release);   // → even: window complete
-            oscScopeActive.store (true, std::memory_order_relaxed);
+            oscScopeNv.store     (nActive, std::memory_order_relaxed);
+            oscScopeLv.store     (best,    std::memory_order_relaxed);
+            oscScopeTail.store   (false,   std::memory_order_relaxed);
+            oscScopeActive.store (true,    std::memory_order_relaxed);
+            oscScopeTailGate_ = false;
         }
         else if (oscDoPub)
         {
-            oscScopeActive.store (false, std::memory_order_relaxed);
+            // ── TAIL MODE — no voice is amp-active, but the OUTPUT may still ring
+            // (grain delay / tape loop / FX feedback ring for MINUTES). Max's invariant:
+            // audio playing ⇒ the scopes see it. Publish the MASTER OUTPUT ring (post-FX,
+            // post-clipper — literally what the ear hears) as the window for all four
+            // oscs, hz=0 → the JS shaper spans the whole window (slow drifting wisps).
+            // Hysteresis so the gate doesn't chatter at the threshold. 1-block latency
+            // (the ring holds last block's master) — invisible at 60 Hz.
+            if (outRms > 0.0015f) oscScopeTailGate_ = true;        // ~-56 dBFS on
+            else if (outRms < 0.0008f) oscScopeTailGate_ = false;  // ~-62 dBFS off
+            if (oscScopeTailGate_)
+            {
+                oscScopeSeq.fetch_add (1, std::memory_order_release);
+                for (int s = 0; s < OSC_SCOPE_SIZE; ++s)
+                {
+                    const float fp = (float) s * (float) (SCOPE_SIZE - 1) / (float) (OSC_SCOPE_SIZE - 1);
+                    const int   j  = (int) fp;
+                    const float fr = fp - (float) j;
+                    const float v  = tailRing[j] + (tailRing[juce::jmin (SCOPE_SIZE - 1, j + 1)] - tailRing[j]) * fr;
+                    for (int o = 0; o < 4; ++o)
+                        oscScope[(size_t) o][(size_t) s].store (v, std::memory_order_relaxed);
+                }
+                oscScopeHz.store (0.0f, std::memory_order_relaxed);   // no pitch anchor — whole-window span
+                oscScopeSr.store ((float) getSampleRate(), std::memory_order_relaxed);
+                oscScopeSeq.fetch_add (1, std::memory_order_release);
+                oscScopeNv.store   (0,     std::memory_order_relaxed);
+                oscScopeLv.store   (0.0f,  std::memory_order_relaxed);
+                oscScopeTail.store (true,  std::memory_order_relaxed);
+                oscScopeActive.store (true, std::memory_order_relaxed);
+            }
+            else
+            {
+                oscScopeNv.store   (0,     std::memory_order_relaxed);
+                oscScopeLv.store   (0.0f,  std::memory_order_relaxed);
+                oscScopeTail.store (false, std::memory_order_relaxed);
+                oscScopeActive.store (false, std::memory_order_relaxed);
+            }
         }
     }
 

@@ -22064,9 +22064,19 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 
   // C++ 60 Hz push. {a,b,c,d:[...1024], hz, sr, active} or {active:false}.
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
+  // VIZDBG — every push stamps this; the overlay below prints it if the flatline
+  // anomaly ever recurs, so the next screenshot diagnoses itself.
+  var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0 };
+  window.__scopeDbg = scopeDbg;
   window.updateOscScope = function (f) {
     try {
       if (!f) return;
+      scopeDbg.pushT = (window.performance && performance.now) ? performance.now() : 0;
+      if (typeof f.nv === 'number') scopeDbg.nv = f.nv;
+      if (typeof f.lv === 'number') scopeDbg.lv = f.lv;
+      if (typeof f.tl === 'number') scopeDbg.tl = f.tl;
+      if (typeof f.orms === 'number') scopeDbg.orms = f.orms;
+      if (f.active) scopeDbg.activeT = scopeDbg.pushT;
       var wasActive = scope.active;
       scope.active = !!f.active;
       if (scope.active) {
@@ -22109,6 +22119,38 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       }
     } catch (e) {}
   }, 700);
+  // VIZDBG OVERLAY — invisible until the flatline anomaly happens, then a tiny dim
+  // readout appears bottom-left of the syn panel so the next screenshot tells us the
+  // truth directly:  A) pushes stopped arriving (tick eval starved),  B) C++ says
+  // inactive while the output is audibly ringing (tail mode should prevent this),
+  // C) pushes fine but the draw loop is stalled (watchdogs should prevent this).
+  var vizDbgEl = null;
+  setInterval(function () {
+    try {
+      var panel = document.getElementById('syn-panel');
+      if (!panel) return;
+      var n = (window.performance && performance.now) ? performance.now() : 0;
+      var pushAge = scopeDbg.pushT ? (n - scopeDbg.pushT) : -1;
+      var frameAge = scopeLastFrameT ? (n - scopeLastFrameT) : -1;
+      var anomaly = null;
+      if (scopeDbg.pushT && pushAge > 2000) anomaly = 'A:PUSH-STALE';
+      else if (!scope.active && scopeDbg.orms > 0.0012 && pushAge >= 0 && pushAge < 2000 && (n - scopeDbg.activeT) > 2500) anomaly = 'B:INACTIVE-BUT-AUDIBLE';
+      else if (scope.active && anyOscVisible() && frameAge > 2000) anomaly = 'C:LOOP-STALLED';
+      if (!anomaly) { if (vizDbgEl) vizDbgEl.style.display = 'none'; return; }
+      if (!vizDbgEl) {
+        vizDbgEl = document.createElement('div');
+        vizDbgEl.style.cssText = 'position:absolute;left:8px;bottom:6px;z-index:99;font:9px Menlo,monospace;color:rgba(255,255,255,.4);pointer-events:none;white-space:nowrap;';
+        panel.appendChild(vizDbgEl);
+      }
+      vizDbgEl.style.display = 'block';
+      vizDbgEl.textContent = 'VIZDBG ' + anomaly
+        + ' push ' + (pushAge < 0 ? 'never' : (pushAge/1000).toFixed(1) + 's')
+        + ' act ' + (scope.active ? 1 : 0)
+        + ' nv ' + scopeDbg.nv + ' lv ' + (+scopeDbg.lv).toFixed(2)
+        + ' tl ' + scopeDbg.tl + ' orms ' + (+scopeDbg.orms).toFixed(4)
+        + ' frame ' + (frameAge < 0 ? 'never' : (frameAge/1000).toFixed(1) + 's');
+    } catch (e) {}
+  }, 1000);
 
   /* -------------------------------------------------------------- public API */
   function ensureCanvas(o) {

@@ -506,6 +506,15 @@ public:
     std::atomic<bool>  oscScopeActive { false };  // false = no voice sounding (JS falls back to static cycle)
     std::atomic<int>   oscScopeSeq    { 0 };      // SPSC seqlock: odd = write in progress, even = complete
     double             oscScopePubAccum_ = 0.0;   // audio-thread sample accumulator — gates the voice-sum publish to ~60 Hz
+    // VIZDBG + TAIL-MODE — published alongside the window so the UI can (a) show the
+    // MASTER-OUTPUT tail when no voice is amp-active but audio still rings (grain delay /
+    // tape loops ring for MINUTES — the "scope flat while audio plays" report), and
+    // (b) self-diagnose on screen if the anomaly ever recurs (the overlay prints these).
+    std::atomic<int>   oscScopeNv   { 0 };        // amp-active voice count at publish
+    std::atomic<float> oscScopeLv   { 0.f };      // most-active voice's level at publish
+    std::atomic<bool>  oscScopeTail { false };    // true = published window IS the output tail
+    std::atomic<float> oscScopeORms { 0.f };      // master output ring RMS at publish
+    bool               oscScopeTailGate_ = false; // audio-thread hysteresis for tail mode
 
     std::atomic<int> currentPresetIndex { 0 };
 

@@ -3546,12 +3546,18 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 os << "],";
             }
             os << "hz:" << SF(oscHz, 3) << ",sr:" << SF(oscSr, 1)
+               << ",nv:" << audioProcessor.oscScopeNv.load(std::memory_order_relaxed)
+               << ",lv:" << SF(audioProcessor.oscScopeLv.load(std::memory_order_relaxed), 3)
+               << ",tl:" << (audioProcessor.oscScopeTail.load(std::memory_order_relaxed) ? 1 : 0)
+               << ",orms:" << SF(audioProcessor.oscScopeORms.load(std::memory_order_relaxed), 4)
                << ",active:true});}}catch(e){}";
             js << os;
         }
         else
         {
-            js << "try{if(window.updateOscScope){window.updateOscScope({active:false});}}catch(e){}";
+            js << "try{if(window.updateOscScope){window.updateOscScope({active:false"
+               << ",orms:" << SF(audioProcessor.oscScopeORms.load(std::memory_order_relaxed), 4)
+               << "});}}catch(e){}";
         }
     }
 
@@ -3650,19 +3656,22 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         {
             // Build a JS call: window.__terrainEqAnalyzer({pre:[...], post:[...]});
             // ~80 KB string at 60 Hz. Modern WebView handles it.
-            juce::String s = "window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";
+            // VIZ-BULLETPROOF — sanitize like the main tick string: a NaN bin (filter
+            // blowup under hot FM) would print 'nan' = ReferenceError = dead EQ eval.
+            auto SFE = [] (float v) { return juce::String (std::isfinite (v) ? v : 0.0f, 6); };
+            juce::String s = "try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";
             for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i)
             {
                 if (i > 0) s += ",";
-                s += juce::String (preBins[i], 6);
+                s += SFE (preBins[i]);
             }
             s += "],post:[";
             for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i)
             {
                 if (i > 0) s += ",";
-                s += juce::String (postBins[i], 6);
+                s += SFE (postBins[i]);
             }
-            s += "]});";
+            s += "]});}catch(e){}";
             webView->evaluateJavascript (s, nullptr);
         }
     }
