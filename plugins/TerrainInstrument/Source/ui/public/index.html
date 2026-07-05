@@ -15527,6 +15527,11 @@ function formatHz(hz) {
 window.addEventListener('resize', () => { if (!document.getElementById('eq-panel').classList.contains('hidden')) redrawEqCanvas(); });
 
 window.__terrainEqAnalyzer = function(data) {
+  // VIZDBG — stamp arrival time: the EQ push rides a SEPARATE evaluateJavascript on the
+  // same host UI thread as the scope push. During an A:PUSH-STALE episode, this age
+  // fingerprints the cause: eq ALSO stale = the host stalled the whole UI thread
+  // (autosave / CPU starvation); eq fresh while scope stale = one eval specifically dies.
+  try { window.__eqDbgT = (window.performance && performance.now) ? performance.now() : 0; } catch (eT) {}
   eqState.preBins = data.pre;
   eqState.postBins = data.post;
   if (!document.getElementById('eq-panel').classList.contains('hidden')) redrawEqCanvas();
@@ -22024,7 +22029,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           if (err < bestErr) { bestErr = err; bestShift = s; }
         }
       }
-      var a = (scope.active ? SHAPE_SMOOTH : RELEASE_SMOOTH) * frac;   // slower morph on release
+      // PUSH-GAP POLICY (the A:PUSH-STALE fix) — the host can stall the UI thread for
+      // SECONDS (FL autosave / CPU spikes), freezing the 60Hz feed. Only trust a
+      // "fade to flat" order from a FRESH push: while the feed is stale, HOLD the last
+      // shape instead of fading — a stalled messenger must never draw silence.
+      var pushFresh = scopeDbg.pushT && (nowMs - scopeDbg.pushT) < 600;
+      var a = (scope.active ? SHAPE_SMOOTH : (pushFresh ? RELEASE_SMOOTH : 0)) * frac;
       // FIX B (part 1) — smooth disp toward the RAW (shifted) target, NO gain. Normalizing the target
       // pre-smooth (the old way) does NOT compensate for the amplitude the smoothing removes → chords
       // looked small. We normalize the FINAL disp at render instead (below + in drawShaper).
@@ -22069,7 +22079,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'wd6';   // bump per ship — printed in the overlay so screenshots prove which build
+  var TERRAIN_BUILD = 'wd7';   // bump per ship — printed in the overlay so screenshots prove which build
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
@@ -22181,7 +22191,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       vizDbgEl.style.whiteSpace = 'normal';
       vizDbgEl.textContent = (anomaly ? scopeDbg.lastSnap
                                       : scopeDbg.lastSnap + ' · seen ' + ((n - scopeDbg.lastAnomalyT)/1000).toFixed(0) + 's ago')
-        + ' frame ' + (frameAge < 0 ? 'never' : (frameAge/1000).toFixed(1) + 's');
+        + ' frame ' + (frameAge < 0 ? 'never' : (frameAge/1000).toFixed(1) + 's')
+        + ' eq ' + (window.__eqDbgT ? ((n - window.__eqDbgT)/1000).toFixed(1) + 's' : 'never');
     } catch (e) {}
   }, 1000);
   // CANVAS CONTEXT-LOSS HEALER — Safari/WKWebView can put a 2D canvas into a LOST state
