@@ -10115,7 +10115,28 @@ setTimeout(function wireSynControls () {
           // front for the .sample-view. Redraw its canvas when it becomes visible
           // (a hidden canvas has zero size, so the initial draw is a no-op).
           try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); if ((isSamp || isGran) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
-        function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 5); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {} }
+        function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 5); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {}
+          // MENU-STUCK MITIGATION — WKWebView can leave a native <select> unable to REOPEN after a
+          // change that mutates its own subtree (switching an osc to FM re-lays-out the osc view).
+          // Dropping focus on the next tick resets the control so it opens again; before this, the
+          // only cure was reopening the editor (Max: "reopening fixes it", trigger: "just switched to FM").
+          setTimeout (function () { try { sel.blur (); } catch (e) {} }, 0);
+        }
+        // MENU-STUCK DIAG — if a header click ever lands on something OTHER than this select (an overlay
+        // is covering it) or a modal backdrop is stuck open, log the exact blocker (console + __vizLog
+        // ring) so the next stick is captured with evidence instead of guessed at.
+        if (sel.parentNode) sel.parentNode.addEventListener ('pointerdown', function (ev) {
+          try {
+            var top = document.elementFromPoint (ev.clientX, ev.clientY);
+            var stuck = document.querySelector ('.rand-menu-backdrop.open, .samp-menu.open, .mv-menu.open');
+            if ((top && top !== sel && top !== disp && !sel.contains (top)) || stuck) {
+              var msg = '[MENU-STUCK] osc ' + o + ' top=' + (top ? (top.className || top.tagName) : 'null')
+                        + ' stuckOverlay=' + (stuck ? stuck.className : 'none');
+              try { console.warn (msg); } catch (e2) {}
+              window.__vizLog = window.__vizLog || []; window.__vizLog.push (msg);
+            }
+          } catch (e) {}
+        }, true);
         paint ();
         sel.addEventListener ('change', pick);
         sel.addEventListener ('input', pick);
