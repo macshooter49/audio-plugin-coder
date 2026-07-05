@@ -3907,8 +3907,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                             sv->copyScopeWindow (o, tmp, OSC_SCOPE_SIZE);
                             for (int s = 0; s < OSC_SCOPE_SIZE; ++s) acc[s] += tmp[s];
                         }
+                float wpk = 0.0f;
                 for (int s = 0; s < OSC_SCOPE_SIZE; ++s)
-                    oscScope[(size_t) o][(size_t) s].store (acc[s] * norm, std::memory_order_relaxed);
+                {
+                    const float v = acc[s] * norm;
+                    const float a = v < 0.0f ? -v : v;
+                    if (a > wpk) wpk = a;
+                    oscScope[(size_t) o][(size_t) s].store (v, std::memory_order_relaxed);
+                }
+                oscScopeWpk[(size_t) o].store (wpk, std::memory_order_relaxed);
+                // VIZDBG — best voice's per-osc render state rides along with the window
+                int eng = 0, au = 0, mip = 0; float d1e = 0.0f, un = 0.0f;
+                bestVoice->getVizDiag (o, eng, au, mip, d1e, un);
+                oscScopeEng[(size_t) o].store (eng, std::memory_order_relaxed);
+                oscScopeAu[(size_t) o].store  (au,  std::memory_order_relaxed);
+                oscScopeMip[(size_t) o].store (mip, std::memory_order_relaxed);
+                oscScopeD1e[(size_t) o].store (d1e, std::memory_order_relaxed);
+                oscScopeUn[(size_t) o].store  (un,  std::memory_order_relaxed);
             }
             // Anchor the display period on the loudest/most-active voice's fundamental.
             oscScopeHz.store     (bestVoice->getFundamentalHz(), std::memory_order_relaxed);

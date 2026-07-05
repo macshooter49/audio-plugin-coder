@@ -515,6 +515,14 @@ public:
     std::atomic<bool>  oscScopeTail { false };    // true = published window IS the output tail
     std::atomic<float> oscScopeORms { 0.f };      // master output ring RMS at publish
     bool               oscScopeTailGate_ = false; // audio-thread hysteresis for tail mode
+    // VIZDBG forensics — per-osc snapshot of the best voice at publish: window peak,
+    // engine idx, active unison, mip level, FM effective index, unison auto-gain.
+    std::array<std::atomic<float>, 4> oscScopeWpk {};   // per-osc published window peak
+    std::array<std::atomic<int>, 4>   oscScopeEng {};   // engine index per osc
+    std::array<std::atomic<int>, 4>   oscScopeAu  {};   // active unison per osc
+    std::array<std::atomic<int>, 4>   oscScopeMip {};   // current mip level per osc
+    std::array<std::atomic<float>, 4> oscScopeD1e {};   // FM d1 effective per osc
+    std::array<std::atomic<float>, 4> oscScopeUn  {};   // unison auto-gain per osc
 
     std::atomic<int> currentPresetIndex { 0 };
 

@@ -3549,8 +3549,21 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                << ",nv:" << audioProcessor.oscScopeNv.load(std::memory_order_relaxed)
                << ",lv:" << SF(audioProcessor.oscScopeLv.load(std::memory_order_relaxed), 3)
                << ",tl:" << (audioProcessor.oscScopeTail.load(std::memory_order_relaxed) ? 1 : 0)
-               << ",orms:" << SF(audioProcessor.oscScopeORms.load(std::memory_order_relaxed), 4)
-               << ",active:true});}}catch(e){}";
+               << ",orms:" << SF(audioProcessor.oscScopeORms.load(std::memory_order_relaxed), 4);
+            // VIZDBG forensics — per-osc window peak / engine / unison / mip / FM index / auto-gain
+            os << ",wpk:[";
+            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeWpk[(size_t) o].load(std::memory_order_relaxed), 3); }
+            os << "],eng:[";
+            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << audioProcessor.oscScopeEng[(size_t) o].load(std::memory_order_relaxed); }
+            os << "],au:[";
+            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << audioProcessor.oscScopeAu[(size_t) o].load(std::memory_order_relaxed); }
+            os << "],mip:[";
+            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << audioProcessor.oscScopeMip[(size_t) o].load(std::memory_order_relaxed); }
+            os << "],d1e:[";
+            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeD1e[(size_t) o].load(std::memory_order_relaxed), 2); }
+            os << "],un:[";
+            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeUn[(size_t) o].load(std::memory_order_relaxed), 2); }
+            os << "],active:true});}}catch(e){}";
             js << os;
         }
         else

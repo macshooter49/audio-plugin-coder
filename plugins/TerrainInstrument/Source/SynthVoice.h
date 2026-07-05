@@ -465,6 +465,22 @@ namespace tw
         /** Test-only accessor — not used in production audio path. */
         Engine engineForTesting() const noexcept { return engine_; }
 
+        /** VIZDBG — per-osc render-critical state for the on-screen forensics overlay:
+         *  engine index, active unison count, current mip level, FM effective index,
+         *  unison auto-gain. Read on the audio thread right after this voice rendered. */
+        void getVizDiag (int osc, int& engineIdx, int& activeUni, int& mipLvl, float& d1Eff, float& uNorm) const noexcept
+        {
+            switch (osc)
+            {
+                default:
+                case 0: engineIdx = (int) engine_;  activeUni = activeUnisonA_; mipLvl = currentMipLevelA_; uNorm = uNormA_; break;
+                case 1: engineIdx = (int) engineB_; activeUni = activeUnisonB_; mipLvl = currentMipLevelB_; uNorm = uNormB_; break;
+                case 2: engineIdx = (int) engineC_; activeUni = activeUnisonC_; mipLvl = currentMipLevelC_; uNorm = uNormC_; break;
+                case 3: engineIdx = (int) engineD_; activeUni = activeUnisonD_; mipLvl = currentMipLevelD_; uNorm = uNormD_; break;
+            }
+            d1Eff = fmD1Eff_[(size_t) juce::jlimit (0, 3, osc)];
+        }
+
         // ════════ SAMPLE-ENGINE-VOICE — per-OSC Sample engine params + setters ════════
         struct SampleEngineParams
         {
@@ -781,7 +797,10 @@ namespace tw
                 const float u_norm = ((float) u / (float) (activeCount - 1)) * 2.0f - 1.0f;  // -1..+1
                 detCents[(size_t) u] = u_norm * det * kUniMaxDetuneCents;
                 // BLEND — centre voice (u_norm≈0) full, outer voices scaled toward `blend`.
-                const float g = 1.0f - (1.0f - bl) * std::fabs (u_norm);
+                // UNISON LAW (voice-0-anchored): voice 0 is ALWAYS full gain. Without this,
+                // UNISON=2 has NO centre voice (u_norm = ±1 for both) and BLEND=0 zeroed
+                // BOTH sines → the osc rendered EXACT SILENCE at full envelope.
+                const float g = (u == 0) ? 1.0f : (1.0f - (1.0f - bl) * std::fabs (u_norm));
                 // WIDTH — equal-power pan, angle in [0, π/2]; BLEND gain folded into the table
                 // so the render loop stays a plain sAu·pan multiply.
                 const float angle = (u_norm * wid + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
@@ -1538,7 +1557,7 @@ namespace tw
                     if (fmAlgo_[o] == 1) m += 6.2832 * (double) fmD2Eff_[o] * fmR2Eff_[o];
                 }
                 m += (double) fmGaleAmt_[o] * 6.0;
-                return m;
+                return juce::jmin (m, 64.0);   // sanity cap — extreme depth×ratio must dull, never vanish
             };
             currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_) * fmRateMul (engine_,  0));
             currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_) * warpRateMul (warp2ModeB_, warp2AmountB_) * fmRateMul (engineB_, 1));
