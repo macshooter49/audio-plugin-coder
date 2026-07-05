@@ -3563,6 +3563,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeD1e[(size_t) o].load(std::memory_order_relaxed), 2); }
             os << "],un:[";
             for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeUn[(size_t) o].load(std::memory_order_relaxed), 2); }
+            os << "],gt:[";
+            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeGt[(size_t) o].load(std::memory_order_relaxed), 2); }
             os << "],active:true});}}catch(e){}";
             js << os;
         }

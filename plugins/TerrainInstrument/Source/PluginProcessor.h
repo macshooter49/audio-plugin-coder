@@ -523,6 +523,7 @@ public:
     std::array<std::atomic<int>, 4>   oscScopeMip {};   // current mip level per osc
     std::array<std::atomic<float>, 4> oscScopeD1e {};   // FM d1 effective per osc
     std::array<std::atomic<float>, 4> oscScopeUn  {};   // unison auto-gain per osc
+    std::array<std::atomic<float>, 4> oscScopeGt  {};   // solo/mute/enable gate target per osc (0 = configured silent)
 
     std::atomic<int> currentPresetIndex { 0 };
 
@@ -816,6 +817,14 @@ private:
         tw::Wavetable                     buf[2];
         std::atomic<const tw::Wavetable*> live { nullptr };
         std::atomic<int>                  audioReadingIdx { -1 };  // 0/1 = buf in use, -1 = none
+        // RACE HARDENING (2026-07-05 scope-flatline root cause): buildFromSpec zeroes then
+        // refills IN PLACE (~5.6ms) while audioReadingIdx only refreshes at block START — a
+        // voice could render its blend composite from a mid-build (zeroed) table and, with
+        // pointer-keyed caching, latch SILENCE for minutes. ready[] parks the audio thread
+        // on the plain bank table while a build is in flight; retireCooldown gives in-flight
+        // blocks time to leave a just-retired buffer before it may be rebuilt.
+        std::atomic<bool> ready[2] { true, true };
+        int   retireCooldown = 0;         // message-thread ticks before a retired buffer may rebuild
         int   buildIdx    = 0;            // message-thread: next buffer to build into
         int   builtPreset = -1;
         int   builtMode   = -1;

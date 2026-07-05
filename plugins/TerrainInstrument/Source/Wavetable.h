@@ -18,6 +18,7 @@
 #include <array>
 #include <complex>
 #include <algorithm>
+#include <atomic>
 #include <juce_core/juce_core.h>
 
 namespace tw
@@ -177,7 +178,22 @@ namespace tw
             }
 
             normalizeMipLevels();
+
+            // Content complete — bump the epoch LAST so a reader keying its cache on it
+            // can only observe the new epoch together with the finished content.
+            buildEpoch_.fetch_add (1, std::memory_order_release);
         }
+
+        /** BUILD EPOCH — increments after every COMPLETED (re)build. The spectral-morph
+         *  slots rebuild their two Wavetable objects IN PLACE forever (same addresses),
+         *  so a pointer-keyed cache (the voice's blend composite) can never tell that
+         *  the CONTENT changed — a composite rendered against a mid-build (zeroed)
+         *  table stayed latched as SILENCE until an unrelated knob moved (the
+         *  2026-07-05 scope-flatline root cause). Keying on (pointer, epoch) forces a
+         *  fresh composite after every completed rebuild. Atomic: message-thread
+         *  writes, audio-thread reads; NOT copied by the (deleted-by-atomic) implicit
+         *  copy — tables are built in place, never copied. */
+        int buildEpoch() const noexcept { return buildEpoch_.load (std::memory_order_acquire); }
 
         /** Canonical render-path lookup. mipLevel is clamped to
          *  [0, numMipLevels_-1] (so legacy single-tier tables, numMipLevels_=1,
@@ -1832,5 +1848,10 @@ namespace tw
         int                  frameSize_     = kFrameSize;
         int                  numMipLevels_  = 1;
         std::vector<float>   mipData_;     // flat [mipLevel][frame][sample]
+
+    public:
+        // BUILD EPOCH storage — deliberately the LAST member (offsets of everything
+        // above stay stable for tooling that links older objects). See buildEpoch().
+        std::atomic<int>     buildEpoch_ { 0 };
     };
 }

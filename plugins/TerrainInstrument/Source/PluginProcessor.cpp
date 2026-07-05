@@ -87,11 +87,17 @@ TerrainInstrumentAudioProcessor::resolveMorphTable (MorphSlot& slot, int presetI
 {
     // Audio thread: atomic-load the published morphed table. If a morph is active,
     // report which buffer we're reading so the rebuild never overwrites it.
+    // RACE HARDENING: a buffer whose rebuild is IN FLIGHT (ready == false) is never
+    // handed to voices — fall back to the plain bank table (sound, never zeros).
     const tw::Wavetable* m = slot.live.load (std::memory_order_acquire);
     if (m != nullptr)
     {
-        slot.audioReadingIdx.store (m == &slot.buf[1] ? 1 : 0, std::memory_order_release);
-        return m;
+        const int idx = (m == &slot.buf[1]) ? 1 : 0;
+        if (slot.ready[idx].load (std::memory_order_acquire))
+        {
+            slot.audioReadingIdx.store (idx, std::memory_order_release);
+            return m;
+        }
     }
     slot.audioReadingIdx.store (-1, std::memory_order_release);
     return wavetableBank.getTable (presetIdx);
@@ -109,6 +115,8 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot,
     // None (or zero amount) → publish nullptr so voices read the plain bank table.
     if (mode <= 0 || amount <= 0.0f)
     {
+        if (slot.live.load (std::memory_order_relaxed) != nullptr)
+            slot.retireCooldown = 2;   // voices may still be mid-block on the retiring buffer
         slot.live.store (nullptr, std::memory_order_release);
         slot.builtPreset = preset;
         slot.builtMode   = mode;
@@ -121,17 +129,29 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot,
         && std::abs (amount - slot.builtAmount) < 1.0e-4f)
         return;
 
-    // Don't rebuild the buffer the audio thread is currently reading.
+    // RETIRE COOLDOWN — audioReadingIdx only refreshes at block START, so for up to a
+    // full audio block after a publish, voices can still be rendering from the buffer
+    // it says they left. Two 60 Hz ticks (~33ms) safely outlives any sane block size.
+    if (slot.retireCooldown > 0) { --slot.retireCooldown; return; }
+
+    // Never rebuild the LIVE buffer, and never one the audio thread reports reading.
     const int target = slot.buildIdx;
+    if (slot.live.load (std::memory_order_relaxed) == &slot.buf[target])
+        return;
     if (slot.audioReadingIdx.load (std::memory_order_acquire) == target)
         return;   // try again on the next tick (after the audio thread moves off it)
 
+    // Mark the build in flight FIRST: any resolve during the rebuild parks voices on
+    // the plain bank table (audible) instead of a half-zeroed morph buffer (silence).
+    slot.ready[target].store (false, std::memory_order_release);
     slot.buf[target].buildFromSpec (
         tw::SpectralMorph::apply (tw::WavetableBank::specForPreset (preset),
                                   (tw::SpectralMode) mode, amount));
+    slot.ready[target].store (true, std::memory_order_release);
 
     slot.live.store (&slot.buf[target], std::memory_order_release);
     slot.buildIdx  ^= 1;
+    slot.retireCooldown = 2;   // let in-flight blocks leave the buffer we just retired
     slot.builtPreset = preset;
     slot.builtMode   = mode;
     slot.builtAmount = amount;
@@ -3924,6 +3944,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 oscScopeMip[(size_t) o].store (mip, std::memory_order_relaxed);
                 oscScopeD1e[(size_t) o].store (d1e, std::memory_order_relaxed);
                 oscScopeUn[(size_t) o].store  (un,  std::memory_order_relaxed);
+                oscScopeGt[(size_t) o].store  (bestVoice->oscGateTargetVal (o), std::memory_order_relaxed);
             }
             // Anchor the display period on the loudest/most-active voice's fundamental.
             oscScopeHz.store     (bestVoice->getFundamentalHz(), std::memory_order_relaxed);

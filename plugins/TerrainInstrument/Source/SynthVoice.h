@@ -468,6 +468,11 @@ namespace tw
         /** VIZDBG — per-osc render-critical state for the on-screen forensics overlay:
          *  engine index, active unison count, current mip level, FM effective index,
          *  unison auto-gain. Read on the audio thread right after this voice rendered. */
+        /** VIZDBG — this osc's solo/mute/enable gate TARGET (0 = configured silent).
+         *  Lets the overlay tell "osc off → flat is correct" from "osc ON but window
+         *  silent → real render dropout" (the per-osc class-D blind spot fix). */
+        float oscGateTargetVal (int osc) const noexcept { return oscGateTarget_[juce::jlimit (0, 3, osc)]; }
+
         void getVizDiag (int osc, int& engineIdx, int& activeUni, int& mipLvl, float& d1Eff, float& uNorm) const noexcept
         {
             switch (osc)
@@ -1582,40 +1587,47 @@ namespace tw
             {
                 float fpA = framePos_;
                 if (interpModeA_ == 1) { const float Nf = 16.0f; fpA = std::round (fpA * (Nf - 1.0f)) / (Nf - 1.0f); }
-                if (fpA != lastFpA_ || blurA_ != lastBlurA_ || currentMipLevelA_ != lastMipA_ || currentWavetable_ != lastWtA_)
+                // Gate keys include the table's BUILD EPOCH: morph slots rebuild their two
+                // Wavetable objects IN PLACE (same pointer, new content), so pointer identity
+                // alone latched a mid-rebuild (zeroed) composite as permanent SILENCE.
+                const int epA = currentWavetable_->buildEpoch();
+                if (fpA != lastFpA_ || blurA_ != lastBlurA_ || currentMipLevelA_ != lastMipA_ || currentWavetable_ != lastWtA_ || epA != lastEpochA_)
                 {
                     currentWavetable_->renderBlend (currentMipLevelA_, fpA, blurA_, blendA_.data());
-                    lastFpA_ = fpA; lastBlurA_ = blurA_; lastMipA_ = currentMipLevelA_; lastWtA_ = currentWavetable_;
+                    lastFpA_ = fpA; lastBlurA_ = blurA_; lastMipA_ = currentMipLevelA_; lastWtA_ = currentWavetable_; lastEpochA_ = epA;
                 }
             }
             if (currentWavetableB_ != nullptr)
             {
                 float fpB = framePosB_;
                 if (interpModeB_ == 1) { const float Nf = 16.0f; fpB = std::round (fpB * (Nf - 1.0f)) / (Nf - 1.0f); }
-                if (fpB != lastFpB_ || blurB_ != lastBlurB_ || currentMipLevelB_ != lastMipB_ || currentWavetableB_ != lastWtB_)
+                const int epB = currentWavetableB_->buildEpoch();
+                if (fpB != lastFpB_ || blurB_ != lastBlurB_ || currentMipLevelB_ != lastMipB_ || currentWavetableB_ != lastWtB_ || epB != lastEpochB_)
                 {
                     currentWavetableB_->renderBlend (currentMipLevelB_, fpB, blurB_, blendB_.data());
-                    lastFpB_ = fpB; lastBlurB_ = blurB_; lastMipB_ = currentMipLevelB_; lastWtB_ = currentWavetableB_;
+                    lastFpB_ = fpB; lastBlurB_ = blurB_; lastMipB_ = currentMipLevelB_; lastWtB_ = currentWavetableB_; lastEpochB_ = epB;
                 }
             }
             if (currentWavetableC_ != nullptr)
             {
                 float fpC = framePosC_;
                 if (interpModeC_ == 1) { const float Nf = 16.0f; fpC = std::round (fpC * (Nf - 1.0f)) / (Nf - 1.0f); }
-                if (fpC != lastFpC_ || blurC_ != lastBlurC_ || currentMipLevelC_ != lastMipC_ || currentWavetableC_ != lastWtC_)
+                const int epC = currentWavetableC_->buildEpoch();
+                if (fpC != lastFpC_ || blurC_ != lastBlurC_ || currentMipLevelC_ != lastMipC_ || currentWavetableC_ != lastWtC_ || epC != lastEpochC_)
                 {
                     currentWavetableC_->renderBlend (currentMipLevelC_, fpC, blurC_, blendC_.data());
-                    lastFpC_ = fpC; lastBlurC_ = blurC_; lastMipC_ = currentMipLevelC_; lastWtC_ = currentWavetableC_;
+                    lastFpC_ = fpC; lastBlurC_ = blurC_; lastMipC_ = currentMipLevelC_; lastWtC_ = currentWavetableC_; lastEpochC_ = epC;
                 }
             }
             if (currentWavetableD_ != nullptr)
             {
                 float fpD = framePosD_;
                 if (interpModeD_ == 1) { const float Nf = 16.0f; fpD = std::round (fpD * (Nf - 1.0f)) / (Nf - 1.0f); }
-                if (fpD != lastFpD_ || blurD_ != lastBlurD_ || currentMipLevelD_ != lastMipD_ || currentWavetableD_ != lastWtD_)
+                const int epD = currentWavetableD_->buildEpoch();
+                if (fpD != lastFpD_ || blurD_ != lastBlurD_ || currentMipLevelD_ != lastMipD_ || currentWavetableD_ != lastWtD_ || epD != lastEpochD_)
                 {
                     currentWavetableD_->renderBlend (currentMipLevelD_, fpD, blurD_, blendD_.data());
-                    lastFpD_ = fpD; lastBlurD_ = blurD_; lastMipD_ = currentMipLevelD_; lastWtD_ = currentWavetableD_;
+                    lastFpD_ = fpD; lastBlurD_ = blurD_; lastMipD_ = currentMipLevelD_; lastWtD_ = currentWavetableD_; lastEpochD_ = epD;
                 }
             }
 
@@ -3955,8 +3967,8 @@ namespace tw
         float blurA_ = 0.0f, blurB_ = 0.0f;
         std::array<float, tw::Wavetable::kFrameSize> blendA_ {};
         std::array<float, tw::Wavetable::kFrameSize> blendB_ {};
-        float lastFpA_ = -2.0f, lastBlurA_ = -2.0f; int lastMipA_ = -2;
-        float lastFpB_ = -2.0f, lastBlurB_ = -2.0f; int lastMipB_ = -2;
+        float lastFpA_ = -2.0f, lastBlurA_ = -2.0f; int lastMipA_ = -2; int lastEpochA_ = -1;
+        float lastFpB_ = -2.0f, lastBlurB_ = -2.0f; int lastMipB_ = -2; int lastEpochB_ = -1;
         // The source table pointer is ALSO a blend dependency: Spectral Morph and live
         // preset changes swap currentWavetable_ with frame/blur/mip unchanged, so the
         // gate must watch the pointer too or the blend keeps stale (pre-morph) bytes.
@@ -4024,10 +4036,13 @@ namespace tw
         // normalization factor are all independent for OSC A and OSC B.
         std::array<float,  kMaxUnison> uDetuneCentsA_ {};
         std::array<float,  kMaxUnison> uDetuneCentsB_ {};
-        std::array<float,  kMaxUnison> uPanLA_        {};
-        std::array<float,  kMaxUnison> uPanRA_        {};
-        std::array<float,  kMaxUnison> uPanLB_        {};
-        std::array<float,  kMaxUnison> uPanRB_        {};
+        // Pan gains default to the count-1 CENTRE result (0.7071/0.7071 on voice 0) so a
+        // voice that has never received a setUnison broadcast still SOUNDS — all-zero
+        // defaults rendered exact silence (harness soak find, 2026-07-05).
+        std::array<float,  kMaxUnison> uPanLA_        { 0.7071f };
+        std::array<float,  kMaxUnison> uPanRA_        { 0.7071f };
+        std::array<float,  kMaxUnison> uPanLB_        { 0.7071f };
+        std::array<float,  kMaxUnison> uPanRB_        { 0.7071f };
 
         int   activeUnisonA_ = 1, activeUnisonB_ = 1;   // 1..kMaxUnison per OSC
         float uNormA_ = 1.0f,     uNormB_ = 1.0f;       // auto-gain: 1/sqrt(Σ blendGain²) — holds loudness as voices rise
@@ -4065,7 +4080,7 @@ namespace tw
         float  frameSpreadC01_ = 0.0f;
         float  blurTargetC_ = 0.0f, blurC_ = 0.0f;
         std::array<float, tw::Wavetable::kFrameSize> blendC_{};
-        float  lastFpC_ = -2.0f, lastBlurC_ = -2.0f; int lastMipC_ = -2;
+        float  lastFpC_ = -2.0f, lastBlurC_ = -2.0f; int lastMipC_ = -2; int lastEpochC_ = -1;
         const tw::Wavetable* lastWtC_ = nullptr;
         int    phaseModeC_ = 2;
         int    foldShapeC_ = 0; float foldAmountC_ = 0.0f;
@@ -4079,7 +4094,7 @@ namespace tw
         float  spectralTiltLowCL_ = 0.0f, spectralTiltLowCR_ = 0.0f;
         std::array<float, kSpectralVibSize> spectralVibCL_{}, spectralVibCR_{};
         int    spectralVibWriteC_ = 0; double spectralVibPhaseC_ = 0.0;
-        std::array<float, kMaxUnison> uDetuneCentsC_{}, uPanLC_{}, uPanRC_{};
+        std::array<float, kMaxUnison> uDetuneCentsC_{}, uPanLC_{ 0.7071f }, uPanRC_{ 0.7071f };
         int    activeUnisonC_ = 1; float uNormC_ = 1.0f;
         float  waverC_ = 0.0f; float waverCentsC_[kMaxUnison]{}; std::uint32_t waverRngC_[kMaxUnison]{};
         // ── OSC D ──
@@ -4105,7 +4120,7 @@ namespace tw
         float  frameSpreadD01_ = 0.0f;
         float  blurTargetD_ = 0.0f, blurD_ = 0.0f;
         std::array<float, tw::Wavetable::kFrameSize> blendD_{};
-        float  lastFpD_ = -2.0f, lastBlurD_ = -2.0f; int lastMipD_ = -2;
+        float  lastFpD_ = -2.0f, lastBlurD_ = -2.0f; int lastMipD_ = -2; int lastEpochD_ = -1;
         const tw::Wavetable* lastWtD_ = nullptr;
         int    phaseModeD_ = 2;
         int    foldShapeD_ = 0; float foldAmountD_ = 0.0f;
@@ -4119,7 +4134,7 @@ namespace tw
         float  spectralTiltLowDL_ = 0.0f, spectralTiltLowDR_ = 0.0f;
         std::array<float, kSpectralVibSize> spectralVibDL_{}, spectralVibDR_{};
         int    spectralVibWriteD_ = 0; double spectralVibPhaseD_ = 0.0;
-        std::array<float, kMaxUnison> uDetuneCentsD_{}, uPanLD_{}, uPanRD_{};
+        std::array<float, kMaxUnison> uDetuneCentsD_{}, uPanLD_{ 0.7071f }, uPanRD_{ 0.7071f };
         int    activeUnisonD_ = 1; float uNormD_ = 1.0f;
         float  waverD_ = 0.0f; float waverCentsD_[kMaxUnison]{}; std::uint32_t waverRngD_[kMaxUnison]{};
 

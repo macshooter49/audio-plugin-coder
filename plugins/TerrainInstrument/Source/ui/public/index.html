@@ -22079,7 +22079,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'wd7';   // bump per ship — printed in the overlay so screenshots prove which build
+  var TERRAIN_BUILD = 'wd8';   // bump per ship — printed in the overlay so screenshots prove which build
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
@@ -22095,6 +22095,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if (f.wpk) scopeDbg.wpk = f.wpk; if (f.eng) scopeDbg.eng = f.eng;
       if (f.au)  scopeDbg.au  = f.au;  if (f.mip) scopeDbg.mip = f.mip;
       if (f.d1e) scopeDbg.d1e = f.d1e; if (f.un)  scopeDbg.un  = f.un;
+      if (f.gt)  scopeDbg.gt  = f.gt;
       if (f.active) scopeDbg.activeT = scopeDbg.pushT;
       var wasActive = scope.active;
       scope.active = !!f.active;
@@ -22155,8 +22156,21 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if (scopeDbg.pushT && pushAge > 2000) anomaly = 'A:PUSH-STALE';
       else if (!scope.active && scopeDbg.orms > 0.0012 && pushAge >= 0 && pushAge < 2000 && (n - scopeDbg.activeT) > 2500) anomaly = 'B:INACTIVE-BUT-AUDIBLE';
       else if (scope.active && anyOscVisible() && frameAge > 2000) anomaly = 'C:LOOP-STALLED';
-      else if (scope.active && anyOscVisible() && frameAge < 1500 && scopeDbg.tpk < 0.003
-               && (scopeDbg.lv > 0.02 || scopeDbg.orms > 0.0012)) anomaly = 'D:WINDOW-SILENT';
+      else if (scope.active && anyOscVisible() && frameAge < 1500 && scopeDbg.tl !== 1 && scopeDbg.nv >= 1
+               && (scopeDbg.lv > 0.02 || scopeDbg.orms > 0.0012)) {
+        // PER-OSC window-silent (fixes the class-D blind spot: one healthy osc used to
+        // mask a stone-dead one). A WT/FM osc whose gate says ON but whose window peak
+        // is ~zero while voices sound = a real render dropout — name the osc directly.
+        if (scopeDbg.wpk && scopeDbg.eng) {
+          for (var oi = 0; oi < 4; oi++) {
+            var oe = +scopeDbg.eng[oi];
+            if ((oe === 0 || oe === 4) && (!scopeDbg.gt || +scopeDbg.gt[oi] > 0.5) && +scopeDbg.wpk[oi] < 0.003) {
+              anomaly = 'D:WINDOW-SILENT-' + 'ABCD'[oi]; break;
+            }
+          }
+        }
+        if (!anomaly && scopeDbg.tpk < 0.003) anomaly = 'D:WINDOW-SILENT';   // legacy all-window check
+      }
       if (scopeDbg.heals > 0 && !anomaly) anomaly = 'E:CANVAS-HEALED×' + scopeDbg.heals;   // breadcrumb after a context-loss heal
       // 60s LATCH — anomalies can be transient (Max had to twitch-screenshot one); once
       // anything fires, keep the LAST report on screen for a minute with its age, and
@@ -22173,7 +22187,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           + (scopeDbg.au  ? ' au['  + scopeDbg.au.join(' ')  + ']' : '')
           + (scopeDbg.mip ? ' mip[' + scopeDbg.mip.join(' ') + ']' : '')
           + (scopeDbg.d1e ? ' d1e[' + scopeDbg.d1e.map(function(v){return (+v).toFixed(1);}).join(' ') + ']' : '')
-          + (scopeDbg.un  ? ' un['  + scopeDbg.un.map(function(v){return (+v).toFixed(2);}).join(' ') + ']' : '');
+          + (scopeDbg.un  ? ' un['  + scopeDbg.un.map(function(v){return (+v).toFixed(2);}).join(' ') + ']' : '')
+          + (scopeDbg.gt  ? ' gt['  + scopeDbg.gt.map(function(v){return (+v).toFixed(1);}).join(' ') + ']' : '');
         scopeDbg.lastSnap = snap;
         window.__vizLog = window.__vizLog || [];
         window.__vizLog.push(Math.round(n/1000) + 's ' + snap);
