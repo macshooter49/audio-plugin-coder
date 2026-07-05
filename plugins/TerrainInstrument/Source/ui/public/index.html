@@ -12300,10 +12300,15 @@ setTimeout(function wireSynControls () {
           followEl.setAttribute('cy', y.toFixed(2));
           followEl.style.opacity='1';
         }
-        // Receive live env state from C++ (60 Hz).
+        // Receive live env state from C++ (60 Hz). Same stale-rAF-id guard as the osc
+        // scope: if WKWebView dropped the pending callback (occlusion/suspend), the
+        // handle lies forever and the dot freezes — trust TIME, reset, redrive.
+        var followLastT = 0;
         window.updateEnvFollower = function(level, stageCode){
           followLevel = level; followStage = stageCode;
-          if(!followRAF){ followRAF=requestAnimationFrame(function(){ followRAF=0; placeFollower(); }); }
+          var n = (window.performance && performance.now) ? performance.now() : 0;
+          if (followRAF && n - followLastT > 250) { try { cancelAnimationFrame(followRAF); } catch(e) {} followRAF = 0; }
+          if(!followRAF){ followRAF=requestAnimationFrame(function(){ followLastT=(window.performance&&performance.now)?performance.now():0; followRAF=0; placeFollower(); }); }
         };
 
         // ── DEPTH slider (right edge) ─ how much PITCH/FILTER envelopes move the sound.
@@ -21948,8 +21953,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   }
   // VIZ-BULLETPROOF wrapper — one bad frame must NEVER kill the scope loop. If the body
   // throws (bad data, transient DOM state), swallow it and re-arm; the next C++ push and
-  // the 1 Hz watchdog below both heal the loop. Audio playing ⇒ the scope keeps drawing.
+  // the watchdog below both heal the loop. Audio playing ⇒ the scope keeps drawing.
+  // scopeLastFrameT = when the loop LAST ACTUALLY RAN — the ground truth the fallback
+  // and watchdog trust instead of the scopeRAF handle (a pending rAF id can be silently
+  // DROPPED by WKWebView after window occlusion/suspend; the handle then lies forever).
+  var scopeLastFrameT = 0;
   function scopeFrame(now) {
+    scopeLastFrameT = (window.performance && performance.now) ? performance.now() : (now || 0);
     try { scopeFrameBody(now); }
     catch (e) { if (!scopeRAF && anyOscVisible()) scopeRAF = requestAnimationFrame(scopeFrame); }
   }
@@ -22063,6 +22073,18 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         scope.hz = +f.hz || 0; scope.sr = +f.sr || 48000;
         scope.a = f.a || null; scope.b = f.b || null; scope.c = f.c || null; scope.d = f.d || null;
         kickScope();                                       // ensure the rAF loop is running
+        // RAF-STARVATION FALLBACK — the close/reopen-to-fix bug: WKWebView can DROP a
+        // pending rAF callback after occlusion/suspend, leaving scopeRAF a stale id that
+        // makes every kick (and a flag-based watchdog) no-op forever = flatline while
+        // audio plays. This C++ push IS a reliable 60 Hz clock: if the loop hasn't
+        // ACTUALLY run in 250ms while a display is visible, scrap the handle and drive
+        // a frame right now (which paints AND re-arms a fresh rAF id).
+        var nowP = (window.performance && performance.now) ? performance.now() : 0;
+        if (nowP - scopeLastFrameT > 250 && anyOscVisible()) {
+          try { if (scopeRAF) cancelAnimationFrame(scopeRAF); } catch (e2) {}
+          scopeRAF = 0;
+          scopeFrame(nowP);
+        }
       } else if (wasActive) {
         // Just went idle. In 'shaper' mode do NOT hard-jump to flat — kick the loop so its
         // smoothing fades the display down to a flat line (the smooth release fade). Reset the
@@ -22072,10 +22094,21 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       }
     } catch (e) {}
   };
-  // WATCHDOG — the scope must never zombie. If C++ says a note is sounding (scope.active)
-  // but no rAF is armed (lost kick, swallowed exception, tab stall), re-kick. 1 Hz, ~free,
-  // runs forever: audio playing ⇒ the visualizer always comes back within a second.
-  setInterval(function () { try { if (scope.active && !scopeRAF && anyOscVisible()) kickScope(); } catch (e) {} }, 1000);
+  // WATCHDOG v2 — trust TIME, not flags. The v1 watchdog checked !scopeRAF, so a stale
+  // rAF id (callback dropped by WKWebView after occlusion) wedged it forever. Now: if a
+  // note is sounding and a display is visible but the loop hasn't TRULY run in >1.2s,
+  // the handle is a zombie — cancel it, clear it, re-kick. Heals every wedge class.
+  setInterval(function () {
+    try {
+      if (!scope.active || !anyOscVisible()) return;
+      var n = (window.performance && performance.now) ? performance.now() : 0;
+      if (n - scopeLastFrameT > 1200) {
+        try { if (scopeRAF) cancelAnimationFrame(scopeRAF); } catch (e) {}
+        scopeRAF = 0;
+        kickScope();
+      }
+    } catch (e) {}
+  }, 700);
 
   /* -------------------------------------------------------------- public API */
   function ensureCanvas(o) {
