@@ -2233,8 +2233,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFmOsc (ParameterIDs::SYN_OSC_D_FM_ALGO, ParameterIDs::SYN_OSC_D_FM_RATIO1, ParameterIDs::SYN_OSC_D_FM_DEPTH1,
               ParameterIDs::SYN_OSC_D_FM_RATIO2, ParameterIDs::SYN_OSC_D_FM_DEPTH2, ParameterIDs::SYN_OSC_D_FM_FB, "D");
 
-    // ── FM WEATHERING SUITE — page-2 functions (Strike/Age/Rust/Gale/Bend/Storm),
-    //    all 0..1 default 0 = page 2 untouched changes NOTHING (backward compatible). ──
+    // ── FM WEATHERING SUITE — page-2 functions (Strike/Age/Rust/Quake/Scorch/Storm),
+    //    all 0..1 default 0 = page 2 untouched changes NOTHING (backward compatible).
+    //    NOTE: param IDs stay …_FM_GALE (→Quake) / …_FM_BEND (→Scorch) — frozen to keep
+    //    the WebView bind chain + saved sessions intact; only the display name changed. ──
     auto addFmWeather = [&layout] (const char* strikeId, const char* ageId, const char* rustId,
                                    const char* galeId, const char* bendId, const char* stormId,
                                    const juce::String& osc)
@@ -2246,7 +2248,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
         };
         addF (strikeId, "Strike"); addF (ageId, "Age");   addF (rustId, "Rust");
-        addF (galeId, "Gale");     addF (bendId, "Bend"); addF (stormId, "Storm");
+        addF (galeId, "Quake");    addF (bendId, "Scorch"); addF (stormId, "Storm");
     };
     addFmWeather (ParameterIDs::SYN_OSC_A_FM_STRIKE, ParameterIDs::SYN_OSC_A_FM_AGE, ParameterIDs::SYN_OSC_A_FM_RUST,
                   ParameterIDs::SYN_OSC_A_FM_GALE, ParameterIDs::SYN_OSC_A_FM_BEND, ParameterIDs::SYN_OSC_A_FM_STORM, "A");

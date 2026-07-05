@@ -1050,17 +1050,38 @@ namespace tw
             fmFbAmt_[o]  = juce::jlimit (0.0f, 1.0f, fb);
         }
 
-        /** FM WEATHERING SUITE — page-2 knobs (osc 0..3 = A..D), all 0..1. */
-        void setFMOsc2 (int osc, float strike, float age, float rust, float gale, float bend, float storm) noexcept
+        /** Fast odd-symmetric tanh (rational 135135… approx) — SCORCH's in-loop
+            waveshaper; no libm call in the hot FM path. Input clamped to ±5. */
+        static inline float fmFastTanh (float x) noexcept
+        {
+            x = juce::jlimit (-5.0f, 5.0f, x);
+            const float x2 = x * x;
+            const float a = x * (135135.0f + x2 * (17325.0f + x2 * (378.0f + x2)));
+            const float b = 135135.0f + x2 * (62370.0f + x2 * (3150.0f + x2 * 28.0f));
+            return a / b;
+        }
+
+        /** Hermite smoothstep on [a,b] → [0,1] — SCORCH/QUAKE macro tapers. */
+        static inline float fmSmoothstep (float a, float b, float x) noexcept
+        {
+            const float t = juce::jlimit (0.0f, 1.0f, (x - a) / juce::jmax (1.0e-6f, b - a));
+            return t * t * (3.0f - 2.0f * t);
+        }
+
+        /** FM WEATHERING SUITE — page-2 knobs (osc 0..3 = A..D), all 0..1.
+            Slot 4 (kept param id …_FM_GALE) now drives QUAKE (subharmonic FM);
+            slot 5 (kept param id …_FM_BEND) now drives SCORCH (in-loop drive).
+            Param IDs are frozen to preserve the WebView bind chain + saved state. */
+        void setFMOsc2 (int osc, float strike, float age, float rust, float quake, float scorch, float storm) noexcept
         {
             if (osc < 0 || osc > 3) return;
             const auto o = (size_t) osc;
-            fmStrike_[o]   = juce::jlimit (0.0f, 1.0f, strike);
-            fmAge_[o]      = juce::jlimit (0.0f, 1.0f, age);
-            fmRust_[o]     = juce::jlimit (0.0f, 1.0f, rust);
-            fmGaleKnob_[o] = juce::jlimit (0.0f, 1.0f, gale);
-            fmBend_[o]     = juce::jlimit (0.0f, 1.0f, bend);
-            fmStorm_[o]    = juce::jlimit (0.0f, 1.0f, storm);
+            fmStrike_[o]     = juce::jlimit (0.0f, 1.0f, strike);
+            fmAge_[o]        = juce::jlimit (0.0f, 1.0f, age);
+            fmRust_[o]       = juce::jlimit (0.0f, 1.0f, rust);
+            fmQuakeKnob_[o]  = juce::jlimit (0.0f, 1.0f, quake);
+            fmScorchKnob_[o] = juce::jlimit (0.0f, 1.0f, scorch);
+            fmStorm_[o]      = juce::jlimit (0.0f, 1.0f, storm);
         }
         void setBlurCD (float blurC01, float blurD01) noexcept { blurTargetC_=juce::jlimit(0.0f,1.0f,blurC01); blurTargetD_=juce::jlimit(0.0f,1.0f,blurD01); }
         void setPhaseModeCD (int modeC, int modeD) noexcept { phaseModeC_=juce::jlimit(0,3,modeC); phaseModeD_=juce::jlimit(0,3,modeD); }
@@ -1123,7 +1144,7 @@ namespace tw
             currentVelocity_ = velocity;
             beginGlide (midiNote);     // PORTAMENTO — snap or start the slide (sets glideNote_)
             // FM WEATHERING note-on: arm the STRIKE transient, roll AGE's per-note offset
-            // (no two notes beat the same), clear GALE's noise filter, set DX key scaling
+            // (no two notes beat the same), reset QUAKE's sub phase (below), set DX key scaling
             // (index halves every 1.5 octaves above C5 so the top end stays sweet).
             fmKs_ = (float) std::pow (0.5, (double) std::max (0, midiNote - 72) / 18.0);
             for (size_t fo = 0; fo < 4; ++fo)
@@ -1131,7 +1152,6 @@ namespace tw
                 fmStrikeEnv_[fo] = 1.0f;
                 fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
                 fmAgeNote_[fo] = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
-                fmGaleLp_[fo] = 0.0f;
             }
             // OSC A resets
             noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
@@ -1175,6 +1195,9 @@ namespace tw
                 fmFbC_[(size_t) u] = 0.0f;  fmFbD_[(size_t) u] = 0.0f;
                 fmPrevM1A_[(size_t) u] = 0.0f;  fmPrevM1B_[(size_t) u] = 0.0f;   // STORM cross memory
                 fmPrevM1C_[(size_t) u] = 0.0f;  fmPrevM1D_[(size_t) u] = 0.0f;
+                // QUAKE — per-voice subharmonic phase starts aligned to the note (phase-locked, click-free)
+                fmQuakePhaseA_[(size_t) u] = 0.0;  fmQuakePhaseB_[(size_t) u] = 0.0;
+                fmQuakePhaseC_[(size_t) u] = 0.0;  fmQuakePhaseD_[(size_t) u] = 0.0;
             }
             phaseSeeded_ = true;
 
@@ -1479,6 +1502,8 @@ namespace tw
                 const double blkSec = (double) numSamples / sampleRate_;
                 const float ouK = (float) juce::jmin (0.5, blkSec * 3.0);           // ~0.3s correlation
                 const float ouS = (float) std::sqrt (juce::jmax (1.0e-6, blkSec)) * 0.9f;
+                const float kInvExp4m1 = 1.0f / (std::exp (4.0f) - 1.0f);   // SCORCH exp-bias normaliser
+                fmIdxGlideCoef_ = 1.0f - std::exp (-1.0f / (float) (sampleRate_ * 0.0012));  // ~1.2ms — AGE de-zipper
                 for (size_t o = 0; o < 4; ++o)
                 {
                     fmD1Sm_[o] += (fmDepth1_[o] - fmD1Sm_[o]) * 0.35f;
@@ -1487,8 +1512,8 @@ namespace tw
                     fmStrikeSm_[o] += (fmStrike_[o]   - fmStrikeSm_[o]) * 0.35f;
                     fmAgeSm_[o]    += (fmAge_[o]      - fmAgeSm_[o])    * 0.35f;
                     fmRustSm_[o]   += (fmRust_[o]     - fmRustSm_[o])   * 0.35f;
-                    fmGaleSm_[o]   += (fmGaleKnob_[o] - fmGaleSm_[o])   * 0.35f;
-                    fmBendSm_[o]   += (fmBend_[o]     - fmBendSm_[o])   * 0.35f;
+                    fmQuakeSm_[o]  += (fmQuakeKnob_[o]  - fmQuakeSm_[o])  * 0.35f;
+                    fmScorchSm_[o] += (fmScorchKnob_[o] - fmScorchSm_[o]) * 0.35f;
                     fmStormSm_[o]  += (fmStorm_[o]    - fmStormSm_[o])  * 0.35f;
 
                     // STRIKE — velocity-scaled index transient (the DX secret): exponential
@@ -1528,29 +1553,58 @@ namespace tw
                     // detaches M1 from the harmonic grid → shimmer/beating → full clang.
                     fmRustTps_[o] = (double) (fmRustSm_[o] * fmRustSm_[o]) * 45.0 / sampleRate_;
 
-                    // GALE — note-tracked noise FM: amount + one-pole coeff (cutoff ~2·f0).
-                    // 1.6 compensates the one-pole's ~10× amplitude loss: breath at a touch,
-                    // genuine howling storm at full crank (~0.9 rad rms deviation).
-                    fmGaleAmt_[o] = fmGaleSm_[o] * fmGaleSm_[o] * 1.6f;
+                    // ── SCORCH — in-loop drive: asymmetric waveshaping of the modulators (breeds
+                    // new sidebands), a self-feedback push (sine→saw grit), and an FM index push.
+                    // exp-bias taper on drive (project DSP rule — never s^k); feedback quadratic.
+                    const float sc  = fmScorchSm_[o];
+                    const float sc2 = sc * sc;
+                    fmScorchIdxMul_[o]   = 1.0f + 0.6f * sc2;                              // hotter FM (1.0 → 1.6)
+                    const float scDrive  = (std::exp (4.0f * sc) - 1.0f) * kInvExp4m1;     // exp-bias 0..1
+                    fmScorchPre_[o]      = 1.0f + 3.0f * scDrive;                          // shaper input gain (1 → 4)
+                    fmScorchBias_[o]     = 0.35f * sc;                                     // asymmetry → even harmonics
+                    fmScorchTanhBias_[o] = fmFastTanh (fmScorchBias_[o]);                  // DC re-center of the shaper
+                    fmScorchMakeup_[o]   = 1.0f / juce::jmax (0.30f, fmFastTanh (fmScorchPre_[o] + fmScorchBias_[o]));
+                    const float scFbAdd  = 0.30f * sc2;                                    // extra self-feedback grit
+                    fmFbEff_[o] = juce::jmin (1.20f, fmFbEff_[o] + scFbAdd);               // fold grit into the feedback path
 
-                    // BEND — phase-distortion fold factor on the modulators (CZ color).
-                    fmBendK_[o] = fmBendSm_[o] * fmBendSm_[o] * 1.5f;
+                    // ── QUAKE — phase-locked subharmonic FM: depth (q²), octave-anchored ratio
+                    // (0.5 → 0.25, the second octave only opens up top), 1/ratio index comp (capped
+                    // 2× so it holds Hz-deviation without mud), and a top-third "fry" shaper.
+                    const float q   = fmQuakeSm_[o];
+                    const float q2  = q * q;
+                    const float qS  = fmSmoothstep (0.45f, 1.0f, q);
+                    fmQuakeSubRatio_[o]   = 0.5f - 0.25f * qS;                             // 0.5 → 0.25
+                    fmQuakeFry_[o]        = fmSmoothstep (0.60f, 1.0f, q);                 // fry only in the top third
+                    const float quakeComp = juce::jmin (0.5f / fmQuakeSubRatio_[o], 2.0f); // 1/ratio index comp, capped
+                    fmQuakeIdx_[o]        = 0.30f * q2 * quakeComp;                        // IDX0 = 0.30 turns base
+
+                    // combined SCORCH+QUAKE bandwidth widening → dull the carrier mip under load (anti-alias)
+                    fmFxMipAdd_[o] = 6.2832f * ( scDrive * 1.5f
+                                               + (fmScorchIdxMul_[o] - 1.0f) * (fmD1Sm_[o] + fmD2Sm_[o])
+                                               + scFbAdd * 1.5f
+                                               + fmQuakeIdx_[o] * fmQuakeSubRatio_[o] );
 
                     // STORM — mutual modulator coupling (M1→M2 phase + M2→M1 leak, every algo).
                     const float st2 = fmStormSm_[o] * fmStormSm_[o];
                     fmStormM12_[o] = st2 * 0.65f;
                     fmStormM21_[o] = st2 * 0.35f;
                 }
-                // GALE cutoff tracks each osc's own pitch (inc[0] = turns/sample of the note)
-                fmGaleCoef_[0] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncA_[0] * 12.6));
-                fmGaleCoef_[1] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncB_[0] * 12.6));
-                fmGaleCoef_[2] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncC_[0] * 12.6));
-                fmGaleCoef_[3] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncD_[0] * 12.6));
+                // QUAKE subsonic fade — each osc's sub uses its own pitch; deep notes at 0.25×
+                // must not dump near-DC energy, so fade the index below ~28 Hz.
+                auto quakeSubsonic = [this] (size_t o, double inc0)
+                {
+                    const double subHz = inc0 * sampleRate_ * (double) fmQuakeSubRatio_[o];
+                    if (subHz > 0.0 && subHz < 28.0) fmQuakeIdx_[o] *= (float) (subHz / 28.0);
+                };
+                quakeSubsonic (0, uPhaseIncA_[0]);
+                quakeSubsonic (1, uPhaseIncB_[0]);
+                quakeSubsonic (2, uPhaseIncC_[0]);
+                quakeSubsonic (3, uPhaseIncD_[0]);
             }
             // FM-aware mip pick — phase modulation widens the carrier's instantaneous rate
             // (Carson-ish: 1 + 2π·D·ratio), so pick a duller mip under heavy FM or the
             // table's upper harmonics alias hard. Ring only shifts by ±f_m1 (linear term);
-            // GALE (noise FM) widens broadband, so it adds its own conservative term.
+            // SCORCH (drive/feedback/index) + QUAKE (subharmonic) widen it further — added below.
             auto fmRateMul = [this] (Engine eng, size_t o) -> double
             {
                 if (eng != Engine::FM) return 1.0;
@@ -1561,7 +1615,7 @@ namespace tw
                     m = 1.0 + 6.2832 * (double) fmD1Eff_[o] * fmR1Eff_[o];
                     if (fmAlgo_[o] == 1) m += 6.2832 * (double) fmD2Eff_[o] * fmR2Eff_[o];
                 }
-                m += (double) fmGaleAmt_[o] * 6.0;
+                m += (double) fmFxMipAdd_[o];
                 return juce::jmin (m, 64.0);   // sanity cap — extreme depth×ratio must dull, never vanish
             };
             currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_) * fmRateMul (engine_,  0));
@@ -1757,36 +1811,41 @@ namespace tw
                             //   2 RING  — M2 → M1; M1 ring-modulates the carrier OUTPUT
                             // All depths/ratios come block-conditioned (fm*Eff_): Strike/Age/
                             // key-scale already folded in. STORM cross-couples the modulators
-                            // (one-sample memory), RUST detunes M1 by absolute Hz, GALE adds
-                            // note-tracked noise FM at the carrier, BEND folds the mod shapes.
+                            // (one-sample memory), RUST detunes M1 by absolute Hz, SCORCH drives
+                            // the modulators (in-loop distortion), QUAKE adds a subharmonic operator.
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncA_[(size_t) u];
-                            const float  d1  = fmD1Eff_[0];
-                            const float  d2  = fmD2Eff_[0];
-                            const float  fbk = fmFbEff_[0];
-                            const int    alg = fmAlgo_[0];
-                            if (u == 0)
-                            {
-                                fmGaleNow_[0] = 0.0f;
-                                if (fmGaleAmt_[0] > 1.0e-4f)
-                                {
-                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
-                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
-                                    fmGaleLp_[0] += fmGaleCoef_[0] * (w - fmGaleLp_[0]);
-                                    fmGaleNow_[0] = fmGaleAmt_[0] * fmGaleLp_[0];
-                                }
+                            if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
+                                fmD1Now_[0] += (fmD1Eff_[0] - fmD1Now_[0]) * fmIdxGlideCoef_;
+                                fmD2Now_[0] += (fmD2Eff_[0] - fmD2Now_[0]) * fmIdxGlideCoef_;
                             }
+                            const float  d1  = fmD1Now_[0] * fmScorchIdxMul_[0];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[0] * fmScorchIdxMul_[0];
+                            const float  fbk = fmFbEff_[0];                        // (SCORCH grit already folded in)
+                            const int    alg = fmAlgo_[0];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseA_[(size_t) u]
                                                         + (double) (fmStormM12_[0] * fmPrevM1A_[(size_t) u]))));
-                            if (fmBendK_[0] > 1.0e-4f) { const float bk = fmBendK_[0] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            // SCORCH — asymmetric drive on M2 (adds harmonics → richer sidebands)
+                            if (fmScorchPre_[0] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[0] * m2 + fmScorchBias_[0]) - fmScorchTanhBias_[0]) * fmScorchMakeup_[0];
                             double m1Arg = uModPhaseA_[(size_t) u] + (double) (fbk * fmFbA_[(size_t) u])
                                          + (double) (fmStormM21_[0] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 → M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmBendK_[0] > 1.0e-4f) { const float bk = fmBendK_[0]; m1 *= (1.0f + bk) - bk * m1 * m1; }
+                            // SCORCH — same drive on M1 (the operator that hits the carrier)
+                            if (fmScorchPre_[0] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[0] * m1 + fmScorchBias_[0]) - fmScorchTanhBias_[0]) * fmScorchMakeup_[0];
                             fmFbA_[(size_t) u] = 0.5f * (fmFbA_[(size_t) u] + m1);
                             fmPrevM1A_[(size_t) u] = m1;
-                            double cPh = uPhaseA_[(size_t) u] + (double) fmGaleNow_[0];
+                            // QUAKE — phase-locked subharmonic operator folded into the carrier phase
+                            double qSubA = 0.0;
+                            if (fmQuakeIdx_[0] > 1.0e-5f)
+                            {
+                                fmQuakePhaseA_[(size_t) u] += inc * (double) fmQuakeSubRatio_[0];
+                                fmQuakePhaseA_[(size_t) u] -= std::floor (fmQuakePhaseA_[(size_t) u]);
+                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseA_[(size_t) u]));
+                                if (fmQuakeFry_[0] > 0.0f) sub += fmQuakeFry_[0] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubA = (double) (fmQuakeIdx_[0] * sub);
+                            }
+                            double cPh = uPhaseA_[(size_t) u] + qSubA;
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2035,32 +2094,34 @@ namespace tw
                             // FM-ENGINE-VOICE — wavetable-carrier FM + WEATHERING (see OSC A for the map)
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncB_[(size_t) u];
-                            const float  d1  = fmD1Eff_[1];
-                            const float  d2  = fmD2Eff_[1];
-                            const float  fbk = fmFbEff_[1];
-                            const int    alg = fmAlgo_[1];
-                            if (u == 0)
-                            {
-                                fmGaleNow_[1] = 0.0f;
-                                if (fmGaleAmt_[1] > 1.0e-4f)
-                                {
-                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
-                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
-                                    fmGaleLp_[1] += fmGaleCoef_[1] * (w - fmGaleLp_[1]);
-                                    fmGaleNow_[1] = fmGaleAmt_[1] * fmGaleLp_[1];
-                                }
+                            if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
+                                fmD1Now_[1] += (fmD1Eff_[1] - fmD1Now_[1]) * fmIdxGlideCoef_;
+                                fmD2Now_[1] += (fmD2Eff_[1] - fmD2Now_[1]) * fmIdxGlideCoef_;
                             }
+                            const float  d1  = fmD1Now_[1] * fmScorchIdxMul_[1];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[1] * fmScorchIdxMul_[1];
+                            const float  fbk = fmFbEff_[1];                        // (SCORCH grit already folded in)
+                            const int    alg = fmAlgo_[1];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseB_[(size_t) u]
                                                         + (double) (fmStormM12_[1] * fmPrevM1B_[(size_t) u]))));
-                            if (fmBendK_[1] > 1.0e-4f) { const float bk = fmBendK_[1] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            if (fmScorchPre_[1] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[1] * m2 + fmScorchBias_[1]) - fmScorchTanhBias_[1]) * fmScorchMakeup_[1];
                             double m1Arg = uModPhaseB_[(size_t) u] + (double) (fbk * fmFbB_[(size_t) u])
                                          + (double) (fmStormM21_[1] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmBendK_[1] > 1.0e-4f) { const float bk = fmBendK_[1]; m1 *= (1.0f + bk) - bk * m1 * m1; }
+                            if (fmScorchPre_[1] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[1] * m1 + fmScorchBias_[1]) - fmScorchTanhBias_[1]) * fmScorchMakeup_[1];
                             fmFbB_[(size_t) u] = 0.5f * (fmFbB_[(size_t) u] + m1);
                             fmPrevM1B_[(size_t) u] = m1;
-                            double cPh = uPhaseB_[(size_t) u] + (double) fmGaleNow_[1];
+                            double qSubB = 0.0;
+                            if (fmQuakeIdx_[1] > 1.0e-5f)
+                            {
+                                fmQuakePhaseB_[(size_t) u] += inc * (double) fmQuakeSubRatio_[1];
+                                fmQuakePhaseB_[(size_t) u] -= std::floor (fmQuakePhaseB_[(size_t) u]);
+                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseB_[(size_t) u]));
+                                if (fmQuakeFry_[1] > 0.0f) sub += fmQuakeFry_[1] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubB = (double) (fmQuakeIdx_[1] * sub);
+                            }
+                            double cPh = uPhaseB_[(size_t) u] + qSubB;
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2305,32 +2366,34 @@ namespace tw
                             // FM-ENGINE-VOICE — wavetable-carrier FM + WEATHERING (see OSC A for the map)
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncC_[(size_t) u];
-                            const float  d1  = fmD1Eff_[2];
-                            const float  d2  = fmD2Eff_[2];
-                            const float  fbk = fmFbEff_[2];
-                            const int    alg = fmAlgo_[2];
-                            if (u == 0)
-                            {
-                                fmGaleNow_[2] = 0.0f;
-                                if (fmGaleAmt_[2] > 1.0e-4f)
-                                {
-                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
-                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
-                                    fmGaleLp_[2] += fmGaleCoef_[2] * (w - fmGaleLp_[2]);
-                                    fmGaleNow_[2] = fmGaleAmt_[2] * fmGaleLp_[2];
-                                }
+                            if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
+                                fmD1Now_[2] += (fmD1Eff_[2] - fmD1Now_[2]) * fmIdxGlideCoef_;
+                                fmD2Now_[2] += (fmD2Eff_[2] - fmD2Now_[2]) * fmIdxGlideCoef_;
                             }
+                            const float  d1  = fmD1Now_[2] * fmScorchIdxMul_[2];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[2] * fmScorchIdxMul_[2];
+                            const float  fbk = fmFbEff_[2];                        // (SCORCH grit already folded in)
+                            const int    alg = fmAlgo_[2];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseC_[(size_t) u]
                                                         + (double) (fmStormM12_[2] * fmPrevM1C_[(size_t) u]))));
-                            if (fmBendK_[2] > 1.0e-4f) { const float bk = fmBendK_[2] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            if (fmScorchPre_[2] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[2] * m2 + fmScorchBias_[2]) - fmScorchTanhBias_[2]) * fmScorchMakeup_[2];
                             double m1Arg = uModPhaseC_[(size_t) u] + (double) (fbk * fmFbC_[(size_t) u])
                                          + (double) (fmStormM21_[2] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmBendK_[2] > 1.0e-4f) { const float bk = fmBendK_[2]; m1 *= (1.0f + bk) - bk * m1 * m1; }
+                            if (fmScorchPre_[2] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[2] * m1 + fmScorchBias_[2]) - fmScorchTanhBias_[2]) * fmScorchMakeup_[2];
                             fmFbC_[(size_t) u] = 0.5f * (fmFbC_[(size_t) u] + m1);
                             fmPrevM1C_[(size_t) u] = m1;
-                            double cPh = uPhaseC_[(size_t) u] + (double) fmGaleNow_[2];
+                            double qSubC = 0.0;
+                            if (fmQuakeIdx_[2] > 1.0e-5f)
+                            {
+                                fmQuakePhaseC_[(size_t) u] += inc * (double) fmQuakeSubRatio_[2];
+                                fmQuakePhaseC_[(size_t) u] -= std::floor (fmQuakePhaseC_[(size_t) u]);
+                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseC_[(size_t) u]));
+                                if (fmQuakeFry_[2] > 0.0f) sub += fmQuakeFry_[2] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubC = (double) (fmQuakeIdx_[2] * sub);
+                            }
+                            double cPh = uPhaseC_[(size_t) u] + qSubC;
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2575,32 +2638,34 @@ namespace tw
                             // FM-ENGINE-VOICE — wavetable-carrier FM + WEATHERING (see OSC A for the map)
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncD_[(size_t) u];
-                            const float  d1  = fmD1Eff_[3];
-                            const float  d2  = fmD2Eff_[3];
-                            const float  fbk = fmFbEff_[3];
-                            const int    alg = fmAlgo_[3];
-                            if (u == 0)
-                            {
-                                fmGaleNow_[3] = 0.0f;
-                                if (fmGaleAmt_[3] > 1.0e-4f)
-                                {
-                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
-                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
-                                    fmGaleLp_[3] += fmGaleCoef_[3] * (w - fmGaleLp_[3]);
-                                    fmGaleNow_[3] = fmGaleAmt_[3] * fmGaleLp_[3];
-                                }
+                            if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
+                                fmD1Now_[3] += (fmD1Eff_[3] - fmD1Now_[3]) * fmIdxGlideCoef_;
+                                fmD2Now_[3] += (fmD2Eff_[3] - fmD2Now_[3]) * fmIdxGlideCoef_;
                             }
+                            const float  d1  = fmD1Now_[3] * fmScorchIdxMul_[3];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[3] * fmScorchIdxMul_[3];
+                            const float  fbk = fmFbEff_[3];                        // (SCORCH grit already folded in)
+                            const int    alg = fmAlgo_[3];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseD_[(size_t) u]
                                                         + (double) (fmStormM12_[3] * fmPrevM1D_[(size_t) u]))));
-                            if (fmBendK_[3] > 1.0e-4f) { const float bk = fmBendK_[3] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            if (fmScorchPre_[3] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[3] * m2 + fmScorchBias_[3]) - fmScorchTanhBias_[3]) * fmScorchMakeup_[3];
                             double m1Arg = uModPhaseD_[(size_t) u] + (double) (fbk * fmFbD_[(size_t) u])
                                          + (double) (fmStormM21_[3] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmBendK_[3] > 1.0e-4f) { const float bk = fmBendK_[3]; m1 *= (1.0f + bk) - bk * m1 * m1; }
+                            if (fmScorchPre_[3] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[3] * m1 + fmScorchBias_[3]) - fmScorchTanhBias_[3]) * fmScorchMakeup_[3];
                             fmFbD_[(size_t) u] = 0.5f * (fmFbD_[(size_t) u] + m1);
                             fmPrevM1D_[(size_t) u] = m1;
-                            double cPh = uPhaseD_[(size_t) u] + (double) fmGaleNow_[3];
+                            double qSubD = 0.0;
+                            if (fmQuakeIdx_[3] > 1.0e-5f)
+                            {
+                                fmQuakePhaseD_[(size_t) u] += inc * (double) fmQuakeSubRatio_[3];
+                                fmQuakePhaseD_[(size_t) u] -= std::floor (fmQuakePhaseD_[(size_t) u]);
+                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseD_[(size_t) u]));
+                                if (fmQuakeFry_[3] > 0.0f) sub += fmQuakeFry_[3] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubD = (double) (fmQuakeIdx_[3] * sub);
+                            }
+                            double cPh = uPhaseD_[(size_t) u] + qSubD;
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -3903,20 +3968,31 @@ namespace tw
         std::array<double, kMaxUnison> uMod2PhaseA_ {}, uMod2PhaseB_ {}, uMod2PhaseC_ {}, uMod2PhaseD_ {};
         std::array<float, kMaxUnison>  fmFbA_ {}, fmFbB_ {}, fmFbC_ {}, fmFbD_ {};
         // ── FM WEATHERING SUITE (page 2) — knob targets + smoothed + slow-process state ──
-        std::array<float, 4> fmStrike_ {}, fmAge_ {}, fmRust_ {}, fmGaleKnob_ {}, fmBend_ {}, fmStorm_ {};
-        std::array<float, 4> fmStrikeSm_ {}, fmAgeSm_ {}, fmRustSm_ {}, fmGaleSm_ {}, fmBendSm_ {}, fmStormSm_ {};
+        std::array<float, 4> fmStrike_ {}, fmAge_ {}, fmRust_ {}, fmQuakeKnob_ {}, fmScorchKnob_ {}, fmStorm_ {};
+        std::array<float, 4> fmStrikeSm_ {}, fmAgeSm_ {}, fmRustSm_ {}, fmQuakeSm_ {}, fmScorchSm_ {}, fmStormSm_ {};
         std::array<float, 4> fmStrikeEnv_ {};                       // note-on index transient, exp decay
         std::array<float, 4> fmAgeOuR_ {}, fmAgeOuI_ {};            // AGE — OU walks (ratio / index)
         std::array<float, 4> fmAgeNote_ {};                         // AGE — per-note S&H offset (±1)
-        std::array<float, 4> fmGaleLp_ {};                          // GALE — one-pole noise state
+        std::array<double, kMaxUnison> fmQuakePhaseA_ {}, fmQuakePhaseB_ {}, fmQuakePhaseC_ {}, fmQuakePhaseD_ {};  // QUAKE — per-voice subharmonic phase
         // block-rate EFFECTIVE values the per-sample core reads (all pow()/exp() here)
         std::array<float, 4>  fmD1Eff_ {}, fmD2Eff_ {}, fmFbEff_ {};
+        // AGE DE-ZIPPER — the OU walk resteps fmD1Eff_/fmD2Eff_ every block; because the carrier does
+        // cPh = phase + d1·m1, a per-block index step is a phase discontinuity = a click train (crackle).
+        // Glide the applied index toward the block target per-SAMPLE (~1.2ms) so the step can't click.
+        std::array<float, 4>  fmD1Now_ {}, fmD2Now_ {};
+        float fmIdxGlideCoef_ { 0.02f };
         std::array<double, 4> fmR1Eff_ { 1.0, 1.0, 1.0, 1.0 }, fmR2Eff_ { 2.0, 2.0, 2.0, 2.0 };
         std::array<double, 4> fmRustTps_ {};                        // RUST — abs-Hz offset in turns/sample
-        std::array<float, 4>  fmGaleAmt_ {}, fmGaleCoef_ {}, fmGaleNow_ {};
-        std::array<float, 4>  fmBendK_ {}, fmStormM12_ {}, fmStormM21_ {};
+        // QUAKE — block coeffs (subharmonic FM): octave-anchored ratio, index (turns), fry amount.
+        std::array<float, 4>  fmQuakeSubRatio_ { 0.5f, 0.5f, 0.5f, 0.5f }, fmQuakeIdx_ {}, fmQuakeFry_ {};
+        // SCORCH — block coeffs (in-loop drive): shaper pre-gain, peak makeup, asymmetry bias + its
+        // tanh (DC re-center), and the FM index push applied to the carrier depths.
+        std::array<float, 4>  fmScorchPre_ { 1.0f, 1.0f, 1.0f, 1.0f }, fmScorchMakeup_ { 1.0f, 1.0f, 1.0f, 1.0f };
+        std::array<float, 4>  fmScorchBias_ {}, fmScorchTanhBias_ {}, fmScorchIdxMul_ { 1.0f, 1.0f, 1.0f, 1.0f };
+        std::array<float, 4>  fmFxMipAdd_ {};                       // SCORCH+QUAKE added carrier bandwidth for the mip picker
+        std::array<float, 4>  fmStormM12_ {}, fmStormM21_ {};       // STORM cross-couple depths (M1↔M2)
         std::array<float, kMaxUnison> fmPrevM1A_ {}, fmPrevM1B_ {}, fmPrevM1C_ {}, fmPrevM1D_ {};  // STORM one-sample cross memory
-        std::uint32_t fmNz_ { 0x9E3779B9u };                        // GALE noise RNG (per voice)
+        std::uint32_t fmNz_ { 0x9E3779B9u };                        // AGE / weathering RNG (per voice)
         float fmKs_ { 1.0f };                                        // DX key scaling — index rolloff above C5
 
         // ── KEYTRACK — note→destination modulation (the mod-matrix embryo) ──────────
