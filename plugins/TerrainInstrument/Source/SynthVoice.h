@@ -1025,6 +1025,19 @@ namespace tw
             fmDepth2_[o] = juce::jlimit (0.0f, 1.0f, d2);
             fmFbAmt_[o]  = juce::jlimit (0.0f, 1.0f, fb);
         }
+
+        /** FM WEATHERING SUITE — page-2 knobs (osc 0..3 = A..D), all 0..1. */
+        void setFMOsc2 (int osc, float strike, float age, float rust, float gale, float bend, float storm) noexcept
+        {
+            if (osc < 0 || osc > 3) return;
+            const auto o = (size_t) osc;
+            fmStrike_[o]   = juce::jlimit (0.0f, 1.0f, strike);
+            fmAge_[o]      = juce::jlimit (0.0f, 1.0f, age);
+            fmRust_[o]     = juce::jlimit (0.0f, 1.0f, rust);
+            fmGaleKnob_[o] = juce::jlimit (0.0f, 1.0f, gale);
+            fmBend_[o]     = juce::jlimit (0.0f, 1.0f, bend);
+            fmStorm_[o]    = juce::jlimit (0.0f, 1.0f, storm);
+        }
         void setBlurCD (float blurC01, float blurD01) noexcept { blurTargetC_=juce::jlimit(0.0f,1.0f,blurC01); blurTargetD_=juce::jlimit(0.0f,1.0f,blurD01); }
         void setPhaseModeCD (int modeC, int modeD) noexcept { phaseModeC_=juce::jlimit(0,3,modeC); phaseModeD_=juce::jlimit(0,3,modeD); }
         void setWaverCD (float c, float d) noexcept { waverC_=juce::jlimit(0.0f,1.0f,c); waverD_=juce::jlimit(0.0f,1.0f,d); }
@@ -1073,6 +1086,8 @@ namespace tw
                 // Pitch-tracking context follows the new note; everything else carries.
                 ktRamp_ = juce::jlimit (0.0f, 1.0f,
                               (float) (midiNote - kKtLowNote) / (float) (kKtHighNote - kKtLowNote));
+                // FM key scaling follows the retargeted pitch (index rolloff above C5)
+                fmKs_ = (float) std::pow (0.5, (double) std::max (0, midiNote - 72) / 18.0);
                 updateUnisonFramePositions();
                 updateUnisonPhaseIncrementsA (glideNote_);
                 updateUnisonPhaseIncrementsB (glideNote_);
@@ -1083,6 +1098,17 @@ namespace tw
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
             beginGlide (midiNote);     // PORTAMENTO — snap or start the slide (sets glideNote_)
+            // FM WEATHERING note-on: arm the STRIKE transient, roll AGE's per-note offset
+            // (no two notes beat the same), clear GALE's noise filter, set DX key scaling
+            // (index halves every 1.5 octaves above C5 so the top end stays sweet).
+            fmKs_ = (float) std::pow (0.5, (double) std::max (0, midiNote - 72) / 18.0);
+            for (size_t fo = 0; fo < 4; ++fo)
+            {
+                fmStrikeEnv_[fo] = 1.0f;
+                fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
+                fmAgeNote_[fo] = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
+                fmGaleLp_[fo] = 0.0f;
+            }
             // OSC A resets
             noiseLpZ_        = 0.0f;     // Phase 3 — NOISE filter memory reset
             // OSC B resets (Phase 9)
@@ -1123,6 +1149,8 @@ namespace tw
                 uMod2PhaseC_[(size_t) u] = 0.0;  uMod2PhaseD_[(size_t) u] = 0.0;
                 fmFbA_[(size_t) u] = 0.0f;  fmFbB_[(size_t) u] = 0.0f;
                 fmFbC_[(size_t) u] = 0.0f;  fmFbD_[(size_t) u] = 0.0f;
+                fmPrevM1A_[(size_t) u] = 0.0f;  fmPrevM1B_[(size_t) u] = 0.0f;   // STORM cross memory
+                fmPrevM1C_[(size_t) u] = 0.0f;  fmPrevM1D_[(size_t) u] = 0.0f;
             }
             phaseSeeded_ = true;
 
@@ -1419,24 +1447,97 @@ namespace tw
                 if (mode == 7)              return 1.0 + (double) amt * 7.0;            // FRACTALIZE (1..8x)
                 return 1.0;
             };
-            // FM-ENGINE-VOICE — smooth depth/feedback at block rate (zipper-free index moves)
-            for (size_t o = 0; o < 4; ++o)
+            // ── FM-ENGINE-VOICE block-rate conditioning + WEATHERING SUITE slow processes ──
+            // Smooth every knob, run STRIKE's decay and AGE's drift walks, then fold it all
+            // into the per-osc EFFECTIVE values the per-sample core reads. All pow()/exp()
+            // happen here, once per block — the sample loop stays lean.
             {
-                fmD1Sm_[o] += (fmDepth1_[o] - fmD1Sm_[o]) * 0.35f;
-                fmD2Sm_[o] += (fmDepth2_[o] - fmD2Sm_[o]) * 0.35f;
-                fmFbSm_[o] += (fmFbAmt_[o]  - fmFbSm_[o]) * 0.35f;
+                const double blkSec = (double) numSamples / sampleRate_;
+                const float ouK = (float) juce::jmin (0.5, blkSec * 3.0);           // ~0.3s correlation
+                const float ouS = (float) std::sqrt (juce::jmax (1.0e-6, blkSec)) * 0.9f;
+                for (size_t o = 0; o < 4; ++o)
+                {
+                    fmD1Sm_[o] += (fmDepth1_[o] - fmD1Sm_[o]) * 0.35f;
+                    fmD2Sm_[o] += (fmDepth2_[o] - fmD2Sm_[o]) * 0.35f;
+                    fmFbSm_[o] += (fmFbAmt_[o]  - fmFbSm_[o]) * 0.35f;
+                    fmStrikeSm_[o] += (fmStrike_[o]   - fmStrikeSm_[o]) * 0.35f;
+                    fmAgeSm_[o]    += (fmAge_[o]      - fmAgeSm_[o])    * 0.35f;
+                    fmRustSm_[o]   += (fmRust_[o]     - fmRustSm_[o])   * 0.35f;
+                    fmGaleSm_[o]   += (fmGaleKnob_[o] - fmGaleSm_[o])   * 0.35f;
+                    fmBendSm_[o]   += (fmBend_[o]     - fmBendSm_[o])   * 0.35f;
+                    fmStormSm_[o]  += (fmStorm_[o]    - fmStormSm_[o])  * 0.35f;
+
+                    // STRIKE — velocity-scaled index transient (the DX secret): exponential
+                    // decay, tau grows with the knob (fast pluck → slow bloom).
+                    const float stk = fmStrikeSm_[o];
+                    if (fmStrikeEnv_[o] > 1.0e-4f)
+                        fmStrikeEnv_[o] *= (float) std::exp (-blkSec / (0.025 + 0.230 * (double) stk));
+                    const float strikeAdd = stk * stk * 2.2f * currentVelocity_ * fmStrikeEnv_[o];
+
+                    // AGE — analog operator instability: two decorrelated OU walks (ratio +
+                    // index) plus the per-note S&H offset rolled at note-on.
+                    const float age2 = fmAgeSm_[o] * fmAgeSm_[o];
+                    if (age2 > 1.0e-6f)
+                    {
+                        fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
+                        const float r1n = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
+                        fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
+                        const float r2n = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
+                        fmAgeOuR_[o] = juce::jlimit (-1.0f, 1.0f, fmAgeOuR_[o] - ouK * fmAgeOuR_[o] + ouS * r1n);
+                        fmAgeOuI_[o] = juce::jlimit (-1.0f, 1.0f, fmAgeOuI_[o] - ouK * fmAgeOuI_[o] + ouS * r2n);
+                    }
+                    const float ratioWob1 = 1.0f + age2 * 0.018f * (fmAgeOuR_[o] + 0.6f * fmAgeNote_[o]);
+                    const float ratioWob2 = 1.0f + age2 * 0.018f * (0.7f * fmAgeOuI_[o] - 0.5f * fmAgeNote_[o]);
+                    const float idxWob    = 1.0f + age2 * 0.30f  * fmAgeOuI_[o];
+
+                    // Page-1 refinement: hotter ceiling + more mid-knob throw (d^1.7 · 2.0
+                    // turns, was d² · 1.5) and DX key scaling (fmKs_, set at note-on).
+                    const float d1base = std::pow (fmD1Sm_[o], 1.7f) * 2.0f;
+                    const float d2base = std::pow (fmD2Sm_[o], 1.7f) * 2.0f;
+                    fmD1Eff_[o] = (d1base + strikeAdd) * idxWob * fmKs_;
+                    fmD2Eff_[o] = (d2base + 0.5f * strikeAdd) * idxWob * fmKs_;
+                    fmFbEff_[o] = fmFbSm_[o] * fmFbSm_[o];
+                    fmR1Eff_[o] = (double) fmRatio1_[o] * (double) ratioWob1;
+                    fmR2Eff_[o] = (double) fmRatio2_[o] * (double) ratioWob2;
+
+                    // RUST — absolute-Hz inharmonic offset on M1 (Chowning's bell trick):
+                    // detaches M1 from the harmonic grid → shimmer/beating → full clang.
+                    fmRustTps_[o] = (double) (fmRustSm_[o] * fmRustSm_[o]) * 45.0 / sampleRate_;
+
+                    // GALE — note-tracked noise FM: amount + one-pole coeff (cutoff ~2·f0).
+                    // 1.6 compensates the one-pole's ~10× amplitude loss: breath at a touch,
+                    // genuine howling storm at full crank (~0.9 rad rms deviation).
+                    fmGaleAmt_[o] = fmGaleSm_[o] * fmGaleSm_[o] * 1.6f;
+
+                    // BEND — phase-distortion fold factor on the modulators (CZ color).
+                    fmBendK_[o] = fmBendSm_[o] * fmBendSm_[o] * 1.5f;
+
+                    // STORM — mutual modulator coupling (M1→M2 phase + M2→M1 leak, every algo).
+                    const float st2 = fmStormSm_[o] * fmStormSm_[o];
+                    fmStormM12_[o] = st2 * 0.65f;
+                    fmStormM21_[o] = st2 * 0.35f;
+                }
+                // GALE cutoff tracks each osc's own pitch (inc[0] = turns/sample of the note)
+                fmGaleCoef_[0] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncA_[0] * 12.6));
+                fmGaleCoef_[1] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncB_[0] * 12.6));
+                fmGaleCoef_[2] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncC_[0] * 12.6));
+                fmGaleCoef_[3] = juce::jlimit (0.02f, 0.65f, (float) (uPhaseIncD_[0] * 12.6));
             }
             // FM-aware mip pick — phase modulation widens the carrier's instantaneous rate
             // (Carson-ish: 1 + 2π·D·ratio), so pick a duller mip under heavy FM or the
-            // table's upper harmonics alias hard. Ring only shifts by ±f_m1 (linear term).
+            // table's upper harmonics alias hard. Ring only shifts by ±f_m1 (linear term);
+            // GALE (noise FM) widens broadband, so it adds its own conservative term.
             auto fmRateMul = [this] (Engine eng, size_t o) -> double
             {
                 if (eng != Engine::FM) return 1.0;
-                const double d1 = (double) (fmD1Sm_[o] * fmD1Sm_[o]) * 1.5;
-                const double d2 = (double) (fmD2Sm_[o] * fmD2Sm_[o]) * 1.5;
-                if (fmAlgo_[o] == 2) return 1.0 + (double) fmD1Sm_[o] * (double) fmRatio1_[o];
-                double m = 1.0 + 6.2832 * d1 * (double) fmRatio1_[o];
-                if (fmAlgo_[o] == 1) m += 6.2832 * d2 * (double) fmRatio2_[o];
+                double m;
+                if (fmAlgo_[o] == 2) m = 1.0 + (double) fmD1Sm_[o] * fmR1Eff_[o];
+                else
+                {
+                    m = 1.0 + 6.2832 * (double) fmD1Eff_[o] * fmR1Eff_[o];
+                    if (fmAlgo_[o] == 1) m += 6.2832 * (double) fmD2Eff_[o] * fmR2Eff_[o];
+                }
+                m += (double) fmGaleAmt_[o] * 6.0;
                 return m;
             };
             currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_) * fmRateMul (engine_,  0));
@@ -1617,26 +1718,44 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            // FM-ENGINE-VOICE — WAVETABLE-CARRIER FM: this osc's blended
-                            // wavetable cycle IS the carrier (frame morph / blur / spectral
-                            // all still live); M1/M2 are sine modulators, phases in turns.
+                            // FM-ENGINE-VOICE — WAVETABLE-CARRIER FM + WEATHERING: this osc's
+                            // blended wavetable cycle IS the carrier (frame morph / blur /
+                            // spectral all still live); M1/M2 are sine modulators (turns).
                             //   0 STACK — M2 → M1 → carrier phase (3-op serial)
                             //   1 SPLIT — M1 and M2 both → carrier phase (parallel)
                             //   2 RING  — M2 → M1; M1 ring-modulates the carrier OUTPUT
-                            // Depth² taper → max ~1.5 turns of deviation; M1 self-feedback
-                            // is the DX half-sum average (stable, tips into growl at full).
+                            // All depths/ratios come block-conditioned (fm*Eff_): Strike/Age/
+                            // key-scale already folded in. STORM cross-couples the modulators
+                            // (one-sample memory), RUST detunes M1 by absolute Hz, GALE adds
+                            // note-tracked noise FM at the carrier, BEND folds the mod shapes.
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncA_[(size_t) u];
-                            const float  d1  = fmD1Sm_[0] * fmD1Sm_[0] * 1.5f;
-                            const float  d2  = fmD2Sm_[0] * fmD2Sm_[0] * 1.5f;
-                            const float  fbk = fmFbSm_[0] * fmFbSm_[0];
+                            const float  d1  = fmD1Eff_[0];
+                            const float  d2  = fmD2Eff_[0];
+                            const float  fbk = fmFbEff_[0];
                             const int    alg = fmAlgo_[0];
-                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseA_[(size_t) u]));
-                            double m1Arg = uModPhaseA_[(size_t) u] + (double) (fbk * fmFbA_[(size_t) u]);
-                            if (alg == 0) m1Arg += (double) (d2 * m2);
-                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (u == 0)
+                            {
+                                fmGaleNow_[0] = 0.0f;
+                                if (fmGaleAmt_[0] > 1.0e-4f)
+                                {
+                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
+                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
+                                    fmGaleLp_[0] += fmGaleCoef_[0] * (w - fmGaleLp_[0]);
+                                    fmGaleNow_[0] = fmGaleAmt_[0] * fmGaleLp_[0];
+                                }
+                            }
+                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseA_[(size_t) u]
+                                                        + (double) (fmStormM12_[0] * fmPrevM1A_[(size_t) u]))));
+                            if (fmBendK_[0] > 1.0e-4f) { const float bk = fmBendK_[0] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            double m1Arg = uModPhaseA_[(size_t) u] + (double) (fbk * fmFbA_[(size_t) u])
+                                         + (double) (fmStormM21_[0] * m2);
+                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 → M1
+                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (fmBendK_[0] > 1.0e-4f) { const float bk = fmBendK_[0]; m1 *= (1.0f + bk) - bk * m1 * m1; }
                             fmFbA_[(size_t) u] = 0.5f * (fmFbA_[(size_t) u] + m1);
-                            double cPh = uPhaseA_[(size_t) u];
+                            fmPrevM1A_[(size_t) u] = m1;
+                            double cPh = uPhaseA_[(size_t) u] + (double) fmGaleNow_[0];
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -1645,9 +1764,9 @@ namespace tw
                                     : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
                             if (alg == 2)
                                 sAu *= (1.0f - fmD1Sm_[0]) + fmD1Sm_[0] * m1;      // ring dry→wet on depth 1
-                            uModPhaseA_[(size_t) u]  += inc * (double) fmRatio1_[0];
+                            uModPhaseA_[(size_t) u]  += inc * fmR1Eff_[0] + fmRustTps_[0];
                             uModPhaseA_[(size_t) u]  -= std::floor (uModPhaseA_[(size_t) u]);
-                            uMod2PhaseA_[(size_t) u] += inc * (double) fmRatio2_[0];
+                            uMod2PhaseA_[(size_t) u] += inc * fmR2Eff_[0];
                             uMod2PhaseA_[(size_t) u] -= std::floor (uMod2PhaseA_[(size_t) u]);
                             uPhaseA_[(size_t) u] += inc;
                             if (uPhaseA_[(size_t) u] >= 1.0) uPhaseA_[(size_t) u] -= 1.0;
@@ -1882,19 +2001,35 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            // FM-ENGINE-VOICE — wavetable-carrier FM (see OSC A for the map)
+                            // FM-ENGINE-VOICE — wavetable-carrier FM + WEATHERING (see OSC A for the map)
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncB_[(size_t) u];
-                            const float  d1  = fmD1Sm_[1] * fmD1Sm_[1] * 1.5f;
-                            const float  d2  = fmD2Sm_[1] * fmD2Sm_[1] * 1.5f;
-                            const float  fbk = fmFbSm_[1] * fmFbSm_[1];
+                            const float  d1  = fmD1Eff_[1];
+                            const float  d2  = fmD2Eff_[1];
+                            const float  fbk = fmFbEff_[1];
                             const int    alg = fmAlgo_[1];
-                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseB_[(size_t) u]));
-                            double m1Arg = uModPhaseB_[(size_t) u] + (double) (fbk * fmFbB_[(size_t) u]);
-                            if (alg == 0) m1Arg += (double) (d2 * m2);
-                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (u == 0)
+                            {
+                                fmGaleNow_[1] = 0.0f;
+                                if (fmGaleAmt_[1] > 1.0e-4f)
+                                {
+                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
+                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
+                                    fmGaleLp_[1] += fmGaleCoef_[1] * (w - fmGaleLp_[1]);
+                                    fmGaleNow_[1] = fmGaleAmt_[1] * fmGaleLp_[1];
+                                }
+                            }
+                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseB_[(size_t) u]
+                                                        + (double) (fmStormM12_[1] * fmPrevM1B_[(size_t) u]))));
+                            if (fmBendK_[1] > 1.0e-4f) { const float bk = fmBendK_[1] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            double m1Arg = uModPhaseB_[(size_t) u] + (double) (fbk * fmFbB_[(size_t) u])
+                                         + (double) (fmStormM21_[1] * m2);
+                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
+                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (fmBendK_[1] > 1.0e-4f) { const float bk = fmBendK_[1]; m1 *= (1.0f + bk) - bk * m1 * m1; }
                             fmFbB_[(size_t) u] = 0.5f * (fmFbB_[(size_t) u] + m1);
-                            double cPh = uPhaseB_[(size_t) u];
+                            fmPrevM1B_[(size_t) u] = m1;
+                            double cPh = uPhaseB_[(size_t) u] + (double) fmGaleNow_[1];
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -1903,9 +2038,9 @@ namespace tw
                                     : static_cast<float> (std::sin (pi2 * cPh));
                             if (alg == 2)
                                 sBu *= (1.0f - fmD1Sm_[1]) + fmD1Sm_[1] * m1;
-                            uModPhaseB_[(size_t) u]  += inc * (double) fmRatio1_[1];
+                            uModPhaseB_[(size_t) u]  += inc * fmR1Eff_[1] + fmRustTps_[1];
                             uModPhaseB_[(size_t) u]  -= std::floor (uModPhaseB_[(size_t) u]);
-                            uMod2PhaseB_[(size_t) u] += inc * (double) fmRatio2_[1];
+                            uMod2PhaseB_[(size_t) u] += inc * fmR2Eff_[1];
                             uMod2PhaseB_[(size_t) u] -= std::floor (uMod2PhaseB_[(size_t) u]);
                             uPhaseB_[(size_t) u] += inc;
                             if (uPhaseB_[(size_t) u] >= 1.0) uPhaseB_[(size_t) u] -= 1.0;
@@ -2136,19 +2271,35 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            // FM-ENGINE-VOICE — wavetable-carrier FM (see OSC A for the map)
+                            // FM-ENGINE-VOICE — wavetable-carrier FM + WEATHERING (see OSC A for the map)
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncC_[(size_t) u];
-                            const float  d1  = fmD1Sm_[2] * fmD1Sm_[2] * 1.5f;
-                            const float  d2  = fmD2Sm_[2] * fmD2Sm_[2] * 1.5f;
-                            const float  fbk = fmFbSm_[2] * fmFbSm_[2];
+                            const float  d1  = fmD1Eff_[2];
+                            const float  d2  = fmD2Eff_[2];
+                            const float  fbk = fmFbEff_[2];
                             const int    alg = fmAlgo_[2];
-                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseC_[(size_t) u]));
-                            double m1Arg = uModPhaseC_[(size_t) u] + (double) (fbk * fmFbC_[(size_t) u]);
-                            if (alg == 0) m1Arg += (double) (d2 * m2);
-                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (u == 0)
+                            {
+                                fmGaleNow_[2] = 0.0f;
+                                if (fmGaleAmt_[2] > 1.0e-4f)
+                                {
+                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
+                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
+                                    fmGaleLp_[2] += fmGaleCoef_[2] * (w - fmGaleLp_[2]);
+                                    fmGaleNow_[2] = fmGaleAmt_[2] * fmGaleLp_[2];
+                                }
+                            }
+                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseC_[(size_t) u]
+                                                        + (double) (fmStormM12_[2] * fmPrevM1C_[(size_t) u]))));
+                            if (fmBendK_[2] > 1.0e-4f) { const float bk = fmBendK_[2] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            double m1Arg = uModPhaseC_[(size_t) u] + (double) (fbk * fmFbC_[(size_t) u])
+                                         + (double) (fmStormM21_[2] * m2);
+                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
+                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (fmBendK_[2] > 1.0e-4f) { const float bk = fmBendK_[2]; m1 *= (1.0f + bk) - bk * m1 * m1; }
                             fmFbC_[(size_t) u] = 0.5f * (fmFbC_[(size_t) u] + m1);
-                            double cPh = uPhaseC_[(size_t) u];
+                            fmPrevM1C_[(size_t) u] = m1;
+                            double cPh = uPhaseC_[(size_t) u] + (double) fmGaleNow_[2];
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2157,9 +2308,9 @@ namespace tw
                                     : static_cast<float> (std::sin (pi2 * cPh));
                             if (alg == 2)
                                 sCu *= (1.0f - fmD1Sm_[2]) + fmD1Sm_[2] * m1;
-                            uModPhaseC_[(size_t) u]  += inc * (double) fmRatio1_[2];
+                            uModPhaseC_[(size_t) u]  += inc * fmR1Eff_[2] + fmRustTps_[2];
                             uModPhaseC_[(size_t) u]  -= std::floor (uModPhaseC_[(size_t) u]);
-                            uMod2PhaseC_[(size_t) u] += inc * (double) fmRatio2_[2];
+                            uMod2PhaseC_[(size_t) u] += inc * fmR2Eff_[2];
                             uMod2PhaseC_[(size_t) u] -= std::floor (uMod2PhaseC_[(size_t) u]);
                             uPhaseC_[(size_t) u] += inc;
                             if (uPhaseC_[(size_t) u] >= 1.0) uPhaseC_[(size_t) u] -= 1.0;
@@ -2390,19 +2541,35 @@ namespace tw
 
                         case Engine::FM:
                         {
-                            // FM-ENGINE-VOICE — wavetable-carrier FM (see OSC A for the map)
+                            // FM-ENGINE-VOICE — wavetable-carrier FM + WEATHERING (see OSC A for the map)
                             const double pi2 = 6.2831853071795865;
                             const double inc = uPhaseIncD_[(size_t) u];
-                            const float  d1  = fmD1Sm_[3] * fmD1Sm_[3] * 1.5f;
-                            const float  d2  = fmD2Sm_[3] * fmD2Sm_[3] * 1.5f;
-                            const float  fbk = fmFbSm_[3] * fmFbSm_[3];
+                            const float  d1  = fmD1Eff_[3];
+                            const float  d2  = fmD2Eff_[3];
+                            const float  fbk = fmFbEff_[3];
                             const int    alg = fmAlgo_[3];
-                            const float  m2  = static_cast<float> (std::sin (pi2 * uMod2PhaseD_[(size_t) u]));
-                            double m1Arg = uModPhaseD_[(size_t) u] + (double) (fbk * fmFbD_[(size_t) u]);
-                            if (alg == 0) m1Arg += (double) (d2 * m2);
-                            const float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (u == 0)
+                            {
+                                fmGaleNow_[3] = 0.0f;
+                                if (fmGaleAmt_[3] > 1.0e-4f)
+                                {
+                                    fmNz_ ^= fmNz_ << 13; fmNz_ ^= fmNz_ >> 17; fmNz_ ^= fmNz_ << 5;
+                                    const float w = (float) (std::int32_t) fmNz_ * (1.0f / 2147483648.0f);
+                                    fmGaleLp_[3] += fmGaleCoef_[3] * (w - fmGaleLp_[3]);
+                                    fmGaleNow_[3] = fmGaleAmt_[3] * fmGaleLp_[3];
+                                }
+                            }
+                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseD_[(size_t) u]
+                                                        + (double) (fmStormM12_[3] * fmPrevM1D_[(size_t) u]))));
+                            if (fmBendK_[3] > 1.0e-4f) { const float bk = fmBendK_[3] * 0.5f; m2 *= (1.0f + bk) - bk * m2 * m2; }
+                            double m1Arg = uModPhaseD_[(size_t) u] + (double) (fbk * fmFbD_[(size_t) u])
+                                         + (double) (fmStormM21_[3] * m2);
+                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
+                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
+                            if (fmBendK_[3] > 1.0e-4f) { const float bk = fmBendK_[3]; m1 *= (1.0f + bk) - bk * m1 * m1; }
                             fmFbD_[(size_t) u] = 0.5f * (fmFbD_[(size_t) u] + m1);
-                            double cPh = uPhaseD_[(size_t) u];
+                            fmPrevM1D_[(size_t) u] = m1;
+                            double cPh = uPhaseD_[(size_t) u] + (double) fmGaleNow_[3];
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2411,9 +2578,9 @@ namespace tw
                                     : static_cast<float> (std::sin (pi2 * cPh));
                             if (alg == 2)
                                 sDu *= (1.0f - fmD1Sm_[3]) + fmD1Sm_[3] * m1;
-                            uModPhaseD_[(size_t) u]  += inc * (double) fmRatio1_[3];
+                            uModPhaseD_[(size_t) u]  += inc * fmR1Eff_[3] + fmRustTps_[3];
                             uModPhaseD_[(size_t) u]  -= std::floor (uModPhaseD_[(size_t) u]);
-                            uMod2PhaseD_[(size_t) u] += inc * (double) fmRatio2_[3];
+                            uMod2PhaseD_[(size_t) u] += inc * fmR2Eff_[3];
                             uMod2PhaseD_[(size_t) u] -= std::floor (uMod2PhaseD_[(size_t) u]);
                             uPhaseD_[(size_t) u] += inc;
                             if (uPhaseD_[(size_t) u] >= 1.0) uPhaseD_[(size_t) u] -= 1.0;
@@ -3704,6 +3871,22 @@ namespace tw
         std::array<float, 4> fmD1Sm_ {}, fmD2Sm_ {}, fmFbSm_ {};
         std::array<double, kMaxUnison> uMod2PhaseA_ {}, uMod2PhaseB_ {}, uMod2PhaseC_ {}, uMod2PhaseD_ {};
         std::array<float, kMaxUnison>  fmFbA_ {}, fmFbB_ {}, fmFbC_ {}, fmFbD_ {};
+        // ── FM WEATHERING SUITE (page 2) — knob targets + smoothed + slow-process state ──
+        std::array<float, 4> fmStrike_ {}, fmAge_ {}, fmRust_ {}, fmGaleKnob_ {}, fmBend_ {}, fmStorm_ {};
+        std::array<float, 4> fmStrikeSm_ {}, fmAgeSm_ {}, fmRustSm_ {}, fmGaleSm_ {}, fmBendSm_ {}, fmStormSm_ {};
+        std::array<float, 4> fmStrikeEnv_ {};                       // note-on index transient, exp decay
+        std::array<float, 4> fmAgeOuR_ {}, fmAgeOuI_ {};            // AGE — OU walks (ratio / index)
+        std::array<float, 4> fmAgeNote_ {};                         // AGE — per-note S&H offset (±1)
+        std::array<float, 4> fmGaleLp_ {};                          // GALE — one-pole noise state
+        // block-rate EFFECTIVE values the per-sample core reads (all pow()/exp() here)
+        std::array<float, 4>  fmD1Eff_ {}, fmD2Eff_ {}, fmFbEff_ {};
+        std::array<double, 4> fmR1Eff_ { 1.0, 1.0, 1.0, 1.0 }, fmR2Eff_ { 2.0, 2.0, 2.0, 2.0 };
+        std::array<double, 4> fmRustTps_ {};                        // RUST — abs-Hz offset in turns/sample
+        std::array<float, 4>  fmGaleAmt_ {}, fmGaleCoef_ {}, fmGaleNow_ {};
+        std::array<float, 4>  fmBendK_ {}, fmStormM12_ {}, fmStormM21_ {};
+        std::array<float, kMaxUnison> fmPrevM1A_ {}, fmPrevM1B_ {}, fmPrevM1C_ {}, fmPrevM1D_ {};  // STORM one-sample cross memory
+        std::uint32_t fmNz_ { 0x9E3779B9u };                        // GALE noise RNG (per voice)
+        float fmKs_ { 1.0f };                                        // DX key scaling — index rolloff above C5
 
         // ── KEYTRACK — note→destination modulation (the mod-matrix embryo) ──────────
         //   The render path keeps reading the EFFECTIVE members (framePos_/warpAmount_/

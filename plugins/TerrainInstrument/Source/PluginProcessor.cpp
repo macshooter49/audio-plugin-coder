@@ -2185,15 +2185,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { algoId, 1 }, "Synth OSC " + osc + " FM Algo",
             juce::StringArray { "Stack", "Split", "Ring" }, 0));
+        // RATIO QUANTIZE (Digitone's trick): 0.25 steps — every click of the knob is a
+        // DIFFERENT harmonic identity, night-and-day audible. The in-between inharmonic
+        // colors now live on RUST/AGE instead of accidental knob positions.
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { r1Id, 1 },   "Synth OSC " + osc + " FM Ratio 1",
-            juce::NormalisableRange<float> (0.25f, 16.0f, 0.0f, 0.5f), 1.0f));
+            juce::NormalisableRange<float> (0.25f, 16.0f, 0.25f, 0.5f), 1.0f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { d1Id, 1 },   "Synth OSC " + osc + " FM Depth 1",
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.35f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { r2Id, 1 },   "Synth OSC " + osc + " FM Ratio 2",
-            juce::NormalisableRange<float> (0.25f, 16.0f, 0.0f, 0.5f), 2.0f));
+            juce::NormalisableRange<float> (0.25f, 16.0f, 0.25f, 0.5f), 2.0f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { d2Id, 1 },   "Synth OSC " + osc + " FM Depth 2",
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
@@ -2209,6 +2212,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
               ParameterIDs::SYN_OSC_C_FM_RATIO2, ParameterIDs::SYN_OSC_C_FM_DEPTH2, ParameterIDs::SYN_OSC_C_FM_FB, "C");
     addFmOsc (ParameterIDs::SYN_OSC_D_FM_ALGO, ParameterIDs::SYN_OSC_D_FM_RATIO1, ParameterIDs::SYN_OSC_D_FM_DEPTH1,
               ParameterIDs::SYN_OSC_D_FM_RATIO2, ParameterIDs::SYN_OSC_D_FM_DEPTH2, ParameterIDs::SYN_OSC_D_FM_FB, "D");
+
+    // ── FM WEATHERING SUITE — page-2 functions (Strike/Age/Rust/Gale/Bend/Storm),
+    //    all 0..1 default 0 = page 2 untouched changes NOTHING (backward compatible). ──
+    auto addFmWeather = [&layout] (const char* strikeId, const char* ageId, const char* rustId,
+                                   const char* galeId, const char* bendId, const char* stormId,
+                                   const juce::String& osc)
+    {
+        auto addF = [&layout, &osc] (const char* id, const char* nm)
+        {
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id, 1 }, "Synth OSC " + osc + " FM " + nm,
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+        };
+        addF (strikeId, "Strike"); addF (ageId, "Age");   addF (rustId, "Rust");
+        addF (galeId, "Gale");     addF (bendId, "Bend"); addF (stormId, "Storm");
+    };
+    addFmWeather (ParameterIDs::SYN_OSC_A_FM_STRIKE, ParameterIDs::SYN_OSC_A_FM_AGE, ParameterIDs::SYN_OSC_A_FM_RUST,
+                  ParameterIDs::SYN_OSC_A_FM_GALE, ParameterIDs::SYN_OSC_A_FM_BEND, ParameterIDs::SYN_OSC_A_FM_STORM, "A");
+    addFmWeather (ParameterIDs::SYN_OSC_B_FM_STRIKE, ParameterIDs::SYN_OSC_B_FM_AGE, ParameterIDs::SYN_OSC_B_FM_RUST,
+                  ParameterIDs::SYN_OSC_B_FM_GALE, ParameterIDs::SYN_OSC_B_FM_BEND, ParameterIDs::SYN_OSC_B_FM_STORM, "B");
+    addFmWeather (ParameterIDs::SYN_OSC_C_FM_STRIKE, ParameterIDs::SYN_OSC_C_FM_AGE, ParameterIDs::SYN_OSC_C_FM_RUST,
+                  ParameterIDs::SYN_OSC_C_FM_GALE, ParameterIDs::SYN_OSC_C_FM_BEND, ParameterIDs::SYN_OSC_C_FM_STORM, "C");
+    addFmWeather (ParameterIDs::SYN_OSC_D_FM_STRIKE, ParameterIDs::SYN_OSC_D_FM_AGE, ParameterIDs::SYN_OSC_D_FM_RUST,
+                  ParameterIDs::SYN_OSC_D_FM_GALE, ParameterIDs::SYN_OSC_D_FM_BEND, ParameterIDs::SYN_OSC_D_FM_STORM, "D");
 
     // BLEND — the 6 one-shot blend/morph knobs per osc (Morph Attack Body Breath Sculpt Dice).
     // OFFLINE-BAKE params: the editor listens and re-renders the blended buffer; the audio
@@ -3358,17 +3385,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const tw::GranularEngineParams gpC = withSampleExtras (gatherGrain (GRAIN_IDS[2]), spC);
         const tw::GranularEngineParams gpD = withSampleExtras (gatherGrain (GRAIN_IDS[3]), spD);
 
-        // ── FM engine: gather the 6 wavetable-carrier FM params per OSC (FM-ENGINE-GATHER) ──
-        // ID order: algo, ratio1, depth1, ratio2, depth2, feedback. 'algo' is the only choice.
-        static const char* const FM_IDS[4][6] = {
-            { ParameterIDs::SYN_OSC_A_FM_ALGO, ParameterIDs::SYN_OSC_A_FM_RATIO1, ParameterIDs::SYN_OSC_A_FM_DEPTH1, ParameterIDs::SYN_OSC_A_FM_RATIO2, ParameterIDs::SYN_OSC_A_FM_DEPTH2, ParameterIDs::SYN_OSC_A_FM_FB },
-            { ParameterIDs::SYN_OSC_B_FM_ALGO, ParameterIDs::SYN_OSC_B_FM_RATIO1, ParameterIDs::SYN_OSC_B_FM_DEPTH1, ParameterIDs::SYN_OSC_B_FM_RATIO2, ParameterIDs::SYN_OSC_B_FM_DEPTH2, ParameterIDs::SYN_OSC_B_FM_FB },
-            { ParameterIDs::SYN_OSC_C_FM_ALGO, ParameterIDs::SYN_OSC_C_FM_RATIO1, ParameterIDs::SYN_OSC_C_FM_DEPTH1, ParameterIDs::SYN_OSC_C_FM_RATIO2, ParameterIDs::SYN_OSC_C_FM_DEPTH2, ParameterIDs::SYN_OSC_C_FM_FB },
-            { ParameterIDs::SYN_OSC_D_FM_ALGO, ParameterIDs::SYN_OSC_D_FM_RATIO1, ParameterIDs::SYN_OSC_D_FM_DEPTH1, ParameterIDs::SYN_OSC_D_FM_RATIO2, ParameterIDs::SYN_OSC_D_FM_DEPTH2, ParameterIDs::SYN_OSC_D_FM_FB }
+        // ── FM engine: gather the 12 wavetable-carrier FM params per OSC (FM-ENGINE-GATHER) ──
+        // ID order: algo, ratio1, depth1, ratio2, depth2, feedback, then the WEATHERING page:
+        // strike, age, rust, gale, bend, storm. 'algo' is the only choice.
+        static const char* const FM_IDS[4][12] = {
+            { ParameterIDs::SYN_OSC_A_FM_ALGO, ParameterIDs::SYN_OSC_A_FM_RATIO1, ParameterIDs::SYN_OSC_A_FM_DEPTH1, ParameterIDs::SYN_OSC_A_FM_RATIO2, ParameterIDs::SYN_OSC_A_FM_DEPTH2, ParameterIDs::SYN_OSC_A_FM_FB,
+              ParameterIDs::SYN_OSC_A_FM_STRIKE, ParameterIDs::SYN_OSC_A_FM_AGE, ParameterIDs::SYN_OSC_A_FM_RUST, ParameterIDs::SYN_OSC_A_FM_GALE, ParameterIDs::SYN_OSC_A_FM_BEND, ParameterIDs::SYN_OSC_A_FM_STORM },
+            { ParameterIDs::SYN_OSC_B_FM_ALGO, ParameterIDs::SYN_OSC_B_FM_RATIO1, ParameterIDs::SYN_OSC_B_FM_DEPTH1, ParameterIDs::SYN_OSC_B_FM_RATIO2, ParameterIDs::SYN_OSC_B_FM_DEPTH2, ParameterIDs::SYN_OSC_B_FM_FB,
+              ParameterIDs::SYN_OSC_B_FM_STRIKE, ParameterIDs::SYN_OSC_B_FM_AGE, ParameterIDs::SYN_OSC_B_FM_RUST, ParameterIDs::SYN_OSC_B_FM_GALE, ParameterIDs::SYN_OSC_B_FM_BEND, ParameterIDs::SYN_OSC_B_FM_STORM },
+            { ParameterIDs::SYN_OSC_C_FM_ALGO, ParameterIDs::SYN_OSC_C_FM_RATIO1, ParameterIDs::SYN_OSC_C_FM_DEPTH1, ParameterIDs::SYN_OSC_C_FM_RATIO2, ParameterIDs::SYN_OSC_C_FM_DEPTH2, ParameterIDs::SYN_OSC_C_FM_FB,
+              ParameterIDs::SYN_OSC_C_FM_STRIKE, ParameterIDs::SYN_OSC_C_FM_AGE, ParameterIDs::SYN_OSC_C_FM_RUST, ParameterIDs::SYN_OSC_C_FM_GALE, ParameterIDs::SYN_OSC_C_FM_BEND, ParameterIDs::SYN_OSC_C_FM_STORM },
+            { ParameterIDs::SYN_OSC_D_FM_ALGO, ParameterIDs::SYN_OSC_D_FM_RATIO1, ParameterIDs::SYN_OSC_D_FM_DEPTH1, ParameterIDs::SYN_OSC_D_FM_RATIO2, ParameterIDs::SYN_OSC_D_FM_DEPTH2, ParameterIDs::SYN_OSC_D_FM_FB,
+              ParameterIDs::SYN_OSC_D_FM_STRIKE, ParameterIDs::SYN_OSC_D_FM_AGE, ParameterIDs::SYN_OSC_D_FM_RUST, ParameterIDs::SYN_OSC_D_FM_GALE, ParameterIDs::SYN_OSC_D_FM_BEND, ParameterIDs::SYN_OSC_D_FM_STORM }
         };
-        float fmVals[4][6];
+        float fmVals[4][12];
         for (int o = 0; o < 4; ++o)
-            for (int k = 0; k < 6; ++k)
+            for (int k = 0; k < 12; ++k)
                 fmVals[o][k] = *rawParam (FM_IDS[o][k]);
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
@@ -3536,8 +3568,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     sv->setGranParamsC (gpC);    sv->setGranParamsD (gpD);
                 }
                 for (int o = 0; o < 4; ++o)   // FM-ENGINE-PUSH — wavetable-carrier FM knobs (cheap stores; ungated)
-                    sv->setFMOsc (o, (int) fmVals[o][0], fmVals[o][1], fmVals[o][2],
-                                  fmVals[o][3], fmVals[o][4], fmVals[o][5]);
+                {
+                    sv->setFMOsc  (o, (int) fmVals[o][0], fmVals[o][1], fmVals[o][2],
+                                   fmVals[o][3], fmVals[o][4], fmVals[o][5]);
+                    sv->setFMOsc2 (o, fmVals[o][6], fmVals[o][7], fmVals[o][8],   // WEATHERING page
+                                   fmVals[o][9], fmVals[o][10], fmVals[o][11]);
+                }
                 sv->setSampleSources (&getOscSampleBuffer (0), &getOscSampleBuffer (1),
                                       &getOscSampleBuffer (2), &getOscSampleBuffer (3));   // PEROSC-PUSH
             }

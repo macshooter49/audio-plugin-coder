@@ -3842,10 +3842,19 @@ body {
 #syn-panel .device.osc.engine-granular:not(.swapped) .front-only { display: none; }
 #syn-panel .device.osc.engine-granular:not(.swapped) .sample-view { display: flex; }
 /* FM ENGINE (FM-ENGINE-UI) — the front view STAYS (2D display = the carrier wavetable);
-   only the knob ROW swaps: WT knobs -> the 6 FM controls (Algo pill + 5 knobs). */
-#syn-panel .fm-knobs { display: none; }
+   only the knob ROW swaps. Two pages inside .fm-knob-wrap (gran-knob-wrap pattern):
+   page 1 = the operators, page 2 = the WEATHERING suite; .fm-arrow flips (.pg2). */
+#syn-panel .fm-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
+#syn-panel .device.osc.engine-fm:not(.swapped) .fm-knob-wrap { display: flex; }
 #syn-panel .device.osc.engine-fm:not(.swapped) .front-only .osc-knobs:not(.fm-knobs) { display: none; }
-#syn-panel .device.osc.engine-fm:not(.swapped) .fm-knobs { display: grid; grid-template-columns: repeat(6, 1fr); }
+#syn-panel .fm-knob-wrap .fm-knobs { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; align-items: center; }
+#syn-panel .fm-knob-wrap .fm-pg2 { display: none; }
+#syn-panel .fm-knob-wrap.pg2 .fm-pg1 { display: none; }
+#syn-panel .fm-knob-wrap.pg2 .fm-pg2 { display: grid; }
+#syn-panel .fm-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
+#syn-panel .fm-arrow:hover { opacity: .95; }
+#syn-panel .fm-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
+#syn-panel .fm-knob-wrap.pg2 .fm-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 #syn-panel .fm-algo { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .fm-algo-pill { position: relative; height: 20px; min-width: 42px; margin-top: 2px; padding: 0 7px;
   border: 1px solid var(--border-strong); border-radius: 10px;
@@ -5182,8 +5191,10 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- FM ENGINE knobs (FM-ENGINE-UI) — shown instead of the WT row when engine == FM.
-                   The wavetable above IS the carrier; Algo picks the modulator routing. -->
-              <div class="osc-knobs fm-knobs">
+                   The wavetable above IS the carrier. Page 1 = the operators; the thin white
+                   arrow flips to page 2 = the WEATHERING suite (Strike Age Rust Gale Bend Storm). -->
+              <div class="fm-knob-wrap">
+              <div class="osc-knobs fm-knobs fm-pg1">
                 <div class="fm-algo" data-osc="a" title="FM algorithm — Stack: Mod 2 feeds Mod 1 feeds the wavetable. Split: both mods hit the wavetable. Ring: Mod 1 ring-modulates the output.">
                   <div class="fm-algo-pill"><span class="fm-algo-val">Stack</span><select class="sel-select"><option value="0">Stack</option><option value="1">Split</option><option value="2">Ring</option></select></div>
                   <div class="knob-label">Algo</div>
@@ -5193,6 +5204,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_FM_RATIO2" title="Mod 2 frequency ratio — follows the note"><div class="knob-ring"></div><div class="knob-label">Ratio 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FM_DEPTH2" title="Mod 2 FM amount (routing set by Algo)"><div class="knob-ring"></div><div class="knob-label">FM 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FM_FB" title="Mod 1 self-feedback — sine to saw to growl"><div class="knob-ring"></div><div class="knob-label">Feedback</div></div>
+              </div>
+              <div class="osc-knobs fm-knobs fm-pg2">
+                <div class="knob" data-syn="SYN_OSC_A_FM_STRIKE" title="Strike — velocity-scaled FM bite at note-on: pluck, mallet, brass blast → slow bloom"><div class="knob-ring"></div><div class="knob-label">Strike</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FM_AGE" title="Age — analog operator drift: the modulators wander so no two notes beat the same"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FM_RUST" title="Rust — pulls Mod 1 off the harmonic grid by absolute Hz: shimmer → corroded bell clang"><div class="knob-ring"></div><div class="knob-label">Rust</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FM_GALE" title="Gale — note-tracked noise FM: breath and air → howling storm"><div class="knob-ring"></div><div class="knob-label">Gale</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FM_BEND" title="Bend — phase-distortion shaping of the modulators (CZ color): same knobs, new harmonic family"><div class="knob-ring"></div><div class="knob-label">Bend</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
+              </div>
+              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Gale · Bend · Storm" aria-label="More FM controls"></div>
               </div>
             </div>
 
@@ -5398,8 +5419,10 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- FM ENGINE knobs (FM-ENGINE-UI) — shown instead of the WT row when engine == FM.
-                   The wavetable above IS the carrier; Algo picks the modulator routing. -->
-              <div class="osc-knobs fm-knobs">
+                   The wavetable above IS the carrier. Page 1 = the operators; the thin white
+                   arrow flips to page 2 = the WEATHERING suite (Strike Age Rust Gale Bend Storm). -->
+              <div class="fm-knob-wrap">
+              <div class="osc-knobs fm-knobs fm-pg1">
                 <div class="fm-algo" data-osc="b" title="FM algorithm — Stack: Mod 2 feeds Mod 1 feeds the wavetable. Split: both mods hit the wavetable. Ring: Mod 1 ring-modulates the output.">
                   <div class="fm-algo-pill"><span class="fm-algo-val">Stack</span><select class="sel-select"><option value="0">Stack</option><option value="1">Split</option><option value="2">Ring</option></select></div>
                   <div class="knob-label">Algo</div>
@@ -5409,6 +5432,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_FM_RATIO2" title="Mod 2 frequency ratio — follows the note"><div class="knob-ring"></div><div class="knob-label">Ratio 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FM_DEPTH2" title="Mod 2 FM amount (routing set by Algo)"><div class="knob-ring"></div><div class="knob-label">FM 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FM_FB" title="Mod 1 self-feedback — sine to saw to growl"><div class="knob-ring"></div><div class="knob-label">Feedback</div></div>
+              </div>
+              <div class="osc-knobs fm-knobs fm-pg2">
+                <div class="knob" data-syn="SYN_OSC_B_FM_STRIKE" title="Strike — velocity-scaled FM bite at note-on: pluck, mallet, brass blast → slow bloom"><div class="knob-ring"></div><div class="knob-label">Strike</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FM_AGE" title="Age — analog operator drift: the modulators wander so no two notes beat the same"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FM_RUST" title="Rust — pulls Mod 1 off the harmonic grid by absolute Hz: shimmer → corroded bell clang"><div class="knob-ring"></div><div class="knob-label">Rust</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FM_GALE" title="Gale — note-tracked noise FM: breath and air → howling storm"><div class="knob-ring"></div><div class="knob-label">Gale</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FM_BEND" title="Bend — phase-distortion shaping of the modulators (CZ color): same knobs, new harmonic family"><div class="knob-ring"></div><div class="knob-label">Bend</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
+              </div>
+              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Gale · Bend · Storm" aria-label="More FM controls"></div>
               </div>
             </div>
 
@@ -5630,8 +5663,10 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- FM ENGINE knobs (FM-ENGINE-UI) — shown instead of the WT row when engine == FM.
-                   The wavetable above IS the carrier; Algo picks the modulator routing. -->
-              <div class="osc-knobs fm-knobs">
+                   The wavetable above IS the carrier. Page 1 = the operators; the thin white
+                   arrow flips to page 2 = the WEATHERING suite (Strike Age Rust Gale Bend Storm). -->
+              <div class="fm-knob-wrap">
+              <div class="osc-knobs fm-knobs fm-pg1">
                 <div class="fm-algo" data-osc="c" title="FM algorithm — Stack: Mod 2 feeds Mod 1 feeds the wavetable. Split: both mods hit the wavetable. Ring: Mod 1 ring-modulates the output.">
                   <div class="fm-algo-pill"><span class="fm-algo-val">Stack</span><select class="sel-select"><option value="0">Stack</option><option value="1">Split</option><option value="2">Ring</option></select></div>
                   <div class="knob-label">Algo</div>
@@ -5641,6 +5676,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_FM_RATIO2" title="Mod 2 frequency ratio — follows the note"><div class="knob-ring"></div><div class="knob-label">Ratio 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_FM_DEPTH2" title="Mod 2 FM amount (routing set by Algo)"><div class="knob-ring"></div><div class="knob-label">FM 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_FM_FB" title="Mod 1 self-feedback — sine to saw to growl"><div class="knob-ring"></div><div class="knob-label">Feedback</div></div>
+              </div>
+              <div class="osc-knobs fm-knobs fm-pg2">
+                <div class="knob" data-syn="SYN_OSC_C_FM_STRIKE" title="Strike — velocity-scaled FM bite at note-on: pluck, mallet, brass blast → slow bloom"><div class="knob-ring"></div><div class="knob-label">Strike</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_FM_AGE" title="Age — analog operator drift: the modulators wander so no two notes beat the same"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_FM_RUST" title="Rust — pulls Mod 1 off the harmonic grid by absolute Hz: shimmer → corroded bell clang"><div class="knob-ring"></div><div class="knob-label">Rust</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_FM_GALE" title="Gale — note-tracked noise FM: breath and air → howling storm"><div class="knob-ring"></div><div class="knob-label">Gale</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_FM_BEND" title="Bend — phase-distortion shaping of the modulators (CZ color): same knobs, new harmonic family"><div class="knob-ring"></div><div class="knob-label">Bend</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
+              </div>
+              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Gale · Bend · Storm" aria-label="More FM controls"></div>
               </div>
             </div>
 
@@ -5846,8 +5891,10 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_FRAME_SPREAD" title="Per-unison-sine wavetable frame spread — requires UNISON ≥ 2"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- FM ENGINE knobs (FM-ENGINE-UI) — shown instead of the WT row when engine == FM.
-                   The wavetable above IS the carrier; Algo picks the modulator routing. -->
-              <div class="osc-knobs fm-knobs">
+                   The wavetable above IS the carrier. Page 1 = the operators; the thin white
+                   arrow flips to page 2 = the WEATHERING suite (Strike Age Rust Gale Bend Storm). -->
+              <div class="fm-knob-wrap">
+              <div class="osc-knobs fm-knobs fm-pg1">
                 <div class="fm-algo" data-osc="d" title="FM algorithm — Stack: Mod 2 feeds Mod 1 feeds the wavetable. Split: both mods hit the wavetable. Ring: Mod 1 ring-modulates the output.">
                   <div class="fm-algo-pill"><span class="fm-algo-val">Stack</span><select class="sel-select"><option value="0">Stack</option><option value="1">Split</option><option value="2">Ring</option></select></div>
                   <div class="knob-label">Algo</div>
@@ -5857,6 +5904,16 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_FM_RATIO2" title="Mod 2 frequency ratio — follows the note"><div class="knob-ring"></div><div class="knob-label">Ratio 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FM_DEPTH2" title="Mod 2 FM amount (routing set by Algo)"><div class="knob-ring"></div><div class="knob-label">FM 2</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FM_FB" title="Mod 1 self-feedback — sine to saw to growl"><div class="knob-ring"></div><div class="knob-label">Feedback</div></div>
+              </div>
+              <div class="osc-knobs fm-knobs fm-pg2">
+                <div class="knob" data-syn="SYN_OSC_D_FM_STRIKE" title="Strike — velocity-scaled FM bite at note-on: pluck, mallet, brass blast → slow bloom"><div class="knob-ring"></div><div class="knob-label">Strike</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_FM_AGE" title="Age — analog operator drift: the modulators wander so no two notes beat the same"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_FM_RUST" title="Rust — pulls Mod 1 off the harmonic grid by absolute Hz: shimmer → corroded bell clang"><div class="knob-ring"></div><div class="knob-label">Rust</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_FM_GALE" title="Gale — note-tracked noise FM: breath and air → howling storm"><div class="knob-ring"></div><div class="knob-label">Gale</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_FM_BEND" title="Bend — phase-distortion shaping of the modulators (CZ color): same knobs, new harmonic family"><div class="knob-ring"></div><div class="knob-label">Bend</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
+              </div>
+              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Gale · Bend · Storm" aria-label="More FM controls"></div>
               </div>
             </div>
 
@@ -10081,6 +10138,15 @@ setTimeout(function wireSynControls () {
       });
     } catch (eFmA) { console.warn ('[FM-algo] wiring failed', eFmA); }
 
+    // ════════ FM WEATHERING page flip — thin white arrow, gran-knob-wrap pattern ════════
+    try {
+      document.querySelectorAll ('#syn-panel .fm-knob-wrap .fm-arrow').forEach (function (arrow) {
+        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.fm-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
+        arrow.addEventListener ('click', toggle);
+        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
+      });
+    } catch (eFmW) { console.warn ('[FM-weather] arrow wiring failed', eFmW); }
+
     // ════════ SAMPLE engine front — interactive visualizer (engine #2) ════════
     // Pure-UI layer. Region/loop/fade/xfade interactions are live now; the 5 knobs
     // (SYN_OSC_x_SAMPLE_*) are auto-wired by the generic .knob[data-syn] handler once
@@ -11026,9 +11092,10 @@ setTimeout(function wireSynControls () {
         if (paramId.indexOf ('_GRAIN_SKEW')    >= 0) { const s = -1 + n * 2; return s < -0.02 ? 'Pluck ' + Math.round (-s * 100) + '%' : (s > 0.02 ? 'Swell ' + Math.round (s * 100) + '%' : 'Even'); }
         if (paramId.indexOf ('_GRAIN_SHAPE')   >= 0) return n < 0.12 ? 'Flat' : n < 0.44 ? 'Flat→Dome' : n < 0.56 ? 'Dome' : n < 0.88 ? 'Dome→Bell' : 'Bell';   // grain window morph
         if (paramId.indexOf ('_GRAIN_')        >= 0) return pct + '%';   // Spray / Width / P.Spray
-        // FM readouts — ratio mirrors the APVTS skew-0.5 range (0.25..16): value = 0.25 + 15.75·n²
-        if (paramId.indexOf ('_FM_RATIO') >= 0) { const r = 0.25 + 15.75 * n * n; return (r < 10 ? r.toFixed (2) : r.toFixed (1)) + '×'; }
-        if (paramId.indexOf ('_FM_')      >= 0) return pct + '%';   // Depth 1 / Depth 2 / Feedback
+        // FM readouts — ratio mirrors the APVTS skew-0.5 range (0.25..16), SNAPPED to the
+        // 0.25 grid exactly like the param (Digitone-style stepped harmonic identities).
+        if (paramId.indexOf ('_FM_RATIO') >= 0) { const r = Math.round ((0.25 + 15.75 * n * n) * 4) / 4; return (r < 10 ? r.toFixed (2) : r.toFixed (1)) + '×'; }
+        if (paramId.indexOf ('_FM_')      >= 0) return pct + '%';   // depths / feedback / weathering suite
         return pct + '%';
       }
       window.__fmtSynReadout = fmtSynReadout;   // exposed so reassigned grain knobs keep proper readouts

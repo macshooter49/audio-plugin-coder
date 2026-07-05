@@ -433,6 +433,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscCFmRatio2Relay).withOptionsFrom(synOscCFmDepth2Relay).withOptionsFrom(synOscCFmFbRelay)
             .withOptionsFrom(synOscDFmAlgoRelay).withOptionsFrom(synOscDFmRatio1Relay).withOptionsFrom(synOscDFmDepth1Relay)
             .withOptionsFrom(synOscDFmRatio2Relay).withOptionsFrom(synOscDFmDepth2Relay).withOptionsFrom(synOscDFmFbRelay)
+            // FM-WEATHERING-WITHOPTIONS (6 × 4 osc)
+            .withOptionsFrom(synOscAFmStrikeRelay).withOptionsFrom(synOscAFmAgeRelay).withOptionsFrom(synOscAFmRustRelay)
+            .withOptionsFrom(synOscAFmGaleRelay).withOptionsFrom(synOscAFmBendRelay).withOptionsFrom(synOscAFmStormRelay)
+            .withOptionsFrom(synOscBFmStrikeRelay).withOptionsFrom(synOscBFmAgeRelay).withOptionsFrom(synOscBFmRustRelay)
+            .withOptionsFrom(synOscBFmGaleRelay).withOptionsFrom(synOscBFmBendRelay).withOptionsFrom(synOscBFmStormRelay)
+            .withOptionsFrom(synOscCFmStrikeRelay).withOptionsFrom(synOscCFmAgeRelay).withOptionsFrom(synOscCFmRustRelay)
+            .withOptionsFrom(synOscCFmGaleRelay).withOptionsFrom(synOscCFmBendRelay).withOptionsFrom(synOscCFmStormRelay)
+            .withOptionsFrom(synOscDFmStrikeRelay).withOptionsFrom(synOscDFmAgeRelay).withOptionsFrom(synOscDFmRustRelay)
+            .withOptionsFrom(synOscDFmGaleRelay).withOptionsFrom(synOscDFmBendRelay).withOptionsFrom(synOscDFmStormRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
             .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
@@ -2558,6 +2567,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscCFmRatio2Attachment, ParameterIDs::SYN_OSC_C_FM_RATIO2, synOscCFmRatio2Relay); mkAtt(synOscCFmDepth2Attachment, ParameterIDs::SYN_OSC_C_FM_DEPTH2, synOscCFmDepth2Relay); mkAtt(synOscCFmFbAttachment,     ParameterIDs::SYN_OSC_C_FM_FB,     synOscCFmFbRelay);
         mkAtt(synOscDFmAlgoAttachment,   ParameterIDs::SYN_OSC_D_FM_ALGO,   synOscDFmAlgoRelay);   mkAtt(synOscDFmRatio1Attachment, ParameterIDs::SYN_OSC_D_FM_RATIO1, synOscDFmRatio1Relay); mkAtt(synOscDFmDepth1Attachment, ParameterIDs::SYN_OSC_D_FM_DEPTH1, synOscDFmDepth1Relay);
         mkAtt(synOscDFmRatio2Attachment, ParameterIDs::SYN_OSC_D_FM_RATIO2, synOscDFmRatio2Relay); mkAtt(synOscDFmDepth2Attachment, ParameterIDs::SYN_OSC_D_FM_DEPTH2, synOscDFmDepth2Relay); mkAtt(synOscDFmFbAttachment,     ParameterIDs::SYN_OSC_D_FM_FB,     synOscDFmFbRelay);
+        // FM-WEATHERING-MKATT (6 × 4 osc)
+        mkAtt(synOscAFmStrikeAttachment, ParameterIDs::SYN_OSC_A_FM_STRIKE, synOscAFmStrikeRelay); mkAtt(synOscAFmAgeAttachment,  ParameterIDs::SYN_OSC_A_FM_AGE,  synOscAFmAgeRelay);  mkAtt(synOscAFmRustAttachment,  ParameterIDs::SYN_OSC_A_FM_RUST,  synOscAFmRustRelay);
+        mkAtt(synOscAFmGaleAttachment,   ParameterIDs::SYN_OSC_A_FM_GALE,   synOscAFmGaleRelay);   mkAtt(synOscAFmBendAttachment, ParameterIDs::SYN_OSC_A_FM_BEND, synOscAFmBendRelay); mkAtt(synOscAFmStormAttachment, ParameterIDs::SYN_OSC_A_FM_STORM, synOscAFmStormRelay);
+        mkAtt(synOscBFmStrikeAttachment, ParameterIDs::SYN_OSC_B_FM_STRIKE, synOscBFmStrikeRelay); mkAtt(synOscBFmAgeAttachment,  ParameterIDs::SYN_OSC_B_FM_AGE,  synOscBFmAgeRelay);  mkAtt(synOscBFmRustAttachment,  ParameterIDs::SYN_OSC_B_FM_RUST,  synOscBFmRustRelay);
+        mkAtt(synOscBFmGaleAttachment,   ParameterIDs::SYN_OSC_B_FM_GALE,   synOscBFmGaleRelay);   mkAtt(synOscBFmBendAttachment, ParameterIDs::SYN_OSC_B_FM_BEND, synOscBFmBendRelay); mkAtt(synOscBFmStormAttachment, ParameterIDs::SYN_OSC_B_FM_STORM, synOscBFmStormRelay);
+        mkAtt(synOscCFmStrikeAttachment, ParameterIDs::SYN_OSC_C_FM_STRIKE, synOscCFmStrikeRelay); mkAtt(synOscCFmAgeAttachment,  ParameterIDs::SYN_OSC_C_FM_AGE,  synOscCFmAgeRelay);  mkAtt(synOscCFmRustAttachment,  ParameterIDs::SYN_OSC_C_FM_RUST,  synOscCFmRustRelay);
+        mkAtt(synOscCFmGaleAttachment,   ParameterIDs::SYN_OSC_C_FM_GALE,   synOscCFmGaleRelay);   mkAtt(synOscCFmBendAttachment, ParameterIDs::SYN_OSC_C_FM_BEND, synOscCFmBendRelay); mkAtt(synOscCFmStormAttachment, ParameterIDs::SYN_OSC_C_FM_STORM, synOscCFmStormRelay);
+        mkAtt(synOscDFmStrikeAttachment, ParameterIDs::SYN_OSC_D_FM_STRIKE, synOscDFmStrikeRelay); mkAtt(synOscDFmAgeAttachment,  ParameterIDs::SYN_OSC_D_FM_AGE,  synOscDFmAgeRelay);  mkAtt(synOscDFmRustAttachment,  ParameterIDs::SYN_OSC_D_FM_RUST,  synOscDFmRustRelay);
+        mkAtt(synOscDFmGaleAttachment,   ParameterIDs::SYN_OSC_D_FM_GALE,   synOscDFmGaleRelay);   mkAtt(synOscDFmBendAttachment, ParameterIDs::SYN_OSC_D_FM_BEND, synOscDFmBendRelay); mkAtt(synOscDFmStormAttachment, ParameterIDs::SYN_OSC_D_FM_STORM, synOscDFmStormRelay);
         // GRAIN-EXPANDED-MKATT (8 × 4 osc)
         mkAtt(synOscAGrainPositionAttachment, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, synOscAGrainPositionRelay); mkAtt(synOscAGrainPitchAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, synOscAGrainPitchRelay); mkAtt(synOscAGrainPsprayAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, synOscAGrainPsprayRelay); mkAtt(synOscAGrainWidthAttachment, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, synOscAGrainWidthRelay);
         mkAtt(synOscAGrainDirAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DIR, synOscAGrainDirRelay); mkAtt(synOscAGrainSkewAttachment, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, synOscAGrainSkewRelay);

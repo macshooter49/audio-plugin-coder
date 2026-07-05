@@ -518,6 +518,31 @@ private:
     juce::WebSliderRelay synOscDFmRatio2Relay { ParameterIDs::SYN_OSC_D_FM_RATIO2 };
     juce::WebSliderRelay synOscDFmDepth2Relay { ParameterIDs::SYN_OSC_D_FM_DEPTH2 };
     juce::WebSliderRelay synOscDFmFbRelay     { ParameterIDs::SYN_OSC_D_FM_FB };
+    // ════ FM WEATHERING relays — page-2 suite (6 × 4 osc) ════
+    juce::WebSliderRelay synOscAFmStrikeRelay { ParameterIDs::SYN_OSC_A_FM_STRIKE };
+    juce::WebSliderRelay synOscAFmAgeRelay    { ParameterIDs::SYN_OSC_A_FM_AGE };
+    juce::WebSliderRelay synOscAFmRustRelay   { ParameterIDs::SYN_OSC_A_FM_RUST };
+    juce::WebSliderRelay synOscAFmGaleRelay   { ParameterIDs::SYN_OSC_A_FM_GALE };
+    juce::WebSliderRelay synOscAFmBendRelay   { ParameterIDs::SYN_OSC_A_FM_BEND };
+    juce::WebSliderRelay synOscAFmStormRelay  { ParameterIDs::SYN_OSC_A_FM_STORM };
+    juce::WebSliderRelay synOscBFmStrikeRelay { ParameterIDs::SYN_OSC_B_FM_STRIKE };
+    juce::WebSliderRelay synOscBFmAgeRelay    { ParameterIDs::SYN_OSC_B_FM_AGE };
+    juce::WebSliderRelay synOscBFmRustRelay   { ParameterIDs::SYN_OSC_B_FM_RUST };
+    juce::WebSliderRelay synOscBFmGaleRelay   { ParameterIDs::SYN_OSC_B_FM_GALE };
+    juce::WebSliderRelay synOscBFmBendRelay   { ParameterIDs::SYN_OSC_B_FM_BEND };
+    juce::WebSliderRelay synOscBFmStormRelay  { ParameterIDs::SYN_OSC_B_FM_STORM };
+    juce::WebSliderRelay synOscCFmStrikeRelay { ParameterIDs::SYN_OSC_C_FM_STRIKE };
+    juce::WebSliderRelay synOscCFmAgeRelay    { ParameterIDs::SYN_OSC_C_FM_AGE };
+    juce::WebSliderRelay synOscCFmRustRelay   { ParameterIDs::SYN_OSC_C_FM_RUST };
+    juce::WebSliderRelay synOscCFmGaleRelay   { ParameterIDs::SYN_OSC_C_FM_GALE };
+    juce::WebSliderRelay synOscCFmBendRelay   { ParameterIDs::SYN_OSC_C_FM_BEND };
+    juce::WebSliderRelay synOscCFmStormRelay  { ParameterIDs::SYN_OSC_C_FM_STORM };
+    juce::WebSliderRelay synOscDFmStrikeRelay { ParameterIDs::SYN_OSC_D_FM_STRIKE };
+    juce::WebSliderRelay synOscDFmAgeRelay    { ParameterIDs::SYN_OSC_D_FM_AGE };
+    juce::WebSliderRelay synOscDFmRustRelay   { ParameterIDs::SYN_OSC_D_FM_RUST };
+    juce::WebSliderRelay synOscDFmGaleRelay   { ParameterIDs::SYN_OSC_D_FM_GALE };
+    juce::WebSliderRelay synOscDFmBendRelay   { ParameterIDs::SYN_OSC_D_FM_BEND };
+    juce::WebSliderRelay synOscDFmStormRelay  { ParameterIDs::SYN_OSC_D_FM_STORM };
     // ── GRAIN-EXPANDED-RELAYS — the 8 reassignable functions (8 × 4 osc) ──
     juce::WebSliderRelay synOscAGrainPositionRelay { ParameterIDs::SYN_OSC_A_GRAIN_POSITION };
     juce::WebSliderRelay synOscAGrainPitchRelay    { ParameterIDs::SYN_OSC_A_GRAIN_PITCH };
@@ -1053,6 +1078,13 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmRatio2Attachment, synOscBFmRatio2Attachment, synOscCFmRatio2Attachment, synOscDFmRatio2Attachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmDepth2Attachment, synOscBFmDepth2Attachment, synOscCFmDepth2Attachment, synOscDFmDepth2Attachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmFbAttachment,     synOscBFmFbAttachment,     synOscCFmFbAttachment,     synOscDFmFbAttachment;
+    // ── FM WEATHERING attachments (6 × 4 osc) ──
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmStrikeAttachment, synOscBFmStrikeAttachment, synOscCFmStrikeAttachment, synOscDFmStrikeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmAgeAttachment,    synOscBFmAgeAttachment,    synOscCFmAgeAttachment,    synOscDFmAgeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmRustAttachment,   synOscBFmRustAttachment,   synOscCFmRustAttachment,   synOscDFmRustAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmGaleAttachment,   synOscBFmGaleAttachment,   synOscCFmGaleAttachment,   synOscDFmGaleAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmBendAttachment,   synOscBFmBendAttachment,   synOscCFmBendAttachment,   synOscDFmBendAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFmStormAttachment,  synOscBFmStormAttachment,  synOscCFmStormAttachment,  synOscDFmStormAttachment;
     // ── GRAIN-EXPANDED-ATTACHMENTS (8 × 4 osc) ──
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainPositionAttachment, synOscAGrainPitchAttachment, synOscAGrainPsprayAttachment, synOscAGrainWidthAttachment, synOscAGrainDirAttachment, synOscAGrainSkewAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainPositionAttachment, synOscBGrainPitchAttachment, synOscBGrainPsprayAttachment, synOscBGrainWidthAttachment, synOscBGrainDirAttachment, synOscBGrainSkewAttachment;

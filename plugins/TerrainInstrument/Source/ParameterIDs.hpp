@@ -610,4 +610,33 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_FM_RATIO2[] = "SYN_OSC_D_FM_RATIO2";
     constexpr char SYN_OSC_D_FM_DEPTH2[] = "SYN_OSC_D_FM_DEPTH2";
     constexpr char SYN_OSC_D_FM_FB[]     = "SYN_OSC_D_FM_FB";
+
+    // ── FM WEATHERING SUITE — page-2 FM functions (2026-07-04). The elements acting
+    //    on the FM: Strike (velocity index transient), Age (operator drift), Rust
+    //    (inharmonic Hz offset), Gale (note-tracked noise FM), Bend (phase-distortion
+    //    modulator shaping), Storm (mutual modulator cross-coupling → chaos). ──
+    constexpr char SYN_OSC_A_FM_STRIKE[] = "SYN_OSC_A_FM_STRIKE";
+    constexpr char SYN_OSC_A_FM_AGE[]    = "SYN_OSC_A_FM_AGE";
+    constexpr char SYN_OSC_A_FM_RUST[]   = "SYN_OSC_A_FM_RUST";
+    constexpr char SYN_OSC_A_FM_GALE[]   = "SYN_OSC_A_FM_GALE";
+    constexpr char SYN_OSC_A_FM_BEND[]   = "SYN_OSC_A_FM_BEND";
+    constexpr char SYN_OSC_A_FM_STORM[]  = "SYN_OSC_A_FM_STORM";
+    constexpr char SYN_OSC_B_FM_STRIKE[] = "SYN_OSC_B_FM_STRIKE";
+    constexpr char SYN_OSC_B_FM_AGE[]    = "SYN_OSC_B_FM_AGE";
+    constexpr char SYN_OSC_B_FM_RUST[]   = "SYN_OSC_B_FM_RUST";
+    constexpr char SYN_OSC_B_FM_GALE[]   = "SYN_OSC_B_FM_GALE";
+    constexpr char SYN_OSC_B_FM_BEND[]   = "SYN_OSC_B_FM_BEND";
+    constexpr char SYN_OSC_B_FM_STORM[]  = "SYN_OSC_B_FM_STORM";
+    constexpr char SYN_OSC_C_FM_STRIKE[] = "SYN_OSC_C_FM_STRIKE";
+    constexpr char SYN_OSC_C_FM_AGE[]    = "SYN_OSC_C_FM_AGE";
+    constexpr char SYN_OSC_C_FM_RUST[]   = "SYN_OSC_C_FM_RUST";
+    constexpr char SYN_OSC_C_FM_GALE[]   = "SYN_OSC_C_FM_GALE";
+    constexpr char SYN_OSC_C_FM_BEND[]   = "SYN_OSC_C_FM_BEND";
+    constexpr char SYN_OSC_C_FM_STORM[]  = "SYN_OSC_C_FM_STORM";
+    constexpr char SYN_OSC_D_FM_STRIKE[] = "SYN_OSC_D_FM_STRIKE";
+    constexpr char SYN_OSC_D_FM_AGE[]    = "SYN_OSC_D_FM_AGE";
+    constexpr char SYN_OSC_D_FM_RUST[]   = "SYN_OSC_D_FM_RUST";
+    constexpr char SYN_OSC_D_FM_GALE[]   = "SYN_OSC_D_FM_GALE";
+    constexpr char SYN_OSC_D_FM_BEND[]   = "SYN_OSC_D_FM_BEND";
+    constexpr char SYN_OSC_D_FM_STORM[]  = "SYN_OSC_D_FM_STORM";
 }
