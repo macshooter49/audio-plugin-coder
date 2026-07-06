@@ -442,6 +442,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscCFmGaleRelay).withOptionsFrom(synOscCFmBendRelay).withOptionsFrom(synOscCFmStormRelay)
             .withOptionsFrom(synOscDFmStrikeRelay).withOptionsFrom(synOscDFmAgeRelay).withOptionsFrom(synOscDFmRustRelay)
             .withOptionsFrom(synOscDFmGaleRelay).withOptionsFrom(synOscDFmBendRelay).withOptionsFrom(synOscDFmStormRelay)
+            // ════ GEODE-ENGINE withOptionsFrom ════
+            .withOptionsFrom(synOscAGeodePositionRelay).withOptionsFrom(synOscAGeodeFossilRelay).withOptionsFrom(synOscAGeodeCreepRelay).withOptionsFrom(synOscAGeodeSiltRelay).withOptionsFrom(synOscAGeodeFormantRelay).withOptionsFrom(synOscAGeodeCutRelay).withOptionsFrom(synOscAGeodeSieveRelay).withOptionsFrom(synOscAGeodeDistillRelay).withOptionsFrom(synOscAGeodeHazeRelay).withOptionsFrom(synOscAGeodeFractureRelay).withOptionsFrom(synOscAGeodeTiltRelay).withOptionsFrom(synOscAGeodeQualityRelay).withOptionsFrom(synOscAGeodeFkeepRelay).withOptionsFrom(synOscAGeodeLoopRelay)
+            .withOptionsFrom(synOscBGeodePositionRelay).withOptionsFrom(synOscBGeodeFossilRelay).withOptionsFrom(synOscBGeodeCreepRelay).withOptionsFrom(synOscBGeodeSiltRelay).withOptionsFrom(synOscBGeodeFormantRelay).withOptionsFrom(synOscBGeodeCutRelay).withOptionsFrom(synOscBGeodeSieveRelay).withOptionsFrom(synOscBGeodeDistillRelay).withOptionsFrom(synOscBGeodeHazeRelay).withOptionsFrom(synOscBGeodeFractureRelay).withOptionsFrom(synOscBGeodeTiltRelay).withOptionsFrom(synOscBGeodeQualityRelay).withOptionsFrom(synOscBGeodeFkeepRelay).withOptionsFrom(synOscBGeodeLoopRelay)
+            .withOptionsFrom(synOscCGeodePositionRelay).withOptionsFrom(synOscCGeodeFossilRelay).withOptionsFrom(synOscCGeodeCreepRelay).withOptionsFrom(synOscCGeodeSiltRelay).withOptionsFrom(synOscCGeodeFormantRelay).withOptionsFrom(synOscCGeodeCutRelay).withOptionsFrom(synOscCGeodeSieveRelay).withOptionsFrom(synOscCGeodeDistillRelay).withOptionsFrom(synOscCGeodeHazeRelay).withOptionsFrom(synOscCGeodeFractureRelay).withOptionsFrom(synOscCGeodeTiltRelay).withOptionsFrom(synOscCGeodeQualityRelay).withOptionsFrom(synOscCGeodeFkeepRelay).withOptionsFrom(synOscCGeodeLoopRelay)
+            .withOptionsFrom(synOscDGeodePositionRelay).withOptionsFrom(synOscDGeodeFossilRelay).withOptionsFrom(synOscDGeodeCreepRelay).withOptionsFrom(synOscDGeodeSiltRelay).withOptionsFrom(synOscDGeodeFormantRelay).withOptionsFrom(synOscDGeodeCutRelay).withOptionsFrom(synOscDGeodeSieveRelay).withOptionsFrom(synOscDGeodeDistillRelay).withOptionsFrom(synOscDGeodeHazeRelay).withOptionsFrom(synOscDGeodeFractureRelay).withOptionsFrom(synOscDGeodeTiltRelay).withOptionsFrom(synOscDGeodeQualityRelay).withOptionsFrom(synOscDGeodeFkeepRelay).withOptionsFrom(synOscDGeodeLoopRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
             .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
@@ -2576,6 +2581,63 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscCFmGaleAttachment,   ParameterIDs::SYN_OSC_C_FM_GALE,   synOscCFmGaleRelay);   mkAtt(synOscCFmBendAttachment, ParameterIDs::SYN_OSC_C_FM_BEND, synOscCFmBendRelay); mkAtt(synOscCFmStormAttachment, ParameterIDs::SYN_OSC_C_FM_STORM, synOscCFmStormRelay);
         mkAtt(synOscDFmStrikeAttachment, ParameterIDs::SYN_OSC_D_FM_STRIKE, synOscDFmStrikeRelay); mkAtt(synOscDFmAgeAttachment,  ParameterIDs::SYN_OSC_D_FM_AGE,  synOscDFmAgeRelay);  mkAtt(synOscDFmRustAttachment,  ParameterIDs::SYN_OSC_D_FM_RUST,  synOscDFmRustRelay);
         mkAtt(synOscDFmGaleAttachment,   ParameterIDs::SYN_OSC_D_FM_GALE,   synOscDFmGaleRelay);   mkAtt(synOscDFmBendAttachment, ParameterIDs::SYN_OSC_D_FM_BEND, synOscDFmBendRelay); mkAtt(synOscDFmStormAttachment, ParameterIDs::SYN_OSC_D_FM_STORM, synOscDFmStormRelay);
+        // ════ GEODE-ENGINE mkAtt ════
+        mkAtt(synOscAGeodePositionAttachment, ParameterIDs::SYN_OSC_A_GEODE_POSITION, synOscAGeodePositionRelay);
+        mkAtt(synOscAGeodeFossilAttachment, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, synOscAGeodeFossilRelay);
+        mkAtt(synOscAGeodeCreepAttachment, ParameterIDs::SYN_OSC_A_GEODE_CREEP, synOscAGeodeCreepRelay);
+        mkAtt(synOscAGeodeSiltAttachment, ParameterIDs::SYN_OSC_A_GEODE_SILT, synOscAGeodeSiltRelay);
+        mkAtt(synOscAGeodeFormantAttachment, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, synOscAGeodeFormantRelay);
+        mkAtt(synOscAGeodeCutAttachment, ParameterIDs::SYN_OSC_A_GEODE_CUT, synOscAGeodeCutRelay);
+        mkAtt(synOscAGeodeSieveAttachment, ParameterIDs::SYN_OSC_A_GEODE_SIEVE, synOscAGeodeSieveRelay);
+        mkAtt(synOscAGeodeDistillAttachment, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, synOscAGeodeDistillRelay);
+        mkAtt(synOscAGeodeHazeAttachment, ParameterIDs::SYN_OSC_A_GEODE_HAZE, synOscAGeodeHazeRelay);
+        mkAtt(synOscAGeodeFractureAttachment, ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, synOscAGeodeFractureRelay);
+        mkAtt(synOscAGeodeTiltAttachment, ParameterIDs::SYN_OSC_A_GEODE_TILT, synOscAGeodeTiltRelay);
+        mkAtt(synOscAGeodeQualityAttachment, ParameterIDs::SYN_OSC_A_GEODE_QUALITY, synOscAGeodeQualityRelay);
+        mkAtt(synOscAGeodeFkeepAttachment, ParameterIDs::SYN_OSC_A_GEODE_FKEEP, synOscAGeodeFkeepRelay);
+        mkAtt(synOscAGeodeLoopAttachment, ParameterIDs::SYN_OSC_A_GEODE_LOOP, synOscAGeodeLoopRelay);
+        mkAtt(synOscBGeodePositionAttachment, ParameterIDs::SYN_OSC_B_GEODE_POSITION, synOscBGeodePositionRelay);
+        mkAtt(synOscBGeodeFossilAttachment, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, synOscBGeodeFossilRelay);
+        mkAtt(synOscBGeodeCreepAttachment, ParameterIDs::SYN_OSC_B_GEODE_CREEP, synOscBGeodeCreepRelay);
+        mkAtt(synOscBGeodeSiltAttachment, ParameterIDs::SYN_OSC_B_GEODE_SILT, synOscBGeodeSiltRelay);
+        mkAtt(synOscBGeodeFormantAttachment, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, synOscBGeodeFormantRelay);
+        mkAtt(synOscBGeodeCutAttachment, ParameterIDs::SYN_OSC_B_GEODE_CUT, synOscBGeodeCutRelay);
+        mkAtt(synOscBGeodeSieveAttachment, ParameterIDs::SYN_OSC_B_GEODE_SIEVE, synOscBGeodeSieveRelay);
+        mkAtt(synOscBGeodeDistillAttachment, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, synOscBGeodeDistillRelay);
+        mkAtt(synOscBGeodeHazeAttachment, ParameterIDs::SYN_OSC_B_GEODE_HAZE, synOscBGeodeHazeRelay);
+        mkAtt(synOscBGeodeFractureAttachment, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, synOscBGeodeFractureRelay);
+        mkAtt(synOscBGeodeTiltAttachment, ParameterIDs::SYN_OSC_B_GEODE_TILT, synOscBGeodeTiltRelay);
+        mkAtt(synOscBGeodeQualityAttachment, ParameterIDs::SYN_OSC_B_GEODE_QUALITY, synOscBGeodeQualityRelay);
+        mkAtt(synOscBGeodeFkeepAttachment, ParameterIDs::SYN_OSC_B_GEODE_FKEEP, synOscBGeodeFkeepRelay);
+        mkAtt(synOscBGeodeLoopAttachment, ParameterIDs::SYN_OSC_B_GEODE_LOOP, synOscBGeodeLoopRelay);
+        mkAtt(synOscCGeodePositionAttachment, ParameterIDs::SYN_OSC_C_GEODE_POSITION, synOscCGeodePositionRelay);
+        mkAtt(synOscCGeodeFossilAttachment, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, synOscCGeodeFossilRelay);
+        mkAtt(synOscCGeodeCreepAttachment, ParameterIDs::SYN_OSC_C_GEODE_CREEP, synOscCGeodeCreepRelay);
+        mkAtt(synOscCGeodeSiltAttachment, ParameterIDs::SYN_OSC_C_GEODE_SILT, synOscCGeodeSiltRelay);
+        mkAtt(synOscCGeodeFormantAttachment, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, synOscCGeodeFormantRelay);
+        mkAtt(synOscCGeodeCutAttachment, ParameterIDs::SYN_OSC_C_GEODE_CUT, synOscCGeodeCutRelay);
+        mkAtt(synOscCGeodeSieveAttachment, ParameterIDs::SYN_OSC_C_GEODE_SIEVE, synOscCGeodeSieveRelay);
+        mkAtt(synOscCGeodeDistillAttachment, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, synOscCGeodeDistillRelay);
+        mkAtt(synOscCGeodeHazeAttachment, ParameterIDs::SYN_OSC_C_GEODE_HAZE, synOscCGeodeHazeRelay);
+        mkAtt(synOscCGeodeFractureAttachment, ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, synOscCGeodeFractureRelay);
+        mkAtt(synOscCGeodeTiltAttachment, ParameterIDs::SYN_OSC_C_GEODE_TILT, synOscCGeodeTiltRelay);
+        mkAtt(synOscCGeodeQualityAttachment, ParameterIDs::SYN_OSC_C_GEODE_QUALITY, synOscCGeodeQualityRelay);
+        mkAtt(synOscCGeodeFkeepAttachment, ParameterIDs::SYN_OSC_C_GEODE_FKEEP, synOscCGeodeFkeepRelay);
+        mkAtt(synOscCGeodeLoopAttachment, ParameterIDs::SYN_OSC_C_GEODE_LOOP, synOscCGeodeLoopRelay);
+        mkAtt(synOscDGeodePositionAttachment, ParameterIDs::SYN_OSC_D_GEODE_POSITION, synOscDGeodePositionRelay);
+        mkAtt(synOscDGeodeFossilAttachment, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, synOscDGeodeFossilRelay);
+        mkAtt(synOscDGeodeCreepAttachment, ParameterIDs::SYN_OSC_D_GEODE_CREEP, synOscDGeodeCreepRelay);
+        mkAtt(synOscDGeodeSiltAttachment, ParameterIDs::SYN_OSC_D_GEODE_SILT, synOscDGeodeSiltRelay);
+        mkAtt(synOscDGeodeFormantAttachment, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, synOscDGeodeFormantRelay);
+        mkAtt(synOscDGeodeCutAttachment, ParameterIDs::SYN_OSC_D_GEODE_CUT, synOscDGeodeCutRelay);
+        mkAtt(synOscDGeodeSieveAttachment, ParameterIDs::SYN_OSC_D_GEODE_SIEVE, synOscDGeodeSieveRelay);
+        mkAtt(synOscDGeodeDistillAttachment, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, synOscDGeodeDistillRelay);
+        mkAtt(synOscDGeodeHazeAttachment, ParameterIDs::SYN_OSC_D_GEODE_HAZE, synOscDGeodeHazeRelay);
+        mkAtt(synOscDGeodeFractureAttachment, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, synOscDGeodeFractureRelay);
+        mkAtt(synOscDGeodeTiltAttachment, ParameterIDs::SYN_OSC_D_GEODE_TILT, synOscDGeodeTiltRelay);
+        mkAtt(synOscDGeodeQualityAttachment, ParameterIDs::SYN_OSC_D_GEODE_QUALITY, synOscDGeodeQualityRelay);
+        mkAtt(synOscDGeodeFkeepAttachment, ParameterIDs::SYN_OSC_D_GEODE_FKEEP, synOscDGeodeFkeepRelay);
+        mkAtt(synOscDGeodeLoopAttachment, ParameterIDs::SYN_OSC_D_GEODE_LOOP, synOscDGeodeLoopRelay);
         // GRAIN-EXPANDED-MKATT (8 × 4 osc)
         mkAtt(synOscAGrainPositionAttachment, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, synOscAGrainPositionRelay); mkAtt(synOscAGrainPitchAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, synOscAGrainPitchRelay); mkAtt(synOscAGrainPsprayAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, synOscAGrainPsprayRelay); mkAtt(synOscAGrainWidthAttachment, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, synOscAGrainWidthRelay);
         mkAtt(synOscAGrainDirAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DIR, synOscAGrainDirRelay); mkAtt(synOscAGrainSkewAttachment, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, synOscAGrainSkewRelay);

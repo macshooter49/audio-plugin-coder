@@ -16,6 +16,7 @@
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
 #include "SampleBuffer.h"
+#include "GeodeEngine.h"        // GEODE resynthesis engine (Engine::SPEC) — analyzer + frame store
 #include "SampleLoader.h"
 #include "Slice.h"
 #include "TerrainSynth.h"
@@ -832,6 +833,26 @@ private:
         float builtAmount = -1.0f;
     };
     MorphSlot morphA_, morphB_, morphC_, morphD_;
+
+    // ── GEODE resynthesis analysis (Engine::SPEC) ────────────────────────
+    // Heavy STFT peak-track analysis runs on the message thread (timerCallback) into a
+    // double buffer and atomic-publishes a const store pointer to the voices (MorphSlot-
+    // style). Source = the osc's loaded sample; if none, a default harmonic store so the
+    // engine always sounds. Change-gated on the source buffer + engine + wavetable preset.
+    struct GeodeSlot
+    {
+        tw::GeodeFrameStore                     buf[2];
+        std::atomic<const tw::GeodeFrameStore*> live { nullptr };
+        int         buildIdx      = 0;
+        bool        built         = false;
+        const void* builtSample   = nullptr;
+        int         builtEngine   = -1;
+        int         builtWtPreset = -999;
+    };
+    GeodeSlot geodeSlot_[4];
+    void rebuildGeodeIfNeeded (int osc);                 // message thread
+    static constexpr int kGeodePartialBudget = 3072;     // all SPEC voices/unison combined
+    int geodePartialsLive_ = 0;                          // audio-thread only (no atomics)
 
     void timerCallback() override;        // message thread — rebuilds morph tables
     void rebuildMorphIfNeeded (MorphSlot& slot,

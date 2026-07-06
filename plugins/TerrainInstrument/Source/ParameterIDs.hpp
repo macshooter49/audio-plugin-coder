@@ -639,4 +639,66 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_FM_GALE[]   = "SYN_OSC_D_FM_GALE";
     constexpr char SYN_OSC_D_FM_BEND[]   = "SYN_OSC_D_FM_BEND";
     constexpr char SYN_OSC_D_FM_STORM[]  = "SYN_OSC_D_FM_STORM";
+
+    // ════════ GEODE-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
+    // Own namespace — MUST NOT collide with SYN_OSC_x_SPECTRAL_TYPE/AMT (the spectral FILTER).
+    // Page 1 (Play): Position · Fossil · Creep · Silt · Formant · Cut
+    // Page 2 (Sculpt): Sieve · Distill · Haze · Fracture · Tilt · Quality
+    // + Formant-Keep (bool) + Loop mode (choice). 14 × 4 osc.
+    constexpr char SYN_OSC_A_GEODE_POSITION[] = "SYN_OSC_A_GEODE_POSITION"; // 0..1 scrub
+    constexpr char SYN_OSC_A_GEODE_FOSSIL[]   = "SYN_OSC_A_GEODE_FOSSIL";   // 0..1 freeze
+    constexpr char SYN_OSC_A_GEODE_CREEP[]    = "SYN_OSC_A_GEODE_CREEP";    // 0..1 scan rate
+    constexpr char SYN_OSC_A_GEODE_SILT[]     = "SYN_OSC_A_GEODE_SILT";     // 0..1 partials<->noise
+    constexpr char SYN_OSC_A_GEODE_FORMANT[]  = "SYN_OSC_A_GEODE_FORMANT";  // 0..1 bipolar formant
+    constexpr char SYN_OSC_A_GEODE_CUT[]      = "SYN_OSC_A_GEODE_CUT";      // 0..1 spectral LP (1=open)
+    constexpr char SYN_OSC_A_GEODE_SIEVE[]    = "SYN_OSC_A_GEODE_SIEVE";    // 0..1 spectral gate
+    constexpr char SYN_OSC_A_GEODE_DISTILL[]  = "SYN_OSC_A_GEODE_DISTILL";  // 0..1 trace to N loudest
+    constexpr char SYN_OSC_A_GEODE_HAZE[]     = "SYN_OSC_A_GEODE_HAZE";     // 0..1 blur
+    constexpr char SYN_OSC_A_GEODE_FRACTURE[] = "SYN_OSC_A_GEODE_FRACTURE"; // 0..1 bipolar inharmonic
+    constexpr char SYN_OSC_A_GEODE_TILT[]     = "SYN_OSC_A_GEODE_TILT";     // 0..1 bipolar tilt
+    constexpr char SYN_OSC_A_GEODE_QUALITY[]  = "SYN_OSC_A_GEODE_QUALITY";  // 0..1 partial budget
+    constexpr char SYN_OSC_A_GEODE_FKEEP[]    = "SYN_OSC_A_GEODE_FKEEP";    // bool formant-preserve
+    constexpr char SYN_OSC_A_GEODE_LOOP[]     = "SYN_OSC_A_GEODE_LOOP";     // choice 0..3
+    constexpr char SYN_OSC_B_GEODE_POSITION[] = "SYN_OSC_B_GEODE_POSITION";
+    constexpr char SYN_OSC_B_GEODE_FOSSIL[]   = "SYN_OSC_B_GEODE_FOSSIL";
+    constexpr char SYN_OSC_B_GEODE_CREEP[]    = "SYN_OSC_B_GEODE_CREEP";
+    constexpr char SYN_OSC_B_GEODE_SILT[]     = "SYN_OSC_B_GEODE_SILT";
+    constexpr char SYN_OSC_B_GEODE_FORMANT[]  = "SYN_OSC_B_GEODE_FORMANT";
+    constexpr char SYN_OSC_B_GEODE_CUT[]      = "SYN_OSC_B_GEODE_CUT";
+    constexpr char SYN_OSC_B_GEODE_SIEVE[]    = "SYN_OSC_B_GEODE_SIEVE";
+    constexpr char SYN_OSC_B_GEODE_DISTILL[]  = "SYN_OSC_B_GEODE_DISTILL";
+    constexpr char SYN_OSC_B_GEODE_HAZE[]     = "SYN_OSC_B_GEODE_HAZE";
+    constexpr char SYN_OSC_B_GEODE_FRACTURE[] = "SYN_OSC_B_GEODE_FRACTURE";
+    constexpr char SYN_OSC_B_GEODE_TILT[]     = "SYN_OSC_B_GEODE_TILT";
+    constexpr char SYN_OSC_B_GEODE_QUALITY[]  = "SYN_OSC_B_GEODE_QUALITY";
+    constexpr char SYN_OSC_B_GEODE_FKEEP[]    = "SYN_OSC_B_GEODE_FKEEP";
+    constexpr char SYN_OSC_B_GEODE_LOOP[]     = "SYN_OSC_B_GEODE_LOOP";
+    constexpr char SYN_OSC_C_GEODE_POSITION[] = "SYN_OSC_C_GEODE_POSITION";
+    constexpr char SYN_OSC_C_GEODE_FOSSIL[]   = "SYN_OSC_C_GEODE_FOSSIL";
+    constexpr char SYN_OSC_C_GEODE_CREEP[]    = "SYN_OSC_C_GEODE_CREEP";
+    constexpr char SYN_OSC_C_GEODE_SILT[]     = "SYN_OSC_C_GEODE_SILT";
+    constexpr char SYN_OSC_C_GEODE_FORMANT[]  = "SYN_OSC_C_GEODE_FORMANT";
+    constexpr char SYN_OSC_C_GEODE_CUT[]      = "SYN_OSC_C_GEODE_CUT";
+    constexpr char SYN_OSC_C_GEODE_SIEVE[]    = "SYN_OSC_C_GEODE_SIEVE";
+    constexpr char SYN_OSC_C_GEODE_DISTILL[]  = "SYN_OSC_C_GEODE_DISTILL";
+    constexpr char SYN_OSC_C_GEODE_HAZE[]     = "SYN_OSC_C_GEODE_HAZE";
+    constexpr char SYN_OSC_C_GEODE_FRACTURE[] = "SYN_OSC_C_GEODE_FRACTURE";
+    constexpr char SYN_OSC_C_GEODE_TILT[]     = "SYN_OSC_C_GEODE_TILT";
+    constexpr char SYN_OSC_C_GEODE_QUALITY[]  = "SYN_OSC_C_GEODE_QUALITY";
+    constexpr char SYN_OSC_C_GEODE_FKEEP[]    = "SYN_OSC_C_GEODE_FKEEP";
+    constexpr char SYN_OSC_C_GEODE_LOOP[]     = "SYN_OSC_C_GEODE_LOOP";
+    constexpr char SYN_OSC_D_GEODE_POSITION[] = "SYN_OSC_D_GEODE_POSITION";
+    constexpr char SYN_OSC_D_GEODE_FOSSIL[]   = "SYN_OSC_D_GEODE_FOSSIL";
+    constexpr char SYN_OSC_D_GEODE_CREEP[]    = "SYN_OSC_D_GEODE_CREEP";
+    constexpr char SYN_OSC_D_GEODE_SILT[]     = "SYN_OSC_D_GEODE_SILT";
+    constexpr char SYN_OSC_D_GEODE_FORMANT[]  = "SYN_OSC_D_GEODE_FORMANT";
+    constexpr char SYN_OSC_D_GEODE_CUT[]      = "SYN_OSC_D_GEODE_CUT";
+    constexpr char SYN_OSC_D_GEODE_SIEVE[]    = "SYN_OSC_D_GEODE_SIEVE";
+    constexpr char SYN_OSC_D_GEODE_DISTILL[]  = "SYN_OSC_D_GEODE_DISTILL";
+    constexpr char SYN_OSC_D_GEODE_HAZE[]     = "SYN_OSC_D_GEODE_HAZE";
+    constexpr char SYN_OSC_D_GEODE_FRACTURE[] = "SYN_OSC_D_GEODE_FRACTURE";
+    constexpr char SYN_OSC_D_GEODE_TILT[]     = "SYN_OSC_D_GEODE_TILT";
+    constexpr char SYN_OSC_D_GEODE_QUALITY[]  = "SYN_OSC_D_GEODE_QUALITY";
+    constexpr char SYN_OSC_D_GEODE_FKEEP[]    = "SYN_OSC_D_GEODE_FKEEP";
+    constexpr char SYN_OSC_D_GEODE_LOOP[]     = "SYN_OSC_D_GEODE_LOOP";
 }

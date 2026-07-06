@@ -14,6 +14,7 @@
 #include "SampleEngine.h"          // SAMPLE-ENGINE-VOICE — per-OSC sample playback core
 #include "SampleBuffer.h"          // SAMPLE-ENGINE-VOICE — shared lock-free buffer
 #include "GranularEngine.h"        // GRANULAR-ENGINE-VOICE — per-OSC granular core
+#include "GeodeEngine.h"           // GEODE-ENGINE-VOICE — per-OSC resynthesis core (Engine::SPEC)
 #include "Warp/WarpProcessor.h"    // SAMPLE-ENGINE-VOICE — STRETCH + FORMANT (Signalsmith Tones)
 #include <atomic>
 #include <array>
@@ -66,6 +67,8 @@ namespace tw
             // GRANULAR-ENGINE-VOICE — prepare per-OSC granular engines
             for (auto& e : granEngA_) e.prepare (sampleRate_);  for (auto& e : granEngB_) e.prepare (sampleRate_);
             for (auto& e : granEngC_) e.prepare (sampleRate_);  for (auto& e : granEngD_) e.prepare (sampleRate_);
+            for (auto& e : geodeEngA_) e.prepare (sampleRate_);  for (auto& e : geodeEngB_) e.prepare (sampleRate_);   // GEODE-ENGINE-VOICE
+            for (auto& e : geodeEngC_) e.prepare (sampleRate_);  for (auto& e : geodeEngD_) e.prepare (sampleRate_);
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
             airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
@@ -534,6 +537,24 @@ namespace tw
         void setGranParamsB (const tw::GranularEngineParams& p) noexcept { granParamsB_ = p; }
         void setGranParamsC (const tw::GranularEngineParams& p) noexcept { granParamsC_ = p; }
         void setGranParamsD (const tw::GranularEngineParams& p) noexcept { granParamsD_ = p; }
+
+        // ── GEODE-ENGINE-VOICE — per-OSC resynthesis (Engine::SPEC). Stores are analyzed
+        //    off-thread by the processor and atomic-published; the voice loads the pointer
+        //    per block (same shape as sampleSource_). Partial budget mirrors the grain budget. ──
+        void setGeodeStores (const std::atomic<const tw::GeodeFrameStore*>* a, const std::atomic<const tw::GeodeFrameStore*>* b,
+                             const std::atomic<const tw::GeodeFrameStore*>* c, const std::atomic<const tw::GeodeFrameStore*>* d) noexcept
+        { geodeStoreSrc_[0] = a; geodeStoreSrc_[1] = b; geodeStoreSrc_[2] = c; geodeStoreSrc_[3] = d; }
+        void setPartialBudget (int* used, int cap) noexcept
+        {
+            for (auto& e : geodeEngA_) e.setPartialBudget (used, cap);
+            for (auto& e : geodeEngB_) e.setPartialBudget (used, cap);
+            for (auto& e : geodeEngC_) e.setPartialBudget (used, cap);
+            for (auto& e : geodeEngD_) e.setPartialBudget (used, cap);
+        }
+        void setGeodeParamsA (const tw::GeodeParams& p) noexcept { geodeParamsA_ = p; }
+        void setGeodeParamsB (const tw::GeodeParams& p) noexcept { geodeParamsB_ = p; }
+        void setGeodeParamsC (const tw::GeodeParams& p) noexcept { geodeParamsC_ = p; }
+        void setGeodeParamsD (const tw::GeodeParams& p) noexcept { geodeParamsD_ = p; }
 
         // ── Phase 9 — OSC B setters (mirror of OSC A) ─────────────────────
 
@@ -1166,6 +1187,7 @@ namespace tw
             spraySeedC_ = sampleSprayRng_ ^ 0xC3u; spraySeedD_ = sampleSprayRng_ ^ 0xD4u;
             sampleNoteOnPending_ = true;
             granNoteOnPending_   = true;   // GRANULAR-ENGINE-VOICE
+            geodeNoteOnPending_  = true;   // GEODE-ENGINE-VOICE
 
             // PHASE — initialise each unison sine's phase accumulator per the selected
             // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
@@ -1721,6 +1743,7 @@ namespace tw
             // buffer (scan/loop/xfade/spray + STRETCH/FORMANT warp). Cheap no-op if none.
             renderSampleBlocks (numSamples);
             renderGranularBlocks (numSamples);   // GRANULAR-ENGINE-VOICE — render any GRAN oscillators' blocks
+            renderGeodeBlocks (numSamples);      // GEODE-ENGINE-VOICE — render any SPEC oscillators' blocks
 
             // CPU: SAMP/GRAN/SPEC oscs render whole blocks above and their result REPLACES the
             // unison sum below — the per-sine u-loop only produces zeros for them (fold of 0,
@@ -1888,6 +1911,7 @@ namespace tw
                     && ((warpMode_ == 9 && warpAmount_ > 0.001f) || (warp2ModeA_ == 9 && warp2AmountA_ > 0.001f)))
                 { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
                 if (engine_ == Engine::GRAN) { sA_L = granBlkAL_[(size_t) i]; sA_R = granBlkAR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
+                if (engine_ == Engine::SPEC) { sA_L = geodeBlkAL_[(size_t) i]; sA_R = geodeBlkAR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airA = sampleParamsA_.air;   // AIR exciter — add generated high harmonics
                     if (airA > 0.001f) {
@@ -2163,6 +2187,7 @@ namespace tw
                     && ((warpModeB_ == 9 && warpAmountB_ > 0.001f) || (warp2ModeB_ == 9 && warp2AmountB_ > 0.001f)))
                 { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
                 if (engineB_ == Engine::GRAN) { sB_L = granBlkBL_[(size_t) i]; sB_R = granBlkBR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
+                if (engineB_ == Engine::SPEC) { sB_L = geodeBlkBL_[(size_t) i]; sB_R = geodeBlkBR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airB = sampleParamsB_.air;   // AIR exciter — add generated high harmonics
                     if (airB > 0.001f) {
@@ -2435,6 +2460,7 @@ namespace tw
                     && ((warpModeC_ == 9 && warpAmountC_ > 0.001f) || (warp2ModeC_ == 9 && warp2AmountC_ > 0.001f)))
                 { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
                 if (engineC_ == Engine::GRAN) { sC_L = granBlkCL_[(size_t) i]; sC_R = granBlkCR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
+                if (engineC_ == Engine::SPEC) { sC_L = geodeBlkCL_[(size_t) i]; sC_R = geodeBlkCR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airC = sampleParamsC_.air;   // AIR exciter — add generated high harmonics
                     if (airC > 0.001f) {
@@ -2707,6 +2733,7 @@ namespace tw
                     && ((warpModeD_ == 9 && warpAmountD_ > 0.001f) || (warp2ModeD_ == 9 && warp2AmountD_ > 0.001f)))
                 { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
                 if (engineD_ == Engine::GRAN) { sD_L = granBlkDL_[(size_t) i]; sD_R = granBlkDR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
+                if (engineD_ == Engine::SPEC) { sD_L = geodeBlkDL_[(size_t) i]; sD_R = geodeBlkDR_[(size_t) i]; } // GEODE-ENGINE-VOICE
                 if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airD = sampleParamsD_.air;   // AIR exciter — add generated high harmonics
                     if (airD > 0.001f) {
@@ -3603,6 +3630,15 @@ namespace tw
         const float *granBlkAL_ = nullptr, *granBlkAR_ = nullptr, *granBlkBL_ = nullptr, *granBlkBR_ = nullptr,
                     *granBlkCL_ = nullptr, *granBlkCR_ = nullptr, *granBlkDL_ = nullptr, *granBlkDR_ = nullptr;
         bool granNoteOnPending_ = false;
+        // ── GEODE-ENGINE-VOICE — per-OSC resynthesis state (mirrors the granular block-render) ──
+        std::array<tw::GeodeEngine, kMaxUnison> geodeEngA_, geodeEngB_, geodeEngC_, geodeEngD_;
+        tw::GeodeParams geodeParamsA_, geodeParamsB_, geodeParamsC_, geodeParamsD_;
+        const std::atomic<const tw::GeodeFrameStore*>* geodeStoreSrc_[4] = { nullptr, nullptr, nullptr, nullptr };
+        const tw::GeodeFrameStore* geodeStoreLast_[4] = { nullptr, nullptr, nullptr, nullptr };
+        juce::AudioBuffer<float> geodeBlkA_, geodeBlkB_, geodeBlkC_, geodeBlkD_;
+        const float *geodeBlkAL_ = nullptr, *geodeBlkAR_ = nullptr, *geodeBlkBL_ = nullptr, *geodeBlkBR_ = nullptr,
+                    *geodeBlkCL_ = nullptr, *geodeBlkCR_ = nullptr, *geodeBlkDL_ = nullptr, *geodeBlkDR_ = nullptr;
+        bool geodeNoteOnPending_ = false;
         std::uint32_t sampleSprayRng_ = 0x12345u, spraySeedA_ = 0, spraySeedB_ = 0, spraySeedC_ = 0, spraySeedD_ = 0;
         // AIR exciter — per-voice/per-channel one-pole HP-split state + coefficient.
         float sampAirLpAL_ = 0.f, sampAirLpAR_ = 0.f, sampAirLpBL_ = 0.f, sampAirLpBR_ = 0.f,
@@ -3898,6 +3934,83 @@ namespace tw
             renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
             renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             granNoteOnPending_ = false;
+        }
+
+        // ════════ GEODE-ENGINE-VOICE — render SPEC oscillators' stereo blocks ════════
+        // Mirrors renderGranularOsc: whole-block render into a per-osc buffer, voice-0-anchored
+        // unison gain, publish const-float pointers the per-sample sum reads. The heavy analysis
+        // lives in the shared GeodeFrameStore (processor, off-thread) — this is just resynthesis.
+        void renderGeodeOsc (std::array<tw::GeodeEngine, kMaxUnison>& engs,
+                             const tw::GeodeParams& p, bool isSpec,
+                             int oct, int semi, float cent,
+                             juce::AudioBuffer<float>& blk,
+                             const float*& outL, const float*& outR,
+                             int numSamples, std::uint32_t seed, bool doNoteOn,
+                             int uniCount, const float* uDetuneCents, float uNorm, float level) noexcept
+        {
+            if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
+                blk.setSize (2, numSamples, false, false, true);
+            float* wL = blk.getWritePointer (0);
+            float* wR = blk.getWritePointer (1);
+            outL = wL; outR = wR;
+            if (! isSpec) return;   // CPU: this block is never read for a non-SPEC osc
+            if (level <= 0.0f || ! engs[0].hasStore())
+            {
+                juce::FloatVectorOperations::clear (wL, numSamples);
+                juce::FloatVectorOperations::clear (wR, numSamples);
+                return;
+            }
+            // Resynthesis pitch = the played note's frequency (A4=440); partials scale by ratio.
+            const double noteSemis = (double) (currentMidiNote_ - 69 + oct * 12 + semi) + (double) cent * 0.01;
+            const double playedHz  = 440.0 * std::pow (2.0, noteSemis / 12.0);
+            const int    N         = juce::jlimit (1, kMaxUnison, uniCount);
+            for (int u = 0; u < N; ++u)
+            {
+                auto& e = engs[(size_t) u];
+                e.setParams (p);
+                const double det = (uDetuneCents != nullptr) ? std::pow (2.0, (double) uDetuneCents[(size_t) u] / 1200.0) : 1.0;
+                if (doNoteOn)
+                {
+                    const std::uint32_t vSeed = (N <= 1) ? seed : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1)));
+                    e.noteOn (playedHz * det, vSeed);
+                }
+            }
+            juce::FloatVectorOperations::clear (wL, numSamples);
+            juce::FloatVectorOperations::clear (wR, numSamples);
+            for (int u = 1; u < N; ++u)
+                engs[(size_t) u].renderBlockAdd (wL, wR, numSamples);
+            if (N > 1)
+            {
+                juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
+                juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
+            }
+            engs[0].renderBlockAdd (wL, wR, numSamples);
+        }
+
+        void renderGeodeBlocks (int numSamples) noexcept
+        {
+            if (engine_ != Engine::SPEC && engineB_ != Engine::SPEC
+                && engineC_ != Engine::SPEC && engineD_ != Engine::SPEC)
+                return;   // no SPEC oscillators → free no-op (common case)
+
+            std::array<tw::GeodeEngine, kMaxUnison>* engs[4] = { &geodeEngA_, &geodeEngB_, &geodeEngC_, &geodeEngD_ };
+            const Engine oe[4] = { engine_, engineB_, engineC_, engineD_ };
+            for (int o = 0; o < 4; ++o)
+            {
+                if (oe[o] != Engine::SPEC || geodeStoreSrc_[o] == nullptr) continue;
+                const tw::GeodeFrameStore* st = geodeStoreSrc_[o]->load();
+                if (st != geodeStoreLast_[o])
+                {
+                    geodeStoreLast_[o] = st;
+                    for (auto& e : *engs[o]) e.setFrameStore (st);
+                }
+            }
+            const bool doOn = geodeNoteOnPending_;
+            renderGeodeOsc (geodeEngA_, geodeParamsA_, engine_  == Engine::SPEC, octOffset_,  semiOffset_,  centsOffset_,  geodeBlkA_, geodeBlkAL_, geodeBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderGeodeOsc (geodeEngB_, geodeParamsB_, engineB_ == Engine::SPEC, octOffsetB_, semiOffsetB_, centsOffsetB_, geodeBlkB_, geodeBlkBL_, geodeBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderGeodeOsc (geodeEngC_, geodeParamsC_, engineC_ == Engine::SPEC, octOffsetC_, semiOffsetC_, centsOffsetC_, geodeBlkC_, geodeBlkCL_, geodeBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderGeodeOsc (geodeEngD_, geodeParamsD_, engineD_ == Engine::SPEC, octOffsetD_, semiOffsetD_, centsOffsetD_, geodeBlkD_, geodeBlkDL_, geodeBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            geodeNoteOnPending_ = false;
         }
 
         Engine               engine_           = Engine::WT;
