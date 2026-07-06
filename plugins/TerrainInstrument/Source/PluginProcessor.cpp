@@ -3879,6 +3879,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         synthScratch.setSize (2, numSamples, false, true, true);
     synthScratch.clear();
 
+    // GEODE — the partial budget is a PER-BLOCK quota (partials are re-rendered every block,
+    // unlike grains which persist and retire). Reset it to 0 before the voices render, or it
+    // grows unbounded and clamps every SPEC voice to 0 active partials (static → silence).
+    geodePartialsLive_ = 0;
+
     // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
     const int flowMode = (int) rawParam (ParameterIDs::FLOW_MODE)->load();
 
