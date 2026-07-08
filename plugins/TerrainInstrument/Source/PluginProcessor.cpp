@@ -4093,15 +4093,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
+        oscScopePubAccum_ += (double) numSamples;
+        const bool oscDoPub = (oscScopePubAccum_ >= getSampleRate() / 60.0);
+        if (oscDoPub) oscScopePubAccum_ -= getSampleRate() / 60.0;
         // HARM-VIZ (hm2) — the most-active voice's LIVE partial bank feeds the white bars,
         // so every key press moves the display (the params-only bake is the idle fallback).
-        for (int o = 0; o < 4; ++o)
-        {
-            float hvb[96];
-            const bool hvLive = any && bestVoice != nullptr && bestVoice->harmLiveBins (o, hvb, 96);
-            if (hvLive) for (int b = 0; b < 96; ++b) harmVizBins_[o][b].store (hvb[b], std::memory_order_relaxed);
-            harmVizLive_[o].store (hvLive ? 1 : 0, std::memory_order_relaxed);
-        }
+        // 60 Hz-gated (hm4): the editor samples at 60 Hz; publishing every block was waste.
+        if (oscDoPub)
+            for (int o = 0; o < 4; ++o)
+            {
+                float hvb[96];
+                const bool hvLive = any && bestVoice != nullptr && bestVoice->harmLiveBins (o, hvb, 96);
+                if (hvLive) for (int b = 0; b < 96; ++b) harmVizBins_[o][b].store (hvb[b], std::memory_order_relaxed);
+                harmVizLive_[o].store (hvLive ? 1 : 0, std::memory_order_relaxed);
+            }
 
         // GRANULAR-FOLLOWER — retired 2026-07-02. The grain-dot scatter cloud is gone; granular
         // now rides the SAME multi-playhead follower system as the Sample engine (aggregated above via
@@ -4124,9 +4129,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // PERF: the per-voice sum is O(4·active-voices·1024); the editor only consumes at 60 Hz,
         // so gate the whole publish to ~60 Hz instead of block-rate (~750 Hz) → ~12× less
         // audio-thread work with zero visual cost (the editor reads the last published frame).
-        oscScopePubAccum_ += (double) numSamples;
-        const bool oscDoPub = (oscScopePubAccum_ >= getSampleRate() / 60.0);
-        if (oscDoPub) oscScopePubAccum_ -= getSampleRate() / 60.0;
         // Output-ring RMS every publish tick (256 relaxed loads, trivial): drives the
         // TAIL-MODE gate below and the VIZDBG overlay's "is audio actually audible" truth.
         float tailRing[SCOPE_SIZE];

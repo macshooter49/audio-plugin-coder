@@ -248,6 +248,62 @@ int main()
         pass += ok2; ++tot;
     }
 
+    // ── 8b. cleanup-sweep regressions: slot shrink and budget saturation must RAMP, not cut ──
+    {
+        // BRAID 0.7 -> 0 mid-note drops ~20 twin slots; the dropped slots must ramp out
+        HarmParams pA; pA.braid = 0.7f;
+        HarmParams pB = pA; pB.braid = 0.0f;
+        HarmonicEngine e; e.prepare (sr, true); e.setParams (pA); e.noteOn (f0, 31u);
+        const int N = (int) (sr * 0.3);
+        std::vector<float> L ((size_t) N, 0.f), R ((size_t) N, 0.f);
+        std::vector<double> diffRms;
+        for (int off = 0; off < N; off += 256)
+        {
+            const int m = std::min (256, N - off);
+            e.setParams (off > N / 2 ? pB : pA);
+            e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m);
+            double sum = 0.0;
+            for (int i = std::max (1, off); i < off + m; ++i)
+            { const double d = (double) L[(size_t) i] - L[(size_t) i - 1]; sum += d * d; }
+            diffRms.push_back (std::sqrt (sum / m));
+        }
+        std::vector<double> sorted = diffRms; std::sort (sorted.begin(), sorted.end());
+        const double med = sorted[sorted.size() / 2];
+        double worst = 0.0; for (double d : diffRms) worst = std::max (worst, d);
+        const bool ok = worst < med * 4.0 + 1e-9;
+        std::printf ("[%-22s] med=%.4f worst=%.4f  %s\n", "declick braid-drop", med, worst, ok ? "PASS" : "FAIL");
+        pass += ok; ++tot;
+    }
+    {
+        // budget flips to saturated mid-note: the bank must RAMP to silence (one block), never truncate
+        int used = 0;
+        HarmonicEngine e; e.prepare (sr, true);
+        e.setPartialBudget (&used, 640);
+        HarmParams p; e.setParams (p); e.noteOn (f0, 77u);
+        const int N = (int) (sr * 0.2);
+        std::vector<float> L ((size_t) N, 0.f), R ((size_t) N, 0.f);
+        double preRms = 0.0; int preN = 0; float maxStep = 0.f; float prev = 0.f;
+        for (int off = 0; off < N; off += 256)
+        {
+            const int m = std::min (256, N - off);
+            used = (off > N / 2) ? 100000 : 0;            // saturate the pool mid-note
+            e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m);
+            for (int i = off; i < off + m; ++i)
+            {
+                if (off <= N / 2) { preRms += (double) L[(size_t) i] * L[(size_t) i]; ++preN; }
+                maxStep = std::max (maxStep, std::fabs (L[(size_t) i] - prev));
+                prev = L[(size_t) i];
+            }
+        }
+        preRms = std::sqrt (preRms / std::max (1, preN));
+        double tailAbs = 0.0;
+        for (int i = N - 2048; i < N; ++i) tailAbs = std::max (tailAbs, (double) std::fabs (L[(size_t) i]));
+        // sounding before, silent at the end, and no sample step bigger than a plausible ramp slope
+        const bool ok = preRms > 0.02 && tailAbs < 1e-4 && maxStep < (float) (preRms * 6.0);
+        std::printf ("[%-22s] pre=%.3f tail=%.5f step=%.3f  %s\n", "saturation ramp-out", preRms, tailAbs, (double) maxStep, ok ? "PASS" : "FAIL");
+        pass += ok; ++tot;
+    }
+
     // ── 9. kitchen-sink finiteness: all knobs hot, low note, long render ──
     {
         HarmParams p; p.mainMode = 4; p.sculptMode = 5; p.hue = 1.f; p.carve = 1.f;

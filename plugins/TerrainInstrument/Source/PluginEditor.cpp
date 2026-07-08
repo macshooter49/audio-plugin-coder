@@ -3713,9 +3713,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             }
             js << "try{if(window.updateHarmViz){window.updateHarmViz(" << hOscId[o] << ",[";
             for (int b = 0; b < tw::harm::kDispBins; ++b) { if (b) js << ","; js << (int) (wB[b] * 99.f); }
-            js << "],[";
-            for (int b = 0; b < tw::harm::kDispBins; ++b) { if (b) js << ","; js << (int) (gB[b] * 99.f); }
-            js << "]);}}catch(e){}";
+            js << "]);}}catch(e){}";   // hm4: ghost array retired with the bar viz (JS takes white only)
+            juce::ignoreUnused (gB);
         }
     }
 

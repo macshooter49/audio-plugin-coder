@@ -328,6 +328,12 @@ namespace tw
             granBlkC_.setSize   (2, spb, false, false, true);
             granBlkD_.setSize   (2, spb, false, false, true);
             warpSrc_.setSize    (2, spb, false, false, true);
+            // HARMONIC/GEODE block buffers — pre-size so the first render never allocates on
+            // the audio thread (the in-render setSize stays as an oversized-host fallback)
+            harmBlkA_.setSize (2, spb, false, false, true);  harmBlkB_.setSize (2, spb, false, false, true);
+            harmBlkC_.setSize (2, spb, false, false, true);  harmBlkD_.setSize (2, spb, false, false, true);
+            geodeBlkA_.setSize (2, spb, false, false, true); geodeBlkB_.setSize (2, spb, false, false, true);
+            geodeBlkC_.setSize (2, spb, false, false, true); geodeBlkD_.setSize (2, spb, false, false, true);
         }
 
         /** Batch 1 Filter — per-block from PluginProcessor. Cutoff/res are
@@ -4075,11 +4081,11 @@ namespace tw
             const double noteSemis = (double) (currentMidiNote_ - 69 + oct * 12 + semi) + (double) cent * 0.01;
             const double playedHz  = 440.0 * std::pow (2.0, noteSemis / 12.0);
             const int    N         = juce::jlimit (1, kMaxUnison, uniCount);
-            engs[0].setParams (p);
-            engs[0].setUnisonScale (N);
             for (int u = 0; u < N; ++u)
             {
                 auto& e = engs[(size_t) u];
+                e.setParams (p);        // EVERY sibling: noteOn reads phase policy (Hornet buzz)
+                e.setUnisonScale (N);   // …and arms uniScatCents_ so scatMul_ actually fills
                 const double det = (uDetuneCents != nullptr) ? std::pow (2.0, (double) uDetuneCents[(size_t) u] / 1200.0) : 1.0;
                 e.setPlayedHz (playedHz * det);
                 if (doNoteOn)

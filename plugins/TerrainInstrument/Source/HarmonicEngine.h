@@ -96,6 +96,7 @@ public:
     void prepare (double sampleRate, bool bankOwner = true) noexcept
     {
         rate_ = sampleRate > 1000.0 ? sampleRate : 48000.0;
+        (void) sineLUT(); (void) sieves();   // build the shared statics OFF the audio thread
         phase_.assign ((size_t) harm::kMaxPartials, 0.f);
         ampZL_.assign ((size_t) harm::kMaxPartials, 0.f);
         ampZR_.assign ((size_t) harm::kMaxPartials, 0.f);
@@ -148,6 +149,7 @@ public:
                                       : hash01 ((std::uint32_t) j * 2654435761u ^ seed_);
         std::fill (ampZL_.begin(), ampZL_.end(), 0.f);   // start silent → first block ramps in
         std::fill (ampZR_.begin(), ampZR_.end(), 0.f);
+        lastSpan_ = 0;
         // per-sibling per-partial static frequency scatter — decorrelates the unison stack so
         // shared-bank animation reads as ENSEMBLE, not coherent vibrato (unison = end of chain)
         if (scatMul_.size() != (size_t) harm::kMaxPartials) scatMul_.assign ((size_t) harm::kMaxPartials, 1.f);
@@ -175,9 +177,11 @@ public:
         // rebuild every OTHER block when the knobs are static (declick ramps + ~190Hz updates
         // make the skip inaudible; any knob touch rebuilds immediately).
         skipTick_ = ! skipTick_;
-        if (skipTick_ && nP_ > 0 && n < 128 && ! displayMode_ && p_ == lastBuilt_)
+        if (skipTick_ && nP_ > 0 && n < 128 && ! displayMode_ && p_ == lastBuilt_
+            && (float) (playedHz_ * pitchMul_) == lastBuiltHz_)   // pitch moved / retriggered → rebuild
         { tB_ += dt; bank_ = this; return true; }
         lastBuilt_ = p_;
+        lastBuiltHz_ = (float) (playedHz_ * pitchMul_);
         const float baseHz = (float) (playedHz_ * pitchMul_);
         const float churnMul = fastExp2 (lerpf (-3.f, 3.f, clamp01 (p_.churn)));   // ×0.125..×8 (hm2 amplify)
 
@@ -236,25 +240,33 @@ public:
     void renderBankAdd (float* L, float* R, int n) noexcept
     {
         if (L == nullptr || R == nullptr || n <= 0 || bank_ == nullptr) return;
-        if (budgetUsed_ != nullptr && budgetCap_ > 0 && *budgetUsed_ >= budgetCap_)
-        {   // shared pool saturated — this (sibling) bank sits the block out, ramped silent
-            std::fill (ampZL_.begin(), ampZL_.end(), 0.f);
-            std::fill (ampZR_.begin(), ampZR_.end(), 0.f);
-            return;
+        // pool exhausted → the bank RAMPS to silence over one declick block (hard-zeroing
+        // ampZ was the exact rr2 click bug in Geode — never truncate a sounding sine).
+        const bool sat = (budgetUsed_ != nullptr && budgetCap_ > 0 && *budgetUsed_ >= budgetCap_);
+        if (sat)
+        {
+            bool silent = true;
+            for (int j = 0; j < harm::kMaxPartials; ++j)
+                if (ampZL_[(size_t) j] > 1e-7f || ampZR_[(size_t) j] > 1e-7f) { silent = false; break; }
+            if (silent) return;   // already faded — free skip
         }
         const HarmonicEngine& b = *bank_;
         const float baseHz = (float) (playedHz_ * pitchMul_);
         const float invN   = 1.f / (float) n;
         const float g      = b.gNormS_;
         int voiced = 0;
-        for (int j = 0; j < b.nP_; ++j)
+        // span covers slots dropped since last block (Braid→0, Root down, Partials down,
+        // pitch-bend up): they ramp to zero at their held frequency instead of hard-cutting,
+        // and their ampZ lands at 0 so re-entry starts clean.
+        const int span = std::min (harm::kMaxPartials, std::max (b.nP_, lastSpan_));
+        for (int j = 0; j < span; ++j)
         {
             const float prevL = ampZL_[(size_t) j];
             const float prevR = ampZR_[(size_t) j];
             const float rj  = b.ratio_[(size_t) j];
             const float hz  = rj * baseHz * scatMul_[(size_t) j];
             const bool  aud = (rj > 0.f && hz > 0.f && hz < (float) rate_ * 0.49f);
-            const float a   = (j < b.nP_ && aud) ? b.amp_[(size_t) j] * g : 0.f;
+            const float a   = (! sat && j < b.nP_ && aud) ? b.amp_[(size_t) j] * g : 0.f;
             const float tgtL = a * b.panL_[(size_t) j];
             const float tgtR = a * b.panR_[(size_t) j];
             if (prevL <= 1e-7f && prevR <= 1e-7f && tgtL <= 1e-7f && tgtR <= 1e-7f)
@@ -276,6 +288,7 @@ public:
             ampZR_[(size_t) j] = tgtR;
             if (tgtL > 1e-7f || tgtR > 1e-7f) ++voiced;
         }
+        lastSpan_ = b.nP_;
         if (budgetUsed_ != nullptr) *budgetUsed_ += voiced;
     }
 
@@ -861,7 +874,8 @@ private:
     void applyFan (int nEff, float dt, float churnMul) noexcept
     {
         const float f = clamp01 (p_.fan);
-        if (f < 0.004f) return;                    // braid pans (if any) survive at fan=0? no — fan=0 leaves braid's own width
+        if (f < 1e-6f) return;                     // fan hard-off — existing (braid/center) pans stand
+        const float seam = sstep (0.f, 0.12f, f);  // fan FADES IN from the existing pans (no snap at 0)
         const float u = clamp01 (f * 2.f - 1.f);
         orbit_ += u * 0.05f * 2.f * harm::kPi * churnMul * dt;
         if (orbit_ > 2.f * harm::kPi) orbit_ -= 2.f * harm::kPi;
@@ -871,7 +885,9 @@ private:
             const float scatt = sineAt (frac ((float) (j + 1) * 0.381966f + orbit_ * (1.f / (2.f * harm::kPi))));
             float pan = lerpf (split, scatt, sstep (0.45f, 0.55f, f));   // morph, never switch (hm2)
             if (j < 2) pan *= 0.2f;                // fundamental stays centered — mono-safe bass
-            const float th = (pan + 1.f) * (harm::kPi * 0.25f);
+            const float th0 = std::atan2 (panR_[(size_t) j], panL_[(size_t) j]);   // pre-fan angle
+            const float thF = (pan + 1.f) * (harm::kPi * 0.25f);
+            const float th  = lerpf (th0, thF, seam);   // angle-domain lerp = constant power
             panL_[(size_t) j] = std::cos (th);
             panR_[(size_t) j] = std::sin (th);
         }
@@ -950,6 +966,8 @@ private:
     float  tB_ = 0.f, orbit_ = 0.f, ouGlobal_ = 0.f, rootHold_ = -1.f;
     float  gNorm_ = 1.f, gNormS_ = 1.f, uniScatCents_ = 0.f, shineChurn_ = 1.f;
     bool   skipTick_ = false;
+    int    lastSpan_ = 0;
+    float  lastBuiltHz_ = -1.f;
     HarmParams lastBuilt_;
     int    nP_ = 0, preparedActive_ = 0, reserved_ = 0;
     int*   budgetUsed_ = nullptr;
