@@ -352,6 +352,11 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
+    /** GEODE viz — the live analysed frame store for one osc (nullptr if that osc isn't on
+     *  Engine::SPEC or has no store). Read by the editor's display engine for the waterfall
+     *  visualizer. Safe on the message thread: rebuilds run on the same (message) thread. */
+    const tw::GeodeFrameStore* geodeLiveStore (int osc) const noexcept
+    { return (osc >= 0 && osc < 4) ? geodeSlot_[(size_t) osc].live.load (std::memory_order_acquire) : nullptr; }
     /** Returns the sample buffer for the currently-editing layer.
      *  Task 5: routes through layers[editingLayer] instead of the old singleton. */
     tw::SampleBuffer& getSampleBuffer() noexcept { return layers[(size_t) editingLayer.load()].sampleBuffer; }
@@ -851,7 +856,11 @@ private:
     };
     GeodeSlot geodeSlot_[4];
     void rebuildGeodeIfNeeded (int osc);                 // message thread
-    static constexpr int kGeodePartialBudget = 3072;     // all SPEC voices/unison combined
+    // Shared real-time ceiling on TOTAL active partials across ALL SPEC voices/unison in this
+    // instance. Additive resynth costs ~1 sine-osc per partial per sample; 3072 pegged a core
+    // (measured ~40%% for the oscillator alone, and STRETCH pinned it there). 640 ≈ <10%% worst
+    // case and thins gracefully (keepLoudest) under heavy chords. (rs2 CPU-cliff fix.)
+    static constexpr int kGeodePartialBudget = 640;      // all SPEC voices/unison combined
     int geodePartialsLive_ = 0;                          // audio-thread only (no atomics)
 
     void timerCallback() override;        // message thread — rebuilds morph tables

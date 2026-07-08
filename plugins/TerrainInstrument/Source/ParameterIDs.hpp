@@ -640,11 +640,14 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_FM_BEND[]   = "SYN_OSC_D_FM_BEND";
     constexpr char SYN_OSC_D_FM_STORM[]  = "SYN_OSC_D_FM_STORM";
 
-    // ════════ GEODE-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
+    // ════════ GEODE-ENGINE-PARAMS — per-OSC RESYNTH oscillator (Engine::SPEC) ════════
     // Own namespace — MUST NOT collide with SYN_OSC_x_SPECTRAL_TYPE/AMT (the spectral FILTER).
-    // Page 1 (Play): Position · Fossil · Creep · Silt · Formant · Cut
-    // Page 2 (Sculpt): Sieve · Distill · Haze · Fracture · Tilt · Quality
-    // + Formant-Keep (bool) + Loop mode (choice). 14 × 4 osc.
+    // The engine is UI-named "Resynth"; these ID strings keep the historical GEODE_* names for
+    // preset stability. Meaning is REMAPPED (see PluginProcessor gather): CREEP=Scan, FOSSIL=Stretch,
+    // POSITION=Start, SILT=Crush, DISTILL=Shape, HAZE=Drive. FRACTURE + BEDROCK are RESERVED (unused).
+    // Page 1 (Play):   Scan · Stretch · Sieve · Cut · Shape · Drive
+    // Page 2 (Sculpt): Quality · Formant · Tilt · Crush · Start
+    // + Formant-Keep (bool) + Loop (choice) + Shape-Target (choice) + Cut-Mode (choice). × 4 osc.
     constexpr char SYN_OSC_A_GEODE_POSITION[] = "SYN_OSC_A_GEODE_POSITION"; // 0..1 scrub
     constexpr char SYN_OSC_A_GEODE_FOSSIL[]   = "SYN_OSC_A_GEODE_FOSSIL";   // 0..1 freeze
     constexpr char SYN_OSC_A_GEODE_CREEP[]    = "SYN_OSC_A_GEODE_CREEP";    // 0..1 scan rate
@@ -659,6 +662,9 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_GEODE_QUALITY[]  = "SYN_OSC_A_GEODE_QUALITY";  // 0..1 partial budget
     constexpr char SYN_OSC_A_GEODE_FKEEP[]    = "SYN_OSC_A_GEODE_FKEEP";    // bool formant-preserve
     constexpr char SYN_OSC_A_GEODE_LOOP[]     = "SYN_OSC_A_GEODE_LOOP";     // choice 0..3
+    constexpr char SYN_OSC_A_GEODE_BEDROCK[]  = "SYN_OSC_A_GEODE_BEDROCK";  // RESERVED (unused; tune via right-click semitone)
+    constexpr char SYN_OSC_A_GEODE_SHAPE_TARGET[] = "SYN_OSC_A_GEODE_SHAPE_TARGET"; // choice 0=Sine 1=Square 2=Saw
+    constexpr char SYN_OSC_A_GEODE_CUT_MODE[]     = "SYN_OSC_A_GEODE_CUT_MODE";     // choice 0=LP 1=HP
     constexpr char SYN_OSC_B_GEODE_POSITION[] = "SYN_OSC_B_GEODE_POSITION";
     constexpr char SYN_OSC_B_GEODE_FOSSIL[]   = "SYN_OSC_B_GEODE_FOSSIL";
     constexpr char SYN_OSC_B_GEODE_CREEP[]    = "SYN_OSC_B_GEODE_CREEP";
@@ -673,6 +679,9 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_GEODE_QUALITY[]  = "SYN_OSC_B_GEODE_QUALITY";
     constexpr char SYN_OSC_B_GEODE_FKEEP[]    = "SYN_OSC_B_GEODE_FKEEP";
     constexpr char SYN_OSC_B_GEODE_LOOP[]     = "SYN_OSC_B_GEODE_LOOP";
+    constexpr char SYN_OSC_B_GEODE_BEDROCK[]  = "SYN_OSC_B_GEODE_BEDROCK";
+    constexpr char SYN_OSC_B_GEODE_SHAPE_TARGET[] = "SYN_OSC_B_GEODE_SHAPE_TARGET";
+    constexpr char SYN_OSC_B_GEODE_CUT_MODE[]     = "SYN_OSC_B_GEODE_CUT_MODE";
     constexpr char SYN_OSC_C_GEODE_POSITION[] = "SYN_OSC_C_GEODE_POSITION";
     constexpr char SYN_OSC_C_GEODE_FOSSIL[]   = "SYN_OSC_C_GEODE_FOSSIL";
     constexpr char SYN_OSC_C_GEODE_CREEP[]    = "SYN_OSC_C_GEODE_CREEP";
@@ -687,6 +696,9 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_GEODE_QUALITY[]  = "SYN_OSC_C_GEODE_QUALITY";
     constexpr char SYN_OSC_C_GEODE_FKEEP[]    = "SYN_OSC_C_GEODE_FKEEP";
     constexpr char SYN_OSC_C_GEODE_LOOP[]     = "SYN_OSC_C_GEODE_LOOP";
+    constexpr char SYN_OSC_C_GEODE_BEDROCK[]  = "SYN_OSC_C_GEODE_BEDROCK";
+    constexpr char SYN_OSC_C_GEODE_SHAPE_TARGET[] = "SYN_OSC_C_GEODE_SHAPE_TARGET";
+    constexpr char SYN_OSC_C_GEODE_CUT_MODE[]     = "SYN_OSC_C_GEODE_CUT_MODE";
     constexpr char SYN_OSC_D_GEODE_POSITION[] = "SYN_OSC_D_GEODE_POSITION";
     constexpr char SYN_OSC_D_GEODE_FOSSIL[]   = "SYN_OSC_D_GEODE_FOSSIL";
     constexpr char SYN_OSC_D_GEODE_CREEP[]    = "SYN_OSC_D_GEODE_CREEP";
@@ -701,4 +713,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_GEODE_QUALITY[]  = "SYN_OSC_D_GEODE_QUALITY";
     constexpr char SYN_OSC_D_GEODE_FKEEP[]    = "SYN_OSC_D_GEODE_FKEEP";
     constexpr char SYN_OSC_D_GEODE_LOOP[]     = "SYN_OSC_D_GEODE_LOOP";
+    constexpr char SYN_OSC_D_GEODE_BEDROCK[]  = "SYN_OSC_D_GEODE_BEDROCK";
+    constexpr char SYN_OSC_D_GEODE_SHAPE_TARGET[] = "SYN_OSC_D_GEODE_SHAPE_TARGET";
+    constexpr char SYN_OSC_D_GEODE_CUT_MODE[]     = "SYN_OSC_D_GEODE_CUT_MODE";
 }

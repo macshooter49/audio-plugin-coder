@@ -2333,51 +2333,65 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFmWeather (ParameterIDs::SYN_OSC_D_FM_STRIKE, ParameterIDs::SYN_OSC_D_FM_AGE, ParameterIDs::SYN_OSC_D_FM_RUST,
                   ParameterIDs::SYN_OSC_D_FM_GALE, ParameterIDs::SYN_OSC_D_FM_BEND, ParameterIDs::SYN_OSC_D_FM_STORM, "D");
 
-    // ════════ GEODE-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
-    // Page 1: Position/Fossil/Creep/Silt/Formant/Cut · Page 2: Sieve/Distill/Haze/Fracture/Tilt/Quality
-    // + Formant-Keep (bool) + Loop (choice). Defaults match tw::GeodeParams (neutral = identity).
+    // ════════ RESYNTH-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
+    // ID strings keep GEODE_* for preset stability; meaning REMAPPED (see the gather):
+    //   Page 1: Scan(CREEP)/Stretch(FOSSIL)/Sieve/Cut/Shape(DISTILL)/Drive(HAZE)
+    //   Page 2: Quality/Formant/Tilt/Crush(SILT)/Start(POSITION)
+    //   + Formant-Keep + Loop + Shape-Target(choice) + Cut-Mode(choice). FRACTURE/BEDROCK reserved.
     auto addGeodeOsc = [&layout] (const char* const* id, const juce::String& osc)
     {
         auto F = [&layout, &osc] (const char* pid, const char* nm, float def)
         {
             layout.add (std::make_unique<juce::AudioParameterFloat> (
-                juce::ParameterID { pid, 1 }, "Synth OSC " + osc + " Geode " + nm,
+                juce::ParameterID { pid, 1 }, "Synth OSC " + osc + " Resynth " + nm,
                 juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), def));
         };
-        F (id[0], "Position", 0.0f);  F (id[1], "Fossil",  0.0f);  F (id[2],  "Creep",   0.0f);
-        F (id[3], "Silt",     0.15f); F (id[4], "Formant", 0.5f);  F (id[5],  "Cut",     1.0f);
-        F (id[6], "Sieve",    0.0f);  F (id[7], "Distill", 0.0f);  F (id[8],  "Haze",    0.0f);
-        F (id[9], "Fracture", 0.5f);  F (id[10],"Tilt",    0.5f);  F (id[11], "Quality", 0.66f);
+        // Neutral/faithful defaults: SCAN 0.5 = natural play-through, QUALITY high, everything else off.
+        F (id[0], "Start",    0.0f);  F (id[1], "Stretch", 0.0f);  F (id[2],  "Scan",    0.5f);
+        F (id[3], "Crush",    0.0f);  F (id[4], "Formant", 0.5f);  F (id[5],  "Cut",     1.0f);
+        F (id[6], "Sieve",    0.0f);  F (id[7], "Shape",   0.0f);  F (id[8],  "Drive",   0.0f);
+        F (id[9], "Fracture", 0.5f);  F (id[10],"Tilt",    0.5f);  F (id[11], "Quality", 0.80f);
         layout.add (std::make_unique<juce::AudioParameterBool> (
-            juce::ParameterID { id[12], 1 }, "Synth OSC " + osc + " Geode Formant Keep", true));
+            juce::ParameterID { id[12], 1 }, "Synth OSC " + osc + " Resynth Formant Keep", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (
-            juce::ParameterID { id[13], 1 }, "Synth OSC " + osc + " Geode Loop",
+            juce::ParameterID { id[13], 1 }, "Synth OSC " + osc + " Resynth Loop",
             juce::StringArray { "One-Shot", "Forward", "Reverse", "Ping-Pong" }, 1));
+        F (id[14], "Bedrock", 0.5f);   // RESERVED (unused)
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[15], 1 }, "Synth OSC " + osc + " Resynth Shape Target",
+            juce::StringArray { "Sine", "Square", "Saw" }, 2));   // default Saw
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[16], 1 }, "Synth OSC " + osc + " Resynth Cut Mode",
+            juce::StringArray { "LP", "HP" }, 0));                // default LP
     };
-    static const char* const GEODE_A[14] = {
+    static const char* const GEODE_A[17] = {
         ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP,
         ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT,
         ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE,
         ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY,
-        ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP };
-    static const char* const GEODE_B[14] = {
+        ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP, ParameterIDs::SYN_OSC_A_GEODE_BEDROCK,
+        ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE };
+    static const char* const GEODE_B[17] = {
         ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP,
         ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT,
         ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE,
         ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY,
-        ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP };
-    static const char* const GEODE_C[14] = {
+        ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP, ParameterIDs::SYN_OSC_B_GEODE_BEDROCK,
+        ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE };
+    static const char* const GEODE_C[17] = {
         ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP,
         ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT,
         ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE,
         ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY,
-        ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP };
-    static const char* const GEODE_D[14] = {
+        ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP, ParameterIDs::SYN_OSC_C_GEODE_BEDROCK,
+        ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE };
+    static const char* const GEODE_D[17] = {
         ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP,
         ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT,
         ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE,
         ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY,
-        ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP };
+        ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP, ParameterIDs::SYN_OSC_D_GEODE_BEDROCK,
+        ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE };
     addGeodeOsc (GEODE_A, "A"); addGeodeOsc (GEODE_B, "B");
     addGeodeOsc (GEODE_C, "C"); addGeodeOsc (GEODE_D, "D");
 
@@ -3548,23 +3562,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (int k = 0; k < 12; ++k)
                 fmVals[o][k] = *rawParam (FM_IDS[o][k]);
 
-        // ── GEODE engine: gather the 14 resynthesis params per OSC (GEODE-ENGINE-GATHER) ──
-        static const char* const GEODE_IDS[4][14] = {
-            { ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP, ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT, ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE, ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY, ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP },
-            { ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP, ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT, ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY, ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP },
-            { ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP, ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT, ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE, ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY, ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP },
-            { ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP, ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT, ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY, ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP }
+        // ── RESYNTH engine: gather the resynthesis params per OSC (GEODE-ENGINE-GATHER) ──
+        // ID strings keep GEODE_* (preset stability); meaning REMAPPED to the Resynth fields:
+        // POSITION→start, FOSSIL→stretch, CREEP→scan, SILT→crush, DISTILL→shape, HAZE→drive.
+        // FRACTURE(id9) + BEDROCK(id14) are reserved/unused. id15=Shape-Target id16=Cut-Mode.
+        static const char* const GEODE_IDS[4][17] = {
+            { ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP, ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT, ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE, ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY, ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP, ParameterIDs::SYN_OSC_A_GEODE_BEDROCK, ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE },
+            { ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP, ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT, ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY, ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP, ParameterIDs::SYN_OSC_B_GEODE_BEDROCK, ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE },
+            { ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP, ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT, ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE, ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY, ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP, ParameterIDs::SYN_OSC_C_GEODE_BEDROCK, ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE },
+            { ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP, ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT, ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY, ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP, ParameterIDs::SYN_OSC_D_GEODE_BEDROCK, ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE }
         };
         tw::GeodeParams geodeP[4];
         for (int o = 0; o < 4; ++o)
         {
             const char* const* id = GEODE_IDS[o];
             tw::GeodeParams g;
-            g.position = *rawParam (id[0]);  g.fossil  = *rawParam (id[1]);  g.creep    = *rawParam (id[2]);
-            g.silt     = *rawParam (id[3]);  g.formant = *rawParam (id[4]);  g.cut      = *rawParam (id[5]);
-            g.sieve    = *rawParam (id[6]);  g.distill = *rawParam (id[7]);  g.haze     = *rawParam (id[8]);
-            g.fracture = *rawParam (id[9]);  g.tilt    = *rawParam (id[10]); g.quality  = *rawParam (id[11]);
+            g.start   = *rawParam (id[0]);  g.stretch = *rawParam (id[1]);  g.scan    = *rawParam (id[2]);
+            g.crush   = *rawParam (id[3]);  g.formant = *rawParam (id[4]);  g.cut     = *rawParam (id[5]);
+            g.sieve   = *rawParam (id[6]);  g.shape   = *rawParam (id[7]);  g.drive   = *rawParam (id[8]);
+            /* id[9] FRACTURE reserved */   g.tilt    = *rawParam (id[10]); g.quality = *rawParam (id[11]);
             g.formantKeep = *rawParam (id[12]) > 0.5f;  g.loopMode = (int) *rawParam (id[13]);
+            /* id[14] BEDROCK reserved */
+            g.shapeTarget = (int) *rawParam (id[15]);   g.cutMode = (int) *rawParam (id[16]);
             geodeP[o] = g;
         }
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
@@ -4003,6 +4022,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         {
                             float p = sv->sampleFollowPos01 (o);
                             if (p < 0.f) p = sv->granScanPos01 (o);   // GRANULAR: the voice's scan head IS its follower (drawn purple in the UI)
+                            if (p < 0.f) p = sv->geodeFollowPos01 (o); // RESYNTH: the geode read-head IS its follower
                             if (p >= 0.f) { sampleFollowIdx_[o][cnt[o]].store (i, std::memory_order_relaxed);
                                             sampleFollowPos_[o][cnt[o]].store (p, std::memory_order_relaxed); ++cnt[o]; }
                         }

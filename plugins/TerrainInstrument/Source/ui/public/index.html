@@ -3859,7 +3859,7 @@ body {
 #syn-panel .geode-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
 #syn-panel .device.osc.engine-geode:not(.swapped) .geode-knob-wrap { display: flex; }
 #syn-panel .device.osc.engine-geode:not(.swapped) .front-only .osc-knobs:not(.geode-knobs) { display: none; }
-#syn-panel .geode-knob-wrap .geode-knobs { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; align-items: center; }
+#syn-panel .geode-knob-wrap .geode-knobs { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; align-items: center; }   /* 6 equal cols: page-1 = 6 knobs, page-2 = 5 (col 6 empty) */
 #syn-panel .geode-knob-wrap .geode-pg2 { display: none; }
 #syn-panel .geode-knob-wrap.pg2 .geode-pg1 { display: none; }
 #syn-panel .geode-knob-wrap.pg2 .geode-pg2 { display: grid; }
@@ -3867,6 +3867,13 @@ body {
 #syn-panel .geode-arrow:hover { opacity: .95; }
 #syn-panel .geode-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
 #syn-panel .geode-knob-wrap.pg2 .geode-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+/* GEODE spectral WATERFALL viz — occupies the SAME transparent osc-display footprint; shown only
+   when engine=Geode (the plain oscilloscope .osc-wave hides). Front white ridge + receding purple
+   frame-ghosts + POSITION playhead (drawn in JS: window.__geodeSpectrum). Thin-white / no-glass. */
+#syn-panel .geode-view { display: none; position: absolute; inset: 0; }
+#syn-panel .geode-view canvas { display: block; width: 100%; height: 100%; }
+#syn-panel .device.osc.engine-geode:not(.swapped) .osc-display .osc-wave  { display: none; }
+#syn-panel .device.osc.engine-geode:not(.swapped) .osc-display .geode-view { display: block; }
 #syn-panel .fm-algo { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .fm-algo-pill { position: relative; height: 20px; min-width: 42px; margin-top: 2px; padding: 0 7px;
   border: 1px solid var(--border-strong); border-radius: 10px;
@@ -4016,6 +4023,11 @@ body {
 #syn-panel .device.osc.engine-sample .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device.osc.engine-granular .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
 #syn-panel .device.osc.engine-granular .device-corner-preset .preset-wrap { display: none; }
+/* Resynth loop-mode selector — same header slot as Sample/Granular loop mode (top of the visualizer),
+   shown only for the Resynth (geode) engine. Reuses the .samp-sel styled dropdown verbatim. */
+#syn-panel .device .geode-head { display: none; }
+#syn-panel .device.osc.engine-geode .geode-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
+#syn-panel .device.osc.engine-geode .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
 #syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
 #syn-panel .samp-sel::after { content: '▾'; font-size: 6px; color: var(--text-muted); margin-left: 3px; pointer-events: none; }
@@ -5087,6 +5099,10 @@ body {
       <circle cx="3" cy="4" r="1.3"/><circle cx="9" cy="4" r="1.3"/>
       <circle cx="3" cy="9" r="1.3"/><circle cx="9" cy="9" r="1.3"/>
     </symbol>
+    <symbol id="ic-vel" viewBox="0 0 12 12" fill="currentColor">
+      <rect x="1" y="7" width="1.6" height="4" rx=".4"/><rect x="4" y="5" width="1.6" height="6" rx=".4"/>
+      <rect x="7" y="3" width="1.6" height="8" rx=".4"/><rect x="10" y="1" width="1.6" height="10" rx=".4" opacity=".55"/>
+    </symbol>
     <symbol id="ic-unison" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1">
       <line x1="3" y1="2" x2="3" y2="10"/>
       <line x1="6" y1="2" x2="6" y2="10"/>
@@ -5128,8 +5144,8 @@ body {
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Geode</option></select></span>
-              <span class="samp-head" data-osc="a"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option></select></span>
+              <span class="geode-head" data-osc="a"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="a"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5193,6 +5209,7 @@ body {
               <!-- waveform display (unchanged) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
+                <div class="geode-view"><canvas class="geode-wave"></canvas></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -5227,27 +5244,27 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- GEODE ENGINE knobs (GEODE-ENGINE-UI) — resynthesis; shown when engine == GEODE (SPEC=3).
-                   Page 1 = Play (Position Fossil Creep Silt Formant Cut); the thin white arrow flips to
-                   Page 2 = Sculpt (Sieve Distill Haze Fracture Tilt Quality). Auto-bound via .knob[data-syn]. -->
+              <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
+                   Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
+                   Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
+                   IDs keep GEODE_* names (preset-safe); meaning remapped in the processor gather. -->
               <div class="geode-knob-wrap">
               <div class="osc-knobs geode-knobs geode-pg1">
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_POSITION" title="Position — scrub through the analyzed sound's spectral frames"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_FOSSIL" title="Fossil — freeze the current spectral frame into an infinite, breathing tone"><div class="knob-ring"></div><div class="knob-label">Fossil</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_CREEP" title="Creep — auto-scan rate through the frames"><div class="knob-ring"></div><div class="knob-label">Creep</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_SILT" title="Silt — balance the tonal partials against the noise residual (breath / air / grit)"><div class="knob-ring"></div><div class="knob-label">Silt</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) independent of pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_CUT" title="Cut — spectral low-pass over the partials"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_CREEP" title="Scan — play/scan rate through the sample: 0 = hold, center = natural speed, up = faster"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_FOSSIL" title="Stretch — time-stretch / slow the playback; max = freeze into an infinite pad"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_SIEVE" title="Sieve — spectral gate: strip the quiet partials for the lossy, low-data, octave-dropping sound"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_CUT" title="Cut — spectral filter. Right-click for LP / HP: removes highs or lows from the resynthesized data"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_DISTILL" title="Shape — morph the sample toward a synth waveform. Right-click: Sine / Square / Saw. Keeps the pitch"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_HAZE" title="Drive — spectral distortion: soft-clip grit that adds synth harmonics without detuning"><div class="knob-ring"></div><div class="knob-label">Drive</div></div>
               </div>
               <div class="osc-knobs geode-knobs geode-pg2">
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_SIEVE" title="Sieve — spectral gate: sift out the quiet partials (denoise; extreme = resonant spikes)"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_DISTILL" title="Distill — keep only the loudest partials (any sound -> a pure pulsing chord)"><div class="knob-ring"></div><div class="knob-label">Distill</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_HAZE" title="Haze — spectral blur / de-focus"><div class="knob-ring"></div><div class="knob-label">Haze</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_FRACTURE" title="Fracture — bend the harmonic series inharmonic (bell / metal)"><div class="knob-ring"></div><div class="knob-label">Fracture</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_TILT" title="Tilt — spectral tilt (bright to dark)"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_GEODE_QUALITY" title="Quality — active partial count (CPU vs richness)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_QUALITY" title="Quality — active partial count: low = thin / lossy, high = full &amp; faithful (pairs with Sieve)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) WITHOUT changing pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_TILT" title="Tilt — spectral tilt, dark to bright"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_SILT" title="Crush — bitcrush + sample-rate decimate: the degraded, old-computer-data lo-fi character"><div class="knob-ring"></div><div class="knob-label">Crush</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_GEODE_POSITION" title="Start — the sample start point the note plays from"><div class="knob-ring"></div><div class="knob-label">Start</div></div>
               </div>
-              <div class="geode-arrow" role="button" tabindex="0" title="Geode sculpt — Sieve, Distill, Haze, Fracture, Tilt, Quality" aria-label="More Geode controls"></div>
+              <div class="geode-arrow" role="button" tabindex="0" title="Resynth sculpt — Quality · Formant · Tilt · Crush · Start" aria-label="More Resynth controls"></div>
               </div>
             </div>
 
@@ -5378,8 +5395,8 @@ body {
           <div class="device osc osc-hidden" id="osc-b-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Geode</option></select></span>
-              <span class="samp-head" data-osc="b"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option></select></span>
+              <span class="geode-head" data-osc="b"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="b"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5443,6 +5460,7 @@ body {
               <!-- waveform display (unchanged) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
+                <div class="geode-view"><canvas class="geode-wave"></canvas></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -5477,27 +5495,27 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- GEODE ENGINE knobs (GEODE-ENGINE-UI) — resynthesis; shown when engine == GEODE (SPEC=3).
-                   Page 1 = Play (Position Fossil Creep Silt Formant Cut); the thin white arrow flips to
-                   Page 2 = Sculpt (Sieve Distill Haze Fracture Tilt Quality). Auto-bound via .knob[data-syn]. -->
+              <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
+                   Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
+                   Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
+                   IDs keep GEODE_* names (preset-safe); meaning remapped in the processor gather. -->
               <div class="geode-knob-wrap">
               <div class="osc-knobs geode-knobs geode-pg1">
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_POSITION" title="Position — scrub through the analyzed sound's spectral frames"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_FOSSIL" title="Fossil — freeze the current spectral frame into an infinite, breathing tone"><div class="knob-ring"></div><div class="knob-label">Fossil</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_CREEP" title="Creep — auto-scan rate through the frames"><div class="knob-ring"></div><div class="knob-label">Creep</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_SILT" title="Silt — balance the tonal partials against the noise residual (breath / air / grit)"><div class="knob-ring"></div><div class="knob-label">Silt</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) independent of pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_CUT" title="Cut — spectral low-pass over the partials"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_CREEP" title="Scan — play/scan rate through the sample: 0 = hold, center = natural speed, up = faster"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_FOSSIL" title="Stretch — time-stretch / slow the playback; max = freeze into an infinite pad"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_SIEVE" title="Sieve — spectral gate: strip the quiet partials for the lossy, low-data, octave-dropping sound"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_CUT" title="Cut — spectral filter. Right-click for LP / HP: removes highs or lows from the resynthesized data"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_DISTILL" title="Shape — morph the sample toward a synth waveform. Right-click: Sine / Square / Saw. Keeps the pitch"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_HAZE" title="Drive — spectral distortion: soft-clip grit that adds synth harmonics without detuning"><div class="knob-ring"></div><div class="knob-label">Drive</div></div>
               </div>
               <div class="osc-knobs geode-knobs geode-pg2">
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_SIEVE" title="Sieve — spectral gate: sift out the quiet partials (denoise; extreme = resonant spikes)"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_DISTILL" title="Distill — keep only the loudest partials (any sound -> a pure pulsing chord)"><div class="knob-ring"></div><div class="knob-label">Distill</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_HAZE" title="Haze — spectral blur / de-focus"><div class="knob-ring"></div><div class="knob-label">Haze</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_FRACTURE" title="Fracture — bend the harmonic series inharmonic (bell / metal)"><div class="knob-ring"></div><div class="knob-label">Fracture</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_TILT" title="Tilt — spectral tilt (bright to dark)"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_GEODE_QUALITY" title="Quality — active partial count (CPU vs richness)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_QUALITY" title="Quality — active partial count: low = thin / lossy, high = full &amp; faithful (pairs with Sieve)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) WITHOUT changing pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_TILT" title="Tilt — spectral tilt, dark to bright"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_SILT" title="Crush — bitcrush + sample-rate decimate: the degraded, old-computer-data lo-fi character"><div class="knob-ring"></div><div class="knob-label">Crush</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_GEODE_POSITION" title="Start — the sample start point the note plays from"><div class="knob-ring"></div><div class="knob-label">Start</div></div>
               </div>
-              <div class="geode-arrow" role="button" tabindex="0" title="Geode sculpt — Sieve, Distill, Haze, Fracture, Tilt, Quality" aria-label="More Geode controls"></div>
+              <div class="geode-arrow" role="button" tabindex="0" title="Resynth sculpt — Quality · Formant · Tilt · Crush · Start" aria-label="More Resynth controls"></div>
               </div>
             </div>
 
@@ -5644,8 +5662,8 @@ body {
           <div class="device osc" id="osc-c-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Geode</option></select></span>
-              <span class="samp-head" data-osc="c"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option></select></span>
+              <span class="geode-head" data-osc="c"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="c"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5709,6 +5727,7 @@ body {
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
+                <div class="geode-view"><canvas class="geode-wave"></canvas></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -5743,27 +5762,27 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- GEODE ENGINE knobs (GEODE-ENGINE-UI) — resynthesis; shown when engine == GEODE (SPEC=3).
-                   Page 1 = Play (Position Fossil Creep Silt Formant Cut); the thin white arrow flips to
-                   Page 2 = Sculpt (Sieve Distill Haze Fracture Tilt Quality). Auto-bound via .knob[data-syn]. -->
+              <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
+                   Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
+                   Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
+                   IDs keep GEODE_* names (preset-safe); meaning remapped in the processor gather. -->
               <div class="geode-knob-wrap">
               <div class="osc-knobs geode-knobs geode-pg1">
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_POSITION" title="Position — scrub through the analyzed sound's spectral frames"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_FOSSIL" title="Fossil — freeze the current spectral frame into an infinite, breathing tone"><div class="knob-ring"></div><div class="knob-label">Fossil</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_CREEP" title="Creep — auto-scan rate through the frames"><div class="knob-ring"></div><div class="knob-label">Creep</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_SILT" title="Silt — balance the tonal partials against the noise residual (breath / air / grit)"><div class="knob-ring"></div><div class="knob-label">Silt</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) independent of pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_CUT" title="Cut — spectral low-pass over the partials"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_CREEP" title="Scan — play/scan rate through the sample: 0 = hold, center = natural speed, up = faster"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_FOSSIL" title="Stretch — time-stretch / slow the playback; max = freeze into an infinite pad"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_SIEVE" title="Sieve — spectral gate: strip the quiet partials for the lossy, low-data, octave-dropping sound"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_CUT" title="Cut — spectral filter. Right-click for LP / HP: removes highs or lows from the resynthesized data"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_DISTILL" title="Shape — morph the sample toward a synth waveform. Right-click: Sine / Square / Saw. Keeps the pitch"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_HAZE" title="Drive — spectral distortion: soft-clip grit that adds synth harmonics without detuning"><div class="knob-ring"></div><div class="knob-label">Drive</div></div>
               </div>
               <div class="osc-knobs geode-knobs geode-pg2">
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_SIEVE" title="Sieve — spectral gate: sift out the quiet partials (denoise; extreme = resonant spikes)"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_DISTILL" title="Distill — keep only the loudest partials (any sound -> a pure pulsing chord)"><div class="knob-ring"></div><div class="knob-label">Distill</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_HAZE" title="Haze — spectral blur / de-focus"><div class="knob-ring"></div><div class="knob-label">Haze</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_FRACTURE" title="Fracture — bend the harmonic series inharmonic (bell / metal)"><div class="knob-ring"></div><div class="knob-label">Fracture</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_TILT" title="Tilt — spectral tilt (bright to dark)"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_GEODE_QUALITY" title="Quality — active partial count (CPU vs richness)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_QUALITY" title="Quality — active partial count: low = thin / lossy, high = full &amp; faithful (pairs with Sieve)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) WITHOUT changing pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_TILT" title="Tilt — spectral tilt, dark to bright"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_SILT" title="Crush — bitcrush + sample-rate decimate: the degraded, old-computer-data lo-fi character"><div class="knob-ring"></div><div class="knob-label">Crush</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_GEODE_POSITION" title="Start — the sample start point the note plays from"><div class="knob-ring"></div><div class="knob-label">Start</div></div>
               </div>
-              <div class="geode-arrow" role="button" tabindex="0" title="Geode sculpt — Sieve, Distill, Haze, Fracture, Tilt, Quality" aria-label="More Geode controls"></div>
+              <div class="geode-arrow" role="button" tabindex="0" title="Resynth sculpt — Quality · Formant · Tilt · Crush · Start" aria-label="More Resynth controls"></div>
               </div>
             </div>
 
@@ -5894,8 +5913,8 @@ body {
           <div class="device osc osc-hidden" id="osc-d-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Geode</option></select></span>
-              <span class="samp-head" data-osc="d"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option></select></span>
+              <span class="geode-head" data-osc="d"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="d"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
@@ -5959,6 +5978,7 @@ body {
               <!-- waveform display (OSC B waveform) -->
               <div class="osc-display">
                 <div class="osc-wave"></div>
+                <div class="geode-view"><canvas class="geode-wave"></canvas></div>
               </div>
               <!-- 5 front knobs: WT POS / WARP / SPECTRAL / FOLD / SPREAD -->
               <div class="osc-knobs">
@@ -5993,27 +6013,27 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- GEODE ENGINE knobs (GEODE-ENGINE-UI) — resynthesis; shown when engine == GEODE (SPEC=3).
-                   Page 1 = Play (Position Fossil Creep Silt Formant Cut); the thin white arrow flips to
-                   Page 2 = Sculpt (Sieve Distill Haze Fracture Tilt Quality). Auto-bound via .knob[data-syn]. -->
+              <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
+                   Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
+                   Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
+                   IDs keep GEODE_* names (preset-safe); meaning remapped in the processor gather. -->
               <div class="geode-knob-wrap">
               <div class="osc-knobs geode-knobs geode-pg1">
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_POSITION" title="Position — scrub through the analyzed sound's spectral frames"><div class="knob-ring"></div><div class="knob-label">Position</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_FOSSIL" title="Fossil — freeze the current spectral frame into an infinite, breathing tone"><div class="knob-ring"></div><div class="knob-label">Fossil</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_CREEP" title="Creep — auto-scan rate through the frames"><div class="knob-ring"></div><div class="knob-label">Creep</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_SILT" title="Silt — balance the tonal partials against the noise residual (breath / air / grit)"><div class="knob-ring"></div><div class="knob-label">Silt</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) independent of pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_CUT" title="Cut — spectral low-pass over the partials"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_CREEP" title="Scan — play/scan rate through the sample: 0 = hold, center = natural speed, up = faster"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_FOSSIL" title="Stretch — time-stretch / slow the playback; max = freeze into an infinite pad"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_SIEVE" title="Sieve — spectral gate: strip the quiet partials for the lossy, low-data, octave-dropping sound"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_CUT" title="Cut — spectral filter. Right-click for LP / HP: removes highs or lows from the resynthesized data"><div class="knob-ring"></div><div class="knob-label">Cut</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_DISTILL" title="Shape — morph the sample toward a synth waveform. Right-click: Sine / Square / Saw. Keeps the pitch"><div class="knob-ring"></div><div class="knob-label">Shape</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_HAZE" title="Drive — spectral distortion: soft-clip grit that adds synth harmonics without detuning"><div class="knob-ring"></div><div class="knob-label">Drive</div></div>
               </div>
               <div class="osc-knobs geode-knobs geode-pg2">
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_SIEVE" title="Sieve — spectral gate: sift out the quiet partials (denoise; extreme = resonant spikes)"><div class="knob-ring"></div><div class="knob-label">Sieve</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_DISTILL" title="Distill — keep only the loudest partials (any sound -> a pure pulsing chord)"><div class="knob-ring"></div><div class="knob-label">Distill</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_HAZE" title="Haze — spectral blur / de-focus"><div class="knob-ring"></div><div class="knob-label">Haze</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_FRACTURE" title="Fracture — bend the harmonic series inharmonic (bell / metal)"><div class="knob-ring"></div><div class="knob-label">Fracture</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_TILT" title="Tilt — spectral tilt (bright to dark)"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_GEODE_QUALITY" title="Quality — active partial count (CPU vs richness)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_QUALITY" title="Quality — active partial count: low = thin / lossy, high = full &amp; faithful (pairs with Sieve)"><div class="knob-ring"></div><div class="knob-label">Quality</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_FORMANT" title="Formant — shift the spectral envelope (vocal size) WITHOUT changing pitch"><div class="knob-ring"></div><div class="knob-label">Formant</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_TILT" title="Tilt — spectral tilt, dark to bright"><div class="knob-ring"></div><div class="knob-label">Tilt</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_SILT" title="Crush — bitcrush + sample-rate decimate: the degraded, old-computer-data lo-fi character"><div class="knob-ring"></div><div class="knob-label">Crush</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_GEODE_POSITION" title="Start — the sample start point the note plays from"><div class="knob-ring"></div><div class="knob-label">Start</div></div>
               </div>
-              <div class="geode-arrow" role="button" tabindex="0" title="Geode sculpt — Sieve, Distill, Haze, Fracture, Tilt, Quality" aria-label="More Geode controls"></div>
+              <div class="geode-arrow" role="button" tabindex="0" title="Resynth sculpt — Quality · Formant · Tilt · Crush · Start" aria-label="More Resynth controls"></div>
               </div>
             </div>
 
@@ -6356,61 +6376,174 @@ body {
           </div>
         </div>
 
-        <!-- Row 4: RIBBON · VOICE META -->
-        <div class="ribbon-row">
-          <div class="ribbon-device">
-            <div class="ribbon-label">Ribbon</div>
-            <div class="ribbon-cs80">CS-80 Expression</div>
-            <div class="ribbon-strip">
-              <svg viewBox="0 0 660 44" preserveAspectRatio="none">
-                <g stroke="rgba(236,232,242,0.10)" stroke-width="0.5">
-                  <line x1="60" y1="6" x2="60" y2="38"/>
-                  <line x1="120" y1="6" x2="120" y2="38"/>
-                  <line x1="180" y1="6" x2="180" y2="38"/>
-                  <line x1="240" y1="6" x2="240" y2="38"/>
-                  <line x1="300" y1="6" x2="300" y2="38"/>
-                  <line x1="360" y1="6" x2="360" y2="38"/>
-                  <line x1="420" y1="6" x2="420" y2="38"/>
-                  <line x1="480" y1="6" x2="480" y2="38"/>
-                  <line x1="540" y1="6" x2="540" y2="38"/>
-                  <line x1="600" y1="6" x2="600" y2="38"/>
-                </g>
-                <line x1="0" y1="22" x2="660" y2="22" stroke="rgba(236,232,242,0.22)" stroke-width="0.5" stroke-dasharray="2,3"/>
-                <g fill="#C5BFD2" font-size="6.5" letter-spacing="1.4" font-family="SF Pro Display" font-weight="300">
-                  <text x="60" y="42">C2</text>
-                  <text x="180" y="42">C3</text>
-                  <text x="300" y="42">C4</text>
-                  <text x="420" y="42">C5</text>
-                  <text x="540" y="42">C6</text>
-                </g>
-                <g fill="#FFFFFF">
-                  <circle cx="200" cy="22" r="3.4"/>
-                  <circle cx="245" cy="22" r="3.4"/>
-                  <circle cx="295" cy="22" r="3.4"/>
-                  <circle cx="340" cy="22" r="3.4"/>
-                </g>
-                <circle cx="295" cy="22" r="6.5" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.85"/>
-              </svg>
+        <!-- Row 4: MACROS · VOICE META (ribbon redesign — transparent, no glass) -->
+        <style id="ribbon-redesign">
+        #syn-panel .ribbon-row.rr-new{ background:transparent; border:none; border-radius:0; grid-template-columns:1fr 1px 178px; gap:16px; padding:14px 6px 8px; }
+        #syn-panel .rr-left{ display:flex; flex-direction:column; }
+        #syn-panel .rr-head{ display:flex; align-items:center; gap:10px; margin-bottom:11px; }
+        #syn-panel .rr-zlabel{ font-size:9px; letter-spacing:2.2px; color:var(--text-secondary); font-weight:300; text-transform:uppercase; }
+        #syn-panel .rr-bank{ display:flex; gap:4px; }
+        #syn-panel .rr-bk{ width:17px; height:15px; display:flex; align-items:center; justify-content:center; font-size:8.5px; font-weight:400; color:var(--text-muted); border:1px solid var(--border); border-radius:4px; cursor:pointer; transition:.14s; }
+        #syn-panel .rr-bk.on{ background:var(--purple-500); border-color:var(--purple-500); color:#fff; }
+        #syn-panel .rr-bk:hover:not(.on){ border-color:var(--purple-400); color:var(--text-secondary); }
+        #syn-panel .rr-hint{ margin-left:auto; font-size:8px; color:var(--text-dim); letter-spacing:1.4px; font-weight:300; }
+        #syn-panel .rr-macros{ display:grid; grid-template-columns:repeat(8,1fr); gap:6px; }
+        #syn-panel .rr-macro{ display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; padding:4px 2px; border-radius:8px; transition:.14s; position:relative; }
+        #syn-panel .rr-macro:hover{ background:rgba(255,255,255,.028); }
+        #syn-panel .rr-macro .knob-ring{ width:38px; height:38px; }
+        #syn-panel .rr-kname{ font-size:8.5px; letter-spacing:.3px; color:var(--text-muted); font-weight:300; max-width:60px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+        #syn-panel .rr-macro.on .rr-kname{ color:var(--text-primary); }
+        #syn-panel .rr-kdot{ position:absolute; top:3px; right:10px; width:4px; height:4px; border-radius:50%; background:var(--purple-400); opacity:0; transition:.14s; }
+        #syn-panel .rr-macro.on .rr-kdot{ opacity:.9; }
+        #syn-panel .rr-drift{ margin-top:12px; display:grid; grid-template-columns:1fr 46px 46px; gap:14px; align-items:center; }
+        #syn-panel .rr-lanelbl{ display:block; margin-bottom:5px; }
+        #syn-panel .rr-lane{ position:relative; height:30px; border:1px solid var(--border); border-radius:6px; overflow:hidden; background:linear-gradient(90deg,rgba(139,92,246,.03),rgba(139,92,246,.06),rgba(139,92,246,.03)); }
+        #syn-panel .rr-lane canvas{ position:absolute; inset:0; width:100%; height:100%; }
+        #syn-panel .rr-mini{ display:flex; flex-direction:column; align-items:center; gap:5px; }
+        #syn-panel .rr-mini .knob-ring{ width:30px; height:30px; }
+        #syn-panel .rr-klabel{ font-size:7.5px; letter-spacing:1.2px; color:var(--text-primary); font-weight:300; }
+        /* boxed WHITE toggles (purple only on select) */
+        #syn-panel .ribbon-row.rr-new .voice-toggle-row{ gap:6px; }
+        #syn-panel .ribbon-row.rr-new .voice-toggle{ flex:1; border:1px solid rgba(255,255,255,.42); border-radius:5px; padding:3px 0; text-align:center; color:var(--text-primary); background:transparent; transition:.14s; }
+        #syn-panel .ribbon-row.rr-new .voice-mode-row .voice-toggle:first-child{ text-align:center; padding-left:0; }
+        #syn-panel .ribbon-row.rr-new .voice-toggle:hover{ border-color:rgba(255,255,255,.72); color:var(--text-primary); }
+        #syn-panel .ribbon-row.rr-new .voice-toggle.on{ border-color:var(--purple-500); color:var(--purple-400); }
+        /* NO-GLASS transparent assign popout */
+        #syn-panel .rr-pop{ position:absolute; z-index:60; width:212px; background:rgba(18,18,31,.9); border:1px solid var(--border-strong); border-radius:9px; padding:10px 11px 9px; display:none; box-shadow:0 12px 34px rgba(0,0,0,.55); }
+        #syn-panel .rr-pop.show{ display:block; }
+        #syn-panel .rr-pop h4{ font-size:9px; letter-spacing:1.6px; color:var(--text-secondary); font-weight:400; text-transform:uppercase; margin:0 0 9px; display:flex; align-items:center; gap:6px; }
+        #syn-panel .rr-pop h4 .nm{ color:var(--purple-400); letter-spacing:.4px; text-transform:none; font-size:10px; }
+        #syn-panel .rr-route{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+        #syn-panel .rr-route .rn{ font-size:9.5px; color:var(--text-primary); font-weight:300; width:66px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        #syn-panel .rr-route .trk{ flex:1; height:3px; border-radius:2px; background:rgba(255,255,255,.1); position:relative; }
+        #syn-panel .rr-route .fil{ position:absolute; top:0; bottom:0; background:rgba(255,255,255,.92); border-radius:2px; }
+        #syn-panel .rr-route .fil.bip{ background:var(--purple-400); }
+        #syn-panel .rr-route .rx{ color:var(--text-dim); font-size:11px; cursor:pointer; line-height:1; }
+        #syn-panel .rr-route .rx:hover{ color:var(--text-secondary); }
+        #syn-panel .rr-pop .add{ font-size:9px; letter-spacing:1px; color:var(--text-muted); font-weight:300; padding-top:5px; border-top:1px solid var(--border); cursor:pointer; display:flex; align-items:center; gap:6px; }
+        #syn-panel .rr-pop .add:hover{ color:var(--purple-400); }
+        </style>
+        <div class="ribbon-row rr-new">
+          <div class="rr-left">
+            <div class="rr-head">
+              <span class="rr-zlabel">Macros</span>
+              <div class="rr-bank"><div class="rr-bk on" data-bank="A">A</div><div class="rr-bk" data-bank="B">B</div></div>
+              <span class="rr-hint">right-click any knob → assign</span>
             </div>
-            <div class="ribbon-controls">
-              <div class="ribbon-mode-dd"><span>Pitch Drift</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Range</div></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Glide</div></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Drift</div></div>
-              <div class="ribbon-mini-knob"><div class="knob-ring"></div><div class="knob-label">Return</div></div>
+            <div class="rr-macros" id="rr-macros"></div>
+            <div class="rr-drift">
+              <div>
+                <span class="rr-zlabel rr-lanelbl">Sway · analog drift</span>
+                <div class="rr-lane"><canvas id="rr-lane" width="900" height="60"></canvas></div>
+              </div>
+              <div class="rr-mini"><div class="knob-ring" data-rrk="0.34"></div><div class="rr-klabel">Depth</div></div>
+              <div class="rr-mini"><div class="knob-ring" data-rrk="0.52"></div><div class="rr-klabel">Rate</div></div>
             </div>
           </div>
 
           <div class="ribbon-divider"></div>
 
           <div class="voice-meta">
-            <div class="voice-toggle-row voice-mode-row"><button class="voice-toggle" data-syn-toggle="SYN_MONO">Mono</button><button class="voice-toggle" data-syn-toggle="SYN_LEGATO">Legato</button></div>
+            <div class="voice-toggle-row voice-mode-row"><button class="voice-toggle" data-syn-toggle="SYN_MONO">Mono</button><button class="voice-toggle" data-syn-toggle="SYN_LEGATO">Legato</button><button class="voice-toggle rr-vis-poly">Poly</button></div>
             <div class="voice-row" data-syn-row="SYN_VOICES"><svg><use href="#ic-voices"/></svg><span>Voices</span><b>8</b></div>
-            <div class="voice-row" data-syn-row="SYN_PORTA"><svg><use href="#ic-trail"/></svg><span>Porta</span><b>0</b></div>
-            <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><svg><use href="#ic-horizon"/></svg><span>Curve</span><b>50</b></div>
+            <div class="voice-row rr-vis-vel"><svg><use href="#ic-vel"/></svg><span>Velocity</span><b>72</b></div>
+            <div class="voice-row" data-syn-row="SYN_PORTA"><svg><use href="#ic-trail"/></svg><span>Portamento</span><b>0</b></div>
+            <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><svg><use href="#ic-horizon"/></svg><span>Glide</span><b>50</b></div>
             <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">Always</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">Scaled</button></div>
           </div>
+
+          <!-- transparent assign popout (visual mock — no routing wired yet) -->
+          <div class="rr-pop" id="rr-pop">
+            <h4>Routes <span class="nm" id="rr-popnm">Macro 3</span></h4>
+            <div class="rr-route"><span class="rn">Geode Pos</span><div class="trk"><div class="fil" style="width:62%"></div></div><span class="rx">×</span></div>
+            <div class="rr-route"><span class="rn">Filter Cut</span><div class="trk"><div class="fil bip" style="left:50%;width:24%"></div></div><span class="rx">×</span></div>
+            <div class="rr-route"><span class="rn">Tape Wow</span><div class="trk"><div class="fil" style="width:38%"></div></div><span class="rx">×</span></div>
+            <div class="add"><span>+</span> Assign destination…</div>
+          </div>
         </div>
+        <script>
+        /* ── Ribbon redesign (rib1) — MACRO BANK + SWAY lane. UI-ONLY, no DSP/param binding yet.
+           Wd9-armored: every entry point in try/catch; never throws into the render loop. ── */
+        (function(){
+          function init(){ try{
+            var arc = window.__synArc || function(){};
+            var BANKS = {
+              A:[{n:'Brightness',v:.58,a:1},{n:'Motion',v:.42,a:1},{n:'Macro 3',v:.71,a:1,live:1},
+                 {n:'Grit',v:.30,a:1},{n:'Space',v:.5,a:0},{n:'Macro 6',v:.5,a:0},
+                 {n:'Macro 7',v:.5,a:0},{n:'Macro 8',v:.5,a:0}],
+              B:[{n:'Warp',v:.64,a:1,live:1},{n:'Macro 10',v:.5,a:0},{n:'Macro 11',v:.5,a:0},{n:'Chaos',v:.22,a:1},
+                 {n:'Macro 13',v:.5,a:0},{n:'Macro 14',v:.5,a:0},{n:'Air',v:.47,a:1},{n:'Macro 16',v:.5,a:0}]
+            };
+            var bank='A', els=[], grid=document.getElementById('rr-macros');
+            if(!grid) return;
+            for(var i=0;i<8;i++){
+              var m=document.createElement('div'); m.className='rr-macro';
+              m.innerHTML='<div class="rr-kdot"></div><div class="knob-ring"></div><div class="rr-kname"></div>';
+              grid.appendChild(m); els.push(m);
+              (function(idx,node){
+                node.addEventListener('mouseenter',function(){ try{ showPop(node,BANKS[bank][idx].n); }catch(e){} });
+                node.addEventListener('mouseleave',hidePop);
+              })(i,m);
+            }
+            function paint(){ try{
+              var arr=BANKS[bank];
+              for(var i=0;i<8;i++){ var d=arr[i];
+                els[i].classList.toggle('on',!!d.a);
+                arc(els[i].querySelector('.knob-ring'), d._v!==undefined?d._v:d.v, false);
+                els[i].querySelector('.rr-kname').textContent=d.n;
+              }
+            }catch(e){} }
+            paint();
+            var bks=document.querySelectorAll('#syn-panel .rr-bk');
+            [].forEach.call(bks,function(b){ b.addEventListener('click',function(){
+              try{ [].forEach.call(bks,function(x){x.classList.remove('on');}); b.classList.add('on'); bank=b.dataset.bank; paint(); }catch(e){}
+            }); });
+            // mini drift knobs (bipolar)
+            [].forEach.call(document.querySelectorAll('#syn-panel .rr-mini .knob-ring'),function(k){
+              try{ arc(k, parseFloat(k.dataset.rrk)||.5, true); }catch(e){}
+            });
+            // popout
+            var pop=document.getElementById('rr-pop'), row=grid.closest('.ribbon-row');
+            function showPop(node,name){ try{
+              if(!pop||!row) return;
+              var nm=document.getElementById('rr-popnm'); if(nm) nm.textContent=name;
+              var r=node.getBoundingClientRect(), rr=row.getBoundingClientRect();
+              var left=Math.max(4,Math.min(r.left-rr.left-72, rr.width-220));
+              pop.style.left=left+'px'; pop.style.top=(r.top-rr.top-150)+'px';
+              pop.classList.add('show');
+            }catch(e){} }
+            function hidePop(){ try{ pop&&pop.classList.remove('show'); }catch(e){} }
+            if(pop){ pop.addEventListener('mouseenter',function(){pop.classList.add('show');}); pop.addEventListener('mouseleave',hidePop); }
+            // live wander on the 'live' macros (analog feel)
+            var t=0;
+            function tick(){ try{
+              t+=0.016; var arr=BANKS[bank];
+              for(var i=0;i<8;i++){ if(arr[i].live){ arr[i]._v=Math.max(0,Math.min(1,arr[i].v+0.12*Math.sin(t*0.7+i))); arc(els[i].querySelector('.knob-ring'),arr[i]._v,false); } }
+            }catch(e){} requestAnimationFrame(tick); }
+            requestAnimationFrame(tick);
+            // SWAY lane — scrolling analog drift trace
+            var cv=document.getElementById('rr-lane');
+            if(cv&&cv.getContext){
+              var cx=cv.getContext('2d'), buf=[]; for(var b2=0;b2<180;b2++) buf.push(0);
+              (function lane(){ try{
+                var now=t*1000+performance.now()*0; // t drives it; performance.now avoided for determinism-safety
+                var pn=(typeof performance!=='undefined'&&performance.now)?performance.now():t*1000;
+                var y=Math.sin(pn/900)*0.5+Math.sin(pn/1700+1)*0.3+Math.sin(pn/430+2)*0.14;
+                buf.push(y); buf.shift();
+                cx.clearRect(0,0,cv.width,cv.height);
+                cx.strokeStyle='rgba(255,255,255,0.14)'; cx.lineWidth=1; cx.setLineDash([2,4]);
+                cx.beginPath(); cx.moveTo(0,cv.height/2); cx.lineTo(cv.width,cv.height/2); cx.stroke(); cx.setLineDash([]);
+                cx.strokeStyle='rgba(255,255,255,0.9)'; cx.lineWidth=1.4; cx.beginPath();
+                for(var i=0;i<buf.length;i++){ var xx=i/(buf.length-1)*cv.width, yy=cv.height/2-buf[i]*(cv.height*0.36); i?cx.lineTo(xx,yy):cx.moveTo(xx,yy); }
+                cx.stroke();
+                var ly=cv.height/2-buf[buf.length-1]*(cv.height*0.36);
+                cx.fillStyle='#fff'; cx.beginPath(); cx.arc(cv.width-3,ly,2.6,0,7); cx.fill();
+              }catch(e){} requestAnimationFrame(lane); })();
+            }
+          }catch(e){ try{console.log('[ribbon] init err',e);}catch(_){} } }
+          if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+        })();
+        </script>
 
       </div>
 
@@ -10202,7 +10335,7 @@ setTimeout(function wireSynControls () {
     // index, so the param mapping stays exact. NOT data-syn (the generic binder divides by
     // options.length-1 = 4, which would mis-map this 6-choice param) — dedicated handler instead.
     try {
-      var ENGINE_NAMES = ['Wavetable','Sample','Granular','Geode','FM','Analog']; // by param index 0..5
+      var ENGINE_NAMES = ['Wavetable','Sample','Granular','Resynth','FM','Analog']; // by param index 0..5
       ['a','b','c','d'].forEach(function (o) {
         var disp = document.getElementById ('osc-' + o + '-engine-display');
         var sel  = document.getElementById ('osc-' + o + '-engine-select');
@@ -10600,6 +10733,31 @@ setTimeout(function wireSynControls () {
         });
         return wrap;
       }
+      // RESYNTH right-click extras — Cut LP/HP and Shape target (Sine/Square/Saw), as .oscq pills
+      // bound to the GEODE_* choice params. (LOOP MODE moved to the header selector at the top of the
+      // visualizer — see .geode-head — to match the Sample/Granular engines.) Tuning uses the shared
+      // Semitone row above.
+      function buildResynthExtras (oscLetter) {
+        var L = (oscLetter || 'a').toUpperCase ();
+        var wrap = document.createElement ('div'); wrap.className = 'oscq';
+        function pillRow (pid, names) {
+          var ss = null; try { ss = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (pid) : null; } catch (e) {}
+          var row = document.createElement ('div'); row.className = 'oq-sm'; var btns = []; var n = names.length;
+          function paint () { var cur = 0; try { cur = ss ? Math.round (ss.getNormalisedValue () * (n - 1)) : 0; } catch (e) {} btns.forEach (function (b, i) { b.classList.toggle ('on', i === cur); }); }
+          names.forEach (function (nm, idx) {
+            var btn = document.createElement ('div'); btn.className = 'oq-sm-btn'; btn.textContent = nm;
+            btn.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation (); if (ss) { try { ss.setNormalisedValue (n > 1 ? idx / (n - 1) : 0); } catch (e) {} } paint (); });
+            row.appendChild (btn); btns.push (btn);
+          });
+          paint (); return row;
+        }
+        function lab (t, mt) { var d = document.createElement ('div'); d.className = 'oq-lab'; d.textContent = t; d.style.margin = mt; return d; }
+        wrap.appendChild (lab ('Cut mode', '2px 0 1px'));
+        wrap.appendChild (pillRow ('SYN_OSC_' + L + '_GEODE_CUT_MODE', ['LP', 'HP']));
+        wrap.appendChild (lab ('Shape', '5px 0 1px'));
+        wrap.appendChild (pillRow ('SYN_OSC_' + L + '_GEODE_SHAPE_TARGET', ['Sine', 'Square', 'Saw']));
+        return wrap;
+      }
       // Wavetable osc has no right-click today — give it its own body-level glass popup
       // (same .samp-menu glass as the sample menu, so they look identical).
       var oscQuickEl = null;
@@ -10631,6 +10789,8 @@ setTimeout(function wireSynControls () {
             var ps = document.createElement ('div'); ps.className = 'sepd'; m.appendChild (ps);
           }
         } catch (_) {}
+        try { var _rdev = e && e.target ? e.target.closest ('.device.osc') : null;
+              if (_rdev && _rdev.classList.contains ('engine-geode')) { m.appendChild (buildResynthExtras (oscLetter)); var _rsp = document.createElement ('div'); _rsp.className = 'sepd'; m.appendChild (_rsp); } } catch (_) {}
         m.appendChild (buildOscQuick (oscLetter));
         m.style.left = Math.min (e.clientX, window.innerWidth - 200) + 'px';
         m.style.top  = Math.max (8, Math.min (e.clientY, window.innerHeight - 150)) + 'px';
@@ -10979,6 +11139,7 @@ setTimeout(function wireSynControls () {
       // (no jump); when a voice stops it drops out of the list and its line fades out (CSS .4s).
       window.updateSampleFollower = function (osc, list) {
         try {
+          try { window.__geodeFollow = window.__geodeFollow || {}; window.__geodeFollow[osc] = list || []; } catch (eF) {}   // Resynth waterfall reads this for its white MIDI followers
           var S = SAMP[osc]; if (! S || ! S.phPool) return;
           var pool = S.phPool, flat = list || [], seen = {};
           for (var i = 0; i + 1 < flat.length; i += 2) {
@@ -10996,8 +11157,10 @@ setTimeout(function wireSynControls () {
       };
 
       // C++ → JS: a real sample finished loading for an oscillator → draw it.
-      window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {} };
-      window.onOscSampleCleared = function (osc) { try { var S = SAMP[osc]; if (S && S.clearLoaded) S.clearLoaded (); } catch (e) {} };
+      window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {}
+        try { window.__geodePeaks = window.__geodePeaks || {}; if (payload && payload.peaksMin && payload.peaksMax) window.__geodePeaks[osc] = { min: payload.peaksMin, max: payload.peaksMax }; } catch (eP) {} };   // Resynth waterfall waveform underlay
+      window.onOscSampleCleared = function (osc) { try { var S = SAMP[osc]; if (S && S.clearLoaded) S.clearLoaded (); } catch (e) {}
+        try { if (window.__geodePeaks) delete window.__geodePeaks[osc]; } catch (eC) {} };
       window.__terrainSampleRedraw = function (osc) {
         var S = SAMP[osc]; if (! S) return;
         requestAnimationFrame (function () { S.redraw (); S.place (); });
@@ -11006,6 +11169,23 @@ setTimeout(function wireSynControls () {
           if (g) { var p = g (osc); if (p && p.then) p.then (function (j) { if (j && window.onOscSampleLoaded) window.onOscSampleLoaded (osc, j); }); } } catch (_) {}
       };
       document.querySelectorAll ('#syn-panel .sample-view').forEach (wireSample);
+
+      // RESYNTH loop mode — a header selector at the TOP of the visualizer (matches the Sample /
+      // Granular loop-mode dropdown), no longer buried in the right-click menu. Two-way bound to
+      // GEODE_LOOP: One-Shot / Forward / Reverse / Ping-Pong. Reuses the .samp-sel styled dropdown.
+      document.querySelectorAll ('#syn-panel .geode-head').forEach (function (head) {
+        var osc = head.getAttribute ('data-osc'); if (! osc) return;
+        var wrap = head.querySelector ('.samp-sel.gmode'); if (! wrap) return;
+        var dispEl = wrap.querySelector ('.samp-sel-disp'), sel = wrap.querySelector ('select');
+        var NAMES = ['One-Shot', 'Forward', 'Reverse', 'Ping-Pong'], N = NAMES.length;
+        var pid = 'SYN_OSC_' + osc.toUpperCase () + '_GEODE_LOOP';
+        var ss = null; try { ss = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (pid) : null; } catch (e) {}
+        function curIdx () { var i = 1; try { i = ss ? Math.round (ss.getNormalisedValue () * (N - 1)) : 1; } catch (e) {} return Math.max (0, Math.min (N - 1, i)); }
+        function paint () { var i = curIdx (); if (dispEl) dispEl.textContent = NAMES[i]; if (sel) sel.value = String (i); }
+        if (sel) sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; if (ss) { try { ss.setNormalisedValue (N > 1 ? i / (N - 1) : 0); } catch (e) {} } paint (); });
+        try { if (ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener) ss.valueChangedEvent.addListener (paint); } catch (e) {}
+        paint ();
+      });
 
       // WAVETABLE osc right-click → glass Volume / Pan / Semitone (this view has no menu
       // otherwise). Derive the osc letter from the display's own front knobs (SYN_OSC_<L>_…).
@@ -11280,7 +11460,7 @@ setTimeout(function wireSynControls () {
           // Helper: update the conic-gradient based on normalised value [0..1].
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
           // Bipolar params (Sample SCAN / FORMANT) fill from 12 o'clock toward + or −.
-          const isBipolar = /(_SAMPLE_(SCAN|FORMANT)|_GRAIN_SCAN)$/.test (paramId);
+          const isBipolar = /(_SAMPLE_(SCAN|FORMANT)|_GRAIN_SCAN|_GEODE_(FORMANT|TILT|FRACTURE|BEDROCK))$/.test (paramId);
           const applyFill = (n) => { window.__synArc (ring, n, isBipolar); };
 
           // Initial fill from current APVTS value.
@@ -12135,14 +12315,14 @@ setTimeout(function wireSynControls () {
             const isSample = function() {
               // SAMPLE *and* GRANULAR use the sample warp shaper (the DSP now runs it for both) —
               // granular used to fall through to the wavetable WARP 2 list, which did nothing.
-              try { const dev = pill.closest('.device.osc'); return !!(dev && (dev.classList.contains('engine-sample') || dev.classList.contains('engine-granular')) && smModeState && smAmtState); }
+              try { const dev = pill.closest('.device.osc'); return !!(dev && (dev.classList.contains('engine-sample') || dev.classList.contains('engine-granular') || dev.classList.contains('engine-geode')) && smModeState && smAmtState); }
               catch (e) { return false; }
             };
             // Active context — choose the param set + mode list per engine.
             const ctx = function() {
               if (isSample()) {
                 let hdr = 'SAMPLE WARP';
-                try { const dev = pill.closest('.device.osc'); if (dev && dev.classList.contains('engine-granular')) hdr = 'GRAIN WARP'; } catch (e) {}
+                try { const dev = pill.closest('.device.osc'); if (dev && dev.classList.contains('engine-granular')) hdr = 'GRAIN WARP'; else if (dev && dev.classList.contains('engine-geode')) hdr = 'RESYNTH WARP'; } catch (e) {}
                 return { modeState: smModeState, amtState: smAmtState, modes: SAMPLE_MODES, header: hdr };
               }
               return { modeState: wtModeState, amtState: wtAmtState, modes: MODES,        header: 'WARP 2' };
@@ -22222,7 +22402,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'geo2';   // bump per ship — in console.log(snap) + strings/lsof (overlay retired; window.TERRAIN_VIZDBG=1 to see it)
+  var TERRAIN_BUILD = 'rs3';   // bump per ship — in console.log(snap) + strings/lsof (overlay retired; window.TERRAIN_VIZDBG=1 to see it)  [rs2 CPU-CLIFF FIX (budget 3072->640, constant-cost unison, thin-before-sculpt) + loop mode top-of-viz · rs3 SHAPE FIX (tune overtones->harmonics, fade sub = no rumble/spray, 1-partial-per-harmonic)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
@@ -22443,6 +22623,130 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 })();
 </script>
 <script>
+/* ═══════════════════════════════════════════════════════════════════════════════════════
+   GEODE SPECTRAL WATERFALL — receives window.__geodeSpectrum({a:{on,p,e:[96]},b,c,d}) at the
+   editor's 60Hz tick (an editor-side "display engine" runs the real sculpt so it moves with
+   POSITION + every knob even when idle). Keeps a rolling history of each osc's magnitude
+   envelope and draws it receding into depth: newest = bright white ridge on top, older rows
+   fade to purple below (the look Max signed off). Purple bar = the POSITION playhead.
+   Replaces the oscilloscope only when the osc engine = Geode (CSS gates .geode-view).
+   wd9-armored: try/catch around receiver + draw, NaN-guarded bins, stall watchdog. Thin-white. */
+(function () {
+  'use strict';
+  var IDS = ['a', 'b', 'c', 'd'];
+  var GW = '#ECE8F2', GG = '#A78BFA', GP = '#B794FF';   // wave / glow / purple (house palette)
+  var NB = 96, MAXL = 10, COMMIT_EVERY = 2;             // bins · waterfall depth · commit decimation (~30Hz trail)
+  var st = {};
+  IDS.forEach(function (o) { st[o] = { hist: [], pos: 0, on: false, lastMs: 0, ctr: 0, cv: null }; });
+
+  function canvasFor(o) {
+    var s = st[o];
+    if (s.cv && s.cv.isConnected) return s.cv;
+    var all = document.querySelectorAll('#syn-panel .geode-wave');   // DOM order a,b,c,d
+    s.cv = all[IDS.indexOf(o)] || null;
+    return s.cv;
+  }
+
+  window.__geodeSpectrum = function (f) {
+    try {
+      var now = (window.performance && performance.now) ? performance.now() : 0;
+      for (var i = 0; i < 4; i++) {
+        var o = IDS[i], d = f && f[o], s = st[o];
+        if (!d || !d.on) { s.on = false; continue; }
+        s.on = true; s.lastMs = now;
+        var p = +d.p; s.pos = (p === p && p >= 0 && p <= 1) ? p : 0;   // NaN-guard
+        var e = d.e || [], row = new Array(NB);
+        for (var b = 0; b < NB; b++) { var v = +e[b]; row[b] = (v === v && v !== Infinity && v !== -Infinity) ? v : 0; }
+        if (s.ctr % COMMIT_EVERY === 0) { s.hist.unshift(row); if (s.hist.length > MAXL) s.hist.pop(); }
+        else if (s.hist.length) s.hist[0] = row; else s.hist.unshift(row);
+        s.ctr++;
+      }
+      kick();
+    } catch (err) {}
+  };
+
+  var raf = 0;
+  function kick() { if (!raf) raf = requestAnimationFrame(draw); }
+  function draw() {
+    raf = 0; var any = false;
+    for (var i = 0; i < 4; i++) { var o = IDS[i]; if (st[o].on) { any = true; try { paint(o); } catch (e) {} } }
+    if (any) raf = requestAnimationFrame(draw);   // keep the fall alive between pushes
+  }
+
+  function amp01(v) { return Math.pow(Math.min(1, (v < 0 ? 0 : v) / 1.3), 0.55); }  // gentle gamma (small partials stay visible)
+
+  function paint(o) {
+    var s = st[o], cv = canvasFor(o); if (!cv) return;
+    var host = cv.parentElement, r = host.getBoundingClientRect();
+    var w = Math.round(r.width), h = Math.round(r.height); if (!w || !h) return;
+    var dpr = window.DPR || window.devicePixelRatio || 1;
+    if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
+    var ctx = cv.getContext('2d'); ctx.clearRect(0, 0, cv.width, cv.height); ctx.save(); ctx.scale(dpr, dpr);
+
+    // faint center grid line (match the oscilloscope's house look)
+    ctx.strokeStyle = 'rgba(255,255,255,0.045)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5); ctx.stroke();
+
+    // sample WAVEFORM underlay (dim) — the dropped sample sits beneath the live data-removal spectrum
+    try {
+      var pk = window.__geodePeaks && window.__geodePeaks[o];
+      if (pk && pk.min && pk.max && pk.min.length > 1) {
+        var mn = pk.min, mx = pk.max, N2 = mn.length, midY = h * 0.5, ampY = h * 0.42;
+        ctx.beginPath();
+        for (var wi = 0; wi < N2; wi++) { var xx = (wi / (N2 - 1)) * w; var yT = midY - (+mx[wi] || 0) * ampY; if (wi === 0) ctx.moveTo(xx, yT); else ctx.lineTo(xx, yT); }
+        for (var wj = N2 - 1; wj >= 0; wj--) { var xx2 = (wj / (N2 - 1)) * w; var yB = midY - (+mn[wj] || 0) * ampY; ctx.lineTo(xx2, yB); }
+        ctx.closePath(); ctx.fillStyle = 'rgba(183,148,255,0.09)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(230,232,242,0.16)'; ctx.lineWidth = 0.75; ctx.stroke();
+      }
+    } catch (eW) {}
+
+    var rows = s.hist, depth = rows.length;
+    if (depth) {
+      var botPad = 8, plotH = h * 0.60;
+      var base = h - botPad;
+      // draw back (oldest) → front (newest) so the white ridge sits on top
+      for (var L = depth - 1; L >= 0; L--) {
+        var row = rows[L], t = L / (MAXL - 1);        // 0 = newest .. → back
+        var yoff = t * (h * 0.42);                    // recede downward
+        var xoff = t * (w * 0.05);                    // slight horizontal skew
+        ctx.beginPath();
+        for (var b = 0; b < NB; b++) {
+          var x = (b / (NB - 1)) * (w - xoff);
+          var y = (base - amp01(row[b]) * plotH) + yoff;
+          if (b === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        if (L === 0) { ctx.strokeStyle = GW; ctx.lineWidth = 1.5; ctx.globalAlpha = 1; ctx.shadowColor = GG; ctx.shadowBlur = 4; }
+        else { ctx.strokeStyle = GP; ctx.lineWidth = 1; ctx.globalAlpha = (1 - t) * 0.55; ctx.shadowBlur = 0; }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    }
+
+    // WHITE MIDI FOLLOWERS — one vertical white line per SOUNDING note (polyphonic), each at its
+    // own read-head position (from the C++ follower push). Replaces the single position playhead.
+    try {
+      var fl = window.__geodeFollow && window.__geodeFollow[o];
+      if (fl && fl.length) {
+        ctx.strokeStyle = 'rgba(236,232,242,0.55)'; ctx.lineWidth = 1;
+        for (var fi = 0; fi + 1 < fl.length; fi += 2) {
+          var fp = +fl[fi + 1]; if (!(fp >= 0 && fp <= 1)) continue;
+          var fx = fp * w;
+          ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, h); ctx.stroke();
+        }
+      }
+    } catch (eFl) {}
+    ctx.restore();
+
+    // watchdog: if the push channel stalls >1.5s, stop animating (the wd9 page-reload owns recovery)
+    var now = (window.performance && performance.now) ? performance.now() : 0;
+    if (now - s.lastMs > 1500) s.on = false;
+  }
+
+  window.addEventListener('resize', function () { for (var i = 0; i < 4; i++) if (st[IDS[i]].on) { try { paint(IDS[i]); } catch (e) {} } });
+})();
+</script>
+<script>
 /* Builder glue for Opus's OscWave (Stage A): feed live knobs (WT POS / WARP / FOLD)
    from the APVTS slider states, and redraw a hidden osc (B/D) when it becomes visible. */
 (function(){
@@ -22476,7 +22780,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
    update can fire before listeners attach, so we re-read a few times to catch it. */
 (function () {
   'use strict';
-  var ENGINE_NAMES = ['Wavetable','Sample','Granular','Geode','FM','Analog'];
+  var ENGINE_NAMES = ['Wavetable','Sample','Granular','Resynth','FM','Analog'];
   function ss (n) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState(n) : null; } catch (e) { return null; } }
   function sIdx (s) { try { return s ? Math.round(s.getScaledValue ? s.getScaledValue() : 0) : 0; } catch (e) { return 0; } }
   function resync () {

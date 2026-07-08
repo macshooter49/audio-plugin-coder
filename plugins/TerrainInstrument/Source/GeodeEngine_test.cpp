@@ -1,118 +1,156 @@
-// GeodeEngine offline proof (Pattern A — NOT in CMakeLists):
-//   c++ -std=c++17 -O2 -Wall -Wextra -ISource Source/GeodeEngine_test.cpp -o /tmp/gd && /tmp/gd
+// ════════════════════════════════════════════════════════════════════════════
+//  GeodeEngine_test.cpp — offline DSP proof for the RESYNTH oscillator.
+//  (Pattern A — NOT in CMakeLists.) Build + run:
+//    c++ -std=c++17 -O2 -Wall -Wextra -ISource Source/GeodeEngine_test.cpp -o /tmp/gd && /tmp/gd
+//
+//  Proves the load-bearing property Max cares about: NOTHING DETUNES. Every sculpt/
+//  degrade control (Formant, Shape, Drive, Crush, Cut, Sieve, Tilt) must keep the
+//  played fundamental fixed. Also checks audio is produced and CRUSH quantizes.
+// ════════════════════════════════════════════════════════════════════════════
 #include "GeodeEngine.h"
 #include <cstdio>
-#include <cmath>
 #include <vector>
-
+#include <cmath>
+#include <complex>
+#include <chrono>
+#include <algorithm>
 using namespace tw;
 
-static int failures = 0;
-static void check (bool cond, const char* what)
+// A harmonic input "sample" spectrum: fundamental + H harmonics at 1/n (saw-ish).
+static GeodeFrameStore makeStore (int H)
 {
-    std::printf ("%s  %s\n", cond ? "  ok" : "FAIL", what);
-    if (! cond) ++failures;
+    GeodeFrameStore s; s.frames.resize (4); s.naturalSec = 2.0f; s.valid = true; s.f0 = 220.f;
+    for (auto& f : s.frames)
+    {
+        int c = 0;
+        for (int n = 1; n <= H; ++n) { f.ratio[(size_t) c] = (float) n; f.amp[(size_t) c] = 1.f / (float) n; ++c; }
+        f.nPartials = c;
+    }
+    return s;
 }
 
-static bool finiteBlock (const float* a, int n)
+// McLeod-style first-peak NSDF fundamental estimate (octave-error resistant).
+static double estFund (const float* x, int n, double sr)
 {
-    for (int i = 0; i < n; ++i) if (! std::isfinite (a[i])) return false;
-    return true;
+    double e0 = 0; for (int i = 0; i < n; ++i) e0 += (double) x[i] * x[i]; if (e0 < 1e-9) return 0;
+    int minLag = (int) (sr / 2000.0), maxLag = (int) (sr / 50.0);
+    std::vector<double> nsdf ((size_t) maxLag + 1, 0.0);
+    double best = 0;
+    for (int lag = minLag; lag < maxLag; ++lag)
+    {
+        double ac = 0, e1 = 0, e2 = 0;
+        for (int i = 0; i + lag < n; ++i) { ac += (double) x[i] * x[i + lag]; e1 += (double) x[i] * x[i]; e2 += (double) x[i + lag] * x[i + lag]; }
+        double v = (e1 + e2 > 1e-9) ? 2 * ac / (e1 + e2) : 0; nsdf[(size_t) lag] = v; if (v > best) best = v;
+    }
+    double thr = 0.85 * best;
+    for (int lag = minLag + 1; lag < maxLag - 1; ++lag)
+        if (nsdf[(size_t) lag] >= thr && nsdf[(size_t) lag] >= nsdf[(size_t) (lag - 1)] && nsdf[(size_t) lag] >= nsdf[(size_t) (lag + 1)])
+        {
+            double ym1 = nsdf[(size_t) (lag - 1)], y0 = nsdf[(size_t) lag], y1 = nsdf[(size_t) (lag + 1)];
+            double den = ym1 - 2 * y0 + y1, d = (std::fabs (den) > 1e-12) ? 0.5 * (ym1 - y1) / den : 0;
+            return sr / (lag + d);
+        }
+    return 0;
 }
-static float rms (const float* a, int n)
+
+static double renderFund (GeodeParams p, GeodeFrameStore& st, double playHz, double sr)
 {
-    double s = 0.0; for (int i = 0; i < n; ++i) s += (double) a[i] * a[i];
-    return (float) std::sqrt (s / std::max (1, n));
+    GeodeEngine e; e.prepare (sr); e.setFrameStore (&st); e.setParams (p); e.noteOn (playHz, 999);
+    int N = (int) (sr * 0.3); std::vector<float> L ((size_t) N, 0), R ((size_t) N, 0);
+    int blk = 256;
+    for (int off = 0; off < N; off += blk) { int m = std::min (blk, N - off); e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m); e.postProcess (&L[(size_t) off], &R[(size_t) off], m); }
+    return estFund (&L[(size_t) (N / 2)], N / 2, sr);
 }
 
 int main()
 {
-    const double SR = 48000.0;
+    const double sr = 48000.0, playHz = 261.63;   // C4
+    auto st = makeStore (12);
+    GeodeParams base; base.scan = 0.f;             // HOLD read-head → measure a stable frame
 
-    // ── 1. synthesize a test sample: 220 Hz sawtooth + a little breath noise ──
-    const int N = (int) (SR * 1.0);
-    std::vector<float> samp ((size_t) N);
-    std::uint32_t rng = 12345u;
-    auto white = [&] { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return (float) ((int32_t) rng) * (1.f / 2147483648.f); };
-    const double f0 = 220.0;
-    for (int i = 0; i < N; ++i)
+    std::printf ("=== RESYNTH DSP proof (played C4 = %.2f Hz) ===\n", playHz);
+    int pass = 0, tot = 0;
+    auto check = [&] (const char* nm, double f) { bool ok = (f > 1 && std::fabs (f - playHz) < 6); std::printf ("[%-16s] fund=%7.1fHz  %s\n", nm, f, ok ? "PASS" : "FAIL"); pass += ok; ++tot; };
+
+    check ("audio/neutral",  renderFund (base, st, playHz, sr));
+    { GeodeParams p = base; p.formant = 0.0f; check ("formant=0.0", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.formant = 1.0f; check ("formant=1.0", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = 2; check ("shape=saw", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = 1; check ("shape=square", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = 0; check ("shape=sine", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.drive = 1.0f; check ("drive=1.0", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.crush = 0.8f; check ("crush=0.8", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.cut = 0.4f; p.cutMode = 0; check ("cut=LP.4", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.sieve = 0.5f; check ("sieve=0.5", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.tilt = 0.9f; check ("tilt=0.9", renderFund (p, st, playHz, sr)); }
+
+    // CRUSH must quantize the output to far fewer distinct levels.
+    auto distinct = [] (std::vector<float>& v) { std::vector<int> q; for (float x : v) q.push_back ((int) std::round (x * 1000)); std::sort (q.begin(), q.end()); q.erase (std::unique (q.begin(), q.end()), q.end()); return (int) q.size(); };
+    int N = 2000; std::vector<float> L0 ((size_t) N, 0), R0 ((size_t) N, 0), L1 ((size_t) N, 0), R1 ((size_t) N, 0);
+    { GeodeEngine e; e.prepare (sr); e.setFrameStore (&st); e.setParams (base); e.noteOn (playHz, 7); e.renderBlockAdd (L0.data(), R0.data(), N); }
+    { GeodeParams pc = base; pc.crush = 0.9f; GeodeEngine e; e.prepare (sr); e.setFrameStore (&st); e.setParams (pc); e.noteOn (playHz, 7); e.renderBlockAdd (L1.data(), R1.data(), N); e.postProcess (L1.data(), R1.data(), N); }
+    int d0 = distinct (L0), d1 = distinct (L1);
+    bool crushOk = d1 < d0 / 2;
+    std::printf ("[crush-quantize   ] nocrush=%d crush=%d  %s\n", d0, d1, crushOk ? "PASS" : "FAIL");
+    pass += crushOk; ++tot;
+
+    // ── SHAPE anti-rumble regression (rs2) — the load-bearing SHAPE test. A REAL sample's analyzed
+    // bank is inharmonic and has a SUB-fundamental peak; the old clean-harmonic makeStore() couldn't
+    // expose the bug Max hit ("rumble slop / detuned spray"). SHAPE→saw must yield a fundamental-
+    // dominant, in-tune harmonic series with ~no octave-down energy. ───────────────────────────────
     {
-        double t = (double) i / SR;
-        double saw = 0.0;
-        for (int h = 1; h <= 20; ++h) saw += std::sin (2.0 * M_PI * f0 * h * t) / h;
-        samp[(size_t) i] = (float) (0.3 * saw) + 0.02f * white();
+        GeodeFrameStore ms; ms.frames.resize (4); ms.naturalSec = 2.0f; ms.valid = true; ms.f0 = (float) playHz;
+        const float MR[] = { 0.50f, 1.00f, 1.71f, 2.00f, 2.34f, 3.00f, 3.13f, 4.02f, 4.83f, 5.10f, 6.00f, 7.29f };
+        const float MA[] = { 0.55f, 1.00f, 0.62f, 0.50f, 0.44f, 0.33f, 0.30f, 0.26f, 0.22f, 0.20f, 0.17f, 0.14f };
+        for (auto& f : ms.frames) { for (int i = 0; i < 12; ++i) { f.ratio[(size_t) i] = MR[i]; f.amp[(size_t) i] = MA[i]; } f.nPartials = 12; }
+        GeodeParams sp; sp.scan = 0.f; sp.shape = 1.0f; sp.shapeTarget = 2; sp.quality = 1.0f;   // full saw
+        const int NN = 16384; std::vector<float> xs ((size_t) NN, 0.f), rr2 ((size_t) NN, 0.f);
+        GeodeEngine e; e.prepare (sr); e.setFrameStore (&ms); e.setParams (sp); e.noteOn (playHz, 5);
+        for (int off = 0; off < NN; off += 256) { int m = std::min (256, NN - off); e.setParams (sp); e.renderBlockAdd (&xs[(size_t) off], &rr2[(size_t) off], m); }
+        std::vector<std::complex<float>> bf ((size_t) NN);
+        for (int i = 0; i < NN; ++i) { float w = 0.5f - 0.5f * std::cos (2.f * 3.14159265f * (float) i / (NN - 1)); bf[(size_t) i] = { xs[(size_t) i] * w, 0.f }; }
+        geodedsp::fft (bf.data(), NN, false);
+        const double binHz = sr / NN; double subE = 0, totE = 0, peakMag = 0; int peakBin = 0;
+        const int subLim = (int) (0.75 * playHz / binHz);
+        for (int b = 1; b < NN / 2; ++b) { const double mg = std::abs (bf[(size_t) b]), en = mg * mg; totE += en; if (b <= subLim) subE += en; if (mg > peakMag) { peakMag = mg; peakBin = b; } }
+        const double subPct = totE > 0 ? 100.0 * subE / totE : 0.0, peakHz = peakBin * binHz;
+        const bool shapeOk = (subPct < 5.0) && (std::fabs (peakHz - playHz) < playHz * 0.06);  // no rumble + fundamental-dominant
+        std::printf ("[shape-antirumble ] sub=%.1f%% peak=%.1fHz (fund %.1f)  %s\n", subPct, peakHz, playHz, shapeOk ? "PASS" : "FAIL");
+        pass += shapeOk; ++tot;
     }
 
-    // ── 2. analyze ──
-    GeodeFrameStore store;
-    GeodeAnalyzer::analyzeSample (samp.data(), N, SR, store);
-    check (store.valid, "sample store is valid");
-    check (store.numFrames() > 4, "produced multiple frames");
-    std::printf ("  ..f0 detected = %.1f Hz (expect ~220), frames = %d\n", store.f0, store.numFrames());
-    check (store.f0 > 200.f && store.f0 < 240.f, "f0 detected near 220 Hz");
-    int maxP = 0; for (auto& f : store.frames) maxP = std::max (maxP, f.nPartials);
-    check (maxP >= 8, "extracted a healthy set of partials");
-
-    // ── 3. resynthesize at MIDI note (A3 = 220) ──
-    GeodeEngine eng; eng.prepare (SR);
-    int budget = 4096; eng.setPartialBudget (&budget, 100000);
-    eng.setFrameStore (&store);
-    GeodeParams p; eng.setParams (p);
-    eng.noteOn (220.0, 999u);
-
-    std::vector<float> L (512, 0.f), R (512, 0.f);
-    for (int blk = 0; blk < 8; ++blk)   // a few blocks to settle the read-head/noise
+    // ── CPU CEILING GUARD (rs2) — never ship a Resynth that pegs a core again. ──────────────
+    // Saturate the shared partial budget the way STRETCH + a big unison chord does, worst-case
+    // knobs on, and assert the per-block cost stays a small fraction of one core. (Full profiling
+    // harness: GeodeEngine_cpubench.cpp.) Threshold is generous so it won't false-fail on a slow
+    // box but WILL catch the 40-60% cliff that shipped in rs1.
     {
-        std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
-        eng.renderBlockAdd (L.data(), R.data(), 512);
+        const int   blk = 128, banks = 256, BUD = 640;   // BUD mirrors kGeodePartialBudget
+        const double blockNs = (double) blk / sr * 1e9;  // realtime ns/block (one core)
+        std::vector<GeodeEngine> engs ((size_t) banks);
+        int live = 0;
+        GeodeParams wp; wp.quality = 1.0f; wp.stretch = 0.98f; wp.scan = 0.5f;      // STRETCH pad
+        wp.formant = 1.0f; wp.tilt = 0.9f; wp.shape = 1.0f; wp.cut = 0.4f; wp.drive = 0.7f; // all sculpt ON
+        for (int i = 0; i < banks; ++i)
+        { auto& e = engs[(size_t) i]; e.prepare (sr); e.setFrameStore (&st);
+          e.setPartialBudget (&live, BUD); e.setUnisonScale (16);
+          GeodeParams pi = wp; pi.start = (float) i / banks; e.setParams (pi);
+          e.noteOn (261.63 * (1.0 + 0.001 * i), (std::uint32_t) (7 + i)); }
+        std::vector<float> L ((size_t) blk, 0.f), R ((size_t) blk, 0.f);
+        for (int w = 0; w < 8; ++w) { live = 0; for (auto& e : engs) { e.renderBlockAdd (L.data(), R.data(), blk); e.postProcess (L.data(), R.data(), blk); } }
+        auto t0 = std::chrono::high_resolution_clock::now();
+        for (int b = 0; b < 3000; ++b)
+        { live = 0; std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
+          for (auto& e : engs) { e.renderBlockAdd (L.data(), R.data(), blk); e.postProcess (L.data(), R.data(), blk); } }
+        auto t1 = std::chrono::high_resolution_clock::now();
+        double nsBlk = std::chrono::duration<double, std::nano> (t1 - t0).count() / 3000.0;
+        double pct = nsBlk / blockNs * 100.0;
+        bool cpuOk = pct < 40.0;   // rs1 shipped at ~40-62%; rs2 target is ~10-15% (~2x headroom here for -O2/slow box)
+        std::printf ("[cpu-ceiling      ] worst-case %d live partials -> %.1f%% of one core  %s\n",
+                     live, pct, cpuOk ? "PASS" : "FAIL");
+        pass += cpuOk; ++tot;
     }
-    check (finiteBlock (L.data(), 512) && finiteBlock (R.data(), 512), "resynth output is finite (no NaN)");
-    check (rms (L.data(), 512) > 1e-4f, "resynth output is audible (non-silent)");
-    std::printf ("  ..resynth RMS L = %.4f\n", rms (L.data(), 512));
 
-    // ── 4. sculpt sweep never NaNs or blows up ──
-    bool sculptOk = true; float peak = 0.f;
-    for (float v = 0.f; v <= 1.001f; v += 0.25f)
-    {
-        GeodeParams q;
-        q.silt = v; q.fossil = v; q.creep = v; q.sieve = v; q.distill = v;
-        q.haze = v; q.fracture = v; q.tilt = v; q.formant = v; q.cut = 1.f - v; q.quality = v;
-        eng.setParams (q); eng.noteOn (330.0, 7u);
-        for (int blk = 0; blk < 4; ++blk)
-        {
-            std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
-            eng.renderBlockAdd (L.data(), R.data(), 512);
-            if (! finiteBlock (L.data(), 512) || ! finiteBlock (R.data(), 512)) sculptOk = false;
-            for (int i = 0; i < 512; ++i) peak = std::max (peak, std::fabs (L[(size_t) i]));
-        }
-    }
-    check (sculptOk, "full sculpt sweep stays finite");
-    check (peak < 8.f, "output stays bounded across sculpt (< 8.0)");
-    std::printf ("  ..sculpt-sweep peak = %.3f\n", peak);
-
-    // ── 5. wavetable door: harmonic partials (saw: ratio h, amp 1/h) ──
-    const int WF = 16, WP = 32;
-    std::vector<float> wr ((size_t) WF * WP, 0.f), wa ((size_t) WF * WP, 0.f);
-    for (int f = 0; f < WF; ++f)
-        for (int h = 1; h <= WP; ++h)
-        { wr[(size_t) f * WP + (h - 1)] = (float) h; wa[(size_t) f * WP + (h - 1)] = 1.f / (float) h; }
-    GeodeFrameStore ws;
-    GeodeAnalyzer::buildFromWave (wr.data(), wa.data(), WF, WP, ws);
-    check (ws.valid && ws.fromWave, "wavetable store built + flagged fromWave");
-    GeodeEngine eng2; eng2.prepare (SR); eng2.setPartialBudget (&budget, 100000);
-    eng2.setFrameStore (&ws);
-    GeodeParams wp; eng2.setParams (wp); eng2.noteOn (110.0, 3u);
-    std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
-    for (int blk = 0; blk < 4; ++blk) { eng2.renderBlockAdd (L.data(), R.data(), 512); }
-    check (finiteBlock (L.data(), 512), "wavetable resynth is finite");
-    check (rms (L.data(), 512) > 1e-4f, "wavetable resynth is audible");
-
-    // ── 6. no store → silent no-op, never crashes ──
-    GeodeEngine eng3; eng3.prepare (SR);
-    std::fill (L.begin(), L.end(), 0.f);
-    eng3.renderBlockAdd (L.data(), R.data(), 512);
-    check (rms (L.data(), 512) < 1e-9f, "no-store engine is a silent no-op");
-
-    std::printf ("\n%s — %d failure(s)\n", failures == 0 ? "ALL GREEN" : "RED", failures);
-    return failures == 0 ? 0 : 1;
+    std::printf ("=== %d/%d PASS ===\n", pass, tot);
+    return (pass == tot) ? 0 : 1;
 }

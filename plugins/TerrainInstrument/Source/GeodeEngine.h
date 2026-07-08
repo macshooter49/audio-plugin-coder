@@ -1,27 +1,31 @@
 #pragma once
 // ════════════════════════════════════════════════════════════════════════════
-//  tw::GeodeEngine — Terrain GEODE resynthesis oscillator (Engine::SPEC)
+//  tw::GeodeEngine — Terrain RESYNTH oscillator (Engine::SPEC)
 //
-//  SMS-flavored resynthesis: OFFLINE-analyze a sound into per-frame sinusoidal
-//  PARTIALS + a noise-residual band envelope; per-voice RESYNTHESIZE it as an
-//  oscillator bank + colored noise, played back polyphonically with a
-//  POSITION / FOSSIL(freeze) / CREEP(scan) read-head and spectral sculpt.
+//  (Internal name stays "Geode" for preset/param-ID stability; the UI calls it
+//   "Resynth".) A SAMPLE resynthesizer: OFFLINE-analyze a dropped sound into
+//   per-frame sinusoidal PARTIALS; per-voice RESYNTHESIZE it as an oscillator
+//   bank, played back polyphonically with a START / STRETCH / SCAN read-head and
+//   a spectral-sculpt + degrade chain — pitched to the key, NEVER detuned.
 //
-//  Two source doors (the hybrid):
-//   • sample   → GeodeAnalyzer::analyzeSample  (STFT peak-track → partials+noise)
-//   • wavetable→ GeodeAnalyzer::buildFromWave   (frames ARE partials — near free)
+//  Controls (amplitude-domain unless noted — the played FUNDAMENTAL is never moved, so nothing
+//  detunes; SHAPE may tune OVERTONES onto exact harmonics; DSP grounded in 2026-07-07 research):
+//    SCAN     play/scan rate (0=hold .5=natural 1=2×)          [read-head]
+//    STRETCH  time-stretch / freeze (slows the read-head)      [read-head]
+//    START    read-head start position                         [read-head]
+//    SIEVE    spectral gate (the lossy "data-removal" hero)    [amp]
+//    CUT      spectral filter, LP or HP (~24 dB/oct)           [amp]
+//    SHAPE    morph→sine/square/saw: tune overtones to harmonics [amp+tune] (Chebyshev W(n))
+//    FORMANT  true-envelope shift — moves envelope, not pitch  [amp]  (Röbel; kernel-smoothed)
+//    TILT     spectral tilt bright/dark                        [amp]
+//    QUALITY  active partial budget (16..96)                   [amp]
+//    DRIVE    spectral distortion (soft-clip, adds harmonics)  [post-synth, period-preserving]
+//    CRUSH    bit-quantize + rate-decimate lo-fi degrade       [post-synth]
 //
-//  Architecture (real-time safety):
-//   • The heavy analysis is done ONCE per source on the MESSAGE thread and stored
-//     in a shared read-only GeodeFrameStore (the processor double-buffers + atomic-
-//     publishes it, MorphSlot-style). Every voice/unison instance just holds a
-//     const pointer and resynthesizes — per-voice CPU is a bounded sine bank.
-//   • renderBlockAdd() allocates nothing (working arrays sized in prepare()).
-//   • Self-contained (copies the small FFT/STFT/f0/peak helpers, like BlendEngine),
-//     so it drops into CMake with no new deps and has its own offline test.
-//
-//  CPU: a shared partial budget (mirrors the grain budget) thins the quietest
-//  partials gracefully instead of dropping voices — Max's soft-budget rule.
+//  Real-time safety: heavy analysis runs ONCE per source on the message thread
+//  into a shared read-only GeodeFrameStore (processor double-buffers + atomic-
+//  publishes it). Every voice/unison instance holds a const pointer and only
+//  resynthesizes. renderBlockAdd()/postProcess() allocate nothing.
 //
 //  Offline proof loop (Pattern A — NOT in CMakeLists):
 //    c++ -std=c++17 -O2 -Wall -Wextra -ISource Source/GeodeEngine_test.cpp -o /tmp/gd && /tmp/gd
@@ -36,18 +40,27 @@
 namespace tw {
 
 namespace geode {
-    constexpr int   kMaxPartials = 96;    // matches Wavetable kMaxPartials (slot cap)
-    constexpr int   kNoiseBands  = 16;    // residual log-band envelope resolution
+    constexpr int   kMaxPartials = 96;    // matches Wavetable kMaxPartials (slot cap / analysis depth)
+    // ── real-time CPU governor (added rs2 — the STRETCH/unison CPU-cliff fix) ──
+    // Additive resynthesis costs ~1 sine-osc PER PARTIAL PER SAMPLE. Left uncapped it pegs a
+    // core (measured: 3072 partials ≈ 40% of one core for the oscillator ALONE). These bound it.
+    constexpr int   kMinActive   = 16;    // floor of the QUALITY active-partial range
+    constexpr int   kMaxActive   = 64;    // per-voice active-partial CEILING (was kMaxPartials=96)
+    constexpr int   kUnisonFloor = 10;    // a single unison bank never thins below this
+    constexpr int   kNoiseBands  = 16;    // residual log-band envelope resolution (analysis only)
     constexpr int   kMaxFrames   = 256;   // frame-store cap (long samples subsampled)
     constexpr int   kWin         = 2048;  // analysis window
     constexpr int   kHop         = 512;   // 75% overlap
     constexpr int   kBins        = kWin / 2 + 1;
     constexpr float kPi          = 3.14159265358979323846f;
     constexpr float kRefHz       = 261.6256f; // C4 — unvoiced-sample transpose reference
+    // Display (data-removal viz) log-frequency window, in partial-ratio units.
+    constexpr float kDispRMin    = 0.5f;      // half the fundamental (sub) …
+    constexpr float kDispRMax    = 64.f;      // …to +6 octaves of partials
 }
 
 // One analyzed spectral frame: K partials (ratio-to-fundamental + linear amp) and
-// a residual noise band envelope. ratio lets sample & wavetable playback share one path.
+// a residual noise band envelope (kept for analysis stability; not rendered).
 struct GeodeFrame
 {
     std::array<float, geode::kMaxPartials> ratio {}; // partial freq / fundamental
@@ -60,38 +73,43 @@ struct GeodeFrame
 struct GeodeFrameStore
 {
     std::vector<GeodeFrame> frames;
-    float f0       = 0.f;             // detected fundamental (Hz); 0 = unvoiced / wavetable
-    bool  fromWave = false;
-    bool  valid    = false;
+    float f0         = 0.f;          // detected fundamental (Hz); 0 = unvoiced
+    float naturalSec = 0.f;          // original sample DURATION (s) → play-through at natural speed
+    bool  fromWave   = false;
+    bool  valid      = false;
     int   numFrames() const noexcept { return (int) frames.size(); }
 };
 
 // Per-block sculpt/play parameters (gathered by the voice; == gates the push).
+// NOTE: field names are the Resynth vocabulary. The APVTS param IDs they map from
+// keep their historical GEODE_* strings (see PluginProcessor gather) for preset safety.
 struct GeodeParams
 {
-    // ── page 1 (Play) ──
-    float position = 0.f;    // 0..1 read position (scrub)
-    float fossil   = 0.f;    // 0..1 freeze amount (holds the read-head)
-    float creep    = 0.f;    // 0..1 auto-scan rate (store-lengths/sec ×2)
-    float silt     = 0.15f;  // 0..1 partials(0) ↔ noise-residual(1) equal-power balance
-    float formant  = 0.5f;   // 0..1 bipolar formant/envelope shift (0.5 = neutral)
-    float cut      = 1.f;    // 0..1 spectral low-pass over partials (1 = fully open)
-    // ── page 2 (Sculpt) ──
-    float sieve    = 0.f;    // 0..1 spectral gate (drop partials below threshold)
-    float distill  = 0.f;    // 0..1 keep only the loudest partials (trace)
-    float haze     = 0.f;    // 0..1 spectral blur (amplitude neighbor-smear)
-    float fracture = 0.5f;   // 0..1 bipolar harmonic↔inharmonic remap (0.5 = neutral)
-    float tilt     = 0.5f;   // 0..1 bipolar spectral tilt (0.5 = flat)
-    float quality  = 0.66f;  // 0..1 active partial cap (→ 16..kMaxPartials)
-    // ── source / loop ──
-    int   loopMode = 1;      // 0=one-shot 1=fwd loop 2=reverse 3=ping-pong
-    bool  formantKeep = true;
+    // ── page 1 (Play & Character) ──
+    float start   = 0.f;    // 0..1 read-head START position          (APVTS: GEODE_POSITION)
+    float stretch = 0.f;    // 0..1 time-stretch / freeze amount       (APVTS: GEODE_FOSSIL)
+    float scan    = 0.5f;   // 0..1 play/scan rate: 0=hold .5=natural 1=2× (APVTS: GEODE_CREEP)
+    float sieve   = 0.f;    // 0..1 spectral gate (lossy hero)         (APVTS: GEODE_SIEVE)
+    float cut     = 1.f;    // 0..1 spectral filter (1 = open)         (APVTS: GEODE_CUT)
+    float shape   = 0.f;    // 0..1 morph toward target waveform       (APVTS: GEODE_DISTILL)
+    float drive   = 0.f;    // 0..1 spectral distortion (post-synth)   (APVTS: GEODE_HAZE)
+    // ── page 2 (Sculpt & Fidelity) ──
+    float quality = 0.80f;  // 0..1 active partial cap (→ 16..kMaxPartials) (APVTS: GEODE_QUALITY)
+    float formant = 0.5f;   // 0..1 bipolar formant/envelope shift     (APVTS: GEODE_FORMANT)
+    float tilt    = 0.5f;   // 0..1 bipolar spectral tilt (0.5 = flat) (APVTS: GEODE_TILT)
+    float crush   = 0.f;    // 0..1 bitcrush + rate decimate (post-synth) (APVTS: GEODE_SILT)
+    // ── choices / toggles ──
+    int   shapeTarget = 2;  // 0=sine 1=square 2=saw                    (APVTS: GEODE_SHAPE_TARGET)
+    int   cutMode     = 0;  // 0=LP 1=HP                                (APVTS: GEODE_CUT_MODE)
+    int   loopMode    = 1;  // 0=one-shot 1=fwd 2=reverse 3=ping-pong   (APVTS: GEODE_LOOP)
+    bool  formantKeep = true;                                        // (APVTS: GEODE_FKEEP)
 
     bool operator== (const GeodeParams& o) const noexcept
     {
-        return position==o.position && fossil==o.fossil && creep==o.creep && silt==o.silt
-            && formant==o.formant && cut==o.cut && sieve==o.sieve && distill==o.distill
-            && haze==o.haze && fracture==o.fracture && tilt==o.tilt && quality==o.quality
+        return start==o.start && stretch==o.stretch && scan==o.scan && sieve==o.sieve
+            && cut==o.cut && shape==o.shape && drive==o.drive && quality==o.quality
+            && formant==o.formant && tilt==o.tilt && crush==o.crush
+            && shapeTarget==o.shapeTarget && cutMode==o.cutMode
             && loopMode==o.loopMode && formantKeep==o.formantKeep;
     }
     bool operator!= (const GeodeParams& o) const noexcept { return ! (*this == o); }
@@ -182,7 +200,7 @@ inline float detectF0 (const float* m, int n, double rate) noexcept
 class GeodeAnalyzer
 {
 public:
-    // Analyze a mono view of a sample into partials + noise per frame.
+    // Analyze a mono view of a sample into partials per frame (SAMPLE-ONLY resynth).
     static void analyzeSample (const float* mono, int n, double rate, GeodeFrameStore& out)
     {
         out = GeodeFrameStore {};
@@ -191,6 +209,7 @@ public:
         const float f0   = geodedsp::detectF0 (mono, n, rate);
         const float fund = (f0 > 0.f) ? f0 : geode::kRefHz;
         out.f0 = f0; out.fromWave = false;
+        out.naturalSec = (float) ((double) n / rate);   // play-through reference: the sample's real length
 
         const int totalFrames = std::max (1, (n + geode::kHop - 1) / geode::kHop);
         const int stride      = std::max (1, (totalFrames + geode::kMaxFrames - 1) / geode::kMaxFrames);
@@ -199,6 +218,8 @@ public:
 
         std::vector<std::complex<float>> buf ((size_t) geode::kWin);
         std::array<float, geode::kBins> mag {};
+        Tracker T; T.reset();                 // persists across frames → stable partial slots
+        std::vector<Peak> peaks; peaks.reserve ((size_t) geode::kMaxPartials);
 
         for (int fi = 0; fi < totalFrames; fi += stride)
         {
@@ -213,7 +234,8 @@ public:
             for (int b = 0; b < geode::kBins; ++b) mag[(size_t) b] = std::abs (buf[(size_t) b]);
 
             GeodeFrame fr;
-            extractPartials (mag.data(), binHz, fund, fr);
+            detectPeaks (mag.data(), binHz, fund, peaks);   // raw peaks this frame
+            trackFrame  (T, peaks, fr);                     // → stable slots (birth/death tracking)
             extractNoise (mag.data(), rate, fr);
             out.frames.push_back (fr);
         }
@@ -221,7 +243,7 @@ public:
         out.valid = ! out.frames.empty();
     }
 
-    // Wavetable door — frames are ALREADY partials. Flat layout: ratio/amp[frame*maxP + p].
+    // Wavetable door (retained for API compatibility; Resynth is sample-only and does not call this).
     static void buildFromWave (const float* ratioFlat, const float* ampFlat,
                                int nFrames, int maxP, GeodeFrameStore& out)
     {
@@ -256,11 +278,12 @@ private:
         return v[(size_t) (n / 2)];
     }
 
-    static void extractPartials (const float* mag, double binHz, float fund, GeodeFrame& fr)
+    struct Peak { float ratio, amp; };
+
+    // detect this frame's spectral peaks → list of {ratio, amp} (loudest kMaxPartials kept).
+    static void detectPeaks (const float* mag, double binHz, float fund, std::vector<Peak>& out)
     {
-        struct Pk { float ratio, amp; };
-        static thread_local std::vector<Pk> pks;
-        pks.clear();
+        out.clear();
         const float med = frameMedian (mag, geode::kBins);
         const float scale = 2.f / (float) geode::kWin;
         for (int b = 2; b < geode::kBins - 2; ++b)
@@ -275,18 +298,61 @@ private:
             const double centroid = c / m;
             const float  hz = (float) (centroid * binHz);
             if (hz < 15.f) continue;
-            pks.push_back ({ hz / fund, (float) m * scale });
+            out.push_back ({ hz / fund, (float) m * scale });
         }
-        // keep the STRONGEST kMaxPartials, then sort by ratio (stable slot order for interp)
-        if ((int) pks.size() > geode::kMaxPartials)
+        if ((int) out.size() > geode::kMaxPartials)
         {
-            std::nth_element (pks.begin(), pks.begin() + geode::kMaxPartials, pks.end(),
-                              [] (const Pk& a, const Pk& b) { return a.amp > b.amp; });
-            pks.resize (geode::kMaxPartials);
+            std::nth_element (out.begin(), out.begin() + geode::kMaxPartials, out.end(),
+                              [] (const Peak& a, const Peak& b) { return a.amp > b.amp; });
+            out.resize (geode::kMaxPartials);
         }
-        std::sort (pks.begin(), pks.end(), [] (const Pk& a, const Pk& b) { return a.ratio < b.ratio; });
-        fr.nPartials = (int) pks.size();
-        for (int i = 0; i < fr.nPartials; ++i) { fr.ratio[(size_t) i] = pks[(size_t) i].ratio; fr.amp[(size_t) i] = pks[(size_t) i].amp; }
+    }
+
+    // ─── cross-frame partial TRACKER (McAulay–Quatieri birth/death) ────────────────
+    struct Tracker
+    {
+        std::array<float, geode::kMaxPartials> ratio {};
+        std::array<float, geode::kMaxPartials> amp   {};
+        std::array<int,   geode::kMaxPartials> miss  {};
+        void reset() noexcept { ratio.fill (0.f); amp.fill (0.f); miss.fill (0); }
+    };
+
+    static void trackFrame (Tracker& T, std::vector<Peak>& peaks, GeodeFrame& fr) noexcept
+    {
+        constexpr float kTol        = 0.05f;   // match window (±~0.85 semitone)
+        constexpr int   kCoast      = 4;       // frames a missed track survives
+        constexpr float kCoastDecay = 0.5f;    // amp decay per missed frame while coasting
+
+        std::array<bool, geode::kMaxPartials> used {};
+        std::sort (peaks.begin(), peaks.end(), [] (const Peak& a, const Peak& b) { return a.amp > b.amp; });
+        for (const auto& p : peaks)
+        {
+            int best = -1; float bestErr = kTol;
+            for (int s = 0; s < geode::kMaxPartials; ++s)
+            {
+                if (T.ratio[(size_t) s] <= 0.f || used[(size_t) s]) continue;
+                const float err = std::fabs (p.ratio - T.ratio[(size_t) s]) / T.ratio[(size_t) s];
+                if (err < bestErr) { bestErr = err; best = s; }
+            }
+            if (best < 0)   // BIRTH — take a FREE slot only (never steal a live/coasting slot)
+            {
+                for (int s = 0; s < geode::kMaxPartials; ++s)
+                    if (T.ratio[(size_t) s] <= 0.f && ! used[(size_t) s]) { best = s; break; }
+            }
+            if (best < 0) continue;   // no free slot → drop this (quieter) peak
+            fr.ratio[(size_t) best] = p.ratio; fr.amp[(size_t) best] = p.amp; used[(size_t) best] = true;
+            T.ratio[(size_t) best] = p.ratio; T.amp[(size_t) best] = p.amp; T.miss[(size_t) best] = 0;
+        }
+        for (int s = 0; s < geode::kMaxPartials; ++s)
+        {
+            if (T.ratio[(size_t) s] > 0.f && ! used[(size_t) s])
+            {
+                if (++T.miss[(size_t) s] > kCoast) { T.ratio[(size_t) s] = 0.f; T.amp[(size_t) s] = 0.f; }
+                else { T.amp[(size_t) s] *= kCoastDecay; fr.ratio[(size_t) s] = T.ratio[(size_t) s]; fr.amp[(size_t) s] = T.amp[(size_t) s]; }
+            }
+        }
+        int nP = 0; for (int s = 0; s < geode::kMaxPartials; ++s) if (fr.amp[(size_t) s] > 1e-6f) nP = s + 1;
+        fr.nPartials = nP;
     }
 
     static void extractNoise (const float* mag, double rate, GeodeFrame& fr)
@@ -297,7 +363,6 @@ private:
         const double logLo = std::log (loF), logHi = std::log (std::max (loF + 1.0, hiF));
         for (int b = 1; b < geode::kBins; ++b)
         {
-            // residual = bins that are NOT strong local peaks (the stochastic part)
             const bool strong = mag[b] > 4.f * med;
             if (strong) continue;
             const double hz = b * binHz;
@@ -309,7 +374,6 @@ private:
         for (int k = 0; k < geode::kNoiseBands; ++k) fr.noise[(size_t) k] = std::sqrt (fr.noise[(size_t) k]);
     }
 
-    // Scale amps + noise to a musical target so SILT crossfades between comparable levels.
     static void normalize (GeodeFrameStore& s)
     {
         float pMax = 1e-9f, nMax = 1e-9f;
@@ -338,23 +402,35 @@ public:
         rate_ = sampleRate > 0.0 ? sampleRate : 48000.0;
         (void) sineLUT();
         phase_.assign (geode::kMaxPartials, 0.f);
+        ampZ_.assign  (geode::kMaxPartials, 0.f);   // declick: per-partial previous-block gain
         wr_.ratio.fill (0.f); wr_.amp.fill (0.f);
-        nzLpZ_ = nzLpZr_ = 0.f;
         pos01_ = 0.f; prevPos_ = -1.f;
         makeup_ = 1.0f;
+        crushHoldL_ = crushHoldR_ = 0.f; crushCnt_ = 0;
     }
 
     // Shared partial budget (processor-owned int, audio-thread only — no atomics).
     void setPartialBudget (int* used, int cap) noexcept { budgetUsed_ = used; budgetCap_ = cap; }
 
+    // CONSTANT-COST UNISON: divide this bank's active partials by ceil(sqrt(N)) so N detuned
+    // unison banks cost ~one full bank instead of N (detuned partials fuse in the ear — full
+    // spectral resolution on every voice is wasted CPU). N=1→÷1, 4→÷2, 9→÷3, 16→÷4.
+    void setUnisonScale (int n) noexcept
+    {
+        int d = 1; const int nn = n > 1 ? n : 1;
+        while (d * d < nn) ++d;             // ceil(sqrt(n))
+        unisonDiv_ = d < 1 ? 1 : d;
+    }
+
     void setFrameStore (const GeodeFrameStore* s) noexcept { store_ = s; }
     bool hasStore() const noexcept { return store_ != nullptr && store_->valid && store_->numFrames() > 0; }
+    float readPos01() const noexcept { return pos01_; }   // current read-head [0,1] (tests / UI follower)
 
     void setParams (const GeodeParams& p) noexcept
     {
-        // user scrub → snap the read-head to POSITION; otherwise CREEP owns it
-        if (prevPos_ >= 0.f && std::fabs (p.position - prevPos_) > 1e-4f) pos01_ = clamp01 (p.position);
-        prevPos_ = p.position;
+        // user scrub → snap the read-head to START; otherwise SCAN owns it
+        if (prevPos_ >= 0.f && std::fabs (p.start - prevPos_) > 1e-4f) pos01_ = clamp01 (p.start);
+        prevPos_ = p.start;
         p_ = p;
     }
 
@@ -363,10 +439,11 @@ public:
         playedHz_ = playedHz > 0.0 ? playedHz : 261.6256;
         rng_ = seed ? seed : 0x9E3779B9u;
         for (auto& ph : phase_) ph = 0.f;
-        nzLpZ_ = nzLpZr_ = 0.f;
-        pos01_ = clamp01 (p_.position);
-        prevPos_ = p_.position;
+        std::fill (ampZ_.begin(), ampZ_.end(), 0.f);   // start silent → first block ramps up (clean attack)
+        pos01_ = clamp01 (p_.start);
+        prevPos_ = p_.start;
         dir_ = 1.f;
+        crushHoldL_ = crushHoldR_ = 0.f; crushCnt_ = 0;
     }
 
     void setPitchRatio (double r) noexcept { pitchMul_ = r > 0.0 ? r : 1.0; }
@@ -376,13 +453,17 @@ public:
         if (! hasStore() || L == nullptr || R == nullptr || n <= 0) return;
         const int nf = store_->numFrames();
 
-        // ── advance the read-head at CREEP rate (block-rate; frozen by FOSSIL) ──
-        const float freeze = clamp01 (p_.fossil);
-        const float creepRate = clamp01 (p_.creep) * 2.0f;           // store-lengths / sec
-        if (creepRate > 1e-4f && freeze < 0.999f)
+        // ── advance the read-head — PLAY-THROUGH (block-rate; STRETCH freezes/slows it) ──
+        // For a sample (naturalSec>0), SCAN is play-through speed referenced to the sample's real
+        // length: 0.5 → 1× natural, 0 → hold, 1 → 2×. STRETCH scales the advance toward 0 (slow /
+        // time-stretch / freeze) — max STRETCH parks the read-head on a frame (infinite pad).
+        const float freeze = clamp01 (p_.stretch);
+        float scanRate = clamp01 (p_.scan) * 2.0f;
+        if (store_->naturalSec > 1e-4f) scanRate /= store_->naturalSec;
+        if (scanRate > 1e-4f && freeze < 0.999f)
         {
             const float dt = (float) n / (float) rate_;
-            float adv = creepRate * (1.f - freeze) * dt * dir_;
+            float adv = scanRate * (1.f - freeze) * dt * dir_;
             pos01_ += adv;
             if (p_.loopMode == 3) // ping-pong
             { while (pos01_ > 1.f || pos01_ < 0.f) { if (pos01_ > 1.f) { pos01_ = 2.f - pos01_; dir_ = -dir_; } else { pos01_ = -pos01_; dir_ = -dir_; } } }
@@ -409,52 +490,194 @@ public:
         }
         wr_.nPartials = nP;
 
-        applySculpt (nP);   // FRACTURE / FORMANT / TILT / CUT / SIEVE / DISTILL / HAZE
-
-        // ── QUALITY + shared partial budget: cap active partials, thin quietest first ──
-        int active = 16 + (int) (clamp01 (p_.quality) * (float) (geode::kMaxPartials - 16));
+        // ── CPU GOVERNOR: decide the active-partial count BEFORE sculpting (rs2). The sculpt pass
+        // is where FORMANT's O(n²) envelope lives — thinning first means it (and every per-partial
+        // op) only touches partials we will actually render. QUALITY sets the ceiling; CONSTANT-COST
+        // UNISON divides it; the shared processor budget is the final hard ceiling (thins gracefully).
+        int active = geode::kMinActive + (int) (clamp01 (p_.quality)
+                        * (float) (geode::kMaxActive - geode::kMinActive));
+        if (unisonDiv_ > 1) active = std::max (geode::kUnisonFloor, active / unisonDiv_);
         active = std::min (active, nP);
         if (budgetUsed_ != nullptr && budgetCap_ > 0)
         {
             const int room = budgetCap_ - *budgetUsed_;
             if (room < active) active = std::max (0, room);
         }
-        if (active < nP) keepLoudest (nP, active);   // zero all but the loudest `active`
+        if (active < nP) keepLoudest (nP, active);   // zero all but the loudest `active` (slots preserved)
 
-        // ── equal-power SILT crossfade (partials ↔ noise residual) ──
-        const float silt = clamp01 (p_.silt);
-        const float gPart = std::cos (silt * 0.5f * geode::kPi);
-        const float gNoise = std::sin (silt * 0.5f * geode::kPi);
+        applySculpt (nP);   // SHAPE/FORMANT/TILT/CUT/SIEVE (amp-only, never ratios) — skips zeroed slots
 
-        // ── oscillator bank ──
+        // ── oscillator bank — per-partial amplitude RAMP (declick) ──────────────────────
+        // Partial FREQUENCY = analysisRatio × playedHz (× pitchMul from key/oct/semi/cents).
+        // No bedrock, no envelope repitch — the sample plays at the KEY pitch, always tuned.
         const float baseHz = (float) (playedHz_ * pitchMul_);
         int voiced = 0;
-        for (int j = 0; j < nP; ++j)
+#ifndef GEODE_NO_DECLICK
+        const float invN = 1.f / (float) n;
+        for (int j = 0; j < geode::kMaxPartials; ++j)
         {
-            const float a = wr_.amp[(size_t) j];
-            if (a <= 1e-6f || wr_.ratio[(size_t) j] <= 0.f) continue;
-            const float hz = wr_.ratio[(size_t) j] * baseHz;
-            if (hz <= 0.f || hz >= (float) rate_ * 0.48f) continue;   // anti-alias: skip > Nyquist
-            const float inc = hz / (float) rate_;
+            const float prevGa = ampZ_[(size_t) j];
+            const float rj  = wr_.ratio[(size_t) j];
+            const float hz  = rj * baseHz;
+            const bool  aud = (rj > 0.f && hz > 0.f && hz < (float) rate_ * 0.48f);   // renderable this block
+            const float tgtGa = (j < nP && aud) ? wr_.amp[(size_t) j] * makeup_ : 0.f;
+            if (prevGa <= 1e-7f && tgtGa <= 1e-7f) { ampZ_[(size_t) j] = 0.f; continue; }   // silent slot — skip
+            const float inc = aud ? hz / (float) rate_ : 0.f;   // a dying partial keeps its freq while it fades
             float ph = phase_[(size_t) j];
-            const float ga = a * gPart * makeup_;
+            const float dGa = (tgtGa - prevGa) * invN;
+            float ga = prevGa;
             for (int i = 0; i < n; ++i)
             {
                 const float s = ga * sineAt (ph);       // partials are centered (mono → both channels)
                 L[i] += s; R[i] += s;
                 ph += inc; if (ph >= 1.f) ph -= 1.f;
+                ga += dGa;
             }
+            phase_[(size_t) j] = ph;
+            ampZ_[(size_t) j] = tgtGa;
+            if (tgtGa > 1e-6f) ++voiced;
+        }
+#else
+        for (int j = 0; j < nP; ++j)
+        {
+            const float a = wr_.amp[(size_t) j];
+            if (a <= 1e-6f || wr_.ratio[(size_t) j] <= 0.f) continue;
+            const float hz = wr_.ratio[(size_t) j] * baseHz;
+            if (hz <= 0.f || hz >= (float) rate_ * 0.48f) continue;
+            const float inc = hz / (float) rate_;
+            float ph = phase_[(size_t) j];
+            const float ga = a * makeup_;
+            for (int i = 0; i < n; ++i) { const float s = ga * sineAt (ph); L[i] += s; R[i] += s; ph += inc; if (ph >= 1.f) ph -= 1.f; }
             phase_[(size_t) j] = ph;
             ++voiced;
         }
+#endif
         if (budgetUsed_ != nullptr) *budgetUsed_ += voiced;
+    }
 
-        // ── colored noise residual (decorrelated L/R for width) ──
-        if (gNoise > 1e-4f) addNoise (L, R, n, A, B, fr, gNoise);
+    // ── POST-SYNTH degrade — applied ONCE per osc (after the unison sum) on this osc's block.
+    // DRIVE = soft-clip distortion (a periodic input keeps its period → adds harmonics, no detune).
+    // CRUSH = bit-depth quantize + sample-rate decimate (the lossy "old-data" degrade).
+    void postProcess (float* L, float* R, int n) noexcept
+    {
+        if (L == nullptr || R == nullptr || n <= 0) return;
+        const float drive = clamp01 (p_.drive);
+        const float crush = clamp01 (p_.crush);
+
+        if (drive > 1e-3f)
+        {
+            const float g  = 1.f + drive * 9.f;          // pre-gain into the shaper
+            const float mk = 1.f / (1.f + drive * 3.5f); // makeup so level doesn't jump
+            for (int i = 0; i < n; ++i)
+            {
+                L[i] = softClip (L[i] * g) * mk;
+                R[i] = softClip (R[i] * g) * mk;
+            }
+        }
+
+        if (crush > 1e-3f)
+        {
+            const float bits   = 16.f - crush * 13.f;                 // 16 → ~3 bits
+            const float levels = std::pow (2.f, bits);
+            const float inv    = 1.f / levels;
+            const int   hold   = 1 + (int) (crush * crush * 40.f);     // sample-and-hold decimation
+            for (int i = 0; i < n; ++i)
+            {
+                if (crushCnt_ <= 0) { crushHoldL_ = L[i]; crushHoldR_ = R[i]; crushCnt_ = hold; }
+                --crushCnt_;
+                L[i] = std::round (crushHoldL_ * levels) * inv;
+                R[i] = std::round (crushHoldR_ * levels) * inv;
+            }
+        }
+    }
+
+    // ═══ DISPLAY-ONLY: the sculpted spectrum as a log-frequency magnitude envelope ═══
+    // Runs the SAME interpolate → sculpt → QUALITY path as renderBlockAdd, synthesizes NO audio
+    // and touches NO audio-voice state — the editor "display engine" calls this each UI tick so the
+    // data-removal viz reacts to POSITION + every sculpt knob even when no note sounds.
+    bool computeDisplayEnvelope (float* outBins, int nBins, float advanceDt, float& outPos01) noexcept
+    {
+        for (int b = 0; b < nBins; ++b) outBins[b] = 0.f;
+        outPos01 = clamp01 (pos01_);
+        if (! hasStore() || outBins == nullptr || nBins <= 0) return false;
+        const int nf = store_->numFrames();
+
+        const float freeze = clamp01 (p_.stretch);
+        float scanRate = clamp01 (p_.scan) * 2.0f;
+        if (store_->naturalSec > 1e-4f) scanRate /= store_->naturalSec;
+        if (scanRate < 1e-4f)
+        {
+            pos01_ = clamp01 (p_.start);
+        }
+        else if (freeze < 0.999f && advanceDt > 0.f)
+        {
+            pos01_ += scanRate * (1.f - freeze) * advanceDt * dir_;
+            if (p_.loopMode == 3)
+            { while (pos01_ > 1.f || pos01_ < 0.f) { if (pos01_ > 1.f) { pos01_ = 2.f - pos01_; dir_ = -dir_; } else { pos01_ = -pos01_; dir_ = -dir_; } } }
+            else if (p_.loopMode == 0) pos01_ = clamp01 (pos01_);
+            else pos01_ -= std::floor (pos01_);
+        }
+        outPos01 = clamp01 (pos01_);
+
+        const float fp = clamp01 (pos01_) * (float) (nf - 1);
+        const int   fa = (int) fp;
+        const int   fb = std::min (nf - 1, fa + 1);
+        const float fr = fp - (float) fa;
+        const GeodeFrame& A = store_->frames[(size_t) fa];
+        const GeodeFrame& B = store_->frames[(size_t) fb];
+        const int nP = std::max (A.nPartials, B.nPartials);
+        for (int j = 0; j < nP; ++j)
+        {
+            const float rA = A.ratio[(size_t) j], rB = B.ratio[(size_t) j];
+            const float aA = A.amp[(size_t) j],   aB = B.amp[(size_t) j];
+            wr_.ratio[(size_t) j] = (rA > 0.f && rB > 0.f) ? (rA + (rB - rA) * fr) : (rA > 0.f ? rA : rB);
+            wr_.amp[(size_t) j]   = aA + (aB - aA) * fr;
+        }
+        wr_.nPartials = nP;
+
+        // mirror renderBlockAdd's CPU governor: thin BEFORE sculpt (display uses no shared budget /
+        // no unison, so just the QUALITY ceiling) — keeps the message-thread viz cost bounded too.
+        int active = geode::kMinActive + (int) (clamp01 (p_.quality)
+                        * (float) (geode::kMaxActive - geode::kMinActive));
+        active = std::min (active, nP);
+        if (active < nP) keepLoudest (nP, active);          // (no shared budget for display)
+
+        applySculpt (nP);                                   // SHAPE/FORMANT/TILT/CUT/SIEVE
+
+        // rasterise partials → log-freq bins (peak-hold)
+        const float lnLo = std::log (geode::kDispRMin), lnHi = std::log (geode::kDispRMax);
+        for (int j = 0; j < nP; ++j)
+        {
+            const float a = wr_.amp[(size_t) j];
+            const float r = wr_.ratio[(size_t) j];
+            if (a <= 1e-6f || r <= 0.f) continue;
+            const float rr = r < geode::kDispRMin ? geode::kDispRMin : (r > geode::kDispRMax ? geode::kDispRMax : r);
+            int b = (int) ((std::log (rr) - lnLo) / (lnHi - lnLo) * (float) (nBins - 1) + 0.5f);
+            if (b < 0) b = 0; else if (b >= nBins) b = nBins - 1;
+            if (a > outBins[b]) outBins[b] = a;
+        }
+
+        const float ref = 0.36f;
+        for (int b = 0; b < nBins; ++b) { const float v = outBins[b] / ref; outBins[b] = v > 1.5f ? 1.5f : v; }
+        if (nBins > 2)
+        {
+            float prev = outBins[0];
+            for (int b = 1; b < nBins - 1; ++b)
+            { const float cur = outBins[b]; outBins[b] = 0.25f * prev + 0.5f * cur + 0.25f * outBins[b + 1]; prev = cur; }
+        }
+        return true;
     }
 
 private:
     static inline float clamp01 (float x) noexcept { return x < 0.f ? 0.f : (x > 1.f ? 1.f : x); }
+
+    // cheap, bounded ~tanh soft-clip (period-preserving distortion; no per-sample tanh cost)
+    static inline float softClip (float x) noexcept
+    {
+        if (x < -3.f) return -1.f;
+        if (x >  3.f) return  1.f;
+        return x * (27.f + x * x) / (27.f + 9.f * x * x);
+    }
 
     static const std::vector<float>& sineLUT() noexcept
     {
@@ -474,67 +697,133 @@ private:
         return t[(size_t) i] + (t[(size_t) (i + 1)] - t[(size_t) i]) * f;
     }
 
-    // sculpt the working partial bank in place (all identity at neutral)
+    // sculpt the working partial bank in place. AMPLITUDE-domain, except SHAPE may glide OVERTONE
+    // ratios onto exact harmonics (it tunes them — the fundamental at ratio 1 never moves, so the
+    // played pitch is fixed). Order: SHAPE → FORMANT → TILT → CUT → SIEVE. All identity at neutral.
     void applySculpt (int nP) noexcept
     {
-        // FRACTURE — bipolar harmonic↔inharmonic spacing (stretch the ratios about 1.0)
-        const float frac = (p_.fracture - 0.5f) * 2.f;   // -1..+1
-        if (std::fabs (frac) > 1e-3f)
+        // ── SHAPE — morph the sample toward a synth waveform (sine / square / saw). ──────────────
+        // A real sample's partials sit at ARBITRARY ratios: inharmonic overtones + a sub-fundamental
+        // peak. A synth wave is a pure HARMONIC series, so SHAPE:
+        //   (a) GLIDES each partial onto its nearest integer harmonic — the fundamental (ratio≈1)
+        //       snaps to exactly 1, so the played PITCH never moves. This TUNES the overtones onto the
+        //       harmonic grid; it does not detune the note (the old code left them inharmonic → "spray").
+        //   (b) FADES OUT sub-fundamental content (ratio < 0.75) — a synth wave has none. (The old code
+        //       rounded a 0.5× sub to harmonic 1 and BOOSTED it → the octave-down "rumble".)
+        //   (c) blends each amplitude toward the Chebyshev target weight W(n): saw = 1/n (all),
+        //       square = 1/n (odd only), sine = fundamental only.
+        // At SHAPE=1 the bank is a clean saw/square/sine at the note pitch.
+        const float shape = clamp01 (p_.shape);
+        if (shape > 1e-3f && nP > 0)
         {
-            const float e = std::pow (2.f, frac);        // 0.5 .. 2
-            for (int j = 0; j < nP; ++j)
-                if (wr_.ratio[(size_t) j] > 0.f)
-                    wr_.ratio[(size_t) j] = std::pow (wr_.ratio[(size_t) j], e);
-        }
+            float ref = 1e-9f;
+            for (int j = 0; j < nP; ++j) ref = std::max (ref, wr_.amp[(size_t) j]);
 
-        // FORMANT — shift the amplitude envelope along ratio (resample amp-vs-ratio)
-        const float fShift = (p_.formant - 0.5f) * 2.f;  // -1..+1
-        if (std::fabs (fShift) > 1e-3f && nP > 1)
-        {
-            const float mul = std::pow (2.f, fShift);    // envelope stretch factor
+            // Multiple messy partials can round to the SAME harmonic; if they all took the target
+            // weight they'd SUM and overpower the fundamental (a saw whose 2nd harmonic is louder
+            // than its root). So elect ONE partial per harmonic (the loudest) to carry the target;
+            // the rest fade out. Result = exactly one partial per harmonic at W(n) → a clean wave.
+            constexpr int kMaxH = 64;
+            int   winner [kMaxH + 1];
+            float winAmp [kMaxH + 1];
+            for (int h = 0; h <= kMaxH; ++h) { winner[h] = -1; winAmp[h] = -1.f; }
             for (int j = 0; j < nP; ++j)
             {
-                const float srcRatio = wr_.ratio[(size_t) j] / mul;
-                wr_.amp[(size_t) j] *= p_.formantKeep ? envAt (srcRatio, nP) / (envAt (wr_.ratio[(size_t) j], nP) + 1e-9f)
-                                                      : 1.f;
+                const float a = wr_.amp[(size_t) j];
+                if (a <= 0.f) continue;
+                const float r = wr_.ratio[(size_t) j];
+                if (r < 0.75f) continue;                                 // sub handled in the pass below
+                int nH = (int) (r + 0.5f); if (nH > kMaxH) nH = kMaxH;
+                if (a > winAmp[nH]) { winAmp[nH] = a; winner[nH] = j; }
+            }
+            for (int j = 0; j < nP; ++j)
+            {
+                if (wr_.amp[(size_t) j] <= 0.f) continue;         // skip thinned slots (don't revive → CPU)
+                const float r = wr_.ratio[(size_t) j];
+                if (r <= 0.f) continue;
+                if (r < 0.75f) { wr_.amp[(size_t) j] *= (1.f - shape); continue; }   // sub-fundamental → fade (kills rumble)
+                const int nH  = (int) (r + 0.5f);                 // nearest integer harmonic (r≥0.75 ⇒ nH≥1)
+                const int nHc = nH > kMaxH ? kMaxH : nH;
+                wr_.ratio[(size_t) j] = r + ((float) nH - r) * shape;   // glide onto the harmonic (fund stays 1 → pitch fixed)
+                float w = 0.f;                                    // non-elected partials → fade out (w=0)
+                if (winner[nHc] == j)
+                    switch (p_.shapeTarget)
+                    {
+                        case 0:  w = (nH == 1) ? 1.f : 0.f; break;                  // sine (fundamental only)
+                        case 1:  w = (nH & 1) ? 1.f / (float) nH : 0.f; break;      // square (odd 1/n)
+                        default: w = 1.f / (float) nH; break;                       // saw (all 1/n)
+                    }
+                const float target = ref * w;
+                wr_.amp[(size_t) j] = wr_.amp[(size_t) j] * (1.f - shape) + target * shape;
             }
         }
 
-        // TILT — bipolar spectral tilt about ratio 1.0 (bright/dark)
-        const float tilt = (p_.tilt - 0.5f) * 2.f;       // -1..+1
+        // ── FORMANT — pitch-preserving envelope shift (true-envelope method) ──
+        // Move the spectral ENVELOPE, never the partial frequencies (research: P(k)=A(k·f)/A(k)).
+        // Envelope is a Gaussian log-frequency KERNEL SMOOTHER (band-limited interpolation through the
+        // peaks) → it can't track individual partials; gain clamp keeps it from nulling the fundamental
+        // or getting harsh. FKEEP off = no formant processing.
+        const float fShift = (p_.formant - 0.5f) * 2.f;   // -1..+1
+        if (std::fabs (fShift) > 1e-3f && p_.formantKeep && nP > 1)
+        {
+            static thread_local std::vector<float> snapR, snapA;
+            snapR.assign (wr_.ratio.begin(), wr_.ratio.begin() + nP);
+            snapA.assign (wr_.amp.begin(),   wr_.amp.begin()   + nP);
+            const float shiftMul = std::pow (2.f, fShift);   // ±1 octave envelope stretch
+            for (int j = 0; j < nP; ++j)
+            {
+                if (wr_.amp[(size_t) j] <= 0.f) continue;    // skip thinned slots → FORMANT is O(active²), not O(96²)
+                const float r = wr_.ratio[(size_t) j];
+                if (r <= 0.f) continue;
+                const float eHere  = smoothEnv (r,            snapR.data(), snapA.data(), nP);
+                const float eThere = smoothEnv (r / shiftMul, snapR.data(), snapA.data(), nP);
+                if (eHere > 1e-6f)
+                {
+                    float gain = eThere / eHere;
+                    if (gain < 0.25f) gain = 0.25f; else if (gain > 4.f) gain = 4.f;
+                    wr_.amp[(size_t) j] *= gain;
+                }
+            }
+        }
+
+        // ── TILT — bipolar spectral tilt about ratio 1.0 (bright/dark) ──
+        const float tilt = (p_.tilt - 0.5f) * 2.f;   // -1..+1
         if (std::fabs (tilt) > 1e-3f)
             for (int j = 0; j < nP; ++j)
             {
+                if (wr_.amp[(size_t) j] <= 0.f) continue;
                 const float r = std::max (0.05f, wr_.ratio[(size_t) j]);
                 wr_.amp[(size_t) j] *= std::pow (r, tilt * 1.5f);
             }
 
-        // CUT — spectral low-pass (soft) over ratio
+        // ── CUT — spectral filter, LP (remove highs) or HP (remove lows), ~24 dB/oct ──
+        // 1.0 = fully open; turning DOWN filters harder. Bites by ~20% of travel (Max: audible early).
         if (p_.cut < 0.999f)
         {
-            const float cutRatio = 0.25f + clamp01 (p_.cut) * 32.f;   // 0.25×..32× fundamental
-            for (int j = 0; j < nP; ++j)
-                if (wr_.ratio[(size_t) j] > cutRatio)
-                {
-                    const float over = wr_.ratio[(size_t) j] / cutRatio;
-                    wr_.amp[(size_t) j] /= (over * over);   // 12 dB/oct-ish rolloff
-                }
-        }
-
-        // HAZE — amplitude neighbor blur (spectral de-focus)
-        const float haze = clamp01 (p_.haze);
-        if (haze > 1e-3f && nP > 2)
-        {
-            float prev = wr_.amp[0];
-            for (int j = 1; j < nP - 1; ++j)
+            const float knob = clamp01 (p_.cut);
+            if (p_.cutMode == 0) // LP
             {
-                const float blur = 0.25f * prev + 0.5f * wr_.amp[(size_t) j] + 0.25f * wr_.amp[(size_t) (j + 1)];
-                prev = wr_.amp[(size_t) j];
-                wr_.amp[(size_t) j] = wr_.amp[(size_t) j] + (blur - wr_.amp[(size_t) j]) * haze;
+                const float cutR = 0.5f + knob * knob * 48.f;   // knob 0.2 → ~2.4× fund (bites)
+                for (int j = 0; j < nP; ++j)
+                    if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] > cutR)
+                    {
+                        const float over = wr_.ratio[(size_t) j] / cutR;
+                        wr_.amp[(size_t) j] /= (over * over * over * over);   // ~24 dB/oct
+                    }
+            }
+            else // HP
+            {
+                const float cutR = 0.5f + (1.f - knob) * (1.f - knob) * 24.f;
+                for (int j = 0; j < nP; ++j)
+                    if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] < cutR)
+                    {
+                        const float under = cutR / std::max (0.05f, wr_.ratio[(size_t) j]);
+                        wr_.amp[(size_t) j] /= (under * under * under * under);
+                    }
             }
         }
 
-        // SIEVE — spectral gate: drop partials below a rising threshold
+        // ── SIEVE — spectral gate: drop partials below a rising threshold (the lossy hero) ──
         const float sieve = clamp01 (p_.sieve);
         if (sieve > 1e-3f)
         {
@@ -543,27 +832,27 @@ private:
             const float thr = mx * sieve * 0.9f;
             for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] < thr) wr_.amp[(size_t) j] = 0.f;
         }
-
-        // DISTILL — keep only the loudest fraction of partials
-        const float distill = clamp01 (p_.distill);
-        if (distill > 1e-3f)
-        {
-            const int keep = std::max (1, (int) ((1.f - distill) * (float) nP));
-            keepLoudest (nP, keep);
-        }
     }
 
-    // amplitude at an arbitrary ratio (nearest-partial envelope sample, for FORMANT)
-    float envAt (float ratio, int nP) const noexcept
+    // smooth spectral envelope sampled at `ratio` — Gaussian kernel over the (snapshot) partial bank.
+    // A band-limited interpolation through the peaks: it passes through the partials without tracking
+    // any single one (research: true-envelope property). Reads a SNAPSHOT so the caller can mutate amps.
+    static float smoothEnv (float ratio, const float* rr, const float* aa, int nP) noexcept
     {
-        if (nP <= 0) return 0.f;
-        float best = 1e9f, amp = 0.f;
+        if (ratio < 1e-4f) ratio = 1e-4f;
+        const float lr = std::log (ratio);
+        const float bw = 0.5f;   // log-freq kernel half-width (~±0.7 oct)
+        float num = 0.f, den = 0.f;
         for (int j = 0; j < nP; ++j)
         {
-            const float d = std::fabs (wr_.ratio[(size_t) j] - ratio);
-            if (d < best) { best = d; amp = wr_.amp[(size_t) j]; }
+            const float rj = rr[j];
+            if (rj <= 0.f || aa[j] <= 0.f) continue;   // skip thinned slots → kernel loop is O(active)
+            const float d = (std::log (rj) - lr) / bw;
+            const float wgt = std::exp (-d * d);
+            num += wgt * aa[j];
+            den += wgt;
         }
-        return amp;
+        return den > 1e-9f ? num / den : 0.f;
     }
 
     // zero all but the `keep` loudest partials (in place)
@@ -583,51 +872,22 @@ private:
         }
     }
 
-    // colored-noise residual from the interpolated band envelope
-    void addNoise (float* L, float* R, int n, const GeodeFrame& A, const GeodeFrame& B, float fr, float gNoise) noexcept
-    {
-        // total residual level + spectral centroid → drive a one-pole tilt (bright↔dark)
-        float total = 0.f, cen = 0.f;
-        for (int k = 0; k < geode::kNoiseBands; ++k)
-        {
-            const float e = A.noise[(size_t) k] + (B.noise[(size_t) k] - A.noise[(size_t) k]) * fr;
-            total += e; cen += e * (float) k;
-        }
-        if (total < 1e-6f) return;
-        cen /= total;                                   // 0..kNoiseBands-1
-        const float bright = cen / (float) (geode::kNoiseBands - 1);   // 0 dark .. 1 bright
-        const float lpCoef = 0.02f + bright * 0.85f;    // one-pole coefficient
-        const float lvl = total * gNoise * makeup_ * 0.6f;
-        for (int i = 0; i < n; ++i)
-        {
-            const float wl = whiteNoise();
-            const float wrr = whiteNoise();             // decorrelated R
-            nzLpZ_  += lpCoef * (wl  - nzLpZ_);
-            nzLpZr_ += lpCoef * (wrr - nzLpZr_);
-            // blend the LP (dark) with the raw (bright) by `bright`
-            L[i] += lvl * (nzLpZ_  + bright * (wl  - nzLpZ_));
-            R[i] += lvl * (nzLpZr_ + bright * (wrr - nzLpZr_));
-        }
-    }
-
-    inline float whiteNoise() noexcept
-    {
-        rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5;
-        return (float) ((int32_t) rng_) * (1.f / 2147483648.f);
-    }
-
     // ── state ──
     static constexpr int kLUT = 4096;
     const GeodeFrameStore* store_ = nullptr;
     GeodeParams p_;
     GeodeFrame  wr_;                          // working (sculpted) partial bank
     std::vector<float> phase_;                // per-partial phase [0,1)
+    std::vector<float> ampZ_;                 // per-partial previous-block effective gain (declick ramp)
     double rate_ = 48000.0, playedHz_ = 261.6256, pitchMul_ = 1.0;
     float  pos01_ = 0.f, prevPos_ = -1.f, dir_ = 1.f;
-    float  nzLpZ_ = 0.f, nzLpZr_ = 0.f, makeup_ = 1.f;
+    float  makeup_ = 1.f;
+    float  crushHoldL_ = 0.f, crushHoldR_ = 0.f;   // CRUSH sample-and-hold state
+    int    crushCnt_ = 0;
     std::uint32_t rng_ = 0x9E3779B9u;
     int*   budgetUsed_ = nullptr;
     int    budgetCap_  = 0;
+    int    unisonDiv_  = 1;   // constant-cost unison divisor = ceil(sqrt(unison count))
 };
 
 } // namespace tw

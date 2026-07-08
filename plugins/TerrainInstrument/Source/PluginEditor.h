@@ -600,6 +600,19 @@ private:
     juce::WebSliderRelay synOscDGeodeQualityRelay { ParameterIDs::SYN_OSC_D_GEODE_QUALITY };
     juce::WebSliderRelay synOscDGeodeFkeepRelay { ParameterIDs::SYN_OSC_D_GEODE_FKEEP };
     juce::WebSliderRelay synOscDGeodeLoopRelay { ParameterIDs::SYN_OSC_D_GEODE_LOOP };
+    juce::WebSliderRelay synOscAGeodeBedrockRelay { ParameterIDs::SYN_OSC_A_GEODE_BEDROCK };
+    juce::WebSliderRelay synOscBGeodeBedrockRelay { ParameterIDs::SYN_OSC_B_GEODE_BEDROCK };
+    juce::WebSliderRelay synOscCGeodeBedrockRelay { ParameterIDs::SYN_OSC_C_GEODE_BEDROCK };
+    juce::WebSliderRelay synOscDGeodeBedrockRelay { ParameterIDs::SYN_OSC_D_GEODE_BEDROCK };
+    // Resynth Shape-Target + Cut-Mode (choice; driven by the right-click menu)
+    juce::WebSliderRelay synOscAGeodeShapeTargetRelay { ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET };
+    juce::WebSliderRelay synOscBGeodeShapeTargetRelay { ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET };
+    juce::WebSliderRelay synOscCGeodeShapeTargetRelay { ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET };
+    juce::WebSliderRelay synOscDGeodeShapeTargetRelay { ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET };
+    juce::WebSliderRelay synOscAGeodeCutModeRelay { ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE };
+    juce::WebSliderRelay synOscBGeodeCutModeRelay { ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE };
+    juce::WebSliderRelay synOscCGeodeCutModeRelay { ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE };
+    juce::WebSliderRelay synOscDGeodeCutModeRelay { ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE };
     // ── GRAIN-EXPANDED-RELAYS — the 8 reassignable functions (8 × 4 osc) ──
     juce::WebSliderRelay synOscAGrainPositionRelay { ParameterIDs::SYN_OSC_A_GRAIN_POSITION };
     juce::WebSliderRelay synOscAGrainPitchRelay    { ParameterIDs::SYN_OSC_A_GRAIN_PITCH };
@@ -1157,6 +1170,9 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeQualityAttachment, synOscBGeodeQualityAttachment, synOscCGeodeQualityAttachment, synOscDGeodeQualityAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeFkeepAttachment, synOscBGeodeFkeepAttachment, synOscCGeodeFkeepAttachment, synOscDGeodeFkeepAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeLoopAttachment, synOscBGeodeLoopAttachment, synOscCGeodeLoopAttachment, synOscDGeodeLoopAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeBedrockAttachment, synOscBGeodeBedrockAttachment, synOscCGeodeBedrockAttachment, synOscDGeodeBedrockAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeShapeTargetAttachment, synOscBGeodeShapeTargetAttachment, synOscCGeodeShapeTargetAttachment, synOscDGeodeShapeTargetAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeCutModeAttachment, synOscBGeodeCutModeAttachment, synOscCGeodeCutModeAttachment, synOscDGeodeCutModeAttachment;
     // ── GRAIN-EXPANDED-ATTACHMENTS (8 × 4 osc) ──
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainPositionAttachment, synOscAGrainPitchAttachment, synOscAGrainPsprayAttachment, synOscAGrainWidthAttachment, synOscAGrainDirAttachment, synOscAGrainSkewAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainPositionAttachment, synOscBGrainPitchAttachment, synOscBGrainPsprayAttachment, synOscBGrainWidthAttachment, synOscBGrainDirAttachment, synOscBGrainSkewAttachment;
@@ -1200,6 +1216,15 @@ private:
     double lastEvalOkMs_      = 0;
     double lastRecoveryMs_    = 0;
     int    channelRecoveries_ = 0;
+
+    // GEODE SPECTRUM WATERFALL — editor-side "display engines" (one per osc). Each timer tick,
+    // for every osc on Engine::SPEC, we feed the live analysed store + current sculpt params and
+    // run computeDisplayEnvelope (interpolate+sculpt, NO audio) → push window.__geodeSpectrum to
+    // the WebView. All on the message thread: zero audio-thread cost, moves with the knobs even
+    // when no note sounds (the "every curve must MOVE" rule). No new APVTS params (viz-only).
+    tw::GeodeEngine geodeDispEng_[4];
+    bool   geodeDispPrepared_ = false;
+    double geodeDispSr_       = 0.0;
 
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);

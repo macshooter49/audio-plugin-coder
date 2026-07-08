@@ -164,6 +164,20 @@ namespace tw
                 default: return -1.f;
             }
         }
+        // RESYNTH-FOLLOWER — the geode read-head position 0..1 for osc (the white MIDI follower),
+        // or -1 when that osc isn't a sounding Resynth (SPEC) engine. GeodeEngine has no isActive(),
+        // so we gate on hasStore(); the "is this voice sounding" check is the caller's isAmpEnvActive().
+        float geodeFollowPos01 (int osc) const noexcept
+        {
+            switch (osc)
+            {
+                case 0: return (engine_  == Engine::SPEC && geodeEngA_[0].hasStore()) ? geodeEngA_[0].readPos01() : -1.f;
+                case 1: return (engineB_ == Engine::SPEC && geodeEngB_[0].hasStore()) ? geodeEngB_[0].readPos01() : -1.f;
+                case 2: return (engineC_ == Engine::SPEC && geodeEngC_[0].hasStore()) ? geodeEngC_[0].readPos01() : -1.f;
+                case 3: return (engineD_ == Engine::SPEC && geodeEngD_[0].hasStore()) ? geodeEngD_[0].readPos01() : -1.f;
+                default: return -1.f;
+            }
+        }
         // Packed follower position for an EXACT trace along the drawn curve:
         // stageIndex (0=Idle,1=Delay,2=Attack,3=Hold,4=Decay,5=Sustain,6=Release)
         // plus the fraction through that segment. Encoded as stage + frac (e.g. 2.37
@@ -1926,7 +1940,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engine_ == Engine::SAMP || engine_ == Engine::GRAN) {
+                if (engine_ == Engine::SAMP || engine_ == Engine::GRAN || engine_ == Engine::SPEC) {
                     const float warpA = sampleParamsA_.warp;
                     if (warpA > 0.001f) {
                         switch (sampleParamsA_.warpMode) {
@@ -2202,7 +2216,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineB_ == Engine::SAMP || engineB_ == Engine::GRAN) {
+                if (engineB_ == Engine::SAMP || engineB_ == Engine::GRAN || engineB_ == Engine::SPEC) {
                     const float warpB = sampleParamsB_.warp;
                     if (warpB > 0.001f) {
                         switch (sampleParamsB_.warpMode) {
@@ -2475,7 +2489,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineC_ == Engine::SAMP || engineC_ == Engine::GRAN) {
+                if (engineC_ == Engine::SAMP || engineC_ == Engine::GRAN || engineC_ == Engine::SPEC) {
                     const float warpC = sampleParamsC_.warp;
                     if (warpC > 0.001f) {
                         switch (sampleParamsC_.warpMode) {
@@ -2748,7 +2762,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineD_ == Engine::SAMP || engineD_ == Engine::GRAN) {
+                if (engineD_ == Engine::SAMP || engineD_ == Engine::GRAN || engineD_ == Engine::SPEC) {
                     const float warpD = sampleParamsD_.warp;
                     if (warpD > 0.001f) {
                         switch (sampleParamsD_.warpMode) {
@@ -3968,6 +3982,7 @@ namespace tw
             {
                 auto& e = engs[(size_t) u];
                 e.setParams (p);
+                e.setUnisonScale (N);   // CONSTANT-COST UNISON — N detuned banks cost ~one bank of partials
                 const double det = (uDetuneCents != nullptr) ? std::pow (2.0, (double) uDetuneCents[(size_t) u] / 1200.0) : 1.0;
                 if (doNoteOn)
                 {
@@ -3985,6 +4000,9 @@ namespace tw
                 juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
             }
             engs[0].renderBlockAdd (wL, wR, numSamples);
+            // POST-SYNTH degrade (DRIVE soft-clip + CRUSH bit/rate) — once per osc, on the summed
+            // unison signal, using voice-0's params (all unison instances share the same GeodeParams).
+            engs[0].postProcess (wL, wR, numSamples);
         }
 
         void renderGeodeBlocks (int numSamples) noexcept
