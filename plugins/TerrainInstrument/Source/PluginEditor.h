@@ -1242,7 +1242,7 @@ private:
     tw::GeodeParams geodeImgParams_[4];
     int  geodeImgGen_[4]       = { 0, 0, 0, 0 };
     int  geodeImgCooldown_[4]  = { 0, 0, 0, 0 };   // ticks until the next bright re-bake
-    int  geodeImgHeartbeat_[4] = { 0, 0, 0, 0 };   // ticks until the next unconditional full push
+    int  geodeImgHeartbeat_[4] = { 0, 75, 150, 225 };   // ticks to the next unconditional full push — STAGGERED so 4 oscs never bake the same tick (cleanup sweep)
 
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);

@@ -5466,6 +5466,26 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
         {
             auto newState = juce::ValueTree::fromXml (*xmlState);
 
+            // rs6 migration (cleanup sweep): FRACTURE was a RESERVED no-op defaulting to 0.5; it is
+            // now MELT (temporal smear, default 0). Pre-rs6 sessions all carry exactly 0.5 → snap to
+            // 0 so old sessions don't load with half-Melt engaged. (A deliberate post-rs6 Melt of
+            // exactly 0.500 is a knife-edge rarity; dblclick-reset now targets 0.)
+            {
+                static const char* const fractureIds[4] = {
+                    ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE,
+                    ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE };
+                for (auto* fid : fractureIds)
+                    for (int c = 0; c < newState.getNumChildren(); ++c)
+                    {
+                        auto ch = newState.getChild (c);
+                        if (ch.hasType ("PARAM") && ch.getProperty ("id").toString() == fid)
+                        {
+                            const float v = (float) ch.getProperty ("value", 0.0f);
+                            if (std::abs (v - 0.5f) < 1e-4f) ch.setProperty ("value", 0.0f, nullptr);
+                        }
+                    }
+            }
+
             // Restore preset index (clamped to valid range after disk presets load)
             int presetIdx = newState.getProperty("presetIndex", 0);
 

@@ -182,6 +182,23 @@ int main()
         pass += shapeOk; ++tot;
     }
 
+    // ── sparse-bank regression (cleanup sweep): the tracker leaves zero-amp gap slots below
+    // nPartials; keepLoudest must NOT count gaps against the QUALITY quota (it silenced real
+    // partials living in high slot indices). Store: nPartials=56 but only 2 live partials @50/55.
+    {
+        GeodeFrameStore sp; sp.frames.resize (2); sp.naturalSec = 1.0f; sp.valid = true; sp.f0 = (float) playHz;
+        for (auto& f : sp.frames)
+        { f.ratio[50] = 1.f; f.amp[50] = 0.30f; f.ratio[55] = 2.f; f.amp[55] = 0.15f; f.nPartials = 56; }
+        GeodeParams p; p.scan = 0.f; p.quality = 0.5f;    // active ≈ 34 < 56 → keepLoudest engages
+        GeodeEngine e; e.prepare (sr); e.setFrameStore (&sp); e.setParams (p); e.noteOn (playHz, 3);
+        const int NN = (int) (sr * 0.3); std::vector<float> LS ((size_t) NN, 0.f), RS ((size_t) NN, 0.f);
+        for (int off = 0; off < NN; off += 256)
+        { int m = std::min (256, NN - off); e.setParams (p); e.renderBlockAdd (&LS[(size_t) off], &RS[(size_t) off], m); }
+        const double f = estFund (&LS[(size_t) (NN / 2)], NN / 2, sr);
+        const bool ok = f > 1 && std::fabs (f - playHz) < 6;   // pre-fix: total silence (fund=0)
+        std::printf ("[sparse-bank      ] fund=%7.1fHz  %s\n", f, ok ? "PASS" : "FAIL"); pass += ok; ++tot;
+    }
+
     // ── CPU CEILING GUARD (rs2) — never ship a Resynth that pegs a core again. ──────────────
     // Saturate the shared partial budget the way STRETCH + a big unison chord does, worst-case
     // knobs on, and assert the per-block cost stays a small fraction of one core. (Full profiling

@@ -452,7 +452,8 @@ public:
         {
             const float rs = clamp01 (p.regionStart);
             const float re = std::max (rs + 0.01f, clamp01 (p.regionEnd));
-            pos01_ = rs + clamp01 (p.start) * (re - rs);
+            pos01_ = (p.loopMode == 2) ? re - clamp01 (p.start) * (re - rs)   // mirror noteOn's REVERSE map
+                                       : rs + clamp01 (p.start) * (re - rs);
         }
         prevPos_ = p.start;
         p_ = p;
@@ -489,7 +490,8 @@ public:
 
         interpFrame (clamp01 (pos01_), nf);
         int nP = wr_.nPartials;
-        ++flickerTick_;                                  // FLICKER sieve epoch clock (~85ms per epoch)
+        flickerTick_ += (std::uint32_t) n;               // FLICKER epoch clock in SAMPLES (time-based —
+                                                         // a block counter re-rolled faster at small buffers)
 
         applySmear (clamp01 (pos01_), nf);   // MELT — temporal amp smear: frames bleed together (pad-ify)
 
@@ -521,7 +523,8 @@ public:
 
         regionGain_ = fadeGain (pos01_);             // sampler-parity FADE IN/OUT (positional gain)
         preparedActive_ = 0;
-        for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 1e-6f) ++preparedActive_;
+        for (int j = 0; j < nP; ++j)
+            if (wr_.amp[(size_t) j] > 1e-6f && wr_.ratio[(size_t) j] > 0.f) ++preparedActive_;   // renderable only
         return true;
     }
 
@@ -543,10 +546,16 @@ public:
     void renderBankAdd (float* L, float* R, int n) noexcept
     {
         if (L == nullptr || R == nullptr || n <= 0) return;
-        if (budgetUsed_ != nullptr && budgetCap_ > 0 && *budgetUsed_ >= budgetCap_)
-        {   // shared budget saturated — this (sibling) bank sits this block out (graceful thinning)
-            std::fill (ampZ_.begin(), ampZ_.end(), 0.f);
-            return;
+        // shared budget saturated → this bank contributes nothing NEW this block, but anything it
+        // was sounding last block RAMPS out through the declick loop below (hard-zeroing ampZ_ was
+        // an audible click — cleanup sweep). Once fully silent, saturated blocks take the fast skip.
+        const bool sat = (budgetUsed_ != nullptr && budgetCap_ > 0 && *budgetUsed_ >= budgetCap_);
+        if (sat)
+        {
+            bool silent = true;
+            for (int j = 0; j < geode::kMaxPartials; ++j)
+                if (ampZ_[(size_t) j] > 1e-7f) { silent = false; break; }
+            if (silent) return;
         }
         const int nP = wr_.nPartials;
         // ── oscillator bank — per-partial amplitude RAMP (declick) ──────────────────────
@@ -563,7 +572,7 @@ public:
             const float rj  = wr_.ratio[(size_t) j];
             const float hz  = rj * baseHz;
             const bool  aud = (rj > 0.f && hz > 0.f && hz < (float) rate_ * 0.48f);   // renderable this block
-            const float tgtGa = (j < nP && aud) ? wr_.amp[(size_t) j] * gain : 0.f;
+            const float tgtGa = (! sat && j < nP && aud) ? wr_.amp[(size_t) j] * gain : 0.f;
             if (prevGa <= 1e-7f && tgtGa <= 1e-7f) { ampZ_[(size_t) j] = 0.f; continue; }   // silent slot — skip
             const float inc = aud ? hz / (float) rate_ : 0.f;   // a dying partial keeps its freq while it fades
             float ph = phase_[(size_t) j];
@@ -581,6 +590,7 @@ public:
             if (tgtGa > 1e-6f) ++voiced;
         }
 #else
+        if (sat) return;
         for (int j = 0; j < nP; ++j)
         {
             const float a = wr_.amp[(size_t) j];
@@ -774,23 +784,33 @@ private:
         if (store_->naturalSec > 1e-4f) scanRate /= store_->naturalSec;
         if (scanRate > 1e-4f && freeze < 0.999f && dt > 0.f)
         {
+            if (pos01_ >= ls && pos01_ <= le) entered_ = true;   // pre-advance entry test (fast heads)
             pos01_ += scanRate * (1.f - freeze) * dt * dir_;
+            if (pos01_ >= ls && pos01_ <= le) entered_ = true;
             const float len = le - ls;
+            // Loop wraps/reflections only engage once the head has ENTERED the brackets — a START
+            // placed outside them free-runs in until then (sampler behavior; no teleports — sweep).
             switch (p_.loopMode)
             {
                 case 0:   // one-shot — clamp inside the region
                     break;
                 case 2:   // reverse loop — wrap loopStart → loopEnd
-                    if (len > 1e-5f) { while (pos01_ < ls) pos01_ += len; while (pos01_ > le && entered_) pos01_ -= len; }
-                    if (pos01_ <= le) entered_ = true;
+                    if (entered_ && len > 1e-5f)
+                    { while (pos01_ < ls) pos01_ += len; while (pos01_ > le) pos01_ -= len; }
                     break;
-                case 3:   // ping-pong — reflect between the brackets (free-run until first entry)
-                    if (pos01_ > le) { pos01_ = 2.f * le - pos01_; dir_ = -dir_; entered_ = true; }
-                    else if (pos01_ < ls && entered_) { pos01_ = 2.f * ls - pos01_; dir_ = -dir_; }
-                    else if (pos01_ >= ls) entered_ = true;
+                case 3:   // ping-pong — reflect between the brackets
+                    if (entered_)
+                    {
+                        int guard = 4;
+                        while (guard-- > 0 && (pos01_ > le || pos01_ < ls))
+                        {
+                            if (pos01_ > le) { pos01_ = 2.f * le - pos01_; dir_ = -dir_; }
+                            else             { pos01_ = 2.f * ls - pos01_; dir_ = -dir_; }
+                        }
+                    }
                     break;
                 default:  // 1 forward / 4 tailed — wrap loopEnd → loopStart
-                    if (len > 1e-5f && pos01_ > le) pos01_ = ls + std::fmod (pos01_ - le, len);
+                    if (entered_ && len > 1e-5f && pos01_ > le) pos01_ = ls + std::fmod (pos01_ - le, len);
                     break;
             }
         }
@@ -850,8 +870,8 @@ private:
         static constexpr float off[4] = { -1.f, -0.45f, 0.45f, 1.f };
         constexpr float wTap = 0.16f, wCenter = 1.f - 4.f * wTap;   // gaussian-ish 5-tap kernel
         const int nP = wr_.nPartials;
-        static thread_local std::vector<float> acc;
-        acc.assign ((size_t) nP, 0.f);
+        float acc[geode::kMaxPartials];                       // stack — never allocates on the audio thread
+        std::fill (acc, acc + nP, 0.f);
         for (int t = 0; t < 4; ++t)
         {
             float tp = pos01 + off[t] * spread;
@@ -862,10 +882,12 @@ private:
             const GeodeFrame& A = store_->frames[(size_t) fa];
             const GeodeFrame& B = store_->frames[(size_t) fb];
             for (int j = 0; j < nP; ++j)
-                acc[(size_t) j] += wTap * (A.amp[(size_t) j] + (B.amp[(size_t) j] - A.amp[(size_t) j]) * fr);
+                acc[j] += wTap * (A.amp[(size_t) j] + (B.amp[(size_t) j] - A.amp[(size_t) j]) * fr);
         }
         for (int j = 0; j < nP; ++j)
-            wr_.amp[(size_t) j] = wCenter * wr_.amp[(size_t) j] + acc[(size_t) j];
+            if (wr_.ratio[(size_t) j] > 0.f)                  // dead slots stay dead — a smeared amp on a
+                wr_.amp[(size_t) j] = wCenter * wr_.amp[(size_t) j] + acc[j];   // ratio-0 slot is unrenderable
+                                                              // but eats the QUALITY quota (cleanup sweep)
     }
 
     // ── QUALITY = spectral BITRATE. Above ~0.7 it's transparent; below, partial amplitudes are
@@ -1057,17 +1079,17 @@ private:
         const float fShift = (p_.formant - 0.5f) * 2.f;   // -1..+1
         if (std::fabs (fShift) > 1e-3f && p_.formantKeep && nP > 1)
         {
-            static thread_local std::vector<float> snapR, snapA;
-            snapR.assign (wr_.ratio.begin(), wr_.ratio.begin() + nP);
-            snapA.assign (wr_.amp.begin(),   wr_.amp.begin()   + nP);
+            float snapR[geode::kMaxPartials], snapA[geode::kMaxPartials];   // stack — no RT alloc
+            std::copy (wr_.ratio.begin(), wr_.ratio.begin() + nP, snapR);
+            std::copy (wr_.amp.begin(),   wr_.amp.begin()   + nP, snapA);
             const float shiftMul = std::pow (2.f, fShift);   // ±1 octave envelope stretch
             for (int j = 0; j < nP; ++j)
             {
                 if (wr_.amp[(size_t) j] <= 0.f) continue;    // skip thinned slots → FORMANT is O(active²), not O(96²)
                 const float r = wr_.ratio[(size_t) j];
                 if (r <= 0.f) continue;
-                const float eHere  = smoothEnv (r,            snapR.data(), snapA.data(), nP);
-                const float eThere = smoothEnv (r / shiftMul, snapR.data(), snapA.data(), nP);
+                const float eHere  = smoothEnv (r,            snapR, snapA, nP);
+                const float eThere = smoothEnv (r / shiftMul, snapR, snapA, nP);
                 if (eHere > 1e-6f)
                 {
                     float gain = eThere / eHere;
@@ -1135,8 +1157,7 @@ private:
                 }
                 case 2: // CLOAK — psychoacoustic masking: delete what louder neighbours hide first
                 {       //          (the literal MP3-at-low-bitrate / lossy-codec sound)
-                    static thread_local std::vector<float> lr;
-                    lr.assign ((size_t) nP, 0.f);
+                    float lr[geode::kMaxPartials];        // stack (fully overwritten below) — no RT alloc
                     for (int j = 0; j < nP; ++j)
                         lr[(size_t) j] = std::log (std::max (0.05f, wr_.ratio[(size_t) j]));
                     const float t = sieve * 0.9f;                 // knob raises the masking threshold
@@ -1159,7 +1180,7 @@ private:
                 }
                 case 3: // FLICKER — probabilistic dropout re-rolled ~12×/s: packet-loss sparkle
                 {       //          (loud partials survive longer; quiet ones flicker in and out)
-                    const std::uint32_t epoch = flickerTick_ >> 5;
+                    const std::uint32_t epoch = flickerTick_ / (std::uint32_t) (rate_ > 0.0 ? rate_ * 0.085 : 4096.0);   // ~85ms per re-roll at any buffer size
                     for (int j = 0; j < nP; ++j)
                     {
                         const float a = wr_.amp[(size_t) j];
@@ -1229,10 +1250,14 @@ private:
     {
         if (keep >= nP) return;
         if (keep <= 0) { for (int j = 0; j < nP; ++j) wr_.amp[(size_t) j] = 0.f; return; }
-        static thread_local std::vector<float> tmp;
-        tmp.assign (wr_.amp.begin(), wr_.amp.begin() + nP);
-        std::nth_element (tmp.begin(), tmp.begin() + (nP - keep), tmp.end());
-        const float thr = tmp[(size_t) (nP - keep)];
+        float tmp[geode::kMaxPartials];                       // stack — never allocates on the audio thread
+        std::copy (wr_.amp.begin(), wr_.amp.begin() + nP, tmp);
+        std::nth_element (tmp, tmp + (nP - keep), tmp + nP);
+        const float thr = tmp[nP - keep];
+        // thr==0 ⇒ fewer than `keep` partials are alive (the tracker leaves zero-amp gap slots below
+        // nPartials) — everything audible already fits, and counting gap slots against the quota was
+        // muting real partials in high slots (cleanup sweep). Nothing to thin.
+        if (thr <= 0.f) return;
         int kept = 0;
         for (int j = 0; j < nP; ++j)
         {

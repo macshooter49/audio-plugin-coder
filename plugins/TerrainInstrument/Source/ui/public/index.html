@@ -11421,6 +11421,11 @@ setTimeout(function wireSynControls () {
           // Blend knobs (secret second row on the Sample view) — Dice resets to 0 (off)
           set (P + 'BLEND_MORPH', 0.5); set (P + 'BLEND_ATTACK', 0.5); set (P + 'BLEND_BODY', 0.5);
           set (P + 'BLEND_BREATH', 0.5); set (P + 'BLEND_SCULPT', 0.5); set (P + 'BLEND_DICE', 0.0);
+          // RESYNTH (GEODE_*) knobs — defaults mirror addGeodeOsc (cleanup sweep: Melt etc had no dblclick-reset)
+          set (P + 'GEODE_POSITION', 0.0); set (P + 'GEODE_FOSSIL', 0.0); set (P + 'GEODE_CREEP', 0.5);
+          set (P + 'GEODE_SILT', 0.0); set (P + 'GEODE_FORMANT', 0.5); set (P + 'GEODE_CUT', 1.0);
+          set (P + 'GEODE_SIEVE', 0.0); set (P + 'GEODE_DISTILL', 0.0); set (P + 'GEODE_HAZE', 0.0);
+          set (P + 'GEODE_FRACTURE', 0.0); set (P + 'GEODE_TILT', 0.5); set (P + 'GEODE_QUALITY', 0.8);
           // OSC C/D wavetable knobs (A/B already covered)
           set (P + 'OCT', 0.5); set (P + 'SEMI', 0.5); set (P + 'CENT', 0.5); set (P + 'PAN', 0.5);
           set (P + 'WT_FRAME', 0.0); set (P + 'WARP_AMOUNT', 0.0);
@@ -11505,7 +11510,7 @@ setTimeout(function wireSynControls () {
             if (! labelEl) return;
             if (readoutTimer) clearTimeout (readoutTimer);
             readoutTimer = setTimeout (() => {
-              labelEl.textContent = labelName;
+              labelEl.textContent = labelEl.dataset.lbl || labelName;   // dynamic override (Cut = LP/HP)
               labelEl.classList.remove ('kv-live');
               readoutTimer = null;
             }, 650);   // brief linger so the value is readable after release
@@ -13214,7 +13219,7 @@ setTimeout(function wireSynControls () {
         var ss = null; try { ss = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_OSC_' + O + '_GEODE_CUT_MODE') : null; } catch (e) {}
         var el = document.querySelector('#syn-panel [data-syn="SYN_OSC_' + O + '_GEODE_CUT"] .knob-label');
         if (!el) return;
-        function paint () { var i = 0; try { i = ss ? Math.round(ss.getNormalisedValue()) : 0; } catch (e) {} el.textContent = i ? 'HP' : 'LP'; }
+        function paint () { var i = 0; try { i = ss ? Math.round(ss.getNormalisedValue()) : 0; } catch (e) {} var t = i ? 'HP' : 'LP'; el.textContent = t; el.dataset.lbl = t; }   // dataset.lbl → drag-readout restores the MODE name, not 'Cut'
         try { if (ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener) ss.valueChangedEvent.addListener(paint); } catch (e) {}
         paint();
       });
@@ -22503,7 +22508,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'rr1';   // bump per ship  [rr1: FLOW mode 4 Drift→ROUND ROBIN — per-note osc rotation (Matriarch-style, global counter, enabled-only, legato keeps osc, gate-declicked) + rotating-dots tile emblem + UI-only .rbn-ext extension card (8 researched cycling techniques)]
+  var TERRAIN_BUILD = 'rr2';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
@@ -22790,13 +22795,23 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var now = (window.performance && performance.now) ? performance.now() : 0;
       for (var i = 0; i < 4; i++) {
         var o = IDS[i], d = f && f[o], s = st[o];
-        if (!d || !d.on) { s.on = false; continue; }
+        if (!d || !d.on) { if (s.on) wipe(o); s.on = false; continue; }
         s.on = true; s.lastMs = now;
         var p = +d.p; s.pos = (p === p && p >= 0 && p <= 1) ? p : 0;
       }
       kick();
     } catch (err) {}
   };
+
+  // osc went dark (sample deleted / engine switched) → clear the canvas and drop the baked
+  // layers so a stale spectral image can't linger (cleanup sweep).
+  function wipe(o) {
+    try {
+      var s = st[o]; s.ghost = null; s.bright = null;
+      var cv = canvasFor(o);
+      if (cv) { var cx = cv.getContext('2d'); cx.clearRect(0, 0, cv.width, cv.height); }
+    } catch (e) {}
+  }
 
   var raf = 0;
   function kick() { if (!raf) raf = requestAnimationFrame(draw); }
@@ -22838,7 +22853,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     ctx.restore();
 
     var now = (window.performance && performance.now) ? performance.now() : 0;
-    if (now - s.lastMs > 1500) s.on = false;
+    if (now - s.lastMs > 1500) { s.on = false; wipe(o); }   // stalled channel → don't freeze a stale image
   }
 
   window.addEventListener('resize', function () { for (var i = 0; i < 4; i++) if (st[IDS[i]].on) { try { paint(IDS[i]); } catch (e) {} } });
