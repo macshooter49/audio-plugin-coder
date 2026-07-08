@@ -575,6 +575,14 @@ namespace tw
             for (auto& e : harmEngC_) e.setPartialBudget (used, cap);
             for (auto& e : harmEngD_) e.setPartialBudget (used, cap);
         }
+        // HARM-VIZ — downsample this voice's live anchor bank into UI bins (audio thread only)
+        bool harmLiveBins (int osc, float* out, int nBins) const noexcept
+        {
+            const Engine oe[4] = { engine_, engineB_, engineC_, engineD_ };
+            if (osc < 0 || osc > 3 || oe[osc] != Engine::HARM) return false;
+            const std::array<tw::HarmonicEngine, kMaxUnison>* engs[4] = { &harmEngA_, &harmEngB_, &harmEngC_, &harmEngD_ };
+            return (*engs[osc])[0].liveBins (out, nBins) > 0;
+        }
         void setHarmParamsA (const tw::HarmParams& p) noexcept { harmParamsA_ = p; }   // HARMONIC-ENGINE-PUSH
         void setHarmParamsB (const tw::HarmParams& p) noexcept { harmParamsB_ = p; }
         void setHarmParamsC (const tw::HarmParams& p) noexcept { harmParamsC_ = p; }

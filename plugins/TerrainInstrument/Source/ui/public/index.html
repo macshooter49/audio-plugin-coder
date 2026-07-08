@@ -3924,7 +3924,7 @@ body {
 #syn-panel .harm-knob-wrap.pg2 .harm-pg2 { display: flex; }
 /* the two-row page (buttons over knobs) is taller than a plain knob row — let the
    display shrink to absorb it (the partial-bar canvas is absolute, it just gets shorter) */
-#syn-panel .device.osc.engine-harm .osc-display { min-height: 42px; }
+#syn-panel .device.osc.engine-harm .osc-display { min-height: 49px; }   /* measured so the knob row bottoms at the SAME pixel as every other engine's row */
 #syn-panel .harm-btn-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
 #syn-panel .harm-btn { appearance: none; -webkit-appearance: none; background: transparent; border: 1px solid rgba(255,255,255,0.34); border-radius: 4px; color: rgba(255,255,255,0.82); font-family: inherit; font-size: 7px; font-weight: 600; letter-spacing: 0.35px; line-height: 1; padding: 2px 0; cursor: pointer; transition: border-color .12s, color .12s, background .12s; }
 #syn-panel .harm-btn:hover { border-color: rgba(255,255,255,0.7); color: #fff; }
@@ -4110,6 +4110,9 @@ body {
 #syn-panel .device.osc.engine-geode .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
 #syn-panel .device.osc.engine-geode .samp-head .samp-sel.snap { display: none; }
 #syn-panel .device.osc.engine-geode .device-corner-preset .preset-wrap { display: none; }
+#syn-panel .device.osc.engine-harm .device-corner-preset .preset-wrap { display: none; }
+#syn-panel .hm-mode-wrap { display: none; }
+#syn-panel .device.osc.engine-harm .device-corner-preset .hm-mode-wrap { display: inline-flex; }
 #syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
 #syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
 #syn-panel .samp-sel::after { content: '▾'; font-size: 6px; color: var(--text-muted); margin-left: 3px; pointer-events: none; }
@@ -5241,6 +5244,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-a-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="a" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-a-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select" aria-label="Wavetable preset">
@@ -5538,6 +5542,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-b-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="b" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-b-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_B_WT_PRESET" id="osc-b-preset-select" aria-label="Wavetable preset">
@@ -5851,6 +5856,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-c-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="c" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-c-preset-display">Sine</span>
               <select class="preset-select" id="osc-c-preset-select" data-syn="SYN_OSC_C_WT_PRESET" aria-label="OSC B wavetable preset">
@@ -6148,6 +6154,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-d-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="d" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-d-preset-display">Sine</span>
               <select class="preset-select" id="osc-d-preset-select" data-syn="SYN_OSC_D_WT_PRESET" aria-label="OSC B wavetable preset">
@@ -10710,12 +10717,25 @@ setTimeout(function wireSynControls () {
         try { st.valueChangedEvent.addListener (paint); } catch (e) {}
         paint ();
       });
+    // header FAMILY selector — same param as the pg1 buttons; both repaint via the state listener
+      var HM_FAM = ['Blade','Neon','Console','Chant','Bronze','Hornet'];
+      document.querySelectorAll ('#syn-panel .hm-mode-select').forEach (function (sel) {
+        var oscL = sel.getAttribute ('data-oscl') || 'a';
+        var disp = document.getElementById ('osc-' + oscL + '-harmmode-display');
+        var st = null; try { st = window.Juce.getSliderState ('SYN_OSC_' + oscL.toUpperCase () + '_HARM_MODE'); } catch (e) {}
+        if (! st || ! disp) return;
+        function paint () { var i = 0; try { i = Math.max (0, Math.min (5, Math.round (st.getNormalisedValue () * 5))); } catch (e) {}
+          disp.textContent = HM_FAM[i] || 'Blade'; try { sel.value = String (i); } catch (e) {} }
+        sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; try { st.setNormalisedValue (i / 5); } catch (e) {} paint (); });
+        try { st.valueChangedEvent.addListener (paint); } catch (e) {}
+        paint ();
+      });
     } catch (eHm) { console.warn ('[HARM] ui wiring failed', eHm); }
 
     // ── HARM VIZ painter — 60 fps rAF lerp toward the C++ pushed bins ──
     try {
       var HV = {};
-      ['a','b','c','d'].forEach (function (o) { HV[o] = { t: null, g: null, cur: null, curG: null, seen: 0 }; });
+      ['a','b','c','d'].forEach (function (o) { HV[o] = { t: null, g: null, cur: null, curG: null, pk: null, seen: 0 }; });
       function hvNow () { return (window.performance && performance.now) ? performance.now () : Date.now (); }
       window.updateHarmViz = function (o, white, ghost) {
         try { var st = HV[o]; if (! st) return; st.t = white; st.g = ghost; st.seen = hvNow (); } catch (e) {}
@@ -10738,17 +10758,23 @@ setTimeout(function wireSynControls () {
         var t = st.t, g = st.g, n = t.length;
         if (! st.cur || st.cur.length !== n) { st.cur = t.slice (); st.curG = (g || t).slice (); }
         var cur = st.cur, curG = st.curG, bw = W / n, i, h;
-        ctx.fillStyle = 'rgba(139,92,246,0.30)';   // purple ghost — the raw family spectrum
+        if (! st.pk || st.pk.length !== n) { st.pk = t.slice (); }
+        var pk = st.pk, fall = H * 0.012;          // peak caps fall with a little gravity
+        ctx.fillStyle = 'rgba(139,92,246,0.22)';   // purple ghost — the raw family spectrum
         for (i = 0; i < n; ++i) {
           curG[i] += (((g && g[i]) || 0) - curG[i]) * 0.35;
-          h = (curG[i] / 99) * H * 0.92;
-          if (h > 0.8) ctx.fillRect (i * bw + bw * 0.18, H - h, Math.max (1, bw * 0.64), h);
+          h = (curG[i] / 99) * H * 0.96;
+          if (h > 0.8) ctx.fillRect (i * bw + bw * 0.14, H - h, Math.max (1, bw * 0.72), h);
         }
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';  // white — what survives your knobs
+        ctx.fillStyle = 'rgba(255,255,255,0.96)';  // white — what survives your knobs
         for (i = 0; i < n; ++i) {
-          cur[i] += ((t[i] || 0) - cur[i]) * 0.35;
-          h = (cur[i] / 99) * H * 0.92;
-          if (h > 0.8) ctx.fillRect (i * bw + bw * 0.30, H - h, Math.max (1, bw * 0.4), h);
+          cur[i] += ((t[i] || 0) - cur[i]) * 0.4;
+          h = (cur[i] / 99) * H * 0.96;
+          if (h > 0.8) ctx.fillRect (i * bw + bw * 0.28, H - h, Math.max (1, bw * 0.44), h);
+          pk[i] = Math.max (cur[i], pk[i] - fall * (99 / H));
+          var ph2 = (pk[i] / 99) * H * 0.96;
+          if (ph2 > 1.6 && ph2 > h + 1.5)          // the cap floats above the bar and falls in
+            ctx.fillRect (i * bw + bw * 0.28, H - ph2 - 1, Math.max (1, bw * 0.44), 1.2);
         }
         ctx.fillStyle = 'rgba(255,255,255,0.28)';  // hairline baseline
         ctx.fillRect (0, H - 1, W, 1);
@@ -22784,7 +22810,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'hm1';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'hm2';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

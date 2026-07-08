@@ -360,6 +360,8 @@ public:
     /** HARM viz — the latest gathered knob snapshot for one osc. The editor's DISPLAY
      *  HarmonicEngine instances rebuild their banks from this on the message-thread tick
      *  (plain struct copy of block-rate floats — a torn read costs one cosmetic frame). */
+    bool  harmVizLive (int osc) const noexcept { return harmVizLive_[(size_t) juce::jlimit (0, 3, osc)].load (std::memory_order_relaxed) != 0; }
+    float harmVizBin (int osc, int b) const noexcept { return harmVizBins_[(size_t) juce::jlimit (0, 3, osc)][(size_t) juce::jlimit (0, 95, b)].load (std::memory_order_relaxed); }
     const tw::HarmParams& harmDisplayParams (int osc) const noexcept
     { return harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)]; }
     /** Returns the sample buffer for the currently-editing layer.
@@ -486,6 +488,10 @@ public:
     // Live AMP envelope output [0,1] of the most-active synth voice, for the UI
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
+    // HARM-VIZ — live partial bins from the most-active voice (audio thread writes; editor
+    // reads on its tick — cosmetic, tear-tolerant)
+    std::atomic<float> harmVizBins_[4][96] {};
+    std::atomic<int>   harmVizLive_[4] {};
     std::atomic<float> synthLfo1Vis { 0.f };   // Batch 1 — live L1 LFO value for the editor dot
     // ANNULUS resonator — live feed read by the editor timer → purple audio-reactive harmonograph layer.
     std::atomic<float> resoVizEnergy_[4] { {0.f}, {0.f}, {0.f}, {0.f} };   // per-band modal energy

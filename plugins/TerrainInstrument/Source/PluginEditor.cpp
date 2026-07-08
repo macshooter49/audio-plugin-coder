@@ -3702,6 +3702,15 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             de.prepareBank (800);                            // ~1/60 s at 48 k — animated ops advance
             float wB[tw::harm::kDispBins], gB[tw::harm::kDispBins];
             de.displayBins (wB, gB, tw::harm::kDispBins);
+            // hm2 — while a note sounds, the WHITE layer is the REAL rendered bank of the
+            // most-active voice, breathing with the amp envelope; idle falls back to the bake.
+            if (audioProcessor.harmVizLive (o))
+            {
+                const float env = juce::jlimit (0.f, 1.f, audioProcessor.ampEnvVis.load (std::memory_order_relaxed));
+                const float sc  = 0.35f + 0.65f * env;
+                for (int b = 0; b < tw::harm::kDispBins; ++b)
+                    wB[b] = audioProcessor.harmVizBin (o, b) * sc;
+            }
             js << "try{if(window.updateHarmViz){window.updateHarmViz(" << hOscId[o] << ",[";
             for (int b = 0; b < tw::harm::kDispBins; ++b) { if (b) js << ","; js << (int) (wB[b] * 99.f); }
             js << "],[";

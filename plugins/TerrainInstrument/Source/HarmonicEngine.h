@@ -108,6 +108,7 @@ public:
             fizzW_.assign ((size_t) harm::kMaxPartials, 0.f);
             baseAmp_.assign ((size_t) harm::kMaxPartials, 0.f);
         }
+        scatMul_.assign ((size_t) harm::kMaxPartials, 1.f);
         bankOwner_ = bankOwner;
         bank_ = nullptr;
         gNorm_ = 1.f; tB_ = 0.f; orbit_ = 0.f;
@@ -123,6 +124,7 @@ public:
         int d = 1; const int nn = n > 1 ? n : 1;
         while (d * d < nn) ++d;
         unisonDiv_ = d < 1 ? 1 : d;
+        uniScatCents_ = (nn > 1) ? 2.8f : 0.f;   // per-sibling partial decorrelation (hm2)
     }
     void setParams (const HarmParams& p) noexcept { p_ = p; }
     void setPitchRatio (double r) noexcept { pitchMul_ = r > 0.0 ? r : 1.0; }
@@ -137,12 +139,22 @@ public:
         seed_ = seed ? seed : 0x9E3779B9u;
         rng_  = seed_ ^ 0xA511E9B3u;    // noise lane seeded ONCE per note, then free-runs
                                         // (a per-block reseed would freeze the OU drift solid)
-        // random phase per partial per note (cookbook policy: lush, crest-safe, every
-        // note a slightly different waveform — the analog feel starts here)
+        // phase policy (cookbook): random per partial per note = lush, crest-safe, every note
+        // a slightly different waveform. HORNET instead fires NEAR-ALIGNED phases — the
+        // band-limited impulse-train buzz is its identity (small jitter keeps headroom sane).
+        const bool buzz = (p_.mainMode == 5);
         for (int j = 0; j < harm::kMaxPartials; ++j)
-            phase_[(size_t) j] = hash01 ((std::uint32_t) j * 2654435761u ^ seed_);
+            phase_[(size_t) j] = buzz ? 0.06f * hash01 ((std::uint32_t) j * 2654435761u ^ seed_)
+                                      : hash01 ((std::uint32_t) j * 2654435761u ^ seed_);
         std::fill (ampZL_.begin(), ampZL_.end(), 0.f);   // start silent → first block ramps in
         std::fill (ampZR_.begin(), ampZR_.end(), 0.f);
+        // per-sibling per-partial static frequency scatter — decorrelates the unison stack so
+        // shared-bank animation reads as ENSEMBLE, not coherent vibrato (unison = end of chain)
+        if (scatMul_.size() != (size_t) harm::kMaxPartials) scatMul_.assign ((size_t) harm::kMaxPartials, 1.f);
+        for (int j = 0; j < harm::kMaxPartials; ++j)
+            scatMul_[(size_t) j] = (uniScatCents_ > 0.f)
+                ? centsMul (uniScatCents_ * (hash01 ((std::uint32_t) j * 40503u ^ seed_ ^ 0x1F123BB5u) - 0.5f) * 2.f)
+                : 1.f;
         if (bankOwner_)
         {
             std::fill (fizzW_.begin(), fizzW_.end(), 0.f);
@@ -159,8 +171,15 @@ public:
     {
         if (! bankOwner_ || n <= 0) return false;
         const float dt = (float) n / (float) rate_;
+        // CPU (hm2): at small host blocks the spectral build ran up to ~750×/s per anchor —
+        // rebuild every OTHER block when the knobs are static (declick ramps + ~190Hz updates
+        // make the skip inaudible; any knob touch rebuilds immediately).
+        skipTick_ = ! skipTick_;
+        if (skipTick_ && nP_ > 0 && n < 128 && ! displayMode_ && p_ == lastBuilt_)
+        { tB_ += dt; bank_ = this; return true; }
+        lastBuilt_ = p_;
         const float baseHz = (float) (playedHz_ * pitchMul_);
-        const float churnMul = 0.25f + 3.75f * p_.churn * p_.churn;   // exp-ish rate scale ×0.25..×4
+        const float churnMul = fastExp2 (lerpf (-3.f, 3.f, clamp01 (p_.churn)));   // ×0.125..×8 (hm2 amplify)
 
         // partial-count window: log taper 8..512, CONTINUOUS (equal-power 3-partial fade edge)
         const float kf = (float) harm::kMinCount
@@ -180,6 +199,7 @@ public:
         if (displayMode_)                          // ghost layer = the untouched family spectrum
             std::copy (amp_.begin(), amp_.begin() + nEff, baseAmp_.begin());
         applyLean   (nEff);
+        shineChurn_ = churnMul;
         nEff = applyShineRoot (nEff);              // ghost deposits may append the sub slot
         applySculpt (nEff, churnMul);
         applyWilt   (nEff);
@@ -232,7 +252,7 @@ public:
             const float prevL = ampZL_[(size_t) j];
             const float prevR = ampZR_[(size_t) j];
             const float rj  = b.ratio_[(size_t) j];
-            const float hz  = rj * baseHz;
+            const float hz  = rj * baseHz * scatMul_[(size_t) j];
             const bool  aud = (rj > 0.f && hz > 0.f && hz < (float) rate_ * 0.49f);
             const float a   = (j < b.nP_ && aud) ? b.amp_[(size_t) j] * g : 0.f;
             const float tgtL = a * b.panL_[(size_t) j];
@@ -291,6 +311,28 @@ public:
             if (white[b] < 3e-2f) white[b] = 0.f;
             if (ghost[b] < 3e-2f) ghost[b] = 0.f;
         }
+    }
+
+    // live white bins from the CURRENT bank — voice anchors feed the UI bars while a
+    // note sounds (same index compression as displayBins; no ghost layer needed here)
+    int liveBins (float* out, int nBins) const noexcept
+    {
+        if (out == nullptr || nBins <= 0 || nP_ <= 0 || ! bankOwner_) return 0;
+        for (int b = 0; b < nBins; ++b) out[b] = 0.f;
+        float mx = 1e-9f;
+        for (int j = 0; j < nP_; ++j)
+        {
+            const float x = std::sqrt ((float) j / (float) harm::kMaxPartials);
+            const int   b = std::min (nBins - 1, (int) (x * (float) nBins));
+            out[b] = std::max (out[b], amp_[(size_t) j]);
+            mx = std::max (mx, out[b]);
+        }
+        for (int b = 0; b < nBins; ++b)
+        {
+            out[b] = std::cbrt (out[b] / mx);
+            if (out[b] < 3e-2f) out[b] = 0.f;
+        }
+        return nP_;
     }
 
     // test hooks
@@ -392,8 +434,8 @@ private:
             default:
             case 0: // ── BLADE — saw → hollow reed ──
             {
-                const float t = 0.8f + 1.4f * k;
-                const float evenG = 1.f - sstep (0.5f, 1.f, k);
+                const float t = 0.75f + 1.9f * k;
+                const float evenG = 1.f - sstep (0.45f, 0.9f, k);
                 for (int j = 0; j < nEff; ++j)
                 {
                     const int nn = j + 1;
@@ -404,16 +446,16 @@ private:
             }
             case 1: // ── NEON — the CS-80 lane ──
             {
-                const float wob   = 0.03f + 0.07f * sstep (0.5f, 1.f, k);       // PWM depth grows up top
+                const float wob   = 0.035f + 0.12f * sstep (0.45f, 1.f, k);      // PWM depth grows up top
                 const float duty  = 0.30f + wob * sineAt (frac (0.4f * tB_));
                 const float mix   = 0.55f;
-                float c, Q;
-                if (k < 0.5f) { c = lerpf (2.f, 14.f, k * 2.f); Q = 2.5f; }
-                else
-                {   // auto brass stab: emphasis sweeps down from 12·f0 with a per-note exp decay
-                    Q = lerpf (3.f, 8.f, k * 2.f - 1.f);
-                    c = 2.5f + 9.5f * fastExp2 (-tB_ * 3.2f);
-                }
+                // parked playable resonance below, self-sweeping brass stab above — CROSSFADED
+                // through k∈[0.45,0.6] so the knob morphs, never switches (hm2 de-snap)
+                const float swp   = sstep (0.45f, 0.6f, k);
+                const float cPark = lerpf (2.f, 14.f, clamp01 (k * 2.f));
+                const float cSwp  = 2.5f + 9.5f * fastExp2 (-tB_ * 3.2f);
+                const float c     = lerpf (cPark, cSwp, swp);
+                const float Q     = lerpf (2.5f, lerpf (4.f, 12.f, clamp01 (k * 2.f - 1.f)), swp);
                 for (int j = 0; j < nEff; ++j)
                 {
                     const int nn = j + 1;
@@ -430,14 +472,14 @@ private:
             case 2: // ── CONSOLE — drawbars → carillon cluster ──
             {
                 static const float RH[9] = { 0.5f, 1.5f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 8.f };
-                static const float RD[9] = { 0.5f, 1.53f, 1.f, 1.98f, 3.04f, 4.07f, 5.1f, 5.94f, 8.21f }; // 8' stays true
+                static const float RD[9] = { 0.5f, 1.56f, 1.f, 1.97f, 3.09f, 4.15f, 5.21f, 6.07f, 8.44f }; // 8' stays true
                 static const float VA[9] = { 0.f, 0.f, 1.f, 0.3f, 0.f, 0.1f, 0.f, 0.f, 0.f };
                 static const float VB[9] = { 0.7f, 0.5f, 1.f, 0.8f, 0.7f, 0.6f, 0.5f, 0.5f, 0.8f };
                 const float regK = clamp01 (k * 2.f);          // flute → full
                 const float cluK = clamp01 (k * 2.f - 1.f);    // full → cluster
                 // faint 1/n^2.5 bed above the bars = cabinet warmth
                 for (int j = 0; j < nEff; ++j)
-                    amp_[(size_t) j] *= 0.05f * fastExp2 (-2.5f * fastLog2 ((float) (j + 1)));
+                    amp_[(size_t) j] *= 0.02f * fastExp2 (-2.5f * fastLog2 ((float) (j + 1)));
                 for (int bj = 0; bj < 9 && bj < nEff; ++bj)
                 {
                     const float bar = (k < 0.5f) ? lerpf (VA[bj], VB[bj], regK)
@@ -452,20 +494,22 @@ private:
                 // vowel path oo → ah on k∈[0,0.5]; above: choir scatter + slow formant drift
                 static const float VOO[3] = { 300.f,  870.f, 2250.f };
                 static const float VAH[3] = { 730.f, 1090.f, 2440.f };
-                const float vk = clamp01 (k * 2.f);
-                const float scat = clamp01 (k * 2.f - 1.f);
-                float F[3], G[3] = { 1.f, 0.63f, 0.32f };
+                static const float VEE[3] = { 270.f, 2290.f, 3010.f };
+                const float vk = clamp01 (k * 2.f);          // oo → ah on the lower half
+                const float wk = clamp01 (k * 2.f - 1.f);    // ah → ee on the upper half (hm2: full walk)
+                const float scat = wk;
+                float F[3], G[3] = { 1.f, 0.75f, 0.45f };
                 for (int fj = 0; fj < 3; ++fj)
                 {
-                    F[fj] = lerpf (VOO[fj], VAH[fj], vk);
-                    F[fj] *= 1.f + 0.02f * scat * sineAt (frac (0.15f * tB_ + 0.33f * (float) fj));
+                    F[fj] = lerpf (lerpf (VOO[fj], VAH[fj], vk), VEE[fj], wk);
+                    F[fj] *= 1.f + 0.045f * scat * sineAt (frac (0.15f * tB_ + 0.33f * (float) fj));
                 }
                 const float refHz = displayMode_ ? 110.f : baseHz;   // freq-ANCHORED: vowels survive pitch
                 for (int j = 0; j < nEff; ++j)
                 {
                     const int nn = j + 1;
                     const float f = (float) nn * refHz;
-                    float mask = 0.06f;
+                    float mask = 0.025f;
                     for (int fj = 0; fj < 3; ++fj)
                     {
                         const float x = fastLog2 (f / F[fj]);             // distance in OCTAVES
@@ -474,31 +518,35 @@ private:
                     }
                     amp_[(size_t) j] *= mask / (float) nn;
                     // choir scatter — frozen per-note random micro-detune (a crowd, not a soloist)
-                    ratio_[(size_t) j] *= 1.f + 0.004f * scat * (hash01 ((std::uint32_t) nn * 77u ^ seed_) - 0.5f) * 2.f;
+                    ratio_[(size_t) j] *= 1.f + 0.009f * scat * (hash01 ((std::uint32_t) nn * 77u ^ seed_) - 0.5f) * 2.f;
                 }
                 break;
             }
             case 4: // ── BRONZE — stiff string → temple gong ──
             {
-                const float B = 4e-4f * fastExp2 (6.2f * k * 1.4427f);      // e^(6.2k)
+                const float B = 4e-4f * fastExp2 (6.7f * k * 1.4427f);      // e^(6.7k) — gong reach (hm2)
                 const float n1 = std::sqrt (1.f + B);                        // root anchor (ratio[0] = 1 exactly)
-                const int   step = 2 + (int) std::lround (2.f * clamp01 (k * 2.f - 1.f));
-                const bool  sparse = k > 0.5f;
+                const float sp2 = sstep (0.5f, 0.7f, k);                     // FADED sparse masks — no snap (hm2)
+                const float sp3 = sstep (0.7f, 1.0f, k);
                 for (int j = 0; j < nEff; ++j)
                 {
                     const int nn = j + 1;
                     ratio_[(size_t) j] = (float) nn * std::sqrt (1.f + B * (float) nn * (float) nn) / n1;
                     float a = fastExp2 (-0.7f * fastLog2 ((float) nn))
                             * (0.55f + 0.45f * sineAt (frac ((float) nn * 0.618f + 0.25f)));
-                    if (sparse && nn >= 4 && (nn % step) != 0) a *= 0.1f;
+                    if (nn >= 4)
+                    {
+                        if ((nn % 2) != 0) a *= lerpf (1.f, 0.07f, sp2);     // odd clang modes thin first…
+                        if ((nn % 3) != 0) a *= lerpf (1.f, 0.22f, sp3);     // …then only every 6th survives
+                    }
                     amp_[(size_t) j] *= a;
                 }
                 break;
             }
             case 5: // ── HORNET — pulse-train buzz wall ──
             {
-                const int   K = (int) std::lround (lerpf (12.f, (float) nEff, k));
-                const float d = 0.5f - 0.38f * sstep (0.5f, 1.f, k);
+                const int   K = (int) std::lround (12.f * fastExp2 (fastLog2 ((float) nEff / 12.f) * k));   // exp growth
+                const float d = 0.5f - 0.44f * sstep (0.4f, 1.f, k);
                 for (int j = 0; j < nEff; ++j)
                 {
                     const int nn = j + 1;
@@ -515,7 +563,7 @@ private:
     // stage 2 — LEAN: bipolar tilt ±12 dB/oct anchored at the fundamental
     void applyLean (int nEff) noexcept
     {
-        const float T = (p_.lean - 0.5f) * 2.f * 12.f;   // dB/oct
+        const float T = (p_.lean - 0.5f) * 2.f * 18.f;   // dB/oct (hm2 amplify)
         if (std::fabs (T) < 0.05f) return;
         for (int j = 0; j < nEff; ++j)
             amp_[(size_t) j] *= dbMul (T * fastLog2 (std::max (0.26f, ratio_[(size_t) j])));
@@ -527,13 +575,13 @@ private:
         const float s = clamp01 (p_.shine);
         if (s > 0.003f)
         {
-            const float det = 0.006f * s * sineAt (frac (0.11f * tB_));
+            const float det = 0.013f * s * sineAt (frac (0.11f * tB_ * shineChurn_));
             const int   half = std::min (nEff / 2, 128);
             for (int j = 0; j < half; ++j)
             {
                 const int dst = (j + 1) * 2 - 1;         // slot of ratio ≈ 2·(j+1)
                 if (dst >= nEff) break;
-                const float ghost = s * 0.55f * amp_[(size_t) j];
+                const float ghost = s * 0.95f * amp_[(size_t) j];
                 if (ghost <= 1e-7f) continue;
                 const float tot = amp_[(size_t) dst] + ghost;
                 // beat the ghost against the host by nudging the slot in proportion to the ghost share
@@ -549,7 +597,7 @@ private:
             {   // half-ratio sub ghost in its own appended slot (never disturbs slot 1's tuning)
                 const int sub = nEff;
                 ratio_[(size_t) sub] = 0.5f;
-                amp_  [(size_t) sub] = (r * 2.f - 1.f) * 0.7f * std::max (amp_[0], 0.2f);
+                amp_  [(size_t) sub] = (r * 2.f - 1.f) * 0.9f * std::max (amp_[0], 0.2f);
                 panL_ [(size_t) sub] = 0.7071f; panR_[(size_t) sub] = 0.7071f;
                 ++nEff;
             }
@@ -569,8 +617,8 @@ private:
             case 0: // ── KEEL — pivot tilt: felt blanket → megaphone scream ──
             {
                 float slope, pivot;
-                if (k < 0.5f) { slope = 6.f * (k * 2.f); pivot = 1.f; }
-                else          { slope = 6.f;             pivot = lerpf (1.f, 12.f, k * 2.f - 1.f); }
+                if (k < 0.5f) { slope = 9.f * (k * 2.f); pivot = 1.f; }
+                else          { slope = 9.f;             pivot = lerpf (1.f, 18.f, k * 2.f - 1.f); }
                 for (int j = 0; j < nEff; ++j)
                 {
                     const float rr = std::max (0.26f, ratio_[(size_t) j]);
@@ -585,12 +633,17 @@ private:
             {
                 float B, anchor;
                 if (k < 0.5f) { B = 0.002f * (k * 2.f) * (k * 2.f); anchor = 1.f; }
-                else { const float u = k * 2.f - 1.f; B = 0.002f + 0.06f * u * u; anchor = 1.f + std::floor (3.f * u + 0.5f); }
+                else { const float u = k * 2.f - 1.f; B = 0.002f + 0.138f * u * u; anchor = 1.f + 3.f * u; }
                 for (int j = 0; j < nEff; ++j)
                 {
                     const float nn = (float) (j + 1);
-                    if (nn <= anchor || ratio_[(size_t) j] < 0.9f) continue;   // root (and sub) stay LOCKED
-                    ratio_[(size_t) j] *= std::sqrt (1.f + B * (nn * nn - anchor * anchor));
+                    if (ratio_[(size_t) j] < 0.9f) continue;                   // sub ghost stays put
+                    // FRACTIONAL anchor (hm2 de-snap): partials near the anchor blend smoothly
+                    // into the stretch instead of re-locking in audible integer steps
+                    const float m = sstep (anchor - 0.5f, anchor + 1.5f, nn);
+                    if (m <= 0.f) continue;
+                    const float str = std::sqrt (1.f + B * std::max (0.f, nn * nn - anchor * anchor));
+                    ratio_[(size_t) j] *= lerpf (1.f, str, m);
                 }
                 break;
             }
@@ -614,8 +667,8 @@ private:
             case 3: // ── TIDE — traveling amplitude ripple ──
             {
                 float d, w, f;
-                if (k < 0.5f) { d = k * 2.f; w = 0.06f; f = 0.3f; }
-                else { const float u = k * 2.f - 1.f; d = 1.f; w = lerpf (0.06f, 0.5f, u); f = lerpf (0.3f, 6.f, u * u); }
+                if (k < 0.5f) { d = std::min (1.f, k * 2.4f); w = 0.06f; f = 0.3f; }
+                else { const float u = k * 2.f - 1.f; d = 1.f; w = lerpf (0.06f, 0.7f, u); f = lerpf (0.3f, 10.f, u * u); }
                 f *= churnMul;
                 const float phT = f * tB_;
                 for (int j = 0; j < nEff; ++j)
@@ -626,7 +679,7 @@ private:
             {
                 float step, dith;
                 if (k < 0.5f) { step = lerpf (0.75f, 6.f, k * 2.f); dith = 0.f; }
-                else          { step = lerpf (6.f, 24.f, k * 2.f - 1.f); dith = k * 2.f - 1.f; }
+                else          { step = lerpf (6.f, 32.f, k * 2.f - 1.f); dith = k * 2.f - 1.f; }
                 const std::uint32_t epoch = (std::uint32_t) (tB_ * 12.f * churnMul);   // re-dither ~12 Hz·churn
                 for (int j = 0; j < nEff; ++j)
                 {
@@ -635,7 +688,7 @@ private:
                     const float dB = 6.0206f * fastLog2 (a);
                     const float dj = dith * hash01 ((std::uint32_t) j * 193u ^ epoch * 7919u ^ seed_);
                     const float q  = std::floor (dB / step + dj) * step;
-                    amp_[(size_t) j] = (q < -80.f) ? 0.f : dbMul (q);
+                    amp_[(size_t) j] = (q < lerpf (-80.f, -54.f, k)) ? 0.f : dbMul (q);   // the floor RISES with the knob — real deletion
                 }
                 break;
             }
@@ -652,8 +705,8 @@ private:
                     if (slot >= 0) { val[slot] = a; idx[slot] = j; }
                 }
                 const float u = clamp01 (k * 2.f - 1.f);
-                const float gD = (k < 0.5f) ? k * 2.f * 0.5f : 0.5f;
-                const float gS = u * 0.6f;
+                const float gD = (k < 0.5f) ? k * 2.f * 0.85f : 0.85f;
+                const float gS = u * 1.15f;
                 int pair = 0;
                 for (int a = 0; a < harm::kClangSeeds; ++a)
                     for (int b = a + 1; b < harm::kClangSeeds; ++b, ++pair)
@@ -661,7 +714,7 @@ private:
                         if (val[a] <= 1e-6f || val[b] <= 1e-6f) continue;
                         const float ra = ratio_[(size_t) idx[a]], rb = ratio_[(size_t) idx[b]];
                         const float g  = std::sqrt (val[a] * val[b]);
-                        const float nudge = 1.f + 0.011f * u * (hash01 ((std::uint32_t) pair * 511u ^ seed_) - 0.5f) * 2.f;
+                        const float nudge = 1.f + 0.02f * u * (hash01 ((std::uint32_t) pair * 511u ^ seed_) - 0.5f) * 2.f;
                         depositAt (std::fabs (ra - rb) * nudge, gD * g, nEff);
                         if (gS > 0.f) depositAt ((ra + rb) * nudge, gS * g, nEff);
                     }
@@ -694,15 +747,20 @@ private:
     }
 
     // stage 5 — WILT: bipolar time arrow (auto-pluck ↔ auto-swell)
+    // WILT (hm2 rework): the knob is DEPTH into a fixed time law — sweeping it mid-note
+    // morphs smoothly between dry and wilted. (The old form scaled the RATE, so mid-note
+    // sweeps were non-monotonic: nothing… nothing… SNAP. Max heard it. Never again.)
     void applyWilt (int nEff) noexcept
     {
         const float w = (p_.wilt - 0.5f) * 2.f;
-        if (std::fabs (w) < 0.01f) return;
-        const float d = 6.f * std::fabs (w);
+        const float depth = std::pow (std::fabs (w), 0.75f);
+        if (depth < 0.01f) return;
         for (int j = 1; j < nEff; ++j)   // fundamental untouched — the note never dies to silence
         {
-            const float e = std::exp (-tB_ * d * (std::max (1.f, ratio_[(size_t) j]) - 1.f) * (1.f / 32.f));
-            amp_[(size_t) j] *= (w < 0.f) ? e : (1.f - e);
+            const float hi = std::max (1.f, ratio_[(size_t) j]) - 1.f;
+            const float e  = std::exp (-tB_ * 7.f * hi * (1.f / ((w < 0.f) ? 32.f : 24.f)));
+            const float target = (w < 0.f) ? e : (1.f - e);
+            amp_[(size_t) j] *= lerpf (1.f, target, depth);
         }
     }
 
@@ -711,9 +769,10 @@ private:
     {
         const float k = clamp01 (p_.fizz);
         if (k < 0.004f) return;
-        float mask1 = 0.f, bw;
-        if (k < 0.5f) { bw = 0.004f * (k * 2.f); }
-        else          { const float u = k * 2.f - 1.f; bw = lerpf (0.004f, 0.05f, u * u); mask1 = 1.f; }
+        float bw;
+        if (k < 0.5f) { bw = 0.009f * (k * 2.f); }
+        else          { const float u = k * 2.f - 1.f; bw = lerpf (0.009f, 0.09f, u * u); }
+        const float mask1 = sstep (0.5f, 0.75f, k);   // whole-spectrum fur FADES in (hm2 de-snap)
         for (int j = 0; j < nEff; ++j)
         {
             float& w = fizzW_[(size_t) j];
@@ -730,8 +789,8 @@ private:
         const float g = clamp01 (p_.grit);
         if (g < 0.004f) return;
         const float hot   = sstep (0.5f, 1.f, g);                    // the haunted-machine regime
-        const float sigA  = 1.2f * g + 2.6f * hot;                   // dB
-        const float sigF  = 2.2f * g + 9.f  * hot;                   // cents
+        const float sigA  = 1.5f * g + 3.2f * hot;                   // dB (hm2 amplify)
+        const float sigF  = 2.6f * g + 12.f * hot;                   // cents
         const float rhoA  = std::exp (-dt / lerpf (0.20f, 0.07f, hot));
         const float rhoF  = std::exp (-dt / lerpf (0.60f, 0.18f, hot));
         const float qA = std::sqrt (1.f - rhoA * rhoA), qF = std::sqrt (1.f - rhoF * rhoF);
@@ -776,22 +835,22 @@ private:
             for (int q = 0; q < M; ++q) if (val[q] < low) { low = val[q]; slot = q; }
             if (slot >= 0) { val[slot] = a; idx[slot] = j; }
         }
-        const float dBase = 3.f + 15.f * b;
+        const float dBase = 4.f + 26.f * b;   // cents (hm2 amplify — the chorus Max liked, bigger)
         int cursor = nEff;
         for (int q = 0; q < M && cursor < harm::kMaxPartials; ++q)
         {
             const int j = idx[q];
             if (j < 0 || val[q] <= 1e-6f) continue;
             const float psi = hash01 ((std::uint32_t) j * 917u ^ seed_);
-            const float d = dBase + 4.f * b * sineAt (frac (lerpf (0.4f, 1.4f, psi) * tB_ + psi));
+            const float d = dBase + 7.f * b * sineAt (frac (lerpf (0.4f, 1.4f, psi) * tB_ * shineChurn_ + psi));
             const float half = amp_[(size_t) j] * 0.7071f;
             amp_  [(size_t) cursor] = half;
             ratio_[(size_t) cursor] = ratio_[(size_t) j] * centsMul (-d);
             amp_  [(size_t) j]      = half;
             ratio_[(size_t) j]     *= centsMul (d * ((j == 0) ? 0.5f : 1.f));   // root braids gently
             // opposing pans (Fan may re-spread later; this is the ensemble's own width)
-            panL_[(size_t) cursor] = 0.88f; panR_[(size_t) cursor] = 0.47f;
-            panL_[(size_t) j]      = 0.47f; panR_[(size_t) j]      = 0.88f;
+            panL_[(size_t) cursor] = 0.94f; panR_[(size_t) cursor] = 0.34f;
+            panL_[(size_t) j]      = 0.34f; panR_[(size_t) j]      = 0.94f;
             fizzW_[(size_t) cursor] = fizzW_[(size_t) j];
             ++cursor;
         }
@@ -808,9 +867,9 @@ private:
         if (orbit_ > 2.f * harm::kPi) orbit_ -= 2.f * harm::kPi;
         for (int j = 0; j < nEff; ++j)
         {
-            float pan;
-            if (f < 0.5f) pan = (((j + 1) & 1) ? -1.f : 1.f) * (f * 2.f) * 0.9f;
-            else          pan = sineAt (frac ((float) (j + 1) * 0.381966f + orbit_ * (1.f / (2.f * harm::kPi))));
+            const float split = (((j + 1) & 1) ? -1.f : 1.f) * std::min (1.f, f * 2.f) * 0.9f;
+            const float scatt = sineAt (frac ((float) (j + 1) * 0.381966f + orbit_ * (1.f / (2.f * harm::kPi))));
+            float pan = lerpf (split, scatt, sstep (0.45f, 0.55f, f));   // morph, never switch (hm2)
             if (j < 2) pan *= 0.2f;                // fundamental stays centered — mono-safe bass
             const float th = (pan + 1.f) * (harm::kPi * 0.25f);
             panL_[(size_t) j] = std::cos (th);
@@ -852,9 +911,20 @@ private:
             if (amp_[(size_t) j] < thr) amp_[(size_t) j] = 0.f;
     }
 
-    // stage 12 — RMS renorm: slow-smoothed gain (τ≈200 ms) — character, never loudness
+    // stage 12 — RMS renorm: slow-smoothed gain (τ≈200 ms) — character, never loudness.
+    // Also the AUDIBILITY FLOOR (hm2 CPU win): partials below −72 dB of the bank's peak are
+    // masked into silence anyway — zeroing them here lets the render's silent-slot skip do
+    // its job on dark patches (Keel/Lean down) instead of burning sines on inaudible tails.
     void renorm (int nEff, float dt) noexcept
     {
+        if (! displayMode_)
+        {
+            float pk = 0.f;
+            for (int j = 0; j < nEff; ++j) pk = std::max (pk, amp_[(size_t) j]);
+            const float floorA = pk * 2.5e-4f;   // −72 dB relative
+            for (int j = 2; j < nEff; ++j)       // root + slot 2 always keep their voice
+                if (amp_[(size_t) j] < floorA) amp_[(size_t) j] = 0.f;
+        }
         float e = 0.f;
         for (int j = 0; j < nEff; ++j) { const float a = amp_[(size_t) j]; e += a * a; }
         const float rms = std::sqrt (0.5f * e);
@@ -873,11 +943,14 @@ private:
     std::vector<float> ratio_, amp_, panL_, panR_, baseAmp_;   // anchor-owned bank (targets)
     std::vector<float> fizzW_;                                  // anchor-owned per-partial walk
     std::vector<float> phase_, ampZL_, ampZR_;                  // per-instance render state
+    std::vector<float> scatMul_;                                // per-sibling static freq scatter (unison decorrelation)
     std::array<float, harm::kBands> ouAmp_ {}, ouFrq_ {};
     const HarmonicEngine* bank_ = nullptr;    // adopted bank (self for anchors after prepareBank)
     double rate_ = 48000.0, playedHz_ = 261.6256, pitchMul_ = 1.0;
     float  tB_ = 0.f, orbit_ = 0.f, ouGlobal_ = 0.f, rootHold_ = -1.f;
-    float  gNorm_ = 1.f, gNormS_ = 1.f;
+    float  gNorm_ = 1.f, gNormS_ = 1.f, uniScatCents_ = 0.f, shineChurn_ = 1.f;
+    bool   skipTick_ = false;
+    HarmParams lastBuilt_;
     int    nP_ = 0, preparedActive_ = 0, reserved_ = 0;
     int*   budgetUsed_ = nullptr;
     int    budgetCap_  = 0;

@@ -4093,6 +4093,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
+        // HARM-VIZ (hm2) — the most-active voice's LIVE partial bank feeds the white bars,
+        // so every key press moves the display (the params-only bake is the idle fallback).
+        for (int o = 0; o < 4; ++o)
+        {
+            float hvb[96];
+            const bool hvLive = any && bestVoice != nullptr && bestVoice->harmLiveBins (o, hvb, 96);
+            if (hvLive) for (int b = 0; b < 96; ++b) harmVizBins_[o][b].store (hvb[b], std::memory_order_relaxed);
+            harmVizLive_[o].store (hvLive ? 1 : 0, std::memory_order_relaxed);
+        }
 
         // GRANULAR-FOLLOWER — retired 2026-07-02. The grain-dot scatter cloud is gone; granular
         // now rides the SAME multi-playhead follower system as the Sample engine (aggregated above via

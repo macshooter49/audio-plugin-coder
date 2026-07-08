@@ -422,6 +422,7 @@ public:
         (void) sineLUT();
         phase_.assign (geode::kMaxPartials, 0.f);
         ampZ_.assign  (geode::kMaxPartials, 0.f);   // declick: per-partial previous-block gain
+        scatMul_.fill (1.f);
         wr_.ratio.fill (0.f); wr_.amp.fill (0.f);
         pos01_ = 0.f; prevPos_ = -1.f;
         makeup_ = 1.0f;
@@ -439,6 +440,7 @@ public:
         int d = 1; const int nn = n > 1 ? n : 1;
         while (d * d < nn) ++d;             // ceil(sqrt(n))
         unisonDiv_ = d < 1 ? 1 : d;
+        uniScatCents_ = (nn > 1) ? 2.2f : 0.f;   // per-sibling partial decorrelation (hm2)
     }
 
     void setFrameStore (const GeodeFrameStore* s) noexcept { store_ = s; }
@@ -465,6 +467,13 @@ public:
         rng_ = seed ? seed : 0x9E3779B9u;
         for (auto& ph : phase_) ph = 0.f;
         std::fill (ampZ_.begin(), ampZ_.end(), 0.f);   // start silent → first block ramps up (clean attack)
+        // per-sibling per-partial static frequency scatter (hm2): decorrelates the unison stack
+        // so shared-bank motion (smear/flicker/drift) is ENSEMBLE, not group vibrato
+        for (int j = 0; j < geode::kMaxPartials; ++j)
+            scatMul_[(size_t) j] = (uniScatCents_ > 0.f)
+                ? std::pow (2.f, uniScatCents_ * ((float) ((rng_ ^ (std::uint32_t) ((std::uint32_t) j * 2654435761u)) >> 8)
+                                                   * (1.f / 16777216.f) - 0.5f) * 2.f * (1.f / 1200.f))
+                : 1.f;
         const float rs = clamp01 (p_.regionStart);
         const float re = std::max (rs + 0.01f, clamp01 (p_.regionEnd));
         if (p_.loopMode == 2) { pos01_ = re - clamp01 (p_.start) * (re - rs); dir_ = -1.f; }   // REVERSE plays end→start
@@ -570,7 +579,7 @@ public:
         {
             const float prevGa = ampZ_[(size_t) j];
             const float rj  = wr_.ratio[(size_t) j];
-            const float hz  = rj * baseHz;
+            const float hz  = rj * baseHz * scatMul_[(size_t) j];
             const bool  aud = (rj > 0.f && hz > 0.f && hz < (float) rate_ * 0.48f);   // renderable this block
             const float tgtGa = (! sat && j < nP && aud) ? wr_.amp[(size_t) j] * gain : 0.f;
             if (prevGa <= 1e-7f && tgtGa <= 1e-7f) { ampZ_[(size_t) j] = 0.f; continue; }   // silent slot — skip
@@ -1118,7 +1127,7 @@ private:
             const float knob = clamp01 (p_.cut);
             if (p_.cutMode == 0) // LP
             {
-                const float cutR = 0.6f * std::pow (140.f, knob);   // knob 0→0.6× · 0.5→7× · 1→84× (open)
+                const float cutR = 0.6f * std::pow (96.f, knob);    // knob 0→0.6× · 0.5→5.9× · 1→58× — tops just above real content, no dead zone (hm2)
                 for (int j = 0; j < nP; ++j)
                     if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] > cutR)
                     {
@@ -1287,6 +1296,8 @@ private:
     int*   budgetUsed_ = nullptr;
     int    budgetCap_  = 0;
     int    unisonDiv_  = 1;   // constant-cost unison divisor = ceil(sqrt(unison count))
+    float  uniScatCents_ = 0.f;                                    // hm2 — per-sibling decorrelation depth
+    std::array<float, geode::kMaxPartials> scatMul_ { };           // hm2 — per-sibling static freq scatter
 };
 
 } // namespace tw
