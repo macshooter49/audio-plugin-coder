@@ -4023,10 +4023,12 @@ body {
 #syn-panel .device.osc.engine-sample .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device.osc.engine-granular .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
 #syn-panel .device.osc.engine-granular .device-corner-preset .preset-wrap { display: none; }
-/* Resynth loop-mode selector — same header slot as Sample/Granular loop mode (top of the visualizer),
-   shown only for the Resynth (geode) engine. Reuses the .samp-sel styled dropdown verbatim. */
+/* Resynth (rs7) shares the SAMPLER header — the same .samp-head loop-mode dropdown drives the
+   shared SAMPLE_LOOP_MODE param (idle for Sample while the osc runs Resynth). Snap is meaningless
+   for resynthesis frames → hidden. The old .geode-head selector is retired (kept in markup, never shown). */
 #syn-panel .device .geode-head { display: none; }
-#syn-panel .device.osc.engine-geode .geode-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
+#syn-panel .device.osc.engine-geode .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
+#syn-panel .device.osc.engine-geode .samp-head .samp-sel.snap { display: none; }
 #syn-panel .device.osc.engine-geode .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
 #syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
@@ -22415,7 +22417,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'rs6';   // bump per ship — strings/lsof-verifiable  [rs6: MELT knob (temporal smear) · DRIVE modes Saturate/Bloom/Glint/Moire/Foldback/Ember · SIEVE modes Floor/Sparse/Cloak/Flicker/Rake/Parity · QUALITY=spectral bitrate · Cut knob = LP/HP label + all modes on KNOB right-clicks · SPECTRAL-IMAGE STRIP viz (ghost/survivors + START handle + followers)]
+  var TERRAIN_BUILD = 'rs7';   // bump per ship  [rs7: WHITE-inverted prominent spectral strip (no glass) + FULL SAMPLER PARITY (shared SAMPLE_* region/loop/fades, drag handles/brackets/fade-curves, REAL reverse, samp-head loop dropdown) + CPU tighten: constant-cost unison bank-sharing 2.1x]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
@@ -22637,25 +22639,23 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 </script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════════════════
-   RESYNTH SPECTRAL-IMAGE STRIP (rs6) — the resynthesis-native visualizer Max picked.
-   A spectral image of the WHOLE analyzed sample: X = time (frames), Y = log-frequency,
-   brightness = partial energy. TWO layers: a DIM purple GHOST (the original analyzed data)
-   under a BRIGHT layer (only the partials that survive the current knobs) — so Sieve / Cut /
-   Quality / Shape / Melt visibly wink data out of existence. Overlays: draggable START handle
-   (bound to GEODE_POSITION), white MIDI-follower read-heads (one per sounding voice, from
-   window.__geodeFollow), and the live display-engine scan head from window.__geodeSpectrum.
-   C++ pushes window.__geodeImage(osc, gen, ghostB64|null, brightB64, w, h) on sample load /
-   knob change (throttled) + a 5s heartbeat (self-heal: a reloaded page repopulates itself).
-   wd9-armored: try/catch everywhere, NaN-guarded, stall watchdog. Thin-white / no-glass. */
+   RESYNTH SPECTRAL-IMAGE STRIP (rs7) — WHITE-first (Max: visualizers are white, purple = accent),
+   full SAMPLER PARITY chrome. The spectral image of the whole analyzed sample (X=time, Y=log-freq,
+   brightness=energy): BRIGHT WHITE survivors over a dim PURPLE ghost of the removed data.
+   Region/loop/fades are the SAME params as the Sample engine (SYN_OSC_*_SAMPLE_* — idle while the
+   osc runs Resynth): draggable START/END handles, loop brackets + band (when looping), fade-in/out
+   curves with drag squares, shades outside the region — exactly the sampler surface, spectral data.
+   White per-voice follower read-heads (__geodeFollow) + purple scan head (__geodeSpectrum). No
+   frame/glass outline. wd9-armored: try/catch, NaN guards, stall watchdog, no setPointerCapture. */
 (function () {
   'use strict';
   var IDS = ['a', 'b', 'c', 'd'];
-  var GW = '#ECE8F2', GP = '#B794FF';                    // house white / purple
+  var GW = '#ECE8F2', GP = '#B794FF';                    // house white / purple (accent)
   var st = {};
   IDS.forEach(function (o) {
     st[o] = { on: false, pos: 0, lastMs: 0, cv: null, gen: -1,
-              ghost: null, bright: null, iw: 0, ih: 0,   // offscreen layer canvases
-              ss: null, drag: false };                   // START param state + drag flag
+              ghost: null, bright: null, iw: 0, ih: 0,
+              ss: {}, drag: null };                      // param states + active drag kind
   });
 
   function canvasFor(o) {
@@ -22663,12 +22663,37 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     if (s.cv && s.cv.isConnected) return s.cv;
     var all = document.querySelectorAll('#syn-panel .geode-wave');   // DOM order a,b,c,d
     s.cv = all[IDS.indexOf(o)] || null;
-    if (s.cv) wireHandle(o, s.cv);
+    if (s.cv) wireChrome(o, s.cv);
     return s.cv;
   }
 
-  /* decode a base64 byte image (w cols × h bins, column-major, bin 0 = LOW freq) into a
-     tinted offscreen canvas. ghost = dim purple wash; bright = purple→white by energy. */
+  /* ── shared SAMPLE_* param plumbing (region/loop/fades — the sampler's own params) ── */
+  var FIELDS = { start: 'START', end: 'END', ls: 'LOOP_START', le: 'LOOP_END', mode: 'LOOP_MODE',
+                 fin: 'FADE_IN', fout: 'FADE_OUT', finc: 'FADEIN_CURVE', foutc: 'FADEOUT_CURVE' };
+  function ssFor(o, k) {
+    var s = st[o];
+    if (s.ss[k] !== undefined) return s.ss[k];
+    var v = null;
+    try { v = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_OSC_' + o.toUpperCase() + '_SAMPLE_' + FIELDS[k]) : null; } catch (e) {}
+    try { if (v && v.valueChangedEvent && v.valueChangedEvent.addListener) v.valueChangedEvent.addListener(kick); } catch (e) {}
+    s.ss[k] = v; return v;
+  }
+  function rd(o, k, d) { var v = ssFor(o, k); var x = d; try { x = v ? v.getNormalisedValue() : d; } catch (e) {} return (x === x && x >= 0 && x <= 1) ? x : d; }
+  function wr(o, k, x) { var v = ssFor(o, k); if (v) { try { v.setNormalisedValue(x < 0 ? 0 : (x > 1 ? 1 : x)); } catch (e) {} } }
+  function region(o) {
+    var rs = rd(o, 'start', 0.05), re = rd(o, 'end', 0.96);
+    if (re < rs + 0.01) re = Math.min(1, rs + 0.01);
+    return { rs: rs, re: re };
+  }
+  function loopModeIdx(o) { return Math.round(rd(o, 'mode', 0) * 4); }   // 5-choice 0..4
+  function expCurve(t, c) {                                              // house exponential-bias
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    var P = (c - 0.5) * 8; if (Math.abs(P) < 1e-3) return t;
+    return (Math.exp(P * t) - 1) / (Math.exp(P) - 1);
+  }
+
+  /* decode a base64 byte image into a tinted layer. INVERTED palette (rs7): survivors = WHITE
+     (gamma-lifted for prominence), ghost = the purple accent underneath. */
   function bakeLayer(b64, w, h, isGhost) {
     try {
       if (!b64 || !w || !h) return null;
@@ -22680,18 +22705,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var d = img.data;
       for (var x = 0; x < w; x++) {
         for (var y = 0; y < h; y++) {
-          var v = bin.charCodeAt(x * h + y) / 255;       // 0..1 energy
+          var v = bin.charCodeAt(x * h + y) / 255;
           if (v <= 0.004) continue;
-          var row = h - 1 - y;                           // bin 0 (low freq) at the BOTTOM
+          var g = Math.pow(v, 0.58);                     // prominence gamma — quiet data stays visible
+          var row = h - 1 - y;
           var di = (row * w + x) * 4;
-          if (isGhost) { d[di] = 167; d[di+1] = 139; d[di+2] = 250; d[di+3] = Math.min(255, v * 150); }
-          else {
-            var t = Math.min(1, v * 1.25);               // energy → purple .. white
-            d[di]   = 183 + (236 - 183) * t;
-            d[di+1] = 148 + (232 - 148) * t;
-            d[di+2] = 255 + (242 - 255) * t;
-            d[di+3] = Math.min(255, 40 + v * 235);
-          }
+          if (isGhost) { d[di] = 167; d[di+1] = 139; d[di+2] = 250; d[di+3] = Math.min(210, g * 165); }
+          else         { d[di] = 236; d[di+1] = 232; d[di+2] = 242; d[di+3] = Math.min(255, 30 + g * 260); }
         }
       }
       ctx.putImageData(img, 0, 0);
@@ -22699,7 +22719,6 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     } catch (e) { return null; }
   }
 
-  /* C++ → image push. ghostB64 is null on bright-only (knob-change) re-bakes. */
   window.__geodeImage = function (o, gen, ghostB64, brightB64, w, h) {
     try {
       var s = st[o]; if (!s) return;
@@ -22710,8 +22729,6 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     } catch (err) {}
   };
 
-  /* C++ 60Hz tick — on-flag + live scan-head pos + stall watchdog food. (The old waterfall
-     history is retired; the image layers carry the spectrum now.) */
   window.__geodeSpectrum = function (f) {
     try {
       var now = (window.performance && performance.now) ? performance.now() : 0;
@@ -22719,42 +22736,60 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         var o = IDS[i], d = f && f[o], s = st[o];
         if (!d || !d.on) { s.on = false; continue; }
         s.on = true; s.lastMs = now;
-        var p = +d.p; s.pos = (p === p && p >= 0 && p <= 1) ? p : 0;   // NaN-guard
+        var p = +d.p; s.pos = (p === p && p >= 0 && p <= 1) ? p : 0;
       }
       kick();
     } catch (err) {}
   };
 
-  /* START handle — drag the thin handle to move GEODE_POSITION (two-way param bound). */
-  function ssFor(o) {
-    var s = st[o];
-    if (s.ss) return s.ss;
-    try { s.ss = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_OSC_' + o.toUpperCase() + '_GEODE_POSITION') : null; } catch (e) {}
-    try { if (s.ss && s.ss.valueChangedEvent && s.ss.valueChangedEvent.addListener) s.ss.valueChangedEvent.addListener(kick); } catch (e) {}
-    return s.ss;
-  }
-  function startPos(o) { var ss = ssFor(o); var v = 0; try { v = ss ? ss.getNormalisedValue() : 0; } catch (e) {} return (v === v && v >= 0 && v <= 1) ? v : 0; }
-  function wireHandle(o, cv) {
-    // NO setPointerCapture (shared-surface rule) — window listeners own the drag.
+  /* ── sampler chrome interaction — drag start/end handles, loop brackets, fade squares.
+     Hit priority: fades (top strip) → loop brackets → region handles. No setPointerCapture. ── */
+  function wireChrome(o, cv) {
+    function hit(ev) {
+      var r = cv.getBoundingClientRect(); if (!r.width) return null;
+      var x = (ev.clientX - r.left), y = (ev.clientY - r.top), w = r.width;
+      var g = region(o), rsx = g.rs * w, rex = g.re * w, len = g.re - g.rs;
+      var finx  = (g.rs + rd(o, 'fin', 0)  * len) * w;
+      var foutx = (g.re - rd(o, 'fout', 0) * len) * w;
+      if (y < 12 && rd(o, 'fin', 0) > 0.002 && Math.abs(x - finx) < 7)  return 'fin';
+      if (y < 12 && rd(o, 'fout', 0) > 0.002 && Math.abs(x - foutx) < 7) return 'fout';
+      if (y < 12 && Math.abs(x - (rsx + 8)) < 7 && rd(o, 'fin', 0) <= 0.002)  return 'fin';
+      if (y < 12 && Math.abs(x - (rex - 8)) < 7 && rd(o, 'fout', 0) <= 0.002) return 'fout';
+      if (loopModeIdx(o) > 0) {
+        var lsx = rd(o, 'ls', 0) * w, lex = rd(o, 'le', 1) * w;
+        if (Math.abs(x - lsx) < 6) return 'ls';
+        if (Math.abs(x - lex) < 6) return 'le';
+      }
+      if (Math.abs(x - rsx) < 7) return 'start';
+      if (Math.abs(x - rex) < 7) return 'end';
+      return null;
+    }
+    cv.addEventListener('pointermove', function (ev) {
+      try { if (!st[o].drag) cv.style.cursor = hit(ev) ? 'ew-resize' : 'default'; } catch (e) {}
+    });
     cv.addEventListener('pointerdown', function (ev) {
       try {
         if (ev.button !== 0) return;
-        var r = cv.getBoundingClientRect(); if (!r.width) return;
-        var sx = startPos(o) * r.width;
-        if (Math.abs((ev.clientX - r.left) - sx) > 9) return;   // only grab NEAR the handle
-        st[o].drag = true; ev.preventDefault(); ev.stopPropagation();
+        var k = hit(ev); if (!k) return;
+        st[o].drag = k; ev.preventDefault(); ev.stopPropagation();
       } catch (e) {}
     });
     window.addEventListener('pointermove', function (ev) {
       try {
-        if (!st[o].drag) return;
+        var k = st[o].drag; if (!k) return;
         var r = cv.getBoundingClientRect(); if (!r.width) return;
         var nx = (ev.clientX - r.left) / r.width; nx = nx < 0 ? 0 : (nx > 1 ? 1 : nx);
-        var ss = ssFor(o); if (ss) { try { ss.setNormalisedValue(nx); } catch (e2) {} }
+        var g = region(o), len = Math.max(0.01, g.re - g.rs);
+        if (k === 'start')      wr(o, 'start', Math.min(nx, g.re - 0.01));
+        else if (k === 'end')   wr(o, 'end',   Math.max(nx, g.rs + 0.01));
+        else if (k === 'ls')    wr(o, 'ls',    Math.min(nx, rd(o, 'le', 1) - 0.005));
+        else if (k === 'le')    wr(o, 'le',    Math.max(nx, rd(o, 'ls', 0) + 0.005));
+        else if (k === 'fin')   wr(o, 'fin',   (nx - g.rs) / len);
+        else if (k === 'fout')  wr(o, 'fout',  (g.re - nx) / len);
         kick();
       } catch (e) {}
     });
-    window.addEventListener('pointerup', function () { st[o].drag = false; });
+    window.addEventListener('pointerup', function () { st[o].drag = null; });
   }
 
   var raf = 0;
@@ -22762,7 +22797,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   function draw() {
     raf = 0; var any = false;
     for (var i = 0; i < 4; i++) { var o = IDS[i]; if (st[o].on) { any = true; try { paint(o); } catch (e) {} } }
-    if (any) raf = requestAnimationFrame(draw);   // keep read-heads live between pushes
+    if (any) raf = requestAnimationFrame(draw);
   }
 
   function paint(o) {
@@ -22773,43 +22808,83 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
     var ctx = cv.getContext('2d'); ctx.clearRect(0, 0, cv.width, cv.height); ctx.save(); ctx.scale(dpr, dpr);
 
-    // spectral image layers — ghost (the data that WAS there) under bright (what survives)
+    var g = region(o), rsx = g.rs * w, rex = g.re * w, len = g.re - g.rs;
+    var mode = loopModeIdx(o);
+
+    // spectral image — WHITE survivors over the purple ghost (no frame/glass outline)
     ctx.imageSmoothingEnabled = true;
     try { if (s.ghost)  ctx.drawImage(s.ghost,  0, 0, w, h); } catch (e1) {}
     try { if (s.bright) ctx.drawImage(s.bright, 0, 0, w, h); } catch (e2) {}
 
-    // faint frame line (house look)
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 0.5;
-    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    // shades OUTSIDE the region (sampler-parity)
+    ctx.fillStyle = 'rgba(18,18,31,0.66)';
+    if (rsx > 0)    ctx.fillRect(0, 0, rsx, h);
+    if (rex < w)    ctx.fillRect(rex, 0, w - rex, h);
 
-    // live display-engine scan head (purple — where the idle/auto-scan is reading)
+    // loop band + purple brackets (only when a loop mode is active)
+    if (mode > 0) {
+      var lsx = rd(o, 'ls', 0) * w, lex = rd(o, 'le', 1) * w;
+      ctx.fillStyle = 'rgba(183,148,255,0.07)';
+      ctx.fillRect(lsx, 0, Math.max(0, lex - lsx), h);
+      ctx.strokeStyle = GP; ctx.lineWidth = 1; ctx.globalAlpha = 0.9;
+      [lsx, lex].forEach(function (bx, bi) {
+        ctx.beginPath(); ctx.moveTo(bx, 0); ctx.lineTo(bx, h); ctx.stroke();
+        var d2 = bi === 0 ? 4 : -4;                        // inward feet, sampler-style brackets
+        ctx.beginPath(); ctx.moveTo(bx, 1);     ctx.lineTo(bx + d2, 1);     ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx, h - 1); ctx.lineTo(bx + d2, h - 1); ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // FADE curves (white thin, exponential-bias — mirrors the DSP) + drag squares on the top edge
+    var fin = rd(o, 'fin', 0), fout = rd(o, 'fout', 0);
+    ctx.strokeStyle = 'rgba(236,232,242,0.75)'; ctx.lineWidth = 1;
+    if (fin > 0.002) {
+      var fc = rd(o, 'finc', 0.5), fx = rsx + fin * len * w;
+      ctx.beginPath();
+      for (var i2 = 0; i2 <= 24; i2++) { var t = i2 / 24; var xx = rsx + t * (fx - rsx); var yy = h - expCurve(t, fc) * h;
+        if (i2 === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy); }
+      ctx.stroke();
+      ctx.fillStyle = GW; ctx.fillRect(fx - 2.5, 0, 5, 5);
+    } else { ctx.fillStyle = 'rgba(236,232,242,0.4)'; ctx.fillRect(rsx + 8 - 2.5, 0, 5, 5); }
+    if (fout > 0.002) {
+      var oc = rd(o, 'foutc', 0.5), ox = rex - fout * len * w;
+      ctx.beginPath();
+      for (var i3 = 0; i3 <= 24; i3++) { var t2 = i3 / 24; var xx2 = rex - t2 * (rex - ox); var yy2 = h - expCurve(t2, oc) * h;
+        if (i3 === 0) ctx.moveTo(xx2, yy2); else ctx.lineTo(xx2, yy2); }
+      ctx.stroke();
+      ctx.fillStyle = GW; ctx.fillRect(ox - 2.5, 0, 5, 5);
+    } else { ctx.fillStyle = 'rgba(236,232,242,0.4)'; ctx.fillRect(rex - 8 - 2.5, 0, 5, 5); }
+
+    // purple scan head (the idle/auto-scan read position — the accent color)
     var px = s.pos * w;
-    ctx.strokeStyle = 'rgba(183,148,255,0.5)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(183,148,255,0.55)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
 
-    // WHITE MIDI FOLLOWERS — one line per sounding voice at its own read position
+    // WHITE MIDI followers — one line per sounding voice
     try {
       var fl = window.__geodeFollow && window.__geodeFollow[o];
       if (fl && fl.length) {
-        ctx.strokeStyle = 'rgba(236,232,242,0.6)'; ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(236,232,242,0.65)'; ctx.lineWidth = 1;
         for (var fi = 0; fi + 1 < fl.length; fi += 2) {
           var fp = +fl[fi + 1]; if (!(fp >= 0 && fp <= 1)) continue;
-          var fx = fp * w;
-          ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, h); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(fp * w, 0); ctx.lineTo(fp * w, h); ctx.stroke();
         }
       }
     } catch (eFl) {}
 
-    // START handle — thin white line + top tick, draggable (sampler-style)
-    var sx = startPos(o) * w;
-    ctx.strokeStyle = GW; ctx.lineWidth = s.drag ? 1.5 : 1; ctx.globalAlpha = s.drag ? 1 : 0.85;
-    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, h); ctx.stroke();
-    ctx.fillStyle = GW;
-    ctx.beginPath(); ctx.moveTo(sx - 3.5, 0); ctx.lineTo(sx + 3.5, 0); ctx.lineTo(sx, 5); ctx.closePath(); ctx.fill();
+    // REGION handles — white verticals with top/bottom grips (draggable), sampler-style
+    ctx.strokeStyle = GW; ctx.lineWidth = 1; ctx.globalAlpha = 0.95;
+    [rsx, rex].forEach(function (hx, hi) {
+      ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, h); ctx.stroke();
+      var d3 = hi === 0 ? 5 : -5;
+      ctx.fillStyle = GW;
+      ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx + d3, 0); ctx.lineTo(hx, 6); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(hx, h); ctx.lineTo(hx + d3, h); ctx.lineTo(hx, h - 6); ctx.closePath(); ctx.fill();
+    });
     ctx.globalAlpha = 1;
     ctx.restore();
 
-    // watchdog: if the tick channel stalls >1.5s, stop animating (the wd9 page-reload owns recovery)
     var now = (window.performance && performance.now) ? performance.now() : 0;
     if (now - s.lastMs > 1500) s.on = false;
   }

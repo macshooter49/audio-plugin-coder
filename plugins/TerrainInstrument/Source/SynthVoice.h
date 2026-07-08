@@ -3992,14 +3992,24 @@ namespace tw
             }
             juce::FloatVectorOperations::clear (wL, numSamples);
             juce::FloatVectorOperations::clear (wR, numSamples);
+            // CONSTANT-COST UNISON (rs7 CPU tighten): the ANCHOR prepares the sculpted bank ONCE
+            // (head + smear + governor + sculpt + bitrate + children — identical for all siblings);
+            // siblings ADOPT it and only render their own detuned sine banks. The anchor reserves
+            // its partial budget while siblings render, so saturation thins siblings — never the core.
+            if (! engs[0].prepareBank (numSamples)) return;
+            engs[0].reserveBudget();
             for (int u = 1; u < N; ++u)
-                engs[(size_t) u].renderBlockAdd (wL, wR, numSamples);
+            {
+                engs[(size_t) u].adoptBank (engs[0]);
+                engs[(size_t) u].renderBankAdd (wL, wR, numSamples);
+            }
             if (N > 1)
             {
                 juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
                 juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
             }
-            engs[0].renderBlockAdd (wL, wR, numSamples);
+            engs[0].releaseBudget();
+            engs[0].renderBankAdd (wL, wR, numSamples);
             // POST-SYNTH degrade (DRIVE soft-clip + CRUSH bit/rate) — once per osc, on the summed
             // unison signal, using voice-0's params (all unison instances share the same GeodeParams).
             engs[0].postProcess (wL, wR, numSamples);

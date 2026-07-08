@@ -104,7 +104,18 @@ struct GeodeParams
     int   cutMode     = 0;  // 0=LP 1=HP                                (APVTS: GEODE_CUT_MODE)
     int   driveMode   = 0;  // 0 Saturate 1 Bloom 2 Glint 3 Moire 4 Foldback 5 Ember (APVTS: GEODE_DRIVE_MODE)
     int   sieveMode   = 0;  // 0 Floor 1 Sparse 2 Cloak 3 Flicker 4 Rake 5 Parity   (APVTS: GEODE_SIEVE_MODE)
-    int   loopMode    = 1;  // 0=one-shot 1=fwd 2=reverse 3=ping-pong   (APVTS: GEODE_LOOP)
+    // ── SAMPLER-PARITY region/loop/fades (rs7) — SHARED with the Sample engine's params (they are
+    // idle while the osc runs Resynth, so Resynth reads the SAME SYN_OSC_*_SAMPLE_* ids: one region
+    // UI, one preset story). START (GEODE_POSITION) becomes the read offset WITHIN the region.
+    float regionStart = 0.f;   // 0..1                                (APVTS: SAMPLE_START)
+    float regionEnd   = 1.f;   // 0..1                                (APVTS: SAMPLE_END)
+    float loopStart   = 0.f;   // 0..1, clamped into the region       (APVTS: SAMPLE_LOOP_START)
+    float loopEnd     = 1.f;   // 0..1, clamped into the region       (APVTS: SAMPLE_LOOP_END)
+    float fadeIn      = 0.f;   // fraction of region                  (APVTS: SAMPLE_FADE_IN)
+    float fadeOut     = 0.f;   // fraction of region                  (APVTS: SAMPLE_FADE_OUT)
+    float fadeInCurve = 0.5f;  // 0..1, 0.5 = linear (exp-bias)       (APVTS: SAMPLE_FADEIN_CURVE)
+    float fadeOutCurve= 0.5f;  //                                     (APVTS: SAMPLE_FADEOUT_CURVE)
+    int   loopMode    = 1;  // 0 One-Shot 1 Fwd 2 Reverse 3 Ping-Pong 4 Tailed(≈Fwd) (APVTS: SAMPLE_LOOP_MODE)
     bool  formantKeep = true;                                        // (APVTS: GEODE_FKEEP)
 
     bool operator== (const GeodeParams& o) const noexcept
@@ -114,6 +125,10 @@ struct GeodeParams
             && formant==o.formant && tilt==o.tilt && crush==o.crush && smear==o.smear
             && shapeTarget==o.shapeTarget && cutMode==o.cutMode
             && driveMode==o.driveMode && sieveMode==o.sieveMode
+            && regionStart==o.regionStart && regionEnd==o.regionEnd
+            && loopStart==o.loopStart && loopEnd==o.loopEnd
+            && fadeIn==o.fadeIn && fadeOut==o.fadeOut
+            && fadeInCurve==o.fadeInCurve && fadeOutCurve==o.fadeOutCurve
             && loopMode==o.loopMode && formantKeep==o.formantKeep;
     }
     bool operator!= (const GeodeParams& o) const noexcept { return ! (*this == o); }
@@ -432,8 +447,13 @@ public:
 
     void setParams (const GeodeParams& p) noexcept
     {
-        // user scrub → snap the read-head to START; otherwise SCAN owns it
-        if (prevPos_ >= 0.f && std::fabs (p.start - prevPos_) > 1e-4f) pos01_ = clamp01 (p.start);
+        // user scrub → snap the read-head to the START offset (within the region); SCAN owns it otherwise
+        if (prevPos_ >= 0.f && std::fabs (p.start - prevPos_) > 1e-4f)
+        {
+            const float rs = clamp01 (p.regionStart);
+            const float re = std::max (rs + 0.01f, clamp01 (p.regionEnd));
+            pos01_ = rs + clamp01 (p.start) * (re - rs);
+        }
         prevPos_ = p.start;
         p_ = p;
     }
@@ -444,40 +464,29 @@ public:
         rng_ = seed ? seed : 0x9E3779B9u;
         for (auto& ph : phase_) ph = 0.f;
         std::fill (ampZ_.begin(), ampZ_.end(), 0.f);   // start silent → first block ramps up (clean attack)
-        pos01_ = clamp01 (p_.start);
+        const float rs = clamp01 (p_.regionStart);
+        const float re = std::max (rs + 0.01f, clamp01 (p_.regionEnd));
+        if (p_.loopMode == 2) { pos01_ = re - clamp01 (p_.start) * (re - rs); dir_ = -1.f; }   // REVERSE plays end→start
+        else                  { pos01_ = rs + clamp01 (p_.start) * (re - rs); dir_ =  1.f; }
+        entered_ = false;
         prevPos_ = p_.start;
-        dir_ = 1.f;
         crushHoldL_ = crushHoldR_ = 0.f; crushCnt_ = 0;
     }
 
     void setPitchRatio (double r) noexcept { pitchMul_ = r > 0.0 ? r : 1.0; }
 
-    void renderBlockAdd (float* L, float* R, int n) noexcept
+    // ═══ per-block render, split for CONSTANT-COST UNISON (rs7): the unison ANCHOR runs
+    // prepareBank() once (head advance + interp + smear + governor + sculpt + bitrate + children —
+    // identical for every unison sibling, so computing it N× was pure waste); siblings adoptBank()
+    // the result and only pay for their own detuned sine banks. renderBlockAdd() = the classic
+    // single-engine path (prepare + render), used by tests/tools and any non-unison caller. ═══
+    bool prepareBank (int n) noexcept
     {
-        if (! hasStore() || L == nullptr || R == nullptr || n <= 0) return;
+        if (! hasStore() || n <= 0) return false;
         const int nf = store_->numFrames();
 
-        // ── advance the read-head — PLAY-THROUGH (block-rate; STRETCH freezes/slows it) ──
-        // For a sample (naturalSec>0), SCAN is play-through speed referenced to the sample's real
-        // length: 0.5 → 1× natural, 0 → hold, 1 → 2×. STRETCH scales the advance toward 0 (slow /
-        // time-stretch / freeze) — max STRETCH parks the read-head on a frame (infinite pad).
-        const float freeze = clamp01 (p_.stretch);
-        float scanRate = clamp01 (p_.scan) * 2.0f;
-        if (store_->naturalSec > 1e-4f) scanRate /= store_->naturalSec;
-        if (scanRate > 1e-4f && freeze < 0.999f)
-        {
-            const float dt = (float) n / (float) rate_;
-            float adv = scanRate * (1.f - freeze) * dt * dir_;
-            pos01_ += adv;
-            if (p_.loopMode == 3) // ping-pong
-            { while (pos01_ > 1.f || pos01_ < 0.f) { if (pos01_ > 1.f) { pos01_ = 2.f - pos01_; dir_ = -dir_; } else { pos01_ = -pos01_; dir_ = -dir_; } } }
-            else if (p_.loopMode == 0) // one-shot: clamp
-            { pos01_ = clamp01 (pos01_); }
-            else // fwd/reverse loop: wrap
-            { pos01_ -= std::floor (pos01_); }
-        }
+        advanceHead ((float) n / (float) rate_);
 
-        // ── interpolate the two bracketing frames into the working partial bank ──
         interpFrame (clamp01 (pos01_), nf);
         int nP = wr_.nPartials;
         ++flickerTick_;                                  // FLICKER sieve epoch clock (~85ms per epoch)
@@ -510,10 +519,41 @@ public:
             childRoom = std::max (0, std::min (16, budgetCap_ - *budgetUsed_ - active));
         nP = applyDriveChildren (nP, childRoom);
 
+        regionGain_ = fadeGain (pos01_);             // sampler-parity FADE IN/OUT (positional gain)
+        preparedActive_ = 0;
+        for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 1e-6f) ++preparedActive_;
+        return true;
+    }
+
+    // Copy the anchor's prepared bank + head state — this sibling then renders its OWN detuned
+    // sine bank from the shared spectrum (phases/seeds stay per-sibling = real unison width).
+    void adoptBank (const GeodeEngine& src) noexcept
+    {
+        wr_ = src.wr_;
+        pos01_ = src.pos01_; dir_ = src.dir_; entered_ = src.entered_;
+        regionGain_ = src.regionGain_; preparedActive_ = src.preparedActive_;
+    }
+
+    // Anchor priority under budget pressure: the anchor reserves its partial count while the
+    // (quieter, detuned) siblings render — a saturated budget thins SIBLINGS first, never the core.
+    void reserveBudget() noexcept { if (budgetUsed_ != nullptr) { *budgetUsed_ += preparedActive_; reserved_ = preparedActive_; } }
+    void releaseBudget() noexcept { if (budgetUsed_ != nullptr && reserved_ > 0) { *budgetUsed_ -= reserved_; reserved_ = 0; } }
+    int  preparedActive() const noexcept { return preparedActive_; }
+
+    void renderBankAdd (float* L, float* R, int n) noexcept
+    {
+        if (L == nullptr || R == nullptr || n <= 0) return;
+        if (budgetUsed_ != nullptr && budgetCap_ > 0 && *budgetUsed_ >= budgetCap_)
+        {   // shared budget saturated — this (sibling) bank sits this block out (graceful thinning)
+            std::fill (ampZ_.begin(), ampZ_.end(), 0.f);
+            return;
+        }
+        const int nP = wr_.nPartials;
         // ── oscillator bank — per-partial amplitude RAMP (declick) ──────────────────────
         // Partial FREQUENCY = analysisRatio × playedHz (× pitchMul from key/oct/semi/cents).
         // No bedrock, no envelope repitch — the sample plays at the KEY pitch, always tuned.
         const float baseHz = (float) (playedHz_ * pitchMul_);
+        const float gain   = makeup_ * regionGain_;
         int voiced = 0;
 #ifndef GEODE_NO_DECLICK
         const float invN = 1.f / (float) n;
@@ -523,7 +563,7 @@ public:
             const float rj  = wr_.ratio[(size_t) j];
             const float hz  = rj * baseHz;
             const bool  aud = (rj > 0.f && hz > 0.f && hz < (float) rate_ * 0.48f);   // renderable this block
-            const float tgtGa = (j < nP && aud) ? wr_.amp[(size_t) j] * makeup_ : 0.f;
+            const float tgtGa = (j < nP && aud) ? wr_.amp[(size_t) j] * gain : 0.f;
             if (prevGa <= 1e-7f && tgtGa <= 1e-7f) { ampZ_[(size_t) j] = 0.f; continue; }   // silent slot — skip
             const float inc = aud ? hz / (float) rate_ : 0.f;   // a dying partial keeps its freq while it fades
             float ph = phase_[(size_t) j];
@@ -549,13 +589,20 @@ public:
             if (hz <= 0.f || hz >= (float) rate_ * 0.48f) continue;
             const float inc = hz / (float) rate_;
             float ph = phase_[(size_t) j];
-            const float ga = a * makeup_;
+            const float ga = a * gain;
             for (int i = 0; i < n; ++i) { const float s = ga * sineAt (ph); L[i] += s; R[i] += s; ph += inc; if (ph >= 1.f) ph -= 1.f; }
             phase_[(size_t) j] = ph;
             ++voiced;
         }
 #endif
         if (budgetUsed_ != nullptr) *budgetUsed_ += voiced;
+    }
+
+    void renderBlockAdd (float* L, float* R, int n) noexcept
+    {
+        if (L == nullptr || R == nullptr || n <= 0) return;
+        if (! prepareBank (n)) return;
+        renderBankAdd (L, R, n);
     }
 
     // ── POST-SYNTH degrade — applied ONCE per osc (after the unison sum) on this osc's block.
@@ -638,20 +685,17 @@ public:
         outPos01 = clamp01 (pos01_);
         if (! hasStore() || outBins == nullptr || nBins <= 0) return false;
 
-        const float freeze = clamp01 (p_.stretch);
         float scanRate = clamp01 (p_.scan) * 2.0f;
         if (store_->naturalSec > 1e-4f) scanRate /= store_->naturalSec;
         if (scanRate < 1e-4f)
-        {
-            pos01_ = clamp01 (p_.start);
+        {   // held — park at the START offset within the region (sampler-parity)
+            const float rs = clamp01 (p_.regionStart);
+            const float re = std::max (rs + 0.01f, clamp01 (p_.regionEnd));
+            pos01_ = rs + clamp01 (p_.start) * (re - rs);
         }
-        else if (freeze < 0.999f && advanceDt > 0.f)
+        else
         {
-            pos01_ += scanRate * (1.f - freeze) * advanceDt * dir_;
-            if (p_.loopMode == 3)
-            { while (pos01_ > 1.f || pos01_ < 0.f) { if (pos01_ > 1.f) { pos01_ = 2.f - pos01_; dir_ = -dir_; } else { pos01_ = -pos01_; dir_ = -dir_; } } }
-            else if (p_.loopMode == 0) pos01_ = clamp01 (pos01_);
-            else pos01_ -= std::floor (pos01_);
+            advanceHead (advanceDt);   // same region/loop-bracket logic as the audio path
         }
         outPos01 = clamp01 (pos01_);
         return computeFrameEnvelope (pos01_, outBins, nBins, false);
@@ -711,6 +755,67 @@ private:
         const float f = x - (float) i;
         const auto& t = sineLUT();
         return t[(size_t) i] + (t[(size_t) (i + 1)] - t[(size_t) i]) * f;
+    }
+
+    // ── advance the read-head — PLAY-THROUGH within the SAMPLER REGION (rs7). SCAN is play speed
+    // (0.5 = natural, referenced to the sample's real length); STRETCH slows/freezes the advance.
+    // The head lives in [regionStart, regionEnd]; loop modes wrap it inside the loop brackets:
+    // One-Shot clamps at region end · Forward/Tailed wrap loopEnd→loopStart · Reverse runs backwards
+    // (dir −1 from noteOn) wrapping loopStart→loopEnd · Ping-Pong reflects between the brackets.
+    void advanceHead (float dt) noexcept
+    {
+        const float rs = clamp01 (p_.regionStart);
+        const float re = std::max (rs + 0.01f, clamp01 (p_.regionEnd));
+        float ls = clamp01 (p_.loopStart), le = clamp01 (p_.loopEnd);
+        ls = ls < rs ? rs : (ls > re ? re : ls);
+        le = le < ls + 0.005f ? std::min (re, ls + 0.005f) : (le > re ? re : le);
+        const float freeze = clamp01 (p_.stretch);
+        float scanRate = clamp01 (p_.scan) * 2.0f;
+        if (store_->naturalSec > 1e-4f) scanRate /= store_->naturalSec;
+        if (scanRate > 1e-4f && freeze < 0.999f && dt > 0.f)
+        {
+            pos01_ += scanRate * (1.f - freeze) * dt * dir_;
+            const float len = le - ls;
+            switch (p_.loopMode)
+            {
+                case 0:   // one-shot — clamp inside the region
+                    break;
+                case 2:   // reverse loop — wrap loopStart → loopEnd
+                    if (len > 1e-5f) { while (pos01_ < ls) pos01_ += len; while (pos01_ > le && entered_) pos01_ -= len; }
+                    if (pos01_ <= le) entered_ = true;
+                    break;
+                case 3:   // ping-pong — reflect between the brackets (free-run until first entry)
+                    if (pos01_ > le) { pos01_ = 2.f * le - pos01_; dir_ = -dir_; entered_ = true; }
+                    else if (pos01_ < ls && entered_) { pos01_ = 2.f * ls - pos01_; dir_ = -dir_; }
+                    else if (pos01_ >= ls) entered_ = true;
+                    break;
+                default:  // 1 forward / 4 tailed — wrap loopEnd → loopStart
+                    if (len > 1e-5f && pos01_ > le) pos01_ = ls + std::fmod (pos01_ - le, len);
+                    break;
+            }
+        }
+        pos01_ = pos01_ < rs ? rs : (pos01_ > re ? re : pos01_);   // hard region clamp
+    }
+
+    // sampler-parity FADE IN/OUT as a positional gain over the region (per-block scalar — the
+    // per-partial declick ramps smooth it). Curves use the house exponential-bias rule.
+    static float fadeCurve (float t, float c) noexcept
+    {
+        t = t < 0.f ? 0.f : (t > 1.f ? 1.f : t);
+        const float P = (c - 0.5f) * 8.f;
+        if (std::fabs (P) < 1e-3f) return t;
+        return (std::exp (P * t) - 1.f) / (std::exp (P) - 1.f);
+    }
+    float fadeGain (float pos) const noexcept
+    {
+        const float rs = clamp01 (p_.regionStart);
+        const float re = std::max (rs + 0.01f, clamp01 (p_.regionEnd));
+        const float len = re - rs;
+        float g = 1.f;
+        const float fin = clamp01 (p_.fadeIn), fout = clamp01 (p_.fadeOut);
+        if (fin  > 1e-4f) { const float t = (pos - rs) / (fin  * len); if (t < 1.f) g *= fadeCurve (t, p_.fadeInCurve); }
+        if (fout > 1e-4f) { const float t = (re - pos) / (fout * len); if (t < 1.f) g *= fadeCurve (t, p_.fadeOutCurve); }
+        return g;
     }
 
     // interpolate the two frames bracketing pos01 into the working partial bank (shared by the
@@ -1145,6 +1250,10 @@ private:
     std::vector<float> ampZ_;                 // per-partial previous-block effective gain (declick ramp)
     double rate_ = 48000.0, playedHz_ = 261.6256, pitchMul_ = 1.0;
     float  pos01_ = 0.f, prevPos_ = -1.f, dir_ = 1.f;
+    bool   entered_ = false;          // ping-pong/reverse: head has reached the loop brackets
+    float  regionGain_ = 1.f;         // sampler-parity fade in/out gain at the current head pos
+    int    preparedActive_ = 0;       // partials alive after prepareBank (unison budget reserve)
+    int    reserved_ = 0;             // budget currently reserved by this (anchor) engine
     float  makeup_ = 1.f;
     float  crushHoldL_ = 0.f, crushHoldR_ = 0.f;   // CRUSH sample-and-hold state
     int    crushCnt_ = 0;

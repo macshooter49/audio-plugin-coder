@@ -94,6 +94,54 @@ int main()
     // rs6 — MELT (temporal smear) + QUALITY-as-bitrate extremes stay in tune
     { GeodeParams p = base; p.smear = 0.9f; check ("melt=0.9", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.quality = 0.05f; check ("quality=trash", renderFund (p, st, playHz, sr)); }
+
+    // ── rs7 — SAMPLER-PARITY region / loop / reverse / fades + constant-cost unison adopt ──────
+    {
+        auto mkEng = [&] (GeodeParams p) { GeodeEngine e; e.prepare (sr); e.setFrameStore (&st); e.setParams (p); e.noteOn (playHz, 42); return e; };
+        std::vector<float> L (512, 0.f), R (512, 0.f);
+        // region confinement: head stays inside [0.2,0.8]; forward loop settles into [0.3,0.6]
+        { GeodeParams p; p.scan = 1.0f; p.regionStart = 0.2f; p.regionEnd = 0.8f;
+          p.loopStart = 0.3f; p.loopEnd = 0.6f; p.loopMode = 1;
+          GeodeEngine e = mkEng (p);
+          bool inRegion = true; float last = -1.f;
+          for (int b = 0; b < 400; ++b) { std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
+            e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); last = e.readPos01();
+            if (last < 0.199f || last > 0.801f) inRegion = false; }
+          const bool inLoop = (last >= 0.295f && last <= 0.605f);
+          std::printf ("[region+loop      ] pos=%.3f inRegion=%d inLoop=%d  %s\n", last, inRegion, inLoop,
+                       (inRegion && inLoop) ? "PASS" : "FAIL"); pass += (inRegion && inLoop); ++tot; }
+        // REVERSE really reverses: head decreases from region end
+        { GeodeParams p; p.scan = 1.0f; p.loopMode = 2;
+          GeodeEngine e = mkEng (p);
+          const float p0 = e.readPos01();
+          for (int b = 0; b < 8; ++b) { std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
+            e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); }
+          const float p1 = e.readPos01();
+          const bool ok = (p0 > 0.9f && p1 < p0 - 1e-4f);
+          std::printf ("[reverse          ] pos %.3f -> %.3f  %s\n", p0, p1, ok ? "PASS" : "FAIL"); pass += ok; ++tot; }
+        // FADE IN: audio near the region start is quieter than after the fade completes
+        { GeodeParams p; p.scan = 1.0f; p.fadeIn = 0.4f; p.loopMode = 0;
+          GeodeEngine e = mkEng (p);
+          auto rms = [&] { double s2 = 0; for (int i = 0; i < 512; ++i) s2 += (double) L[i] * L[i]; return std::sqrt (s2 / 512.0); };
+          std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
+          e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512);
+          const double early = rms();
+          for (int b = 0; b < 200; ++b) { std::fill (L.begin(), L.end(), 0.f); std::fill (R.begin(), R.end(), 0.f);
+            e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); }
+          const double late = rms();
+          const bool ok = late > early * 1.6;
+          std::printf ("[fade-in          ] early=%.4f late=%.4f  %s\n", early, late, ok ? "PASS" : "FAIL"); pass += ok; ++tot; }
+        // constant-cost unison adopt path keeps the pitch (anchor prepares, sibling adopts+renders)
+        { GeodeParams p; p.scan = 0.f;
+          GeodeEngine anchor = mkEng (p), sib = mkEng (p);
+          int Nn = (int) (sr * 0.3); std::vector<float> LA ((size_t) Nn, 0.f), RA ((size_t) Nn, 0.f);
+          for (int off = 0; off < Nn; off += 256)
+          { int m = std::min (256, Nn - off);
+            anchor.setParams (p); anchor.prepareBank (m);
+            sib.adoptBank (anchor); sib.renderBankAdd (&LA[(size_t) off], &RA[(size_t) off], m);
+            anchor.renderBankAdd (&LA[(size_t) off], &RA[(size_t) off], m); }
+          check ("unison-adopt", estFund (&LA[(size_t) (Nn / 2)], Nn / 2, sr)); }
+    }
     { GeodeParams p = base; p.crush = 0.8f; check ("crush=0.8", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.cut = 0.4f; p.cutMode = 0; check ("cut=LP.4", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.sieve = 0.5f; check ("sieve=0.5", renderFund (p, st, playHz, sr)); }
