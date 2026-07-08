@@ -1052,10 +1052,24 @@ namespace tw
         void setLevelC (float level) noexcept { levelC_ = juce::jlimit (0.0f, 1.0f, level); }
         void setLevelD (float level) noexcept { levelD_ = juce::jlimit (0.0f, 1.0f, level); }
         // SOLO/MUTE — set per-osc gate targets (A,B,C,D). Click-free: smoothed toward target in render.
+        /** FLOW · ROUND ROBIN (mode 4 — replaced Drift/"human"): each note-on sounds exactly ONE
+         *  oscillator, rotating through the enabled/audible set (Moog-Matriarch-style global
+         *  rotation — the shared counter lives in the processor, audio-thread only). The pick is
+         *  applied through the existing click-free osc gate; a voice keeps its osc through release. */
+        void setRobin (bool on, int* counter, bool eA, bool eB, bool eC, bool eD) noexcept
+        {
+            robinOn_ = on; robinCtr_ = counter;
+            robinEn_[0] = eA; robinEn_[1] = eB; robinEn_[2] = eC; robinEn_[3] = eD;
+            if (! on && ! playing_) robinPick_ = -1;   // mode off → clear once the voice is idle
+        }
+        // effective per-osc gate target = SOLO/MUTE gate masked by this note's round-robin pick
+        float robinGate (int g) const noexcept
+        { return (robinPick_ >= 0 && g != robinPick_) ? 0.0f : oscGateTarget_[g]; }
+
         void setOscGates (float a, float b, float c, float d) noexcept
         {
             oscGateTarget_[0] = a; oscGateTarget_[1] = b; oscGateTarget_[2] = c; oscGateTarget_[3] = d;
-            if (! playing_) { for (int k = 0; k < 4; ++k) oscGate_[k] = oscGateTarget_[k]; }  // snap when idle → fresh notes respect gate from sample 0, no blip
+            if (! playing_) { for (int k = 0; k < 4; ++k) oscGate_[k] = robinGate (k); }  // snap when idle → fresh notes respect gate from sample 0, no blip
         }
         void setPanC (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLC_=std::cos(a); panRC_=std::sin(a); }
         void setPanD (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLD_=std::cos(a); panRD_=std::sin(a); }
@@ -1174,6 +1188,25 @@ namespace tw
                 playing_ = true;
                 return;   // amp/filter envelopes, phases, waver, fold history all untouched
             }
+
+            // ── FLOW · ROUND ROBIN — this note sounds ONE oscillator, rotating per note-on.
+            // Cycles only through the enabled+audible set (≥2 participants, else a no-op);
+            // legato retargets above keep the phrase's osc (Matriarch behavior). Gates snap
+            // here (the amp envelope starts at silence, so the snap is click-free).
+            robinPick_ = -1;
+            if (robinOn_ && robinCtr_ != nullptr)
+            {
+                int en = 0;
+                for (int k = 0; k < 4; ++k) if (robinEn_[k]) ++en;
+                if (en >= 2)
+                {
+                    int idx = *robinCtr_ % en;
+                    *robinCtr_ = (*robinCtr_ + 1) & 0x3FFFFFFF;
+                    for (int k = 0; k < 4; ++k)
+                        if (robinEn_[k] && idx-- == 0) { robinPick_ = k; break; }
+                }
+            }
+            for (int g = 0; g < 4; ++g) oscGate_[g] = robinGate (g);
 
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
@@ -1751,7 +1784,7 @@ namespace tw
             // loop) instead of rendering into a ×0 gate. The 4 ms gate one-pole keeps on/off
             // click-free; skipping only begins once the fade has actually finished.
             for (int g = 0; g < 4; ++g)
-                oscDead_[g] = oscGateTarget_[g] <= 0.0f && oscGate_[g] < 1.0e-4f;
+                oscDead_[g] = robinGate (g) <= 0.0f && oscGate_[g] < 1.0e-4f;
 
             // SAMPLE-ENGINE-VOICE — render any SAMP oscillators' stereo blocks for this
             // buffer (scan/loop/xfade/spray + STRETCH/FORMANT warp). Cheap no-op if none.
@@ -2904,7 +2937,7 @@ namespace tw
                 }
 
                 // SOLO/MUTE — advance the per-osc click-free gates one sample (one-pole toward target)
-                for (int g = 0; g < 4; ++g) oscGate_[g] += (oscGateTarget_[g] - oscGate_[g]) * oscGateCoef_;
+                for (int g = 0; g < 4; ++g) oscGate_[g] += (robinGate (g) - oscGate_[g]) * oscGateCoef_;
                 const float gA = oscGate_[0], gB = oscGate_[1], gC = oscGate_[2], gD = oscGate_[3];
 
                 // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate)
@@ -3604,6 +3637,11 @@ namespace tw
         float oscGate_[4]       { 1.0f, 1.0f, 1.0f, 1.0f };   // smoothed solo/mute gate (click-free)
         bool  oscDead_[4]       { false, false, false, false }; // gate fully settled at 0 → skip the osc's render entirely
         float oscGateTarget_[4] { 1.0f, 1.0f, 1.0f, 1.0f };
+        // FLOW · ROUND ROBIN state (see setRobin) — pick chosen at startNote, kept through release
+        bool  robinOn_    = false;
+        int*  robinCtr_   = nullptr;
+        bool  robinEn_[4] { true, false, false, false };
+        int   robinPick_  = -1;
         float oscGateCoef_ = 0.006f;                          // one-pole coef, set in setCurrentPlaybackSampleRate
 
         int   octOffset_   = 0;

@@ -862,6 +862,7 @@ private:
     // case and thins gracefully (keepLoudest) under heavy chords. (rs2 CPU-cliff fix.)
     static constexpr int kGeodePartialBudget = 640;      // all SPEC voices/unison combined
     int geodePartialsLive_ = 0;                          // audio-thread only (no atomics)
+    int robinCounter_ = 0;                               // FLOW · ROUND ROBIN global note rotation (audio-thread only)
 
     void timerCallback() override;        // message thread — rebuilds morph tables
     void rebuildMorphIfNeeded (MorphSlot& slot,

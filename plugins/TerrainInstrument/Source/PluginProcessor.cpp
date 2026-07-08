@@ -2564,7 +2564,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── FLOW ───────────────────────────────────────────────────────────────
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_MODE, 1 }, "Flow Mode",
-        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Drift" }, 0));   // 0 = Off; mode 2 = CHOP (replaced Seq)
+        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Round Robin" }, 0));   // 0 = Off; 2 = CHOP (replaced Seq); 4 = ROUND ROBIN (replaced Drift — index frozen)
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_LATCH, 1 }, "Arp Latch", false));
     auto addFlowKnob = [&] (const char* id, const char* name, float def) {
@@ -2614,6 +2614,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // just guarantees a missed path can never leak the budget permanently.
     granGrainsLive_  = 0;
     geodePartialsLive_ = 0;   // GEODE — reset the shared partial budget (self-heals a leaked count)
+    robinCounter_ = 0;        // FLOW · ROUND ROBIN — rotation restarts from osc A
 
     // Task 5: singleton synth removed. Prep all layer synths instead.
     // Mark 2 task 4: prep per-layer scratch buffers and per-layer synth rates.
@@ -3662,23 +3663,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             //    DRIFT is the active mode, inject default routes so it audibly modulates the wavetable
             //    timbre — DEPTH (FLOW_DRF_MORPH) scales it. (Full per-lane custom routing = mod-matrix phase.)
             for (int i = 0; i < 8; ++i) synModCfg.driftLanes[i] = driftLane_[i];
-            if ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4)
-            {
-                const float dDepth = juce::jlimit (0.0f, 1.0f, rawParam (ParameterIDs::FLOW_DRF_MORPH)->load());
-                if (dDepth > 0.001f)
-                {
-                    const wc::ModSource dsrc[] = { wc::ModSource::Drift1, wc::ModSource::Drift2, wc::ModSource::Drift3, wc::ModSource::Drift4 };
-                    const wc::ModDest   ddst[] = { wc::ModDest::Frame,   wc::ModDest::FrameB,   wc::ModDest::Warp,     wc::ModDest::Fold };
-                    for (int k = 0; k < 4 && na < wc::MAX_ASSIGNMENTS; ++k)
-                    {
-                        synModCfg.assignments[na].source  = dsrc[k];
-                        synModCfg.assignments[na].dest    = ddst[k];
-                        synModCfg.assignments[na].depth   = 0.7f;   // fixed musical scaler — the engine already applies DEPTH (o*=depth), so don't ×dDepth again
-                        synModCfg.assignments[na].enabled = true;
-                        ++na;
-                    }
-                }
-            }
+            // (FLOW mode 4 = ROUND ROBIN now — the old DRIFT default-route injection that wobbled
+            //  the wavetables is retired; the drift lanes stay published as mod-matrix sources.)
             synModCfg.numAssignments = na;
         }
         synModBpm = currentBPM.load();   // (declared in outer scope — hoisted for FLOW ARP)
@@ -3752,6 +3738,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setTuningC (octC, semiC, centC);  sv->setTuningD (octD, semiD, centD);
                 sv->setLevelC (lvlC);                 sv->setLevelD (lvlD);
                 sv->setOscGates (gateA, gateB, gateC, gateD);   // SOLO/MUTE — click-free per-osc gate
+                sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
+                              gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setPanC (panC);                   sv->setPanD (panD);
                 sv->setWavetableC (wtC);              sv->setWavetableD (wtD);
                 sv->setWavetableFrameC (wtFrameC);    sv->setWavetableFrameD (wtFrameD);
