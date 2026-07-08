@@ -989,7 +989,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_ENGINE, 1 },
         "Synth OSC A Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
         0));
 
     layout.add (std::make_unique<juce::AudioParameterInt> (
@@ -1551,7 +1551,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_ENGINE, 1 },
         "Synth OSC B Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_OCT, 1 },
@@ -1696,7 +1696,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_ENGINE, 1 },
         "Synth OSC C Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_OCT, 1 },
@@ -1841,7 +1841,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_ENGINE, 1 },
         "Synth OSC D Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "NOISE" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_OCT, 1 },
@@ -2332,6 +2332,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                   ParameterIDs::SYN_OSC_C_FM_GALE, ParameterIDs::SYN_OSC_C_FM_BEND, ParameterIDs::SYN_OSC_C_FM_STORM, "C");
     addFmWeather (ParameterIDs::SYN_OSC_D_FM_STRIKE, ParameterIDs::SYN_OSC_D_FM_AGE, ParameterIDs::SYN_OSC_D_FM_RUST,
                   ParameterIDs::SYN_OSC_D_FM_GALE, ParameterIDs::SYN_OSC_D_FM_BEND, ParameterIDs::SYN_OSC_D_FM_STORM, "D");
+
+    // ════════ HARM-ENGINE-PARAMS — per-OSC HARMONIC additive oscillator (2026-07-08) ════════
+    // Pure additive: 512-partial banks built procedurally per block. MODE = base spectrum
+    // family (HUE morphs the regime inside it), SCULPT = spectral transform (CARVE = depth,
+    // CHURN = motion rate). Defaults land on an instant playable saw-family voice.
+    auto addHarmOsc = [&layout] (const char* const id[14], const juce::String& osc)
+    {
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[0], 1 }, "Synth OSC " + osc + " Harmonic Mode",
+            juce::StringArray { "Blade", "Neon", "Console", "Chant", "Bronze", "Hornet" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[1], 1 }, "Synth OSC " + osc + " Harmonic Sculpt",
+            juce::StringArray { "Keel", "Splay", "Cull", "Tide", "Terrace", "Clang" }, 0));
+        static const char* nm[12] = { "Hue", "Partials", "Lean", "Fan", "Grit", "Braid",
+                                      "Carve", "Churn", "Root", "Shine", "Wilt", "Fizz" };
+        static const float dv[12] = { 0.35f, 0.5f, 0.5f, 0.f, 0.f, 0.f,
+                                      0.f, 0.5f, 0.f, 0.f, 0.5f, 0.f };
+        for (int k = 0; k < 12; ++k)
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id[k + 2], 1 }, "Synth OSC " + osc + " Harmonic " + nm[k],
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), dv[k]));
+    };
+    {
+        static const char* const HARM_A[14] = { ParameterIDs::SYN_OSC_A_HARM_MODE, ParameterIDs::SYN_OSC_A_HARM_SCULPT, ParameterIDs::SYN_OSC_A_HARM_HUE, ParameterIDs::SYN_OSC_A_HARM_COUNT, ParameterIDs::SYN_OSC_A_HARM_LEAN, ParameterIDs::SYN_OSC_A_HARM_FAN, ParameterIDs::SYN_OSC_A_HARM_GRIT, ParameterIDs::SYN_OSC_A_HARM_BRAID, ParameterIDs::SYN_OSC_A_HARM_CARVE, ParameterIDs::SYN_OSC_A_HARM_CHURN, ParameterIDs::SYN_OSC_A_HARM_ROOT, ParameterIDs::SYN_OSC_A_HARM_SHINE, ParameterIDs::SYN_OSC_A_HARM_WILT, ParameterIDs::SYN_OSC_A_HARM_FIZZ };
+        static const char* const HARM_B[14] = { ParameterIDs::SYN_OSC_B_HARM_MODE, ParameterIDs::SYN_OSC_B_HARM_SCULPT, ParameterIDs::SYN_OSC_B_HARM_HUE, ParameterIDs::SYN_OSC_B_HARM_COUNT, ParameterIDs::SYN_OSC_B_HARM_LEAN, ParameterIDs::SYN_OSC_B_HARM_FAN, ParameterIDs::SYN_OSC_B_HARM_GRIT, ParameterIDs::SYN_OSC_B_HARM_BRAID, ParameterIDs::SYN_OSC_B_HARM_CARVE, ParameterIDs::SYN_OSC_B_HARM_CHURN, ParameterIDs::SYN_OSC_B_HARM_ROOT, ParameterIDs::SYN_OSC_B_HARM_SHINE, ParameterIDs::SYN_OSC_B_HARM_WILT, ParameterIDs::SYN_OSC_B_HARM_FIZZ };
+        static const char* const HARM_C[14] = { ParameterIDs::SYN_OSC_C_HARM_MODE, ParameterIDs::SYN_OSC_C_HARM_SCULPT, ParameterIDs::SYN_OSC_C_HARM_HUE, ParameterIDs::SYN_OSC_C_HARM_COUNT, ParameterIDs::SYN_OSC_C_HARM_LEAN, ParameterIDs::SYN_OSC_C_HARM_FAN, ParameterIDs::SYN_OSC_C_HARM_GRIT, ParameterIDs::SYN_OSC_C_HARM_BRAID, ParameterIDs::SYN_OSC_C_HARM_CARVE, ParameterIDs::SYN_OSC_C_HARM_CHURN, ParameterIDs::SYN_OSC_C_HARM_ROOT, ParameterIDs::SYN_OSC_C_HARM_SHINE, ParameterIDs::SYN_OSC_C_HARM_WILT, ParameterIDs::SYN_OSC_C_HARM_FIZZ };
+        static const char* const HARM_D[14] = { ParameterIDs::SYN_OSC_D_HARM_MODE, ParameterIDs::SYN_OSC_D_HARM_SCULPT, ParameterIDs::SYN_OSC_D_HARM_HUE, ParameterIDs::SYN_OSC_D_HARM_COUNT, ParameterIDs::SYN_OSC_D_HARM_LEAN, ParameterIDs::SYN_OSC_D_HARM_FAN, ParameterIDs::SYN_OSC_D_HARM_GRIT, ParameterIDs::SYN_OSC_D_HARM_BRAID, ParameterIDs::SYN_OSC_D_HARM_CARVE, ParameterIDs::SYN_OSC_D_HARM_CHURN, ParameterIDs::SYN_OSC_D_HARM_ROOT, ParameterIDs::SYN_OSC_D_HARM_SHINE, ParameterIDs::SYN_OSC_D_HARM_WILT, ParameterIDs::SYN_OSC_D_HARM_FIZZ };
+        addHarmOsc (HARM_A, "A"); addHarmOsc (HARM_B, "B"); addHarmOsc (HARM_C, "C"); addHarmOsc (HARM_D, "D");
+    }
 
     // ════════ RESYNTH-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
     // ID strings keep GEODE_* for preset stability; meaning REMAPPED (see the gather):
@@ -3606,6 +3635,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.fadeInCurve = *rawParam (id[26]);  g.fadeOutCurve = *rawParam (id[27]);
             geodeP[o] = g;
         }
+        // ── HARMONIC engine: gather the additive params per OSC (HARM-ENGINE-GATHER) ──
+        static const char* const HARM_IDS[4][14] = {
+            { ParameterIDs::SYN_OSC_A_HARM_MODE, ParameterIDs::SYN_OSC_A_HARM_SCULPT, ParameterIDs::SYN_OSC_A_HARM_HUE, ParameterIDs::SYN_OSC_A_HARM_COUNT, ParameterIDs::SYN_OSC_A_HARM_LEAN, ParameterIDs::SYN_OSC_A_HARM_FAN, ParameterIDs::SYN_OSC_A_HARM_GRIT, ParameterIDs::SYN_OSC_A_HARM_BRAID, ParameterIDs::SYN_OSC_A_HARM_CARVE, ParameterIDs::SYN_OSC_A_HARM_CHURN, ParameterIDs::SYN_OSC_A_HARM_ROOT, ParameterIDs::SYN_OSC_A_HARM_SHINE, ParameterIDs::SYN_OSC_A_HARM_WILT, ParameterIDs::SYN_OSC_A_HARM_FIZZ },
+            { ParameterIDs::SYN_OSC_B_HARM_MODE, ParameterIDs::SYN_OSC_B_HARM_SCULPT, ParameterIDs::SYN_OSC_B_HARM_HUE, ParameterIDs::SYN_OSC_B_HARM_COUNT, ParameterIDs::SYN_OSC_B_HARM_LEAN, ParameterIDs::SYN_OSC_B_HARM_FAN, ParameterIDs::SYN_OSC_B_HARM_GRIT, ParameterIDs::SYN_OSC_B_HARM_BRAID, ParameterIDs::SYN_OSC_B_HARM_CARVE, ParameterIDs::SYN_OSC_B_HARM_CHURN, ParameterIDs::SYN_OSC_B_HARM_ROOT, ParameterIDs::SYN_OSC_B_HARM_SHINE, ParameterIDs::SYN_OSC_B_HARM_WILT, ParameterIDs::SYN_OSC_B_HARM_FIZZ },
+            { ParameterIDs::SYN_OSC_C_HARM_MODE, ParameterIDs::SYN_OSC_C_HARM_SCULPT, ParameterIDs::SYN_OSC_C_HARM_HUE, ParameterIDs::SYN_OSC_C_HARM_COUNT, ParameterIDs::SYN_OSC_C_HARM_LEAN, ParameterIDs::SYN_OSC_C_HARM_FAN, ParameterIDs::SYN_OSC_C_HARM_GRIT, ParameterIDs::SYN_OSC_C_HARM_BRAID, ParameterIDs::SYN_OSC_C_HARM_CARVE, ParameterIDs::SYN_OSC_C_HARM_CHURN, ParameterIDs::SYN_OSC_C_HARM_ROOT, ParameterIDs::SYN_OSC_C_HARM_SHINE, ParameterIDs::SYN_OSC_C_HARM_WILT, ParameterIDs::SYN_OSC_C_HARM_FIZZ },
+            { ParameterIDs::SYN_OSC_D_HARM_MODE, ParameterIDs::SYN_OSC_D_HARM_SCULPT, ParameterIDs::SYN_OSC_D_HARM_HUE, ParameterIDs::SYN_OSC_D_HARM_COUNT, ParameterIDs::SYN_OSC_D_HARM_LEAN, ParameterIDs::SYN_OSC_D_HARM_FAN, ParameterIDs::SYN_OSC_D_HARM_GRIT, ParameterIDs::SYN_OSC_D_HARM_BRAID, ParameterIDs::SYN_OSC_D_HARM_CARVE, ParameterIDs::SYN_OSC_D_HARM_CHURN, ParameterIDs::SYN_OSC_D_HARM_ROOT, ParameterIDs::SYN_OSC_D_HARM_SHINE, ParameterIDs::SYN_OSC_D_HARM_WILT, ParameterIDs::SYN_OSC_D_HARM_FIZZ }
+        };
+        tw::HarmParams harmP[4];
+        for (int o = 0; o < 4; ++o)
+        {
+            const char* const* id = HARM_IDS[o];
+            tw::HarmParams h;
+            h.mainMode   = (int) *rawParam (id[0]);
+            h.sculptMode = (int) *rawParam (id[1]);
+            h.hue   = *rawParam (id[2]);  h.count = *rawParam (id[3]);  h.lean  = *rawParam (id[4]);
+            h.fan   = *rawParam (id[5]);  h.grit  = *rawParam (id[6]);  h.braid = *rawParam (id[7]);
+            h.carve = *rawParam (id[8]);  h.churn = *rawParam (id[9]);  h.root  = *rawParam (id[10]);
+            h.shine = *rawParam (id[11]); h.wilt  = *rawParam (id[12]); h.fizz  = *rawParam (id[13]);
+            harmP[o] = h;
+        }
+        harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread
+        harmDisplayParams_[2] = harmP[2]; harmDisplayParams_[3] = harmP[3];   // display engines read these
+
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
@@ -3752,6 +3804,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setEngineC (engineIdxC);          sv->setEngineD (engineIdxD);
                 sv->setGeodeParamsA (geodeP[0]); sv->setGeodeParamsB (geodeP[1]);   // GEODE-ENGINE-PUSH (cheap stores, ungated)
                 sv->setGeodeParamsC (geodeP[2]); sv->setGeodeParamsD (geodeP[3]);
+                sv->setHarmParamsA (harmP[0]);   sv->setHarmParamsB (harmP[1]);   // HARM-ENGINE-PUSH (cheap stores, ungated)
+                sv->setHarmParamsC (harmP[2]);   sv->setHarmParamsD (harmP[3]);
                 // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
                 if (engChanged)
                 {

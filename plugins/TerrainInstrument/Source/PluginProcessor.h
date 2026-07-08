@@ -357,6 +357,11 @@ public:
      *  visualizer. Safe on the message thread: rebuilds run on the same (message) thread. */
     const tw::GeodeFrameStore* geodeLiveStore (int osc) const noexcept
     { return (osc >= 0 && osc < 4) ? geodeSlot_[(size_t) osc].live.load (std::memory_order_acquire) : nullptr; }
+    /** HARM viz — the latest gathered knob snapshot for one osc. The editor's DISPLAY
+     *  HarmonicEngine instances rebuild their banks from this on the message-thread tick
+     *  (plain struct copy of block-rate floats — a torn read costs one cosmetic frame). */
+    const tw::HarmParams& harmDisplayParams (int osc) const noexcept
+    { return harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)]; }
     /** Returns the sample buffer for the currently-editing layer.
      *  Task 5: routes through layers[editingLayer] instead of the old singleton. */
     tw::SampleBuffer& getSampleBuffer() noexcept { return layers[(size_t) editingLayer.load()].sampleBuffer; }
@@ -860,8 +865,11 @@ private:
     // instance. Additive resynth costs ~1 sine-osc per partial per sample; 3072 pegged a core
     // (measured ~40%% for the oscillator alone, and STRETCH pinned it there). 640 ≈ <10%% worst
     // case and thins gracefully (keepLoudest) under heavy chords. (rs2 CPU-cliff fix.)
-    static constexpr int kGeodePartialBudget = 640;      // all SPEC voices/unison combined
+    static constexpr int kGeodePartialBudget = 640;      // all SPEC + HARM voices/unison combined
     int geodePartialsLive_ = 0;                          // audio-thread only (no atomics)
+    // HARM-ENGINE — per-osc knob snapshots for the editor's display banks (written in the
+    // processBlock gather; read on the message thread — cosmetic, tear-tolerant)
+    std::array<tw::HarmParams, 4> harmDisplayParams_ {};
     int robinCounter_ = 0;                               // FLOW · ROUND ROBIN global note rotation (audio-thread only)
 
     void timerCallback() override;        // message thread — rebuilds morph tables

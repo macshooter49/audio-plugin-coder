@@ -724,4 +724,64 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_GEODE_CUT_MODE[]     = "SYN_OSC_D_GEODE_CUT_MODE";
     constexpr char SYN_OSC_D_GEODE_DRIVE_MODE[]   = "SYN_OSC_D_GEODE_DRIVE_MODE";   // choice: Saturate Bloom Glint Moire Foldback Ember
     constexpr char SYN_OSC_D_GEODE_SIEVE_MODE[]   = "SYN_OSC_D_GEODE_SIEVE_MODE";   // choice: Floor Sparse Cloak Flicker Rake Parity
+
+    // ════════ HARM-ENGINE-IDS — per-OSC HARMONIC additive oscillator (Engine::HARM, slot 5;
+    // the never-exposed NOISE engine slot, ID frozen + meaning remapped — house precedent).
+    // 2 mode rows (MAIN / SCULPT) + 12 knob laws; DSP in HarmonicEngine.h (2026-07-08). ════════
+    constexpr char SYN_OSC_A_HARM_MODE[]         = "SYN_OSC_A_HARM_MODE";   // choice: Blade Neon Console Chant Bronze Hornet
+    constexpr char SYN_OSC_A_HARM_SCULPT[]       = "SYN_OSC_A_HARM_SCULPT";   // choice: Keel Splay Cull Tide Terrace Clang
+    constexpr char SYN_OSC_A_HARM_HUE[]          = "SYN_OSC_A_HARM_HUE";   // 0..1 main-family regime morph
+    constexpr char SYN_OSC_A_HARM_COUNT[]        = "SYN_OSC_A_HARM_COUNT";   // 0..1 partial count (log 8..512)
+    constexpr char SYN_OSC_A_HARM_LEAN[]         = "SYN_OSC_A_HARM_LEAN";   // 0..1 bipolar tilt (0.5 flat)
+    constexpr char SYN_OSC_A_HARM_FAN[]          = "SYN_OSC_A_HARM_FAN";   // 0..1 stereo: split -> golden orbit
+    constexpr char SYN_OSC_A_HARM_GRIT[]         = "SYN_OSC_A_HARM_GRIT";   // 0..1 analog life (banded OU)
+    constexpr char SYN_OSC_A_HARM_BRAID[]        = "SYN_OSC_A_HARM_BRAID";   // 0..1 ensemble twin pairs
+    constexpr char SYN_OSC_A_HARM_CARVE[]        = "SYN_OSC_A_HARM_CARVE";   // 0..1 sculpt regime depth
+    constexpr char SYN_OSC_A_HARM_CHURN[]        = "SYN_OSC_A_HARM_CHURN";   // 0..1 motion rate (0.5 = 1x)
+    constexpr char SYN_OSC_A_HARM_ROOT[]         = "SYN_OSC_A_HARM_ROOT";   // 0..1 fund guard -> sub ghost
+    constexpr char SYN_OSC_A_HARM_SHINE[]        = "SYN_OSC_A_HARM_SHINE";   // 0..1 +oct detuned ghost
+    constexpr char SYN_OSC_A_HARM_WILT[]         = "SYN_OSC_A_HARM_WILT";   // 0..1 time arrow (0.5 off)
+    constexpr char SYN_OSC_A_HARM_FIZZ[]         = "SYN_OSC_A_HARM_FIZZ";   // 0..1 per-partial noise fur
+    constexpr char SYN_OSC_B_HARM_MODE[]         = "SYN_OSC_B_HARM_MODE";
+    constexpr char SYN_OSC_B_HARM_SCULPT[]       = "SYN_OSC_B_HARM_SCULPT";
+    constexpr char SYN_OSC_B_HARM_HUE[]          = "SYN_OSC_B_HARM_HUE";
+    constexpr char SYN_OSC_B_HARM_COUNT[]        = "SYN_OSC_B_HARM_COUNT";
+    constexpr char SYN_OSC_B_HARM_LEAN[]         = "SYN_OSC_B_HARM_LEAN";
+    constexpr char SYN_OSC_B_HARM_FAN[]          = "SYN_OSC_B_HARM_FAN";
+    constexpr char SYN_OSC_B_HARM_GRIT[]         = "SYN_OSC_B_HARM_GRIT";
+    constexpr char SYN_OSC_B_HARM_BRAID[]        = "SYN_OSC_B_HARM_BRAID";
+    constexpr char SYN_OSC_B_HARM_CARVE[]        = "SYN_OSC_B_HARM_CARVE";
+    constexpr char SYN_OSC_B_HARM_CHURN[]        = "SYN_OSC_B_HARM_CHURN";
+    constexpr char SYN_OSC_B_HARM_ROOT[]         = "SYN_OSC_B_HARM_ROOT";
+    constexpr char SYN_OSC_B_HARM_SHINE[]        = "SYN_OSC_B_HARM_SHINE";
+    constexpr char SYN_OSC_B_HARM_WILT[]         = "SYN_OSC_B_HARM_WILT";
+    constexpr char SYN_OSC_B_HARM_FIZZ[]         = "SYN_OSC_B_HARM_FIZZ";
+    constexpr char SYN_OSC_C_HARM_MODE[]         = "SYN_OSC_C_HARM_MODE";
+    constexpr char SYN_OSC_C_HARM_SCULPT[]       = "SYN_OSC_C_HARM_SCULPT";
+    constexpr char SYN_OSC_C_HARM_HUE[]          = "SYN_OSC_C_HARM_HUE";
+    constexpr char SYN_OSC_C_HARM_COUNT[]        = "SYN_OSC_C_HARM_COUNT";
+    constexpr char SYN_OSC_C_HARM_LEAN[]         = "SYN_OSC_C_HARM_LEAN";
+    constexpr char SYN_OSC_C_HARM_FAN[]          = "SYN_OSC_C_HARM_FAN";
+    constexpr char SYN_OSC_C_HARM_GRIT[]         = "SYN_OSC_C_HARM_GRIT";
+    constexpr char SYN_OSC_C_HARM_BRAID[]        = "SYN_OSC_C_HARM_BRAID";
+    constexpr char SYN_OSC_C_HARM_CARVE[]        = "SYN_OSC_C_HARM_CARVE";
+    constexpr char SYN_OSC_C_HARM_CHURN[]        = "SYN_OSC_C_HARM_CHURN";
+    constexpr char SYN_OSC_C_HARM_ROOT[]         = "SYN_OSC_C_HARM_ROOT";
+    constexpr char SYN_OSC_C_HARM_SHINE[]        = "SYN_OSC_C_HARM_SHINE";
+    constexpr char SYN_OSC_C_HARM_WILT[]         = "SYN_OSC_C_HARM_WILT";
+    constexpr char SYN_OSC_C_HARM_FIZZ[]         = "SYN_OSC_C_HARM_FIZZ";
+    constexpr char SYN_OSC_D_HARM_MODE[]         = "SYN_OSC_D_HARM_MODE";
+    constexpr char SYN_OSC_D_HARM_SCULPT[]       = "SYN_OSC_D_HARM_SCULPT";
+    constexpr char SYN_OSC_D_HARM_HUE[]          = "SYN_OSC_D_HARM_HUE";
+    constexpr char SYN_OSC_D_HARM_COUNT[]        = "SYN_OSC_D_HARM_COUNT";
+    constexpr char SYN_OSC_D_HARM_LEAN[]         = "SYN_OSC_D_HARM_LEAN";
+    constexpr char SYN_OSC_D_HARM_FAN[]          = "SYN_OSC_D_HARM_FAN";
+    constexpr char SYN_OSC_D_HARM_GRIT[]         = "SYN_OSC_D_HARM_GRIT";
+    constexpr char SYN_OSC_D_HARM_BRAID[]        = "SYN_OSC_D_HARM_BRAID";
+    constexpr char SYN_OSC_D_HARM_CARVE[]        = "SYN_OSC_D_HARM_CARVE";
+    constexpr char SYN_OSC_D_HARM_CHURN[]        = "SYN_OSC_D_HARM_CHURN";
+    constexpr char SYN_OSC_D_HARM_ROOT[]         = "SYN_OSC_D_HARM_ROOT";
+    constexpr char SYN_OSC_D_HARM_SHINE[]        = "SYN_OSC_D_HARM_SHINE";
+    constexpr char SYN_OSC_D_HARM_WILT[]         = "SYN_OSC_D_HARM_WILT";
+    constexpr char SYN_OSC_D_HARM_FIZZ[]         = "SYN_OSC_D_HARM_FIZZ";
 }

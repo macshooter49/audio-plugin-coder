@@ -452,6 +452,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscAGeodeCutModeRelay).withOptionsFrom(synOscBGeodeCutModeRelay).withOptionsFrom(synOscCGeodeCutModeRelay).withOptionsFrom(synOscDGeodeCutModeRelay)
             .withOptionsFrom(synOscAGeodeDriveModeRelay).withOptionsFrom(synOscBGeodeDriveModeRelay).withOptionsFrom(synOscCGeodeDriveModeRelay).withOptionsFrom(synOscDGeodeDriveModeRelay)
             .withOptionsFrom(synOscAGeodeSieveModeRelay).withOptionsFrom(synOscBGeodeSieveModeRelay).withOptionsFrom(synOscCGeodeSieveModeRelay).withOptionsFrom(synOscDGeodeSieveModeRelay)
+            // ════ HARM-ENGINE withOptionsFrom (14 × 4 osc) ════
+            .withOptionsFrom(synOscAHarmModeRelay).withOptionsFrom(synOscAHarmSculptRelay).withOptionsFrom(synOscAHarmHueRelay).withOptionsFrom(synOscAHarmCountRelay).withOptionsFrom(synOscAHarmLeanRelay).withOptionsFrom(synOscAHarmFanRelay).withOptionsFrom(synOscAHarmGritRelay).withOptionsFrom(synOscAHarmBraidRelay).withOptionsFrom(synOscAHarmCarveRelay).withOptionsFrom(synOscAHarmChurnRelay).withOptionsFrom(synOscAHarmRootRelay).withOptionsFrom(synOscAHarmShineRelay).withOptionsFrom(synOscAHarmWiltRelay).withOptionsFrom(synOscAHarmFizzRelay)
+            .withOptionsFrom(synOscBHarmModeRelay).withOptionsFrom(synOscBHarmSculptRelay).withOptionsFrom(synOscBHarmHueRelay).withOptionsFrom(synOscBHarmCountRelay).withOptionsFrom(synOscBHarmLeanRelay).withOptionsFrom(synOscBHarmFanRelay).withOptionsFrom(synOscBHarmGritRelay).withOptionsFrom(synOscBHarmBraidRelay).withOptionsFrom(synOscBHarmCarveRelay).withOptionsFrom(synOscBHarmChurnRelay).withOptionsFrom(synOscBHarmRootRelay).withOptionsFrom(synOscBHarmShineRelay).withOptionsFrom(synOscBHarmWiltRelay).withOptionsFrom(synOscBHarmFizzRelay)
+            .withOptionsFrom(synOscCHarmModeRelay).withOptionsFrom(synOscCHarmSculptRelay).withOptionsFrom(synOscCHarmHueRelay).withOptionsFrom(synOscCHarmCountRelay).withOptionsFrom(synOscCHarmLeanRelay).withOptionsFrom(synOscCHarmFanRelay).withOptionsFrom(synOscCHarmGritRelay).withOptionsFrom(synOscCHarmBraidRelay).withOptionsFrom(synOscCHarmCarveRelay).withOptionsFrom(synOscCHarmChurnRelay).withOptionsFrom(synOscCHarmRootRelay).withOptionsFrom(synOscCHarmShineRelay).withOptionsFrom(synOscCHarmWiltRelay).withOptionsFrom(synOscCHarmFizzRelay)
+            .withOptionsFrom(synOscDHarmModeRelay).withOptionsFrom(synOscDHarmSculptRelay).withOptionsFrom(synOscDHarmHueRelay).withOptionsFrom(synOscDHarmCountRelay).withOptionsFrom(synOscDHarmLeanRelay).withOptionsFrom(synOscDHarmFanRelay).withOptionsFrom(synOscDHarmGritRelay).withOptionsFrom(synOscDHarmBraidRelay).withOptionsFrom(synOscDHarmCarveRelay).withOptionsFrom(synOscDHarmChurnRelay).withOptionsFrom(synOscDHarmRootRelay).withOptionsFrom(synOscDHarmShineRelay).withOptionsFrom(synOscDHarmWiltRelay).withOptionsFrom(synOscDHarmFizzRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
             .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
@@ -2586,6 +2591,63 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscCFmGaleAttachment,   ParameterIDs::SYN_OSC_C_FM_GALE,   synOscCFmGaleRelay);   mkAtt(synOscCFmBendAttachment, ParameterIDs::SYN_OSC_C_FM_BEND, synOscCFmBendRelay); mkAtt(synOscCFmStormAttachment, ParameterIDs::SYN_OSC_C_FM_STORM, synOscCFmStormRelay);
         mkAtt(synOscDFmStrikeAttachment, ParameterIDs::SYN_OSC_D_FM_STRIKE, synOscDFmStrikeRelay); mkAtt(synOscDFmAgeAttachment,  ParameterIDs::SYN_OSC_D_FM_AGE,  synOscDFmAgeRelay);  mkAtt(synOscDFmRustAttachment,  ParameterIDs::SYN_OSC_D_FM_RUST,  synOscDFmRustRelay);
         mkAtt(synOscDFmGaleAttachment,   ParameterIDs::SYN_OSC_D_FM_GALE,   synOscDFmGaleRelay);   mkAtt(synOscDFmBendAttachment, ParameterIDs::SYN_OSC_D_FM_BEND, synOscDFmBendRelay); mkAtt(synOscDFmStormAttachment, ParameterIDs::SYN_OSC_D_FM_STORM, synOscDFmStormRelay);
+        // ════ HARM-ENGINE mkAtt (14 × 4 osc) ════
+        mkAtt(synOscAHarmModeAttachment, ParameterIDs::SYN_OSC_A_HARM_MODE, synOscAHarmModeRelay);
+        mkAtt(synOscAHarmSculptAttachment, ParameterIDs::SYN_OSC_A_HARM_SCULPT, synOscAHarmSculptRelay);
+        mkAtt(synOscAHarmHueAttachment, ParameterIDs::SYN_OSC_A_HARM_HUE, synOscAHarmHueRelay);
+        mkAtt(synOscAHarmCountAttachment, ParameterIDs::SYN_OSC_A_HARM_COUNT, synOscAHarmCountRelay);
+        mkAtt(synOscAHarmLeanAttachment, ParameterIDs::SYN_OSC_A_HARM_LEAN, synOscAHarmLeanRelay);
+        mkAtt(synOscAHarmFanAttachment, ParameterIDs::SYN_OSC_A_HARM_FAN, synOscAHarmFanRelay);
+        mkAtt(synOscAHarmGritAttachment, ParameterIDs::SYN_OSC_A_HARM_GRIT, synOscAHarmGritRelay);
+        mkAtt(synOscAHarmBraidAttachment, ParameterIDs::SYN_OSC_A_HARM_BRAID, synOscAHarmBraidRelay);
+        mkAtt(synOscAHarmCarveAttachment, ParameterIDs::SYN_OSC_A_HARM_CARVE, synOscAHarmCarveRelay);
+        mkAtt(synOscAHarmChurnAttachment, ParameterIDs::SYN_OSC_A_HARM_CHURN, synOscAHarmChurnRelay);
+        mkAtt(synOscAHarmRootAttachment, ParameterIDs::SYN_OSC_A_HARM_ROOT, synOscAHarmRootRelay);
+        mkAtt(synOscAHarmShineAttachment, ParameterIDs::SYN_OSC_A_HARM_SHINE, synOscAHarmShineRelay);
+        mkAtt(synOscAHarmWiltAttachment, ParameterIDs::SYN_OSC_A_HARM_WILT, synOscAHarmWiltRelay);
+        mkAtt(synOscAHarmFizzAttachment, ParameterIDs::SYN_OSC_A_HARM_FIZZ, synOscAHarmFizzRelay);
+        mkAtt(synOscBHarmModeAttachment, ParameterIDs::SYN_OSC_B_HARM_MODE, synOscBHarmModeRelay);
+        mkAtt(synOscBHarmSculptAttachment, ParameterIDs::SYN_OSC_B_HARM_SCULPT, synOscBHarmSculptRelay);
+        mkAtt(synOscBHarmHueAttachment, ParameterIDs::SYN_OSC_B_HARM_HUE, synOscBHarmHueRelay);
+        mkAtt(synOscBHarmCountAttachment, ParameterIDs::SYN_OSC_B_HARM_COUNT, synOscBHarmCountRelay);
+        mkAtt(synOscBHarmLeanAttachment, ParameterIDs::SYN_OSC_B_HARM_LEAN, synOscBHarmLeanRelay);
+        mkAtt(synOscBHarmFanAttachment, ParameterIDs::SYN_OSC_B_HARM_FAN, synOscBHarmFanRelay);
+        mkAtt(synOscBHarmGritAttachment, ParameterIDs::SYN_OSC_B_HARM_GRIT, synOscBHarmGritRelay);
+        mkAtt(synOscBHarmBraidAttachment, ParameterIDs::SYN_OSC_B_HARM_BRAID, synOscBHarmBraidRelay);
+        mkAtt(synOscBHarmCarveAttachment, ParameterIDs::SYN_OSC_B_HARM_CARVE, synOscBHarmCarveRelay);
+        mkAtt(synOscBHarmChurnAttachment, ParameterIDs::SYN_OSC_B_HARM_CHURN, synOscBHarmChurnRelay);
+        mkAtt(synOscBHarmRootAttachment, ParameterIDs::SYN_OSC_B_HARM_ROOT, synOscBHarmRootRelay);
+        mkAtt(synOscBHarmShineAttachment, ParameterIDs::SYN_OSC_B_HARM_SHINE, synOscBHarmShineRelay);
+        mkAtt(synOscBHarmWiltAttachment, ParameterIDs::SYN_OSC_B_HARM_WILT, synOscBHarmWiltRelay);
+        mkAtt(synOscBHarmFizzAttachment, ParameterIDs::SYN_OSC_B_HARM_FIZZ, synOscBHarmFizzRelay);
+        mkAtt(synOscCHarmModeAttachment, ParameterIDs::SYN_OSC_C_HARM_MODE, synOscCHarmModeRelay);
+        mkAtt(synOscCHarmSculptAttachment, ParameterIDs::SYN_OSC_C_HARM_SCULPT, synOscCHarmSculptRelay);
+        mkAtt(synOscCHarmHueAttachment, ParameterIDs::SYN_OSC_C_HARM_HUE, synOscCHarmHueRelay);
+        mkAtt(synOscCHarmCountAttachment, ParameterIDs::SYN_OSC_C_HARM_COUNT, synOscCHarmCountRelay);
+        mkAtt(synOscCHarmLeanAttachment, ParameterIDs::SYN_OSC_C_HARM_LEAN, synOscCHarmLeanRelay);
+        mkAtt(synOscCHarmFanAttachment, ParameterIDs::SYN_OSC_C_HARM_FAN, synOscCHarmFanRelay);
+        mkAtt(synOscCHarmGritAttachment, ParameterIDs::SYN_OSC_C_HARM_GRIT, synOscCHarmGritRelay);
+        mkAtt(synOscCHarmBraidAttachment, ParameterIDs::SYN_OSC_C_HARM_BRAID, synOscCHarmBraidRelay);
+        mkAtt(synOscCHarmCarveAttachment, ParameterIDs::SYN_OSC_C_HARM_CARVE, synOscCHarmCarveRelay);
+        mkAtt(synOscCHarmChurnAttachment, ParameterIDs::SYN_OSC_C_HARM_CHURN, synOscCHarmChurnRelay);
+        mkAtt(synOscCHarmRootAttachment, ParameterIDs::SYN_OSC_C_HARM_ROOT, synOscCHarmRootRelay);
+        mkAtt(synOscCHarmShineAttachment, ParameterIDs::SYN_OSC_C_HARM_SHINE, synOscCHarmShineRelay);
+        mkAtt(synOscCHarmWiltAttachment, ParameterIDs::SYN_OSC_C_HARM_WILT, synOscCHarmWiltRelay);
+        mkAtt(synOscCHarmFizzAttachment, ParameterIDs::SYN_OSC_C_HARM_FIZZ, synOscCHarmFizzRelay);
+        mkAtt(synOscDHarmModeAttachment, ParameterIDs::SYN_OSC_D_HARM_MODE, synOscDHarmModeRelay);
+        mkAtt(synOscDHarmSculptAttachment, ParameterIDs::SYN_OSC_D_HARM_SCULPT, synOscDHarmSculptRelay);
+        mkAtt(synOscDHarmHueAttachment, ParameterIDs::SYN_OSC_D_HARM_HUE, synOscDHarmHueRelay);
+        mkAtt(synOscDHarmCountAttachment, ParameterIDs::SYN_OSC_D_HARM_COUNT, synOscDHarmCountRelay);
+        mkAtt(synOscDHarmLeanAttachment, ParameterIDs::SYN_OSC_D_HARM_LEAN, synOscDHarmLeanRelay);
+        mkAtt(synOscDHarmFanAttachment, ParameterIDs::SYN_OSC_D_HARM_FAN, synOscDHarmFanRelay);
+        mkAtt(synOscDHarmGritAttachment, ParameterIDs::SYN_OSC_D_HARM_GRIT, synOscDHarmGritRelay);
+        mkAtt(synOscDHarmBraidAttachment, ParameterIDs::SYN_OSC_D_HARM_BRAID, synOscDHarmBraidRelay);
+        mkAtt(synOscDHarmCarveAttachment, ParameterIDs::SYN_OSC_D_HARM_CARVE, synOscDHarmCarveRelay);
+        mkAtt(synOscDHarmChurnAttachment, ParameterIDs::SYN_OSC_D_HARM_CHURN, synOscDHarmChurnRelay);
+        mkAtt(synOscDHarmRootAttachment, ParameterIDs::SYN_OSC_D_HARM_ROOT, synOscDHarmRootRelay);
+        mkAtt(synOscDHarmShineAttachment, ParameterIDs::SYN_OSC_D_HARM_SHINE, synOscDHarmShineRelay);
+        mkAtt(synOscDHarmWiltAttachment, ParameterIDs::SYN_OSC_D_HARM_WILT, synOscDHarmWiltRelay);
+        mkAtt(synOscDHarmFizzAttachment, ParameterIDs::SYN_OSC_D_HARM_FIZZ, synOscDHarmFizzRelay);
         // ════ GEODE-ENGINE mkAtt ════
         mkAtt(synOscAGeodePositionAttachment, ParameterIDs::SYN_OSC_A_GEODE_POSITION, synOscAGeodePositionRelay);
         mkAtt(synOscAGeodeFossilAttachment, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, synOscAGeodeFossilRelay);
@@ -3612,6 +3674,41 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
            << "],out:" << SF(ro, 3) << ",position:" << SF(rpos, 3) << "});}}catch(e){}";
     }
 
+
+    // ── HARMONIC-ENGINE viz — white partial bars + purple base ghost (60 fps) ──
+    // Four DISPLAY HarmonicEngine instances (message-thread only, display mode: no Nyquist
+    // taper, no budget) rebuild their banks from the processor's latest gathered knobs each
+    // tick; the JS painter lerps bars toward these targets so motion stays 60 fps smooth.
+    {
+        if (! harmDispInit_)
+        {
+            for (int o = 0; o < 4; ++o)
+            {
+                harmDispEng_[(size_t) o].prepare (48000.0, true);
+                harmDispEng_[(size_t) o].setDisplayMode (true);
+                harmDispEng_[(size_t) o].noteOn (110.0, 0xB33D5EEDu + (std::uint32_t) o);
+            }
+            harmDispInit_ = true;
+        }
+        static const char* hOscId[4] = { "'a'", "'b'", "'c'", "'d'" };
+        static const char* hEngIds[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
+                                          ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+        for (int o = 0; o < 4; ++o)
+        {
+            const int engIdx = (int) audioProcessor.getAPVTS().getRawParameterValue (hEngIds[o])->load();
+            if (engIdx != 5) continue;                       // only HARM oscs pay for the bake
+            auto& de = harmDispEng_[(size_t) o];
+            de.setParams (audioProcessor.harmDisplayParams (o));
+            de.prepareBank (800);                            // ~1/60 s at 48 k — animated ops advance
+            float wB[tw::harm::kDispBins], gB[tw::harm::kDispBins];
+            de.displayBins (wB, gB, tw::harm::kDispBins);
+            js << "try{if(window.updateHarmViz){window.updateHarmViz(" << hOscId[o] << ",[";
+            for (int b = 0; b < tw::harm::kDispBins; ++b) { if (b) js << ","; js << (int) (wB[b] * 99.f); }
+            js << "],[";
+            for (int b = 0; b < tw::harm::kDispBins; ++b) { if (b) js << ","; js << (int) (gB[b] * 99.f); }
+            js << "]);}}catch(e){}";
+        }
+    }
 
     // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──
     // Read the lock-free oscScope atoms published by the audio thread and hand them

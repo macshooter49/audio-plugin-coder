@@ -15,6 +15,7 @@
 #include "SampleBuffer.h"          // SAMPLE-ENGINE-VOICE — shared lock-free buffer
 #include "GranularEngine.h"        // GRANULAR-ENGINE-VOICE — per-OSC granular core
 #include "GeodeEngine.h"           // GEODE-ENGINE-VOICE — per-OSC resynthesis core (Engine::SPEC)
+#include "HarmonicEngine.h"       // HARMONIC-ENGINE-VOICE — per-OSC additive bank (Engine::HARM)
 #include "Warp/WarpProcessor.h"    // SAMPLE-ENGINE-VOICE — STRETCH + FORMANT (Signalsmith Tones)
 #include <atomic>
 #include <array>
@@ -42,8 +43,9 @@ namespace tw
         SynthVoice() = default;
 
         /** Phase 3 — OSC engine choice. Order matches the SYN_OSC_A_ENGINE
-         *  StringArray in createParameterLayout: WT, SAMP, GRAN, SPEC, FM, NOISE. */
-        enum class Engine : int { WT = 0, SAMP = 1, GRAN = 2, SPEC = 3, FM = 4, NOISE = 5 };
+         *  StringArray in createParameterLayout: WT, SAMP, GRAN, SPEC, FM, HARM (slot 5
+         *  was the never-exposed NOISE engine — ID frozen, meaning remapped to HARMONIC). */
+        enum class Engine : int { WT = 0, SAMP = 1, GRAN = 2, SPEC = 3, FM = 4, HARM = 5 };
 
         static constexpr int kMaxUnison = 16;   // Serum-parity unison ceiling (was 8)
 
@@ -69,6 +71,10 @@ namespace tw
             for (auto& e : granEngC_) e.prepare (sampleRate_);  for (auto& e : granEngD_) e.prepare (sampleRate_);
             for (auto& e : geodeEngA_) e.prepare (sampleRate_);  for (auto& e : geodeEngB_) e.prepare (sampleRate_);   // GEODE-ENGINE-VOICE
             for (auto& e : geodeEngC_) e.prepare (sampleRate_);  for (auto& e : geodeEngD_) e.prepare (sampleRate_);
+            { int u = 0; for (auto& e : harmEngA_) e.prepare (sampleRate_, u++ == 0); }   // HARMONIC-ENGINE-VOICE
+            { int u = 0; for (auto& e : harmEngB_) e.prepare (sampleRate_, u++ == 0); }   //  (index 0 = bank anchor)
+            { int u = 0; for (auto& e : harmEngC_) e.prepare (sampleRate_, u++ == 0); }
+            { int u = 0; for (auto& e : harmEngD_) e.prepare (sampleRate_, u++ == 0); }
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
             airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
@@ -564,7 +570,15 @@ namespace tw
             for (auto& e : geodeEngB_) e.setPartialBudget (used, cap);
             for (auto& e : geodeEngC_) e.setPartialBudget (used, cap);
             for (auto& e : geodeEngD_) e.setPartialBudget (used, cap);
+            for (auto& e : harmEngA_) e.setPartialBudget (used, cap);   // HARMONIC-ENGINE-VOICE — same pool
+            for (auto& e : harmEngB_) e.setPartialBudget (used, cap);
+            for (auto& e : harmEngC_) e.setPartialBudget (used, cap);
+            for (auto& e : harmEngD_) e.setPartialBudget (used, cap);
         }
+        void setHarmParamsA (const tw::HarmParams& p) noexcept { harmParamsA_ = p; }   // HARMONIC-ENGINE-PUSH
+        void setHarmParamsB (const tw::HarmParams& p) noexcept { harmParamsB_ = p; }
+        void setHarmParamsC (const tw::HarmParams& p) noexcept { harmParamsC_ = p; }
+        void setHarmParamsD (const tw::HarmParams& p) noexcept { harmParamsD_ = p; }
         void setGeodeParamsA (const tw::GeodeParams& p) noexcept { geodeParamsA_ = p; }
         void setGeodeParamsB (const tw::GeodeParams& p) noexcept { geodeParamsB_ = p; }
         void setGeodeParamsC (const tw::GeodeParams& p) noexcept { geodeParamsC_ = p; }
@@ -1235,6 +1249,7 @@ namespace tw
             sampleNoteOnPending_ = true;
             granNoteOnPending_   = true;   // GRANULAR-ENGINE-VOICE
             geodeNoteOnPending_  = true;   // GEODE-ENGINE-VOICE
+            harmNoteOnPending_   = true;   // HARMONIC-ENGINE-VOICE
 
             // PHASE — initialise each unison sine's phase accumulator per the selected
             // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
@@ -1791,14 +1806,15 @@ namespace tw
             renderSampleBlocks (numSamples);
             renderGranularBlocks (numSamples);   // GRANULAR-ENGINE-VOICE — render any GRAN oscillators' blocks
             renderGeodeBlocks (numSamples);      // GEODE-ENGINE-VOICE — render any SPEC oscillators' blocks
+            renderHarmonicBlocks (numSamples);   // HARMONIC-ENGINE-VOICE — render any HARM oscillators' blocks
 
             // CPU: SAMP/GRAN/SPEC oscs render whole blocks above and their result REPLACES the
             // unison sum below — the per-sine u-loop only produces zeros for them (fold of 0,
             // two pan MACs, discarded). Skip it entirely; the sums already start at 0.
-            const bool uLoopA = ! oscDead_[0] && (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC);
-            const bool uLoopB = ! oscDead_[1] && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC);
-            const bool uLoopC = ! oscDead_[2] && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC);
-            const bool uLoopD = ! oscDead_[3] && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC);
+            const bool uLoopA = ! oscDead_[0] && (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC && engine_  != Engine::HARM);
+            const bool uLoopB = ! oscDead_[1] && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC && engineB_ != Engine::HARM);
+            const bool uLoopC = ! oscDead_[2] && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC && engineC_ != Engine::HARM);
+            const bool uLoopD = ! oscDead_[3] && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM);
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
@@ -1850,26 +1866,6 @@ namespace tw
                             break;
                         }
 
-                        case Engine::NOISE:
-                        {
-                            // Noise is a single stream per voice — all unison sines hear the
-                            // same noise sample. Compute PRNG + LP filter once at u==0,
-                            // then broadcast the same noiseLpZ_ to all sines.
-                            if (u == 0)
-                            {
-                                noiseState_ ^= noiseState_ << 13;
-                                noiseState_ ^= noiseState_ >> 17;
-                                noiseState_ ^= noiseState_ << 5;
-                                const float white = static_cast<float> (static_cast<int32_t> (noiseState_))
-                                                  * (1.0f / 2147483648.0f);
-                                const float alpha = 1.0f - 0.98f * framePos_;
-                                noiseLpZ_ += alpha * (white - noiseLpZ_);
-                            }
-                            const float drive = 1.0f + 8.0f * warpAmount_;
-                            sAu = std::tanh (noiseLpZ_ * drive);
-                            sAu *= 1.0f + 0.5f * framePos_;
-                            break;
-                        }
 
                         case Engine::FM:
                         {
@@ -1936,6 +1932,7 @@ namespace tw
                         case Engine::SAMP:
                         case Engine::GRAN:
                         case Engine::SPEC:
+                        case Engine::HARM:
                             sAu = 0.0f; break;
                     }
 
@@ -1959,6 +1956,7 @@ namespace tw
                 { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
                 if (engine_ == Engine::GRAN) { sA_L = granBlkAL_[(size_t) i]; sA_R = granBlkAR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engine_ == Engine::SPEC) { sA_L = geodeBlkAL_[(size_t) i]; sA_R = geodeBlkAR_[(size_t) i]; } // GEODE-ENGINE-VOICE
+                if (engine_ == Engine::HARM) { sA_L = harmBlkAL_[(size_t) i]; sA_R = harmBlkAR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airA = sampleParamsA_.air;   // AIR exciter — add generated high harmonics
                     if (airA > 0.001f) {
@@ -1973,7 +1971,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engine_ == Engine::SAMP || engine_ == Engine::GRAN || engine_ == Engine::SPEC) {
+                if (engine_ == Engine::SAMP || engine_ == Engine::GRAN || engine_ == Engine::SPEC || engine_ == Engine::HARM) {
                     const float warpA = sampleParamsA_.warp;
                     if (warpA > 0.001f) {
                         switch (sampleParamsA_.warpMode) {
@@ -2141,24 +2139,6 @@ namespace tw
                             break;
                         }
 
-                        case Engine::NOISE:
-                        {
-                            // OSC B noise is single-stream per voice — all unison sines hear the same noise.
-                            if (u == 0)
-                            {
-                                noiseStateB_ ^= noiseStateB_ << 13;
-                                noiseStateB_ ^= noiseStateB_ >> 17;
-                                noiseStateB_ ^= noiseStateB_ << 5;
-                                const float white = static_cast<float> (static_cast<int32_t> (noiseStateB_))
-                                                  * (1.0f / 2147483648.0f);
-                                const float alpha = 1.0f - 0.98f * framePosB_;
-                                noiseLpZB_ += alpha * (white - noiseLpZB_);
-                            }
-                            const float drive = 1.0f + 8.0f * warpAmountB_;
-                            sBu = std::tanh (noiseLpZB_ * drive);
-                            sBu *= 1.0f + 0.5f * framePosB_;
-                            break;
-                        }
 
                         case Engine::FM:
                         {
@@ -2213,6 +2193,7 @@ namespace tw
                         case Engine::SAMP:
                         case Engine::GRAN:
                         case Engine::SPEC:
+                        case Engine::HARM:
                             sBu = 0.0f; break;
                     }
 
@@ -2235,6 +2216,7 @@ namespace tw
                 { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
                 if (engineB_ == Engine::GRAN) { sB_L = granBlkBL_[(size_t) i]; sB_R = granBlkBR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineB_ == Engine::SPEC) { sB_L = geodeBlkBL_[(size_t) i]; sB_R = geodeBlkBR_[(size_t) i]; } // GEODE-ENGINE-VOICE
+                if (engineB_ == Engine::HARM) { sB_L = harmBlkBL_[(size_t) i]; sB_R = harmBlkBR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airB = sampleParamsB_.air;   // AIR exciter — add generated high harmonics
                     if (airB > 0.001f) {
@@ -2249,7 +2231,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineB_ == Engine::SAMP || engineB_ == Engine::GRAN || engineB_ == Engine::SPEC) {
+                if (engineB_ == Engine::SAMP || engineB_ == Engine::GRAN || engineB_ == Engine::SPEC || engineB_ == Engine::HARM) {
                     const float warpB = sampleParamsB_.warp;
                     if (warpB > 0.001f) {
                         switch (sampleParamsB_.warpMode) {
@@ -2414,24 +2396,6 @@ namespace tw
                             break;
                         }
 
-                        case Engine::NOISE:
-                        {
-                            // OSC C noise is single-stream per voice — all unison sines hear the same noise.
-                            if (u == 0)
-                            {
-                                noiseStateC_ ^= noiseStateC_ << 13;
-                                noiseStateC_ ^= noiseStateC_ >> 17;
-                                noiseStateC_ ^= noiseStateC_ << 5;
-                                const float white = static_cast<float> (static_cast<int32_t> (noiseStateC_))
-                                                  * (1.0f / 2147483648.0f);
-                                const float alpha = 1.0f - 0.98f * framePosC_;
-                                noiseLpZC_ += alpha * (white - noiseLpZC_);
-                            }
-                            const float drive = 1.0f + 8.0f * warpAmountC_;
-                            sCu = std::tanh (noiseLpZC_ * drive);
-                            sCu *= 1.0f + 0.5f * framePosC_;
-                            break;
-                        }
 
                         case Engine::FM:
                         {
@@ -2486,6 +2450,7 @@ namespace tw
                         case Engine::SAMP:
                         case Engine::GRAN:
                         case Engine::SPEC:
+                        case Engine::HARM:
                             sCu = 0.0f; break;
                     }
 
@@ -2508,6 +2473,7 @@ namespace tw
                 { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
                 if (engineC_ == Engine::GRAN) { sC_L = granBlkCL_[(size_t) i]; sC_R = granBlkCR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineC_ == Engine::SPEC) { sC_L = geodeBlkCL_[(size_t) i]; sC_R = geodeBlkCR_[(size_t) i]; } // GEODE-ENGINE-VOICE
+                if (engineC_ == Engine::HARM) { sC_L = harmBlkCL_[(size_t) i]; sC_R = harmBlkCR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airC = sampleParamsC_.air;   // AIR exciter — add generated high harmonics
                     if (airC > 0.001f) {
@@ -2522,7 +2488,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineC_ == Engine::SAMP || engineC_ == Engine::GRAN || engineC_ == Engine::SPEC) {
+                if (engineC_ == Engine::SAMP || engineC_ == Engine::GRAN || engineC_ == Engine::SPEC || engineC_ == Engine::HARM) {
                     const float warpC = sampleParamsC_.warp;
                     if (warpC > 0.001f) {
                         switch (sampleParamsC_.warpMode) {
@@ -2687,24 +2653,6 @@ namespace tw
                             break;
                         }
 
-                        case Engine::NOISE:
-                        {
-                            // OSC D noise is single-stream per voice — all unison sines hear the same noise.
-                            if (u == 0)
-                            {
-                                noiseStateD_ ^= noiseStateD_ << 13;
-                                noiseStateD_ ^= noiseStateD_ >> 17;
-                                noiseStateD_ ^= noiseStateD_ << 5;
-                                const float white = static_cast<float> (static_cast<int32_t> (noiseStateD_))
-                                                  * (1.0f / 2147483648.0f);
-                                const float alpha = 1.0f - 0.98f * framePosD_;
-                                noiseLpZD_ += alpha * (white - noiseLpZD_);
-                            }
-                            const float drive = 1.0f + 8.0f * warpAmountD_;
-                            sDu = std::tanh (noiseLpZD_ * drive);
-                            sDu *= 1.0f + 0.5f * framePosD_;
-                            break;
-                        }
 
                         case Engine::FM:
                         {
@@ -2759,6 +2707,7 @@ namespace tw
                         case Engine::SAMP:
                         case Engine::GRAN:
                         case Engine::SPEC:
+                        case Engine::HARM:
                             sDu = 0.0f; break;
                     }
 
@@ -2781,6 +2730,7 @@ namespace tw
                 { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
                 if (engineD_ == Engine::GRAN) { sD_L = granBlkDL_[(size_t) i]; sD_R = granBlkDR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineD_ == Engine::SPEC) { sD_L = geodeBlkDL_[(size_t) i]; sD_R = geodeBlkDR_[(size_t) i]; } // GEODE-ENGINE-VOICE
+                if (engineD_ == Engine::HARM) { sD_L = harmBlkDL_[(size_t) i]; sD_R = harmBlkDR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
                     const float airD = sampleParamsD_.air;   // AIR exciter — add generated high harmonics
                     if (airD > 0.001f) {
@@ -2795,7 +2745,7 @@ namespace tw
                 //    quiet; Drive/Fold/Sine Shaper is how a low one-shot gets turned UP). The
                 //    granular AIR lives in-engine; the shaper state is per-osc, and an osc is
                 //    only ever ONE of SAMP/GRAN, so reusing the DC-block/fold state is safe. ──
-                if (engineD_ == Engine::SAMP || engineD_ == Engine::GRAN || engineD_ == Engine::SPEC) {
+                if (engineD_ == Engine::SAMP || engineD_ == Engine::GRAN || engineD_ == Engine::SPEC || engineD_ == Engine::HARM) {
                     const float warpD = sampleParamsD_.warp;
                     if (warpD > 0.001f) {
                         switch (sampleParamsD_.warpMode) {
@@ -3691,6 +3641,16 @@ namespace tw
         const float *geodeBlkAL_ = nullptr, *geodeBlkAR_ = nullptr, *geodeBlkBL_ = nullptr, *geodeBlkBR_ = nullptr,
                     *geodeBlkCL_ = nullptr, *geodeBlkCR_ = nullptr, *geodeBlkDL_ = nullptr, *geodeBlkDR_ = nullptr;
         bool geodeNoteOnPending_ = false;
+
+        // ── HARMONIC-ENGINE-VOICE (Engine::HARM, slot 5) — per-osc procedural additive banks.
+        // Index 0 of each array = the unison ANCHOR (owns the spectrum-build arrays); siblings
+        // are render-state-only and borrow the anchor's bank via adoptBank() every block.
+        std::array<tw::HarmonicEngine, kMaxUnison> harmEngA_, harmEngB_, harmEngC_, harmEngD_;
+        tw::HarmParams harmParamsA_, harmParamsB_, harmParamsC_, harmParamsD_;
+        juce::AudioBuffer<float> harmBlkA_, harmBlkB_, harmBlkC_, harmBlkD_;
+        const float *harmBlkAL_ = nullptr, *harmBlkAR_ = nullptr, *harmBlkBL_ = nullptr, *harmBlkBR_ = nullptr,
+                    *harmBlkCL_ = nullptr, *harmBlkCR_ = nullptr, *harmBlkDL_ = nullptr, *harmBlkDR_ = nullptr;
+        bool harmNoteOnPending_ = false;
         std::uint32_t sampleSprayRng_ = 0x12345u, spraySeedA_ = 0, spraySeedB_ = 0, spraySeedC_ = 0, spraySeedD_ = 0;
         // AIR exciter — per-voice/per-channel one-pole HP-split state + coefficient.
         float sampAirLpAL_ = 0.f, sampAirLpAR_ = 0.f, sampAirLpBL_ = 0.f, sampAirLpBR_ = 0.f,
@@ -4077,6 +4037,78 @@ namespace tw
             renderGeodeOsc (geodeEngC_, geodeParamsC_, engineC_ == Engine::SPEC, octOffsetC_, semiOffsetC_, centsOffsetC_, geodeBlkC_, geodeBlkCL_, geodeBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
             renderGeodeOsc (geodeEngD_, geodeParamsD_, engineD_ == Engine::SPEC, octOffsetD_, semiOffsetD_, centsOffsetD_, geodeBlkD_, geodeBlkDL_, geodeBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             geodeNoteOnPending_ = false;
+        }
+
+        // ════════ HARMONIC-ENGINE-VOICE — render HARM oscillators' stereo blocks ════════
+        // Mirrors renderGeodeOsc minus the frame store: the spectrum is procedural (built from
+        // HarmParams every block). Constant-cost unison: the ANCHOR builds the sculpted bank
+        // once; siblings adopt the pointer and render their own detuned phase sets. Pitch is
+        // pushed LIVE every block (setPlayedHz) so oct/semi/cents moves retune mid-note.
+        void renderHarmonicOsc (std::array<tw::HarmonicEngine, kMaxUnison>& engs,
+                                const tw::HarmParams& p, bool isHarm,
+                                int oct, int semi, float cent,
+                                juce::AudioBuffer<float>& blk,
+                                const float*& outL, const float*& outR,
+                                int numSamples, std::uint32_t seed, bool doNoteOn,
+                                int uniCount, const float* uDetuneCents, float uNorm, float level) noexcept
+        {
+            if (blk.getNumChannels() < 2 || blk.getNumSamples() < numSamples)
+                blk.setSize (2, numSamples, false, false, true);
+            float* wL = blk.getWritePointer (0);
+            float* wR = blk.getWritePointer (1);
+            outL = wL; outR = wR;
+            if (! isHarm) return;   // CPU: this block is never read for a non-HARM osc
+            if (level <= 0.0f)
+            {
+                juce::FloatVectorOperations::clear (wL, numSamples);
+                juce::FloatVectorOperations::clear (wR, numSamples);
+                return;
+            }
+            const double noteSemis = (double) (currentMidiNote_ - 69 + oct * 12 + semi) + (double) cent * 0.01;
+            const double playedHz  = 440.0 * std::pow (2.0, noteSemis / 12.0);
+            const int    N         = juce::jlimit (1, kMaxUnison, uniCount);
+            engs[0].setParams (p);
+            engs[0].setUnisonScale (N);
+            for (int u = 0; u < N; ++u)
+            {
+                auto& e = engs[(size_t) u];
+                const double det = (uDetuneCents != nullptr) ? std::pow (2.0, (double) uDetuneCents[(size_t) u] / 1200.0) : 1.0;
+                e.setPlayedHz (playedHz * det);
+                if (doNoteOn)
+                {
+                    const std::uint32_t vSeed = (N <= 1) ? seed : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1)));
+                    e.noteOn (playedHz * det, vSeed);
+                }
+            }
+            juce::FloatVectorOperations::clear (wL, numSamples);
+            juce::FloatVectorOperations::clear (wR, numSamples);
+            if (! engs[0].prepareBank (numSamples)) return;
+            engs[0].reserveBudget();
+            for (int u = 1; u < N; ++u)
+            {
+                engs[(size_t) u].adoptBank (engs[0]);
+                engs[(size_t) u].renderBankAdd (wL, wR, numSamples);
+            }
+            if (N > 1)
+            {
+                juce::FloatVectorOperations::multiply (wL, uNorm, numSamples);
+                juce::FloatVectorOperations::multiply (wR, uNorm, numSamples);
+            }
+            engs[0].releaseBudget();
+            engs[0].renderBankAdd (wL, wR, numSamples);
+        }
+
+        void renderHarmonicBlocks (int numSamples) noexcept
+        {
+            if (engine_ != Engine::HARM && engineB_ != Engine::HARM
+                && engineC_ != Engine::HARM && engineD_ != Engine::HARM)
+                return;   // no HARM oscillators → free no-op (common case)
+            const bool doOn = harmNoteOnPending_;
+            renderHarmonicOsc (harmEngA_, harmParamsA_, engine_  == Engine::HARM, octOffset_,  semiOffset_,  centsOffset_,  harmBlkA_, harmBlkAL_, harmBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderHarmonicOsc (harmEngB_, harmParamsB_, engineB_ == Engine::HARM, octOffsetB_, semiOffsetB_, centsOffsetB_, harmBlkB_, harmBlkBL_, harmBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderHarmonicOsc (harmEngC_, harmParamsC_, engineC_ == Engine::HARM, octOffsetC_, semiOffsetC_, centsOffsetC_, harmBlkC_, harmBlkCL_, harmBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderHarmonicOsc (harmEngD_, harmParamsD_, engineD_ == Engine::HARM, octOffsetD_, semiOffsetD_, centsOffsetD_, harmBlkD_, harmBlkDL_, harmBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            harmNoteOnPending_ = false;
         }
 
         Engine               engine_           = Engine::WT;

@@ -218,9 +218,9 @@ struct SynthVoiceEngineTests : public juce::UnitTest
         tw::SynthVoice v;
         v.setEngine (0); expect (v.engineForTesting() == tw::SynthVoice::Engine::WT);
         v.setEngine (4); expect (v.engineForTesting() == tw::SynthVoice::Engine::FM);
-        v.setEngine (5); expect (v.engineForTesting() == tw::SynthVoice::Engine::NOISE);
+        v.setEngine (5); expect (v.engineForTesting() == tw::SynthVoice::Engine::HARM);
         v.setEngine (-1); expect (v.engineForTesting() == tw::SynthVoice::Engine::WT);   // clamps low
-        v.setEngine (99); expect (v.engineForTesting() == tw::SynthVoice::Engine::NOISE); // clamps high
+        v.setEngine (99); expect (v.engineForTesting() == tw::SynthVoice::Engine::HARM); // clamps high
     }
 };
 
