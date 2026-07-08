@@ -566,8 +566,10 @@ public:
 
         if (drive > 1e-3f)
         {
-            const float g  = 1.f + drive * 9.f;          // pre-gain into the shaper
-            const float mk = 1.f / (1.f + drive * 3.5f); // makeup so level doesn't jump
+            // AMPLIFIED: slams the shaper (g up to ~37×) with only gentle makeup, so DRIVE gets LOUDER
+            // and harmonically denser as you push it — 100% is meant to be ear-blasting, 50% already hot.
+            const float g  = 1.f + drive * 36.f;         // pre-gain into the shaper
+            const float mk = 1.f / (1.f + drive * 0.8f); // gentle makeup (0.56 at full) → level jumps UP
             for (int i = 0; i < n; ++i)
             {
                 L[i] = softClip (L[i] * g) * mk;
@@ -697,6 +699,32 @@ private:
         return t[(size_t) i] + (t[(size_t) (i + 1)] - t[(size_t) i]) * f;
     }
 
+    // SHAPE target harmonic weight W(n) = the amplitude of harmonic n for each target waveform.
+    // Research-derived Fourier recipes (all bounded ~[0,1.1]); n = harmonic index ≥ 1. Adding a target
+    // = one case here + one entry in the GEODE_SHAPE_TARGET StringArray + one menu label.
+    static inline float shapeWeight (int target, int n) noexcept
+    {
+        const float fn = (float) n;
+        switch (target)
+        {
+            case 0:  return (n == 1) ? 1.f : 0.f;                                   // Sine  — fundamental only
+            case 1:  return (n & 1) ? 1.f / fn : 0.f;                               // Square — odd 1/n
+            case 2:  return 1.f / fn;                                               // Saw    — all 1/n
+            case 3:  return (n & 1) ? 1.f / (fn * fn) : 0.f;                        // Triangle — odd 1/n²
+            case 4:  return std::fabs (std::sin (fn * geode::kPi * 0.28f)) / fn;    // Pulse  — |sin(nπd)|/n, d≈0.28
+            case 5:  return (n & 1) ? std::pow (fn, -1.5f) : 0.f;                   // Hollow — odd 1/n^1.5 (clarinet)
+            case 6:  switch (n) { case 1: return 1.f;  case 2: return 0.8f; case 3: return 0.6f;   // Organ drawbar
+                                  case 4: return 0.5f; case 5: return 0.4f; case 6: return 0.3f;
+                                  case 8: return 0.25f; default: return 0.f; }
+            case 7:  return (n == 1) ? 0.5f : ((n & 1) ? 0.f : (2.f / geode::kPi) / (fn * fn - 1.f)); // Half-wave
+            case 8:  { const float a = fn - 3.f, b = fn - 9.f;                      // Vowel "ah" (formant bumps @ n≈3,9)
+                       return std::exp (-a * a / 4.5f) + 0.7f * std::exp (-b * b / 8.f); }
+            case 9:  return std::pow (fn, -0.6f);                                   // Bright — 1/n^0.6 (supersaw-ish)
+            case 10: return std::pow (fn, 0.3f) * std::exp (-fn / 12.f) * (n == 1 ? 0.4f : 1.f);   // Metal — clang/tine
+            default: return 1.f / fn;
+        }
+    }
+
     // sculpt the working partial bank in place. AMPLITUDE-domain, except SHAPE may glide OVERTONE
     // ratios onto exact harmonics (it tunes them — the fundamental at ratio 1 never moves, so the
     // played pitch is fixed). Order: SHAPE → FORMANT → TILT → CUT → SIEVE. All identity at neutral.
@@ -713,7 +741,7 @@ private:
         //   (c) blends each amplitude toward the Chebyshev target weight W(n): saw = 1/n (all),
         //       square = 1/n (odd only), sine = fundamental only.
         // At SHAPE=1 the bank is a clean saw/square/sine at the note pitch.
-        const float shape = clamp01 (p_.shape);
+        const float shape = std::pow (clamp01 (p_.shape), 0.72f);   // amplified: reaches fuller morph earlier
         if (shape > 1e-3f && nP > 0)
         {
             float ref = 1e-9f;
@@ -745,14 +773,7 @@ private:
                 const int nH  = (int) (r + 0.5f);                 // nearest integer harmonic (r≥0.75 ⇒ nH≥1)
                 const int nHc = nH > kMaxH ? kMaxH : nH;
                 wr_.ratio[(size_t) j] = r + ((float) nH - r) * shape;   // glide onto the harmonic (fund stays 1 → pitch fixed)
-                float w = 0.f;                                    // non-elected partials → fade out (w=0)
-                if (winner[nHc] == j)
-                    switch (p_.shapeTarget)
-                    {
-                        case 0:  w = (nH == 1) ? 1.f : 0.f; break;                  // sine (fundamental only)
-                        case 1:  w = (nH & 1) ? 1.f / (float) nH : 0.f; break;      // square (odd 1/n)
-                        default: w = 1.f / (float) nH; break;                       // saw (all 1/n)
-                    }
+                const float w = (winner[nHc] == j) ? shapeWeight (p_.shapeTarget, nH) : 0.f;  // non-elected → fade
                 const float target = ref * w;
                 wr_.amp[(size_t) j] = wr_.amp[(size_t) j] * (1.f - shape) + target * shape;
             }
@@ -786,24 +807,26 @@ private:
             }
         }
 
-        // ── TILT — bipolar spectral tilt about ratio 1.0 (bright/dark) ──
+        // ── TILT — bipolar spectral tilt about ratio 1.0 (bright/dark). Amplified: ±3.2 exponent so
+        // it goes from fully dark to screaming bright well before the extremes. ──
         const float tilt = (p_.tilt - 0.5f) * 2.f;   // -1..+1
         if (std::fabs (tilt) > 1e-3f)
             for (int j = 0; j < nP; ++j)
             {
                 if (wr_.amp[(size_t) j] <= 0.f) continue;
                 const float r = std::max (0.05f, wr_.ratio[(size_t) j]);
-                wr_.amp[(size_t) j] *= std::pow (r, tilt * 1.5f);
+                wr_.amp[(size_t) j] *= std::pow (r, tilt * 3.2f);
             }
 
         // ── CUT — spectral filter, LP (remove highs) or HP (remove lows), ~24 dB/oct ──
-        // 1.0 = fully open; turning DOWN filters harder. Bites by ~20% of travel (Max: audible early).
+        // 1.0 = fully open; turning DOWN filters harder. The cutoff sweeps EXPONENTIALLY across the whole
+        // knob (like a real filter freq) so it's audible everywhere — not crammed into the bottom 15%.
         if (p_.cut < 0.999f)
         {
             const float knob = clamp01 (p_.cut);
             if (p_.cutMode == 0) // LP
             {
-                const float cutR = 0.5f + knob * knob * 48.f;   // knob 0.2 → ~2.4× fund (bites)
+                const float cutR = 0.6f * std::pow (140.f, knob);   // knob 0→0.6× · 0.5→7× · 1→84× (open)
                 for (int j = 0; j < nP; ++j)
                     if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] > cutR)
                     {
@@ -813,7 +836,7 @@ private:
             }
             else // HP
             {
-                const float cutR = 0.5f + (1.f - knob) * (1.f - knob) * 24.f;
+                const float cutR = 0.5f * std::pow (90.f, 1.f - knob);   // knob 1→0.5× (open) · 0.5→4.7× · 0→45×
                 for (int j = 0; j < nP; ++j)
                     if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] < cutR)
                     {
@@ -823,13 +846,15 @@ private:
             }
         }
 
-        // ── SIEVE — spectral gate: drop partials below a rising threshold (the lossy hero) ──
+        // ── SIEVE — spectral gate: drop partials below a rising threshold (the lossy hero). Amplified:
+        // sqrt curve so it bites HARD early (knob 0.5 already strips to ~70% of peak = very lossy;
+        // knob 1 leaves only the loudest partial or two = near-sine "data gone"). ──
         const float sieve = clamp01 (p_.sieve);
         if (sieve > 1e-3f)
         {
             float mx = 1e-9f;
             for (int j = 0; j < nP; ++j) mx = std::max (mx, wr_.amp[(size_t) j]);
-            const float thr = mx * sieve * 0.9f;
+            const float thr = mx * std::sqrt (sieve) * 0.97f;
             for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] < thr) wr_.amp[(size_t) j] = 0.f;
         }
     }

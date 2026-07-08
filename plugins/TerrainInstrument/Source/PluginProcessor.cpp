@@ -2359,7 +2359,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         F (id[14], "Bedrock", 0.5f);   // RESERVED (unused)
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { id[15], 1 }, "Synth OSC " + osc + " Resynth Shape Target",
-            juce::StringArray { "Sine", "Square", "Saw" }, 2));   // default Saw
+            juce::StringArray { "Sine", "Square", "Saw", "Triangle", "Pulse", "Hollow",
+                                "Organ", "Half", "Vowel", "Bright", "Metal" }, 2));   // default Saw (0..10 = shapeWeight cases)
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { id[16], 1 }, "Synth OSC " + osc + " Resynth Cut Mode",
             juce::StringArray { "LP", "HP" }, 0));                // default LP

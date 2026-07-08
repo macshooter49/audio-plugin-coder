@@ -78,6 +78,10 @@ int main()
     { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = 2; check ("shape=saw", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = 1; check ("shape=square", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = 0; check ("shape=sine", renderFund (p, st, playHz, sr)); }
+    // all 11 SHAPE targets must keep the played fundamental (they tune overtones onto harmonics)
+    { const char* shN[11] = { "sine","square","saw","triangle","pulse","hollow","organ","half","vowel","bright","metal" };
+      for (int t = 3; t <= 10; ++t) { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = t;
+        char nm[28]; std::snprintf (nm, sizeof nm, "shape=%s", shN[t]); check (nm, renderFund (p, st, playHz, sr)); } }
     { GeodeParams p = base; p.drive = 1.0f; check ("drive=1.0", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.crush = 0.8f; check ("crush=0.8", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.cut = 0.4f; p.cutMode = 0; check ("cut=LP.4", renderFund (p, st, playHz, sr)); }
