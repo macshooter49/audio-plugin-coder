@@ -83,6 +83,17 @@ int main()
       for (int t = 3; t <= 10; ++t) { GeodeParams p = base; p.shape = 1.0f; p.shapeTarget = t;
         char nm[28]; std::snprintf (nm, sizeof nm, "shape=%s", shN[t]); check (nm, renderFund (p, st, playHz, sr)); } }
     { GeodeParams p = base; p.drive = 1.0f; check ("drive=1.0", renderFund (p, st, playHz, sr)); }
+    // rs6 — every DRIVE mode keeps the played fundamental (spectral children ≥ 0.75×fund; folders period-preserving)
+    { const char* dm[6] = { "saturate","bloom","glint","moire","foldback","ember" };
+      for (int m = 1; m <= 5; ++m) { GeodeParams p = base; p.drive = 0.9f; p.driveMode = m;
+        char nm[28]; std::snprintf (nm, sizeof nm, "drive=%s", dm[m]); check (nm, renderFund (p, st, playHz, sr)); } }
+    // rs6 — every SIEVE mode keeps the fundamental (they only kill/attenuate partials; loudest = fund survives)
+    { const char* sm[6] = { "floor","sparse","cloak","flicker","rake","parity" };
+      for (int m = 1; m <= 5; ++m) { GeodeParams p = base; p.sieve = 0.6f; p.sieveMode = m;
+        char nm[28]; std::snprintf (nm, sizeof nm, "sieve=%s", sm[m]); check (nm, renderFund (p, st, playHz, sr)); } }
+    // rs6 — MELT (temporal smear) + QUALITY-as-bitrate extremes stay in tune
+    { GeodeParams p = base; p.smear = 0.9f; check ("melt=0.9", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.quality = 0.05f; check ("quality=trash", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.crush = 0.8f; check ("crush=0.8", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.cut = 0.4f; p.cutMode = 0; check ("cut=LP.4", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.sieve = 0.5f; check ("sieve=0.5", renderFund (p, st, playHz, sr)); }
@@ -135,6 +146,7 @@ int main()
         int live = 0;
         GeodeParams wp; wp.quality = 1.0f; wp.stretch = 0.98f; wp.scan = 0.5f;      // STRETCH pad
         wp.formant = 1.0f; wp.tilt = 0.9f; wp.shape = 1.0f; wp.cut = 0.4f; wp.drive = 0.7f; // all sculpt ON
+        wp.smear = 0.8f; wp.driveMode = 1; wp.sieve = 0.3f; wp.sieveMode = 2;       // rs6 kitchen sink: MELT + BLOOM children + CLOAK O(n²)
         for (int i = 0; i < banks; ++i)
         { auto& e = engs[(size_t) i]; e.prepare (sr); e.setFrameStore (&st);
           e.setPartialBudget (&live, BUD); e.setUnisonScale (16);

@@ -613,6 +613,14 @@ private:
     juce::WebSliderRelay synOscBGeodeCutModeRelay { ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE };
     juce::WebSliderRelay synOscCGeodeCutModeRelay { ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE };
     juce::WebSliderRelay synOscDGeodeCutModeRelay { ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE };
+    juce::WebSliderRelay synOscAGeodeDriveModeRelay { ParameterIDs::SYN_OSC_A_GEODE_DRIVE_MODE };
+    juce::WebSliderRelay synOscBGeodeDriveModeRelay { ParameterIDs::SYN_OSC_B_GEODE_DRIVE_MODE };
+    juce::WebSliderRelay synOscCGeodeDriveModeRelay { ParameterIDs::SYN_OSC_C_GEODE_DRIVE_MODE };
+    juce::WebSliderRelay synOscDGeodeDriveModeRelay { ParameterIDs::SYN_OSC_D_GEODE_DRIVE_MODE };
+    juce::WebSliderRelay synOscAGeodeSieveModeRelay { ParameterIDs::SYN_OSC_A_GEODE_SIEVE_MODE };
+    juce::WebSliderRelay synOscBGeodeSieveModeRelay { ParameterIDs::SYN_OSC_B_GEODE_SIEVE_MODE };
+    juce::WebSliderRelay synOscCGeodeSieveModeRelay { ParameterIDs::SYN_OSC_C_GEODE_SIEVE_MODE };
+    juce::WebSliderRelay synOscDGeodeSieveModeRelay { ParameterIDs::SYN_OSC_D_GEODE_SIEVE_MODE };
     // ── GRAIN-EXPANDED-RELAYS — the 8 reassignable functions (8 × 4 osc) ──
     juce::WebSliderRelay synOscAGrainPositionRelay { ParameterIDs::SYN_OSC_A_GRAIN_POSITION };
     juce::WebSliderRelay synOscAGrainPitchRelay    { ParameterIDs::SYN_OSC_A_GRAIN_PITCH };
@@ -1173,6 +1181,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeBedrockAttachment, synOscBGeodeBedrockAttachment, synOscCGeodeBedrockAttachment, synOscDGeodeBedrockAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeShapeTargetAttachment, synOscBGeodeShapeTargetAttachment, synOscCGeodeShapeTargetAttachment, synOscDGeodeShapeTargetAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeCutModeAttachment, synOscBGeodeCutModeAttachment, synOscCGeodeCutModeAttachment, synOscDGeodeCutModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeDriveModeAttachment, synOscBGeodeDriveModeAttachment, synOscCGeodeDriveModeAttachment, synOscDGeodeDriveModeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGeodeSieveModeAttachment, synOscBGeodeSieveModeAttachment, synOscCGeodeSieveModeAttachment, synOscDGeodeSieveModeAttachment;
     // ── GRAIN-EXPANDED-ATTACHMENTS (8 × 4 osc) ──
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAGrainPositionAttachment, synOscAGrainPitchAttachment, synOscAGrainPsprayAttachment, synOscAGrainWidthAttachment, synOscAGrainDirAttachment, synOscAGrainSkewAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBGrainPositionAttachment, synOscBGrainPitchAttachment, synOscBGrainPsprayAttachment, synOscBGrainWidthAttachment, synOscBGrainDirAttachment, synOscBGrainSkewAttachment;
@@ -1225,6 +1235,14 @@ private:
     tw::GeodeEngine geodeDispEng_[4];
     bool   geodeDispPrepared_ = false;
     double geodeDispSr_       = 0.0;
+    // SPECTRAL-IMAGE STRIP (rs6) — per-osc bake state for window.__geodeImage: ghost (raw analyzed
+    // data) is re-baked when the STORE changes (or on the 5s heartbeat = self-heal for a reloaded
+    // page); bright (current-knob survivors) also re-bakes on content-param changes, throttled.
+    const tw::GeodeFrameStore* geodeImgStore_[4] = { nullptr, nullptr, nullptr, nullptr };
+    tw::GeodeParams geodeImgParams_[4];
+    int  geodeImgGen_[4]       = { 0, 0, 0, 0 };
+    int  geodeImgCooldown_[4]  = { 0, 0, 0, 0 };   // ticks until the next bright re-bake
+    int  geodeImgHeartbeat_[4] = { 0, 0, 0, 0 };   // ticks until the next unconditional full push
 
     // Resource provider
     std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url);

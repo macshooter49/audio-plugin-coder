@@ -2336,8 +2336,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ════════ RESYNTH-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
     // ID strings keep GEODE_* for preset stability; meaning REMAPPED (see the gather):
     //   Page 1: Scan(CREEP)/Stretch(FOSSIL)/Sieve/Cut/Shape(DISTILL)/Drive(HAZE)
-    //   Page 2: Quality/Formant/Tilt/Crush(SILT)/Start(POSITION)
-    //   + Formant-Keep + Loop + Shape-Target(choice) + Cut-Mode(choice). FRACTURE/BEDROCK reserved.
+    //   Page 2: Quality/Formant/Tilt/Crush(SILT)/Start(POSITION)/Melt(FRACTURE — temporal smear)
+    //   + Formant-Keep + Loop + Shape-Target/Cut-Mode/Drive-Mode/Sieve-Mode (choices). BEDROCK reserved.
     auto addGeodeOsc = [&layout] (const char* const* id, const juce::String& osc)
     {
         auto F = [&layout, &osc] (const char* pid, const char* nm, float def)
@@ -2350,7 +2350,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         F (id[0], "Start",    0.0f);  F (id[1], "Stretch", 0.0f);  F (id[2],  "Scan",    0.5f);
         F (id[3], "Crush",    0.0f);  F (id[4], "Formant", 0.5f);  F (id[5],  "Cut",     1.0f);
         F (id[6], "Sieve",    0.0f);  F (id[7], "Shape",   0.0f);  F (id[8],  "Drive",   0.0f);
-        F (id[9], "Fracture", 0.5f);  F (id[10],"Tilt",    0.5f);  F (id[11], "Quality", 0.80f);
+        F (id[9], "Melt",     0.0f);  F (id[10],"Tilt",    0.5f);  F (id[11], "Quality", 0.80f);   // Melt = FRACTURE id repurposed (was reserved @0.5 → now 0 = off)
         layout.add (std::make_unique<juce::AudioParameterBool> (
             juce::ParameterID { id[12], 1 }, "Synth OSC " + osc + " Resynth Formant Keep", true));
         layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -2364,35 +2364,45 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { id[16], 1 }, "Synth OSC " + osc + " Resynth Cut Mode",
             juce::StringArray { "LP", "HP" }, 0));                // default LP
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[17], 1 }, "Synth OSC " + osc + " Resynth Drive Mode",
+            juce::StringArray { "Saturate", "Bloom", "Glint", "Moire", "Foldback", "Ember" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[18], 1 }, "Synth OSC " + osc + " Resynth Sieve Mode",
+            juce::StringArray { "Floor", "Sparse", "Cloak", "Flicker", "Rake", "Parity" }, 0));
     };
-    static const char* const GEODE_A[17] = {
+    static const char* const GEODE_A[19] = {
         ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP,
         ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT,
         ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE,
         ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY,
         ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP, ParameterIDs::SYN_OSC_A_GEODE_BEDROCK,
-        ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE };
-    static const char* const GEODE_B[17] = {
+        ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE,
+        ParameterIDs::SYN_OSC_A_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_A_GEODE_SIEVE_MODE };
+    static const char* const GEODE_B[19] = {
         ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP,
         ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT,
         ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE,
         ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY,
         ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP, ParameterIDs::SYN_OSC_B_GEODE_BEDROCK,
-        ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE };
-    static const char* const GEODE_C[17] = {
+        ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE,
+        ParameterIDs::SYN_OSC_B_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_B_GEODE_SIEVE_MODE };
+    static const char* const GEODE_C[19] = {
         ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP,
         ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT,
         ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE,
         ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY,
         ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP, ParameterIDs::SYN_OSC_C_GEODE_BEDROCK,
-        ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE };
-    static const char* const GEODE_D[17] = {
+        ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE,
+        ParameterIDs::SYN_OSC_C_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_C_GEODE_SIEVE_MODE };
+    static const char* const GEODE_D[19] = {
         ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP,
         ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT,
         ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE,
         ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY,
         ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP, ParameterIDs::SYN_OSC_D_GEODE_BEDROCK,
-        ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE };
+        ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE,
+        ParameterIDs::SYN_OSC_D_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_D_GEODE_SIEVE_MODE };
     addGeodeOsc (GEODE_A, "A"); addGeodeOsc (GEODE_B, "B");
     addGeodeOsc (GEODE_C, "C"); addGeodeOsc (GEODE_D, "D");
 
@@ -3566,12 +3576,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // ── RESYNTH engine: gather the resynthesis params per OSC (GEODE-ENGINE-GATHER) ──
         // ID strings keep GEODE_* (preset stability); meaning REMAPPED to the Resynth fields:
         // POSITION→start, FOSSIL→stretch, CREEP→scan, SILT→crush, DISTILL→shape, HAZE→drive.
-        // FRACTURE(id9) + BEDROCK(id14) are reserved/unused. id15=Shape-Target id16=Cut-Mode.
-        static const char* const GEODE_IDS[4][17] = {
-            { ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP, ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT, ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE, ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY, ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP, ParameterIDs::SYN_OSC_A_GEODE_BEDROCK, ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE },
-            { ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP, ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT, ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY, ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP, ParameterIDs::SYN_OSC_B_GEODE_BEDROCK, ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE },
-            { ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP, ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT, ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE, ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY, ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP, ParameterIDs::SYN_OSC_C_GEODE_BEDROCK, ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE },
-            { ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP, ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT, ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY, ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP, ParameterIDs::SYN_OSC_D_GEODE_BEDROCK, ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE }
+        // FRACTURE(id9)=MELT smear; BEDROCK(id14) reserved. id15=Shape id16=Cut id17=Drive id18=Sieve modes.
+        static const char* const GEODE_IDS[4][19] = {
+            { ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP, ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT, ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE, ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY, ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP, ParameterIDs::SYN_OSC_A_GEODE_BEDROCK, ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE, ParameterIDs::SYN_OSC_A_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_A_GEODE_SIEVE_MODE },
+            { ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP, ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT, ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY, ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP, ParameterIDs::SYN_OSC_B_GEODE_BEDROCK, ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE, ParameterIDs::SYN_OSC_B_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_B_GEODE_SIEVE_MODE },
+            { ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP, ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT, ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE, ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY, ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP, ParameterIDs::SYN_OSC_C_GEODE_BEDROCK, ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE, ParameterIDs::SYN_OSC_C_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_C_GEODE_SIEVE_MODE },
+            { ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP, ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT, ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY, ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP, ParameterIDs::SYN_OSC_D_GEODE_BEDROCK, ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE, ParameterIDs::SYN_OSC_D_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_D_GEODE_SIEVE_MODE }
         };
         tw::GeodeParams geodeP[4];
         for (int o = 0; o < 4; ++o)
@@ -3581,10 +3591,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.start   = *rawParam (id[0]);  g.stretch = *rawParam (id[1]);  g.scan    = *rawParam (id[2]);
             g.crush   = *rawParam (id[3]);  g.formant = *rawParam (id[4]);  g.cut     = *rawParam (id[5]);
             g.sieve   = *rawParam (id[6]);  g.shape   = *rawParam (id[7]);  g.drive   = *rawParam (id[8]);
-            /* id[9] FRACTURE reserved */   g.tilt    = *rawParam (id[10]); g.quality = *rawParam (id[11]);
+            g.smear   = *rawParam (id[9]);  g.tilt    = *rawParam (id[10]); g.quality = *rawParam (id[11]);   // id[9] = FRACTURE repurposed as MELT
             g.formantKeep = *rawParam (id[12]) > 0.5f;  g.loopMode = (int) *rawParam (id[13]);
             /* id[14] BEDROCK reserved */
-            g.shapeTarget = (int) *rawParam (id[15]);   g.cutMode = (int) *rawParam (id[16]);
+            g.shapeTarget = (int) *rawParam (id[15]);   g.cutMode   = (int) *rawParam (id[16]);
+            g.driveMode   = (int) *rawParam (id[17]);   g.sieveMode = (int) *rawParam (id[18]);
             geodeP[o] = g;
         }
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.

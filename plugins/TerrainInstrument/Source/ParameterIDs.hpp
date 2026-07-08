@@ -644,10 +644,10 @@ namespace ParameterIDs
     // Own namespace — MUST NOT collide with SYN_OSC_x_SPECTRAL_TYPE/AMT (the spectral FILTER).
     // The engine is UI-named "Resynth"; these ID strings keep the historical GEODE_* names for
     // preset stability. Meaning is REMAPPED (see PluginProcessor gather): CREEP=Scan, FOSSIL=Stretch,
-    // POSITION=Start, SILT=Crush, DISTILL=Shape, HAZE=Drive. FRACTURE + BEDROCK are RESERVED (unused).
+    // POSITION=Start, SILT=Crush, DISTILL=Shape, HAZE=Drive, FRACTURE=Melt (temporal smear). BEDROCK RESERVED.
     // Page 1 (Play):   Scan · Stretch · Sieve · Cut · Shape · Drive
-    // Page 2 (Sculpt): Quality · Formant · Tilt · Crush · Start
-    // + Formant-Keep (bool) + Loop (choice) + Shape-Target (choice) + Cut-Mode (choice). × 4 osc.
+    // Page 2 (Sculpt): Quality · Formant · Tilt · Crush · Start · Melt
+    // + Formant-Keep (bool) + Loop + Shape-Target + Cut-Mode + Drive-Mode + Sieve-Mode (choices). × 4 osc.
     constexpr char SYN_OSC_A_GEODE_POSITION[] = "SYN_OSC_A_GEODE_POSITION"; // 0..1 scrub
     constexpr char SYN_OSC_A_GEODE_FOSSIL[]   = "SYN_OSC_A_GEODE_FOSSIL";   // 0..1 freeze
     constexpr char SYN_OSC_A_GEODE_CREEP[]    = "SYN_OSC_A_GEODE_CREEP";    // 0..1 scan rate
@@ -657,7 +657,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_GEODE_SIEVE[]    = "SYN_OSC_A_GEODE_SIEVE";    // 0..1 spectral gate
     constexpr char SYN_OSC_A_GEODE_DISTILL[]  = "SYN_OSC_A_GEODE_DISTILL";  // 0..1 trace to N loudest
     constexpr char SYN_OSC_A_GEODE_HAZE[]     = "SYN_OSC_A_GEODE_HAZE";     // 0..1 blur
-    constexpr char SYN_OSC_A_GEODE_FRACTURE[] = "SYN_OSC_A_GEODE_FRACTURE"; // 0..1 bipolar inharmonic
+    constexpr char SYN_OSC_A_GEODE_FRACTURE[] = "SYN_OSC_A_GEODE_FRACTURE"; // 0..1 MELT temporal smear (ID kept for preset safety)
     constexpr char SYN_OSC_A_GEODE_TILT[]     = "SYN_OSC_A_GEODE_TILT";     // 0..1 bipolar tilt
     constexpr char SYN_OSC_A_GEODE_QUALITY[]  = "SYN_OSC_A_GEODE_QUALITY";  // 0..1 partial budget
     constexpr char SYN_OSC_A_GEODE_FKEEP[]    = "SYN_OSC_A_GEODE_FKEEP";    // bool formant-preserve
@@ -665,6 +665,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_GEODE_BEDROCK[]  = "SYN_OSC_A_GEODE_BEDROCK";  // RESERVED (unused; tune via right-click semitone)
     constexpr char SYN_OSC_A_GEODE_SHAPE_TARGET[] = "SYN_OSC_A_GEODE_SHAPE_TARGET"; // choice 0=Sine 1=Square 2=Saw
     constexpr char SYN_OSC_A_GEODE_CUT_MODE[]     = "SYN_OSC_A_GEODE_CUT_MODE";     // choice 0=LP 1=HP
+    constexpr char SYN_OSC_A_GEODE_DRIVE_MODE[]   = "SYN_OSC_A_GEODE_DRIVE_MODE";   // choice: Saturate Bloom Glint Moire Foldback Ember
+    constexpr char SYN_OSC_A_GEODE_SIEVE_MODE[]   = "SYN_OSC_A_GEODE_SIEVE_MODE";   // choice: Floor Sparse Cloak Flicker Rake Parity
     constexpr char SYN_OSC_B_GEODE_POSITION[] = "SYN_OSC_B_GEODE_POSITION";
     constexpr char SYN_OSC_B_GEODE_FOSSIL[]   = "SYN_OSC_B_GEODE_FOSSIL";
     constexpr char SYN_OSC_B_GEODE_CREEP[]    = "SYN_OSC_B_GEODE_CREEP";
@@ -682,6 +684,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_GEODE_BEDROCK[]  = "SYN_OSC_B_GEODE_BEDROCK";
     constexpr char SYN_OSC_B_GEODE_SHAPE_TARGET[] = "SYN_OSC_B_GEODE_SHAPE_TARGET";
     constexpr char SYN_OSC_B_GEODE_CUT_MODE[]     = "SYN_OSC_B_GEODE_CUT_MODE";
+    constexpr char SYN_OSC_B_GEODE_DRIVE_MODE[]   = "SYN_OSC_B_GEODE_DRIVE_MODE";   // choice: Saturate Bloom Glint Moire Foldback Ember
+    constexpr char SYN_OSC_B_GEODE_SIEVE_MODE[]   = "SYN_OSC_B_GEODE_SIEVE_MODE";   // choice: Floor Sparse Cloak Flicker Rake Parity
     constexpr char SYN_OSC_C_GEODE_POSITION[] = "SYN_OSC_C_GEODE_POSITION";
     constexpr char SYN_OSC_C_GEODE_FOSSIL[]   = "SYN_OSC_C_GEODE_FOSSIL";
     constexpr char SYN_OSC_C_GEODE_CREEP[]    = "SYN_OSC_C_GEODE_CREEP";
@@ -699,6 +703,8 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_GEODE_BEDROCK[]  = "SYN_OSC_C_GEODE_BEDROCK";
     constexpr char SYN_OSC_C_GEODE_SHAPE_TARGET[] = "SYN_OSC_C_GEODE_SHAPE_TARGET";
     constexpr char SYN_OSC_C_GEODE_CUT_MODE[]     = "SYN_OSC_C_GEODE_CUT_MODE";
+    constexpr char SYN_OSC_C_GEODE_DRIVE_MODE[]   = "SYN_OSC_C_GEODE_DRIVE_MODE";   // choice: Saturate Bloom Glint Moire Foldback Ember
+    constexpr char SYN_OSC_C_GEODE_SIEVE_MODE[]   = "SYN_OSC_C_GEODE_SIEVE_MODE";   // choice: Floor Sparse Cloak Flicker Rake Parity
     constexpr char SYN_OSC_D_GEODE_POSITION[] = "SYN_OSC_D_GEODE_POSITION";
     constexpr char SYN_OSC_D_GEODE_FOSSIL[]   = "SYN_OSC_D_GEODE_FOSSIL";
     constexpr char SYN_OSC_D_GEODE_CREEP[]    = "SYN_OSC_D_GEODE_CREEP";
@@ -716,4 +722,6 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_GEODE_BEDROCK[]  = "SYN_OSC_D_GEODE_BEDROCK";
     constexpr char SYN_OSC_D_GEODE_SHAPE_TARGET[] = "SYN_OSC_D_GEODE_SHAPE_TARGET";
     constexpr char SYN_OSC_D_GEODE_CUT_MODE[]     = "SYN_OSC_D_GEODE_CUT_MODE";
+    constexpr char SYN_OSC_D_GEODE_DRIVE_MODE[]   = "SYN_OSC_D_GEODE_DRIVE_MODE";   // choice: Saturate Bloom Glint Moire Foldback Ember
+    constexpr char SYN_OSC_D_GEODE_SIEVE_MODE[]   = "SYN_OSC_D_GEODE_SIEVE_MODE";   // choice: Floor Sparse Cloak Flicker Rake Parity
 }

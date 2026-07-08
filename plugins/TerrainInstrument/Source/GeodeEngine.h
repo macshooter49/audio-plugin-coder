@@ -44,7 +44,7 @@ namespace geode {
     // ── real-time CPU governor (added rs2 — the STRETCH/unison CPU-cliff fix) ──
     // Additive resynthesis costs ~1 sine-osc PER PARTIAL PER SAMPLE. Left uncapped it pegs a
     // core (measured: 3072 partials ≈ 40% of one core for the oscillator ALONE). These bound it.
-    constexpr int   kMinActive   = 16;    // floor of the QUALITY active-partial range
+    constexpr int   kMinActive   = 4;     // floor of the QUALITY range — low QUALITY = skeletal lo-fi trash
     constexpr int   kMaxActive   = 64;    // per-voice active-partial CEILING (was kMaxPartials=96)
     constexpr int   kUnisonFloor = 10;    // a single unison bank never thins below this
     constexpr int   kNoiseBands  = 16;    // residual log-band envelope resolution (analysis only)
@@ -94,13 +94,16 @@ struct GeodeParams
     float shape   = 0.f;    // 0..1 morph toward target waveform       (APVTS: GEODE_DISTILL)
     float drive   = 0.f;    // 0..1 spectral distortion (post-synth)   (APVTS: GEODE_HAZE)
     // ── page 2 (Sculpt & Fidelity) ──
-    float quality = 0.80f;  // 0..1 active partial cap (→ 16..kMaxPartials) (APVTS: GEODE_QUALITY)
+    float quality = 0.80f;  // 0..1 spectral bitrate: partial count + amp quantize (APVTS: GEODE_QUALITY)
     float formant = 0.5f;   // 0..1 bipolar formant/envelope shift     (APVTS: GEODE_FORMANT)
     float tilt    = 0.5f;   // 0..1 bipolar spectral tilt (0.5 = flat) (APVTS: GEODE_TILT)
     float crush   = 0.f;    // 0..1 bitcrush + rate decimate (post-synth) (APVTS: GEODE_SILT)
+    float smear   = 0.f;    // 0..1 MELT — temporal amp smear across frames (APVTS: GEODE_FRACTURE, repurposed)
     // ── choices / toggles ──
-    int   shapeTarget = 2;  // 0=sine 1=square 2=saw                    (APVTS: GEODE_SHAPE_TARGET)
+    int   shapeTarget = 2;  // 0..10 sine…metal (see shapeWeight)       (APVTS: GEODE_SHAPE_TARGET)
     int   cutMode     = 0;  // 0=LP 1=HP                                (APVTS: GEODE_CUT_MODE)
+    int   driveMode   = 0;  // 0 Saturate 1 Bloom 2 Glint 3 Moire 4 Foldback 5 Ember (APVTS: GEODE_DRIVE_MODE)
+    int   sieveMode   = 0;  // 0 Floor 1 Sparse 2 Cloak 3 Flicker 4 Rake 5 Parity   (APVTS: GEODE_SIEVE_MODE)
     int   loopMode    = 1;  // 0=one-shot 1=fwd 2=reverse 3=ping-pong   (APVTS: GEODE_LOOP)
     bool  formantKeep = true;                                        // (APVTS: GEODE_FKEEP)
 
@@ -108,8 +111,9 @@ struct GeodeParams
     {
         return start==o.start && stretch==o.stretch && scan==o.scan && sieve==o.sieve
             && cut==o.cut && shape==o.shape && drive==o.drive && quality==o.quality
-            && formant==o.formant && tilt==o.tilt && crush==o.crush
+            && formant==o.formant && tilt==o.tilt && crush==o.crush && smear==o.smear
             && shapeTarget==o.shapeTarget && cutMode==o.cutMode
+            && driveMode==o.driveMode && sieveMode==o.sieveMode
             && loopMode==o.loopMode && formantKeep==o.formantKeep;
     }
     bool operator!= (const GeodeParams& o) const noexcept { return ! (*this == o); }
@@ -474,29 +478,20 @@ public:
         }
 
         // ── interpolate the two bracketing frames into the working partial bank ──
-        const float fp = clamp01 (pos01_) * (float) (nf - 1);
-        const int   fa = (int) fp;
-        const int   fb = std::min (nf - 1, fa + 1);
-        const float fr = fp - (float) fa;
-        const GeodeFrame& A = store_->frames[(size_t) fa];
-        const GeodeFrame& B = store_->frames[(size_t) fb];
-        const int nP = std::max (A.nPartials, B.nPartials);
-        for (int j = 0; j < nP; ++j)
-        {
-            const float rA = A.ratio[(size_t) j], rB = B.ratio[(size_t) j];
-            const float aA = A.amp[(size_t) j],   aB = B.amp[(size_t) j];
-            wr_.ratio[(size_t) j] = (rA > 0.f && rB > 0.f) ? (rA + (rB - rA) * fr) : (rA > 0.f ? rA : rB);
-            wr_.amp[(size_t) j]   = aA + (aB - aA) * fr;
-        }
-        wr_.nPartials = nP;
+        interpFrame (clamp01 (pos01_), nf);
+        int nP = wr_.nPartials;
+        ++flickerTick_;                                  // FLICKER sieve epoch clock (~85ms per epoch)
+
+        applySmear (clamp01 (pos01_), nf);   // MELT — temporal amp smear: frames bleed together (pad-ify)
 
         // ── CPU GOVERNOR: decide the active-partial count BEFORE sculpting (rs2). The sculpt pass
         // is where FORMANT's O(n²) envelope lives — thinning first means it (and every per-partial
-        // op) only touches partials we will actually render. QUALITY sets the ceiling; CONSTANT-COST
-        // UNISON divides it; the shared processor budget is the final hard ceiling (thins gracefully).
+        // op) only touches partials we will actually render. QUALITY sets the ceiling (its floor is
+        // the lo-fi zone — see applyBitrate); CONSTANT-COST UNISON divides it; the shared processor
+        // budget is the final hard ceiling (thins gracefully).
         int active = geode::kMinActive + (int) (clamp01 (p_.quality)
                         * (float) (geode::kMaxActive - geode::kMinActive));
-        if (unisonDiv_ > 1) active = std::max (geode::kUnisonFloor, active / unisonDiv_);
+        if (unisonDiv_ > 1) active = std::max (std::min (active, geode::kUnisonFloor), active / unisonDiv_);
         active = std::min (active, nP);
         if (budgetUsed_ != nullptr && budgetCap_ > 0)
         {
@@ -506,6 +501,14 @@ public:
         if (active < nP) keepLoudest (nP, active);   // zero all but the loudest `active` (slots preserved)
 
         applySculpt (nP);   // SHAPE/FORMANT/TILT/CUT/SIEVE (amp-only, never ratios) — skips zeroed slots
+
+        applyBitrate (nP);  // QUALITY low = spectral bit-crush: quantize amps to few levels (lossy encode)
+
+        // BLOOM/GLINT/MOIRE spectral drive — children partials appended within the shared budget
+        int childRoom = 16;
+        if (budgetUsed_ != nullptr && budgetCap_ > 0)
+            childRoom = std::max (0, std::min (16, budgetCap_ - *budgetUsed_ - active));
+        nP = applyDriveChildren (nP, childRoom);
 
         // ── oscillator bank — per-partial amplitude RAMP (declick) ──────────────────────
         // Partial FREQUENCY = analysisRatio × playedHz (× pitchMul from key/oct/semi/cents).
@@ -566,14 +569,46 @@ public:
 
         if (drive > 1e-3f)
         {
-            // AMPLIFIED: slams the shaper (g up to ~37×) with only gentle makeup, so DRIVE gets LOUDER
-            // and harmonically denser as you push it — 100% is meant to be ear-blasting, 50% already hot.
-            const float g  = 1.f + drive * 36.f;         // pre-gain into the shaper
-            const float mk = 1.f / (1.f + drive * 0.8f); // gentle makeup (0.56 at full) → level jumps UP
-            for (int i = 0; i < n; ++i)
+            switch (p_.driveMode)
             {
-                L[i] = softClip (L[i] * g) * mk;
-                R[i] = softClip (R[i] * g) * mk;
+                case 1: case 2: case 3:   // BLOOM / GLINT / MOIRE — spectral-domain (children partials
+                    break;                // grown in renderBlockAdd); no audio-domain shaping here.
+                case 4:                   // FOLDBACK — sine-fold: peaks REFLECT, spectrum keeps
+                {                         // reorganizing as you push (metallic / West-Coast shimmer)
+                    const float ang  = 0.5f * geode::kPi * (1.f + drive * 6.f);
+                    const float wmix = drive * 2.5f > 1.f ? 1.f : drive * 2.5f;   // dry→wet (identity at 0)
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float wl = std::sin (L[i] * ang), wr2 = std::sin (R[i] * ang);
+                        L[i] += (wl - L[i]) * wmix;
+                        R[i] += (wr2 - R[i]) * wmix;
+                    }
+                    break;
+                }
+                case 5:                   // EMBER — asymmetric tube/tape bias: even harmonics, warm
+                {
+                    const float g  = 1.f + drive * 7.f;
+                    const float b  = drive * 0.4f;
+                    const float mk = 1.f / (1.f + drive * 0.8f);
+                    const float dc = softClip (b);
+                    for (int i = 0; i < n; ++i)
+                    {
+                        L[i] = (softClip (L[i] * g + b) - dc) * mk;
+                        R[i] = (softClip (R[i] * g + b) - dc) * mk;
+                    }
+                    break;
+                }
+                default:                  // SATURATE — the amplified rs4 soft-clip: slams the shaper
+                {                         // (g→37×) with gentle makeup so 100% is ear-blasting.
+                    const float g  = 1.f + drive * 36.f;
+                    const float mk = 1.f / (1.f + drive * 0.8f);
+                    for (int i = 0; i < n; ++i)
+                    {
+                        L[i] = softClip (L[i] * g) * mk;
+                        R[i] = softClip (R[i] * g) * mk;
+                    }
+                    break;
+                }
             }
         }
 
@@ -602,7 +637,6 @@ public:
         for (int b = 0; b < nBins; ++b) outBins[b] = 0.f;
         outPos01 = clamp01 (pos01_);
         if (! hasStore() || outBins == nullptr || nBins <= 0) return false;
-        const int nf = store_->numFrames();
 
         const float freeze = clamp01 (p_.stretch);
         float scanRate = clamp01 (p_.scan) * 2.0f;
@@ -620,53 +654,33 @@ public:
             else pos01_ -= std::floor (pos01_);
         }
         outPos01 = clamp01 (pos01_);
+        return computeFrameEnvelope (pos01_, outBins, nBins, false);
+    }
 
-        const float fp = clamp01 (pos01_) * (float) (nf - 1);
-        const int   fa = (int) fp;
-        const int   fb = std::min (nf - 1, fa + 1);
-        const float fr = fp - (float) fa;
-        const GeodeFrame& A = store_->frames[(size_t) fa];
-        const GeodeFrame& B = store_->frames[(size_t) fb];
-        const int nP = std::max (A.nPartials, B.nPartials);
-        for (int j = 0; j < nP; ++j)
+    // ═══ DISPLAY-ONLY: rasterize ONE frame's spectrum into log-freq magnitude bins. ═══
+    // Powers the live display tick above AND the editor's spectral-image bake: neutral=true gives
+    // the RAW analyzed frame (the "ghost" = the original data), neutral=false runs the FULL current
+    // sculpt chain (smear → quality → sculpt → bitrate → drive children) = the "survivors" the knobs
+    // leave alive. Touches wr_ only — never audio-voice state, never the read-head.
+    bool computeFrameEnvelope (float pos01, float* outBins, int nBins, bool neutral) noexcept
+    {
+        if (! hasStore() || outBins == nullptr || nBins <= 0) return false;
+        for (int b = 0; b < nBins; ++b) outBins[b] = 0.f;
+        const int nf = store_->numFrames();
+        interpFrame (clamp01 (pos01), nf);
+        int nP = wr_.nPartials;
+        if (! neutral)
         {
-            const float rA = A.ratio[(size_t) j], rB = B.ratio[(size_t) j];
-            const float aA = A.amp[(size_t) j],   aB = B.amp[(size_t) j];
-            wr_.ratio[(size_t) j] = (rA > 0.f && rB > 0.f) ? (rA + (rB - rA) * fr) : (rA > 0.f ? rA : rB);
-            wr_.amp[(size_t) j]   = aA + (aB - aA) * fr;
+            applySmear (clamp01 (pos01), nf);
+            int active = geode::kMinActive + (int) (clamp01 (p_.quality)
+                            * (float) (geode::kMaxActive - geode::kMinActive));
+            active = std::min (active, nP);
+            if (active < nP) keepLoudest (nP, active);      // (no shared budget / unison for display)
+            applySculpt (nP);
+            applyBitrate (nP);
+            nP = applyDriveChildren (nP, 16);
         }
-        wr_.nPartials = nP;
-
-        // mirror renderBlockAdd's CPU governor: thin BEFORE sculpt (display uses no shared budget /
-        // no unison, so just the QUALITY ceiling) — keeps the message-thread viz cost bounded too.
-        int active = geode::kMinActive + (int) (clamp01 (p_.quality)
-                        * (float) (geode::kMaxActive - geode::kMinActive));
-        active = std::min (active, nP);
-        if (active < nP) keepLoudest (nP, active);          // (no shared budget for display)
-
-        applySculpt (nP);                                   // SHAPE/FORMANT/TILT/CUT/SIEVE
-
-        // rasterise partials → log-freq bins (peak-hold)
-        const float lnLo = std::log (geode::kDispRMin), lnHi = std::log (geode::kDispRMax);
-        for (int j = 0; j < nP; ++j)
-        {
-            const float a = wr_.amp[(size_t) j];
-            const float r = wr_.ratio[(size_t) j];
-            if (a <= 1e-6f || r <= 0.f) continue;
-            const float rr = r < geode::kDispRMin ? geode::kDispRMin : (r > geode::kDispRMax ? geode::kDispRMax : r);
-            int b = (int) ((std::log (rr) - lnLo) / (lnHi - lnLo) * (float) (nBins - 1) + 0.5f);
-            if (b < 0) b = 0; else if (b >= nBins) b = nBins - 1;
-            if (a > outBins[b]) outBins[b] = a;
-        }
-
-        const float ref = 0.36f;
-        for (int b = 0; b < nBins; ++b) { const float v = outBins[b] / ref; outBins[b] = v > 1.5f ? 1.5f : v; }
-        if (nBins > 2)
-        {
-            float prev = outBins[0];
-            for (int b = 1; b < nBins - 1; ++b)
-            { const float cur = outBins[b]; outBins[b] = 0.25f * prev + 0.5f * cur + 0.25f * outBins[b + 1]; prev = cur; }
-        }
+        rasterizeBins (nP, outBins, nBins);
         return true;
     }
 
@@ -697,6 +711,157 @@ private:
         const float f = x - (float) i;
         const auto& t = sineLUT();
         return t[(size_t) i] + (t[(size_t) (i + 1)] - t[(size_t) i]) * f;
+    }
+
+    // interpolate the two frames bracketing pos01 into the working partial bank (shared by the
+    // audio render, the display tick, and the spectral-image bake).
+    void interpFrame (float pos01, int nf) noexcept
+    {
+        const float fp = pos01 * (float) (nf - 1);
+        const int   fa = (int) fp;
+        const int   fb = std::min (nf - 1, fa + 1);
+        const float fr = fp - (float) fa;
+        const GeodeFrame& A = store_->frames[(size_t) fa];
+        const GeodeFrame& B = store_->frames[(size_t) fb];
+        const int nP = std::max (A.nPartials, B.nPartials);
+        for (int j = 0; j < nP; ++j)
+        {
+            const float rA = A.ratio[(size_t) j], rB = B.ratio[(size_t) j];
+            const float aA = A.amp[(size_t) j],   aB = B.amp[(size_t) j];
+            wr_.ratio[(size_t) j] = (rA > 0.f && rB > 0.f) ? (rA + (rB - rA) * fr) : (rA > 0.f ? rA : rB);
+            wr_.amp[(size_t) j]   = aA + (aB - aA) * fr;
+        }
+        wr_.nPartials = nP;
+    }
+
+    // ── MELT — temporal smear: blur each partial's AMPLITUDE across neighbouring analysis frames
+    // (the tracker keeps slot j the same partial across frames, so per-slot averaging is coherent).
+    // Attacks dissolve into a sustained wash — "turn any sample into a pad". Amp-only → pitch-safe.
+    void applySmear (float pos01, int nf) noexcept
+    {
+        const float sm = clamp01 (p_.smear);
+        if (sm <= 1e-3f || nf < 2) return;
+        const float spread = sm * sm * 0.35f;                       // up to ±35% of the sample
+        static constexpr float off[4] = { -1.f, -0.45f, 0.45f, 1.f };
+        constexpr float wTap = 0.16f, wCenter = 1.f - 4.f * wTap;   // gaussian-ish 5-tap kernel
+        const int nP = wr_.nPartials;
+        static thread_local std::vector<float> acc;
+        acc.assign ((size_t) nP, 0.f);
+        for (int t = 0; t < 4; ++t)
+        {
+            float tp = pos01 + off[t] * spread;
+            tp = tp < 0.f ? 0.f : (tp > 1.f ? 1.f : tp);
+            const float fp = tp * (float) (nf - 1);
+            const int   fa = (int) fp, fb = std::min (nf - 1, fa + 1);
+            const float fr = fp - (float) fa;
+            const GeodeFrame& A = store_->frames[(size_t) fa];
+            const GeodeFrame& B = store_->frames[(size_t) fb];
+            for (int j = 0; j < nP; ++j)
+                acc[(size_t) j] += wTap * (A.amp[(size_t) j] + (B.amp[(size_t) j] - A.amp[(size_t) j]) * fr);
+        }
+        for (int j = 0; j < nP; ++j)
+            wr_.amp[(size_t) j] = wCenter * wr_.amp[(size_t) j] + acc[(size_t) j];
+    }
+
+    // ── QUALITY = spectral BITRATE. Above ~0.7 it's transparent; below, partial amplitudes are
+    // quantized to ever-fewer levels (2..48) — the spectral bit-crush half of the lossy encode
+    // (the other half is the shrinking partial count). Quiet partials round to ZERO = data gone.
+    void applyBitrate (int nP) noexcept
+    {
+        const float q = clamp01 (p_.quality);
+        if (q >= 0.7f || nP < 1) return;
+        float mx = 1e-9f;
+        for (int j = 0; j < nP; ++j) mx = std::max (mx, wr_.amp[(size_t) j]);
+        const float t = q / 0.7f;
+        const float L = 2.f + t * t * 46.f;                          // 2..48 amplitude levels
+        for (int j = 0; j < nP; ++j)
+            if (wr_.amp[(size_t) j] > 0.f)
+                wr_.amp[(size_t) j] = std::round (wr_.amp[(size_t) j] / mx * L) / L * mx;
+    }
+
+    // ── DRIVE spectral modes (BLOOM/GLINT/MOIRE) — "waveshaping in the additive domain": grow NEW
+    // child partials from the sculpted parents instead of clipping the audio. Band-limited by
+    // construction (children are explicit sines, gated by the same Nyquist check in the bank loop).
+    // Children never sit below 0.75× the fundamental → the played pitch always dominates.
+    // Returns the new partial count (children appended in slots nP..). Foldback/Ember/Saturate are
+    // audio-domain and live in postProcess.
+    int applyDriveChildren (int nP, int room) noexcept
+    {
+        const float drive = clamp01 (p_.drive);
+        const int   mode  = p_.driveMode;
+        if (drive <= 1e-3f || mode < 1 || mode > 3 || room <= 0 || nP < 1) return nP;
+        float ref = 1e-9f;
+        for (int j = 0; j < nP; ++j) ref = std::max (ref, wr_.amp[(size_t) j]);
+        int total = nP;
+        auto add = [&] (float r, float a) noexcept
+        {
+            if (total >= geode::kMaxPartials || room <= 0 || r < 0.75f || a <= 1e-6f) return;
+            wr_.ratio[(size_t) total] = r; wr_.amp[(size_t) total] = a; ++total; --room;
+        };
+        if (mode == 1)          // BLOOM — Chebyshev harmonic growth on the loudest parents
+        {
+            int used = 0;
+            for (int j = 0; j < nP && used < 8; ++j)
+            {
+                const float a = wr_.amp[(size_t) j];
+                if (a < 0.06f * ref) continue;
+                const float r = wr_.ratio[(size_t) j];
+                if (r <= 0.f) continue;
+                add (r * 2.f, a * drive * 0.60f);
+                add (r * 3.f, a * drive * 0.32f);
+                ++used;
+            }
+        }
+        else if (mode == 2)     // GLINT — HF exciter: re-hallucinate sizzle above the mids only
+        {
+            for (int j = 0; j < nP; ++j)
+            {
+                const float a = wr_.amp[(size_t) j], r = wr_.ratio[(size_t) j];
+                if (a <= 1e-6f || r < 3.f) continue;
+                add (r * 2.f, a * drive * 0.85f);
+                wr_.amp[(size_t) j] *= (1.f + drive * 0.6f);        // presence lift on the uppers
+            }
+        }
+        else                    // MOIRE — intermod sidebands f_i±f_j of the loudest pairs (clangorous)
+        {
+            int idx[6]; int k = 0;
+            for (int j = 0; j < nP && k < 6; ++j)                    // loudest-first-ish: take audible parents
+                if (wr_.amp[(size_t) j] > 0.30f * ref && wr_.ratio[(size_t) j] > 0.f) idx[k++] = j;
+            for (int i = 0; i < k; ++i)
+                for (int j = i + 1; j < k; ++j)
+                {
+                    const float ri = wr_.ratio[(size_t) idx[i]], rj = wr_.ratio[(size_t) idx[j]];
+                    const float aa = wr_.amp[(size_t) idx[i]] * wr_.amp[(size_t) idx[j]] / ref * drive * 1.7f;
+                    add (ri + rj, aa);
+                    add (std::fabs (ri - rj), aa);                   // add() rejects < 0.75 → pitch protected
+                }
+        }
+        wr_.nPartials = total;
+        return total;
+    }
+
+    // rasterize the working bank → log-freq magnitude bins (peak-hold, normalized, 3-tap smoothed)
+    void rasterizeBins (int nP, float* outBins, int nBins) noexcept
+    {
+        const float lnLo = std::log (geode::kDispRMin), lnHi = std::log (geode::kDispRMax);
+        for (int j = 0; j < nP; ++j)
+        {
+            const float a = wr_.amp[(size_t) j];
+            const float r = wr_.ratio[(size_t) j];
+            if (a <= 1e-6f || r <= 0.f) continue;
+            const float rr = r < geode::kDispRMin ? geode::kDispRMin : (r > geode::kDispRMax ? geode::kDispRMax : r);
+            int b = (int) ((std::log (rr) - lnLo) / (lnHi - lnLo) * (float) (nBins - 1) + 0.5f);
+            if (b < 0) b = 0; else if (b >= nBins) b = nBins - 1;
+            if (a > outBins[b]) outBins[b] = a;
+        }
+        const float ref = 0.36f;
+        for (int b = 0; b < nBins; ++b) { const float v = outBins[b] / ref; outBins[b] = v > 1.5f ? 1.5f : v; }
+        if (nBins > 2)
+        {
+            float prev = outBins[0];
+            for (int b = 1; b < nBins - 1; ++b)
+            { const float cur = outBins[b]; outBins[b] = 0.25f * prev + 0.5f * cur + 0.25f * outBins[b + 1]; prev = cur; }
+        }
     }
 
     // SHAPE target harmonic weight W(n) = the amplitude of harmonic n for each target waveform.
@@ -846,16 +1011,90 @@ private:
             }
         }
 
-        // ── SIEVE — spectral gate: drop partials below a rising threshold (the lossy hero). Amplified:
-        // sqrt curve so it bites HARD early (knob 0.5 already strips to ~70% of peak = very lossy;
-        // knob 1 leaves only the loudest partial or two = near-sine "data gone"). ──
+        // ── SIEVE — the lossy data-removal hero, now with 6 flavors (right-click the knob).
+        // All amp-only (kill/attenuate partials) → pitch-safe. Identity at sieve=0 for every mode.
         const float sieve = clamp01 (p_.sieve);
-        if (sieve > 1e-3f)
+        if (sieve > 1e-3f && nP > 0)
         {
             float mx = 1e-9f;
             for (int j = 0; j < nP; ++j) mx = std::max (mx, wr_.amp[(size_t) j]);
-            const float thr = mx * std::sqrt (sieve) * 0.97f;
-            for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] < thr) wr_.amp[(size_t) j] = 0.f;
+            switch (p_.sieveMode)
+            {
+                case 1: // SPARSE — adaptive keep-loudest-N: the surviving set changes frame-to-frame
+                {       //          (glassy, underwater, low-bitrate shimmer)
+                    int na = 0;
+                    for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 1e-6f) ++na;
+                    const int keep = std::max (1, (int) ((1.f - sieve) * (float) na + 0.5f));
+                    if (keep < na) keepLoudest (nP, keep);
+                    break;
+                }
+                case 2: // CLOAK — psychoacoustic masking: delete what louder neighbours hide first
+                {       //          (the literal MP3-at-low-bitrate / lossy-codec sound)
+                    static thread_local std::vector<float> lr;
+                    lr.assign ((size_t) nP, 0.f);
+                    for (int j = 0; j < nP; ++j)
+                        lr[(size_t) j] = std::log (std::max (0.05f, wr_.ratio[(size_t) j]));
+                    const float t = sieve * 0.9f;                 // knob raises the masking threshold
+                    constexpr float spread = 0.9f;                // triangular skirt ~1.3 oct wide
+                    for (int i = 0; i < nP; ++i)
+                    {
+                        const float ai = wr_.amp[(size_t) i];
+                        if (ai <= 1e-6f) continue;
+                        float m = 0.f;
+                        for (int j = 0; j < nP; ++j)
+                        {
+                            const float aj = wr_.amp[(size_t) j];
+                            if (aj <= ai || j == i) continue;      // only LOUDER partials mask
+                            const float d = std::fabs (lr[(size_t) i] - lr[(size_t) j]);
+                            if (d < spread) m += aj * (1.f - d / spread);
+                        }
+                        if (ai < t * m) wr_.amp[(size_t) i] = 0.f;
+                    }
+                    break;
+                }
+                case 3: // FLICKER — probabilistic dropout re-rolled ~12×/s: packet-loss sparkle
+                {       //          (loud partials survive longer; quiet ones flicker in and out)
+                    const std::uint32_t epoch = flickerTick_ >> 5;
+                    for (int j = 0; j < nP; ++j)
+                    {
+                        const float a = wr_.amp[(size_t) j];
+                        if (a <= 1e-6f) continue;
+                        std::uint32_t h = ((std::uint32_t) j * 2654435761u) ^ (epoch * 40503u) ^ rng_;
+                        h ^= h >> 16; h *= 0x7FEB352Du; h ^= h >> 15; h *= 0x846CA68Bu; h ^= h >> 16;
+                        const float u = (float) (h & 0xFFFFFF) / 16777215.f;
+                        const float killP = sieve * (1.f - 0.8f * a / mx);
+                        if (u < killP) wr_.amp[(size_t) j] = 0.f;
+                    }
+                    break;
+                }
+                case 4: // RAKE — every-Nth harmonic comb: hollow → metallic gaps as N rises (2..8)
+                {
+                    const int N = 2 + (int) (sieve * 6.99f);
+                    for (int j = 0; j < nP; ++j)
+                    {
+                        if (wr_.amp[(size_t) j] <= 1e-6f) continue;
+                        const int nH = std::max (1, (int) (wr_.ratio[(size_t) j] + 0.5f));
+                        if ((nH - 1) % N != 0) wr_.amp[(size_t) j] = 0.f;   // fundamental always kept
+                    }
+                    break;
+                }
+                case 5: // PARITY — fade the EVEN harmonics: hollow square/clarinet woodiness
+                {
+                    for (int j = 0; j < nP; ++j)
+                    {
+                        if (wr_.amp[(size_t) j] <= 1e-6f) continue;
+                        const int nH = std::max (1, (int) (wr_.ratio[(size_t) j] + 0.5f));
+                        if ((nH & 1) == 0) wr_.amp[(size_t) j] *= (1.f - sieve);
+                    }
+                    break;
+                }
+                default: // FLOOR — the shipped rising threshold gate (sqrt curve = bites early)
+                {
+                    const float thr = mx * std::sqrt (sieve) * 0.97f;
+                    for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] < thr) wr_.amp[(size_t) j] = 0.f;
+                    break;
+                }
+            }
         }
     }
 
@@ -910,6 +1149,7 @@ private:
     float  crushHoldL_ = 0.f, crushHoldR_ = 0.f;   // CRUSH sample-and-hold state
     int    crushCnt_ = 0;
     std::uint32_t rng_ = 0x9E3779B9u;
+    std::uint32_t flickerTick_ = 0;   // FLICKER sieve epoch clock (incremented per rendered block)
     int*   budgetUsed_ = nullptr;
     int    budgetCap_  = 0;
     int    unisonDiv_  = 1;   // constant-cost unison divisor = ceil(sqrt(unison count))

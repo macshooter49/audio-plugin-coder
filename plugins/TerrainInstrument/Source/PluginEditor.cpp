@@ -450,6 +450,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscAGeodeBedrockRelay).withOptionsFrom(synOscBGeodeBedrockRelay).withOptionsFrom(synOscCGeodeBedrockRelay).withOptionsFrom(synOscDGeodeBedrockRelay)
             .withOptionsFrom(synOscAGeodeShapeTargetRelay).withOptionsFrom(synOscBGeodeShapeTargetRelay).withOptionsFrom(synOscCGeodeShapeTargetRelay).withOptionsFrom(synOscDGeodeShapeTargetRelay)
             .withOptionsFrom(synOscAGeodeCutModeRelay).withOptionsFrom(synOscBGeodeCutModeRelay).withOptionsFrom(synOscCGeodeCutModeRelay).withOptionsFrom(synOscDGeodeCutModeRelay)
+            .withOptionsFrom(synOscAGeodeDriveModeRelay).withOptionsFrom(synOscBGeodeDriveModeRelay).withOptionsFrom(synOscCGeodeDriveModeRelay).withOptionsFrom(synOscDGeodeDriveModeRelay)
+            .withOptionsFrom(synOscAGeodeSieveModeRelay).withOptionsFrom(synOscBGeodeSieveModeRelay).withOptionsFrom(synOscCGeodeSieveModeRelay).withOptionsFrom(synOscDGeodeSieveModeRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
             .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
@@ -2653,6 +2655,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscBGeodeCutModeAttachment, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE, synOscBGeodeCutModeRelay);
         mkAtt(synOscCGeodeCutModeAttachment, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE, synOscCGeodeCutModeRelay);
         mkAtt(synOscDGeodeCutModeAttachment, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE, synOscDGeodeCutModeRelay);
+        mkAtt(synOscAGeodeDriveModeAttachment, ParameterIDs::SYN_OSC_A_GEODE_DRIVE_MODE, synOscAGeodeDriveModeRelay);
+        mkAtt(synOscBGeodeDriveModeAttachment, ParameterIDs::SYN_OSC_B_GEODE_DRIVE_MODE, synOscBGeodeDriveModeRelay);
+        mkAtt(synOscCGeodeDriveModeAttachment, ParameterIDs::SYN_OSC_C_GEODE_DRIVE_MODE, synOscCGeodeDriveModeRelay);
+        mkAtt(synOscDGeodeDriveModeAttachment, ParameterIDs::SYN_OSC_D_GEODE_DRIVE_MODE, synOscDGeodeDriveModeRelay);
+        mkAtt(synOscAGeodeSieveModeAttachment, ParameterIDs::SYN_OSC_A_GEODE_SIEVE_MODE, synOscAGeodeSieveModeRelay);
+        mkAtt(synOscBGeodeSieveModeAttachment, ParameterIDs::SYN_OSC_B_GEODE_SIEVE_MODE, synOscBGeodeSieveModeRelay);
+        mkAtt(synOscCGeodeSieveModeAttachment, ParameterIDs::SYN_OSC_C_GEODE_SIEVE_MODE, synOscCGeodeSieveModeRelay);
+        mkAtt(synOscDGeodeSieveModeAttachment, ParameterIDs::SYN_OSC_D_GEODE_SIEVE_MODE, synOscDGeodeSieveModeRelay);
         // GRAIN-EXPANDED-MKATT (8 × 4 osc)
         mkAtt(synOscAGrainPositionAttachment, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, synOscAGrainPositionRelay); mkAtt(synOscAGrainPitchAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, synOscAGrainPitchRelay); mkAtt(synOscAGrainPsprayAttachment, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, synOscAGrainPsprayRelay); mkAtt(synOscAGrainWidthAttachment, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, synOscAGrainWidthRelay);
         mkAtt(synOscAGrainDirAttachment, ParameterIDs::SYN_OSC_A_GRAIN_DIR, synOscAGrainDirRelay); mkAtt(synOscAGrainSkewAttachment, ParameterIDs::SYN_OSC_A_GRAIN_SKEW, synOscAGrainSkewRelay);
@@ -3808,11 +3818,11 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             }
             static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
                                                 ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
-            static const char* const GID[4][17] = {
-                { ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP, ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT, ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE, ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY, ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP, ParameterIDs::SYN_OSC_A_GEODE_BEDROCK, ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE },
-                { ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP, ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT, ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY, ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP, ParameterIDs::SYN_OSC_B_GEODE_BEDROCK, ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE },
-                { ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP, ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT, ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE, ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY, ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP, ParameterIDs::SYN_OSC_C_GEODE_BEDROCK, ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE },
-                { ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP, ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT, ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY, ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP, ParameterIDs::SYN_OSC_D_GEODE_BEDROCK, ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE }
+            static const char* const GID[4][19] = {
+                { ParameterIDs::SYN_OSC_A_GEODE_POSITION, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, ParameterIDs::SYN_OSC_A_GEODE_CREEP, ParameterIDs::SYN_OSC_A_GEODE_SILT, ParameterIDs::SYN_OSC_A_GEODE_FORMANT, ParameterIDs::SYN_OSC_A_GEODE_CUT, ParameterIDs::SYN_OSC_A_GEODE_SIEVE, ParameterIDs::SYN_OSC_A_GEODE_DISTILL, ParameterIDs::SYN_OSC_A_GEODE_HAZE, ParameterIDs::SYN_OSC_A_GEODE_FRACTURE, ParameterIDs::SYN_OSC_A_GEODE_TILT, ParameterIDs::SYN_OSC_A_GEODE_QUALITY, ParameterIDs::SYN_OSC_A_GEODE_FKEEP, ParameterIDs::SYN_OSC_A_GEODE_LOOP, ParameterIDs::SYN_OSC_A_GEODE_BEDROCK, ParameterIDs::SYN_OSC_A_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_A_GEODE_CUT_MODE , ParameterIDs::SYN_OSC_A_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_A_GEODE_SIEVE_MODE },
+                { ParameterIDs::SYN_OSC_B_GEODE_POSITION, ParameterIDs::SYN_OSC_B_GEODE_FOSSIL, ParameterIDs::SYN_OSC_B_GEODE_CREEP, ParameterIDs::SYN_OSC_B_GEODE_SILT, ParameterIDs::SYN_OSC_B_GEODE_FORMANT, ParameterIDs::SYN_OSC_B_GEODE_CUT, ParameterIDs::SYN_OSC_B_GEODE_SIEVE, ParameterIDs::SYN_OSC_B_GEODE_DISTILL, ParameterIDs::SYN_OSC_B_GEODE_HAZE, ParameterIDs::SYN_OSC_B_GEODE_FRACTURE, ParameterIDs::SYN_OSC_B_GEODE_TILT, ParameterIDs::SYN_OSC_B_GEODE_QUALITY, ParameterIDs::SYN_OSC_B_GEODE_FKEEP, ParameterIDs::SYN_OSC_B_GEODE_LOOP, ParameterIDs::SYN_OSC_B_GEODE_BEDROCK, ParameterIDs::SYN_OSC_B_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_B_GEODE_CUT_MODE , ParameterIDs::SYN_OSC_B_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_B_GEODE_SIEVE_MODE },
+                { ParameterIDs::SYN_OSC_C_GEODE_POSITION, ParameterIDs::SYN_OSC_C_GEODE_FOSSIL, ParameterIDs::SYN_OSC_C_GEODE_CREEP, ParameterIDs::SYN_OSC_C_GEODE_SILT, ParameterIDs::SYN_OSC_C_GEODE_FORMANT, ParameterIDs::SYN_OSC_C_GEODE_CUT, ParameterIDs::SYN_OSC_C_GEODE_SIEVE, ParameterIDs::SYN_OSC_C_GEODE_DISTILL, ParameterIDs::SYN_OSC_C_GEODE_HAZE, ParameterIDs::SYN_OSC_C_GEODE_FRACTURE, ParameterIDs::SYN_OSC_C_GEODE_TILT, ParameterIDs::SYN_OSC_C_GEODE_QUALITY, ParameterIDs::SYN_OSC_C_GEODE_FKEEP, ParameterIDs::SYN_OSC_C_GEODE_LOOP, ParameterIDs::SYN_OSC_C_GEODE_BEDROCK, ParameterIDs::SYN_OSC_C_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_C_GEODE_CUT_MODE , ParameterIDs::SYN_OSC_C_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_C_GEODE_SIEVE_MODE },
+                { ParameterIDs::SYN_OSC_D_GEODE_POSITION, ParameterIDs::SYN_OSC_D_GEODE_FOSSIL, ParameterIDs::SYN_OSC_D_GEODE_CREEP, ParameterIDs::SYN_OSC_D_GEODE_SILT, ParameterIDs::SYN_OSC_D_GEODE_FORMANT, ParameterIDs::SYN_OSC_D_GEODE_CUT, ParameterIDs::SYN_OSC_D_GEODE_SIEVE, ParameterIDs::SYN_OSC_D_GEODE_DISTILL, ParameterIDs::SYN_OSC_D_GEODE_HAZE, ParameterIDs::SYN_OSC_D_GEODE_FRACTURE, ParameterIDs::SYN_OSC_D_GEODE_TILT, ParameterIDs::SYN_OSC_D_GEODE_QUALITY, ParameterIDs::SYN_OSC_D_GEODE_FKEEP, ParameterIDs::SYN_OSC_D_GEODE_LOOP, ParameterIDs::SYN_OSC_D_GEODE_BEDROCK, ParameterIDs::SYN_OSC_D_GEODE_SHAPE_TARGET, ParameterIDs::SYN_OSC_D_GEODE_CUT_MODE, ParameterIDs::SYN_OSC_D_GEODE_DRIVE_MODE, ParameterIDs::SYN_OSC_D_GEODE_SIEVE_MODE }
             };
             auto& vt = audioProcessor.getAPVTS();
             auto rp  = [&vt] (const char* id) noexcept { auto* a = vt.getRawParameterValue (id); return a != nullptr ? a->load() : 0.0f; };
@@ -3836,14 +3846,81 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 gp.start   = rp (g[0]);  gp.stretch = rp (g[1]);  gp.scan    = rp (g[2]);
                 gp.crush   = rp (g[3]);  gp.formant = rp (g[4]);  gp.cut     = rp (g[5]);
                 gp.sieve   = rp (g[6]);  gp.shape   = rp (g[7]);  gp.drive   = rp (g[8]);
-                /* g[9] FRACTURE reserved */  gp.tilt = rp (g[10]); gp.quality = rp (g[11]);
+                gp.smear = rp (g[9]);  gp.tilt = rp (g[10]); gp.quality = rp (g[11]);   // g[9] = FRACTURE repurposed as MELT
                 gp.formantKeep = rp (g[12]) > 0.5f;  gp.loopMode = (int) rp (g[13]);
-                gp.shapeTarget = (int) rp (g[15]);   gp.cutMode = (int) rp (g[16]);
+                gp.shapeTarget = (int) rp (g[15]);   gp.cutMode   = (int) rp (g[16]);
+                gp.driveMode   = (int) rp (g[17]);   gp.sieveMode = (int) rp (g[18]);
                 geodeDispEng_[o].setFrameStore (store);
                 geodeDispEng_[o].setParams (gp);
                 float pos = 0.0f;
                 geodeDispEng_[o].computeDisplayEnvelope (bins, NB, dt, pos);
                 anyOn = true;
+
+                // ── SPECTRAL-IMAGE STRIP bake (rs6) — ghost (raw data) + bright (survivors) ──
+                // Full push on store-change or the 5s heartbeat (self-heal: a wd9-reloaded page
+                // repopulates); bright-only on content-knob changes, throttled to ~6Hz. Column-
+                // major bytes (x*IH+y, bin 0 = low freq), base64, → window.__geodeImage.
+                {
+                    constexpr int IW = 128, IH = 64;
+                    auto contentChanged = [] (const tw::GeodeParams& a, const tw::GeodeParams& b) noexcept
+                    {
+                        return a.sieve != b.sieve || a.cut != b.cut || a.shape != b.shape
+                            || a.drive != b.drive || a.quality != b.quality || a.formant != b.formant
+                            || a.tilt != b.tilt || a.smear != b.smear || a.shapeTarget != b.shapeTarget
+                            || a.cutMode != b.cutMode || a.driveMode != b.driveMode
+                            || a.sieveMode != b.sieveMode || a.formantKeep != b.formantKeep;
+                    };
+                    if (geodeImgCooldown_[o] > 0)  --geodeImgCooldown_[o];
+                    if (geodeImgHeartbeat_[o] > 0) --geodeImgHeartbeat_[o];
+                    const bool storeChanged = (store != geodeImgStore_[o]);
+                    const bool fullPush     = storeChanged || geodeImgHeartbeat_[o] <= 0;
+                    const bool brightPush   = contentChanged (gp, geodeImgParams_[o]) && geodeImgCooldown_[o] <= 0;
+                    if (fullPush || brightPush)
+                    {
+                        float fb[IH];
+                        juce::MemoryBlock bright ((size_t) (IW * IH));
+                        auto* bp = static_cast<unsigned char*> (bright.getData());
+                        for (int x = 0; x < IW; ++x)
+                        {
+                            geodeDispEng_[o].computeFrameEnvelope ((float) x / (float) (IW - 1), fb, IH, false);
+                            for (int y = 0; y < IH; ++y)
+                            {
+                                float v = std::isfinite (fb[y]) ? fb[y] * (255.0f / 1.5f) : 0.0f;
+                                bp[x * IH + y] = (unsigned char) (v < 0.f ? 0.f : (v > 255.f ? 255.f : v));
+                            }
+                        }
+                        juce::String js = "try{window.__geodeImage&&window.__geodeImage('";
+                        js << oscKey[o] << "',";
+                        if (fullPush)
+                        {
+                            if (storeChanged) ++geodeImgGen_[o];
+                            juce::MemoryBlock ghost ((size_t) (IW * IH));
+                            auto* gp8 = static_cast<unsigned char*> (ghost.getData());
+                            for (int x = 0; x < IW; ++x)
+                            {
+                                geodeDispEng_[o].computeFrameEnvelope ((float) x / (float) (IW - 1), fb, IH, true);
+                                for (int y = 0; y < IH; ++y)
+                                {
+                                    float v = std::isfinite (fb[y]) ? fb[y] * (255.0f / 1.5f) : 0.0f;
+                                    gp8[x * IH + y] = (unsigned char) (v < 0.f ? 0.f : (v > 255.f ? 255.f : v));
+                                }
+                            }
+                            js << geodeImgGen_[o] << ",'"
+                               << juce::Base64::toBase64 (ghost.getData(), ghost.getSize()) << "','";
+                        }
+                        else
+                        {
+                            js << geodeImgGen_[o] << ",null,'";
+                        }
+                        js << juce::Base64::toBase64 (bright.getData(), bright.getSize())
+                           << "'," << IW << "," << IH << ");}catch(e){}";
+                        webView->evaluateJavascript (js, nullptr);
+                        geodeImgStore_[o]     = store;
+                        geodeImgParams_[o]    = gp;
+                        geodeImgCooldown_[o]  = 10;    // ≥ ~166ms between bright re-bakes on knob drags
+                        geodeImgHeartbeat_[o] = 300;   // unconditional full refresh every ~5s (healer)
+                    }
+                }
                 s += "{on:1,p:" + SFG (pos) + ",e:[";
                 for (int b = 0; b < NB; ++b) { if (b) s += ","; s += SFG (bins[b]); }
                 s += "]}";
