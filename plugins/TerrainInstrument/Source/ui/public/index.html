@@ -3918,22 +3918,15 @@ body {
 #syn-panel .harm-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
 #syn-panel .device.osc.engine-harm:not(.swapped) .harm-knob-wrap { display: flex; }
 #syn-panel .device.osc.engine-harm:not(.swapped) .front-only .osc-knobs:not(.harm-knobs) { display: none; }
-#syn-panel .harm-knob-wrap .harm-pg { flex: 1; display: none; flex-direction: column; gap: 3px; min-width: 0; }
-#syn-panel .harm-knob-wrap .harm-pg1 { display: flex; }
-#syn-panel .harm-knob-wrap.pg2 .harm-pg1 { display: none; }
-#syn-panel .harm-knob-wrap.pg2 .harm-pg2 { display: flex; }
-/* the two-row page (buttons over knobs) is taller than a plain knob row — let the
-   display shrink to absorb it (the partial-bar canvas is absolute, it just gets shorter) */
-#syn-panel .device.osc.engine-harm .osc-display { min-height: 49px; }   /* measured so the knob row bottoms at the SAME pixel as every other engine's row */
-#syn-panel .harm-btn-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
-#syn-panel .harm-btn { appearance: none; -webkit-appearance: none; background: transparent; border: 1px solid rgba(255,255,255,0.34); border-radius: 4px; color: rgba(255,255,255,0.82); font-family: inherit; font-size: 7px; font-weight: 600; letter-spacing: 0.35px; line-height: 1; padding: 2px 0; cursor: pointer; transition: border-color .12s, color .12s, background .12s; }
-#syn-panel .harm-btn:hover { border-color: rgba(255,255,255,0.7); color: #fff; }
-#syn-panel .harm-btn.active { border-color: var(--purple-400); color: #fff; background: rgba(139,92,246,0.22); }
 #syn-panel .harm-knob-wrap .harm-knobs { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; align-items: center; }
+#syn-panel .harm-knob-wrap .harm-pg2 { display: none; }
+#syn-panel .harm-knob-wrap.pg2 .harm-pg1 { display: none; }
+#syn-panel .harm-knob-wrap.pg2 .harm-pg2 { display: grid; }
 #syn-panel .harm-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
 #syn-panel .harm-arrow:hover { opacity: .95; }
 #syn-panel .harm-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
 #syn-panel .harm-knob-wrap.pg2 .harm-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+#syn-panel .hm-mode-wrap.hm-sculpt { margin-left: 7px; }
 #syn-panel .harm-view { position: absolute; inset: 0; display: none; }
 #syn-panel .harm-view canvas { display: block; width: 100%; height: 100%; }
 #syn-panel .device.osc.engine-harm .osc-wave { display: none; }
@@ -4111,7 +4104,7 @@ body {
 #syn-panel .device.osc.engine-geode .samp-head .samp-sel.snap { display: none; }
 #syn-panel .device.osc.engine-geode .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device.osc.engine-harm .device-corner-preset .preset-wrap { display: none; }
-#syn-panel .hm-mode-wrap { display: none; }
+#syn-panel .device-corner-preset .hm-mode-wrap { display: none; }   /* must outrank the base .preset-wrap display rule */
 #syn-panel .device.osc.engine-harm .device-corner-preset .hm-mode-wrap { display: inline-flex; }
 #syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
 #syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
@@ -5244,7 +5237,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-a-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="a" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-a-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="a" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-a-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="a" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-a-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select" aria-label="Wavetable preset">
@@ -5338,21 +5331,11 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- HARMONIC ENGINE (HARM-ENGINE-UI) — shown when engine == Harmonic (HARM=5).
-                   Page 1 = Voice (6 spectrum families + Hue Partials Lean Fan Grit Braid);
-                   the thin white arrow flips to Page 2 = Sculpt (6 transforms + Carve Churn
-                   Root Shine Wilt Fizz). Knobs auto-bind via .knob[data-syn]. -->
+              <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
+                   Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
+                   name goes for WT). Knobs auto-bind via .knob[data-syn]; arrow flips pages. -->
               <div class="harm-knob-wrap">
-              <div class="harm-pg harm-pg1">
-              <div class="harm-btn-row" data-harm="mode" data-oscl="a">
-                <button type="button" class="harm-btn" data-idx="0" title="Blade — the analog saw family; Hue steepens the rolloff and fades the evens toward a hollow reed">Blade</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Neon — the CS-80 lane: saw+pulse under a singing resonance; past 50% it stabs and sweeps itself">Neon</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Console — drawbar organ: flute to full registration; past 50% the bars detune into a carillon cluster">Console</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Chant — a vocal mask over the series: oo to ah; past 50% it scatters into a slow-drifting choir">Chant</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Bronze — struck metal: Hue stretches the overtones from piano-string zing to temple gong, root stays locked">Bronze</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Hornet — band-limited buzz: Hue lights more partials and narrows the pulse into a swarm">Hornet</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg1">
                 <div class="knob" data-syn="SYN_OSC_A_HARM_HUE" title="Hue — morphs the character inside the chosen family; 50% and 100% are different instruments, not more of one"><div class="knob-ring"></div><div class="knob-label">Hue</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_COUNT" title="Partials — how much of the series exists: 8 skeletal to 512 full-spectrum; loudness stays level"><div class="knob-ring"></div><div class="knob-label">Partials</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_LEAN" title="Lean — spectral center of gravity: dark felt left, glassy bright right"><div class="knob-ring"></div><div class="knob-label">Lean</div></div>
@@ -5360,24 +5343,13 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_HARM_GRIT" title="Grit — analog life: banded drift on every partial; subtle VCO wander to haunted machine"><div class="knob-ring"></div><div class="knob-label">Grit</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_BRAID" title="Braid — ensemble twins on the loudest partials: true detuned-pair width, beats speed up with pitch"><div class="knob-ring"></div><div class="knob-label">Braid</div></div>
               </div>
-              </div>
-              <div class="harm-pg harm-pg2">
-              <div class="harm-btn-row" data-harm="sculpt" data-oscl="a">
-                <button type="button" class="harm-btn" data-idx="0" title="Keel — pivot tilt: dark felt blanket; past 50% the pivot climbs and the lows duck into a megaphone scream">Keel</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Splay — inharmonic stretch with the root LOCKED harmonic: glass, bell, then gong you can still play">Splay</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Cull — sieves the series: odd survivors, then primes, then Fibonacci — hollow to skeletal chimes">Cull</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Tide — waves of brightness roll through the spectrum: one slow swell to a fast spectral flutter">Tide</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Terrace — quantizes partial loudness into steps: lo-fi shelves, then dithered dying-light sputter">Terrace</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Clang — ring-mod lattice grown inside the spectrum: undertone growl to clangorous bell chaos">Clang</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg2">
                 <div class="knob" data-syn="SYN_OSC_A_HARM_CARVE" title="Carve — how deep the sculpt cuts; past 50% each mode changes SHAPE, not just amount"><div class="knob-ring"></div><div class="knob-label">Carve</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_CHURN" title="Churn — motion rate for the animated sculpts: Tide speed, Terrace dither, orbit and shimmer breathing"><div class="knob-ring"></div><div class="knob-label">Churn</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
-              </div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
               </div>
@@ -5542,7 +5514,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-b-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="b" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-b-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="b" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-b-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="b" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-b-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_B_WT_PRESET" id="osc-b-preset-select" aria-label="Wavetable preset">
@@ -5636,21 +5608,11 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- HARMONIC ENGINE (HARM-ENGINE-UI) — shown when engine == Harmonic (HARM=5).
-                   Page 1 = Voice (6 spectrum families + Hue Partials Lean Fan Grit Braid);
-                   the thin white arrow flips to Page 2 = Sculpt (6 transforms + Carve Churn
-                   Root Shine Wilt Fizz). Knobs auto-bind via .knob[data-syn]. -->
+              <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
+                   Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
+                   name goes for WT). Knobs auto-bind via .knob[data-syn]; arrow flips pages. -->
               <div class="harm-knob-wrap">
-              <div class="harm-pg harm-pg1">
-              <div class="harm-btn-row" data-harm="mode" data-oscl="b">
-                <button type="button" class="harm-btn" data-idx="0" title="Blade — the analog saw family; Hue steepens the rolloff and fades the evens toward a hollow reed">Blade</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Neon — the CS-80 lane: saw+pulse under a singing resonance; past 50% it stabs and sweeps itself">Neon</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Console — drawbar organ: flute to full registration; past 50% the bars detune into a carillon cluster">Console</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Chant — a vocal mask over the series: oo to ah; past 50% it scatters into a slow-drifting choir">Chant</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Bronze — struck metal: Hue stretches the overtones from piano-string zing to temple gong, root stays locked">Bronze</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Hornet — band-limited buzz: Hue lights more partials and narrows the pulse into a swarm">Hornet</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg1">
                 <div class="knob" data-syn="SYN_OSC_B_HARM_HUE" title="Hue — morphs the character inside the chosen family; 50% and 100% are different instruments, not more of one"><div class="knob-ring"></div><div class="knob-label">Hue</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_COUNT" title="Partials — how much of the series exists: 8 skeletal to 512 full-spectrum; loudness stays level"><div class="knob-ring"></div><div class="knob-label">Partials</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_LEAN" title="Lean — spectral center of gravity: dark felt left, glassy bright right"><div class="knob-ring"></div><div class="knob-label">Lean</div></div>
@@ -5658,24 +5620,13 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_HARM_GRIT" title="Grit — analog life: banded drift on every partial; subtle VCO wander to haunted machine"><div class="knob-ring"></div><div class="knob-label">Grit</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_BRAID" title="Braid — ensemble twins on the loudest partials: true detuned-pair width, beats speed up with pitch"><div class="knob-ring"></div><div class="knob-label">Braid</div></div>
               </div>
-              </div>
-              <div class="harm-pg harm-pg2">
-              <div class="harm-btn-row" data-harm="sculpt" data-oscl="b">
-                <button type="button" class="harm-btn" data-idx="0" title="Keel — pivot tilt: dark felt blanket; past 50% the pivot climbs and the lows duck into a megaphone scream">Keel</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Splay — inharmonic stretch with the root LOCKED harmonic: glass, bell, then gong you can still play">Splay</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Cull — sieves the series: odd survivors, then primes, then Fibonacci — hollow to skeletal chimes">Cull</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Tide — waves of brightness roll through the spectrum: one slow swell to a fast spectral flutter">Tide</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Terrace — quantizes partial loudness into steps: lo-fi shelves, then dithered dying-light sputter">Terrace</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Clang — ring-mod lattice grown inside the spectrum: undertone growl to clangorous bell chaos">Clang</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg2">
                 <div class="knob" data-syn="SYN_OSC_B_HARM_CARVE" title="Carve — how deep the sculpt cuts; past 50% each mode changes SHAPE, not just amount"><div class="knob-ring"></div><div class="knob-label">Carve</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_CHURN" title="Churn — motion rate for the animated sculpts: Tide speed, Terrace dither, orbit and shimmer breathing"><div class="knob-ring"></div><div class="knob-label">Churn</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
-              </div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
               </div>
@@ -5856,7 +5807,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-c-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="c" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-c-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="c" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-c-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="c" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-c-preset-display">Sine</span>
               <select class="preset-select" id="osc-c-preset-select" data-syn="SYN_OSC_C_WT_PRESET" aria-label="OSC B wavetable preset">
@@ -5950,21 +5901,11 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- HARMONIC ENGINE (HARM-ENGINE-UI) — shown when engine == Harmonic (HARM=5).
-                   Page 1 = Voice (6 spectrum families + Hue Partials Lean Fan Grit Braid);
-                   the thin white arrow flips to Page 2 = Sculpt (6 transforms + Carve Churn
-                   Root Shine Wilt Fizz). Knobs auto-bind via .knob[data-syn]. -->
+              <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
+                   Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
+                   name goes for WT). Knobs auto-bind via .knob[data-syn]; arrow flips pages. -->
               <div class="harm-knob-wrap">
-              <div class="harm-pg harm-pg1">
-              <div class="harm-btn-row" data-harm="mode" data-oscl="c">
-                <button type="button" class="harm-btn" data-idx="0" title="Blade — the analog saw family; Hue steepens the rolloff and fades the evens toward a hollow reed">Blade</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Neon — the CS-80 lane: saw+pulse under a singing resonance; past 50% it stabs and sweeps itself">Neon</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Console — drawbar organ: flute to full registration; past 50% the bars detune into a carillon cluster">Console</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Chant — a vocal mask over the series: oo to ah; past 50% it scatters into a slow-drifting choir">Chant</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Bronze — struck metal: Hue stretches the overtones from piano-string zing to temple gong, root stays locked">Bronze</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Hornet — band-limited buzz: Hue lights more partials and narrows the pulse into a swarm">Hornet</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg1">
                 <div class="knob" data-syn="SYN_OSC_C_HARM_HUE" title="Hue — morphs the character inside the chosen family; 50% and 100% are different instruments, not more of one"><div class="knob-ring"></div><div class="knob-label">Hue</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_COUNT" title="Partials — how much of the series exists: 8 skeletal to 512 full-spectrum; loudness stays level"><div class="knob-ring"></div><div class="knob-label">Partials</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_LEAN" title="Lean — spectral center of gravity: dark felt left, glassy bright right"><div class="knob-ring"></div><div class="knob-label">Lean</div></div>
@@ -5972,24 +5913,13 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_HARM_GRIT" title="Grit — analog life: banded drift on every partial; subtle VCO wander to haunted machine"><div class="knob-ring"></div><div class="knob-label">Grit</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_BRAID" title="Braid — ensemble twins on the loudest partials: true detuned-pair width, beats speed up with pitch"><div class="knob-ring"></div><div class="knob-label">Braid</div></div>
               </div>
-              </div>
-              <div class="harm-pg harm-pg2">
-              <div class="harm-btn-row" data-harm="sculpt" data-oscl="c">
-                <button type="button" class="harm-btn" data-idx="0" title="Keel — pivot tilt: dark felt blanket; past 50% the pivot climbs and the lows duck into a megaphone scream">Keel</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Splay — inharmonic stretch with the root LOCKED harmonic: glass, bell, then gong you can still play">Splay</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Cull — sieves the series: odd survivors, then primes, then Fibonacci — hollow to skeletal chimes">Cull</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Tide — waves of brightness roll through the spectrum: one slow swell to a fast spectral flutter">Tide</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Terrace — quantizes partial loudness into steps: lo-fi shelves, then dithered dying-light sputter">Terrace</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Clang — ring-mod lattice grown inside the spectrum: undertone growl to clangorous bell chaos">Clang</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg2">
                 <div class="knob" data-syn="SYN_OSC_C_HARM_CARVE" title="Carve — how deep the sculpt cuts; past 50% each mode changes SHAPE, not just amount"><div class="knob-ring"></div><div class="knob-label">Carve</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_CHURN" title="Churn — motion rate for the animated sculpts: Tide speed, Terrace dither, orbit and shimmer breathing"><div class="knob-ring"></div><div class="knob-label">Churn</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
-              </div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
               </div>
@@ -6154,7 +6084,7 @@ body {
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-d-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="d" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-d-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="d" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-d-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="d" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-d-preset-display">Sine</span>
               <select class="preset-select" id="osc-d-preset-select" data-syn="SYN_OSC_D_WT_PRESET" aria-label="OSC B wavetable preset">
@@ -6248,21 +6178,11 @@ body {
               </div>
               <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
               </div>
-              <!-- HARMONIC ENGINE (HARM-ENGINE-UI) — shown when engine == Harmonic (HARM=5).
-                   Page 1 = Voice (6 spectrum families + Hue Partials Lean Fan Grit Braid);
-                   the thin white arrow flips to Page 2 = Sculpt (6 transforms + Carve Churn
-                   Root Shine Wilt Fizz). Knobs auto-bind via .knob[data-syn]. -->
+              <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
+                   Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
+                   name goes for WT). Knobs auto-bind via .knob[data-syn]; arrow flips pages. -->
               <div class="harm-knob-wrap">
-              <div class="harm-pg harm-pg1">
-              <div class="harm-btn-row" data-harm="mode" data-oscl="d">
-                <button type="button" class="harm-btn" data-idx="0" title="Blade — the analog saw family; Hue steepens the rolloff and fades the evens toward a hollow reed">Blade</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Neon — the CS-80 lane: saw+pulse under a singing resonance; past 50% it stabs and sweeps itself">Neon</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Console — drawbar organ: flute to full registration; past 50% the bars detune into a carillon cluster">Console</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Chant — a vocal mask over the series: oo to ah; past 50% it scatters into a slow-drifting choir">Chant</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Bronze — struck metal: Hue stretches the overtones from piano-string zing to temple gong, root stays locked">Bronze</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Hornet — band-limited buzz: Hue lights more partials and narrows the pulse into a swarm">Hornet</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg1">
                 <div class="knob" data-syn="SYN_OSC_D_HARM_HUE" title="Hue — morphs the character inside the chosen family; 50% and 100% are different instruments, not more of one"><div class="knob-ring"></div><div class="knob-label">Hue</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_COUNT" title="Partials — how much of the series exists: 8 skeletal to 512 full-spectrum; loudness stays level"><div class="knob-ring"></div><div class="knob-label">Partials</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_LEAN" title="Lean — spectral center of gravity: dark felt left, glassy bright right"><div class="knob-ring"></div><div class="knob-label">Lean</div></div>
@@ -6270,24 +6190,13 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_HARM_GRIT" title="Grit — analog life: banded drift on every partial; subtle VCO wander to haunted machine"><div class="knob-ring"></div><div class="knob-label">Grit</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_BRAID" title="Braid — ensemble twins on the loudest partials: true detuned-pair width, beats speed up with pitch"><div class="knob-ring"></div><div class="knob-label">Braid</div></div>
               </div>
-              </div>
-              <div class="harm-pg harm-pg2">
-              <div class="harm-btn-row" data-harm="sculpt" data-oscl="d">
-                <button type="button" class="harm-btn" data-idx="0" title="Keel — pivot tilt: dark felt blanket; past 50% the pivot climbs and the lows duck into a megaphone scream">Keel</button>
-                <button type="button" class="harm-btn" data-idx="1" title="Splay — inharmonic stretch with the root LOCKED harmonic: glass, bell, then gong you can still play">Splay</button>
-                <button type="button" class="harm-btn" data-idx="2" title="Cull — sieves the series: odd survivors, then primes, then Fibonacci — hollow to skeletal chimes">Cull</button>
-                <button type="button" class="harm-btn" data-idx="3" title="Tide — waves of brightness roll through the spectrum: one slow swell to a fast spectral flutter">Tide</button>
-                <button type="button" class="harm-btn" data-idx="4" title="Terrace — quantizes partial loudness into steps: lo-fi shelves, then dithered dying-light sputter">Terrace</button>
-                <button type="button" class="harm-btn" data-idx="5" title="Clang — ring-mod lattice grown inside the spectrum: undertone growl to clangorous bell chaos">Clang</button>
-              </div>
-              <div class="osc-knobs harm-knobs">
+              <div class="osc-knobs harm-knobs harm-pg2">
                 <div class="knob" data-syn="SYN_OSC_D_HARM_CARVE" title="Carve — how deep the sculpt cuts; past 50% each mode changes SHAPE, not just amount"><div class="knob-ring"></div><div class="knob-label">Carve</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_CHURN" title="Churn — motion rate for the animated sculpts: Tide speed, Terrace dither, orbit and shimmer breathing"><div class="knob-ring"></div><div class="knob-label">Churn</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
-              </div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
               </div>
@@ -10701,23 +10610,19 @@ setTimeout(function wireSynControls () {
         arrow.addEventListener ('click', toggle);
         arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
       });
-      // mode/sculpt rows — bound to the 6-way choice params (normalised = idx/5, engine-select pattern)
-      document.querySelectorAll ('#syn-panel .harm-btn-row').forEach (function (row) {
-        var oscL = row.getAttribute ('data-oscl') || 'a';
-        var kind = row.getAttribute ('data-harm') || 'mode';
-        var pid  = 'SYN_OSC_' + oscL.toUpperCase () + '_HARM_' + (kind === 'mode' ? 'MODE' : 'SCULPT');
-        var st = null; try { st = window.Juce.getSliderState (pid); } catch (e) {}
-        if (! st) { console.warn ('[HARM] no SliderState for', pid); return; }
-        var btns = Array.prototype.slice.call (row.querySelectorAll ('.harm-btn'));
-        function idxNow () { try { return Math.max (0, Math.min (5, Math.round (st.getNormalisedValue () * 5))); } catch (e) { return 0; } }
-        function paint () { var i = idxNow (); btns.forEach (function (b, j) { b.classList.toggle ('active', j === i); }); }
-        btns.forEach (function (b, j) {
-          b.addEventListener ('click', function (e) { e.preventDefault (); try { st.setNormalisedValue (j / 5); } catch (e2) {} paint (); });
-        });
+    // header FAMILY + SCULPT selectors — the mode UI (bottom buttons retired hm3)
+      var HM_SCULPT = ['Keel','Splay','Cull','Tide','Terrace','Clang'];
+      document.querySelectorAll ('#syn-panel .hm-sculpt-select').forEach (function (sel) {
+        var oscL = sel.getAttribute ('data-oscl') || 'a';
+        var disp = document.getElementById ('osc-' + oscL + '-harmsculpt-display');
+        var st = null; try { st = window.Juce.getSliderState ('SYN_OSC_' + oscL.toUpperCase () + '_HARM_SCULPT'); } catch (e) {}
+        if (! st || ! disp) return;
+        function paint () { var i = 0; try { i = Math.max (0, Math.min (5, Math.round (st.getNormalisedValue () * 5))); } catch (e) {}
+          disp.textContent = HM_SCULPT[i] || 'Keel'; try { sel.value = String (i); } catch (e) {} }
+        sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; try { st.setNormalisedValue (i / 5); } catch (e) {} paint (); });
         try { st.valueChangedEvent.addListener (paint); } catch (e) {}
         paint ();
       });
-    // header FAMILY selector — same param as the pg1 buttons; both repaint via the state listener
       var HM_FAM = ['Blade','Neon','Console','Chant','Bronze','Hornet'];
       document.querySelectorAll ('#syn-panel .hm-mode-select').forEach (function (sel) {
         var oscL = sel.getAttribute ('data-oscl') || 'a';
@@ -10732,14 +10637,29 @@ setTimeout(function wireSynControls () {
       });
     } catch (eHm) { console.warn ('[HARM] ui wiring failed', eHm); }
 
-    // ── HARM VIZ painter — 60 fps rAF lerp toward the C++ pushed bins ──
+    // ── HARM VIZ painter — flat-line partial spectrum (hm3): THIN white lines rise from a
+    //    baseline; a low-opacity PURPLE waveform ghost breathes behind while notes play (tapped
+    //    from the osc-scope push). HEALERS: lazy tap, per-frame re-query, TIME watchdog wipe. ──
     try {
       var HV = {};
-      ['a','b','c','d'].forEach (function (o) { HV[o] = { t: null, g: null, cur: null, curG: null, pk: null, seen: 0 }; });
+      ['a','b','c','d'].forEach (function (o) { HV[o] = { t: null, cur: null, seen: 0 }; });
+      var HVWAVE = { on: false, t: 0, a: null, b: null, c: null, d: null, patched: false };
       function hvNow () { return (window.performance && performance.now) ? performance.now () : Date.now (); }
       window.updateHarmViz = function (o, white, ghost) {
-        try { var st = HV[o]; if (! st) return; st.t = white; st.g = ghost; st.seen = hvNow (); } catch (e) {}
+        try { var st = HV[o]; if (! st) return; st.t = white; st.seen = hvNow (); } catch (e) {}
       };
+      function hvTapScope () {   // lazy monkey-patch — the scope IIFE loads after this one
+        if (HVWAVE.patched || typeof window.updateOscScope !== 'function') return;
+        var orig = window.updateOscScope;
+        window.updateOscScope = function (f) {
+          try {
+            HVWAVE.on = !! (f && f.active);
+            if (HVWAVE.on) { HVWAVE.a = f.a || null; HVWAVE.b = f.b || null; HVWAVE.c = f.c || null; HVWAVE.d = f.d || null; HVWAVE.t = hvNow (); }
+          } catch (e) {}
+          return orig (f);
+        };
+        HVWAVE.patched = true;
+      }
       function hvPaint (o) {
         var st = HV[o];
         var cv = document.getElementById ('harm-bars-' + o);
@@ -10753,33 +10673,36 @@ setTimeout(function wireSynControls () {
         if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
         var ctx = cv.getContext ('2d'); if (! ctx) return;
         ctx.clearRect (0, 0, W, H);
+        var wv = (HVWAVE.on && hvNow () - HVWAVE.t < 400) ? HVWAVE[o] : null;
+        if (wv && wv.length > 8) {
+          ctx.strokeStyle = 'rgba(139,92,246,0.26)';
+          ctx.lineWidth = Math.max (1, dpr);
+          ctx.beginPath ();
+          var wn = wv.length, mid = H * 0.5;
+          for (var wi = 0; wi < wn; ++wi) {
+            var wx = wi / (wn - 1) * W, wy = mid - (wv[wi] || 0) * H * 0.40;
+            if (wi) ctx.lineTo (wx, wy); else ctx.moveTo (wx, wy);
+          }
+          ctx.stroke ();
+        }
+        var bl = Math.max (1, Math.round (dpr));
+        var by = H - bl - Math.round (dpr);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect (0, by, W, bl);
         var stale = hvNow () - st.seen > 1600;   // watchdog trusts TIME — feed died, wipe clean
-        if (! st.t || stale) { st.cur = null; st.curG = null; return; }
-        var t = st.t, g = st.g, n = t.length;
-        if (! st.cur || st.cur.length !== n) { st.cur = t.slice (); st.curG = (g || t).slice (); }
-        var cur = st.cur, curG = st.curG, bw = W / n, i, h;
-        if (! st.pk || st.pk.length !== n) { st.pk = t.slice (); }
-        var pk = st.pk, fall = H * 0.012;          // peak caps fall with a little gravity
-        ctx.fillStyle = 'rgba(139,92,246,0.22)';   // purple ghost — the raw family spectrum
-        for (i = 0; i < n; ++i) {
-          curG[i] += (((g && g[i]) || 0) - curG[i]) * 0.35;
-          h = (curG[i] / 99) * H * 0.96;
-          if (h > 0.8) ctx.fillRect (i * bw + bw * 0.14, H - h, Math.max (1, bw * 0.72), h);
-        }
-        ctx.fillStyle = 'rgba(255,255,255,0.96)';  // white — what survives your knobs
-        for (i = 0; i < n; ++i) {
+        if (! st.t || stale) { st.cur = null; return; }
+        var t = st.t, n = t.length;
+        if (! st.cur || st.cur.length !== n) { st.cur = t.slice (); }
+        var cur = st.cur, bw = W / n;
+        var lw = Math.max (1, Math.round (dpr * 1.1));   // THIN lines — the whole point
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        for (var i = 0; i < n; ++i) {
           cur[i] += ((t[i] || 0) - cur[i]) * 0.4;
-          h = (cur[i] / 99) * H * 0.96;
-          if (h > 0.8) ctx.fillRect (i * bw + bw * 0.28, H - h, Math.max (1, bw * 0.44), h);
-          pk[i] = Math.max (cur[i], pk[i] - fall * (99 / H));
-          var ph2 = (pk[i] / 99) * H * 0.96;
-          if (ph2 > 1.6 && ph2 > h + 1.5)          // the cap floats above the bar and falls in
-            ctx.fillRect (i * bw + bw * 0.28, H - ph2 - 1, Math.max (1, bw * 0.44), 1.2);
+          var h = (cur[i] / 99) * (H * 0.94);
+          if (h > 0.8) ctx.fillRect (Math.round (i * bw + bw * 0.5 - lw * 0.5), by - h, lw, h);
         }
-        ctx.fillStyle = 'rgba(255,255,255,0.28)';  // hairline baseline
-        ctx.fillRect (0, H - 1, W, 1);
       }
-      function hvRaf () { try { hvPaint ('a'); hvPaint ('b'); hvPaint ('c'); hvPaint ('d'); } catch (e) {} requestAnimationFrame (hvRaf); }
+      function hvRaf () { try { hvTapScope (); hvPaint ('a'); hvPaint ('b'); hvPaint ('c'); hvPaint ('d'); } catch (e) {} requestAnimationFrame (hvRaf); }
       requestAnimationFrame (hvRaf);
     } catch (eHv) { console.warn ('[HARM] viz wiring failed', eHv); }
 
@@ -22810,7 +22733,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'hm2';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'hm3';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
