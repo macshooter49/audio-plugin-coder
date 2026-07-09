@@ -4110,6 +4110,9 @@ namespace tw
             }
             engs[0].releaseBudget();
             engs[0].renderBankAdd (wL, wR, numSamples);
+            // FORGE (hm6) — analog saturation on the summed unison signal, once per osc,
+            // anchor-owned state (same placement as Geode's postProcess drive).
+            engs[0].postProcess (wL, wR, numSamples);
         }
 
         void renderHarmonicBlocks (int numSamples) noexcept

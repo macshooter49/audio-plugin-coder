@@ -64,6 +64,7 @@ static double renderFund (const HarmParams& p, double playHz, double sr,
         if (p2 != nullptr && off > N / 2) e.setParams (*p2);   // mid-note param jump (declick probe)
         else e.setParams (p);
         e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m);
+        e.postProcess   (&L[(size_t) off], &R[(size_t) off], m);   // full chain incl. FORGE
     }
     static std::vector<float> mono; mono.assign ((size_t) N, 0.f);
     bool finite = true;
@@ -326,10 +327,10 @@ int main()
         e.setParams (p); e.noteOn (55.0, 11u);
         std::vector<float> L (512, 0.f), R (512, 0.f);
         // warm up
-        for (int w = 0; w < 20; ++w) { used = 0; e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); }
+        for (int w = 0; w < 20; ++w) { used = 0; e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); e.postProcess (L.data(), R.data(), 512); }
         const int iters = 400;
         auto t0 = std::chrono::steady_clock::now();
-        for (int w = 0; w < iters; ++w) { used = 0; e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); }
+        for (int w = 0; w < iters; ++w) { used = 0; e.setParams (p); e.renderBlockAdd (L.data(), R.data(), 512); e.postProcess (L.data(), R.data(), 512); }
         auto t1 = std::chrono::steady_clock::now();
         const double usPerBlock = std::chrono::duration<double, std::micro> (t1 - t0).count() / iters;
         const double blockMs = 512.0 / sr * 1000.0;
@@ -355,12 +356,14 @@ int main()
         // while renorm holds the LEVEL — timbre flips, loudness doesn't pump
         auto bright = [&] (float fg, double& rmsOut)
         {
-            HarmParams p; p.forge = fg;
+            HarmParams p; p.forge = fg; p.count = 0.1f;   // DARK source — drive must regenerate highs
             HarmonicEngine e; e.prepare (sr, true); e.setParams (p); e.noteOn (f0, 5u);
             const int N = (int) sr / 2;
             std::vector<float> L ((size_t) N, 0.f), R ((size_t) N, 0.f);
             for (int off = 0; off < N; off += 256)
-            { e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], std::min (256, N - off)); }
+            { const int m = std::min (256, N - off);
+              e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m);
+              e.postProcess (&L[(size_t) off], &R[(size_t) off], m); }
             double sq = 0.0, dq = 0.0;
             for (int i = N / 2 + 1; i < N; ++i)
             {
@@ -395,6 +398,7 @@ int main()
                 const int m = std::min (256, N - off);
                 if (jump) p.forge = (off > N / 2) ? 1.f : 0.f;
                 e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m);
+                e.postProcess (&L[(size_t) off], &R[(size_t) off], m);
                 for (int i = off; i < off + m; ++i)
                 {
                     if (i > (int) sr / 100)   // past the note-on ramp-in
@@ -407,6 +411,36 @@ int main()
         const float ref = worstStep (false), jmp = worstStep (true);
         const bool ok = jmp < ref * 1.5f + 1e-4f;
         std::printf ("[%-22s] jump=%.4f steady=%.4f  %s\n", "declick forge-jump", jmp, ref, ok ? "PASS" : "FAIL");
+        pass += ok; ++tot;
+    }
+
+    {
+        // forge=0 bypass must be bit-identical (postProcess early-outs, buffer untouched)
+        HarmParams p; HarmonicEngine e; e.prepare (sr, true); e.setParams (p); e.noteOn (f0, 3u);
+        std::vector<float> L (2048, 0.f), R (2048, 0.f);
+        e.renderBlockAdd (L.data(), R.data(), 2048);
+        std::vector<float> Lc = L, Rc = R;
+        e.postProcess (L.data(), R.data(), 2048);
+        bool same = true;
+        for (int i = 0; i < 2048; ++i) if (L[(size_t) i] != Lc[(size_t) i] || R[(size_t) i] != Rc[(size_t) i]) { same = false; break; }
+        std::printf ("[%-22s] %s\n", "forge=0 bit-identical", same ? "PASS" : "FAIL");
+        pass += same; ++tot;
+    }
+    {
+        // the asymmetry bias injects DC by design — the blocker must remove it
+        HarmParams p; p.forge = 1.f;
+        HarmonicEngine e; e.prepare (sr, true); e.setParams (p); e.noteOn (f0, 21u);
+        const int N = (int) sr / 2;
+        std::vector<float> L ((size_t) N, 0.f), R ((size_t) N, 0.f);
+        for (int off = 0; off < N; off += 256)
+        { const int m = std::min (256, N - off);
+          e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m);
+          e.postProcess (&L[(size_t) off], &R[(size_t) off], m); }
+        double mean = 0.0, rms = 0.0;
+        for (int i = N / 2; i < N; ++i) { mean += (double) L[(size_t) i]; rms += (double) L[(size_t) i] * L[(size_t) i]; }
+        mean /= (double) (N / 2); rms = std::sqrt (rms / (double) (N / 2));
+        const bool ok = std::fabs (mean) < 0.02 * std::max (1e-6, rms);
+        std::printf ("[%-22s] dc=%.5f rms=%.3f  %s\n", "forge DC clean", mean, rms, ok ? "PASS" : "FAIL");
         pass += ok; ++tot;
     }
 

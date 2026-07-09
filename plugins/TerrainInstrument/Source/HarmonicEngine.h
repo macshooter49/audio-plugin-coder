@@ -26,7 +26,7 @@
 //    5 CLANG   sum/difference intermod lattice on the loudest partials
 //
 //  Voice knobs:  HUE · PARTIALS(count) · LEAN(tilt) · FAN(stereo) · GRIT(life) · BRAID(ensemble)
-//  Sculpt knobs: CARVE · CHURN · ROOT(fund guard+sub) · SHINE(+oct ghost) · WILT(time arrow) · FORGE(spectral feedback drive)
+//  Sculpt knobs: CARVE · CHURN · ROOT(fund guard+sub) · SHINE(+oct ghost) · WILT(time arrow) · FORGE(analog feedback fuzz, post-render)
 //
 //  DSP ground rules honored (house):
 //   - every amplitude change rides a per-partial linear ramp (declick)
@@ -75,14 +75,14 @@ struct HarmParams
     float root   = 0.0f;      // fundamental guard → half-ratio sub ghost
     float shine  = 0.0f;      // detuned +1 octave ghost spectrum
     float wilt   = 0.5f;      // time arrow: highs decay ↔ highs bloom (0.5 = off)
-    float forge  = 0.0f;      // harmonic drive: overtone cascade + feedback regeneration
+    float forge  = 0.0f;      // analog drive: ADAA tanh + feedback fuzz on the summed osc
 
     bool operator== (const HarmParams& o) const noexcept
     {
         return mainMode==o.mainMode && sculptMode==o.sculptMode
             && hue==o.hue && count==o.count && lean==o.lean && fan==o.fan
             && grit==o.grit && braid==o.braid && carve==o.carve && churn==o.churn
-            && root==o.root && shine==o.shine && wilt==o.wilt && forge==o.forge;
+            && root==o.root && shine==o.shine && wilt==o.wilt;   // forge is post-render (no rebuild)
     }
     bool operator!= (const HarmParams& o) const noexcept { return ! (*this == o); }
 };
@@ -96,6 +96,9 @@ public:
     void prepare (double sampleRate, bool bankOwner = true) noexcept
     {
         rate_ = sampleRate > 1000.0 ? sampleRate : 48000.0;
+        fgEnvK_ = 1.f - std::exp (-1.f / (0.010f * (float) rate_));
+        fgMkK_  = 1.f - std::exp (-1.f / (0.005f * (float) rate_));
+        fgDK_   = 1.f - std::exp (-1.f / (0.030f * (float) rate_));
         (void) sineLUT(); (void) sieves();   // build the shared statics OFF the audio thread
         phase_.assign ((size_t) harm::kMaxPartials, 0.f);
         ampZL_.assign ((size_t) harm::kMaxPartials, 0.f);
@@ -137,6 +140,9 @@ public:
     {
         playedHz_ = playedHz > 8.0 ? playedHz : 261.6256;
         seed_ = seed ? seed : 0x9E3779B9u;
+        fgSeed_ = false; fgMk_ = 1.f; fgIn_ = fgWet_ = 0.f;   // FORGE reseeds per note
+        forgeZ_ = clamp01 (p_.forge);                          // note-on snaps to the knob (no glide-in)
+        fgY1_[0] = fgY1_[1] = 0.f; fgDcX_[0] = fgDcX_[1] = 0.f; fgDcY_[0] = fgDcY_[1] = 0.f;
         rng_  = seed_ ^ 0xA511E9B3u;    // noise lane seeded ONCE per note, then free-runs
                                         // (a per-block reseed would freeze the OU drift solid)
         // phase policy (cookbook): random per partial per note = lush, crest-safe, every note
@@ -205,7 +211,6 @@ public:
         nEff = applyShineRoot (nEff);              // ghost deposits may append the sub slot
         applySculpt (nEff, churnMul);
         applyWilt   (nEff);
-        nEff = applyForge (nEff);          // may grow the bank (overtone ghosts)
         applyGrit   (nEff, dt);
         nEff = applyBraid (nEff);                  // appends twin slots (bounded by room)
         applyFan    (nEff, dt, churnMul);
@@ -297,6 +302,66 @@ public:
         renderBankAdd (L, R, n);
     }
 
+    // ── FORGE (hm6) — TRUE analog saturation on the osc's SUMMED signal, run ONCE per
+    // osc-voice on the anchor after the unison sum (distortion at the end of the chain,
+    // mirroring Geode's postProcess drive). Asymmetric-biased tanh through 1st-order ADAA
+    // (aliasing suppressed — house WARP/FOLD pattern), one-sample FEEDBACK around the
+    // shaper (fuzz snarl), DC blocker (the asymmetry bias injects DC by design), and a
+    // CONTINUOUS per-sample RMS auto-gain (10 ms tracker) so loudness never pumps — not
+    // even on a hard knob jump or an LFO sweep. Drive ramps per sample: morph, no switch.
+    void postProcess (float* L, float* R, int n) noexcept
+    {
+        const float dT = clamp01 (p_.forge);
+        if (L == nullptr || R == nullptr || n <= 0) return;
+        if (dT < 0.004f && forgeZ_ < 0.004f)
+        {   // clean bypass — park state so re-entry reseeds (ADAA history gotcha)
+            fgSeed_ = false; fgMk_ = 1.f; fgIn_ = fgWet_ = 0.f; forgeZ_ = 0.f;
+            fgY1_[0] = fgY1_[1] = 0.f; fgDcX_[0] = fgDcX_[1] = 0.f; fgDcY_[0] = fgDcY_[1] = 0.f;
+            return;
+        }
+        float* ch[2] = { L, R };
+        for (int i = 0; i < n; ++i)
+        {
+            // 30 ms drive GLIDE (continuous across blocks): a hard knob jump or LFO square
+            // moves slower than the 10 ms loudness tracker — the level can never burst
+            forgeZ_ += fgDK_ * (dT - forgeZ_);
+            const float dd = forgeZ_;
+            const float g    = 1.f + 60.f * dd * dd;                // up to +36 dB into the shaper
+            const float bias = 0.30f * dd;                          // asymmetry → even harmonics
+            const float fb   = 0.55f * dd;                          // feedback → fuzz snarl
+            const float w    = sstep (0.f, 0.10f, dd);              // wet fades in from silence
+            float xs = 0.f, ys = 0.f, yd2[2];
+            for (int c = 0; c < 2; ++c)
+            {
+                const float x   = ch[c][i];
+                const float xin = g * x + bias + fb * fgY1_[c];
+                float y;
+                const float lc1 = lncoshf_ (xin);
+                if (! fgSeed_) { y = std::tanh (xin); }             // seed with the FIRST input
+                else
+                {
+                    const float dx = xin - fgX0_[c];
+                    y = (dx > 1e-4f || dx < -1e-4f) ? (lc1 - fgLc0_[c]) / dx
+                                                    : std::tanh (0.5f * (xin + fgX0_[c]));
+                }
+                fgX0_[c] = xin; fgLc0_[c] = lc1; fgY1_[c] = y;
+                const float yd = y - fgDcX_[c] + 0.995f * fgDcY_[c];   // DC blocker
+                fgDcX_[c] = y; fgDcY_[c] = yd;
+                yd2[c] = yd;
+                xs += x * x; ys += yd * yd;
+            }
+            fgSeed_ = true;
+            // continuous loudness match: raw-wet RMS tracked against dry RMS, per sample
+            fgIn_  += fgEnvK_ * (0.5f * xs - fgIn_);
+            fgWet_ += fgEnvK_ * (0.5f * ys - fgWet_);
+            float mkRaw = std::sqrt ((fgIn_ + 1e-9f) / (fgWet_ + 1e-9f));
+            mkRaw = mkRaw < 0.02f ? 0.02f : (mkRaw > 8.f ? 8.f : mkRaw);
+            fgMk_ += fgMkK_ * (mkRaw - fgMk_);
+            for (int c = 0; c < 2; ++c)
+                ch[c][i] += w * (yd2[c] * fgMk_ - ch[c][i]);
+        }
+    }
+
     // ── display: white bars (post-sculpt bank) + purple ghost (base family) ──
     // Bars are PARTIAL-indexed with sqrt index compression so the low harmonics get
     // real estate and the 512-tail still reads. Values normalized 0..1 per layer.
@@ -375,6 +440,12 @@ private:
         union { float fv; std::int32_t bits; } u; u.fv = p;
         u.bits += (std::int32_t) fl << 23;
         return u.fv;
+    }
+    // numerically-safe ln(cosh x) — the tanh antiderivative the FORGE ADAA integrates
+    static inline float lncoshf_ (float x) noexcept
+    {
+        const float a = x < 0.f ? -x : x;
+        return a + std::log1p (std::exp (-2.f * a)) - 0.6931472f;
     }
     static inline float dbMul  (float dB)    noexcept { return fastExp2 (dB * 0.166096f);  }   // 10^(dB/20)
     static inline float centsMul (float c)   noexcept { return fastExp2 (c * (1.f/1200.f)); }
@@ -775,88 +846,6 @@ private:
         }
     }
 
-    // stage 6 — FORGE: spectral feedback drive (harmonic distortion, additive-native).
-    // Every loud partial cascades energy into its OWN 2x/3x/4x overtones — the exact
-    // intermodulation a waveshaper would create, but built in the spectrum so nothing
-    // aliases (the Nyquist taper still runs after this). A deposit lands ON an existing
-    // partial when the bank already owns that frequency (integer families: pure timbre
-    // shift, zero new render cost) and is APPENDED as a new partial otherwise (gongs and
-    // stretched banks sprout their own inharmonic overtones). The higher-order weights
-    // ride d^2 and d^4 = feedback regeneration, and heavy drive compresses the amp
-    // lattice toward a buzz wall. Every term scales smoothly from zero — the knob
-    // MORPHS, it never switches (hm2 law). renorm() holds loudness level afterwards.
-    int applyForge (int nEff) noexcept
-    {
-        const float d = clamp01 (p_.forge);
-        if (d < 0.004f) return nEff;
-        // loudest-M donors (braid-style bounded scan) — the cascade grows with drive
-        constexpr int kForgeMax = 40;
-        const int M = std::min (nEff, (int) std::lround (lerpf (6.f, (float) kForgeMax, d)));
-        int   idx[kForgeMax]; float val[kForgeMax];
-        for (int q = 0; q < M; ++q) { idx[q] = -1; val[q] = -1.f; }
-        float e0 = 0.f;                       // pre-forge bank energy — forge REDISTRIBUTES,
-        for (int j = 0; j < nEff; ++j)        // it never adds (energy-neutral, braid-style):
-        {                                     // the renorm slew never sees a jump, so a hard
-            const float a = amp_[(size_t) j]; // knob move (or an LFO) can't burst the level
-            e0 += a * a;
-            int slot = -1; float low = a;
-            for (int q = 0; q < M; ++q) if (val[q] < low) { low = val[q]; slot = q; }
-            if (slot >= 0) { val[slot] = a; idx[slot] = j; }
-        }
-        const float w[3] = { 0.85f * d, 0.70f * d * d, 0.55f * d * d * d * d };   // 2x, 3x, 4x
-        int cursor = nEff;
-        // integer-lattice probe: cheap in-place match, append on miss (never a full scan)
-        auto findSlot = [&] (float rT) -> int
-        {
-            const int g = (int) std::lround (rT) - 1;
-            for (int t = std::max (0, g - 2); t <= g + 2 && t < cursor; ++t)
-                if (std::fabs (ratio_[(size_t) t] - rT) < 0.009f * rT) return t;
-            return -1;
-        };
-        for (int q = 0; q < M; ++q)
-        {
-            const int j = idx[q];
-            if (j < 0 || val[q] <= 1e-6f) continue;
-            const float r = ratio_[(size_t) j], a = amp_[(size_t) j];
-            for (int m = 0; m < 3; ++m)
-            {
-                const float dep = a * w[m];
-                if (dep <= 1e-6f) continue;
-                const float rT = r * (float) (m + 2);
-                const int hit = findSlot (rT);
-                if (hit >= 0) { amp_[(size_t) hit] += dep; continue; }
-                if (cursor >= harm::kMaxPartials) continue;
-                amp_  [(size_t) cursor] = dep;
-                ratio_[(size_t) cursor] = rT;
-                panL_ [(size_t) cursor] = panL_[(size_t) j];   // ghosts sit where their donor sits
-                panR_ [(size_t) cursor] = panR_[(size_t) j];
-                ++cursor;
-            }
-        }
-        // spectral compression — heavy drive flattens dynamics into the buzz wall
-        const float c = 0.45f * d * d;
-        if (c > 0.01f)
-        {
-            float mx = 1e-9f;
-            for (int j = 0; j < cursor; ++j) mx = std::max (mx, amp_[(size_t) j]);
-            const float e = 1.f - c;
-            for (int j = 0; j < cursor; ++j)
-            {
-                const float a = amp_[(size_t) j];
-                if (a > 1e-7f) amp_[(size_t) j] = mx * fastExp2 (e * fastLog2 (a / mx));
-            }
-        }
-        // energy-neutral: rescale so total bank energy matches the pre-forge bank
-        float e1 = 0.f;
-        for (int j = 0; j < cursor; ++j) { const float a = amp_[(size_t) j]; e1 += a * a; }
-        if (e1 > 1e-12f && e0 > 1e-12f)
-        {
-            const float gq = std::sqrt (e0 / e1);
-            for (int j = 0; j < cursor; ++j) amp_[(size_t) j] *= gq;
-        }
-        return cursor;
-    }
-
     // stage 7 — GRIT: banded OU drift (amp dB + freq cents) + slow global wander.
     // Exact OU discretization (cookbook): x' = ρx + σ√(1-ρ²)·randn, ρ = e^(-dt/τ).
     void applyGrit (int nEff, float dt) noexcept
@@ -1035,6 +1024,11 @@ private:
     int    unisonDiv_  = 1;   // constant-cost unison divisor = ceil(sqrt(unison count))
     bool   bankOwner_ = true, displayMode_ = false;
     std::uint32_t seed_ = 0x9E3779B9u, rng_ = 0x9E3779B9u;
+    // FORGE post-saturator state (anchor-owned; per channel where [2])
+    float forgeZ_ = 0.f, fgMk_ = 1.f, fgIn_ = 0.f, fgWet_ = 0.f;
+    float fgEnvK_ = 0.0021f, fgMkK_ = 0.0042f, fgDK_ = 0.0007f;   // 10/5/30 ms at 48 k (prepare() retunes)
+    float fgX0_[2] {}, fgLc0_[2] {}, fgY1_[2] {}, fgDcX_[2] {}, fgDcY_[2] {};
+    bool  fgSeed_ = false;
 };
 
 } // namespace tw
