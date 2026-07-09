@@ -484,6 +484,9 @@ public:
     }
 
     void setPitchRatio (double r) noexcept { pitchMul_ = r > 0.0 ? r : 1.0; }
+    // live retune (Coarse/oct/semi/cents moved mid-note): phase accumulators make this
+    // C0-continuous — same law as HarmonicEngine::setPlayedHz (hm4)
+    void setPlayedHz (double hz) noexcept { if (hz > 8.0) playedHz_ = hz; }
 
     // ═══ per-block render, split for CONSTANT-COST UNISON (rs7): the unison ANCHOR runs
     // prepareBank() once (head advance + interp + smear + governor + sculpt + bitrate + children —

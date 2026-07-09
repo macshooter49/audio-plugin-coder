@@ -904,8 +904,11 @@ namespace tw
         void setSub (int o, int range, int form, float weight, float heatK) noexcept
         {
             if (o < 0 || o > 3) return;
+            const int nf = juce::jlimit (0, 3, form);
+            if (nf != sub_[o].form && sub_[o].on)
+            { sub_[o].formOld = sub_[o].form; sub_[o].xf = 1.f; }   // Shape MORPHS mid-note
+            sub_[o].form   = nf;
             sub_[o].range  = juce::jlimit (0, 2, range);
-            sub_[o].form   = juce::jlimit (0, 3, form);
             sub_[o].weight = juce::jlimit (0.f, 1.f, weight);
             sub_[o].heatK  = juce::jlimit (0.f, 1.f, heatK);
         }
@@ -2016,8 +2019,8 @@ namespace tw
                 float sA_R = sumAR;
                 // RECTIFY DC block — only when this osc's wavetable warp == Rectify (slot 1 or 2)
                 // with nonzero amount; dormant (bit-identical) otherwise.
-                if ((engine_ == Engine::WT || engine_ == Engine::FM)
-                    && ((warpMode_ == 9 && warpAmount_ > 0.001f) || (warp2ModeA_ == 9 && warp2AmountA_ > 0.001f)))
+                if ((engine_ == Engine::WT && ((warpMode_ == 9 && warpAmount_ > 0.001f) || (warp2ModeA_ == 9 && warp2AmountA_ > 0.001f)))
+                    || (engine_ == Engine::FM && warp2ModeA_ == 9 && warp2AmountA_ > 0.001f))
                 { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
                 if (engine_ == Engine::GRAN) { sA_L = granBlkAL_[(size_t) i]; sA_R = granBlkAR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engine_ == Engine::SPEC) { sA_L = geodeBlkAL_[(size_t) i]; sA_R = geodeBlkAR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -2287,8 +2290,8 @@ namespace tw
                 float sB_L = sumBL;
                 float sB_R = sumBR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if ((engineB_ == Engine::WT || engineB_ == Engine::FM)
-                    && ((warpModeB_ == 9 && warpAmountB_ > 0.001f) || (warp2ModeB_ == 9 && warp2AmountB_ > 0.001f)))
+                if ((engineB_ == Engine::WT && ((warpModeB_ == 9 && warpAmountB_ > 0.001f) || (warp2ModeB_ == 9 && warp2AmountB_ > 0.001f)))
+                    || (engineB_ == Engine::FM && warp2ModeB_ == 9 && warp2AmountB_ > 0.001f))
                 { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
                 if (engineB_ == Engine::GRAN) { sB_L = granBlkBL_[(size_t) i]; sB_R = granBlkBR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineB_ == Engine::SPEC) { sB_L = geodeBlkBL_[(size_t) i]; sB_R = geodeBlkBR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -2555,8 +2558,8 @@ namespace tw
                 float sC_L = sumCL;
                 float sC_R = sumCR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if ((engineC_ == Engine::WT || engineC_ == Engine::FM)
-                    && ((warpModeC_ == 9 && warpAmountC_ > 0.001f) || (warp2ModeC_ == 9 && warp2AmountC_ > 0.001f)))
+                if ((engineC_ == Engine::WT && ((warpModeC_ == 9 && warpAmountC_ > 0.001f) || (warp2ModeC_ == 9 && warp2AmountC_ > 0.001f)))
+                    || (engineC_ == Engine::FM && warp2ModeC_ == 9 && warp2AmountC_ > 0.001f))
                 { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
                 if (engineC_ == Engine::GRAN) { sC_L = granBlkCL_[(size_t) i]; sC_R = granBlkCR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineC_ == Engine::SPEC) { sC_L = geodeBlkCL_[(size_t) i]; sC_R = geodeBlkCR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -2823,8 +2826,8 @@ namespace tw
                 float sD_L = sumDL;
                 float sD_R = sumDR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if ((engineD_ == Engine::WT || engineD_ == Engine::FM)
-                    && ((warpModeD_ == 9 && warpAmountD_ > 0.001f) || (warp2ModeD_ == 9 && warp2AmountD_ > 0.001f)))
+                if ((engineD_ == Engine::WT && ((warpModeD_ == 9 && warpAmountD_ > 0.001f) || (warp2ModeD_ == 9 && warp2AmountD_ > 0.001f)))
+                    || (engineD_ == Engine::FM && warp2ModeD_ == 9 && warp2AmountD_ > 0.001f))
                 { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
                 if (engineD_ == Engine::GRAN) { sD_L = granBlkDL_[(size_t) i]; sD_R = granBlkDR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineD_ == Engine::SPEC) { sD_L = geodeBlkDL_[(size_t) i]; sD_R = geodeBlkDR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -3310,7 +3313,7 @@ namespace tw
                     + (double) coarseModA_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
-                uPhaseIncA_[(size_t) u] = hz / sampleRate_;
+                uPhaseIncA_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
         }
 
@@ -3328,7 +3331,7 @@ namespace tw
                     + (double) coarseModB_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
-                uPhaseIncB_[(size_t) u] = hz / sampleRate_;
+                uPhaseIncB_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
         }
         void updateUnisonPhaseIncrementsC (double pitchNote) noexcept
@@ -3345,7 +3348,7 @@ namespace tw
                     + (double) coarseModC_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
-                uPhaseIncC_[(size_t) u] = hz / sampleRate_;
+                uPhaseIncC_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
         }
         void updateUnisonPhaseIncrementsD (double pitchNote) noexcept
@@ -3362,7 +3365,7 @@ namespace tw
                     + (double) coarseModD_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
-                uPhaseIncD_[(size_t) u] = hz / sampleRate_;
+                uPhaseIncD_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
         }
 
@@ -3750,17 +3753,20 @@ namespace tw
         // Index 0 of each array = the unison ANCHOR (owns the spectrum-build arrays); siblings
         // are render-state-only and borrow the anchor's bank via adoptBank() every block.
         // ── SUB (universal osc box, 2026-07-09) — ONE voice-anchored sub per osc.
-        // Tracks the osc's FINAL pitch (glide + Oct/Semi/Cent(+Coarse base) + Coarse mod
-        // + pitch env) down Range octaves. Weight is exp-bias perceptual; the sum is
-        // energy-normalized (1/sqrt(1+w^2)) so a heavy sub never blows voice headroom.
+        // Tracks the osc's FINAL pitch (engine-matched source + Oct/Semi/Cent(+Coarse base)
+        // + Coarse mod + pitch env) down Range octaves. Weight is exp-bias perceptual; the
+        // sum is energy-normalized (1/sqrt(1+w^2)) so a heavy sub never blows headroom.
+        // Mono = no stereo spread; injected pre-pan so it rides the osc's pan/level (by design).
         struct SubLane
         {
             tw::SubOsc osc;
-            int    range = 0, form = 0;
+            int    range = 0, form = 0, formOld = 0;
             float  weight = 0.f, heatK = 0.f;
             double inc = 0.0;
             float  w = 0.f, dw = 0.f;     // ramped effective weight
             float  n = 1.f, dn = 0.f;     // ramped energy normalizer
+            float  hCur = 0.f, dh = 0.f;  // ramped drive (heat) — no block zipper
+            float  xf = 0.f, dxf = 0.f;   // Shape crossfade (old→new form, one block)
             bool   on = false;
         };
         SubLane sub_[4];
@@ -3774,16 +3780,24 @@ namespace tw
             const int   sems[4] = { semiOffset_, semiOffsetB_, semiOffsetC_, semiOffsetD_ };
             const float cts[4]  = { centsOffset_, centsOffsetB_, centsOffsetC_, centsOffsetD_ };
             const float crs[4]  = { coarseModA_, coarseModB_, coarseModC_, coarseModD_ };
+            const Engine eng4[4] = { engine_, engineB_, engineC_, engineD_ };
             for (int o = 0; o < 4; ++o)
             {
                 SubLane& sl = sub_[o];
-                const float wKnob = juce::jlimit (0.f, 1.f, sl.weight + subWMod_[o]);
+                // a dead/muted osc ramps its sub OUT (declick) instead of ticking for a ×0 gate
+                const float wKnob = oscDead_[o] ? 0.f
+                                  : juce::jlimit (0.f, 1.f, sl.weight + subWMod_[o]);
                 // exponential-bias perceptual level (house curve law — never p^k)
                 const float wEff = wKnob <= 0.f ? 0.f
                                  : (std::exp (2.0f * wKnob) - 1.0f) / (std::exp (2.0f) - 1.0f);
                 sl.on = wEff > 1e-5f || sl.w > 1e-5f;    // stays on to RAMP OUT (declick)
-                if (! sl.on) { sl.dw = 0.f; sl.dn = (1.f - sl.n) * invN; continue; }
-                const double semis = (glideNote_ - 69.0)
+                if (! sl.on) { sl.dw = 0.f; sl.dn = (1.f - sl.n) * invN; sl.xf = 0.f; continue; }
+                // pitch source MATCHES the engine: WT/FM glide (glideNote_); the sample-family
+                // engines snap to currentMidiNote_ at note-on — the sub must stay glued to its
+                // OWN osc, not slide away from it during portamento (cleanup-sweep fix)
+                const bool glides = (eng4[o] == Engine::WT || eng4[o] == Engine::FM);
+                const double noteSrc = glides ? glideNote_ : (double) currentMidiNote_;
+                const double semis = (noteSrc - 69.0)
                                    + (double) octs[o] * 12.0 + (double) sems[o]
                                    + (double) cts[o] * 0.01 + (double) crs[o]
                                    + pitchEnvSemis_
@@ -3791,17 +3805,26 @@ namespace tw
                 const double hz = 440.0 * std::pow (2.0, semis / 12.0);
                 sl.inc = juce::jlimit (0.0, 0.45, hz / sampleRate_);
                 const float nT = 1.0f / std::sqrt (1.0f + wEff * wEff);
-                sl.dw = (wEff - sl.w) * invN;
-                sl.dn = (nT   - sl.n) * invN;
+                const float hT = juce::jlimit (0.f, 1.f, sl.heatK + subHMod_[o]);
+                sl.dw  = (wEff - sl.w) * invN;
+                sl.dn  = (nT   - sl.n) * invN;
+                sl.dh  = (hT   - sl.hCur) * invN;
+                sl.dxf = (sl.xf > 0.f) ? -sl.xf * invN : 0.f;   // Shape morph completes in one block
             }
         }
 
         inline void subMix (int o, float& l, float& r) noexcept
         {
             SubLane& sl = sub_[o];
-            sl.w += sl.dw; sl.n += sl.dn;
-            const float h = juce::jlimit (0.f, 1.f, sl.heatK + subHMod_[o]);
-            const float v = sl.osc.heat (sl.osc.tick (sl.inc, sl.form), h) * sl.w;
+            sl.w += sl.dw; sl.n += sl.dn; sl.hCur += sl.dh;
+            float v;
+            if (sl.xf > 0.f)
+            {
+                v = sl.osc.tickXf (sl.inc, sl.form, sl.formOld, sl.xf);
+                sl.xf += sl.dxf; if (sl.xf < 0.f) sl.xf = 0.f;
+            }
+            else v = sl.osc.tick (sl.inc, sl.form);
+            v = sl.osc.heat (v, sl.hCur) * sl.w;
             l = (l + v) * sl.n;
             r = (r + v) * sl.n;
         }
@@ -4143,6 +4166,7 @@ namespace tw
                 e.setParams (p);
                 e.setUnisonScale (N);   // CONSTANT-COST UNISON — N detuned banks cost ~one bank of partials
                 const double det = (uDetuneCents != nullptr) ? std::pow (2.0, (double) uDetuneCents[(size_t) u] / 1200.0) : 1.0;
+                e.setPlayedHz (playedHz * det);   // LIVE retune — Coarse/oct/semi/cent move mid-note (phase-continuous)
                 if (doNoteOn)
                 {
                     const std::uint32_t vSeed = (N <= 1) ? seed : (seed ^ (0x9E3779B1u * (std::uint32_t) (u + 1)));

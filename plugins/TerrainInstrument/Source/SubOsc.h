@@ -5,8 +5,9 @@
 //  ONE per voice per osc — NOT per unison sibling (anchor law: same as the
 //  voice-0-anchored unison / grain-warp anchor). A single band-limited low
 //  oscillator that tracks the osc's FINAL pitch (note + Oct + Semi + Cent +
-//  Coarse + pitch env) shifted down 1–3 octaves. Mono / centered — sub-bass
-//  belongs in the middle; unison spreads the MAIN osc above it.
+//  Coarse + pitch env) shifted down 1–3 octaves. Mono — NO stereo spread (unison
+//  spreads the MAIN osc above it); it rides the osc's own pan/level like part of
+//  the oscillator, which is what a per-osc layer should do.
 //
 //  Forms: Sine · Triangle · Square · Saw. The discontinuous pair (Square/Saw)
 //  is polyBLEP band-limited; Triangle's 1/k² harmonics make naive clean.
@@ -28,6 +29,21 @@ struct SubOsc
     {
         const double t = phase_;
         phase_ += inc; if (phase_ >= 1.0) phase_ -= 1.0;
+        return eval (t, inc, form);
+    }
+
+    // Shape crossfade: ONE phase advance, two evaluations blended — flipping Shape
+    // mid-note MORPHS instead of stepping (rr sweep fix: unramped waveform switch)
+    inline float tickXf (double inc, int fNew, int fOld, float xf) noexcept
+    {
+        const double t = phase_;
+        phase_ += inc; if (phase_ >= 1.0) phase_ -= 1.0;
+        const float a = eval (t, inc, fNew);
+        return a + (eval (t, inc, fOld) - a) * xf;
+    }
+
+    static inline float eval (double t, double inc, int form) noexcept
+    {
         switch (form)
         {
             default:
@@ -60,7 +76,8 @@ struct SubOsc
         }
         x0_ = xin; lc0_ = lc1;
         const float shaped = y / std::tanh (g);            // soft knee, peaks stay ~±1
-        const float w = h < 0.08f ? h * 12.5f : 1.f;       // wet fades in — morph, no switch
+        const float u = h > 0.08f ? 1.f : h * 12.5f;       // wet SMOOTHSTEPS in from 0 —
+        const float w = u * u * (3.f - 2.f * u);           // no kink at the bypass gate
         return x + w * (shaped - x);
     }
 

@@ -4466,14 +4466,7 @@ body {
 #syn-panel .kt-dest-value { font-size: 11px; }
 #syn-panel .kt-depth { cursor: ns-resize; user-select: none; color: var(--text-muted); }
 #syn-panel .kt-depth.dragging { color: var(--text-primary); }
-#syn-panel .sel.rt-pill { gap: 2px; }
-#syn-panel .rt-route-row { position: relative; width: 100%; display: flex; align-items: center; justify-content: center; gap: 3px; }
-#syn-panel .rt-half { position: relative; flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; }
-#syn-panel .rt-half .sel-value { font-size: 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#syn-panel .rt-arrow { flex: 0 0 auto; font-size: 9px; color: var(--text-muted); line-height: 1; }
-#syn-panel .rt-arrow.act { color: var(--purple-500); }
-#syn-panel .rt-amt { cursor: ns-resize; user-select: none; color: var(--text-muted); }
-#syn-panel .rt-amt.act { color: var(--text-primary); }
+/* (rt-pill CSS removed 2026-07-09 — ROUTE tiles retired for COARSE) */
 #syn-panel .sel.uni-pill { gap: 3px; }
 #syn-panel .uni-pill .uni-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .uni-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
@@ -12378,59 +12371,7 @@ setTimeout(function wireSynControls () {
     // ── ROUTE amount — bipolar draggable %. (SRC/DST are native <select> dropdowns,
     //    auto-bound by the generic [data-syn] wirer + bindSelValueMirror; no JS needed there.)
     //    The arrow lights purple when the amount is non-zero. ──
-    (function initRoutePills() {
-      try {
-        document.querySelectorAll('#syn-panel .rt-amt[data-syn-rt]').forEach(function(el) {
-          try {
-            const amtId = el.dataset.synRt;
-            if (!amtId || !window.Juce || !window.Juce.getSliderState) return;
-            const amtState = window.Juce.getSliderState(amtId);
-            if (!amtState) { console.warn('[RT] no SliderState for', amtId); return; }
-            const valEl = el.querySelector('b');
-            const pill  = el.closest('.rt-pill');
-            const arrow = pill ? pill.querySelector('.rt-arrow') : null;
-            const refresh = function() {
-              try {
-                const v = Math.round(amtState.getScaledValue ? amtState.getScaledValue() : 0);
-                if (valEl) valEl.textContent = (v > 0 ? '+' : '') + v;
-                const active = v !== 0;
-                el.classList.toggle('act', active);
-                if (arrow) arrow.classList.toggle('act', active);
-              } catch (e) { console.warn('[RT] refresh failed', amtId, e); }
-            };
-            refresh();
-            let startY = 0, startN = 0.5, dragging = false;
-            const onMove = function(ev) {
-              if (!dragging) return;
-              const dy = startY - ev.clientY;
-              const nN = Math.max(0, Math.min(1, startN + dy / 150));
-              try { amtState.setNormalisedValue(nN); } catch (e) {}
-              refresh();
-            };
-            const onUp = function() {
-              dragging = false;
-              document.removeEventListener('pointermove', onMove);
-              document.removeEventListener('pointerup', onUp);
-            };
-            el.addEventListener('pointerdown', function(ev) {
-              try {
-                dragging = true;
-                startY = ev.clientY;
-                startN = amtState.getNormalisedValue ? amtState.getNormalisedValue() : 0.5;
-                if (el.setPointerCapture) el.setPointerCapture(ev.pointerId);
-                document.addEventListener('pointermove', onMove);
-                document.addEventListener('pointerup', onUp);
-                ev.preventDefault(); ev.stopPropagation();
-              } catch (e) { console.warn('[RT] pointerdown failed', amtId, e); }
-            });
-            el.addEventListener('dblclick', function(ev) {        // dbl-click resets to 0 %
-              try { amtState.setNormalisedValue(0.5); refresh(); ev.preventDefault(); } catch (e) {}
-            });
-            if (amtState.valueChangedEvent && amtState.valueChangedEvent.addListener) amtState.valueChangedEvent.addListener(refresh);
-          } catch (perEl) { console.warn('[RT] per-amt init failed', perEl); }
-        });
-      } catch (eRT) { console.warn('[RT] initRoutePills failed', eRT); }
-    })();
+    // (initRoutePills removed 2026-07-09 — the Note→Frame rt-pill tiles were retired for COARSE)
 
     // ── UNISON pills — RIGHT-CLICK to pick Voices/Detune/Blend/Width; drag the value.
     //    Active param lives on pill.dataset.uniActive so the right-click menu (syn-ctx-menu
@@ -21771,7 +21712,10 @@ restoreThemeFromBackend();
   function targets(){ var out=[];
     document.querySelectorAll('#syn-panel .knob[data-syn]').forEach(function(k){ var p=k.getAttribute('data-syn'); if(KNOBDEST.hasOwnProperty(p)) out.push({el:k,dest:KNOBDEST[p],kind:'knob'}); });
     document.querySelectorAll('#syn-panel .coarse-pill .coarse-val[data-coarse]').forEach(function(k){ var p=k.getAttribute('data-coarse'); if(KNOBDEST.hasOwnProperty(p)) out.push({el:k,dest:KNOBDEST[p],kind:'knob'}); });   // COARSE — the modulatable pitch lane
-    document.querySelectorAll('#syn-panel .sub-pill .sub-val[data-sub-weight]').forEach(function(k){ var p=k.getAttribute('data-sub-weight'); if(KNOBDEST.hasOwnProperty(p)) out.push({el:k,dest:KNOBDEST[p],kind:'knob'}); });   // SUB — drop = Weight
+    document.querySelectorAll('#syn-panel .sub-pill').forEach(function(pill){ var v=pill.querySelector('.sub-val'); if(!v) return;
+      var a=pill.dataset.subActive||'weight';                         // SUB — drop hits the ACTIVE
+      var p=v.getAttribute(a==='heat'?'data-sub-heat':'data-sub-weight');   // continuous param:
+      if(p&&KNOBDEST.hasOwnProperty(p)) out.push({el:v,dest:KNOBDEST[p],kind:'knob'}); });   // Mix, or Drive when selected
     var cut=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="cut"]'); if(cut) out.push({el:cut.parentElement,dest:-1,kind:'cut'}); // dest resolved at drop (slot)
     document.querySelectorAll('#mod-engine .mv-tabs .t').forEach(function(t){ var n=+t.getAttribute('data-tab'); if(!n)return; out.push({el:t,dest:11+n,kind:'lfo',lfo:n}); }); // LFO→LFO: LfoAmt{n} (skip page arrows)
     return out; }
@@ -21832,7 +21776,12 @@ restoreThemeFromBackend();
   function elForDest(dest){
     if(dest===0||dest===1){ var c=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="cut"]'); return c?c.parentElement:null; }
     if(dest>=12&&dest<=21){ return document.querySelector('#mod-engine .mv-tabs .t[data-tab="'+(dest-11)+'"]'); }
-    var found=null; document.querySelectorAll('#syn-panel .knob[data-syn]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-syn')]===dest) found=k; }); return found; }
+    var found=null; document.querySelectorAll('#syn-panel .knob[data-syn]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-syn')]===dest) found=k; });
+    // COARSE/SUB pill dests (42..53) live on pills, not knobs — without these two scans a
+    // restored route has no badge (invisible modulation) and the next push() clobbers it
+    if(!found) document.querySelectorAll('#syn-panel .coarse-pill .coarse-val[data-coarse]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-coarse')]===dest) found=k; });
+    if(!found) document.querySelectorAll('#syn-panel .sub-pill .sub-val').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-sub-weight')]===dest||KNOBDEST[k.getAttribute('data-sub-heat')]===dest) found=k; });
+    return found; }
   function restore(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g)return;
     g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); arr.forEach(function(o){ var lfo=(o.s|0)+1, dest=o.d|0, el=elForDest(dest); if(!el)return;
       for(var i=0;i<assigns.length;i++) if(assigns[i].lfo===lfo&&assigns[i].dest===dest) return;
@@ -22826,7 +22775,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'sc2';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'sc3';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
