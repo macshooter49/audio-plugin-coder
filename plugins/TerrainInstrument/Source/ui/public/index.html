@@ -3761,7 +3761,8 @@ body {
   background: var(--bg-hero);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 3px;
+  gap: 2px;
+  padding: 1px 0 2px;   /* label + value + gaps = 26.9px inside the 28px pill */
   position: relative;
   overflow: hidden;
 }
@@ -3773,8 +3774,8 @@ body {
 }
 #syn-panel .sel-value {
   color: var(--text-primary);
-  font-size: 11px; letter-spacing: 0.4px; font-weight: 300;
-  line-height: 1;
+  font-size: 10px; letter-spacing: 0.4px; font-weight: 300;
+  line-height: 1.2;   /* descender room — 'Square'/'Shape' tails must never clip */
 }
 /* The <select> overlays the sel, transparent, takes the clicks */
 #syn-panel .sel-select {
@@ -4474,19 +4475,19 @@ body {
 #syn-panel .rt-amt { cursor: ns-resize; user-select: none; color: var(--text-muted); }
 #syn-panel .rt-amt.act { color: var(--text-primary); }
 #syn-panel .sel.uni-pill { gap: 3px; }
-#syn-panel .uni-pill .uni-param-value { font-size: 9px; line-height: 1.35; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .uni-pill .uni-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .uni-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
 #syn-panel .uni-pill.act .uni-val { color: var(--text-primary); }
 #syn-panel .uni-suffix { font-style: normal; opacity: 0.75; }
 #syn-panel .sel.sub-pill { gap: 3px; }
-#syn-panel .sub-pill .sub-param-value { font-size: 9px; line-height: 1.35; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#syn-panel .sub-pill .sub-val { cursor: ns-resize; user-select: none; color: var(--text-muted); }
-#syn-panel .sub-pill.act .sub-val { color: var(--text-primary); }
+#syn-panel .sub-pill .sub-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .sub-pill .sub-val { cursor: ns-resize; user-select: none; color: var(--text-primary); }
+#syn-panel .sub-suffix { font-style: normal; opacity: 0.75; }
 #syn-panel .sel.coarse-pill { gap: 3px; }
-#syn-panel .coarse-pill .coarse-val { cursor: ns-resize; user-select: none; color: var(--text-muted); }
-#syn-panel .coarse-pill.act .coarse-val { color: var(--text-primary); }
+#syn-panel .coarse-pill .coarse-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .coarse-pill .coarse-val { cursor: ns-resize; user-select: none; color: var(--text-primary); }
 #syn-panel .sel.warp2-pill { gap: 3px; }
-#syn-panel .warp2-pill .warp2-mode-value { font-size: 9px; line-height: 1.35; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#syn-panel .warp2-pill .warp2-mode-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .warp2-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
 #syn-panel .warp2-pill.act .warp2-val { color: var(--text-primary); }
 #syn-panel .warp2-suffix { font-style: normal; opacity: 0.75; }
@@ -5462,8 +5463,8 @@ body {
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
-                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Range / Form / Weight / Heat, then drag the value. Drop an LFO on it to modulate Weight.">
-                  <div class="sel-value sub-param-value" id="osc-a-sub-param-value">Weight</div>
+                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Octave / Shape / Mix / Drive, then drag the value. Drop an LFO on it to modulate Mix.">
+                  <div class="sel-value sub-param-value" id="osc-a-sub-param-value">Mix</div>
                   <div class="sel-value sub-val" id="osc-a-sub-val" data-sub-range="SYN_OSC_A_SUB_RANGE" data-sub-form="SYN_OSC_A_SUB_FORM" data-sub-weight="SYN_OSC_A_SUB_WEIGHT" data-sub-heat="SYN_OSC_A_SUB_HEAT"><b>0</b><i class="sub-suffix">%</i></div>
                 </div>
                 <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
@@ -5475,7 +5476,7 @@ body {
                   <div class="sel-value uni-val" id="osc-a-uni-val" data-uni-voices="SYN_OSC_A_UNISON" data-uni-detune="SYN_OSC_A_UDETUNE" data-uni-blend="SYN_OSC_A_UBLEND" data-uni-width="SYN_OSC_A_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
-                  <div class="sel-label">Coarse</div>
+                  <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-a-coarse-val" data-coarse="SYN_OSC_A_COARSE"><b>+0.00</b></div>
                 </div>
               </div>
@@ -5716,8 +5717,8 @@ body {
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
-                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Range / Form / Weight / Heat, then drag the value. Drop an LFO on it to modulate Weight.">
-                  <div class="sel-value sub-param-value" id="osc-b-sub-param-value">Weight</div>
+                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Octave / Shape / Mix / Drive, then drag the value. Drop an LFO on it to modulate Mix.">
+                  <div class="sel-value sub-param-value" id="osc-b-sub-param-value">Mix</div>
                   <div class="sel-value sub-val" id="osc-b-sub-val" data-sub-range="SYN_OSC_B_SUB_RANGE" data-sub-form="SYN_OSC_B_SUB_FORM" data-sub-weight="SYN_OSC_B_SUB_WEIGHT" data-sub-heat="SYN_OSC_B_SUB_HEAT"><b>0</b><i class="sub-suffix">%</i></div>
                 </div>
                 <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
@@ -5729,7 +5730,7 @@ body {
                   <div class="sel-value uni-val" id="osc-b-uni-val" data-uni-voices="SYN_OSC_B_UNISON" data-uni-detune="SYN_OSC_B_UDETUNE" data-uni-blend="SYN_OSC_B_UBLEND" data-uni-width="SYN_OSC_B_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
-                  <div class="sel-label">Coarse</div>
+                  <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-b-coarse-val" data-coarse="SYN_OSC_B_COARSE"><b>+0.00</b></div>
                 </div>
               </div>
@@ -5986,8 +5987,8 @@ body {
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
-                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Range / Form / Weight / Heat, then drag the value. Drop an LFO on it to modulate Weight.">
-                  <div class="sel-value sub-param-value" id="osc-c-sub-param-value">Weight</div>
+                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Octave / Shape / Mix / Drive, then drag the value. Drop an LFO on it to modulate Mix.">
+                  <div class="sel-value sub-param-value" id="osc-c-sub-param-value">Mix</div>
                   <div class="sel-value sub-val" id="osc-c-sub-val" data-sub-range="SYN_OSC_C_SUB_RANGE" data-sub-form="SYN_OSC_C_SUB_FORM" data-sub-weight="SYN_OSC_C_SUB_WEIGHT" data-sub-heat="SYN_OSC_C_SUB_HEAT"><b>0</b><i class="sub-suffix">%</i></div>
                 </div>
                 <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
@@ -5999,7 +6000,7 @@ body {
                   <div class="sel-value uni-val" id="osc-c-uni-val" data-uni-voices="SYN_OSC_C_UNISON" data-uni-detune="SYN_OSC_C_UDETUNE" data-uni-blend="SYN_OSC_C_UBLEND" data-uni-width="SYN_OSC_C_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
-                  <div class="sel-label">Coarse</div>
+                  <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-c-coarse-val" data-coarse="SYN_OSC_C_COARSE"><b>+0.00</b></div>
                 </div>
               </div>
@@ -6240,8 +6241,8 @@ body {
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
-                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Range / Form / Weight / Heat, then drag the value. Drop an LFO on it to modulate Weight.">
-                  <div class="sel-value sub-param-value" id="osc-d-sub-param-value">Weight</div>
+                <div class="sel sub-pill" data-sub-active="weight" title="SUB — a low oscillator layered under this osc, one per voice, always centered. Right-click to choose Octave / Shape / Mix / Drive, then drag the value. Drop an LFO on it to modulate Mix.">
+                  <div class="sel-value sub-param-value" id="osc-d-sub-param-value">Mix</div>
                   <div class="sel-value sub-val" id="osc-d-sub-val" data-sub-range="SYN_OSC_D_SUB_RANGE" data-sub-form="SYN_OSC_D_SUB_FORM" data-sub-weight="SYN_OSC_D_SUB_WEIGHT" data-sub-heat="SYN_OSC_D_SUB_HEAT"><b>0</b><i class="sub-suffix">%</i></div>
                 </div>
                 <div class="sel warp2-pill" title="WARP 2 — second warp slot, chained in series after WARP (Wavetable). In the Sample engine this becomes the SAMPLE WARP shaper (Sine Shaper / Rectify / Fold / Drive / Crush) on the sample stream. Right-click to choose the mode, drag the value for amount.">
@@ -6253,7 +6254,7 @@ body {
                   <div class="sel-value uni-val" id="osc-d-uni-val" data-uni-voices="SYN_OSC_D_UNISON" data-uni-detune="SYN_OSC_D_UDETUNE" data-uni-blend="SYN_OSC_D_UBLEND" data-uni-width="SYN_OSC_D_UWIDTH"><b>1</b><i class="uni-suffix"></i></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
-                  <div class="sel-label">Coarse</div>
+                  <div class="sel-value coarse-param-value">Coarse</div>
                   <div class="sel-value coarse-val" id="osc-d-coarse-val" data-coarse="SYN_OSC_D_COARSE"><b>+0.00</b></div>
                 </div>
               </div>
@@ -10720,6 +10721,41 @@ setTimeout(function wireSynControls () {
           };
         });
       }
+      // ── WAVETABLE drop: choose the destination engine (Max 2026-07-09). A one-shot
+      // dropped on a WAVETABLE osc asks Sample | Granular | Resynth before flipping —
+      // same .samp-menu glass as Replace|Blend. Sample/Granular/Resynth oscs keep their
+      // direct-drop behavior (and the loaded-sample Replace|Blend ask stays untouched).
+      var engChoiceEl = null;
+      function openEngineDropChoice (e, osc, file) {
+        if (! engChoiceEl) {
+          engChoiceEl = document.createElement ('div');
+          engChoiceEl.className = 'samp-menu';
+          document.body.appendChild (engChoiceEl);
+          document.addEventListener ('pointerdown', function (ev) { if (engChoiceEl && ! engChoiceEl.contains (ev.target)) engChoiceEl.classList.remove ('open'); });
+        }
+        var m = engChoiceEl;
+        var ic = function (p) { return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">' + p + '</svg>'; };
+        m.innerHTML =
+          '<div data-a="samp">' + ic ('<path d="M2 8 L5 4 L8 11 L11 5 L14 8"/>') + 'Sample</div>' +
+          '<div data-a="gran">' + ic ('<circle cx="5" cy="6" r="1.2"/><circle cx="10" cy="4.6" r="1.2"/><circle cx="8" cy="9" r="1.2"/><circle cx="12" cy="10.4" r="1.2"/><circle cx="4.6" cy="11.4" r="1.2"/>') + 'Granular</div>' +
+          '<div data-a="spec">' + ic ('<path d="M2 13 V9 M5 13 V4 M8 13 V7 M11 13 V2 M14 13 V6"/>') + 'Resynth</div>';
+        m.classList.add ('open');
+        var mw = m.offsetWidth || 140, mh = m.offsetHeight || 110;
+        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth  - mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - mh - 6)) + 'px';
+        m.querySelectorAll ('div[data-a]').forEach (function (d) {
+          d.onclick = function () {
+            m.classList.remove ('open');
+            var a = d.dataset.a;
+            if (a === 'gran' || a === 'spec') {
+              // flip the engine FIRST — dropSampleToOsc sees GRAN/GEODE and keeps it, loading the buffer
+              try { var es = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState ('SYN_OSC_' + osc.toUpperCase () + '_ENGINE') : null;
+                    if (es) es.setNormalisedValue ((a === 'gran' ? 2 : 3) / 5); } catch (_) {}
+            }
+            dropSampleToOsc (osc, file);
+          };
+        });
+      }
       // C++ pushes blend state (bake published / editor reopen): reveal or hide the flip arrow.
       window.onBlendState = function (osc, on) {
         try {
@@ -10832,7 +10868,17 @@ setTimeout(function wireSynControls () {
           function paint (on) { btn.classList.toggle ('on', !! on); }
           paint (rd ());
           btn.addEventListener ('pointerdown', function (ev) { ev.preventDefault (); ev.stopPropagation ();
-            var nv = rd () ? 0 : 1; if (bs) { try { bs.setNormalisedValue (nv); } catch (e) {} } paint (nv >= 0.5); });
+            var nv = rd () ? 0 : 1; if (bs) { try { bs.setNormalisedValue (nv); } catch (e) {} }
+            // EXCLUSIVE SOLO (Max 2026-07-09): solo FOLLOWS the click — turning solo on here
+            // instantly un-solos the other three oscs. No back-and-forth, no arguments.
+            if (suf === 'SOLO' && nv >= 0.5) {
+              ['A','B','C','D'].forEach (function (X) {
+                if (X === L) return;
+                try { var os = window.Juce.getSliderState ('SYN_OSC_' + X + '_SOLO');
+                      if (os && os.getNormalisedValue () >= 0.5) os.setNormalisedValue (0); } catch (e) {}
+              });
+            }
+            paint (nv >= 0.5); });
           smRow.appendChild (btn);
         });
         wrap.appendChild (smRow);
@@ -11377,6 +11423,14 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('drop', function (e) {
           e.preventDefault (); e.stopPropagation (); disp.classList.remove ('dragover');
           var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (! f) return;
+          // WAVETABLE only: ask which engine should host the one-shot (Sample | Granular |
+          // Resynth). FM/Harmonic keep the old direct flip-to-Sample; sample-family
+          // displays never reach this handler (they own .samp-disp).
+          var _dev = disp.closest ('.device.osc');
+          var _isWt = ! (_dev && (_dev.classList.contains ('engine-sample') || _dev.classList.contains ('engine-granular')
+                                || _dev.classList.contains ('engine-geode') || _dev.classList.contains ('engine-fm')
+                                || _dev.classList.contains ('engine-harm')));
+          if (_isWt) { openEngineDropChoice (e, L, f); return; }
           dropSampleToOsc (L, f);
         });
       });
@@ -12466,9 +12520,10 @@ setTimeout(function wireSynControls () {
     //    Verbatim clone of the UNISON pill pattern (same glass menu, same drag law). ──
     (function initSubPills() {
       try {
+        // plain words (Max 2026-07-09: fresh-names rule REVOKED — labels users understand)
         const PARAMS = [
-          { key: 'range',  label: 'Range'  }, { key: 'form', label: 'Form' },
-          { key: 'weight', label: 'Weight' }, { key: 'heat', label: 'Heat' },
+          { key: 'range',  label: 'Octave' }, { key: 'form', label: 'Shape' },
+          { key: 'weight', label: 'Mix'    }, { key: 'heat', label: 'Drive' },
         ];
         const RANGE_LABELS = ['-1', '-2', '-3'];
         const FORM_LABELS  = ['Sine', 'Tri', 'Square', 'Saw'];
@@ -12492,7 +12547,7 @@ setTimeout(function wireSynControls () {
                 if (a === 'range')     numEl.textContent = RANGE_LABELS[Math.round(sv)] || '-1';
                 else if (a === 'form') numEl.textContent = FORM_LABELS[Math.round(sv)] || 'Sine';
                 else                   numEl.textContent = Math.round(sv * 100);
-                if (sufEl) sufEl.textContent = (a === 'range') ? ' Oct' : ((a === 'form') ? '' : '%');
+                if (sufEl) sufEl.textContent = (a === 'range' || a === 'form') ? '' : '%';
                 if (labEl) { const p = PARAMS.find(function(x){return x.key===a;}); labEl.textContent = p ? p.label : a; }
                 const ws = states.weight;
                 const wv = (ws && ws.getScaledValue) ? ws.getScaledValue() : 0;
@@ -12631,14 +12686,15 @@ setTimeout(function wireSynControls () {
             const isSample = function() {
               // SAMPLE *and* GRANULAR use the sample warp shaper (the DSP now runs it for both) —
               // granular used to fall through to the wavetable WARP 2 list, which did nothing.
-              try { const dev = pill.closest('.device.osc'); return !!(dev && (dev.classList.contains('engine-sample') || dev.classList.contains('engine-granular') || dev.classList.contains('engine-geode')) && smModeState && smAmtState); }
+              // HARM joins the shaper set (its DSP gate was already wired — the pill wasn't)
+              try { const dev = pill.closest('.device.osc'); return !!(dev && (dev.classList.contains('engine-sample') || dev.classList.contains('engine-granular') || dev.classList.contains('engine-geode') || dev.classList.contains('engine-harm')) && smModeState && smAmtState); }
               catch (e) { return false; }
             };
             // Active context — choose the param set + mode list per engine.
             const ctx = function() {
               if (isSample()) {
                 let hdr = 'SAMPLE WARP';
-                try { const dev = pill.closest('.device.osc'); if (dev && dev.classList.contains('engine-granular')) hdr = 'GRAIN WARP'; else if (dev && dev.classList.contains('engine-geode')) hdr = 'RESYNTH WARP'; } catch (e) {}
+                try { const dev = pill.closest('.device.osc'); if (dev && dev.classList.contains('engine-granular')) hdr = 'GRAIN WARP'; else if (dev && dev.classList.contains('engine-geode')) hdr = 'RESYNTH WARP'; else if (dev && dev.classList.contains('engine-harm')) hdr = 'HARMONIC WARP'; } catch (e) {}
                 return { modeState: smModeState, amtState: smAmtState, modes: SAMPLE_MODES, header: hdr };
               }
               return { modeState: wtModeState, amtState: wtAmtState, modes: MODES,        header: 'WARP 2' };
@@ -22770,7 +22826,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'sc1';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'sc2';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

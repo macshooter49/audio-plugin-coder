@@ -1968,9 +1968,21 @@ namespace tw
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
-                            sAu = (currentWavetable_ != nullptr)
-                                    ? tw::Wavetable::readCycle (blendA_.data(), (float) cPh)
-                                    : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
+                            // WARP 2 on the FM carrier (2026-07-09): the back-panel pill works on
+                            // FM now — phase warp remaps the carrier AFTER the modulators (classic
+                            // warped-FM: Sync/PWM/Formant on the operator output), amp modes shape it.
+                            float fmWin = 1.0f; bool fmSkip = false;
+                            if (warp2ModeA_ != 0)
+                                cPh = applyPhaseWarp (warp2ModeA_, warp2AmountA_, cPh, fmWin, fmSkip);
+                            if (fmSkip) sAu = 0.0f;
+                            else
+                            {
+                                sAu = (currentWavetable_ != nullptr)
+                                        ? tw::Wavetable::readCycle (blendA_.data(), (float) cPh)
+                                        : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
+                                sAu *= fmWin;
+                                sAu = applyAmpWarp (warp2ModeA_, warp2AmountA_, sAu);
+                            }
                             if (alg == 2)
                                 sAu *= (1.0f - fmD1Sm_[0]) + fmD1Sm_[0] * m1;      // ring dry→wet on depth 1
                             uModPhaseA_[(size_t) u]  += inc * fmR1Eff_[0] + fmRustTps_[0];
@@ -2004,7 +2016,7 @@ namespace tw
                 float sA_R = sumAR;
                 // RECTIFY DC block — only when this osc's wavetable warp == Rectify (slot 1 or 2)
                 // with nonzero amount; dormant (bit-identical) otherwise.
-                if (engine_ == Engine::WT
+                if ((engine_ == Engine::WT || engine_ == Engine::FM)
                     && ((warpMode_ == 9 && warpAmount_ > 0.001f) || (warp2ModeA_ == 9 && warp2AmountA_ > 0.001f)))
                 { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
                 if (engine_ == Engine::GRAN) { sA_L = granBlkAL_[(size_t) i]; sA_R = granBlkAR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
@@ -2231,9 +2243,18 @@ namespace tw
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
-                            sBu = (currentWavetableB_ != nullptr)
-                                    ? tw::Wavetable::readCycle (blendB_.data(), (float) cPh)
-                                    : static_cast<float> (std::sin (pi2 * cPh));
+                            float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
+                            if (warp2ModeB_ != 0)
+                                cPh = applyPhaseWarp (warp2ModeB_, warp2AmountB_, cPh, fmWin, fmSkip);
+                            if (fmSkip) sBu = 0.0f;
+                            else
+                            {
+                                sBu = (currentWavetableB_ != nullptr)
+                                        ? tw::Wavetable::readCycle (blendB_.data(), (float) cPh)
+                                        : static_cast<float> (std::sin (pi2 * cPh));
+                                sBu *= fmWin;
+                                sBu = applyAmpWarp (warp2ModeB_, warp2AmountB_, sBu);
+                            }
                             if (alg == 2)
                                 sBu *= (1.0f - fmD1Sm_[1]) + fmD1Sm_[1] * m1;
                             uModPhaseB_[(size_t) u]  += inc * fmR1Eff_[1] + fmRustTps_[1];
@@ -2266,7 +2287,7 @@ namespace tw
                 float sB_L = sumBL;
                 float sB_R = sumBR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if (engineB_ == Engine::WT
+                if ((engineB_ == Engine::WT || engineB_ == Engine::FM)
                     && ((warpModeB_ == 9 && warpAmountB_ > 0.001f) || (warp2ModeB_ == 9 && warp2AmountB_ > 0.001f)))
                 { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
                 if (engineB_ == Engine::GRAN) { sB_L = granBlkBL_[(size_t) i]; sB_R = granBlkBR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
@@ -2490,9 +2511,18 @@ namespace tw
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
-                            sCu = (currentWavetableC_ != nullptr)
-                                    ? tw::Wavetable::readCycle (blendC_.data(), (float) cPh)
-                                    : static_cast<float> (std::sin (pi2 * cPh));
+                            float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
+                            if (warp2ModeC_ != 0)
+                                cPh = applyPhaseWarp (warp2ModeC_, warp2AmountC_, cPh, fmWin, fmSkip);
+                            if (fmSkip) sCu = 0.0f;
+                            else
+                            {
+                                sCu = (currentWavetableC_ != nullptr)
+                                        ? tw::Wavetable::readCycle (blendC_.data(), (float) cPh)
+                                        : static_cast<float> (std::sin (pi2 * cPh));
+                                sCu *= fmWin;
+                                sCu = applyAmpWarp (warp2ModeC_, warp2AmountC_, sCu);
+                            }
                             if (alg == 2)
                                 sCu *= (1.0f - fmD1Sm_[2]) + fmD1Sm_[2] * m1;
                             uModPhaseC_[(size_t) u]  += inc * fmR1Eff_[2] + fmRustTps_[2];
@@ -2525,7 +2555,7 @@ namespace tw
                 float sC_L = sumCL;
                 float sC_R = sumCR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if (engineC_ == Engine::WT
+                if ((engineC_ == Engine::WT || engineC_ == Engine::FM)
                     && ((warpModeC_ == 9 && warpAmountC_ > 0.001f) || (warp2ModeC_ == 9 && warp2AmountC_ > 0.001f)))
                 { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
                 if (engineC_ == Engine::GRAN) { sC_L = granBlkCL_[(size_t) i]; sC_R = granBlkCR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
@@ -2749,9 +2779,18 @@ namespace tw
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
-                            sDu = (currentWavetableD_ != nullptr)
-                                    ? tw::Wavetable::readCycle (blendD_.data(), (float) cPh)
-                                    : static_cast<float> (std::sin (pi2 * cPh));
+                            float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
+                            if (warp2ModeD_ != 0)
+                                cPh = applyPhaseWarp (warp2ModeD_, warp2AmountD_, cPh, fmWin, fmSkip);
+                            if (fmSkip) sDu = 0.0f;
+                            else
+                            {
+                                sDu = (currentWavetableD_ != nullptr)
+                                        ? tw::Wavetable::readCycle (blendD_.data(), (float) cPh)
+                                        : static_cast<float> (std::sin (pi2 * cPh));
+                                sDu *= fmWin;
+                                sDu = applyAmpWarp (warp2ModeD_, warp2AmountD_, sDu);
+                            }
                             if (alg == 2)
                                 sDu *= (1.0f - fmD1Sm_[3]) + fmD1Sm_[3] * m1;
                             uModPhaseD_[(size_t) u]  += inc * fmR1Eff_[3] + fmRustTps_[3];
@@ -2784,7 +2823,7 @@ namespace tw
                 float sD_L = sumDL;
                 float sD_R = sumDR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if (engineD_ == Engine::WT
+                if ((engineD_ == Engine::WT || engineD_ == Engine::FM)
                     && ((warpModeD_ == 9 && warpAmountD_ > 0.001f) || (warp2ModeD_ == 9 && warp2AmountD_ > 0.001f)))
                 { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
                 if (engineD_ == Engine::GRAN) { sD_L = granBlkDL_[(size_t) i]; sD_R = granBlkDR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE

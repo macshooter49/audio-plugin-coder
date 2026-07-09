@@ -2373,16 +2373,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 juce::ParameterID { coarse, 1 }, "Synth OSC " + osc + " Coarse",
                 juce::NormalisableRange<float> (-64.0f, 64.0f, 0.0f), 0.0f));
             layout.add (std::make_unique<juce::AudioParameterChoice> (
-                juce::ParameterID { range, 1 }, "Synth OSC " + osc + " Sub Range",
+                juce::ParameterID { range, 1 }, "Synth OSC " + osc + " Sub Octave",
                 juce::StringArray { "-1 Oct", "-2 Oct", "-3 Oct" }, 0));
             layout.add (std::make_unique<juce::AudioParameterChoice> (
-                juce::ParameterID { form, 1 }, "Synth OSC " + osc + " Sub Form",
+                juce::ParameterID { form, 1 }, "Synth OSC " + osc + " Sub Shape",
                 juce::StringArray { "Sine", "Triangle", "Square", "Saw" }, 0));
             layout.add (std::make_unique<juce::AudioParameterFloat> (
-                juce::ParameterID { weight, 1 }, "Synth OSC " + osc + " Sub Weight",
+                juce::ParameterID { weight, 1 }, "Synth OSC " + osc + " Sub Mix",
                 juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
             layout.add (std::make_unique<juce::AudioParameterFloat> (
-                juce::ParameterID { heat, 1 }, "Synth OSC " + osc + " Sub Heat",
+                juce::ParameterID { heat, 1 }, "Synth OSC " + osc + " Sub Drive",
                 juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
         };
         addSubCoarse (ParameterIDs::SYN_OSC_A_COARSE, ParameterIDs::SYN_OSC_A_SUB_RANGE, ParameterIDs::SYN_OSC_A_SUB_FORM, ParameterIDs::SYN_OSC_A_SUB_WEIGHT, ParameterIDs::SYN_OSC_A_SUB_HEAT, "A");
