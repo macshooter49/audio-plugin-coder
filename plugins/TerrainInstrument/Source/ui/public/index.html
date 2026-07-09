@@ -4610,23 +4610,23 @@ body {
             #syn-panel .device.filter .filter-display { min-height: 40px; }
             /* TwoFilters — back panel (per-filter MIX + shared series/parallel routing) */
             #syn-panel .device.filter .filter-back {
-              flex: 1; display: none; flex-direction: column; gap: 10px;
-              justify-content: center; padding: 2px 2px 0;
+              flex: 1; display: none; flex-direction: column; gap: 8px;
+              justify-content: center; padding: 2px 2px 8px;   /* labels never touch the base */
             }
             #syn-panel .device.filter.swapped .filter-back { display: flex; }
-            #syn-panel .fb-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-secondary); margin-bottom: 5px; }
-            #syn-panel .fb-routing { display: flex; flex-direction: column; }
-            #syn-panel .fb-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-            #syn-panel .fb-opt {
-              height: 22px; border: 1px solid var(--border-strong); border-radius: 6px;
-              display: flex; align-items: center; justify-content: center;
-              font-size: 9px; letter-spacing: 1.2px; color: var(--text-primary);
-              font-weight: 300; cursor: pointer; opacity: 0.5; transition: opacity .12s, background .12s, border-color .12s;
-            }
-            #syn-panel .fb-opt:hover { opacity: 0.8; }
-            #syn-panel .fb-opt.act { opacity: 1; background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
-            #syn-panel .fb-mix { display: flex; align-items: center; justify-content: center; }
-            #syn-panel .fb-mix .knob { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+            /* fb1 — filter back = the osc back panel's structural twin (thin-white, transparent) */
+            #syn-panel .flt-src { cursor: pointer; transition: background .15s ease, color .15s ease; }
+            #syn-panel .flt-mid-row { min-height: 28px; flex: 0 0 auto; }
+            #syn-panel .flt-mini .flt-mini-label { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; }
+            #syn-panel .flt-mini-val { cursor: ns-resize; user-select: none; }
+            #syn-panel .flt-back-knobs { flex: 0 0 auto; }
+            #syn-panel .filter-toggle .ft-env { cursor: pointer; transition: color .18s ease; }
+            #syn-panel .filter-toggle .ft-env.act { background: var(--purple-500); border-color: var(--purple-500); color: #FFFFFF; }
+            #syn-panel .fb-opt { cursor: pointer; }
+            #syn-panel .fb-opt .sel-value { color: var(--text-muted); transition: color .15s ease; }
+            #syn-panel .fb-opt:hover .sel-value { color: var(--text-primary); }
+            #syn-panel .fb-opt.act { border-color: var(--purple-500); }
+            #syn-panel .fb-opt.act .sel-value { color: #C9B3FF; }
             /* Dropdown trigger — make it visibly clickable */
             #syn-panel .device.filter .dd-trigger { cursor: pointer; transition: border-color .15s; }
             #syn-panel .device.filter .dd-trigger:hover { border-color: var(--purple-500); }
@@ -6273,6 +6273,7 @@ body {
               <div class="ft-pill act" id="filter-pill-1">1</div>
               <div class="ft-pill" id="filter-pill-2">2</div>
               <div class="ft-pill ft-kt" id="filter-kt-emblem" title="Key Track">K</div>
+              <div class="ft-pill ft-env" id="filter-env-emblem" title="Env Track — the envelope opens this filter (per filter, Serum-style). UI mock — wiring lands with the filters milestone.">E</div>
               <button class="swap-btn" type="button" id="filter-swap-btn" aria-label="Toggle filter back panel (mix + routing)"></button>
             </div>
             <div class="dd-trigger front-only"><span>Ladder LP · 24</span><svg class="dd-chev"><use href="#ic-chev"/></svg></div>
@@ -6289,16 +6290,39 @@ body {
               <div class="knob"><div class="knob-ring"></div><div class="knob-label">Env</div></div>
             </div>
             <!-- BACK VIEW (visible when .device.swapped) — per-filter MIX + shared routing -->
+            <!-- BACK VIEW fb1 — the osc back panel's structural TWIN (UI mock, no DSP):
+                 row 1 = per-source routing pills (which oscillators feed THIS filter —
+                 Serum-style A/B/C/D + Sub + Noise, purple fill = routed, per filter 1/2),
+                 row 2 = Series/Parallel (LIVE param) + Key / Poles pills (mock),
+                 row 3 = Mix (LIVE per-filter param) + Drive/Env/Vel/Track mock knobs.
+                 Same row geometry as the osc back panel so the two overlay 1:1. -->
             <div class="filter-back back-only">
-              <div class="fb-routing">
-                <div class="fb-label">Routing</div>
-                <div class="fb-seg" id="filter-routing-seg">
-                  <div class="fb-opt act" data-route="0">Series</div>
-                  <div class="fb-opt" data-route="1">Parallel</div>
+              <div class="blend-pills flt-src-row" id="flt-src-row">
+                <div class="blend-pill flt-src act" data-fsrc="0" title="Route Osc A into this filter">A</div>
+                <div class="blend-pill flt-src act" data-fsrc="1" title="Route Osc B into this filter">B</div>
+                <div class="blend-pill flt-src act" data-fsrc="2" title="Route Osc C into this filter">C</div>
+                <div class="blend-pill flt-src act" data-fsrc="3" title="Route Osc D into this filter">D</div>
+                <div class="blend-pill flt-src act" data-fsrc="4" title="Route the Sub layers into this filter">S</div>
+                <div class="blend-pill flt-src act" data-fsrc="5" title="Route the Noise layer into this filter">N</div>
+              </div>
+              <div class="selector-pills flt-mid-row" id="filter-routing-seg">
+                <div class="sel fb-opt act" data-route="0" title="Series — filter 1 feeds filter 2"><div class="sel-value">Series</div></div>
+                <div class="sel fb-opt" data-route="1" title="Parallel — both filters run side by side"><div class="sel-value">Parallel</div></div>
+                <div class="sel flt-mini" id="flt-key-pill" title="Key — keytrack amount (drag · UI mock)">
+                  <div class="sel-value flt-mini-label">Key</div>
+                  <div class="sel-value flt-mini-val" id="flt-key-val"><b>0</b>%</div>
+                </div>
+                <div class="sel flt-mini" id="flt-poles-pill" title="Poles — 12 or 24 dB/oct (click · UI mock)">
+                  <div class="sel-value flt-mini-label">Poles</div>
+                  <div class="sel-value flt-mini-val" id="flt-poles-val">24</div>
                 </div>
               </div>
-              <div class="fb-mix">
+              <div class="osc-knobs flt-back-knobs">
                 <div class="knob" id="filter-mix-knob"><div class="knob-ring"></div><div class="knob-label">Mix</div></div>
+                <div class="knob flt-mockknob" title="Drive — filter input saturation (UI mock)"><div class="knob-ring"></div><div class="knob-label">Drive</div></div>
+                <div class="knob flt-mockknob" title="Env — envelope depth into cutoff (UI mock)"><div class="knob-ring"></div><div class="knob-label">Env</div></div>
+                <div class="knob flt-mockknob" title="Vel — velocity opens the filter (UI mock)"><div class="knob-ring"></div><div class="knob-label">Vel</div></div>
+                <div class="knob flt-mockknob" title="Track — env-follower tracking amount (UI mock)"><div class="knob-ring"></div><div class="knob-label">Track</div></div>
               </div>
             </div>
           </div>
@@ -13738,6 +13762,46 @@ setTimeout(function wireSynControls () {
       });
       if (routeSt && routeSt.valueChangedEvent && routeSt.valueChangedEvent.addListener) routeSt.valueChangedEvent.addListener(refreshRouting);
       refreshRouting();
+
+      // ── FILTER BACK fb1 (UI MOCK — no DSP): per-filter source pills (A/B/C/D/S/N),
+      //    E env-track emblem, Key drag, Poles toggle. State is per filter (1/2) and
+      //    purely visual — the real routing lands with the filters milestone. ──
+      (function initFilterBackMock() {
+        try {
+          const fst = { 1: { src: [1,1,1,1,1,1], env: false, key: 0, poles: 24 },
+                        2: { src: [1,1,1,1,1,1], env: false, key: 0, poles: 24 } };
+          const curF = () => (slotPill2 && slotPill2.classList.contains('act')) ? 2 : 1;
+          const renderFb = () => {
+            const st = fst[curF()];
+            document.querySelectorAll('#flt-src-row .flt-src').forEach((p, i) => p.classList.toggle('act', !! st.src[i]));
+            const e = document.getElementById('filter-env-emblem'); if (e) e.classList.toggle('act', !! st.env);
+            const kv = document.querySelector('#flt-key-val b'); if (kv) kv.textContent = Math.round(st.key);
+            const pv = document.getElementById('flt-poles-val'); if (pv) pv.textContent = st.poles;
+          };
+          document.querySelectorAll('#flt-src-row .flt-src').forEach((p, i) =>
+            p.addEventListener('click', () => { const st = fst[curF()]; st.src[i] = st.src[i] ? 0 : 1; renderFb(); }));
+          const env = document.getElementById('filter-env-emblem');
+          if (env) env.addEventListener('click', () => { const st = fst[curF()]; st.env = ! st.env; renderFb(); });
+          const pp = document.getElementById('flt-poles-pill');
+          if (pp) pp.addEventListener('click', () => { const st = fst[curF()]; st.poles = (st.poles === 24) ? 12 : 24; renderFb(); });
+          // Key pill — vertical drag, 0..100 % (mock value)
+          const kp = document.getElementById('flt-key-pill');
+          if (kp) {
+            let dragging = false, y0 = 0, v0 = 0;
+            const mv = (ev) => { if (! dragging) return; const st = fst[curF()];
+              st.key = Math.max(0, Math.min(100, v0 + (y0 - ev.clientY) * 0.8)); renderFb(); };
+            const up = () => { dragging = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
+            kp.addEventListener('pointerdown', (ev) => { if (ev.button !== 0) return;
+              dragging = true; y0 = ev.clientY; v0 = fst[curF()].key;
+              document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+              ev.preventDefault(); });
+            kp.addEventListener('dblclick', () => { fst[curF()].key = 0; renderFb(); });
+          }
+          // the 1/2 tabs swap which filter's back-state is shown
+          [slotPill1, slotPill2].forEach(p => { if (p) p.addEventListener('click', () => setTimeout(renderFb, 0)); });
+          renderFb();
+        } catch (eFb) { console.warn('[FLT-BACK] fb1 mock init failed', eFb); }
+      })();
 
       // ── 6B — Reactive response curve.
       // Evaluate the analytic magnitude of the active filter at 128 log-
@@ -22775,7 +22839,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'sc3';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'fb1';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
