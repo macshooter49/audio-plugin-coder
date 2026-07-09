@@ -2362,6 +2362,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         addHarmOsc (HARM_A, "A"); addHarmOsc (HARM_B, "B"); addHarmOsc (HARM_C, "C"); addHarmOsc (HARM_D, "D");
     }
 
+    // ════════ UNIVERSAL OSC BOXES (2026-07-09) — COARSE + SUB per oscillator ════════
+    // COARSE = continuous ±64 st, NO snap (the smooth modulatable pitch lane — Serum CRS).
+    // SUB = voice-anchored sub osc: Range / Form / Weight / Heat. Defaults keep it OFF.
+    {
+        auto addSubCoarse = [&layout] (const char* coarse, const char* range, const char* form,
+                                       const char* weight, const char* heat, const juce::String& osc)
+        {
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { coarse, 1 }, "Synth OSC " + osc + " Coarse",
+                juce::NormalisableRange<float> (-64.0f, 64.0f, 0.0f), 0.0f));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                juce::ParameterID { range, 1 }, "Synth OSC " + osc + " Sub Range",
+                juce::StringArray { "-1 Oct", "-2 Oct", "-3 Oct" }, 0));
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                juce::ParameterID { form, 1 }, "Synth OSC " + osc + " Sub Form",
+                juce::StringArray { "Sine", "Triangle", "Square", "Saw" }, 0));
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { weight, 1 }, "Synth OSC " + osc + " Sub Weight",
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { heat, 1 }, "Synth OSC " + osc + " Sub Heat",
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+        };
+        addSubCoarse (ParameterIDs::SYN_OSC_A_COARSE, ParameterIDs::SYN_OSC_A_SUB_RANGE, ParameterIDs::SYN_OSC_A_SUB_FORM, ParameterIDs::SYN_OSC_A_SUB_WEIGHT, ParameterIDs::SYN_OSC_A_SUB_HEAT, "A");
+        addSubCoarse (ParameterIDs::SYN_OSC_B_COARSE, ParameterIDs::SYN_OSC_B_SUB_RANGE, ParameterIDs::SYN_OSC_B_SUB_FORM, ParameterIDs::SYN_OSC_B_SUB_WEIGHT, ParameterIDs::SYN_OSC_B_SUB_HEAT, "B");
+        addSubCoarse (ParameterIDs::SYN_OSC_C_COARSE, ParameterIDs::SYN_OSC_C_SUB_RANGE, ParameterIDs::SYN_OSC_C_SUB_FORM, ParameterIDs::SYN_OSC_C_SUB_WEIGHT, ParameterIDs::SYN_OSC_C_SUB_HEAT, "C");
+        addSubCoarse (ParameterIDs::SYN_OSC_D_COARSE, ParameterIDs::SYN_OSC_D_SUB_RANGE, ParameterIDs::SYN_OSC_D_SUB_FORM, ParameterIDs::SYN_OSC_D_SUB_WEIGHT, ParameterIDs::SYN_OSC_D_SUB_HEAT, "D");
+    }
+
     // ════════ RESYNTH-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
     // ID strings keep GEODE_* for preset stability; meaning REMAPPED (see the gather):
     //   Page 1: Scan(CREEP)/Stretch(FOSSIL)/Sieve/Cut/Shape(DISTILL)/Drive(HAZE)
@@ -3739,13 +3768,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             engParamsPushed_ = true;
         }
 
+        // ── UNIVERSAL OSC BOXES — COARSE folds into the cents lane (±6400 c: one term,
+        //    every engine); SUB params push straight to the voice lanes. Read once per block.
+        const float coarseA = *rawParam (ParameterIDs::SYN_OSC_A_COARSE);
+        const float coarseB = *rawParam (ParameterIDs::SYN_OSC_B_COARSE);
+        const float coarseC = *rawParam (ParameterIDs::SYN_OSC_C_COARSE);
+        const float coarseD = *rawParam (ParameterIDs::SYN_OSC_D_COARSE);
+        const int   subRngA = (int) *rawParam (ParameterIDs::SYN_OSC_A_SUB_RANGE), subFrmA = (int) *rawParam (ParameterIDs::SYN_OSC_A_SUB_FORM);
+        const int   subRngB = (int) *rawParam (ParameterIDs::SYN_OSC_B_SUB_RANGE), subFrmB = (int) *rawParam (ParameterIDs::SYN_OSC_B_SUB_FORM);
+        const int   subRngC = (int) *rawParam (ParameterIDs::SYN_OSC_C_SUB_RANGE), subFrmC = (int) *rawParam (ParameterIDs::SYN_OSC_C_SUB_FORM);
+        const int   subRngD = (int) *rawParam (ParameterIDs::SYN_OSC_D_SUB_RANGE), subFrmD = (int) *rawParam (ParameterIDs::SYN_OSC_D_SUB_FORM);
+        const float subWgtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_WEIGHT), subHtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_HEAT);
+        const float subWgtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_HEAT);
+        const float subWgtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_HEAT);
+        const float subWgtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_WEIGHT), subHtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_HEAT);
+
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
             if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
             {
                 if (synCfgChanged)
                     sv->setModConfig          (synModCfg, synModBpm);
-                sv->setTuning                 (oct, semi, cent);
+                sv->setTuning                 (oct, semi, cent + coarseA * 100.0f);   // + COARSE (cents lane)
                 sv->setLevel                  (lvl);
                 sv->setPan                    (pan);
                 sv->setFilterParameters       (cut, res);
@@ -3774,7 +3818,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWarp                   (warpMode, warpAmount);
                 sv->setEngine                 (engineIdx);
                 // Phase 9 — OSC B setters
-                sv->setTuningB                (octB, semiB, centB);
+                sv->setTuningB                (octB, semiB, centB + coarseB * 100.0f);
                 sv->setLevelB                 (lvlB);
                 sv->setPanB                   (panB);
                 sv->setWavetableB             (wtB);
@@ -3787,9 +3831,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setRoute                  (rtSrcA, rtDestA, rtAmtA / 100.0f, rtSrcB, rtDestB, rtAmtB / 100.0f);  // ROUTE
                 sv->setEngineB                (engineIdxB);
                 // ── OSC C / D pushes (4-osc) ──
-                sv->setTuningC (octC, semiC, centC);  sv->setTuningD (octD, semiD, centD);
+                sv->setTuningC (octC, semiC, centC + coarseC * 100.0f);  sv->setTuningD (octD, semiD, centD + coarseD * 100.0f);
                 sv->setLevelC (lvlC);                 sv->setLevelD (lvlD);
                 sv->setOscGates (gateA, gateB, gateC, gateD);   // SOLO/MUTE — click-free per-osc gate
+                sv->setSub (0, subRngA, subFrmA, subWgtA, subHtA);   // SUB — universal osc box
+                sv->setSub (1, subRngB, subFrmB, subWgtB, subHtB);
+                sv->setSub (2, subRngC, subFrmC, subWgtC, subHtC);
+                sv->setSub (3, subRngD, subFrmD, subWgtD, subHtD);
                 sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setPanC (panC);                   sv->setPanD (panD);

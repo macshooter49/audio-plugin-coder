@@ -784,4 +784,32 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_HARM_SHINE[]        = "SYN_OSC_D_HARM_SHINE";
     constexpr char SYN_OSC_D_HARM_WILT[]         = "SYN_OSC_D_HARM_WILT";
     constexpr char SYN_OSC_D_HARM_FIZZ[]         = "SYN_OSC_D_HARM_FIZZ";
+
+    // ── UNIVERSAL OSC BOXES (2026-07-09) — COARSE + SUB on every oscillator ──
+    // COARSE: continuous ±64 st pitch lane, NO snap — the smooth modulatable pitch
+    // destination (Serum-2 CRS insight). Sums on top of Oct/Semi/Cent (cents lane).
+    // SUB: single voice-anchored sub osc — Range(-1/-2/-3 oct) · Form(Sine/Tri/Sq/Saw)
+    //      · Weight(level, exp-bias) · Heat(ADAA-tanh light drive). Default OFF.
+    // (The retired PHASE_MODE + ROUTE_* ids above stay registered — IDs FROZEN — but
+    //  their tiles are gone: phase is hardwired FREE, the Note→Frame route is dead.)
+    constexpr char SYN_OSC_A_COARSE[]     = "SYN_OSC_A_COARSE";      // float -64..+64 st, default 0
+    constexpr char SYN_OSC_B_COARSE[]     = "SYN_OSC_B_COARSE";
+    constexpr char SYN_OSC_C_COARSE[]     = "SYN_OSC_C_COARSE";
+    constexpr char SYN_OSC_D_COARSE[]     = "SYN_OSC_D_COARSE";
+    constexpr char SYN_OSC_A_SUB_RANGE[]  = "SYN_OSC_A_SUB_RANGE";   // choice 0=-1oct 1=-2oct 2=-3oct
+    constexpr char SYN_OSC_B_SUB_RANGE[]  = "SYN_OSC_B_SUB_RANGE";
+    constexpr char SYN_OSC_C_SUB_RANGE[]  = "SYN_OSC_C_SUB_RANGE";
+    constexpr char SYN_OSC_D_SUB_RANGE[]  = "SYN_OSC_D_SUB_RANGE";
+    constexpr char SYN_OSC_A_SUB_FORM[]   = "SYN_OSC_A_SUB_FORM";    // choice 0=Sine 1=Tri 2=Square 3=Saw
+    constexpr char SYN_OSC_B_SUB_FORM[]   = "SYN_OSC_B_SUB_FORM";
+    constexpr char SYN_OSC_C_SUB_FORM[]   = "SYN_OSC_C_SUB_FORM";
+    constexpr char SYN_OSC_D_SUB_FORM[]   = "SYN_OSC_D_SUB_FORM";
+    constexpr char SYN_OSC_A_SUB_WEIGHT[] = "SYN_OSC_A_SUB_WEIGHT";  // float 0..1, default 0 (off)
+    constexpr char SYN_OSC_B_SUB_WEIGHT[] = "SYN_OSC_B_SUB_WEIGHT";
+    constexpr char SYN_OSC_C_SUB_WEIGHT[] = "SYN_OSC_C_SUB_WEIGHT";
+    constexpr char SYN_OSC_D_SUB_WEIGHT[] = "SYN_OSC_D_SUB_WEIGHT";
+    constexpr char SYN_OSC_A_SUB_HEAT[]   = "SYN_OSC_A_SUB_HEAT";    // float 0..1, default 0
+    constexpr char SYN_OSC_B_SUB_HEAT[]   = "SYN_OSC_B_SUB_HEAT";
+    constexpr char SYN_OSC_C_SUB_HEAT[]   = "SYN_OSC_C_SUB_HEAT";
+    constexpr char SYN_OSC_D_SUB_HEAT[]   = "SYN_OSC_D_SUB_HEAT";
 }

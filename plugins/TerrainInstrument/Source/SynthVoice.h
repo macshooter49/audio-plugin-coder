@@ -16,6 +16,7 @@
 #include "GranularEngine.h"        // GRANULAR-ENGINE-VOICE — per-OSC granular core
 #include "GeodeEngine.h"           // GEODE-ENGINE-VOICE — per-OSC resynthesis core (Engine::SPEC)
 #include "HarmonicEngine.h"       // HARMONIC-ENGINE-VOICE — per-OSC additive bank (Engine::HARM)
+#include "SubOsc.h"               // SUB — voice-anchored sub oscillator (universal osc box)
 #include "Warp/WarpProcessor.h"    // SAMPLE-ENGINE-VOICE — STRETCH + FORMANT (Signalsmith Tones)
 #include <atomic>
 #include <array>
@@ -900,10 +901,22 @@ namespace tw
 
         /** PHASE mode per OSC (0=RETRIG, 1=FREE, 2=RANDOM, 3=SPREAD). Governs how each
          *  unison sine's phase accumulator is initialised at note-on. Pushed per block. */
+        void setSub (int o, int range, int form, float weight, float heatK) noexcept
+        {
+            if (o < 0 || o > 3) return;
+            sub_[o].range  = juce::jlimit (0, 2, range);
+            sub_[o].form   = juce::jlimit (0, 3, form);
+            sub_[o].weight = juce::jlimit (0.f, 1.f, weight);
+            sub_[o].heatK  = juce::jlimit (0.f, 1.f, heatK);
+        }
+
         void setPhaseMode (int modeA, int modeB) noexcept
         {
-            phaseModeA_ = juce::jlimit (0, 3, modeA);
-            phaseModeB_ = juce::jlimit (0, 3, modeB);
+            // Phase tile RETIRED (2026-07-09, Max's call): phase is HARDWIRED to FREE —
+            // accumulators never reset, every note starts where the wave happens to be.
+            // The PHASE_MODE params stay registered (IDs FROZEN) but are ignored.
+            juce::ignoreUnused (modeA, modeB);
+            phaseModeA_ = 1; phaseModeB_ = 1;
         }
 
         /** WAVER depth per OSC, 0..1 (analog pitch drift; from SYN_OSC_A/B_WAVER / 100).
@@ -1042,12 +1055,15 @@ namespace tw
         void setRoute (int srcA, int destA, float amtA,
                        int srcB, int destB, float amtB) noexcept
         {
+            // Note→Frame ROUTE tile RETIRED (2026-07-09): the route is DEAD — amounts are
+            // forced to 0 so an old session's stored route can't apply invisible modulation.
+            juce::ignoreUnused (amtA, amtB);
             routeSrcA_  = juce::jlimit (0, 1, srcA);
             routeDestA_ = juce::jlimit (0, 2, destA);
-            routeAmtA_  = juce::jlimit (-1.0f, 1.0f, amtA);
+            routeAmtA_  = 0.0f;
             routeSrcB_  = juce::jlimit (0, 1, srcB);
             routeDestB_ = juce::jlimit (0, 2, destB);
-            routeAmtB_  = juce::jlimit (-1.0f, 1.0f, amtB);
+            routeAmtB_  = 0.0f;
         }
 
         /** Phase 11c — Set per-OSC SPECTRAL type + amount. Pushed per-block from
@@ -1161,11 +1177,15 @@ namespace tw
             fmStorm_[o]      = juce::jlimit (0.0f, 1.0f, storm);
         }
         void setBlurCD (float blurC01, float blurD01) noexcept { blurTargetC_=juce::jlimit(0.0f,1.0f,blurC01); blurTargetD_=juce::jlimit(0.0f,1.0f,blurD01); }
-        void setPhaseModeCD (int modeC, int modeD) noexcept { phaseModeC_=juce::jlimit(0,3,modeC); phaseModeD_=juce::jlimit(0,3,modeD); }
+        void setPhaseModeCD (int modeC, int modeD) noexcept
+        {
+            juce::ignoreUnused (modeC, modeD);   // hardwired FREE (tile retired — see setPhaseMode)
+            phaseModeC_ = 1; phaseModeD_ = 1;
+        }
         void setWaverCD (float c, float d) noexcept { waverC_=juce::jlimit(0.0f,1.0f,c); waverD_=juce::jlimit(0.0f,1.0f,d); }
         void setFoldCD (int shapeC, float amountC, int shapeD, float amountD) noexcept { foldShapeC_=juce::jlimit(0,2,shapeC); foldAmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); foldShapeD_=juce::jlimit(0,2,shapeD); foldAmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
         void setKeytrackCD (float depthC, int destC, float depthD, int destD) noexcept { ktDepthC_=juce::jlimit(0.0f,1.0f,depthC); ktDestC_=juce::jlimit(0,2,destC); ktDepthD_=juce::jlimit(0.0f,1.0f,depthD); ktDestD_=juce::jlimit(0,2,destD); }
-        void setRouteCD (int srcC, int destC, float amtC, int srcD, int destD, float amtD) noexcept { routeSrcC_=juce::jlimit(0,1,srcC); routeDestC_=juce::jlimit(0,2,destC); routeAmtC_=juce::jlimit(-1.0f,1.0f,amtC); routeSrcD_=juce::jlimit(0,1,srcD); routeDestD_=juce::jlimit(0,2,destD); routeAmtD_=juce::jlimit(-1.0f,1.0f,amtD); }
+        void setRouteCD (int srcC, int destC, float amtC, int srcD, int destD, float amtD) noexcept { juce::ignoreUnused (amtC, amtD); routeSrcC_=juce::jlimit(0,1,srcC); routeDestC_=juce::jlimit(0,2,destC); routeAmtC_=0.0f; routeSrcD_=juce::jlimit(0,1,srcD); routeDestD_=juce::jlimit(0,2,destD); routeAmtD_=0.0f; }   // route RETIRED — dead by force
         void setSpectralCD (int typeC, float amtC, int typeD, float amtD) noexcept { spectralTypeC_=juce::jlimit(0,9,typeC); spectralAmtC_=juce::jlimit(0.0f,1.0f,amtC); spectralTypeD_=juce::jlimit(0,9,typeD); spectralAmtD_=juce::jlimit(0.0f,1.0f,amtD); spectralBypassC_=(spectralAmtC_<1.0e-4f); spectralBypassD_=(spectralAmtD_<1.0e-4f); updateSpectralCoefficients(spectralTypeC_,spectralAmtC_,spectralFilterCL_,spectralFilterCR_); updateSpectralCoefficients(spectralTypeD_,spectralAmtD_,spectralFilterDL_,spectralFilterDR_); }
         void setInterpModeCD (int modeC, int modeD) noexcept { interpModeC_=juce::jlimit(0,1,modeC); interpModeD_=juce::jlimit(0,1,modeD); }
 
@@ -1321,6 +1341,7 @@ namespace tw
             ktRamp_ = juce::jlimit (0.0f, 1.0f,
                           (float) (midiNote - kKtLowNote) / (float) (kKtHighNote - kKtLowNote));
 
+            for (auto& sl : sub_) sl.osc.noteOn();   // SUB — fresh phase + reseeded heat shaper
             // Phase 8b — populate per-sine increments
             updateUnisonFramePositions();
             updateUnisonPhaseIncrementsA (glideNote_);
@@ -1463,6 +1484,9 @@ namespace tw
                 }
                 float mFrA = 0.0f, mWpA = 0.0f, mFdA = 0.0f, mFrB = 0.0f, mWpB = 0.0f, mFdB = 0.0f;
                 float mFrC = 0.0f, mWpC = 0.0f, mFdC = 0.0f, mFrD = 0.0f, mWpD = 0.0f, mFdD = 0.0f;
+                float mCrs[4] = { 0.f, 0.f, 0.f, 0.f };   // COARSE mod (semitones, per osc)
+                float mSw[4]  = { 0.f, 0.f, 0.f, 0.f };   // SUB Weight mod
+                float mSh[4]  = { 0.f, 0.f, 0.f, 0.f };   // SUB Heat mod
                 for (int a = 0; a < modConfig_.numAssignments; ++a)
                 {
                     const auto& as = modConfig_.assignments[a];
@@ -1489,10 +1513,24 @@ namespace tw
                         case wc::ModDest::FrameD: mFrD += c; break;
                         case wc::ModDest::WarpD:  mWpD += c; break;
                         case wc::ModDest::FoldD:  mFdD += c; break;
+                        case wc::ModDest::CoarseA: mCrs[0] += c; break;
+                        case wc::ModDest::CoarseB: mCrs[1] += c; break;
+                        case wc::ModDest::CoarseC: mCrs[2] += c; break;
+                        case wc::ModDest::CoarseD: mCrs[3] += c; break;
+                        case wc::ModDest::SubWeightA: mSw[0] += c; break;
+                        case wc::ModDest::SubWeightB: mSw[1] += c; break;
+                        case wc::ModDest::SubWeightC: mSw[2] += c; break;
+                        case wc::ModDest::SubWeightD: mSw[3] += c; break;
+                        case wc::ModDest::SubHeatA: mSh[0] += c; break;
+                        case wc::ModDest::SubHeatB: mSh[1] += c; break;
+                        case wc::ModDest::SubHeatC: mSh[2] += c; break;
+                        case wc::ModDest::SubHeatD: mSh[3] += c; break;
                         default: break;
                     }
                 }
                 // FRAME/WARP/FOLD — keytrack crossfade + ROUTE + LFO mod, clamp once.
+                coarseModA_ = mCrs[0]; coarseModB_ = mCrs[1]; coarseModC_ = mCrs[2]; coarseModD_ = mCrs[3];
+                for (int o = 0; o < 4; ++o) { subWMod_[o] = mSw[o]; subHMod_[o] = mSh[o]; }
                 framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA);
                 warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f) + mWpA);
                 foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f) + mFdA);
@@ -1579,6 +1617,7 @@ namespace tw
             updateUnisonPhaseIncrementsB (glideNote_);
             updateUnisonPhaseIncrementsC (glideNote_);
             updateUnisonPhaseIncrementsD (glideNote_);
+            prepareSubBlock (numSamples);   // SUB — voice-anchored per-osc sub lanes (universal box)
 
             // Phase 10a / Phase 8b — pick mip level using sine 0 (centre-detuned,
             // no spread offset) as the reference — ±25 cents of unison detune
@@ -2003,6 +2042,8 @@ namespace tw
                         }
                     }
                 }
+                // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
+                if (sub_[0].on) subMix (0, sA_L, sA_R);
                 if (! spectralBypassA_)
                 {
                     if (spectralTypeA_ <= 2)
@@ -2263,6 +2304,8 @@ namespace tw
                         }
                     }
                 }
+                // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
+                if (sub_[1].on) subMix (1, sB_L, sB_R);
                 if (! spectralBypassB_)
                 {
                     if (spectralTypeB_ <= 2)
@@ -2520,6 +2563,8 @@ namespace tw
                         }
                     }
                 }
+                // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
+                if (sub_[2].on) subMix (2, sC_L, sC_R);
                 if (! spectralBypassC_)
                 {
                     if (spectralTypeC_ <= 2)
@@ -2777,6 +2822,8 @@ namespace tw
                         }
                     }
                 }
+                // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
+                if (sub_[3].on) subMix (3, sD_L, sD_R);
                 if (! spectralBypassD_)
                 {
                     if (spectralTypeD_ <= 2)
@@ -3221,6 +3268,7 @@ namespace tw
                     + static_cast<double> (centsOffset_)             * 0.01
                     + static_cast<double> (uDetuneCentsA_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsA_[(size_t) u])  * 0.01
+                    + (double) coarseModA_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncA_[(size_t) u] = hz / sampleRate_;
@@ -3238,6 +3286,7 @@ namespace tw
                     + static_cast<double> (centsOffsetB_)            * 0.01
                     + static_cast<double> (uDetuneCentsB_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsB_[(size_t) u])  * 0.01
+                    + (double) coarseModB_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncB_[(size_t) u] = hz / sampleRate_;
@@ -3254,6 +3303,7 @@ namespace tw
                     + static_cast<double> (centsOffsetC_)            * 0.01
                     + static_cast<double> (uDetuneCentsC_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsC_[(size_t) u])  * 0.01
+                    + (double) coarseModC_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncC_[(size_t) u] = hz / sampleRate_;
@@ -3270,6 +3320,7 @@ namespace tw
                     + static_cast<double> (centsOffsetD_)            * 0.01
                     + static_cast<double> (uDetuneCentsD_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsD_[(size_t) u])  * 0.01
+                    + (double) coarseModD_                                   // COARSE mod lane (per-block)
                     + pitchEnvSemis_;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncD_[(size_t) u] = hz / sampleRate_;
@@ -3659,6 +3710,63 @@ namespace tw
         // ── HARMONIC-ENGINE-VOICE (Engine::HARM, slot 5) — per-osc procedural additive banks.
         // Index 0 of each array = the unison ANCHOR (owns the spectrum-build arrays); siblings
         // are render-state-only and borrow the anchor's bank via adoptBank() every block.
+        // ── SUB (universal osc box, 2026-07-09) — ONE voice-anchored sub per osc.
+        // Tracks the osc's FINAL pitch (glide + Oct/Semi/Cent(+Coarse base) + Coarse mod
+        // + pitch env) down Range octaves. Weight is exp-bias perceptual; the sum is
+        // energy-normalized (1/sqrt(1+w^2)) so a heavy sub never blows voice headroom.
+        struct SubLane
+        {
+            tw::SubOsc osc;
+            int    range = 0, form = 0;
+            float  weight = 0.f, heatK = 0.f;
+            double inc = 0.0;
+            float  w = 0.f, dw = 0.f;     // ramped effective weight
+            float  n = 1.f, dn = 0.f;     // ramped energy normalizer
+            bool   on = false;
+        };
+        SubLane sub_[4];
+        float coarseModA_ = 0.f, coarseModB_ = 0.f, coarseModC_ = 0.f, coarseModD_ = 0.f;
+        float subWMod_[4] = { 0.f, 0.f, 0.f, 0.f }, subHMod_[4] = { 0.f, 0.f, 0.f, 0.f };
+
+        void prepareSubBlock (int numSamples) noexcept
+        {
+            const float invN = 1.f / (float) juce::jmax (1, numSamples);
+            const int   octs[4] = { octOffset_, octOffsetB_, octOffsetC_, octOffsetD_ };
+            const int   sems[4] = { semiOffset_, semiOffsetB_, semiOffsetC_, semiOffsetD_ };
+            const float cts[4]  = { centsOffset_, centsOffsetB_, centsOffsetC_, centsOffsetD_ };
+            const float crs[4]  = { coarseModA_, coarseModB_, coarseModC_, coarseModD_ };
+            for (int o = 0; o < 4; ++o)
+            {
+                SubLane& sl = sub_[o];
+                const float wKnob = juce::jlimit (0.f, 1.f, sl.weight + subWMod_[o]);
+                // exponential-bias perceptual level (house curve law — never p^k)
+                const float wEff = wKnob <= 0.f ? 0.f
+                                 : (std::exp (2.0f * wKnob) - 1.0f) / (std::exp (2.0f) - 1.0f);
+                sl.on = wEff > 1e-5f || sl.w > 1e-5f;    // stays on to RAMP OUT (declick)
+                if (! sl.on) { sl.dw = 0.f; sl.dn = (1.f - sl.n) * invN; continue; }
+                const double semis = (glideNote_ - 69.0)
+                                   + (double) octs[o] * 12.0 + (double) sems[o]
+                                   + (double) cts[o] * 0.01 + (double) crs[o]
+                                   + pitchEnvSemis_
+                                   - 12.0 * (double) (sl.range + 1);
+                const double hz = 440.0 * std::pow (2.0, semis / 12.0);
+                sl.inc = juce::jlimit (0.0, 0.45, hz / sampleRate_);
+                const float nT = 1.0f / std::sqrt (1.0f + wEff * wEff);
+                sl.dw = (wEff - sl.w) * invN;
+                sl.dn = (nT   - sl.n) * invN;
+            }
+        }
+
+        inline void subMix (int o, float& l, float& r) noexcept
+        {
+            SubLane& sl = sub_[o];
+            sl.w += sl.dw; sl.n += sl.dn;
+            const float h = juce::jlimit (0.f, 1.f, sl.heatK + subHMod_[o]);
+            const float v = sl.osc.heat (sl.osc.tick (sl.inc, sl.form), h) * sl.w;
+            l = (l + v) * sl.n;
+            r = (r + v) * sl.n;
+        }
+
         std::array<tw::HarmonicEngine, kMaxUnison> harmEngA_, harmEngB_, harmEngC_, harmEngD_;
         tw::HarmParams harmParamsA_, harmParamsB_, harmParamsC_, harmParamsD_;
         juce::AudioBuffer<float> harmBlkA_, harmBlkB_, harmBlkC_, harmBlkD_;
@@ -3863,10 +3971,10 @@ namespace tw
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             sampleNoteOnPending_ = false;
         }
 
@@ -3955,10 +4063,10 @@ namespace tw
                 }
             }
             const bool doOn = granNoteOnPending_;
-            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             granNoteOnPending_ = false;
         }
 
@@ -4046,10 +4154,10 @@ namespace tw
                 }
             }
             const bool doOn = geodeNoteOnPending_;
-            renderGeodeOsc (geodeEngA_, geodeParamsA_, engine_  == Engine::SPEC, octOffset_,  semiOffset_,  centsOffset_,  geodeBlkA_, geodeBlkAL_, geodeBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderGeodeOsc (geodeEngB_, geodeParamsB_, engineB_ == Engine::SPEC, octOffsetB_, semiOffsetB_, centsOffsetB_, geodeBlkB_, geodeBlkBL_, geodeBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderGeodeOsc (geodeEngC_, geodeParamsC_, engineC_ == Engine::SPEC, octOffsetC_, semiOffsetC_, centsOffsetC_, geodeBlkC_, geodeBlkCL_, geodeBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderGeodeOsc (geodeEngD_, geodeParamsD_, engineD_ == Engine::SPEC, octOffsetD_, semiOffsetD_, centsOffsetD_, geodeBlkD_, geodeBlkDL_, geodeBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderGeodeOsc (geodeEngA_, geodeParamsA_, engine_  == Engine::SPEC, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  geodeBlkA_, geodeBlkAL_, geodeBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderGeodeOsc (geodeEngB_, geodeParamsB_, engineB_ == Engine::SPEC, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, geodeBlkB_, geodeBlkBL_, geodeBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderGeodeOsc (geodeEngC_, geodeParamsC_, engineC_ == Engine::SPEC, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, geodeBlkC_, geodeBlkCL_, geodeBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderGeodeOsc (geodeEngD_, geodeParamsD_, engineD_ == Engine::SPEC, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, geodeBlkD_, geodeBlkDL_, geodeBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             geodeNoteOnPending_ = false;
         }
 
@@ -4121,10 +4229,10 @@ namespace tw
                 && engineC_ != Engine::HARM && engineD_ != Engine::HARM)
                 return;   // no HARM oscillators → free no-op (common case)
             const bool doOn = harmNoteOnPending_;
-            renderHarmonicOsc (harmEngA_, harmParamsA_, engine_  == Engine::HARM, octOffset_,  semiOffset_,  centsOffset_,  harmBlkA_, harmBlkAL_, harmBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderHarmonicOsc (harmEngB_, harmParamsB_, engineB_ == Engine::HARM, octOffsetB_, semiOffsetB_, centsOffsetB_, harmBlkB_, harmBlkBL_, harmBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderHarmonicOsc (harmEngC_, harmParamsC_, engineC_ == Engine::HARM, octOffsetC_, semiOffsetC_, centsOffsetC_, harmBlkC_, harmBlkCL_, harmBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderHarmonicOsc (harmEngD_, harmParamsD_, engineD_ == Engine::HARM, octOffsetD_, semiOffsetD_, centsOffsetD_, harmBlkD_, harmBlkDL_, harmBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderHarmonicOsc (harmEngA_, harmParamsA_, engine_  == Engine::HARM, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  harmBlkA_, harmBlkAL_, harmBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
+            renderHarmonicOsc (harmEngB_, harmParamsB_, engineB_ == Engine::HARM, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, harmBlkB_, harmBlkBL_, harmBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
+            renderHarmonicOsc (harmEngC_, harmParamsC_, engineC_ == Engine::HARM, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, harmBlkC_, harmBlkCL_, harmBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
+            renderHarmonicOsc (harmEngD_, harmParamsD_, engineD_ == Engine::HARM, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, harmBlkD_, harmBlkDL_, harmBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
             harmNoteOnPending_ = false;
         }
 

@@ -53,6 +53,9 @@ enum class ModDest : int
     FrameD, WarpD, FoldD,      // OSC D wavetable frame / warp / fold (linear 0..1) — Phase 4B
     ChopRate, ChopGate, ChopVary, ChopTraj, ChopMorph,   // FLOW · CHOP macros (mode 2) — append-only
     ResoStructure, ResoBrightness, ResoDamping, ResoPosition, ResoMix,  // ANNULUS resonator macros — append-only
+    CoarseA, CoarseB, CoarseC, CoarseD,                  // per-osc COARSE pitch lane (semitones) — append-only
+    SubWeightA, SubWeightB, SubWeightC, SubWeightD,      // per-osc SUB level (linear 0..1)
+    SubHeatA, SubHeatB, SubHeatC, SubHeatD,              // per-osc SUB drive (linear 0..1)
     NumDests
 };
 
@@ -104,6 +107,25 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // ChopVary
     { ModDomain::Linear01,  1.0f },  // ChopTraj
     { ModDomain::Linear01,  1.0f },  // ChopMorph
+    // BUGFIX (2026-07-09): the 5 ANNULUS entries were MISSING — value-init gave them
+    // fullScale 0, so Reso mod routes contributed exactly nothing. Now they modulate.
+    { ModDomain::Linear01,  1.0f },  // ResoStructure
+    { ModDomain::Linear01,  1.0f },  // ResoBrightness
+    { ModDomain::Linear01,  1.0f },  // ResoDamping
+    { ModDomain::Linear01,  1.0f },  // ResoPosition
+    { ModDomain::Linear01,  1.0f },  // ResoMix
+    { ModDomain::Semitone, 24.0f },  // CoarseA: ±24 st at full depth (matches Pitch)
+    { ModDomain::Semitone, 24.0f },  // CoarseB
+    { ModDomain::Semitone, 24.0f },  // CoarseC
+    { ModDomain::Semitone, 24.0f },  // CoarseD
+    { ModDomain::Linear01,  1.0f },  // SubWeightA
+    { ModDomain::Linear01,  1.0f },  // SubWeightB
+    { ModDomain::Linear01,  1.0f },  // SubWeightC
+    { ModDomain::Linear01,  1.0f },  // SubWeightD
+    { ModDomain::Linear01,  1.0f },  // SubHeatA
+    { ModDomain::Linear01,  1.0f },  // SubHeatB
+    { ModDomain::Linear01,  1.0f },  // SubHeatC
+    { ModDomain::Linear01,  1.0f },  // SubHeatD
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

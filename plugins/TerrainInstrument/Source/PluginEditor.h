@@ -600,6 +600,28 @@ private:
     juce::WebSliderRelay synOscDHarmShineRelay { ParameterIDs::SYN_OSC_D_HARM_SHINE };
     juce::WebSliderRelay synOscDHarmWiltRelay  { ParameterIDs::SYN_OSC_D_HARM_WILT };
     juce::WebSliderRelay synOscDHarmFizzRelay  { ParameterIDs::SYN_OSC_D_HARM_FIZZ };
+
+    // ════ UNIVERSAL OSC BOXES — COARSE + SUB relays (5 × 4 osc, 2026-07-09) ════
+    juce::WebSliderRelay synOscACoarseRelay { ParameterIDs::SYN_OSC_A_COARSE };
+    juce::WebSliderRelay synOscBCoarseRelay { ParameterIDs::SYN_OSC_B_COARSE };
+    juce::WebSliderRelay synOscCCoarseRelay { ParameterIDs::SYN_OSC_C_COARSE };
+    juce::WebSliderRelay synOscDCoarseRelay { ParameterIDs::SYN_OSC_D_COARSE };
+    juce::WebSliderRelay synOscASubRangeRelay { ParameterIDs::SYN_OSC_A_SUB_RANGE };
+    juce::WebSliderRelay synOscBSubRangeRelay { ParameterIDs::SYN_OSC_B_SUB_RANGE };
+    juce::WebSliderRelay synOscCSubRangeRelay { ParameterIDs::SYN_OSC_C_SUB_RANGE };
+    juce::WebSliderRelay synOscDSubRangeRelay { ParameterIDs::SYN_OSC_D_SUB_RANGE };
+    juce::WebSliderRelay synOscASubFormRelay { ParameterIDs::SYN_OSC_A_SUB_FORM };
+    juce::WebSliderRelay synOscBSubFormRelay { ParameterIDs::SYN_OSC_B_SUB_FORM };
+    juce::WebSliderRelay synOscCSubFormRelay { ParameterIDs::SYN_OSC_C_SUB_FORM };
+    juce::WebSliderRelay synOscDSubFormRelay { ParameterIDs::SYN_OSC_D_SUB_FORM };
+    juce::WebSliderRelay synOscASubWeightRelay { ParameterIDs::SYN_OSC_A_SUB_WEIGHT };
+    juce::WebSliderRelay synOscBSubWeightRelay { ParameterIDs::SYN_OSC_B_SUB_WEIGHT };
+    juce::WebSliderRelay synOscCSubWeightRelay { ParameterIDs::SYN_OSC_C_SUB_WEIGHT };
+    juce::WebSliderRelay synOscDSubWeightRelay { ParameterIDs::SYN_OSC_D_SUB_WEIGHT };
+    juce::WebSliderRelay synOscASubHeatRelay { ParameterIDs::SYN_OSC_A_SUB_HEAT };
+    juce::WebSliderRelay synOscBSubHeatRelay { ParameterIDs::SYN_OSC_B_SUB_HEAT };
+    juce::WebSliderRelay synOscCSubHeatRelay { ParameterIDs::SYN_OSC_C_SUB_HEAT };
+    juce::WebSliderRelay synOscDSubHeatRelay { ParameterIDs::SYN_OSC_D_SUB_HEAT };
     // ════ GEODE-ENGINE relays (resynthesis oscillator) ════
     juce::WebSliderRelay synOscAGeodePositionRelay { ParameterIDs::SYN_OSC_A_GEODE_POSITION };
     juce::WebSliderRelay synOscAGeodeFossilRelay { ParameterIDs::SYN_OSC_A_GEODE_FOSSIL };
@@ -1235,6 +1257,12 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmShineAttachment, synOscBHarmShineAttachment, synOscCHarmShineAttachment, synOscDHarmShineAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmWiltAttachment, synOscBHarmWiltAttachment, synOscCHarmWiltAttachment, synOscDHarmWiltAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmFizzAttachment, synOscBHarmFizzAttachment, synOscCHarmFizzAttachment, synOscDHarmFizzAttachment;
+    // UNIVERSAL OSC BOXES — COARSE + SUB attachments
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscACoarseAttachment, synOscBCoarseAttachment, synOscCCoarseAttachment, synOscDCoarseAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASubRangeAttachment, synOscBSubRangeAttachment, synOscCSubRangeAttachment, synOscDSubRangeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASubFormAttachment, synOscBSubFormAttachment, synOscCSubFormAttachment, synOscDSubFormAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASubWeightAttachment, synOscBSubWeightAttachment, synOscCSubWeightAttachment, synOscDSubWeightAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASubHeatAttachment, synOscBSubHeatAttachment, synOscCSubHeatAttachment, synOscDSubHeatAttachment;
     // ── HARM-ENGINE display banks — message-thread instances that feed the white
     //    partial-bar viz (rebuilt from the processor's gathered knobs each tick) ──
     tw::HarmonicEngine harmDispEng_[4];

@@ -457,6 +457,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBHarmModeRelay).withOptionsFrom(synOscBHarmSculptRelay).withOptionsFrom(synOscBHarmHueRelay).withOptionsFrom(synOscBHarmCountRelay).withOptionsFrom(synOscBHarmLeanRelay).withOptionsFrom(synOscBHarmFanRelay).withOptionsFrom(synOscBHarmGritRelay).withOptionsFrom(synOscBHarmBraidRelay).withOptionsFrom(synOscBHarmCarveRelay).withOptionsFrom(synOscBHarmChurnRelay).withOptionsFrom(synOscBHarmRootRelay).withOptionsFrom(synOscBHarmShineRelay).withOptionsFrom(synOscBHarmWiltRelay).withOptionsFrom(synOscBHarmFizzRelay)
             .withOptionsFrom(synOscCHarmModeRelay).withOptionsFrom(synOscCHarmSculptRelay).withOptionsFrom(synOscCHarmHueRelay).withOptionsFrom(synOscCHarmCountRelay).withOptionsFrom(synOscCHarmLeanRelay).withOptionsFrom(synOscCHarmFanRelay).withOptionsFrom(synOscCHarmGritRelay).withOptionsFrom(synOscCHarmBraidRelay).withOptionsFrom(synOscCHarmCarveRelay).withOptionsFrom(synOscCHarmChurnRelay).withOptionsFrom(synOscCHarmRootRelay).withOptionsFrom(synOscCHarmShineRelay).withOptionsFrom(synOscCHarmWiltRelay).withOptionsFrom(synOscCHarmFizzRelay)
             .withOptionsFrom(synOscDHarmModeRelay).withOptionsFrom(synOscDHarmSculptRelay).withOptionsFrom(synOscDHarmHueRelay).withOptionsFrom(synOscDHarmCountRelay).withOptionsFrom(synOscDHarmLeanRelay).withOptionsFrom(synOscDHarmFanRelay).withOptionsFrom(synOscDHarmGritRelay).withOptionsFrom(synOscDHarmBraidRelay).withOptionsFrom(synOscDHarmCarveRelay).withOptionsFrom(synOscDHarmChurnRelay).withOptionsFrom(synOscDHarmRootRelay).withOptionsFrom(synOscDHarmShineRelay).withOptionsFrom(synOscDHarmWiltRelay).withOptionsFrom(synOscDHarmFizzRelay)
+            .withOptionsFrom(synOscACoarseRelay).withOptionsFrom(synOscBCoarseRelay).withOptionsFrom(synOscCCoarseRelay).withOptionsFrom(synOscDCoarseRelay).withOptionsFrom(synOscASubRangeRelay).withOptionsFrom(synOscBSubRangeRelay).withOptionsFrom(synOscCSubRangeRelay).withOptionsFrom(synOscDSubRangeRelay).withOptionsFrom(synOscASubFormRelay).withOptionsFrom(synOscBSubFormRelay).withOptionsFrom(synOscCSubFormRelay).withOptionsFrom(synOscDSubFormRelay).withOptionsFrom(synOscASubWeightRelay).withOptionsFrom(synOscBSubWeightRelay).withOptionsFrom(synOscCSubWeightRelay).withOptionsFrom(synOscDSubWeightRelay).withOptionsFrom(synOscASubHeatRelay).withOptionsFrom(synOscBSubHeatRelay).withOptionsFrom(synOscCSubHeatRelay).withOptionsFrom(synOscDSubHeatRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
             .withOptionsFrom(synOscAGrainDirRelay).withOptionsFrom(synOscAGrainSkewRelay)
@@ -2648,6 +2649,27 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDHarmShineAttachment, ParameterIDs::SYN_OSC_D_HARM_SHINE, synOscDHarmShineRelay);
         mkAtt(synOscDHarmWiltAttachment, ParameterIDs::SYN_OSC_D_HARM_WILT, synOscDHarmWiltRelay);
         mkAtt(synOscDHarmFizzAttachment, ParameterIDs::SYN_OSC_D_HARM_FIZZ, synOscDHarmFizzRelay);
+        // UNIVERSAL OSC BOXES — COARSE + SUB (full 6-link chain, 2026-07-09)
+        mkAtt(synOscACoarseAttachment, ParameterIDs::SYN_OSC_A_COARSE, synOscACoarseRelay);
+        mkAtt(synOscBCoarseAttachment, ParameterIDs::SYN_OSC_B_COARSE, synOscBCoarseRelay);
+        mkAtt(synOscCCoarseAttachment, ParameterIDs::SYN_OSC_C_COARSE, synOscCCoarseRelay);
+        mkAtt(synOscDCoarseAttachment, ParameterIDs::SYN_OSC_D_COARSE, synOscDCoarseRelay);
+        mkAtt(synOscASubRangeAttachment, ParameterIDs::SYN_OSC_A_SUB_RANGE, synOscASubRangeRelay);
+        mkAtt(synOscBSubRangeAttachment, ParameterIDs::SYN_OSC_B_SUB_RANGE, synOscBSubRangeRelay);
+        mkAtt(synOscCSubRangeAttachment, ParameterIDs::SYN_OSC_C_SUB_RANGE, synOscCSubRangeRelay);
+        mkAtt(synOscDSubRangeAttachment, ParameterIDs::SYN_OSC_D_SUB_RANGE, synOscDSubRangeRelay);
+        mkAtt(synOscASubFormAttachment, ParameterIDs::SYN_OSC_A_SUB_FORM, synOscASubFormRelay);
+        mkAtt(synOscBSubFormAttachment, ParameterIDs::SYN_OSC_B_SUB_FORM, synOscBSubFormRelay);
+        mkAtt(synOscCSubFormAttachment, ParameterIDs::SYN_OSC_C_SUB_FORM, synOscCSubFormRelay);
+        mkAtt(synOscDSubFormAttachment, ParameterIDs::SYN_OSC_D_SUB_FORM, synOscDSubFormRelay);
+        mkAtt(synOscASubWeightAttachment, ParameterIDs::SYN_OSC_A_SUB_WEIGHT, synOscASubWeightRelay);
+        mkAtt(synOscBSubWeightAttachment, ParameterIDs::SYN_OSC_B_SUB_WEIGHT, synOscBSubWeightRelay);
+        mkAtt(synOscCSubWeightAttachment, ParameterIDs::SYN_OSC_C_SUB_WEIGHT, synOscCSubWeightRelay);
+        mkAtt(synOscDSubWeightAttachment, ParameterIDs::SYN_OSC_D_SUB_WEIGHT, synOscDSubWeightRelay);
+        mkAtt(synOscASubHeatAttachment, ParameterIDs::SYN_OSC_A_SUB_HEAT, synOscASubHeatRelay);
+        mkAtt(synOscBSubHeatAttachment, ParameterIDs::SYN_OSC_B_SUB_HEAT, synOscBSubHeatRelay);
+        mkAtt(synOscCSubHeatAttachment, ParameterIDs::SYN_OSC_C_SUB_HEAT, synOscCSubHeatRelay);
+        mkAtt(synOscDSubHeatAttachment, ParameterIDs::SYN_OSC_D_SUB_HEAT, synOscDSubHeatRelay);
         // ════ GEODE-ENGINE mkAtt ════
         mkAtt(synOscAGeodePositionAttachment, ParameterIDs::SYN_OSC_A_GEODE_POSITION, synOscAGeodePositionRelay);
         mkAtt(synOscAGeodeFossilAttachment, ParameterIDs::SYN_OSC_A_GEODE_FOSSIL, synOscAGeodeFossilRelay);
