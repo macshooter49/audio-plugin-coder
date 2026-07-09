@@ -2346,7 +2346,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             juce::ParameterID { id[1], 1 }, "Synth OSC " + osc + " Harmonic Sculpt",
             juce::StringArray { "Keel", "Splay", "Cull", "Tide", "Terrace", "Clang" }, 0));
         static const char* nm[12] = { "Hue", "Partials", "Lean", "Fan", "Grit", "Braid",
-                                      "Carve", "Churn", "Root", "Shine", "Wilt", "Fizz" };
+                                      "Carve", "Churn", "Root", "Shine", "Wilt", "Forge" };
         static const float dv[12] = { 0.35f, 0.5f, 0.5f, 0.f, 0.f, 0.f,
                                       0.f, 0.5f, 0.f, 0.f, 0.5f, 0.f };
         for (int k = 0; k < 12; ++k)
@@ -3652,7 +3652,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             h.hue   = *rawParam (id[2]);  h.count = *rawParam (id[3]);  h.lean  = *rawParam (id[4]);
             h.fan   = *rawParam (id[5]);  h.grit  = *rawParam (id[6]);  h.braid = *rawParam (id[7]);
             h.carve = *rawParam (id[8]);  h.churn = *rawParam (id[9]);  h.root  = *rawParam (id[10]);
-            h.shine = *rawParam (id[11]); h.wilt  = *rawParam (id[12]); h.fizz  = *rawParam (id[13]);
+            h.shine = *rawParam (id[11]); h.wilt  = *rawParam (id[12]); h.forge = *rawParam (id[13]);
             harmP[o] = h;
         }
         harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread

@@ -26,7 +26,7 @@
 //    5 CLANG   sum/difference intermod lattice on the loudest partials
 //
 //  Voice knobs:  HUE · PARTIALS(count) · LEAN(tilt) · FAN(stereo) · GRIT(life) · BRAID(ensemble)
-//  Sculpt knobs: CARVE · CHURN · ROOT(fund guard+sub) · SHINE(+oct ghost) · WILT(time arrow) · FIZZ(noise fur)
+//  Sculpt knobs: CARVE · CHURN · ROOT(fund guard+sub) · SHINE(+oct ghost) · WILT(time arrow) · FORGE(spectral feedback drive)
 //
 //  DSP ground rules honored (house):
 //   - every amplitude change rides a per-partial linear ramp (declick)
@@ -75,14 +75,14 @@ struct HarmParams
     float root   = 0.0f;      // fundamental guard → half-ratio sub ghost
     float shine  = 0.0f;      // detuned +1 octave ghost spectrum
     float wilt   = 0.5f;      // time arrow: highs decay ↔ highs bloom (0.5 = off)
-    float fizz   = 0.0f;      // per-partial noise fur (airy top → tuned waterfall)
+    float forge  = 0.0f;      // harmonic drive: overtone cascade + feedback regeneration
 
     bool operator== (const HarmParams& o) const noexcept
     {
         return mainMode==o.mainMode && sculptMode==o.sculptMode
             && hue==o.hue && count==o.count && lean==o.lean && fan==o.fan
             && grit==o.grit && braid==o.braid && carve==o.carve && churn==o.churn
-            && root==o.root && shine==o.shine && wilt==o.wilt && fizz==o.fizz;
+            && root==o.root && shine==o.shine && wilt==o.wilt && forge==o.forge;
     }
     bool operator!= (const HarmParams& o) const noexcept { return ! (*this == o); }
 };
@@ -106,7 +106,6 @@ public:
             amp_.assign   ((size_t) harm::kMaxPartials, 0.f);
             panL_.assign  ((size_t) harm::kMaxPartials, 0.7071f);
             panR_.assign  ((size_t) harm::kMaxPartials, 0.7071f);
-            fizzW_.assign ((size_t) harm::kMaxPartials, 0.f);
             baseAmp_.assign ((size_t) harm::kMaxPartials, 0.f);
         }
         scatMul_.assign ((size_t) harm::kMaxPartials, 1.f);
@@ -159,7 +158,6 @@ public:
                 : 1.f;
         if (bankOwner_)
         {
-            std::fill (fizzW_.begin(), fizzW_.end(), 0.f);
             for (auto& b : ouAmp_) b = 0.f;
             for (auto& b : ouFrq_) b = 0.f;
             ouGlobal_ = 0.f;
@@ -207,7 +205,7 @@ public:
         nEff = applyShineRoot (nEff);              // ghost deposits may append the sub slot
         applySculpt (nEff, churnMul);
         applyWilt   (nEff);
-        applyFizz   (nEff);
+        nEff = applyForge (nEff);          // may grow the bank (overtone ghosts)
         applyGrit   (nEff, dt);
         nEff = applyBraid (nEff);                  // appends twin slots (bounded by room)
         applyFan    (nEff, dt, churnMul);
@@ -777,22 +775,86 @@ private:
         }
     }
 
-    // stage 6 — FIZZ: per-partial random-walk ratio fur (airy top → tuned waterfall)
-    void applyFizz (int nEff) noexcept
+    // stage 6 — FORGE: spectral feedback drive (harmonic distortion, additive-native).
+    // Every loud partial cascades energy into its OWN 2x/3x/4x overtones — the exact
+    // intermodulation a waveshaper would create, but built in the spectrum so nothing
+    // aliases (the Nyquist taper still runs after this). A deposit lands ON an existing
+    // partial when the bank already owns that frequency (integer families: pure timbre
+    // shift, zero new render cost) and is APPENDED as a new partial otherwise (gongs and
+    // stretched banks sprout their own inharmonic overtones). The higher-order weights
+    // ride d^2 and d^4 = feedback regeneration, and heavy drive compresses the amp
+    // lattice toward a buzz wall. Every term scales smoothly from zero — the knob
+    // MORPHS, it never switches (hm2 law). renorm() holds loudness level afterwards.
+    int applyForge (int nEff) noexcept
     {
-        const float k = clamp01 (p_.fizz);
-        if (k < 0.004f) return;
-        float bw;
-        if (k < 0.5f) { bw = 0.009f * (k * 2.f); }
-        else          { const float u = k * 2.f - 1.f; bw = lerpf (0.009f, 0.09f, u * u); }
-        const float mask1 = sstep (0.5f, 0.75f, k);   // whole-spectrum fur FADES in (hm2 de-snap)
-        for (int j = 0; j < nEff; ++j)
-        {
-            float& w = fizzW_[(size_t) j];
-            w = 0.99f * w + 0.1f * rngPm();
-            const float mask = std::max (mask1, sstep (0.3f, 1.f, (float) (j + 1) / (float) std::max (16, nEff)));
-            ratio_[(size_t) j] *= 1.f + bw * mask * w;
+        const float d = clamp01 (p_.forge);
+        if (d < 0.004f) return nEff;
+        // loudest-M donors (braid-style bounded scan) — the cascade grows with drive
+        constexpr int kForgeMax = 40;
+        const int M = std::min (nEff, (int) std::lround (lerpf (6.f, (float) kForgeMax, d)));
+        int   idx[kForgeMax]; float val[kForgeMax];
+        for (int q = 0; q < M; ++q) { idx[q] = -1; val[q] = -1.f; }
+        float e0 = 0.f;                       // pre-forge bank energy — forge REDISTRIBUTES,
+        for (int j = 0; j < nEff; ++j)        // it never adds (energy-neutral, braid-style):
+        {                                     // the renorm slew never sees a jump, so a hard
+            const float a = amp_[(size_t) j]; // knob move (or an LFO) can't burst the level
+            e0 += a * a;
+            int slot = -1; float low = a;
+            for (int q = 0; q < M; ++q) if (val[q] < low) { low = val[q]; slot = q; }
+            if (slot >= 0) { val[slot] = a; idx[slot] = j; }
         }
+        const float w[3] = { 0.85f * d, 0.70f * d * d, 0.55f * d * d * d * d };   // 2x, 3x, 4x
+        int cursor = nEff;
+        // integer-lattice probe: cheap in-place match, append on miss (never a full scan)
+        auto findSlot = [&] (float rT) -> int
+        {
+            const int g = (int) std::lround (rT) - 1;
+            for (int t = std::max (0, g - 2); t <= g + 2 && t < cursor; ++t)
+                if (std::fabs (ratio_[(size_t) t] - rT) < 0.009f * rT) return t;
+            return -1;
+        };
+        for (int q = 0; q < M; ++q)
+        {
+            const int j = idx[q];
+            if (j < 0 || val[q] <= 1e-6f) continue;
+            const float r = ratio_[(size_t) j], a = amp_[(size_t) j];
+            for (int m = 0; m < 3; ++m)
+            {
+                const float dep = a * w[m];
+                if (dep <= 1e-6f) continue;
+                const float rT = r * (float) (m + 2);
+                const int hit = findSlot (rT);
+                if (hit >= 0) { amp_[(size_t) hit] += dep; continue; }
+                if (cursor >= harm::kMaxPartials) continue;
+                amp_  [(size_t) cursor] = dep;
+                ratio_[(size_t) cursor] = rT;
+                panL_ [(size_t) cursor] = panL_[(size_t) j];   // ghosts sit where their donor sits
+                panR_ [(size_t) cursor] = panR_[(size_t) j];
+                ++cursor;
+            }
+        }
+        // spectral compression — heavy drive flattens dynamics into the buzz wall
+        const float c = 0.45f * d * d;
+        if (c > 0.01f)
+        {
+            float mx = 1e-9f;
+            for (int j = 0; j < cursor; ++j) mx = std::max (mx, amp_[(size_t) j]);
+            const float e = 1.f - c;
+            for (int j = 0; j < cursor; ++j)
+            {
+                const float a = amp_[(size_t) j];
+                if (a > 1e-7f) amp_[(size_t) j] = mx * fastExp2 (e * fastLog2 (a / mx));
+            }
+        }
+        // energy-neutral: rescale so total bank energy matches the pre-forge bank
+        float e1 = 0.f;
+        for (int j = 0; j < cursor; ++j) { const float a = amp_[(size_t) j]; e1 += a * a; }
+        if (e1 > 1e-12f && e0 > 1e-12f)
+        {
+            const float gq = std::sqrt (e0 / e1);
+            for (int j = 0; j < cursor; ++j) amp_[(size_t) j] *= gq;
+        }
+        return cursor;
     }
 
     // stage 7 — GRIT: banded OU drift (amp dB + freq cents) + slow global wander.
@@ -864,7 +926,6 @@ private:
             // opposing pans (Fan may re-spread later; this is the ensemble's own width)
             panL_[(size_t) cursor] = 0.94f; panR_[(size_t) cursor] = 0.34f;
             panL_[(size_t) j]      = 0.34f; panR_[(size_t) j]      = 0.94f;
-            fizzW_[(size_t) cursor] = fizzW_[(size_t) j];
             ++cursor;
         }
         return cursor;
@@ -957,7 +1018,6 @@ private:
     // ── state ────────────────────────────────────────────────────────────────
     HarmParams p_;
     std::vector<float> ratio_, amp_, panL_, panR_, baseAmp_;   // anchor-owned bank (targets)
-    std::vector<float> fizzW_;                                  // anchor-owned per-partial walk
     std::vector<float> phase_, ampZL_, ampZR_;                  // per-instance render state
     std::vector<float> scatMul_;                                // per-sibling static freq scatter (unison decorrelation)
     std::array<float, harm::kBands> ouAmp_ {}, ouFrq_ {};

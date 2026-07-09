@@ -128,7 +128,7 @@ int main()
     { HarmParams p; p.grit = 1.f;  checkFund ("grit=1.0", renderFund (p, f0, sr), f0, 5.0); }
     { HarmParams p; p.braid = 1.f; checkFund ("braid=1.0", renderFund (p, f0, sr), f0, 5.0); }
     { HarmParams p; p.fan = 1.f;   checkFund ("fan=1.0 orbit", renderFund (p, f0, sr), f0, 4.0); }
-    { HarmParams p; p.fizz = 0.5f; checkFund ("fizz=0.5", renderFund (p, f0, sr), f0, 5.0); }
+    { HarmParams p; p.forge = 0.5f; checkFund ("forge=0.5", renderFund (p, f0, sr), f0, 5.0); }
     { HarmParams p; p.shine = 1.f; p.root = 1.f; checkFund ("shine+root=1", renderFund (p, f0, sr), f0, 5.0); }
     { HarmParams p; p.wilt = 0.f;  checkFund ("wilt=pluck", renderFund (p, f0, sr), f0, 5.0); }
     { HarmParams p; p.wilt = 1.f;  checkFund ("wilt=bloom", renderFund (p, f0, sr), f0, 5.0); }
@@ -308,7 +308,7 @@ int main()
     {
         HarmParams p; p.mainMode = 4; p.sculptMode = 5; p.hue = 1.f; p.carve = 1.f;
         p.count = 1.f; p.lean = 0.8f; p.fan = 1.f; p.grit = 1.f; p.braid = 1.f;
-        p.churn = 1.f; p.root = 1.f; p.shine = 1.f; p.wilt = 0.f; p.fizz = 1.f;
+        p.churn = 1.f; p.root = 1.f; p.shine = 1.f; p.wilt = 0.f; p.forge = 1.f;
         double r = 0;
         const double f = renderFund (p, 41.2, sr, &r);   // E1
         const bool ok = f > 0.0 && r > 1e-4 && r < 2.0;
@@ -320,7 +320,7 @@ int main()
     {
         int used = 0;
         HarmParams p; p.mainMode = 1; p.sculptMode = 3; p.hue = 0.8f; p.carve = 0.8f;
-        p.count = 1.f; p.grit = 0.6f; p.braid = 0.7f; p.fan = 1.f; p.fizz = 0.4f; p.shine = 0.5f;
+        p.count = 1.f; p.grit = 0.6f; p.braid = 0.7f; p.fan = 1.f; p.forge = 0.4f; p.shine = 0.5f;
         HarmonicEngine e; e.prepare (sr, true);
         e.setPartialBudget (&used, 640);
         e.setParams (p); e.noteOn (55.0, 11u);
@@ -345,6 +345,69 @@ int main()
         auto t3 = std::chrono::steady_clock::now();
         std::printf ("[%-22s] %.1f us/blk\n", "prepare-only cost",
                      std::chrono::duration<double, std::micro> (t3 - t2).count() / iters);
+    }
+
+    // ── FORGE: harmonic drive (hm5 — replaced Fizz) ─────────────────────────
+    { HarmParams p; p.forge = 1.0f; checkFund ("forge=1.0 keeps pitch", renderFund (p, f0, sr), f0, 5.0); }
+    { HarmParams p; p.mainMode = 1; p.hue = 0.4f; p.forge = 1.0f; checkFund ("neon forge=1.0", renderFund (p, f0, sr), f0, 5.0); }
+    {
+        // night-and-day: HF share (derivative RMS over RMS) must rise hard with drive,
+        // while renorm holds the LEVEL — timbre flips, loudness doesn't pump
+        auto bright = [&] (float fg, double& rmsOut)
+        {
+            HarmParams p; p.forge = fg;
+            HarmonicEngine e; e.prepare (sr, true); e.setParams (p); e.noteOn (f0, 5u);
+            const int N = (int) sr / 2;
+            std::vector<float> L ((size_t) N, 0.f), R ((size_t) N, 0.f);
+            for (int off = 0; off < N; off += 256)
+            { e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], std::min (256, N - off)); }
+            double sq = 0.0, dq = 0.0;
+            for (int i = N / 2 + 1; i < N; ++i)
+            {
+                sq += (double) L[(size_t) i] * L[(size_t) i];
+                const double df = (double) L[(size_t) i] - (double) L[(size_t) i - 1];
+                dq += df * df;
+            }
+            rmsOut = std::sqrt (sq / (double) (N / 2));
+            return std::sqrt (dq / std::max (1e-12, sq));
+        };
+        double r0 = 0.0, r1 = 0.0;
+        const double b0 = bright (0.f, r0), b1 = bright (1.f, r1);
+        const bool okB = b1 > b0 * 1.8;
+        const double lvl = 20.0 * std::log10 (std::max (1e-9, r1) / std::max (1e-9, r0));
+        const bool okL = std::fabs (lvl) < 4.0;
+        std::printf ("[%-22s] hf x%.2f  lvl %+.1f dB  %s\n", "forge night-and-day",
+                     b1 / std::max (1e-9, b0), lvl, (okB && okL) ? "PASS" : "FAIL");
+        pass += (okB && okL); ++tot;
+    }
+    {
+        // declick: a hard forge jump 0 -> 1 mid-note must ramp inside one block — the
+        // honest yardstick is the worst per-sample step of a STEADY forge=1 render
+        auto worstStep = [&] (bool jump)
+        {
+            HarmParams p; p.forge = jump ? 0.f : 1.f;
+            HarmonicEngine e; e.prepare (sr, true); e.setParams (p); e.noteOn (f0, 91u);
+            const int N = (int) (sr * 0.2);
+            std::vector<float> L ((size_t) N, 0.f), R ((size_t) N, 0.f);
+            float mx = 0.f, prev = 0.f;
+            for (int off = 0; off < N; off += 256)
+            {
+                const int m = std::min (256, N - off);
+                if (jump) p.forge = (off > N / 2) ? 1.f : 0.f;
+                e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], m);
+                for (int i = off; i < off + m; ++i)
+                {
+                    if (i > (int) sr / 100)   // past the note-on ramp-in
+                        mx = std::max (mx, std::fabs (L[(size_t) i] - prev));
+                    prev = L[(size_t) i];
+                }
+            }
+            return mx;
+        };
+        const float ref = worstStep (false), jmp = worstStep (true);
+        const bool ok = jmp < ref * 1.5f + 1e-4f;
+        std::printf ("[%-22s] jump=%.4f steady=%.4f  %s\n", "declick forge-jump", jmp, ref, ok ? "PASS" : "FAIL");
+        pass += ok; ++tot;
     }
 
     std::printf ("═══ %d/%d PASS ═══\n", pass, tot);

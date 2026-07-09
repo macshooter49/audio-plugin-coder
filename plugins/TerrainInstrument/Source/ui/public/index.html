@@ -3914,7 +3914,8 @@ body {
 #syn-panel .fm-knob-wrap.pg2 .fm-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 /* HARMONIC ENGINE (engine #5, additive) — two pages, each = 6 mode buttons over 6 knobs.
    .harm-arrow flips (.pg2). Buttons are thin-white pills, purple on select (house aesthetic).
-   The viz (.harm-view) rides the osc-display footprint: white partial bars over a purple ghost. */
+   The viz (.harm-view) rides the osc-display footprint: a centered white flatline with thin
+   mirrored partial lines rising out of it (Pigments-style) — white and thin, no ghost. */
 #syn-panel .harm-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
 #syn-panel .device.osc.engine-harm:not(.swapped) .harm-knob-wrap { display: flex; }
 #syn-panel .device.osc.engine-harm:not(.swapped) .front-only .osc-knobs:not(.harm-knobs) { display: none; }
@@ -5349,9 +5350,9 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_HARM_FIZZ" title="Forge — harmonic drive: every partial fires its own overtones; warm shimmer low, feedback cascade high, the voice flips into a buzz wall at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
-              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
+              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -5626,9 +5627,9 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_HARM_FIZZ" title="Forge — harmonic drive: every partial fires its own overtones; warm shimmer low, feedback cascade high, the voice flips into a buzz wall at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
-              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
+              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -5919,9 +5920,9 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_HARM_FIZZ" title="Forge — harmonic drive: every partial fires its own overtones; warm shimmer low, feedback cascade high, the voice flips into a buzz wall at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
-              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
+              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -6196,9 +6197,9 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_HARM_ROOT" title="Root — guards the fundamental from the sculpt, then adds a sub-octave ghost past 50%"><div class="knob-ring"></div><div class="knob-label">Root</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_SHINE" title="Shine — a detuned +1 octave ghost of the whole spectrum; shimmer that slowly breathes"><div class="knob-ring"></div><div class="knob-label">Shine</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_HARM_WILT" title="Wilt — the note&#39;s time arrow: left = highs decay like a pluck, right = highs bloom in like a swell"><div class="knob-ring"></div><div class="knob-label">Wilt</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_HARM_FIZZ" title="Fizz — partials grow noise fur: airy sparkling top at 50%, a tuned waterfall at 100%"><div class="knob-ring"></div><div class="knob-label">Fizz</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_HARM_FIZZ" title="Forge — harmonic drive: every partial fires its own overtones; warm shimmer low, feedback cascade high, the voice flips into a buzz wall at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
-              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Fizz" aria-label="More Harmonic controls"></div>
+              <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -10637,29 +10638,18 @@ setTimeout(function wireSynControls () {
       });
     } catch (eHm) { console.warn ('[HARM] ui wiring failed', eHm); }
 
-    // ── HARM VIZ painter — flat-line partial spectrum (hm3): THIN white lines rise from a
-    //    baseline; a low-opacity PURPLE waveform ghost breathes behind while notes play (tapped
-    //    from the osc-scope push). HEALERS: lazy tap, per-frame re-query, TIME watchdog wipe. ──
+    // ── HARM VIZ painter — Pigments-style flat-line partial spectrum (hm5): a thin white
+    //    BASELINE rides the vertical CENTER of the display (the resting meter), and every
+    //    partial is a thin white line mirrored symmetrically above and below it. No ghost,
+    //    no fill, no bottom line — white and thin only, live at the display rate.
+    //    HEALERS: per-frame re-query, TIME watchdog wipe back to the bare flatline. ──
     try {
       var HV = {};
       ['a','b','c','d'].forEach (function (o) { HV[o] = { t: null, cur: null, seen: 0 }; });
-      var HVWAVE = { on: false, t: 0, a: null, b: null, c: null, d: null, patched: false };
       function hvNow () { return (window.performance && performance.now) ? performance.now () : Date.now (); }
-      window.updateHarmViz = function (o, white, ghost) {
+      window.updateHarmViz = function (o, white) {
         try { var st = HV[o]; if (! st) return; st.t = white; st.seen = hvNow (); } catch (e) {}
       };
-      function hvTapScope () {   // lazy monkey-patch — the scope IIFE loads after this one
-        if (HVWAVE.patched || typeof window.updateOscScope !== 'function') return;
-        var orig = window.updateOscScope;
-        window.updateOscScope = function (f) {
-          try {
-            HVWAVE.on = !! (f && f.active);
-            if (HVWAVE.on) { HVWAVE.a = f.a || null; HVWAVE.b = f.b || null; HVWAVE.c = f.c || null; HVWAVE.d = f.d || null; HVWAVE.t = hvNow (); }
-          } catch (e) {}
-          return orig (f);
-        };
-        HVWAVE.patched = true;
-      }
       function hvPaint (o) {
         var st = HV[o];
         var cv = document.getElementById ('harm-bars-' + o);
@@ -10673,36 +10663,23 @@ setTimeout(function wireSynControls () {
         if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
         var ctx = cv.getContext ('2d'); if (! ctx) return;
         ctx.clearRect (0, 0, W, H);
-        var wv = (HVWAVE.on && hvNow () - HVWAVE.t < 400) ? HVWAVE[o] : null;
-        if (wv && wv.length > 8) {
-          ctx.strokeStyle = 'rgba(139,92,246,0.26)';
-          ctx.lineWidth = Math.max (1, dpr);
-          ctx.beginPath ();
-          var wn = wv.length, mid = H * 0.5;
-          for (var wi = 0; wi < wn; ++wi) {
-            var wx = wi / (wn - 1) * W, wy = mid - (wv[wi] || 0) * H * 0.40;
-            if (wi) ctx.lineTo (wx, wy); else ctx.moveTo (wx, wy);
-          }
-          ctx.stroke ();
-        }
-        var bl = Math.max (1, Math.round (dpr));
-        var by = H - bl - Math.round (dpr);
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.fillRect (0, by, W, bl);
+        var mid = Math.round (H * 0.5), bl = Math.max (1, Math.round (dpr));
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillRect (0, mid - (bl >> 1), W, bl);            // the flatline — always there
         var stale = hvNow () - st.seen > 1600;   // watchdog trusts TIME — feed died, wipe clean
         if (! st.t || stale) { st.cur = null; return; }
         var t = st.t, n = t.length;
         if (! st.cur || st.cur.length !== n) { st.cur = t.slice (); }
         var cur = st.cur, bw = W / n;
-        var lw = Math.max (1, Math.round (dpr * 1.1));   // THIN lines — the whole point
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        var lw = Math.max (1, Math.round (dpr));             // THIN — one css pixel
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
         for (var i = 0; i < n; ++i) {
           cur[i] += ((t[i] || 0) - cur[i]) * 0.4;
-          var h = (cur[i] / 99) * (H * 0.94);
-          if (h > 0.8) ctx.fillRect (Math.round (i * bw + bw * 0.5 - lw * 0.5), by - h, lw, h);
+          var h = (cur[i] / 99) * (H * 0.46);                // half-height per side (mirrored)
+          if (h > 0.6) ctx.fillRect (Math.round (i * bw + bw * 0.5 - lw * 0.5), mid - h, lw, h * 2);
         }
       }
-      function hvRaf () { try { hvTapScope (); hvPaint ('a'); hvPaint ('b'); hvPaint ('c'); hvPaint ('d'); } catch (e) {} requestAnimationFrame (hvRaf); }
+      function hvRaf () { try { hvPaint ('a'); hvPaint ('b'); hvPaint ('c'); hvPaint ('d'); } catch (e) {} requestAnimationFrame (hvRaf); }
       requestAnimationFrame (hvRaf);
     } catch (eHv) { console.warn ('[HARM] viz wiring failed', eHv); }
 
@@ -22733,7 +22710,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'hm4';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'hm5';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
