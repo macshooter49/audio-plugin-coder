@@ -4609,6 +4609,9 @@ body {
             #syn-panel .device.filter .filter-toggle { right: 17px; }
             #syn-panel .device.filter .filter-display { min-height: 40px; }
             /* TwoFilters — back panel (per-filter MIX + shared series/parallel routing) */
+            /* fb2 — the BACK panel goes TRANSPARENT like the osc back (thin-white law):
+               the card chrome belongs to the filter's FRONT face only */
+            #syn-panel .device.filter.swapped { background: transparent; border-color: transparent; }
             #syn-panel .device.filter .filter-back {
               flex: 1; display: none; flex-direction: column; gap: 8px;
               justify-content: center; padding: 2px 2px 8px;   /* labels never touch the base */
@@ -22839,7 +22842,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb1';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'fb2';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
