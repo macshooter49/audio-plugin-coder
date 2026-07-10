@@ -22554,7 +22554,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 
     // the waveform — one clean pass, sampled per pixel (exactly like the LFO).
     ctx.beginPath();
-    ctx.strokeStyle = WAVE_COLOR; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = WAVE_COLOR; ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.lineCap = 'round';   // LINE LAW: matches .mv-stroke (LFO) + harm viz
     ctx.shadowColor = GLOW_COLOR; ctx.shadowBlur = 3;          // subtle glow, like the LFO
     for (var x = 0; x <= w; x++) {
       var v = sampleAt(x / w), py = h * 0.5 - v * h * 0.45;   // taller — fill the display more dramatically
@@ -22844,7 +22844,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb3';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'fb4';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
