@@ -10599,16 +10599,18 @@ setTimeout(function wireSynControls () {
         if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
         var ctx = cv.getContext ('2d'); if (! ctx) return;
         ctx.clearRect (0, 0, W, H);
-        var mid = Math.round (H * 0.5), bl = Math.max (1, Math.round (dpr));
-        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        // LINE LAW: same line as the LFO wave (.mv-stroke — #ECE8F2 @ 1.7px). The
+        // flatline is the dimmed resting member of the same family.
+        var mid = Math.round (H * 0.5), bl = Math.max (1, Math.round (dpr * 1.7));
+        ctx.fillStyle = 'rgba(236,232,242,0.45)';
         ctx.fillRect (0, mid - (bl >> 1), W, bl);            // the flatline — always there
         var stale = hvNow () - st.seen > 1600;   // watchdog trusts TIME — feed died, wipe clean
         if (! st.t || stale) { st.cur = null; return; }
         var t = st.t, n = t.length;
         if (! st.cur || st.cur.length !== n) { st.cur = t.slice (); }
         var cur = st.cur, bw = W / n;
-        var lw = Math.max (1, Math.round (dpr));             // THIN — one css pixel
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        var lw = Math.max (1, Math.round (dpr * 1.7));       // matches .mv-stroke width
+        ctx.fillStyle = '#ECE8F2';                            // matches .mv-stroke color
         for (var i = 0; i < n; ++i) {
           cur[i] += ((t[i] || 0) - cur[i]) * 0.4;
           var h = (cur[i] / 99) * (H * 0.46);                // half-height per side (mirrored)
@@ -22842,7 +22844,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb2';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'fb3';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
