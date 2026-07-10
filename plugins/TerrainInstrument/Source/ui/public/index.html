@@ -10654,7 +10654,7 @@ setTimeout(function wireSynControls () {
         for (var i = 0; i < w; i++) { var v = data[Math.min (data.length - 1, i * step)]; x.lineTo (i, mid - Math.abs (v) * amp); }
         for (var j = w - 1; j >= 0; j--) { var v2 = data[Math.min (data.length - 1, j * step)]; x.lineTo (j, mid + Math.abs (v2) * amp); }
         x.closePath (); x.fillStyle = 'rgba(183,148,255,0.07)'; x.fill ();
-        x.lineWidth = 1.3; x.strokeStyle = '#E0DCE8'; x.lineJoin = 'round';
+        x.lineWidth = 1.7; x.strokeStyle = '#ECE8F2'; x.lineJoin = 'round';   // LINE LAW: matches .mv-stroke
         x.shadowColor = 'rgba(183,148,255,.35)'; x.shadowBlur = 2.5;
         x.beginPath (); for (var k = 0; k < w; k++) { var y = mid - Math.abs (data[Math.min (data.length - 1, k * step)]) * amp; k ? x.lineTo (k, y) : x.moveTo (k, y); } x.stroke ();
         x.beginPath (); for (var m = 0; m < w; m++) { var y2 = mid + Math.abs (data[Math.min (data.length - 1, m * step)]) * amp; m ? x.lineTo (m, y2) : x.moveTo (m, y2); } x.stroke ();
@@ -10675,7 +10675,7 @@ setTimeout(function wireSynControls () {
         for (var i = 0; i < w; i++) x.lineTo (i, mid - maxAt (i) * amp);
         for (var j = w - 1; j >= 0; j--) x.lineTo (j, mid - minAt (j) * amp);
         x.closePath (); x.fillStyle = 'rgba(183,148,255,0.07)'; x.fill ();
-        x.lineWidth = 1.3; x.strokeStyle = '#E0DCE8'; x.lineJoin = 'round'; x.shadowColor = 'rgba(183,148,255,.35)'; x.shadowBlur = 2.5;
+        x.lineWidth = 1.7; x.strokeStyle = '#ECE8F2'; x.lineJoin = 'round'; x.shadowColor = 'rgba(183,148,255,.35)'; x.shadowBlur = 2.5;   // LINE LAW: matches .mv-stroke
         x.beginPath (); for (var k = 0; k < w; k++) { var y = mid - maxAt (k) * amp; k ? x.lineTo (k, y) : x.moveTo (k, y); } x.stroke ();
         x.beginPath (); for (var m = 0; m < w; m++) { var y2 = mid - minAt (m) * amp; m ? x.lineTo (m, y2) : x.moveTo (m, y2); } x.stroke ();
         x.shadowBlur = 0;
@@ -22844,7 +22844,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb4';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'fb5';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
