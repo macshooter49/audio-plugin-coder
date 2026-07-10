@@ -3928,6 +3928,19 @@ body {
 #syn-panel .harm-arrow:hover { opacity: .95; }
 #syn-panel .harm-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
 #syn-panel .harm-knob-wrap.pg2 .harm-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+/* MODAL-ENGINE knob panel — mirrors .harm-knob-wrap, 2 pages × 5 knobs, thin-white arrow */
+#syn-panel .modal-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
+#syn-panel .device.osc.engine-modal:not(.swapped) .modal-knob-wrap { display: flex; }
+#syn-panel .device.osc.engine-modal:not(.swapped) .front-only .osc-knobs:not(.modal-knobs) { display: none; }
+#syn-panel .modal-knob-wrap .modal-knobs { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
+#syn-panel .modal-knob-wrap .modal-pg2 { display: none; }
+#syn-panel .modal-knob-wrap.pg2 .modal-pg1 { display: none; }
+#syn-panel .modal-knob-wrap.pg2 .modal-pg2 { display: grid; }
+#syn-panel .modal-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
+#syn-panel .modal-arrow:hover { opacity: .95; }
+#syn-panel .modal-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
+#syn-panel .modal-knob-wrap.pg2 .modal-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+
 #syn-panel .hm-mode-wrap.hm-sculpt { margin-left: 7px; }
 #syn-panel .harm-view { position: absolute; inset: 0; display: none; }
 #syn-panel .harm-view canvas { display: block; width: 100%; height: 100%; }
@@ -4108,6 +4121,11 @@ body {
 #syn-panel .device.osc.engine-harm .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device-corner-preset .hm-mode-wrap { display: none; }   /* must outrank the base .preset-wrap display rule */
 #syn-panel .device.osc.engine-harm .device-corner-preset .hm-mode-wrap { display: inline-flex; }
+#syn-panel .device.osc.engine-modal .device-corner-preset .preset-wrap { display: none; }
+#syn-panel .device-corner-preset .md-fam-wrap { display: none; }   /* default-hide — must outrank the base .preset-wrap display (mirrors .hm-mode-wrap) */
+#syn-panel .device.osc.engine-modal .device-corner-preset .md-fam-wrap { display: inline-flex; }
+#syn-panel .md-fam-wrap.md-form { margin-left: 7px; }
+
 #syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
 #syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
 #syn-panel .samp-sel::after { content: '▾'; font-size: 6px; color: var(--text-muted); margin-left: 3px; pointer-events: none; }
@@ -5235,14 +5253,14 @@ body {
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option><option value="6">Modal</option></select></span>
               <span class="geode-head" data-osc="a"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="a"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-a-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="a" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-a-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="a" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-a-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="a" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-a-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="a" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span><span class="preset-wrap md-fam-wrap"><span class="preset-display" id="osc-a-modalfam-display">Grand</span><select class="preset-select md-fam-select" data-oscl="a" aria-label="Modal family"><option value="0">Grand</option><option value="1">Pluck</option><option value="2">Bow</option><option value="3">Flute</option><option value="4">Reed</option><option value="5">Brass</option><option value="6">Bars</option><option value="7">Bells</option><option value="8">Skin</option></select></span><span class="preset-wrap md-fam-wrap md-form"><span class="preset-display" id="osc-a-modalform-display">Concert</span><select class="preset-select md-form-select" data-oscl="a" aria-label="Modal form"><option value="0">Concert</option><option value="1">Upright</option><option value="2">Tack</option><option value="3">Felt</option><option value="4">Silver</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-a-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_A_WT_PRESET" id="osc-a-preset-select" aria-label="Wavetable preset">
@@ -5357,6 +5375,23 @@ body {
                 <div class="knob" data-syn="SYN_OSC_A_HARM_FIZZ" title="Forge — analog drive: feedback fuzz on the whole oscillator; warm saturation low, biting overdrive mid, screaming fuzz at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -5489,14 +5524,14 @@ body {
           <div class="device osc osc-hidden" id="osc-b-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option><option value="6">Modal</option></select></span>
               <span class="geode-head" data-osc="b"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="b"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-b-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="b" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-b-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="b" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-b-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="b" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-b-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="b" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span><span class="preset-wrap md-fam-wrap"><span class="preset-display" id="osc-b-modalfam-display">Grand</span><select class="preset-select md-fam-select" data-oscl="b" aria-label="Modal family"><option value="0">Grand</option><option value="1">Pluck</option><option value="2">Bow</option><option value="3">Flute</option><option value="4">Reed</option><option value="5">Brass</option><option value="6">Bars</option><option value="7">Bells</option><option value="8">Skin</option></select></span><span class="preset-wrap md-fam-wrap md-form"><span class="preset-display" id="osc-b-modalform-display">Concert</span><select class="preset-select md-form-select" data-oscl="b" aria-label="Modal form"><option value="0">Concert</option><option value="1">Upright</option><option value="2">Tack</option><option value="3">Felt</option><option value="4">Silver</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-b-preset-display">Sine</span>
               <select class="preset-select" data-syn="SYN_OSC_B_WT_PRESET" id="osc-b-preset-select" aria-label="Wavetable preset">
@@ -5611,6 +5646,23 @@ body {
                 <div class="knob" data-syn="SYN_OSC_B_HARM_FIZZ" title="Forge — analog drive: feedback fuzz on the whole oscillator; warm saturation low, biting overdrive mid, screaming fuzz at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -5759,14 +5811,14 @@ body {
           <div class="device osc" id="osc-c-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option><option value="6">Modal</option></select></span>
               <span class="geode-head" data-osc="c"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="c"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-c-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="c" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-c-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="c" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-c-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="c" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-c-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="c" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span><span class="preset-wrap md-fam-wrap"><span class="preset-display" id="osc-c-modalfam-display">Grand</span><select class="preset-select md-fam-select" data-oscl="c" aria-label="Modal family"><option value="0">Grand</option><option value="1">Pluck</option><option value="2">Bow</option><option value="3">Flute</option><option value="4">Reed</option><option value="5">Brass</option><option value="6">Bars</option><option value="7">Bells</option><option value="8">Skin</option></select></span><span class="preset-wrap md-fam-wrap md-form"><span class="preset-display" id="osc-c-modalform-display">Concert</span><select class="preset-select md-form-select" data-oscl="c" aria-label="Modal form"><option value="0">Concert</option><option value="1">Upright</option><option value="2">Tack</option><option value="3">Felt</option><option value="4">Silver</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-c-preset-display">Sine</span>
               <select class="preset-select" id="osc-c-preset-select" data-syn="SYN_OSC_C_WT_PRESET" aria-label="OSC B wavetable preset">
@@ -5881,6 +5933,23 @@ body {
                 <div class="knob" data-syn="SYN_OSC_C_HARM_FIZZ" title="Forge — analog drive: feedback fuzz on the whole oscillator; warm saturation low, biting overdrive mid, screaming fuzz at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -6013,14 +6082,14 @@ body {
           <div class="device osc osc-hidden" id="osc-d-device">
             <div class="device-label-row">
               <div class="device-label">Osc ·</div>
-              <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
+              <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option><option value="6">Modal</option></select></span>
               <span class="geode-head" data-osc="d"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="d"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
             <!-- preset corner: visible span (right-edge flushes with rightmost pill border)
                  overlaid by an invisible native <select> that captures clicks and renders the
                  native dropdown. JS updates the span from select.change. Phase 9: now APVTS-wired. -->
             <div class="device-corner-preset">
-              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-d-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="d" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-d-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="d" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span>
+              <span class="preset-wrap hm-mode-wrap"><span class="preset-display" id="osc-d-harmmode-display">Blade</span><select class="preset-select hm-mode-select" data-oscl="d" aria-label="Harmonic family"><option value="0">Blade</option><option value="1">Neon</option><option value="2">Console</option><option value="3">Chant</option><option value="4">Bronze</option><option value="5">Hornet</option></select></span><span class="preset-wrap hm-mode-wrap hm-sculpt"><span class="preset-display" id="osc-d-harmsculpt-display">Keel</span><select class="preset-select hm-sculpt-select" data-oscl="d" aria-label="Harmonic sculpt"><option value="0">Keel</option><option value="1">Splay</option><option value="2">Cull</option><option value="3">Tide</option><option value="4">Terrace</option><option value="5">Clang</option></select></span><span class="preset-wrap md-fam-wrap"><span class="preset-display" id="osc-d-modalfam-display">Grand</span><select class="preset-select md-fam-select" data-oscl="d" aria-label="Modal family"><option value="0">Grand</option><option value="1">Pluck</option><option value="2">Bow</option><option value="3">Flute</option><option value="4">Reed</option><option value="5">Brass</option><option value="6">Bars</option><option value="7">Bells</option><option value="8">Skin</option></select></span><span class="preset-wrap md-fam-wrap md-form"><span class="preset-display" id="osc-d-modalform-display">Concert</span><select class="preset-select md-form-select" data-oscl="d" aria-label="Modal form"><option value="0">Concert</option><option value="1">Upright</option><option value="2">Tack</option><option value="3">Felt</option><option value="4">Silver</option></select></span>
               <span class="preset-wrap">
               <span class="preset-display" id="osc-d-preset-display">Sine</span>
               <select class="preset-select" id="osc-d-preset-select" data-syn="SYN_OSC_D_WT_PRESET" aria-label="OSC B wavetable preset">
@@ -6135,6 +6204,23 @@ body {
                 <div class="knob" data-syn="SYN_OSC_D_HARM_FIZZ" title="Forge — analog drive: feedback fuzz on the whole oscillator; warm saturation low, biting overdrive mid, screaming fuzz at 100%"><div class="knob-ring"></div><div class="knob-label">Forge</div></div>
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
@@ -10458,25 +10544,25 @@ setTimeout(function wireSynControls () {
     });
 
     // OSC engine selector (header dropdown) — replaces the removed emblem pills.
-    // SYN_OSC_x_ENGINE is a 6-choice param (WT/Samp/Gran/Spec/FM/Analog); we write idx/5.
-    // The UI exposes 5 engines (Analog dropped) and each <option value> is the REAL engine
-    // index, so the param mapping stays exact. NOT data-syn (the generic binder divides by
-    // options.length-1 = 4, which would mis-map this 6-choice param) — dedicated handler instead.
+    // SYN_OSC_x_ENGINE is a 7-choice param (WT/Samp/Gran/Spec/FM/Harmonic/Modal); we write idx/6.
+    // Each <option value> is the REAL engine index, so the param mapping stays exact. NOT
+    // data-syn (the generic binder divides by options.length-1, which would mis-map this
+    // 7-choice param) — dedicated handler instead.
     try {
-      var ENGINE_NAMES = ['Wavetable','Sample','Granular','Resynth','FM','Harmonic']; // by param index 0..5 (5 was 'Analog' — slot repurposed)
+      var ENGINE_NAMES = ['Wavetable','Sample','Granular','Resynth','FM','Harmonic','Modal']; // by param index 0..6
       ['a','b','c','d'].forEach(function (o) {
         var disp = document.getElementById ('osc-' + o + '-engine-display');
         var sel  = document.getElementById ('osc-' + o + '-engine-select');
         if (! disp || ! sel || ! window.Juce || ! window.Juce.getSliderState) return;
         var es = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_ENGINE');
         if (! es) { console.warn ('[SYN-engine-select] no SliderState for osc', o); return; }
-        function idxNow () { try { return Math.max (0, Math.min (5, Math.round (es.getScaledValue ? es.getScaledValue () : 0))); } catch (e) { return 0; } }
+        function idxNow () { try { return Math.max (0, Math.min (6, Math.round (es.getScaledValue ? es.getScaledValue () : 0))); } catch (e) { return 0; } }
         function paint () { var i = idxNow (); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; try { sel.value = String (i); } catch (e) {}
           // Engine-conditional front: Sample engine (index 1) swaps the wavetable
           // front for the .sample-view. Redraw its canvas when it becomes visible
           // (a hidden canvas has zero size, so the initial draw is a no-op).
-          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); if ((isSamp || isGran) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
-        function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 5); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {}
+          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); var isModal = (i === 6); dev.classList.toggle ('engine-modal', isModal); if ((isSamp || isGran) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
+        function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 6); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {}
           // MENU-STUCK MITIGATION — WKWebView can leave a native <select> unable to REOPEN after a
           // change that mutates its own subtree (switching an osc to FM re-lays-out the osc view).
           // Dropping focus on the next tick resets the control so it opens again; before this, the
@@ -10573,6 +10659,53 @@ setTimeout(function wireSynControls () {
         paint ();
       });
     } catch (eHm) { console.warn ('[HARM] ui wiring failed', eHm); }
+
+    // ════════ MODAL ENGINE UI — page flip + FAMILY/FORM selectors (instrument names per family) ════════
+    try {
+      document.querySelectorAll ('#syn-panel .modal-knob-wrap .modal-arrow').forEach (function (arrow) {
+        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.modal-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
+        arrow.addEventListener ('click', toggle);
+        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
+      });
+      var MODAL_FAM = ['Grand','Pluck','Bow','Flute','Reed','Brass','Bars','Bells','Skin'];
+      var MODAL_FORMS = [
+        ['Concert','Upright','Tack','Felt','Silver'], ['Steel','Nylon','Lute','Harp','Sitar'],
+        ['Violin','Viola','Cello','Contra','Gamba'], ['Concert','Alto','Pan','Shaku','Bottle'],
+        ['Clarinet','Sax','Oboe','Bassoon','Duduk'], ['Trumpet','Cornet','Horn','Trombone','Tuba'],
+        ['Marimba','Vibes','Xylo','Glass','Kalimba'], ['Church','Tubular','Handbell','Gong','Tibetan'],
+        ['Timpani','Tom','Snare','Djembe','Tabla'] ];
+      document.querySelectorAll ('#syn-panel .md-fam-select').forEach (function (sel) {
+        var o = sel.getAttribute ('data-oscl') || 'a';
+        var disp = document.getElementById ('osc-' + o + '-modalfam-display');
+        var formSel = document.querySelector ('#syn-panel .md-form-select[data-oscl="' + o + '"]');
+        var formDisp = document.getElementById ('osc-' + o + '-modalform-display');
+        var st = null, stF = null;
+        try { st = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_MODAL_FAMILY'); } catch (e) {}
+        try { stF = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_MODAL_FORM'); } catch (e) {}
+        if (! st || ! disp) return;
+        function famIdx () { var i = 0; try { i = Math.max (0, Math.min (8, Math.round (st.getNormalisedValue () * 8))); } catch (e) {} return i; }
+        function formIdx () { var i = 0; try { if (stF) i = Math.max (0, Math.min (4, Math.round (stF.getNormalisedValue () * 4))); } catch (e) {} return i; }
+        function repop (fi) { if (! formSel) return; var nm = MODAL_FORMS[fi] || MODAL_FORMS[0];
+          for (var k = 0; k < 5; k++) { if (formSel.options[k]) formSel.options[k].textContent = nm[k]; }
+          if (formDisp) formDisp.textContent = nm[formIdx ()] || nm[0]; }
+        function paint () { var i = famIdx (); disp.textContent = MODAL_FAM[i] || 'Grand'; try { sel.value = String (i); } catch (e) {} repop (i); }
+        sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; try { st.setNormalisedValue (i / 8); } catch (e) {} paint (); });
+        try { st.valueChangedEvent.addListener (paint); } catch (e) {}
+        if (stF) { try { stF.valueChangedEvent.addListener (function () { repop (famIdx ()); }); } catch (e) {} }
+        paint ();
+      });
+      document.querySelectorAll ('#syn-panel .md-form-select').forEach (function (sel) {
+        var o = sel.getAttribute ('data-oscl') || 'a';
+        var formDisp = document.getElementById ('osc-' + o + '-modalform-display');
+        var stF = null, stFam = null;
+        try { stF = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_MODAL_FORM'); } catch (e) {}
+        try { stFam = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_MODAL_FAMILY'); } catch (e) {}
+        if (! stF) return;
+        sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; try { stF.setNormalisedValue (i / 4); } catch (e) {}
+          var fi = 0; try { if (stFam) fi = Math.max (0, Math.min (8, Math.round (stFam.getNormalisedValue () * 8))); } catch (e) {}
+          if (formDisp) formDisp.textContent = (MODAL_FORMS[fi] || MODAL_FORMS[0])[i]; });
+      });
+    } catch (eMd) { console.warn ('[MODAL] ui wiring failed', eMd); }
 
     // ── HARM VIZ painter — Pigments-style flat-line partial spectrum (hm5): a thin white
     //    BASELINE rides the vertical CENTER of the display (the resting meter), and every
@@ -10707,9 +10840,9 @@ setTimeout(function wireSynControls () {
         var U = osc.toUpperCase ();
         function ss (id) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (id) : null; } catch (_) { return null; } }
         var es = ss ('SYN_OSC_' + U + '_ENGINE');
-        var curEng = -1; if (es) { try { curEng = Math.round (es.getNormalisedValue () * 5); } catch (_) {} }  // 0=WT 1=SAMP 2=GRAN 3=SPEC 4=FM 5=NOISE
-        var keepEngine = (curEng === 2 || curEng === 3);   // GRANULAR (2) + GEODE (3) both read the sample buffer directly — keep the engine, just load the buffer (GEODE analyzes it)
-        if (es && ! keepEngine) { try { es.setNormalisedValue (1 / 5); } catch (_) {} }   // else flip to Sample (index 1)
+        var curEng = -1; if (es) { try { curEng = Math.round (es.getNormalisedValue () * 6); } catch (_) {} }  // 0=WT 1=SAMP 2=GRAN 3=SPEC 4=FM 5=HARM 6=MODAL (7 choices → *6)
+        var keepEngine = (curEng === 2 || curEng === 3 || curEng === 6);   // GRANULAR(2) + GEODE(3) + MODAL(6) read the sample buffer directly — keep the engine, just load the buffer (MODAL rings it as the exciter)
+        if (es && ! keepEngine) { try { es.setNormalisedValue (1 / 6); } catch (_) {} }   // else flip to Sample (index 1)
         if (! keepEngine) {
           var pm = ss ('SYN_OSC_' + U + '_SAMPLE_LOOP_MODE');  if (pm) { try { pm.setNormalisedValue (0); } catch (_) {} }        // One-Shot (5-choice index 0)
           try { var S = SAMP[osc]; if (S && S.st) { S.st.mode = 0; S.st.loop = false; if (S.repaintHeader) S.repaintHeader (); if (S.place) S.place (); } } catch (_) {}
@@ -10778,7 +10911,7 @@ setTimeout(function wireSynControls () {
             if (a === 'gran' || a === 'spec') {
               // flip the engine FIRST — dropSampleToOsc sees GRAN/GEODE and keeps it, loading the buffer
               try { var es = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState ('SYN_OSC_' + osc.toUpperCase () + '_ENGINE') : null;
-                    if (es) es.setNormalisedValue ((a === 'gran' ? 2 : 3) / 5); } catch (_) {}
+                    if (es) es.setNormalisedValue ((a === 'gran' ? 2 : 3) / 6); } catch (_) {}
             }
             dropSampleToOsc (osc, file);
           };
@@ -11457,9 +11590,9 @@ setTimeout(function wireSynControls () {
           var _dev = disp.closest ('.device.osc');
           var _isWt = ! (_dev && (_dev.classList.contains ('engine-sample') || _dev.classList.contains ('engine-granular')
                                 || _dev.classList.contains ('engine-geode') || _dev.classList.contains ('engine-fm')
-                                || _dev.classList.contains ('engine-harm')));
+                                || _dev.classList.contains ('engine-harm') || _dev.classList.contains ('engine-modal')));
           if (_isWt) { openEngineDropChoice (e, L, f); return; }
-          dropSampleToOsc (L, f);
+          dropSampleToOsc (L, f);   // MODAL (and the rest) skip the menu — the drop loads straight in (exciter for MODAL)
         });
       });
 
@@ -11571,6 +11704,46 @@ setTimeout(function wireSynControls () {
       // P9 polish — default normalised values for dblclick-to-reset.
       // Values are normalised [0..1] matching APVTS NormalisableRange for each param.
       const KNOB_DEFAULTS_NORMALISED = {
+        'SYN_OSC_A_MODAL_HARD': 0.5,
+        'SYN_OSC_A_MODAL_POS': 0.28,
+        'SYN_OSC_A_MODAL_DECAY': 0.6,
+        'SYN_OSC_A_MODAL_MATERIAL': 0.5,
+        'SYN_OSC_A_MODAL_BREATH': 0.0,
+        'SYN_OSC_A_MODAL_STRETCH': 0.5,
+        'SYN_OSC_A_MODAL_BLOOM': 0.0,
+        'SYN_OSC_A_MODAL_HALO': 0.0,
+        'SYN_OSC_A_MODAL_AGE': 0.0,
+        'SYN_OSC_A_MODAL_BODY': 0.5,
+        'SYN_OSC_B_MODAL_HARD': 0.5,
+        'SYN_OSC_B_MODAL_POS': 0.28,
+        'SYN_OSC_B_MODAL_DECAY': 0.6,
+        'SYN_OSC_B_MODAL_MATERIAL': 0.5,
+        'SYN_OSC_B_MODAL_BREATH': 0.0,
+        'SYN_OSC_B_MODAL_STRETCH': 0.5,
+        'SYN_OSC_B_MODAL_BLOOM': 0.0,
+        'SYN_OSC_B_MODAL_HALO': 0.0,
+        'SYN_OSC_B_MODAL_AGE': 0.0,
+        'SYN_OSC_B_MODAL_BODY': 0.5,
+        'SYN_OSC_C_MODAL_HARD': 0.5,
+        'SYN_OSC_C_MODAL_POS': 0.28,
+        'SYN_OSC_C_MODAL_DECAY': 0.6,
+        'SYN_OSC_C_MODAL_MATERIAL': 0.5,
+        'SYN_OSC_C_MODAL_BREATH': 0.0,
+        'SYN_OSC_C_MODAL_STRETCH': 0.5,
+        'SYN_OSC_C_MODAL_BLOOM': 0.0,
+        'SYN_OSC_C_MODAL_HALO': 0.0,
+        'SYN_OSC_C_MODAL_AGE': 0.0,
+        'SYN_OSC_C_MODAL_BODY': 0.5,
+        'SYN_OSC_D_MODAL_HARD': 0.5,
+        'SYN_OSC_D_MODAL_POS': 0.28,
+        'SYN_OSC_D_MODAL_DECAY': 0.6,
+        'SYN_OSC_D_MODAL_MATERIAL': 0.5,
+        'SYN_OSC_D_MODAL_BREATH': 0.0,
+        'SYN_OSC_D_MODAL_STRETCH': 0.5,
+        'SYN_OSC_D_MODAL_BLOOM': 0.0,
+        'SYN_OSC_D_MODAL_HALO': 0.0,
+        'SYN_OSC_D_MODAL_AGE': 0.0,
+        'SYN_OSC_D_MODAL_BODY': 0.5,
         // SAMPLE engine knobs (all 4 osc) — SCAN/FORMANT bipolar (center 0.5)
         SYN_OSC_A_SAMPLE_SCAN: 0.75, SYN_OSC_A_SAMPLE_STRETCH: 0.0, SYN_OSC_A_SAMPLE_FORMANT: 0.5, SYN_OSC_A_SAMPLE_SPRAY: 0.0, SYN_OSC_A_SAMPLE_XFADE: 0.12,
         SYN_OSC_B_SAMPLE_SCAN: 0.75, SYN_OSC_B_SAMPLE_STRETCH: 0.0, SYN_OSC_B_SAMPLE_FORMANT: 0.5, SYN_OSC_B_SAMPLE_SPRAY: 0.0, SYN_OSC_B_SAMPLE_XFADE: 0.12,
@@ -23237,7 +23410,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
    update can fire before listeners attach, so we re-read a few times to catch it. */
 (function () {
   'use strict';
-  var ENGINE_NAMES = ['Wavetable','Sample','Granular','Resynth','FM','Analog'];
+  var ENGINE_NAMES = ['Wavetable','Sample','Granular','Resynth','FM','Harmonic','Modal'];   // 7 choices (slot 5 was 'Analog', now Harmonic; 6 = Modal)
   function ss (n) { try { return (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState(n) : null; } catch (e) { return null; } }
   function sIdx (s) { try { return s ? Math.round(s.getScaledValue ? s.getScaledValue() : 0) : 0; } catch (e) { return 0; } }
   function resync () {
@@ -23256,7 +23429,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           esel = document.getElementById('osc-' + o + '-engine-select'),
           edisp = document.getElementById('osc-' + o + '-engine-display');
       if (es && edisp) {
-        var ei = Math.max(0, Math.min(5, sIdx(es)));
+        var ei = Math.max(0, Math.min(6, sIdx(es)));
         edisp.textContent = ENGINE_NAMES[ei] || 'Wavetable';
         if (esel) { try { esel.value = String(ei); } catch (e) {} }
       }

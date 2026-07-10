@@ -457,6 +457,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscBHarmModeRelay).withOptionsFrom(synOscBHarmSculptRelay).withOptionsFrom(synOscBHarmHueRelay).withOptionsFrom(synOscBHarmCountRelay).withOptionsFrom(synOscBHarmLeanRelay).withOptionsFrom(synOscBHarmFanRelay).withOptionsFrom(synOscBHarmGritRelay).withOptionsFrom(synOscBHarmBraidRelay).withOptionsFrom(synOscBHarmCarveRelay).withOptionsFrom(synOscBHarmChurnRelay).withOptionsFrom(synOscBHarmRootRelay).withOptionsFrom(synOscBHarmShineRelay).withOptionsFrom(synOscBHarmWiltRelay).withOptionsFrom(synOscBHarmFizzRelay)
             .withOptionsFrom(synOscCHarmModeRelay).withOptionsFrom(synOscCHarmSculptRelay).withOptionsFrom(synOscCHarmHueRelay).withOptionsFrom(synOscCHarmCountRelay).withOptionsFrom(synOscCHarmLeanRelay).withOptionsFrom(synOscCHarmFanRelay).withOptionsFrom(synOscCHarmGritRelay).withOptionsFrom(synOscCHarmBraidRelay).withOptionsFrom(synOscCHarmCarveRelay).withOptionsFrom(synOscCHarmChurnRelay).withOptionsFrom(synOscCHarmRootRelay).withOptionsFrom(synOscCHarmShineRelay).withOptionsFrom(synOscCHarmWiltRelay).withOptionsFrom(synOscCHarmFizzRelay)
             .withOptionsFrom(synOscDHarmModeRelay).withOptionsFrom(synOscDHarmSculptRelay).withOptionsFrom(synOscDHarmHueRelay).withOptionsFrom(synOscDHarmCountRelay).withOptionsFrom(synOscDHarmLeanRelay).withOptionsFrom(synOscDHarmFanRelay).withOptionsFrom(synOscDHarmGritRelay).withOptionsFrom(synOscDHarmBraidRelay).withOptionsFrom(synOscDHarmCarveRelay).withOptionsFrom(synOscDHarmChurnRelay).withOptionsFrom(synOscDHarmRootRelay).withOptionsFrom(synOscDHarmShineRelay).withOptionsFrom(synOscDHarmWiltRelay).withOptionsFrom(synOscDHarmFizzRelay)
+            // ════ MODAL-ENGINE withOptionsFrom (13 × 4 osc) ════
+            .withOptionsFrom(synOscAModalFamilyRelay).withOptionsFrom(synOscAModalFormRelay).withOptionsFrom(synOscAModalSourceRelay).withOptionsFrom(synOscAModalHardRelay).withOptionsFrom(synOscAModalPosRelay).withOptionsFrom(synOscAModalDecayRelay).withOptionsFrom(synOscAModalMaterialRelay).withOptionsFrom(synOscAModalBreathRelay).withOptionsFrom(synOscAModalStretchRelay).withOptionsFrom(synOscAModalBloomRelay).withOptionsFrom(synOscAModalHaloRelay).withOptionsFrom(synOscAModalAgeRelay).withOptionsFrom(synOscAModalBodyRelay)
+            .withOptionsFrom(synOscBModalFamilyRelay).withOptionsFrom(synOscBModalFormRelay).withOptionsFrom(synOscBModalSourceRelay).withOptionsFrom(synOscBModalHardRelay).withOptionsFrom(synOscBModalPosRelay).withOptionsFrom(synOscBModalDecayRelay).withOptionsFrom(synOscBModalMaterialRelay).withOptionsFrom(synOscBModalBreathRelay).withOptionsFrom(synOscBModalStretchRelay).withOptionsFrom(synOscBModalBloomRelay).withOptionsFrom(synOscBModalHaloRelay).withOptionsFrom(synOscBModalAgeRelay).withOptionsFrom(synOscBModalBodyRelay)
+            .withOptionsFrom(synOscCModalFamilyRelay).withOptionsFrom(synOscCModalFormRelay).withOptionsFrom(synOscCModalSourceRelay).withOptionsFrom(synOscCModalHardRelay).withOptionsFrom(synOscCModalPosRelay).withOptionsFrom(synOscCModalDecayRelay).withOptionsFrom(synOscCModalMaterialRelay).withOptionsFrom(synOscCModalBreathRelay).withOptionsFrom(synOscCModalStretchRelay).withOptionsFrom(synOscCModalBloomRelay).withOptionsFrom(synOscCModalHaloRelay).withOptionsFrom(synOscCModalAgeRelay).withOptionsFrom(synOscCModalBodyRelay)
+            .withOptionsFrom(synOscDModalFamilyRelay).withOptionsFrom(synOscDModalFormRelay).withOptionsFrom(synOscDModalSourceRelay).withOptionsFrom(synOscDModalHardRelay).withOptionsFrom(synOscDModalPosRelay).withOptionsFrom(synOscDModalDecayRelay).withOptionsFrom(synOscDModalMaterialRelay).withOptionsFrom(synOscDModalBreathRelay).withOptionsFrom(synOscDModalStretchRelay).withOptionsFrom(synOscDModalBloomRelay).withOptionsFrom(synOscDModalHaloRelay).withOptionsFrom(synOscDModalAgeRelay).withOptionsFrom(synOscDModalBodyRelay)
             .withOptionsFrom(synOscACoarseRelay).withOptionsFrom(synOscBCoarseRelay).withOptionsFrom(synOscCCoarseRelay).withOptionsFrom(synOscDCoarseRelay).withOptionsFrom(synOscASubRangeRelay).withOptionsFrom(synOscBSubRangeRelay).withOptionsFrom(synOscCSubRangeRelay).withOptionsFrom(synOscDSubRangeRelay).withOptionsFrom(synOscASubFormRelay).withOptionsFrom(synOscBSubFormRelay).withOptionsFrom(synOscCSubFormRelay).withOptionsFrom(synOscDSubFormRelay).withOptionsFrom(synOscASubWeightRelay).withOptionsFrom(synOscBSubWeightRelay).withOptionsFrom(synOscCSubWeightRelay).withOptionsFrom(synOscDSubWeightRelay).withOptionsFrom(synOscASubHeatRelay).withOptionsFrom(synOscBSubHeatRelay).withOptionsFrom(synOscCSubHeatRelay).withOptionsFrom(synOscDSubHeatRelay)
             // GRAIN-EXPANDED-WITHOPTIONS (8 × 4 osc)
             .withOptionsFrom(synOscAGrainPositionRelay).withOptionsFrom(synOscAGrainPitchRelay).withOptionsFrom(synOscAGrainPsprayRelay).withOptionsFrom(synOscAGrainWidthRelay)
@@ -2649,6 +2654,59 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkAtt(synOscDHarmShineAttachment, ParameterIDs::SYN_OSC_D_HARM_SHINE, synOscDHarmShineRelay);
         mkAtt(synOscDHarmWiltAttachment, ParameterIDs::SYN_OSC_D_HARM_WILT, synOscDHarmWiltRelay);
         mkAtt(synOscDHarmFizzAttachment, ParameterIDs::SYN_OSC_D_HARM_FIZZ, synOscDHarmFizzRelay);
+        // ════ MODAL-ENGINE mkAtt (13 × 4 osc) ════
+        mkAtt(synOscAModalFamilyAttachment, ParameterIDs::SYN_OSC_A_MODAL_FAMILY, synOscAModalFamilyRelay);
+        mkAtt(synOscAModalFormAttachment, ParameterIDs::SYN_OSC_A_MODAL_FORM, synOscAModalFormRelay);
+        mkAtt(synOscAModalSourceAttachment, ParameterIDs::SYN_OSC_A_MODAL_SOURCE, synOscAModalSourceRelay);
+        mkAtt(synOscAModalHardAttachment, ParameterIDs::SYN_OSC_A_MODAL_HARD, synOscAModalHardRelay);
+        mkAtt(synOscAModalPosAttachment, ParameterIDs::SYN_OSC_A_MODAL_POS, synOscAModalPosRelay);
+        mkAtt(synOscAModalDecayAttachment, ParameterIDs::SYN_OSC_A_MODAL_DECAY, synOscAModalDecayRelay);
+        mkAtt(synOscAModalMaterialAttachment, ParameterIDs::SYN_OSC_A_MODAL_MATERIAL, synOscAModalMaterialRelay);
+        mkAtt(synOscAModalBreathAttachment, ParameterIDs::SYN_OSC_A_MODAL_BREATH, synOscAModalBreathRelay);
+        mkAtt(synOscAModalStretchAttachment, ParameterIDs::SYN_OSC_A_MODAL_STRETCH, synOscAModalStretchRelay);
+        mkAtt(synOscAModalBloomAttachment, ParameterIDs::SYN_OSC_A_MODAL_BLOOM, synOscAModalBloomRelay);
+        mkAtt(synOscAModalHaloAttachment, ParameterIDs::SYN_OSC_A_MODAL_HALO, synOscAModalHaloRelay);
+        mkAtt(synOscAModalAgeAttachment, ParameterIDs::SYN_OSC_A_MODAL_AGE, synOscAModalAgeRelay);
+        mkAtt(synOscAModalBodyAttachment, ParameterIDs::SYN_OSC_A_MODAL_BODY, synOscAModalBodyRelay);
+        mkAtt(synOscBModalFamilyAttachment, ParameterIDs::SYN_OSC_B_MODAL_FAMILY, synOscBModalFamilyRelay);
+        mkAtt(synOscBModalFormAttachment, ParameterIDs::SYN_OSC_B_MODAL_FORM, synOscBModalFormRelay);
+        mkAtt(synOscBModalSourceAttachment, ParameterIDs::SYN_OSC_B_MODAL_SOURCE, synOscBModalSourceRelay);
+        mkAtt(synOscBModalHardAttachment, ParameterIDs::SYN_OSC_B_MODAL_HARD, synOscBModalHardRelay);
+        mkAtt(synOscBModalPosAttachment, ParameterIDs::SYN_OSC_B_MODAL_POS, synOscBModalPosRelay);
+        mkAtt(synOscBModalDecayAttachment, ParameterIDs::SYN_OSC_B_MODAL_DECAY, synOscBModalDecayRelay);
+        mkAtt(synOscBModalMaterialAttachment, ParameterIDs::SYN_OSC_B_MODAL_MATERIAL, synOscBModalMaterialRelay);
+        mkAtt(synOscBModalBreathAttachment, ParameterIDs::SYN_OSC_B_MODAL_BREATH, synOscBModalBreathRelay);
+        mkAtt(synOscBModalStretchAttachment, ParameterIDs::SYN_OSC_B_MODAL_STRETCH, synOscBModalStretchRelay);
+        mkAtt(synOscBModalBloomAttachment, ParameterIDs::SYN_OSC_B_MODAL_BLOOM, synOscBModalBloomRelay);
+        mkAtt(synOscBModalHaloAttachment, ParameterIDs::SYN_OSC_B_MODAL_HALO, synOscBModalHaloRelay);
+        mkAtt(synOscBModalAgeAttachment, ParameterIDs::SYN_OSC_B_MODAL_AGE, synOscBModalAgeRelay);
+        mkAtt(synOscBModalBodyAttachment, ParameterIDs::SYN_OSC_B_MODAL_BODY, synOscBModalBodyRelay);
+        mkAtt(synOscCModalFamilyAttachment, ParameterIDs::SYN_OSC_C_MODAL_FAMILY, synOscCModalFamilyRelay);
+        mkAtt(synOscCModalFormAttachment, ParameterIDs::SYN_OSC_C_MODAL_FORM, synOscCModalFormRelay);
+        mkAtt(synOscCModalSourceAttachment, ParameterIDs::SYN_OSC_C_MODAL_SOURCE, synOscCModalSourceRelay);
+        mkAtt(synOscCModalHardAttachment, ParameterIDs::SYN_OSC_C_MODAL_HARD, synOscCModalHardRelay);
+        mkAtt(synOscCModalPosAttachment, ParameterIDs::SYN_OSC_C_MODAL_POS, synOscCModalPosRelay);
+        mkAtt(synOscCModalDecayAttachment, ParameterIDs::SYN_OSC_C_MODAL_DECAY, synOscCModalDecayRelay);
+        mkAtt(synOscCModalMaterialAttachment, ParameterIDs::SYN_OSC_C_MODAL_MATERIAL, synOscCModalMaterialRelay);
+        mkAtt(synOscCModalBreathAttachment, ParameterIDs::SYN_OSC_C_MODAL_BREATH, synOscCModalBreathRelay);
+        mkAtt(synOscCModalStretchAttachment, ParameterIDs::SYN_OSC_C_MODAL_STRETCH, synOscCModalStretchRelay);
+        mkAtt(synOscCModalBloomAttachment, ParameterIDs::SYN_OSC_C_MODAL_BLOOM, synOscCModalBloomRelay);
+        mkAtt(synOscCModalHaloAttachment, ParameterIDs::SYN_OSC_C_MODAL_HALO, synOscCModalHaloRelay);
+        mkAtt(synOscCModalAgeAttachment, ParameterIDs::SYN_OSC_C_MODAL_AGE, synOscCModalAgeRelay);
+        mkAtt(synOscCModalBodyAttachment, ParameterIDs::SYN_OSC_C_MODAL_BODY, synOscCModalBodyRelay);
+        mkAtt(synOscDModalFamilyAttachment, ParameterIDs::SYN_OSC_D_MODAL_FAMILY, synOscDModalFamilyRelay);
+        mkAtt(synOscDModalFormAttachment, ParameterIDs::SYN_OSC_D_MODAL_FORM, synOscDModalFormRelay);
+        mkAtt(synOscDModalSourceAttachment, ParameterIDs::SYN_OSC_D_MODAL_SOURCE, synOscDModalSourceRelay);
+        mkAtt(synOscDModalHardAttachment, ParameterIDs::SYN_OSC_D_MODAL_HARD, synOscDModalHardRelay);
+        mkAtt(synOscDModalPosAttachment, ParameterIDs::SYN_OSC_D_MODAL_POS, synOscDModalPosRelay);
+        mkAtt(synOscDModalDecayAttachment, ParameterIDs::SYN_OSC_D_MODAL_DECAY, synOscDModalDecayRelay);
+        mkAtt(synOscDModalMaterialAttachment, ParameterIDs::SYN_OSC_D_MODAL_MATERIAL, synOscDModalMaterialRelay);
+        mkAtt(synOscDModalBreathAttachment, ParameterIDs::SYN_OSC_D_MODAL_BREATH, synOscDModalBreathRelay);
+        mkAtt(synOscDModalStretchAttachment, ParameterIDs::SYN_OSC_D_MODAL_STRETCH, synOscDModalStretchRelay);
+        mkAtt(synOscDModalBloomAttachment, ParameterIDs::SYN_OSC_D_MODAL_BLOOM, synOscDModalBloomRelay);
+        mkAtt(synOscDModalHaloAttachment, ParameterIDs::SYN_OSC_D_MODAL_HALO, synOscDModalHaloRelay);
+        mkAtt(synOscDModalAgeAttachment, ParameterIDs::SYN_OSC_D_MODAL_AGE, synOscDModalAgeRelay);
+        mkAtt(synOscDModalBodyAttachment, ParameterIDs::SYN_OSC_D_MODAL_BODY, synOscDModalBodyRelay);
         // UNIVERSAL OSC BOXES — COARSE + SUB (full 6-link chain, 2026-07-09)
         mkAtt(synOscACoarseAttachment, ParameterIDs::SYN_OSC_A_COARSE, synOscACoarseRelay);
         mkAtt(synOscBCoarseAttachment, ParameterIDs::SYN_OSC_B_COARSE, synOscBCoarseRelay);

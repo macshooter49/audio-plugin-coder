@@ -601,6 +601,60 @@ private:
     juce::WebSliderRelay synOscDHarmWiltRelay  { ParameterIDs::SYN_OSC_D_HARM_WILT };
     juce::WebSliderRelay synOscDHarmFizzRelay  { ParameterIDs::SYN_OSC_D_HARM_FIZZ };
 
+    // ════ MODAL-ENGINE relays — physical modeling oscillator (13 × 4 osc) ════
+    juce::WebSliderRelay synOscAModalFamilyRelay { ParameterIDs::SYN_OSC_A_MODAL_FAMILY };
+    juce::WebSliderRelay synOscAModalFormRelay { ParameterIDs::SYN_OSC_A_MODAL_FORM };
+    juce::WebSliderRelay synOscAModalSourceRelay { ParameterIDs::SYN_OSC_A_MODAL_SOURCE };
+    juce::WebSliderRelay synOscAModalHardRelay { ParameterIDs::SYN_OSC_A_MODAL_HARD };
+    juce::WebSliderRelay synOscAModalPosRelay { ParameterIDs::SYN_OSC_A_MODAL_POS };
+    juce::WebSliderRelay synOscAModalDecayRelay { ParameterIDs::SYN_OSC_A_MODAL_DECAY };
+    juce::WebSliderRelay synOscAModalMaterialRelay { ParameterIDs::SYN_OSC_A_MODAL_MATERIAL };
+    juce::WebSliderRelay synOscAModalBreathRelay { ParameterIDs::SYN_OSC_A_MODAL_BREATH };
+    juce::WebSliderRelay synOscAModalStretchRelay { ParameterIDs::SYN_OSC_A_MODAL_STRETCH };
+    juce::WebSliderRelay synOscAModalBloomRelay { ParameterIDs::SYN_OSC_A_MODAL_BLOOM };
+    juce::WebSliderRelay synOscAModalHaloRelay { ParameterIDs::SYN_OSC_A_MODAL_HALO };
+    juce::WebSliderRelay synOscAModalAgeRelay { ParameterIDs::SYN_OSC_A_MODAL_AGE };
+    juce::WebSliderRelay synOscAModalBodyRelay { ParameterIDs::SYN_OSC_A_MODAL_BODY };
+    juce::WebSliderRelay synOscBModalFamilyRelay { ParameterIDs::SYN_OSC_B_MODAL_FAMILY };
+    juce::WebSliderRelay synOscBModalFormRelay { ParameterIDs::SYN_OSC_B_MODAL_FORM };
+    juce::WebSliderRelay synOscBModalSourceRelay { ParameterIDs::SYN_OSC_B_MODAL_SOURCE };
+    juce::WebSliderRelay synOscBModalHardRelay { ParameterIDs::SYN_OSC_B_MODAL_HARD };
+    juce::WebSliderRelay synOscBModalPosRelay { ParameterIDs::SYN_OSC_B_MODAL_POS };
+    juce::WebSliderRelay synOscBModalDecayRelay { ParameterIDs::SYN_OSC_B_MODAL_DECAY };
+    juce::WebSliderRelay synOscBModalMaterialRelay { ParameterIDs::SYN_OSC_B_MODAL_MATERIAL };
+    juce::WebSliderRelay synOscBModalBreathRelay { ParameterIDs::SYN_OSC_B_MODAL_BREATH };
+    juce::WebSliderRelay synOscBModalStretchRelay { ParameterIDs::SYN_OSC_B_MODAL_STRETCH };
+    juce::WebSliderRelay synOscBModalBloomRelay { ParameterIDs::SYN_OSC_B_MODAL_BLOOM };
+    juce::WebSliderRelay synOscBModalHaloRelay { ParameterIDs::SYN_OSC_B_MODAL_HALO };
+    juce::WebSliderRelay synOscBModalAgeRelay { ParameterIDs::SYN_OSC_B_MODAL_AGE };
+    juce::WebSliderRelay synOscBModalBodyRelay { ParameterIDs::SYN_OSC_B_MODAL_BODY };
+    juce::WebSliderRelay synOscCModalFamilyRelay { ParameterIDs::SYN_OSC_C_MODAL_FAMILY };
+    juce::WebSliderRelay synOscCModalFormRelay { ParameterIDs::SYN_OSC_C_MODAL_FORM };
+    juce::WebSliderRelay synOscCModalSourceRelay { ParameterIDs::SYN_OSC_C_MODAL_SOURCE };
+    juce::WebSliderRelay synOscCModalHardRelay { ParameterIDs::SYN_OSC_C_MODAL_HARD };
+    juce::WebSliderRelay synOscCModalPosRelay { ParameterIDs::SYN_OSC_C_MODAL_POS };
+    juce::WebSliderRelay synOscCModalDecayRelay { ParameterIDs::SYN_OSC_C_MODAL_DECAY };
+    juce::WebSliderRelay synOscCModalMaterialRelay { ParameterIDs::SYN_OSC_C_MODAL_MATERIAL };
+    juce::WebSliderRelay synOscCModalBreathRelay { ParameterIDs::SYN_OSC_C_MODAL_BREATH };
+    juce::WebSliderRelay synOscCModalStretchRelay { ParameterIDs::SYN_OSC_C_MODAL_STRETCH };
+    juce::WebSliderRelay synOscCModalBloomRelay { ParameterIDs::SYN_OSC_C_MODAL_BLOOM };
+    juce::WebSliderRelay synOscCModalHaloRelay { ParameterIDs::SYN_OSC_C_MODAL_HALO };
+    juce::WebSliderRelay synOscCModalAgeRelay { ParameterIDs::SYN_OSC_C_MODAL_AGE };
+    juce::WebSliderRelay synOscCModalBodyRelay { ParameterIDs::SYN_OSC_C_MODAL_BODY };
+    juce::WebSliderRelay synOscDModalFamilyRelay { ParameterIDs::SYN_OSC_D_MODAL_FAMILY };
+    juce::WebSliderRelay synOscDModalFormRelay { ParameterIDs::SYN_OSC_D_MODAL_FORM };
+    juce::WebSliderRelay synOscDModalSourceRelay { ParameterIDs::SYN_OSC_D_MODAL_SOURCE };
+    juce::WebSliderRelay synOscDModalHardRelay { ParameterIDs::SYN_OSC_D_MODAL_HARD };
+    juce::WebSliderRelay synOscDModalPosRelay { ParameterIDs::SYN_OSC_D_MODAL_POS };
+    juce::WebSliderRelay synOscDModalDecayRelay { ParameterIDs::SYN_OSC_D_MODAL_DECAY };
+    juce::WebSliderRelay synOscDModalMaterialRelay { ParameterIDs::SYN_OSC_D_MODAL_MATERIAL };
+    juce::WebSliderRelay synOscDModalBreathRelay { ParameterIDs::SYN_OSC_D_MODAL_BREATH };
+    juce::WebSliderRelay synOscDModalStretchRelay { ParameterIDs::SYN_OSC_D_MODAL_STRETCH };
+    juce::WebSliderRelay synOscDModalBloomRelay { ParameterIDs::SYN_OSC_D_MODAL_BLOOM };
+    juce::WebSliderRelay synOscDModalHaloRelay { ParameterIDs::SYN_OSC_D_MODAL_HALO };
+    juce::WebSliderRelay synOscDModalAgeRelay { ParameterIDs::SYN_OSC_D_MODAL_AGE };
+    juce::WebSliderRelay synOscDModalBodyRelay { ParameterIDs::SYN_OSC_D_MODAL_BODY };
+
     // ════ UNIVERSAL OSC BOXES — COARSE + SUB relays (5 × 4 osc, 2026-07-09) ════
     juce::WebSliderRelay synOscACoarseRelay { ParameterIDs::SYN_OSC_A_COARSE };
     juce::WebSliderRelay synOscBCoarseRelay { ParameterIDs::SYN_OSC_B_COARSE };
@@ -1257,6 +1311,21 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmShineAttachment, synOscBHarmShineAttachment, synOscCHarmShineAttachment, synOscDHarmShineAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmWiltAttachment, synOscBHarmWiltAttachment, synOscCHarmWiltAttachment, synOscDHarmWiltAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmFizzAttachment, synOscBHarmFizzAttachment, synOscCHarmFizzAttachment, synOscDHarmFizzAttachment;
+
+    // ── MODAL-ENGINE attachments (13 × 4 osc) ──
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalFamilyAttachment, synOscBModalFamilyAttachment, synOscCModalFamilyAttachment, synOscDModalFamilyAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalFormAttachment, synOscBModalFormAttachment, synOscCModalFormAttachment, synOscDModalFormAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalSourceAttachment, synOscBModalSourceAttachment, synOscCModalSourceAttachment, synOscDModalSourceAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalHardAttachment, synOscBModalHardAttachment, synOscCModalHardAttachment, synOscDModalHardAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalPosAttachment, synOscBModalPosAttachment, synOscCModalPosAttachment, synOscDModalPosAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalDecayAttachment, synOscBModalDecayAttachment, synOscCModalDecayAttachment, synOscDModalDecayAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalMaterialAttachment, synOscBModalMaterialAttachment, synOscCModalMaterialAttachment, synOscDModalMaterialAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalBreathAttachment, synOscBModalBreathAttachment, synOscCModalBreathAttachment, synOscDModalBreathAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalStretchAttachment, synOscBModalStretchAttachment, synOscCModalStretchAttachment, synOscDModalStretchAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalBloomAttachment, synOscBModalBloomAttachment, synOscCModalBloomAttachment, synOscDModalBloomAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalHaloAttachment, synOscBModalHaloAttachment, synOscCModalHaloAttachment, synOscDModalHaloAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalAgeAttachment, synOscBModalAgeAttachment, synOscCModalAgeAttachment, synOscDModalAgeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalBodyAttachment, synOscBModalBodyAttachment, synOscCModalBodyAttachment, synOscDModalBodyAttachment;
     // UNIVERSAL OSC BOXES — COARSE + SUB attachments
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscACoarseAttachment, synOscBCoarseAttachment, synOscCCoarseAttachment, synOscDCoarseAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASubRangeAttachment, synOscBSubRangeAttachment, synOscCSubRangeAttachment, synOscDSubRangeAttachment;

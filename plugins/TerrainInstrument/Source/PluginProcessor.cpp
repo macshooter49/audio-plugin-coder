@@ -989,7 +989,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_ENGINE, 1 },
         "Synth OSC A Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
         0));
 
     layout.add (std::make_unique<juce::AudioParameterInt> (
@@ -1551,7 +1551,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_ENGINE, 1 },
         "Synth OSC B Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_OCT, 1 },
@@ -1696,7 +1696,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_ENGINE, 1 },
         "Synth OSC C Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_OCT, 1 },
@@ -1841,7 +1841,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_ENGINE, 1 },
         "Synth OSC D Engine",
-        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM" },
+        juce::StringArray { "WT", "SAMP", "GRAN", "SPEC", "FM", "HARM", "MODAL" },
         0));
     layout.add (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_OCT, 1 },
@@ -2360,6 +2360,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         static const char* const HARM_C[14] = { ParameterIDs::SYN_OSC_C_HARM_MODE, ParameterIDs::SYN_OSC_C_HARM_SCULPT, ParameterIDs::SYN_OSC_C_HARM_HUE, ParameterIDs::SYN_OSC_C_HARM_COUNT, ParameterIDs::SYN_OSC_C_HARM_LEAN, ParameterIDs::SYN_OSC_C_HARM_FAN, ParameterIDs::SYN_OSC_C_HARM_GRIT, ParameterIDs::SYN_OSC_C_HARM_BRAID, ParameterIDs::SYN_OSC_C_HARM_CARVE, ParameterIDs::SYN_OSC_C_HARM_CHURN, ParameterIDs::SYN_OSC_C_HARM_ROOT, ParameterIDs::SYN_OSC_C_HARM_SHINE, ParameterIDs::SYN_OSC_C_HARM_WILT, ParameterIDs::SYN_OSC_C_HARM_FIZZ };
         static const char* const HARM_D[14] = { ParameterIDs::SYN_OSC_D_HARM_MODE, ParameterIDs::SYN_OSC_D_HARM_SCULPT, ParameterIDs::SYN_OSC_D_HARM_HUE, ParameterIDs::SYN_OSC_D_HARM_COUNT, ParameterIDs::SYN_OSC_D_HARM_LEAN, ParameterIDs::SYN_OSC_D_HARM_FAN, ParameterIDs::SYN_OSC_D_HARM_GRIT, ParameterIDs::SYN_OSC_D_HARM_BRAID, ParameterIDs::SYN_OSC_D_HARM_CARVE, ParameterIDs::SYN_OSC_D_HARM_CHURN, ParameterIDs::SYN_OSC_D_HARM_ROOT, ParameterIDs::SYN_OSC_D_HARM_SHINE, ParameterIDs::SYN_OSC_D_HARM_WILT, ParameterIDs::SYN_OSC_D_HARM_FIZZ };
         addHarmOsc (HARM_A, "A"); addHarmOsc (HARM_B, "B"); addHarmOsc (HARM_C, "C"); addHarmOsc (HARM_D, "D");
+    }
+
+    // ── MODAL engine params: 3 selectors (Family/Form/Source) + 10 knobs, ×4 oscs ──
+    auto addModalOsc = [&layout] (const char* const id[13], const juce::String& osc)
+    {
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[0], 1 }, "Synth OSC " + osc + " Modal Family",
+            juce::StringArray { "Grand", "Pluck", "Bow", "Flute", "Reed", "Brass", "Bars", "Bells", "Skin" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[1], 1 }, "Synth OSC " + osc + " Modal Form",
+            juce::StringArray { "I", "II", "III", "IV", "V" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id[2], 1 }, "Synth OSC " + osc + " Modal Source",
+            juce::StringArray { "Auto", "Noise", "Click", "Sample" }, 0));
+        static const char* nm[10] = { "Hard", "Pos", "Decay", "Material", "Breath",
+                                      "Stretch", "Bloom", "Halo", "Age", "Body" };
+        static const float dv[10] = { 0.5f, 0.28f, 0.6f, 0.5f, 0.0f,
+                                      0.5f, 0.0f, 0.0f, 0.0f, 0.5f };
+        for (int k = 0; k < 10; ++k)
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id[k + 3], 1 }, "Synth OSC " + osc + " Modal " + nm[k],
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), dv[k]));
+    };
+    {
+        static const char* const MODAL_A[13] = { ParameterIDs::SYN_OSC_A_MODAL_FAMILY, ParameterIDs::SYN_OSC_A_MODAL_FORM, ParameterIDs::SYN_OSC_A_MODAL_SOURCE, ParameterIDs::SYN_OSC_A_MODAL_HARD, ParameterIDs::SYN_OSC_A_MODAL_POS, ParameterIDs::SYN_OSC_A_MODAL_DECAY, ParameterIDs::SYN_OSC_A_MODAL_MATERIAL, ParameterIDs::SYN_OSC_A_MODAL_BREATH, ParameterIDs::SYN_OSC_A_MODAL_STRETCH, ParameterIDs::SYN_OSC_A_MODAL_BLOOM, ParameterIDs::SYN_OSC_A_MODAL_HALO, ParameterIDs::SYN_OSC_A_MODAL_AGE, ParameterIDs::SYN_OSC_A_MODAL_BODY };
+        static const char* const MODAL_B[13] = { ParameterIDs::SYN_OSC_B_MODAL_FAMILY, ParameterIDs::SYN_OSC_B_MODAL_FORM, ParameterIDs::SYN_OSC_B_MODAL_SOURCE, ParameterIDs::SYN_OSC_B_MODAL_HARD, ParameterIDs::SYN_OSC_B_MODAL_POS, ParameterIDs::SYN_OSC_B_MODAL_DECAY, ParameterIDs::SYN_OSC_B_MODAL_MATERIAL, ParameterIDs::SYN_OSC_B_MODAL_BREATH, ParameterIDs::SYN_OSC_B_MODAL_STRETCH, ParameterIDs::SYN_OSC_B_MODAL_BLOOM, ParameterIDs::SYN_OSC_B_MODAL_HALO, ParameterIDs::SYN_OSC_B_MODAL_AGE, ParameterIDs::SYN_OSC_B_MODAL_BODY };
+        static const char* const MODAL_C[13] = { ParameterIDs::SYN_OSC_C_MODAL_FAMILY, ParameterIDs::SYN_OSC_C_MODAL_FORM, ParameterIDs::SYN_OSC_C_MODAL_SOURCE, ParameterIDs::SYN_OSC_C_MODAL_HARD, ParameterIDs::SYN_OSC_C_MODAL_POS, ParameterIDs::SYN_OSC_C_MODAL_DECAY, ParameterIDs::SYN_OSC_C_MODAL_MATERIAL, ParameterIDs::SYN_OSC_C_MODAL_BREATH, ParameterIDs::SYN_OSC_C_MODAL_STRETCH, ParameterIDs::SYN_OSC_C_MODAL_BLOOM, ParameterIDs::SYN_OSC_C_MODAL_HALO, ParameterIDs::SYN_OSC_C_MODAL_AGE, ParameterIDs::SYN_OSC_C_MODAL_BODY };
+        static const char* const MODAL_D[13] = { ParameterIDs::SYN_OSC_D_MODAL_FAMILY, ParameterIDs::SYN_OSC_D_MODAL_FORM, ParameterIDs::SYN_OSC_D_MODAL_SOURCE, ParameterIDs::SYN_OSC_D_MODAL_HARD, ParameterIDs::SYN_OSC_D_MODAL_POS, ParameterIDs::SYN_OSC_D_MODAL_DECAY, ParameterIDs::SYN_OSC_D_MODAL_MATERIAL, ParameterIDs::SYN_OSC_D_MODAL_BREATH, ParameterIDs::SYN_OSC_D_MODAL_STRETCH, ParameterIDs::SYN_OSC_D_MODAL_BLOOM, ParameterIDs::SYN_OSC_D_MODAL_HALO, ParameterIDs::SYN_OSC_D_MODAL_AGE, ParameterIDs::SYN_OSC_D_MODAL_BODY };
+        addModalOsc (MODAL_A, "A"); addModalOsc (MODAL_B, "B"); addModalOsc (MODAL_C, "C"); addModalOsc (MODAL_D, "D");
     }
 
     // ════════ UNIVERSAL OSC BOXES (2026-07-09) — COARSE + SUB per oscillator ════════
@@ -3687,6 +3716,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread
         harmDisplayParams_[2] = harmP[2]; harmDisplayParams_[3] = harmP[3];   // display engines read these
 
+        // ── MODAL engine: gather the physical-model params per OSC (MODAL-ENGINE-GATHER) ──
+        static const char* const MODAL_IDS[4][13] = {
+            { ParameterIDs::SYN_OSC_A_MODAL_FAMILY, ParameterIDs::SYN_OSC_A_MODAL_FORM, ParameterIDs::SYN_OSC_A_MODAL_SOURCE, ParameterIDs::SYN_OSC_A_MODAL_HARD, ParameterIDs::SYN_OSC_A_MODAL_POS, ParameterIDs::SYN_OSC_A_MODAL_DECAY, ParameterIDs::SYN_OSC_A_MODAL_MATERIAL, ParameterIDs::SYN_OSC_A_MODAL_BREATH, ParameterIDs::SYN_OSC_A_MODAL_STRETCH, ParameterIDs::SYN_OSC_A_MODAL_BLOOM, ParameterIDs::SYN_OSC_A_MODAL_HALO, ParameterIDs::SYN_OSC_A_MODAL_AGE, ParameterIDs::SYN_OSC_A_MODAL_BODY },
+            { ParameterIDs::SYN_OSC_B_MODAL_FAMILY, ParameterIDs::SYN_OSC_B_MODAL_FORM, ParameterIDs::SYN_OSC_B_MODAL_SOURCE, ParameterIDs::SYN_OSC_B_MODAL_HARD, ParameterIDs::SYN_OSC_B_MODAL_POS, ParameterIDs::SYN_OSC_B_MODAL_DECAY, ParameterIDs::SYN_OSC_B_MODAL_MATERIAL, ParameterIDs::SYN_OSC_B_MODAL_BREATH, ParameterIDs::SYN_OSC_B_MODAL_STRETCH, ParameterIDs::SYN_OSC_B_MODAL_BLOOM, ParameterIDs::SYN_OSC_B_MODAL_HALO, ParameterIDs::SYN_OSC_B_MODAL_AGE, ParameterIDs::SYN_OSC_B_MODAL_BODY },
+            { ParameterIDs::SYN_OSC_C_MODAL_FAMILY, ParameterIDs::SYN_OSC_C_MODAL_FORM, ParameterIDs::SYN_OSC_C_MODAL_SOURCE, ParameterIDs::SYN_OSC_C_MODAL_HARD, ParameterIDs::SYN_OSC_C_MODAL_POS, ParameterIDs::SYN_OSC_C_MODAL_DECAY, ParameterIDs::SYN_OSC_C_MODAL_MATERIAL, ParameterIDs::SYN_OSC_C_MODAL_BREATH, ParameterIDs::SYN_OSC_C_MODAL_STRETCH, ParameterIDs::SYN_OSC_C_MODAL_BLOOM, ParameterIDs::SYN_OSC_C_MODAL_HALO, ParameterIDs::SYN_OSC_C_MODAL_AGE, ParameterIDs::SYN_OSC_C_MODAL_BODY },
+            { ParameterIDs::SYN_OSC_D_MODAL_FAMILY, ParameterIDs::SYN_OSC_D_MODAL_FORM, ParameterIDs::SYN_OSC_D_MODAL_SOURCE, ParameterIDs::SYN_OSC_D_MODAL_HARD, ParameterIDs::SYN_OSC_D_MODAL_POS, ParameterIDs::SYN_OSC_D_MODAL_DECAY, ParameterIDs::SYN_OSC_D_MODAL_MATERIAL, ParameterIDs::SYN_OSC_D_MODAL_BREATH, ParameterIDs::SYN_OSC_D_MODAL_STRETCH, ParameterIDs::SYN_OSC_D_MODAL_BLOOM, ParameterIDs::SYN_OSC_D_MODAL_HALO, ParameterIDs::SYN_OSC_D_MODAL_AGE, ParameterIDs::SYN_OSC_D_MODAL_BODY }
+        };
+        tw::ModalParams modalP[4];
+        for (int o = 0; o < 4; ++o)
+        {
+            const char* const* id = MODAL_IDS[o];
+            tw::ModalParams m;
+            m.family = (int) *rawParam (id[0]);
+            m.form   = (int) *rawParam (id[1]);
+            m.source = (int) *rawParam (id[2]);
+            m.hard     = *rawParam (id[3]);  m.pos     = *rawParam (id[4]);  m.decay   = *rawParam (id[5]);
+            m.material = *rawParam (id[6]);  m.breath  = *rawParam (id[7]);  m.stretch = *rawParam (id[8]);
+            m.bloom    = *rawParam (id[9]);  m.halo    = *rawParam (id[10]); m.age     = *rawParam (id[11]);
+            m.body     = *rawParam (id[12]);
+            modalP[o] = m;
+        }
+
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
@@ -3854,6 +3905,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setGeodeParamsC (geodeP[2]); sv->setGeodeParamsD (geodeP[3]);
                 sv->setHarmParamsA (harmP[0]);   sv->setHarmParamsB (harmP[1]);   // HARM-ENGINE-PUSH (cheap stores, ungated)
                 sv->setHarmParamsC (harmP[2]);   sv->setHarmParamsD (harmP[3]);
+                sv->setModalParamsA (modalP[0]); sv->setModalParamsB (modalP[1]); // MODAL-ENGINE-PUSH
+                sv->setModalParamsC (modalP[2]); sv->setModalParamsD (modalP[3]);
                 // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
                 if (engChanged)
                 {
