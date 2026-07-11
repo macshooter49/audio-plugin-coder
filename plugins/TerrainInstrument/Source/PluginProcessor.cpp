@@ -3723,6 +3723,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             { ParameterIDs::SYN_OSC_C_MODAL_FAMILY, ParameterIDs::SYN_OSC_C_MODAL_FORM, ParameterIDs::SYN_OSC_C_MODAL_SOURCE, ParameterIDs::SYN_OSC_C_MODAL_HARD, ParameterIDs::SYN_OSC_C_MODAL_POS, ParameterIDs::SYN_OSC_C_MODAL_DECAY, ParameterIDs::SYN_OSC_C_MODAL_MATERIAL, ParameterIDs::SYN_OSC_C_MODAL_BREATH, ParameterIDs::SYN_OSC_C_MODAL_STRETCH, ParameterIDs::SYN_OSC_C_MODAL_BLOOM, ParameterIDs::SYN_OSC_C_MODAL_HALO, ParameterIDs::SYN_OSC_C_MODAL_AGE, ParameterIDs::SYN_OSC_C_MODAL_BODY },
             { ParameterIDs::SYN_OSC_D_MODAL_FAMILY, ParameterIDs::SYN_OSC_D_MODAL_FORM, ParameterIDs::SYN_OSC_D_MODAL_SOURCE, ParameterIDs::SYN_OSC_D_MODAL_HARD, ParameterIDs::SYN_OSC_D_MODAL_POS, ParameterIDs::SYN_OSC_D_MODAL_DECAY, ParameterIDs::SYN_OSC_D_MODAL_MATERIAL, ParameterIDs::SYN_OSC_D_MODAL_BREATH, ParameterIDs::SYN_OSC_D_MODAL_STRETCH, ParameterIDs::SYN_OSC_D_MODAL_BLOOM, ParameterIDs::SYN_OSC_D_MODAL_HALO, ParameterIDs::SYN_OSC_D_MODAL_AGE, ParameterIDs::SYN_OSC_D_MODAL_BODY }
         };
+        static const char* const MODAL_LOOP_IDS[4] = {
+            ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_MODE, ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_MODE,
+            ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_MODE, ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_MODE };
+        // exciter loop region (the PURPLE BOX) — same per-osc sample loop-start/end the sample-view edits
+        static const char* const MODAL_LOOPSTART_IDS[4] = {
+            ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_START, ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_START,
+            ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_START, ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_START };
+        static const char* const MODAL_LOOPEND_IDS[4] = {
+            ParameterIDs::SYN_OSC_A_SAMPLE_LOOP_END, ParameterIDs::SYN_OSC_B_SAMPLE_LOOP_END,
+            ParameterIDs::SYN_OSC_C_SAMPLE_LOOP_END, ParameterIDs::SYN_OSC_D_SAMPLE_LOOP_END };
         tw::ModalParams modalP[4];
         for (int o = 0; o < 4; ++o)
         {
@@ -3735,6 +3745,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             m.material = *rawParam (id[6]);  m.breath  = *rawParam (id[7]);  m.stretch = *rawParam (id[8]);
             m.bloom    = *rawParam (id[9]);  m.halo    = *rawParam (id[10]); m.age     = *rawParam (id[11]);
             m.body     = *rawParam (id[12]);
+            const int lm = (int) *rawParam (MODAL_LOOP_IDS[o]);   // exciter loop mode (from the samp-head loop header)
+            m.loopMode = (lm >= 0 && lm <= 3) ? lm : 0;           // 0..3 One-Shot/Fwd/Rev/PingPong (Tailed=4 → One-Shot)
+            m.loopStart = *rawParam (MODAL_LOOPSTART_IDS[o]);      // purple-box start → exciter loops CONFINED here
+            m.loopEnd   = *rawParam (MODAL_LOOPEND_IDS[o]);        // purple-box end
             modalP[o] = m;
         }
 
@@ -4185,6 +4199,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                             float p = sv->sampleFollowPos01 (o);
                             if (p < 0.f) p = sv->granScanPos01 (o);   // GRANULAR: the voice's scan head IS its follower (drawn purple in the UI)
                             if (p < 0.f) p = sv->geodeFollowPos01 (o); // RESYNTH: the geode read-head IS its follower
+                            if (p < 0.f) p = sv->modalFollowPos01 (o); // MODAL: the exciter read-head IS its follower (same mechanism)
                             if (p >= 0.f) { sampleFollowIdx_[o][cnt[o]].store (i, std::memory_order_relaxed);
                                             sampleFollowPos_[o][cnt[o]].store (p, std::memory_order_relaxed); ++cnt[o]; }
                         }

@@ -190,6 +190,20 @@ namespace tw
                 default: return -1.f;
             }
         }
+        // MODAL-FOLLOWER — the exciter read-head position 0..1 for osc (the white MIDI follower,
+        // IDENTICAL mechanism to Sample/Granular/Resynth), or -1 when that osc isn't a sounding
+        // Modal engine reading a dropped sample exciter. One-shot sweeps once then parks.
+        float modalFollowPos01 (int osc) const noexcept
+        {
+            switch (osc)
+            {
+                case 0: return (engine_  == Engine::MODAL && modalEngA_[0].isActive()) ? modalEngA_[0].readPos01() : -1.f;
+                case 1: return (engineB_ == Engine::MODAL && modalEngB_[0].isActive()) ? modalEngB_[0].readPos01() : -1.f;
+                case 2: return (engineC_ == Engine::MODAL && modalEngC_[0].isActive()) ? modalEngC_[0].readPos01() : -1.f;
+                case 3: return (engineD_ == Engine::MODAL && modalEngD_[0].isActive()) ? modalEngD_[0].readPos01() : -1.f;
+                default: return -1.f;
+            }
+        }
         // Packed follower position for an EXACT trace along the drawn curve:
         // stageIndex (0=Idle,1=Delay,2=Attack,3=Hold,4=Decay,5=Sustain,6=Release)
         // plus the fraction through that segment. Encoded as stage + frac (e.g. 2.37

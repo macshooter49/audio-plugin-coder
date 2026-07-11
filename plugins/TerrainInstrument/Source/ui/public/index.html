@@ -3930,8 +3930,45 @@ body {
 #syn-panel .harm-knob-wrap.pg2 .harm-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 /* MODAL-ENGINE knob panel — mirrors .harm-knob-wrap, 2 pages × 5 knobs, thin-white arrow */
 #syn-panel .modal-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
+/* ── MODAL wears the SAMPLE shell (mv2) — structurally IDENTICAL to Granular: front-only is
+   hidden and the 10 modal knobs live INSIDE the sample-view (moved next to samp-knob-wrap),
+   so the waveform pane + knob row share Granular's exact flex geometry → pixel-aligned top &
+   bottom. (mv1 stacked sample-view + front-only as two boxes, which mis-seated the knobs 8px.) ── */
+#syn-panel .device.osc.engine-modal:not(.swapped) .front-only  { display: none; }
+#syn-panel .device.osc.engine-modal:not(.swapped) .sample-view { display: flex; }
 #syn-panel .device.osc.engine-modal:not(.swapped) .modal-knob-wrap { display: flex; }
-#syn-panel .device.osc.engine-modal:not(.swapped) .front-only .osc-knobs:not(.modal-knobs) { display: none; }
+#syn-panel .device.osc.engine-modal .sample-view .samp-knob-wrap { display: none; }             /* Modal uses its own 10 knobs, not Scan/Stretch/Formant */
+#syn-panel .device.osc.engine-modal .samp-head { display: inline-flex; align-items: center; gap: 11px; margin-left: 5px; }
+#syn-panel .device.osc.engine-modal .samp-head .samp-sel.snap { display: none; }                /* no transient-snap on the exciter (mirror Resynth) */
+/* mv3 — MODAL header: the loop-mode selector wears the SAME padded purple-box pill as the
+   family/form (.preset-display), so One-Shot · Grand · Concert are identical, aligned pills —
+   fixes (1) the loop mode sitting higher/un-padded vs the families and (2) it now "stays in the
+   purple box" on hover exactly like the family selector. */
+#syn-panel .device.osc.engine-modal .samp-head .samp-sel-disp {
+  font-size: 9.5px; font-weight: 300; letter-spacing: 0.8px;
+  padding: 2px 6px; border-radius: 5px; transition: background .12s ease, color .12s ease;
+}
+#syn-panel .device.osc.engine-modal .samp-head .samp-sel:hover .samp-sel-disp {
+  background: rgba(139,92,246,0.15); color: var(--text-primary);
+}
+/* mv3 — the padded loop-mode pill makes the LEFT header cluster (Modal · One-Shot) a hair taller,
+   so nudge the corner-preset (Grand · Concert · [A] · [+]) down 2px to match → all four centered. */
+#syn-panel .device.osc.engine-modal .device-corner-preset { top: 6px; }
+/* mv4 — WKWebView (the plugin's real engine) seats BLOCK text (.preset-display families) lower
+   inside its box than INLINE text (.samp-sel-disp loop mode), so the families rendered low even
+   though the boxes measured aligned. Flex-CENTER the glyphs in both (engine-independent, no
+   baseline dependency) → every header pill's text sits on the same line. */
+#syn-panel .device.osc.engine-modal .md-fam-wrap .preset-display,
+#syn-panel .device.osc.engine-modal .samp-head .samp-sel-disp {
+  display: inline-flex; align-items: center; line-height: 1;
+}
+/* mv5 — measured in the REAL engine (WKWebView, Range/glyph bounds): the family glyphs still land
+   1.5px lower than the loop-mode/engine glyphs. Nudge ONLY the family TEXT up so Grand/Concert sit
+   on the exact same line as One-Shot · Modal (the [A]/[+] boxes are already aligned, so don't move them). */
+#syn-panel .device.osc.engine-modal .md-fam-wrap .preset-display { position: relative; top: -1.5px; }
+/* drop the loop-mode ▾ arrow on Modal so One-Shot matches the family pills (they have no arrow) —
+   also removes the small low mark it left between One-Shot and Grand. */
+#syn-panel .device.osc.engine-modal .samp-head .samp-sel::after { display: none; }
 #syn-panel .modal-knob-wrap .modal-knobs { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
 #syn-panel .modal-knob-wrap .modal-pg2 { display: none; }
 #syn-panel .modal-knob-wrap.pg2 .modal-pg1 { display: none; }
@@ -5310,7 +5347,7 @@ body {
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">A</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">A</span></span><!-- S/N chips removed: SUB is a per-osc box; noise → one shared engine (mid) -->
               <button class="swap-btn" type="button" id="osc-a-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -5376,23 +5413,6 @@ body {
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
-              <div class="modal-knob-wrap">
-              <div class="osc-knobs modal-knobs modal-pg1">
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
-              </div>
-              <div class="osc-knobs modal-knobs modal-pg2">
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-              </div>
-              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
-              </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
                    Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
@@ -5421,6 +5441,23 @@ body {
                 <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -5581,7 +5618,7 @@ body {
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">B</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="ab" title="Toggle">B</span></span><!-- S/N chips removed -->
               <button class="swap-btn" type="button" id="osc-b-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -5647,23 +5684,6 @@ body {
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
-              <div class="modal-knob-wrap">
-              <div class="osc-knobs modal-knobs modal-pg1">
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
-              </div>
-              <div class="osc-knobs modal-knobs modal-pg2">
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-              </div>
-              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
-              </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
                    Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
@@ -5692,6 +5712,23 @@ body {
                 <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -5868,7 +5905,7 @@ body {
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">C</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">C</span></span><!-- S/N chips removed -->
               <button class="swap-btn" type="button" id="osc-c-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -5934,23 +5971,6 @@ body {
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
-              <div class="modal-knob-wrap">
-              <div class="osc-knobs modal-knobs modal-pg1">
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
-              </div>
-              <div class="osc-knobs modal-knobs modal-pg2">
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-              </div>
-              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
-              </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
                    Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
@@ -5979,6 +5999,23 @@ body {
                 <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -6139,7 +6176,7 @@ body {
                 </optgroup>
               </select>
               </span>
-              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">D</span><span class="sn-chip" data-sn="sub" title="Sub oscillator">S</span><span class="sn-chip" data-sn="noise" title="Noise oscillator">N</span></span>
+              <span class="osc-emblems"><span class="osc-letter" data-slot="cd" title="Toggle">D</span></span><!-- S/N chips removed -->
               <button class="swap-btn" type="button" id="osc-d-swap-btn" aria-label="Back panel"></button>
             </div>
             <!-- FRONT VIEW (default) — Phase 11a v14 layout -->
@@ -6205,23 +6242,6 @@ body {
               </div>
               <div class="harm-arrow" role="button" tabindex="0" title="Harmonic sculpt — Carve · Churn · Root · Shine · Wilt · Forge" aria-label="More Harmonic controls"></div>
               </div>
-              <div class="modal-knob-wrap">
-              <div class="osc-knobs modal-knobs modal-pg1">
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
-              </div>
-              <div class="osc-knobs modal-knobs modal-pg2">
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
-              </div>
-              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
-              </div>
               <!-- RESYNTH ENGINE knobs (RESYNTH-ENGINE-UI) — shown when engine == Resynth (SPEC=3).
                    Page 1 = Play (Scan Stretch Sieve Cut Shape Drive); the thin white arrow flips to
                    Page 2 = Sculpt (Quality Formant Tilt Crush Start). Auto-bound via .knob[data-syn].
@@ -6250,6 +6270,23 @@ body {
                 <div class="fade-cv fo" title="Fade curve — drag up / down"></div>
                 <div class="samp-drop">＋&nbsp;&nbsp;Drop sample here</div>
                 <svg class="samp-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" title="Chop editor"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>
+              </div>
+              <div class="modal-knob-wrap">
+              <div class="osc-knobs modal-knobs modal-pg1">
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_HARD" title="Hard — exciter hardness: soft mallet/felt left, hard stick/pick right"><div class="knob-ring"></div><div class="knob-label">Hard</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_POS" title="Pos — strike/pluck/bow point: bridge to middle; sweeps the node comb / mode balance"><div class="knob-ring"></div><div class="knob-label">Pos</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_DECAY" title="Decay — ring time: tight staccato left, near-infinite sustain right"><div class="knob-ring"></div><div class="knob-label">Decay</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_MATERIAL" title="Material — what it&#39;s made of: dull wood/felt left, ringing glass/metal right"><div class="knob-ring"></div><div class="knob-label">Material</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_BREATH" title="Breath — continuous drive: plucked/struck left, bowed/blown sustain + air right"><div class="knob-ring"></div><div class="knob-label">Breath</div></div>
+              </div>
+              <div class="osc-knobs modal-knobs modal-pg2">
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_STRETCH" title="Stretch — inharmonicity: pure harmonic left, piano-stiff to bell/gong right"><div class="knob-ring"></div><div class="knob-label">Stretch</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_BLOOM" title="Bloom — post-attack life: dead left, blooms open and shimmers alive right"><div class="knob-ring"></div><div class="knob-label">Bloom</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_HALO" title="Halo — sympathetic resonance: dry left, beating two-stage halo right"><div class="knob-ring"></div><div class="knob-label">Halo</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_AGE" title="Age — condition: pristine left, worn/detuned/buzzy human right (per-note round robin)"><div class="knob-ring"></div><div class="knob-label">Age</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_MODAL_BODY" title="Body — resonator body + capture: raw string left, full resonant body + stereo right"><div class="knob-ring"></div><div class="knob-label">Body</div></div>
+              </div>
+              <div class="modal-arrow" role="button" tabindex="0" title="Modal sculpt — Stretch · Bloom · Halo · Age · Body" aria-label="More Modal controls"></div>
               </div>
               <div class="samp-knob-wrap">
               <div class="osc-knobs samp-knobs">
@@ -10561,7 +10598,7 @@ setTimeout(function wireSynControls () {
           // Engine-conditional front: Sample engine (index 1) swaps the wavetable
           // front for the .sample-view. Redraw its canvas when it becomes visible
           // (a hidden canvas has zero size, so the initial draw is a no-op).
-          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); var isModal = (i === 6); dev.classList.toggle ('engine-modal', isModal); if ((isSamp || isGran) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
+          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); var isModal = (i === 6); dev.classList.toggle ('engine-modal', isModal); if ((isSamp || isGran || isModal) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
         function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 6); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {}
           // MENU-STUCK MITIGATION — WKWebView can leave a native <select> unable to REOPEN after a
           // change that mutates its own subtree (switching an osc to FM re-lays-out the osc view).

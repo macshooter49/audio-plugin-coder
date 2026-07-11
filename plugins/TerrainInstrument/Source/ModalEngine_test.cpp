@@ -238,6 +238,65 @@ int main()
                + "Hz (target 196, rms=" + std::to_string (rms).substr(0,6) + ")");
     }
 
+    // ── 11. exciter LOOP MODES: continuous excitation must SUSTAIN without runaway; follower valid ──
+    std::printf ("\n11. exciter loop modes (sustain + follower, no runaway):\n");
+    {
+        std::vector<float> snap ((size_t) (SR * 0.05));   // 50ms broadband exciter
+        std::uint32_t r = 999u; float z = 0.f;
+        for (size_t i = 0; i < snap.size(); ++i)
+        { r = r*1664525u+1013904223u; float n=(float)(r>>8)*(1.f/16777216.f)*2.f-1.f; z += 0.25f*(n-z); snap[i]=z; }
+        const char* nm[4] = { "One-Shot", "Forward", "Reverse", "Ping-Pong" };
+        for (int mode = 0; mode < 4; ++mode)
+        {
+            ModalEngine e; e.prepare (SR, true);
+            ModalParams p; p.family = modal::BOW; p.source = 3; p.decay = 0.7f; p.breath = 0.5f; p.loopMode = mode;
+            e.setParams (p); e.setExciterSample (snap.data(), (int) snap.size(), SR);
+            e.setPlayedHz (220.0); e.noteOn (220.0, 60u, 0.9f);
+            std::vector<float> L(128), R(128); double peak = 0; bool posOk = true, sawPos = false, finite = true;
+            for (int pos = 0; pos < (int) (SR * 2.0); pos += 128)
+            { std::fill (L.begin(),L.end(),0.f); std::fill (R.begin(),R.end(),0.f);
+              e.renderBlockAdd (L.data(), R.data(), 128);
+              for (int i=0;i<128;++i){ float v=L[i]; if(!std::isfinite(v)) finite=false; if(std::fabs(v)>peak) peak=std::fabs(v); }
+              float fp = e.readPos01(); if (fp >= 0.f){ sawPos=true; if(fp<-0.001f||fp>1.001f) posOk=false; } }
+            const bool ok = finite && peak < 8.0 && posOk && sawPos;   // bounded, no NaN, follower position valid
+            check (ok, std::string(nm[mode]) + ": peak=" + std::to_string(peak).substr(0,5)
+                       + (finite?"":" NONFINITE") + (posOk?"":" BADPOS") + (sawPos?"":" NOPOS"));
+        }
+    }
+
+    // ── 12. Sample/Granular LOOP-CATCH: the follower must START at the sample beginning, play a
+    //        forward LEAD-IN, and only once it reaches the purple box [0.30,0.60] loop THERE — Max's
+    //        refinement ("start at the beginning THEN when it reaches the box, loop"). So: first
+    //        readable pos ≈ 0 (NOT in the box), steady-state pos confined to [0.30,0.60]. ──
+    std::printf ("\n12. loop-catch: lead-in from start → loop in box [0.30,0.60]:\n");
+    {
+        std::vector<float> snap ((size_t) (SR * 0.20));   // 200ms exciter so lead-in + sub-region are meaningful
+        std::uint32_t r = 4242u; float z = 0.f;
+        for (size_t i = 0; i < snap.size(); ++i)
+        { r = r*1664525u+1013904223u; float n=(float)(r>>8)*(1.f/16777216.f)*2.f-1.f; z += 0.25f*(n-z); snap[i]=z; }
+        const char* nm[3] = { "Forward", "Reverse", "Ping-Pong" };
+        for (int mode = 1; mode <= 3; ++mode)
+        {
+            ModalEngine e; e.prepare (SR, true);
+            ModalParams p; p.family = modal::BOW; p.source = 3; p.decay = 0.7f; p.breath = 0.5f;
+            p.loopMode = mode; p.loopStart = 0.30f; p.loopEnd = 0.60f;
+            e.setParams (p); e.setExciterSample (snap.data(), (int) snap.size(), SR);
+            e.setPlayedHz (220.0); e.noteOn (220.0, 77u, 0.9f);
+            float firstPos = -1.f, slo = 1.f, shi = 0.f; int nSteady = 0;
+            const int total = (int) (SR * 1.2);
+            for (int pos = 0; pos < total; pos += 64)
+            { std::vector<float> L(64,0.f), R(64,0.f); e.renderBlockAdd (L.data(), R.data(), 64);
+              float fp = e.readPos01(); if (fp < 0.f) continue;
+              if (firstPos < 0.f) firstPos = fp;
+              if (pos > (int) (SR * 0.5)) { ++nSteady; if (fp<slo) slo=fp; if (fp>shi) shi=fp; } }
+            const bool leadIn = (firstPos >= 0.f && firstPos < 0.20f);                 // began at the START, not in the box
+            const bool inBox  = (nSteady > 50) && (slo >= 0.30f - 0.02f) && (shi <= 0.60f + 0.02f);
+            check (leadIn && inBox, std::string(nm[mode-1]) + ": start=" + std::to_string(firstPos).substr(0,4)
+                       + " (want <0.20) steady=[" + std::to_string(slo).substr(0,4) + "," + std::to_string(shi).substr(0,4)
+                       + "] (want in [0.30,0.60])" + (leadIn?"":" NO-LEADIN") + (inBox?"":" NOT-IN-BOX"));
+        }
+    }
+
     std::printf ("\n═══ %d passed, %d failed ═══\n", gPass, gFail);
     return gFail == 0 ? 0 : 1;
 }

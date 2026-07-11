@@ -70,6 +70,9 @@ struct ModalParams
     int   family = modal::GRAND;   // 0..8
     int   form   = 0;              // 0..4 — the instrument variant inside the family
     int   source = 0;              // 0 Auto · 1 Noise · 2 Click · 3 Sample (exciter select)
+    int   loopMode = 0;            // 0 One-Shot · 1 Forward · 2 Reverse · 3 Ping-Pong — exciter read (loop-mode header)
+    float loopStart = 0.f;        // exciter loop region start 0..1 (the PURPLE BOX) — looped read is confined here
+    float loopEnd   = 1.f;        // exciter loop region end   0..1 (the PURPLE BOX)
 
     float hard    = 0.5f;   // exciter hardness / contact time
     float pos     = 0.28f;  // excitation position
@@ -87,7 +90,8 @@ struct ModalParams
         return family==o.family && form==o.form && source==o.source
             && hard==o.hard && pos==o.pos && decay==o.decay && material==o.material
             && breath==o.breath && stretch==o.stretch && bloom==o.bloom
-            && halo==o.halo && age==o.age && body==o.body;
+            && halo==o.halo && age==o.age && body==o.body && loopMode==o.loopMode
+            && loopStart==o.loopStart && loopEnd==o.loopEnd;
     }
     bool operator!= (const ModalParams& o) const noexcept { return ! (*this == o); }
 };
@@ -128,10 +132,19 @@ public:
 
     void setPartialBudget (int* used, int cap) noexcept { budgetUsed_ = used; budgetCap_ = cap; }
     void setUnisonScale (int n) noexcept { uniN_ = n < 1 ? 1 : n; }
-    void setParams (const ModalParams& p) noexcept { p_ = p; }
+    void setParams (const ModalParams& p) noexcept { p_ = p; computeLoopBounds(); }
     void setPitchRatio (double r) noexcept { pitchMul_ = r > 0.0 ? r : 1.0; }
     void setPlayedHz (double hz) noexcept { if (hz > 8.0) playedHz_ = hz; }
     void setDisplayMode (bool on) noexcept { displayMode_ = on; }
+    // ── follower: exciter read position 0..1 — drives the white MIDI follower EXACTLY like
+    //    Sample/Granular/Resynth. -1 when not reading a sample exciter; one-shot parks when done. ──
+    bool  isActive() const noexcept { return active_; }
+    float readPos01() const noexcept
+    {
+        if (! (useSample_ && active_ && exDataLen_ > 1)) return -1.f;
+        if (p_.loopMode == 0 && exPos_ >= exLen_) return -1.f;   // one-shot finished → follower parks
+        return clamp01 (exRead_ / (float) (exDataLen_ - 1));
+    }
 
     // Exciter sample: the dropped one-shot (mono view). Borrowed pointer — the owner
     // (SynthVoice/SampleBuffer) outlives the note. Used when source == Sample (or Auto
@@ -141,6 +154,7 @@ public:
         exData_ = (data && len > 1) ? data : nullptr;
         exDataLen_ = exData_ ? len : 0;
         exSrcStep_ = (srcRate > 1000.0) ? (float) (srcRate / rate_) : 1.f;
+        computeLoopBounds();   // purple-box indices depend on the new length
     }
 
     // ════════════════════════════ note lifecycle ════════════════════════════
@@ -706,6 +720,22 @@ private:
     }
 
     // ═══════════════════════════ excitation ══════════════════════════════════
+    // Map the purple-box fractions (loopStart/loopEnd) → exciter sample indices [loopLo_,loopHi_].
+    // Called at block-rate (setParams / setExciterSample) and at note-on so the looped read tracks
+    // the box live, exactly like the Sample engine's setRegionParams. Guards a degenerate/inverted box.
+    void computeLoopBounds() noexcept
+    {
+        if (exDataLen_ > 1)
+        {
+            const float Nm1 = (float) (exDataLen_ - 1);
+            float lo = clamp01 (p_.loopStart) * Nm1;
+            float hi = clamp01 (p_.loopEnd)   * Nm1;
+            if (hi < lo + 1.f) { hi = lo + 1.f; if (hi > Nm1) { hi = Nm1; lo = hi - 1.f; if (lo < 0.f) lo = 0.f; } }
+            loopLo_ = lo; loopHi_ = hi;
+        }
+        else { loopLo_ = 0.f; loopHi_ = 0.f; }
+    }
+
     void primeExcitation() noexcept
     {
         // choose exciter: Sample if loaded & (source==Sample or Auto), else Click/Noise.
@@ -720,6 +750,12 @@ private:
         noiseCut_ = 300.f * std::pow (2.f, lerpf (1.f, 7.f, clamp01 (0.35f * hard + 0.5f * vel_ + 0.15f)));
         noiseZ_ = 0.f;
         exLen_ = useSample_ ? exDataLen_ : burstLen_;
+        // exciter read start/direction. LOOP modes start at the sample BEGINNING (exRead_=0) and play a
+        // forward LEAD-IN; once the read first reaches the purple box they "catch" and loop within
+        // [loopLo_,loopHi_] — exactly the Sample/Granular loop-catch model. (exRead_ is already 0 above.)
+        computeLoopBounds();
+        exDir_  = 1;
+        caught_ = false;
 
         // continuous drive (bow/breath) target set from BREATH; sustained families always drive
         const float breath = clamp01 (p_.breath);
@@ -740,17 +776,38 @@ private:
         float e = 0.f;
 
         // ── impulsive part: burst / sample (strings + modal + attack of winds) ──
-        if (exPos_ < exLen_)
+        const bool sampleLoop = useSample_ && exData_ && p_.loopMode != 0 && exDataLen_ > 1;
+        if (exPos_ < exLen_ || sampleLoop)
         {
             float raw;
             if (useSample_ && exData_)
             {
-                const int idx = (int) exRead_;
+                int idx = (int) exRead_;
+                if (idx < 0) idx = 0; else if (idx > exDataLen_ - 1) idx = exDataLen_ - 1;
                 raw = (idx < exDataLen_ - 1)
                     ? lerpf (exData_[(size_t) idx], exData_[(size_t) (idx + 1)], exRead_ - (float) idx)
-                    : 0.f;
-                exRead_ += exSrcStep_;
-                if ((int) exRead_ >= exDataLen_) exPos_ = exLen_;    // sample done
+                    : exData_[(size_t) (exDataLen_ - 1)];
+                exRead_ += exSrcStep_ * (float) exDir_;
+                // loop-mode boundary handling — Sample/Granular LOOP-CATCH model: play a forward
+                // LEAD-IN from the sample start, and only once the read first reaches the purple box
+                // [loopLo_,loopHi_] does it "catch" and loop THERE. One-Shot ignores the box (reads once).
+                const float span = loopHi_ - loopLo_;
+                if (p_.loopMode == 0) { if ((int) exRead_ >= exDataLen_) exPos_ = exLen_; }          // One-Shot: stop at buffer end
+                else if (span < 1.f)  { if (exRead_ >= loopLo_) exRead_ = loopLo_; }                  // degenerate box → lead-in then hold
+                else
+                {
+                    // catch on first reaching the box's far edge (= loop end); Rev/Ping then turn back there.
+                    if (! caught_ && (exRead_ >= loopHi_ || (int) exRead_ >= exDataLen_ - 1))
+                    { caught_ = true; if (exRead_ > loopHi_) exRead_ = loopHi_; if (p_.loopMode != 1) exDir_ = -1; }
+                    if (caught_)
+                    {
+                        if      (p_.loopMode == 1) { if (exRead_ >= loopHi_) exRead_ -= span; }        // Forward loop in box
+                        else if (p_.loopMode == 2) { if (exRead_ <= loopLo_) exRead_ += span; }        // Reverse loop in box
+                        else { if      (exRead_ >= loopHi_) { exRead_ = loopHi_; exDir_ = -1; }         // Ping-Pong in box
+                               else if (exRead_ <= loopLo_) { exRead_ = loopLo_; exDir_ =  1; } }
+                    }
+                }
+                if (p_.loopMode != 0) raw *= 0.5f;   // a looped exciter drives continuously — tame it so the resonator can't run away
             }
             else
             {
@@ -762,7 +819,7 @@ private:
                 if (p_.source == 2) raw = (exPos_ == 0 ? 1.f : raw * 0.2f);   // Click = a spike + tail
             }
             e += raw * exciteGain_;
-            ++exPos_;
+            if (! sampleLoop) ++exPos_;   // looping keeps exPos_ < exLen_ so the impulsive gate stays open; exRead_ drives the loop
         }
         else if (rollLeft_ > 0)                               // AGE multi-strike roll
         {
@@ -1019,8 +1076,9 @@ private:
     // excitation
     const float* exData_ = nullptr; int exDataLen_ = 0; float exSrcStep_ = 1.f;
     bool   useSample_ = false;
-    int    exPos_ = 0, exLen_ = 0, burstLen_ = 64;
-    float  exRead_ = 0.f, noiseCut_ = 2000.f, noiseZ_ = 0.f, exciteGain_ = 1.f;
+    int    exPos_ = 0, exLen_ = 0, burstLen_ = 64, exDir_ = 1;
+    bool   caught_ = false;   // loop-catch: has the forward lead-in reached the purple box yet?
+    float  exRead_ = 0.f, loopLo_ = 0.f, loopHi_ = 0.f, noiseCut_ = 2000.f, noiseZ_ = 0.f, exciteGain_ = 1.f;
     float  contDrive_ = 0.f, driveZ_ = 0.f;
     int    rollLeft_ = 0, rollTimer_ = 0;
 
