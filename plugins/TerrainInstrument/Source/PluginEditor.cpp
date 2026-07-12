@@ -512,6 +512,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         static_cast<bool>(args[0]) ? 1.0f : 0.0f);
                 complete(juce::var{});
             })
+            .withNativeFunction("setSynParam", [this](const juce::Array<juce::var>& args,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // DIRECT APVTS write — bypasses the WebSliderRelay. At this plugin's scale
+                // (700+ relays) the MODAL engine's relays silently failed to reach the APVTS:
+                // the knob ring moved (JS handler ran) but the parameter never changed, so the
+                // audio thread read the default forever. This writes the value straight to the
+                // parameter (same mechanism as setDelayFreeze), which the processor reads live.
+                // args = [ paramId (string), normalised 0..1 ].
+                if (args.size() >= 2)
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (args[0].toString()))
+                        p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, static_cast<float> (static_cast<double> (args[1]))));
+                complete (juce::var{});
+            })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
