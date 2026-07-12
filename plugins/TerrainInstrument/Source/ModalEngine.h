@@ -113,6 +113,7 @@ public:
         for (auto& m : modes_)  m = Mode {};
         for (auto& b : body_)   b = Biquad {};
         for (auto& d : disp_)   d = AllpassS {};
+        for (auto& d : dispB_)  d = AllpassS {};
         reset();
         gNorm_ = 1.f;
     }
@@ -121,10 +122,11 @@ public:
     {
         dlA_.clear(); dlB_.clear(); combA_.clear(); combB_.clear();
         boreN_.clear(); boreB_.clear();
-        lpA_.reset(); lpB_.reset(); ozA_.reset(); ozB_.reset(); dcA_.reset(); dcB_.reset(); dcOut_.reset();
+        lpA_.reset(); lpB_.reset(); ozA_.reset(); ozB_.reset(); dcA_.reset(); dcB_.reset(); dcOut_.reset(); matEq_.reset();
         for (auto& m : modes_) m.reset();
         for (auto& b : body_)  b.reset();
         for (auto& d : disp_)  d.reset();
+        for (auto& d : dispB_) d.reset();
         active_ = false; ringDown_ = false; exPos_ = 0; exLen_ = 0;
         env_ = 0.f; envRel_ = 1.f; bloomEnv_ = 0.f; bloomLpZ_ = 0.f; bloomLfo_ = 0.f; driveZ_ = 0.f;
         bowPhase_ = 0.f; lipY1_ = 0.f; ampZ_ = 0.f; silentBlocks_ = 0;
@@ -170,7 +172,7 @@ public:
 
         active_ = true; ringDown_ = false;
         env_ = 0.f; envRel_ = 1.f; bloomEnv_ = 0.f; driveZ_ = 0.f;
-        ampZ_ = 0.f; silentBlocks_ = 0;
+        ampZ_ = 0.f; silentBlocks_ = 0; relGain_ = 1.f;
     }
 
     void noteOff() noexcept
@@ -191,6 +193,7 @@ public:
         const float gl   = 0.7071f * (1.f - 0.5f * pan);
         const float gr   = 0.7071f * (1.f + 0.5f * pan);
         const float relK = 1.f - std::exp (-1.f / (0.006f * (float) rate_));   // 6 ms release-fade smoother
+        const float relDampK = 1.f - std::exp (-1.f / (0.012f * (float) rate_)); // 12 ms damper-close smoother
         float peak = 0.f;
 
         for (int i = 0; i < n; ++i)
@@ -198,7 +201,10 @@ public:
             // amp envelope: percussive families own their decay in the resonator, so the
             // "env" here is only an attack de-click + note-off release-fade (ring-tail law).
             if (ringDown_)
-                envRel_ += relK * (0.f - envRel_);      // fade the DRIVE, not the tail (resonator rings out)
+            {
+                envRel_ += relK * (0.f - envRel_);      // fade the DRIVE (bow/breath), not the tail
+                relGain_ += relDampK * (relGainTarget_ - relGain_);   // GRAND: the damper closes on the string
+            }
             const float excite = nextExcitation (i);    // strike burst / continuous bow/breath
 
             float s = 0.f;
@@ -424,6 +430,7 @@ private:
     {
         core_ = modal::coreOf (p_.family);
         const float f0 = (float) (playedHz_ * pitchMul_);
+        keyN_ = std::min (88.f, std::max (0.f, 12.f * std::log2 (std::max (8.f, f0) / 27.5f)));  // 0=A0 · 27=C3 · 39=C4 · 87=C8
 
         // ── AGE: bounded, physical, per-note (reads as human, not chorus) ──
         const float age = clamp01 (p_.age);
@@ -454,6 +461,10 @@ private:
 
         if (core_ == 2)  buildModal (fHz, fm, pos, mtrl, dec, str, body);
         else             buildLoops (fHz, fm, pos, mtrl, dec, str, body);
+
+        // GRAND note-off DAMPER target: on key-up the string is damped to a fast decay (effective per-trip
+        // gain ~0.72 → ~120-200 ms, faster in the treble). Only bites when the note rings longer than that.
+        relGainTarget_ = (p_.family == modal::GRAND) ? std::min (1.f, 0.72f / std::max (0.1f, loopGain_)) : 1.f;
 
         // BODY biquads (bowed / brass / plucked radiation) — a few peaking resonances
         buildBody (fm, body);
@@ -597,27 +608,63 @@ private:
         const float bright = fm.bright;
         // brightness of the loop damping filter (MATERIAL × form). The one-zero averager in
         // the string loop kills Nyquist, so this one-pole only shapes the audible tilt.
-        const float cut = 300.f * std::pow (2.f, lerpf (0.5f, 6.0f, clamp01 (mtrl * 0.7f + bright * 0.3f)));
+        // GRAND stays a STEEL piano string at BOTH ends of MATERIAL — the floor is RAISED to ~1400 Hz
+        // (the old ~600-800 Hz floor is what made MATERIAL<50% sound like a dead nylon guitar). Warm hall
+        // piano ↔ brilliant new hammers, steel throughout. Other families keep the wide wood↔metal sweep.
+        float cut;
+        if (p_.family == modal::GRAND)
+            cut = lerpf (1400.f, 7000.f, clamp01 (0.72f * mtrl + 0.18f * clamp01 (p_.hard) + 0.10f * bright));
+        else
+            cut = 300.f * std::pow (2.f, lerpf (0.5f, 6.0f, clamp01 (mtrl * 0.7f + bright * 0.3f)));
         lpA_.setCutoff (std::min (cut, 0.45f * (float) rate_), (float) rate_);
         lpB_.setCutoff (std::min (cut * 0.96f, 0.45f * (float) rate_), (float) rate_);
+        // GRAND MATERIAL also tilts the OUTPUT presence (2.6 kHz): the loop cutoff shapes only the
+        // weak top partials, so this bell is what actually sweeps the AUDIBLE warm↔brilliant range.
+        if (p_.family == modal::GRAND)
+            matEq_.peaking (2000.f, (float) rate_, 0.5f, lerpf (-9.f, 8.f, mtrl));   // wide presence tilt
 
         // loop gain from DECAY (RT60). g close to 1 = long ring. Strings ride the one-zero
         // (a hair of loss per trip) so cap a touch below unity to stay well-behaved.
-        loopGain_ = lerpf (0.972f, 0.99965f, std::pow (dec, 0.7f));
+        if (p_.family == modal::GRAND)
+        {
+            // register-scaled RT60: bass rings ~2-3× longer than treble (real piano); DECAY spans
+            // staccato (~0.1 s) → pedal-up cathedral. g = the per-trip gain that hits that T60 at f0.
+            const float t60 = (0.10f * std::pow (2.f, 8.f * dec)) * lerpf (1.8f, 0.4f, clamp01 (keyN_ / 88.f));
+            loopGain_ = std::min (0.99995f, std::exp (-6.9078f / std::max (1e-3f, t60 * f0)));
+        }
+        else
+            loopGain_ = lerpf (0.972f, 0.99965f, std::pow (dec, 0.7f));
 
-        // dispersion (STRETCH → piano stiffness B): allpass cascade stretches partials sharp
-        const float sc = clamp01 ((str - 0.5f) * 2.f);   // only the >0.5 half stiffens
-        buildDispersion (sc, f0);
+        // dispersion (piano stiffness B): allpass cascade stretches upper partials sharp.
+        float dispAmt;
+        if (p_.family == modal::GRAND)
+        {
+            // A real piano is ALWAYS stiff — bake key-scaled inharmonicity ON by default (a perfectly
+            // harmonic comb is the #1 "synth/organ" tell). Railsback U-curve B(key), min at C3; STRETCH
+            // scales it a REALISTIC ×0.33 (near-flat) … ×1 (measured grand) … ×3 (honky-tonk) — never
+            // a bell/gong detune sweep. The fundamental is pitch-anchored in buildDispersion (a-C-is-a-C).
+            const float kn = keyN_;
+            const float log10B = (kn <= 27.f) ? (-3.40f - 0.45f * (kn / 27.f))          // A0≈4e-4 → C3≈1.4e-4
+                                              : (-3.85f + 2.25f * ((kn - 27.f) / 60.f)); // C4≈4e-4 → C8≈2.5e-2
+            const float Beff = std::pow (10.f, log10B) * std::pow (3.f, (str - 0.5f) * 2.f);
+            dispAmt = clamp01 ((std::log10 (std::max (1e-6f, Beff)) + 4.30f) / 2.78f);   // perceptual B → allpass strength
+        }
+        else
+            dispAmt = clamp01 ((str - 0.5f) * 2.f);   // other string families: only STRETCH>0.5 stiffens
+        buildDispersion (dispAmt, f0);
 
         // fundamental period, phase-delay compensated so a C is a C (string loop adds the
         // one-zero's ½-sample delay; MSW loops don't run the averager).
         const float lpPd = lpA_.phaseDelay();
         const float ozPd = (core_ == 0) ? 0.5f : 0.f;
         float period = (float) rate_ / std::max (20.f, f0);
-        float dispPd = dispActive_ ? (float) modal::kDispStages * dispPhaseDelay_ : 0.f;
+        float dispPd = dispActive_ ? dispPhaseDelay_ : 0.f;   // dispPhaseDelay_ = exact TOTAL allpass delay at f0
         float La = period - lpPd - ozPd - dispPd - 1.f;
         // HALO: dual-polarization detune (beating + two-stage decay) — audible chorus at max
-        const float haloCents = clamp01 (p_.halo) * 14.0f;
+        // GRAND runs a permanent slightly-detuned unison TWIN (piano strings) → coupled beating + a
+        // two-stage decay; HALO adds MORE sympathetic detune on top. Other string families detune via HALO only.
+        const float baseCents = (p_.family == modal::GRAND) ? 1.0f : 0.f;
+        const float haloCents = baseCents + clamp01 (p_.halo) * 14.0f;
         float Lb = ((float) rate_ / std::max (20.f, f0 * centsMul (haloCents))) - lpPd - ozPd - dispPd - 1.f;
         La = std::max (2.f, std::min ((float) modal::kMaxDelay - 3.f, La));
         Lb = std::max (2.f, std::min ((float) modal::kMaxDelay - 3.f, Lb));
@@ -627,6 +674,7 @@ private:
         combLen_ = std::max (1.f, (0.5f * clamp01 (pos + agePosJit_)) * period);
         combA_.setDelay (combLen_); combB_.setDelay (combLen_);
         combDepth_ = 0.5f + 0.4f * clamp01 (pos);
+        combNorm_  = 1.f / std::sqrt (1.f + combDepth_ * combDepth_);   // energy-normalize the strike comb → POS is a TIMBRE knob, not a level/clip one
 
         // MSW families: set up the bore/nut delays + nonlinearity parameters
         if (core_ == 1)
@@ -689,17 +737,41 @@ private:
     {
         dispActive_ = (amt > 0.02f);
         dispPhaseDelay_ = 0.f;
-        if (! dispActive_) { for (auto& d : disp_) { d.reset(); d.set (0.f, 0.f); } return; }
-        // stiffness allpass (STK StifKarp style): each stage a 2nd-order stretch
-        const float t = 0.5f + 0.499f * amt;             // 0.5..~1.0
-        const float b0 = t * t;                          // = a2 = b0
-        for (int s = 0; s < modal::kDispStages; ++s)
-        {
-            const float fs_i = f0 * (2.f + (float) s * 1.3f);
-            const float cw = std::cos (2.f * kPi * std::min (fs_i, 0.45f * (float) rate_) * fsInv_);
-            disp_[(size_t) s].set (-2.f * t * cw, b0);   // a1 = -2t·cos, a2 = t²
-        }
-        dispPhaseDelay_ = 1.5f * amt;                    // approx group delay per stage (compensated in La)
+        if (! dispActive_) { for (auto& d : disp_) { d.reset(); d.set (0.f, 0.f); } for (auto& d : dispB_) { d.reset(); d.set (0.f, 0.f); } return; }
+        // stiffness dispersion: a cascade of FIRST-ORDER allpasses with a NEGATIVE coefficient — the
+        // group delay DECREASES with frequency, so upper partials complete the loop sooner and stretch
+        // SHARP (piano inharmonicity f_n = n·f0·√(1+B·n²), Jaffe–Smith / Van Duyne / Rauhala–Välimäki).
+        // AllpassS with a2=0 realizes z⁻¹·AP1(a=−aMag): the z⁻¹ per stage is constant delay (absorbed by
+        // the f0 anchoring below); AP1's a<0 does the frequency-dependent sharpening. |a| grows with B.
+        // strength grows with B; bounded on SHORT (high-note) loops so the dispersion delay can't eat the
+        // period and detune the note (keeps a-C-is-a-C at every register — treble disperses gently).
+        // Coefficient bounded so the f0-anchoring linearization stays accurate (strong dispersion shifts the
+        // fundamental — see Rauhala–Välimäki) AND the delay can't eat a short (high-note) loop → a-C-is-a-C
+        // holds at every register. This gives moderate, pitch-locked piano stiffness (deepening it further
+        // = a closed-form dispersion design, a later refinement). |a| grows with B, tapers with register.
+        const float period = (float) rate_ / std::max (20.f, f0);
+        const float aMag = std::min (0.85f, 0.40f + 1.5f * amt) * clamp01 (period / 240.f);
+        for (int s = 0; s < modal::kDispStages; ++s) { disp_[(size_t) s].set (-aMag, 0.f); dispB_[(size_t) s].set (-aMag, 0.f); }
+        // ── PITCH ANCHORING (a-C-is-a-C): the allpass cascade adds a frequency-dependent delay to the
+        //    loop — measure its EXACT total phase delay AT f0 and compensate La, so the FUNDAMENTAL stays
+        //    locked while the upper partials stretch sharp. (The old `1.5·amt` guess slid the fundamental
+        //    → that was the "STRETCH detunes into a synth" bug.) ──
+        const float w0 = 2.f * kPi * std::min (f0, 0.45f * (float) rate_) * fsInv_;
+        float pd = 0.f;
+        if (w0 > 1e-5f)
+            for (int s = 0; s < modal::kDispStages; ++s)
+            {
+                const float A1 = disp_[(size_t) s].a1, A2 = disp_[(size_t) s].a2;
+                const float c1 = std::cos (w0), s1 = std::sin (w0);
+                const float c2 = std::cos (2.f * w0), s2 = std::sin (2.f * w0);
+                const float Nre = A2 + A1 * c1 + c2,     Nim = -(A1 * s1 + s2);        // H = (a2 + a1 z⁻¹ + z⁻²)/…
+                const float Dre = 1.f + A1 * c1 + A2 * c2, Dim = -(A1 * s1 + A2 * s2);
+                float ph = std::atan2 (Nim, Nre) - std::atan2 (Dim, Dre);
+                while (ph >  0.f)            ph -= 2.f * kPi;                           // wrap into (-2π, 0]
+                while (ph <= -2.f * kPi)     ph += 2.f * kPi;
+                pd += -ph / w0;                                                        // phase delay (samples), ≥ 0
+            }
+        dispPhaseDelay_ = std::max (0.f, pd);            // exact TOTAL allpass delay at f0 (compensated in La)
     }
 
     void buildBody (const Form& fm, float bodyAmt) noexcept
@@ -749,6 +821,24 @@ private:
         // noise burst LP cutoff (velocity → brightness; hard → brightness)
         noiseCut_ = 300.f * std::pow (2.f, lerpf (1.f, 7.f, clamp01 (0.35f * hard + 0.5f * vel_ + 0.15f)));
         noiseZ_ = 0.f;
+        // GRAND: a real FELT HAMMER, not filtered-noise-into-a-string (that is a pluck = the nylon sound).
+        // Contact time is key- + hardness- + velocity-scaled (Chaigne & Askenfelt): bass ~4 ms → treble
+        // <1 ms; harder/louder = shorter = brighter. The exciter is a deterministic force pulse of that width.
+        feltK_ = 0.f; knockLvl_ = 0.f;
+        if (p_.family == modal::GRAND && ! useSample_)
+        {
+            const float tc0 = lerpf (3.2e-3f, 0.6e-3f, clamp01 (keyN_ / 88.f));
+            float tc = tc0 * lerpf (1.4f, 0.28f, hard) * lerpf (1.15f, 0.85f, vel_);
+            tc = std::min (4.0e-3f, std::max (0.25e-3f, tc));   // shorter contact = richer upper partials (less dull)
+            burstLen_ = std::max (2, (int) (tc * (float) rate_));   // contact window = the force-pulse width
+            feltK_    = 0.6f * hard;                                // felt hardening → upper partials with HARD
+            knockLvl_ = 0.04f + 0.10f * hard;                       // contact "thump" (felt knock) amount
+            noiseCut_ = 1500.f + 5000.f * hard;                     // knock brightness
+            // energy-normalize the pulse so HARD is a pure TIMBRE (brightness) control, not a loudness one:
+            // attenuate long (bass) contacts, and compensate the short/bright contacts' higher excitation
+            // efficiency so a hard hit is brighter, NOT louder → hard hits stay clean (no output clip).
+            feltNorm_ = std::min (1.0f, std::sqrt (110.f / (float) burstLen_)) * (1.f - 0.35f * hard);
+        }
         exLen_ = useSample_ ? exDataLen_ : burstLen_;
         // exciter read start/direction. LOOP modes start at the sample BEGINNING (exRead_=0) and play a
         // forward LEAD-IN; once the read first reaches the purple box they "catch" and loop within
@@ -809,6 +899,29 @@ private:
                 }
                 if (p_.loopMode != 0) raw *= 0.5f;   // a looped exciter drives continuously — tame it so the resonator can't run away
             }
+            else if (p_.family == modal::GRAND)
+            {
+                // FELT HAMMER force pulse (deterministic): a raised-cosine contact-force pulse whose WIDTH
+                // is the contact time — that is a STRIKE, not filtered-noise-into-a-string (a pluck). The
+                // Hann pulse's spectrum rolls off above ~1/(2·tc), so contact time IS the attack brightness.
+                const float ph = (float) exPos_ / (float) std::max (1, burstLen_);    // 0..1 across contact
+                float F = 0.5f - 0.5f * std::cos (2.f * kPi * ph);                     // Hann force pulse (unipolar; DC-blocked in the loop)
+                F = F * (1.f + feltK_ * F) / (1.f + feltK_);                           // felt hardening → upper partials, peak-preserved
+                // felt KNOCK: brief filtered-noise contact transient over the first half — contact noise
+                // (realism law #1), NOT the whole exciter.
+                float knock = 0.f;
+                if (ph < 0.5f)
+                {
+                    float nz = rngPm();
+                    noiseZ_ += (1.f - std::exp (-2.f * kPi * noiseCut_ * fsInv_)) * (nz - noiseZ_);
+                    knock = noiseZ_ * knockLvl_ * (1.f - 2.f * ph);                    // fades out across the first half
+                }
+                // a coherent force pulse injects FAR more resonance than the old spread-out noise burst,
+                // so scale it well under the output soft-clip ceiling → hard hits stay clean (louder +
+                // brighter), never digital-clip. Longer (bass) contacts carry more energy → level ∝ 1/√len
+                // keeps the hottest low-note/max-velocity case in the clean zone without squashing dynamics.
+                raw = (F + knock) * (0.36f * feltNorm_);
+            }
             else
             {
                 // shaped noise burst with a raised-cosine window (contact-time envelope)
@@ -848,30 +961,50 @@ private:
     // STRING (waveguide SDL, dual polarization). Excite = injected into the loop.
     inline float tickString (float in) noexcept
     {
+        // GRAND: strike-position comb on the EXCITATION (feedforward) instead of the OUTPUT — POS shapes
+        // which harmonics the hammer excites (node at the strike point) WITHOUT the output comb's resonant
+        // peak boost that pushed high POS into the clip. Other string families keep the output comb below.
+        const float exc = (p_.family == modal::GRAND) ? (in - combA_.tick (in) * combDepth_) * combNorm_ : in;
+
         // polarization A — loop damper = one-zero averager (kills Nyquist) → one-pole tilt
-        float fbA = lpA_.process (ozA_.process (dlA_.peek())) * loopGain_;
+        float fbA = lpA_.process (ozA_.process (dlA_.peek())) * (loopGain_ * relGain_);
         if (dispActive_) { for (int s = 0; s < modal::kDispStages; ++s) fbA = disp_[(size_t) s].process (fbA); }
-        float outA = dlA_.tick (in + fbA);
+        float outA = dlA_.tick (exc + fbA);
         outA = dcA_.process (outA);
         // AGE buzz: sitar/biwa asymmetric bridge rectifier (nonlinear at the top of AGE)
         if (ageBuzz_ > 0.f) { const float v = std::fabs (outA) - 0.02f * ageBuzz_; outA = lerpf (outA, (v > 0.f ? v : 0.f) * (outA > 0.f ? 1.f : -1.5f), ageBuzz_ * 0.5f); }
 
-        // polarization B (HALO): a fully-excited detuned twin that rings LONGER than A. The
-        // mistuned pair beats (chorus/shimmer) and the longer B tail is the piano two-stage
-        // decay — a prompt sound over a slow aftersound. Dry at 0, obvious halo at 1.
-        float sB = 0.f;
-        if (haloAmt_ > 0.02f)
+        // polarization B — the detuned twin string. Uses its OWN dispersion state (dispB_) so the two
+        // polarizations don't corrupt each other's allpass memory when both run every sample.
+        float s;
+        if (p_.family == modal::GRAND)
+        {
+            // GRAND: ALWAYS-ON coupled unison. B rings a hair LONGER than A → Weinreich two-stage decay
+            // (a prompt sound over a slow aftersound); the ~0.7¢ detune (buildLoops Lb) makes the pair
+            // beat = the "alive" piano sustain. Summed as equal partners, scaled to keep the pair's peak
+            // ≈ one string (stays under the soft-clip ceiling — no return of the clipping).
+            // B loses ~⅓ as much energy per round-trip as A → rings ~3× longer = a strong prompt→aftersound
+            // (Weinreich). Clamped stable. This is what makes the sustain "bloom" instead of dying flat.
+            const float gB = std::min (0.99996f, 1.f - (1.f - loopGain_) * 0.32f);
+            float fbB = lpB_.process (ozB_.process (dlB_.peek())) * (gB * relGain_);
+            if (dispActive_) { for (int s2 = 0; s2 < modal::kDispStages; ++s2) fbB = dispB_[(size_t) s2].process (fbB); }
+            float outB = dcB_.process (dlB_.tick (exc + fbB));
+            s = (outA + outB) * 0.55f;
+        }
+        else if (haloAmt_ > 0.02f)
         {
             float fbB = lpB_.process (ozB_.process (dlB_.peek())) * std::min (0.99993f, loopGain_ + 0.0016f * haloAmt_);
-            if (dispActive_) { for (int s = 0; s < modal::kDispStages; ++s) fbB = disp_[(size_t) s].process (fbB); }
-            float outB = dlB_.tick (in + fbB);           // full excitation (was ½) → equal partner
-            outB = dcB_.process (outB);
-            sB = outB * (0.5f + 0.5f * haloAmt_);         // mixed in strongly at high halo
+            if (dispActive_) { for (int s2 = 0; s2 < modal::kDispStages; ++s2) fbB = dispB_[(size_t) s2].process (fbB); }
+            float outB = dcB_.process (dlB_.tick (in + fbB));
+            s = outA * (1.f - 0.4f * haloAmt_) + outB * (0.5f + 0.5f * haloAmt_);   // HALO chorus/sympathetic
         }
-
-        float s = outA * (haloAmt_ > 0.02f ? (1.f - 0.4f * haloAmt_) : 1.f) + sB;
-        // position comb (pickup / pluck point)
-        s -= combA_.tick (s) * combDepth_;
+        else
+            s = outA;
+        // position comb — OUTPUT comb for non-GRAND families; GRAND combs the excitation instead (above)
+        // so POS no longer boosts the resonant peak into the clip.
+        if (p_.family != modal::GRAND) s -= combA_.tick (s) * combDepth_;
+        // MATERIAL presence tilt (GRAND) — the audible warm↔brilliant sweep
+        if (p_.family == modal::GRAND) s = matEq_.process (s);
         // BLOOM: slow high-shelf lift as the note develops (energy migrates up)
         s = applyBloom (s);
         // BODY radiation
@@ -1062,12 +1195,15 @@ private:
     OneZero ozA_, ozB_;
     DCBlock dcA_, dcB_, dcOut_;
     AllpassS disp_[modal::kDispStages];
-    Biquad  body_[modal::kBodyModes], lipBq_;
-    float  loopGain_ = 0.99f, combLen_ = 1.f, combDepth_ = 0.5f;
+    AllpassS dispB_[modal::kDispStages];   // separate dispersion state for polarization B (GRAND twin runs every sample)
+    Biquad  body_[modal::kBodyModes], lipBq_, matEq_;   // matEq_ = GRAND MATERIAL presence tilt (warm↔brilliant)
+    float  loopGain_ = 0.99f, combLen_ = 1.f, combDepth_ = 0.5f, combNorm_ = 1.f;
     bool   dispActive_ = false, bodyOn_ = false;
     float  dispPhaseDelay_ = 0.f;
     float  bowSlope_ = 3.f, reedSlope_ = -0.3f, lipY1_ = 0.f, bowPhase_ = 0.f;
     float  formPitchMul_ = 1.f;
+    float  keyN_ = 39.f;                      // MIDI key index from f0 (0=A0 · 27=C3 · 39=C4 · 87=C8) — piano key-scaling
+    float  feltK_ = 0.f, knockLvl_ = 0.f, feltNorm_ = 1.f;   // GRAND felt-hammer: hardening, knock level, energy norm
 
     // modal bank
     Mode   modes_[modal::kMaxModes];
@@ -1089,6 +1225,7 @@ private:
 
     // envelopes
     float  env_ = 0.f, envRel_ = 1.f, ampZ_ = 0.f;
+    float  relGain_ = 1.f, relGainTarget_ = 1.f;   // GRAND note-off DAMPER: extra loop loss on key-up
     int    silentBlocks_ = 0;
 
     // budget / unison

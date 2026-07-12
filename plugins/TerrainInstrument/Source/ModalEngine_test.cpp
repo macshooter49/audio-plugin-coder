@@ -41,6 +41,25 @@ static double acfPitch (const std::vector<float>& x, double sr, double fmin, dou
     return sr / bl;
 }
 
+// Goertzel magnitude at frequency f over x (narrow-band energy probe for inharmonicity tests)
+static double goertzel (const std::vector<float>& x, double f, double sr)
+{
+    const double w = 2.0 * M_PI * f / sr, coeff = 2.0 * std::cos (w);
+    double s1 = 0, s2 = 0;
+    for (float v : x) { const double s0 = (double) v + coeff * s1 - s2; s2 = s1; s1 = s0; }
+    return std::sqrt (std::max (0.0, s1*s1 + s2*s2 - coeff*s1*s2));
+}
+
+// actual measured frequency of partial n: scan Goertzel around n·f0 and return the peak bin
+static double partialFreq (const std::vector<float>& x, double f0, int n, double sr)
+{
+    // scan only within ±half the spacing to the next harmonic so we never lock onto a NEIGHBOUR partial
+    const double lo = n*f0*0.985, hi = n*f0*(1.0 + 0.45/(double)n);   // upper bound < (n+1)/n
+    double bestF = lo, bestM = -1;
+    for (double f = lo; f <= hi; f += 0.5) { const double m = goertzel (x, f, sr); if (m > bestM) { bestM = m; bestF = f; } }
+    return bestF;
+}
+
 // render `secs` seconds; measure into a window [t0,t1] fraction of the run
 static Stats run (ModalParams p, double hz, double secs, double t0=0.0, double t1=1.0,
                   bool releaseAt=false, double relFrac=0.5)
@@ -87,6 +106,31 @@ static Stats run (ModalParams p, double hz, double secs, double t0=0.0, double t
     s.centroid = winSecs > 0 ? (double) s.zc / winSecs : 0.0;   // ZC rate (HF proxy)
     s.pitch = acfPitch (cap, SR, hz * 0.45, hz * 2.2);          // true fundamental
     return s;
+}
+
+// render and return the raw mono capture over [t0,t1] (for spectral/inharmonicity probes)
+static std::vector<float> capture (ModalParams p, double hz, double secs, double t0, double t1)
+{
+    ModalEngine e; e.prepare (SR, true); e.setParams (p); e.setPitchRatio (1.0);
+    e.setPlayedHz (hz); e.noteOn (hz, 0x12345u, 0.9f);
+    const int total = (int)(secs*SR), block = 128, a0 = (int)(t0*total), a1 = (int)(t1*total);
+    std::vector<float> L(block), R(block), cap; int pos = 0;
+    while (pos < total) { std::fill (L.begin(),L.end(),0.f); std::fill (R.begin(),R.end(),0.f);
+        e.renderBlockAdd (L.data(), R.data(), block);
+        for (int i=0;i<block;++i){ const int gp=pos+i; if (gp>=a0 && gp<a1) cap.push_back (L[i]); } pos += block; }
+    return cap;
+}
+
+// peak |output| over `secs` for a given note + velocity (clipping probe)
+static double peakOf (ModalParams p, double hz, float vel, double secs = 1.2)
+{
+    ModalEngine e; e.prepare (SR, true); e.setParams (p); e.setPitchRatio (1.0);
+    e.setPlayedHz (hz); e.noteOn (hz, 0x1234u, vel);
+    const int total = (int)(secs*SR), block = 128; std::vector<float> L(block), R(block); double pk = 0; int pos = 0;
+    while (pos < total) { std::fill (L.begin(),L.end(),0.f); std::fill (R.begin(),R.end(),0.f);
+        e.renderBlockAdd (L.data(), R.data(), block);
+        for (int i=0;i<block;++i){ const double a = std::fabs (L[i]); if (a>pk) pk=a; } pos += block; }
+    return pk;
 }
 
 int main()
@@ -295,6 +339,125 @@ int main()
                        + " (want <0.20) steady=[" + std::to_string(slo).substr(0,4) + "," + std::to_string(shi).substr(0,4)
                        + "] (want in [0.30,0.60])" + (leadIn?"":" NO-LEADIN") + (inBox?"":" NOT-IN-BOX"));
         }
+    }
+
+    // ── 13. GRAND pitch LOCKED across STRETCH (a-C-is-a-C — Stretch no longer "detunes into a synth") ──
+    std::printf ("\n13. GRAND pitch locked across STRETCH + register (anchoring fix):\n");
+    for (double hz : { 130.81, 523.25 })                  // C3 and C5 (guards high-note dispersion-detune)
+    {
+        double pit[3]; const float st[3] = { 0.0f, 0.5f, 1.0f };
+        for (int i = 0; i < 3; ++i)
+        { ModalParams p; p.family = modal::GRAND; p.stretch = st[i]; p.decay = 0.7f; p.material = 0.5f;
+          pit[i] = run (p, hz, 0.8, 0.05, 0.55).pitch; }
+        double dmax = 0; for (int i = 0; i < 3; ++i) { double e = std::fabs (pit[i]-hz)/hz; if (e>dmax) dmax=e; }
+        const double spread = std::fabs (pit[2]-pit[0]) / hz;
+        check (dmax < 0.02 && spread < 0.012,
+               std::to_string((int)hz) + "Hz stretch 0/0.5/1 = " + std::to_string((int)pit[0]) + "/"
+               + std::to_string((int)pit[1]) + "/" + std::to_string((int)pit[2]) + "Hz (max err "
+               + std::to_string(dmax*100).substr(0,4) + "%, spread " + std::to_string(spread*100).substr(0,4) + "%)");
+    }
+
+    // ── 14. GRAND felt hammer = a struck, pitched, bounded note (not a plucked/nylon noise-burst) ──
+    std::printf ("\n14. GRAND felt hammer: struck, pitched, bounded:\n");
+    {
+        ModalParams p; p.family = modal::GRAND; p.stretch = 0.5f; p.decay = 0.62f; p.material = 0.5f; p.hard = 0.42f;
+        Stats s = run (p, 130.81, 1.0, 0.02, 0.6);
+        const double err = std::fabs (s.pitch - 130.81) / 130.81;
+        const bool ok = s.finite && s.peak < 0.98 && s.rms > 1e-3 && err < 0.03;
+        check (ok, "C3 struck: pitch≈" + std::to_string((int)s.pitch) + "Hz (err " + std::to_string(err*100).substr(0,4)
+               + "%) peak=" + std::to_string(s.peak).substr(0,5) + " rms=" + std::to_string(s.rms).substr(0,6));
+    }
+
+    // ── 15. INHARMONICITY baked on at default + scales with STRETCH (the "it's a real piano, not a comb") ──
+    std::printf ("\n15. GRAND inharmonicity present + scales with STRETCH:\n");
+    {
+        const double hz = 130.81;                         // C3
+        ModalParams p0; p0.family = modal::GRAND; p0.stretch = 0.0f; p0.decay = 0.9f; p0.material = 0.6f;
+        ModalParams p1; p1.family = modal::GRAND; p1.stretch = 1.0f; p1.decay = 0.9f; p1.material = 0.6f;
+        auto cap0 = capture (p0, hz, 0.9, 0.06, 0.5);
+        auto cap1 = capture (p1, hz, 0.9, 0.06, 0.5);
+        // average sharpness over partials 4/6/8/10 = a robust "how inharmonic is it" score
+        double s0 = 0, s1 = 0; const int P[4] = { 4, 6, 8, 10 };
+        for (int n : P) { s0 += partialFreq (cap0, hz, n, SR)/(n*hz); s1 += partialFreq (cap1, hz, n, SR)/(n*hz); }
+        s0 /= 4; s1 /= 4;
+        // stretch 1.0 must be audibly inharmonic (partials sharp) AND clearly sharper than near-harmonic stretch 0
+        const bool ok = (s1 > 1.006) && (s1 > s0 + 0.006);
+        check (ok, "C3 mean partial sharpness (×harmonic): stretch0=" + std::to_string(s0).substr(0,6)
+               + " stretch1=" + std::to_string(s1).substr(0,6));
+    }
+
+    // ── 16. GRAND stays CLEAN across EVERY knob extreme (no output-clip "synth distortion") — the worst
+    //        case is max DECAY + max velocity + bright MATERIAL + POS comb, measured over a long ring so
+    //        late resonant/beat crests are caught (that combo is what Max heard clip). ──
+    std::printf ("\n16. GRAND clean at all knob extremes (no clipping):\n");
+    {
+        double worst = 0; std::string wcase;
+        for (float hard : { 0.2f, 0.9f })
+          for (float mat : { 0.5f, 1.0f })
+            for (float pos : { 0.0f, 0.5f, 1.0f })
+              for (double hz : { 65.41, 130.81, 261.63, 523.25 })
+              { ModalParams p; p.family = modal::GRAND; p.decay = 1.0f; p.hard = hard; p.material = mat; p.pos = pos;
+                const double pk = peakOf (p, hz, 1.0f, 4.0);   // v1.0, 4 s ring
+                if (pk > worst) { worst = pk; wcase = "hard" + std::to_string(hard).substr(0,3) + " mat"
+                                  + std::to_string(mat).substr(0,3) + " pos" + std::to_string(pos).substr(0,3)
+                                  + " " + std::to_string((int)hz) + "Hz"; } }
+        // a hard clip pins ~0.79 and softClip bends audibly past ~0.72 — keep the worst case well under
+        check (worst < 0.72, "worst-case peak " + std::to_string(worst).substr(0,5) + " (" + wcase + ") clean");
+    }
+
+    // ── 17. GRAND coupled unison → two-stage decay (aftersound decays SLOWER than the prompt = "alive") ──
+    std::printf ("\n17. GRAND two-stage decay (prompt over aftersound):\n");
+    {
+        ModalParams p; p.family = modal::GRAND; p.decay = 0.72f; p.material = 0.5f; p.hard = 0.4f; p.halo = 0.f;
+        const double hz = 130.81;
+        // prompt decay rate (A dominates) vs aftersound decay rate (slow B dominates), equal-width windows
+        const double a = run (p, hz, 3.0, 0.02, 0.12).rms, b = run (p, hz, 3.0, 0.12, 0.22).rms;   // prompt pair
+        const double c = run (p, hz, 3.0, 0.60, 0.70).rms, d = run (p, hz, 3.0, 0.70, 0.80).rms;   // aftersound pair
+        const double rP = (b > 1e-9) ? a/b : 999.0, rA = (d > 1e-9) ? c/d : 0.0;
+        // single exponential → rP == rA; a slow aftersound → prompt decays faster per window than aftersound
+        check (rP > rA * 1.04 && d > 1e-5, "prompt decays faster than aftersound: rP " + std::to_string(rP).substr(0,4)
+               + " > rA " + std::to_string(rA).substr(0,4));
+    }
+
+    // ── 18. GRAND DECAY is night-and-day (staccato ↔ long ring) ──
+    std::printf ("\n18. GRAND DECAY night-and-day:\n");
+    {
+        ModalParams lo; lo.family = modal::GRAND; lo.decay = 0.10f; lo.hard = 0.4f;
+        ModalParams hi; hi.family = modal::GRAND; hi.decay = 0.85f; hi.hard = 0.4f;
+        const double tLo = run (lo, 130.81, 3.0, 0.5, 1.0).rms;   // tail window
+        const double tHi = run (hi, 130.81, 3.0, 0.5, 1.0).rms;
+        check (tHi > tLo * 5.0 && tHi > 1e-4, "tail: decay0.85 rms=" + std::to_string(tHi).substr(0,6)
+               + " ≫ decay0.10 rms=" + std::to_string(tLo).substr(0,6));
+    }
+
+    // ── 19. GRAND MATERIAL night-and-day AND never nylon-dark (steel string at both ends) ──
+    std::printf ("\n19. GRAND MATERIAL bright↔warm, never nylon:\n");
+    {
+        ModalParams dk; dk.family = modal::GRAND; dk.material = 0.0f; dk.decay = 0.6f; dk.hard = 0.5f;
+        ModalParams br; br.family = modal::GRAND; br.material = 1.0f; br.decay = 0.6f; br.hard = 0.5f;
+        const double hz = 130.81;
+        auto capD = capture (dk, hz, 1.0, 0.04, 0.6);
+        auto capB = capture (br, hz, 1.0, 0.04, 0.6);
+        // upper/lower partial energy ratio — sensitive to brightness even when the fundamental dominates
+        auto hilo = [&](std::vector<float>& c) {
+            double lo = 0, hi = 0;
+            for (int n = 1; n <= 3;  ++n) lo += goertzel (c, n*hz, SR);
+            for (int n = 4; n <= 16; ++n) hi += goertzel (c, n*hz, SR);
+            return hi / (lo + 1e-9); };
+        const double rD = hilo (capD), rB = hilo (capB);
+        // bright has clearly more upper-partial energy; warm still keeps STEEL uppers (ratio not near-zero = not nylon-dead)
+        check (rB > rD * 1.6 && rD > 0.05, "upper/lower energy warm=" + std::to_string(rD).substr(0,5)
+               + " → bright=" + std::to_string(rB).substr(0,5));
+    }
+
+    // ── 20. GRAND note-off DAMPER: the released tail is damped fast (key-up ≠ sustain pedal) ──
+    std::printf ("\n20. GRAND note-off damper:\n");
+    {
+        ModalParams p; p.family = modal::GRAND; p.decay = 0.8f; p.hard = 0.4f;
+        const double held = run (p, 130.81, 2.0, 0.75, 1.0).rms;               // note HELD → rings
+        const double rel  = run (p, 130.81, 2.0, 0.75, 1.0, true, 0.5).rms;    // note-off at 50% → damped
+        check (held > rel * 3.0 && held > 1e-4, "released tail rms=" + std::to_string(rel).substr(0,6)
+               + " ≪ held rms=" + std::to_string(held).substr(0,6));
     }
 
     std::printf ("\n═══ %d passed, %d failed ═══\n", gPass, gFail);
