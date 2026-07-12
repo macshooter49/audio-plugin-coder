@@ -2403,7 +2403,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 juce::NormalisableRange<float> (-64.0f, 64.0f, 0.0f), 0.0f));
             layout.add (std::make_unique<juce::AudioParameterChoice> (
                 juce::ParameterID { range, 1 }, "Synth OSC " + osc + " Sub Octave",
-                juce::StringArray { "-1 Oct", "-2 Oct", "-3 Oct" }, 0));
+                juce::StringArray { "-4 Oct", "-3 Oct", "-2 Oct", "-1 Oct", "0 Oct",
+                                    "+1 Oct", "+2 Oct", "+3 Oct", "+4 Oct" }, 4));   // default index 4 = 0 Oct (regular pitch)
             layout.add (std::make_unique<juce::AudioParameterChoice> (
                 juce::ParameterID { form, 1 }, "Synth OSC " + osc + " Sub Shape",
                 juce::StringArray { "Sine", "Triangle", "Square", "Saw" }, 0));

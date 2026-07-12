@@ -937,7 +937,7 @@ namespace tw
             if (nf != sub_[o].form && sub_[o].on)
             { sub_[o].formOld = sub_[o].form; sub_[o].xf = 1.f; }   // Shape MORPHS mid-note
             sub_[o].form   = nf;
-            sub_[o].range  = juce::jlimit (0, 2, range);
+            sub_[o].range  = juce::jlimit (0, 8, range);   // 9 choices: idx 0..8 → -4..+4 Oct (idx 4 = 0)
             sub_[o].weight = juce::jlimit (0.f, 1.f, weight);
             sub_[o].heatK  = juce::jlimit (0.f, 1.f, heatK);
         }
@@ -3840,7 +3840,7 @@ namespace tw
                                    + (double) octs[o] * 12.0 + (double) sems[o]
                                    + (double) cts[o] * 0.01 + (double) crs[o]
                                    + pitchEnvSemis_
-                                   - 12.0 * (double) (sl.range + 1);
+                                   + 12.0 * (double) (sl.range - 4);   // Sub octave: idx 0..8 → -4..+4 (idx 4 = 0, regular pitch)
                 const double hz = 440.0 * std::pow (2.0, semis / 12.0);
                 sl.inc = juce::jlimit (0.0, 0.45, hz / sampleRate_);
                 const float nT = 1.0f / std::sqrt (1.0f + wEff * wEff);

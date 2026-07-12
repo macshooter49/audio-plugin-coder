@@ -11857,7 +11857,7 @@ setTimeout(function wireSynControls () {
           set (P + 'HARM_CARVE', 0.0); set (P + 'HARM_CHURN', 0.5); set (P + 'HARM_ROOT', 0.0);
           set (P + 'HARM_SHINE', 0.0); set (P + 'HARM_WILT', 0.5); set (P + 'HARM_FIZZ', 0.0);
           // UNIVERSAL OSC BOXES — Coarse centered (0 st), Sub fully off
-          set (P + 'COARSE', 0.5); set (P + 'SUB_RANGE', 0.0); set (P + 'SUB_FORM', 0.0);
+          set (P + 'COARSE', 0.5); set (P + 'SUB_RANGE', 0.5); set (P + 'SUB_FORM', 0.0);   // SUB_RANGE 0.5 = idx 4 = 0 Oct (regular pitch)
           set (P + 'SUB_WEIGHT', 0.0); set (P + 'SUB_HEAT', 0.0);
           // OSC C/D wavetable knobs (A/B already covered)
           set (P + 'OCT', 0.5); set (P + 'SEMI', 0.5); set (P + 'CENT', 0.5); set (P + 'PAN', 0.5);
@@ -12730,7 +12730,7 @@ setTimeout(function wireSynControls () {
           { key: 'range',  label: 'Octave' }, { key: 'form', label: 'Shape' },
           { key: 'weight', label: 'Mix'    }, { key: 'heat', label: 'Drive' },
         ];
-        const RANGE_LABELS = ['-1', '-2', '-3'];
+        const RANGE_LABELS = ['-4', '-3', '-2', '-1', '0', '+1', '+2', '+3', '+4'];
         const FORM_LABELS  = ['Sine', 'Tri', 'Square', 'Saw'];
         document.querySelectorAll('#syn-panel .sub-pill').forEach(function(pill) {
           try {
@@ -12749,7 +12749,7 @@ setTimeout(function wireSynControls () {
               try {
                 const a = getActive(); const st = states[a]; if (!st) return;
                 const sv = st.getScaledValue ? st.getScaledValue() : 0;
-                if (a === 'range')     numEl.textContent = RANGE_LABELS[Math.round(sv)] || '-1';
+                if (a === 'range')     numEl.textContent = RANGE_LABELS[Math.round(sv)] || '0';
                 else if (a === 'form') numEl.textContent = FORM_LABELS[Math.round(sv)] || 'Sine';
                 else                   numEl.textContent = Math.round(sv * 100);
                 if (sufEl) sufEl.textContent = (a === 'range' || a === 'form') ? '' : '%';
