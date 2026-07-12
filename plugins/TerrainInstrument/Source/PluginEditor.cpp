@@ -526,6 +526,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, static_cast<float> (static_cast<double> (args[1]))));
                 complete (juce::var{});
             })
+            .withNativeFunction("getSynParam", [this](const juce::Array<juce::var>& args,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // READ a param's normalised value (0..1) so the WebView can restore its display state on
+                // reopen WITHOUT a WebSliderRelay (dodges the relay-scale bug). args = [ paramId ].
+                float v = 0.0f;
+                if (args.size() >= 1)
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (args[0].toString()))
+                        v = p->getValue();
+                complete (juce::var (v));
+            })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

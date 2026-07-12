@@ -3739,10 +3739,16 @@ body {
   position: relative;
 }
 #syn-panel .blend-pill.act {
-  background: var(--purple-500);
-  border-color: var(--purple-500);
-  color: #FFFFFF;
+  /* GLOW, not fill (Max 2026-07-12): mostly transparent, purple-glowing outline + letters —
+     the same language as the swap emblem / hover state. Applies to osc blend pills AND filter pills. */
+  background: transparent;
+  border-color: var(--purple-400);
+  color: var(--purple-400);
+  box-shadow: 0 0 8px rgba(139,92,246,0.40);
+  text-shadow: 0 0 6px rgba(139,92,246,0.45);
 }
+#syn-panel .blend-pill .bp-val { font-size: 13px; font-weight: 400; letter-spacing: 0; }
+#syn-panel .blend-pill.act { cursor: ns-resize; }
 
 /* Phase 11a — selector-pills (back middle row).
    Container takes the .osc-display footprint (same flex:1 + min-height),
@@ -11718,8 +11724,17 @@ setTimeout(function wireSynControls () {
       // waveform restore misses (and since the engine state didn't "change", no valueChangedEvent
       // retry fires). Re-request each osc's cached sample payload a couple of times to beat the
       // WKWebView init race — restores the loaded waveforms so they survive close/reopen.
-      [350, 900, 1800].forEach (function (ms) {
-        setTimeout (function () { try { for (var k in SAMP) { if (SAMP[k] && window.__terrainSampleRedraw) window.__terrainSampleRedraw (k); } } catch (e) {} }, ms);
+      // Retry over a WIDE window (not just 1.8s) AND stop per-osc once the waveform is actually
+      // restored — the processor still holds the sample across editor close/reopen, so this only
+      // has to outlast the WebView-bridge init race. Prevents the "sample vanished, press Normalize"
+      // reopen bug (Max 2026-07-12).
+      [120, 300, 600, 1000, 1600, 2400, 3500, 5000, 7000, 9000].forEach (function (ms) {
+        setTimeout (function () { try { for (var k in SAMP) {
+          if (! SAMP[k] || ! window.__terrainSampleRedraw) continue;
+          var v = SAMP[k].view;
+          if (v && v.classList.contains ('loaded')) continue;   // already restored → skip (idempotent, cheap)
+          window.__terrainSampleRedraw (k);
+        } } catch (e) {} }, ms);
       });
 
       window.addEventListener ('resize', function () { for (var k in SAMP) { if (SAMP[k]) { SAMP[k].redraw (); SAMP[k].place (); } } });
@@ -12736,50 +12751,59 @@ setTimeout(function wireSynControls () {
         function wSrc  (o, s, v) { st(o, s).src  = v; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'SRC'),  v / (NSRC - 1)); }
         function wDep  (o, s, d) { d = Math.max(0, Math.min(1, d)); st(o, s).depth = d; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'DEPTH'), d); }
 
-        function paint (pill, o, s) {
+        var MENU_FAM = ['Off','FM','PD','AM','RM','Sync','Warp','Dist'];   // families shown (Filter removed per Max)
+        var pillOf = {};                                                   // "a1" -> pill element (for reopen refresh)
+        function srcLtr (v) { return (v < 4) ? 'ABCD'.charAt(v) : (v === 6 ? 'self' : '?'); }
+
+        // Default view = "FM(D)" (mode + source, same style). Hover or drag → the big % value.
+        function paintLabel (pill, o, s) {
           var b = st(o, s);
           if (b.mode === 0) { pill.textContent = 'B' + s; pill.classList.remove('act');
             pill.title = 'Blend slot ' + s + ' — right-click to assign a warp (FM / PD from another oscillator).'; return; }
-          var srcLbl = (b.src < 4) ? 'ABCD'.charAt(b.src) : (b.src === 6 ? 'self' : '?');
-          pill.innerHTML = MODES[b.mode] + '<span style="opacity:.55;font-size:.85em">&nbsp;' + srcLbl + '</span> <b>' + Math.round(b.depth * 100) + '</b>';
+          pill.textContent = MODES[b.mode] + '(' + srcLtr(b.src) + ')';
           pill.classList.add('act');
-          pill.title = MODES[b.mode] + ' from Osc ' + String(srcLbl).toUpperCase() + ' — drag up/down for depth. The source modulates even with its own volume down.';
+          pill.title = MODES[b.mode] + ' from Osc ' + String(srcLtr(b.src)).toUpperCase() + ' — hover or drag for depth. The source modulates even at volume 0.';
+        }
+        function paintValue (pill, o, s) {
+          var b = st(o, s); if (b.mode === 0) { paintLabel(pill, o, s); return; }
+          pill.innerHTML = '<span class="bp-val">' + Math.round(b.depth * 100) + '</span>';
+          pill.classList.add('act');
         }
 
         function menu (pill, o, s, x, y) {
           var b = st(o, s), items = [], ci = 'abcd'.indexOf(o);
           items.push({ isHeader: true, label: 'Blend ' + s + ' · Osc ' + o.toUpperCase() });
-          MODES.forEach(function (m, mi) {
-            var on = (mi === 0) || P1ON[m];
+          MENU_FAM.forEach(function (m) {
+            var mi = MODES.indexOf(m), on = (mi === 0) || P1ON[m];
             items.push({ label: m, isChecked: (b.mode === mi), isDisabled: !on, badge: on ? '' : 'soon', keepOpen: true,
               onPick: function () { if (!on) return; wMode(o, s, mi);
-                if (mi === 1 || mi === 2) { var cs = st(o, s).src; if (cs === ci || (mi === 1 && cs === 6)) wSrc(o, s, (ci + 1) % 4); }
-                paint(pill, o, s); menu(pill, o, s, x, y); } });
+                if (mi === 1 || mi === 2) { var cs = st(o, s).src; if (cs === ci || cs > 3) wSrc(o, s, (ci + 1) % 4); }
+                paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
           });
           if (b.mode === 1 || b.mode === 2) {
             items.push({ isHeader: true, label: 'Source' });
             ['a','b','c','d'].forEach(function (so) { if (so === o) return; var si = 'abcd'.indexOf(so);
               items.push({ label: 'Osc ' + so.toUpperCase(), isChecked: (b.src === si), keepOpen: true,
-                onPick: function () { wSrc(o, s, si); paint(pill, o, s); menu(pill, o, s, x, y); } }); });
-            items.push({ label: 'Sub',   isDisabled: true, badge: 'soon' });
-            items.push({ label: 'Noise', isDisabled: true, badge: 'soon' });
+                onPick: function () { wSrc(o, s, si); paintLabel(pill, o, s); menu(pill, o, s, x, y); } }); });
+            items.push({ label: 'Noise', isDisabled: true, badge: 'soon' });   // Sub + Filter removed per Max
             if (b.mode === 2) items.push({ label: 'Self (feedback)', isChecked: (b.src === 6), keepOpen: true,
-              onPick: function () { wSrc(o, s, 6); paint(pill, o, s); menu(pill, o, s, x, y); } });
+              onPick: function () { wSrc(o, s, 6); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
           }
           if (window.__synShowMenu) window.__synShowMenu(null, items, x, y);
         }
 
         function wire (pill, o, s) {
-          paint(pill, o, s);
+          pillOf[o + s] = pill;
+          paintLabel(pill, o, s);
+          var drag = false, hover = false, y0 = 0, d0 = 0;
           pill.addEventListener('contextmenu', function (ev) { ev.preventDefault(); ev.stopPropagation(); menu(pill, o, s, ev.clientX, ev.clientY); });
-          var drag = false, y0 = 0, d0 = 0;
-          function mv (ev) { if (!drag) return; var nd = Math.max(0, Math.min(1, d0 + (y0 - ev.clientY) / 150)); wDep(o, s, nd);
-            pill.innerHTML = MODES[st(o, s).mode] + ' <b>' + Math.round(nd * 100) + '</b>'; }
-          function up () { if (!drag) return; drag = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); paint(pill, o, s); }
+          pill.addEventListener('mouseenter', function () { hover = true; if (!drag && st(o, s).mode !== 0) paintValue(pill, o, s); });
+          pill.addEventListener('mouseleave', function () { hover = false; if (!drag) paintLabel(pill, o, s); });
+          function mv (ev) { if (!drag) return; var nd = Math.max(0, Math.min(1, d0 + (y0 - ev.clientY) / 150)); wDep(o, s, nd); paintValue(pill, o, s); }
+          function up () { if (!drag) return; drag = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); if (hover) paintValue(pill, o, s); else paintLabel(pill, o, s); }
           pill.addEventListener('pointerdown', function (ev) { if (ev.button !== 0) return; if (st(o, s).mode === 0) return;
             drag = true; y0 = ev.clientY; d0 = st(o, s).depth; try { pill.setPointerCapture(ev.pointerId); } catch (_) {}
             document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); ev.preventDefault(); });
-          pill.style.cursor = 'context-menu';
         }
 
         document.querySelectorAll('#syn-panel .back-only .blend-pills').forEach(function (row) {
@@ -12789,6 +12813,24 @@ setTimeout(function wireSynControls () {
           var pills = row.querySelectorAll('.blend-pill');
           for (var i = 0; i < pills.length && i < 4; ++i) wire(pills[i], o, i + 1);   // B1..B4 only (Mix/Mod later)
         });
+
+        // ── survive close/reopen: read the live APVTS values back (getSynParam native fn) and repaint. ──
+        function refresh () {
+          if (!window.Juce || !window.Juce.getNativeFunction) return;
+          var getP; try { getP = window.Juce.getNativeFunction('getSynParam'); } catch (e) { return; }
+          if (!getP) return;
+          Object.keys(pillOf).forEach(function (k) {
+            var o = k.charAt(0), s = parseInt(k.charAt(1), 10);
+            Promise.all([ getP(pid(o, s, 'MODE')), getP(pid(o, s, 'SRC')), getP(pid(o, s, 'DEPTH')) ]).then(function (v) {
+              st(o, s).mode  = Math.round((+v[0] || 0) * (MODES.length - 1));
+              st(o, s).src   = Math.round((+v[1] || 0) * (NSRC - 1));
+              st(o, s).depth = (+v[2] || 0);
+              paintLabel(pillOf[k], o, s);
+            }).catch(function () {});
+          });
+        }
+        refresh();
+        [250, 700, 1500].forEach(function (ms) { setTimeout(refresh, ms); });   // beat the WKWebView init race
       } catch (e) { console.warn('[BLEND] init failed', e); }
     })();
 
