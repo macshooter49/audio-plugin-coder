@@ -2391,6 +2391,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         addModalOsc (MODAL_A, "A"); addModalOsc (MODAL_B, "B"); addModalOsc (MODAL_C, "C"); addModalOsc (MODAL_D, "D");
     }
 
+    // ── BLEND MODES: 4 warp slots (B1..B4) × 4 oscs — cross-osc FM/PD/AM/RM/… ──
+    {
+        auto addBlendSlots = [&layout] (const char* const id[12], const juce::String& osc)
+        {
+            const juce::StringArray modes { "Off", "FM", "PD", "AM", "RM", "Sync", "Warp", "Dist", "Filter" };
+            const juce::StringArray srcs  { "Osc A", "Osc B", "Osc C", "Osc D", "Sub", "Noise", "Self" };
+            for (int s = 0; s < 4; ++s)
+            {
+                const juce::String n = "Synth OSC " + osc + " Blend " + juce::String (s + 1) + " ";
+                layout.add (std::make_unique<juce::AudioParameterChoice> (
+                    juce::ParameterID { id[s * 3 + 0], 1 }, n + "Mode",   modes, 0));
+                layout.add (std::make_unique<juce::AudioParameterChoice> (
+                    juce::ParameterID { id[s * 3 + 1], 1 }, n + "Source", srcs,  1));   // default Osc B (moot while Off)
+                layout.add (std::make_unique<juce::AudioParameterFloat> (
+                    juce::ParameterID { id[s * 3 + 2], 1 }, n + "Depth",
+                    juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+            }
+        };
+        static const char* const WS_A[12] = { ParameterIDs::SYN_OSC_A_WSLOT1_MODE, ParameterIDs::SYN_OSC_A_WSLOT1_SRC, ParameterIDs::SYN_OSC_A_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT2_MODE, ParameterIDs::SYN_OSC_A_WSLOT2_SRC, ParameterIDs::SYN_OSC_A_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT3_MODE, ParameterIDs::SYN_OSC_A_WSLOT3_SRC, ParameterIDs::SYN_OSC_A_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT4_MODE, ParameterIDs::SYN_OSC_A_WSLOT4_SRC, ParameterIDs::SYN_OSC_A_WSLOT4_DEPTH };
+        static const char* const WS_B[12] = { ParameterIDs::SYN_OSC_B_WSLOT1_MODE, ParameterIDs::SYN_OSC_B_WSLOT1_SRC, ParameterIDs::SYN_OSC_B_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT2_MODE, ParameterIDs::SYN_OSC_B_WSLOT2_SRC, ParameterIDs::SYN_OSC_B_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT3_MODE, ParameterIDs::SYN_OSC_B_WSLOT3_SRC, ParameterIDs::SYN_OSC_B_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT4_MODE, ParameterIDs::SYN_OSC_B_WSLOT4_SRC, ParameterIDs::SYN_OSC_B_WSLOT4_DEPTH };
+        static const char* const WS_C[12] = { ParameterIDs::SYN_OSC_C_WSLOT1_MODE, ParameterIDs::SYN_OSC_C_WSLOT1_SRC, ParameterIDs::SYN_OSC_C_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT2_MODE, ParameterIDs::SYN_OSC_C_WSLOT2_SRC, ParameterIDs::SYN_OSC_C_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT3_MODE, ParameterIDs::SYN_OSC_C_WSLOT3_SRC, ParameterIDs::SYN_OSC_C_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT4_MODE, ParameterIDs::SYN_OSC_C_WSLOT4_SRC, ParameterIDs::SYN_OSC_C_WSLOT4_DEPTH };
+        static const char* const WS_D[12] = { ParameterIDs::SYN_OSC_D_WSLOT1_MODE, ParameterIDs::SYN_OSC_D_WSLOT1_SRC, ParameterIDs::SYN_OSC_D_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT2_MODE, ParameterIDs::SYN_OSC_D_WSLOT2_SRC, ParameterIDs::SYN_OSC_D_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT3_MODE, ParameterIDs::SYN_OSC_D_WSLOT3_SRC, ParameterIDs::SYN_OSC_D_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT4_MODE, ParameterIDs::SYN_OSC_D_WSLOT4_SRC, ParameterIDs::SYN_OSC_D_WSLOT4_DEPTH };
+        addBlendSlots (WS_A, "A"); addBlendSlots (WS_B, "B"); addBlendSlots (WS_C, "C"); addBlendSlots (WS_D, "D");
+    }
+
     // ════════ UNIVERSAL OSC BOXES (2026-07-09) — COARSE + SUB per oscillator ════════
     // COARSE = continuous ±64 st, NO snap (the smooth modulatable pitch lane — Serum CRS).
     // SUB = voice-anchored sub osc: Range / Form / Weight / Heat. Defaults keep it OFF.
@@ -3753,6 +3778,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             modalP[o] = m;
         }
 
+        // ── BLEND MODES: gather the 4 warp slots × 4 oscs once (cross-osc FM/PD/AM/RM) ──
+        static const char* const WSLOT_IDS[4][12] = {
+            { ParameterIDs::SYN_OSC_A_WSLOT1_MODE, ParameterIDs::SYN_OSC_A_WSLOT1_SRC, ParameterIDs::SYN_OSC_A_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT2_MODE, ParameterIDs::SYN_OSC_A_WSLOT2_SRC, ParameterIDs::SYN_OSC_A_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT3_MODE, ParameterIDs::SYN_OSC_A_WSLOT3_SRC, ParameterIDs::SYN_OSC_A_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT4_MODE, ParameterIDs::SYN_OSC_A_WSLOT4_SRC, ParameterIDs::SYN_OSC_A_WSLOT4_DEPTH },
+            { ParameterIDs::SYN_OSC_B_WSLOT1_MODE, ParameterIDs::SYN_OSC_B_WSLOT1_SRC, ParameterIDs::SYN_OSC_B_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT2_MODE, ParameterIDs::SYN_OSC_B_WSLOT2_SRC, ParameterIDs::SYN_OSC_B_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT3_MODE, ParameterIDs::SYN_OSC_B_WSLOT3_SRC, ParameterIDs::SYN_OSC_B_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT4_MODE, ParameterIDs::SYN_OSC_B_WSLOT4_SRC, ParameterIDs::SYN_OSC_B_WSLOT4_DEPTH },
+            { ParameterIDs::SYN_OSC_C_WSLOT1_MODE, ParameterIDs::SYN_OSC_C_WSLOT1_SRC, ParameterIDs::SYN_OSC_C_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT2_MODE, ParameterIDs::SYN_OSC_C_WSLOT2_SRC, ParameterIDs::SYN_OSC_C_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT3_MODE, ParameterIDs::SYN_OSC_C_WSLOT3_SRC, ParameterIDs::SYN_OSC_C_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT4_MODE, ParameterIDs::SYN_OSC_C_WSLOT4_SRC, ParameterIDs::SYN_OSC_C_WSLOT4_DEPTH },
+            { ParameterIDs::SYN_OSC_D_WSLOT1_MODE, ParameterIDs::SYN_OSC_D_WSLOT1_SRC, ParameterIDs::SYN_OSC_D_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT2_MODE, ParameterIDs::SYN_OSC_D_WSLOT2_SRC, ParameterIDs::SYN_OSC_D_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT3_MODE, ParameterIDs::SYN_OSC_D_WSLOT3_SRC, ParameterIDs::SYN_OSC_D_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT4_MODE, ParameterIDs::SYN_OSC_D_WSLOT4_SRC, ParameterIDs::SYN_OSC_D_WSLOT4_DEPTH }
+        };
+        struct BlendCfg { int mode; int src; float depth; };
+        BlendCfg blendCfg[4][4];
+        for (int o = 0; o < 4; ++o)
+            for (int s = 0; s < 4; ++s)
+            {
+                const char* const* id = WSLOT_IDS[o];
+                blendCfg[o][s] = { (int) *rawParam (id[s * 3 + 0]), (int) *rawParam (id[s * 3 + 1]), *rawParam (id[s * 3 + 2]) };
+            }
+
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
         // ── Batch 1 — assemble the synth modulation config from params + transport,
@@ -3922,6 +3963,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setHarmParamsC (harmP[2]);   sv->setHarmParamsD (harmP[3]);
                 sv->setModalParamsA (modalP[0]); sv->setModalParamsB (modalP[1]); // MODAL-ENGINE-PUSH
                 sv->setModalParamsC (modalP[2]); sv->setModalParamsD (modalP[3]);
+                for (int bo = 0; bo < 4; ++bo)                                     // BLEND-MODES-PUSH (cross-osc warp slots)
+                    for (int bs = 0; bs < 4; ++bs)
+                        sv->setBlendSlot (bo, bs, blendCfg[bo][bs].mode, blendCfg[bo][bs].src, blendCfg[bo][bs].depth);
                 // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
                 if (engChanged)
                 {

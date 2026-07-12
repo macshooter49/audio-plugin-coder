@@ -867,4 +867,24 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_MODAL_HALO[]     = "SYN_OSC_D_MODAL_HALO";
     constexpr char SYN_OSC_D_MODAL_AGE[]      = "SYN_OSC_D_MODAL_AGE";
     constexpr char SYN_OSC_D_MODAL_BODY[]     = "SYN_OSC_D_MODAL_BODY";
+
+    // ── BLEND MODES (Serum-2-style cross-osc warp) — 4 slots (B1..B4) × 4 oscs, any-to-any.
+    //    Each slot = MODE (Off/FM/PD/AM/RM/Sync/Warp/Dist/Filter) + SRC (Osc A..D/Sub/Noise/Self) + DEPTH 0..1.
+    //    Fresh WSLOT_ prefix — do NOT reuse SYN_OSC_*_BLEND_* (that's the offline sample-baker). ──
+    constexpr char SYN_OSC_A_WSLOT1_MODE[] = "SYN_OSC_A_WSLOT1_MODE";  constexpr char SYN_OSC_A_WSLOT1_SRC[] = "SYN_OSC_A_WSLOT1_SRC";  constexpr char SYN_OSC_A_WSLOT1_DEPTH[] = "SYN_OSC_A_WSLOT1_DEPTH";
+    constexpr char SYN_OSC_A_WSLOT2_MODE[] = "SYN_OSC_A_WSLOT2_MODE";  constexpr char SYN_OSC_A_WSLOT2_SRC[] = "SYN_OSC_A_WSLOT2_SRC";  constexpr char SYN_OSC_A_WSLOT2_DEPTH[] = "SYN_OSC_A_WSLOT2_DEPTH";
+    constexpr char SYN_OSC_A_WSLOT3_MODE[] = "SYN_OSC_A_WSLOT3_MODE";  constexpr char SYN_OSC_A_WSLOT3_SRC[] = "SYN_OSC_A_WSLOT3_SRC";  constexpr char SYN_OSC_A_WSLOT3_DEPTH[] = "SYN_OSC_A_WSLOT3_DEPTH";
+    constexpr char SYN_OSC_A_WSLOT4_MODE[] = "SYN_OSC_A_WSLOT4_MODE";  constexpr char SYN_OSC_A_WSLOT4_SRC[] = "SYN_OSC_A_WSLOT4_SRC";  constexpr char SYN_OSC_A_WSLOT4_DEPTH[] = "SYN_OSC_A_WSLOT4_DEPTH";
+    constexpr char SYN_OSC_B_WSLOT1_MODE[] = "SYN_OSC_B_WSLOT1_MODE";  constexpr char SYN_OSC_B_WSLOT1_SRC[] = "SYN_OSC_B_WSLOT1_SRC";  constexpr char SYN_OSC_B_WSLOT1_DEPTH[] = "SYN_OSC_B_WSLOT1_DEPTH";
+    constexpr char SYN_OSC_B_WSLOT2_MODE[] = "SYN_OSC_B_WSLOT2_MODE";  constexpr char SYN_OSC_B_WSLOT2_SRC[] = "SYN_OSC_B_WSLOT2_SRC";  constexpr char SYN_OSC_B_WSLOT2_DEPTH[] = "SYN_OSC_B_WSLOT2_DEPTH";
+    constexpr char SYN_OSC_B_WSLOT3_MODE[] = "SYN_OSC_B_WSLOT3_MODE";  constexpr char SYN_OSC_B_WSLOT3_SRC[] = "SYN_OSC_B_WSLOT3_SRC";  constexpr char SYN_OSC_B_WSLOT3_DEPTH[] = "SYN_OSC_B_WSLOT3_DEPTH";
+    constexpr char SYN_OSC_B_WSLOT4_MODE[] = "SYN_OSC_B_WSLOT4_MODE";  constexpr char SYN_OSC_B_WSLOT4_SRC[] = "SYN_OSC_B_WSLOT4_SRC";  constexpr char SYN_OSC_B_WSLOT4_DEPTH[] = "SYN_OSC_B_WSLOT4_DEPTH";
+    constexpr char SYN_OSC_C_WSLOT1_MODE[] = "SYN_OSC_C_WSLOT1_MODE";  constexpr char SYN_OSC_C_WSLOT1_SRC[] = "SYN_OSC_C_WSLOT1_SRC";  constexpr char SYN_OSC_C_WSLOT1_DEPTH[] = "SYN_OSC_C_WSLOT1_DEPTH";
+    constexpr char SYN_OSC_C_WSLOT2_MODE[] = "SYN_OSC_C_WSLOT2_MODE";  constexpr char SYN_OSC_C_WSLOT2_SRC[] = "SYN_OSC_C_WSLOT2_SRC";  constexpr char SYN_OSC_C_WSLOT2_DEPTH[] = "SYN_OSC_C_WSLOT2_DEPTH";
+    constexpr char SYN_OSC_C_WSLOT3_MODE[] = "SYN_OSC_C_WSLOT3_MODE";  constexpr char SYN_OSC_C_WSLOT3_SRC[] = "SYN_OSC_C_WSLOT3_SRC";  constexpr char SYN_OSC_C_WSLOT3_DEPTH[] = "SYN_OSC_C_WSLOT3_DEPTH";
+    constexpr char SYN_OSC_C_WSLOT4_MODE[] = "SYN_OSC_C_WSLOT4_MODE";  constexpr char SYN_OSC_C_WSLOT4_SRC[] = "SYN_OSC_C_WSLOT4_SRC";  constexpr char SYN_OSC_C_WSLOT4_DEPTH[] = "SYN_OSC_C_WSLOT4_DEPTH";
+    constexpr char SYN_OSC_D_WSLOT1_MODE[] = "SYN_OSC_D_WSLOT1_MODE";  constexpr char SYN_OSC_D_WSLOT1_SRC[] = "SYN_OSC_D_WSLOT1_SRC";  constexpr char SYN_OSC_D_WSLOT1_DEPTH[] = "SYN_OSC_D_WSLOT1_DEPTH";
+    constexpr char SYN_OSC_D_WSLOT2_MODE[] = "SYN_OSC_D_WSLOT2_MODE";  constexpr char SYN_OSC_D_WSLOT2_SRC[] = "SYN_OSC_D_WSLOT2_SRC";  constexpr char SYN_OSC_D_WSLOT2_DEPTH[] = "SYN_OSC_D_WSLOT2_DEPTH";
+    constexpr char SYN_OSC_D_WSLOT3_MODE[] = "SYN_OSC_D_WSLOT3_MODE";  constexpr char SYN_OSC_D_WSLOT3_SRC[] = "SYN_OSC_D_WSLOT3_SRC";  constexpr char SYN_OSC_D_WSLOT3_DEPTH[] = "SYN_OSC_D_WSLOT3_DEPTH";
+    constexpr char SYN_OSC_D_WSLOT4_MODE[] = "SYN_OSC_D_WSLOT4_MODE";  constexpr char SYN_OSC_D_WSLOT4_SRC[] = "SYN_OSC_D_WSLOT4_SRC";  constexpr char SYN_OSC_D_WSLOT4_DEPTH[] = "SYN_OSC_D_WSLOT4_DEPTH";
 }

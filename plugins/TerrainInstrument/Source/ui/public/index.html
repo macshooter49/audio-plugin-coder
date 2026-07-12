@@ -12721,6 +12721,77 @@ setTimeout(function wireSynControls () {
       } catch (e) { console.warn('[UNI] initUnisonPills failed', e); }
     })();
 
+    // ══════════ BLEND MODES — B1..B4 cross-osc warp slots (P1: FM + PD, any-to-any) ══════════
+    //   Right-click a pill → glass menu (family → source); left-drag → depth 0-100%. All 4 oscs.
+    //   Writes go through __setSynParam (relay-bypass); JS holds the display state, DSP reads APVTS.
+    (function initBlendPills () {
+      try {
+        var MODES = ['Off','FM','PD','AM','RM','Sync','Warp','Dist','Filter'];   // == SYN_OSC_x_WSLOTn_MODE choice order
+        var P1ON  = { FM: 1, PD: 1 };                                            // families active in P1
+        var NSRC  = 7;                                                           // SRC choices: Osc A..D / Sub / Noise / Self
+        var bstate = {};                                                         // "a1" -> {mode,src,depth}  (display source of truth)
+        function st  (o, s) { var k = o + s; return bstate[k] || (bstate[k] = { mode: 0, src: ('abcd'.indexOf(o) + 1) % 4, depth: 0 }); }
+        function pid (o, s, p) { return 'SYN_OSC_' + o.toUpperCase() + '_WSLOT' + s + '_' + p; }
+        function wMode (o, s, m) { st(o, s).mode = m; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'MODE'), m / (MODES.length - 1)); }
+        function wSrc  (o, s, v) { st(o, s).src  = v; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'SRC'),  v / (NSRC - 1)); }
+        function wDep  (o, s, d) { d = Math.max(0, Math.min(1, d)); st(o, s).depth = d; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'DEPTH'), d); }
+
+        function paint (pill, o, s) {
+          var b = st(o, s);
+          if (b.mode === 0) { pill.textContent = 'B' + s; pill.classList.remove('act');
+            pill.title = 'Blend slot ' + s + ' — right-click to assign a warp (FM / PD from another oscillator).'; return; }
+          var srcLbl = (b.src < 4) ? 'ABCD'.charAt(b.src) : (b.src === 6 ? 'self' : '?');
+          pill.innerHTML = MODES[b.mode] + '<span style="opacity:.55;font-size:.85em">&nbsp;' + srcLbl + '</span> <b>' + Math.round(b.depth * 100) + '</b>';
+          pill.classList.add('act');
+          pill.title = MODES[b.mode] + ' from Osc ' + String(srcLbl).toUpperCase() + ' — drag up/down for depth. The source modulates even with its own volume down.';
+        }
+
+        function menu (pill, o, s, x, y) {
+          var b = st(o, s), items = [], ci = 'abcd'.indexOf(o);
+          items.push({ isHeader: true, label: 'Blend ' + s + ' · Osc ' + o.toUpperCase() });
+          MODES.forEach(function (m, mi) {
+            var on = (mi === 0) || P1ON[m];
+            items.push({ label: m, isChecked: (b.mode === mi), isDisabled: !on, badge: on ? '' : 'soon', keepOpen: true,
+              onPick: function () { if (!on) return; wMode(o, s, mi);
+                if (mi === 1 || mi === 2) { var cs = st(o, s).src; if (cs === ci || (mi === 1 && cs === 6)) wSrc(o, s, (ci + 1) % 4); }
+                paint(pill, o, s); menu(pill, o, s, x, y); } });
+          });
+          if (b.mode === 1 || b.mode === 2) {
+            items.push({ isHeader: true, label: 'Source' });
+            ['a','b','c','d'].forEach(function (so) { if (so === o) return; var si = 'abcd'.indexOf(so);
+              items.push({ label: 'Osc ' + so.toUpperCase(), isChecked: (b.src === si), keepOpen: true,
+                onPick: function () { wSrc(o, s, si); paint(pill, o, s); menu(pill, o, s, x, y); } }); });
+            items.push({ label: 'Sub',   isDisabled: true, badge: 'soon' });
+            items.push({ label: 'Noise', isDisabled: true, badge: 'soon' });
+            if (b.mode === 2) items.push({ label: 'Self (feedback)', isChecked: (b.src === 6), keepOpen: true,
+              onPick: function () { wSrc(o, s, 6); paint(pill, o, s); menu(pill, o, s, x, y); } });
+          }
+          if (window.__synShowMenu) window.__synShowMenu(null, items, x, y);
+        }
+
+        function wire (pill, o, s) {
+          paint(pill, o, s);
+          pill.addEventListener('contextmenu', function (ev) { ev.preventDefault(); ev.stopPropagation(); menu(pill, o, s, ev.clientX, ev.clientY); });
+          var drag = false, y0 = 0, d0 = 0;
+          function mv (ev) { if (!drag) return; var nd = Math.max(0, Math.min(1, d0 + (y0 - ev.clientY) / 150)); wDep(o, s, nd);
+            pill.innerHTML = MODES[st(o, s).mode] + ' <b>' + Math.round(nd * 100) + '</b>'; }
+          function up () { if (!drag) return; drag = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); paint(pill, o, s); }
+          pill.addEventListener('pointerdown', function (ev) { if (ev.button !== 0) return; if (st(o, s).mode === 0) return;
+            drag = true; y0 = ev.clientY; d0 = st(o, s).depth; try { pill.setPointerCapture(ev.pointerId); } catch (_) {}
+            document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); ev.preventDefault(); });
+          pill.style.cursor = 'context-menu';
+        }
+
+        document.querySelectorAll('#syn-panel .back-only .blend-pills').forEach(function (row) {
+          var dev = row.closest('.device.osc'); if (!dev || !dev.id) return;
+          var o = dev.id.charAt(4);   // 'osc-a-device' -> 'a'
+          if ('abcd'.indexOf(o) < 0) return;
+          var pills = row.querySelectorAll('.blend-pill');
+          for (var i = 0; i < pills.length && i < 4; ++i) wire(pills[i], o, i + 1);   // B1..B4 only (Mix/Mod later)
+        });
+      } catch (e) { console.warn('[BLEND] init failed', e); }
+    })();
+
     // ── SUB pills — RIGHT-CLICK to pick Range/Form/Weight/Heat; drag the value.
     //    Verbatim clone of the UNISON pill pattern (same glass menu, same drag law). ──
     (function initSubPills() {

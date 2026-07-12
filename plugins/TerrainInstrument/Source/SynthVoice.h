@@ -619,6 +619,14 @@ namespace tw
         void setHarmParamsB (const tw::HarmParams& p) noexcept { harmParamsB_ = p; }
         void setHarmParamsC (const tw::HarmParams& p) noexcept { harmParamsC_ = p; }
         void setHarmParamsD (const tw::HarmParams& p) noexcept { harmParamsD_ = p; }
+        void setBlendSlot (int osc, int slot, int mode, int src, float depth) noexcept   // BLEND-MODES-PUSH (cross-osc warp)
+        {
+            if (osc < 0 || osc > 3 || slot < 0 || slot > 3) return;
+            BlendSlotV& b = blendSlot_[osc][slot];
+            b.mode = mode; b.src = src;
+            const float dc = juce::jlimit (0.f, 1.f, depth);
+            b.depth = (std::exp (2.0f * dc) - 1.0f) / (std::exp (2.0f) - 1.0f);   // house exp-bias curve
+        }
         void setModalParamsA (const tw::ModalParams& p) noexcept { modalParamsA_ = p; }   // MODAL-ENGINE-PUSH
         void setModalParamsB (const tw::ModalParams& p) noexcept { modalParamsB_ = p; }
         void setModalParamsC (const tw::ModalParams& p) noexcept { modalParamsC_ = p; }
@@ -1905,6 +1913,36 @@ namespace tw
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
+// ── BLEND MODES: per-carrier read-phase offset from the 4 cross-osc warp slots. PD = modulator
+                //    injected direct (phase modulation); FM = modulator integrated per carrier (leaky) →
+                //    true linear/thru-zero frequency modulation. Carrier accumulators stay clean — everything
+                //    rides the read phase. Modulator taps = previous-sample pre-gain osc outputs (any-to-any). ──
+                float blendOff[4] = { 0.f, 0.f, 0.f, 0.f };
+                {
+                    const float repInc[4] = { (float) uPhaseIncA_[0], (float) uPhaseIncB_[0],
+                                              (float) uPhaseIncC_[0], (float) uPhaseIncD_[0] };
+                    for (int c = 0; c < 4; ++c)
+                    {
+                        float pm = 0.f, fmDrive = 0.f;
+                        for (int s = 0; s < 4; ++s)
+                        {
+                            BlendSlotV& b = blendSlot_[c][s];
+                            blendDepthSm_[c][s] += (b.depth - blendDepthSm_[c][s]) * 0.0025f;   // de-zipper
+                            const float d = blendDepthSm_[c][s];
+                            if (b.mode == 0 || d < 1.0e-4f) continue;                            // Off / silent
+                            float mod;
+                            if      (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
+                            else if (b.src == 6) mod = modPrev_[c];       // Self (feedback)
+                            else                 mod = 0.f;               // Sub(4)/Noise(5): P1 no-op
+                            if      (b.mode == 2) pm      += (1.20f * d) * mod;    // PD (phase, cycles)
+                            else if (b.mode == 1) fmDrive += (12.0f * d) * mod;    // FM (freq deviation)
+                        }
+                        fmPhase_[c] = 0.9997f * fmPhase_[c] + repInc[c] * fmDrive;   // integrate freq → phase
+                        fmPhase_[c] = juce::jlimit (-8.f, 8.f, fmPhase_[c]);         // bound (thru-zero + feedback safe)
+                        blendOff[c] = pm + fmPhase_[c];
+                    }
+                }
+
                 float sumAL = 0.0f, sumAR = 0.0f;
 
                 for (int u = 0; uLoopA && u < activeUnisonA_; ++u)
@@ -1936,7 +1974,7 @@ namespace tw
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer
                                     // (frame position, stepped-interp and blur already applied at block rate).
-                                    sAu = tw::Wavetable::readCycle (blendA_.data(), (float) warpedPhase);
+                                    double rpA = warpedPhase + (double) blendOff[0]; rpA -= std::floor (rpA); sAu = tw::Wavetable::readCycle (blendA_.data(), (float) rpA);   // BLEND inject
                                     sAu *= window;
 
                                     sAu = applyAmpWarp (warpMode_,    warpAmount_,    sAu);   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
@@ -1998,7 +2036,7 @@ namespace tw
                                 if (fmQuakeFry_[0] > 0.0f) sub += fmQuakeFry_[0] * (sub - sub * sub * sub * (1.0f / 6.0f));
                                 qSubA = (double) (fmQuakeIdx_[0] * sub);
                             }
-                            double cPh = uPhaseA_[(size_t) u] + qSubA;
+                            double cPh = uPhaseA_[(size_t) u] + qSubA + (double) blendOff[0];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2225,7 +2263,7 @@ namespace tw
                                 else
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
-                                    sBu = tw::Wavetable::readCycle (blendB_.data(), (float) warpedPhase);
+                                    double rpB = warpedPhase + (double) blendOff[1]; rpB -= std::floor (rpB); sBu = tw::Wavetable::readCycle (blendB_.data(), (float) rpB);   // BLEND inject
                                     sBu *= window;
 
                                     sBu = applyAmpWarp (warpModeB_,   warpAmountB_,   sBu);   // slot 1 amp-domain
@@ -2275,7 +2313,7 @@ namespace tw
                                 if (fmQuakeFry_[1] > 0.0f) sub += fmQuakeFry_[1] * (sub - sub * sub * sub * (1.0f / 6.0f));
                                 qSubB = (double) (fmQuakeIdx_[1] * sub);
                             }
-                            double cPh = uPhaseB_[(size_t) u] + qSubB;
+                            double cPh = uPhaseB_[(size_t) u] + qSubB + (double) blendOff[1];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2495,7 +2533,7 @@ namespace tw
                                 else
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
-                                    sCu = tw::Wavetable::readCycle (blendC_.data(), (float) warpedPhase);
+                                    double rpC = warpedPhase + (double) blendOff[2]; rpC -= std::floor (rpC); sCu = tw::Wavetable::readCycle (blendC_.data(), (float) rpC);   // BLEND inject
                                     sCu *= window;
 
                                     sCu = applyAmpWarp (warpModeC_,   warpAmountC_,   sCu);   // slot 1 amp-domain
@@ -2545,7 +2583,7 @@ namespace tw
                                 if (fmQuakeFry_[2] > 0.0f) sub += fmQuakeFry_[2] * (sub - sub * sub * sub * (1.0f / 6.0f));
                                 qSubC = (double) (fmQuakeIdx_[2] * sub);
                             }
-                            double cPh = uPhaseC_[(size_t) u] + qSubC;
+                            double cPh = uPhaseC_[(size_t) u] + qSubC + (double) blendOff[2];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -2765,7 +2803,7 @@ namespace tw
                                 else
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
-                                    sDu = tw::Wavetable::readCycle (blendD_.data(), (float) warpedPhase);
+                                    double rpD = warpedPhase + (double) blendOff[3]; rpD -= std::floor (rpD); sDu = tw::Wavetable::readCycle (blendD_.data(), (float) rpD);   // BLEND inject
                                     sDu *= window;
 
                                     sDu = applyAmpWarp (warpModeD_,   warpAmountD_,   sDu);   // slot 1 amp-domain
@@ -2815,7 +2853,7 @@ namespace tw
                                 if (fmQuakeFry_[3] > 0.0f) sub += fmQuakeFry_[3] * (sub - sub * sub * sub * (1.0f / 6.0f));
                                 qSubD = (double) (fmQuakeIdx_[3] * sub);
                             }
-                            double cPh = uPhaseD_[(size_t) u] + qSubD;
+                            double cPh = uPhaseD_[(size_t) u] + qSubD + (double) blendOff[3];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
@@ -3035,6 +3073,11 @@ namespace tw
                 // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate)
                 scratchL[i] = (sA_L * level_ * panL_ * gA + sB_L * levelB_ * panLB_ * gB + sC_L * levelC_ * panLC_ * gC + sD_L * levelD_ * panLD_ * gD) * velEnv;
                 scratchR[i] = (sA_R * level_ * panR_ * gA + sB_R * levelB_ * panRB_ * gB + sC_R * levelC_ * panRC_ * gC + sD_R * levelD_ * panRD_ * gD) * velEnv;
+                // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
+                // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
+                modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
+                modPrev_[2] = 0.5f * (sC_L + sC_R); modPrev_[3] = 0.5f * (sD_L + sD_R);
+                for (int mc = 0; mc < 4; ++mc) modPrev_[mc] = juce::jlimit (-4.f, 4.f, modPrev_[mc]);
             }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
@@ -3878,6 +3921,13 @@ namespace tw
         // MODAL-ENGINE-VOICE — per-OSC physical model (Engine::MODAL), same shape as HARM
         std::array<tw::ModalEngine, kMaxUnison> modalEngA_, modalEngB_, modalEngC_, modalEngD_;
         tw::ModalParams modalParamsA_, modalParamsB_, modalParamsC_, modalParamsD_;
+
+        // ── BLEND MODES (Serum-2-style cross-osc warp) — per-voice state ──
+        struct BlendSlotV { int mode = 0; int src = 0; float depth = 0.f; };   // depth = exp-biased target
+        BlendSlotV blendSlot_[4][4];
+        float blendDepthSm_[4][4] = {};   // per-sample de-zippered depth
+        float modPrev_[4] = { 0.f, 0.f, 0.f, 0.f };   // prev-sample pre-gain osc outputs = the modulator taps
+        float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
         juce::AudioBuffer<float> modalBlkA_, modalBlkB_, modalBlkC_, modalBlkD_;
         const float *modalBlkAL_ = nullptr, *modalBlkAR_ = nullptr, *modalBlkBL_ = nullptr, *modalBlkBR_ = nullptr,
                     *modalBlkCL_ = nullptr, *modalBlkCR_ = nullptr, *modalBlkDL_ = nullptr, *modalBlkDR_ = nullptr;
