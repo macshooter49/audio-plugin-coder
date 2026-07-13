@@ -12754,7 +12754,7 @@ setTimeout(function wireSynControls () {
         function wSrc  (o, s, v) { st(o, s).src  = v; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'SRC'),  v / (NSRC - 1)); }
         function wDep  (o, s, d) { d = Math.max(0, Math.min(1, d)); st(o, s).depth = d; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'DEPTH'), d); }
 
-        var MENU_FAM = ['Off','FM','PD','AM','RM','Sync','Warp','Dist'];   // families shown (Filter removed per Max)
+        var MENU_FAM = ['Off','FM','PD','AM','RM'];   // FINAL blend arsenal — Sync/Warp/Dist removed (redundant with the front/back warp modes; Max 2026-07-12). Enum in C++ keeps them (frozen), just not shown.
         var pillOf = {};                                                   // "a1" -> pill element (for reopen refresh)
         function srcLtr (v) { return (v < 4) ? 'ABCD'.charAt(v) : (v === 6 ? 'S' : '?'); }   // Self = 'S' (PD(S), not PD(self))
 
@@ -12762,7 +12762,7 @@ setTimeout(function wireSynControls () {
         function paintLabel (pill, o, s) {
           var b = st(o, s);
           if (b.mode === 0) { pill.innerHTML = '<span class="bp-txt">B' + s + '</span>'; pill.classList.remove('act');
-            pill.title = 'Blend slot ' + s + ' — right-click to assign a warp (FM / PD from another oscillator).'; return; }
+            pill.title = 'Blend slot ' + s + ' — right-click to warp this oscillator with FM / PD / AM / RM from another oscillator.'; return; }
           pill.innerHTML = '<span class="bp-txt">' + MODES[b.mode] + '<span class="bp-par">(</span>' + srcLtr(b.src) + '<span class="bp-par">)</span></span>';
           pill.classList.add('act');
           pill.title = MODES[b.mode] + ' from Osc ' + String(srcLtr(b.src)).toUpperCase() + ' — hover or drag for depth. The source modulates even at volume 0.';
