@@ -1910,8 +1910,9 @@ namespace tw
                     for (int s = 0; s < 4; ++s)
                     {
                         const BlendSlotV& b = blendSlot_[c][s];
-                        if ((b.mode != 1 && b.mode != 2) || b.depth < 1.0e-4f) continue;  // only armed FM/PD
-                        if (isBlock (eng[c])) blkCarrierArmed_[c] = true;                 // c's block gets modulated
+                        if (b.mode < 1 || b.mode > 4 || b.depth < 1.0e-4f) continue;      // armed FM/PD/AM/RM only
+                        if ((b.mode == 1 || b.mode == 2) && isBlock (eng[c]))
+                            blkCarrierArmed_[c] = true;                                   // FM/PD phase-modulate c's block (AM/RM don't need the ring)
                         if      (b.src < 4)  modSrcForce_[b.src] = true;                  // Osc A..D as source
                         else if (b.src == 6) modSrcForce_[c]     = true;                  // Self
                     }
@@ -1928,10 +1929,14 @@ namespace tw
             // CPU: SAMP/GRAN/SPEC oscs render whole blocks above and their result REPLACES the
             // unison sum below — the per-sine u-loop only produces zeros for them (fold of 0,
             // two pan MACs, discarded). Skip it entirely; the sums already start at 0.
-            const bool uLoopA = ! oscDead_[0] && (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC && engine_  != Engine::HARM && engine_  != Engine::MODAL);
-            const bool uLoopB = ! oscDead_[1] && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC && engineB_ != Engine::HARM && engineB_ != Engine::MODAL);
-            const bool uLoopC = ! oscDead_[2] && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC && engineC_ != Engine::HARM && engineC_ != Engine::MODAL);
-            const bool uLoopD = ! oscDead_[3] && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL);
+            // (|| modSrcForce_) — a WT/FM osc feeding an armed blend slot renders even when a FLOW
+            // mode / round-robin gated it dead, so it can still modulate. Its audible output is still
+            // zeroed by the per-osc gate (gA..gD) in the mix; only modPrev_ sees it. Bit-identical
+            // when nothing is blended (modSrcForce_ all false).
+            const bool uLoopA = (! oscDead_[0] || modSrcForce_[0]) && (engine_  != Engine::SAMP && engine_  != Engine::GRAN && engine_  != Engine::SPEC && engine_  != Engine::HARM && engine_  != Engine::MODAL);
+            const bool uLoopB = (! oscDead_[1] || modSrcForce_[1]) && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC && engineB_ != Engine::HARM && engineB_ != Engine::MODAL);
+            const bool uLoopC = (! oscDead_[2] || modSrcForce_[2]) && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC && engineC_ != Engine::HARM && engineC_ != Engine::MODAL);
+            const bool uLoopD = (! oscDead_[3] || modSrcForce_[3]) && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL);
             for (int i = 0; i < numSamples; ++i)
             {
                 // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
@@ -1940,12 +1945,13 @@ namespace tw
                 //    true linear/thru-zero frequency modulation. Carrier accumulators stay clean — everything
                 //    rides the read phase. Modulator taps = previous-sample pre-gain osc outputs (any-to-any). ──
                 float blendOff[4] = { 0.f, 0.f, 0.f, 0.f };
+                float blendAmp[4] = { 1.f, 1.f, 1.f, 1.f };   // AM/RM amplitude gain (1 = inert; multiplies the carrier)
                 {
                     const float repInc[4] = { (float) uPhaseIncA_[0], (float) uPhaseIncB_[0],
                                               (float) uPhaseIncC_[0], (float) uPhaseIncD_[0] };
                     for (int c = 0; c < 4; ++c)
                     {
-                        float pm = 0.f, fmDrive = 0.f;
+                        float pm = 0.f, fmDrive = 0.f, amp = 1.0f;
                         for (int s = 0; s < 4; ++s)
                         {
                             BlendSlotV& b = blendSlot_[c][s];
@@ -1956,12 +1962,15 @@ namespace tw
                             if      (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
                             else if (b.src == 6) mod = modPrev_[c];       // Self (feedback)
                             else                 mod = 0.f;               // Sub(4)/Noise(5): P1 no-op
-                            if      (b.mode == 2) pm      += (1.20f * d) * mod;    // PD (phase, cycles)
-                            else if (b.mode == 1) fmDrive += (12.0f * d) * mod;    // FM (freq deviation)
+                            if      (b.mode == 2) pm      += (1.20f * d) * mod;              // PD (phase, cycles)
+                            else if (b.mode == 1) fmDrive += (12.0f * d) * mod;              // FM (freq deviation)
+                            else if (b.mode == 3) amp     *= 1.0f + d * mod;                 // AM — carrier*(1+d*mod): fundamental KEPT (tremolo→sidebands)
+                            else if (b.mode == 4) amp     *= (1.0f - d) + d * mod;           // RM — ring: dry fades as depth rises, fundamental SUPPRESSED
                         }
                         fmPhase_[c] = 0.9997f * fmPhase_[c] + repInc[c] * fmDrive;   // integrate freq → phase
                         fmPhase_[c] = juce::jlimit (-8.f, 8.f, fmPhase_[c]);         // bound (thru-zero + feedback safe)
                         blendOff[c] = pm + fmPhase_[c];
+                        blendAmp[c] = juce::jlimit (-6.0f, 6.0f, amp);   // safety ceiling for stacked AM/RM on a hot modulator (never touches 1–2 slot use)
                     }
                 }
 
@@ -2156,6 +2165,7 @@ namespace tw
                 // above, and an un-blended osc bypasses this entirely (bit-identical to today).
                 if (blkCarrierArmed_[0] || blkArmSm_[0] > 1.0e-4f)
                     blendReadBlock (0, blendOff[0], blkCarrierArmed_[0], sA_L, sA_R);
+                sA_L *= blendAmp[0]; sA_R *= blendAmp[0];   // BLEND AM/RM (amplitude-domain, all engines; 1.0 = inert)
                 // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
                 if (sub_[0].on) subMix (0, sA_L, sA_R);
                 if (! spectralBypassA_)
@@ -2433,6 +2443,7 @@ namespace tw
                 // BLEND MODES (carrier = block engine): phase-modulate OSC B's rendered block (see OSC A).
                 if (blkCarrierArmed_[1] || blkArmSm_[1] > 1.0e-4f)
                     blendReadBlock (1, blendOff[1], blkCarrierArmed_[1], sB_L, sB_R);
+                sB_L *= blendAmp[1]; sB_R *= blendAmp[1];   // BLEND AM/RM
                 if (sub_[1].on) subMix (1, sB_L, sB_R);
                 if (! spectralBypassB_)
                 {
@@ -2706,6 +2717,7 @@ namespace tw
                 // BLEND MODES (carrier = block engine): phase-modulate OSC C's rendered block (see OSC A).
                 if (blkCarrierArmed_[2] || blkArmSm_[2] > 1.0e-4f)
                     blendReadBlock (2, blendOff[2], blkCarrierArmed_[2], sC_L, sC_R);
+                sC_L *= blendAmp[2]; sC_R *= blendAmp[2];   // BLEND AM/RM
                 if (sub_[2].on) subMix (2, sC_L, sC_R);
                 if (! spectralBypassC_)
                 {
@@ -2979,6 +2991,7 @@ namespace tw
                 // BLEND MODES (carrier = block engine): phase-modulate OSC D's rendered block (see OSC A).
                 if (blkCarrierArmed_[3] || blkArmSm_[3] > 1.0e-4f)
                     blendReadBlock (3, blendOff[3], blkCarrierArmed_[3], sD_L, sD_R);
+                sD_L *= blendAmp[3]; sD_R *= blendAmp[3];   // BLEND AM/RM
                 if (sub_[3].on) subMix (3, sD_L, sD_R);
                 if (! spectralBypassD_)
                 {
@@ -4170,8 +4183,12 @@ namespace tw
         // applied later in the mix), so a forced-but-turned-down osc stays silent — it just modulates.
         float blkGateLevel (int o, float lvl) const noexcept
         {
-            if (oscDead_[o]) return 0.0f;
-            return modSrcForce_[o] ? juce::jmax (lvl, 1.0e-4f) : lvl;
+            // A blend MODULATOR source must render even when Level-0 AND even when a FLOW mode
+            // (round-robin / mute / solo) has gated this osc dead — otherwise round-robin starves
+            // the modulator and the FM/PD silently stops. Output stays inaudible: the real level_
+            // and the per-osc gate (gA..gD, which tracks round-robin) still zero it in the mix.
+            if (modSrcForce_[o]) return juce::jmax (lvl, 1.0e-4f);
+            return oscDead_[o] ? 0.0f : lvl;
         }
 
         // BLEND MODES — modulated re-read of a block engine's output = FM/PD ON a Sample/Granular/
