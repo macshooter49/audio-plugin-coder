@@ -1964,8 +1964,8 @@ namespace tw
                             else                 mod = 0.f;               // Sub(4)/Noise(5): P1 no-op
                             if      (b.mode == 2) pm      += (1.20f * d) * mod;              // PD (phase, cycles)
                             else if (b.mode == 1) fmDrive += (12.0f * d) * mod;              // FM (freq deviation)
-                            else if (b.mode == 3) amp     *= 1.0f + d * mod;                 // AM — carrier*(1+d*mod): fundamental KEPT (tremolo→sidebands)
-                            else if (b.mode == 4) amp     *= (1.0f - d) + d * mod;           // RM — ring: dry fades as depth rises, fundamental SUPPRESSED
+                            else if (b.mode == 3) amp     *= 1.0f + (1.8f * d) * mod;        // AM — carrier*(1+1.8·d·mod): fundamental KEPT; 1.8 drive → night-and-day at 100%
+                            else if (b.mode == 4) amp     *= (1.0f - d) + (1.8f * d) * mod;   // RM — ring: dry fades, wet driven 1.8× so full ring reads hard [EAR-TUNABLE]
                         }
                         fmPhase_[c] = 0.9997f * fmPhase_[c] + repInc[c] * fmDrive;   // integrate freq → phase
                         fmPhase_[c] = juce::jlimit (-8.f, 8.f, fmPhase_[c]);         // bound (thru-zero + feedback safe)

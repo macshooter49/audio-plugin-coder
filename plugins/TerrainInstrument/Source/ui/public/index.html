@@ -3748,10 +3748,10 @@ body {
 }
 /* Perfect centering: absorb the trailing letter-spacing so the glyphs sit dead-center in the box. */
 #syn-panel .blend-pill .bp-txt { margin-right: -1.4px; }
-/* Parens sit optically low of the caps in SF Pro — nudge them up so "FM(D)" reads vertically centered. */
-#syn-panel .blend-pill .bp-par { position: relative; top: -1px; }
-/* Drag/hover value — SAME SF Pro family, THIN weight, with a % sign, centered. */
-#syn-panel .blend-pill .bp-val { font-weight: 200; font-size: 12px; letter-spacing: 0.3px; margin-right: -0.3px; }
+/* Parens vs source letter: -0.5px centres the letter inside the parens (0 read letter-high, -1 read letter-low). */
+#syn-panel .blend-pill .bp-par { position: relative; top: -0.5px; }
+/* Drag/hover value — SAME SF Pro family, thin but WHITE (weight 300 + --text-primary, matches the label; 200 read gray), % sign, centered. */
+#syn-panel .blend-pill .bp-val { font-weight: 300; font-size: 12px; letter-spacing: 0.3px; margin-right: -0.3px; color: var(--text-primary); }
 
 /* Phase 11a — selector-pills (back middle row).
    Container takes the .osc-display footprint (same flex:1 + min-height),
