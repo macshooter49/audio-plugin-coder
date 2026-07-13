@@ -3722,10 +3722,10 @@ body {
 #syn-panel .device .back-only { display: none; }
 #syn-panel .device.swapped .back-only { display: flex; }
 
-/* Phase 11a — blend-pills (back top row, 6 letters: B1 B2 B3 B4 MIX MOD).
-   EXACT clone of .engine-pills + .eng above so flipping front↔back leaves the
-   pill row pixel-identical. Only the contents (letters vs engine emblems) change. */
-#syn-panel .blend-pills { display: flex; gap: 8px; }
+/* Phase 11a — blend-pills (back top row, 4 slots: B1 B2 B3 B4; Mix/Mod dropped 2026-07-13).
+   gap:6px matches .selector-pills below so the 4 pills column-align on top of the 4
+   selector pills (Mix/None/Voices/Coarse) — even, symmetrical stacking (Max). */
+#syn-panel .blend-pills { display: flex; gap: 6px; }
 #syn-panel .blend-pill {
   flex: 1; height: 30px;
   border: 1px solid var(--border-strong); border-radius: 6px;
@@ -3748,8 +3748,10 @@ body {
 }
 /* Perfect centering: absorb the trailing letter-spacing so the glyphs sit dead-center in the box. */
 #syn-panel .blend-pill .bp-txt { margin-right: -1.4px; }
-/* Parens vs source letter: -0.5px centres the letter inside the parens (0 read letter-high, -1 read letter-low). */
-#syn-panel .blend-pill .bp-par { position: relative; top: -0.5px; }
+/* Parens vs source letter: -0.85px lifts the parens so the letter's ink-center sits dead-center
+   between them. NOT eyeballed — canvas TextMetrics on SF Pro: cap ink-center = 0.352em above
+   baseline, '(' ink-center = 0.267em → delta 0.085em = 0.85px @10px (Max 2026-07-13; -2px overshot). */
+#syn-panel .blend-pill .bp-par { position: relative; top: -0.85px; }
 /* Drag/hover value — SAME SF Pro family, thin but WHITE (weight 300 + --text-primary, matches the label; 200 read gray), % sign, centered. */
 #syn-panel .blend-pill .bp-val { font-weight: 300; font-size: 12px; letter-spacing: 0.3px; margin-right: -0.3px; color: var(--text-primary); }
 
@@ -4269,7 +4271,9 @@ body {
 #syn-panel .cross-knob .knob-label { font-size: 7.5px; letter-spacing: 0.6px; color: var(--text-primary); }
 
 /* ── FILTER + FLOW row ── */
-#syn-panel .row-filter-vl { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
+/* 332px (was 318) = the OSC column width ((792−104−24)/2 at 820px) so the filter's right
+   edge stacks exactly on the OSC back panel's (Max 2026-07-13). Mirrored on .row-env-mod. */
+#syn-panel .row-filter-vl { display: grid; grid-template-columns: 332px 1fr; gap: 12px; }
 #syn-panel .filter { display: flex; flex-direction: column; gap: 7px; padding-top: 30px; position: relative; }
 #syn-panel .filter-toggle {
   position: absolute; top: 6px; right: 14px;
@@ -4427,7 +4431,7 @@ body {
 #syn-panel .vis-knob .knob-label { font-size: 7px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* ── ENV + MOD row ── */
-#syn-panel .row-env-mod { display: grid; grid-template-columns: 318px 1fr; gap: 12px; }
+#syn-panel .row-env-mod { display: grid; grid-template-columns: 332px 1fr; gap: 12px; }   /* match .row-filter-vl / OSC column — shared right edge */
 #syn-panel .envs { display: flex; flex-direction: column; gap: 5px; padding-top: 22px; }
 #syn-panel .env-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
 #syn-panel .env-tab { flex: 1; padding: 3px 0 5px; font-size: 9px; letter-spacing: 1.8px; text-align: center; color: var(--text-secondary); font-weight: 300; position: relative; }
@@ -4666,8 +4670,9 @@ body {
               align-items: center; padding-bottom: 4px;
             }
             /* FILTER label — nudge right to match the OSC label position (left:17) so the
-               visible "F" glyph aligns with the dropdown box border below it. */
-            #syn-panel .device.filter > .device-label { left: 17px; }
+               visible "F" glyph aligns with the dropdown box border below it.
+               Uppercase + white to read identically to the OSC header (Max 2026-07-13). */
+            #syn-panel .device.filter > .device-label { left: 17px; text-transform: uppercase; color: #FFFFFF; }
             /* 1/2/+ pills cluster — mirror the label nudge so the cluster's right edge
                sits inside the dropdown box border below, matching OSC's preset-corner inset. */
             #syn-panel .device.filter .filter-toggle { right: 17px; }
@@ -4692,8 +4697,43 @@ body {
             #syn-panel .fb-opt { cursor: pointer; }
             #syn-panel .fb-opt .sel-value { color: var(--text-muted); transition: color .15s ease; }
             #syn-panel .fb-opt:hover .sel-value { color: var(--text-primary); }
-            #syn-panel .fb-opt.act { border-color: var(--purple-500); }
-            #syn-panel .fb-opt.act .sel-value { color: #C9B3FF; }
+            /* Series/Parallel — keep the dark boxes, but use the SAME purple as the OSC back
+               emblem (purple-400), not the darker purple-500 (Max 2026-07-13). */
+            #syn-panel .fb-opt.act { border-color: var(--purple-400); }
+            #syn-panel .fb-opt.act .sel-value { color: var(--purple-400); }
+            /* Back-panel emblems = the OSC back emblem, verbatim: transparent, thin PURPLE-400
+               outline, NO fill, NO glow (Max 2026-07-13). Applies to the 1/2/K/E tabs, the
+               flip-arrow swap button, and the A/B/C/D/S/N routing pills. */
+            #syn-panel .device.filter.swapped .filter-toggle .ft-pill.act,
+            #syn-panel .device.filter.swapped .filter-toggle .ft-kt.act,
+            #syn-panel .device.filter.swapped .filter-toggle .ft-env.act {
+              background: transparent; border-color: var(--purple-400); color: var(--purple-400); box-shadow: none;
+            }
+            #syn-panel .device.filter.swapped .swap-btn:hover,
+            #syn-panel .device.filter.swapped .swap-btn.act {
+              background: transparent; border-color: var(--purple-400); color: var(--purple-400); box-shadow: none;
+            }
+            /* Routing pills A/B/C/D/S/N — selected = purple-400 outline + purple-400 letter,
+               overriding the shared thin-white .blend-pill.act (osc blend pills stay white; these turn purple). */
+            #syn-panel .filter-back .flt-src.act {
+              background: transparent; border-color: var(--purple-400); color: var(--purple-400);
+            }
+            /* Back-panel tab cluster (1/2/K/E) + flip-arrow SIZING = the OSC header emblems
+               verbatim: 16×16 square, radius 4, grid-centered glyph (padding-bottom 2px optical
+               nudge), arrow vertically aligned with the tabs (Max 2026-07-13: boxes were 16×14
+               + a low 14px arrow → letters off / arrow too low). */
+            #syn-panel .device.filter.swapped .filter-toggle { gap: 4px; align-items: center; }
+            #syn-panel .device.filter.swapped .filter-toggle .ft-pill,
+            #syn-panel .device.filter.swapped .swap-btn {
+              width: 16px; height: 16px; box-sizing: border-box; margin: 0;
+              border: 1px solid var(--border-strong); border-radius: 4px;
+              display: inline-grid; place-items: center;
+              line-height: 1; letter-spacing: 0; padding: 0 0 2px;
+            }
+            #syn-panel .device.filter.swapped .filter-toggle .ft-pill { font-size: 9px; }
+            #syn-panel .device.filter.swapped .swap-btn { font-size: 12px; margin-left: 2px; }
+            #syn-panel .device.filter.swapped .swap-btn::before { transform: none; }
+            #syn-panel .device.filter.swapped .swap-btn.act::before { font-size: 11px; }
             /* Dropdown trigger — make it visibly clickable */
             #syn-panel .device.filter .dd-trigger { cursor: pointer; transition: border-color .15s; }
             #syn-panel .device.filter .dd-trigger:hover { border-color: var(--purple-500); }
@@ -5529,14 +5569,13 @@ body {
 
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
             <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
+              <!-- TOP ROW: 4 BLEND SLOT pills (B1–B4) — wired to WSLOT MODE/SRC/DEPTH -->
+              <!-- Mix/Mod pills dropped 2026-07-13 (mod matrix covers movement; per-slot depth covers amount) -->
               <div class="blend-pills">
                 <div class="blend-pill">B1</div>
                 <div class="blend-pill">B2</div>
                 <div class="blend-pill">B3</div>
                 <div class="blend-pill">B4</div>
-                <div class="blend-pill">Mix</div>
-                <div class="blend-pill">Mod</div>
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
@@ -5800,14 +5839,13 @@ body {
 
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
             <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
+              <!-- TOP ROW: 4 BLEND SLOT pills (B1–B4) — wired to WSLOT MODE/SRC/DEPTH -->
+              <!-- Mix/Mod pills dropped 2026-07-13 (mod matrix covers movement; per-slot depth covers amount) -->
               <div class="blend-pills">
                 <div class="blend-pill">B1</div>
                 <div class="blend-pill">B2</div>
                 <div class="blend-pill">B3</div>
                 <div class="blend-pill">B4</div>
-                <div class="blend-pill">Mix</div>
-                <div class="blend-pill">Mod</div>
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
@@ -6087,14 +6125,13 @@ body {
 
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
             <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
+              <!-- TOP ROW: 4 BLEND SLOT pills (B1–B4) — wired to WSLOT MODE/SRC/DEPTH -->
+              <!-- Mix/Mod pills dropped 2026-07-13 (mod matrix covers movement; per-slot depth covers amount) -->
               <div class="blend-pills">
                 <div class="blend-pill">B1</div>
                 <div class="blend-pill">B2</div>
                 <div class="blend-pill">B3</div>
                 <div class="blend-pill">B4</div>
-                <div class="blend-pill">Mix</div>
-                <div class="blend-pill">Mod</div>
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
@@ -6358,14 +6395,13 @@ body {
 
             <!-- BACK VIEW (visible when .device.swapped) — Phase 11a v14 layout -->
             <div class="back-only" style="flex-direction: column; gap: 7px; flex: 1; min-height: 0;">
-              <!-- TOP ROW: 6 BLEND SLOT pills — UI-ONLY placeholders, no DSP wiring this phase -->
+              <!-- TOP ROW: 4 BLEND SLOT pills (B1–B4) — wired to WSLOT MODE/SRC/DEPTH -->
+              <!-- Mix/Mod pills dropped 2026-07-13 (mod matrix covers movement; per-slot depth covers amount) -->
               <div class="blend-pills">
                 <div class="blend-pill">B1</div>
                 <div class="blend-pill">B2</div>
                 <div class="blend-pill">B3</div>
                 <div class="blend-pill">B4</div>
-                <div class="blend-pill">Mix</div>
-                <div class="blend-pill">Mod</div>
               </div>
               <!-- MIDDLE ROW: 4 SELECTOR pills (WARP / SPECTRAL / FOLD / INTERP) -->
               <div class="selector-pills">
@@ -12814,7 +12850,7 @@ setTimeout(function wireSynControls () {
           var o = dev.id.charAt(4);   // 'osc-a-device' -> 'a'
           if ('abcd'.indexOf(o) < 0) return;
           var pills = row.querySelectorAll('.blend-pill');
-          for (var i = 0; i < pills.length && i < 4; ++i) wire(pills[i], o, i + 1);   // B1..B4 only (Mix/Mod later)
+          for (var i = 0; i < pills.length && i < 4; ++i) wire(pills[i], o, i + 1);   // B1..B4 (Mix/Mod pills removed 2026-07-13)
         });
 
         // ── survive close/reopen: read the live APVTS values back (getSynParam native fn) and repaint. ──
@@ -21896,7 +21932,7 @@ restoreThemeFromBackend();
     '#syn-panel .device.filter:not(.swapped) .filt-exp{width:13px;height:13px;color:rgba(255,255,255,.72);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:6px;}'+
     '#syn-panel .device.filter:not(.swapped) .filt-exp svg{width:13px;height:13px;display:block;}'+
     '#syn-panel .device.filter:not(.swapped) .filt-exp:hover{color:#fff;}'+
-    '#syn-panel .device.filter:not(.swapped) .filt-hud{position:absolute;top:8px;right:112px;z-index:4;font-family:-apple-system,system-ui,sans-serif;font-size:10px;font-weight:400;letter-spacing:.3px;color:rgba(255,255,255,.8);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .14s;text-shadow:0 1px 3px rgba(0,0,0,.95);}'+
+    '#syn-panel .device.filter:not(.swapped) .filt-hud{position:absolute;top:8px;right:150px;z-index:4;font-family:-apple-system,system-ui,sans-serif;font-size:10px;font-weight:400;letter-spacing:.3px;color:rgba(255,255,255,.8);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .14s;text-shadow:0 1px 3px rgba(0,0,0,.95);}'+
     '#syn-panel .device.filter:not(.swapped) .filt-hud.on{opacity:1;}'+
     '#syn-panel .device.filter.swapped .filt-hud{display:none;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-knobs{bottom:6px;}'+
@@ -23195,7 +23231,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb6';   // bump per ship  [rr2 CLEANUP SWEEP: budget-saturation declick, sparse-bank keepLoudest fix, Melt phantom-slot guard, loop-bracket entry gating, reverse scrub, time-based Flicker, zero RT allocs (stack buffers), staggered image heartbeats, Cut label persistence, stale-canvas wipe, GEODE dblclick defaults, FRACTURE 0.5 preset snap]
+  var TERRAIN_BUILD = 'fb10';   // bump per ship  [fb10 = fb9 but blend-pill parens -2.0→-0.85px (canvas-metric-exact ink centering; -2.0 overshot & rode high)] [fb9 = fb8 + blend-pill parens -2.5→-2.0 (letter dead-center, headless-verified) + filter back tab cluster (1/2/K/E + arrow) = OSC emblems 16×16 grid-centered (was 16×14 + low arrow)] [fb8 = fb7 + filter cutoff legend (.filt-hud) moved right:112→150 so "C 1.1k" clears the 1/2/K/E tabs] [fb7 BLEND/FILTER UI: dropped Mix/Mod pills (blend row = 4 slots, gap6 column-aligned to selector row), parens +2px up, filter back panel = OSC twin (332px width match, purple-400 emblems/tabs/routing/series-parallel, no fill/glow, FILTER header uppercase white)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
