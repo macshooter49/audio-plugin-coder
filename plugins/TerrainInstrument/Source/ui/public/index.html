@@ -3739,16 +3739,17 @@ body {
   position: relative;
 }
 #syn-panel .blend-pill.act {
-  /* GLOW, not fill (Max 2026-07-12): mostly transparent, purple-glowing outline + letters —
-     the same language as the swap emblem / hover state. Applies to osc blend pills AND filter pills. */
+  /* NO glow, NO fill (Max 2026-07-12): active pills stay thin-white, told apart only by their
+     label (FM(D) vs B1). Just white. Applies to the filter pills too (shared class). */
   background: transparent;
-  border-color: var(--purple-400);
-  color: var(--purple-400);
-  box-shadow: 0 0 8px rgba(139,92,246,0.40);
-  text-shadow: 0 0 6px rgba(139,92,246,0.45);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  cursor: ns-resize;
 }
-#syn-panel .blend-pill .bp-val { font-size: 13px; font-weight: 400; letter-spacing: 0; }
-#syn-panel .blend-pill.act { cursor: ns-resize; }
+/* Perfect centering: absorb the trailing letter-spacing so the glyphs sit dead-center in the box. */
+#syn-panel .blend-pill .bp-txt { margin-right: -1.4px; }
+/* Drag/hover value — SAME SF Pro family, THIN weight, with a % sign, centered. */
+#syn-panel .blend-pill .bp-val { font-weight: 200; font-size: 12px; letter-spacing: 0.3px; margin-right: -0.3px; }
 
 /* Phase 11a — selector-pills (back middle row).
    Container takes the .osc-display footprint (same flex:1 + min-height),
@@ -12758,15 +12759,15 @@ setTimeout(function wireSynControls () {
         // Default view = "FM(D)" (mode + source, same style). Hover or drag → the big % value.
         function paintLabel (pill, o, s) {
           var b = st(o, s);
-          if (b.mode === 0) { pill.textContent = 'B' + s; pill.classList.remove('act');
+          if (b.mode === 0) { pill.innerHTML = '<span class="bp-txt">B' + s + '</span>'; pill.classList.remove('act');
             pill.title = 'Blend slot ' + s + ' — right-click to assign a warp (FM / PD from another oscillator).'; return; }
-          pill.textContent = MODES[b.mode] + '(' + srcLtr(b.src) + ')';
+          pill.innerHTML = '<span class="bp-txt">' + MODES[b.mode] + '(' + srcLtr(b.src) + ')</span>';
           pill.classList.add('act');
           pill.title = MODES[b.mode] + ' from Osc ' + String(srcLtr(b.src)).toUpperCase() + ' — hover or drag for depth. The source modulates even at volume 0.';
         }
         function paintValue (pill, o, s) {
           var b = st(o, s); if (b.mode === 0) { paintLabel(pill, o, s); return; }
-          pill.innerHTML = '<span class="bp-val">' + Math.round(b.depth * 100) + '</span>';
+          pill.innerHTML = '<span class="bp-val">' + Math.round(b.depth * 100) + '%</span>';
           pill.classList.add('act');
         }
 
