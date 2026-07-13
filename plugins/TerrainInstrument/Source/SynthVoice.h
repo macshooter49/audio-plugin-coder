@@ -1895,6 +1895,28 @@ namespace tw
             for (int g = 0; g < 4; ++g)
                 oscDead_[g] = robinGate (g) <= 0.0f && oscGate_[g] < 1.0e-4f;
 
+            // ── BLEND MODES (all-engines): derive the two per-block flags from the warp matrix.
+            //    Both stay false for any un-blended patch → the block renders + per-sample loop below
+            //    behave exactly as before. modSrcForce_ opens a turned-down source engine's Level-0
+            //    gate so it still modulates; blkCarrierArmed_ marks a block engine whose output the
+            //    per-sample loop will phase-modulate (FM/PD on a sample). ──
+            {
+                const Engine eng[4] = { engine_, engineB_, engineC_, engineD_ };
+                auto isBlock = [] (Engine e) noexcept {
+                    return e == Engine::SAMP || e == Engine::GRAN || e == Engine::SPEC
+                        || e == Engine::HARM || e == Engine::MODAL; };
+                for (int o = 0; o < 4; ++o) { modSrcForce_[o] = false; blkCarrierArmed_[o] = false; }
+                for (int c = 0; c < 4; ++c)
+                    for (int s = 0; s < 4; ++s)
+                    {
+                        const BlendSlotV& b = blendSlot_[c][s];
+                        if ((b.mode != 1 && b.mode != 2) || b.depth < 1.0e-4f) continue;  // only armed FM/PD
+                        if (isBlock (eng[c])) blkCarrierArmed_[c] = true;                 // c's block gets modulated
+                        if      (b.src < 4)  modSrcForce_[b.src] = true;                  // Osc A..D as source
+                        else if (b.src == 6) modSrcForce_[c]     = true;                  // Self
+                    }
+            }
+
             // SAMPLE-ENGINE-VOICE — render any SAMP oscillators' stereo blocks for this
             // buffer (scan/loop/xfade/spray + STRETCH/FORMANT warp). Cheap no-op if none.
             renderSampleBlocks (numSamples);
@@ -2128,6 +2150,12 @@ namespace tw
                         }
                     }
                 }
+                // BLEND MODES (carrier = block engine): phase-modulate OSC A's rendered block by the
+                // cross-osc warp (FM/PD on a sample/granular/spec/harm/modal). Skipped unless A is a
+                // block engine with an armed slot — WT/FM carriers were injected in the unison loop
+                // above, and an un-blended osc bypasses this entirely (bit-identical to today).
+                if (blkCarrierArmed_[0] || blkArmSm_[0] > 1.0e-4f)
+                    blendReadBlock (0, blendOff[0], blkCarrierArmed_[0], sA_L, sA_R);
                 // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
                 if (sub_[0].on) subMix (0, sA_L, sA_R);
                 if (! spectralBypassA_)
@@ -2402,6 +2430,9 @@ namespace tw
                     }
                 }
                 // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
+                // BLEND MODES (carrier = block engine): phase-modulate OSC B's rendered block (see OSC A).
+                if (blkCarrierArmed_[1] || blkArmSm_[1] > 1.0e-4f)
+                    blendReadBlock (1, blendOff[1], blkCarrierArmed_[1], sB_L, sB_R);
                 if (sub_[1].on) subMix (1, sB_L, sB_R);
                 if (! spectralBypassB_)
                 {
@@ -2672,6 +2703,9 @@ namespace tw
                     }
                 }
                 // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
+                // BLEND MODES (carrier = block engine): phase-modulate OSC C's rendered block (see OSC A).
+                if (blkCarrierArmed_[2] || blkArmSm_[2] > 1.0e-4f)
+                    blendReadBlock (2, blendOff[2], blkCarrierArmed_[2], sC_L, sC_R);
                 if (sub_[2].on) subMix (2, sC_L, sC_R);
                 if (! spectralBypassC_)
                 {
@@ -2942,6 +2976,9 @@ namespace tw
                     }
                 }
                 // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
+                // BLEND MODES (carrier = block engine): phase-modulate OSC D's rendered block (see OSC A).
+                if (blkCarrierArmed_[3] || blkArmSm_[3] > 1.0e-4f)
+                    blendReadBlock (3, blendOff[3], blkCarrierArmed_[3], sD_L, sD_R);
                 if (sub_[3].on) subMix (3, sD_L, sD_R);
                 if (! spectralBypassD_)
                 {
@@ -3928,6 +3965,25 @@ namespace tw
         float blendDepthSm_[4][4] = {};   // per-sample de-zippered depth
         float modPrev_[4] = { 0.f, 0.f, 0.f, 0.f };   // prev-sample pre-gain osc outputs = the modulator taps
         float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
+        // BLEND MODES — ALL-ENGINES support (2026-07-12). Two per-block flags derived from the warp
+        // matrix, both inert (false) for any patch with no active FM/PD slot → existing sound is
+        // byte-identical whenever nothing is blended:
+        //   modSrcForce_[o]     = osc o feeds an armed FM/PD slot → its block engine must RENDER even
+        //                         at Level 0 (so it can modulate silently — the "turn D down, still
+        //                         hear D's FM" behaviour). Output stays inaudible (real level_ = 0).
+        //   blkCarrierArmed_[o] = osc o is a BLOCK engine (Sample/Granular/Spec/Harmonic/Modal) that
+        //                         carries an armed FM/PD slot → its rendered block gets phase-modulated
+        //                         through a short delay ring (below) = FM/PD *on a sample*.
+        bool  modSrcForce_[4]     = { false, false, false, false };
+        bool  blkCarrierArmed_[4] = { false, false, false, false };
+        static constexpr int   kBlkRing     = 256;      // ring length (power of two → mask 255)
+        static constexpr int   kBlkMaxOff   = 64;       // ± sample excursion at full depth (also the base delay)
+        static constexpr float kBlkOffScale = 40.0f;    // blendOff (cycles) → samples  [EAR-TUNABLE: raise = deeper]
+        static constexpr float kBlkArmCoef  = 0.0012f;  // ~20 ms one-pole to declick the delay engaging/leaving
+        float blkRingL_[4][kBlkRing] = {};
+        float blkRingR_[4][kBlkRing] = {};
+        int   blkRingW_[4]  = { 0, 0, 0, 0 };
+        float blkArmSm_[4]  = { 0.f, 0.f, 0.f, 0.f };   // 0→1 arm ramp (delay + mod depth fade together)
         juce::AudioBuffer<float> modalBlkA_, modalBlkB_, modalBlkC_, modalBlkD_;
         const float *modalBlkAL_ = nullptr, *modalBlkAR_ = nullptr, *modalBlkBL_ = nullptr, *modalBlkBR_ = nullptr,
                     *modalBlkCL_ = nullptr, *modalBlkCR_ = nullptr, *modalBlkDL_ = nullptr, *modalBlkDR_ = nullptr;
@@ -4108,6 +4164,39 @@ namespace tw
             }
         }
 
+        // BLEND MODES — Level-0 gate value for a block renderer. Normally the real level; bumped a
+        // hair above 0 only when this osc feeds an armed FM/PD slot, so the engine still renders
+        // (full amplitude) for the modulator tap. Output is NOT scaled by this (the true level_ is
+        // applied later in the mix), so a forced-but-turned-down osc stays silent — it just modulates.
+        float blkGateLevel (int o, float lvl) const noexcept
+        {
+            if (oscDead_[o]) return 0.0f;
+            return modSrcForce_[o] ? juce::jmax (lvl, 1.0e-4f) : lvl;
+        }
+
+        // BLEND MODES — modulated re-read of a block engine's output = FM/PD ON a Sample/Granular/
+        // Spec/Harmonic/Modal carrier. offCycles is the SAME per-carrier blend offset the WT/FM path
+        // uses (PD = direct phase, FM = leaky-integrated → true frequency modulation); here it drives
+        // a fractional read of a tiny per-osc delay ring, so the sample's read position wiggles and
+        // the sidebands reflect the sample's own waveform. Runs ONLY while armed (or ramping out) —
+        // an un-blended block osc never calls this, so it stays bit-identical to today.
+        inline void blendReadBlock (int c, float offCycles, bool armed, float& L, float& R) noexcept
+        {
+            float* rL = blkRingL_[c]; float* rR = blkRingR_[c];
+            const int w = blkRingW_[c];
+            rL[w] = L; rR[w] = R;                                            // write the (shaped) block output
+            blkArmSm_[c] += ((armed ? 1.0f : 0.0f) - blkArmSm_[c]) * kBlkArmCoef;   // declick delay in/out
+            const float amt   = blkArmSm_[c];
+            const float offS  = juce::jlimit (-(float) kBlkMaxOff, (float) kBlkMaxOff, offCycles * kBlkOffScale) * amt;
+            const float delay = (float) kBlkMaxOff * amt;                    // base delay ramps in with the arm
+            float rp = (float) w - delay + offS + (float) kBlkRing;          // read behind write (kept positive)
+            int i0 = (int) rp; const float fr = rp - (float) i0;
+            i0 &= (kBlkRing - 1); const int i1 = (i0 + 1) & (kBlkRing - 1);
+            L = rL[i0] + (rL[i1] - rL[i0]) * fr;
+            R = rR[i0] + (rR[i1] - rR[i0]) * fr;
+            blkRingW_[c] = (w + 1) & (kBlkRing - 1);
+        }
+
         void renderSampleBlocks (int numSamples) noexcept
         {
             if (engine_ != Engine::SAMP && engineB_ != Engine::SAMP
@@ -4134,10 +4223,10 @@ namespace tw
                 }
             }
             const bool doOn = sampleNoteOnPending_;
-            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderSampleOsc (sampleEngA_, sampleWarpA_, sampleParamsA_, engine_  == Engine::SAMP, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  sampleBlkA_, sampBlkAL_, sampBlkAR_, numSamples, spraySeedA_, doOn, sampleNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uPanLA_.data(), uPanRA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderSampleOsc (sampleEngB_, sampleWarpB_, sampleParamsB_, engineB_ == Engine::SAMP, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, sampleBlkB_, sampBlkBL_, sampBlkBR_, numSamples, spraySeedB_, doOn, sampleNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uPanLB_.data(), uPanRB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderSampleOsc (sampleEngC_, sampleWarpC_, sampleParamsC_, engineC_ == Engine::SAMP, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, sampleBlkC_, sampBlkCL_, sampBlkCR_, numSamples, spraySeedC_, doOn, sampleNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uPanLC_.data(), uPanRC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderSampleOsc (sampleEngD_, sampleWarpD_, sampleParamsD_, engineD_ == Engine::SAMP, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, sampleBlkD_, sampBlkDL_, sampBlkDR_, numSamples, spraySeedD_, doOn, sampleNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uPanLD_.data(), uPanRD_.data(), uNormD_, blkGateLevel (3, levelD_));
             sampleNoteOnPending_ = false;
         }
 
@@ -4226,10 +4315,10 @@ namespace tw
                 }
             }
             const bool doOn = granNoteOnPending_;
-            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderGranularOsc (granEngA_, granParamsA_, engine_  == Engine::GRAN, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  granBlkA_, granBlkAL_, granBlkAR_, numSamples, spraySeedA_, doOn, granNativeOverOut_[0], activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderGranularOsc (granEngB_, granParamsB_, engineB_ == Engine::GRAN, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, granBlkB_, granBlkBL_, granBlkBR_, numSamples, spraySeedB_, doOn, granNativeOverOut_[1], activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderGranularOsc (granEngC_, granParamsC_, engineC_ == Engine::GRAN, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, granBlkC_, granBlkCL_, granBlkCR_, numSamples, spraySeedC_, doOn, granNativeOverOut_[2], activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderGranularOsc (granEngD_, granParamsD_, engineD_ == Engine::GRAN, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, granBlkD_, granBlkDL_, granBlkDR_, numSamples, spraySeedD_, doOn, granNativeOverOut_[3], activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
             granNoteOnPending_ = false;
         }
 
@@ -4318,10 +4407,10 @@ namespace tw
                 }
             }
             const bool doOn = geodeNoteOnPending_;
-            renderGeodeOsc (geodeEngA_, geodeParamsA_, engine_  == Engine::SPEC, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  geodeBlkA_, geodeBlkAL_, geodeBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderGeodeOsc (geodeEngB_, geodeParamsB_, engineB_ == Engine::SPEC, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, geodeBlkB_, geodeBlkBL_, geodeBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderGeodeOsc (geodeEngC_, geodeParamsC_, engineC_ == Engine::SPEC, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, geodeBlkC_, geodeBlkCL_, geodeBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderGeodeOsc (geodeEngD_, geodeParamsD_, engineD_ == Engine::SPEC, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, geodeBlkD_, geodeBlkDL_, geodeBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderGeodeOsc (geodeEngA_, geodeParamsA_, engine_  == Engine::SPEC, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  geodeBlkA_, geodeBlkAL_, geodeBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderGeodeOsc (geodeEngB_, geodeParamsB_, engineB_ == Engine::SPEC, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, geodeBlkB_, geodeBlkBL_, geodeBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderGeodeOsc (geodeEngC_, geodeParamsC_, engineC_ == Engine::SPEC, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, geodeBlkC_, geodeBlkCL_, geodeBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderGeodeOsc (geodeEngD_, geodeParamsD_, engineD_ == Engine::SPEC, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, geodeBlkD_, geodeBlkDL_, geodeBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
             geodeNoteOnPending_ = false;
         }
 
@@ -4393,10 +4482,10 @@ namespace tw
                 && engineC_ != Engine::HARM && engineD_ != Engine::HARM)
                 return;   // no HARM oscillators → free no-op (common case)
             const bool doOn = harmNoteOnPending_;
-            renderHarmonicOsc (harmEngA_, harmParamsA_, engine_  == Engine::HARM, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  harmBlkA_, harmBlkAL_, harmBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_);
-            renderHarmonicOsc (harmEngB_, harmParamsB_, engineB_ == Engine::HARM, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, harmBlkB_, harmBlkBL_, harmBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_);
-            renderHarmonicOsc (harmEngC_, harmParamsC_, engineC_ == Engine::HARM, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, harmBlkC_, harmBlkCL_, harmBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_);
-            renderHarmonicOsc (harmEngD_, harmParamsD_, engineD_ == Engine::HARM, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, harmBlkD_, harmBlkDL_, harmBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_);
+            renderHarmonicOsc (harmEngA_, harmParamsA_, engine_  == Engine::HARM, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  harmBlkA_, harmBlkAL_, harmBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
+            renderHarmonicOsc (harmEngB_, harmParamsB_, engineB_ == Engine::HARM, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, harmBlkB_, harmBlkBL_, harmBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
+            renderHarmonicOsc (harmEngC_, harmParamsC_, engineC_ == Engine::HARM, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, harmBlkC_, harmBlkCL_, harmBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
+            renderHarmonicOsc (harmEngD_, harmParamsD_, engineD_ == Engine::HARM, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, harmBlkD_, harmBlkDL_, harmBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
             harmNoteOnPending_ = false;
         }
 
@@ -4481,10 +4570,10 @@ namespace tw
                         exR[o] = sampleSource_[o]->getSampleRate();
                 }
             }
-            renderModalOsc (modalEngA_, modalParamsA_, engine_  == Engine::MODAL, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  modalBlkA_, modalBlkAL_, modalBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, oscDead_[0] ? 0.0f : level_,  exL[0], exN[0], exR[0]);
-            renderModalOsc (modalEngB_, modalParamsB_, engineB_ == Engine::MODAL, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, modalBlkB_, modalBlkBL_, modalBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, oscDead_[1] ? 0.0f : levelB_, exL[1], exN[1], exR[1]);
-            renderModalOsc (modalEngC_, modalParamsC_, engineC_ == Engine::MODAL, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, modalBlkC_, modalBlkCL_, modalBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, oscDead_[2] ? 0.0f : levelC_, exL[2], exN[2], exR[2]);
-            renderModalOsc (modalEngD_, modalParamsD_, engineD_ == Engine::MODAL, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, modalBlkD_, modalBlkDL_, modalBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, oscDead_[3] ? 0.0f : levelD_, exL[3], exN[3], exR[3]);
+            renderModalOsc (modalEngA_, modalParamsA_, engine_  == Engine::MODAL, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  modalBlkA_, modalBlkAL_, modalBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_),  exL[0], exN[0], exR[0]);
+            renderModalOsc (modalEngB_, modalParamsB_, engineB_ == Engine::MODAL, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, modalBlkB_, modalBlkBL_, modalBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_), exL[1], exN[1], exR[1]);
+            renderModalOsc (modalEngC_, modalParamsC_, engineC_ == Engine::MODAL, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, modalBlkC_, modalBlkCL_, modalBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_), exL[2], exN[2], exR[2]);
+            renderModalOsc (modalEngD_, modalParamsD_, engineD_ == Engine::MODAL, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, modalBlkD_, modalBlkDL_, modalBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_), exL[3], exN[3], exR[3]);
             modalNoteOnPending_ = false;
         }
 
