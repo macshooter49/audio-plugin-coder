@@ -1292,6 +1292,11 @@ public:
         reset();
     }
 
+    /** POLES — ladder slope override: true = 4-pole/24 dB, false = 2-pole/12 dB tap. Applies to
+     *  LADDER_LP24 (LADDER_LP12 stays fixed 12 dB). CPU-free — both taps are already computed. */
+    void setPoles (bool poles24) noexcept { polesTwo_ = ! poles24; }
+    bool polesTwo_ = false, lastPoles_ = false;   // Poles slope override (2-pole tap when true)
+
     /** Per-sample setter. Cutoff in Hz (post-env, post-drift, post-clamp),
      *  resonance 0..1, drive 0..1. */
     void setParams (float cutHz, float res01, float drv01, double fs) noexcept
@@ -1302,20 +1307,26 @@ public:
         // the tan()/pow()/exp() coefficient recompute on actual change; NONE has no coefficients.
         if (type_ == Type::NONE) { preDrive_ = 1.0f; postMakeup_ = 1.0f; return; }
         if (cutHz == lastCut_ && res01 == lastRes_ && drv01 == lastDrv_
-            && fs == lastFs_ && type_ == lastType_ && morph_ == lastMorph_)
+            && fs == lastFs_ && type_ == lastType_ && morph_ == lastMorph_
+            && polesTwo_ == lastPoles_)
             return;
         lastCut_ = cutHz; lastRes_ = res01; lastDrv_ = drv01;
-        lastFs_ = fs; lastType_ = type_; lastMorph_ = morph_;
+        lastFs_ = fs; lastType_ = type_; lastMorph_ = morph_; lastPoles_ = polesTwo_;
         const float driveLin = driveLinear (drv01);
         switch (type_)
         {
             case Type::LADDER_LP24:
-                ladderL_.twoPole = false; ladderR_.twoPole = false;
+            {
+                // Poles override: 4-pole/24 dB by default, or the 2-pole/12 dB tap when polesTwo_.
+                ladderL_.twoPole = polesTwo_; ladderR_.twoPole = polesTwo_;
+                const float mk = polesTwo_ ? kLadder12Makeup : 1.0f;
+                ladderL_.twoPoleMakeup = mk; ladderR_.twoPoleMakeup = mk;
                 ladderL_.setCoeffs (cutHz, res01, fs);
                 ladderR_.setCoeffs (cutHz, res01, fs);
                 preDrive_  = driveLin;
                 postMakeup_= driveMakeup (driveLin);
                 break;
+            }
             case Type::LADDER_LP12:
                 ladderL_.twoPole = true;  ladderR_.twoPole = true;
                 ladderL_.twoPoleMakeup = kLadder12Makeup;

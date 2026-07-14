@@ -1143,7 +1143,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         filterTypeChoices.add ("None");
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_FILTER1_TYPE, 1 },
-            "Synth Filter 1 Type", filterTypeChoices, 0));   // default = LADDER LP 24 (was the hardwired one)
+            "Synth Filter 1 Type", filterTypeChoices, 27));  // default = NONE (filters start OFF; wire on the back panel — Max 2026-07-13)
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_FILTER2_TYPE, 1 },
             "Synth Filter 2 Type", filterTypeChoices, 27));  // default = NONE (slot 2 inert this batch)
@@ -1206,11 +1206,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_FILTER2_PDRV, 1 }, "Synth Filter 2 Post Drive",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_POLES, 1 }, "Synth Filter 1 Poles 24dB", true));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_POLES, 1 }, "Synth Filter 2 Poles 24dB", true));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_FILTER_ROUTING, 1 },
         "Synth Filter Routing", juce::StringArray { "SERIES", "PARALLEL" }, 0));
-    // Per-oscillator filter routing masks — default TRUE (all sources routed to both filters), so a
-    // fresh patch is byte-identical to the pre-routing behaviour (all oscs → F1, F2=None by default).
+    // Per-oscillator filter routing masks — default FALSE (nothing routed): a fresh patch has the
+    // filters OFF and connects nothing, so every osc passes DRY (the filter is a modular node you
+    // wire up on the back panel). Max 2026-07-13.
     {
         struct { const char* id; const char* name; } fltSrc[] = {
             { ParameterIDs::SYN_FILTER1_SRC_A,   "Synth Filter 1 Source A"   },
@@ -1226,7 +1231,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         };
         for (auto& s : fltSrc)
             layout.add (std::make_unique<juce::AudioParameterBool> (
-                juce::ParameterID { s.id, 1 }, s.name, true));
+                juce::ParameterID { s.id, 1 }, s.name, false));
     }
 
     // Filter ADSR (independent from AMP env — drives the cutoff via the bipolar ENV knob).
@@ -3434,6 +3439,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float filtVel2 =        *rawParam (ParameterIDs::SYN_FILTER2_VEL);
         const float filtPdrv1=        *rawParam (ParameterIDs::SYN_FILTER1_PDRV);
         const float filtPdrv2=        *rawParam (ParameterIDs::SYN_FILTER2_PDRV);
+        const bool  filtP24_1=        *rawParam (ParameterIDs::SYN_FILTER1_POLES) > 0.5f;
+        const bool  filtP24_2=        *rawParam (ParameterIDs::SYN_FILTER2_POLES) > 0.5f;
         const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
         // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
         const bool  f1src[5] = { *rawParam (ParameterIDs::SYN_FILTER1_SRC_A)   > 0.5f,
@@ -3963,6 +3970,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterSources          (f1src, f2src);
                 sv->setFilterVelocity         (filtVel1, filtVel2);
                 sv->setFilterPostDrive        (filtPdrv1, filtPdrv2);
+                sv->setFilterPoles            (filtP24_1, filtP24_2);
                 sv->setAmpEnv                 (ampDly, ampA, ampHld, ampD, ampS, ampR, ampCa, ampCd, ampCr, ampLoop);
                 sv->setPitchEnv               (pitDly, pitA, pitHld, pitD, pitS, pitR, pitCa, pitCd, pitCr, pitLoop);
                 sv->setPitchEnvDepth          (pitDepth);

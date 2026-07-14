@@ -6471,21 +6471,21 @@ body {
                  Same row geometry as the osc back panel so the two overlay 1:1. -->
             <div class="filter-back back-only">
               <div class="blend-pills flt-src-row" id="flt-src-row">
-                <div class="blend-pill flt-src act" data-fsrc="0" title="Route Osc A into this filter">A</div>
-                <div class="blend-pill flt-src act" data-fsrc="1" title="Route Osc B into this filter">B</div>
-                <div class="blend-pill flt-src act" data-fsrc="2" title="Route Osc C into this filter">C</div>
-                <div class="blend-pill flt-src act" data-fsrc="3" title="Route Osc D into this filter">D</div>
-                <div class="blend-pill flt-src act" data-fsrc="4" title="Route the Sub layers into this filter">S</div>
-                <div class="blend-pill flt-src act" data-fsrc="5" title="Route the Noise layer into this filter">N</div>
+                <div class="blend-pill flt-src" data-fsrc="0" title="Route Osc A into this filter">A</div>
+                <div class="blend-pill flt-src" data-fsrc="1" title="Route Osc B into this filter">B</div>
+                <div class="blend-pill flt-src" data-fsrc="2" title="Route Osc C into this filter">C</div>
+                <div class="blend-pill flt-src" data-fsrc="3" title="Route Osc D into this filter">D</div>
+                <div class="blend-pill flt-src" data-fsrc="4" title="Route the Sub layers into this filter">S</div>
+                <div class="blend-pill flt-src" data-fsrc="5" title="Route the Noise layer into this filter">N</div>
               </div>
               <div class="selector-pills flt-mid-row" id="filter-routing-seg">
                 <div class="sel fb-opt act" data-route="0" title="Series — filter 1 feeds filter 2"><div class="sel-value">Series</div></div>
                 <div class="sel fb-opt" data-route="1" title="Parallel — both filters run side by side"><div class="sel-value">Parallel</div></div>
-                <div class="sel flt-mini" id="flt-key-pill" title="Key — keytrack amount (drag · UI mock)">
+                <div class="sel flt-mini" id="flt-key-pill" title="Key — reserved">
                   <div class="sel-value flt-mini-label">Key</div>
-                  <div class="sel-value flt-mini-val" id="flt-key-val"><b>0</b>%</div>
+                  <div class="sel-value flt-mini-val">—</div>
                 </div>
-                <div class="sel flt-mini" id="flt-poles-pill" title="Poles — 12 or 24 dB/oct (click · UI mock)">
+                <div class="sel flt-mini" id="flt-poles-pill" title="Poles — Ladder filter slope: 24 or 12 dB/oct (click to toggle). Ladder LP only.">
                   <div class="sel-value flt-mini-label">Poles</div>
                   <div class="sel-value flt-mini-val" id="flt-poles-val">24</div>
                 </div>
@@ -14168,8 +14168,8 @@ setTimeout(function wireSynControls () {
       //    N (idx 5), the E env-track emblem, Key drag + Poles toggle are still UI mock. ──
       (function initFilterBackMock() {
         try {
-          const fst = { 1: { src: [1,1,1,1,1,1], env: false, key: 0, poles: 24 },
-                        2: { src: [1,1,1,1,1,1], env: false, key: 0, poles: 24 } };
+          const fst = { 1: { src: [0,0,0,0,0,0], env: false, poles: 24 },
+                        2: { src: [0,0,0,0,0,0], env: false, poles: 24 } };
           const curF = () => (slotPill2 && slotPill2.classList.contains('act')) ? 2 : 1;
           // Real routing params for source indices 0..4 (A,B,C,D,Sub); index 5 (N) has none yet.
           const FSRC_IDS = {
@@ -14186,15 +14186,19 @@ setTimeout(function wireSynControls () {
             const st = fst[curF()];
             document.querySelectorAll('#flt-src-row .flt-src').forEach((p, i) => p.classList.toggle('act', !! st.src[i]));
             const e = document.getElementById('filter-env-emblem'); if (e) e.classList.toggle('act', !! st.env);
-            const kv = document.querySelector('#flt-key-val b'); if (kv) kv.textContent = Math.round(st.key);
             const pv = document.getElementById('flt-poles-val'); if (pv) pv.textContent = st.poles;
           };
+          // Poles (24dB=1 / 12dB=0) — REAL param via __setSynParam. (Key pill is reserved/inert.)
+          const FPOLES_ID = { 1: 'SYN_FILTER1_POLES', 2: 'SYN_FILTER2_POLES' };
           // Pull live param values into fst for BOTH filters, then repaint (survives reopen).
           const syncSrc = () => {
             if (! getP) return;
-            [1, 2].forEach(f => FSRC_IDS[f].forEach((id, i) => {
-              try { Promise.resolve(getP(id)).then(v => { fst[f].src[i] = (+v > 0.5) ? 1 : 0; renderFb(); }).catch(() => {}); } catch (e) {}
-            }));
+            [1, 2].forEach(f => {
+              FSRC_IDS[f].forEach((id, i) => {
+                try { Promise.resolve(getP(id)).then(v => { fst[f].src[i] = (+v > 0.5) ? 1 : 0; renderFb(); }).catch(() => {}); } catch (e) {}
+              });
+              try { Promise.resolve(getP(FPOLES_ID[f])).then(v => { fst[f].poles = (+v > 0.5) ? 24 : 12; renderFb(); }).catch(() => {}); } catch (e) {}
+            });
           };
           document.querySelectorAll('#flt-src-row .flt-src').forEach((p, i) =>
             p.addEventListener('click', () => { const f = curF(); setSrc(f, i, ! fst[f].src[i]); renderFb(); }));
@@ -14203,20 +14207,8 @@ setTimeout(function wireSynControls () {
           const env = document.getElementById('filter-env-emblem');
           if (env) env.addEventListener('click', () => { const st = fst[curF()]; st.env = ! st.env; renderFb(); });
           const pp = document.getElementById('flt-poles-pill');
-          if (pp) pp.addEventListener('click', () => { const st = fst[curF()]; st.poles = (st.poles === 24) ? 12 : 24; renderFb(); });
-          // Key pill — vertical drag, 0..100 % (mock value)
-          const kp = document.getElementById('flt-key-pill');
-          if (kp) {
-            let dragging = false, y0 = 0, v0 = 0;
-            const mv = (ev) => { if (! dragging) return; const st = fst[curF()];
-              st.key = Math.max(0, Math.min(100, v0 + (y0 - ev.clientY) * 0.8)); renderFb(); };
-            const up = () => { dragging = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
-            kp.addEventListener('pointerdown', (ev) => { if (ev.button !== 0) return;
-              dragging = true; y0 = ev.clientY; v0 = fst[curF()].key;
-              document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
-              ev.preventDefault(); });
-            kp.addEventListener('dblclick', () => { fst[curF()].key = 0; renderFb(); });
-          }
+          if (pp) pp.addEventListener('click', () => { const f = curF(); fst[f].poles = (fst[f].poles === 24) ? 12 : 24;
+            try { if (window.__setSynParam) window.__setSynParam(FPOLES_ID[f], fst[f].poles === 24 ? 1 : 0); } catch (e) {} renderFb(); });
           // the 1/2 tabs swap which filter's back-state is shown
           [slotPill1, slotPill2].forEach(p => { if (p) p.addEventListener('click', () => setTimeout(renderFb, 0)); });
           renderFb();
@@ -23259,7 +23251,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb14';   // bump per ship  [fb14 = fb13 + back-panel filter knobs wired: Mix(done) · Drive=POST-filter tanh saturation (new SYN_FILTER*_PDRV) · Env=mirrors front ENV · Vel=velocity→cutoff ±72st (new SYN_FILTER*_VEL) · Track=keytrack amount (K=on/off). All per-filter via the 1/2 tab.] [fb13 = fb12 + filter header polish: K gets its purple underscore, + button & extender white, extender 13→11px pulled next to +, filter-type/tabs/legend unified on one centerline (top:7 h:16), legend nudged right 150→132] [fb12 = fb11 + PER-OSCILLATOR FILTER ROUTING: back-panel A/B/C/D/Sub pills now really route each osc to Filter 1 and/or 2 (independent + dry bypass; series=F1→F2 chain, parallel=F1+F2). CPU-free (filters already run per voice; routing = bus adds). Default all-routed = byte-identical to old. Sub separated cleanly from its osc. N still mock (no noise engine).] boxed emblem glyphs rest SHARP WHITE like the filter routing pills: osc header A/B/C/D/S/N/+ (--text-muted→--text-primary) + filter back tabs 1/2/K/E (opacity 0.4→1, white); active states still purple-400] [fb10 = fb9 but blend-pill parens -2.0→-0.85px (canvas-metric-exact ink centering; -2.0 overshot & rode high)] [fb9 = fb8 + blend-pill parens -2.5→-2.0 (letter dead-center, headless-verified) + filter back tab cluster (1/2/K/E + arrow) = OSC emblems 16×16 grid-centered (was 16×14 + low arrow)] [fb8 = fb7 + filter cutoff legend (.filt-hud) moved right:112→150 so "C 1.1k" clears the 1/2/K/E tabs] [fb7 BLEND/FILTER UI: dropped Mix/Mod pills (blend row = 4 slots, gap6 column-aligned to selector row), parens +2px up, filter back panel = OSC twin (332px width match, purple-400 emblems/tabs/routing/series-parallel, no fill/glow, FILTER header uppercase white)]
+  var TERRAIN_BUILD = 'fb17';   // bump per ship  [fb17 = KEY feature REMOVED (Max: bad idea) — Key pill now reserved/inert; KEEPS Poles (ladder 12/24 slope), filters-default-OFF, and Vel/post-Drive knobs. fb16 KEY-lock and fb15 chromatic-snap both reverted.] Key pill = comb chromatic-snap (lerp cutSemis→round, comb/Karplus only) + Poles pill = ladder 12/24dB tap (FilterSlot.setPoles, CPU-free) + FILTERS DEFAULT OFF (Filter1 type=None, all routing masks default FALSE ⇒ oscs pass dry until wired on back panel)] [fb14 = fb13 + back-panel filter knobs wired: Mix(done) · Drive=POST-filter tanh saturation (new SYN_FILTER*_PDRV) · Env=mirrors front ENV · Vel=velocity→cutoff ±72st (new SYN_FILTER*_VEL) · Track=keytrack amount (K=on/off). All per-filter via the 1/2 tab.] [fb13 = fb12 + filter header polish: K gets its purple underscore, + button & extender white, extender 13→11px pulled next to +, filter-type/tabs/legend unified on one centerline (top:7 h:16), legend nudged right 150→132] [fb12 = fb11 + PER-OSCILLATOR FILTER ROUTING: back-panel A/B/C/D/Sub pills now really route each osc to Filter 1 and/or 2 (independent + dry bypass; series=F1→F2 chain, parallel=F1+F2). CPU-free (filters already run per voice; routing = bus adds). Default all-routed = byte-identical to old. Sub separated cleanly from its osc. N still mock (no noise engine).] boxed emblem glyphs rest SHARP WHITE like the filter routing pills: osc header A/B/C/D/S/N/+ (--text-muted→--text-primary) + filter back tabs 1/2/K/E (opacity 0.4→1, white); active states still purple-400] [fb10 = fb9 but blend-pill parens -2.0→-0.85px (canvas-metric-exact ink centering; -2.0 overshot & rode high)] [fb9 = fb8 + blend-pill parens -2.5→-2.0 (letter dead-center, headless-verified) + filter back tab cluster (1/2/K/E + arrow) = OSC emblems 16×16 grid-centered (was 16×14 + low arrow)] [fb8 = fb7 + filter cutoff legend (.filt-hud) moved right:112→150 so "C 1.1k" clears the 1/2/K/E tabs] [fb7 BLEND/FILTER UI: dropped Mix/Mod pills (blend row = 4 slots, gap6 column-aligned to selector row), parens +2px up, filter back panel = OSC twin (332px width match, purple-400 emblems/tabs/routing/series-parallel, no fill/glow, FILTER header uppercase white)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

@@ -422,6 +422,8 @@ namespace tw
         { velAmt1_ = juce::jlimit (0.0f, 1.0f, v1); velAmt2_ = juce::jlimit (0.0f, 1.0f, v2); }
         void setFilterPostDrive (float d1, float d2) noexcept
         { postDrv1_ = juce::jlimit (0.0f, 1.0f, d1); postDrv2_ = juce::jlimit (0.0f, 1.0f, d2); }
+        void setFilterPoles (bool p24_1, bool p24_2) noexcept
+        { filterSlot_.setPoles (p24_1); filterSlot2_.setPoles (p24_2); }   // setPoles takes poles24 (true=24dB)
 
         // ── Per-envelope ROUTING (the mini mod-matrix per envelope) ──────────
         // Destination indices — MUST match the SYN_ENV*_DEST choice order and the

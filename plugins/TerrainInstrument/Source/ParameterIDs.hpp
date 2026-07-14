@@ -194,6 +194,9 @@ namespace ParameterIDs
     constexpr char SYN_FILTER2_VEL[]   = "SYN_FILTER2_VEL";
     constexpr char SYN_FILTER1_PDRV[]  = "SYN_FILTER1_PDRV";
     constexpr char SYN_FILTER2_PDRV[]  = "SYN_FILTER2_PDRV";
+    // POLES = ladder slope (true = 24 dB/4-pole, false = 12 dB/2-pole tap).
+    constexpr char SYN_FILTER1_POLES[] = "SYN_FILTER1_POLES";
+    constexpr char SYN_FILTER2_POLES[] = "SYN_FILTER2_POLES";
     // Per-filter wet/dry mix + routing between the two slots (independent filters).
     constexpr char SYN_FILTER1_MIX[]    = "SYN_FILTER1_MIX";    // float 0..1 (1 = fully filtered)
     constexpr char SYN_FILTER2_MIX[]    = "SYN_FILTER2_MIX";    // float 0..1
