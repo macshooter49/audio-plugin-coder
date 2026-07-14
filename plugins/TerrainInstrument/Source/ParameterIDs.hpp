@@ -188,6 +188,12 @@ namespace ParameterIDs
     constexpr char SYN_FILTER2_RES[]   = "SYN_FILTER2_RES";    // RESERVED
     constexpr char SYN_FILTER2_DRV[]   = "SYN_FILTER2_DRV";    // RESERVED
     constexpr char SYN_FILTER2_ENV[]   = "SYN_FILTER2_ENV";    // RESERVED
+    // Back-panel per-filter knobs: VEL = velocity→cutoff depth (0..1), PDRV = post-filter output
+    // drive/saturation (0..1). (Env=SYN_FILTER*_ENV, Track=SYN_FILTER*_KEYTRACK, Mix=SYN_FILTER*_MIX.)
+    constexpr char SYN_FILTER1_VEL[]   = "SYN_FILTER1_VEL";
+    constexpr char SYN_FILTER2_VEL[]   = "SYN_FILTER2_VEL";
+    constexpr char SYN_FILTER1_PDRV[]  = "SYN_FILTER1_PDRV";
+    constexpr char SYN_FILTER2_PDRV[]  = "SYN_FILTER2_PDRV";
     // Per-filter wet/dry mix + routing between the two slots (independent filters).
     constexpr char SYN_FILTER1_MIX[]    = "SYN_FILTER1_MIX";    // float 0..1 (1 = fully filtered)
     constexpr char SYN_FILTER2_MIX[]    = "SYN_FILTER2_MIX";    // float 0..1

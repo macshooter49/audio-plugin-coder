@@ -417,6 +417,11 @@ namespace tw
         // Per-oscillator filter routing masks — which sources (A,B,C,D,Sub) feed each filter.
         void setFilterSources (const bool s1[5], const bool s2[5]) noexcept
         { for (int k = 0; k < 5; ++k) { fltSrc1_[k] = s1[k]; fltSrc2_[k] = s2[k]; } }
+        // Back-panel Vel (velocity→cutoff depth) + post-filter Drive, per filter.
+        void setFilterVelocity (float v1, float v2) noexcept
+        { velAmt1_ = juce::jlimit (0.0f, 1.0f, v1); velAmt2_ = juce::jlimit (0.0f, 1.0f, v2); }
+        void setFilterPostDrive (float d1, float d2) noexcept
+        { postDrv1_ = juce::jlimit (0.0f, 1.0f, d1); postDrv2_ = juce::jlimit (0.0f, 1.0f, d2); }
 
         // ── Per-envelope ROUTING (the mini mod-matrix per envelope) ──────────
         // Destination indices — MUST match the SYN_ENV*_DEST choice order and the
@@ -3320,7 +3325,7 @@ namespace tw
                     // Filter 1 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
                     // CPU: the semitone→Hz pow(2,x) is gated on change — with nothing modulating,
                     // cutSemis is bit-identical every sample and the pow never re-runs.
-                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + driftSemis + ktCutSemis1;
+                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + driftSemis + ktCutSemis1 + velAmt1_ * currentVelocity_ * 72.0f;
                     if (cutSemis1 != lastCutSemis1_)
                     {
                         lastCutSemis1_ = cutSemis1;
@@ -3331,7 +3336,7 @@ namespace tw
                     filterSlot_.setParams (lastCutHz1_, res1, drv01_, coefSr);
 
                     // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
-                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis + ktCutSemis2;
+                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis + ktCutSemis2 + velAmt2_ * currentVelocity_ * 72.0f;
                     if (cutSemis2 != lastCutSemis2_)
                     {
                         lastCutSemis2_ = cutSemis2;
@@ -3347,33 +3352,46 @@ namespace tw
                     const bool par = (filterRouting_ != 0);
                     const bool a1  = (filterType1_ != kNoneType) && anySrc1_;
                     const bool a2  = (filterType2_ != kNoneType) && (par ? anySrc2_ : (anySrc1_ || anySrc2_));
+                    // Post-filter output drive (back-panel Drive) — soft tanh saturation blended by
+                    // amount, applied to each filter's wet output (F1's lands pre-F2 in series).
+                    auto pdrive = [] (float& L, float& R, float amt) noexcept
+                    {
+                        if (amt <= 0.0001f) return;
+                        const float d = 1.0f + amt * 4.0f;
+                        L = L + amt * (std::tanh (L * d) - L);
+                        R = R + amt * (std::tanh (R * d) - R);
+                    };
                     // Filter the two buses (dry is added by the caller). filterMix blends each
                     // filter's wet vs its own bus input, exactly as the old per-filter MIX did.
                     auto filterBuses = [&] (float b1L, float b1R, float b2L, float b2R, float& outL, float& outR)
                     {
-                        if (! par)   // SERIES: F1(bus1) → (+ bus2 F2-only sources) → F2
+                        if (! par)   // SERIES: F1(bus1) → drive1 → (+ bus2 F2-only) → F2 → drive2
                         {
                             float w1L = b1L, w1R = b1R;
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
                                       w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
                                       w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
+                            pdrive (w1L, w1R, postDrv1_);
                             const float pL = w1L + b2L, pR = w1R + b2R;
                             float w2L = pL, w2R = pR;
                             if (a2) { float wl = pL, wr = pR; filterSlot2_.processStereo (wl, wr);
                                       w2L = filterMix2_ * wl + (1.0f - filterMix2_) * pL;
                                       w2R = filterMix2_ * wr + (1.0f - filterMix2_) * pR; }
+                            pdrive (w2L, w2R, postDrv2_);
                             outL = w2L; outR = w2R;
                         }
-                        else         // PARALLEL: F1(bus1) + F2(bus2)
+                        else         // PARALLEL: F1(bus1) + F2(bus2), each with its own post-drive
                         {
                             float w1L = b1L, w1R = b1R;
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
                                       w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
                                       w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
+                            pdrive (w1L, w1R, postDrv1_);
                             float w2L = b2L, w2R = b2R;
                             if (a2) { float wl = b2L, wr = b2R; filterSlot2_.processStereo (wl, wr);
                                       w2L = filterMix2_ * wl + (1.0f - filterMix2_) * b2L;
                                       w2R = filterMix2_ * wr + (1.0f - filterMix2_) * b2R; }
+                            pdrive (w2L, w2R, postDrv2_);
                             outL = w1L + w2L; outR = w1R + w2R;
                         }
                     };
@@ -3869,6 +3887,8 @@ namespace tw
         float                   busCoD_[5]  = { 0,0,0,0,0 };   // → dry/bypass  (fltDry_)
         bool                    anySrc1_ = true, anySrc2_ = false;   // any source routed to each filter this block
         juce::AudioBuffer<float> fltBus2_, fltDry_;              // F2 + dry buses (bus1 = scratch_)
+        float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
+        float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
 
         // ── Per-envelope ROUTING state (mini mod-matrix) ──────────────────────
         // Index 0 = AMP (not routed); 1..4 = the free envelopes (FLT/PITCH/M1/M2,

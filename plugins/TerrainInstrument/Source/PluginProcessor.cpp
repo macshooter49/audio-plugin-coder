@@ -1193,6 +1193,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_FILTER2_MIX, 1 },
         "Synth Filter 2 Mix",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    // Back-panel Vel (velocity→cutoff) + post-filter Drive, per filter. Default 0 = inert.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_VEL, 1 },  "Synth Filter 1 Velocity",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_VEL, 1 },  "Synth Filter 2 Velocity",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_PDRV, 1 }, "Synth Filter 1 Post Drive",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_PDRV, 1 }, "Synth Filter 2 Post Drive",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_FILTER_ROUTING, 1 },
         "Synth Filter Routing", juce::StringArray { "SERIES", "PARALLEL" }, 0));
@@ -3417,6 +3430,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float filtEnv2 =        *rawParam (ParameterIDs::SYN_FILTER2_ENV);
         const float filtMix1 =        *rawParam (ParameterIDs::SYN_FILTER1_MIX);
         const float filtMix2 =        *rawParam (ParameterIDs::SYN_FILTER2_MIX);
+        const float filtVel1 =        *rawParam (ParameterIDs::SYN_FILTER1_VEL);
+        const float filtVel2 =        *rawParam (ParameterIDs::SYN_FILTER2_VEL);
+        const float filtPdrv1=        *rawParam (ParameterIDs::SYN_FILTER1_PDRV);
+        const float filtPdrv2=        *rawParam (ParameterIDs::SYN_FILTER2_PDRV);
         const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
         // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
         const bool  f1src[5] = { *rawParam (ParameterIDs::SYN_FILTER1_SRC_A)   > 0.5f,
@@ -3944,6 +3961,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterMix2             (filtMix2);
                 sv->setFilterRouting          (filtRoute);
                 sv->setFilterSources          (f1src, f2src);
+                sv->setFilterVelocity         (filtVel1, filtVel2);
+                sv->setFilterPostDrive        (filtPdrv1, filtPdrv2);
                 sv->setAmpEnv                 (ampDly, ampA, ampHld, ampD, ampS, ampR, ampCa, ampCd, ampCr, ampLoop);
                 sv->setPitchEnv               (pitDly, pitA, pitHld, pitD, pitS, pitR, pitCa, pitCd, pitCr, pitLoop);
                 sv->setPitchEnvDepth          (pitDepth);

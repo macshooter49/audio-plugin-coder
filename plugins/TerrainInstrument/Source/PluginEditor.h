@@ -173,6 +173,10 @@ private:
     juce::WebSliderRelay synFilter2EnvRelay   { ParameterIDs::SYN_FILTER2_ENV };
     juce::WebSliderRelay synFilter1MixRelay   { ParameterIDs::SYN_FILTER1_MIX };
     juce::WebSliderRelay synFilter2MixRelay   { ParameterIDs::SYN_FILTER2_MIX };
+    juce::WebSliderRelay synFilter1VelRelay   { ParameterIDs::SYN_FILTER1_VEL };
+    juce::WebSliderRelay synFilter2VelRelay   { ParameterIDs::SYN_FILTER2_VEL };
+    juce::WebSliderRelay synFilter1PdrvRelay  { ParameterIDs::SYN_FILTER1_PDRV };
+    juce::WebSliderRelay synFilter2PdrvRelay  { ParameterIDs::SYN_FILTER2_PDRV };
     juce::WebSliderRelay synFilterRoutingRelay{ ParameterIDs::SYN_FILTER_ROUTING };
     juce::WebSliderRelay synEnvFltARelay      { ParameterIDs::SYN_ENV_FLT_A };
     juce::WebSliderRelay synEnvFltDRelay      { ParameterIDs::SYN_ENV_FLT_D };
@@ -961,6 +965,10 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2EnvAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1MixAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2MixAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1VelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2VelAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter1PdrvAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synFilter2PdrvAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synFilterRoutingAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvFltAAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synEnvFltDAttachment;

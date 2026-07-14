@@ -107,6 +107,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synFilter2EnvRelay)
             .withOptionsFrom(synFilter1MixRelay)
             .withOptionsFrom(synFilter2MixRelay)
+            .withOptionsFrom(synFilter1VelRelay)
+            .withOptionsFrom(synFilter2VelRelay)
+            .withOptionsFrom(synFilter1PdrvRelay)
+            .withOptionsFrom(synFilter2PdrvRelay)
             .withOptionsFrom(synFilterRoutingRelay)
             .withOptionsFrom(synEnvFltARelay)
             .withOptionsFrom(synEnvFltDRelay)
@@ -3082,6 +3086,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synFilter2MixAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_MIX),
         synFilter2MixRelay, nullptr);
+    synFilter1VelAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_VEL),
+        synFilter1VelRelay, nullptr);
+    synFilter2VelAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_VEL),
+        synFilter2VelRelay, nullptr);
+    synFilter1PdrvAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER1_PDRV),
+        synFilter1PdrvRelay, nullptr);
+    synFilter2PdrvAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER2_PDRV),
+        synFilter2PdrvRelay, nullptr);
     synFilterRoutingAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_FILTER_ROUTING),
         synFilterRoutingRelay, nullptr);
