@@ -1206,10 +1206,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_FILTER2_PDRV, 1 }, "Synth Filter 2 Post Drive",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
-    layout.add (std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { ParameterIDs::SYN_FILTER1_POLES, 1 }, "Synth Filter 1 Poles 24dB", true));
-    layout.add (std::make_unique<juce::AudioParameterBool> (
-        juce::ParameterID { ParameterIDs::SYN_FILTER2_POLES, 1 }, "Synth Filter 2 Poles 24dB", true));
+    // DRIVE TYPE — post-filter drive waveshaper flavor (Tube/Diode/Fold/Hard/Crush/Fuzz), per filter.
+    {
+        const juce::StringArray driveTypes { "Tube","Diode","Fold","Hard","Crush","Fuzz" };
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER1_DRIVETYPE, 1 }, "Synth Filter 1 Drive Type", driveTypes, 0));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER2_DRIVETYPE, 1 }, "Synth Filter 2 Drive Type", driveTypes, 0));
+    }
+    // POLES — ladder slope tap: 6/12/18/24 dB/oct (choice 0..3), default 24 dB (index 3).
+    {
+        const juce::StringArray poleSlopes { "6","12","18","24" };
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER1_POLES, 1 }, "Synth Filter 1 Poles", poleSlopes, 3));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_FILTER2_POLES, 1 }, "Synth Filter 2 Poles", poleSlopes, 3));
+    }
+    // SPREAD — filter stereo width (L/R cutoff offset 0..1), per filter.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER1_SPREAD, 1 }, "Synth Filter 1 Spread",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_FILTER2_SPREAD, 1 }, "Synth Filter 2 Spread",
+        juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_FILTER_ROUTING, 1 },
         "Synth Filter Routing", juce::StringArray { "SERIES", "PARALLEL" }, 0));
@@ -3439,8 +3458,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float filtVel2 =        *rawParam (ParameterIDs::SYN_FILTER2_VEL);
         const float filtPdrv1=        *rawParam (ParameterIDs::SYN_FILTER1_PDRV);
         const float filtPdrv2=        *rawParam (ParameterIDs::SYN_FILTER2_PDRV);
-        const bool  filtP24_1=        *rawParam (ParameterIDs::SYN_FILTER1_POLES) > 0.5f;
-        const bool  filtP24_2=        *rawParam (ParameterIDs::SYN_FILTER2_POLES) > 0.5f;
+        const int   filtDrvType1=(int)*rawParam (ParameterIDs::SYN_FILTER1_DRIVETYPE);   // 0=Tube..5=Fuzz
+        const int   filtDrvType2=(int)*rawParam (ParameterIDs::SYN_FILTER2_DRIVETYPE);
+        const int   filtPole1= (int)  *rawParam (ParameterIDs::SYN_FILTER1_POLES);    // 0=6 1=12 2=18 3=24 dB
+        const int   filtPole2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_POLES);
+        const float filtSpread1=      *rawParam (ParameterIDs::SYN_FILTER1_SPREAD);   // stereo width 0..1
+        const float filtSpread2=      *rawParam (ParameterIDs::SYN_FILTER2_SPREAD);
         const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
         // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
         const bool  f1src[5] = { *rawParam (ParameterIDs::SYN_FILTER1_SRC_A)   > 0.5f,
@@ -3970,7 +3993,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterSources          (f1src, f2src);
                 sv->setFilterVelocity         (filtVel1, filtVel2);
                 sv->setFilterPostDrive        (filtPdrv1, filtPdrv2);
-                sv->setFilterPoles            (filtP24_1, filtP24_2);
+                sv->setFilterDriveType        (filtDrvType1, filtDrvType2);
+                sv->setFilterPoles            (filtPole1, filtPole2);
+                sv->setFilterSpread           (filtSpread1, filtSpread2);
                 sv->setAmpEnv                 (ampDly, ampA, ampHld, ampD, ampS, ampR, ampCa, ampCd, ampCr, ampLoop);
                 sv->setPitchEnv               (pitDly, pitA, pitHld, pitD, pitS, pitR, pitCa, pitCd, pitCr, pitLoop);
                 sv->setPitchEnvDepth          (pitDepth);

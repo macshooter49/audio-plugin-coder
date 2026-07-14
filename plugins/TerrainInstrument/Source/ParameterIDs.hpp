@@ -194,9 +194,15 @@ namespace ParameterIDs
     constexpr char SYN_FILTER2_VEL[]   = "SYN_FILTER2_VEL";
     constexpr char SYN_FILTER1_PDRV[]  = "SYN_FILTER1_PDRV";
     constexpr char SYN_FILTER2_PDRV[]  = "SYN_FILTER2_PDRV";
+    // DRIVETYPE = post-filter drive waveshaper flavor (choice 0..5: Tube/Diode/Fold/Hard/Crush/Fuzz).
+    constexpr char SYN_FILTER1_DRIVETYPE[] = "SYN_FILTER1_DRIVETYPE";
+    constexpr char SYN_FILTER2_DRIVETYPE[] = "SYN_FILTER2_DRIVETYPE";
     // POLES = ladder slope (true = 24 dB/4-pole, false = 12 dB/2-pole tap).
     constexpr char SYN_FILTER1_POLES[] = "SYN_FILTER1_POLES";
     constexpr char SYN_FILTER2_POLES[] = "SYN_FILTER2_POLES";
+    // SPREAD = filter stereo width (L/R cutoff offset, 0..1).
+    constexpr char SYN_FILTER1_SPREAD[] = "SYN_FILTER1_SPREAD";
+    constexpr char SYN_FILTER2_SPREAD[] = "SYN_FILTER2_SPREAD";
     // Per-filter wet/dry mix + routing between the two slots (independent filters).
     constexpr char SYN_FILTER1_MIX[]    = "SYN_FILTER1_MIX";    // float 0..1 (1 = fully filtered)
     constexpr char SYN_FILTER2_MIX[]    = "SYN_FILTER2_MIX";    // float 0..1

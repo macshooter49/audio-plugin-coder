@@ -422,8 +422,34 @@ namespace tw
         { velAmt1_ = juce::jlimit (0.0f, 1.0f, v1); velAmt2_ = juce::jlimit (0.0f, 1.0f, v2); }
         void setFilterPostDrive (float d1, float d2) noexcept
         { postDrv1_ = juce::jlimit (0.0f, 1.0f, d1); postDrv2_ = juce::jlimit (0.0f, 1.0f, d2); }
-        void setFilterPoles (bool p24_1, bool p24_2) noexcept
-        { filterSlot_.setPoles (p24_1); filterSlot2_.setPoles (p24_2); }   // setPoles takes poles24 (true=24dB)
+        // Back-panel Drive TYPE — which waveshaper the post-filter drive uses (0=Tube..5=Fuzz).
+        void setFilterDriveType (int t1, int t2) noexcept
+        { driveType1_ = juce::jlimit (0, 5, t1); driveType2_ = juce::jlimit (0, 5, t2); }
+        // Post-filter drive waveshapers. Pure, STATELESS functions of the sample — node-ready
+        // (lift straight into a drive node later). x=input, d=drive gain, a=amount (level-aware modes).
+        // All DC-free at rest (x=0 -> 0) and bounded so switching type never jumps the level wildly.
+        static inline float fShape (float x, int type, float d, float a) noexcept
+        {
+            switch (type)
+            {
+                default:
+                case 0: return std::tanh (x * d);                                     // Tube  — warm soft saturation (default)
+                case 1: return (x >= 0.0f) ? std::tanh (x * d)                         // Diode — asymmetric (even harmonics)
+                                           : std::tanh (x * d * 0.5f) * 0.85f;
+                case 2: return std::sin (x * d * 1.5f);                                // Fold  — sine wavefolder (metallic)
+                case 3: return juce::jlimit (-1.0f, 1.0f, x * d);                      // Hard  — hard clip (buzzy)
+                case 4: { const float lv = std::round (2.0f + (1.0f - a) * 30.0f);     // Crush — amplitude bitcrush (32->2 steps)
+                          const float xc = juce::jlimit (-1.0f, 1.0f, x * d);
+                          return std::round (xc * lv) / juce::jmax (1.0f, lv); }
+                case 5: return juce::jlimit (-1.0f, 1.0f,                              // Fuzz  — hot asym -> squareish
+                                             std::tanh (x * d * 4.0f + 0.15f) - 0.148885f);
+            }
+        }
+        void setFilterPoles (int tap1, int tap2) noexcept
+        { filterSlot_.setPoles (tap1); filterSlot2_.setPoles (tap2); }   // tap 0..3 = 6/12/18/24 dB
+        // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
+        void setFilterSpread (float s1, float s2) noexcept
+        { filterSlot_.setSpread (s1); filterSlot2_.setSpread (s2); }
 
         // ── Per-envelope ROUTING (the mini mod-matrix per envelope) ──────────
         // Destination indices — MUST match the SYN_ENV*_DEST choice order and the
@@ -3356,12 +3382,12 @@ namespace tw
                     const bool a2  = (filterType2_ != kNoneType) && (par ? anySrc2_ : (anySrc1_ || anySrc2_));
                     // Post-filter output drive (back-panel Drive) — soft tanh saturation blended by
                     // amount, applied to each filter's wet output (F1's lands pre-F2 in series).
-                    auto pdrive = [] (float& L, float& R, float amt) noexcept
+                    auto pdrive = [] (float& L, float& R, float amt, int type) noexcept
                     {
                         if (amt <= 0.0001f) return;
                         const float d = 1.0f + amt * 4.0f;
-                        L = L + amt * (std::tanh (L * d) - L);
-                        R = R + amt * (std::tanh (R * d) - R);
+                        L = L + amt * (fShape (L, type, d, amt) - L);
+                        R = R + amt * (fShape (R, type, d, amt) - R);
                     };
                     // Filter the two buses (dry is added by the caller). filterMix blends each
                     // filter's wet vs its own bus input, exactly as the old per-filter MIX did.
@@ -3373,13 +3399,13 @@ namespace tw
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
                                       w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
                                       w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
-                            pdrive (w1L, w1R, postDrv1_);
+                            pdrive (w1L, w1R, postDrv1_, driveType1_);
                             const float pL = w1L + b2L, pR = w1R + b2R;
                             float w2L = pL, w2R = pR;
                             if (a2) { float wl = pL, wr = pR; filterSlot2_.processStereo (wl, wr);
                                       w2L = filterMix2_ * wl + (1.0f - filterMix2_) * pL;
                                       w2R = filterMix2_ * wr + (1.0f - filterMix2_) * pR; }
-                            pdrive (w2L, w2R, postDrv2_);
+                            pdrive (w2L, w2R, postDrv2_, driveType2_);
                             outL = w2L; outR = w2R;
                         }
                         else         // PARALLEL: F1(bus1) + F2(bus2), each with its own post-drive
@@ -3388,12 +3414,12 @@ namespace tw
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
                                       w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
                                       w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
-                            pdrive (w1L, w1R, postDrv1_);
+                            pdrive (w1L, w1R, postDrv1_, driveType1_);
                             float w2L = b2L, w2R = b2R;
                             if (a2) { float wl = b2L, wr = b2R; filterSlot2_.processStereo (wl, wr);
                                       w2L = filterMix2_ * wl + (1.0f - filterMix2_) * b2L;
                                       w2R = filterMix2_ * wr + (1.0f - filterMix2_) * b2R; }
-                            pdrive (w2L, w2R, postDrv2_);
+                            pdrive (w2L, w2R, postDrv2_, driveType2_);
                             outL = w1L + w2L; outR = w1R + w2R;
                         }
                     };
@@ -3891,6 +3917,7 @@ namespace tw
         juce::AudioBuffer<float> fltBus2_, fltDry_;              // F2 + dry buses (bus1 = scratch_)
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
+        int                     driveType1_ = 0, driveType2_ = 0;    // Drive TYPE (0=Tube..5=Fuzz)
 
         // ── Per-envelope ROUTING state (mini mod-matrix) ──────────────────────
         // Index 0 = AMP (not routed); 1..4 = the free envelopes (FLT/PITCH/M1/M2,

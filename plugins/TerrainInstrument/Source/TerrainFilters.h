@@ -138,19 +138,20 @@ struct LadderLP24
     float k = 0.0f;
     float driveComp = 1.0f;       // = 1 + 0.5k (bass restore, §1.2)
 
-    // Batch 2: 12 dB/oct (2-pole) tap. Output stage 2 instead of stage 4 with
-    // the 4-pole feedback loop intact (Diva/Repro switchable-slope approach).
-    // twoPoleMakeup level-matches the steeper-passband 2-pole tap to LP24.
-    bool  twoPole = false;
-    float s2Prev  = 0.0f;
-    float twoPoleMakeup = 1.0f;   // measured constant
+    // POLES — switchable slope. The 4-pole ladder computes all four stages every
+    // sample, so tapping stage 1/2/3/4 reads out 6/12/18/24 dB/oct for free (the
+    // 4-pole resonant feedback loop stays intact regardless of the tap point).
+    // poleTap: 0=6dB(s1) 1=12dB(s2) 2=18dB(s3) 3=24dB(s4). poleMakeup level-matches
+    // the brighter lower-order taps to the 24 dB reference.
+    int   poleTap = 3;
+    float poleMakeup = 1.0f;
+    float s1Prev = 0.0f, s2Prev = 0.0f, s3Prev = 0.0f;
 
     void reset() noexcept
     {
         s1 = s2 = s3 = s4 = 0;
         tV1 = tV2 = tV3 = tV4 = tVfb = 0;
-        s4Prev = 0;
-        s2Prev = 0;
+        s1Prev = s2Prev = s3Prev = s4Prev = 0;
     }
 
     /** Set cutoff (Hz) and resonance (0..1) at the current sample rate.
@@ -189,13 +190,17 @@ struct LadderLP24
         v = (tV3 - tV4) * G;  s4 += 2.0f * v;  tV4 = fastTanh (s4);
         tVfb = fastTanh (k * s4);
 
+        // Tap the selected stage (half-sample averaged, like the 24 dB path). Every
+        // tap shares the 4-pole resonant feedback; only the readout point changes.
         float y;
-        if (twoPole)
-            y = 0.5f * (s2 + s2Prev) * driveComp * twoPoleMakeup;   // 12 dB/oct tap
-        else
-            y = 0.5f * (s4 + s4Prev) * driveComp;                   // 24 dB/oct
-        s2Prev = s2;
-        s4Prev = s4;
+        switch (poleTap)
+        {
+            case 0:  y = 0.5f * (s1 + s1Prev) * driveComp * poleMakeup; break;   // 6 dB/oct
+            case 1:  y = 0.5f * (s2 + s2Prev) * driveComp * poleMakeup; break;   // 12 dB/oct
+            case 2:  y = 0.5f * (s3 + s3Prev) * driveComp * poleMakeup; break;   // 18 dB/oct
+            default: y = 0.5f * (s4 + s4Prev) * driveComp;             break;   // 24 dB/oct (unity)
+        }
+        s1Prev = s1; s2Prev = s2; s3Prev = s3; s4Prev = s4;
         return y;
     }
 };
@@ -1294,8 +1299,12 @@ public:
 
     /** POLES — ladder slope override: true = 4-pole/24 dB, false = 2-pole/12 dB tap. Applies to
      *  LADDER_LP24 (LADDER_LP12 stays fixed 12 dB). CPU-free — both taps are already computed. */
-    void setPoles (bool poles24) noexcept { polesTwo_ = ! poles24; }
-    bool polesTwo_ = false, lastPoles_ = false;   // Poles slope override (2-pole tap when true)
+    void setPoles (int tapSel) noexcept { poleTapSel_ = juce::jlimit (0, 3, tapSel); }   // 0=6 1=12 2=18 3=24 dB
+    int  poleTapSel_ = 3, lastPoleTap_ = 3;        // Poles slope: ladder tap 0..3 (6/12/18/24 dB), 24 default
+    // STEREO SPREAD — L/R cutoff offset (0..1 -> +/-kSpreadSemis). Frequency-based cores only.
+    void setSpread (float s01) noexcept { spread_ = juce::jlimit (0.0f, 1.0f, s01); }
+    float spread_ = 0.0f, lastSpread_ = 0.0f;
+    static constexpr float kSpreadSemis = 6.0f;    // +/-6 st at full -> an octave of L/R separation
 
     /** Per-sample setter. Cutoff in Hz (post-env, post-drift, post-clamp),
      *  resonance 0..1, drive 0..1. */
@@ -1308,47 +1317,55 @@ public:
         if (type_ == Type::NONE) { preDrive_ = 1.0f; postMakeup_ = 1.0f; return; }
         if (cutHz == lastCut_ && res01 == lastRes_ && drv01 == lastDrv_
             && fs == lastFs_ && type_ == lastType_ && morph_ == lastMorph_
-            && polesTwo_ == lastPoles_)
+            && poleTapSel_ == lastPoleTap_ && spread_ == lastSpread_)
             return;
         lastCut_ = cutHz; lastRes_ = res01; lastDrv_ = drv01;
-        lastFs_ = fs; lastType_ = type_; lastMorph_ = morph_; lastPoles_ = polesTwo_;
+        lastFs_ = fs; lastType_ = type_; lastMorph_ = morph_;
+        lastPoleTap_ = poleTapSel_; lastSpread_ = spread_;
         const float driveLin = driveLinear (drv01);
+        // STEREO SPREAD: split the cutoff +/-kSpreadSemis around the set value (L below / R above) so a
+        // resonant filter blooms into a wide stereo image. spread_=0 -> sMul=1 -> cutHzL=cutHzR=cutHz
+        // (byte-identical to the mono path). Each core clamps cutoff internally, so extremes are safe.
+        const float sMul   = std::exp2 (spread_ * kSpreadSemis / 12.0f);
+        const float cutHzL = cutHz / sMul;
+        const float cutHzR = cutHz * sMul;
         switch (type_)
         {
             case Type::LADDER_LP24:
             {
-                // Poles override: 4-pole/24 dB by default, or the 2-pole/12 dB tap when polesTwo_.
-                ladderL_.twoPole = polesTwo_; ladderR_.twoPole = polesTwo_;
-                const float mk = polesTwo_ ? kLadder12Makeup : 1.0f;
-                ladderL_.twoPoleMakeup = mk; ladderR_.twoPoleMakeup = mk;
-                ladderL_.setCoeffs (cutHz, res01, fs);
-                ladderR_.setCoeffs (cutHz, res01, fs);
+                // Poles: tap 0..3 -> 6/12/18/24 dB (see LadderLP24). Makeup anchors on the two
+                // measured points (24 dB=1.0, 12 dB=kLadder12Makeup) and interpolates the rest.
+                ladderL_.poleTap = poleTapSel_; ladderR_.poleTap = poleTapSel_;
+                const float mk = std::pow (kLadder12Makeup, (3 - poleTapSel_) * 0.5f);
+                ladderL_.poleMakeup = mk; ladderR_.poleMakeup = mk;
+                ladderL_.setCoeffs (cutHzL, res01, fs);
+                ladderR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
                 postMakeup_= driveMakeup (driveLin);
                 break;
             }
             case Type::LADDER_LP12:
-                ladderL_.twoPole = true;  ladderR_.twoPole = true;
-                ladderL_.twoPoleMakeup = kLadder12Makeup;
-                ladderR_.twoPoleMakeup = kLadder12Makeup;
-                ladderL_.setCoeffs (cutHz, res01, fs);
-                ladderR_.setCoeffs (cutHz, res01, fs);
+                ladderL_.poleTap = 1;  ladderR_.poleTap = 1;   // fixed 12 dB type (Poles doesn't apply here)
+                ladderL_.poleMakeup = kLadder12Makeup;
+                ladderR_.poleMakeup = kLadder12Makeup;
+                ladderL_.setCoeffs (cutHzL, res01, fs);
+                ladderR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
                 postMakeup_= driveMakeup (driveLin);
                 break;
             case Type::LADDER_HP24:
                 ladderHpL_.outMakeup = kLadderHp24Makeup;
                 ladderHpR_.outMakeup = kLadderHp24Makeup;
-                ladderHpL_.setCoeffs (cutHz, res01, fs);
-                ladderHpR_.setCoeffs (cutHz, res01, fs);
+                ladderHpL_.setCoeffs (cutHzL, res01, fs);
+                ladderHpR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
                 postMakeup_= driveMakeup (driveLin);
                 break;
             case Type::DIODE_LP:
                 diodeL_.outMakeup = kDiodeMakeup;
                 diodeR_.outMakeup = kDiodeMakeup;
-                diodeL_.setCoeffs (cutHz, res01, fs);
-                diodeR_.setCoeffs (cutHz, res01, fs);
+                diodeL_.setCoeffs (cutHzL, res01, fs);
+                diodeR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
                 postMakeup_= driveMakeup (driveLin);
                 break;
@@ -1381,8 +1398,8 @@ public:
                 postMakeup_= driveMakeup (driveLin) * kObxMakeup;
                 break;
             case Type::ACID_303:
-                acidL_.setCoeffs (cutHz, res01, fs);
-                acidR_.setCoeffs (cutHz, res01, fs);
+                acidL_.setCoeffs (cutHzL, res01, fs);
+                acidR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
                 postMakeup_= driveMakeup (driveLin);
                 break;
@@ -1396,8 +1413,8 @@ public:
                                  : (type_ == Type::COMB_SHIMMER) ? CombMode::Shimmer
                                  :                                 CombMode::Karplus;
                 combL_.mode = m; combR_.mode = m;
-                combL_.setParams (cutHz,           res01, fs);
-                combR_.setParams (cutHz * 1.0015f, res01, fs);   // ~+2.6 cents → stereo width
+                combL_.setParams (cutHzL,            res01, fs);
+                combR_.setParams (cutHzR * 1.0015f, res01, fs);   // +2.6 cents base width, plus Spread
                 preDrive_  = driveLin;       // DRV boosts the comb input (LOUDER, never quieter)
                 postMakeup_= combMakeup (m);
                 break;
@@ -1583,10 +1600,12 @@ private:
     void setSvf (SvfMultimode::Output o, float qMax,
                  float cutHz, float res01, float driveLin, double fs) noexcept
     {
+        // STEREO SPREAD: offset L/R cutoff (same +/-kSpreadSemis split as the direct cores above).
+        const float sMul = std::exp2 (spread_ * kSpreadSemis / 12.0f);
         svfL_.qMax = qMax; svfR_.qMax = qMax;
         svfL_.out  = o;    svfR_.out  = o;
-        svfL_.setCoeffs (cutHz, res01, fs);
-        svfR_.setCoeffs (cutHz, res01, fs);
+        svfL_.setCoeffs (cutHz / sMul, res01, fs);
+        svfR_.setCoeffs (cutHz * sMul, res01, fs);
         svfL_.setDrive  (driveLin);
         svfR_.setDrive  (driveLin);
     }
