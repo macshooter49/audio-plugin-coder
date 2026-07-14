@@ -192,6 +192,18 @@ namespace ParameterIDs
     constexpr char SYN_FILTER1_MIX[]    = "SYN_FILTER1_MIX";    // float 0..1 (1 = fully filtered)
     constexpr char SYN_FILTER2_MIX[]    = "SYN_FILTER2_MIX";    // float 0..1
     constexpr char SYN_FILTER_ROUTING[] = "SYN_FILTER_ROUTING"; // choice 0=SERIES, 1=PARALLEL
+    // Per-oscillator filter ROUTING masks — which sources feed each filter (bool, default ON = all
+    // routed, so a fresh patch = today's behaviour). Order: A, B, C, D, Sub. Noise (N) reserved.
+    constexpr char SYN_FILTER1_SRC_A[]  = "SYN_FILTER1_SRC_A";
+    constexpr char SYN_FILTER1_SRC_B[]  = "SYN_FILTER1_SRC_B";
+    constexpr char SYN_FILTER1_SRC_C[]  = "SYN_FILTER1_SRC_C";
+    constexpr char SYN_FILTER1_SRC_D[]  = "SYN_FILTER1_SRC_D";
+    constexpr char SYN_FILTER1_SRC_SUB[]= "SYN_FILTER1_SRC_SUB";
+    constexpr char SYN_FILTER2_SRC_A[]  = "SYN_FILTER2_SRC_A";
+    constexpr char SYN_FILTER2_SRC_B[]  = "SYN_FILTER2_SRC_B";
+    constexpr char SYN_FILTER2_SRC_C[]  = "SYN_FILTER2_SRC_C";
+    constexpr char SYN_FILTER2_SRC_D[]  = "SYN_FILTER2_SRC_D";
+    constexpr char SYN_FILTER2_SRC_SUB[]= "SYN_FILTER2_SRC_SUB";
 
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)

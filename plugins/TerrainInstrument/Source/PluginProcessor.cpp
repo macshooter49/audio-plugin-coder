@@ -1196,6 +1196,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_FILTER_ROUTING, 1 },
         "Synth Filter Routing", juce::StringArray { "SERIES", "PARALLEL" }, 0));
+    // Per-oscillator filter routing masks — default TRUE (all sources routed to both filters), so a
+    // fresh patch is byte-identical to the pre-routing behaviour (all oscs → F1, F2=None by default).
+    {
+        struct { const char* id; const char* name; } fltSrc[] = {
+            { ParameterIDs::SYN_FILTER1_SRC_A,   "Synth Filter 1 Source A"   },
+            { ParameterIDs::SYN_FILTER1_SRC_B,   "Synth Filter 1 Source B"   },
+            { ParameterIDs::SYN_FILTER1_SRC_C,   "Synth Filter 1 Source C"   },
+            { ParameterIDs::SYN_FILTER1_SRC_D,   "Synth Filter 1 Source D"   },
+            { ParameterIDs::SYN_FILTER1_SRC_SUB, "Synth Filter 1 Source Sub" },
+            { ParameterIDs::SYN_FILTER2_SRC_A,   "Synth Filter 2 Source A"   },
+            { ParameterIDs::SYN_FILTER2_SRC_B,   "Synth Filter 2 Source B"   },
+            { ParameterIDs::SYN_FILTER2_SRC_C,   "Synth Filter 2 Source C"   },
+            { ParameterIDs::SYN_FILTER2_SRC_D,   "Synth Filter 2 Source D"   },
+            { ParameterIDs::SYN_FILTER2_SRC_SUB, "Synth Filter 2 Source Sub" },
+        };
+        for (auto& s : fltSrc)
+            layout.add (std::make_unique<juce::AudioParameterBool> (
+                juce::ParameterID { s.id, 1 }, s.name, true));
+    }
 
     // Filter ADSR (independent from AMP env — drives the cutoff via the bipolar ENV knob).
     // Defaults: classic "filter sweep down" shape (instant attack, mid decay, no sustain, short release).
@@ -3399,6 +3418,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float filtMix1 =        *rawParam (ParameterIDs::SYN_FILTER1_MIX);
         const float filtMix2 =        *rawParam (ParameterIDs::SYN_FILTER2_MIX);
         const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
+        // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
+        const bool  f1src[5] = { *rawParam (ParameterIDs::SYN_FILTER1_SRC_A)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_B)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_C)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_D)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_SUB) > 0.5f };
+        const bool  f2src[5] = { *rawParam (ParameterIDs::SYN_FILTER2_SRC_A)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_B)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_C)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_D)   > 0.5f,
+                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_SUB) > 0.5f };
         const float fltEnvA =         *rawParam (ParameterIDs::SYN_ENV_FLT_A);
         const float fltEnvD =         *rawParam (ParameterIDs::SYN_ENV_FLT_D);
         const float fltEnvS =         *rawParam (ParameterIDs::SYN_ENV_FLT_S);
@@ -3913,6 +3943,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterMix1             (filtMix1);
                 sv->setFilterMix2             (filtMix2);
                 sv->setFilterRouting          (filtRoute);
+                sv->setFilterSources          (f1src, f2src);
                 sv->setAmpEnv                 (ampDly, ampA, ampHld, ampD, ampS, ampR, ampCa, ampCd, ampCr, ampLoop);
                 sv->setPitchEnv               (pitDly, pitA, pitHld, pitD, pitS, pitR, pitCa, pitCd, pitCr, pitLoop);
                 sv->setPitchEnvDepth          (pitDepth);

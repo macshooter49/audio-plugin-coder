@@ -338,6 +338,8 @@ namespace tw
             //    (warpSrc_: stretchRatio is always ≥1 so its source length ≤ numSamples.)
             const int spb = juce::jmax (1, samplesPerBlock);
             scratch_.setSize    (2, spb, false, true,  true);
+            fltBus2_.setSize    (2, spb, false, true,  true);   // per-osc filter routing buses
+            fltDry_ .setSize    (2, spb, false, true,  true);
             envScratch_.setSize (5, spb, false, true,  true);
             sampleBlkA_.setSize (2, spb, false, false, true);
             sampleBlkB_.setSize (2, spb, false, false, true);
@@ -412,6 +414,9 @@ namespace tw
         void setFilterMix1 (float mix) noexcept       { filterMix1_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterMix2 (float mix) noexcept       { filterMix2_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterRouting (int mode) noexcept     { filterRouting_ = (mode != 0) ? 1 : 0; }
+        // Per-oscillator filter routing masks — which sources (A,B,C,D,Sub) feed each filter.
+        void setFilterSources (const bool s1[5], const bool s2[5]) noexcept
+        { for (int k = 0; k < 5; ++k) { fltSrc1_[k] = s1[k]; fltSrc2_[k] = s2[k]; } }
 
         // ── Per-envelope ROUTING (the mini mod-matrix per envelope) ──────────
         // Destination indices — MUST match the SYN_ENV*_DEST choice order and the
@@ -1478,6 +1483,31 @@ namespace tw
             scratch_.clear();
             auto* scratchL = scratch_.getWritePointer (0);
             auto* scratchR = scratch_.getWritePointer (1);
+            // Per-osc filter routing buses (bus1 = scratch). Fully written each sample below.
+            if (fltBus2_.getNumChannels() < 2 || fltBus2_.getNumSamples() < numSamples)
+                fltBus2_.setSize (2, numSamples, false, true, true);
+            if (fltDry_.getNumChannels() < 2 || fltDry_.getNumSamples() < numSamples)
+                fltDry_.setSize (2, numSamples, false, true, true);
+            auto* busB2L = fltBus2_.getWritePointer (0);
+            auto* busB2R = fltBus2_.getWritePointer (1);
+            auto* busDryL = fltDry_.getWritePointer (0);
+            auto* busDryR = fltDry_.getWritePointer (1);
+            // Per-block routing coefficients (independent + dry-bypass model): each source
+            // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
+            // → dry if in neither. Multiply-by-0/1 keeps the per-sample sum branchless.
+            {
+                const bool par = (filterRouting_ != 0);
+                anySrc1_ = anySrc2_ = false;
+                for (int k = 0; k < 5; ++k)
+                {
+                    const bool m1 = fltSrc1_[k], m2 = fltSrc2_[k];
+                    busCo1_[k] = m1 ? 1.0f : 0.0f;
+                    busCo2_[k] = (par ? m2 : (m2 && ! m1)) ? 1.0f : 0.0f;
+                    busCoD_[k] = (! m1 && ! m2) ? 1.0f : 0.0f;
+                    anySrc1_ = anySrc1_ || (busCo1_[k] != 0.0f);
+                    anySrc2_ = anySrc2_ || (busCo2_[k] != 0.0f);
+                }
+            }
 
             // KEYTRACK + ROUTE — resolve effective destination values, clamped.
             // KEYTRACK (mod route #1) is a CROSSFADE from the knob toward a pure pitch ramp:
@@ -1939,6 +1969,9 @@ namespace tw
             const bool uLoopD = (! oscDead_[3] || modSrcForce_[3]) && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL);
             for (int i = 0; i < numSamples; ++i)
             {
+                // Per-osc SUB contributions this sample (mono, post-normalization) — filled by
+                // subMix, used by the filter router to route the Sub independently of its osc.
+                float subMono0 = 0.f, subMono1 = 0.f, subMono2 = 0.f, subMono3 = 0.f;
                 // ── OSC A — sum across activeUnisonA_ sines (per-OSC unison) ─────
 // ── BLEND MODES: per-carrier read-phase offset from the 4 cross-osc warp slots. PD = modulator
                 //    injected direct (phase modulation); FM = modulator integrated per carrier (leaky) →
@@ -2167,7 +2200,7 @@ namespace tw
                     blendReadBlock (0, blendOff[0], blkCarrierArmed_[0], sA_L, sA_R);
                 sA_L *= blendAmp[0]; sA_R *= blendAmp[0];   // BLEND AM/RM (amplitude-domain, all engines; 1.0 = inert)
                 // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
-                if (sub_[0].on) subMix (0, sA_L, sA_R);
+                if (sub_[0].on) subMix (0, sA_L, sA_R, subMono0);
                 if (! spectralBypassA_)
                 {
                     if (spectralTypeA_ <= 2)
@@ -2444,7 +2477,7 @@ namespace tw
                 if (blkCarrierArmed_[1] || blkArmSm_[1] > 1.0e-4f)
                     blendReadBlock (1, blendOff[1], blkCarrierArmed_[1], sB_L, sB_R);
                 sB_L *= blendAmp[1]; sB_R *= blendAmp[1];   // BLEND AM/RM
-                if (sub_[1].on) subMix (1, sB_L, sB_R);
+                if (sub_[1].on) subMix (1, sB_L, sB_R, subMono1);
                 if (! spectralBypassB_)
                 {
                     if (spectralTypeB_ <= 2)
@@ -2718,7 +2751,7 @@ namespace tw
                 if (blkCarrierArmed_[2] || blkArmSm_[2] > 1.0e-4f)
                     blendReadBlock (2, blendOff[2], blkCarrierArmed_[2], sC_L, sC_R);
                 sC_L *= blendAmp[2]; sC_R *= blendAmp[2];   // BLEND AM/RM
-                if (sub_[2].on) subMix (2, sC_L, sC_R);
+                if (sub_[2].on) subMix (2, sC_L, sC_R, subMono2);
                 if (! spectralBypassC_)
                 {
                     if (spectralTypeC_ <= 2)
@@ -2992,7 +3025,7 @@ namespace tw
                 if (blkCarrierArmed_[3] || blkArmSm_[3] > 1.0e-4f)
                     blendReadBlock (3, blendOff[3], blkCarrierArmed_[3], sD_L, sD_R);
                 sD_L *= blendAmp[3]; sD_R *= blendAmp[3];   // BLEND AM/RM
-                if (sub_[3].on) subMix (3, sD_L, sD_R);
+                if (sub_[3].on) subMix (3, sD_L, sD_R, subMono3);
                 if (! spectralBypassD_)
                 {
                     if (spectralTypeD_ <= 2)
@@ -3120,9 +3153,26 @@ namespace tw
                 for (int g = 0; g < 4; ++g) oscGate_[g] += (robinGate (g) - oscGate_[g]) * oscGateCoef_;
                 const float gA = oscGate_[0], gB = oscGate_[1], gC = oscGate_[2], gD = oscGate_[3];
 
-                // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate)
-                scratchL[i] = (sA_L * level_ * panL_ * gA + sB_L * levelB_ * panLB_ * gB + sC_L * levelC_ * panLC_ * gC + sD_L * levelD_ * panLD_ * gD) * velEnv;
-                scratchR[i] = (sA_R * level_ * panR_ * gA + sB_R * levelB_ * panRB_ * gB + sC_R * levelC_ * panRC_ * gC + sD_R * levelD_ * panRD_ * gD) * velEnv;
+                // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate), split
+                // into the 3 filter-routing buses. Each osc's full signal = osc-only (sX-subMono)
+                // + its sub (subMono); routed by busCo*_ (F1 bus = scratch, F2 = fltBus2_, dry =
+                // fltDry_). Default (all sources → F1) makes scratch = the old full mix exactly.
+                const float gAL = level_  * panL_  * gA * velEnv, gAR = level_  * panR_  * gA * velEnv;
+                const float gBL = levelB_ * panLB_ * gB * velEnv, gBR = levelB_ * panRB_ * gB * velEnv;
+                const float gCL = levelC_ * panLC_ * gC * velEnv, gCR = levelC_ * panRC_ * gC * velEnv;
+                const float gDL = levelD_ * panLD_ * gD * velEnv, gDR = levelD_ * panRD_ * gD * velEnv;
+                const float oAL = (sA_L - subMono0) * gAL, oAR = (sA_R - subMono0) * gAR;   // osc-only (sub removed)
+                const float oBL = (sB_L - subMono1) * gBL, oBR = (sB_R - subMono1) * gBR;
+                const float oCL = (sC_L - subMono2) * gCL, oCR = (sC_R - subMono2) * gCR;
+                const float oDL = (sD_L - subMono3) * gDL, oDR = (sD_R - subMono3) * gDR;
+                const float subBL = subMono0 * gAL + subMono1 * gBL + subMono2 * gCL + subMono3 * gDL;   // Sub source (idx 4)
+                const float subBR = subMono0 * gAR + subMono1 * gBR + subMono2 * gCR + subMono3 * gDR;
+                scratchL[i] = busCo1_[0]*oAL + busCo1_[1]*oBL + busCo1_[2]*oCL + busCo1_[3]*oDL + busCo1_[4]*subBL;
+                scratchR[i] = busCo1_[0]*oAR + busCo1_[1]*oBR + busCo1_[2]*oCR + busCo1_[3]*oDR + busCo1_[4]*subBR;
+                busB2L[i]   = busCo2_[0]*oAL + busCo2_[1]*oBL + busCo2_[2]*oCL + busCo2_[3]*oDL + busCo2_[4]*subBL;
+                busB2R[i]   = busCo2_[0]*oAR + busCo2_[1]*oBR + busCo2_[2]*oCR + busCo2_[3]*oDR + busCo2_[4]*subBR;
+                busDryL[i]  = busCoD_[0]*oAL + busCoD_[1]*oBL + busCoD_[2]*oCL + busCoD_[3]*oDL + busCoD_[4]*subBL;
+                busDryR[i]  = busCoD_[0]*oAR + busCoD_[1]*oBR + busCoD_[2]*oCR + busCoD_[3]*oDR + busCoD_[4]*subBR;
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
                 modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
@@ -3135,8 +3185,9 @@ namespace tw
             {
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    scratchL[i] *= stealingFade_;
-                    scratchR[i] *= stealingFade_;
+                    scratchL[i] *= stealingFade_;  scratchR[i] *= stealingFade_;
+                    busB2L[i]   *= stealingFade_;  busB2R[i]   *= stealingFade_;   // fade the routing buses too
+                    busDryL[i]  *= stealingFade_;  busDryR[i]  *= stealingFade_;
                     stealingFade_ *= stealingFadeStep_;
                 }
                 if (stealingFade_ < 0.001f)
@@ -3290,54 +3341,61 @@ namespace tw
                         baseRes012_ + resWander * driftState_ * 0.5f);
                     filterSlot2_.setParams (lastCutHz2_, res2, drv012_, coefSr);
 
-                    // Routing + per-filter wet/dry mix. NONE-aware so a bypassed
-                    // slot drops out of the sum cleanly. Filters are independent.
-                    const bool a1 = (filterType1_ != kNoneType);
-                    const bool a2 = (filterType2_ != kNoneType);
-                    auto applyFilters = [&] (float& L, float& R)
+                    // PER-OSC ROUTING combine. Buses: bus1 = scratch (F1's sources), bus2 = fltBus2_
+                    // (F2 sources in parallel / F2-only in series), dry = fltDry_ (unrouted, bypass).
+                    // a1/a2 NONE-aware AND gated on bus content (skip a filter with no input).
+                    const bool par = (filterRouting_ != 0);
+                    const bool a1  = (filterType1_ != kNoneType) && anySrc1_;
+                    const bool a2  = (filterType2_ != kNoneType) && (par ? anySrc2_ : (anySrc1_ || anySrc2_));
+                    // Filter the two buses (dry is added by the caller). filterMix blends each
+                    // filter's wet vs its own bus input, exactly as the old per-filter MIX did.
+                    auto filterBuses = [&] (float b1L, float b1R, float b2L, float b2R, float& outL, float& outR)
                     {
-                        const float dryL = L, dryR = R;
-                        if (filterRouting_ == 0)          // SERIES: x → F1 → F2
+                        if (! par)   // SERIES: F1(bus1) → (+ bus2 F2-only sources) → F2
                         {
-                            float l = L, r = R;
-                            if (a1) { float wl = l, wr = r; filterSlot_.processStereo (wl, wr);
-                                      l = filterMix1_ * wl + (1.0f - filterMix1_) * l;
-                                      r = filterMix1_ * wr + (1.0f - filterMix1_) * r; }
-                            if (a2) { float wl = l, wr = r; filterSlot2_.processStereo (wl, wr);
-                                      l = filterMix2_ * wl + (1.0f - filterMix2_) * l;
-                                      r = filterMix2_ * wr + (1.0f - filterMix2_) * r; }
-                            L = l; R = r;
+                            float w1L = b1L, w1R = b1R;
+                            if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
+                                      w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
+                                      w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
+                            const float pL = w1L + b2L, pR = w1R + b2R;
+                            float w2L = pL, w2R = pR;
+                            if (a2) { float wl = pL, wr = pR; filterSlot2_.processStereo (wl, wr);
+                                      w2L = filterMix2_ * wl + (1.0f - filterMix2_) * pL;
+                                      w2R = filterMix2_ * wr + (1.0f - filterMix2_) * pR; }
+                            outL = w2L; outR = w2R;
                         }
-                        else                              // PARALLEL: F1(x) + F2(x)
+                        else         // PARALLEL: F1(bus1) + F2(bus2)
                         {
-                            float b1L = dryL, b1R = dryR, b2L = dryL, b2R = dryR;
-                            if (a1) { filterSlot_.processStereo (b1L, b1R);
-                                      b1L = filterMix1_ * b1L + (1.0f - filterMix1_) * dryL;
-                                      b1R = filterMix1_ * b1R + (1.0f - filterMix1_) * dryR; }
-                            if (a2) { filterSlot2_.processStereo (b2L, b2R);
-                                      b2L = filterMix2_ * b2L + (1.0f - filterMix2_) * dryL;
-                                      b2R = filterMix2_ * b2R + (1.0f - filterMix2_) * dryR; }
-                            if (a1 && a2) { L = 0.5f * (b1L + b2L); R = 0.5f * (b1R + b2R); }
-                            else if (a1)  { L = b1L; R = b1R; }
-                            else if (a2)  { L = b2L; R = b2R; }
-                            else          { L = dryL; R = dryR; }
+                            float w1L = b1L, w1R = b1R;
+                            if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
+                                      w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
+                                      w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
+                            float w2L = b2L, w2R = b2R;
+                            if (a2) { float wl = b2L, wr = b2R; filterSlot2_.processStereo (wl, wr);
+                                      w2L = filterMix2_ * wl + (1.0f - filterMix2_) * b2L;
+                                      w2R = filterMix2_ * wr + (1.0f - filterMix2_) * b2R; }
+                            outL = w1L + w2L; outR = w1R + w2R;
                         }
                     };
 
+                    const float dryL = busDryL[i], dryR = busDryR[i];
                     if (oversample)
                     {
-                        // 2× linear-interp upsample → filter twice → box decimate.
-                        const float midL = 0.5f * (osPrevL_ + sL[i]);
-                        const float midR = 0.5f * (osPrevR_ + sR[i]);
-                        float yMidL = midL, yMidR = midR; applyFilters (yMidL, yMidR);
-                        float yL = sL[i], yR = sR[i];      applyFilters (yL, yR);
-                        sL[i] = 0.5f * (yMidL + yL);
-                        sR[i] = 0.5f * (yMidR + yR);
+                        // 2× linear-interp upsample → filter twice → box decimate. Interp bus1 (via
+                        // the existing osPrev feedback) + bus2; dry bypasses (added once, post-decimate).
+                        const float m1L = 0.5f * (osPrevL_   + sL[i]),     m1R = 0.5f * (osPrevR_   + sR[i]);
+                        const float m2L = 0.5f * (osPrevB2L_ + busB2L[i]), m2R = 0.5f * (osPrevB2R_ + busB2R[i]);
+                        float yMidL, yMidR; filterBuses (m1L, m1R, m2L, m2R, yMidL, yMidR);
+                        float yL, yR;       filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], yL, yR);
+                        sL[i] = 0.5f * (yMidL + yL) + dryL;
+                        sR[i] = 0.5f * (yMidR + yR) + dryR;
                         osPrevL_ = sL[i]; osPrevR_ = sR[i];
+                        osPrevB2L_ = busB2L[i]; osPrevB2R_ = busB2R[i];
                     }
                     else
                     {
-                        applyFilters (sL[i], sR[i]);
+                        float oL, oR; filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], oL, oR);
+                        sL[i] = oL + dryL; sR[i] = oR + dryR;
                     }
                 }
                 // CPU: unticked LFOs advance phase once for the whole block — peek() (the
@@ -3357,6 +3415,7 @@ namespace tw
                     filterSlot_.reset();
             filterSlot2_.reset();
                     osPrevL_ = osPrevR_ = 0.0f;
+                    osPrevB2L_ = osPrevB2R_ = 0.0f;
                     juce::FloatVectorOperations::clear (sL, numSamples);
                     juce::FloatVectorOperations::clear (sR, numSamples);
                 }
@@ -3779,6 +3838,8 @@ namespace tw
         // 2× oversampling input-prev for linear-interp upsample (Ladder + Acid303)
         float                   osPrevL_     = 0.0f;
         float                   osPrevR_     = 0.0f;
+        float                   osPrevB2L_   = 0.0f;   // oversample prev-state for the F2 routing bus
+        float                   osPrevB2R_   = 0.0f;
 
         // Filter 2 — fully independent second FilterSlot (own type/cut/res/drv/env).
         // Shares the FLT envelope shape + EROSION drift, with its own ENV amount.
@@ -3797,6 +3858,17 @@ namespace tw
         int                     filterRouting_ = 0;    // 0 = series, 1 = parallel
         float                   filterMix1_  = 1.0f;   // 0 = dry, 1 = fully filtered
         float                   filterMix2_  = 1.0f;
+        // ── Per-oscillator filter routing (independent + dry bypass) ──────────
+        // masks: [0..4] = A,B,C,D,Sub. Default all-true ⇒ a fresh patch routes every source to
+        // both filters, which in the default SERIES/F2=None case is byte-identical to the old
+        // single-mix path. busCo*_ are per-block 0/1 coefficients derived from the masks+routing.
+        bool                    fltSrc1_[5] = { true, true, true, true, true };
+        bool                    fltSrc2_[5] = { true, true, true, true, true };
+        float                   busCo1_[5]  = { 1,1,1,1,1 };   // → Filter 1 bus (reuses scratch_)
+        float                   busCo2_[5]  = { 0,0,0,0,0 };   // → Filter 2 bus (fltBus2_)
+        float                   busCoD_[5]  = { 0,0,0,0,0 };   // → dry/bypass  (fltDry_)
+        bool                    anySrc1_ = true, anySrc2_ = false;   // any source routed to each filter this block
+        juce::AudioBuffer<float> fltBus2_, fltDry_;              // F2 + dry buses (bus1 = scratch_)
 
         // ── Per-envelope ROUTING state (mini mod-matrix) ──────────────────────
         // Index 0 = AMP (not routed); 1..4 = the free envelopes (FLT/PITCH/M1/M2,
@@ -3945,7 +4017,11 @@ namespace tw
             }
         }
 
-        inline void subMix (int o, float& l, float& r) noexcept
+        // subAcc receives THIS sub's post-normalization contribution (mono) so the filter router
+        // can route the sub independently of its oscillator. l/r are updated EXACTLY as before
+        // (osc+sub combined), so the scope/blend taps that read sX are unchanged; the osc-only
+        // signal is recovered downstream as (sX - subAcc).
+        inline void subMix (int o, float& l, float& r, float& subAcc) noexcept
         {
             SubLane& sl = sub_[o];
             sl.w += sl.dw; sl.n += sl.dn; sl.hCur += sl.dh;
@@ -3957,6 +4033,7 @@ namespace tw
             }
             else v = sl.osc.tick (sl.inc, sl.form);
             v = sl.osc.heat (v, sl.hCur) * sl.w;
+            subAcc += v * sl.n;          // sub's share of the normalized sum (mono)
             l = (l + v) * sl.n;
             r = (r + v) * sl.n;
         }

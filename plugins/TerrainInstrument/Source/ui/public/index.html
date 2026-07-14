@@ -3636,7 +3636,7 @@ body {
 #syn-panel .device.osc .swap-btn {
   width: 16px; height: 16px; box-sizing: border-box; margin: 0;
   border: 1px solid var(--border-strong); border-radius: 4px;
-  background: transparent; color: var(--text-muted);
+  background: transparent; color: var(--text-primary);   /* sharp white rest, like the filter routing pills (Max 2026-07-13) */
   font-weight: 400; line-height: 1; letter-spacing: 0;
   display: inline-grid; place-items: center; cursor: pointer;
   transition: color .12s ease, border-color .12s ease;
@@ -4730,7 +4730,9 @@ body {
               display: inline-grid; place-items: center;
               line-height: 1; letter-spacing: 0; padding: 0 0 2px;
             }
-            #syn-panel .device.filter.swapped .filter-toggle .ft-pill { font-size: 9px; }
+            /* Rest sharp white + full opacity (was opacity 0.4 dim) so the tab glyphs read
+               like the filter routing pills / osc emblems; active stays purple-400 (Max 2026-07-13). */
+            #syn-panel .device.filter.swapped .filter-toggle .ft-pill { font-size: 9px; color: var(--text-primary); opacity: 1; }
             #syn-panel .device.filter.swapped .swap-btn { font-size: 12px; margin-left: 2px; }
             #syn-panel .device.filter.swapped .swap-btn::before { transform: none; }
             #syn-panel .device.filter.swapped .swap-btn.act::before { font-size: 11px; }
@@ -14155,14 +14157,25 @@ setTimeout(function wireSynControls () {
       if (routeSt && routeSt.valueChangedEvent && routeSt.valueChangedEvent.addListener) routeSt.valueChangedEvent.addListener(refreshRouting);
       refreshRouting();
 
-      // ── FILTER BACK fb1 (UI MOCK — no DSP): per-filter source pills (A/B/C/D/S/N),
-      //    E env-track emblem, Key drag, Poles toggle. State is per filter (1/2) and
-      //    purely visual — the real routing lands with the filters milestone. ──
+      // ── FILTER BACK fb1: per-filter source pills A/B/C/D/Sub are now REAL per-oscillator
+      //    routing (SYN_FILTER{1,2}_SRC_*, written via __setSynParam / read via getSynParam).
+      //    N (idx 5), the E env-track emblem, Key drag + Poles toggle are still UI mock. ──
       (function initFilterBackMock() {
         try {
           const fst = { 1: { src: [1,1,1,1,1,1], env: false, key: 0, poles: 24 },
                         2: { src: [1,1,1,1,1,1], env: false, key: 0, poles: 24 } };
           const curF = () => (slotPill2 && slotPill2.classList.contains('act')) ? 2 : 1;
+          // Real routing params for source indices 0..4 (A,B,C,D,Sub); index 5 (N) has none yet.
+          const FSRC_IDS = {
+            1: ['SYN_FILTER1_SRC_A','SYN_FILTER1_SRC_B','SYN_FILTER1_SRC_C','SYN_FILTER1_SRC_D','SYN_FILTER1_SRC_SUB'],
+            2: ['SYN_FILTER2_SRC_A','SYN_FILTER2_SRC_B','SYN_FILTER2_SRC_C','SYN_FILTER2_SRC_D','SYN_FILTER2_SRC_SUB'],
+          };
+          let getP = null;
+          try { getP = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction('getSynParam') : null; } catch (e) {}
+          const setSrc = (f, i, on) => {
+            fst[f].src[i] = on ? 1 : 0;
+            if (i <= 4) { try { if (window.__setSynParam) window.__setSynParam(FSRC_IDS[f][i], on ? 1 : 0); } catch (e) {} }
+          };
           const renderFb = () => {
             const st = fst[curF()];
             document.querySelectorAll('#flt-src-row .flt-src').forEach((p, i) => p.classList.toggle('act', !! st.src[i]));
@@ -14170,8 +14183,17 @@ setTimeout(function wireSynControls () {
             const kv = document.querySelector('#flt-key-val b'); if (kv) kv.textContent = Math.round(st.key);
             const pv = document.getElementById('flt-poles-val'); if (pv) pv.textContent = st.poles;
           };
+          // Pull live param values into fst for BOTH filters, then repaint (survives reopen).
+          const syncSrc = () => {
+            if (! getP) return;
+            [1, 2].forEach(f => FSRC_IDS[f].forEach((id, i) => {
+              try { Promise.resolve(getP(id)).then(v => { fst[f].src[i] = (+v > 0.5) ? 1 : 0; renderFb(); }).catch(() => {}); } catch (e) {}
+            }));
+          };
           document.querySelectorAll('#flt-src-row .flt-src').forEach((p, i) =>
-            p.addEventListener('click', () => { const st = fst[curF()]; st.src[i] = st.src[i] ? 0 : 1; renderFb(); }));
+            p.addEventListener('click', () => { const f = curF(); setSrc(f, i, ! fst[f].src[i]); renderFb(); }));
+          syncSrc();
+          [250, 700, 1500].forEach(ms => setTimeout(syncSrc, ms));   // beat the WKWebView init race
           const env = document.getElementById('filter-env-emblem');
           if (env) env.addEventListener('click', () => { const st = fst[curF()]; st.env = ! st.env; renderFb(); });
           const pp = document.getElementById('flt-poles-pill');
@@ -21914,25 +21936,25 @@ restoreThemeFromBackend();
     '#syn-panel .device.filter.swapped .filt-bg{display:none;}'+
     '#syn-panel .device.filter .filter-display{display:none;}'+
     '#syn-panel .device.filter:not(.swapped) > .device-label{display:none;}'+
-    '#syn-panel .device.filter:not(.swapped) .dd-trigger{position:absolute;top:8px;left:11px;z-index:3;height:auto;min-height:0;padding:0;width:auto;max-width:calc(100% - 88px);background:transparent;border:none;border-radius:0;color:rgba(255,255,255,.62);font-size:9px;letter-spacing:1.1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);gap:5px;}'+
+    '#syn-panel .device.filter:not(.swapped) .dd-trigger{position:absolute;top:7px;left:11px;z-index:3;height:16px;min-height:0;padding:0;width:auto;max-width:calc(100% - 88px);background:transparent;border:none;border-radius:0;color:rgba(255,255,255,.62);font-size:9px;letter-spacing:1.1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);gap:5px;align-items:center;}'+
     '#syn-panel .device.filter:not(.swapped) .dd-trigger:hover{color:#fff;border:none;background:transparent;}'+
     '#syn-panel .device.filter:not(.swapped) .dd-trigger .dd-chev{color:inherit;opacity:.6;}'+
-    '#syn-panel .device.filter:not(.swapped) .filter-toggle{top:7px;right:12px;z-index:3;gap:8px;align-items:center;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle{top:7px;right:12px;z-index:3;gap:8px;height:16px;align-items:center;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill{position:relative;width:auto;min-width:0;height:auto;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:10px;font-weight:400;text-shadow:0 1px 3px rgba(0,0,0,.9);}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill.act{background:transparent;color:#fff;font-weight:600;border:none;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-pill.act::after{content:"";position:absolute;left:-1px;right:-1px;bottom:-3px;height:1.5px;background:var(--purple-400);border-radius:1px;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-kt{cursor:pointer;color:rgba(255,255,255,.4);transition:color .18s ease,text-shadow .18s ease;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-kt.act{color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.9);}'+
-    '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-kt.act::after{display:none;}'+
-    '#syn-panel .device.filter:not(.swapped) .filter-toggle .swap-btn{background:transparent;border:none;color:rgba(255,255,255,.5);margin-left:0;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .ft-kt.act::after{display:block;}'+
+    '#syn-panel .device.filter:not(.swapped) .filter-toggle .swap-btn{background:transparent;border:none;color:rgba(255,255,255,.92);margin-left:0;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-knobs{position:absolute;left:0;right:0;bottom:5px;z-index:3;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 12px;background:none;}'+
     '#syn-panel .device.filter .fk-em{display:flex;flex-direction:column;align-items:center;gap:1px;}'+
     '#syn-panel .device.filter .fk-em canvas{width:100%;height:30px;cursor:ns-resize;}'+
     '#syn-panel .device.filter .fk-em .lbl{display:none;}'+
-    '#syn-panel .device.filter:not(.swapped) .filt-exp{width:13px;height:13px;color:rgba(255,255,255,.72);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:6px;}'+
-    '#syn-panel .device.filter:not(.swapped) .filt-exp svg{width:13px;height:13px;display:block;}'+
+    '#syn-panel .device.filter:not(.swapped) .filt-exp{width:11px;height:11px;color:rgba(255,255,255,.92);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:0;}'+
+    '#syn-panel .device.filter:not(.swapped) .filt-exp svg{width:11px;height:11px;display:block;}'+
     '#syn-panel .device.filter:not(.swapped) .filt-exp:hover{color:#fff;}'+
-    '#syn-panel .device.filter:not(.swapped) .filt-hud{position:absolute;top:8px;right:150px;z-index:4;font-family:-apple-system,system-ui,sans-serif;font-size:10px;font-weight:400;letter-spacing:.3px;color:rgba(255,255,255,.8);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .14s;text-shadow:0 1px 3px rgba(0,0,0,.95);}'+
+    '#syn-panel .device.filter:not(.swapped) .filt-hud{position:absolute;top:7px;right:132px;z-index:4;height:16px;display:flex;align-items:center;font-family:-apple-system,system-ui,sans-serif;font-size:10px;font-weight:400;letter-spacing:.3px;color:rgba(255,255,255,.8);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .14s;text-shadow:0 1px 3px rgba(0,0,0,.95);}'+
     '#syn-panel .device.filter:not(.swapped) .filt-hud.on{opacity:1;}'+
     '#syn-panel .device.filter.swapped .filt-hud{display:none;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-knobs{bottom:6px;}'+
@@ -23231,7 +23253,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb10';   // bump per ship  [fb10 = fb9 but blend-pill parens -2.0→-0.85px (canvas-metric-exact ink centering; -2.0 overshot & rode high)] [fb9 = fb8 + blend-pill parens -2.5→-2.0 (letter dead-center, headless-verified) + filter back tab cluster (1/2/K/E + arrow) = OSC emblems 16×16 grid-centered (was 16×14 + low arrow)] [fb8 = fb7 + filter cutoff legend (.filt-hud) moved right:112→150 so "C 1.1k" clears the 1/2/K/E tabs] [fb7 BLEND/FILTER UI: dropped Mix/Mod pills (blend row = 4 slots, gap6 column-aligned to selector row), parens +2px up, filter back panel = OSC twin (332px width match, purple-400 emblems/tabs/routing/series-parallel, no fill/glow, FILTER header uppercase white)]
+  var TERRAIN_BUILD = 'fb13';   // bump per ship  [fb13 = fb12 + filter header polish: K gets its purple underscore, + button & extender white, extender 13→11px pulled next to +, filter-type/tabs/legend unified on one centerline (top:7 h:16), legend nudged right 150→132] [fb12 = fb11 + PER-OSCILLATOR FILTER ROUTING: back-panel A/B/C/D/Sub pills now really route each osc to Filter 1 and/or 2 (independent + dry bypass; series=F1→F2 chain, parallel=F1+F2). CPU-free (filters already run per voice; routing = bus adds). Default all-routed = byte-identical to old. Sub separated cleanly from its osc. N still mock (no noise engine).] boxed emblem glyphs rest SHARP WHITE like the filter routing pills: osc header A/B/C/D/S/N/+ (--text-muted→--text-primary) + filter back tabs 1/2/K/E (opacity 0.4→1, white); active states still purple-400] [fb10 = fb9 but blend-pill parens -2.0→-0.85px (canvas-metric-exact ink centering; -2.0 overshot & rode high)] [fb9 = fb8 + blend-pill parens -2.5→-2.0 (letter dead-center, headless-verified) + filter back tab cluster (1/2/K/E + arrow) = OSC emblems 16×16 grid-centered (was 16×14 + low arrow)] [fb8 = fb7 + filter cutoff legend (.filt-hud) moved right:112→150 so "C 1.1k" clears the 1/2/K/E tabs] [fb7 BLEND/FILTER UI: dropped Mix/Mod pills (blend row = 4 slots, gap6 column-aligned to selector row), parens +2px up, filter back panel = OSC twin (332px width match, purple-400 emblems/tabs/routing/series-parallel, no fill/glow, FILTER header uppercase white)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
