@@ -2159,6 +2159,65 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     complete (juce::var ("temp-write-failed"));
                 }
             })
+            .withNativeFunction("importAudioAsWavetable", [this](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — decode dropped audio to mono PCM and build an imported
+                // wavetable for this osc. args[0]=osc 'a'..'d', args[1]=filename, args[2]=base64.
+                if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const auto b64 = args[2].toString();
+
+                juce::MemoryOutputStream decoded;
+                if (! juce::Base64::convertFromBase64 (decoded, b64)) { complete (juce::var ("decode-failed")); return; }
+
+                juce::AudioFormatManager fm; fm.registerBasicFormats();
+                std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (
+                    std::make_unique<juce::MemoryInputStream> (decoded.getData(), decoded.getDataSize(), false)));
+                if (reader == nullptr) { complete (juce::var ("unreadable")); return; }
+
+                const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);  // cap 60 s
+                if (n <= 0) { complete (juce::var ("empty")); return; }
+                juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
+                reader->read (&buf, 0, n, 0, true, true);
+
+                std::vector<float> mono ((size_t) n, 0.0f);
+                const int ch = buf.getNumChannels();
+                for (int c = 0; c < ch; ++c)
+                { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) mono[(size_t) i] += p[i]; }
+                if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) mono[(size_t) i] *= g; }
+
+                audioProcessor.importAudioAsWavetable (oscIdx, mono.data(), n);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("setImportFrames", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — re-slice the osc's imported source at a new frame count (resolution).
+                if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                audioProcessor.setImportFrames (oscIdx, (int) (double) args[1]);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("clearWavetable", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — drop the imported table for this osc (revert to the factory selection).
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                audioProcessor.clearImportedWavetable (oscIdx);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("getOscWavetable", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER viz — return the osc's live table frames as JSON for the 3D waterfall.
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
+            })
             .withNativeFunction("getOscSamplePayload", [this](const juce::Array<juce::var>& args,
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

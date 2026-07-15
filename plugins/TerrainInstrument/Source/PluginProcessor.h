@@ -378,6 +378,14 @@ public:
     juce::String&     blendSrcPath (int idx, int which) noexcept { return blendSrcPaths_[(size_t) juce::jlimit (0, 3, idx)][(size_t) (which & 1)]; }
     void setCachedOscPayload (const juce::String& json, int idx)
     { if (idx < 0 || idx > 3) return; juce::ScopedLock sl (samplePayloadLock); cachedOscPayloads_[(size_t) idx] = json; }
+    // Wavetable EXTENDER (message thread) — build/clear an imported table for osc 0..3.
+    void importAudioAsWavetable (int osc, const float* pcm, int numSamples);
+    void clearImportedWavetable (int osc);
+    void setImportFrames (int osc, int frames);   // re-slice the stored import at a new frame count (resolution)
+    // Wavetable EXTENDER viz — compact JSON of the osc's LIVE table (imported or factory) for the
+    // 3D waterfall: { n:<displayFrames>, p:<pointsPerFrame>, nf:<realFrames>, d:[ n*p samples ] }.
+    juce::String getOscWavetableJson (int osc);
+
     juce::String getCachedOscPayload (int idx) const
     { if (idx < 0 || idx > 3) return {}; juce::ScopedLock sl (samplePayloadLock); return cachedOscPayloads_[(size_t) idx]; }
 
@@ -849,6 +857,30 @@ private:
         float builtAmount = -1.0f;
     };
     MorphSlot morphA_, morphB_, morphC_, morphD_;
+
+    // ── Wavetable EXTENDER — per-osc imported tables ("turn anything into a wavetable") ──
+    // Built on the message thread from dropped audio (Wavetable::buildFromPcm) then atomic-
+    // published to voices, exactly like MorphSlot. When live != null the voice reads the
+    // imported table instead of the factory bank. 2-buffer rotation: a re-import builds into
+    // the buffer the audio thread is NOT on, then publishes, so there is no torn/zeroed read.
+    struct ImportSlot
+    {
+        tw::Wavetable                     buf[2];
+        std::atomic<const tw::Wavetable*> live { nullptr };
+        int nextIdx = 0;
+    };
+    ImportSlot importSlot_[4];
+    std::vector<float> importedPcm_[4];                          // stored mono source per osc (re-slice on resolution change)
+    int                importFrames_[4] = { 40, 40, 40, 40 };    // current frame count per osc (resolution mode)
+    void rebuildImport (int osc);                                // message thread — (re)build importSlot_[osc] from importedPcm_
+    // Audio thread: the wavetable a voice should read for one osc — the imported table if one
+    // was dropped, else the morphed/factory table. Atomic load only (no locks).
+    const tw::Wavetable* wavetableForOsc (int osc, MorphSlot& slot, int presetIdx) noexcept
+    {
+        if (auto* imp = importSlot_[(size_t) juce::jlimit (0, 3, osc)].live.load (std::memory_order_acquire))
+            return imp;
+        return resolveMorphTable (slot, presetIdx);
+    }
 
     // ── GEODE resynthesis analysis (Engine::SPEC) ────────────────────────
     // Heavy STFT peak-track analysis runs on the message thread (timerCallback) into a

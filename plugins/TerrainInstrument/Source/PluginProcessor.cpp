@@ -106,6 +106,70 @@ TerrainInstrumentAudioProcessor::resolveMorphTable (MorphSlot& slot, int presetI
     return wavetableBank.getTable (presetIdx);
 }
 
+//==============================================================================
+// Wavetable EXTENDER — build an imported table from dropped audio (message thread).
+//==============================================================================
+void TerrainInstrumentAudioProcessor::rebuildImport (int osc)
+{
+    osc = juce::jlimit (0, 3, osc);
+    auto& slot = importSlot_[osc];
+    const int idx = slot.nextIdx;                                   // build into the NON-live buffer
+    slot.buf[idx].buildFromPcm (importedPcm_[osc].data(), (int) importedPcm_[osc].size(), importFrames_[osc]);
+    slot.live.store (&slot.buf[idx], std::memory_order_release);    // publish only AFTER the build finishes
+    slot.nextIdx = 1 - idx;
+}
+
+void TerrainInstrumentAudioProcessor::importAudioAsWavetable (int osc, const float* pcm, int numSamples)
+{
+    osc = juce::jlimit (0, 3, osc);
+    importedPcm_[osc].assign (pcm, pcm + juce::jmax (0, numSamples));   // keep the source so resolution can change later
+    rebuildImport (osc);
+}
+
+void TerrainInstrumentAudioProcessor::setImportFrames (int osc, int frames)
+{
+    osc = juce::jlimit (0, 3, osc);
+    importFrames_[osc] = juce::jlimit (2, tw::Wavetable::kMaxFrames, frames);
+    if (! importedPcm_[osc].empty()) rebuildImport (osc);
+}
+
+void TerrainInstrumentAudioProcessor::clearImportedWavetable (int osc)
+{
+    importSlot_[juce::jlimit (0, 3, osc)].live.store (nullptr, std::memory_order_release);
+}
+
+juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
+{
+    osc = juce::jlimit (0, 3, osc);
+    // Resolve the table the same way the voice does: imported override, else the factory bank.
+    const tw::Wavetable* wt = importSlot_[osc].live.load (std::memory_order_acquire);
+    if (wt == nullptr)
+    {
+        static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                            ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+        wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[osc]));
+    }
+    if (wt == nullptr) return "{}";
+
+    const int numFrames = juce::jmax (1, wt->getNumFrames());
+    const int dispN = juce::jlimit (1, 64, numFrames);     // decimate to ≤64 display frames (viz LOD)
+    const int pts   = 160;                                 // points per frame polyline
+    juce::MemoryOutputStream out;
+    out << "{\"n\":" << dispN << ",\"p\":" << pts << ",\"nf\":" << numFrames << ",\"d\":[";
+    for (int i = 0; i < dispN; ++i)
+    {
+        const float framePos = (dispN > 1) ? (float) i / (float) (dispN - 1) : 0.0f;
+        for (int p = 0; p < pts; ++p)
+        {
+            const float v = wt->lookup (0, framePos, (float) p / (float) pts);   // mip 0 = full bandwidth
+            if (i || p) out << ',';
+            out << juce::String (v, 4);
+        }
+    }
+    out << "]}";
+    return out.toString();
+}
+
 void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot,
                                                             const juce::String& presetId,
                                                             const juce::String& modeId,
@@ -3541,7 +3605,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
         const int            wtPreset = (int) *rawParam (ParameterIDs::SYN_OSC_A_WT_PRESET);
         const float          wtFrame  =       *rawParam (ParameterIDs::SYN_OSC_A_WT_FRAME);
-        const tw::Wavetable* wt       = resolveMorphTable (morphA_, wtPreset);
+        const tw::Wavetable* wt       = wavetableForOsc (0, morphA_, wtPreset);
         // Phase 2C — warp mode + amount
         const int   warpMode   = (int) *rawParam (ParameterIDs::SYN_OSC_A_WARP_MODE);
         const int   phaseModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_PHASE_MODE);
@@ -3557,7 +3621,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float panB       =        *rawParam (ParameterIDs::SYN_OSC_B_PAN);
         const int   wtPresetB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WT_PRESET);
         const float wtFrameB   =        *rawParam (ParameterIDs::SYN_OSC_B_WT_FRAME);
-        const tw::Wavetable* wtB = resolveMorphTable (morphB_, wtPresetB);
+        const tw::Wavetable* wtB = wavetableForOsc (1, morphB_, wtPresetB);
         const int   warpModeB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP_MODE);
         const int   phaseModeB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_PHASE_MODE);
         const float warpAmountB =       *rawParam (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
@@ -3588,7 +3652,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float centC=*rawParam (ParameterIDs::SYN_OSC_C_CENT), lvlC=*rawParam (ParameterIDs::SYN_OSC_C_LEVEL), panC=*rawParam (ParameterIDs::SYN_OSC_C_PAN);
         const int   wtPresetC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WT_PRESET);
         const float wtFrameC=*rawParam (ParameterIDs::SYN_OSC_C_WT_FRAME);
-        const tw::Wavetable* wtC = resolveMorphTable(morphC_, wtPresetC);
+        const tw::Wavetable* wtC = wavetableForOsc (2, morphC_, wtPresetC);
         const int   warpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_PHASE_MODE);
         const float warpAmountC=*rawParam (ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
         const int   warp2ModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP2_MODE);
@@ -3603,7 +3667,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float centD=*rawParam (ParameterIDs::SYN_OSC_D_CENT), lvlD=*rawParam (ParameterIDs::SYN_OSC_D_LEVEL), panD=*rawParam (ParameterIDs::SYN_OSC_D_PAN);
         const int   wtPresetD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WT_PRESET);
         const float wtFrameD=*rawParam (ParameterIDs::SYN_OSC_D_WT_FRAME);
-        const tw::Wavetable* wtD = resolveMorphTable(morphD_, wtPresetD);
+        const tw::Wavetable* wtD = wavetableForOsc (3, morphD_, wtPresetD);
         const int   warpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_PHASE_MODE);
         const float warpAmountD=*rawParam (ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
         const int   warp2ModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP2_MODE);

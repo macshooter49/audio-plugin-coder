@@ -65,6 +65,8 @@ namespace tw
     public:
         static constexpr int kFrameSize    = 2048;  // power of 2 → cheap modulo via mask
         static constexpr int kNumMipLevels = 8;     // 256/128/64/32/16/8/4/2 harmonics
+        static constexpr int kMaxFrames    = 256;   // hard ceiling on frame count (imported tables);
+                                                    // also sizes renderBlend's stack weight array
 
         // Maximum-harmonic count per mip level. Index 0 = full bandwidth.
         static constexpr std::array<int, kNumMipLevels> kMipMaxHarmonics
@@ -184,6 +186,70 @@ namespace tw
             buildEpoch_.fetch_add (1, std::memory_order_release);
         }
 
+        /** Build a band-limited wavetable from raw mono PCM — "turn anything into a wavetable."
+         *  Slices the source into up to `maxFrames` frames, each a `kFrameSize` window taken
+         *  evenly across the WHOLE file (frame 0 = start, last frame = end), so the FRAME/WT-POS
+         *  axis scans the sound's timbre over time. Each window is reconstructed the SAME way
+         *  buildFromSpec does — forward-FFT, keep harmonics 1..hMax per mip level, drop DC, then
+         *  inverse-FFT — so every frame is perfectly loop-seamless (integer harmonics of the frame
+         *  length) and alias-free per pitch (the 8 mip levels). Offline / message-thread only. */
+        void buildFromPcm (const float* pcm, int totalSamples, int framesWanted = 40)
+        {
+            frameSize_    = kFrameSize;
+            numMipLevels_ = kNumMipLevels;
+            // Exactly framesWanted evenly-spaced windows across the file (the FRAME/WTPOS axis scans the
+            // sound over time). The caller picks the count = the resolution mode; clamped to kMaxFrames.
+            numFrames_    = (pcm != nullptr && totalSamples >= frameSize_)
+                              ? juce::jlimit (1, kMaxFrames, framesWanted)
+                              : 1;
+            mipData_.assign ((size_t) (numMipLevels_ * numFrames_ * frameSize_), 0.0f);
+            if (pcm == nullptr || totalSamples <= 0)
+            { buildEpoch_.fetch_add (1, std::memory_order_release); return; }
+
+            const int N    = frameSize_;
+            const int last = juce::jmax (0, totalSamples - 1);
+            const double span = (double) juce::jmax (0, totalSamples - N);   // window-start range
+            std::vector<std::complex<double>> win  ((size_t) N);
+            std::vector<std::complex<double>> spec ((size_t) N);
+
+            for (int frame = 0; frame < numFrames_; ++frame)
+            {
+                // 1) grab a kFrameSize window (frame 0 = file start … last frame = file end).
+                const int start = (numFrames_ > 1)
+                                    ? (int) std::lround (span * frame / (numFrames_ - 1)) : 0;
+                for (int n = 0; n < N; ++n)
+                {
+                    float v;
+                    if (totalSamples >= N)
+                        v = pcm[(size_t) juce::jlimit (0, last, start + n)];
+                    else   // source shorter than one frame → stretch it to fill the cycle
+                        v = pcm[(size_t) juce::jlimit (0, last, (int) ((double) n * totalSamples / N))];
+                    win[(size_t) n] = std::complex<double> ((double) v, 0.0);
+                }
+                // 2) forward FFT → the window's harmonic spectrum (harmonic h == bin h).
+                forwardFFT (win);
+                // 3) per mip level, keep harmonics 1..hMax (+ conjugate mirror), drop DC & Nyquist,
+                //    then inverse-FFT. spec[k] = win[k]/N so inverseFFT reconstructs the signal.
+                const double invN = 1.0 / (double) N;
+                for (int level = 0; level < numMipLevels_; ++level)
+                {
+                    const int hMax = kMipMaxHarmonics[(size_t) level];
+                    std::fill (spec.begin(), spec.end(), std::complex<double> (0.0, 0.0));
+                    for (int h = 1; h <= hMax && h < N - h; ++h)
+                    {
+                        spec[(size_t) h]       = win[(size_t) h]       * invN;
+                        spec[(size_t) (N - h)] = win[(size_t) (N - h)] * invN;
+                    }
+                    inverseFFT (spec);
+                    float* dst = &mipData_[(size_t) ((level * numFrames_ + frame) * frameSize_)];
+                    for (int n = 0; n < N; ++n)
+                        dst[(size_t) n] = (float) spec[(size_t) n].real();
+                }
+            }
+            normalizeMipLevels();
+            buildEpoch_.fetch_add (1, std::memory_order_release);
+        }
+
         /** BUILD EPOCH — increments after every COMPLETED (re)build. The spectral-morph
          *  slots rebuild their two Wavetable objects IN PLACE forever (same addresses),
          *  so a pointer-keyed cache (the voice's blend composite) can never tell that
@@ -255,7 +321,7 @@ namespace tw
 
             // Weights over all frames = blend( bilinear , Gaussian ), each Σ = 1, so the
             // combined weights also Σ = 1. At blur = 0 only the bilinear pair survives.
-            float w[WavetableSpec::kNumFrames] = { 0.0f };
+            float w[kMaxFrames] = { 0.0f };   // sized for imported tables (up to kMaxFrames), NOT just factory's 16 — else 256-frame imports overflow this stack array and crash the host
             const float sigma = 0.0001f + blur * blur * 9.0f;  // frame-axis spread → near-whole-table at full
             float gsum = 0.0f;
             for (int f = 0; f < N; ++f)
@@ -1790,6 +1856,15 @@ namespace tw
         }
 
     private:
+        // Forward DFT via the conjugation identity F = conj( inverseFFT( conj(x) ) ) — reuses the
+        // proven radix-2 transform. a[k] ← Σ_n a[n]·e^{-i2πkn/N} (raw, UNnormalized). Build-time only.
+        static void forwardFFT (std::vector<std::complex<double>>& a) noexcept
+        {
+            for (auto& z : a) z = std::conj (z);
+            inverseFFT (a);
+            for (auto& z : a) z = std::conj (z);
+        }
+
         // In-place radix-2 inverse DFT (raw, UNnormalized): a[n] ← Σ_k a[k]·e^{+i2πkn/N}.
         // N (= frameSize_, 2048) is a power of two. Build-time only (not real-time).
         static void inverseFFT (std::vector<std::complex<double>>& a) noexcept
