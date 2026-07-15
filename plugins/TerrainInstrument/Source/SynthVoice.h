@@ -448,8 +448,11 @@ namespace tw
         void setFilterPoles (int tap1, int tap2) noexcept
         { filterSlot_.setPoles (tap1); filterSlot2_.setPoles (tap2); }   // tap 0..3 = 6/12/18/24 dB
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
+        // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
+        // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
+        // filters (comb). This is pure width: flat magnitude ⇒ zero pitch change.
         void setFilterSpread (float s1, float s2) noexcept
-        { filterSlot_.setSpread (s1); filterSlot2_.setSpread (s2); }
+        { spread1_ = juce::jlimit (0.0f, 1.0f, s1); spread2_ = juce::jlimit (0.0f, 1.0f, s2); }
 
         // ── Per-envelope ROUTING (the mini mod-matrix per envelope) ──────────
         // Destination indices — MUST match the SYN_ENV*_DEST choice order and the
@@ -3389,6 +3392,20 @@ namespace tw
                         L = L + amt * (fShape (L, type, d, amt) - L);
                         R = R + amt * (fShape (R, type, d, amt) - R);
                     };
+                    // POST-FILTER STEREO WIDTH (filter Spread) — mid/side all-pass widener. The mid stays
+                    // centred; a decorrelated copy of it (first-order all-pass = FLAT magnitude ⇒ ZERO pitch
+                    // change, fixing the comb detune) is injected into the side → width even from a mono
+                    // source, and mono-safe (L+R = 2·mid). Applied to the WET output only.
+                    auto widen = [this] (float& L, float& R) noexcept
+                    {
+                        const float sp = juce::jmax (spread1_, spread2_);
+                        if (sp <= 0.001f) return;
+                        const float mid = 0.5f * (L + R), side = 0.5f * (L - R);
+                        const float k = 0.7f;
+                        const float dcx = k * mid + apMx1_ - k * apMy1_;  apMx1_ = mid; apMy1_ = dcx;
+                        const float sideW = side + sp * 0.9f * dcx;
+                        L = mid + sideW; R = mid - sideW;
+                    };
                     // Filter the two buses (dry is added by the caller). filterMix blends each
                     // filter's wet vs its own bus input, exactly as the old per-filter MIX did.
                     auto filterBuses = [&] (float b1L, float b1R, float b2L, float b2R, float& outL, float& outR)
@@ -3433,14 +3450,16 @@ namespace tw
                         const float m2L = 0.5f * (osPrevB2L_ + busB2L[i]), m2R = 0.5f * (osPrevB2R_ + busB2R[i]);
                         float yMidL, yMidR; filterBuses (m1L, m1R, m2L, m2R, yMidL, yMidR);
                         float yL, yR;       filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], yL, yR);
-                        sL[i] = 0.5f * (yMidL + yL) + dryL;
-                        sR[i] = 0.5f * (yMidR + yR) + dryR;
-                        osPrevL_ = sL[i]; osPrevR_ = sR[i];
+                        float wetL = 0.5f * (yMidL + yL), wetR = 0.5f * (yMidR + yR);
+                        osPrevL_ = wetL + dryL; osPrevR_ = wetR + dryR;   // OS feedback = un-widened output (keeps the loop stable)
                         osPrevB2L_ = busB2L[i]; osPrevB2R_ = busB2R[i];
+                        widen (wetL, wetR);
+                        sL[i] = wetL + dryL; sR[i] = wetR + dryR;
                     }
                     else
                     {
                         float oL, oR; filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], oL, oR);
+                        widen (oL, oR);
                         sL[i] = oL + dryL; sR[i] = oR + dryR;
                     }
                 }
@@ -3918,6 +3937,8 @@ namespace tw
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
         int                     driveType1_ = 0, driveType2_ = 0;    // Drive TYPE (0=Tube..5=Fuzz)
+        float                   spread1_ = 0.0f, spread2_ = 0.0f;    // filter SPREAD → post-filter stereo width (no detune)
+        float                   apMx1_ = 0.0f, apMy1_ = 0.0f;        // width all-pass state (mid-channel decorrelator)
 
         // ── Per-envelope ROUTING state (mini mod-matrix) ──────────────────────
         // Index 0 = AMP (not routed); 1..4 = the free envelopes (FLT/PITCH/M1/M2,

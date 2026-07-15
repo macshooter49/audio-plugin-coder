@@ -2218,6 +2218,87 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
             })
+            .withNativeFunction("setWavetableName", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — set the display/persist name for an osc's import.
+                if (args.size() >= 2)
+                {
+                    const juce::String oscStr = args[0].toString();
+                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                    audioProcessor.setImportName (oscIdx, args[1].toString());
+                }
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("getImportState", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — {a:{active,name},...} so the UI can restore imports on reopen.
+                complete (juce::var (audioProcessor.getImportStateJson()));
+            })
+            .withNativeFunction("openImportsFolder", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — the user's wavetable Imports folder; create + reveal in Finder/Explorer.
+                auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                               .getChildFile ("Noizefield").getChildFile ("Terrain Instrument").getChildFile ("Wavetables");
+                if (! dir.exists()) dir.createDirectory();
+                dir.revealToUser();
+                complete (juce::var (dir.getFullPathName()));
+            })
+            .withNativeFunction("listImports", [this](const juce::Array<juce::var>&,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — scan the Imports folder → JSON array of table names (no extension).
+                auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                               .getChildFile ("Noizefield").getChildFile ("Terrain Instrument").getChildFile ("Wavetables");
+                if (! dir.exists()) dir.createDirectory();
+                juce::String json = "[";
+                if (dir.isDirectory())
+                {
+                    auto files = dir.findChildFiles (juce::File::findFiles, false, "*.wav");
+                    files.sort();
+                    for (int i = 0; i < files.size(); ++i)
+                    {
+                        if (i) json += ",";
+                        auto nm = files[i].getFileNameWithoutExtension().replace ("\\", "\\\\").replace ("\"", "\\\"");
+                        json += "\"" + nm + "\"";
+                    }
+                }
+                json += "]";
+                complete (juce::var (json));
+            })
+            .withNativeFunction("loadImportedWavetable", [this](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Wavetable EXTENDER — load a wavetable file from the Imports folder into an osc.
+                // args[0]=osc 'a'..'d', args[1]=file name (with or without .wav). Auto-detects wavetable frames.
+                if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                auto name = args[1].toString();
+                auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                               .getChildFile ("Noizefield").getChildFile ("Terrain Instrument").getChildFile ("Wavetables");
+                juce::File file = dir.getChildFile (name);
+                if (! file.existsAsFile()) file = dir.getChildFile (name + ".wav");
+                if (! file.existsAsFile()) { complete (juce::var ("not-found")); return; }
+
+                juce::AudioFormatManager fm; fm.registerBasicFormats();
+                std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
+                if (reader == nullptr) { complete (juce::var ("unreadable")); return; }
+                const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
+                if (n <= 0) { complete (juce::var ("empty")); return; }
+                juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
+                reader->read (&buf, 0, n, 0, true, true);
+                std::vector<float> mono ((size_t) n, 0.0f);
+                const int ch = buf.getNumChannels();
+                for (int c = 0; c < ch; ++c)
+                { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) mono[(size_t) i] += p[i]; }
+                if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) mono[(size_t) i] *= g; }
+
+                audioProcessor.importAudioAsWavetable (oscIdx, mono.data(), n);
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("getOscSamplePayload", [this](const juce::Array<juce::var>& args,
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

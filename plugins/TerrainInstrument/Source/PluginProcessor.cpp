@@ -123,19 +123,52 @@ void TerrainInstrumentAudioProcessor::importAudioAsWavetable (int osc, const flo
 {
     osc = juce::jlimit (0, 3, osc);
     importedPcm_[osc].assign (pcm, pcm + juce::jmax (0, numSamples));   // keep the source so resolution can change later
+    // Auto-detect a WAVETABLE FILE (concatenated kFrameSize single-cycles, e.g. Serum/Vital): an exact
+    // multiple of kFrameSize giving 2..kMaxFrames frames → use its REAL frames. buildFromPcm's evenly-
+    // spaced windows land exactly on the frame boundaries when framesWanted = n/frameSize, so it's
+    // frame-perfect. Otherwise it's arbitrary audio → keep the resolution-mode frame count.
+    const int fs = tw::Wavetable::kFrameSize;
+    const int n  = (int) importedPcm_[osc].size();
+    importIsFile_[osc] = (n >= fs * 2 && (n % fs) == 0 && (n / fs) <= tw::Wavetable::kMaxFrames);
+    if (importIsFile_[osc]) importFrames_[osc] = n / fs;
     rebuildImport (osc);
 }
 
 void TerrainInstrumentAudioProcessor::setImportFrames (int osc, int frames)
 {
     osc = juce::jlimit (0, 3, osc);
+    if (importIsFile_[osc]) return;   // a real wavetable file keeps its own frames — resolution doesn't re-slice it
     importFrames_[osc] = juce::jlimit (2, tw::Wavetable::kMaxFrames, frames);
     if (! importedPcm_[osc].empty()) rebuildImport (osc);
 }
 
 void TerrainInstrumentAudioProcessor::clearImportedWavetable (int osc)
 {
-    importSlot_[juce::jlimit (0, 3, osc)].live.store (nullptr, std::memory_order_release);
+    osc = juce::jlimit (0, 3, osc);
+    importSlot_[osc].live.store (nullptr, std::memory_order_release);
+    importedPcm_[osc].clear();
+    importName_[osc]   = {};
+    importIsFile_[osc] = false;
+}
+
+void TerrainInstrumentAudioProcessor::setImportName (int osc, const juce::String& name)
+{
+    importName_[juce::jlimit (0, 3, osc)] = name;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getImportStateJson()
+{
+    juce::String j = "{";
+    for (int o = 0; o < 4; ++o)
+    {
+        if (o) j += ",";
+        const bool active = importSlot_[o].live.load (std::memory_order_acquire) != nullptr;
+        const char k[2] = { (char) ('a' + o), 0 };
+        auto nm = importName_[o].replace ("\\", "\\\\").replace ("\"", "\\\"");
+        j += "\"" + juce::String (k) + "\":{\"active\":" + (active ? "true" : "false")
+           + ",\"name\":\"" + nm + "\"}";
+    }
+    return j + "}";
 }
 
 juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
@@ -5825,6 +5858,21 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         state.setProperty ("holdMode", (bool) holdMode.load(), nullptr);
     }
 
+    // Wavetable EXTENDER — embed active imports (base64 float32 source, capped to kMaxFrames·kFrameSize)
+    // so they survive reload. Only oscs with a live import write anything.
+    for (int o = 0; o < 4; ++o)
+    {
+        if (importedPcm_[o].empty()) continue;
+        const int cap = tw::Wavetable::kMaxFrames * tw::Wavetable::kFrameSize;
+        const int nn  = juce::jmin ((int) importedPcm_[o].size(), cap);
+        juce::MemoryBlock mb (importedPcm_[o].data(), (size_t) nn * sizeof (float));
+        const juce::String s (o);
+        state.setProperty ("wtImportPcm"    + s, mb.toBase64Encoding(), nullptr);
+        state.setProperty ("wtImportFrames" + s, importFrames_[o],      nullptr);
+        state.setProperty ("wtImportFile"   + s, importIsFile_[o],      nullptr);
+        state.setProperty ("wtImportName"   + s, importName_[o],        nullptr);
+    }
+
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
 }
@@ -5880,6 +5928,26 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             tapeLinkEnabled.store(static_cast<float>(newState.getProperty("tapeLinkEnabled", 0.f)));
             chorusEnabled.store(static_cast<float>(newState.getProperty("chorusEnabled", 1.f)));
             delayEnabled.store(static_cast<float>(newState.getProperty("delayEnabled", 1.f)));
+
+            // Wavetable EXTENDER — restore embedded imports (or clear the osc if none was saved).
+            for (int o = 0; o < 4; ++o)
+            {
+                const juce::String s (o);
+                const juce::String b64 = newState.getProperty ("wtImportPcm" + s, juce::String()).toString();
+                if (b64.isEmpty())
+                {
+                    importedPcm_[o].clear(); importName_[o] = {}; importIsFile_[o] = false;
+                    importSlot_[o].live.store (nullptr, std::memory_order_release);
+                    continue;
+                }
+                juce::MemoryBlock mb; mb.fromBase64Encoding (b64);
+                const int nn = (int) (mb.getSize() / sizeof (float));
+                importedPcm_[o].assign ((const float*) mb.getData(), (const float*) mb.getData() + nn);
+                importFrames_[o] = (int)  newState.getProperty ("wtImportFrames" + s, 40);
+                importIsFile_[o] = (bool) newState.getProperty ("wtImportFile"   + s, false);
+                importName_[o]   =        newState.getProperty ("wtImportName"   + s, juce::String()).toString();
+                rebuildImport (o);
+            }
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
