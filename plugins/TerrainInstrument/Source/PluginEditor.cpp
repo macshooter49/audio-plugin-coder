@@ -2218,6 +2218,22 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
             })
+            .withNativeFunction("setWaterfallView", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                {
+                    const juce::String oscStr = args[0].toString();
+                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                    audioProcessor.setWaterfallView (oscIdx, (bool) args[1]);
+                }
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("getWaterfallView", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getWaterfallViewJson()));
+            })
             .withNativeFunction("setWavetableName", [this](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

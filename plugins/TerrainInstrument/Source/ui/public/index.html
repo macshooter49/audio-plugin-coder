@@ -3525,12 +3525,18 @@ body {
 
 /* ── P4-T10: swap-state UI — + button, label row, preset corner, engine-controls ── */
 #syn-panel .device-label-row {
-  position: absolute; top: 6px; left: 17px;   /* +3 to align visible "O" stroke with WT pill border (font bearing comp.) */
+  position: absolute; top: 4px; left: 17px; height: 16px;   /* HEADER CENTERLINE: same top+height as .device-corner-preset so BOTH header clusters share one centerline */
   display: flex; align-items: center; gap: 6px;   /* uniform letter->S gap; matches osc-sn S->N gap for a symmetric A S N header */
   z-index: 1;
 }
 #syn-panel .device-label-row .device-label {
   position: static; display: inline-flex; align-items: center;
+}
+/* the "·" separator between "OSC" and the engine name — a geometric circle (perfectly centerable on
+   the header centerline; the font glyph U+00B7 floats up at x-height and can't be centered cleanly). */
+#syn-panel .device.osc .device-label .lbl-sep {
+  width: 2px; height: 2px; border-radius: 50%; background: rgba(255,255,255,0.42);   /* LOW-OPACITY dot (Max) — subtle, not solid white; smaller too */
+  display: inline-block; margin-left: 5px; flex: 0 0 auto;
 }
 
 #syn-panel .swap-btn {
@@ -3570,7 +3576,7 @@ body {
 }
 
 #syn-panel .device-corner-preset {
-  position: absolute; top: 4px; right: 14px;
+  position: absolute; top: 4px; right: 14px; height: 16px;   /* HEADER CENTERLINE: matches .device-label-row so the selector + A + + share the OSC centerline */
   z-index: 1;
   display: inline-flex; align-items: center; gap: 6px;   /* + sits just right of the wave-name, repositions with word length */
 }
@@ -3591,7 +3597,7 @@ body {
   font-size: 9.5px; font-weight: 500; letter-spacing: 0.5px; color: var(--text-secondary);
   cursor: pointer; white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s ease;
 }
-#syn-panel .device.osc .engine-wrap:hover .engine-display { color: var(--text-primary); }
+#syn-panel .device.osc .engine-wrap:hover .engine-display { color: var(--purple-400); }
 #syn-panel .engine-select {
   -webkit-appearance: none; appearance: none;
   position: absolute; inset: 0; width: 100%; height: 100%;
@@ -3628,7 +3634,7 @@ body {
    paired oscillators must always work (pointer-events:auto re-enables hit-testing under a
    none ancestor). Everything else stays locked until the osc is switched back on. */
 #syn-panel .device.osc.osc-off .osc-emblems .osc-letter { pointer-events: auto; cursor: pointer; }
-#syn-panel .device.osc .engine-display { color: var(--text-muted); font-weight: 400; }
+#syn-panel .device.osc .engine-display { color: #FFFFFF; font-weight: 300; }   /* engine name white but WEIGHT 300 to match "OSC"/preset (400 read too bold/bright — Max); grays when osc off via ancestor */
 #syn-panel .device.osc .device-corner-preset { gap: 4px; }
 #syn-panel .device.osc .osc-emblems { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
 #syn-panel .device.osc .osc-emblems .osc-letter,
@@ -3644,8 +3650,8 @@ body {
 #syn-panel .device.osc .osc-emblems .osc-letter,
 #syn-panel .device.osc .osc-emblems .sn-chip { font-size: 9px; }
 #syn-panel .device.osc .swap-btn { font-size: 12px; }
-#syn-panel .device.osc .swap-btn::before { transform: none; }
-#syn-panel .device.osc .swap-btn.act::before { font-size: 11px; }
+#syn-panel .device.osc .swap-btn::before { transform: translateY(-1px); }   /* HEADER CENTERLINE: the "+" font glyph sits LOW in the box → UP 1px = dead center (matches the filter's +) */
+#syn-panel .device.osc .swap-btn.act::before { font-size: 11px; transform: translateY(-1px); }   /* ← back arrow: same up-1px centering as the + */
 #syn-panel .device.osc .osc-emblems .osc-letter:hover,
 #syn-panel .device.osc .osc-emblems .sn-chip:hover,
 #syn-panel .device.osc .swap-btn:hover { color: #FFFFFF; border-color: var(--purple-400); background: rgba(139,92,246,0.22); box-shadow: 0 0 7px rgba(167,139,250,0.45); text-shadow: none; }
@@ -3657,7 +3663,9 @@ body {
 /* ── OSCFIX-ALIGN-V2: lift A/S/N glyphs to the + center; OSC device → flex column so front+back knob rows share one baseline ── */
 #syn-panel .device.osc .osc-emblems .osc-letter,
 #syn-panel .device.osc .osc-emblems .sn-chip,
-#syn-panel .device.osc .swap-btn { padding-bottom: 2px; }
+#syn-panel .device.osc .swap-btn { padding-bottom: 0; }   /* HEADER CENTERLINE: was 2px (lifted glyphs off-center); now glyphs grid-center in the 16px box */
+#syn-panel .device.osc .osc-emblems .osc-letter,
+#syn-panel .device.osc .osc-emblems .sn-chip { padding-top: 1.5px; }   /* cap letters ride high in the line box → down 0.75px = dead-center (measured at 11x vs a crosshair) */
 #syn-panel .device.osc { display: flex; flex-direction: column; }
 /* clickable letter that toggles A<->B / C<->D within the slot */
 /* the letter is the easter-egg "seamless switch" (A<->B / C<->D). Styled IDENTICALLY to the
@@ -4197,6 +4205,16 @@ body {
 .samp-menu div:hover { background: rgba(255,255,255,0.08); color: #fff; }
 .samp-menu div svg { width: 13px; height: 13px; opacity: .85; flex: none; }
 .samp-menu .sepd { height: 1px; background: rgba(255,255,255,.08); margin: 4px 6px; padding: 0; }
+/* wavetable selector — prev/next stepper arrows (small, transparent, white) + cascading folder submenus */
+#syn-panel .device.osc .wt-nav { display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 16px; font-size: 11px; line-height: 1; color: rgba(255,255,255,0.4); cursor: pointer; user-select: none; transition: color .12s ease; }
+#syn-panel .device.osc .wt-nav:hover { color: var(--purple-400); }
+#syn-panel .device.osc.engine-sample .wt-nav,
+#syn-panel .device.osc.engine-granular .wt-nav,
+#syn-panel .device.osc.engine-geode .wt-nav,
+#syn-panel .device.osc.engine-harm .wt-nav,
+#syn-panel .device.osc.engine-modal .wt-nav { display: none; }   /* arrows only for the wavetable/FM preset */
+.samp-menu .wt-caret { margin-left: auto; opacity: 0.5; padding-left: 16px; }   /* the › on a folder row */
+.samp-menu div.hl { background: rgba(139,92,246,0.22); color: #fff; }           /* the open/hovered folder in the cascade */
 
 /* ── OSC QUICK-CONTROLS (Volume / Pan / Semitone) ──────────────────────────────
    Glass sliders shown on right-click of the WAVETABLE osc (brand-new menu) AND
@@ -5340,7 +5358,7 @@ body {
           <div class="osc-slot" id="slot-ab" data-cur="a">
           <div class="device osc" id="osc-a-device">
             <div class="device-label-row">
-              <div class="device-label">Osc ·</div>
+              <div class="device-label">Osc<span class="lbl-sep"></span></div>
               <span class="engine-wrap"><span class="engine-display" id="osc-a-engine-display">Wavetable</span><select class="engine-select" id="osc-a-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
               <span class="geode-head" data-osc="a"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="a"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
@@ -5610,7 +5628,7 @@ body {
           </div>
           <div class="device osc osc-hidden" id="osc-b-device">
             <div class="device-label-row">
-              <div class="device-label">Osc ·</div>
+              <div class="device-label">Osc<span class="lbl-sep"></span></div>
               <span class="engine-wrap"><span class="engine-display" id="osc-b-engine-display">Wavetable</span><select class="engine-select" id="osc-b-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
               <span class="geode-head" data-osc="b"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="b"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
@@ -5896,7 +5914,7 @@ body {
           <div class="osc-slot" id="slot-cd" data-cur="c">
           <div class="device osc" id="osc-c-device">
             <div class="device-label-row">
-              <div class="device-label">Osc ·</div>
+              <div class="device-label">Osc<span class="lbl-sep"></span></div>
               <span class="engine-wrap"><span class="engine-display" id="osc-c-engine-display">Wavetable</span><select class="engine-select" id="osc-c-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
               <span class="geode-head" data-osc="c"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="c"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
@@ -6166,7 +6184,7 @@ body {
           </div>
           <div class="device osc osc-hidden" id="osc-d-device">
             <div class="device-label-row">
-              <div class="device-label">Osc ·</div>
+              <div class="device-label">Osc<span class="lbl-sep"></span></div>
               <span class="engine-wrap"><span class="engine-display" id="osc-d-engine-display">Wavetable</span><select class="engine-select" id="osc-d-engine-select" aria-label="Oscillator engine"><option value="0">Wavetable</option><option value="1">Sample</option><option value="2">Granular</option><option value="4">FM</option><option value="3">Resynth</option><option value="5">Harmonic</option></select></span>
               <span class="geode-head" data-osc="d"><span class="samp-sel gmode"><span class="samp-sel-disp">Forward</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option></select></span></span><span class="samp-head" data-osc="d"><span class="samp-sel mode"><span class="samp-sel-disp">One-Shot</span><select class="samp-sel-input"><option value="0">One-Shot</option><option value="1">Forward</option><option value="2">Reverse</option><option value="3">Ping-Pong</option><option value="4">Tailed</option></select></span><span class="samp-sel snap"><span class="samp-sel-disp">Zero</span><select class="samp-sel-input"><option value="0">Off</option><option value="1">Zero</option><option value="2">Transient</option></select></span></span>
             </div>
@@ -11315,9 +11333,43 @@ setTimeout(function wireSynControls () {
         try { var _rdev = e && e.target ? e.target.closest ('.device.osc') : null;
               /* Resynth extras retired — Cut LP/HP, Drive mode, Sieve mode, Shape target all live on the KNOB right-clicks now (KNOB_MENUS) */ } catch (_) {}
         m.appendChild (buildOscQuick (oscLetter));
-        m.style.left = Math.min (e.clientX, window.innerWidth - 200) + 'px';
-        m.style.top  = Math.max (8, Math.min (e.clientY, window.innerHeight - 150)) + 'px';
+        // WAVETABLE EXTENDER — when this osc holds an import, FUSE the FFT-rate (resolution) rows +
+        // Clear Wavetable into this same menu, so vol/pan/solo/mute/semitones AND the wavetable controls
+        // live in ONE right-click (the old code swapped to a separate menu you couldn't get back from).
+        try {
+          var _WT = window.wtWaterfall;
+          if (_WT && _WT.imported[oscLetter]) {
+            var _nf = function (n) { return (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction (n) : null; };
+            var wsep = document.createElement ('div'); wsep.className = 'sepd'; m.appendChild (wsep);
+            var whdr = document.createElement ('div'); whdr.textContent = 'Wavetable';
+            whdr.style.cssText = 'font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-muted);opacity:0.55;padding:4px 12px 2px;pointer-events:none;';
+            m.appendChild (whdr);
+            var _cur = _WT.res ? (_WT.res[oscLetter] | 0) : 1;
+            WT_RES_LABELS.forEach (function (lab, idx) {
+              var rrow = document.createElement ('div');
+              rrow.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 13 V9 M5 13 V4 M8 13 V7 M11 13 V2 M14 13 V6"/></svg>' + (idx === _cur ? '✓ ' : '') + lab;
+              rrow.addEventListener ('click', function () { m.classList.remove ('open'); if (_WT) _WT.res[oscLetter] = idx;
+                try { var sf = _nf ('setImportFrames'); if (sf) Promise.resolve (sf (oscLetter, WT_RES_FRAMES[idx])).then (function () { if (_WT) _WT.fetch (oscLetter); }); } catch (_) {} });
+              m.appendChild (rrow);
+            });
+            var wclr = document.createElement ('div');
+            wclr.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4.5 H13 M6.5 4.5 V3 H9.5 V4.5 M4.5 4.5 L5.2 13.5 H10.8 L11.5 4.5"/></svg>Clear Wavetable';
+            wclr.addEventListener ('click', function () { m.classList.remove ('open');
+              try { var cf = _nf ('clearWavetable'); if (cf) Promise.resolve (cf (oscLetter)).then (function () {
+                if (_WT) { _WT.imported[oscLetter] = false; if (_WT.importName) _WT.importName[oscLetter] = ''; _WT.fetch (oscLetter); }
+                var _disp = document.getElementById ('osc-' + oscLetter + '-preset-display');
+                var _sel  = document.getElementById ('osc-' + oscLetter + '-preset-select');
+                if (_disp && _sel && _sel.options[_sel.selectedIndex]) _disp.textContent = _sel.options[_sel.selectedIndex].text;
+              }); } catch (_) {} });
+            m.appendChild (wclr);
+          }
+        } catch (_) {}
         m.classList.add ('open');
+        // Measure the ACTUAL (now-populated) menu and clamp — with the wavetable rows added it's taller,
+        // so the old fixed 150px estimate would push Clear Wavetable off the bottom.
+        var _qmw = m.offsetWidth || 190, _qmh = m.offsetHeight || 150;
+        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth  - _qmw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - _qmh - 6)) + 'px';
       }
 
       function wireSample (view) {
@@ -11719,7 +11771,7 @@ setTimeout(function wireSynControls () {
         var L  = mm ? mm[1].toLowerCase () : null;
         if (! L) return;
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); e.stopPropagation ();
-          if (window.wtWaterfall && window.wtWaterfall.imported[L]) openWtMenu (e, L); else openOscQuick (e, L); });
+          openOscQuick (e, L); });   // ONE fused menu — vol/pan/solo/mute/semitones + (imports) FFT rate + Clear Wavetable
         // Left-click the scope → toggle the 3D WAVETABLE WATERFALL for this osc (Serum-style).
         disp.addEventListener ('click', function (e) { try { if (window.wtWaterfall) window.wtWaterfall.toggle (L); } catch (_) {} });
         // Drag a sample onto the WAVETABLE display → flip this osc to Sample + One-Shot + load.
@@ -23087,6 +23139,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     fetch:function(o){ try{ var fn=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getOscWavetable'):null; if(!fn)return;
         Promise.resolve(fn(o)).then(function(js){ try{ var t=JSON.parse(js); if(t&&t.d&&t.d.length){ t.d=Float32Array.from(t.d); wtWaterfall.cache[o]=t; wtWaterfall.off[o]=null; wtWaterfall.kick(); } }catch(e){} }).catch(function(){}); }catch(e){} },
     toggle:function(o){ wtWaterfall.on[o]=!wtWaterfall.on[o];
+      try{ var sv=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setWaterfallView'):null; if(sv) sv(o, wtWaterfall.on[o]); }catch(e){}   // remember the view so it survives editor reopen
       if(wtWaterfall.on[o]){ wtWaterfall.fetch(o); wtWaterfall.kick(); }
       else { var cv=document.getElementById('osc-wave-'+o); if(cv){ cv.getContext('2d').clearRect(0,0,cv.width,cv.height); } if(typeof kickScope==='function') kickScope(); } },
     kick:function(){ if(!wtWaterfall.raf) wtWaterfall.raf=requestAnimationFrame(wtWaterfall.loop); },
@@ -23146,60 +23199,112 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   var WT_SEC_STYLE = 'font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-muted);opacity:0.55;padding:6px 12px 2px;pointer-events:none;';
   function wtNfn (n) { try { return (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction (n) : null; } catch (e) { return null; } }
   var wtSelMenuEl = null;
+  window.wtStepPreset = function (o, dir) {
+    var sel = document.getElementById ('osc-' + o + '-preset-select'); if (! sel) return;
+    var n = sel.options.length; if (! n) return;
+    var idx = sel.selectedIndex; if (idx < 0) idx = 0;
+    idx = (idx + dir + n) % n; sel.selectedIndex = idx;
+    sel.dispatchEvent (new Event ('change', { bubbles: true }));
+    try { var pss = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_WT_PRESET');
+          if (pss) pss.setNormalisedValue ((parseInt (sel.value, 10) || 0) / Math.max (1, n - 1)); } catch (e) {}
+    var WT = window.wtWaterfall, cf = wtNfn ('clearWavetable');
+    if (cf) Promise.resolve (cf (o)).then (function () { if (WT) { WT.imported[o] = false; if (WT.importName) WT.importName[o] = ''; WT.fetch (o); } });
+  };
+  // ═══ CASCADING FOLDER MENU (Serum-2 style) ═══ left-click the header name → Basic Shapes / Factory /
+  // Imported folders; hover a folder → its submenu flies out to the side; a leaf = a built-in preset or
+  // an imported table. Replaces the old single flat scrolling list.
   window.openWtSelectMenu = function (osc, ev) {
     var sel  = document.getElementById ('osc-' + osc + '-preset-select');
     var disp = document.getElementById ('osc-' + osc + '-preset-display');
     if (! sel) return;
     var WT = window.wtWaterfall;
     var esc = function (s) { return String (s).replace (/&/g, '&amp;').replace (/</g, '&lt;').replace (/>/g, '&gt;'); };
-    var build = function (imports) {
-      if (! wtSelMenuEl) {
-        wtSelMenuEl = document.createElement ('div'); wtSelMenuEl.className = 'samp-menu';
-        wtSelMenuEl.style.overflowY = 'auto';
-        document.body.appendChild (wtSelMenuEl);
-        document.addEventListener ('pointerdown', function (e2) { if (wtSelMenuEl && ! wtSelMenuEl.contains (e2.target)) wtSelMenuEl.classList.remove ('open'); });
-      }
-      var m = wtSelMenuEl, imp = WT && WT.imported[osc], curVal = sel.value;
-      m.style.maxHeight = Math.min (340, window.innerHeight - 24) + 'px';
-      var html = '<div data-open="1">＋&nbsp;&nbsp;Open Imports Folder</div>';
-      Array.prototype.forEach.call (sel.getElementsByTagName ('optgroup'), function (og) {
-        html += '<div style="' + WT_SEC_STYLE + '">' + esc (og.label) + '</div>';
-        Array.prototype.forEach.call (og.getElementsByTagName ('option'), function (op) {
-          var cur = (! imp && op.value === curVal);
-          html += '<div data-v="' + op.value + '"' + (cur ? ' style="color:var(--purple-400);"' : '') + '>' + (cur ? '✓&nbsp;' : '&nbsp;&nbsp;&nbsp;') + esc (op.text) + '</div>';
-        });
+    if (window.__wtCascadeClose) { try { window.__wtCascadeClose (); } catch (e) {} }
+
+    // ── build the folder tree from the <select>'s optgroups ── Basic (group 0) → "Basic Shapes";
+    // the rest → subfolders of "Factory"; "Imported" is filled from a folder scan on hover.
+    var groups = Array.prototype.slice.call (sel.getElementsByTagName ('optgroup'));
+    var optLeaf = function (op) { return { kind: 'preset', label: op.text, value: op.value }; };
+    var groupLeaves = function (g) { return Array.prototype.map.call (g.getElementsByTagName ('option'), optLeaf); };
+    var tree = [];
+    if (groups.length) tree.push ({ folder: 'Basic Shapes', children: groupLeaves (groups[0]) });
+    tree.push ({ folder: 'Factory', children: groups.slice (1).map (function (g) { return { folder: g.label, children: groupLeaves (g) }; }) });
+    var impNode = { folder: 'Imported', load: function (cb) {
+        if (impNode._cache) { cb (impNode._cache); return; }
+        var lf = wtNfn ('listImports');
+        if (lf) Promise.resolve (lf()).then (function (js) { var a = []; try { a = JSON.parse (js); } catch (e) {}
+            impNode._cache = a.length ? a.map (function (nm) { return { kind: 'import', label: nm }; })
+                                      : [{ disabled: true, label: '— drop tables in the folder —' }];
+            cb (impNode._cache); }).catch (function () { cb ([{ disabled: true, label: '— empty —' }]); });
+        else cb ([{ disabled: true, label: '— empty —' }]);
+    } };
+    tree.push (impNode);
+
+    // ── panel stack (one .samp-menu per open level) ──
+    var panels = [];
+    function closeFrom (lvl) { while (panels.length > lvl) { var p = panels.pop (); if (p && p.parentNode) p.parentNode.removeChild (p); } }
+    function closeAll () { closeFrom (0); document.removeEventListener ('pointerdown', onDown, true); window.__wtCascadeClose = null; }
+    function onDown (e) { for (var i = 0; i < panels.length; i++) if (panels[i].contains (e.target)) return; closeAll (); }
+    window.__wtCascadeClose = closeAll;
+    var curVal = function () { return (WT && WT.imported[osc]) ? null : sel.value; };
+    var curImp = function () { return (WT && WT.imported[osc] && WT.importName) ? WT.importName[osc] : null; };
+    function clearHL (m) { for (var i = 0; i < m.children.length; i++) if (m.children[i].classList) m.children[i].classList.remove ('hl'); }
+
+    function applyPreset (v) {
+      sel.value = v; sel.dispatchEvent (new Event ('change', { bubbles: true }));
+      try { var pss = window.Juce.getSliderState ('SYN_OSC_' + osc.toUpperCase () + '_WT_PRESET');
+            if (pss) pss.setNormalisedValue ((parseInt (v, 10) || 0) / Math.max (1, sel.options.length - 1)); } catch (e) {}
+      var cf = wtNfn ('clearWavetable'); if (cf) Promise.resolve (cf (osc)).then (function () { if (WT) { WT.imported[osc] = false; if (WT.importName) WT.importName[osc] = ''; WT.fetch (osc); } });
+      closeAll ();
+    }
+    function applyImport (nm) {
+      var f = wtNfn ('loadImportedWavetable'); if (f) Promise.resolve (f (osc, nm)).then (function () {
+        if (disp) disp.textContent = nm; var snf = wtNfn ('setWavetableName'); if (snf) snf (osc, nm);
+        if (WT) { WT.imported[osc] = true; if (! WT.importName) WT.importName = {}; WT.importName[osc] = nm; WT.fetch (osc); } });
+      closeAll ();
+    }
+
+    function buildPanel (items, lvl, aRect) {
+      closeFrom (lvl);
+      var m = document.createElement ('div'); m.className = 'samp-menu'; m.style.overflowY = 'auto';
+      m.style.maxHeight = Math.min (360, window.innerHeight - 20) + 'px';
+      items.forEach (function (it) {
+        var d = document.createElement ('div');
+        if (it.folder !== undefined) {
+          d.innerHTML = esc (it.folder) + '<span class="wt-caret">&rsaquo;</span>';
+          d.addEventListener ('mouseenter', function () { clearHL (m); d.classList.add ('hl');
+            var r = d.getBoundingClientRect ();
+            if (it.load) it.load (function (ch) { buildPanel (ch, lvl + 1, r); }); else buildPanel (it.children, lvl + 1, r); });
+        } else if (it.disabled) {
+          d.textContent = it.label; d.style.opacity = '0.35'; d.style.cursor = 'default';
+          d.addEventListener ('mouseenter', function () { closeFrom (lvl + 1); });
+        } else {
+          var cur = (it.kind === 'preset' && it.value === curVal ()) || (it.kind === 'import' && it.label === curImp ());
+          d.innerHTML = (cur ? '<span style="color:var(--purple-400);">&#10003;</span>&nbsp;' : '&nbsp;&nbsp;&nbsp;') + esc (it.label);
+          if (cur) d.style.color = 'var(--purple-400)';
+          d.addEventListener ('mouseenter', function () { clearHL (m); closeFrom (lvl + 1); });
+          d.addEventListener ('click', function () { it.kind === 'preset' ? applyPreset (it.value) : applyImport (it.label); });
+        }
+        m.appendChild (d);
       });
-      html += '<div style="' + WT_SEC_STYLE + '">Imports</div>';
-      if (imports && imports.length) {
-        imports.forEach (function (nm) {
-          var cur = imp && WT.importName && WT.importName[osc] === nm;
-          html += '<div data-imp="' + encodeURIComponent (nm) + '"' + (cur ? ' style="color:var(--purple-400);"' : '') + '>' + (cur ? '✓&nbsp;' : '&nbsp;&nbsp;&nbsp;') + esc (nm) + '</div>';
-        });
-      } else {
-        html += '<div style="' + WT_SEC_STYLE + 'opacity:0.35;">— drop tables in the folder —</div>';
+      if (lvl === 0) {   // root gets the Open-Imports-Folder footer
+        var sepd = document.createElement ('div'); sepd.className = 'sepd'; m.appendChild (sepd);
+        var opf = document.createElement ('div'); opf.innerHTML = '＋&nbsp;&nbsp;Open Imports Folder';
+        opf.addEventListener ('mouseenter', function () { clearHL (m); closeFrom (1); });
+        opf.addEventListener ('click', function () { var f = wtNfn ('openImportsFolder'); if (f) f (); closeAll (); });
+        m.appendChild (opf);
       }
-      m.innerHTML = html; m.classList.add ('open');
-      var mw = m.offsetWidth || 170;
-      m.style.left = Math.max (6, Math.min (ev.clientX, window.innerWidth - mw - 6)) + 'px';
-      m.style.top  = Math.max (6, Math.min (ev.clientY, window.innerHeight - (m.offsetHeight || 300) - 6)) + 'px';
-      m.querySelectorAll ('div[data-v]').forEach (function (d) { d.onclick = function () {
-        m.classList.remove ('open');
-        sel.value = d.dataset.v; sel.dispatchEvent (new Event ('change', { bubbles: true }));   // drives WT_PRESET + the header display
-        var cf = wtNfn ('clearWavetable'); if (cf) Promise.resolve (cf (osc)).then (function () { if (WT) { WT.imported[osc] = false; if (WT.importName) WT.importName[osc] = ''; WT.fetch (osc); } });
-      }; });
-      var opd = m.querySelector ('div[data-open]'); if (opd) opd.onclick = function () { m.classList.remove ('open'); var f = wtNfn ('openImportsFolder'); if (f) f(); };
-      m.querySelectorAll ('div[data-imp]').forEach (function (d) { d.onclick = function () {
-        m.classList.remove ('open'); var nm = decodeURIComponent (d.dataset.imp);
-        var f = wtNfn ('loadImportedWavetable'); if (f) Promise.resolve (f (osc, nm)).then (function () {
-          if (disp) disp.textContent = nm;
-          var snf = wtNfn ('setWavetableName'); if (snf) snf (osc, nm);
-          if (WT) { WT.imported[osc] = true; if (! WT.importName) WT.importName = {}; WT.importName[osc] = nm; WT.fetch (osc); }
-        });
-      }; });
-    };
-    var lf = wtNfn ('listImports');
-    if (lf) Promise.resolve (lf()).then (function (js) { var a = []; try { a = JSON.parse (js); } catch (e) {} build (a); }).catch (function () { build ([]); });
-    else build ([]);
+      document.body.appendChild (m);
+      var mw = m.offsetWidth || 160, mh = m.offsetHeight || 200, left, top;
+      if (lvl === 0) { left = ev.clientX; top = ev.clientY; }
+      else { left = aRect.right + 2; top = aRect.top - 6; if (left + mw > window.innerWidth - 6) left = aRect.left - mw - 2; }
+      m.style.left = Math.max (6, Math.min (left, window.innerWidth - mw - 6)) + 'px';
+      m.style.top  = Math.max (6, Math.min (top, window.innerHeight - mh - 6)) + 'px';
+      m.classList.add ('open'); panels[lvl] = m; return m;
+    }
+
+    document.addEventListener ('pointerdown', onDown, true);
+    buildPanel (tree, 0, null);
   };
   // Intercept the native WT dropdown → glass menu (select gets pointer-events:none so the OS menu never opens).
   [200, 800, 2000].forEach (function (ms) { setTimeout (function () { try {
@@ -23209,6 +23314,16 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         try { sel.style.pointerEvents = 'none'; } catch (e) {}
         var wrap = sel.parentElement || sel;
         wrap.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); window.openWtSelectMenu (o, e); });
+      }
+      // prev/next stepper arrows flanking the wavetable name (siblings of the preset-wrap so they don't
+      // trigger the name's open-menu handler). CSS gates them to the wavetable/FM engine.
+      var pdisp = document.getElementById ('osc-' + o + '-preset-display');
+      var pw = pdisp ? pdisp.parentElement : null;
+      if (pw && pw.parentNode && ! pw._wtArrows) { pw._wtArrows = true;
+        var mkNav = function (glyph, dir) { var s = document.createElement ('span'); s.className = 'wt-nav'; s.innerHTML = glyph;
+          s.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); window.wtStepPreset (o, dir); }); return s; };
+        pw.parentNode.insertBefore (mkNav ('&lsaquo;', -1), pw);
+        var nx = mkNav ('&rsaquo;', 1); if (pw.nextSibling) pw.parentNode.insertBefore (nx, pw.nextSibling); else pw.parentNode.appendChild (nx);
       }
     });
   } catch (e) {} }, ms); });
@@ -23224,6 +23339,18 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     }).catch (function () {});
   };
   [500, 1500, 3200].forEach (function (ms) { setTimeout (function () { try { wtWaterfall.restoreImports(); } catch (e) {} }, ms); });
+  // ═══ Restore the 3D-WATERFALL VIEW on reopen ═══ Max: if it was on the waterfall when the window
+  // closed, it must open back to the waterfall — not snap to the oscilloscope. The processor remembers
+  // the per-osc toggle (survives editor reopen + project reload); re-apply it here.
+  wtWaterfall.restoreView = function () {
+    var fn = wtNfn ('getWaterfallView'); if (! fn) return;
+    Promise.resolve (fn()).then (function (js) { var st = {}; try { st = JSON.parse (js); } catch (e) { return; }
+      ['a','b','c','d'].forEach (function (o) { if (st[o] && ! wtWaterfall.on[o]) {
+        wtWaterfall.on[o] = true; wtWaterfall.fetch (o); wtWaterfall.kick();   // don't call setWaterfallView — already true in the processor
+      } });
+    }).catch (function () {});
+  };
+  [600, 1600, 3300].forEach (function (ms) { setTimeout (function () { try { wtWaterfall.restoreView(); } catch (e) {} }, ms); });
 
   // IDLE render = FLATLINE. Max: the osc display must NOT show a static wavetable picture;
   // when nothing's playing it's a clean flat line (heartbeat-monitor) and it only comes alive
@@ -23506,7 +23633,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb26';   // bump per ship  [fb26 = WAVETABLE EXTENDER PHASE 4 COMPLETE: (4a) file-import auto-detect — dropping a Serum/Vital .wav (2048-frame multiple) imports frame-perfect. (4b) Imports folder (.../Noizefield/Terrain Instrument/Wavetables) + open/scan/load native fns. (4c) GLASS SELECTOR — left-click the header name -> categorized glass menu (Open Imports Folder + built-in optgroups + Imports from the scan); built-ins drive WT_PRESET, imports call loadImportedWavetable, header shows the file/table name. (4d) PERSISTENCE — imports embed in the preset (base64 float32, capped) + restore on reopen via getImportState.] [fb25 = fb24 fixes: (1) waterfall no longer CLIPS at the bottom (amplitude headroom in the geo). (2) waterfall is LIVE — WT_PRESET/ENGINE change listeners refetch so it reflects the current shape without toggling. (3) filter SPREAD no longer DETUNES the comb — moved off the L/R cutoff offset onto a POST-filter mid/side all-pass widener (flat magnitude = zero pitch change, mono-safe) = pure stereo width.] [fb24 = fb23 + WAVETABLE VISUAL POLISH + RESOLUTION/CLEAR: waterfall matched to the mockup at the real short-aspect display (thinner white lines, tuned oblique geo, default 40 frames so imports aren't cluttered) · WTPOS line now THIN + exact --purple-400 (#B794FF) + NO glow/bloom · right-click an imported-table scope -> resolution 256/512/1024/2048 (=24/40/56/80 frames, sparse->full; re-slices the stored source live) + Clear Wavetable (revert to factory). New setImportFrames/clearWavetable native fns; processor keeps the source PCM per osc.] [fb23 = fb22 fixes: (1) DAW CRASH ON IMPORT fixed — renderBlend's stack weight array was float w[16] (WavetableSpec::kNumFrames) but imported tables have up to 256 frames -> stack overflow; now float w[kMaxFrames=256]. (2) Waterfall is now TRANSPARENT (dropped the opaque dark backdrop + curtain fills) like the 2D scope, geometry tucked so it no longer clips the bottom.] [fb22 = fb21 + WAVETABLE EXTENDER phase 3 = 3D WATERFALL VIZ: left-click an osc scope -> canvas-2D oblique-projection waterfall of all wavetable frames (white depth-faded lines on dark, receding up/back) + purple WTPOS line streaking front<->back as position modulates. Offscreen-cached static stack (1 blit + 1 line/frame, 60fps). Frames via getOscWavetable native fn. Geometry validated in a standalone headless harness first.] [fb21 = WAVETABLE EXTENDER phase 1-2: drop audio on a WT osc -> glass menu gains a 4th "Wavetable" option -> importAudioAsWavetable native fn decodes to mono -> Wavetable::buildFromPcm (forward-FFT each window, keep harmonics per mip, iFFT -> 8 band-limited seam-free frames, up to 256). Per-osc ImportSlot atomic handoff (MorphSlot pattern) + wavetableForOsc override. All 4 oscs. WTPOS scans it. Visual waterfall = next phase.] [fb20 = fb19 but Poles pill = left-click DRAG up/down through 6/12/18/24 (same feel as Spread) instead of click-to-cycle; bare click no longer switches; wheel still steps.] [fb19 = fb18 + SPREAD (filter stereo width: Key pill -> Spread; per-channel L/R cutoff offset +/-6st inside FilterSlot, frequency cores only; new SYN_FILTER{1,2}_SPREAD float, drag/scroll) + POLES now SCROLLS 6/12/18/24 dB (ladder stage taps s1..s4; SYN_FILTER*_POLES bool->4-choice). Filter back panel COMPLETE.] [fb18 = fb17 + FILTER DRIVE TYPES: back-panel Drive knob RIGHT-CLICK -> 6 waveshapers (Tube/Diode/Fold/Hard/Crush/Fuzz) via new SYN_FILTER{1,2}_DRIVETYPE choice params. pdrive() switches shaper via fShape() (pure/stateless -> node-ready). Tube = old tanh default, so existing patches sound identical. Slot-aware via 1/2 tab. (Spread pill NEXT build.)] [fb17 = KEY feature REMOVED (Max: bad idea) — Key pill now reserved/inert; KEEPS Poles (ladder 12/24 slope), filters-default-OFF, and Vel/post-Drive knobs. fb16 KEY-lock and fb15 chromatic-snap both reverted.] Key pill = comb chromatic-snap (lerp cutSemis→round, comb/Karplus only) + Poles pill = ladder 12/24dB tap (FilterSlot.setPoles, CPU-free) + FILTERS DEFAULT OFF (Filter1 type=None, all routing masks default FALSE ⇒ oscs pass dry until wired on back panel)] [fb14 = fb13 + back-panel filter knobs wired: Mix(done) · Drive=POST-filter tanh saturation (new SYN_FILTER*_PDRV) · Env=mirrors front ENV · Vel=velocity→cutoff ±72st (new SYN_FILTER*_VEL) · Track=keytrack amount (K=on/off). All per-filter via the 1/2 tab.] [fb13 = fb12 + filter header polish: K gets its purple underscore, + button & extender white, extender 13→11px pulled next to +, filter-type/tabs/legend unified on one centerline (top:7 h:16), legend nudged right 150→132] [fb12 = fb11 + PER-OSCILLATOR FILTER ROUTING: back-panel A/B/C/D/Sub pills now really route each osc to Filter 1 and/or 2 (independent + dry bypass; series=F1→F2 chain, parallel=F1+F2). CPU-free (filters already run per voice; routing = bus adds). Default all-routed = byte-identical to old. Sub separated cleanly from its osc. N still mock (no noise engine).] boxed emblem glyphs rest SHARP WHITE like the filter routing pills: osc header A/B/C/D/S/N/+ (--text-muted→--text-primary) + filter back tabs 1/2/K/E (opacity 0.4→1, white); active states still purple-400] [fb10 = fb9 but blend-pill parens -2.0→-0.85px (canvas-metric-exact ink centering; -2.0 overshot & rode high)] [fb9 = fb8 + blend-pill parens -2.5→-2.0 (letter dead-center, headless-verified) + filter back tab cluster (1/2/K/E + arrow) = OSC emblems 16×16 grid-centered (was 16×14 + low arrow)] [fb8 = fb7 + filter cutoff legend (.filt-hud) moved right:112→150 so "C 1.1k" clears the 1/2/K/E tabs] [fb7 BLEND/FILTER UI: dropped Mix/Mod pills (blend row = 4 slots, gap6 column-aligned to selector row), parens +2px up, filter back panel = OSC twin (332px width match, purple-400 emblems/tabs/routing/series-parallel, no fill/glow, FILTER header uppercase white)]
+  var TERRAIN_BUILD = 'fb29';   // bump per ship  [fb29 = HEADER PIXEL-PERFECT + SELECTOR ARROWS + CASCADING FOLDER MENU (Max): (1) EMBLEMS dead-centered — measured at 11x vs a crosshair: "+"/"←" translateY(-1px) (were pushed LOW), letters padding-top 1.5px; (2) the "·" separator is now LOW-OPACITY (rgba white .42) + smaller (2px), not solid white; (3) engine name "Wavetable" weight 300 (was 400 → too bold/bright), matches OSC; (4) SELECTOR STEPPER ARROWS — small transparent white ‹ › flanking the wavetable name (wtStepPreset ±1, gated to wavetable/FM engine); (5) CASCADING FOLDER MENU replacing the flat scroll list — Basic Shapes / Factory (→ Analog/Digital/Vocal/Metallic/Experimental/Morph subfolders) / Imported (folder scan) + Open Imports Folder; hover a folder → glass submenu flies out, ✓ marks the current, purple-highlights the open path. Applies to all 4 oscillators.] [fb28 = OSC HEADER SYMMETRY: every element on ONE centerline (Max). (1) both header clusters (.device-label-row + .device-corner-preset) pinned to the SAME top:4 + height:16 so the left text and the right selector/emblems share the OSC centerline. (2) the "·" separator between OSC and the engine name is now a geometric 2.5px CIRCLE (.lbl-sep) instead of the U+00B7 font glyph that floated high — perfectly centerable. (3) engine name ("Wavetable") is now WHITE (#FFFFFF) not muted grey; hover → purple-400. (4) A / + emblem glyphs truly center in their 16px boxes (dropped the legacy padding-bottom:2px lift; cap letters get padding-top:1px, "+" gets translateY(0.5px) for optical center). Applies to all 4 oscillators (shared CSS + markup). Verified in a headless harness against a centerline guide.] [fb27 = CPU FIX + WAVETABLE UX: (1) ⚡ CPU SPIKE ON WT-POS MOD FIXED — Wavetable::renderBlend had a fast bilinear short-circuit added for blur≈0 (O(frameSize), INDEPENDENT of frame count); the old path was O(frameSize × N) with N exp() calls EVERY block, so an LFO on WT-POS over a 256-frame import (grand piano etc.) rebuilt it per block and spiked ~half the CPU. Blur>0 now sums a bounded Gaussian band [f0-4σ..f1+4σ] instead of all N. (2) RIGHT-CLICK MENU FUSED — imported osc's back-panel right-click now shows vol/pan/solo/mute/semitones AND the FFT rate (256/512/1024/2048) + Clear Wavetable in ONE menu (was a separate menu you couldn't get back from). (3) WATERFALL VIEW PERSISTS — if it was on the 3D waterfall, it reopens to the waterfall, not the oscilloscope (processor remembers per-osc via setWaterfallView/getWaterfallView + state). (4) FFT RATE ALWAYS VISUALLY CHANGES — dropped the importIsFile_ gate on setImportFrames so resolution re-slices files too + refetches. (5) SHAPE CHANGE ALWAYS UPDATES — glass-menu built-in pick now drives WT_PRESET via its SliderState (dispatching 'change' alone only updated the display text, not the param), so switching an import to sine/triangle refreshes voice + waterfall immediately.] [fb26 = WAVETABLE EXTENDER PHASE 4 COMPLETE: (4a) file-import auto-detect — dropping a Serum/Vital .wav (2048-frame multiple) imports frame-perfect. (4b) Imports folder (.../Noizefield/Terrain Instrument/Wavetables) + open/scan/load native fns. (4c) GLASS SELECTOR — left-click the header name -> categorized glass menu (Open Imports Folder + built-in optgroups + Imports from the scan); built-ins drive WT_PRESET, imports call loadImportedWavetable, header shows the file/table name. (4d) PERSISTENCE — imports embed in the preset (base64 float32, capped) + restore on reopen via getImportState.] [fb25 = fb24 fixes: (1) waterfall no longer CLIPS at the bottom (amplitude headroom in the geo). (2) waterfall is LIVE — WT_PRESET/ENGINE change listeners refetch so it reflects the current shape without toggling. (3) filter SPREAD no longer DETUNES the comb — moved off the L/R cutoff offset onto a POST-filter mid/side all-pass widener (flat magnitude = zero pitch change, mono-safe) = pure stereo width.] [fb24 = fb23 + WAVETABLE VISUAL POLISH + RESOLUTION/CLEAR: waterfall matched to the mockup at the real short-aspect display (thinner white lines, tuned oblique geo, default 40 frames so imports aren't cluttered) · WTPOS line now THIN + exact --purple-400 (#B794FF) + NO glow/bloom · right-click an imported-table scope -> resolution 256/512/1024/2048 (=24/40/56/80 frames, sparse->full; re-slices the stored source live) + Clear Wavetable (revert to factory). New setImportFrames/clearWavetable native fns; processor keeps the source PCM per osc.] [fb23 = fb22 fixes: (1) DAW CRASH ON IMPORT fixed — renderBlend's stack weight array was float w[16] (WavetableSpec::kNumFrames) but imported tables have up to 256 frames -> stack overflow; now float w[kMaxFrames=256]. (2) Waterfall is now TRANSPARENT (dropped the opaque dark backdrop + curtain fills) like the 2D scope, geometry tucked so it no longer clips the bottom.] [fb22 = fb21 + WAVETABLE EXTENDER phase 3 = 3D WATERFALL VIZ: left-click an osc scope -> canvas-2D oblique-projection waterfall of all wavetable frames (white depth-faded lines on dark, receding up/back) + purple WTPOS line streaking front<->back as position modulates. Offscreen-cached static stack (1 blit + 1 line/frame, 60fps). Frames via getOscWavetable native fn. Geometry validated in a standalone headless harness first.] [fb21 = WAVETABLE EXTENDER phase 1-2: drop audio on a WT osc -> glass menu gains a 4th "Wavetable" option -> importAudioAsWavetable native fn decodes to mono -> Wavetable::buildFromPcm (forward-FFT each window, keep harmonics per mip, iFFT -> 8 band-limited seam-free frames, up to 256). Per-osc ImportSlot atomic handoff (MorphSlot pattern) + wavetableForOsc override. All 4 oscs. WTPOS scans it. Visual waterfall = next phase.] [fb20 = fb19 but Poles pill = left-click DRAG up/down through 6/12/18/24 (same feel as Spread) instead of click-to-cycle; bare click no longer switches; wheel still steps.] [fb19 = fb18 + SPREAD (filter stereo width: Key pill -> Spread; per-channel L/R cutoff offset +/-6st inside FilterSlot, frequency cores only; new SYN_FILTER{1,2}_SPREAD float, drag/scroll) + POLES now SCROLLS 6/12/18/24 dB (ladder stage taps s1..s4; SYN_FILTER*_POLES bool->4-choice). Filter back panel COMPLETE.] [fb18 = fb17 + FILTER DRIVE TYPES: back-panel Drive knob RIGHT-CLICK -> 6 waveshapers (Tube/Diode/Fold/Hard/Crush/Fuzz) via new SYN_FILTER{1,2}_DRIVETYPE choice params. pdrive() switches shaper via fShape() (pure/stateless -> node-ready). Tube = old tanh default, so existing patches sound identical. Slot-aware via 1/2 tab. (Spread pill NEXT build.)] [fb17 = KEY feature REMOVED (Max: bad idea) — Key pill now reserved/inert; KEEPS Poles (ladder 12/24 slope), filters-default-OFF, and Vel/post-Drive knobs. fb16 KEY-lock and fb15 chromatic-snap both reverted.] Key pill = comb chromatic-snap (lerp cutSemis→round, comb/Karplus only) + Poles pill = ladder 12/24dB tap (FilterSlot.setPoles, CPU-free) + FILTERS DEFAULT OFF (Filter1 type=None, all routing masks default FALSE ⇒ oscs pass dry until wired on back panel)] [fb14 = fb13 + back-panel filter knobs wired: Mix(done) · Drive=POST-filter tanh saturation (new SYN_FILTER*_PDRV) · Env=mirrors front ENV · Vel=velocity→cutoff ±72st (new SYN_FILTER*_VEL) · Track=keytrack amount (K=on/off). All per-filter via the 1/2 tab.] [fb13 = fb12 + filter header polish: K gets its purple underscore, + button & extender white, extender 13→11px pulled next to +, filter-type/tabs/legend unified on one centerline (top:7 h:16), legend nudged right 150→132] [fb12 = fb11 + PER-OSCILLATOR FILTER ROUTING: back-panel A/B/C/D/Sub pills now really route each osc to Filter 1 and/or 2 (independent + dry bypass; series=F1→F2 chain, parallel=F1+F2). CPU-free (filters already run per voice; routing = bus adds). Default all-routed = byte-identical to old. Sub separated cleanly from its osc. N still mock (no noise engine).] boxed emblem glyphs rest SHARP WHITE like the filter routing pills: osc header A/B/C/D/S/N/+ (--text-muted→--text-primary) + filter back tabs 1/2/K/E (opacity 0.4→1, white); active states still purple-400] [fb10 = fb9 but blend-pill parens -2.0→-0.85px (canvas-metric-exact ink centering; -2.0 overshot & rode high)] [fb9 = fb8 + blend-pill parens -2.5→-2.0 (letter dead-center, headless-verified) + filter back tab cluster (1/2/K/E + arrow) = OSC emblems 16×16 grid-centered (was 16×14 + low arrow)] [fb8 = fb7 + filter cutoff legend (.filt-hud) moved right:112→150 so "C 1.1k" clears the 1/2/K/E tabs] [fb7 BLEND/FILTER UI: dropped Mix/Mod pills (blend row = 4 slots, gap6 column-aligned to selector row), parens +2px up, filter back panel = OSC twin (332px width match, purple-400 emblems/tabs/routing/series-parallel, no fill/glow, FILTER header uppercase white)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

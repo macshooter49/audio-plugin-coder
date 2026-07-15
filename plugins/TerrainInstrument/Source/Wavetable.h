@@ -319,12 +319,30 @@ namespace tw
             const int   f1    = f0 < N - 1 ? f0 + 1 : f0;
             const float fFrac = fIdx - (float) f0;
 
-            // Weights over all frames = blend( bilinear , Gaussian ), each Σ = 1, so the
-            // combined weights also Σ = 1. At blur = 0 only the bilinear pair survives.
-            float w[kMaxFrames] = { 0.0f };   // sized for imported tables (up to kMaxFrames), NOT just factory's 16 — else 256-frame imports overflow this stack array and crash the host
-            const float sigma = 0.0001f + blur * blur * 9.0f;  // frame-axis spread → near-whole-table at full
+            // ── FAST PATH — blur ≈ 0 (the common case): exactly the bilinear two-frame read.
+            // O(frameSize), INDEPENDENT of frame count — so scanning/modulating WT-POS on a big
+            // imported table (up to kMaxFrames frames) costs the SAME as a 16-frame factory table.
+            // ⚡ THE CPU FIX: an LFO on WT-POS makes the caller rebuild this EVERY block, and the old
+            // path was O(frameSize × N) with N exp() calls even at blur 0 → a massive spike on
+            // 256-frame imports (fine on factory's 16). This short-circuits it.
+            if (blur <= 1.0e-4f)
+            {
+                for (int n = 0; n < frameSize_; ++n)
+                    out[n] = sample (lvl, f0, n) * (1.0f - fFrac) + sample (lvl, f1, n) * fFrac;
+                return;   // the bilinear read IS the RMS reference → nothing to re-match
+            }
+
+            // ── BLUR PATH — Gaussian over a BOUNDED band around the centre. Frames past ~4σ carry
+            // negligible weight (exp(-8) ≈ 3e-4), so only [lo..hi] is summed → O(frameSize × band)
+            // instead of O(frameSize × N). Keeps blur cheap on big imported tables too.
+            const float sigma = 0.0001f + blur * blur * 9.0f;  // frame-axis spread
+            const int   band  = juce::jmin (N, (int) std::ceil (sigma * 4.0f) + 2);
+            const int   lo    = juce::jmax (0,     f0 - band);
+            const int   hi    = juce::jmin (N - 1, f1 + band);
+
+            float w[kMaxFrames] = { 0.0f };   // sized to kMaxFrames; only [lo..hi] is written/read
             float gsum = 0.0f;
-            for (int f = 0; f < N; ++f)
+            for (int f = lo; f <= hi; ++f)
             {
                 const float d = ((float) f - fIdx) / sigma;
                 const float g = std::exp (-0.5f * d * d);
@@ -332,20 +350,17 @@ namespace tw
                 gsum += g;
             }
             const float gInv = gsum > 1.0e-12f ? (blur / gsum) : 0.0f;
-            for (int f = 0; f < N; ++f) w[(size_t) f] *= gInv;        // Gaussian part, scaled by blur
+            for (int f = lo; f <= hi; ++f) w[(size_t) f] *= gInv;     // Gaussian part, scaled by blur
             w[(size_t) f0] += (1.0f - blur) * (1.0f - fFrac);         // + bilinear part, scaled by (1-blur)
             w[(size_t) f1] += (1.0f - blur) * fFrac;
 
-            // Build the blended cycle + accumulate RMS of it and of the bilinear reference.
+            // Build the blended cycle over the band + accumulate RMS of it and of the bilinear ref.
             double accBlend = 0.0, accRef = 0.0;
             for (int n = 0; n < frameSize_; ++n)
             {
                 float v = 0.0f;
-                for (int f = 0; f < N; ++f)
-                {
-                    const float wf = w[(size_t) f];
-                    if (wf != 0.0f) v += wf * sample (lvl, f, n);
-                }
+                for (int f = lo; f <= hi; ++f)
+                    v += w[(size_t) f] * sample (lvl, f, n);
                 out[n] = v;
                 accBlend += (double) v * (double) v;
 

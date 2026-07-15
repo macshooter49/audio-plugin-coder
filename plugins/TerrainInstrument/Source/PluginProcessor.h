@@ -384,6 +384,8 @@ public:
     void setImportFrames (int osc, int frames);   // re-slice the stored import at a new frame count (resolution)
     void setImportName (int osc, const juce::String& name);   // display/persist name for an import
     juce::String getImportStateJson();                        // {a:{active,name},...} — UI restores this on reopen
+    void setWaterfallView (int osc, bool on);                 // remember the 3D-waterfall toggle per osc
+    juce::String getWaterfallViewJson();                      // {a:bool,...} — UI restores the view on reopen
     // Wavetable EXTENDER viz — compact JSON of the osc's LIVE table (imported or factory) for the
     // 3D waterfall: { n:<displayFrames>, p:<pointsPerFrame>, nf:<realFrames>, d:[ n*p samples ] }.
     juce::String getOscWavetableJson (int osc);
@@ -876,6 +878,7 @@ private:
     int                importFrames_[4] = { 40, 40, 40, 40 };    // current frame count per osc (resolution mode)
     bool               importIsFile_[4] = { false, false, false, false };  // true = a real wavetable FILE (fixed frames), false = arbitrary audio (resolution-adjustable)
     juce::String       importName_[4];                                     // display/persist name (file/table) per osc
+    bool               wt3dView_[4] = { false, false, false, false };       // 3D-waterfall view toggle per osc (survives editor reopen + preset)
     void rebuildImport (int osc);                                // message thread — (re)build importSlot_[osc] from importedPcm_
     // Audio thread: the wavetable a voice should read for one osc — the imported table if one
     // was dropped, else the morphed/factory table. Atomic load only (no locks).

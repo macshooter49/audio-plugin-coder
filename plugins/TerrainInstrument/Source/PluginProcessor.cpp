@@ -137,9 +137,8 @@ void TerrainInstrumentAudioProcessor::importAudioAsWavetable (int osc, const flo
 void TerrainInstrumentAudioProcessor::setImportFrames (int osc, int frames)
 {
     osc = juce::jlimit (0, 3, osc);
-    if (importIsFile_[osc]) return;   // a real wavetable file keeps its own frames — resolution doesn't re-slice it
     importFrames_[osc] = juce::jlimit (2, tw::Wavetable::kMaxFrames, frames);
-    if (! importedPcm_[osc].empty()) rebuildImport (osc);
+    if (! importedPcm_[osc].empty()) rebuildImport (osc);   // re-slice at the chosen density (audio AND wavetable files → always a visible change)
 }
 
 void TerrainInstrumentAudioProcessor::clearImportedWavetable (int osc)
@@ -167,6 +166,23 @@ juce::String TerrainInstrumentAudioProcessor::getImportStateJson()
         auto nm = importName_[o].replace ("\\", "\\\\").replace ("\"", "\\\"");
         j += "\"" + juce::String (k) + "\":{\"active\":" + (active ? "true" : "false")
            + ",\"name\":\"" + nm + "\"}";
+    }
+    return j + "}";
+}
+
+void TerrainInstrumentAudioProcessor::setWaterfallView (int osc, bool on)
+{
+    wt3dView_[juce::jlimit (0, 3, osc)] = on;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getWaterfallViewJson()
+{
+    juce::String j = "{";
+    for (int o = 0; o < 4; ++o)
+    {
+        if (o) j += ",";
+        const char k[2] = { (char) ('a' + o), 0 };
+        j += "\"" + juce::String (k) + "\":" + (wt3dView_[o] ? "true" : "false");
     }
     return j + "}";
 }
@@ -5872,6 +5888,7 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         state.setProperty ("wtImportFile"   + s, importIsFile_[o],      nullptr);
         state.setProperty ("wtImportName"   + s, importName_[o],        nullptr);
     }
+    for (int o = 0; o < 4; ++o) state.setProperty ("wt3dView" + juce::String (o), wt3dView_[o], nullptr);
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
@@ -5948,6 +5965,7 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 importName_[o]   =        newState.getProperty ("wtImportName"   + s, juce::String()).toString();
                 rebuildImport (o);
             }
+            for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
