@@ -840,6 +840,14 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_SUB_HEAT[]   = "SYN_OSC_C_SUB_HEAT";
     constexpr char SYN_OSC_D_SUB_HEAT[]   = "SYN_OSC_D_SUB_HEAT";
 
+    // ════════ NOISE ENGINE (2026-07-15) — one shared noise source (center module), routed via N ════════
+    // Written straight to APVTS via setSynParam (relay-bypass — we're past the ~700 WebSliderRelay ceiling).
+    constexpr char SYN_NOISE_ON[]    = "SYN_NOISE_ON";      // bool — module enabled
+    constexpr char SYN_NOISE_TYPE[]  = "SYN_NOISE_TYPE";    // choice — White/Pink/Brown/Geiger/Tape…/Vinyl…/Space…
+    constexpr char SYN_NOISE_LEVEL[] = "SYN_NOISE_LEVEL";   // float 0..1
+    constexpr char SYN_NOISE_PITCH[] = "SYN_NOISE_PITCH";   // float 0..1 (0.5 = nominal; tone/brightness for colors)
+    constexpr char SYN_NOISE_PAN[]   = "SYN_NOISE_PAN";     // float 0..1 (0.5 = center)
+
     // ════════ MODAL-ENGINE-IDS — per-OSC physical modeling (Engine::MODAL, slot 6) ════════
     // 3 selectors (Family ×9 · Form ×5 · Source ×4) + 10 knobs, ×4 oscs = 52 params.
     constexpr char SYN_OSC_A_MODAL_FAMILY[]   = "SYN_OSC_A_MODAL_FAMILY";

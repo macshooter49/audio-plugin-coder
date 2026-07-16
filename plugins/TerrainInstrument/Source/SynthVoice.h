@@ -991,6 +991,60 @@ namespace tw
             sub_[o].heatK  = juce::jlimit (0.f, 1.f, heatK);
         }
 
+        // ── NOISE ENGINE (center module — one shared source per voice, injected into the Filter 1 bus) ──
+        void setNoise (bool on, int type, float level, float pitch, float pan) noexcept
+        {
+            noiseOn_    = on;
+            noiseType_  = type;
+            noiseLevel_ = juce::jlimit (0.0f, 1.0f, level);
+            noisePitch_ = juce::jlimit (0.0f, 1.0f, pitch);
+            const float th = juce::jlimit (0.0f, 1.0f, pan) * 1.5707963268f;   // equal-power pan (−3 dB center)
+            noisePanL_ = std::cos (th);
+            noisePanR_ = std::sin (th);
+        }
+    private:
+        // xorshift32 → [-1,1). Two independent L/R streams = an instantly-decorrelated stereo field.
+        static inline float noiseWhite (std::uint32_t& s) noexcept
+        {
+            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+            return (float) ((std::int32_t) s) * (1.0f / 2147483648.0f);
+        }
+        inline void noiseTick (float& oL, float& oR) noexcept
+        {
+            const float wl = noiseWhite (noiseRngL_), wr = noiseWhite (noiseRngR_);
+            switch (noiseType_)
+            {
+                case 1: {   // Pink — Paul Kellet economy filter (≈ -3 dB/oct)
+                    auto pk = [] (float w, float* b) noexcept {
+                        b[0] = 0.99886f*b[0] + w*0.0555179f; b[1] = 0.99332f*b[1] + w*0.0750759f;
+                        b[2] = 0.96900f*b[2] + w*0.1538520f; b[3] = 0.86650f*b[3] + w*0.3104856f;
+                        b[4] = 0.55000f*b[4] + w*0.5329522f; b[5] = -0.7616f*b[5] - w*0.0168980f;
+                        const float o = b[0]+b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+w*0.5362f;
+                        b[6] = w*0.115926f; return o * 0.11f;
+                    };
+                    oL = pk (wl, pkL_); oR = pk (wr, pkR_); break;
+                }
+                case 2:     // Brown — leaky integrator (≈ -6 dB/oct)
+                    brL_ = (brL_ + 0.02f*wl) * 0.996f; brR_ = (brR_ + 0.02f*wr) * 0.996f;
+                    oL = brL_ * 3.5f; oR = brR_ * 3.5f; break;
+                case 3: {   // Geiger — sparse random clicks with a fast decay tail
+                    auto gg = [] (float w, float& v) noexcept {
+                        if (w > 0.9992f || w < -0.9992f) v = (w > 0.0f ? 1.0f : -1.0f);
+                        v *= 0.86f; return v;
+                    };
+                    oL = gg (wl, geValL_); oR = gg (wr, geValR_); break;
+                }
+                default:    // White (0) + P1 placeholder for Tape/Vinyl/Space (synthesized in P3)
+                    oL = wl; oR = wr; break;
+            }
+        }
+        bool  noiseOn_    = false;
+        int   noiseType_  = 0;
+        float noiseLevel_ = 0.0f, noisePitch_ = 0.5f, noisePanL_ = 0.70710678f, noisePanR_ = 0.70710678f;
+        std::uint32_t noiseRngL_ = 0x9E3779B9u, noiseRngR_ = 0x85EBCA6Bu;
+        float pkL_[7] = { 0 }, pkR_[7] = { 0 }, brL_ = 0.0f, brR_ = 0.0f, geValL_ = 0.0f, geValR_ = 0.0f;
+    public:
+
         void setPhaseMode (int modeA, int modeB) noexcept
         {
             // Phase tile RETIRED (2026-07-09, Max's call): phase is HARDWIRED to FREE —
@@ -3205,6 +3259,14 @@ namespace tw
                 const float subBR = subMono0 * gAR + subMono1 * gBR + subMono2 * gCR + subMono3 * gDR;
                 scratchL[i] = busCo1_[0]*oAL + busCo1_[1]*oBL + busCo1_[2]*oCL + busCo1_[3]*oDL + busCo1_[4]*subBL;
                 scratchR[i] = busCo1_[0]*oAR + busCo1_[1]*oBR + busCo1_[2]*oCR + busCo1_[3]*oDR + busCo1_[4]*subBR;
+                // NOISE ENGINE → Filter 1 bus, riding the amp env + velocity like the oscs (P1: routed to F1).
+                if (noiseOn_)
+                {
+                    float _nL, _nR; noiseTick (_nL, _nR);
+                    const float _ng = noiseLevel_ * velEnv;
+                    scratchL[i] += _nL * _ng * noisePanL_;
+                    scratchR[i] += _nR * _ng * noisePanR_;
+                }
                 busB2L[i]   = busCo2_[0]*oAL + busCo2_[1]*oBL + busCo2_[2]*oCL + busCo2_[3]*oDL + busCo2_[4]*subBL;
                 busB2R[i]   = busCo2_[0]*oAR + busCo2_[1]*oBR + busCo2_[2]*oCR + busCo2_[3]*oDR + busCo2_[4]*subBR;
                 busDryL[i]  = busCoD_[0]*oAL + busCoD_[1]*oBL + busCoD_[2]*oCL + busCoD_[3]*oDL + busCoD_[4]*subBL;

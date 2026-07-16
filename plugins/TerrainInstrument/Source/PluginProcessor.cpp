@@ -2613,6 +2613,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         addSubCoarse (ParameterIDs::SYN_OSC_B_COARSE, ParameterIDs::SYN_OSC_B_SUB_RANGE, ParameterIDs::SYN_OSC_B_SUB_FORM, ParameterIDs::SYN_OSC_B_SUB_WEIGHT, ParameterIDs::SYN_OSC_B_SUB_HEAT, "B");
         addSubCoarse (ParameterIDs::SYN_OSC_C_COARSE, ParameterIDs::SYN_OSC_C_SUB_RANGE, ParameterIDs::SYN_OSC_C_SUB_FORM, ParameterIDs::SYN_OSC_C_SUB_WEIGHT, ParameterIDs::SYN_OSC_C_SUB_HEAT, "C");
         addSubCoarse (ParameterIDs::SYN_OSC_D_COARSE, ParameterIDs::SYN_OSC_D_SUB_RANGE, ParameterIDs::SYN_OSC_D_SUB_FORM, ParameterIDs::SYN_OSC_D_SUB_WEIGHT, ParameterIDs::SYN_OSC_D_SUB_HEAT, "D");
+
+        // ── NOISE ENGINE (center module — one shared source, routed through Filter 1) ──
+        layout.add (std::make_unique<juce::AudioParameterBool> (
+            juce::ParameterID { ParameterIDs::SYN_NOISE_ON, 1 }, "Noise On", false));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_NOISE_TYPE, 1 }, "Noise Type",
+            juce::StringArray { "White Noise", "Pink Noise", "Brown Noise", "Geiger",
+                                "Tape Hiss", "Tape Hum", "Tape Air", "Tape Crackle",
+                                "Clean Vinyl", "Dirty Vinyl",
+                                "Space Open", "Space Helium", "Space Wind" }, 0));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_NOISE_LEVEL, 1 }, "Noise Level",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.35f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_NOISE_PITCH, 1 }, "Noise Pitch",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_NOISE_PAN, 1 }, "Noise Pan",
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
     }
 
     // ════════ RESYNTH-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
@@ -4079,6 +4098,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float subWgtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_HEAT);
         const float subWgtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_HEAT);
         const float subWgtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_WEIGHT), subHtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_HEAT);
+        // ── NOISE ENGINE reads (Choice raw = normalised 0..1 → index; per CLAUDE.md) ──
+        const bool  noiseOn    = *rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f;
+        const int   noiseType  = (int) std::lround (*rawParam (ParameterIDs::SYN_NOISE_TYPE) * 12.0f);   // 13 choices → ×(13-1)
+        const float noiseLevel = *rawParam (ParameterIDs::SYN_NOISE_LEVEL);
+        const float noisePitch = *rawParam (ParameterIDs::SYN_NOISE_PITCH);
+        const float noisePan   = *rawParam (ParameterIDs::SYN_NOISE_PAN);
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -4141,6 +4166,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setSub (1, subRngB, subFrmB, subWgtB, subHtB);
                 sv->setSub (2, subRngC, subFrmC, subWgtC, subHtC);
                 sv->setSub (3, subRngD, subFrmD, subWgtD, subHtD);
+                sv->setNoise (noiseOn, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
                 sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setPanC (panC);                   sv->setPanD (panD);
