@@ -573,10 +573,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("scanNoiseFactory", [this](const juce::Array<juce::var>&,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // NOISE FACTORY (P5d) — scan the CC0 library folder → { Category: [files] } JSON for the menu.
+                // NOISE FACTORY (P5d) — scan the CC0 library folder → { path, exists, total, cats:{Cat:[files]} }.
+                // Returns the RESOLVED path + count so the UI can breadcrumb WHERE it looked (diagnoses sandbox paths).
                 auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                               .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Noise");
-                juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                juce::DynamicObject::Ptr cats = new juce::DynamicObject();
+                int total = 0;
                 if (root.isDirectory())
                     for (auto& sub : root.findChildFiles (juce::File::findDirectories, false))
                     {
@@ -584,8 +586,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         found.sort();
                         juce::Array<juce::var> files;
                         for (auto& f : found) files.add (f.getFileName());
-                        if (files.size() > 0) obj->setProperty (sub.getFileName(), files);
+                        if (files.size() > 0) { cats->setProperty (sub.getFileName(), files); total += files.size(); }
                     }
+                juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                obj->setProperty ("path",   root.getFullPathName());
+                obj->setProperty ("exists", root.isDirectory());
+                obj->setProperty ("total",  total);
+                obj->setProperty ("cats",   juce::var (cats.get()));
                 complete (juce::var (juce::JSON::toString (juce::var (obj.get()))));
             })
             .withNativeFunction("loadNoiseFactory", [this](const juce::Array<juce::var>& args,
@@ -615,6 +622,29 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // NOISE IMPORT (P5c) — on GUI open the UI reads this to re-load the persisted factory/user sample.
                 complete (juce::var (audioProcessor.getNoiseSampleSel()));
+            })
+            .withNativeFunction("pickNoiseFile", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE IMPORT — NATIVE file dialog (reliable in WKWebView, unlike an HTML <input type=file>) → looping noise.
+                auto chooser = std::make_shared<juce::FileChooser> (
+                    "Import a noise sample",
+                    juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+                    "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+                const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                chooser->launchAsync (flags, [safe, chooser] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    const auto f = fc.getResult();
+                    if (f.existsAsFile())
+                    {
+                        juce::MemoryBlock mb;
+                        if (f.loadFileAsData (mb) && mb.getSize() > 0)
+                            safe->loadNoiseSampleFromMemory (std::move (mb), f.getFileName());
+                    }
+                });
+                complete (juce::var ("ok"));
             })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
