@@ -662,6 +662,112 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.startWavetableAudition (oscIdx);
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("stopPreview", [this](const juce::Array<juce::var>&,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // PREVIEW STOP (fb60) — double-click / close silences the active audition immediately.
+                audioProcessor.stopPreview();
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("pickNoiseImport", [this](const juce::Array<juce::var>&,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // IMPORT (fb60) — ONE dialog, pick a FILE or a FOLDER (Max: "click a folder and press import, it's there").
+                auto chooser = std::make_shared<juce::FileChooser> (
+                    "Import noise — pick an audio file or a folder",
+                    juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+                    "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+                const auto flags = juce::FileBrowserComponent::openMode
+                                 | juce::FileBrowserComponent::canSelectFiles
+                                 | juce::FileBrowserComponent::canSelectDirectories;
+                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                chooser->launchAsync (flags, [safe, chooser] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    const auto f = fc.getResult();
+                    if (! f.exists()) return;   // cancelled
+                    safe->audioProcessor.addImportPath (false, f.getFullPathName());
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript ("if(window.onNoiseImportsChanged)window.onNoiseImportsChanged();", nullptr);
+                });
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("pickWavetableImport", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                auto chooser = std::make_shared<juce::FileChooser> (
+                    "Import wavetable — pick an audio file or a folder",
+                    juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+                    "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+                const auto flags = juce::FileBrowserComponent::openMode
+                                 | juce::FileBrowserComponent::canSelectFiles
+                                 | juce::FileBrowserComponent::canSelectDirectories;
+                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                chooser->launchAsync (flags, [safe, chooser, oscIdx] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    const auto f = fc.getResult();
+                    if (! f.exists()) return;
+                    safe->audioProcessor.addImportPath (true, f.getFullPathName());
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript (
+                            juce::String ("if(window.onWavetableImportsChanged)window.onWavetableImportsChanged('")
+                            + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "');", nullptr);
+                });
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("listNoiseImports", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getImportsJson (false)));
+            })
+            .withNativeFunction("listWtImports", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getImportsJson (true)));
+            })
+            .withNativeFunction("loadNoiseByPath", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // IMPORT (fb60) — load a referenced noise file by absolute path (in-memory, sandbox-safe).
+                if (args.size() < 1) { complete (juce::var ("bad-args")); return; }
+                juce::File f (args[0].toString());
+                if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
+                juce::MemoryBlock mb;
+                if (! f.loadFileAsData (mb) || mb.getSize() == 0) { complete (juce::var ("read-failed")); return; }
+                loadNoiseSampleFromMemory (std::move (mb), f.getFileName());
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("loadWavetableByPath", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // IMPORT (fb60) — load a referenced wavetable file by absolute path → decode → mono → build table.
+                if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                juce::File f (args[1].toString());
+                if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
+                juce::AudioFormatManager fm; fm.registerBasicFormats();
+                std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
+                if (reader == nullptr) { complete (juce::var ("unreadable")); return; }
+                const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
+                if (n <= 0) { complete (juce::var ("empty")); return; }
+                juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
+                reader->read (&buf, 0, n, 0, true, true);
+                std::vector<float> mono ((size_t) n, 0.0f);
+                const int ch = buf.getNumChannels();
+                for (int c = 0; c < ch; ++c) { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) mono[(size_t) i] += p[i]; }
+                if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) mono[(size_t) i] *= g; }
+                audioProcessor.importAudioAsWavetable (oscIdx, mono.data(), n);
+                const juce::String nm = f.getFileNameWithoutExtension();
+                if (webView != nullptr)
+                    webView->evaluateJavascript (
+                        juce::String ("if(window.onWavetableImported)window.onWavetableImported('")
+                        + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "'," + juce::JSON::toString (juce::var (nm)) + ");", nullptr);
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("pickWavetableFile", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

@@ -525,6 +525,15 @@ public:
     juce::String getNoiseSampleSel () const                { return noiseSampleSelJson_; }
     void startNoiseAudition () noexcept { noiseAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // headphone preview (browser)
     void startWavetableAudition (int osc) noexcept { wtAudReqOsc_.store (juce::jlimit (0, 3, osc), std::memory_order_relaxed); wtAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // WT headphone preview
+    void stopPreview () noexcept { previewStop_.store (true, std::memory_order_relaxed); }   // kill the active one-shot audition immediately (Max: double-click/close stops it)
+
+    // ── IMPORTS REGISTRY (fb60) — reference-in-place user imports: single FILES → an "Imports" category,
+    //    whole FOLDERS → their own named category (scanned live for count). Paths only, no audio copied.
+    //    Msg-thread only. Persisted best-effort to a small JSON in app-data (survives where writable).
+    void         addImportPath (bool wt, const juce::String& path);   // decides file-vs-folder via File::isDirectory
+    juce::String getImportsJson (bool wt);                            // {files:[{name,path}], folders:[{name,path,count,items:[…]}]}
+    void         loadImportsRegistry ();
+    void         saveImportsRegistry (bool wt);
     tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
     juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
     /** BLEND — persisted source-pair paths (which: 0 = A, 1 = B). Empty = no live blend.
@@ -1121,6 +1130,9 @@ private:
     std::atomic<int> wtAudReqOsc_ { 0 };
     int    wtAudSeen_ = 0, wtAudCtr_ = 0, wtAudTotal_ = 0, wtAudOsc_ = 0;
     double wtAudPhase_ = 0.0, wtAudInc_ = 0.0;
+    std::atomic<bool> previewStop_ { false };                       // set by msg thread → audio thread kills the one-shot
+    // IMPORTS REGISTRY (fb60) — msg-thread-only path lists (reference-in-place); [0]=noise, [1]=wavetable
+    juce::StringArray importFiles_[2], importFolders_[2];
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
     std::array<juce::String, 4>               oscSourcePaths_;

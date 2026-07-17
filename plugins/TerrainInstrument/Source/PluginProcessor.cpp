@@ -70,6 +70,8 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // far too heavy for the audio thread). 60Hz polling keeps the morph knob
     // responsive while never touching a buffer the audio thread is reading.
     startTimerHz (60);
+
+    loadImportsRegistry();   // IMPORTS (fb60) — restore referenced files/folders from the app-data JSON
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
@@ -217,6 +219,99 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     }
     out << "]}";
     return out.toString();
+}
+
+//==============================================================================
+// IMPORTS REGISTRY (fb60) — reference-in-place user imports (paths only, no audio copied).
+namespace {
+    juce::File importsRegPath (bool wt)
+    {
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                 .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument")
+                 .getChildFile (wt ? "imports-wavetable.json" : "imports-noise.json");
+    }
+    const char* const kImportWild = "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3";
+}
+
+void TerrainInstrumentAudioProcessor::addImportPath (bool wt, const juce::String& path)
+{
+    const int i = wt ? 1 : 0;
+    juce::File f (path);
+    if (! f.exists()) return;
+    if (f.isDirectory()) { if (! importFolders_[i].contains (path)) importFolders_[i].add (path); }
+    else                 { if (! importFiles_[i].contains (path))   importFiles_[i].add (path); }
+    saveImportsRegistry (wt);
+}
+
+juce::String TerrainInstrumentAudioProcessor::getImportsJson (bool wt)
+{
+    const int idx = wt ? 1 : 0;
+    juce::Array<juce::var> files;
+    for (auto& p : importFiles_[idx])
+    {
+        juce::File f (p);
+        if (! f.existsAsFile()) continue;
+        juce::DynamicObject::Ptr o = new juce::DynamicObject();
+        o->setProperty ("name", f.getFileNameWithoutExtension());
+        o->setProperty ("path", f.getFullPathName());
+        files.add (juce::var (o.get()));
+    }
+    juce::Array<juce::var> folders;
+    for (auto& p : importFolders_[idx])
+    {
+        juce::File d (p);
+        if (! d.isDirectory()) continue;
+        auto found = d.findChildFiles (juce::File::findFiles, false, kImportWild);
+        found.sort();
+        juce::Array<juce::var> items;
+        for (auto& cf : found)
+        {
+            juce::DynamicObject::Ptr io = new juce::DynamicObject();
+            io->setProperty ("name", cf.getFileNameWithoutExtension());
+            io->setProperty ("path", cf.getFullPathName());
+            items.add (juce::var (io.get()));
+        }
+        juce::DynamicObject::Ptr o = new juce::DynamicObject();
+        o->setProperty ("name",  d.getFileName());
+        o->setProperty ("path",  d.getFullPathName());
+        o->setProperty ("count", items.size());
+        o->setProperty ("items", items);
+        folders.add (juce::var (o.get()));
+    }
+    juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty ("files",   files);
+    root->setProperty ("folders", folders);
+    return juce::JSON::toString (juce::var (root.get()));
+}
+
+void TerrainInstrumentAudioProcessor::saveImportsRegistry (bool wt)
+{
+    const int idx = wt ? 1 : 0;
+    juce::Array<juce::var> f, d;
+    for (auto& p : importFiles_[idx])   f.add (p);
+    for (auto& p : importFolders_[idx]) d.add (p);
+    juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty ("files", f);
+    root->setProperty ("folders", d);
+    auto file = importsRegPath (wt);
+    file.getParentDirectory().createDirectory();                        // best-effort (may fail in a sandbox)
+    file.replaceWithText (juce::JSON::toString (juce::var (root.get())));// best-effort — in-memory registry still works this session
+}
+
+void TerrainInstrumentAudioProcessor::loadImportsRegistry ()
+{
+    for (int wt = 0; wt < 2; ++wt)
+    {
+        auto file = importsRegPath (wt == 1);
+        if (! file.existsAsFile()) continue;
+        auto v = juce::JSON::parse (file.loadFileAsString());
+        if (auto* o = v.getDynamicObject())
+        {
+            importFiles_[wt].clear(); importFolders_[wt].clear();
+            if (auto* fa = o->getProperty ("files").getArray())   for (auto& e : *fa) importFiles_[wt].add (e.toString());
+            if (auto* da = o->getProperty ("folders").getArray()) for (auto& e : *da) importFolders_[wt].add (e.toString());
+        }
+    }
 }
 
 void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot,
@@ -5329,6 +5424,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                        flowPpq, flowBpm, getSampleRate(), lanes, numSamples, flowPlaying);
         for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = lanes[i];
     }
+
+    // PREVIEW STOP (Max: double-click to select / closing the browser must SILENCE the audition immediately —
+    // otherwise a sample's ~3.5s tail "keeps fucking playing"). Kills both one-shots this block.
+    if (previewStop_.exchange (false, std::memory_order_relaxed)) { noiseAudCtr_ = 0; wtAudCtr_ = 0; }
 
     // ── NOISE AUDITION (browser headphone preview) — ONE-SHOT, re-triggerable (Max: "play once, re-trigger,
     //    don't loop"). On each trigger: if a sample is loaded → play it once start-to-end (cap 3.5 s); else →
