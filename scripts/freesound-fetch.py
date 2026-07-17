@@ -58,8 +58,12 @@ SEARCH_URL = BASE + "/search/text/"          # canonical text-search endpoint
 OAUTH_AUTHORIZE = BASE + "/oauth2/authorize/"
 OAUTH_TOKEN = BASE + "/oauth2/access_token/"
 
-# The ONE license string we accept. Must match verbatim.
-CC0_LICENSE = "Creative Commons 0"
+# CC0 has TWO representations. The API search FILTER wants the human NAME
+# ("Creative Commons 0"), but each result's returned "license" field is a URL.
+# Use the name for the filter; match the URL(s) for the verbatim re-check.
+CC0_LICENSE  = "Creative Commons 0"                                   # for the search FILTER
+CC0_RETURNED = ("http://creativecommons.org/publicdomain/zero/1.0/",  # what the API RETURNS
+                "https://creativecommons.org/publicdomain/zero/1.0/")
 
 # Duration window (seconds). Loop-friendly texture beds; skip one-shots/epics.
 DURATION_MIN = 1.0
@@ -96,6 +100,7 @@ CATEGORY_PLAN = {
     "Electrical":  {"target": 12, "queries": ["electrical hum", "electric buzz", "fluorescent hum", "transformer hum"]},
     "Metal":       {"target": 10, "queries": ["metal scrape", "metal rattle", "metal texture", "metal resonance"]},
     "RoomTone":    {"target": 14, "queries": ["room tone", "crowd murmur", "cafe ambience", "office ambience"]},
+    "Voices":      {"target": 18, "queries": ["crowd laughing", "people talking crowd", "group laughter", "crowd cheer", "chatter murmur", "audience crowd"]},
     "Appliances":  {"target": 12, "queries": ["refrigerator hum", "washing machine", "fan hum", "air conditioner"]},
     "Transit":     {"target": 12, "queries": ["train interior", "car interior", "traffic", "subway"]},
 }
@@ -190,7 +195,8 @@ def search_category(token, category, queries, target, seen_ids):
             for r in data.get("results", []):
                 sid = r.get("id")
                 # ---- defence in depth: verify CC0 verbatim, never trust filter ----
-                if r.get("license") != CC0_LICENSE:
+                # (the API RETURNS license as a URL, not the filter's "Creative Commons 0" name)
+                if r.get("license") not in CC0_RETURNED:
                     continue
                 if sid in seen_ids:
                     continue
