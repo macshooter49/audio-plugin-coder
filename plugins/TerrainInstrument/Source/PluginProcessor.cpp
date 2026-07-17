@@ -5777,6 +5777,8 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         if (synModJson.isNotEmpty())
             state.setProperty("synModJson", synModJson, nullptr);
     }
+    if (noiseSampleSelJson_.isNotEmpty())
+        state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
 
     // ── V2 format marker ─────────────────────────────────────────────────────
     // Task 12: introduce version=2 and editingLayer so Task 13 (setStateInformation)
@@ -5977,6 +5979,10 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             tapeLinkEnabled.store(static_cast<float>(newState.getProperty("tapeLinkEnabled", 0.f)));
             chorusEnabled.store(static_cast<float>(newState.getProperty("chorusEnabled", 1.f)));
             delayEnabled.store(static_cast<float>(newState.getProperty("delayEnabled", 1.f)));
+
+            // NOISE IMPORT (P5c) — restore the noise-sample selection (factory path or embedded user audio).
+            // The editor re-loads the buffer on GUI open via getNoiseSampleSel. Empty = algorithmic type.
+            noiseSampleSelJson_ = newState.getProperty ("noiseSampleSel", juce::String()).toString();
 
             // Wavetable EXTENDER — restore embedded imports (or clear the osc if none was saved).
             for (int o = 0; o < 4; ++o)

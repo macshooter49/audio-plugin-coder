@@ -570,6 +570,52 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     webView->evaluateJavascript ("if (window.onNoiseSampleCleared) window.onNoiseSampleCleared();", nullptr);
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("scanNoiseFactory", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE FACTORY (P5d) — scan the CC0 library folder → { Category: [files] } JSON for the menu.
+                auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                              .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Noise");
+                juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+                if (root.isDirectory())
+                    for (auto& sub : root.findChildFiles (juce::File::findDirectories, false))
+                    {
+                        auto found = sub.findChildFiles (juce::File::findFiles, false, "*.ogg;*.wav;*.aif;*.aiff;*.flac");
+                        found.sort();
+                        juce::Array<juce::var> files;
+                        for (auto& f : found) files.add (f.getFileName());
+                        if (files.size() > 0) obj->setProperty (sub.getFileName(), files);
+                    }
+                complete (juce::var (juce::JSON::toString (juce::var (obj.get()))));
+            })
+            .withNativeFunction("loadNoiseFactory", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE FACTORY (P5d) — load a factory sound from the folder → looping noise (in-memory read).
+                if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
+                auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                              .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Noise");
+                auto f = root.getChildFile (args[0].toString()).getChildFile (args[1].toString());
+                if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
+                juce::MemoryBlock mb;
+                if (! f.loadFileAsData (mb) || mb.getSize() == 0) { complete (juce::var ("read-failed")); return; }
+                loadNoiseSampleFromMemory (std::move (mb), f.getFileName());
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("setNoiseSampleSel", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE IMPORT (P5c) — UI reports the current noise-sample selection descriptor (JSON) so it
+                // persists in the preset. Empty string = none (algorithmic type).
+                audioProcessor.setNoiseSampleSel (args.size() > 0 ? args[0].toString() : juce::String());
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("getNoiseSampleSel", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE IMPORT (P5c) — on GUI open the UI reads this to re-load the persisted factory/user sample.
+                complete (juce::var (audioProcessor.getNoiseSampleSel()));
+            })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -11130,6 +11176,13 @@ void TerrainInstrumentAudioProcessorEditor::loadNoiseSampleFromMemory (juce::Mem
     double rate = 0.0;
     auto raw = readAudioFromMemory (data.getData(), data.getSize(), rate);
     if (raw == nullptr || raw->getNumSamples() < 64 || rate <= 0.0) return;
+    const int cap = (int) (rate * 30.0);   // cap noise textures at 30 s (bounded memory / preset size)
+    if (cap > 0 && raw->getNumSamples() > cap)
+    {
+        auto trimmed = std::make_shared<juce::AudioBuffer<float>> (raw->getNumChannels(), cap);
+        for (int c = 0; c < raw->getNumChannels(); ++c) trimmed->copyFrom (c, 0, *raw, c, 0, cap);
+        raw = trimmed;
+    }
     auto looped = bakeSeamlessNoiseLoop (raw);
     auto& target = audioProcessor.getNoiseSampleBuffer();
     target.setSampleRate (rate);
