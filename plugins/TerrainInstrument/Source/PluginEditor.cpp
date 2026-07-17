@@ -653,6 +653,44 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.startNoiseAudition();
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("pickWavetableFile", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // WAVETABLE IMPORT — NATIVE file dialog (mirrors pickNoiseFile) → decode → mono → build wavetable.
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                auto chooser = std::make_shared<juce::FileChooser> (
+                    "Import a wavetable",
+                    juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+                    "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+                const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                chooser->launchAsync (flags, [safe, chooser, oscIdx] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    const auto f = fc.getResult();
+                    if (! f.existsAsFile()) return;
+                    juce::AudioFormatManager fm; fm.registerBasicFormats();
+                    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
+                    if (reader == nullptr) return;
+                    const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
+                    if (n <= 0) return;
+                    juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
+                    reader->read (&buf, 0, n, 0, true, true);
+                    std::vector<float> mono ((size_t) n, 0.0f);
+                    const int ch = buf.getNumChannels();
+                    for (int c = 0; c < ch; ++c) { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) mono[(size_t) i] += p[i]; }
+                    if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) mono[(size_t) i] *= g; }
+                    safe->audioProcessor.importAudioAsWavetable (oscIdx, mono.data(), n);
+                    const juce::String nm = f.getFileNameWithoutExtension();
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript (
+                            juce::String ("if(window.onWavetableImported)window.onWavetableImported('")
+                            + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "'," + juce::JSON::toString (juce::var (nm)) + ");",
+                            nullptr);
+                });
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
