@@ -2436,23 +2436,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (! juce::Base64::convertFromBase64 (decodedStream, args[2].toString()))
                 { complete (juce::var ("decode-failed")); return; }
 
-                // ⚠️ SANDBOX GOTCHA (see MEMORY): this still writes a TEMP FILE, and the blend BAKER also writes
-                //    srcA/srcB/out WAVs to blendCacheDir (App Support) — both fail if the host blocks disk writes.
-                //    Plain load + Replace are already memory-safe; Blend needs a full in-memory baker pass (TODO).
-                auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                  .getChildFile ("Terrain-Instrument-Drops");
-                tempDir.createDirectory();
-                auto safeName = juce::File::createLegalFileName (filename);
-                if (safeName.isEmpty()) safeName = "blend-src.wav";
-                auto tempFile = tempDir.getNonexistentChildFile (
-                                   safeName.upToLastOccurrenceOf (".", false, false),
-                                   safeName.fromLastOccurrenceOf (".", true, false),
-                                   true);
-                tempFile.replaceWithData (decodedStream.getData(), decodedStream.getDataSize());
-                if (! tempFile.existsAsFile()) { complete (juce::var ("temp-write-failed")); return; }
-
-                startBlend (oscIdx, tempFile);
-                complete (juce::var ("ok"));
+                // MEMORY — decode → AudioBuffer in memory, NO temp file (sandbox-safe). The bake + undo are
+                // fully in-memory too (publishBlendBuffer WAV-encodes in memory; blendHistory_ holds buffers).
+                double rateB = 0.0;
+                auto bufB = readAudioFromMemory (decodedStream.getData(), decodedStream.getDataSize(), rateB);
+                if (bufB == nullptr || bufB->getNumSamples() < 64) { complete (juce::var ("unreadable")); return; }
+                startBlend (oscIdx, bufB, rateB, filename);
+                complete (juce::var ("ok (memory)"));
             })
             .withNativeFunction("clearOscSample", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -2497,10 +2487,10 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
                 auto& hist = blendHistory_[(size_t) oscIdx];
                 if (hist.empty()) { complete (juce::var ("none")); return; }
-                const juce::File f = hist.back();
+                auto entry = hist.back();   // { pre-blend buffer, rate } — the one-shot snapshot (memory, no disk)
                 hist.pop_back();
                 resetBlend (oscIdx, true);
-                if (f.existsAsFile()) loadOscSampleAsync (oscIdx, f);
+                if (entry.first != nullptr) publishBlendBuffer (oscIdx, entry.first, entry.second);   // restore as a plain sample
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("exportBlendedSample", [this](const juce::Array<juce::var>& args,
@@ -2510,13 +2500,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // in the blend cache and reveal it in Finder: one drag away from the DAW.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
-                const juce::File src (audioProcessor.oscSourcePath (oscIdx));
-                if (! src.existsAsFile()) { complete (juce::var ("none")); return; }
-                auto dir = blendCacheDir().getChildFile ("Exports");
-                dir.createDirectory();
-                auto dst = dir.getNonexistentChildFile ("Terrain-" + src.getFileNameWithoutExtension(), ".wav", true);
-                if (src.copyFileTo (dst)) { dst.revealToUser(); complete (juce::var ("ok")); }
-                else complete (juce::var ("copy-failed"));
+                auto buf = audioProcessor.getOscSampleBuffer (oscIdx).load();
+                if (buf == nullptr || buf->getNumSamples() < 1) { complete (juce::var ("none")); return; }
+                const double rate = audioProcessor.getOscSampleBuffer (oscIdx).getSampleRate();
+                // A user-chosen save location grants write permission even in a sandbox (App Support is blocked).
+                auto chooser = std::make_shared<juce::FileChooser> (
+                    "Export sample",
+                    juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Terrain-export.wav"),
+                    "*.wav");
+                const auto flags = juce::FileBrowserComponent::saveMode
+                                 | juce::FileBrowserComponent::canSelectFiles
+                                 | juce::FileBrowserComponent::warnAboutOverwriting;
+                chooser->launchAsync (flags, [buf, rate, chooser] (const juce::FileChooser& fc)
+                {
+                    const auto f = fc.getResult();
+                    if (f != juce::File()) TerrainInstrumentAudioProcessorEditor::writeWav24 (f, *buf, rate);
+                });
+                complete (juce::var ("ok"));
             })
             .withNativeFunction("loadSampleFromBase64", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -11099,6 +11099,40 @@ std::shared_ptr<juce::AudioBuffer<float>> TerrainInstrumentAudioProcessorEditor:
     return buf;
 }
 
+std::shared_ptr<juce::AudioBuffer<float>> TerrainInstrumentAudioProcessorEditor::readAudioFromMemory (const void* data, size_t size, double& rateOut)
+{
+    rateOut = 0.0;
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (
+        fm.createReaderFor (std::make_unique<juce::MemoryInputStream> (data, size, false)));
+    if (reader == nullptr || reader->lengthInSamples <= 0) return nullptr;
+    const int n  = (int) std::min<juce::int64> (reader->lengthInSamples, (juce::int64) (reader->sampleRate * 600.0));
+    const int ch = (int) std::min (2u, reader->numChannels);
+    auto buf = std::make_shared<juce::AudioBuffer<float>> (ch, n);
+    reader->read (buf.get(), 0, n, 0, true, ch > 1);
+    rateOut = reader->sampleRate;
+    return buf;
+}
+
+// Publish a baked / undo AudioBuffer to the osc — WAV-encode it IN MEMORY (no disk) and route through
+// loadOscSampleFromMemory so it reuses the peaks + waveform push. Sandbox-safe (onBlendState pushed by caller).
+void TerrainInstrumentAudioProcessorEditor::publishBlendBuffer (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> buf, double rate)
+{
+    if (oscIdx < 0 || oscIdx > 3 || buf == nullptr || buf->getNumSamples() < 1) return;
+    juce::MemoryBlock mb;
+    {
+        auto mos = std::make_unique<juce::MemoryOutputStream> (mb, false);
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::AudioFormatWriter> w (
+            wav.createWriterFor (mos.get(), rate > 0.0 ? rate : 48000.0,
+                                 (unsigned int) buf->getNumChannels(), 24, {}, 0));
+        if (w != nullptr) { mos.release(); w->writeFromAudioSampleBuffer (*buf, 0, buf->getNumSamples()); w->flush(); }
+    }
+    if (mb.getSize() == 0) return;
+    loadOscSampleFromMemory (oscIdx, std::move (mb), "(blend)");
+}
+
 bool TerrainInstrumentAudioProcessorEditor::writeWav24 (const juce::File& f, const juce::AudioBuffer<float>& b, double rate)
 {
     f.deleteFile();
@@ -11146,40 +11180,29 @@ void TerrainInstrumentAudioProcessorEditor::resetBlend (int oscIdx, bool pushUi)
             + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "',false);", nullptr);
 }
 
-void TerrainInstrumentAudioProcessorEditor::startBlend (int oscIdx, const juce::File& srcBFile)
+void TerrainInstrumentAudioProcessorEditor::startBlend (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> srcB, double rateB, const juce::String& name)
 {
+    juce::ignoreUnused (name);
     if (oscIdx < 0 || oscIdx > 3) return;
     auto cur = audioProcessor.getOscSampleBuffer (oscIdx).load();
-    if (cur == nullptr || cur->getNumSamples() < 256) { loadOscSampleAsync (oscIdx, srcBFile); return; }   // nothing to blend with — plain load
-    double rateB = 0.0;
-    auto bufB = readAudioFile (srcBFile, rateB);
-    if (bufB == nullptr || bufB->getNumSamples() < 256) return;
+    if (cur == nullptr || cur->getNumSamples() < 256)   // nothing to blend with — just publish the drop
+    { publishBlendBuffer (oscIdx, srcB, rateB); return; }
+    if (srcB == nullptr || srcB->getNumSamples() < 256) return;
 
     const double curRate = audioProcessor.getOscSampleBuffer (oscIdx).getSampleRate();
 
-    // UNDO — snapshot the CURRENT one-shot before this blend layer goes on top. Each layer
-    // gets its own history WAV (bake slot files get overwritten, so a copy is mandatory);
+    // UNDO — snapshot the CURRENT one-shot IN MEMORY (no disk) before this blend layer goes on top;
     // undoBlend pops one layer at a time all the way back to the very first one-shot.
     {
-        auto hDir = blendCacheDir().getChildFile ("History");
-        hDir.createDirectory();
-        auto hFile = hDir.getNonexistentChildFile (
-            "Undo-" + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)), ".wav", true);
-        const juce::File curFile (audioProcessor.oscSourcePath (oscIdx));
-        bool snapped = curFile.existsAsFile() && curFile.copyFileTo (hFile);
-        if (! snapped) snapped = writeWav24 (hFile, *cur, curRate > 0.0 ? curRate : 48000.0);
-        if (snapped)
-        {
-            auto& hist = blendHistory_[(size_t) oscIdx];
-            hist.push_back (hFile);
-            if (hist.size() > 100) { hist.front().deleteFile(); hist.erase (hist.begin()); }
-        }
+        auto& hist = blendHistory_[(size_t) oscIdx];
+        hist.push_back ({ cur, curRate > 0.0 ? curRate : 48000.0 });
+        if (hist.size() > 100) hist.erase (hist.begin());
     }
 
     auto& bl  = oscBlends_[oscIdx];
     bl.srcA   = cur;   // the CURRENT sound — a previous bake when stacking
     bl.rateA  = curRate > 0.0 ? curRate : 48000.0;
-    bl.srcB   = bufB;
+    bl.srcB   = srcB;
     bl.rateB  = rateB > 0.0 ? rateB : bl.rateA;
     bl.engine = std::make_shared<tw::BlendEngine>();   // fresh pair → analyze on first bake
     bl.live   = true;
@@ -11217,12 +11240,8 @@ void TerrainInstrumentAudioProcessorEditor::queueBlendBake (int oscIdx)
     auto engine = bl.engine;   // shared_ptrs ride into the job — safe against re-drops mid-bake
     auto srcA = bl.srcA; auto srcB = bl.srcB;
     const double rateA = bl.rateA, rateB = bl.rateB;
-    const juce::String letter = juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx));
-    const juce::File outFile = blendCacheDir().getChildFile ("Blend-" + letter + "-out" + juce::String (bl.outSlot) + ".wav");
-    bl.outSlot ^= 1;   // alternate slots so the loader never reads a file mid-overwrite
-
     juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
-    blendPool_.addJob ([safe, oscIdx, params, engine, srcA, srcB, rateA, rateB, outFile]
+    blendPool_.addJob ([safe, oscIdx, params, engine, srcA, srcB, rateA, rateB]
     {
         if (! engine->isAnalyzed())
             engine->analyze (srcA->getReadPointer (0),
@@ -11233,33 +11252,32 @@ void TerrainInstrumentAudioProcessorEditor::queueBlendBake (int oscIdx)
                              srcB->getNumSamples(), rateB);
         std::vector<float> oL, oR;
         engine->render (params, oL, oR);
-        bool ok = oL.size() >= 64;
+        const bool ok = oL.size() >= 64;
+        const double rate = engine->outRate();
+        std::shared_ptr<juce::AudioBuffer<float>> outBuf;
         if (ok)
         {
-            juce::AudioBuffer<float> buf (2, (int) oL.size());
-            buf.copyFrom (0, 0, oL.data(), (int) oL.size());
-            buf.copyFrom (1, 0, oR.data(), (int) oR.size());
-            ok = writeWav24 (outFile, buf, engine->outRate());
+            outBuf = std::make_shared<juce::AudioBuffer<float>> (2, (int) oL.size());
+            outBuf->copyFrom (0, 0, oL.data(), (int) oL.size());
+            outBuf->copyFrom (1, 0, oR.data(), (int) oR.size());
         }
-        juce::MessageManager::callAsync ([safe, oscIdx, outFile, ok]
+        juce::MessageManager::callAsync ([safe, oscIdx, outBuf, rate, ok]
         {
             if (safe == nullptr) return;
             safe->oscBlends_[oscIdx].baking = false;
             // live check: a Delete-sample while this bake was in flight must NOT resurrect it
-            if (ok && safe->oscBlends_[oscIdx].live) safe->publishBlend (oscIdx, outFile);
+            if (ok && outBuf != nullptr && safe->oscBlends_[oscIdx].live)
+            {
+                safe->publishBlendBuffer (oscIdx, outBuf, rate);   // WAV-encode in memory → publish (no disk)
+                if (safe->webView != nullptr)
+                    safe->webView->evaluateJavascript (
+                        juce::String ("if(window.onBlendState)window.onBlendState('")
+                        + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "',true);", nullptr);
+            }
             if (safe->oscBlends_[oscIdx].dirty.exchange (false))
                 safe->queueBlendBake (oscIdx);   // params moved while baking → go again
         });
     });
-}
-
-void TerrainInstrumentAudioProcessorEditor::publishBlend (int oscIdx, const juce::File& baked)
-{
-    loadOscSampleAsync (oscIdx, baked);   // decode → buffer swap → peaks push (waveform morphs)
-    if (webView != nullptr)
-        webView->evaluateJavascript (
-            juce::String ("if(window.onBlendState)window.onBlendState('")
-            + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "',true);", nullptr);
 }
 
 void TerrainInstrumentAudioProcessorEditor::pollBlendKnobs()

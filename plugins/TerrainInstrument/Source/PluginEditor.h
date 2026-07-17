@@ -1447,16 +1447,17 @@ private:
     };
     OscBlend oscBlends_[4];
     bool blendRestoreTried_ = false;           // lazy one-shot state-restore (first timer tick)
-    void startBlend (int oscIdx, const juce::File& srcBFile);   // drop → "Blend" clicked
+    void startBlend (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> srcB, double rateB, const juce::String& name);   // drop → "Blend" (memory)
     void queueBlendBake (int oscIdx);                           // analyze-if-needed + render on the pool
-    void publishBlend (int oscIdx, const juce::File& baked);    // message thread: load + UI push
+    void publishBlendBuffer (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> buf, double rate);   // publish a baked buffer (memory, NO disk) + UI push
     void pollBlendKnobs();                                      // timerCallback: debounce re-bakes
     void restoreBlendsFromState();                              // reload persisted source pairs
     void resetBlend (int oscIdx, bool pushUi);                  // end a live blend (Replace / undo / delete)
-    std::array<std::vector<juce::File>, 4> blendHistory_;       // UNDO — pre-blend snapshots, ≤100 deep
+    std::array<std::vector<std::pair<std::shared_ptr<juce::AudioBuffer<float>>, double>>, 4> blendHistory_;   // UNDO — pre-blend buffer snapshots (memory), ≤100 deep
     tw::BlendParams currentBlendParams (int oscIdx) const;
     juce::File blendCacheDir() const;
     static std::shared_ptr<juce::AudioBuffer<float>> readAudioFile (const juce::File& f, double& rateOut);
+    static std::shared_ptr<juce::AudioBuffer<float>> readAudioFromMemory (const void* data, size_t size, double& rateOut);   // sandbox-safe (no File)
     static bool writeWav24 (const juce::File& f, const juce::AudioBuffer<float>& b, double rate);
     // Declared LAST → destroyed FIRST: the pool must drain its jobs (which touch members
     // above) before anything else in this editor dies.
