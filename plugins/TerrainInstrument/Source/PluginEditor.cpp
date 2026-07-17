@@ -649,8 +649,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("auditionNoise", [this](const juce::Array<juce::var>&,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // NOISE AUDITION — headphone preview: play the currently-loaded noise sample once through the output.
+                // NOISE AUDITION — headphone preview (one-shot): sample if loaded, else generate the current type.
                 audioProcessor.startNoiseAudition();
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("auditionWavetable", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // WAVETABLE AUDITION — headphone preview (one-shot): pluck the osc's current table at a fixed pitch.
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                audioProcessor.startWavetableAudition (oscIdx);
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("pickWavetableFile", [this](const juce::Array<juce::var>& args,

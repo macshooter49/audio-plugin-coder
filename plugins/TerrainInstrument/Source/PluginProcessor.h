@@ -321,6 +321,153 @@ private:
 };
 
 //==============================================================================
+// NOISE PREVIEW GENERATOR — a stand-alone, self-contained copy of SynthVoice::noiseTick's
+// 13-type DSP (White/Pink/Brown/Geiger/Tape×4/Vinyl×2/Space×3), used ONLY by the browser
+// headphone preview so the audition sounds BIT-IDENTICAL to the engine (Max's fb50 lesson:
+// the 13 types must be genuinely distinct). Verbatim math — do not "improve" it here or it
+// drifts from the voice. Keyless, per-block-cheap, its own L/R RNG + filter state.
+struct NoisePreviewGen
+{
+    void setSR (float sr) noexcept { noiseSR_ = sr > 0.0f ? sr : 48000.0f; }
+    void setType (int t)  noexcept { noiseType_ = t; }
+    void reset () noexcept
+    {
+        for (int i = 0; i < 7; ++i) { pkL_[i] = 0.0f; pkR_[i] = 0.0f; }
+        brL_ = brR_ = geValL_ = geValR_ = 0.0f;
+        tpL_ = tpR_ = tpL2_ = tpR2_ = 0.0f;
+        spL_ = spL2_ = spR_ = spR2_ = 0.0f;
+        humPh_ = windPh_ = windPh2_ = gustL_ = 0.0f;
+        rumbL_[0] = rumbL_[1] = rumbR_[0] = rumbR_[1] = 0.0f;
+        noiseRngL_ = 0x9E3779B9u; noiseRngR_ = 0x85EBCA6Bu;
+    }
+    static inline float noiseWhite (std::uint32_t& s) noexcept
+    {
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+        return (float) ((std::int32_t) s) * (1.0f / 2147483648.0f);
+    }
+    static inline float noiseSine (float ph) noexcept
+    {
+        const float x = 2.0f * ph - 1.0f;
+        const float q = 4.0f * x * (1.0f - std::fabs (x));
+        return q * (0.775f + 0.225f * std::fabs (q));
+    }
+    inline void tick (float& oL, float& oR) noexcept
+    {
+        const float wl = noiseWhite (noiseRngL_), wr = noiseWhite (noiseRngR_);
+        switch (noiseType_)
+        {
+            case 1: {   // Pink — Paul Kellet economy filter
+                auto pk = [] (float w, float* b) noexcept {
+                    b[0] = 0.99886f*b[0] + w*0.0555179f; b[1] = 0.99332f*b[1] + w*0.0750759f;
+                    b[2] = 0.96900f*b[2] + w*0.1538520f; b[3] = 0.86650f*b[3] + w*0.3104856f;
+                    b[4] = 0.55000f*b[4] + w*0.5329522f; b[5] = -0.7616f*b[5] - w*0.0168980f;
+                    const float o = b[0]+b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+w*0.5362f;
+                    b[6] = w*0.115926f; return o * 0.11f;
+                };
+                oL = pk (wl, pkL_); oR = pk (wr, pkR_); break;
+            }
+            case 2:     // Brown — leaky integrator
+                brL_ = (brL_ + 0.02f*wl) * 0.996f; brR_ = (brR_ + 0.02f*wr) * 0.996f;
+                oL = brL_ * 3.5f; oR = brR_ * 3.5f; break;
+            case 3: {   // Geiger — dry Poisson clicks
+                auto click = [] (float w, float w2, float& env) noexcept {
+                    if (w > 0.9993f || w < -0.9993f)
+                        env = (0.6f + 0.4f*std::fabs (w2)) * (w > 0.0f ? 1.0f : -1.0f);
+                    const float o = env; env *= 0.80f; return o;
+                };
+                oL = click (wl, wr, geValL_); oR = click (wr, wl, geValR_); break;
+            }
+            case 4: {   // Tape Hiss
+                tpL_  += 0.21f*(wl - tpL_);   tpR_  += 0.21f*(wr - tpR_);
+                const float hpL = wl - tpL_,  hpR = wr - tpR_;
+                tpL2_ += 0.55f*(hpL - tpL2_); tpR2_ += 0.55f*(hpR - tpR2_);
+                oL = tpL2_ * 2.0f; oR = tpR2_ * 2.0f; break;
+            }
+            case 5: {   // Tape Hum
+                humPh_ += 60.0f / noiseSR_; if (humPh_ >= 1.0f) humPh_ -= 1.0f;
+                float h2 = humPh_*2.0f; if (h2 >= 1.0f) h2 -= 1.0f;
+                float h3 = humPh_*3.0f; while (h3 >= 1.0f) h3 -= 1.0f;
+                const float hum = noiseSine (humPh_)*0.70f + noiseSine (h2)*0.22f + noiseSine (h3)*0.10f;
+                tpL_ += 0.25f*(wl - tpL_); tpR_ += 0.25f*(wr - tpR_);
+                oL = hum*0.82f + (wl - tpL_)*0.12f;
+                oR = hum*0.82f + (wr - tpR_)*0.12f; break;
+            }
+            case 6: {   // Tape Air
+                tpL_ += 0.38f*(wl - tpL_); tpR_ += 0.38f*(wr - tpR_);
+                const float airL = wl - tpL_, airR = wr - tpR_;
+                windPh_ += 0.25f / noiseSR_; if (windPh_ >= 1.0f) windPh_ -= 1.0f;
+                const float breath = 0.72f + 0.28f * noiseSine (windPh_);
+                oL = airL * 1.3f * breath; oR = airR * 1.3f * breath; break;
+            }
+            case 7: {   // Tape Crackle
+                tpL_ += 0.22f*(wl - tpL_); tpR_ += 0.22f*(wr - tpR_);
+                const float hissL = wl - tpL_, hissR = wr - tpR_;
+                auto pop = [] (float w, float w2, float& env) noexcept {
+                    if      (w >  0.9995f)  env =  (0.7f + 0.3f*std::fabs (w2));
+                    else if (w < -0.99985f) env = -(0.5f + 0.3f*std::fabs (w2));
+                    const float o = env; env *= 0.86f; return o;
+                };
+                oL = pop (wl, wr, geValL_) + hissL*0.28f;
+                oR = pop (wr, wl, geValR_) + hissR*0.28f; break;
+            }
+            case 8: case 9: {   // Vinyl
+                const bool dirty = (noiseType_ == 9);
+                rumbL_[0] += 0.006f*(wl - rumbL_[0]); rumbL_[1] += 0.006f*(rumbL_[0] - rumbL_[1]);
+                rumbR_[0] += 0.006f*(wr - rumbR_[0]); rumbR_[1] += 0.006f*(rumbR_[0] - rumbR_[1]);
+                const float rmb = dirty ? 24.0f : 18.0f;
+                auto pk = [] (float w, float* b) noexcept {
+                    b[0]=0.99886f*b[0]+w*0.0555179f; b[1]=0.99332f*b[1]+w*0.0750759f;
+                    b[2]=0.96900f*b[2]+w*0.1538520f; b[3]=0.86650f*b[3]+w*0.3104856f;
+                    b[4]=0.55000f*b[4]+w*0.5329522f; b[5]=-0.7616f*b[5]-w*0.0168980f;
+                    const float o=b[0]+b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+w*0.5362f; b[6]=w*0.115926f; return o*0.11f;
+                };
+                const float surfL = pk (wl, pkL_) * (dirty ? 0.50f : 0.22f);
+                const float surfR = pk (wr, pkR_) * (dirty ? 0.50f : 0.22f);
+                const float thr = dirty ? 0.9975f : 0.9993f;
+                auto crk = [thr] (float w, float w2, float& env) noexcept {
+                    if (w > thr || w < -thr) env = (0.55f + 0.45f*std::fabs (w2)) * (w > 0.0f ? 1.0f : -1.0f);
+                    const float o = env; env *= 0.845f; return o;
+                };
+                const float ckL = crk (wl, wr, geValL_) * (dirty ? 0.9f : 0.7f);
+                const float ckR = crk (wr, wl, geValR_) * (dirty ? 0.9f : 0.7f);
+                oL = rumbL_[1]*rmb + surfL + ckL;
+                oR = rumbR_[1]*rmb + surfR + ckR; break;
+            }
+            case 10: case 11: case 12: {   // Space — Chamberlin SVF resonant band-pass
+                const float w0 = 6.2831853f / noiseSR_;
+                float fc, qd, amp;
+                if (noiseType_ == 10) {
+                    windPh2_ += 0.07f / noiseSR_; if (windPh2_ >= 1.0f) windPh2_ -= 1.0f;
+                    fc = 1100.0f + 500.0f * noiseSine (windPh2_); qd = 0.90f; amp = 2.6f;
+                } else if (noiseType_ == 11) {
+                    windPh2_ += 0.05f / noiseSR_; if (windPh2_ >= 1.0f) windPh2_ -= 1.0f;
+                    fc = 3200.0f + 400.0f * noiseSine (windPh2_); qd = 0.28f; amp = 1.8f;
+                } else {
+                    windPh_  += 0.13f / noiseSR_; if (windPh_  >= 1.0f) windPh_  -= 1.0f;
+                    windPh2_ += 0.09f / noiseSR_; if (windPh2_ >= 1.0f) windPh2_ -= 1.0f;
+                    fc = 700.0f + 450.0f * noiseSine (windPh2_); qd = 0.60f;
+                    gustL_ += 0.00035f*(wl - gustL_);
+                    amp = 2.6f * juce::jlimit (0.0f, 1.4f, 0.45f + 0.55f*noiseSine (windPh_) + 2.5f*gustL_);
+                }
+                float f = juce::jlimit (0.0f, 0.9f, fc * w0);
+                spL_ += f * spL2_; const float hpL = wl - spL_ - qd*spL2_; spL2_ += f * hpL;
+                spR_ += f * spR2_; const float hpR = wr - spR_ - qd*spR2_; spR2_ += f * hpR;
+                oL = spL2_ * amp; oR = spR2_ * amp; break;
+            }
+            default: oL = wl; oR = wr; break;   // White (0)
+        }
+    }
+    int   noiseType_ = 0;
+    float noiseSR_   = 48000.0f;
+    std::uint32_t noiseRngL_ = 0x9E3779B9u, noiseRngR_ = 0x85EBCA6Bu;
+    float pkL_[7] = { 0 }, pkR_[7] = { 0 }, brL_ = 0.0f, brR_ = 0.0f, geValL_ = 0.0f, geValR_ = 0.0f;
+    float tpL_ = 0.0f, tpR_ = 0.0f, tpL2_ = 0.0f, tpR2_ = 0.0f;
+    float spL_ = 0.0f, spL2_ = 0.0f, spR_ = 0.0f, spR2_ = 0.0f;
+    float humPh_ = 0.0f, windPh_ = 0.0f, windPh2_ = 0.0f, gustL_ = 0.0f;
+    float rumbL_[2] = { 0.0f, 0.0f }, rumbR_[2] = { 0.0f, 0.0f };
+};
+
+//==============================================================================
 class TerrainInstrumentAudioProcessor  : public juce::AudioProcessor,
                                          private juce::Timer
 {
@@ -377,6 +524,7 @@ public:
     void         setNoiseSampleSel (const juce::String& j) { noiseSampleSelJson_ = j; }
     juce::String getNoiseSampleSel () const                { return noiseSampleSelJson_; }
     void startNoiseAudition () noexcept { noiseAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // headphone preview (browser)
+    void startWavetableAudition (int osc) noexcept { wtAudReqOsc_.store (juce::jlimit (0, 3, osc), std::memory_order_relaxed); wtAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // WT headphone preview
     tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
     juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
     /** BLEND — persisted source-pair paths (which: 0 = A, 1 = B). Empty = no live blend.
@@ -963,8 +1111,16 @@ private:
     tw::SampleBuffer                          noiseSampleBuffer_;   // NOISE IMPORT (P5) — shared looping-sample noise source
     juce::String                              noiseSampleSelJson_;  // NOISE IMPORT (P5c) — persisted selection (factory path / user audio)
     std::atomic<int> noiseAuditionReq_ { 0 };                       // NOISE AUDITION — bumped (msg thread) to trigger a headphone preview
-    int    noiseAudSeen_ = 0, noiseAudCtr_ = 0;                     // audio thread: last-seen trigger + samples remaining
+    int    noiseAudSeen_ = 0, noiseAudCtr_ = 0, noiseAudTotal_ = 0; // audio thread: last-seen trigger + samples remaining + one-shot length
+    int    noiseAudType_ = 0;                                       // -1 = sample one-shot, else the algorithmic type index being previewed
     double noiseAudPos_ = 0.0;
+    NoisePreviewGen noisePrevGen_;                                  // faithful 13-type generator for previewing algorithmic noise (keyless)
+    // WAVETABLE AUDITION — headphone preview of an osc's current table: one-shot plucked note at a fixed pitch,
+    // slow frame-scan so you hear the whole table. Reads the table exactly like the voice/viz (import slot else bank).
+    std::atomic<int> wtAuditionReq_ { 0 };
+    std::atomic<int> wtAudReqOsc_ { 0 };
+    int    wtAudSeen_ = 0, wtAudCtr_ = 0, wtAudTotal_ = 0, wtAudOsc_ = 0;
+    double wtAudPhase_ = 0.0, wtAudInc_ = 0.0;
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
     std::array<juce::String, 4>               oscSourcePaths_;
