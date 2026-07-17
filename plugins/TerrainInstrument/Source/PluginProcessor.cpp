@@ -2627,7 +2627,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             juce::ParameterID { ParameterIDs::SYN_NOISE_LEVEL, 1 }, "Noise Level",
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.35f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_NOISE_PITCH, 1 }, "Noise Pitch",
+            juce::ParameterID { ParameterIDs::SYN_NOISE_PITCH, 1 }, "Noise Scan",
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { ParameterIDs::SYN_NOISE_PAN, 1 }, "Noise Pan",
@@ -4472,6 +4472,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         }
                 }
         ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
+        noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
         ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);

@@ -500,6 +500,7 @@ public:
     // Live AMP envelope output [0,1] of the most-active synth voice, for the UI
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
+    std::atomic<float> noiseVizLevel_ { 0.f };   // NOISE viz — env level while noise is sounding (0 when off/silent)
     // HARM-VIZ — live partial bins from the most-active voice (audio thread writes; editor
     // reads on its tick — cosmetic, tear-tolerant)
     std::atomic<float> harmVizBins_[4][96] {};

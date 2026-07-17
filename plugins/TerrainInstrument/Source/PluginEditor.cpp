@@ -541,6 +541,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         v = p->getValue();
                 complete (juce::var (v));
             })
+            .withNativeFunction("getNoiseViz", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE visualizer trigger — env level while noise is sounding (0 = off/silent → viz fades out).
+                complete (juce::var (audioProcessor.noiseVizLevel_.load (std::memory_order_relaxed)));
+            })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -2136,28 +2142,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     return;
                 }
 
-                auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                  .getChildFile ("Terrain-Instrument-Drops");
-                tempDir.createDirectory();
-
-                auto safeName = juce::File::createLegalFileName (filename);
-                if (safeName.isEmpty()) safeName = "osc-sample.wav";
-
-                auto tempFile = tempDir.getNonexistentChildFile (
-                                   safeName.upToLastOccurrenceOf (".", false, false),
-                                   safeName.fromLastOccurrenceOf (".", true, false),
-                                   true);
-                tempFile.replaceWithData (decodedStream.getData(), decodedStream.getDataSize());
-
-                if (tempFile.existsAsFile())
-                {
-                    loadOscSampleAsync (oscIdx, tempFile);
-                    complete (juce::var ("ok"));
-                }
-                else
-                {
-                    complete (juce::var ("temp-write-failed"));
-                }
+                // MEMORY LOAD — NO temp file. The host sandbox / macOS TCC blocks disk writes in FL Studio
+                // (temp AND Application Support both unwritable → the drop silently failed). The wavetable
+                // import already reads from memory — this makes the sample/granular drop do the same.
+                juce::MemoryBlock mb (decodedStream.getData(), decodedStream.getDataSize());
+                if (mb.getSize() == 0) { complete (juce::var ("empty-decode")); return; }
+                loadOscSampleFromMemory (oscIdx, std::move (mb), filename);
+                complete (juce::var ("ok (memory)"));
             })
             .withNativeFunction("importAudioAsWavetable", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -2445,6 +2436,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (! juce::Base64::convertFromBase64 (decodedStream, args[2].toString()))
                 { complete (juce::var ("decode-failed")); return; }
 
+                // ⚠️ SANDBOX GOTCHA (see MEMORY): this still writes a TEMP FILE, and the blend BAKER also writes
+                //    srcA/srcB/out WAVs to blendCacheDir (App Support) — both fail if the host blocks disk writes.
+                //    Plain load + Replace are already memory-safe; Blend needs a full in-memory baker pass (TODO).
                 auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory)
                                   .getChildFile ("Terrain-Instrument-Drops");
                 tempDir.createDirectory();
@@ -2540,30 +2534,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     return;
                 }
 
-                // Write to a stable temp file so loadSampleAsync can read it.
-                auto tempDir = juce::File::getSpecialLocation (
-                                  juce::File::tempDirectory)
-                                  .getChildFile ("Terrain-Instrument-Drops");
-                tempDir.createDirectory();
-
-                auto safeName = juce::File::createLegalFileName (filename);
-                if (safeName.isEmpty()) safeName = "dropped-sample.wav";
-
-                auto tempFile = tempDir.getNonexistentChildFile (
-                                   safeName.upToLastOccurrenceOf (".", false, false),
-                                   safeName.fromLastOccurrenceOf (".", true, false),
-                                   true);
-                tempFile.replaceWithData (decodedStream.getData(), decodedStream.getDataSize());
-
-                if (tempFile.existsAsFile())
-                {
-                    loadSampleAsync (tempFile);
-                    complete (juce::var ("ok"));
-                }
-                else
-                {
-                    complete (juce::var ("temp-write-failed"));
-                }
+                // MEMORY LOAD — NO temp file (host sandbox / macOS TCC may block disk writes; see loadSampleForOsc).
+                juce::MemoryBlock mb (decodedStream.getData(), decodedStream.getDataSize());
+                if (mb.getSize() == 0) { complete (juce::var ("empty-decode")); return; }
+                loadSampleFromMemory (std::move (mb), filename);
+                complete (juce::var ("ok (memory)"));
             })
             .withResourceProvider([this](const auto& url) {
                 return getResource(url);
@@ -10791,6 +10766,93 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
         });
 }
 
+// FRONT SAMPLER — sandbox-safe load straight from the base64-decoded bytes (NO temp file). Mirrors
+// loadSampleAsync but feeds SampleLoader::loadFromMemory, so the front #hero drop works even when the
+// host sandbox / macOS TCC blocks disk writes (the same trap that broke the per-osc sample drop).
+void TerrainInstrumentAudioProcessorEditor::loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
+{
+    currentSampleSourcePath = filename;
+    audioProcessor.setLoadedSamplePath (filename);
+
+    auto& loader = audioProcessor.getSampleLoader();
+    auto& target = audioProcessor.getSampleBuffer();
+
+    if (webView != nullptr)
+        webView->evaluateJavascript (
+            "if (window.onLoadingStarted) window.onLoadingStarted("
+            + juce::JSON::toString (juce::var (filename)) + ");",
+            nullptr);
+
+    loader.loadFromMemory (
+        std::move (data), filename, target,
+        [this] (float progress)
+        {
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    "if (window.onLoadingProgress) window.onLoadingProgress("
+                    + juce::String (progress, 4) + ");",
+                    nullptr);
+        },
+        [this] (tw::SampleLoader::Result r)
+        {
+            if (! r.success)
+            {
+                if (webView != nullptr)
+                    webView->evaluateJavascript (
+                        "if (window.onLoadError) window.onLoadError("
+                        + juce::JSON::toString (juce::var (r.errorMessage)) + ");",
+                        nullptr);
+                return;
+            }
+
+            {
+                const size_t li = (size_t) audioProcessor.editingLayer.load();
+                auto buf = audioProcessor.getSampleBuffer().load();
+                audioProcessor.layers[li].sampleBuffer.setSampleRate (r.sampleRate);
+                audioProcessor.layers[li].sampleBuffer.store (buf);
+                audioProcessor.layers[li].sourceFileName = r.filename;
+                audioProcessor.layers[li].sourcePath     = currentSampleSourcePath;
+            }
+
+            juce::Array<juce::var> minArr, maxArr;
+            minArr.ensureStorageAllocated ((int) r.peaksMin.size());
+            maxArr.ensureStorageAllocated ((int) r.peaksMax.size());
+            for (auto v : r.peaksMin) minArr.add (juce::var (v));
+            for (auto v : r.peaksMax) maxArr.add (juce::var (v));
+
+            juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+            obj->setProperty ("filename",      r.filename);
+            obj->setProperty ("sampleRate",    r.sampleRate);
+            obj->setProperty ("lengthSamples", r.lengthSamples);
+            obj->setProperty ("numChannels",   r.numChannels);
+            obj->setProperty ("peaksMin",      juce::var (minArr));
+            obj->setProperty ("peaksMax",      juce::var (maxArr));
+            const auto json = juce::JSON::toString (juce::var (obj.get()), true);
+
+            audioProcessor.setCachedSamplePayload (json);
+
+            audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.startSample = 0;
+            audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].pitchModeSlice.endSample   = (juce::int64) r.lengthSamples;
+            audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSliceBounds (-1, 0, (int) r.lengthSamples);
+            audioProcessor.sourceVersionId_.fetch_add (1, std::memory_order_relaxed);
+            {
+                auto buf = audioProcessor.getSampleBuffer().load();
+                if (buf && buf->getNumSamples() > 0 && buf->getNumChannels() >= 1)
+                {
+                    const float* L = buf->getReadPointer (0);
+                    const float* R = (buf->getNumChannels() >= 2) ? buf->getReadPointer (1) : L;
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSource (L, R, buf->getNumSamples());
+                    audioProcessor.layers[(size_t) audioProcessor.editingLayer.load()].synth.warpCache.setSampleRate (r.sampleRate);
+                }
+            }
+
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    "if (window.onSampleLoaded) window.onSampleLoaded(" + json + ");",
+                    nullptr);
+        });
+}
+
 // ── Task 13: per-layer sample reload ─────────────────────────────────────────
 // Identical to loadSampleAsync but targets a FIXED layer index (layerIdx) rather
 // than whatever editingLayer is at callback time.  Used by the editor constructor
@@ -10953,6 +11015,50 @@ void TerrainInstrumentAudioProcessorEditor::loadOscSampleAsync (int oscIdx, cons
             const auto json = juce::JSON::toString (juce::var (obj.get()), true /*allOnOneLine*/);
 
             audioProcessor.setCachedOscPayload (json, oscIdx);   // restored on editor reopen
+
+            if (webView != nullptr)
+                webView->evaluateJavascript (
+                    juce::String ("if (window.onOscSampleLoaded) window.onOscSampleLoaded('")
+                    + oscLetter + "', " + json + ");",
+                    nullptr);
+        });
+}
+
+// PEROSC — sandbox-safe sample load straight from the base64-decoded bytes (NO temp file). Mirrors
+// loadOscSampleAsync but feeds SampleLoader::loadFromMemory, so a dropped sample loads even when the
+// host sandbox / macOS TCC blocks disk writes (which is what broke sample drops in FL Studio).
+void TerrainInstrumentAudioProcessorEditor::loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename)
+{
+    if (oscIdx < 0 || oscIdx > 3) return;
+    const char oscLetter = (char) ('a' + oscIdx);
+    audioProcessor.oscSourcePath (oscIdx) = filename;   // no disk path; the cached payload restores the waveform on reopen
+
+    auto& loader = audioProcessor.getOscSampleLoader (oscIdx);
+    auto& target = audioProcessor.getOscSampleBuffer (oscIdx);
+
+    loader.loadFromMemory (
+        std::move (data), filename, target,
+        [] (float) {},
+        [this, oscIdx, oscLetter] (tw::SampleLoader::Result r)
+        {
+            if (! r.success) return;
+
+            juce::Array<juce::var> minArr, maxArr;
+            minArr.ensureStorageAllocated ((int) r.peaksMin.size());
+            maxArr.ensureStorageAllocated ((int) r.peaksMax.size());
+            for (auto v : r.peaksMin) minArr.add (juce::var (v));
+            for (auto v : r.peaksMax) maxArr.add (juce::var (v));
+
+            juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+            obj->setProperty ("filename",      r.filename);
+            obj->setProperty ("sampleRate",    r.sampleRate);
+            obj->setProperty ("lengthSamples", r.lengthSamples);
+            obj->setProperty ("numChannels",   r.numChannels);
+            obj->setProperty ("peaksMin",      juce::var (minArr));
+            obj->setProperty ("peaksMax",      juce::var (maxArr));
+            const auto json = juce::JSON::toString (juce::var (obj.get()), true);
+
+            audioProcessor.setCachedOscPayload (json, oscIdx);
 
             if (webView != nullptr)
                 webView->evaluateJavascript (

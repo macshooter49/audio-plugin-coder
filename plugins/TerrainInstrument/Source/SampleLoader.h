@@ -160,6 +160,113 @@ namespace tw
             });
         }
 
+        /** Async load from IN-MEMORY audio bytes (e.g. base64-decoded drop) — NO temp file, so it works
+            even when the host sandbox / macOS TCC blocks disk writes. Mirrors load() but reads the audio
+            from a MemoryInputStream instead of a juce::File. */
+        void loadFromMemory (juce::MemoryBlock data,
+                             juce::String filenameHint,
+                             SampleBuffer& target,
+                             std::function<void(float /*progress*/)> onProgress,
+                             std::function<void(Result)> onComplete)
+        {
+            cancel();
+            shouldStop.store (false);
+
+            workerThread = std::thread ([this, data = std::move (data), filenameHint, &target,
+                                         onProgress = std::move (onProgress),
+                                         onComplete = std::move (onComplete)]()
+            {
+                Result r;
+                r.filename     = filenameHint;
+                r.absolutePath = filenameHint;
+
+                std::unique_ptr<juce::AudioFormatReader> reader (
+                    formatManager.createReaderFor (
+                        std::make_unique<juce::MemoryInputStream> (data.getData(), data.getSize(), false)));
+                if (! reader)
+                {
+                    r.errorMessage = "Unsupported format. Use WAV, AIFF, FLAC, or MP3.";
+                    juce::MessageManager::callAsync ([cb = onComplete, r] { if (cb) cb (r); });
+                    return;
+                }
+
+                const auto totalSamples = (int) reader->lengthInSamples;
+                const auto nativeRate   = reader->sampleRate;
+                const auto numChans     = (int) reader->numChannels;
+
+                if (totalSamples <= 0 || nativeRate <= 0.0 || numChans <= 0)
+                {
+                    r.errorMessage = "Could not read file (empty or invalid).";
+                    juce::MessageManager::callAsync ([cb = onComplete, r] { if (cb) cb (r); });
+                    return;
+                }
+
+                const double sampleSeconds = (double) totalSamples / nativeRate;
+                if (sampleSeconds > (double) kMaxSampleSeconds)
+                {
+                    r.errorMessage = "Sample exceeds 10 min limit. Trim externally and re-import.";
+                    juce::MessageManager::callAsync ([cb = onComplete, r] { if (cb) cb (r); });
+                    return;
+                }
+
+                auto buf = std::make_shared<juce::AudioBuffer<float>> (
+                    juce::jmax (2, numChans), totalSamples);
+
+                const int chunkSize = juce::jmax (16384, totalSamples / 20);
+                int       readPos   = 0;
+                while (readPos < totalSamples && ! shouldStop.load())
+                {
+                    const int thisChunk = juce::jmin (chunkSize, totalSamples - readPos);
+                    reader->read (buf.get(), readPos, thisChunk, readPos, true, true);
+                    readPos += thisChunk;
+                    const float progress = (float) readPos / (float) totalSamples;
+                    juce::MessageManager::callAsync ([cb = onProgress, progress] { if (cb) cb (progress); });
+                }
+
+                if (shouldStop.load())
+                {
+                    r.errorMessage = "Cancelled.";
+                    juce::MessageManager::callAsync ([cb = onComplete, r] { if (cb) cb (r); });
+                    return;
+                }
+
+                if (numChans == 1)
+                    buf->copyFrom (1, 0, *buf, 0, 0, totalSamples);
+
+                r.peaksMin.assign (kPeakBins, 0.0f);
+                r.peaksMax.assign (kPeakBins, 0.0f);
+                const int samplesPerBin = juce::jmax (1, totalSamples / kPeakBins);
+                const int activeChans   = buf->getNumChannels();
+                for (int b = 0; b < kPeakBins; ++b)
+                {
+                    const int start = b * samplesPerBin;
+                    const int end   = juce::jmin (start + samplesPerBin, totalSamples);
+                    float minV = 0.0f, maxV = 0.0f;
+                    for (int ch = 0; ch < activeChans; ++ch)
+                    {
+                        const auto* d = buf->getReadPointer (ch);
+                        for (int i = start; i < end; ++i)
+                        {
+                            const float s = d[i];
+                            minV = juce::jmin (minV, s);
+                            maxV = juce::jmax (maxV, s);
+                        }
+                    }
+                    r.peaksMin[b] = minV;
+                    r.peaksMax[b] = maxV;
+                }
+
+                target.setSampleRate (nativeRate);
+                target.store (buf);
+
+                r.success       = true;
+                r.sampleRate    = nativeRate;
+                r.lengthSamples = totalSamples;
+                r.numChannels   = numChans;
+                juce::MessageManager::callAsync ([cb = onComplete, r] { if (cb) cb (std::move (r)); });
+            });
+        }
+
         /** Cancels an in-flight load (joins the worker thread). */
         void cancel()
         {

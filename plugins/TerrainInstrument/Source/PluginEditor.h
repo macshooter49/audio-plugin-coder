@@ -30,11 +30,13 @@ private:
     // Sample / patch loading helpers (Task 11; loadPatch + importTerrainPack
     // are stubs implemented in Tasks 18 / 22 of the v0a plan)
     void loadSampleAsync      (const juce::File& file);
+    void loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename);   // front sampler — sandbox-safe (no temp file)
     // Task 13: targets a specific layer index (0..3) instead of editingLayer.
     // Used by the editor constructor to fan out V2 preset reloads across all
     // 4 layer slots without temporarily changing editingLayer on the audio thread.
     void loadSampleIntoLayer  (const juce::File& file, int layerIdx);
     void loadOscSampleAsync   (int oscIdx, const juce::File& file);   // PEROSC
+    void loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename);   // PEROSC — sandbox-safe (no temp file)
     void loadPatch         (const juce::File& patchFile);    // Task 18 stub
     void importTerrainPack (const juce::File& packFile);     // Task 22 stub
 

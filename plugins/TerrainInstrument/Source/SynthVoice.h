@@ -60,6 +60,7 @@ namespace tw
         {
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
             sampleRate_ = (sr > 0.0) ? sr : 48000.0;
+            noiseSR_ = (float) sampleRate_;   // NOISE engine Hz-based math (hum/wind/rumble/SVF)
             ampEnv_.prepare (sampleRate_);
             fltEnvT_.prepare (sampleRate_);
             pitchEnvT_.prepare (sampleRate_);
@@ -997,7 +998,9 @@ namespace tw
             noiseOn_    = on;
             noiseType_  = type;
             noiseLevel_ = juce::jlimit (0.0f, 1.0f, level);
-            noisePitch_ = juce::jlimit (0.0f, 1.0f, pitch);
+            // "Scan" (formerly Pitch): drives the noise scan/playback RATE — 0 = very slow (0.1×) … 0.5 = 1× … 1 = 2×.
+            const float sc = juce::jlimit (0.0f, 1.0f, pitch);
+            noiseScanRate_ = (sc < 0.5f) ? (0.1f + 1.8f * sc) : (1.0f + 2.0f * (sc - 0.5f));
             const float th = juce::jlimit (0.0f, 1.0f, pan) * 1.5707963268f;   // equal-power pan (−3 dB center)
             noisePanL_ = std::cos (th);
             noisePanR_ = std::sin (th);
@@ -1008,6 +1011,13 @@ namespace tw
         {
             s ^= s << 13; s ^= s >> 17; s ^= s << 5;
             return (float) ((std::int32_t) s) * (1.0f / 2147483648.0f);
+        }
+        // Cheap phase→sine, phase in [0,1). ~1% THD — plenty for LFOs / hum / SVF sweep. No std::sin per sample.
+        static inline float noiseSine (float ph) noexcept
+        {
+            const float x = 2.0f * ph - 1.0f;                    // [-1,1)
+            const float q = 4.0f * x * (1.0f - std::fabs (x));   // parabola
+            return q * (0.775f + 0.225f * std::fabs (q));        // devmaster refine
         }
         inline void noiseTick (float& oL, float& oR) noexcept
         {
@@ -1027,22 +1037,112 @@ namespace tw
                 case 2:     // Brown — leaky integrator (≈ -6 dB/oct)
                     brL_ = (brL_ + 0.02f*wl) * 0.996f; brR_ = (brR_ + 0.02f*wr) * 0.996f;
                     oL = brL_ * 3.5f; oR = brR_ * 3.5f; break;
-                case 3: {   // Geiger — sparse random clicks with a fast decay tail
-                    auto gg = [] (float w, float& v) noexcept {
-                        if (w > 0.9992f || w < -0.9992f) v = (w > 0.0f ? 1.0f : -1.0f);
-                        v *= 0.86f; return v;
+                case 3: {   // Geiger — dry Poisson clicks, random amplitude, crisp fast decay, NO bed
+                    auto click = [] (float w, float w2, float& env) noexcept {
+                        if (w > 0.9993f || w < -0.9993f)
+                            env = (0.6f + 0.4f*std::fabs (w2)) * (w > 0.0f ? 1.0f : -1.0f);
+                        const float o = env; env *= 0.80f; return o;
                     };
-                    oL = gg (wl, geValL_); oR = gg (wr, geValR_); break;
+                    oL = click (wl, wr, geValL_); oR = click (wr, wl, geValR_); break;
                 }
-                default:    // White (0) + P1 placeholder for Tape/Vinyl/Space (synthesized in P3)
+                case 4: {   // Tape Hiss — band-limited upper-mid noise (~1.5–8 kHz), gentle top roll-off
+                    tpL_  += 0.21f*(wl - tpL_);   tpR_  += 0.21f*(wr - tpR_);     // HP ~1.5 kHz (remove lows)
+                    const float hpL = wl - tpL_,  hpR = wr - tpR_;
+                    tpL2_ += 0.55f*(hpL - tpL2_); tpR2_ += 0.55f*(hpR - tpR2_);   // LP ~6 kHz (tame top)
+                    oL = tpL2_ * 2.0f; oR = tpR2_ * 2.0f; break;
+                }
+                case 5: {   // Tape Hum — 60 Hz + 120 + 180 harmonics (low buzz) over faint hiss
+                    humPh_ += 60.0f / noiseSR_; if (humPh_ >= 1.0f) humPh_ -= 1.0f;
+                    float h2 = humPh_*2.0f; if (h2 >= 1.0f) h2 -= 1.0f;
+                    float h3 = humPh_*3.0f; while (h3 >= 1.0f) h3 -= 1.0f;
+                    const float hum = noiseSine (humPh_)*0.70f + noiseSine (h2)*0.22f + noiseSine (h3)*0.10f;
+                    tpL_ += 0.25f*(wl - tpL_); tpR_ += 0.25f*(wr - tpR_);         // faint hiss bed
+                    oL = hum*0.82f + (wl - tpL_)*0.12f;
+                    oR = hum*0.82f + (wr - tpR_)*0.12f; break;
+                }
+                case 6: {   // Tape Air — breathy bright high-shelf, slow "breathing" amplitude
+                    tpL_ += 0.38f*(wl - tpL_); tpR_ += 0.38f*(wr - tpR_);         // HP ~2.7 kHz (airy top)
+                    const float airL = wl - tpL_, airR = wr - tpR_;
+                    windPh_ += 0.25f / noiseSR_; if (windPh_ >= 1.0f) windPh_ -= 1.0f;  // ~0.25 Hz breath
+                    const float breath = 0.72f + 0.28f * noiseSine (windPh_);
+                    oL = airL * 1.3f * breath; oR = airR * 1.3f * breath; break;
+                }
+                case 7: {   // Tape Crackle — sparse ASYMMETRIC pops over faint hiss
+                    tpL_ += 0.22f*(wl - tpL_); tpR_ += 0.22f*(wr - tpR_);         // faint hiss bed
+                    const float hissL = wl - tpL_, hissR = wr - tpR_;
+                    auto pop = [] (float w, float w2, float& env) noexcept {
+                        if      (w >  0.9995f)  env =  (0.7f + 0.3f*std::fabs (w2)); // positive-biased pop
+                        else if (w < -0.99985f) env = -(0.5f + 0.3f*std::fabs (w2)); // rare negative
+                        const float o = env; env *= 0.86f; return o;
+                    };
+                    oL = pop (wl, wr, geValL_) + hissL*0.28f;
+                    oR = pop (wr, wl, geValR_) + hissR*0.28f; break;
+                }
+                case 8: case 9: {   // Vinyl — LF rumble + pink surface + Poisson crackle (Dirty=denser/louder)
+                    const bool dirty = (noiseType_ == 9);
+                    rumbL_[0] += 0.006f*(wl - rumbL_[0]); rumbL_[1] += 0.006f*(rumbL_[0] - rumbL_[1]);   // ~40 Hz turntable rumble
+                    rumbR_[0] += 0.006f*(wr - rumbR_[0]); rumbR_[1] += 0.006f*(rumbR_[0] - rumbR_[1]);
+                    const float rmb = dirty ? 24.0f : 18.0f;
+                    auto pk = [] (float w, float* b) noexcept {                   // pink surface (reuse Kellet state)
+                        b[0]=0.99886f*b[0]+w*0.0555179f; b[1]=0.99332f*b[1]+w*0.0750759f;
+                        b[2]=0.96900f*b[2]+w*0.1538520f; b[3]=0.86650f*b[3]+w*0.3104856f;
+                        b[4]=0.55000f*b[4]+w*0.5329522f; b[5]=-0.7616f*b[5]-w*0.0168980f;
+                        const float o=b[0]+b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+w*0.5362f; b[6]=w*0.115926f; return o*0.11f;
+                    };
+                    const float surfL = pk (wl, pkL_) * (dirty ? 0.50f : 0.22f);
+                    const float surfR = pk (wr, pkR_) * (dirty ? 0.50f : 0.22f);
+                    const float thr = dirty ? 0.9975f : 0.9993f;                  // Poisson crackle
+                    auto crk = [thr] (float w, float w2, float& env) noexcept {
+                        if (w > thr || w < -thr) env = (0.55f + 0.45f*std::fabs (w2)) * (w > 0.0f ? 1.0f : -1.0f);
+                        const float o = env; env *= 0.845f; return o;
+                    };
+                    const float ckL = crk (wl, wr, geValL_) * (dirty ? 0.9f : 0.7f);
+                    const float ckR = crk (wr, wl, geValR_) * (dirty ? 0.9f : 0.7f);
+                    oL = rumbL_[1]*rmb + surfL + ckL;
+                    oR = rumbR_[1]*rmb + surfR + ckR; break;
+                }
+                case 10: case 11: case 12: {   // Space — Chamberlin SVF resonant band-pass (tonal wash, not flat noise)
+                    const float w0 = 6.2831853f / noiseSR_;
+                    float fc, qd, amp;
+                    if (noiseType_ == 10) {          // Space Open — broad airy wash, slow drift
+                        windPh2_ += 0.07f / noiseSR_; if (windPh2_ >= 1.0f) windPh2_ -= 1.0f;
+                        fc = 1100.0f + 500.0f * noiseSine (windPh2_);
+                        qd = 0.90f; amp = 2.6f;
+                    } else if (noiseType_ == 11) {   // Space Helium — high, thin, resonant formant
+                        windPh2_ += 0.05f / noiseSR_; if (windPh2_ >= 1.0f) windPh2_ -= 1.0f;
+                        fc = 3200.0f + 400.0f * noiseSine (windPh2_);
+                        qd = 0.28f; amp = 1.8f;
+                    } else {                          // Space Wind — gusting swept band-pass
+                        windPh_  += 0.13f / noiseSR_; if (windPh_  >= 1.0f) windPh_  -= 1.0f;
+                        windPh2_ += 0.09f / noiseSR_; if (windPh2_ >= 1.0f) windPh2_ -= 1.0f;
+                        fc = 700.0f + 450.0f * noiseSine (windPh2_);
+                        qd = 0.60f;
+                        gustL_ += 0.00035f*(wl - gustL_);
+                        amp = 2.6f * juce::jlimit (0.0f, 1.4f,
+                                      0.45f + 0.55f*noiseSine (windPh_) + 2.5f*gustL_);
+                    }
+                    float f = juce::jlimit (0.0f, 0.9f, fc * w0);   // f = 2·sin(π·fc/fs) ≈ 2π·fc/fs
+                    spL_ += f * spL2_; const float hpL = wl - spL_ - qd*spL2_; spL2_ += f * hpL;
+                    spR_ += f * spR2_; const float hpR = wr - spR_ - qd*spR2_; spR2_ += f * hpR;
+                    oL = spL2_ * amp; oR = spR2_ * amp; break;
+                }
+                default:    // White (0)
                     oL = wl; oR = wr; break;
             }
+            // (SCAN/speed is applied at the call site as a sample-and-hold + interpolation on this raw output.)
         }
         bool  noiseOn_    = false;
         int   noiseType_  = 0;
         float noiseLevel_ = 0.0f, noisePitch_ = 0.5f, noisePanL_ = 0.70710678f, noisePanR_ = 0.70710678f;
         std::uint32_t noiseRngL_ = 0x9E3779B9u, noiseRngR_ = 0x85EBCA6Bu;
         float pkL_[7] = { 0 }, pkR_[7] = { 0 }, brL_ = 0.0f, brR_ = 0.0f, geValL_ = 0.0f, geValR_ = 0.0f;
+        float tpL_ = 0.0f, tpR_ = 0.0f, spL_ = 0.0f, spL2_ = 0.0f, spR_ = 0.0f, spR2_ = 0.0f, noiseLpL_ = 0.0f, noiseLpR_ = 0.0f;
+        // NOISE P2 DSP (researched, per-type distinct): 2nd tape pole, hum/breath/gust LFO phases, gust env, vinyl rumble.
+        float tpL2_ = 0.0f, tpR2_ = 0.0f, humPh_ = 0.0f, windPh_ = 0.0f, windPh2_ = 0.0f, gustL_ = 0.0f;
+        // SCAN (was Pitch): sample-and-hold + interpolation at noiseScanRate_ (0.1×…2×) → the noise "scans" slower/faster.
+        float noiseScanRate_ = 1.0f, scanPh_ = 0.0f, nCurL_ = 0.0f, nCurR_ = 0.0f, nPrevL_ = 0.0f, nPrevR_ = 0.0f;
+        float rumbL_[2] = { 0.0f, 0.0f }, rumbR_[2] = { 0.0f, 0.0f };   // Vinyl turntable rumble (2-pole LP, L/R)
+        float noiseSR_ = 48000.0f;   // sample rate for Hz-based noise math (hum/wind/rumble/SVF); set in setCurrentPlaybackSampleRate
     public:
 
         void setPhaseMode (int modeA, int modeB) noexcept
@@ -3262,7 +3362,14 @@ namespace tw
                 // NOISE ENGINE → Filter 1 bus, riding the amp env + velocity like the oscs (P1: routed to F1).
                 if (noiseOn_)
                 {
-                    float _nL, _nR; noiseTick (_nL, _nR);
+                    // SCAN — advance a phase at noiseScanRate_ (0.1×…2×); regenerate the noise only on wrap and
+                    // interpolate between held samples. Slow scan = long smooth ramp (draggy/dark), fast = up to 2×
+                    // (brighter), 0.5 knob = 1× (normal). Great for FM / blend-mode / filter-routing modulation later.
+                    scanPh_ += noiseScanRate_;
+                    while (scanPh_ >= 1.0f) { scanPh_ -= 1.0f; nPrevL_ = nCurL_; nPrevR_ = nCurR_; noiseTick (nCurL_, nCurR_); }
+                    const float _t = scanPh_;
+                    const float _nL = nPrevL_ + (nCurL_ - nPrevL_) * _t;
+                    const float _nR = nPrevR_ + (nCurR_ - nPrevR_) * _t;
                     const float _ng = noiseLevel_ * velEnv;
                     scratchL[i] += _nL * _ng * noisePanL_;
                     scratchR[i] += _nR * _ng * noisePanR_;
