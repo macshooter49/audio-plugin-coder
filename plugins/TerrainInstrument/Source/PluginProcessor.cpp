@@ -4098,9 +4098,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float subWgtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_HEAT);
         const float subWgtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_HEAT);
         const float subWgtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_WEIGHT), subHtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_HEAT);
-        // ── NOISE ENGINE reads (Choice raw = normalised 0..1 → index; per CLAUDE.md) ──
+        // ── NOISE ENGINE reads ──
+        // getRawParameterValue() for an AudioParameterChoice returns the INDEX (0..N-1) directly —
+        // exactly like SYN_FILTER*_DRIVETYPE / _POLES / SYN_OSC_*_ENGINE are read below. The old
+        // `lround(raw * 12)` (from a wrong CLAUDE.md note claiming raw is normalised) pushed indices
+        // 2..12 to 24..144 → every type but White(0)/Pink(→12=SpaceWind) collapsed to the switch default (White).
         const bool  noiseOn    = *rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f;
-        const int   noiseType  = (int) std::lround (*rawParam (ParameterIDs::SYN_NOISE_TYPE) * 12.0f);   // 13 choices → ×(13-1)
+        const int   noiseType  = (int) *rawParam (ParameterIDs::SYN_NOISE_TYPE);   // choice index 0..12
         const float noiseLevel = *rawParam (ParameterIDs::SYN_NOISE_LEVEL);
         const float noisePitch = *rawParam (ParameterIDs::SYN_NOISE_PITCH);
         const float noisePan   = *rawParam (ParameterIDs::SYN_NOISE_PAN);

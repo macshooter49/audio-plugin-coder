@@ -145,7 +145,14 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
 - **Over-length C++ raw strings truncate (~245KB) silently** -> breaks the injected `<script>`.
   Split into <60KB `juce::String(R"(...)")` pieces. (Relevant if HTML is ever embedded as a raw
   string rather than BinaryData.)
-- **AudioParameterChoice:** `getRawParameterValue()` returns normalized [0,1], not the index.
+- **AudioParameterChoice — READ THE INDEX DIRECTLY.** `apvts.getRawParameterValue(id)` returns the
+  **choice INDEX (0..N-1)** as a float, NOT normalized. Read it `(int)*rawParam(id)` — exactly like
+  `SYN_FILTER*_DRIVETYPE`/`_POLES` and `SYN_OSC_*_ENGINE`. Do **not** multiply by (N-1). (The two APIs
+  differ: `getParameter(id)->getValue()` returns normalized [0,1] — that's for `getSynParam` UI read-back;
+  `getRawParameterValue(id)` returns the index.) ⚠️ The old wording here said "returns normalized [0,1]"
+  and that was WRONG — it caused the fb50 noise-type bug: the read did `lround(raw*12)`, which shoved 11
+  of 13 types past the switch to White, so only ~2 noises sounded. Every other choice param read the index
+  plainly and worked, which is the proof.
 - **New SYN knobs:** prefer a default of 0.5 over 0/1 — dblclick-reset to an extreme can hide
   itself as a "snap-back" bug. Suppress dblclick within 400ms of a real drag.
 
