@@ -371,6 +371,8 @@ public:
 
     // PEROSC-BUFFERS — per-OSC Sample oscillator buffers (synth-side; A/B/C/D independent).
     tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, 3, idx)]; }
+    // NOISE IMPORT (P5) — one shared looping-sample source for the Noise module (user drop or factory sample).
+    tw::SampleBuffer& getNoiseSampleBuffer () noexcept { return noiseSampleBuffer_; }
     tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
     juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
     /** BLEND — persisted source-pair paths (which: 0 = A, 1 = B). Empty = no live blend.
@@ -954,6 +956,7 @@ private:
     // PEROSC-BUFFERS — dedicated per-OSC buffers/loaders/payloads/paths (one loader each so
     // rapid drops on A..D don't cancel one another). Guarded by samplePayloadLock for payloads.
     std::array<tw::SampleBuffer, 4>           oscSampleBuffers_;
+    tw::SampleBuffer                          noiseSampleBuffer_;   // NOISE IMPORT (P5) — shared looping-sample noise source
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
     std::array<juce::String, 4>               oscSourcePaths_;

@@ -37,6 +37,7 @@ private:
     void loadSampleIntoLayer  (const juce::File& file, int layerIdx);
     void loadOscSampleAsync   (int oscIdx, const juce::File& file);   // PEROSC
     void loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename);   // PEROSC — sandbox-safe (no temp file)
+    void loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename);   // NOISE IMPORT (P5) — sandbox-safe looping-noise sample
     void loadPatch         (const juce::File& patchFile);    // Task 18 stub
     void importTerrainPack (const juce::File& packFile);     // Task 22 stub
 

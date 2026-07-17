@@ -547,6 +547,29 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // NOISE visualizer trigger — env level while noise is sounding (0 = off/silent → viz fades out).
                 complete (juce::var (audioProcessor.noiseVizLevel_.load (std::memory_order_relaxed)));
             })
+            .withNativeFunction("loadNoiseSample", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE IMPORT (P5) — decode a dropped/picked audio file IN MEMORY (sandbox-safe) → looping noise.
+                // args = [ filename, base64 ].
+                if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
+                const auto filename = args[0].toString();
+                juce::MemoryOutputStream decoded;
+                if (! juce::Base64::convertFromBase64 (decoded, args[1].toString())) { complete (juce::var ("decode-failed")); return; }
+                juce::MemoryBlock mb (decoded.getData(), decoded.getDataSize());
+                if (mb.getSize() == 0) { complete (juce::var ("empty-decode")); return; }
+                loadNoiseSampleFromMemory (std::move (mb), filename);
+                complete (juce::var ("ok (memory)"));
+            })
+            .withNativeFunction("clearNoiseSample", [this](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE IMPORT (P5) — revert to the algorithmic type (empty the shared buffer).
+                audioProcessor.getNoiseSampleBuffer().store (nullptr);
+                if (webView != nullptr)
+                    webView->evaluateJavascript ("if (window.onNoiseSampleCleared) window.onNoiseSampleCleared();", nullptr);
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -11066,6 +11089,55 @@ void TerrainInstrumentAudioProcessorEditor::loadOscSampleFromMemory (int oscIdx,
                     + oscLetter + "', " + json + ");",
                     nullptr);
         });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NOISE IMPORT (P5) — load a dropped/imported audio file as a fixed looping
+// noise texture. In-memory decode (sandbox-safe), then a one-time bake:
+// equal-power seam-crossfade (click-free loop) + peak-normalize (ear-level).
+// ═══════════════════════════════════════════════════════════════════════════
+static std::shared_ptr<juce::AudioBuffer<float>>
+    bakeSeamlessNoiseLoop (const std::shared_ptr<juce::AudioBuffer<float>>& in)
+{
+    if (in == nullptr) return in;
+    const int len = in->getNumSamples();
+    const int ch  = juce::jlimit (1, 2, in->getNumChannels());
+    if (len < 256) return in;                                    // too short to loop-bake — use raw
+    const int xf     = juce::jmin (4096, len / 8);              // equal-power crossfade width
+    const int outLen = len - xf;
+    auto out = std::make_shared<juce::AudioBuffer<float>> (ch, outLen);
+    for (int c = 0; c < ch; ++c)
+    {
+        const float* src = in->getReadPointer (juce::jmin (c, in->getNumChannels() - 1));
+        float* dst = out->getWritePointer (c);
+        for (int i = xf; i < outLen; ++i) dst[i] = src[i];       // straight middle
+        for (int i = 0; i < xf; ++i)                             // seam: head(in) fades in over tail fading out
+        {
+            const float t    = (float) i / (float) xf;
+            const float wIn  = std::sin (0.5f * juce::MathConstants<float>::pi * t);
+            const float wOut = std::cos (0.5f * juce::MathConstants<float>::pi * t);
+            dst[i] = src[i] * wIn + src[outLen + i] * wOut;
+        }
+    }
+    float peak = 0.0f;                                           // peak-normalize to ~0.9 (consistent import level)
+    for (int c = 0; c < ch; ++c) peak = juce::jmax (peak, out->getMagnitude (c, 0, outLen));
+    if (peak > 1.0e-6f) out->applyGain (0.9f / peak);
+    return out;
+}
+
+void TerrainInstrumentAudioProcessorEditor::loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
+{
+    double rate = 0.0;
+    auto raw = readAudioFromMemory (data.getData(), data.getSize(), rate);
+    if (raw == nullptr || raw->getNumSamples() < 64 || rate <= 0.0) return;
+    auto looped = bakeSeamlessNoiseLoop (raw);
+    auto& target = audioProcessor.getNoiseSampleBuffer();
+    target.setSampleRate (rate);
+    target.store (looped);                                       // atomic swap → audio thread picks it up next block
+    if (webView != nullptr)
+        webView->evaluateJavascript (
+            "if (window.onNoiseSampleLoaded) window.onNoiseSampleLoaded(" + juce::JSON::toString (juce::var (filename)) + ");",
+            nullptr);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -4171,6 +4171,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setSub (2, subRngC, subFrmC, subWgtC, subHtC);
                 sv->setSub (3, subRngD, subFrmD, subWgtD, subHtD);
                 sv->setNoise (noiseOn, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
+                sv->setNoiseSampleSource (&noiseSampleBuffer_);   // NOISE IMPORT (P5) — looping-sample override (empty buffer = algorithmic type)
                 sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setPanC (panC);                   sv->setPanD (panD);

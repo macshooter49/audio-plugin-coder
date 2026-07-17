@@ -612,6 +612,27 @@ namespace tw
         void setSampleSources (tw::SampleBuffer* a, tw::SampleBuffer* b,
                                tw::SampleBuffer* c, tw::SampleBuffer* d) noexcept   // PEROSC-VOICE
         { sampleSource_[0] = a; sampleSource_[1] = b; sampleSource_[2] = c; sampleSource_[3] = d; }
+        // NOISE IMPORT (P5) — shared looping-sample noise source. One atomic load per block; recache raw
+        // pointers only when the buffer changes (CPU-safe). The held BufferPtr keeps it alive through render.
+        void setNoiseSampleSource (tw::SampleBuffer* s) noexcept
+        {
+            noiseSampleSource_ = s;
+            auto buf = (s != nullptr) ? s->load() : tw::SampleBuffer::BufferPtr();
+            if (buf.get() != noiseBufLast_)
+            {
+                noiseHeldBuf_ = buf; noiseBufLast_ = buf.get();
+                if (buf != nullptr && buf->getNumSamples() > 1)
+                {
+                    noiseSampLen_ = buf->getNumSamples();
+                    noiseSampL_   = buf->getReadPointer (0);
+                    noiseSampR_   = buf->getNumChannels() > 1 ? buf->getReadPointer (1) : noiseSampL_;
+                    const double nr = (s != nullptr) ? s->getSampleRate() : 0.0;
+                    noiseSampNativeOverOut_ = (nr > 0.0 && noiseSR_ > 0.0f) ? (nr / (double) noiseSR_) : 1.0;
+                    if (noiseSampPos_ >= (double) noiseSampLen_) noiseSampPos_ = 0.0;
+                }
+                else { noiseSampLen_ = 0; noiseSampL_ = noiseSampR_ = nullptr; }
+            }
+        }
         // GRANULAR-ENGINE-VOICE — per-OSC granular params (granular reuses the same sampleSource_ buffers).
         // GLOBAL grain budget — the processor shares ONE live-grain counter + cap across every
         // granular engine in the instance (all 4 oscs × unison × voices), so stacked dense
@@ -1143,6 +1164,13 @@ namespace tw
         float noiseScanRate_ = 1.0f, scanPh_ = 0.0f, nCurL_ = 0.0f, nCurR_ = 0.0f, nPrevL_ = 0.0f, nPrevR_ = 0.0f;
         float rumbL_[2] = { 0.0f, 0.0f }, rumbR_[2] = { 0.0f, 0.0f };   // Vinyl turntable rumble (2-pole LP, L/R)
         float noiseSR_ = 48000.0f;   // sample rate for Hz-based noise math (hum/wind/rumble/SVF); set in setCurrentPlaybackSampleRate
+        // NOISE IMPORT (P5) — looping-sample source state (overrides the algorithmic type when a buffer is loaded).
+        tw::SampleBuffer* noiseSampleSource_ = nullptr;
+        tw::SampleBuffer::BufferPtr noiseHeldBuf_;                 // keeps the current buffer alive through render
+        const juce::AudioBuffer<float>* noiseBufLast_ = nullptr;   // change-detect for the recache
+        const float* noiseSampL_ = nullptr; const float* noiseSampR_ = nullptr;
+        int    noiseSampLen_ = 0;
+        double noiseSampPos_ = 0.0, noiseSampNativeOverOut_ = 1.0;
     public:
 
         void setPhaseMode (int modeA, int modeB) noexcept
@@ -3362,14 +3390,28 @@ namespace tw
                 // NOISE ENGINE → Filter 1 bus, riding the amp env + velocity like the oscs (P1: routed to F1).
                 if (noiseOn_)
                 {
-                    // SCAN — advance a phase at noiseScanRate_ (0.1×…2×); regenerate the noise only on wrap and
-                    // interpolate between held samples. Slow scan = long smooth ramp (draggy/dark), fast = up to 2×
-                    // (brighter), 0.5 knob = 1× (normal). Great for FM / blend-mode / filter-routing modulation later.
-                    scanPh_ += noiseScanRate_;
-                    while (scanPh_ >= 1.0f) { scanPh_ -= 1.0f; nPrevL_ = nCurL_; nPrevR_ = nCurR_; noiseTick (nCurL_, nCurR_); }
-                    const float _t = scanPh_;
-                    const float _nL = nPrevL_ + (nCurL_ - nPrevL_) * _t;
-                    const float _nR = nPrevR_ + (nCurR_ - nPrevR_) * _t;
+                    float _nL, _nR;
+                    if (noiseSampLen_ > 1 && noiseSampL_ != nullptr)
+                    {
+                        // NOISE IMPORT (P5) — a loaded sample plays as a FIXED LOOPING TEXTURE: Scan = loop speed,
+                        // rides the amp env like the algorithmic noise, seam pre-crossfaded at load (click-free), no pitch-track.
+                        const int i0 = (int) noiseSampPos_; int i1 = i0 + 1; if (i1 >= noiseSampLen_) i1 = 0;
+                        const float fr = (float) (noiseSampPos_ - (double) i0);
+                        _nL = noiseSampL_[i0] + (noiseSampL_[i1] - noiseSampL_[i0]) * fr;
+                        _nR = noiseSampR_[i0] + (noiseSampR_[i1] - noiseSampR_[i0]) * fr;
+                        noiseSampPos_ += (double) noiseScanRate_ * noiseSampNativeOverOut_;
+                        while (noiseSampPos_ >= (double) noiseSampLen_) noiseSampPos_ -= (double) noiseSampLen_;
+                    }
+                    else
+                    {
+                        // SCAN — advance a phase at noiseScanRate_ (0.1×…2×); regenerate the noise only on wrap and
+                        // interpolate between held samples. 0.5 knob = 1× (normal). Algorithmic types (colors/tape/vinyl/space).
+                        scanPh_ += noiseScanRate_;
+                        while (scanPh_ >= 1.0f) { scanPh_ -= 1.0f; nPrevL_ = nCurL_; nPrevR_ = nCurR_; noiseTick (nCurL_, nCurR_); }
+                        const float _t = scanPh_;
+                        _nL = nPrevL_ + (nCurL_ - nPrevL_) * _t;
+                        _nR = nPrevR_ + (nCurR_ - nPrevR_) * _t;
+                    }
                     const float _ng = noiseLevel_ * velEnv;
                     scratchL[i] += _nL * _ng * noisePanL_;
                     scratchR[i] += _nR * _ng * noisePanR_;
