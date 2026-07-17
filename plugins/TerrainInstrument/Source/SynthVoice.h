@@ -3909,17 +3909,28 @@ namespace tw
             }
         }
 
-        struct FoldState { float x1 = 0.0f; };
+        struct FoldState
+        {
+            float x1  = 0.0f;    // previous input sample
+            float Fx1 = 0.0f;    // cached antiderivative F(x1) for the (sh1,am1) curve below
+            int   sh1 = -1;      // shape Fx1 was computed under (-1 = cache invalid)
+            float am1 = -1.0f;   // amount Fx1 was computed under (-1 = cache invalid)
+        };
 
         // 1st-order ADAA: y[n] = (F(x[n]) − F(x[n−1])) / (x[n] − x[n−1]).
-        // NEVER cache F — recompute BOTH antiderivatives live each sample. This is
-        // correct after a note-on reset (x1=0 evaluates the real F(0), which is NOT 0
-        // for any fold shape) and stays correct when shape/amount change between samples
-        // (both terms evaluate on the current curve). [ADAA audit vs Waveshaper 75cb6a9]
-        // A midpoint-naive fallback handles the low-slew 0/0 case.
+        // WITHIN-BLOCK CACHE (CPU): shape/amount are pushed ONCE PER BLOCK (setFold), so across a
+        // block F(x[n−1]) this sample is bit-identical to last sample's F(x[n]) — cache it (st.Fx1)
+        // and reuse it ONLY while (shape,amount) are unchanged. ANY curve change (a block boundary
+        // that moved the knob, or per-block automation) forces a live recompute of F(x1) on the
+        // CURRENT curve, so the output is identical to the recompute-both version — this just skips
+        // recomputing a value that is provably unchanged. After a note-on reset (x1=0, sh1=-1) the
+        // first sample recomputes F(0) live (≠ 0 for any fold). The low-slew and fold-off branches
+        // produce no F, so they invalidate the cache (sh1=-1) → the next real sample recomputes.
+        // A midpoint-naive fallback handles the low-slew 0/0 case. [ADAA audit vs Waveshaper 75cb6a9]
         static inline float applyFoldADAA (float x, int shape, float amount, FoldState& st) noexcept
         {
-            float y;
+            float y, Fx = 0.0f;
+            bool  haveFx = false;
             if (amount <= 1.0e-6f)
             {
                 y = x;                                                   // fold off → identity
@@ -3930,11 +3941,17 @@ namespace tw
             }
             else
             {
-                const float Fx  = foldAntideriv (x,     shape, amount);
-                const float Fx1 = foldAntideriv (st.x1, shape, amount);  // recomputed live, never cached
+                Fx = foldAntideriv (x, shape, amount);
+                // F(x1): reuse the cache iff it was computed on the SAME curve, else recompute live.
+                const float Fx1 = (st.sh1 == shape && st.am1 == amount)
+                                    ? st.Fx1
+                                    : foldAntideriv (st.x1, shape, amount);
                 y = (Fx - Fx1) / (x - st.x1);
+                haveFx = true;
             }
             st.x1 = x;
+            if (haveFx) { st.Fx1 = Fx; st.sh1 = shape; st.am1 = amount; }
+            else          st.sh1 = -1;                                    // invalidate cache
             return y;
         }
 
