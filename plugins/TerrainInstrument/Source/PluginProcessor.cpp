@@ -243,6 +243,14 @@ void TerrainInstrumentAudioProcessor::addImportPath (bool wt, const juce::String
     saveImportsRegistry (wt);
 }
 
+void TerrainInstrumentAudioProcessor::removeImportPath (bool wt, const juce::String& path)
+{
+    const int i = wt ? 1 : 0;
+    importFiles_[i].removeString (path);      // remove a single import OR
+    importFolders_[i].removeString (path);    // a whole user folder (only one array holds it) — file on disk untouched
+    saveImportsRegistry (wt);
+}
+
 juce::String TerrainInstrumentAudioProcessor::getImportsJson (bool wt)
 {
     const int idx = wt ? 1 : 0;

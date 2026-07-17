@@ -768,6 +768,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "'," + juce::JSON::toString (juce::var (nm)) + ");", nullptr);
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("removeNoiseImport", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // DELETE (fb61) — un-reference a user folder OR single import (file on disk untouched).
+                if (args.size() >= 1) audioProcessor.removeImportPath (false, args[0].toString());
+                if (webView != nullptr)
+                    webView->evaluateJavascript ("if(window.onNoiseImportsChanged)window.onNoiseImportsChanged();", nullptr);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("removeWtImport", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1) audioProcessor.removeImportPath (true, args[0].toString());
+                if (webView != nullptr)
+                    webView->evaluateJavascript ("if(window.onWavetableImportsChanged)window.onWavetableImportsChanged('a');", nullptr);
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("pickWavetableFile", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

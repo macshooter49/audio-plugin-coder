@@ -531,6 +531,7 @@ public:
     //    whole FOLDERS → their own named category (scanned live for count). Paths only, no audio copied.
     //    Msg-thread only. Persisted best-effort to a small JSON in app-data (survives where writable).
     void         addImportPath (bool wt, const juce::String& path);   // decides file-vs-folder via File::isDirectory
+    void         removeImportPath (bool wt, const juce::String& path);// un-reference a user folder OR single import (NEVER touches the file on disk)
     juce::String getImportsJson (bool wt);                            // {files:[{name,path}], folders:[{name,path,count,items:[…]}]}
     void         loadImportsRegistry ();
     void         saveImportsRegistry (bool wt);
