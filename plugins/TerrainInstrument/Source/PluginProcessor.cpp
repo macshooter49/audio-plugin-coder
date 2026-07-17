@@ -5330,6 +5330,47 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = lanes[i];
     }
 
+    // ── NOISE AUDITION (headphone preview in the browser) — play the LOADED noise sample once through the
+    //    output, ~2.5 s, looped, 50 ms fades, at preview level; re-triggerable. Sample-only (algo types have
+    //    no buffer → no-op). Mixed post-FX so it's a clean raw preview of exactly what you'd load. CPU: only
+    //    runs during an active 2.5 s preview.
+    {
+        const int req = noiseAuditionReq_.load (std::memory_order_relaxed);
+        if (req != noiseAudSeen_) { noiseAudSeen_ = req; noiseAudPos_ = 0.0; noiseAudCtr_ = (int) (getSampleRate() * 2.5); }
+        if (noiseAudCtr_ > 0)
+        {
+            auto nb = noiseSampleBuffer_.load();
+            if (nb != nullptr && nb->getNumSamples() > 1 && buffer.getNumChannels() >= 1)
+            {
+                const int    nlen  = nb->getNumSamples();
+                const float* nL    = nb->getReadPointer (0);
+                const float* nR    = nb->getNumChannels() > 1 ? nb->getReadPointer (1) : nL;
+                const double sr    = getSampleRate();
+                const double ratio = (noiseSampleBuffer_.getSampleRate() > 0.0) ? (noiseSampleBuffer_.getSampleRate() / sr) : 1.0;
+                const double total = sr * 2.5;
+                const float  fade  = (float) (sr * 0.05);
+                float* oL = buffer.getWritePointer (0);
+                float* oR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : oL;
+                for (int i = 0; i < numSamples && noiseAudCtr_ > 0; ++i)
+                {
+                    const int i0 = (int) noiseAudPos_; int i1 = i0 + 1; if (i1 >= nlen) i1 = 0;
+                    const float fr = (float) (noiseAudPos_ - (double) i0);
+                    const float sL = nL[i0] + (nL[i1] - nL[i0]) * fr;
+                    const float sR = nR[i0] + (nR[i1] - nR[i0]) * fr;
+                    const double elapsed = total - (double) noiseAudCtr_;
+                    float env = 1.0f;
+                    if (elapsed < (double) fade)          env = (float) (elapsed / (double) fade);
+                    else if ((float) noiseAudCtr_ < fade) env = (float) noiseAudCtr_ / fade;
+                    const float g = 0.55f * juce::jlimit (0.0f, 1.0f, env);
+                    oL[i] += sL * g; oR[i] += sR * g;
+                    noiseAudPos_ += ratio; while (noiseAudPos_ >= (double) nlen) noiseAudPos_ -= (double) nlen;
+                    --noiseAudCtr_;
+                }
+            }
+            else noiseAudCtr_ = 0;
+        }
+    }
+
     // (ANNULUS RESONATOR moved UP to the synth-section output — pre-FX — see above.)
 }
 

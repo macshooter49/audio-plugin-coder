@@ -646,6 +646,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 });
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction("auditionNoise", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // NOISE AUDITION — headphone preview: play the currently-loaded noise sample once through the output.
+                audioProcessor.startNoiseAudition();
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("getPresetName", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
