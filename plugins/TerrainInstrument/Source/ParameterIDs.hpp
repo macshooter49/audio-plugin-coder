@@ -850,6 +850,7 @@ namespace ParameterIDs
     constexpr char SYN_NOISE_PITCH[] = "SYN_NOISE_PITCH";   // float 0..1 (0.5 = nominal; tone/brightness for colors)
     constexpr char SYN_NOISE_PAN[]   = "SYN_NOISE_PAN";     // float 0..1 (0.5 = center)
     constexpr char SYN_NOISE_PLAYMODE[] = "SYN_NOISE_PLAYMODE";  // fb66 — choice: 0 Random (random start/note) · 1 Envelope (one-shot/note) · 2 Free (global always-running tape)
+    constexpr char SYN_NOISE_WIDTH[] = "SYN_NOISE_WIDTH";        // fb69 — float 0..2 stereo width (M/S): 0 mono · 1 normal · 2 wide
 
     // ════════ MODAL-ENGINE-IDS — per-OSC physical modeling (Engine::MODAL, slot 6) ════════
     // 3 selectors (Family ×9 · Form ×5 · Source ×4) + 10 knobs, ×4 oscs = 52 params.

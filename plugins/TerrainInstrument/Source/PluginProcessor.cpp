@@ -2771,6 +2771,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_NOISE_PLAYMODE, 1 }, "Noise Play Mode",
             juce::StringArray { "Random", "Envelope", "Free" }, 0));
+        // fb69 — STEREO WIDTH (M/S on the noise output): 0 = mono, 1 = normal (default, identity), 2 = wide.
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_NOISE_WIDTH, 1 }, "Noise Width",
+            juce::NormalisableRange<float> (0.0f, 2.0f, 0.001f), 1.0f));
     }
 
     // ════════ RESYNTH-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
@@ -4250,6 +4254,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float noisePitch = *rawParam (ParameterIDs::SYN_NOISE_PITCH);
         const float noisePan   = *rawParam (ParameterIDs::SYN_NOISE_PAN);
         const int   noisePlayMode = (int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE);   // fb66 — 0 Random · 1 Envelope · 2 Free
+        const float noiseWidth    = *rawParam (ParameterIDs::SYN_NOISE_WIDTH);   // fb69 — stereo width 0..2 (M/S)
 
         // fb66 — FREE play mode: a GLOBAL always-running tape playhead. Advanced once per block (even with
         // no notes) at the rate the voices read the loop, wrapped to length. Voices in Free mode resync to
@@ -4363,6 +4368,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setNoisePlayMode      (noisePlayMode);        // fb66 — Random / Envelope / Free (sample playback)
                 sv->setNoiseFreePos       (noiseFreePos_);        // fb66/fb67 — latest global tape position (a Free note reads it once at note-on; no per-block resync)
                 sv->setNoiseCarrier       (! monoNoise || (sv == noiseCarrierVoice));   // fb68 — Free = only the newest voice sounds the noise (mono); poly modes = all carry
+                sv->setNoiseWidth         (noiseWidth);            // fb69 — noise stereo width (M/S)
                 sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setPanC (panC);                   sv->setPanD (panD);

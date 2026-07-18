@@ -1036,6 +1036,7 @@ namespace tw
         // stay ~phase-locked because they all advance at the same rate from the same tape clock.
         void setNoiseFreePos (double posSamples) noexcept { noiseFreeLatest_ = posSamples; }
         void setNoiseCarrier (bool on) noexcept { noiseCarrierTarget_ = on ? 1.0f : 0.0f; }   // fb68 — Free-mode mono gate (poly modes push true to all)
+        void setNoiseWidth (float w) noexcept { noiseWidth_ = juce::jlimit (0.0f, 2.0f, w); }   // fb69 — stereo width (M/S)
         // Representative follower position 0..1 for the waveform viz (Random/Envelope read this voice's head); -1 = no sample.
         float noiseFollowPos01 () const noexcept
         { return (noiseSampLen_ > 1) ? (float) (noiseSampPos_ / (double) noiseSampLen_) : -1.0f; }
@@ -1192,6 +1193,7 @@ namespace tw
         // and the rest 0; the audible noise multiplies by a ~ms-smoothed gain → mono (no polyphonic phasing) with
         // click-free hand-offs. In non-Free modes every voice is a carrier (target 1) so this is a no-op.
         float  noiseCarrierTarget_ = 1.0f, noiseCarrierGain_ = 1.0f;
+        float  noiseWidth_ = 1.0f;   // fb69 — noise stereo width (M/S): 0 mono · 1 normal · 2 wide
     public:
 
         void setPhaseMode (int modeA, int modeB) noexcept
@@ -3489,8 +3491,11 @@ namespace tw
                     if (noiseOn_)   // audible bus contribution only when the noise engine is actually on
                     {
                         const float _ng = noiseLevel_ * velEnv * noiseCarrierGain_;   // fb68 — × carrier gain (Free = mono; poly = 1)
-                        noiseAddL = _nL * _ng * noisePanL_;
-                        noiseAddR = _nR * _ng * noisePanR_;
+                        const float aL = _nL * _ng * noisePanL_, aR = _nR * _ng * noisePanR_;
+                        // fb69 — STEREO WIDTH via mid/side: 0 = mono (side→0), 1 = normal (identity), 2 = wide (side×2).
+                        const float mid = 0.5f * (aL + aR), side = 0.5f * (aL - aR) * noiseWidth_;
+                        noiseAddL = mid + side;
+                        noiseAddR = mid - side;
                     }
                 }
                 scratchL[i] += noiseAddL * noiseCo1_;   scratchR[i] += noiseAddR * noiseCo1_;   // → Filter 1 bus
