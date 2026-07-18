@@ -219,6 +219,8 @@ namespace ParameterIDs
     constexpr char SYN_FILTER2_SRC_C[]  = "SYN_FILTER2_SRC_C";
     constexpr char SYN_FILTER2_SRC_D[]  = "SYN_FILTER2_SRC_D";
     constexpr char SYN_FILTER2_SRC_SUB[]= "SYN_FILTER2_SRC_SUB";
+    constexpr char SYN_FILTER1_SRC_NOISE[] = "SYN_FILTER1_SRC_NOISE";   // fb63 — route the Noise layer into Filter 1
+    constexpr char SYN_FILTER2_SRC_NOISE[] = "SYN_FILTER2_SRC_NOISE";   // fb63 — route the Noise layer into Filter 2
 
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)

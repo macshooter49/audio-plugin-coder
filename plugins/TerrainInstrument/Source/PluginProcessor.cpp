@@ -1463,6 +1463,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             { ParameterIDs::SYN_FILTER2_SRC_C,   "Synth Filter 2 Source C"   },
             { ParameterIDs::SYN_FILTER2_SRC_D,   "Synth Filter 2 Source D"   },
             { ParameterIDs::SYN_FILTER2_SRC_SUB, "Synth Filter 2 Source Sub" },
+            { ParameterIDs::SYN_FILTER1_SRC_NOISE, "Synth Filter 1 Source Noise" },   // fb63 — noise → filter routing
+            { ParameterIDs::SYN_FILTER2_SRC_NOISE, "Synth Filter 2 Source Noise" },
         };
         for (auto& s : fltSrc)
             layout.add (std::make_unique<juce::AudioParameterBool> (
@@ -3711,6 +3713,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                  *rawParam (ParameterIDs::SYN_FILTER2_SRC_C)   > 0.5f,
                                  *rawParam (ParameterIDs::SYN_FILTER2_SRC_D)   > 0.5f,
                                  *rawParam (ParameterIDs::SYN_FILTER2_SRC_SUB) > 0.5f };
+        const bool  noiseF1 = *rawParam (ParameterIDs::SYN_FILTER1_SRC_NOISE) > 0.5f;   // fb63 — noise → filter routing
+        const bool  noiseF2 = *rawParam (ParameterIDs::SYN_FILTER2_SRC_NOISE) > 0.5f;
         const float fltEnvA =         *rawParam (ParameterIDs::SYN_ENV_FLT_A);
         const float fltEnvD =         *rawParam (ParameterIDs::SYN_ENV_FLT_D);
         const float fltEnvS =         *rawParam (ParameterIDs::SYN_ENV_FLT_S);
@@ -4236,6 +4240,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterMix2             (filtMix2);
                 sv->setFilterRouting          (filtRoute);
                 sv->setFilterSources          (f1src, f2src);
+                sv->setNoiseFilterRouting     (noiseF1, noiseF2);   // fb63 — route the noise layer into F1/F2/dry
                 sv->setFilterVelocity         (filtVel1, filtVel2);
                 sv->setFilterPostDrive        (filtPdrv1, filtPdrv2);
                 sv->setFilterDriveType        (filtDrvType1, filtDrvType2);

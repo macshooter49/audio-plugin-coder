@@ -418,6 +418,8 @@ namespace tw
         // Per-oscillator filter routing masks — which sources (A,B,C,D,Sub) feed each filter.
         void setFilterSources (const bool s1[5], const bool s2[5]) noexcept
         { for (int k = 0; k < 5; ++k) { fltSrc1_[k] = s1[k]; fltSrc2_[k] = s2[k]; } }
+        // fb63 — the Noise layer as a 6th filter source (its own bus routing, mirrors the osc mask logic).
+        void setNoiseFilterRouting (bool f1, bool f2) noexcept { noiseSrc1_ = f1; noiseSrc2_ = f2; }
         // Back-panel Vel (velocity→cutoff depth) + post-filter Drive, per filter.
         void setFilterVelocity (float v1, float v2) noexcept
         { velAmt1_ = juce::jlimit (0.0f, 1.0f, v1); velAmt2_ = juce::jlimit (0.0f, 1.0f, v2); }
@@ -1725,6 +1727,12 @@ namespace tw
                     anySrc1_ = anySrc1_ || (busCo1_[k] != 0.0f);
                     anySrc2_ = anySrc2_ || (busCo2_[k] != 0.0f);
                 }
+                // fb63 — NOISE routed like a 6th source (same F1/F2/parallel/dry rules).
+                noiseCo1_ = noiseSrc1_ ? 1.0f : 0.0f;
+                noiseCo2_ = (par ? noiseSrc2_ : (noiseSrc2_ && ! noiseSrc1_)) ? 1.0f : 0.0f;
+                noiseCoD_ = (! noiseSrc1_ && ! noiseSrc2_) ? 1.0f : 0.0f;
+                anySrc1_ = anySrc1_ || (noiseCo1_ != 0.0f);
+                anySrc2_ = anySrc2_ || (noiseCo2_ != 0.0f);
             }
 
             // KEYTRACK + ROUTE — resolve effective destination values, clamped.
@@ -3387,7 +3395,8 @@ namespace tw
                 const float subBR = subMono0 * gAR + subMono1 * gBR + subMono2 * gCR + subMono3 * gDR;
                 scratchL[i] = busCo1_[0]*oAL + busCo1_[1]*oBL + busCo1_[2]*oCL + busCo1_[3]*oDL + busCo1_[4]*subBL;
                 scratchR[i] = busCo1_[0]*oAR + busCo1_[1]*oBR + busCo1_[2]*oCR + busCo1_[3]*oDR + busCo1_[4]*subBR;
-                // NOISE ENGINE → Filter 1 bus, riding the amp env + velocity like the oscs (P1: routed to F1).
+                // NOISE ENGINE — compute the contribution once, then ROUTE it into F1/F2/dry per the N pill (fb63).
+                float noiseAddL = 0.0f, noiseAddR = 0.0f;
                 if (noiseOn_)
                 {
                     float _nL, _nR;
@@ -3413,13 +3422,14 @@ namespace tw
                         _nR = nPrevR_ + (nCurR_ - nPrevR_) * _t;
                     }
                     const float _ng = noiseLevel_ * velEnv;
-                    scratchL[i] += _nL * _ng * noisePanL_;
-                    scratchR[i] += _nR * _ng * noisePanR_;
+                    noiseAddL = _nL * _ng * noisePanL_;
+                    noiseAddR = _nR * _ng * noisePanR_;
                 }
-                busB2L[i]   = busCo2_[0]*oAL + busCo2_[1]*oBL + busCo2_[2]*oCL + busCo2_[3]*oDL + busCo2_[4]*subBL;
-                busB2R[i]   = busCo2_[0]*oAR + busCo2_[1]*oBR + busCo2_[2]*oCR + busCo2_[3]*oDR + busCo2_[4]*subBR;
-                busDryL[i]  = busCoD_[0]*oAL + busCoD_[1]*oBL + busCoD_[2]*oCL + busCoD_[3]*oDL + busCoD_[4]*subBL;
-                busDryR[i]  = busCoD_[0]*oAR + busCoD_[1]*oBR + busCoD_[2]*oCR + busCoD_[3]*oDR + busCoD_[4]*subBR;
+                scratchL[i] += noiseAddL * noiseCo1_;   scratchR[i] += noiseAddR * noiseCo1_;   // → Filter 1 bus
+                busB2L[i]   = busCo2_[0]*oAL + busCo2_[1]*oBL + busCo2_[2]*oCL + busCo2_[3]*oDL + busCo2_[4]*subBL + noiseAddL * noiseCo2_;
+                busB2R[i]   = busCo2_[0]*oAR + busCo2_[1]*oBR + busCo2_[2]*oCR + busCo2_[3]*oDR + busCo2_[4]*subBR + noiseAddR * noiseCo2_;
+                busDryL[i]  = busCoD_[0]*oAL + busCoD_[1]*oBL + busCoD_[2]*oCL + busCoD_[3]*oDL + busCoD_[4]*subBL + noiseAddL * noiseCoD_;
+                busDryR[i]  = busCoD_[0]*oAR + busCoD_[1]*oBR + busCoD_[2]*oCR + busCoD_[3]*oDR + busCoD_[4]*subBR + noiseAddR * noiseCoD_;
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
                 modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
@@ -4161,6 +4171,9 @@ namespace tw
         float                   busCo2_[5]  = { 0,0,0,0,0 };   // → Filter 2 bus (fltBus2_)
         float                   busCoD_[5]  = { 0,0,0,0,0 };   // → dry/bypass  (fltDry_)
         bool                    anySrc1_ = true, anySrc2_ = false;   // any source routed to each filter this block
+        // fb63 — NOISE filter routing (its own masks + bus coefficients; default DRY like the oscs).
+        bool                    noiseSrc1_ = false, noiseSrc2_ = false;
+        float                   noiseCo1_ = 0.0f, noiseCo2_ = 0.0f, noiseCoD_ = 1.0f;
         juce::AudioBuffer<float> fltBus2_, fltDry_;              // F2 + dry buses (bus1 = scratch_)
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
