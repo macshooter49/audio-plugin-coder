@@ -3465,6 +3465,12 @@ namespace tw
                             const float fr = (float) (noiseSampPos_ - (double) i0);
                             _nL = noiseSampL_[i0] + (noiseSampL_[i1] - noiseSampL_[i0]) * fr;
                             _nR = noiseSampR_[i0] + (noiseSampR_[i1] - noiseSampR_[i0]) * fr;
+                            if (noisePlayMode_ == 1)   // fb70 — Envelope one-shot fades out over its last ~60 ms instead of hard-cutting ("shooting the birds")
+                            {
+                                const double toEnd = (double) (noiseSampLen_ - 1) - noiseSampPos_;
+                                const double fadeLen = 0.060 * (double) noiseSR_;
+                                if (toEnd < fadeLen) { const float g = (float) juce::jlimit (0.0, 1.0, toEnd / fadeLen); _nL *= g; _nR *= g; }
+                            }
                             noiseSampPos_ += (double) noiseScanRate_ * noiseSampNativeOverOut_;
                             if (noisePlayMode_ == 1)   // Envelope — one-shot: stop at the end, no wrap
                             {
