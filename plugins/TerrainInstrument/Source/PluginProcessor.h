@@ -1132,6 +1132,14 @@ private:
     int    wtAudSeen_ = 0, wtAudCtr_ = 0, wtAudTotal_ = 0, wtAudOsc_ = 0;
     double wtAudPhase_ = 0.0, wtAudInc_ = 0.0;
     std::atomic<bool> previewStop_ { false };                       // set by msg thread → audio thread kills the one-shot
+    // PREVIEW DECLICK (fb62) — a short retrigger fade-out so scanning through sounds doesn't cut/click, and a HELD
+    // buffer so the noise preview stays on the sound it started (the shared buffer swaps under it → "bleeds over").
+    tw::SampleBuffer::BufferPtr noiseAudHeld_;                       // buffer captured at trigger → stable preview
+    double noiseAudRatio_  = 1.0;                                    // captured resample ratio for the held buffer
+    int    noiseAudFade_   = 0, noiseAudFadeLen_ = 0;               // retrigger fade-out (samples left / length)
+    bool   noiseAudPending_ = false;                                // a new preview queued to start after the fade-out
+    int    wtAudFade_ = 0, wtAudFadeLen_ = 0;                        // WT retrigger fade-out
+    bool   wtAudPending_ = false;
     // IMPORTS REGISTRY (fb60) — msg-thread-only path lists (reference-in-place); [0]=noise, [1]=wavetable
     juce::StringArray importFiles_[2], importFolders_[2];
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;

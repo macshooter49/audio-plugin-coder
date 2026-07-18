@@ -5435,7 +5435,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // PREVIEW STOP (Max: double-click to select / closing the browser must SILENCE the audition immediately —
     // otherwise a sample's ~3.5s tail "keeps fucking playing"). Kills both one-shots this block.
-    if (previewStop_.exchange (false, std::memory_order_relaxed)) { noiseAudCtr_ = 0; wtAudCtr_ = 0; }
+    if (previewStop_.exchange (false, std::memory_order_relaxed))
+    {
+        // Fade out (not an abrupt cut → no click) and cancel any queued preview.
+        const int fl = juce::jmax (1, (int) (getSampleRate() * 0.008));
+        if (noiseAudCtr_ > 0 && noiseAudFade_ <= 0) { noiseAudFadeLen_ = fl; noiseAudFade_ = fl; }
+        if (wtAudCtr_    > 0 && wtAudFade_    <= 0) { wtAudFadeLen_    = fl; wtAudFade_    = fl; }
+        noiseAudCtr_ = 0; wtAudCtr_ = 0; noiseAudPending_ = false; wtAudPending_ = false;
+    }
 
     // ── NOISE AUDITION (browser headphone preview) — ONE-SHOT, re-triggerable (Max: "play once, re-trigger,
     //    don't loop"). On each trigger: if a sample is loaded → play it once start-to-end (cap 3.5 s); else →
@@ -5443,65 +5450,85 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //    old "built-in types are silent" bug — they had no buffer). Keyless, mixed post-FX, soft-clipped. CPU:
     //    only during an active preview.
     {
-        const int req = noiseAuditionReq_.load (std::memory_order_relaxed);
-        if (req != noiseAudSeen_)
+        const double sr = getSampleRate();
+        // Start a fresh preview: capture + HOLD the current buffer so scanning doesn't bleed (the shared buffer
+        // swaps under the playing preview otherwise), and decide sample-vs-type from the committed state.
+        auto startNoisePreview = [this, sr]()
         {
-            noiseAudSeen_ = req; noiseAudPos_ = 0.0;
-            const double sr = getSampleRate();
-            auto nb = noiseSampleBuffer_.load();
-            if (nb != nullptr && nb->getNumSamples() > 1)
+            noiseAudPos_   = 0.0;
+            noiseAudHeld_  = noiseSampleBuffer_.load();
+            noiseAudRatio_ = (noiseSampleBuffer_.getSampleRate() > 0.0) ? (noiseSampleBuffer_.getSampleRate() / sr) : 1.0;
+            if (noiseAudHeld_ != nullptr && noiseAudHeld_->getNumSamples() > 1)
             {
-                const double ratio  = (noiseSampleBuffer_.getSampleRate() > 0.0) ? (noiseSampleBuffer_.getSampleRate() / sr) : 1.0;
-                const double outLen = (double) nb->getNumSamples() / juce::jmax (1.0e-6, ratio);   // sample length in OUTPUT samples
-                noiseAudType_  = -1;                                                                // sample one-shot
-                noiseAudCtr_   = (int) juce::jmin (sr * 3.5, outLen);
+                const double outLen = (double) noiseAudHeld_->getNumSamples() / juce::jmax (1.0e-6, noiseAudRatio_);
+                noiseAudType_ = -1;                                                                  // sample one-shot
+                noiseAudCtr_  = (int) juce::jmin (sr * 3.5, outLen);
             }
             else
             {
-                noiseAudType_  = (int) *rawParam (ParameterIDs::SYN_NOISE_TYPE);                     // choice index 0..12
+                noiseAudType_ = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_NOISE_TYPE);    // choice index 0..12
                 noisePrevGen_.setSR ((float) sr); noisePrevGen_.setType (noiseAudType_); noisePrevGen_.reset();
-                noiseAudCtr_   = (int) (sr * 1.10);                                                  // ~1.1 s burst
+                noiseAudCtr_  = (int) (sr * 1.10);                                                   // ~1.1 s burst
             }
             noiseAudTotal_ = juce::jmax (1, noiseAudCtr_);
-        }
-        if (noiseAudCtr_ > 0 && buffer.getNumChannels() >= 1)
+        };
+
+        const int req = noiseAuditionReq_.load (std::memory_order_relaxed);
+        if (req != noiseAudSeen_)
         {
-            const double sr   = getSampleRate();
-            const float  atk  = (float) (sr * 0.012);
-            const float  rel  = (float) (sr * 0.13);
+            noiseAudSeen_ = req;
+            if (noiseAudCtr_ > 0 || noiseAudFade_ > 0)   // already sounding → fade the current one OUT first (declick), queue the new
+            {
+                noiseAudFadeLen_ = juce::jmax (1, (int) (sr * 0.008));   // ~8 ms
+                if (noiseAudFade_ <= 0) noiseAudFade_ = noiseAudFadeLen_;
+                noiseAudPending_ = true;
+            }
+            else startNoisePreview();
+        }
+
+        if ((noiseAudCtr_ > 0 || noiseAudFade_ > 0) && buffer.getNumChannels() >= 1)
+        {
+            const float atk  = (float) (sr * 0.012);
+            const float rel  = (float) (sr * 0.13);
+            const bool  fade = noiseAudFade_ > 0;
             float* oL = buffer.getWritePointer (0);
             float* oR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : oL;
-            auto nb = noiseSampleBuffer_.load();   // cheap atomic; only USED in sample mode (noiseAudType_ < 0)
-            const int    nlen  = (nb != nullptr) ? nb->getNumSamples() : 0;
-            const float* nL    = (nb != nullptr) ? nb->getReadPointer (0) : nullptr;
-            const float* nR    = (nb != nullptr && nb->getNumChannels() > 1) ? nb->getReadPointer (1) : nL;
-            const double ratio = (nb != nullptr && noiseSampleBuffer_.getSampleRate() > 0.0) ? (noiseSampleBuffer_.getSampleRate() / sr) : 1.0;
-            if (noiseAudType_ < 0 && (nb == nullptr || nlen < 2)) noiseAudCtr_ = 0;   // sample vanished mid-preview
-            for (int i = 0; i < numSamples && noiseAudCtr_ > 0; ++i)
+            auto nb = noiseAudHeld_;   // the HELD buffer (stable — no mid-scan swap)
+            const int    nlen = (nb != nullptr) ? nb->getNumSamples() : 0;
+            const float* nL   = (nb != nullptr) ? nb->getReadPointer (0) : nullptr;
+            const float* nR   = (nb != nullptr && nb->getNumChannels() > 1) ? nb->getReadPointer (1) : nL;
+            if (noiseAudType_ < 0 && (nb == nullptr || nlen < 2)) { noiseAudCtr_ = 0; noiseAudFade_ = 0; }
+            for (int i = 0; i < numSamples; ++i)
             {
+                if (fade) { if (noiseAudFade_ <= 0) break; } else { if (noiseAudCtr_ <= 0) break; }
                 float sL, sR;
                 if (noiseAudType_ < 0)   // sample one-shot (no loop — stop at end)
                 {
                     const int i0 = (int) noiseAudPos_;
-                    if (i0 >= nlen - 1) { noiseAudCtr_ = 0; break; }
+                    if (i0 >= nlen - 1) { if (fade) noiseAudFade_ = 0; else noiseAudCtr_ = 0; break; }
                     const int   i1 = i0 + 1;
                     const float fr = (float) (noiseAudPos_ - (double) i0);
                     sL = nL[i0] + (nL[i1] - nL[i0]) * fr;
                     sR = nR[i0] + (nR[i1] - nR[i0]) * fr;
-                    noiseAudPos_ += ratio;
+                    noiseAudPos_ += noiseAudRatio_;
                 }
-                else                     // algorithmic type — generate the real DSP
+                else noisePrevGen_.tick (sL, sR);       // algorithmic type — real DSP
+
+                float g;
+                if (fade) { g = (noiseAudType_ < 0 ? 0.55f : 0.42f) * ((float) noiseAudFade_ / (float) noiseAudFadeLen_); --noiseAudFade_; }
+                else
                 {
-                    noisePrevGen_.tick (sL, sR);
+                    const float elapsed = (float) (noiseAudTotal_ - noiseAudCtr_);
+                    float env = 1.0f;
+                    if (elapsed < atk)               env = elapsed / atk;
+                    if ((float) noiseAudCtr_ < rel)  env = juce::jmin (env, (float) noiseAudCtr_ / rel);
+                    g = (noiseAudType_ < 0 ? 0.55f : 0.42f) * juce::jlimit (0.0f, 1.0f, env);
+                    --noiseAudCtr_;
                 }
-                const float elapsed = (float) (noiseAudTotal_ - noiseAudCtr_);
-                float env = 1.0f;
-                if (elapsed < atk)               env = elapsed / atk;
-                if ((float) noiseAudCtr_ < rel)  env = juce::jmin (env, (float) noiseAudCtr_ / rel);
-                const float g = (noiseAudType_ < 0 ? 0.55f : 0.42f) * juce::jlimit (0.0f, 1.0f, env);
-                oL[i] += std::tanh (sL * g); oR[i] += std::tanh (sR * g);   // soft-clip guards hot types (Brown/Vinyl)
-                --noiseAudCtr_;
+                if (noiseAudType_ < 0) { oL[i] += sL * g; oR[i] += sR * g; }
+                else                   { oL[i] += std::tanh (sL * g); oR[i] += std::tanh (sR * g); }   // soft-clip hot types
             }
+            if (noiseAudFade_ <= 0 && noiseAudPending_) { noiseAudPending_ = false; startNoisePreview(); }   // fade done → start the queued one (next block)
         }
     }
 
@@ -5509,17 +5536,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //    fixed pitch (C3), with a slow frame-scan (0→1) so you hear the whole table morph. Table resolved exactly
     //    like the voice/viz: imported override else the factory bank. Keyless, mixed post-FX, band-limited via mip.
     {
-        const int req = wtAuditionReq_.load (std::memory_order_relaxed);
-        if (req != wtAudSeen_)
+        const double sr = getSampleRate();
+        auto startWtPreview = [this, sr]()
         {
-            wtAudSeen_  = req; wtAudOsc_ = juce::jlimit (0, 3, wtAudReqOsc_.load (std::memory_order_relaxed));
+            wtAudOsc_   = juce::jlimit (0, 3, wtAudReqOsc_.load (std::memory_order_relaxed));
             wtAudPhase_ = 0.0;
-            const double sr = getSampleRate();
             wtAudInc_   = 130.81 / sr;                 // C3
             wtAudCtr_   = (int) (sr * 0.95);
             wtAudTotal_ = juce::jmax (1, wtAudCtr_);
+        };
+        const int req = wtAuditionReq_.load (std::memory_order_relaxed);
+        if (req != wtAudSeen_)
+        {
+            wtAudSeen_ = req;
+            if (wtAudCtr_ > 0 || wtAudFade_ > 0)   // already sounding → fade OUT first (declick), queue the new
+            {
+                wtAudFadeLen_ = juce::jmax (1, (int) (sr * 0.008));
+                if (wtAudFade_ <= 0) wtAudFade_ = wtAudFadeLen_;
+                wtAudPending_ = true;
+            }
+            else startWtPreview();
         }
-        if (wtAudCtr_ > 0 && buffer.getNumChannels() >= 1)
+        if ((wtAudCtr_ > 0 || wtAudFade_ > 0) && buffer.getNumChannels() >= 1)
         {
             const int o = wtAudOsc_;
             const tw::Wavetable* wt = importSlot_[o].live.load (std::memory_order_acquire);
@@ -5529,28 +5567,35 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                                     ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
                 wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[o]));
             }
-            if (wt == nullptr) { wtAudCtr_ = 0; }
+            if (wt == nullptr) { wtAudCtr_ = 0; wtAudFade_ = 0; }
             else
             {
-                const int   mip = tw::Wavetable::mipLevelForPhaseIncrement (wtAudInc_);
-                const double sr = getSampleRate();
-                const float atk = (float) (sr * 0.010);
-                const float rel = (float) (sr * 0.16);
+                const int   mip  = tw::Wavetable::mipLevelForPhaseIncrement (wtAudInc_);
+                const float atk  = (float) (sr * 0.010);
+                const float rel  = (float) (sr * 0.16);
+                const bool  fade = wtAudFade_ > 0;
                 float* oL = buffer.getWritePointer (0);
                 float* oR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : oL;
-                for (int i = 0; i < numSamples && wtAudCtr_ > 0; ++i)
+                for (int i = 0; i < numSamples; ++i)
                 {
-                    const float elapsed  = (float) (wtAudTotal_ - wtAudCtr_);
-                    const float framePos = juce::jlimit (0.0f, 1.0f, elapsed / (float) wtAudTotal_);   // slow scan across the table
+                    if (fade) { if (wtAudFade_ <= 0) break; } else { if (wtAudCtr_ <= 0) break; }
+                    const float framePos = juce::jlimit (0.0f, 1.0f, (float) (wtAudTotal_ - wtAudCtr_) / (float) wtAudTotal_);   // frozen during fade
                     const float s = wt->lookup (mip, framePos, (float) wtAudPhase_);
-                    float env = 1.0f;
-                    if (elapsed < atk)            env = elapsed / atk;
-                    if ((float) wtAudCtr_ < rel)  env = juce::jmin (env, (float) wtAudCtr_ / rel);
-                    const float g = 0.42f * juce::jlimit (0.0f, 1.0f, env);
+                    float g;
+                    if (fade) { g = 0.42f * ((float) wtAudFade_ / (float) wtAudFadeLen_); --wtAudFade_; }
+                    else
+                    {
+                        const float elapsed = (float) (wtAudTotal_ - wtAudCtr_);
+                        float env = 1.0f;
+                        if (elapsed < atk)            env = elapsed / atk;
+                        if ((float) wtAudCtr_ < rel)  env = juce::jmin (env, (float) wtAudCtr_ / rel);
+                        g = 0.42f * juce::jlimit (0.0f, 1.0f, env);
+                        --wtAudCtr_;
+                    }
                     oL[i] += s * g; oR[i] += s * g;
                     wtAudPhase_ += wtAudInc_; if (wtAudPhase_ >= 1.0) wtAudPhase_ -= 1.0;
-                    --wtAudCtr_;
                 }
+                if (wtAudFade_ <= 0 && wtAudPending_) { wtAudPending_ = false; startWtPreview(); }
             }
         }
     }
