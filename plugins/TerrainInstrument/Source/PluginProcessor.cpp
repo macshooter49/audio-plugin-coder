@@ -4255,9 +4255,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // no notes) at the rate the voices read the loop, wrapped to length. Voices in Free mode resync to
         // this at block start (setNoiseFreePos) so every note reads the ONE shared tape; the waveform
         // follower reads the normalised copy. Audio + follower use the same value → perfectly consistent.
+        bool noiseSampleLoaded = false;   // fb68 — the Free-mode mono carrier gate only engages with a real sample loaded
         {
             auto nb = noiseSampleBuffer_.load();
             const int nlen = (nb != nullptr) ? nb->getNumSamples() : 0;
+            noiseSampleLoaded = (nlen > 1);
             if (nlen > 1)
             {
                 const double nnr = noiseSampleBuffer_.getSampleRate();
@@ -4271,6 +4273,27 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 noiseFreeNorm_.store ((float) (noiseFreePos_ / (double) nlen), std::memory_order_relaxed);
             }
             else { noiseFreePos_ = 0.0; noiseFreeNorm_.store (0.0f, std::memory_order_relaxed); }
+        }
+
+        // fb68 — Free mode is MONOPHONIC noise: stacked polyphonic tape copies comb/phase, so pick ONE carrier voice
+        // (newest key-HELD active voice; fallback newest active so a release tail still sounds) and let only it add the
+        // audible noise. Poly modes / no sample → every voice carries (no-op). A note started mid-block is promoted
+        // next block (its voice starts muted at note-on and ramps in click-free).
+        const bool monoNoise = (noisePlayMode == 2) && noiseSampleLoaded;
+        tw::SynthVoice* noiseCarrierVoice = nullptr;
+        if (monoNoise)
+        {
+            juce::uint32 bestHeld = 0, bestAny = 0;
+            tw::SynthVoice* held = nullptr; tw::SynthVoice* anyv = nullptr;
+            for (int i = 0; i < synthEngine.getNumVoices(); ++i)
+                if (auto* sv = synthVoices_[(size_t) i])
+                    if (sv->isAmpEnvActive())
+                    {
+                        const juce::uint32 st = sv->getNoteStartStamp();
+                        if (anyv == nullptr || st >= bestAny) { bestAny = st; anyv = sv; }
+                        if (sv->isKeyDown() && (held == nullptr || st >= bestHeld)) { bestHeld = st; held = sv; }
+                    }
+            noiseCarrierVoice = (held != nullptr) ? held : anyv;
         }
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
@@ -4338,7 +4361,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setNoise (noiseOn, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
                 sv->setNoiseSampleSource (&noiseSampleBuffer_);   // NOISE IMPORT (P5) — looping-sample override (empty buffer = algorithmic type)
                 sv->setNoisePlayMode      (noisePlayMode);        // fb66 — Random / Envelope / Free (sample playback)
-                sv->setNoiseFreePos       (noiseFreePos_);        // fb66 — Free-mode global tape position (resynced per block; needs len from setNoiseSampleSource above)
+                sv->setNoiseFreePos       (noiseFreePos_);        // fb66/fb67 — latest global tape position (a Free note reads it once at note-on; no per-block resync)
+                sv->setNoiseCarrier       (! monoNoise || (sv == noiseCarrierVoice));   // fb68 — Free = only the newest voice sounds the noise (mono); poly modes = all carry
                 sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setPanC (panC);                   sv->setPanD (panD);

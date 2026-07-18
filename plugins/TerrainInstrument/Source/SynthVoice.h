@@ -1035,6 +1035,7 @@ namespace tw
         // resync of the playing head (that resync was the source of the Free-mode background static). Voices still
         // stay ~phase-locked because they all advance at the same rate from the same tape clock.
         void setNoiseFreePos (double posSamples) noexcept { noiseFreeLatest_ = posSamples; }
+        void setNoiseCarrier (bool on) noexcept { noiseCarrierTarget_ = on ? 1.0f : 0.0f; }   // fb68 — Free-mode mono gate (poly modes push true to all)
         // Representative follower position 0..1 for the waveform viz (Random/Envelope read this voice's head); -1 = no sample.
         float noiseFollowPos01 () const noexcept
         { return (noiseSampLen_ > 1) ? (float) (noiseSampPos_ / (double) noiseSampLen_) : -1.0f; }
@@ -1187,6 +1188,10 @@ namespace tw
         int    noisePlayMode_    = 0;
         bool   noiseOneShotDone_ = false;   // Envelope: the one-shot has played through (silent until the next note)
         double noiseFreeLatest_  = 0.0;     // fb67 — latest global tape position (samples); a Free note enters here, then free-runs
+        // fb68 — Free-mode MONO carrier gate: the processor marks the newest voice as the sole carrier (target 1)
+        // and the rest 0; the audible noise multiplies by a ~ms-smoothed gain → mono (no polyphonic phasing) with
+        // click-free hand-offs. In non-Free modes every voice is a carrier (target 1) so this is a no-op.
+        float  noiseCarrierTarget_ = 1.0f, noiseCarrierGain_ = 1.0f;
     public:
 
         void setPhaseMode (int modeA, int modeB) noexcept
@@ -1585,6 +1590,11 @@ namespace tw
                     noiseSampPos_ = juce::jlimit (0.0, (double) (noiseSampLen_ - 1), noiseFreeLatest_);
                 }
             }
+            // fb68 — reset the Free-mode mono carrier gate. Poly modes (and algorithmic noise) = full immediately.
+            // A Free + sample voice starts MUTED so a chord doesn't blast every voice for a block — the processor
+            // promotes exactly ONE (the newest) to carrier next block and it ramps in click-free.
+            if (noisePlayMode_ == 2 && noiseSampLen_ > 1) { noiseCarrierGain_ = noiseCarrierTarget_ = 0.0f; }
+            else                                          { noiseCarrierGain_ = noiseCarrierTarget_ = 1.0f; }
 
             // PHASE — initialise each unison sine's phase accumulator per the selected
             // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
@@ -3474,10 +3484,11 @@ namespace tw
                         _nL = nPrevL_ + (nCurL_ - nPrevL_) * _t;
                         _nR = nPrevR_ + (nCurR_ - nPrevR_) * _t;
                     }
-                    noiseModTap_ = juce::jlimit (-4.0f, 4.0f, 0.5f * (_nL + _nR));   // fb64 — blend modulator tap (pre-gain raw noise, 1-sample delayed like modPrev_)
+                    noiseModTap_ = juce::jlimit (-4.0f, 4.0f, 0.5f * (_nL + _nR));   // fb64 — blend modulator tap (pre-gain raw noise, 1-sample delayed like modPrev_) — stays per-voice (not gated by the mono carrier)
+                    noiseCarrierGain_ += (noiseCarrierTarget_ - noiseCarrierGain_) * 0.01f;   // fb68 — ~10 ms smoothing → click-free mono carrier hand-offs (no-op in poly modes, target = 1)
                     if (noiseOn_)   // audible bus contribution only when the noise engine is actually on
                     {
-                        const float _ng = noiseLevel_ * velEnv;
+                        const float _ng = noiseLevel_ * velEnv * noiseCarrierGain_;   // fb68 — × carrier gain (Free = mono; poly = 1)
                         noiseAddL = _nL * _ng * noisePanL_;
                         noiseAddR = _nR * _ng * noisePanR_;
                     }
