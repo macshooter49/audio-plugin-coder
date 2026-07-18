@@ -1030,13 +1030,11 @@ namespace tw
         }
         // fb66 — NOISE play mode (sample playback): 0 Random · 1 Envelope (one-shot) · 2 Free (global tape).
         void setNoisePlayMode (int m) noexcept { noisePlayMode_ = m; }
-        // Free-mode resync: pushed once per block (BEFORE render, AFTER setNoiseSampleSource so length is current).
-        // Snaps this voice's read head to the one shared tape so every note reads the same running position.
-        void setNoiseFreePos (double posSamples) noexcept
-        {
-            if (noisePlayMode_ == 2 && noiseSampLen_ > 1)
-                noiseSampPos_ = juce::jlimit (0.0, (double) (noiseSampLen_ - 1), posSamples);
-        }
+        // fb67 — Free tape clock: just REMEMBER the latest global position (pushed once per block). A Free note
+        // reads this ONCE at note-on (startNote) and then free-runs/loops exactly like Random — NO per-block
+        // resync of the playing head (that resync was the source of the Free-mode background static). Voices still
+        // stay ~phase-locked because they all advance at the same rate from the same tape clock.
+        void setNoiseFreePos (double posSamples) noexcept { noiseFreeLatest_ = posSamples; }
         // Representative follower position 0..1 for the waveform viz (Random/Envelope read this voice's head); -1 = no sample.
         float noiseFollowPos01 () const noexcept
         { return (noiseSampLen_ > 1) ? (float) (noiseSampPos_ / (double) noiseSampLen_) : -1.0f; }
@@ -1188,6 +1186,7 @@ namespace tw
         // fb66 — NOISE play modes: 0 Random (random start/note) · 1 Envelope (one-shot/note) · 2 Free (global tape).
         int    noisePlayMode_    = 0;
         bool   noiseOneShotDone_ = false;   // Envelope: the one-shot has played through (silent until the next note)
+        double noiseFreeLatest_  = 0.0;     // fb67 — latest global tape position (samples); a Free note enters here, then free-runs
     public:
 
         void setPhaseMode (int modeA, int modeB) noexcept
@@ -1580,6 +1579,10 @@ namespace tw
                 {
                     noiseSampPos_ = 0.0;
                     noiseOneShotDone_ = false;
+                }
+                else if (noisePlayMode_ == 2)   // Free — enter the running tape at its current spot (once), then loop like Random
+                {
+                    noiseSampPos_ = juce::jlimit (0.0, (double) (noiseSampLen_ - 1), noiseFreeLatest_);
                 }
             }
 
