@@ -2162,6 +2162,7 @@ namespace tw
                     return e == Engine::SAMP || e == Engine::GRAN || e == Engine::SPEC
                         || e == Engine::HARM || e == Engine::MODAL; };
                 for (int o = 0; o < 4; ++o) { modSrcForce_[o] = false; blkCarrierArmed_[o] = false; }
+                noiseForce_ = false;   // fb64 — set when any osc blends WITH the noise (so its tap is generated even if noise output is off)
                 for (int c = 0; c < 4; ++c)
                     for (int s = 0; s < 4; ++s)
                     {
@@ -2170,6 +2171,7 @@ namespace tw
                         if ((b.mode == 1 || b.mode == 2) && isBlock (eng[c]))
                             blkCarrierArmed_[c] = true;                                   // FM/PD phase-modulate c's block (AM/RM don't need the ring)
                         if      (b.src < 4)  modSrcForce_[b.src] = true;                  // Osc A..D as source
+                        else if (b.src == 5) noiseForce_         = true;                  // Noise as source (fb64)
                         else if (b.src == 6) modSrcForce_[c]     = true;                  // Self
                     }
             }
@@ -2219,8 +2221,9 @@ namespace tw
                             if (b.mode == 0 || d < 1.0e-4f) continue;                            // Off / silent
                             float mod;
                             if      (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
+                            else if (b.src == 5) mod = noiseModTap_;      // Noise (fb64) — FM/PD/AM/RM an osc WITH the noise
                             else if (b.src == 6) mod = modPrev_[c];       // Self (feedback)
-                            else                 mod = 0.f;               // Sub(4)/Noise(5): P1 no-op
+                            else                 mod = 0.f;               // Sub(4): still no-op
                             if      (b.mode == 2) pm      += (1.20f * d) * mod;              // PD (phase, cycles)
                             else if (b.mode == 1) fmDrive += (12.0f * d) * mod;              // FM (freq deviation)
                             else if (b.mode == 3) amp     *= 1.0f + (1.8f * d) * mod;        // AM — carrier*(1+1.8·d·mod): fundamental KEPT; 1.8 drive → night-and-day at 100%
@@ -3397,7 +3400,7 @@ namespace tw
                 scratchR[i] = busCo1_[0]*oAR + busCo1_[1]*oBR + busCo1_[2]*oCR + busCo1_[3]*oDR + busCo1_[4]*subBR;
                 // NOISE ENGINE — compute the contribution once, then ROUTE it into F1/F2/dry per the N pill (fb63).
                 float noiseAddL = 0.0f, noiseAddR = 0.0f;
-                if (noiseOn_)
+                if (noiseOn_ || noiseForce_)   // fb64 — also generate when noise is a BLEND SOURCE (even if its own output is off)
                 {
                     float _nL, _nR;
                     if (noiseSampLen_ > 1 && noiseSampL_ != nullptr)
@@ -3421,9 +3424,13 @@ namespace tw
                         _nL = nPrevL_ + (nCurL_ - nPrevL_) * _t;
                         _nR = nPrevR_ + (nCurR_ - nPrevR_) * _t;
                     }
-                    const float _ng = noiseLevel_ * velEnv;
-                    noiseAddL = _nL * _ng * noisePanL_;
-                    noiseAddR = _nR * _ng * noisePanR_;
+                    noiseModTap_ = juce::jlimit (-4.0f, 4.0f, 0.5f * (_nL + _nR));   // fb64 — blend modulator tap (pre-gain raw noise, 1-sample delayed like modPrev_)
+                    if (noiseOn_)   // audible bus contribution only when the noise engine is actually on
+                    {
+                        const float _ng = noiseLevel_ * velEnv;
+                        noiseAddL = _nL * _ng * noisePanL_;
+                        noiseAddR = _nR * _ng * noisePanR_;
+                    }
                 }
                 scratchL[i] += noiseAddL * noiseCo1_;   scratchR[i] += noiseAddR * noiseCo1_;   // → Filter 1 bus
                 busB2L[i]   = busCo2_[0]*oAL + busCo2_[1]*oBL + busCo2_[2]*oCL + busCo2_[3]*oDL + busCo2_[4]*subBL + noiseAddL * noiseCo2_;
@@ -4365,6 +4372,8 @@ namespace tw
         BlendSlotV blendSlot_[4][4];
         float blendDepthSm_[4][4] = {};   // per-sample de-zippered depth
         float modPrev_[4] = { 0.f, 0.f, 0.f, 0.f };   // prev-sample pre-gain osc outputs = the modulator taps
+        float noiseModTap_ = 0.0f;                    // fb64 — the NOISE modulator tap (src=5), pre-gain, 1-sample delayed
+        bool  noiseForce_  = false;                   // fb64 — noise is used as a blend source this block → generate it even if output off
         float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
         // BLEND MODES — ALL-ENGINES support (2026-07-12). Two per-block flags derived from the warp
         // matrix, both inert (false) for any patch with no active FM/PD slot → existing sound is
