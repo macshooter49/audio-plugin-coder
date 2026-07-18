@@ -547,6 +547,30 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // NOISE visualizer trigger — env level while noise is sounding (0 = off/silent → viz fades out).
                 complete (juce::var (audioProcessor.noiseVizLevel_.load (std::memory_order_relaxed)));
             })
+            .withNativeFunction("getNoiseFollow", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb66 — waveform playhead follower position 0..1 (-1 = none). Free → global tape; else loudest voice.
+                complete (juce::var (audioProcessor.getNoiseFollow()));
+            })
+            .withNativeFunction("getNoiseWavePeaks", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb66 — min/max envelope of the loaded noise sample for the waveform viz ("" if algorithmic).
+                complete (juce::var (audioProcessor.getNoiseWavePeaksJson()));
+            })
+            .withNativeFunction("setNoiseVizMode", [this](const juce::Array<juce::var>& args,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb66 — persist the noise viz choice (1 particle · 2 waveform). Survives reopen + saves with the patch.
+                if (args.size() >= 1) audioProcessor.setNoiseVizMode ((int) args[0]);
+                complete (juce::var (true));
+            })
+            .withNativeFunction("getNoiseVizMode", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getNoiseVizMode()));   // fb66 — restore viz choice on GUI open
+            })
             .withNativeFunction("loadNoiseSample", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

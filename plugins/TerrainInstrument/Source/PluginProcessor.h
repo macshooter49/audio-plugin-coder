@@ -523,6 +523,11 @@ public:
     // NOISE IMPORT (P5c) — persisted noise-sample selection descriptor (JSON): factory path or embedded user audio.
     void         setNoiseSampleSel (const juce::String& j) { noiseSampleSelJson_ = j; }
     juce::String getNoiseSampleSel () const                { return noiseSampleSelJson_; }
+    // fb66 — NOISE right-click engine bridges: waveform follower + peaks + persisted viz choice.
+    float        getNoiseFollow () const noexcept { return noiseVizPos_.load (std::memory_order_relaxed); }   // representative follower 0..1 (-1 = none)
+    juce::String getNoiseWavePeaksJson ();                        // min/max envelope of the loaded noise sample ("" if none)
+    void         setNoiseVizMode (int m) noexcept { noiseVizMode_ = juce::jlimit (1, 2, m); }   // 1 particle · 2 waveform (UI state, persisted)
+    int          getNoiseVizMode () const noexcept { return noiseVizMode_; }
     void startNoiseAudition () noexcept { noiseAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // headphone preview (browser)
     void startWavetableAudition (int osc) noexcept { wtAudReqOsc_.store (juce::jlimit (0, 3, osc), std::memory_order_relaxed); wtAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // WT headphone preview
     void stopPreview () noexcept { previewStop_.store (true, std::memory_order_relaxed); }   // kill the active one-shot audition immediately (Max: double-click/close stops it)
@@ -665,6 +670,8 @@ public:
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
     std::atomic<float> noiseVizLevel_ { 0.f };   // NOISE viz — env level while noise is sounding (0 when off/silent)
+    std::atomic<float> noiseVizPos_  { -1.f };   // fb66 — NOISE waveform follower position 0..1 (representative), -1 = none
+    std::atomic<float> noiseFreeNorm_{ 0.f  };   // fb66 — NOISE Free-mode global tape position 0..1
     // HARM-VIZ — live partial bins from the most-active voice (audio thread writes; editor
     // reads on its tick — cosmetic, tear-tolerant)
     std::atomic<float> harmVizBins_[4][96] {};
@@ -1120,6 +1127,8 @@ private:
     std::array<tw::SampleBuffer, 4>           oscSampleBuffers_;
     tw::SampleBuffer                          noiseSampleBuffer_;   // NOISE IMPORT (P5) — shared looping-sample noise source
     juce::String                              noiseSampleSelJson_;  // NOISE IMPORT (P5c) — persisted selection (factory path / user audio)
+    double                                    noiseFreePos_ = 0.0;  // fb66 — NOISE Free-mode global tape playhead (samples; audio thread)
+    int                                       noiseVizMode_ = 1;    // fb66 — NOISE viz choice (1 particle · 2 waveform), persisted
     std::atomic<int> noiseAuditionReq_ { 0 };                       // NOISE AUDITION — bumped (msg thread) to trigger a headphone preview
     int    noiseAudSeen_ = 0, noiseAudCtr_ = 0, noiseAudTotal_ = 0; // audio thread: last-seen trigger + samples remaining + one-shot length
     int    noiseAudType_ = 0;                                       // -1 = sample one-shot, else the algorithmic type index being previewed

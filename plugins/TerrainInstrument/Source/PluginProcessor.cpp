@@ -189,6 +189,35 @@ juce::String TerrainInstrumentAudioProcessor::getWaterfallViewJson()
     return j + "}";
 }
 
+juce::String TerrainInstrumentAudioProcessor::getNoiseWavePeaksJson()
+{
+    // fb66 — compact min/max envelope of the loaded noise sample for the waveform viz. Empty ("") when no
+    // sample is loaded (algorithmic type) → the UI draws the live oscilloscope instead. Msg-thread only.
+    auto buf = noiseSampleBuffer_.load();
+    const int len = (buf != nullptr) ? buf->getNumSamples() : 0;
+    if (buf == nullptr || len < 2) return {};
+    const int cols = 220;                                   // downsample to ~viz width
+    const int ch   = juce::jmin (2, buf->getNumChannels());
+    juce::String mn, mx;
+    for (int c = 0; c < cols; ++c)
+    {
+        const int s0 = (int) ((juce::int64) c * len / cols);
+        int s1 = (int) ((juce::int64) (c + 1) * len / cols);
+        if (s1 <= s0) s1 = s0 + 1;
+        if (s1 > len)  s1 = len;
+        float lo = 0.0f, hi = 0.0f;
+        for (int chan = 0; chan < ch; ++chan)
+        {
+            const float* d = buf->getReadPointer (chan);
+            for (int s = s0; s < s1; ++s) { const float v = d[s]; if (v < lo) lo = v; if (v > hi) hi = v; }
+        }
+        if (c) { mn << ","; mx << ","; }
+        mn << juce::String (lo, 3);
+        mx << juce::String (hi, 3);
+    }
+    return "{\"min\":[" + mn + "],\"max\":[" + mx + "]}";
+}
+
 juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
@@ -2737,6 +2766,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { ParameterIDs::SYN_NOISE_PAN, 1 }, "Noise Pan",
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
+        // fb66 — PLAY MODE (sample playback only; algorithmic types ignore it). Default Random =
+        // today's accidental feel made deliberate (each note enters the loop at a fresh spot).
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIDs::SYN_NOISE_PLAYMODE, 1 }, "Noise Play Mode",
+            juce::StringArray { "Random", "Envelope", "Free" }, 0));
     }
 
     // ════════ RESYNTH-ENGINE-PARAMS — per-OSC resynthesis oscillator (Engine::SPEC) ════════
@@ -4215,6 +4249,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float noiseLevel = *rawParam (ParameterIDs::SYN_NOISE_LEVEL);
         const float noisePitch = *rawParam (ParameterIDs::SYN_NOISE_PITCH);
         const float noisePan   = *rawParam (ParameterIDs::SYN_NOISE_PAN);
+        const int   noisePlayMode = (int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE);   // fb66 — 0 Random · 1 Envelope · 2 Free
+
+        // fb66 — FREE play mode: a GLOBAL always-running tape playhead. Advanced once per block (even with
+        // no notes) at the rate the voices read the loop, wrapped to length. Voices in Free mode resync to
+        // this at block start (setNoiseFreePos) so every note reads the ONE shared tape; the waveform
+        // follower reads the normalised copy. Audio + follower use the same value → perfectly consistent.
+        {
+            auto nb = noiseSampleBuffer_.load();
+            const int nlen = (nb != nullptr) ? nb->getNumSamples() : 0;
+            if (nlen > 1)
+            {
+                const double nnr = noiseSampleBuffer_.getSampleRate();
+                const double sr  = getSampleRate();
+                const double nativeOverOut = (nnr > 0.0 && sr > 0.0) ? (nnr / sr) : 1.0;
+                const float  sc   = juce::jlimit (0.0f, 1.0f, noisePitch);
+                const double rate = (sc < 0.5f) ? (0.1 + 1.8 * (double) sc) : (1.0 + 2.0 * ((double) sc - 0.5));
+                noiseFreePos_ += (double) numSamples * rate * nativeOverOut;
+                while (noiseFreePos_ >= (double) nlen) noiseFreePos_ -= (double) nlen;
+                if (noiseFreePos_ < 0.0) noiseFreePos_ = 0.0;
+                noiseFreeNorm_.store ((float) (noiseFreePos_ / (double) nlen), std::memory_order_relaxed);
+            }
+            else { noiseFreePos_ = 0.0; noiseFreeNorm_.store (0.0f, std::memory_order_relaxed); }
+        }
 
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -4280,6 +4337,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setSub (3, subRngD, subFrmD, subWgtD, subHtD);
                 sv->setNoise (noiseOn, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
                 sv->setNoiseSampleSource (&noiseSampleBuffer_);   // NOISE IMPORT (P5) — looping-sample override (empty buffer = algorithmic type)
+                sv->setNoisePlayMode      (noisePlayMode);        // fb66 — Random / Envelope / Free (sample playback)
+                sv->setNoiseFreePos       (noiseFreePos_);        // fb66 — Free-mode global tape position (resynced per block; needs len from setNoiseSampleSource above)
                 sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setPanC (panC);                   sv->setPanD (panD);
@@ -4586,6 +4645,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
         ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
         noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
+        // fb66 — waveform follower position. Free → the global tape head (visible even when idle);
+        // Random/Envelope → the loudest sounding voice's read head; -1 = nothing to draw.
+        noiseVizPos_.store ((((int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE)) == 2) ? noiseFreeNorm_.load (std::memory_order_relaxed)
+                                                 : (bestVoice != nullptr ? bestVoice->noiseFollowPos01() : -1.0f),
+                            std::memory_order_relaxed);
         ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
@@ -6054,6 +6118,8 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     }
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
+    if (noiseVizMode_ != 1)
+        state.setProperty ("noiseVizMode", noiseVizMode_, nullptr);   // fb66 — noise waveform/particle viz choice (default particle)
 
     // ── V2 format marker ─────────────────────────────────────────────────────
     // Task 12: introduce version=2 and editingLayer so Task 13 (setStateInformation)
@@ -6258,6 +6324,7 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             // NOISE IMPORT (P5c) — restore the noise-sample selection (factory path or embedded user audio).
             // The editor re-loads the buffer on GUI open via getNoiseSampleSel. Empty = algorithmic type.
             noiseSampleSelJson_ = newState.getProperty ("noiseSampleSel", juce::String()).toString();
+            noiseVizMode_ = (int) newState.getProperty ("noiseVizMode", 1);   // fb66 — restore noise viz choice (default particle)
 
             // Wavetable EXTENDER — restore embedded imports (or clear the osc if none was saved).
             for (int o = 0; o < 4; ++o)

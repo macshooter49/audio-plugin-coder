@@ -1028,6 +1028,18 @@ namespace tw
             noisePanL_ = std::cos (th);
             noisePanR_ = std::sin (th);
         }
+        // fb66 — NOISE play mode (sample playback): 0 Random · 1 Envelope (one-shot) · 2 Free (global tape).
+        void setNoisePlayMode (int m) noexcept { noisePlayMode_ = m; }
+        // Free-mode resync: pushed once per block (BEFORE render, AFTER setNoiseSampleSource so length is current).
+        // Snaps this voice's read head to the one shared tape so every note reads the same running position.
+        void setNoiseFreePos (double posSamples) noexcept
+        {
+            if (noisePlayMode_ == 2 && noiseSampLen_ > 1)
+                noiseSampPos_ = juce::jlimit (0.0, (double) (noiseSampLen_ - 1), posSamples);
+        }
+        // Representative follower position 0..1 for the waveform viz (Random/Envelope read this voice's head); -1 = no sample.
+        float noiseFollowPos01 () const noexcept
+        { return (noiseSampLen_ > 1) ? (float) (noiseSampPos_ / (double) noiseSampLen_) : -1.0f; }
     private:
         // xorshift32 → [-1,1). Two independent L/R streams = an instantly-decorrelated stereo field.
         static inline float noiseWhite (std::uint32_t& s) noexcept
@@ -1173,6 +1185,9 @@ namespace tw
         const float* noiseSampL_ = nullptr; const float* noiseSampR_ = nullptr;
         int    noiseSampLen_ = 0;
         double noiseSampPos_ = 0.0, noiseSampNativeOverOut_ = 1.0;
+        // fb66 — NOISE play modes: 0 Random (random start/note) · 1 Envelope (one-shot/note) · 2 Free (global tape).
+        int    noisePlayMode_    = 0;
+        bool   noiseOneShotDone_ = false;   // Envelope: the one-shot has played through (silent until the next note)
     public:
 
         void setPhaseMode (int modeA, int modeB) noexcept
@@ -1550,6 +1565,23 @@ namespace tw
             geodeNoteOnPending_  = true;   // GEODE-ENGINE-VOICE
             harmNoteOnPending_   = true;   // HARMONIC-ENGINE-VOICE
             modalNoteOnPending_  = true;   // MODAL-ENGINE-VOICE
+
+            // fb66 — NOISE play-mode note-on: Random drops the loop head at a fresh random spot each note
+            // (the deliberate version of today's feel); Envelope restarts the one-shot from the top. Free
+            // leaves the head alone — it gets resynced to the global tape by setNoiseFreePos each block.
+            if (noiseSampLen_ > 1)
+            {
+                if (noisePlayMode_ == 0)   // Random
+                {
+                    sampleSprayRng_ = sampleSprayRng_ * 1664525u + 1013904223u;
+                    noiseSampPos_ = ((double) (sampleSprayRng_ >> 8) * (1.0 / 16777216.0)) * (double) noiseSampLen_;
+                }
+                else if (noisePlayMode_ == 1)   // Envelope — one-shot from the top
+                {
+                    noiseSampPos_ = 0.0;
+                    noiseOneShotDone_ = false;
+                }
+            }
 
             // PHASE — initialise each unison sine's phase accumulator per the selected
             // mode (RETRIG/FREE/RANDOM/SPREAD). The amp env starts at 0, so any reset here
@@ -3405,14 +3437,29 @@ namespace tw
                     float _nL, _nR;
                     if (noiseSampLen_ > 1 && noiseSampL_ != nullptr)
                     {
-                        // NOISE IMPORT (P5) — a loaded sample plays as a FIXED LOOPING TEXTURE: Scan = loop speed,
-                        // rides the amp env like the algorithmic noise, seam pre-crossfaded at load (click-free), no pitch-track.
-                        const int i0 = (int) noiseSampPos_; int i1 = i0 + 1; if (i1 >= noiseSampLen_) i1 = 0;
-                        const float fr = (float) (noiseSampPos_ - (double) i0);
-                        _nL = noiseSampL_[i0] + (noiseSampL_[i1] - noiseSampL_[i0]) * fr;
-                        _nR = noiseSampR_[i0] + (noiseSampR_[i1] - noiseSampR_[i0]) * fr;
-                        noiseSampPos_ += (double) noiseScanRate_ * noiseSampNativeOverOut_;
-                        while (noiseSampPos_ >= (double) noiseSampLen_) noiseSampPos_ -= (double) noiseSampLen_;
+                        // NOISE IMPORT (P5) — a loaded sample plays as a looping texture (Scan = speed), riding the amp
+                        // env, seam pre-crossfaded at load (click-free). fb66 PLAY MODE: Random/Free loop; Envelope is a
+                        // one-shot (plays through once, then silent until the next note re-arms it via startNote).
+                        if (noisePlayMode_ == 1 && noiseOneShotDone_)
+                        {
+                            _nL = 0.0f; _nR = 0.0f;   // Envelope — one-shot finished
+                        }
+                        else
+                        {
+                            const int i0 = (int) noiseSampPos_; int i1 = i0 + 1; if (i1 >= noiseSampLen_) i1 = 0;
+                            const float fr = (float) (noiseSampPos_ - (double) i0);
+                            _nL = noiseSampL_[i0] + (noiseSampL_[i1] - noiseSampL_[i0]) * fr;
+                            _nR = noiseSampR_[i0] + (noiseSampR_[i1] - noiseSampR_[i0]) * fr;
+                            noiseSampPos_ += (double) noiseScanRate_ * noiseSampNativeOverOut_;
+                            if (noisePlayMode_ == 1)   // Envelope — one-shot: stop at the end, no wrap
+                            {
+                                if (noiseSampPos_ >= (double) (noiseSampLen_ - 1)) { noiseSampPos_ = (double) (noiseSampLen_ - 1); noiseOneShotDone_ = true; }
+                            }
+                            else                        // Random / Free — loop
+                            {
+                                while (noiseSampPos_ >= (double) noiseSampLen_) noiseSampPos_ -= (double) noiseSampLen_;
+                            }
+                        }
                     }
                     else
                     {
