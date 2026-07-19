@@ -710,7 +710,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     if (safe == nullptr) return;
                     const auto f = fc.getResult();
                     if (! f.exists()) return;   // cancelled
-                    safe->audioProcessor.addImportPath (false, f.getFullPathName());
+                    safe->audioProcessor.addImportPath (0, f.getFullPathName());
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript ("if(window.onNoiseImportsChanged)window.onNoiseImportsChanged();", nullptr);
                 });
@@ -734,7 +734,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     if (safe == nullptr) return;
                     const auto f = fc.getResult();
                     if (! f.exists()) return;
-                    safe->audioProcessor.addImportPath (true, f.getFullPathName());
+                    safe->audioProcessor.addImportPath (1, f.getFullPathName());
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript (
                             juce::String ("if(window.onWavetableImportsChanged)window.onWavetableImportsChanged('")
@@ -745,12 +745,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("listNoiseImports", [this](const juce::Array<juce::var>&,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getImportsJson (false)));
+                complete (juce::var (audioProcessor.getImportsJson (0)));
             })
             .withNativeFunction("listWtImports", [this](const juce::Array<juce::var>&,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getImportsJson (true)));
+                complete (juce::var (audioProcessor.getImportsJson (1)));
             })
             .withNativeFunction("loadNoiseByPath", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -796,7 +796,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // DELETE (fb61) — un-reference a user folder OR single import (file on disk untouched).
-                if (args.size() >= 1) audioProcessor.removeImportPath (false, args[0].toString());
+                if (args.size() >= 1) audioProcessor.removeImportPath (0, args[0].toString());
                 if (webView != nullptr)
                     webView->evaluateJavascript ("if(window.onNoiseImportsChanged)window.onNoiseImportsChanged();", nullptr);
                 complete (juce::var ("ok"));
@@ -804,9 +804,75 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("removeWtImport", [this](const juce::Array<juce::var>& args,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                if (args.size() >= 1) audioProcessor.removeImportPath (true, args[0].toString());
+                if (args.size() >= 1) audioProcessor.removeImportPath (1, args[0].toString());
                 if (webView != nullptr)
                     webView->evaluateJavascript ("if(window.onWavetableImportsChanged)window.onWavetableImportsChanged('a');", nullptr);
+                complete (juce::var ("ok"));
+            })
+            // ═══ fb74 — SAMPLE BROWSER (Sample / Granular / Resynth share one registry, kind = 2) ═══
+            .withNativeFunction("pickSampleImport", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // IMPORT — ONE dialog, pick a FILE or a FOLDER (mirrors pickNoiseImport; reference-in-place).
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                auto chooser = std::make_shared<juce::FileChooser> (
+                    "Import a sample — pick an audio file or a folder",
+                    juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+                    "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
+                const auto flags = juce::FileBrowserComponent::openMode
+                                 | juce::FileBrowserComponent::canSelectFiles
+                                 | juce::FileBrowserComponent::canSelectDirectories;
+                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                chooser->launchAsync (flags, [safe, chooser, oscIdx] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    const auto f = fc.getResult();
+                    if (! f.exists()) return;   // cancelled
+                    safe->audioProcessor.addImportPath (2, f.getFullPathName());
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript (
+                            juce::String ("if(window.onSampleImportsChanged)window.onSampleImportsChanged('")
+                            + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "');", nullptr);
+                });
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("listSampleImports", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getImportsJson (2)));
+            })
+            .withNativeFunction("loadSampleByPath", [this](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // Load a referenced/factory sample by absolute path into the osc's sample buffer — the SAME
+                // in-memory entry point as a drop (loadOscSampleFromMemory), so peaks/persistence/blend all match.
+                if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
+                const juce::String oscStr = args[0].toString();
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                juce::File f (args[1].toString());
+                if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
+                juce::MemoryBlock mb;
+                if (! f.loadFileAsData (mb) || mb.getSize() == 0) { complete (juce::var ("read-failed")); return; }
+                loadOscSampleFromMemory (oscIdx, std::move (mb), f.getFileName());
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("removeSampleImport", [this](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // DELETE — un-reference a user FOLDER (single imports have no delete since fb73; Finder owns them).
+                if (args.size() >= 1) audioProcessor.removeImportPath (2, args[0].toString());
+                if (webView != nullptr)
+                    webView->evaluateJavascript ("if(window.onSampleImportsChanged)window.onSampleImportsChanged('a');", nullptr);
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("auditionOscSample", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // SAMPLE AUDITION — headphone preview: play the osc's current sample once (post-FX, capped 3.5 s).
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                audioProcessor.startOscSampleAudition (oscIdx);
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("pickWavetableFile", [this](const juce::Array<juce::var>& args,

@@ -251,38 +251,40 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
 }
 
 //==============================================================================
-// IMPORTS REGISTRY (fb60) — reference-in-place user imports (paths only, no audio copied).
+// IMPORTS REGISTRY (fb60, 3-way fb74) — reference-in-place user imports (paths only, no audio copied).
+// kind: 0 = noise · 1 = wavetable · 2 = sample (Sample/Granular/Resynth share one registry).
 namespace {
-    juce::File importsRegPath (bool wt)
+    juce::File importsRegPath (int kind)
     {
+        static const char* const kRegNames[3] = { "imports-noise.json", "imports-wavetable.json", "imports-sample.json" };
         return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                  .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument")
-                 .getChildFile (wt ? "imports-wavetable.json" : "imports-noise.json");
+                 .getChildFile (kRegNames[juce::jlimit (0, 2, kind)]);
     }
     const char* const kImportWild = "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3";
 }
 
-void TerrainInstrumentAudioProcessor::addImportPath (bool wt, const juce::String& path)
+void TerrainInstrumentAudioProcessor::addImportPath (int kind, const juce::String& path)
 {
-    const int i = wt ? 1 : 0;
+    const int i = juce::jlimit (0, 2, kind);
     juce::File f (path);
     if (! f.exists()) return;
     if (f.isDirectory()) { if (! importFolders_[i].contains (path)) importFolders_[i].add (path); }
     else                 { if (! importFiles_[i].contains (path))   importFiles_[i].add (path); }
-    saveImportsRegistry (wt);
+    saveImportsRegistry (i);
 }
 
-void TerrainInstrumentAudioProcessor::removeImportPath (bool wt, const juce::String& path)
+void TerrainInstrumentAudioProcessor::removeImportPath (int kind, const juce::String& path)
 {
-    const int i = wt ? 1 : 0;
+    const int i = juce::jlimit (0, 2, kind);
     importFiles_[i].removeString (path);      // remove a single import OR
     importFolders_[i].removeString (path);    // a whole user folder (only one array holds it) — file on disk untouched
-    saveImportsRegistry (wt);
+    saveImportsRegistry (i);
 }
 
-juce::String TerrainInstrumentAudioProcessor::getImportsJson (bool wt)
+juce::String TerrainInstrumentAudioProcessor::getImportsJson (int kind)
 {
-    const int idx = wt ? 1 : 0;
+    const int idx = juce::jlimit (0, 2, kind);
     juce::Array<juce::var> files;
     juce::StringArray deadFiles;   // fb73 — a single import whose file is gone (Finder-deleted) is PRUNED from the
                                    // registry, not just hidden: Max's model is "delete it in the OS folder = it's gone".
@@ -299,7 +301,7 @@ juce::String TerrainInstrumentAudioProcessor::getImportsJson (bool wt)
     if (! deadFiles.isEmpty())
     {
         for (auto& p : deadFiles) importFiles_[idx].removeString (p);
-        saveImportsRegistry (wt);
+        saveImportsRegistry (idx);
     }
     juce::Array<juce::var> folders;
     for (auto& p : importFolders_[idx])
@@ -329,32 +331,32 @@ juce::String TerrainInstrumentAudioProcessor::getImportsJson (bool wt)
     return juce::JSON::toString (juce::var (root.get()));
 }
 
-void TerrainInstrumentAudioProcessor::saveImportsRegistry (bool wt)
+void TerrainInstrumentAudioProcessor::saveImportsRegistry (int kind)
 {
-    const int idx = wt ? 1 : 0;
+    const int idx = juce::jlimit (0, 2, kind);
     juce::Array<juce::var> f, d;
     for (auto& p : importFiles_[idx])   f.add (p);
     for (auto& p : importFolders_[idx]) d.add (p);
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     root->setProperty ("files", f);
     root->setProperty ("folders", d);
-    auto file = importsRegPath (wt);
+    auto file = importsRegPath (idx);
     file.getParentDirectory().createDirectory();                        // best-effort (may fail in a sandbox)
     file.replaceWithText (juce::JSON::toString (juce::var (root.get())));// best-effort — in-memory registry still works this session
 }
 
 void TerrainInstrumentAudioProcessor::loadImportsRegistry ()
 {
-    for (int wt = 0; wt < 2; ++wt)
+    for (int k = 0; k < 3; ++k)   // fb74 — 0 noise · 1 wavetable · 2 sample
     {
-        auto file = importsRegPath (wt == 1);
+        auto file = importsRegPath (k);
         if (! file.existsAsFile()) continue;
         auto v = juce::JSON::parse (file.loadFileAsString());
         if (auto* o = v.getDynamicObject())
         {
-            importFiles_[wt].clear(); importFolders_[wt].clear();
-            if (auto* fa = o->getProperty ("files").getArray())   for (auto& e : *fa) importFiles_[wt].add (e.toString());
-            if (auto* da = o->getProperty ("folders").getArray()) for (auto& e : *da) importFolders_[wt].add (e.toString());
+            importFiles_[k].clear(); importFolders_[k].clear();
+            if (auto* fa = o->getProperty ("files").getArray())   for (auto& e : *fa) importFiles_[k].add (e.toString());
+            if (auto* da = o->getProperty ("folders").getArray()) for (auto& e : *da) importFolders_[k].add (e.toString());
         }
     }
 }
@@ -5548,7 +5550,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int fl = juce::jmax (1, (int) (getSampleRate() * 0.008));
         if (noiseAudCtr_ > 0 && noiseAudFade_ <= 0) { noiseAudFadeLen_ = fl; noiseAudFade_ = fl; }
         if (wtAudCtr_    > 0 && wtAudFade_    <= 0) { wtAudFadeLen_    = fl; wtAudFade_    = fl; }
-        noiseAudCtr_ = 0; wtAudCtr_ = 0; noiseAudPending_ = false; wtAudPending_ = false;
+        if (sampAudCtr_  > 0 && sampAudFade_  <= 0) { sampAudFadeLen_  = fl; sampAudFade_  = fl; }   // fb74 — sample preview too
+        noiseAudCtr_ = 0; wtAudCtr_ = 0; sampAudCtr_ = 0;
+        noiseAudPending_ = false; wtAudPending_ = false; sampAudPending_ = false;
     }
 
     // ── NOISE AUDITION (browser headphone preview) — ONE-SHOT, re-triggerable (Max: "play once, re-trigger,
@@ -5704,6 +5708,78 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
                 if (wtAudFade_ <= 0 && wtAudPending_) { wtAudPending_ = false; startWtPreview(); }
             }
+        }
+    }
+
+    // ── SAMPLE AUDITION (fb74 — browser headphone preview for Sample/Granular/Resynth) — ONE-SHOT of the
+    //    osc's CURRENT sample buffer at its native pitch (keyless), capped 3.5 s, HELD at trigger so a fast
+    //    scan doesn't swap the buffer under the playing preview. Same fades/retrigger declick as the noise
+    //    preview. Mixed post-FX; CPU only while actively previewing.
+    {
+        const double sr = getSampleRate();
+        auto startSampPreview = [this, sr]()
+        {
+            sampAudOsc_   = juce::jlimit (0, 3, sampAudReqOsc_.load (std::memory_order_relaxed));
+            sampAudPos_   = 0.0;
+            sampAudHeld_  = oscSampleBuffers_[(size_t) sampAudOsc_].load();
+            const double srcRate = oscSampleBuffers_[(size_t) sampAudOsc_].getSampleRate();
+            sampAudRatio_ = (srcRate > 0.0) ? (srcRate / sr) : 1.0;
+            if (sampAudHeld_ != nullptr && sampAudHeld_->getNumSamples() > 1)
+            {
+                const double outLen = (double) sampAudHeld_->getNumSamples() / juce::jmax (1.0e-6, sampAudRatio_);
+                sampAudCtr_ = (int) juce::jmin (sr * 3.5, outLen);
+            }
+            else sampAudCtr_ = 0;   // nothing loaded on this osc → silent (the browser click still committed the load; audition follows next click)
+            sampAudTotal_ = juce::jmax (1, sampAudCtr_);
+        };
+        const int req = sampAuditionReq_.load (std::memory_order_relaxed);
+        if (req != sampAudSeen_)
+        {
+            sampAudSeen_ = req;
+            if (sampAudCtr_ > 0 || sampAudFade_ > 0)   // already sounding → fade OUT first (declick), queue the new
+            {
+                sampAudFadeLen_ = juce::jmax (1, (int) (sr * 0.008));
+                if (sampAudFade_ <= 0) sampAudFade_ = sampAudFadeLen_;
+                sampAudPending_ = true;
+            }
+            else startSampPreview();
+        }
+        if ((sampAudCtr_ > 0 || sampAudFade_ > 0) && buffer.getNumChannels() >= 1)
+        {
+            const float atk  = (float) (sr * 0.012);
+            const float rel  = (float) (sr * 0.13);
+            const bool  fade = sampAudFade_ > 0;
+            float* oL = buffer.getWritePointer (0);
+            float* oR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : oL;
+            auto nb = sampAudHeld_;   // the HELD buffer (stable — no mid-scan swap)
+            const int    nlen = (nb != nullptr) ? nb->getNumSamples() : 0;
+            const float* nL   = (nb != nullptr) ? nb->getReadPointer (0) : nullptr;
+            const float* nR   = (nb != nullptr && nb->getNumChannels() > 1) ? nb->getReadPointer (1) : nL;
+            if (nb == nullptr || nlen < 2) { sampAudCtr_ = 0; sampAudFade_ = 0; }
+            for (int i = 0; i < numSamples; ++i)
+            {
+                if (fade) { if (sampAudFade_ <= 0) break; } else { if (sampAudCtr_ <= 0) break; }
+                const int i0 = (int) sampAudPos_;
+                if (i0 >= nlen - 1) { if (fade) sampAudFade_ = 0; else sampAudCtr_ = 0; break; }
+                const int   i1 = i0 + 1;
+                const float fr = (float) (sampAudPos_ - (double) i0);
+                const float sL = nL[i0] + (nL[i1] - nL[i0]) * fr;
+                const float sR = nR[i0] + (nR[i1] - nR[i0]) * fr;
+                sampAudPos_ += sampAudRatio_;
+                float g;
+                if (fade) { g = 0.55f * ((float) sampAudFade_ / (float) sampAudFadeLen_); --sampAudFade_; }
+                else
+                {
+                    const float elapsed = (float) (sampAudTotal_ - sampAudCtr_);
+                    float env = 1.0f;
+                    if (elapsed < atk)              env = elapsed / atk;
+                    if ((float) sampAudCtr_ < rel)  env = juce::jmin (env, (float) sampAudCtr_ / rel);
+                    g = 0.55f * juce::jlimit (0.0f, 1.0f, env);
+                    --sampAudCtr_;
+                }
+                oL[i] += sL * g; oR[i] += sR * g;
+            }
+            if (sampAudFade_ <= 0 && sampAudPending_) { sampAudPending_ = false; startSampPreview(); }
         }
     }
 

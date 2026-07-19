@@ -530,16 +530,18 @@ public:
     int          getNoiseVizMode () const noexcept { return noiseVizMode_; }
     void startNoiseAudition () noexcept { noiseAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // headphone preview (browser)
     void startWavetableAudition (int osc) noexcept { wtAudReqOsc_.store (juce::jlimit (0, 3, osc), std::memory_order_relaxed); wtAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // WT headphone preview
+    void startOscSampleAudition (int osc) noexcept { sampAudReqOsc_.store (juce::jlimit (0, 3, osc), std::memory_order_relaxed); sampAuditionReq_.fetch_add (1, std::memory_order_relaxed); }   // fb74 — SAMPLE browser headphone preview (plays the osc's current sample once)
     void stopPreview () noexcept { previewStop_.store (true, std::memory_order_relaxed); }   // kill the active one-shot audition immediately (Max: double-click/close stops it)
 
-    // ── IMPORTS REGISTRY (fb60) — reference-in-place user imports: single FILES → an "Imports" category,
-    //    whole FOLDERS → their own named category (scanned live for count). Paths only, no audio copied.
+    // ── IMPORTS REGISTRY (fb60, 3-way fb74) — reference-in-place user imports: single FILES → an "Imports"
+    //    category, whole FOLDERS → their own named category (scanned live for count). Paths only, no audio
+    //    copied. kind: 0 = noise · 1 = wavetable · 2 = sample (Sample/Granular/Resynth share ONE registry).
     //    Msg-thread only. Persisted best-effort to a small JSON in app-data (survives where writable).
-    void         addImportPath (bool wt, const juce::String& path);   // decides file-vs-folder via File::isDirectory
-    void         removeImportPath (bool wt, const juce::String& path);// un-reference a user folder OR single import (NEVER touches the file on disk)
-    juce::String getImportsJson (bool wt);                            // {files:[{name,path}], folders:[{name,path,count,items:[…]}]}
+    void         addImportPath (int kind, const juce::String& path);   // decides file-vs-folder via File::isDirectory
+    void         removeImportPath (int kind, const juce::String& path);// un-reference a user folder OR single import (NEVER touches the file on disk)
+    juce::String getImportsJson (int kind);                            // {files:[{name,path}], folders:[{name,path,count,items:[…]}]}
     void         loadImportsRegistry ();
-    void         saveImportsRegistry (bool wt);
+    void         saveImportsRegistry (int kind);
     tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
     juce::String&     oscSourcePath      (int idx) noexcept { return oscSourcePaths_  [(size_t) juce::jlimit (0, 3, idx)]; }
     /** BLEND — persisted source-pair paths (which: 0 = A, 1 = B). Empty = no live blend.
@@ -1149,8 +1151,17 @@ private:
     bool   noiseAudPending_ = false;                                // a new preview queued to start after the fade-out
     int    wtAudFade_ = 0, wtAudFadeLen_ = 0;                        // WT retrigger fade-out
     bool   wtAudPending_ = false;
-    // IMPORTS REGISTRY (fb60) — msg-thread-only path lists (reference-in-place); [0]=noise, [1]=wavetable
-    juce::StringArray importFiles_[2], importFolders_[2];
+    // fb74 — SAMPLE AUDITION (browser headphone preview): one-shot of an osc's current sample buffer,
+    // held at trigger (stable during a scan), same retrigger declick as the noise preview.
+    std::atomic<int> sampAuditionReq_ { 0 };
+    std::atomic<int> sampAudReqOsc_ { 0 };
+    int    sampAudSeen_ = 0, sampAudCtr_ = 0, sampAudTotal_ = 0, sampAudOsc_ = 0;
+    double sampAudPos_ = 0.0, sampAudRatio_ = 1.0;
+    tw::SampleBuffer::BufferPtr sampAudHeld_;
+    int    sampAudFade_ = 0, sampAudFadeLen_ = 0;
+    bool   sampAudPending_ = false;
+    // IMPORTS REGISTRY (fb60, 3-way fb74) — msg-thread-only path lists (reference-in-place); [0]=noise, [1]=wavetable, [2]=sample
+    juce::StringArray importFiles_[3], importFolders_[3];
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
     std::array<juce::String, 4>               oscSourcePaths_;
