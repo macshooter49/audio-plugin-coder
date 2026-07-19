@@ -119,6 +119,12 @@ enum class ModDest : int
     HarmShineC, HarmShineD, HarmWiltA, HarmWiltB,
     HarmWiltC, HarmWiltD, HarmFizzA, HarmFizzB,
     HarmFizzC, HarmFizzD,
+    // ── fb76 — SPECTRAL + BLUR now routable (Max's override of the fb75 exclusion). Spectral morph
+    //    rebuilds on the MESSAGE thread (60 Hz timer + retire-cooldown ⇒ ~20 Hz max churn, ZERO
+    //    audio-thread cost); Blur re-renders the bounded Gaussian band per voice — the SAME
+    //    pre-existing path a frame-LFO with static blur already exercises. ──
+    SpectralA, SpectralB, SpectralC, SpectralD,
+    BlurA, BlurB, BlurC, BlurD,
     NumDests
 };
 
@@ -416,6 +422,14 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // HarmFizzB: harmonic fizz (forge) — osc B
     { ModDomain::Linear01,  1.0f },  // HarmFizzC: harmonic fizz (forge) — osc C
     { ModDomain::Linear01,  1.0f },  // HarmFizzD: harmonic fizz (forge) — osc D
+    { ModDomain::Linear01,  1.0f },  // SpectralA: spectral morph amount — osc A (message-thread rebuild)
+    { ModDomain::Linear01,  1.0f },  // SpectralB
+    { ModDomain::Linear01,  1.0f },  // SpectralC
+    { ModDomain::Linear01,  1.0f },  // SpectralD
+    { ModDomain::Linear01,  1.0f },  // BlurA: wavetable frame blur — osc A
+    { ModDomain::Linear01,  1.0f },  // BlurB
+    { ModDomain::Linear01,  1.0f },  // BlurC
+    { ModDomain::Linear01,  1.0f },  // BlurD
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

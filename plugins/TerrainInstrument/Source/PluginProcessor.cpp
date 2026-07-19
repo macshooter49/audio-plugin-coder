@@ -361,14 +361,20 @@ void TerrainInstrumentAudioProcessor::loadImportsRegistry ()
     }
 }
 
-void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot,
+void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
                                                             const juce::String& presetId,
                                                             const juce::String& modeId,
                                                             const juce::String& amtId)
 {
     const int   preset = (int) *apvts.getRawParameterValue (presetId);
     const int   mode   = (int) *apvts.getRawParameterValue (modeId);
-    const float amount =       *apvts.getRawParameterValue (amtId);
+    // fb76 — SPECTRAL LFO MOD: use the EFFECTIVE amount the audio thread publishes each block
+    // (base + LFO, quantized to 1/128 while a route is live so micro-wiggles don't churn; EXACT
+    // raw pass-through when unmodded). -1 = audio thread hasn't run yet → raw param fallback.
+    // Rebuild churn stays naturally throttled by the retireCooldown below (~20 Hz worst case),
+    // entirely on the message thread — the audio thread never pays for a morph rebuild.
+    const float effAmt = spectralEffAmt_[juce::jlimit (0, 3, oscIdx)].load (std::memory_order_relaxed);
+    const float amount = (effAmt >= 0.0f) ? effAmt : apvts.getRawParameterValue (amtId)->load();   // ->load(): atomic<float> can't deduce in a ternary
 
     // None (or zero amount) → publish nullptr so voices read the plain bank table.
     if (mode <= 0 || amount <= 0.0f)
@@ -417,16 +423,16 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot,
 
 void TerrainInstrumentAudioProcessor::timerCallback()
 {
-    rebuildMorphIfNeeded (morphA_, ParameterIDs::SYN_OSC_A_WT_PRESET,
+    rebuildMorphIfNeeded (morphA_, 0, ParameterIDs::SYN_OSC_A_WT_PRESET,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_AMT);
-    rebuildMorphIfNeeded (morphB_, ParameterIDs::SYN_OSC_B_WT_PRESET,
+    rebuildMorphIfNeeded (morphB_, 1, ParameterIDs::SYN_OSC_B_WT_PRESET,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_AMT);
-    rebuildMorphIfNeeded (morphC_, ParameterIDs::SYN_OSC_C_WT_PRESET,
+    rebuildMorphIfNeeded (morphC_, 2, ParameterIDs::SYN_OSC_C_WT_PRESET,
                           ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_C_SPECTRAL_AMT);
-    rebuildMorphIfNeeded (morphD_, ParameterIDs::SYN_OSC_D_WT_PRESET,
+    rebuildMorphIfNeeded (morphD_, 3, ParameterIDs::SYN_OSC_D_WT_PRESET,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_AMT);
     // GEODE — analyze any SPEC oscillator's source into partials+noise (off the audio thread).
@@ -3747,6 +3753,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Wrap helper: base param + this block's mod sum, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
         { return juce::jlimit (lo, hi, *rawParam (pid) + modSums[(int) d]); };
+        // fb76 — SPECTRAL morph amount mod: the rebuild runs on the MESSAGE thread (timerCallback →
+        // rebuildMorphIfNeeded); the audio thread only PUBLISHES the effective amount here. Offset 0
+        // passes the raw param through EXACTLY (byte-identical → the timer's epsilon gate holds);
+        // a live route quantizes to 1/128 so tiny LFO wiggles don't trigger rebuild churn.
+        {
+            static const char* const kSpecAmtIds[4] = {
+                ParameterIDs::SYN_OSC_A_SPECTRAL_AMT, ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
+                ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
+            for (int o = 0; o < 4; ++o)
+            {
+                const float rawAmt = *rawParam (kSpecAmtIds[o]);
+                const float off    = modSums[(int) wc::ModDest::SpectralA + o];
+                spectralEffAmt_[o].store (off == 0.0f ? rawAmt
+                    : std::round (juce::jlimit (0.0f, 1.0f, rawAmt + off) * 128.0f) / 128.0f,
+                    std::memory_order_relaxed);
+            }
+        }
 
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
         const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
@@ -4545,8 +4568,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
         // have no audio-thread effect yet — render path will start reading them
         // in Phase 11c (SPECTRAL) and 11d (FOLD).
-        const float blurA = *rawParam (ParameterIDs::SYN_OSC_A_FRAME_SPREAD);
-        const float blurB = *rawParam (ParameterIDs::SYN_OSC_B_FRAME_SPREAD);
+        const float blurA = mdP (ParameterIDs::SYN_OSC_A_FRAME_SPREAD, wc::ModDest::BlurA, 0.0f, 1.0f);   // fb76 — blur is LFO-routable (bounded Gaussian band; same cost path as frame-LFO + static blur)
+        const float blurB = mdP (ParameterIDs::SYN_OSC_B_FRAME_SPREAD, wc::ModDest::BlurB, 0.0f, 1.0f);
 
         // Phase 11d — FOLD per OSC.
         const int   foldShapeA  = (int) *rawParam (ParameterIDs::SYN_OSC_A_FOLD_SHAPE);
@@ -4564,13 +4587,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // OSC C / D — unison / blur / fold / interp (4-osc)
         const int   uniCountC=(int)*rawParam (ParameterIDs::SYN_OSC_C_UNISON);
         const float uniDetC=*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, uniBlnC=*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, uniWidC=*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f;
-        const float blurC=*rawParam (ParameterIDs::SYN_OSC_C_FRAME_SPREAD);
+        const float blurC=mdP (ParameterIDs::SYN_OSC_C_FRAME_SPREAD, wc::ModDest::BlurC, 0.0f, 1.0f);
         const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
         const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
         const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
         const int   uniCountD=(int)*rawParam (ParameterIDs::SYN_OSC_D_UNISON);
         const float uniDetD=*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, uniBlnD=*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, uniWidD=*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f;
-        const float blurD=*rawParam (ParameterIDs::SYN_OSC_D_FRAME_SPREAD);
+        const float blurD=mdP (ParameterIDs::SYN_OSC_D_FRAME_SPREAD, wc::ModDest::BlurD, 0.0f, 1.0f);
         const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
         const float foldAmtD=*rawParam (ParameterIDs::SYN_OSC_D_FOLD_AMT);
         const int   interpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_INTERP_MODE);

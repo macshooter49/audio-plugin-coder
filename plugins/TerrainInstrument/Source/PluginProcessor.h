@@ -1035,6 +1035,10 @@ private:
         float builtAmount = -1.0f;
     };
     MorphSlot morphA_, morphB_, morphC_, morphD_;
+    // fb76 — the audio thread publishes the EFFECTIVE (LFO-modulated) spectral amount per osc each
+    // block; the 60 Hz timer's rebuildMorphIfNeeded reads it instead of the raw param. -1 = not yet
+    // published (fresh instance / suspended host) → the timer falls back to the raw param.
+    std::atomic<float> spectralEffAmt_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
 
     // ── Wavetable EXTENDER — per-osc imported tables ("turn anything into a wavetable") ──
     // Built on the message thread from dropped audio (Wavetable::buildFromPcm) then atomic-
@@ -1092,7 +1096,7 @@ private:
     int robinCounter_ = 0;                               // FLOW · ROUND ROBIN global note rotation (audio-thread only)
 
     void timerCallback() override;        // message thread — rebuilds morph tables
-    void rebuildMorphIfNeeded (MorphSlot& slot,
+    void rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
                                const juce::String& presetId,
                                const juce::String& modeId,
                                const juce::String& amtId);
