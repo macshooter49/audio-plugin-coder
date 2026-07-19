@@ -3718,31 +3718,61 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     wc::ModConfig synModCfg;
     float         synModBpm = 0.0f;
     {
+        // ═══ fb75 — UNIVERSAL LFO MOD (block-rate) ═══════════════════════════════════
+        // ONE O(routes) pass turns the mod matrix into per-destination offsets for every
+        // newly-routable target (filters 1/2, noise, blend depths, per-osc level/pan, and
+        // all the engine macro knobs). Sources = the processor's free-running LFO mirrors
+        // (flowLfo_ — the proven FLOW/RESO pattern; the voice LFOs run Free so values agree).
+        // CPU: zero routes ⇒ sums stay 0 ⇒ every wrapped value is byte-identical ⇒ the
+        // change-gates below hold and this whole feature costs NOTHING at idle. Dests below
+        // Res1 (the per-voice batch: frame/warp/fold/cutoff/coarse/sub…) keep their richer
+        // per-voice application in SynthVoice and are skipped here (no double-modulation).
+        float modSums[(int) wc::ModDest::NumDests] = { 0 };
+        {
+            static const char* const kLfoDepthIds[wc::NUM_LFOS] = {
+                ParameterIDs::LFO1_DEPTH, ParameterIDs::LFO2_DEPTH, ParameterIDs::LFO3_DEPTH,
+                ParameterIDs::LFO4_DEPTH, ParameterIDs::LFO5_DEPTH, ParameterIDs::LFO6_DEPTH,
+                ParameterIDs::LFO7_DEPTH, ParameterIDs::LFO8_DEPTH, ParameterIDs::LFO9_DEPTH,
+                ParameterIDs::LFO10_DEPTH };
+            const juce::ScopedLock sl (synModLock);
+            for (const auto& r : synModRoutes)
+            {
+                if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
+                if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
+                const float master = *rawParam (kLfoDepthIds[r.src]);   // per-LFO MASTER ring (same law as the matrix merge below)
+                modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
+                                                          flowLfo_[r.src].peek(), r.depth * master);
+            }
+        }
+        // Wrap helper: base param + this block's mod sum, clamped ONCE to the param's range.
+        auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
+        { return juce::jlimit (lo, hi, *rawParam (pid) + modSums[(int) d]); };
+
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
         const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
         const float cent    =         *rawParam (ParameterIDs::SYN_OSC_A_CENT);
-        const float lvl     =         *rawParam (ParameterIDs::SYN_OSC_A_LEVEL);
-        const float pan     =         *rawParam (ParameterIDs::SYN_OSC_A_PAN);
+        const float lvl     =         mdP (ParameterIDs::SYN_OSC_A_LEVEL, wc::ModDest::LevelA, 0.0f, 1.0f);
+        const float pan     =         mdP (ParameterIDs::SYN_OSC_A_PAN, wc::ModDest::PanA, -1.0f, 1.0f);
         const float cut     =         *rawParam (ParameterIDs::SYN_FILTER1_CUT);
-        const float res     =         *rawParam (ParameterIDs::SYN_FILTER1_RES);
+        const float res     =         mdP (ParameterIDs::SYN_FILTER1_RES, wc::ModDest::Res1, 0.0f, 1.0f);
         const float fltKt1  =         *rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK);
         // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
         const int   filtType= (int)   *rawParam (ParameterIDs::SYN_FILTER1_TYPE);
-        const float filtDrv =         *rawParam (ParameterIDs::SYN_FILTER1_DRV);
-        const float filtEnv =         *rawParam (ParameterIDs::SYN_FILTER1_ENV);
+        const float filtDrv =         mdP (ParameterIDs::SYN_FILTER1_DRV, wc::ModDest::FDrv1, 0.0f, 1.0f);
+        const float filtEnv =         mdP (ParameterIDs::SYN_FILTER1_ENV, wc::ModDest::FEnv1, -1.0f, 1.0f);
         // Filter 2 (independent) + per-filter mix + routing.
         const float cut2     =        *rawParam (ParameterIDs::SYN_FILTER2_CUT);
-        const float res2     =        *rawParam (ParameterIDs::SYN_FILTER2_RES);
+        const float res2     =        mdP (ParameterIDs::SYN_FILTER2_RES, wc::ModDest::Res2, 0.0f, 1.0f);
         const float fltKt2   =        *rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK);
         const int   filtType2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_TYPE);
-        const float filtDrv2 =        *rawParam (ParameterIDs::SYN_FILTER2_DRV);
-        const float filtEnv2 =        *rawParam (ParameterIDs::SYN_FILTER2_ENV);
-        const float filtMix1 =        *rawParam (ParameterIDs::SYN_FILTER1_MIX);
-        const float filtMix2 =        *rawParam (ParameterIDs::SYN_FILTER2_MIX);
+        const float filtDrv2 =        mdP (ParameterIDs::SYN_FILTER2_DRV, wc::ModDest::FDrv2, 0.0f, 1.0f);
+        const float filtEnv2 =        mdP (ParameterIDs::SYN_FILTER2_ENV, wc::ModDest::FEnv2, -1.0f, 1.0f);
+        const float filtMix1 =        mdP (ParameterIDs::SYN_FILTER1_MIX, wc::ModDest::FMix1, 0.0f, 1.0f);
+        const float filtMix2 =        mdP (ParameterIDs::SYN_FILTER2_MIX, wc::ModDest::FMix2, 0.0f, 1.0f);
         const float filtVel1 =        *rawParam (ParameterIDs::SYN_FILTER1_VEL);
         const float filtVel2 =        *rawParam (ParameterIDs::SYN_FILTER2_VEL);
-        const float filtPdrv1=        *rawParam (ParameterIDs::SYN_FILTER1_PDRV);
-        const float filtPdrv2=        *rawParam (ParameterIDs::SYN_FILTER2_PDRV);
+        const float filtPdrv1=        mdP (ParameterIDs::SYN_FILTER1_PDRV, wc::ModDest::FPDrv1, 0.0f, 1.0f);
+        const float filtPdrv2=        mdP (ParameterIDs::SYN_FILTER2_PDRV, wc::ModDest::FPDrv2, 0.0f, 1.0f);
         const int   filtDrvType1=(int)*rawParam (ParameterIDs::SYN_FILTER1_DRIVETYPE);   // 0=Tube..5=Fuzz
         const int   filtDrvType2=(int)*rawParam (ParameterIDs::SYN_FILTER2_DRIVETYPE);
         const int   filtPole1= (int)  *rawParam (ParameterIDs::SYN_FILTER1_POLES);    // 0=6 1=12 2=18 3=24 dB
@@ -3840,8 +3870,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   octB       = (int)  *rawParam (ParameterIDs::SYN_OSC_B_OCT);
         const int   semiB      = (int)  *rawParam (ParameterIDs::SYN_OSC_B_SEMI);
         const float centB      =        *rawParam (ParameterIDs::SYN_OSC_B_CENT);
-        const float lvlB       =        *rawParam (ParameterIDs::SYN_OSC_B_LEVEL);
-        const float panB       =        *rawParam (ParameterIDs::SYN_OSC_B_PAN);
+        const float lvlB       =        mdP (ParameterIDs::SYN_OSC_B_LEVEL, wc::ModDest::LevelB, 0.0f, 1.0f);
+        const float panB       =        mdP (ParameterIDs::SYN_OSC_B_PAN, wc::ModDest::PanB, -1.0f, 1.0f);
         const int   wtPresetB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WT_PRESET);
         const float wtFrameB   =        *rawParam (ParameterIDs::SYN_OSC_B_WT_FRAME);
         const tw::Wavetable* wtB = wavetableForOsc (1, morphB_, wtPresetB);
@@ -3872,7 +3902,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         // ── OSC C / D params (4-osc) — mirror OSC B; pushed per voice below ──
         const int   octC=(int)*rawParam (ParameterIDs::SYN_OSC_C_OCT), semiC=(int)*rawParam (ParameterIDs::SYN_OSC_C_SEMI);
-        const float centC=*rawParam (ParameterIDs::SYN_OSC_C_CENT), lvlC=*rawParam (ParameterIDs::SYN_OSC_C_LEVEL), panC=*rawParam (ParameterIDs::SYN_OSC_C_PAN);
+        const float centC=*rawParam (ParameterIDs::SYN_OSC_C_CENT), lvlC=mdP (ParameterIDs::SYN_OSC_C_LEVEL, wc::ModDest::LevelC, 0.0f, 1.0f), panC=mdP (ParameterIDs::SYN_OSC_C_PAN, wc::ModDest::PanC, -1.0f, 1.0f);
         const int   wtPresetC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WT_PRESET);
         const float wtFrameC=*rawParam (ParameterIDs::SYN_OSC_C_WT_FRAME);
         const tw::Wavetable* wtC = wavetableForOsc (2, morphC_, wtPresetC);
@@ -3887,7 +3917,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   rtSrcC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_SRC), rtDestC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_DEST);
         const float rtAmtC=*rawParam (ParameterIDs::SYN_OSC_C_ROUTE_AMT);
         const int   octD=(int)*rawParam (ParameterIDs::SYN_OSC_D_OCT), semiD=(int)*rawParam (ParameterIDs::SYN_OSC_D_SEMI);
-        const float centD=*rawParam (ParameterIDs::SYN_OSC_D_CENT), lvlD=*rawParam (ParameterIDs::SYN_OSC_D_LEVEL), panD=*rawParam (ParameterIDs::SYN_OSC_D_PAN);
+        const float centD=*rawParam (ParameterIDs::SYN_OSC_D_CENT), lvlD=mdP (ParameterIDs::SYN_OSC_D_LEVEL, wc::ModDest::LevelD, 0.0f, 1.0f), panD=mdP (ParameterIDs::SYN_OSC_D_PAN, wc::ModDest::PanD, -1.0f, 1.0f);
         const int   wtPresetD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WT_PRESET);
         const float wtFrameD=*rawParam (ParameterIDs::SYN_OSC_D_WT_FRAME);
         const tw::Wavetable* wtD = wavetableForOsc (3, morphD_, wtPresetD);
@@ -3991,6 +4021,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // 'key' is the only choice → cast to index. static table = built once (no per-block alloc).
         // Air/Stretch/StretchMode + region(start/end) are patched in AFTER from the already-gathered
         // Sample params (spA..spD) — they reuse the Sample osc's params (waveform right-click + handles).
+        // ── fb75 — SAMPLE-ENGINE knob mod (block-rate; also flows into GRANULAR via withSampleExtras).
+        //    MUST run before the gpX gather below and before the engChanged compare (a modulated
+        //    struct must differ from lastSpX_ so it pushes). Region/loop points stay UNMODDED. ──
+        {
+            tw::SynthVoice::SampleEngineParams* spMod[4] = { &spA, &spB, &spC, &spD };
+            for (int o = 0; o < 4; ++o)
+            {
+                auto& sp = *spMod[o];
+                sp.scan    = juce::jlimit (-1.0f, 1.0f, sp.scan    + modSums[(int) wc::ModDest::SampScanA    + o]);
+                sp.stretch = juce::jlimit ( 0.0f, 1.0f, sp.stretch + modSums[(int) wc::ModDest::SampStretchA + o]);
+                sp.formant = juce::jlimit (-1.0f, 1.0f, sp.formant + modSums[(int) wc::ModDest::SampFormantA + o]);   // param range IS -1..1 (bipolar formant)
+                sp.air     = juce::jlimit ( 0.0f, 1.0f, sp.air     + modSums[(int) wc::ModDest::SampAirA     + o]);
+                sp.spray   = juce::jlimit ( 0.0f, 1.0f, sp.spray   + modSums[(int) wc::ModDest::SampSprayA   + o]);
+                sp.xfade   = juce::jlimit ( 0.0f, 1.0f, sp.xfade   + modSums[(int) wc::ModDest::SampXfadeA   + o]);
+            }
+        }
         static const char* const GRAIN_IDS[4][12] = {
             { ParameterIDs::SYN_OSC_A_GRAIN_SCAN, ParameterIDs::SYN_OSC_A_GRAIN_DENSITY, ParameterIDs::SYN_OSC_A_GRAIN_SIZE, ParameterIDs::SYN_OSC_A_GRAIN_SPRAY, ParameterIDs::SYN_OSC_A_GRAIN_SHAPE, ParameterIDs::SYN_OSC_A_GRAIN_KEY, ParameterIDs::SYN_OSC_A_GRAIN_POSITION, ParameterIDs::SYN_OSC_A_GRAIN_PITCH, ParameterIDs::SYN_OSC_A_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_A_GRAIN_WIDTH, ParameterIDs::SYN_OSC_A_GRAIN_DIR, ParameterIDs::SYN_OSC_A_GRAIN_SKEW },
             { ParameterIDs::SYN_OSC_B_GRAIN_SCAN, ParameterIDs::SYN_OSC_B_GRAIN_DENSITY, ParameterIDs::SYN_OSC_B_GRAIN_SIZE, ParameterIDs::SYN_OSC_B_GRAIN_SPRAY, ParameterIDs::SYN_OSC_B_GRAIN_SHAPE, ParameterIDs::SYN_OSC_B_GRAIN_KEY, ParameterIDs::SYN_OSC_B_GRAIN_POSITION, ParameterIDs::SYN_OSC_B_GRAIN_PITCH, ParameterIDs::SYN_OSC_B_GRAIN_PSPRAY, ParameterIDs::SYN_OSC_B_GRAIN_WIDTH, ParameterIDs::SYN_OSC_B_GRAIN_DIR, ParameterIDs::SYN_OSC_B_GRAIN_SKEW },
@@ -4028,10 +4074,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.loopMode    = sp.loopMode;   // One-Shot/Fwd/Rev/Ping-Pong/Tailed → granular scan behavior
             return g;
         };
-        const tw::GranularEngineParams gpA = withSampleExtras (gatherGrain (GRAIN_IDS[0]), spA);
-        const tw::GranularEngineParams gpB = withSampleExtras (gatherGrain (GRAIN_IDS[1]), spB);
-        const tw::GranularEngineParams gpC = withSampleExtras (gatherGrain (GRAIN_IDS[2]), spC);
-        const tw::GranularEngineParams gpD = withSampleExtras (gatherGrain (GRAIN_IDS[3]), spD);
+        tw::GranularEngineParams gpA = withSampleExtras (gatherGrain (GRAIN_IDS[0]), spA);   // fb75 — non-const: the mod block below offsets the knob fields
+        tw::GranularEngineParams gpB = withSampleExtras (gatherGrain (GRAIN_IDS[1]), spB);
+        tw::GranularEngineParams gpC = withSampleExtras (gatherGrain (GRAIN_IDS[2]), spC);
+        tw::GranularEngineParams gpD = withSampleExtras (gatherGrain (GRAIN_IDS[3]), spD);
+        // ── fb75 — GRANULAR knob mod (block-rate; the "star position" ask lives here: GrainPos). ──
+        {
+            tw::GranularEngineParams* gpMod[4] = { &gpA, &gpB, &gpC, &gpD };
+            for (int o = 0; o < 4; ++o)
+            {
+                auto& g = *gpMod[o];
+                g.position   = juce::jlimit ( 0.0f, 1.0f, g.position   + modSums[(int) wc::ModDest::GrainPosA     + o]);
+                g.density    = juce::jlimit ( 0.0f, 1.0f, g.density    + modSums[(int) wc::ModDest::GrainDensityA + o]);
+                g.size       = juce::jlimit ( 0.0f, 1.0f, g.size       + modSums[(int) wc::ModDest::GrainSizeA    + o]);
+                g.pitch      = juce::jlimit (-48.0f, 48.0f, g.pitch    + modSums[(int) wc::ModDest::GrainPitchA   + o]);
+                g.spray      = juce::jlimit ( 0.0f, 1.0f, g.spray      + modSums[(int) wc::ModDest::GrainSprayA   + o]);
+                g.pitchSpray = juce::jlimit ( 0.0f, 1.0f, g.pitchSpray + modSums[(int) wc::ModDest::GrainPSprayA  + o]);
+                g.shape      = juce::jlimit ( 0.0f, 1.0f, g.shape      + modSums[(int) wc::ModDest::GrainShapeA   + o]);
+                g.skew       = juce::jlimit (-1.0f, 1.0f, g.skew       + modSums[(int) wc::ModDest::GrainSkewA    + o]);
+                g.width      = juce::jlimit ( 0.0f, 1.0f, g.width      + modSums[(int) wc::ModDest::GrainWidthA   + o]);
+                g.scan       = juce::jlimit (-1.0f, 1.0f, g.scan       + modSums[(int) wc::ModDest::GrainScanA    + o]);
+            }
+        }
 
         // ── FM engine: gather the 12 wavetable-carrier FM params per OSC (FM-ENGINE-GATHER) ──
         // ID order: algo, ratio1, depth1, ratio2, depth2, feedback, then the WEATHERING page:
@@ -4050,6 +4114,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int o = 0; o < 4; ++o)
             for (int k = 0; k < 12; ++k)
                 fmVals[o][k] = *rawParam (FM_IDS[o][k]);
+        // fb75 — FM knob mod (block-rate): fb (k=5) + the WEATHERING page (k=6..11). algo/ratios/depths untouched.
+        for (int o = 0; o < 4; ++o)
+        {
+            fmVals[o][5]  = juce::jlimit (0.0f, 1.0f, fmVals[o][5]  + modSums[(int) wc::ModDest::FmFbA     + o]);
+            fmVals[o][6]  = juce::jlimit (0.0f, 1.0f, fmVals[o][6]  + modSums[(int) wc::ModDest::FmStrikeA + o]);
+            fmVals[o][7]  = juce::jlimit (0.0f, 1.0f, fmVals[o][7]  + modSums[(int) wc::ModDest::FmAgeA    + o]);
+            fmVals[o][8]  = juce::jlimit (0.0f, 1.0f, fmVals[o][8]  + modSums[(int) wc::ModDest::FmRustA   + o]);
+            fmVals[o][9]  = juce::jlimit (0.0f, 1.0f, fmVals[o][9]  + modSums[(int) wc::ModDest::FmGaleA   + o]);
+            fmVals[o][10] = juce::jlimit (0.0f, 1.0f, fmVals[o][10] + modSums[(int) wc::ModDest::FmBendA   + o]);
+            fmVals[o][11] = juce::jlimit (0.0f, 1.0f, fmVals[o][11] + modSums[(int) wc::ModDest::FmStormA  + o]);
+        }
 
         // ── RESYNTH engine: gather the resynthesis params per OSC (GEODE-ENGINE-GATHER) ──
         // ID strings keep GEODE_* (preset stability); meaning REMAPPED to the Resynth fields:
@@ -4081,6 +4156,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.loopMode    = (int) *rawParam (id[23]);
             g.fadeIn      = *rawParam (id[24]);  g.fadeOut      = *rawParam (id[25]);
             g.fadeInCurve = *rawParam (id[26]);  g.fadeOutCurve = *rawParam (id[27]);
+            // fb75 — RESYNTH knob mod (block-rate; struct fields are all 0..1)
+            g.quality = juce::jlimit (0.0f, 1.0f, g.quality + modSums[(int) wc::ModDest::GeoQualityA + o]);
+            g.formant = juce::jlimit (0.0f, 1.0f, g.formant + modSums[(int) wc::ModDest::GeoFormantA + o]);
+            g.tilt    = juce::jlimit (0.0f, 1.0f, g.tilt    + modSums[(int) wc::ModDest::GeoTiltA    + o]);
+            g.crush   = juce::jlimit (0.0f, 1.0f, g.crush   + modSums[(int) wc::ModDest::GeoCrushA   + o]);
+            g.start   = juce::jlimit (0.0f, 1.0f, g.start   + modSums[(int) wc::ModDest::GeoStartA   + o]);
+            g.smear   = juce::jlimit (0.0f, 1.0f, g.smear   + modSums[(int) wc::ModDest::GeoMeltA    + o]);
+            g.scan    = juce::jlimit (0.0f, 1.0f, g.scan    + modSums[(int) wc::ModDest::GeoScanA    + o]);
+            g.cut     = juce::jlimit (0.0f, 1.0f, g.cut     + modSums[(int) wc::ModDest::GeoCutA     + o]);
+            g.shape   = juce::jlimit (0.0f, 1.0f, g.shape   + modSums[(int) wc::ModDest::GeoShapeA   + o]);
+            g.stretch = juce::jlimit (0.0f, 1.0f, g.stretch + modSums[(int) wc::ModDest::GeoStretchA + o]);
+            g.drive   = juce::jlimit (0.0f, 1.0f, g.drive   + modSums[(int) wc::ModDest::GeoDriveA   + o]);
+            g.sieve   = juce::jlimit (0.0f, 1.0f, g.sieve   + modSums[(int) wc::ModDest::GeoSieveA   + o]);
             geodeP[o] = g;
         }
         // ── HARMONIC engine: gather the additive params per OSC (HARM-ENGINE-GATHER) ──
@@ -4101,6 +4189,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             h.fan   = *rawParam (id[5]);  h.grit  = *rawParam (id[6]);  h.braid = *rawParam (id[7]);
             h.carve = *rawParam (id[8]);  h.churn = *rawParam (id[9]);  h.root  = *rawParam (id[10]);
             h.shine = *rawParam (id[11]); h.wilt  = *rawParam (id[12]); h.forge = *rawParam (id[13]);
+            // fb75 — HARMONIC knob mod (block-rate; all fields 0..1, knobs MORPH not switch)
+            h.hue   = juce::jlimit (0.0f, 1.0f, h.hue   + modSums[(int) wc::ModDest::HarmHueA   + o]);
+            h.count = juce::jlimit (0.0f, 1.0f, h.count + modSums[(int) wc::ModDest::HarmCountA + o]);
+            h.lean  = juce::jlimit (0.0f, 1.0f, h.lean  + modSums[(int) wc::ModDest::HarmLeanA  + o]);
+            h.fan   = juce::jlimit (0.0f, 1.0f, h.fan   + modSums[(int) wc::ModDest::HarmFanA   + o]);
+            h.grit  = juce::jlimit (0.0f, 1.0f, h.grit  + modSums[(int) wc::ModDest::HarmGritA  + o]);
+            h.braid = juce::jlimit (0.0f, 1.0f, h.braid + modSums[(int) wc::ModDest::HarmBraidA + o]);
+            h.carve = juce::jlimit (0.0f, 1.0f, h.carve + modSums[(int) wc::ModDest::HarmCarveA + o]);
+            h.churn = juce::jlimit (0.0f, 1.0f, h.churn + modSums[(int) wc::ModDest::HarmChurnA + o]);
+            h.root  = juce::jlimit (0.0f, 1.0f, h.root  + modSums[(int) wc::ModDest::HarmRootA  + o]);
+            h.shine = juce::jlimit (0.0f, 1.0f, h.shine + modSums[(int) wc::ModDest::HarmShineA + o]);
+            h.wilt  = juce::jlimit (0.0f, 1.0f, h.wilt  + modSums[(int) wc::ModDest::HarmWiltA  + o]);
+            h.forge = juce::jlimit (0.0f, 1.0f, h.forge + modSums[(int) wc::ModDest::HarmFizzA  + o]);
             harmP[o] = h;
         }
         harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread
@@ -4156,6 +4257,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 const char* const* id = WSLOT_IDS[o];
                 blendCfg[o][s] = { (int) *rawParam (id[s * 3 + 0]), (int) *rawParam (id[s * 3 + 1]), *rawParam (id[s * 3 + 2]) };
+                blendCfg[o][s].depth = juce::jlimit (0.0f, 1.0f, blendCfg[o][s].depth + modSums[(int) wc::ModDest::BlendDepthA1 + o * 4 + s]);   // fb75 — blend-slot depth mod
             }
 
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
@@ -4260,11 +4362,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // 2..12 to 24..144 → every type but White(0)/Pink(→12=SpaceWind) collapsed to the switch default (White).
         const bool  noiseOn    = *rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f;
         const int   noiseType  = (int) *rawParam (ParameterIDs::SYN_NOISE_TYPE);   // choice index 0..12
-        const float noiseLevel = *rawParam (ParameterIDs::SYN_NOISE_LEVEL);
-        const float noisePitch = *rawParam (ParameterIDs::SYN_NOISE_PITCH);
-        const float noisePan   = *rawParam (ParameterIDs::SYN_NOISE_PAN);
+        const float noiseLevel = mdP (ParameterIDs::SYN_NOISE_LEVEL, wc::ModDest::NoiseLevel, 0.0f, 1.0f);
+        const float noisePitch = mdP (ParameterIDs::SYN_NOISE_PITCH, wc::ModDest::NoiseScan, 0.0f, 1.0f);
+        const float noisePan   = mdP (ParameterIDs::SYN_NOISE_PAN, wc::ModDest::NoisePan, 0.0f, 1.0f);
         const int   noisePlayMode = (int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE);   // fb66 — 0 Random · 1 Envelope · 2 Free
-        const float noiseWidth    = *rawParam (ParameterIDs::SYN_NOISE_WIDTH);   // fb69 — stereo width 0..2 (M/S)
+        const float noiseWidth    = mdP (ParameterIDs::SYN_NOISE_WIDTH, wc::ModDest::NoiseWidth, 0.0f, 2.0f);   // fb69 — stereo width 0..2 (M/S)
 
         // fb66 — FREE play mode: a GLOBAL always-running tape playhead. Advanced once per block (even with
         // no notes) at the rate the voices read the loop, wrapped to length. Voices in Free mode resync to
