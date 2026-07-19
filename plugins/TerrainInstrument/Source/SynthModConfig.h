@@ -135,6 +135,21 @@ enum class ModDest : int
     UniDetA, UniDetB, UniDetC, UniDetD,
     UniBlendA, UniBlendB, UniBlendC, UniBlendD,
     UniWidthA, UniWidthB, UniWidthC, UniWidthD,
+    // ── fb78 — NOTHING OFF THE TABLE (Max): FM page-1 ratios/depths, granular Key ("if a madman
+    //    wants to modulate the key of a granular, let them") + Dir, filter back-panel Vel/Track +
+    //    Spread, Sub Octave/Shape (stepped), Unison Voices (stepped). Stepped dests round + clamp. ──
+    FmRatio1A, FmRatio1B, FmRatio1C, FmRatio1D,
+    FmDepth1A, FmDepth1B, FmDepth1C, FmDepth1D,
+    FmRatio2A, FmRatio2B, FmRatio2C, FmRatio2D,
+    FmDepth2A, FmDepth2B, FmDepth2C, FmDepth2D,
+    GrainKeyA, GrainKeyB, GrainKeyC, GrainKeyD,
+    GrainDirA, GrainDirB, GrainDirC, GrainDirD,
+    FVel1, FVel2,
+    FTrack1, FTrack2,
+    FSpread1, FSpread2,
+    SubRangeA, SubRangeB, SubRangeC, SubRangeD,
+    SubFormA, SubFormB, SubFormC, SubFormD,
+    UniVoicesA, UniVoicesB, UniVoicesC, UniVoicesD,
     NumDests
 };
 
@@ -468,6 +483,48 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // UniWidthB
     { ModDomain::Linear01,  1.0f },  // UniWidthC
     { ModDomain::Linear01,  1.0f },  // UniWidthD
+    { ModDomain::Linear01,  4.0f },  // FmRatio1A: ±4 ratio at full depth (param 0.25..16) — osc A
+    { ModDomain::Linear01,  4.0f },  // FmRatio1B
+    { ModDomain::Linear01,  4.0f },  // FmRatio1C
+    { ModDomain::Linear01,  4.0f },  // FmRatio1D
+    { ModDomain::Linear01,  1.0f },  // FmDepth1A
+    { ModDomain::Linear01,  1.0f },  // FmDepth1B
+    { ModDomain::Linear01,  1.0f },  // FmDepth1C
+    { ModDomain::Linear01,  1.0f },  // FmDepth1D
+    { ModDomain::Linear01,  4.0f },  // FmRatio2A
+    { ModDomain::Linear01,  4.0f },  // FmRatio2B
+    { ModDomain::Linear01,  4.0f },  // FmRatio2C
+    { ModDomain::Linear01,  4.0f },  // FmRatio2D
+    { ModDomain::Linear01,  1.0f },  // FmDepth2A
+    { ModDomain::Linear01,  1.0f },  // FmDepth2B
+    { ModDomain::Linear01,  1.0f },  // FmDepth2C
+    { ModDomain::Linear01,  1.0f },  // FmDepth2D
+    { ModDomain::Linear01,  6.0f },  // GrainKeyA: ±6 key steps at full depth (stepped 0..6) — osc A
+    { ModDomain::Linear01,  6.0f },  // GrainKeyB
+    { ModDomain::Linear01,  6.0f },  // GrainKeyC
+    { ModDomain::Linear01,  6.0f },  // GrainKeyD
+    { ModDomain::Bipolar,   1.0f },  // GrainDirA: grain direction bias (−1 rev · 0 rand · +1 fwd)
+    { ModDomain::Bipolar,   1.0f },  // GrainDirB
+    { ModDomain::Bipolar,   1.0f },  // GrainDirC
+    { ModDomain::Bipolar,   1.0f },  // GrainDirD
+    { ModDomain::Linear01,  1.0f },  // FVel1: filter 1 velocity→cutoff amount
+    { ModDomain::Linear01,  1.0f },  // FVel2
+    { ModDomain::Linear01,  1.0f },  // FTrack1: filter 1 keytrack amount
+    { ModDomain::Linear01,  1.0f },  // FTrack2
+    { ModDomain::Linear01,  1.0f },  // FSpread1: filter 1 stereo spread
+    { ModDomain::Linear01,  1.0f },  // FSpread2
+    { ModDomain::Linear01,  8.0f },  // SubRangeA: ±8 octave steps at full depth (stepped 0..8) — osc A
+    { ModDomain::Linear01,  8.0f },  // SubRangeB
+    { ModDomain::Linear01,  8.0f },  // SubRangeC
+    { ModDomain::Linear01,  8.0f },  // SubRangeD
+    { ModDomain::Linear01,  3.0f },  // SubFormA: ±3 shape steps at full depth (stepped 0..3) — osc A
+    { ModDomain::Linear01,  3.0f },  // SubFormB
+    { ModDomain::Linear01,  3.0f },  // SubFormC
+    { ModDomain::Linear01,  3.0f },  // SubFormD
+    { ModDomain::Linear01, 15.0f },  // UniVoicesA: ±15 voices at full depth (stepped 1..16) — osc A
+    { ModDomain::Linear01, 15.0f },  // UniVoicesB
+    { ModDomain::Linear01, 15.0f },  // UniVoicesC
+    { ModDomain::Linear01, 15.0f },  // UniVoicesD
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

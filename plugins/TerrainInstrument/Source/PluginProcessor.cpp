@@ -1327,7 +1327,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0));
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::LFO1_SYNC, 1 },
-        "LFO 1 Sync", true));
+        "LFO 1 Sync", false));   // fb78 ROOT-CAUSE FIX: was true — the UI boots FREE, and a sync'd LFO froze at phase 0 with the transport stopped, so EVERY route multiplied by 0.0 ("none of them work")
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::LFO1_DIV, 1 },
         "LFO 1 Division",
@@ -1354,7 +1354,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             layout.add (std::make_unique<juce::AudioParameterChoice> (
                 juce::ParameterID { shape, 1 }, "LFO " + juce::String (n) + " Shape", lfoShapes, 0));
             layout.add (std::make_unique<juce::AudioParameterBool> (
-                juce::ParameterID { sync, 1 },  "LFO " + juce::String (n) + " Sync", true));
+                juce::ParameterID { sync, 1 },  "LFO " + juce::String (n) + " Sync", false));   // fb78 ROOT-CAUSE FIX (see LFO 1)
             layout.add (std::make_unique<juce::AudioParameterChoice> (
                 juce::ParameterID { div, 1 },   "LFO " + juce::String (n) + " Division", lfoDivs, 5));
         };
@@ -3753,24 +3753,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Wrap helper: base param + this block's mod sum, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
         { return juce::jlimit (lo, hi, *rawParam (pid) + modSums[(int) d]); };
-        // fb76 — SPECTRAL morph amount mod: the rebuild runs on the MESSAGE thread (timerCallback →
-        // rebuildMorphIfNeeded); the audio thread only PUBLISHES the effective amount here. Offset 0
-        // passes the raw param through EXACTLY (byte-identical → the timer's epsilon gate holds);
-        // a live route quantizes to 1/128 so tiny LFO wiggles don't trigger rebuild churn.
-        {
-            static const char* const kSpecAmtIds[4] = {
-                ParameterIDs::SYN_OSC_A_SPECTRAL_AMT, ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
-                ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
-            for (int o = 0; o < 4; ++o)
-            {
-                const float rawAmt = *rawParam (kSpecAmtIds[o]);
-                const float off    = modSums[(int) wc::ModDest::SpectralA + o];
-                spectralEffAmt_[o].store (off == 0.0f ? rawAmt
-                    : std::round (juce::jlimit (0.0f, 1.0f, rawAmt + off) * 128.0f) / 128.0f,
-                    std::memory_order_relaxed);
-            }
-        }
-
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
         const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
         const float cent    =         *rawParam (ParameterIDs::SYN_OSC_A_CENT);
@@ -3778,7 +3760,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float pan     =         mdP (ParameterIDs::SYN_OSC_A_PAN, wc::ModDest::PanA, -1.0f, 1.0f);
         const float cut     =         *rawParam (ParameterIDs::SYN_FILTER1_CUT);
         const float res     =         mdP (ParameterIDs::SYN_FILTER1_RES, wc::ModDest::Res1, 0.0f, 1.0f);
-        const float fltKt1  =         *rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK);
+        const float fltKt1  =         juce::jlimit (0.0f, 100.0f, *rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK) + modSums[(int) wc::ModDest::FTrack1] * 100.0f);   // fb78 — back-panel Track mod
         // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
         const int   filtType= (int)   *rawParam (ParameterIDs::SYN_FILTER1_TYPE);
         const float filtDrv =         mdP (ParameterIDs::SYN_FILTER1_DRV, wc::ModDest::FDrv1, 0.0f, 1.0f);
@@ -3786,22 +3768,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Filter 2 (independent) + per-filter mix + routing.
         const float cut2     =        *rawParam (ParameterIDs::SYN_FILTER2_CUT);
         const float res2     =        mdP (ParameterIDs::SYN_FILTER2_RES, wc::ModDest::Res2, 0.0f, 1.0f);
-        const float fltKt2   =        *rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK);
+        const float fltKt2   =        juce::jlimit (0.0f, 100.0f, *rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK) + modSums[(int) wc::ModDest::FTrack2] * 100.0f);
         const int   filtType2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_TYPE);
         const float filtDrv2 =        mdP (ParameterIDs::SYN_FILTER2_DRV, wc::ModDest::FDrv2, 0.0f, 1.0f);
         const float filtEnv2 =        mdP (ParameterIDs::SYN_FILTER2_ENV, wc::ModDest::FEnv2, -1.0f, 1.0f);
         const float filtMix1 =        mdP (ParameterIDs::SYN_FILTER1_MIX, wc::ModDest::FMix1, 0.0f, 1.0f);
         const float filtMix2 =        mdP (ParameterIDs::SYN_FILTER2_MIX, wc::ModDest::FMix2, 0.0f, 1.0f);
-        const float filtVel1 =        *rawParam (ParameterIDs::SYN_FILTER1_VEL);
-        const float filtVel2 =        *rawParam (ParameterIDs::SYN_FILTER2_VEL);
+        const float filtVel1 =        mdP (ParameterIDs::SYN_FILTER1_VEL, wc::ModDest::FVel1, 0.0f, 1.0f);   // fb78 — back-panel Vel mod
+        const float filtVel2 =        mdP (ParameterIDs::SYN_FILTER2_VEL, wc::ModDest::FVel2, 0.0f, 1.0f);
         const float filtPdrv1=        mdP (ParameterIDs::SYN_FILTER1_PDRV, wc::ModDest::FPDrv1, 0.0f, 1.0f);
         const float filtPdrv2=        mdP (ParameterIDs::SYN_FILTER2_PDRV, wc::ModDest::FPDrv2, 0.0f, 1.0f);
         const int   filtDrvType1=(int)*rawParam (ParameterIDs::SYN_FILTER1_DRIVETYPE);   // 0=Tube..5=Fuzz
         const int   filtDrvType2=(int)*rawParam (ParameterIDs::SYN_FILTER2_DRIVETYPE);
         const int   filtPole1= (int)  *rawParam (ParameterIDs::SYN_FILTER1_POLES);    // 0=6 1=12 2=18 3=24 dB
         const int   filtPole2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_POLES);
-        const float filtSpread1=      *rawParam (ParameterIDs::SYN_FILTER1_SPREAD);   // stereo width 0..1
-        const float filtSpread2=      *rawParam (ParameterIDs::SYN_FILTER2_SPREAD);
+        const float filtSpread1=      mdP (ParameterIDs::SYN_FILTER1_SPREAD, wc::ModDest::FSpread1, 0.0f, 1.0f);   // stereo width 0..1 · fb78 mod
+        const float filtSpread2=      mdP (ParameterIDs::SYN_FILTER2_SPREAD, wc::ModDest::FSpread2, 0.0f, 1.0f);
         const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
         // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
         const bool  f1src[5] = { *rawParam (ParameterIDs::SYN_FILTER1_SRC_A)   > 0.5f,
@@ -4117,6 +4099,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 g.skew       = juce::jlimit (-1.0f, 1.0f, g.skew       + modSums[(int) wc::ModDest::GrainSkewA    + o]);
                 g.width      = juce::jlimit ( 0.0f, 1.0f, g.width      + modSums[(int) wc::ModDest::GrainWidthA   + o]);
                 g.scan       = juce::jlimit (-1.0f, 1.0f, g.scan       + modSums[(int) wc::ModDest::GrainScanA    + o]);
+                g.dir        = juce::jlimit (-1.0f, 1.0f, g.dir        + modSums[(int) wc::ModDest::GrainDirA     + o]);   // fb78
+                g.key        = juce::jlimit (0, 6, (int) std::lround ((float) g.key + modSums[(int) wc::ModDest::GrainKeyA + o]));   // fb78 — stepped ("madman mode": modulate the KEY)
             }
         }
 
@@ -4137,9 +4121,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int o = 0; o < 4; ++o)
             for (int k = 0; k < 12; ++k)
                 fmVals[o][k] = *rawParam (FM_IDS[o][k]);
-        // fb75 — FM knob mod (block-rate): fb (k=5) + the WEATHERING page (k=6..11). algo/ratios/depths untouched.
+        // fb75/78 — FM knob mod (block-rate): ratios/depths (k=1..4), fb (k=5), WEATHERING (k=6..11). algo untouched.
         for (int o = 0; o < 4; ++o)
         {
+            fmVals[o][1]  = juce::jlimit (0.25f, 16.0f, fmVals[o][1] + modSums[(int) wc::ModDest::FmRatio1A + o]);   // fb78
+            fmVals[o][2]  = juce::jlimit (0.0f, 1.0f, fmVals[o][2]  + modSums[(int) wc::ModDest::FmDepth1A + o]);
+            fmVals[o][3]  = juce::jlimit (0.25f, 16.0f, fmVals[o][3] + modSums[(int) wc::ModDest::FmRatio2A + o]);
+            fmVals[o][4]  = juce::jlimit (0.0f, 1.0f, fmVals[o][4]  + modSums[(int) wc::ModDest::FmDepth2A + o]);
             fmVals[o][5]  = juce::jlimit (0.0f, 1.0f, fmVals[o][5]  + modSums[(int) wc::ModDest::FmFbA     + o]);
             fmVals[o][6]  = juce::jlimit (0.0f, 1.0f, fmVals[o][6]  + modSums[(int) wc::ModDest::FmStrikeA + o]);
             fmVals[o][7]  = juce::jlimit (0.0f, 1.0f, fmVals[o][7]  + modSums[(int) wc::ModDest::FmAgeA    + o]);
@@ -4370,10 +4358,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float coarseB = *rawParam (ParameterIDs::SYN_OSC_B_COARSE);
         const float coarseC = *rawParam (ParameterIDs::SYN_OSC_C_COARSE);
         const float coarseD = *rawParam (ParameterIDs::SYN_OSC_D_COARSE);
-        const int   subRngA = (int) *rawParam (ParameterIDs::SYN_OSC_A_SUB_RANGE), subFrmA = (int) *rawParam (ParameterIDs::SYN_OSC_A_SUB_FORM);
-        const int   subRngB = (int) *rawParam (ParameterIDs::SYN_OSC_B_SUB_RANGE), subFrmB = (int) *rawParam (ParameterIDs::SYN_OSC_B_SUB_FORM);
-        const int   subRngC = (int) *rawParam (ParameterIDs::SYN_OSC_C_SUB_RANGE), subFrmC = (int) *rawParam (ParameterIDs::SYN_OSC_C_SUB_FORM);
-        const int   subRngD = (int) *rawParam (ParameterIDs::SYN_OSC_D_SUB_RANGE), subFrmD = (int) *rawParam (ParameterIDs::SYN_OSC_D_SUB_FORM);
+        const int   subRngA = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_A_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 0])), subFrmA = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_A_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 0]));   // fb78 — stepped sub octave/shape mod
+        const int   subRngB = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_B_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 1])), subFrmB = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_B_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 1]));   // fb78 — stepped sub octave/shape mod
+        const int   subRngC = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_C_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 2])), subFrmC = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_C_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 2]));   // fb78 — stepped sub octave/shape mod
+        const int   subRngD = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_D_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 3])), subFrmD = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_D_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 3]));   // fb78 — stepped sub octave/shape mod
         const float subWgtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_WEIGHT), subHtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_HEAT);
         const float subWgtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_HEAT);
         const float subWgtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_HEAT);
@@ -4563,11 +4551,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         juce::ignoreUnused (unisonCount, unisonSpread01);   // global UNISON/SPREAD retired → per-OSC below
 
         // Per-OSC UNISON (replaces global). Voices 1..16 + Detune/Blend/Width (0..100 %→0..1).
-        const int   uniCountA = (int) *rawParam (ParameterIDs::SYN_OSC_A_UNISON);
+        const int   uniCountA = juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_A_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 0]));   // fb78 — stepped voices mod
         const float uniDetA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f + modSums[(int) wc::ModDest::UniDetA]);     // fb77 — unison pill mod
         const float uniBlnA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f + modSums[(int) wc::ModDest::UniBlendA]);
         const float uniWidA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f + modSums[(int) wc::ModDest::UniWidthA]);
-        const int   uniCountB = (int) *rawParam (ParameterIDs::SYN_OSC_B_UNISON);
+        const int   uniCountB = juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_B_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 1]));   // fb78 — stepped voices mod
         const float uniDetB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f + modSums[(int) wc::ModDest::UniDetB]);
         const float uniBlnB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f + modSums[(int) wc::ModDest::UniBlendB]);
         const float uniWidB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f + modSums[(int) wc::ModDest::UniWidthB]);
@@ -4593,13 +4581,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int interpModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_INTERP_MODE);
         const int interpModeB = (int) *rawParam (ParameterIDs::SYN_OSC_B_INTERP_MODE);
         // OSC C / D — unison / blur / fold / interp (4-osc)
-        const int   uniCountC=(int)*rawParam (ParameterIDs::SYN_OSC_C_UNISON);
+        const int   uniCountC=juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_C_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 2]));   // fb78 — stepped voices mod
         const float uniDetC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f + modSums[(int) wc::ModDest::UniDetC]), uniBlnC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f + modSums[(int) wc::ModDest::UniBlendC]), uniWidC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f + modSums[(int) wc::ModDest::UniWidthC]);
         const float blurC=mdP (ParameterIDs::SYN_OSC_C_FRAME_SPREAD, wc::ModDest::BlurC, 0.0f, 1.0f);
         const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
         const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
         const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
-        const int   uniCountD=(int)*rawParam (ParameterIDs::SYN_OSC_D_UNISON);
+        const int   uniCountD=juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_D_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 3]));   // fb78 — stepped voices mod
         const float uniDetD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f + modSums[(int) wc::ModDest::UniDetD]), uniBlnD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f + modSums[(int) wc::ModDest::UniBlendD]), uniWidD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f + modSums[(int) wc::ModDest::UniWidthD]);
         const float blurD=mdP (ParameterIDs::SYN_OSC_D_FRAME_SPREAD, wc::ModDest::BlurD, 0.0f, 1.0f);
         const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
@@ -4667,14 +4655,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     for (int i = 0; i < wc::NUM_LFOS; ++i)
     {
         flowLfo_[i].setSettings (synModCfg.lfos[i]);
-        if (synModCfg.lfos[i].sync)
+        if (synModCfg.lfos[i].sync && flowPlaying)
         {
             const float bpc = wc::kSyncDivisions[ juce::jlimit (0, wc::kNumSyncDivisions - 1, synModCfg.lfos[i].syncIdx) ].beatsPerCycle;
             flowLfo_[i].setPhaseFromTransport ((float) std::fmod (flowPpq / (double) bpc, 1.0)); // locks to bar + arp clock
         }
         else
         {
-            flowLfo_[i].setFrequency (synModCfg.lfos[i].rateHz);
+            // fb78 ROOT-CAUSE FIX: a sync'd LFO with the TRANSPORT STOPPED used to pin its phase to the
+            // frozen ppq (= 0 in most idle hosts) → shapeAt(0) = 0 forever → every route it fed was DEAD
+            // ("none of them work", Max — he sound-designs with the transport stopped). Now a stopped
+            // sync'd LFO FREE-RUNS at its tempo-derived rate — exactly what the per-voice LFOs already
+            // do (setModConfig resolves syncedHz and free-runs) — and re-locks to the bar on play.
+            const float hz = synModCfg.lfos[i].sync
+                               ? wc::syncedHz (synModCfg.lfos[i].syncIdx, synModBpm > 0.0f ? synModBpm : 120.0f)
+                               : synModCfg.lfos[i].rateHz;
+            flowLfo_[i].setFrequency (hz);
             for (int s = 0; s < numSamples; ++s) flowLfo_[i].processSample();   // advance to track time
         }
     }
