@@ -284,14 +284,22 @@ juce::String TerrainInstrumentAudioProcessor::getImportsJson (bool wt)
 {
     const int idx = wt ? 1 : 0;
     juce::Array<juce::var> files;
+    juce::StringArray deadFiles;   // fb73 — a single import whose file is gone (Finder-deleted) is PRUNED from the
+                                   // registry, not just hidden: Max's model is "delete it in the OS folder = it's gone".
+                                   // FOLDERS are NOT pruned (an unmounted drive would lose them permanently; they just hide).
     for (auto& p : importFiles_[idx])
     {
         juce::File f (p);
-        if (! f.existsAsFile()) continue;
+        if (! f.existsAsFile()) { deadFiles.add (p); continue; }
         juce::DynamicObject::Ptr o = new juce::DynamicObject();
         o->setProperty ("name", f.getFileNameWithoutExtension());
         o->setProperty ("path", f.getFullPathName());
         files.add (juce::var (o.get()));
+    }
+    if (! deadFiles.isEmpty())
+    {
+        for (auto& p : deadFiles) importFiles_[idx].removeString (p);
+        saveImportsRegistry (wt);
     }
     juce::Array<juce::var> folders;
     for (auto& p : importFolders_[idx])
