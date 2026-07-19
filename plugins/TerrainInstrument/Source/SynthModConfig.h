@@ -125,6 +125,16 @@ enum class ModDest : int
     //    pre-existing path a frame-LFO with static blur already exercises. ──
     SpectralA, SpectralB, SpectralC, SpectralD,
     BlurA, BlurB, BlurC, BlurD,
+    // ── fb77 — the WHOLE osc back panel (Max): tuning Oct/Semi/Cent (summed in SEMITONES and folded
+    //    into the voice's cents lane — continuous pitch, no stepped octave switching), Warp2 amount,
+    //    and the Unison pill's continuous params (Detune/Blend/Width; Voices stays a discrete pick). ──
+    OctA, OctB, OctC, OctD,
+    SemiA, SemiB, SemiC, SemiD,
+    CentA, CentB, CentC, CentD,
+    Warp2A, Warp2B, Warp2C, Warp2D,
+    UniDetA, UniDetB, UniDetC, UniDetD,
+    UniBlendA, UniBlendB, UniBlendC, UniBlendD,
+    UniWidthA, UniWidthB, UniWidthC, UniWidthD,
     NumDests
 };
 
@@ -430,6 +440,34 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // BlurB
     { ModDomain::Linear01,  1.0f },  // BlurC
     { ModDomain::Linear01,  1.0f },  // BlurD
+    { ModDomain::Semitone, 12.0f },  // OctA: ±1 octave at full depth — osc A
+    { ModDomain::Semitone, 12.0f },  // OctB
+    { ModDomain::Semitone, 12.0f },  // OctC
+    { ModDomain::Semitone, 12.0f },  // OctD
+    { ModDomain::Semitone, 12.0f },  // SemiA: ±12 st at full depth (the knob's own span)
+    { ModDomain::Semitone, 12.0f },  // SemiB
+    { ModDomain::Semitone, 12.0f },  // SemiC
+    { ModDomain::Semitone, 12.0f },  // SemiD
+    { ModDomain::Semitone,  1.0f },  // CentA: ±1 st (±100 cents) at full depth — vibrato lane
+    { ModDomain::Semitone,  1.0f },  // CentB
+    { ModDomain::Semitone,  1.0f },  // CentC
+    { ModDomain::Semitone,  1.0f },  // CentD
+    { ModDomain::Linear01,  1.0f },  // Warp2A: warp 2 amount — osc A
+    { ModDomain::Linear01,  1.0f },  // Warp2B
+    { ModDomain::Linear01,  1.0f },  // Warp2C
+    { ModDomain::Linear01,  1.0f },  // Warp2D
+    { ModDomain::Linear01,  1.0f },  // UniDetA: unison detune — osc A
+    { ModDomain::Linear01,  1.0f },  // UniDetB
+    { ModDomain::Linear01,  1.0f },  // UniDetC
+    { ModDomain::Linear01,  1.0f },  // UniDetD
+    { ModDomain::Linear01,  1.0f },  // UniBlendA: unison blend — osc A
+    { ModDomain::Linear01,  1.0f },  // UniBlendB
+    { ModDomain::Linear01,  1.0f },  // UniBlendC
+    { ModDomain::Linear01,  1.0f },  // UniBlendD
+    { ModDomain::Linear01,  1.0f },  // UniWidthA: unison width — osc A
+    { ModDomain::Linear01,  1.0f },  // UniWidthB
+    { ModDomain::Linear01,  1.0f },  // UniWidthC
+    { ModDomain::Linear01,  1.0f },  // UniWidthD
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

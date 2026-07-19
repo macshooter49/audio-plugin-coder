@@ -3903,9 +3903,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float warpAmountB =       *rawParam (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
         // WARP 2 — chained second slot per OSC
         const int   warp2ModeA = (int)  *rawParam (ParameterIDs::SYN_OSC_A_WARP2_MODE);
-        const float warp2AmtA  =        *rawParam (ParameterIDs::SYN_OSC_A_WARP2_AMT);
+        const float warp2AmtA  =        mdP (ParameterIDs::SYN_OSC_A_WARP2_AMT, wc::ModDest::Warp2A, 0.0f, 1.0f);   // fb77 — back-panel WARP2 amount mod
         const int   warp2ModeB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP2_MODE);
-        const float warp2AmtB  =        *rawParam (ParameterIDs::SYN_OSC_B_WARP2_AMT);
+        const float warp2AmtB  =        mdP (ParameterIDs::SYN_OSC_B_WARP2_AMT, wc::ModDest::Warp2B, 0.0f, 1.0f);
         const int   engineIdxB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ENGINE);
         // WAVER — per-OSC analog pitch-drift depth (0..100 %). Pushed per voice below.
         const float waverA      =       *rawParam (ParameterIDs::SYN_OSC_A_WAVER);
@@ -3932,7 +3932,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   warpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_PHASE_MODE);
         const float warpAmountC=*rawParam (ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
         const int   warp2ModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP2_MODE);
-        const float warp2AmtC=*rawParam (ParameterIDs::SYN_OSC_C_WARP2_AMT);
+        const float warp2AmtC=mdP (ParameterIDs::SYN_OSC_C_WARP2_AMT, wc::ModDest::Warp2C, 0.0f, 1.0f);
         const int   engineIdxC=(int)*rawParam (ParameterIDs::SYN_OSC_C_ENGINE);
         const float waverC=*rawParam (ParameterIDs::SYN_OSC_C_WAVER);
         const float ktDepthC=*rawParam (ParameterIDs::SYN_OSC_C_KEYTRACK);
@@ -3947,7 +3947,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   warpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_PHASE_MODE);
         const float warpAmountD=*rawParam (ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
         const int   warp2ModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP2_MODE);
-        const float warp2AmtD=*rawParam (ParameterIDs::SYN_OSC_D_WARP2_AMT);
+        const float warp2AmtD=mdP (ParameterIDs::SYN_OSC_D_WARP2_AMT, wc::ModDest::Warp2D, 0.0f, 1.0f);
         const int   engineIdxD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ENGINE);
         const float waverD=*rawParam (ParameterIDs::SYN_OSC_D_WAVER);
         const float ktDepthD=*rawParam (ParameterIDs::SYN_OSC_D_KEYTRACK);
@@ -4436,13 +4436,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             noiseCarrierVoice = (held != nullptr) ? held : anyv;
         }
 
+        // fb77 — BACK-PANEL TUNING MOD (Oct/Semi/Cent): all three sums arrive in SEMITONES
+        // (kDestInfo domains: Oct ±12 st = ±1 octave, Semi ±12 st, Cent ±1 st at full depth)
+        // and fold into the voice's CENTS lane next to COARSE — continuous pitch, no re-quantize.
+        float tuneModCents[4];
+        for (int o = 0; o < 4; ++o)
+            tuneModCents[o] = (modSums[(int) wc::ModDest::OctA  + o]
+                             + modSums[(int) wc::ModDest::SemiA + o]
+                             + modSums[(int) wc::ModDest::CentA + o]) * 100.0f;
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
             if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
             {
                 if (synCfgChanged)
                     sv->setModConfig          (synModCfg, synModBpm);
-                sv->setTuning                 (oct, semi, cent + coarseA * 100.0f);   // + COARSE (cents lane)
+                sv->setTuning                 (oct, semi, cent + coarseA * 100.0f + tuneModCents[0]);   // + COARSE + Oct/Semi/Cent mod (cents lane)
                 sv->setLevel                  (lvl);
                 sv->setPan                    (pan);
                 sv->setFilterParameters       (cut, res);
@@ -4478,7 +4486,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setWarp                   (warpMode, warpAmount);
                 sv->setEngine                 (engineIdx);
                 // Phase 9 — OSC B setters
-                sv->setTuningB                (octB, semiB, centB + coarseB * 100.0f);
+                sv->setTuningB                (octB, semiB, centB + coarseB * 100.0f + tuneModCents[1]);
                 sv->setLevelB                 (lvlB);
                 sv->setPanB                   (panB);
                 sv->setWavetableB             (wtB);
@@ -4491,7 +4499,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setRoute                  (rtSrcA, rtDestA, rtAmtA / 100.0f, rtSrcB, rtDestB, rtAmtB / 100.0f);  // ROUTE
                 sv->setEngineB                (engineIdxB);
                 // ── OSC C / D pushes (4-osc) ──
-                sv->setTuningC (octC, semiC, centC + coarseC * 100.0f);  sv->setTuningD (octD, semiD, centD + coarseD * 100.0f);
+                sv->setTuningC (octC, semiC, centC + coarseC * 100.0f + tuneModCents[2]);  sv->setTuningD (octD, semiD, centD + coarseD * 100.0f + tuneModCents[3]);
                 sv->setLevelC (lvlC);                 sv->setLevelD (lvlD);
                 sv->setOscGates (gateA, gateB, gateC, gateD);   // SOLO/MUTE — click-free per-osc gate
                 sv->setSub (0, subRngA, subFrmA, subWgtA, subHtA);   // SUB — universal osc box
@@ -4556,13 +4564,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
         // Per-OSC UNISON (replaces global). Voices 1..16 + Detune/Blend/Width (0..100 %→0..1).
         const int   uniCountA = (int) *rawParam (ParameterIDs::SYN_OSC_A_UNISON);
-        const float uniDetA   =       *rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f;
-        const float uniBlnA   =       *rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f;
-        const float uniWidA   =       *rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f;
+        const float uniDetA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f + modSums[(int) wc::ModDest::UniDetA]);     // fb77 — unison pill mod
+        const float uniBlnA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f + modSums[(int) wc::ModDest::UniBlendA]);
+        const float uniWidA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f + modSums[(int) wc::ModDest::UniWidthA]);
         const int   uniCountB = (int) *rawParam (ParameterIDs::SYN_OSC_B_UNISON);
-        const float uniDetB   =       *rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f;
-        const float uniBlnB   =       *rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f;
-        const float uniWidB   =       *rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f;
+        const float uniDetB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f + modSums[(int) wc::ModDest::UniDetB]);
+        const float uniBlnB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f + modSums[(int) wc::ModDest::UniBlendB]);
+        const float uniWidB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f + modSums[(int) wc::ModDest::UniWidthB]);
 
         // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
@@ -4586,13 +4594,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int interpModeB = (int) *rawParam (ParameterIDs::SYN_OSC_B_INTERP_MODE);
         // OSC C / D — unison / blur / fold / interp (4-osc)
         const int   uniCountC=(int)*rawParam (ParameterIDs::SYN_OSC_C_UNISON);
-        const float uniDetC=*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, uniBlnC=*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, uniWidC=*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f;
+        const float uniDetC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f + modSums[(int) wc::ModDest::UniDetC]), uniBlnC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f + modSums[(int) wc::ModDest::UniBlendC]), uniWidC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f + modSums[(int) wc::ModDest::UniWidthC]);
         const float blurC=mdP (ParameterIDs::SYN_OSC_C_FRAME_SPREAD, wc::ModDest::BlurC, 0.0f, 1.0f);
         const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
         const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
         const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
         const int   uniCountD=(int)*rawParam (ParameterIDs::SYN_OSC_D_UNISON);
-        const float uniDetD=*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, uniBlnD=*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, uniWidD=*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f;
+        const float uniDetD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f + modSums[(int) wc::ModDest::UniDetD]), uniBlnD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f + modSums[(int) wc::ModDest::UniBlendD]), uniWidD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f + modSums[(int) wc::ModDest::UniWidthD]);
         const float blurD=mdP (ParameterIDs::SYN_OSC_D_FRAME_SPREAD, wc::ModDest::BlurD, 0.0f, 1.0f);
         const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
         const float foldAmtD=*rawParam (ParameterIDs::SYN_OSC_D_FOLD_AMT);
