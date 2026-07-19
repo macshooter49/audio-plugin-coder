@@ -150,6 +150,9 @@ enum class ModDest : int
     SubRangeA, SubRangeB, SubRangeC, SubRangeD,
     SubFormA, SubFormB, SubFormC, SubFormD,
     UniVoicesA, UniVoicesB, UniVoicesC, UniVoicesD,
+    // ── fb79 — per-osc FILTER SENDS (the F1/F2 pills went per-oscillator; default 0 = dry) ──
+    OscF1SendA, OscF1SendB, OscF1SendC, OscF1SendD,
+    OscF2SendA, OscF2SendB, OscF2SendC, OscF2SendD,
     NumDests
 };
 
@@ -525,6 +528,14 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01, 15.0f },  // UniVoicesB
     { ModDomain::Linear01, 15.0f },  // UniVoicesC
     { ModDomain::Linear01, 15.0f },  // UniVoicesD
+    { ModDomain::Linear01,  1.0f },  // OscF1SendA: osc A → Filter 1 send
+    { ModDomain::Linear01,  1.0f },  // OscF1SendB
+    { ModDomain::Linear01,  1.0f },  // OscF1SendC
+    { ModDomain::Linear01,  1.0f },  // OscF1SendD
+    { ModDomain::Linear01,  1.0f },  // OscF2SendA: osc A → Filter 2 send
+    { ModDomain::Linear01,  1.0f },  // OscF2SendB
+    { ModDomain::Linear01,  1.0f },  // OscF2SendC
+    { ModDomain::Linear01,  1.0f },  // OscF2SendD
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

@@ -415,9 +415,10 @@ namespace tw
         void setFilterMix1 (float mix) noexcept       { filterMix1_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterMix2 (float mix) noexcept       { filterMix2_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterRouting (int mode) noexcept     { filterRouting_ = (mode != 0) ? 1 : 0; }
-        // Per-oscillator filter routing masks — which sources (A,B,C,D,Sub) feed each filter.
-        void setFilterSources (const bool s1[5], const bool s2[5]) noexcept
-        { for (int k = 0; k < 5; ++k) { fltSrc1_[k] = s1[k]; fltSrc2_[k] = s2[k]; } }
+        // fb79 — per-oscillator CONTINUOUS filter sends (0..1 each; Sub arrives as 0/1). Each source
+        // (A,B,C,D,Sub) mixes m1 into the F1 bus and m2 into F2, remainder dry — fully independent.
+        void setFilterSources (const float s1[5], const float s2[5]) noexcept
+        { for (int k = 0; k < 5; ++k) { fltSrc1_[k] = juce::jlimit (0.0f, 1.0f, s1[k]); fltSrc2_[k] = juce::jlimit (0.0f, 1.0f, s2[k]); } }
         // fb63 — the Noise layer as a 6th filter source (its own bus routing, mirrors the osc mask logic).
         void setNoiseFilterRouting (bool f1, bool f2) noexcept { noiseSrc1_ = f1; noiseSrc2_ = f2; }
         // Back-panel Vel (velocity→cutoff depth) + post-filter Drive, per filter.
@@ -1767,12 +1768,16 @@ namespace tw
                 anySrc1_ = anySrc2_ = false;
                 for (int k = 0; k < 5; ++k)
                 {
-                    const bool m1 = fltSrc1_[k], m2 = fltSrc2_[k];
-                    busCo1_[k] = m1 ? 1.0f : 0.0f;
-                    busCo2_[k] = (par ? m2 : (m2 && ! m1)) ? 1.0f : 0.0f;
-                    busCoD_[k] = (! m1 && ! m2) ? 1.0f : 0.0f;
-                    anySrc1_ = anySrc1_ || (busCo1_[k] != 0.0f);
-                    anySrc2_ = anySrc2_ || (busCo2_[k] != 0.0f);
+                    // fb79 — CONTINUOUS per-source sends: m1 of the source into the F1 bus; in series the
+                    // F1 portion already flows on into F2, so the direct-to-F2 amount is only the excess
+                    // max(0, m2−m1); dry = whatever's left (clamped — full dual sends leave no dry, same
+                    // energy as the old binary dual-route). Reduces EXACTLY to the old 0/1 behaviour.
+                    const float m1 = fltSrc1_[k], m2 = fltSrc2_[k];
+                    busCo1_[k] = m1;
+                    busCo2_[k] = par ? m2 : juce::jmax (0.0f, m2 - m1);
+                    busCoD_[k] = juce::jmax (0.0f, 1.0f - m1 - busCo2_[k]);
+                    anySrc1_ = anySrc1_ || (busCo1_[k] > 0.0005f);
+                    anySrc2_ = anySrc2_ || (busCo2_[k] > 0.0005f);
                 }
                 // fb63 — NOISE routed like a 6th source (same F1/F2/parallel/dry rules).
                 noiseCo1_ = noiseSrc1_ ? 1.0f : 0.0f;
@@ -4244,8 +4249,8 @@ namespace tw
         // masks: [0..4] = A,B,C,D,Sub. Default all-true ⇒ a fresh patch routes every source to
         // both filters, which in the default SERIES/F2=None case is byte-identical to the old
         // single-mix path. busCo*_ are per-block 0/1 coefficients derived from the masks+routing.
-        bool                    fltSrc1_[5] = { true, true, true, true, true };
-        bool                    fltSrc2_[5] = { true, true, true, true, true };
+        float                   fltSrc1_[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };   // fb79 — continuous sends, default DRY (the processor pushes real values every block)
+        float                   fltSrc2_[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
         float                   busCo1_[5]  = { 1,1,1,1,1 };   // → Filter 1 bus (reuses scratch_)
         float                   busCo2_[5]  = { 0,0,0,0,0 };   // → Filter 2 bus (fltBus2_)
         float                   busCoD_[5]  = { 0,0,0,0,0 };   // → dry/bypass  (fltDry_)

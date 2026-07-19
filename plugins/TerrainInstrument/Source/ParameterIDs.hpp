@@ -210,6 +210,16 @@ namespace ParameterIDs
     // Per-oscillator filter ROUTING masks — which sources feed each filter (bool, default ON = all
     // routed, so a fresh patch = today's behaviour). Order: A, B, C, D, Sub. Noise (N) reserved.
     constexpr char SYN_FILTER1_SRC_A[]  = "SYN_FILTER1_SRC_A";
+    // fb79 — PER-OSC continuous filter sends (replace the binary A-D masks; each osc owns its own
+    // F1/F2 amount, DEFAULT 0 = dry — Max: "nothing routed until we decide"). Sub/Noise stay binary.
+    constexpr char SYN_OSC_A_F1MIX[]    = "SYN_OSC_A_F1MIX";    // float 0..1, default 0
+    constexpr char SYN_OSC_B_F1MIX[]    = "SYN_OSC_B_F1MIX";
+    constexpr char SYN_OSC_C_F1MIX[]    = "SYN_OSC_C_F1MIX";
+    constexpr char SYN_OSC_D_F1MIX[]    = "SYN_OSC_D_F1MIX";
+    constexpr char SYN_OSC_A_F2MIX[]    = "SYN_OSC_A_F2MIX";
+    constexpr char SYN_OSC_B_F2MIX[]    = "SYN_OSC_B_F2MIX";
+    constexpr char SYN_OSC_C_F2MIX[]    = "SYN_OSC_C_F2MIX";
+    constexpr char SYN_OSC_D_F2MIX[]    = "SYN_OSC_D_F2MIX";
     constexpr char SYN_FILTER1_SRC_B[]  = "SYN_FILTER1_SRC_B";
     constexpr char SYN_FILTER1_SRC_C[]  = "SYN_FILTER1_SRC_C";
     constexpr char SYN_FILTER1_SRC_D[]  = "SYN_FILTER1_SRC_D";

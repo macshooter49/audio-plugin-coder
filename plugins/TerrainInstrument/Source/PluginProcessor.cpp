@@ -1454,6 +1454,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_FILTER2_MIX, 1 },
         "Synth Filter 2 Mix",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
+    // fb79 — PER-OSC continuous filter sends (the F1/F2 pills). DEFAULT 0 = fully dry: a fresh
+    // Terrain routes NOTHING anywhere until you fill a pill (Max). Replaces the binary A-D masks.
+    for (auto* pid : { ParameterIDs::SYN_OSC_A_F1MIX, ParameterIDs::SYN_OSC_B_F1MIX, ParameterIDs::SYN_OSC_C_F1MIX, ParameterIDs::SYN_OSC_D_F1MIX,
+                       ParameterIDs::SYN_OSC_A_F2MIX, ParameterIDs::SYN_OSC_B_F2MIX, ParameterIDs::SYN_OSC_C_F2MIX, ParameterIDs::SYN_OSC_D_F2MIX })
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { pid, 1 }, juce::String (pid).replace ("SYN_OSC_", "Synth OSC ").replace ("_F1MIX", " Filter 1 Send").replace ("_F2MIX", " Filter 2 Send"),
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     // Back-panel Vel (velocity→cutoff) + post-filter Drive, per filter. Default 0 = inert.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_FILTER1_VEL, 1 },  "Synth Filter 1 Velocity",
@@ -3786,16 +3793,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float filtSpread2=      mdP (ParameterIDs::SYN_FILTER2_SPREAD, wc::ModDest::FSpread2, 0.0f, 1.0f);
         const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
         // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
-        const bool  f1src[5] = { *rawParam (ParameterIDs::SYN_FILTER1_SRC_A)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_B)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_C)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_D)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_SUB) > 0.5f };
-        const bool  f2src[5] = { *rawParam (ParameterIDs::SYN_FILTER2_SRC_A)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_B)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_C)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_D)   > 0.5f,
-                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_SUB) > 0.5f };
+        // fb79 — PER-OSC CONTINUOUS FILTER SENDS (the F1/F2 pills, each osc independent, default 0 =
+        // dry). Replaces the binary A-D masks (SYN_FILTER*_SRC_A..D are no longer consumed for oscs —
+        // the pills + the filter back-panel A-D toggles both drive these send params now). Sub stays
+        // a binary mask (the S pill). LFO-routable per send (OscF1SendA.. — "everything routable").
+        const float f1src[5] = { mdP (ParameterIDs::SYN_OSC_A_F1MIX, wc::ModDest::OscF1SendA, 0.0f, 1.0f),
+                                 mdP (ParameterIDs::SYN_OSC_B_F1MIX, wc::ModDest::OscF1SendB, 0.0f, 1.0f),
+                                 mdP (ParameterIDs::SYN_OSC_C_F1MIX, wc::ModDest::OscF1SendC, 0.0f, 1.0f),
+                                 mdP (ParameterIDs::SYN_OSC_D_F1MIX, wc::ModDest::OscF1SendD, 0.0f, 1.0f),
+                                 *rawParam (ParameterIDs::SYN_FILTER1_SRC_SUB) > 0.5f ? 1.0f : 0.0f };
+        const float f2src[5] = { mdP (ParameterIDs::SYN_OSC_A_F2MIX, wc::ModDest::OscF2SendA, 0.0f, 1.0f),
+                                 mdP (ParameterIDs::SYN_OSC_B_F2MIX, wc::ModDest::OscF2SendB, 0.0f, 1.0f),
+                                 mdP (ParameterIDs::SYN_OSC_C_F2MIX, wc::ModDest::OscF2SendC, 0.0f, 1.0f),
+                                 mdP (ParameterIDs::SYN_OSC_D_F2MIX, wc::ModDest::OscF2SendD, 0.0f, 1.0f),
+                                 *rawParam (ParameterIDs::SYN_FILTER2_SRC_SUB) > 0.5f ? 1.0f : 0.0f };
         const bool  noiseF1 = *rawParam (ParameterIDs::SYN_FILTER1_SRC_NOISE) > 0.5f;   // fb63 — noise → filter routing
         const bool  noiseF2 = *rawParam (ParameterIDs::SYN_FILTER2_SRC_NOISE) > 0.5f;
         const float fltEnvA =         *rawParam (ParameterIDs::SYN_ENV_FLT_A);
