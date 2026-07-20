@@ -2782,7 +2782,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                                 "Space Open", "Space Helium", "Space Wind" }, 0));
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { ParameterIDs::SYN_NOISE_LEVEL, 1 }, "Noise Level",
-            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.35f));
+            juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.08f));   // fb80 — was 0.35: the noise gets LOUD past ~20-30% (Max: default 5-10%)
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { ParameterIDs::SYN_NOISE_PITCH, 1 }, "Noise Scan",
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
