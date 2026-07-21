@@ -76,12 +76,37 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 {
+    cardWindows_.clear();   // fb83 — popped card windows die with the plugin INSTANCE (hosts destroy processors on the message thread)
+
     // Stop the morph rebuild timer BEFORE any members are destroyed — the
     // callback touches apvts / wavetableBank / morph slots.
     stopTimer();
 
     if (captureExportThread && captureExportThread->joinable())
         captureExportThread->join();
+}
+
+//==============================================================================
+// fb83 — popped-out FLOW card windows (see PluginProcessor.h). The concrete
+// window class lives in PluginEditor.cpp; here they're just Components to own.
+//==============================================================================
+void TerrainInstrumentAudioProcessor::adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w)
+{
+    cardWindows_[id] = std::move (w);
+}
+
+void TerrainInstrumentAudioProcessor::closeCardWindow (const juce::String& id)
+{
+    cardWindows_.erase (id);
+    if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
+        ed->notifyCardWindowGone (id, false);
+}
+
+void TerrainInstrumentAudioProcessor::dockCardWindow (const juce::String& id)
+{
+    cardWindows_.erase (id);
+    if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
+        ed->notifyCardWindowGone (id, true);    // no editor open → dock degrades to a plain close
 }
 
 //==============================================================================

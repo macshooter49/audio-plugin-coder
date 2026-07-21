@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <unordered_map>
+#include <map>
 #include "GrainEngine.h"
 #include "TapeProcessor.h"
 #include "TapeLoopProcessor.h"
@@ -499,6 +500,18 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
+
+    // ── fb83: popped-out FLOW card windows live on the PROCESSOR ──
+    // FL Studio auto-closes an unfocused plugin editor window, which used to destroy
+    // any popped card the instant it (or anything else) took focus. Owned here, a card
+    // survives the editor closing and only dies with the plugin instance (dtor clears
+    // on the message thread) or its own ✕/dock. Type-erased as juce::Component so the
+    // concrete window class stays private to PluginEditor.cpp.
+    std::map<juce::String, std::unique_ptr<juce::Component>> cardWindows_;
+    void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
+    void closeCardWindow (const juce::String& id);   // erase + notify the active editor (if any)
+    void dockCardWindow  (const juce::String& id);   // erase + reopen in-plugin via the active editor
+
     /** GEODE viz — the live analysed frame store for one osc (nullptr if that osc isn't on
      *  Engine::SPEC or has no store). Read by the editor's display engine for the waterfall
      *  visualizer. Safe on the message thread: rebuilds run on the same (message) thread. */

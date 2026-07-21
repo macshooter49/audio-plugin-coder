@@ -19,6 +19,11 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    // fb83 — called by the PROCESSOR when a popped card window closes or docks
+    // (the processor owns those windows; this editor just mirrors the state into
+    // its WebView so the tile can reopen the card in-plugin).
+    void notifyCardWindowGone (const juce::String& id, bool redock);
+
     // FileDragAndDropTarget — sample / patch / pack drag-drop
     bool isInterestedInFileDrag (const juce::StringArray& files) override;
     void filesDropped           (const juce::StringArray& files, int x, int y) override;
@@ -828,16 +833,15 @@ private:
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
-    // 2a. POPPED-OUT FLOW EXTENSION CARDS (fb82) — ⧉ on a card header detaches it
-    // into a borderless always-on-top native window holding its OWN WebView, booted
-    // with ?card=<id> so the page renders just that card (no relays — the popped
-    // card talks through the setSynParam/getSynParam bypass). Cleared FIRST in the
-    // dtor so no card window ever outlives the editor.
-    class CardWindow;
-    std::map<juce::String, std::unique_ptr<CardWindow>> cardWindows_;
+    // 2a. POPPED-OUT FLOW EXTENSION CARDS (fb82/fb83) — ⧉ on a card header detaches
+    // it into a borderless always-on-top native window holding its OWN WebView, booted
+    // with ?card=<id> so the page renders just that card (no relays — the popped card
+    // talks through the setSynParam/getSynParam bypass). fb83: the windows are OWNED
+    // BY THE PROCESSOR so they survive FL auto-closing an unfocused editor; this
+    // editor only CREATES them (it knows the card's rect + serves the page snapshot),
+    // and their style flags include windowIgnoresKeyPresses so clicking a card never
+    // steals key focus from the host's plugin window in the first place.
     void popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect);
-    void closeCardWindow  (const juce::String& id);
-    void dockCardWindow   (const juce::String& id);
 
     // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
     static constexpr int CAPTURE_STRIP_HEIGHT = 26;

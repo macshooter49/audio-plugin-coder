@@ -556,6 +556,16 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                             (int) static_cast<double> (args[4])));
                 complete (juce::var{});
             })
+            .withNativeFunction("getPoppedCards", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb83 — card windows outlive the editor now, so a fresh page must re-learn
+                // which cards are floating (seeds __poppedCards → tiles refocus, not duplicate).
+                juce::StringArray ids;
+                for (auto& kv : audioProcessor.cardWindows_)
+                    if (kv.second != nullptr) ids.add (kv.first);
+                complete (juce::var (ids.joinIntoString (",")));
+            })
             .withNativeFunction("getNoiseViz", [this](const juce::Array<juce::var>&,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4143,27 +4153,39 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 }
 
 //==============================================================================
-// fb82 — CardWindow: a popped-out FLOW extension card. Borderless always-on-top
-// native window holding its OWN WebView, which loads the SAME index.html with
-// ?card=<id> so the page boots straight into card-only mode (just that card,
-// pinned at 0,0; everything else hidden). NO WebSliderRelays here — a relay can
-// only serve one WebView, so the popped card talks through the setSynParam /
-// getSynParam bypass (the proven post-relay-ceiling path). The card's ⠿ header
-// drags this window via screen coords from JS; ✕ closes it; ⧉ docks it back.
+// fb82/fb83 — TerrainCardWindow: a popped-out FLOW extension card. Borderless
+// always-on-top native window holding its OWN WebView, which loads the SAME
+// index.html with ?card=<id> so the page boots straight into card-only mode
+// (just that card, pinned at 0,0; everything else hidden). NO WebSliderRelays
+// here — a relay can only serve one WebView, so the popped card talks through
+// the setSynParam/getSynParam bypass. The card's ⠿ header drags this window via
+// screen coords from JS; ✕ closes it; ⧉ docks it back.
+//
+// fb83 (Max: "press the window and it disappears until I reopen the plugin"):
+// (1) windowIgnoresKeyPresses in the style flags → the NSWindow can NEVER become
+//     key, so clicking the card doesn't take focus off FL's plugin window — which
+//     is what made FL auto-close the editor (whose dtor then killed the card).
+// (2) The PROCESSOR owns these windows now, so even a deliberately-closed editor
+//     leaves the card floating; params go straight to the processor's APVTS, and
+//     the page is served from a snapshot taken at pop time (editor-independent).
 //==============================================================================
-class TerrainInstrumentAudioProcessorEditor::CardWindow : public juce::TopLevelWindow
+class TerrainCardWindow : public juce::TopLevelWindow
 {
 public:
-    CardWindow (TerrainInstrumentAudioProcessorEditor& ed, const juce::String& cardId,
-                juce::Rectangle<int> screenBounds)
-        : juce::TopLevelWindow ("Terrain " + cardId.toUpperCase() + " Card", false)
+    TerrainCardWindow (TerrainInstrumentAudioProcessor& proc, const juce::String& cardId,
+                       std::optional<juce::WebBrowserComponent::Resource> pageSnapshot,
+                       juce::Rectangle<int> screenBounds)
+        : juce::TopLevelWindow ("Terrain " + cardId.toUpperCase() + " Card", false),
+          html_ (std::move (pageSnapshot))
     {
         setDropShadowEnabled (true);
         setOpaque (true);
 
-        // SafePointer everywhere — the editor can die (host closes the GUI) while a
-        // WKWebView callback is still in flight; sp goes null instead of dangling.
-        juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> sp (&ed);
+        // proc is a plain reference: the PROCESSOR owns this window and clears it in
+        // its own dtor, so proc always outlives us. The async close/dock hops guard
+        // with a SafePointer to THIS window instead — if the processor died, it
+        // destroyed us first, the SafePointer is null, and proc is never touched.
+        juce::Component::SafePointer<juce::Component> self (this);
         const juce::String cid (cardId);
 
         web = std::make_unique<juce::WebBrowserComponent>(
@@ -4174,23 +4196,23 @@ public:
                         .withUserDataFolder (juce::File::getSpecialLocation (
                             juce::File::SpecialLocationType::tempDirectory)))
                 .withNativeIntegrationEnabled()
-                .withNativeFunction ("setSynParam", [sp](const juce::Array<juce::var>& args,
-                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                .withNativeFunction ("setSynParam", [&proc](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     // Same DIRECT APVTS write as the main view's setSynParam — keeps the
                     // popped card's blend/latch live without any relay.
-                    if (sp != nullptr && args.size() >= 2)
-                        if (auto* p = sp->audioProcessor.getAPVTS().getParameter (args[0].toString()))
+                    if (args.size() >= 2)
+                        if (auto* p = proc.getAPVTS().getParameter (args[0].toString()))
                             p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f,
                                 static_cast<float> (static_cast<double> (args[1]))));
                     complete (juce::var{});
                 })
-                .withNativeFunction ("getSynParam", [sp](const juce::Array<juce::var>& args,
-                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                .withNativeFunction ("getSynParam", [&proc](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     float v = 0.0f;
-                    if (sp != nullptr && args.size() >= 1)
-                        if (auto* p = sp->audioProcessor.getAPVTS().getParameter (args[0].toString()))
+                    if (args.size() >= 1)
+                        if (auto* p = proc.getAPVTS().getParameter (args[0].toString()))
                             v = p->getValue();
                     complete (juce::var (v));
                 })
@@ -4223,24 +4245,25 @@ public:
                     }
                     complete (juce::var{});
                 })
-                .withNativeFunction ("closeCardWindow", [sp, cid](const juce::Array<juce::var>&,
-                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                .withNativeFunction ("closeCardWindow", [self, &proc, cid](const juce::Array<juce::var>&,
+                                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     complete (juce::var{});
                     // Destroying this window tears down the WebView that invoked us —
                     // NEVER do that inside its own callback; hop the message queue.
-                    juce::MessageManager::callAsync ([sp, cid] { if (sp != nullptr) sp->closeCardWindow (cid); });
+                    juce::MessageManager::callAsync ([self, &proc, cid]
+                    { if (self != nullptr) proc.closeCardWindow (cid); });
                 })
-                .withNativeFunction ("dockCardWindow", [sp, cid](const juce::Array<juce::var>&,
-                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                .withNativeFunction ("dockCardWindow", [self, &proc, cid](const juce::Array<juce::var>&,
+                                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     complete (juce::var{});
-                    juce::MessageManager::callAsync ([sp, cid] { if (sp != nullptr) sp->dockCardWindow (cid); });
+                    juce::MessageManager::callAsync ([self, &proc, cid]
+                    { if (self != nullptr) proc.dockCardWindow (cid); });
                 })
-                .withResourceProvider ([sp](const auto& url) -> std::optional<juce::WebBrowserComponent::Resource>
+                .withResourceProvider ([this](const auto&) -> std::optional<juce::WebBrowserComponent::Resource>
                 {
-                    if (sp != nullptr) return sp->getResource (url);
-                    return std::nullopt;
+                    return html_;   // page snapshot taken at pop time — editor-independent
                 })
         );
 
@@ -4248,14 +4271,26 @@ public:
         setBounds (screenBounds);
         setAlwaysOnTop (true);          // a floating tool palette — stays over the DAW
         setVisible (true);              // TopLevelWindow attaches to the desktop here (borderless + shadow)
-        toFront (true);
+        toFront (false);                // show it WITHOUT trying to take focus
         web->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + "?card=" + cardId);
+    }
+
+    // fb83 — THE disappear fix: windowIgnoresKeyPresses makes the mac peer's
+    // canBecomeKeyWindow() return false, so clicking/dragging this window never
+    // takes key focus off the host's plugin window — FL no longer reacts to a
+    // "focus loss" by closing the editor. Mouse events still arrive normally
+    // (same mechanism JUCE popup menus use); the card needs no keyboard.
+    int getDesktopWindowStyleFlags() const override
+    {
+        return juce::TopLevelWindow::getDesktopWindowStyleFlags()
+             | juce::ComponentPeer::windowIgnoresKeyPresses;
     }
 
     void resized() override { if (web != nullptr) web->setBounds (getLocalBounds()); }
     void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0xFF2A2A48)); }   // card body color behind the WebView's first frame
 
 private:
+    std::optional<juce::WebBrowserComponent::Resource> html_;
     juce::Point<int> dragOff_;
     std::unique_ptr<juce::WebBrowserComponent> web;
 };
@@ -4265,9 +4300,10 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
     // Whitelist — the id lands in window titles and dock evals; only the 4 FLOW cards exist.
     if (id != "arp" && id != "chop" && id != "gli" && id != "rbn") return;
 
-    if (auto it = cardWindows_.find (id); it != cardWindows_.end() && it->second != nullptr)
+    auto& wins = audioProcessor.cardWindows_;
+    if (auto it = wins.find (id); it != wins.end() && it->second != nullptr)
     {
-        it->second->toFront (true);     // already popped → just refocus (w=0 focus ping lands here)
+        it->second->toFront (false);    // already popped → just re-order it up (w=0 focus ping lands here)
         return;
     }
     if (webView == nullptr || viewportRect.getWidth() < 60 || viewportRect.getHeight() < 60) return;
@@ -4275,28 +4311,23 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
     // The card's viewport rect → screen coords, so the floating window appears EXACTLY
     // where the card was sitting (the "it moved out of the plugin" illusion).
     const auto tl = webView->localPointToGlobal (viewportRect.getTopLeft());
-    cardWindows_[id] = std::make_unique<CardWindow> (*this, id,
-        juce::Rectangle<int> (tl.x, tl.y, viewportRect.getWidth(), viewportRect.getHeight()));
+    audioProcessor.adoptCardWindow (id, std::make_unique<TerrainCardWindow> (audioProcessor, id,
+        getResource ("index.html"),
+        juce::Rectangle<int> (tl.x, tl.y, viewportRect.getWidth(), viewportRect.getHeight())));
 }
 
-void TerrainInstrumentAudioProcessorEditor::closeCardWindow (const juce::String& id)
+void TerrainInstrumentAudioProcessorEditor::notifyCardWindowGone (const juce::String& id, bool redock)
 {
-    cardWindows_.erase (id);
-    if (webView != nullptr)   // tell the main view so the tile can reopen the card in-plugin next time
-        webView->evaluateJavascript ("try{window.__cardWinGone&&window.__cardWinGone('" + id + "');}catch(e){}");
-}
-
-void TerrainInstrumentAudioProcessorEditor::dockCardWindow (const juce::String& id)
-{
-    cardWindows_.erase (id);
-    if (webView != nullptr)   // reopen the card inside the plugin at its remembered position
-        webView->evaluateJavascript ("try{window.__cardWinGone&&window.__cardWinGone('" + id
-                                     + "');window.__redockCard&&window.__redockCard('" + id + "');}catch(e){}");
+    if (webView == nullptr) return;
+    juce::String js = "try{window.__cardWinGone&&window.__cardWinGone('" + id + "');";
+    if (redock)
+        js += "window.__redockCard&&window.__redockCard('" + id + "');";
+    js += "}catch(e){}";
+    webView->evaluateJavascript (js);
 }
 
 TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 {
-    cardWindows_.clear();   // fb82 — no card window may outlive the editor (orphan windows crash hosts)
     stopTimer();
     blendPool_.removeAllJobs (true, 4000);   // drain bakes before members die
 }
