@@ -4208,7 +4208,7 @@ static void terrainCardLog (const juce::String& msg)
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + msg + "\n");
 }
 
-class TerrainCardWindow : public juce::TopLevelWindow
+class TerrainCardWindow : public juce::TopLevelWindow, private juce::Timer
 {
 public:
     TerrainCardWindow (TerrainInstrumentAudioProcessor& proc, const juce::String& cardId,
@@ -4341,8 +4341,19 @@ public:
         }
        #endif
 
-        terrainCardLog ("created " + id_ + "  bounds=" + getBounds().toString());
+       #if JUCE_MAC
+        // fb88 — winprobe proved the fb87 windows NEVER REACHED THE WINDOW SERVER
+        // (alive in JUCE, absent from CGWindowList): either orderFront doesn't take
+        // effect in FL, or FL's window manager closes foreign windows on sight (the
+        // JUCE peer source itself warns "plugin hosts can unexpectedly close the
+        // window for us"). Counter-punch: the strongest ordering call there is…
+        if (id w = nsWindow())
+            ((void (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("orderFrontRegardless"));
+       #endif
+
+        terrainCardLog ("created " + id_ + "  bounds=" + getBounds().toString() + nsStateString());
         web->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + "?card=" + cardId);
+        startTimer (1000);   // fb88 — 1Hz truth-teller + self-revive (see timerCallback)
     }
 
     ~TerrainCardWindow() override
@@ -4392,20 +4403,79 @@ public:
     {
        #if JUCE_MAC
         detachFromHost();
+        editorSp_ = &editorComp;   // fb88 — remembered so the reviver can re-attach
         auto* ownPeer = getPeer();
         auto* edPeer  = editorComp.getPeer();
-        if (ownPeer == nullptr || edPeer == nullptr) return;
+        if (ownPeer == nullptr || edPeer == nullptr)
+            { terrainCardLog ("attach BAIL " + id_ + " peer own=" + juce::String ((int)(ownPeer != nullptr)) + " ed=" + juce::String ((int)(edPeer != nullptr))); return; }
         id ownView = (id) ownPeer->getNativeHandle();
         id edView  = (id) edPeer->getNativeHandle();
-        if (ownView == nullptr || edView == nullptr) return;
+        if (ownView == nullptr || edView == nullptr)
+            { terrainCardLog ("attach BAIL " + id_ + " view own=" + juce::String ((int)(ownView != nullptr)) + " ed=" + juce::String ((int)(edView != nullptr))); return; }
         id ownWin = ((id (*) (id, SEL)) objc_msgSend) (ownView, sel_registerName ("window"));
         id edWin  = ((id (*) (id, SEL)) objc_msgSend) (edView,  sel_registerName ("window"));
-        if (ownWin == nullptr || edWin == nullptr || ownWin == edWin) return;
+        if (ownWin == nullptr || edWin == nullptr || ownWin == edWin)
+            { terrainCardLog ("attach BAIL " + id_ + " win own=" + juce::String ((int)(ownWin != nullptr)) + " ed=" + juce::String ((int)(edWin != nullptr)) + " same=" + juce::String ((int)(ownWin == edWin))); return; }
         ((void (*) (id, SEL, id, long)) objc_msgSend) (edWin, sel_registerName ("addChildWindow:ordered:"),
                                                        ownWin, 1 /* NSWindowAbove */);
-        terrainCardLog ("attached " + id_ + " as child of the host plugin window");
+        const long edNum = ((long (*) (id, SEL)) objc_msgSend) (edWin, sel_registerName ("windowNumber"));
+        terrainCardLog ("attached " + id_ + " as child of host winnum=" + juce::String (edNum) + nsStateString());
        #else
         juce::ignoreUnused (editorComp);
+       #endif
+    }
+
+   #if JUCE_MAC
+    // fb88 — the peer's NSWindow, or null if the peer is gone.
+    id nsWindow() const
+    {
+        if (auto* p = getPeer())
+            if (id v = (id) p->getNativeHandle())
+                return ((id (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("window"));
+        return nullptr;
+    }
+
+    // "  ns: winnum=N nsvisible=B child=B" — the WINDOW SERVER's truth, not JUCE's.
+    juce::String nsStateString() const
+    {
+        id w = nsWindow();
+        if (w == nullptr) return "  ns: NO WINDOW";
+        const long num = ((long (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("windowNumber"));
+        const bool vis = ((signed char (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("isVisible")) != 0;
+        const bool par = ((id (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("parentWindow")) != nullptr;
+        return "  ns: winnum=" + juce::String (num) + " nsvisible=" + juce::String ((int) vis) + " child=" + juce::String ((int) par);
+    }
+   #else
+    juce::String nsStateString() const { return {}; }
+   #endif
+
+    // fb88 — 1Hz: log the NSWindow's real state whenever it CHANGES (a host closing
+    // us shows up as nsvisible 1→0 with a timestamp), and REVIVE: if AppKit says we're
+    // ordered out while JUCE says visible, order back in and re-attach to the host.
+    void timerCallback() override
+    {
+       #if JUCE_MAC
+        long num = 0; bool vis = false, par = false;
+        if (id w = nsWindow())
+        {
+            num = ((long (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("windowNumber"));
+            vis = ((signed char (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("isVisible")) != 0;
+            par = ((id (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("parentWindow")) != nullptr;
+        }
+        if (num != lastNum_ || vis != lastVis_ || par != lastPar_)
+        {
+            terrainCardLog ("ns-state " + id_ + "  winnum=" + juce::String (num)
+                            + " nsvisible=" + juce::String ((int) vis) + " child=" + juce::String ((int) par));
+            lastNum_ = num; lastVis_ = vis; lastPar_ = par;
+        }
+        if (! vis && isVisible())
+        {
+            terrainCardLog ("REVIVING " + id_ + " (window server ordered us out)");
+            if (id w = nsWindow())
+                ((void (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("orderFrontRegardless"));
+            if (editorSp_ != nullptr)
+                attachToHost (*editorSp_);
+        }
        #endif
     }
 
@@ -4449,6 +4519,8 @@ private:
     std::optional<juce::WebBrowserComponent::Resource> html_;
     juce::Point<int> dragOff_;
     double lastMoveLogMs_ = 0.0;
+    juce::Component::SafePointer<juce::Component> editorSp_;   // fb88 — for the reviver's re-attach
+    long lastNum_ = -1; bool lastVis_ = true, lastPar_ = false; // fb88 — ns-state change detector
     std::unique_ptr<juce::WebBrowserComponent> web;
 };
 
