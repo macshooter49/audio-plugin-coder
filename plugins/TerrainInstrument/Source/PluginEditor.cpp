@@ -4379,6 +4379,56 @@ public:
              | juce::ComponentPeer::windowIgnoresKeyPresses;
     }
 
+    // fb87 — THE VISIBILITY FIX: attach as a CHILD WINDOW of the host's own plugin
+    // window ([hostWindow addChildWindow:ours ordered:NSWindowAbove] — the canonical
+    // recipe for plugin satellite windows on macOS, per the JUCE forum's 2006-to-now
+    // saga). The fb84-86 logs proved our window was created, shown, and steered
+    // perfectly by the drag — yet Max never saw it: FL keeps its windows composited
+    // in a way that buries a free-floating plugin window no matter its level. A child
+    // window shares the host window's Space, rides its ordering, and stays above it —
+    // exactly how FL's own detached plugin windows behave. Detached when the editor
+    // dies (the card lives on, processor-owned); the next editor re-attaches it.
+    void attachToHost (juce::Component& editorComp)
+    {
+       #if JUCE_MAC
+        detachFromHost();
+        auto* ownPeer = getPeer();
+        auto* edPeer  = editorComp.getPeer();
+        if (ownPeer == nullptr || edPeer == nullptr) return;
+        id ownView = (id) ownPeer->getNativeHandle();
+        id edView  = (id) edPeer->getNativeHandle();
+        if (ownView == nullptr || edView == nullptr) return;
+        id ownWin = ((id (*) (id, SEL)) objc_msgSend) (ownView, sel_registerName ("window"));
+        id edWin  = ((id (*) (id, SEL)) objc_msgSend) (edView,  sel_registerName ("window"));
+        if (ownWin == nullptr || edWin == nullptr || ownWin == edWin) return;
+        ((void (*) (id, SEL, id, long)) objc_msgSend) (edWin, sel_registerName ("addChildWindow:ordered:"),
+                                                       ownWin, 1 /* NSWindowAbove */);
+        terrainCardLog ("attached " + id_ + " as child of the host plugin window");
+       #else
+        juce::ignoreUnused (editorComp);
+       #endif
+    }
+
+    void detachFromHost()
+    {
+       #if JUCE_MAC
+        if (auto* ownPeer = getPeer())
+            if (id ownView = (id) ownPeer->getNativeHandle())
+            {
+                id ownWin = ((id (*) (id, SEL)) objc_msgSend) (ownView, sel_registerName ("window"));
+                if (ownWin != nullptr)
+                {
+                    id parent = ((id (*) (id, SEL)) objc_msgSend) (ownWin, sel_registerName ("parentWindow"));
+                    if (parent != nullptr)
+                    {
+                        ((void (*) (id, SEL, id)) objc_msgSend) (parent, sel_registerName ("removeChildWindow:"), ownWin);
+                        terrainCardLog ("detached " + id_ + " from the host window");
+                    }
+                }
+            }
+       #endif
+    }
+
     // fb84/fb86 — the ONE clamped move used by both drags (the popped window's own
     // header drag AND the main view's tear-off follow-drag): whatever coords the
     // WebView reports, ≥60px of header always stays grabbable on some display.
@@ -4444,9 +4494,11 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
         const auto tl = webView->localPointToGlobal (viewportRect.getTopLeft());
         screenRect = { tl.x, tl.y, viewportRect.getWidth(), viewportRect.getHeight() };
     }
-    audioProcessor.adoptCardWindow (id, std::make_unique<TerrainCardWindow> (audioProcessor, id,
+    auto win = std::make_unique<TerrainCardWindow> (audioProcessor, id,
         getResource ("index.html"), screenRect,
-        grabOffset.value_or (juce::Point<int> (158, 12))));
+        grabOffset.value_or (juce::Point<int> (158, 12)));
+    win->attachToHost (*this);   // fb87 — child of FL's plugin window = actually visible
+    audioProcessor.adoptCardWindow (id, std::move (win));
 }
 
 void TerrainInstrumentAudioProcessorEditor::dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen)
@@ -4469,6 +4521,12 @@ void TerrainInstrumentAudioProcessorEditor::notifyCardWindowGone (const juce::St
 
 TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 {
+    // fb87 — unhook popped cards from the dying host window (they live on, processor-
+    // owned, and the next editor re-attaches them via its timer one-shot).
+    for (auto& kv : audioProcessor.cardWindows_)
+        if (auto* cw = dynamic_cast<TerrainCardWindow*> (kv.second.get()))
+            cw->detachFromHost();
+
     stopTimer();
     blendPool_.removeAllJobs (true, 4000);   // drain bakes before members die
 }
@@ -4477,6 +4535,16 @@ TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
+
+    // fb87 — one-shot once our peer exists (it doesn't in the ctor): re-attach any
+    // surviving popped cards to THIS editor's host window so they show again.
+    if (! cardWindowsAttached_ && getPeer() != nullptr)
+    {
+        cardWindowsAttached_ = true;
+        for (auto& kv : audioProcessor.cardWindows_)
+            if (auto* cw = dynamic_cast<TerrainCardWindow*> (kv.second.get()))
+                cw->attachToHost (*this);
+    }
 
     // ── CHANNEL WATCHDOG (wd9) ── the eval channel to the WebContent process can die
     // silently: evals stop executing, no error surfaces, and the scopes freeze/flatline
