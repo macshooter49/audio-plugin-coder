@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <array>
+#include <map>
 #include "PluginProcessor.h"
 #include "ParameterIDs.hpp"
 #include "BlendEngine.h"
@@ -826,6 +827,17 @@ private:
 
     // 2. WEBVIEW SECOND (destroyed middle)
     std::unique_ptr<juce::WebBrowserComponent> webView;
+
+    // 2a. POPPED-OUT FLOW EXTENSION CARDS (fb82) — ⧉ on a card header detaches it
+    // into a borderless always-on-top native window holding its OWN WebView, booted
+    // with ?card=<id> so the page renders just that card (no relays — the popped
+    // card talks through the setSynParam/getSynParam bypass). Cleared FIRST in the
+    // dtor so no card window ever outlives the editor.
+    class CardWindow;
+    std::map<juce::String, std::unique_ptr<CardWindow>> cardWindows_;
+    void popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect);
+    void closeCardWindow  (const juce::String& id);
+    void dockCardWindow   (const juce::String& id);
 
     // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
     static constexpr int CAPTURE_STRIP_HEIGHT = 26;
