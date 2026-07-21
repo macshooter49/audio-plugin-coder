@@ -1,5 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+
+static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
 #include "ParametricEQ.h"
 #include <cmath>
 
@@ -76,6 +78,8 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 {
+    if (! cardWindows_.empty())
+        terrainCardLogP ("instance dtor clearing " + juce::String ((int) cardWindows_.size()) + " card window(s)");
     cardWindows_.clear();   // fb83 — popped card windows die with the plugin INSTANCE (hosts destroy processors on the message thread)
 
     // Stop the morph rebuild timer BEFORE any members are destroyed — the
@@ -89,7 +93,18 @@ TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 //==============================================================================
 // fb83 — popped-out FLOW card windows (see PluginProcessor.h). The concrete
 // window class lives in PluginEditor.cpp; here they're just Components to own.
+// fb84 — every intentional teardown logs a marker BEFORE the erase, so the
+// window dtor's "destroyed" line in cardwin.log always has a named cause; a
+// "destroyed" with no preceding marker = external teardown (the smoking gun).
 //==============================================================================
+static void terrainCardLogP (const juce::String& msg)
+{
+    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+               .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("cardwin.log");
+    f.getParentDirectory().createDirectory();
+    f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + msg + "\n");
+}
+
 void TerrainInstrumentAudioProcessor::adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w)
 {
     cardWindows_[id] = std::move (w);
@@ -97,6 +112,7 @@ void TerrainInstrumentAudioProcessor::adoptCardWindow (const juce::String& id, s
 
 void TerrainInstrumentAudioProcessor::closeCardWindow (const juce::String& id)
 {
+    terrainCardLogP ("closing " + id + " (card ✕)");
     cardWindows_.erase (id);
     if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
         ed->notifyCardWindowGone (id, false);
@@ -104,6 +120,7 @@ void TerrainInstrumentAudioProcessor::closeCardWindow (const juce::String& id)
 
 void TerrainInstrumentAudioProcessor::dockCardWindow (const juce::String& id)
 {
+    terrainCardLogP ("docking " + id + " (card ⧉)");
     cardWindows_.erase (id);
     if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
         ed->notifyCardWindowGone (id, true);    // no editor open → dock degrades to a plain close

@@ -2,6 +2,10 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
+#if JUCE_MAC
+ #include <objc/message.h>   // fb84 — card windows need NSWindow.collectionBehavior (fullscreen-Space survival); JUCE doesn't expose it
+#endif
+
 //==============================================================================
 TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
@@ -4169,6 +4173,19 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 //     leaves the card floating; params go straight to the processor's APVTS, and
 //     the page is served from a snapshot taken at pop time (editor-independent).
 //==============================================================================
+// fb84 — forensic breadcrumb log (Max: "it still does it" — the vanish survived the
+// fb83 focus fix, so every card-window lifecycle event now leaves a trace we can read
+// after a repro: created/moved/hidden/destroyed + who asked. Best-effort file write —
+// ~/Library/WavesCrate/TerrainInstrument/ is the path the import registry already
+// persists to from FL (fb60), so it's writable where temp/App Support are not.
+static void terrainCardLog (const juce::String& msg)
+{
+    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+               .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("cardwin.log");
+    f.getParentDirectory().createDirectory();
+    f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + msg + "\n");
+}
+
 class TerrainCardWindow : public juce::TopLevelWindow
 {
 public:
@@ -4176,7 +4193,7 @@ public:
                        std::optional<juce::WebBrowserComponent::Resource> pageSnapshot,
                        juce::Rectangle<int> screenBounds)
         : juce::TopLevelWindow ("Terrain " + cardId.toUpperCase() + " Card", false),
-          html_ (std::move (pageSnapshot))
+          id_ (cardId), html_ (std::move (pageSnapshot))
     {
         setDropShadowEnabled (true);
         setOpaque (true);
@@ -4226,8 +4243,22 @@ public:
                     {
                         const juce::Point<int> m ((int) static_cast<double> (args[1]),
                                                   (int) static_cast<double> (args[2]));
-                        if (args[0].toString() == "start") dragOff_ = getPosition() - m;
-                        else                               setTopLeftPosition (m + dragOff_);
+                        if (args[0].toString() == "start")
+                        {
+                            dragOff_ = getPosition() - m;
+                            terrainCardLog ("drag start " + id_ + "  mouse=" + m.toString() + "  win=" + getPosition().toString());
+                        }
+                        else
+                        {
+                            // fb84 — CLAMP to the union of displays: whatever coords the WebView
+                            // reports, the window can never teleport somewhere unreachable. At
+                            // least 60px of header always stays grabbable on-screen.
+                            auto p = m + dragOff_;
+                            const auto area = juce::Desktop::getInstance().getDisplays().getTotalBounds (true);
+                            p.x = juce::jlimit (area.getX() - getWidth() + 60, juce::jmax (area.getX(), area.getRight() - 60), p.x);
+                            p.y = juce::jlimit (area.getY(), juce::jmax (area.getY(), area.getBottom() - 40), p.y);
+                            setTopLeftPosition (p);
+                        }
                     }
                     complete (juce::var{});
                 })
@@ -4272,7 +4303,52 @@ public:
         setAlwaysOnTop (true);          // a floating tool palette — stays over the DAW
         setVisible (true);              // TopLevelWindow attaches to the desktop here (borderless + shadow)
         toFront (false);                // show it WITHOUT trying to take focus
+
+       #if JUCE_MAC
+        // fb84 — THE fullscreen-Space fix. FL commonly runs in a macOS FULLSCREEN Space;
+        // a window without FullScreenAuxiliary is not allowed to coexist with one, so on
+        // the first interaction WindowServer evicts it to the desktop Space — from inside
+        // fullscreen FL it looks like the window vanished and it "never comes back".
+        // CanJoinAllSpaces (1<<0) + FullScreenAuxiliary (1<<8) makes the card legal over
+        // every Space including fullscreen ones. JUCE has no API for collectionBehavior,
+        // so this goes straight through the objc runtime to the peer's NSWindow.
+        if (auto* peer = getPeer())
+        {
+            if (void* nsView = peer->getNativeHandle())
+            {
+                id nsWindow = ((id (*) (id, SEL)) objc_msgSend) ((id) nsView, sel_registerName ("window"));
+                if (nsWindow != nullptr)
+                    ((void (*) (id, SEL, unsigned long)) objc_msgSend) (nsWindow, sel_registerName ("setCollectionBehavior:"),
+                                                                        (1UL << 0) | (1UL << 8));
+            }
+        }
+       #endif
+
+        terrainCardLog ("created " + id_ + "  bounds=" + getBounds().toString());
         web->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + "?card=" + cardId);
+    }
+
+    ~TerrainCardWindow() override
+    {
+        // If the log shows this WITHOUT a preceding "close/dock/instance-dtor" marker,
+        // something OUTSIDE our code tore the window down — that's the smoking gun.
+        terrainCardLog ("destroyed " + id_);
+    }
+
+    void moved() override
+    {
+        juce::TopLevelWindow::moved();
+        const auto now = juce::Time::getMillisecondCounterHiRes();
+        if (now - lastMoveLogMs_ > 400.0)   // throttled — drags flood moved()
+        {
+            lastMoveLogMs_ = now;
+            terrainCardLog ("moved " + id_ + "  -> " + getBounds().toString());
+        }
+    }
+
+    void visibilityChanged() override
+    {
+        terrainCardLog (juce::String (isVisible() ? "shown " : "HIDDEN ") + id_);
     }
 
     // fb83 — THE disappear fix: windowIgnoresKeyPresses makes the mac peer's
@@ -4290,8 +4366,10 @@ public:
     void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0xFF2A2A48)); }   // card body color behind the WebView's first frame
 
 private:
+    juce::String id_;
     std::optional<juce::WebBrowserComponent::Resource> html_;
     juce::Point<int> dragOff_;
+    double lastMoveLogMs_ = 0.0;
     std::unique_ptr<juce::WebBrowserComponent> web;
 };
 
@@ -4303,7 +4381,19 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
     auto& wins = audioProcessor.cardWindows_;
     if (auto it = wins.find (id); it != wins.end() && it->second != nullptr)
     {
-        it->second->toFront (false);    // already popped → just re-order it up (w=0 focus ping lands here)
+        auto* w = it->second.get();
+        // fb84 — RESCUE: if the window somehow ended up off every display (bad drag
+        // coords, Space weirdness, monitor unplugged), re-anchor it next to the editor
+        // instead of toFront-ing something invisible.
+        const auto area = juce::Desktop::getInstance().getDisplays().getTotalBounds (true);
+        if (! area.intersects (w->getBounds()))
+        {
+            w->setTopLeftPosition (getScreenBounds().getTopLeft().translated (40, 40));
+            terrainCardLog ("rescued " + id + "  -> " + w->getBounds().toString());
+        }
+        if (! w->isVisible())
+            w->setVisible (true);       // whatever hid it, a re-open request should surface it
+        w->toFront (false);             // already popped → just re-order it up (w=0 focus ping lands here)
         return;
     }
     if (webView == nullptr || viewportRect.getWidth() < 60 || viewportRect.getHeight() < 60) return;
