@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ROUND ROBIN card — Wheel</title>
+<title>ROUND ROBIN card — Wheel v2 · Prophet outlines</title>
 <style>
-/* ════ ROUND ROBIN — "WHEEL" · the cycle as a machine: four stations on a
-   thin-line wheel, the purple arm sweeps A→B→C→D, the sounding station lit.
-   Same anatomy as the locked GLITCH: hero / tabs / bank / measured grid row /
-   dot slots / chain. Hero persists across the Cycle·Behavior·Order pages. ════ */
+/* ════ ROUND ROBIN v2 — the Prophet grammar joins the system: labeled hairline
+   GROUP BOXES (label interrupts the outline, top-center) + CONNECTOR TRACES
+   wiring the sections: wheel → CYCLE bank → splits into FEEL + HUMANIZE.
+   Wheel geometry corrected: stations, trail, and arrow all EXACTLY on the
+   orbit. Rails measured as always. ════ */
 *{box-sizing:border-box;margin:0;padding:0}
 body{width:720px;height:640px;overflow:hidden;background:#16141F;
   font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
@@ -26,28 +27,39 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:uppercase;font-weight:600}
 .h .pop{margin-left:auto;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:500}
 .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px}
-.b{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
+.b{padding:12px 14px 14px;display:flex;flex-direction:column}
 
-/* ── hero: the wheel + mono status column, boxless ── */
-.hero{display:grid;grid-template-columns:1fr 92px;gap:8px;height:116px}
+/* ── hero: corrected wheel + status behind a hairline separator ── */
+.hero{display:grid;grid-template-columns:1fr 92px;gap:0;height:114px}
 .wheel{position:relative}
 .wheel svg{position:absolute;inset:0;width:100%;height:100%}
 .stat{display:flex;flex-direction:column;gap:5px;justify-content:center;
-  font-family:'SF Mono',ui-monospace,Menlo,monospace}
+  font-family:'SF Mono',ui-monospace,Menlo,monospace;
+  border-left:1px solid rgba(255,255,255,.10);padding-left:12px}
 .stat div{font-size:6.5px;letter-spacing:.8px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap}
 .stat b{color:rgba(255,255,255,.90);font-weight:500}
 .stat .live b{color:#B794FF}
+/* connector stub: hero → CYCLE box */
+.stub{height:10px;position:relative}
+.stub::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.18)}
 
-.tabs{display:flex;justify-content:center;gap:26px}
+.tabs{display:flex;justify-content:center;gap:26px;margin:2px 0 12px}
 .tab{position:relative;font-size:8px;letter-spacing:1.8px;text-transform:uppercase;
   color:rgba(255,255,255,.40);font-weight:500;padding-bottom:5px}
 .tab.on{color:rgba(255,255,255,.95)}
 .tab.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
   bottom:0;width:14px;height:2px;border-radius:1px;background:#B794FF}
 
-/* ── station bank: which oscillators ride the cycle ── */
+/* ── Prophet group box: hairline outline, label interrupts the border ── */
+.gbox{position:relative;border:1px solid rgba(255,255,255,.15);border-radius:9px}
+.gbl{position:absolute;top:-4px;left:50%;transform:translateX(-50%);
+  font-size:6px;letter-spacing:1.6px;text-transform:uppercase;line-height:8px;
+  color:rgba(255,255,255,.52);background:#232045;padding:0 6px;white-space:nowrap}
+
+/* CYCLE bank box */
+.bank{padding:10px 8px 8px}
 .fx{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-.fxb{height:30px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
+.fxb{height:26px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
   display:flex;align-items:center;justify-content:center;font-size:8.5px;
   letter-spacing:.5px;color:rgba(255,255,255,.55)}
 .fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600}
@@ -56,13 +68,23 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14)}
 .fleds i.on{background:#B794FF}
 
-/* ── THE GRID ROW (the locked G1v3 recipe — shared rails, measured) ── */
-.grid5{display:grid;grid-template-columns:70px 70px 1fr 1fr 1fr;gap:8px}
+/* connector tree: CYCLE → FEEL + HUMANIZE */
+.tree{height:12px;position:relative}
+.tree svg{position:absolute;inset:0;width:100%;height:100%}
+
+/* ── the control row: freestanding B + two group boxes, ONE set of rails ── */
+.ctlrow{display:grid;grid-template-columns:64px 100px 1fr;gap:8px;align-items:end}
 .cell{display:flex;flex-direction:column;align-items:center}
-.ctl{height:48px;display:flex;align-items:flex-end;justify-content:center;width:100%}
+.ctl{display:flex;align-items:flex-end;justify-content:center;width:100%}
 .cell .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;
   color:rgba(255,255,255,.45);line-height:1;margin-top:6px}
 .cell .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1;margin-top:4px;min-height:9px}
+.free{margin-bottom:9px}          /* matches the boxes' border+bottom padding so rails stay level */
+.free .ctl{height:48px}
+.gbox .cell .ctl{height:40px}
+.gbox.feel{padding:10px 10px 8px}
+.gbox.hum{padding:10px 6px 8px}
+.hum .in{display:grid;grid-template-columns:repeat(3,1fr)}
 .big{font-size:44px;font-weight:100;letter-spacing:.5px;color:rgba(255,255,255,.95);
   font-family:-apple-system,'SF Pro Display',sans-serif;line-height:.82}
 .mini{display:flex;flex-direction:column;gap:7px;width:100%;justify-content:flex-end}
@@ -74,11 +96,11 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .tr i{position:absolute;left:0;top:0;bottom:0;width:35%;background:#B794FF;border-radius:2px}
 .tr b{position:absolute;top:50%;left:35%;width:7px;height:7px;border-radius:50%;
   background:#fff;transform:translate(-50%,-50%)}
-.k svg{width:32px;height:32px;display:block}
+.k svg{width:30px;height:30px;display:block}
 
-/* ── dot slots + chain (family furniture) ── */
+/* dots + chain */
 .gl{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.32)}
-.slotrow{display:flex;align-items:center;justify-content:space-between;padding:0 3px}
+.slotrow{display:flex;align-items:center;justify-content:space-between;padding:0 3px;margin-top:12px}
 .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px}
 .sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26)}
 .sd.on i{background:rgba(255,255,255,.92);border-color:transparent}
@@ -100,28 +122,29 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
   <div class="b">
 
     <div class="hero">
-      <div class="wheel"><svg viewBox="0 0 196 116">
-        <!-- orbit -->
-        <circle cx="98" cy="58" r="40" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
-        <!-- direction arrowhead on the orbit -->
-        <path d="M132,33 L137,37 L130,39 Z" fill="rgba(255,255,255,.45)"/>
-        <!-- sweep arm to the sounding station (B, right) -->
-        <line x1="98" y1="58" x2="132" y2="58" stroke="#B794FF" stroke-width="1.4"/>
-        <circle cx="98" cy="58" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1"/>
-        <!-- trail from previous station (A, top) -->
-        <path d="M98,24 A34,34 0 0 1 132,58" fill="none" stroke="rgba(183,148,255,.28)" stroke-width="2"/>
-        <!-- stations -->
+      <div class="wheel"><svg viewBox="0 0 190 114">
+        <!-- orbit, exact -->
+        <circle cx="95" cy="57" r="38" fill="none" stroke="rgba(255,255,255,.20)" stroke-width="1"/>
+        <!-- trail A→B along the orbit -->
+        <path d="M95,19 A38,38 0 0 1 133,57" fill="none" stroke="rgba(183,148,255,.30)" stroke-width="2"/>
+        <!-- direction arrow, tangent at 45° on the orbit -->
+        <path d="M0,-3.2 L2.6,2.2 L-2.6,2.2 Z" fill="rgba(255,255,255,.50)"
+          transform="translate(121.9,30.1) rotate(135)"/>
+        <!-- arm: hub → sounding station -->
+        <line x1="95" y1="57" x2="122.5" y2="57" stroke="#B794FF" stroke-width="1.4"/>
+        <circle cx="95" cy="57" r="2.5" fill="rgba(255,255,255,.80)"/>
+        <!-- stations, centers exactly on the orbit -->
         <g font-family="-apple-system" font-size="9" font-weight="600" text-anchor="middle">
-          <circle cx="98" cy="18" r="9.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1"/>
-          <text x="98" y="21.5" fill="rgba(255,255,255,.60)">A</text>
-          <circle cx="138" cy="58" r="11" fill="rgba(255,255,255,.94)"/>
-          <circle cx="138" cy="58" r="15" fill="none" stroke="rgba(183,148,255,.55)" stroke-width="1"/>
-          <text x="138" y="61.5" fill="#1A1A2E">B</text>
-          <circle cx="98" cy="98" r="9.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1"/>
-          <text x="98" y="101.5" fill="rgba(255,255,255,.60)">C</text>
-          <circle cx="58" cy="58" r="9.5" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"
-            stroke-dasharray="2 2"/>
-          <text x="58" y="61.5" fill="rgba(255,255,255,.32)">D</text>
+          <circle cx="95" cy="19" r="9.5" fill="none" stroke="rgba(255,255,255,.50)" stroke-width="1"/>
+          <text x="95" y="22.4" fill="rgba(255,255,255,.65)">A</text>
+          <circle cx="133" cy="57" r="10.5" fill="rgba(255,255,255,.94)"/>
+          <circle cx="133" cy="57" r="14.5" fill="none" stroke="rgba(183,148,255,.50)" stroke-width="1"/>
+          <text x="133" y="60.4" fill="#1A1A2E">B</text>
+          <circle cx="95" cy="95" r="9.5" fill="none" stroke="rgba(255,255,255,.50)" stroke-width="1"/>
+          <text x="95" y="98.4" fill="rgba(255,255,255,.65)">C</text>
+          <circle cx="57" cy="57" r="9.5" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="1"
+            stroke-dasharray="2.5 2.5"/>
+          <text x="57" y="60.4" fill="rgba(255,255,255,.34)">D</text>
         </g>
       </svg></div>
       <div class="stat">
@@ -135,61 +158,70 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 
     <div class="tabs"><span class="tab on">Cycle</span><span class="tab">Behavior</span><span class="tab">Order</span></div>
 
-    <div>
+    <div class="stub"></div>
+    <div class="gbox bank"><span class="gbl">Cycle</span>
       <div class="fx">
         <span class="fxb on">A</span><span class="fxb cur">B</span>
         <span class="fxb on">C</span><span class="fxb">D</span></div>
       <div class="fleds"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
     </div>
 
-    <div class="grid5">
-      <div class="cell">
+    <div class="tree"><svg viewBox="0 0 288 12" preserveAspectRatio="none">
+      <path d="M144,0 L144,5 M115,5 L237,5 M115,5 L115,12 M237,5 L237,12"
+        fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1"/></svg></div>
+
+    <div class="ctlrow">
+      <div class="cell free">
         <div class="ctl"><span class="big">B</span></div>
         <span class="lb">Playing</span><span class="vl"></span>
       </div>
-      <div class="cell">
-        <div class="ctl"><div class="mini">
-          <div class="tog"><i></i>A First</div>
-          <div class="tr"><i></i><b></b></div>
-        </div></div>
-        <span class="lb">Vary</span><span class="vl">35%</span>
+      <div class="gbox feel"><span class="gbl">Feel</span>
+        <div class="cell">
+          <div class="ctl"><div class="mini">
+            <div class="tog"><i></i>A First</div>
+            <div class="tr"><i></i><b></b></div>
+          </div></div>
+          <span class="lb">Vary</span><span class="vl">35%</span>
+        </div>
       </div>
-      <div class="cell k">
-        <div class="ctl"><svg viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
-            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-              stroke-linecap="round" stroke-dasharray="20 112" transform="rotate(128 18 18)"/></svg></div>
-        <span class="lb">Lvl ±</span><span class="vl">15%</span>
-      </div>
-      <div class="cell k">
-        <div class="ctl"><svg viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
-            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-              stroke-linecap="round" stroke-dasharray="14 118" transform="rotate(128 18 18)"/></svg></div>
-        <span class="lb">Pan ±</span><span class="vl">10%</span>
-      </div>
-      <div class="cell k">
-        <div class="ctl"><svg viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
-            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-              stroke-linecap="round" stroke-dasharray="36 96" transform="rotate(128 18 18)"/></svg></div>
-        <span class="lb">After</span><span class="vl">2s</span>
+      <div class="gbox hum"><span class="gbl">Humanize</span>
+        <div class="in">
+          <div class="cell k">
+            <div class="ctl"><svg viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+                  stroke-linecap="round" stroke-dasharray="20 112" transform="rotate(128 18 18)"/></svg></div>
+            <span class="lb">Lvl ±</span><span class="vl">15%</span>
+          </div>
+          <div class="cell k">
+            <div class="ctl"><svg viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+                  stroke-linecap="round" stroke-dasharray="14 118" transform="rotate(128 18 18)"/></svg></div>
+            <span class="lb">Pan ±</span><span class="vl">10%</span>
+          </div>
+          <div class="cell k">
+            <div class="ctl"><svg viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+                  stroke-linecap="round" stroke-dasharray="36 96" transform="rotate(128 18 18)"/></svg></div>
+            <span class="lb">After</span><span class="vl">2s</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div>
-      <div class="slotrow">
-        <span class="sd on"><i></i><b>1</b></span><span class="sd"><i></i><b>2</b></span>
-        <span class="sd"><i></i><b>3</b></span><span class="sd"><i></i><b>4</b></span>
-        <span class="sd"><i></i><b>5</b></span><span class="sd"><i></i><b>6</b></span>
-        <span class="sd"><i></i><b>7</b></span><span class="sd"><i></i><b>8</b></span>
-        <span class="sd"><i></i><b>9</b></span><span class="sd"><i></i><b>10</b></span>
-        <span class="sd"><i></i><b>11</b></span><span class="sd"><i></i><b>12</b></span></div>
-      <div class="chain"><span class="gl" style="margin-right:2px">Chain</span>
-        <span class="chip cur">1</span><span class="arr">›</span><span class="chip">1</span>
-        <span class="arr">›</span><span class="chip">2</span><span class="arr">›</span><span class="chip">3</span>
-        <span class="add">+</span></div>
-    </div>
+    <div class="slotrow">
+      <span class="sd on"><i></i><b>1</b></span><span class="sd"><i></i><b>2</b></span>
+      <span class="sd"><i></i><b>3</b></span><span class="sd"><i></i><b>4</b></span>
+      <span class="sd"><i></i><b>5</b></span><span class="sd"><i></i><b>6</b></span>
+      <span class="sd"><i></i><b>7</b></span><span class="sd"><i></i><b>8</b></span>
+      <span class="sd"><i></i><b>9</b></span><span class="sd"><i></i><b>10</b></span>
+      <span class="sd"><i></i><b>11</b></span><span class="sd"><i></i><b>12</b></span></div>
+    <div class="chain"><span class="gl" style="margin-right:2px">Chain</span>
+      <span class="chip cur">1</span><span class="arr">›</span><span class="chip">1</span>
+      <span class="arr">›</span><span class="chip">2</span><span class="arr">›</span><span class="chip">3</span>
+      <span class="add">+</span></div>
   </div>
 </div>
 </body>
