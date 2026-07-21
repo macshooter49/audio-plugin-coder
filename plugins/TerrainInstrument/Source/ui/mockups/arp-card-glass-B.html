@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ARP card — B · Readout</title>
+<style>
+/* ════ MOCKUP B — "READOUT" · the TE reference translated hardest: ONE dark inset
+   screen on the glass (mono readout + step graph + dot-matrix meter), a Dir knob
+   with a label fan (the NATURAL/CHEMO/CONFUSION tree), wiring brackets, segmented
+   strips, step squares + LEDs. Signature: the readout screen — the card's only
+   dark well, everything else floats. ════ */
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:720px;height:640px;overflow:hidden;background:#16141F;
+  font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
+  -webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center}
+.bg{position:absolute;inset:0;background:
+  radial-gradient(420px 300px at 62% 30%,rgba(139,92,246,.14),transparent 70%),
+  linear-gradient(180deg,#191726 0%,#1A1A2E 60%,#141221 100%)}
+.bg svg{position:absolute;inset:0;width:100%;height:100%;opacity:.11}
+
+.card{position:relative;width:316px;border-radius:14px;
+  background:linear-gradient(180deg,rgba(38,34,62,.66),rgba(28,25,50,.78));
+  -webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07)}
+.h{display:flex;align-items:center;gap:8px;padding:10px 13px 9px;
+  border-bottom:1px solid rgba(255,255,255,.08)}
+.h .g{letter-spacing:2px;color:rgba(255,255,255,.30);font-size:10px}
+.h .dot{width:5px;height:5px;border-radius:50%;background:#B794FF}
+.h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:uppercase;font-weight:600}
+.h .pop{margin-left:auto;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:500}
+.h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px}
+.b{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
+
+/* ── the READOUT: the card's only dark well ── */
+.screen{display:grid;grid-template-columns:88px 1fr 26px;gap:8px;height:96px;
+  background:#100E1C;border-radius:9px;border:1px solid rgba(255,255,255,.07);
+  padding:9px 10px;box-shadow:inset 0 2px 10px rgba(0,0,0,.5)}
+.ro{display:flex;flex-direction:column;gap:5px;font-family:'SF Mono',ui-monospace,Menlo,monospace}
+.ro div{font-size:6.5px;letter-spacing:.8px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap}
+.ro b{color:rgba(255,255,255,.90);font-weight:500}
+.ro .live b{color:#B794FF}
+.ro .foot{margin-top:auto;color:rgba(255,255,255,.28)}
+.graph{position:relative}
+.graph svg{position:absolute;inset:0;width:100%;height:100%}
+.matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;align-content:start;padding-top:2px}
+.matrix i{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.13);justify-self:center}
+.matrix i.on{background:#B794FF}
+.matrix i.dim{background:rgba(183,148,255,.35)}
+
+/* ── tabs ── */
+.tabs{display:flex;justify-content:center;gap:26px}
+.tab{position:relative;font-size:8px;letter-spacing:1.8px;text-transform:uppercase;
+  color:rgba(255,255,255,.40);font-weight:500;padding-bottom:5px}
+.tab.on{color:rgba(255,255,255,.95)}
+.tab.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
+  bottom:0;width:14px;height:2px;border-radius:1px;background:#B794FF}
+
+/* ── TE cluster row: two knobs + bracket → division strip · Dir knob + label fan ── */
+.cluster{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cl{display:flex;flex-direction:column;align-items:center}
+.krow{display:flex;gap:16px}
+.k{display:flex;flex-direction:column;align-items:center;gap:4px}
+.k svg{width:34px;height:34px}
+.k .lb{font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.wire{width:104px;height:9px;position:relative;margin:3px 0 4px}
+.wire::before{content:'';position:absolute;inset:0 0 auto 0;height:6px;
+  border-left:1px solid rgba(255,255,255,.20);border-right:1px solid rgba(255,255,255,.20);
+  border-top:1px solid rgba(255,255,255,.20);border-radius:4px 4px 0 0;top:3px}
+.wire::after{content:'';position:absolute;left:50%;top:0;width:1px;height:4px;background:rgba(255,255,255,.20)}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);width:118px;height:20px;
+  border:1px solid rgba(255,255,255,.16);border-radius:6px;overflow:hidden}
+.seg{display:flex;align-items:center;justify-content:center;font-size:6.5px;letter-spacing:.4px;
+  color:rgba(255,255,255,.42);border-left:1px solid rgba(255,255,255,.09)}
+.seg:first-child{border-left:none}
+.seg.on{color:#fff;background:rgba(183,148,255,.13);box-shadow:inset 0 -2px 0 #B794FF}
+/* Dir knob + label fan */
+.fan{display:grid;grid-template-columns:38px 1fr;gap:6px;align-items:center;margin-top:2px}
+.fan svg.kb{width:38px;height:38px}
+.fanlabels{display:flex;flex-direction:column;gap:6px}
+.fl{display:flex;align-items:center;gap:5px;font-size:6.5px;letter-spacing:1.2px;
+  text-transform:uppercase;color:rgba(255,255,255,.40)}
+.fl::before{content:'';width:12px;height:1px;background:rgba(255,255,255,.20)}
+.fl.on{color:rgba(255,255,255,.95)}
+.fl.on::before{background:#B794FF;height:2px;border-radius:1px}
+.fan .cap{grid-column:1/3;text-align:center;font-size:6.5px;letter-spacing:1.2px;
+  text-transform:uppercase;color:rgba(255,255,255,.45);margin-top:2px}
+
+/* ── steps + LEDs + chain ── */
+.gl{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.32)}
+.slots{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-top:5px}
+.slot{aspect-ratio:1;border:1px solid rgba(255,255,255,.20);border-radius:5px;
+  display:flex;align-items:center;justify-content:center;font-size:7.5px;color:rgba(255,255,255,.45)}
+.slot.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600}
+.sleds{display:grid;grid-template-columns:repeat(12,1fr);margin-top:4px}
+.sleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14)}
+.sleds i.on{background:#B794FF}
+.chain{display:flex;align-items:center;gap:7px;margin-top:6px}
+.chip{min-width:15px;height:15px;padding:0 4px;border:1px solid rgba(255,255,255,.18);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;font-size:7px;color:rgba(255,255,255,.55)}
+.chip.cur{border-color:#B794FF;color:#B794FF}
+.arr{color:rgba(255,255,255,.25);font-size:8px}
+.add{margin-left:auto;color:rgba(255,255,255,.40);font-size:10px}
+</style>
+</head>
+<body>
+<div class="bg"><svg viewBox="0 0 720 640" preserveAspectRatio="none">
+  <g stroke="#fff" fill="none" stroke-width="1">
+    <path d="M0,430 Q180,360 360,395 T720,380"/><path d="M0,455 Q180,385 360,420 T720,405"/>
+    <path d="M0,480 Q180,412 360,447 T720,430"/><path d="M0,505 Q180,440 360,474 T720,456"/>
+    <path d="M0,530 Q180,468 360,501 T720,482"/></g></svg></div>
+
+<div class="card">
+  <div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">Arp</span>
+    <span class="pop">Pop Out</span><span class="x">✕</span></div>
+  <div class="b">
+
+    <div class="screen">
+      <div class="ro">
+        <div>Lane: <b>Pitch</b></div>
+        <div>Div: <b>1/16</b></div>
+        <div>Dir: <b>Up</b></div>
+        <div class="live">Status: <b>Playing</b></div>
+        <div class="foot">Step 6 · 16</div>
+      </div>
+      <div class="graph"><svg viewBox="0 0 150 78" preserveAspectRatio="none">
+        <line x1="0" y1="39" x2="150" y2="39" stroke="rgba(255,255,255,.10)" stroke-width="1"/>
+        <path d="M4,58 L14,44 24,30 34,30 44,16 54,30 64,44 74,44 84,58 94,30 104,30 114,8 124,16 134,16 144,44"
+          fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.2" stroke-linejoin="round"/>
+        <line x1="54" y1="4" x2="54" y2="74" stroke="#B794FF" stroke-width="1"/>
+        <circle cx="54" cy="30" r="2.4" fill="#B794FF"/></svg></div>
+      <div class="matrix">
+        <i class="on"></i><i class="on"></i><i class="dim"></i>
+        <i class="on"></i><i class="dim"></i><i></i>
+        <i class="on"></i><i class="on"></i><i></i>
+        <i class="dim"></i><i></i><i></i>
+        <i class="on"></i><i></i><i></i>
+        <i class="dim"></i><i></i><i></i>
+        <i></i><i></i><i></i></div>
+    </div>
+
+    <div class="tabs"><span class="tab on">Pattern</span><span class="tab">Play</span><span class="tab">Motion</span></div>
+
+    <div class="cluster">
+      <div class="cl">
+        <div class="krow">
+          <div class="k"><svg viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+              <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+                stroke-linecap="round" stroke-dasharray="40 92" transform="rotate(128 18 18)"/></svg>
+            <span class="lb">Rate</span></div>
+          <div class="k"><svg viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+              <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+                stroke-linecap="round" stroke-dasharray="58 74" transform="rotate(128 18 18)"/></svg>
+            <span class="lb">Gate</span></div>
+        </div>
+        <div class="wire"></div>
+        <div class="strip">
+          <span class="seg">1/8</span><span class="seg on">1/16</span><span class="seg">1/16т</span><span class="seg">1/32</span>
+        </div>
+      </div>
+      <div class="cl">
+        <div class="fan">
+          <svg class="kb" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="15.5" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+            <circle cx="20" cy="20" r="15.5" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+              stroke-linecap="round" stroke-dasharray="24 122" transform="rotate(128 20 20)"/>
+            <line x1="20" y1="8.5" x2="20" y2="13.5" stroke="#B794FF" stroke-width="2"
+              stroke-linecap="round" transform="rotate(-32 20 20)"/></svg>
+          <div class="fanlabels">
+            <span class="fl on">Up</span>
+            <span class="fl">Down</span>
+            <span class="fl">Up·Dn</span>
+            <span class="fl">Rand</span>
+          </div>
+          <span class="cap">Dir</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <span class="gl">Patterns · 12 Slots</span>
+      <div class="slots">
+        <span class="slot on">1</span><span class="slot">2</span><span class="slot">3</span><span class="slot">4</span>
+        <span class="slot">5</span><span class="slot">6</span><span class="slot">7</span><span class="slot">8</span>
+        <span class="slot">9</span><span class="slot">10</span><span class="slot">11</span><span class="slot">12</span></div>
+      <div class="sleds"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="chain"><span class="gl" style="margin-right:2px">Chain</span>
+        <span class="chip cur">1</span><span class="arr">›</span><span class="chip">1</span>
+        <span class="arr">›</span><span class="chip">2</span><span class="arr">›</span><span class="chip">3</span>
+        <span class="add">+</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
