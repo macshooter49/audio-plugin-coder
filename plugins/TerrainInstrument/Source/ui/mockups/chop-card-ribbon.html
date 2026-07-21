@@ -24,7 +24,10 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .h .g{letter-spacing:2px;color:rgba(255,255,255,.30);font-size:10px}
 .h .dot{width:5px;height:5px;border-radius:50%;background:#B794FF}
 .h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:uppercase;font-weight:600}
-.h .pop{margin-left:auto;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:500}
+.mix{margin-left:auto;display:flex;align-items:baseline;gap:4px;
+  font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.40)}
+.mix b{font-size:11px;font-weight:200;letter-spacing:.3px;color:rgba(255,255,255,.92);font-family:-apple-system,'SF Pro Display',sans-serif}
+.h .pop{margin-left:12px;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:500}
 .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px}
 .b{padding:12px 14px 14px;display:flex;flex-direction:column}
 
@@ -50,23 +53,23 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
   font-size:6px;letter-spacing:1.6px;text-transform:uppercase;line-height:8px;
   color:rgba(255,255,255,.52);background:#232045;padding:0 6px;white-space:nowrap}
 .ctlrow{display:grid;grid-template-columns:1fr 1.12fr;gap:8px}
-.gbox.carve{padding:11px 9px 10px;display:flex;flex-direction:column;justify-content:space-between}
+.gbox.carve{padding:14px 9px 8px;display:flex;flex-direction:column;justify-content:flex-end}
 .togrow{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .tog{height:20px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
   display:flex;align-items:center;justify-content:center;gap:4px;
   font-size:6.5px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.72)}
 .tog.off{color:rgba(255,255,255,.38)}
 .tog i{width:5px;height:5px;border-radius:50%;background:#B794FF}
-.carve .cells{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
+.carve .cells{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:4px;margin-top:8px}
 .carve .cell{display:flex;flex-direction:column;align-items:center;gap:6px}
 .step{width:100%;height:20px;border:1px solid rgba(255,255,255,.18);border-radius:6px;
-  display:flex;align-items:center;justify-content:space-between;padding:0 5px;
-  font-size:8px;color:rgba(255,255,255,.88)}
+  display:flex;align-items:center;justify-content:space-between;padding:0 4px;
+  font-size:7.5px;letter-spacing:.2px;color:rgba(255,255,255,.88);white-space:nowrap}
 .step s{text-decoration:none;color:rgba(255,255,255,.30);font-size:8px}
 .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;
   color:rgba(255,255,255,.45);line-height:1}
 .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1}
-.gbox.depth{padding:11px 8px 10px}
+.gbox.depth{padding:14px 8px 8px}
 .depth .in{display:grid;grid-template-columns:repeat(4,1fr);height:100%}
 .depth .cell{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px}
 .vs{width:3px;height:30px;background:rgba(255,255,255,.13);border-radius:2px;position:relative}
@@ -98,7 +101,7 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 <div class="bg"></div>
 <div class="card">
   <div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">Chop</span>
-    <span class="pop">Pop Out</span><span class="x">✕</span></div>
+    <span class="mix">Mix <b>60%</b></span><span class="pop">Pop Out</span><span class="x">✕</span></div>
   <div class="b">
 
     <div class="tabs"><span class="tab on">Slice</span><span class="tab">Scan</span><span class="tab">Shape</span></div>
@@ -140,25 +143,34 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
     </div>
 
     <div class="ribbon"><svg viewBox="0 0 288 52">
+      <!-- the MEMORY: rolling capture buffer, dim = the past -->
       <rect x="4" y="6" width="280" height="30" rx="5" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"/>
-      <!-- 8 cells -->
-      <g stroke="rgba(255,255,255,.12)" stroke-width="1">
-        <line x1="39" y1="6" x2="39" y2="36"/><line x1="74" y1="6" x2="74" y2="36"/>
-        <line x1="109" y1="6" x2="109" y2="36"/><line x1="144" y1="6" x2="144" y2="36"/>
-        <line x1="179" y1="6" x2="179" y2="36"/><line x1="214" y1="6" x2="214" y2="36"/>
-        <line x1="249" y1="6" x2="249" y2="36"/>
-      </g>
-      <!-- loop region tint -->
-      <rect x="144" y="6.5" width="105" height="29" fill="rgba(255,255,255,.05)"/>
-      <!-- scan handle · play cursor -->
-      <line x1="179" y1="6" x2="179" y2="36" stroke="rgba(255,255,255,.40)" stroke-width="1" stroke-dasharray="3 2"/>
-      <line x1="228" y1="4" x2="228" y2="38" stroke="#B794FF" stroke-width="1.4"/>
-      <!-- LED per cell -->
+      <path d="M6,21 L15,15 L24,26 L33,18 L42,25 L51,14 L60,26 L69,20 L78,24 L87,16 L96,27 L105,19 L114,23 L123,15 L132,25 L141,20 L144,21"
+        fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"/>
+      <path d="M249,22 L258,17 L267,25 L276,19 L282,22"
+        fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"/>
+      <!-- the LOOP WINDOW: the region being performed, sliced -->
+      <rect x="144" y="6.5" width="105" height="29" fill="rgba(255,255,255,.055)"/>
+      <path d="M144,21 L153,14 L162,27 L171,17 L180,24 L189,13 L198,26 L207,19 L216,25 L225,15 L234,27 L243,18 L249,22"
+        fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1"/>
+      <g stroke="rgba(255,255,255,.16)" stroke-width="1">
+        <line x1="157" y1="6" x2="157" y2="36"/><line x1="170" y1="6" x2="170" y2="36"/>
+        <line x1="183" y1="6" x2="183" y2="36"/><line x1="197" y1="6" x2="197" y2="36"/>
+        <line x1="210" y1="6" x2="210" y2="36"/><line x1="223" y1="6" x2="223" y2="36"/>
+        <line x1="236" y1="6" x2="236" y2="36"/></g>
+      <!-- window edges: drag nubs + scan handle (dashed) -->
+      <rect x="141" y="2" width="6" height="3" rx="1" fill="rgba(255,255,255,.40)"/>
+      <rect x="246" y="2" width="6" height="3" rx="1" fill="rgba(255,255,255,.40)"/>
+      <line x1="144" y1="6" x2="144" y2="36" stroke="rgba(255,255,255,.45)" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="249" y1="6" x2="249" y2="36" stroke="rgba(255,255,255,.30)" stroke-width="1"/>
+      <!-- playhead: current slice -->
+      <line x1="199" y1="4" x2="199" y2="38" stroke="#B794FF" stroke-width="1.4"/>
+      <!-- slice LEDs: one per window slice, current lit -->
       <g>
-        <circle cx="21.5" cy="45" r="1.5" fill="rgba(255,255,255,.16)"/><circle cx="56.5" cy="45" r="1.5" fill="rgba(255,255,255,.16)"/>
-        <circle cx="91.5" cy="45" r="1.5" fill="rgba(255,255,255,.16)"/><circle cx="126.5" cy="45" r="1.5" fill="rgba(255,255,255,.16)"/>
-        <circle cx="161.5" cy="45" r="1.5" fill="rgba(255,255,255,.16)"/><circle cx="196.5" cy="45" r="1.5" fill="rgba(255,255,255,.16)"/>
-        <circle cx="231.5" cy="45" r="1.5" fill="#B794FF"/><circle cx="266.5" cy="45" r="1.5" fill="rgba(255,255,255,.16)"/>
+        <circle cx="151" cy="45" r="1.5" fill="rgba(255,255,255,.18)"/><circle cx="164" cy="45" r="1.5" fill="rgba(255,255,255,.18)"/>
+        <circle cx="177" cy="45" r="1.5" fill="rgba(255,255,255,.18)"/><circle cx="190" cy="45" r="1.5" fill="rgba(255,255,255,.18)"/>
+        <circle cx="203" cy="45" r="1.5" fill="#B794FF"/><circle cx="216" cy="45" r="1.5" fill="rgba(255,255,255,.18)"/>
+        <circle cx="229" cy="45" r="1.5" fill="rgba(255,255,255,.18)"/><circle cx="242" cy="45" r="1.5" fill="rgba(255,255,255,.18)"/>
       </g>
     </svg></div>
 
