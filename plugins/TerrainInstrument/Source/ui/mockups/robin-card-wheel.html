@@ -34,15 +34,12 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .wheel{position:relative}
 .wheel svg{position:absolute;inset:0;width:100%;height:100%}
 .stat{display:flex;flex-direction:column;gap:5px;justify-content:center;
-  font-family:'SF Mono',ui-monospace,Menlo,monospace;padding-left:12px}
-.stat div{font-size:6.5px;letter-spacing:.8px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap}
+  font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;font-weight:300;padding-left:12px}
+.stat div{font-size:7px;letter-spacing:1.1px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap}
 .stat b{color:rgba(255,255,255,.90);font-weight:500}
 .stat .live b{color:#B794FF}
-/* connector stub: hero → CYCLE box */
-.stub{height:10px;position:relative}
-.stub::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.18)}
 
-.tabs{display:flex;justify-content:center;gap:26px;margin:2px 0 12px}
+.tabs{display:flex;justify-content:center;gap:26px;margin:10px 0 12px}
 .tab{position:relative;font-size:8px;letter-spacing:1.8px;text-transform:uppercase;
   color:rgba(255,255,255,.40);font-weight:500;padding-bottom:5px}
 .tab.on{color:rgba(255,255,255,.95)}
@@ -87,9 +84,11 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .big{font-size:44px;font-weight:100;letter-spacing:.5px;color:rgba(255,255,255,.95);
   font-family:-apple-system,'SF Pro Display',sans-serif;line-height:.82}
 .mini{display:flex;flex-direction:column;gap:7px;width:100%;justify-content:flex-end}
+.togrow{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .tog{height:20px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
-  display:flex;align-items:center;justify-content:center;gap:5px;
-  font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.72)}
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  font-size:6.5px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.72)}
+.tog.off{color:rgba(255,255,255,.38)}
 .tog i{width:5px;height:5px;border-radius:50%;background:#B794FF}
 .tr{height:3px;border-radius:2px;background:rgba(255,255,255,.12);position:relative;margin-bottom:3px}
 .tr i{position:absolute;left:0;top:0;bottom:0;width:35%;background:#B794FF;border-radius:2px}
@@ -124,16 +123,11 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
       <div class="wheel"><svg viewBox="0 0 190 114">
         <!-- orbit, exact -->
         <circle cx="95" cy="57" r="38" fill="none" stroke="rgba(255,255,255,.20)" stroke-width="1"/>
-        <!-- trail A→B along the orbit -->
-        <path d="M95,19 A38,38 0 0 1 133,57" fill="none" stroke="rgba(183,148,255,.30)" stroke-width="2"/>
-        <!-- direction arrow, tangent at 45° on the orbit -->
-        <path d="M0,-3.2 L2.6,2.2 L-2.6,2.2 Z" fill="rgba(255,255,255,.50)"
-          transform="translate(121.9,30.1) rotate(135)"/>
         <!-- arm: hub → sounding station -->
         <line x1="95" y1="57" x2="122.5" y2="57" stroke="#B794FF" stroke-width="1.4"/>
         <circle cx="95" cy="57" r="2.5" fill="rgba(255,255,255,.80)"/>
         <!-- stations, centers exactly on the orbit -->
-        <g font-family="-apple-system" font-size="9" font-weight="600" text-anchor="middle">
+        <g font-family="'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="9" font-weight="500" text-anchor="middle">
           <circle cx="95" cy="19" r="9.5" fill="none" stroke="rgba(255,255,255,.50)" stroke-width="1"/>
           <text x="95" y="22.4" fill="rgba(255,255,255,.65)">A</text>
           <circle cx="133" cy="57" r="10.5" fill="rgba(255,255,255,.94)"/>
@@ -157,7 +151,6 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 
     <div class="tabs"><span class="tab on">Cycle</span><span class="tab">Behavior</span><span class="tab">Order</span></div>
 
-    <div class="stub"></div>
     <div class="gbox bank"><span class="gbl">Cycle</span>
       <div class="fx">
         <span class="fxb on">A</span><span class="fxb cur">B</span>
@@ -173,7 +166,7 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
       <div class="gbox feel"><span class="gbl">Feel</span>
         <div class="cell">
           <div class="ctl"><div class="mini">
-            <div class="tog"><i></i>A First</div>
+            <div class="togrow"><div class="tog"><i></i>A First</div><div class="tog off">Retrig</div></div>
             <div class="tr"><i></i><b></b></div>
           </div></div>
           <span class="lb">Vary</span><span class="vl">35%</span>
@@ -186,14 +179,14 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
                 <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
                 <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
                   stroke-linecap="round" stroke-dasharray="20 112" transform="rotate(128 18 18)"/></svg></div>
-            <span class="lb">Lvl ±</span><span class="vl">15%</span>
+            <span class="lb">Lvl</span><span class="vl">15%</span>
           </div>
           <div class="cell k">
             <div class="ctl"><svg viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
                 <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
                   stroke-linecap="round" stroke-dasharray="14 118" transform="rotate(128 18 18)"/></svg></div>
-            <span class="lb">Pan ±</span><span class="vl">10%</span>
+            <span class="lb">Pan</span><span class="vl">10%</span>
           </div>
           <div class="cell k">
             <div class="ctl"><svg viewBox="0 0 36 36">
