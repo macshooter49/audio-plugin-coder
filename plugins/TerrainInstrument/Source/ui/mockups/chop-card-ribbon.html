@@ -60,15 +60,15 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
   font-size:6.5px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.72)}
 .tog.off{color:rgba(255,255,255,.38)}
 .tog i{width:5px;height:5px;border-radius:50%;background:#B794FF}
-.carve .cells{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:4px;margin-top:8px}
+.carve .cells{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
 .carve .cell{display:flex;flex-direction:column;align-items:center;gap:6px}
 .step{width:100%;height:20px;border:1px solid rgba(255,255,255,.18);border-radius:6px;
   display:flex;align-items:center;justify-content:space-between;padding:0 4px;
   font-size:7.5px;letter-spacing:.2px;color:rgba(255,255,255,.88);white-space:nowrap}
 .step s{text-decoration:none;color:rgba(255,255,255,.30);font-size:8px}
 .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;
-  color:rgba(255,255,255,.45);line-height:1}
-.vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1}
+  color:rgba(255,255,255,.45);line-height:1;transform:translateX(.65px)}
+.vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1;transform:translateX(.15px)}
 .gbox.depth{padding:14px 8px 8px}
 .depth .in{display:grid;grid-template-columns:repeat(4,1fr);height:100%}
 .depth .cell{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px}
@@ -117,7 +117,7 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
         <div class="cells">
           <div class="cell"><div class="step"><s>‹</s>8<s>›</s></div><span class="lb">Slices</span></div>
           <div class="cell"><div class="step"><s>‹</s>8<s>›</s></div><span class="lb">Loop</span></div>
-          <div class="cell"><div class="step"><s>‹</s>Step<s>›</s></div><span class="lb">Mode</span></div>
+          <div class="cell"><div class="step" style="justify-content:center">Step</div><span class="lb">Mode</span></div>
         </div>
       </div>
       <div class="gbox depth"><span class="gbl">Order · Depth</span>
