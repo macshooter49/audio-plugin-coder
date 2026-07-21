@@ -69,7 +69,7 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .tree svg{position:absolute;inset:0;width:100%;height:100%}
 
 /* ── the control row: freestanding B + two group boxes, ONE set of rails ── */
-.ctlrow{display:grid;grid-template-columns:118px 1fr;gap:8px;align-items:end}
+.ctlrow{display:grid;grid-template-columns:1fr 1.1fr;gap:8px;align-items:end}
 .cell{display:flex;flex-direction:column;align-items:center}
 .ctl{display:flex;align-items:flex-end;justify-content:center;width:100%}
 .cell .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;
@@ -78,7 +78,10 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .free{margin-bottom:9px}          /* matches the boxes' border+bottom padding so rails stay level */
 .free .ctl{height:48px}
 .gbox .cell .ctl{height:40px}
-.gbox.feel{padding:10px 10px 8px}
+.gbox.feel{padding:10px 8px 8px}
+.feel .cells{display:grid;grid-template-columns:repeat(3,1fr);margin-top:7px}
+.feel .cells .ctl{height:13px;padding:0 4px}
+.feel .tr{width:100%;margin-bottom:0}
 .gbox.hum{padding:10px 6px 8px}
 .hum .in{display:grid;grid-template-columns:repeat(3,1fr)}
 .big{font-size:44px;font-weight:100;letter-spacing:.5px;color:rgba(255,255,255,.95);
@@ -164,12 +167,20 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 
     <div class="ctlrow">
       <div class="gbox feel"><span class="gbl">Feel</span>
-        <div class="cell">
-          <div class="ctl"><div class="mini">
-            <div class="togrow"><div class="tog"><i></i>A First</div><div class="tog off">Retrig</div></div>
-            <div class="tr"><i></i><b></b></div>
-          </div></div>
-          <span class="lb">Vary</span><span class="vl">35%</span>
+        <div class="togrow"><div class="tog"><i></i>A First</div><div class="tog off">Retrig</div></div>
+        <div class="cells">
+          <div class="cell">
+            <div class="ctl"><div class="tr"><i></i><b></b></div></div>
+            <span class="lb">Vary</span><span class="vl">35%</span>
+          </div>
+          <div class="cell">
+            <div class="ctl"><div class="tr" style="--p:20%"><i style="width:20%"></i><b style="left:20%"></b></div></div>
+            <span class="lb">Drift</span><span class="vl">20%</span>
+          </div>
+          <div class="cell">
+            <div class="ctl"><div class="tr"><i style="width:12%"></i><b style="left:12%"></b></div></div>
+            <span class="lb">Wobble</span><span class="vl">12%</span>
+          </div>
         </div>
       </div>
       <div class="gbox hum"><span class="gbl">Humanize</span>
