@@ -4318,7 +4318,17 @@ public:
         addAndMakeVisible (*web);
         setBounds (screenBounds);
         setAlwaysOnTop (true);          // a floating tool palette — stays over the DAW
-        setVisible (true);              // TopLevelWindow attaches to the desktop here (borderless + shadow)
+
+        // fb89 — THE ACTUAL BUG, seven builds deep: TopLevelWindow(name, false) +
+        // setVisible(true) NEVER creates the native window. Component::setVisible
+        // does not put a parentless component on the desktop — only addToDesktop()
+        // does. Every card window since fb82 was a peerless JUCE component: "shown",
+        // "moved", and physically nonexistent (fb88's "created … ns: NO WINDOW" was
+        // the confession). This call creates the real NSWindow via the VIRTUAL
+        // getDesktopWindowStyleFlags() — so it carries windowIgnoresKeyPresses too.
+        addToDesktop();
+
+        setVisible (true);
         toFront (false);                // show it WITHOUT trying to take focus
 
        #if JUCE_MAC
