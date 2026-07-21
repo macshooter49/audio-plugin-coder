@@ -841,7 +841,13 @@ private:
     // editor only CREATES them (it knows the card's rect + serves the page snapshot),
     // and their style flags include windowIgnoresKeyPresses so clicking a card never
     // steals key focus from the host's plugin window in the first place.
-    void popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect);
+    // fb86 — grab/mouseScreen present = DRAG-ACROSS-THE-EDGE handoff: the window is
+    // born with its grab point pinned under the cursor, and the main view's SAME drag
+    // keeps steering it via dragPoppedCardWindow until mouseup.
+    void popOutCardWindow  (const juce::String& id, juce::Rectangle<int> viewportRect,
+                            std::optional<juce::Point<int>> grabOffset  = {},
+                            std::optional<juce::Point<int>> mouseScreen = {});
+    void dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen);
 
     // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
     static constexpr int CAPTURE_STRIP_HEIGHT = 26;

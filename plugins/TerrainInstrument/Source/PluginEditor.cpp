@@ -549,15 +549,37 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // fb82 — detach a FLOW extension card into a floating native window.
-                // args = [ id ('arp'|'chop'|'gli'|'rbn'), viewportX, viewportY, w, h ].
+                // args = [ id ('arp'|'chop'|'gli'|'rbn'), viewportX, viewportY, w, h,
+                //          (fb86 handoff:) grabDX, grabDY, mouseScreenX, mouseScreenY ].
                 // A call for an already-popped id just refocuses its window (the JS
                 // sends w=0 for that), so double-pops can never duplicate a card.
                 if (args.size() >= 5)
-                    popOutCardWindow (args[0].toString(),
-                                      juce::Rectangle<int> ((int) static_cast<double> (args[1]),
-                                                            (int) static_cast<double> (args[2]),
-                                                            (int) static_cast<double> (args[3]),
-                                                            (int) static_cast<double> (args[4])));
+                {
+                    const juce::Rectangle<int> vr ((int) static_cast<double> (args[1]),
+                                                   (int) static_cast<double> (args[2]),
+                                                   (int) static_cast<double> (args[3]),
+                                                   (int) static_cast<double> (args[4]));
+                    if (args.size() >= 9)
+                        popOutCardWindow (args[0].toString(), vr,
+                                          juce::Point<int> ((int) static_cast<double> (args[5]),
+                                                            (int) static_cast<double> (args[6])),
+                                          juce::Point<int> ((int) static_cast<double> (args[7]),
+                                                            (int) static_cast<double> (args[8])));
+                    else
+                        popOutCardWindow (args[0].toString(), vr);
+                }
+                complete (juce::var{});
+            })
+            .withNativeFunction("dragPoppedCard", [this](const juce::Array<juce::var>& args,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb86 — the tear-off drag: after an edge handoff the MAIN view's drag
+                // keeps streaming here; we steer the freshly-popped native window.
+                // args = [ id, mouseScreenX, mouseScreenY ].
+                if (args.size() >= 3)
+                    dragPoppedCardWindow (args[0].toString(),
+                                          juce::Point<int> ((int) static_cast<double> (args[1]),
+                                                            (int) static_cast<double> (args[2])));
                 complete (juce::var{});
             })
             .withNativeFunction("getPoppedCards", [this](const juce::Array<juce::var>&,
@@ -4191,10 +4213,14 @@ class TerrainCardWindow : public juce::TopLevelWindow
 public:
     TerrainCardWindow (TerrainInstrumentAudioProcessor& proc, const juce::String& cardId,
                        std::optional<juce::WebBrowserComponent::Resource> pageSnapshot,
-                       juce::Rectangle<int> screenBounds)
+                       juce::Rectangle<int> screenBounds,
+                       juce::Point<int> grabOffset = { 158, 12 })
         : juce::TopLevelWindow ("Terrain " + cardId.toUpperCase() + " Card", false),
           id_ (cardId), html_ (std::move (pageSnapshot))
     {
+        // fb86 — seed the drag offset from the tear-off grab point so a handoff drag
+        // (dragMoveTo before any 'start') keeps the card pinned exactly under the cursor.
+        dragOff_ = -grabOffset;
         setDropShadowEnabled (true);
         setOpaque (true);
 
@@ -4249,16 +4275,7 @@ public:
                             terrainCardLog ("drag start " + id_ + "  mouse=" + m.toString() + "  win=" + getPosition().toString());
                         }
                         else
-                        {
-                            // fb84 — CLAMP to the union of displays: whatever coords the WebView
-                            // reports, the window can never teleport somewhere unreachable. At
-                            // least 60px of header always stays grabbable on-screen.
-                            auto p = m + dragOff_;
-                            const auto area = juce::Desktop::getInstance().getDisplays().getTotalBounds (true);
-                            p.x = juce::jlimit (area.getX() - getWidth() + 60, juce::jmax (area.getX(), area.getRight() - 60), p.x);
-                            p.y = juce::jlimit (area.getY(), juce::jmax (area.getY(), area.getBottom() - 40), p.y);
-                            setTopLeftPosition (p);
-                        }
+                            dragMoveTo (m);
                     }
                     complete (juce::var{});
                 })
@@ -4362,6 +4379,18 @@ public:
              | juce::ComponentPeer::windowIgnoresKeyPresses;
     }
 
+    // fb84/fb86 — the ONE clamped move used by both drags (the popped window's own
+    // header drag AND the main view's tear-off follow-drag): whatever coords the
+    // WebView reports, ≥60px of header always stays grabbable on some display.
+    void dragMoveTo (juce::Point<int> m)
+    {
+        auto p = m + dragOff_;
+        const auto area = juce::Desktop::getInstance().getDisplays().getTotalBounds (true);
+        p.x = juce::jlimit (area.getX() - getWidth() + 60, juce::jmax (area.getX(), area.getRight() - 60), p.x);
+        p.y = juce::jlimit (area.getY(), juce::jmax (area.getY(), area.getBottom() - 40), p.y);
+        setTopLeftPosition (p);
+    }
+
     void resized() override { if (web != nullptr) web->setBounds (getLocalBounds()); }
     void paint (juce::Graphics& g) override { g.fillAll (juce::Colour (0xFF2A2A48)); }   // card body color behind the WebView's first frame
 
@@ -4373,7 +4402,9 @@ private:
     std::unique_ptr<juce::WebBrowserComponent> web;
 };
 
-void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect)
+void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect,
+                                                              std::optional<juce::Point<int>> grabOffset,
+                                                              std::optional<juce::Point<int>> mouseScreen)
 {
     // Whitelist — the id lands in window titles and dock evals; only the 4 FLOW cards exist.
     if (id != "arp" && id != "chop" && id != "gli" && id != "rbn") return;
@@ -4398,12 +4429,32 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
     }
     if (webView == nullptr || viewportRect.getWidth() < 60 || viewportRect.getHeight() < 60) return;
 
-    // The card's viewport rect → screen coords, so the floating window appears EXACTLY
-    // where the card was sitting (the "it moved out of the plugin" illusion).
-    const auto tl = webView->localPointToGlobal (viewportRect.getTopLeft());
+    // Placement: a Pop Out click lands the window EXACTLY where the card was sitting
+    // (viewport rect → screen). A fb86 edge-handoff instead pins the card's GRAB POINT
+    // under the cursor — the card visually tears off the plugin mid-drag.
+    juce::Rectangle<int> screenRect;
+    if (grabOffset.has_value() && mouseScreen.has_value())
+    {
+        screenRect = { mouseScreen->x - grabOffset->x, mouseScreen->y - grabOffset->y,
+                       viewportRect.getWidth(), viewportRect.getHeight() };
+        terrainCardLog ("handoff " + id + "  mouse=" + mouseScreen->toString() + "  grab=" + grabOffset->toString());
+    }
+    else
+    {
+        const auto tl = webView->localPointToGlobal (viewportRect.getTopLeft());
+        screenRect = { tl.x, tl.y, viewportRect.getWidth(), viewportRect.getHeight() };
+    }
     audioProcessor.adoptCardWindow (id, std::make_unique<TerrainCardWindow> (audioProcessor, id,
-        getResource ("index.html"),
-        juce::Rectangle<int> (tl.x, tl.y, viewportRect.getWidth(), viewportRect.getHeight())));
+        getResource ("index.html"), screenRect,
+        grabOffset.value_or (juce::Point<int> (158, 12))));
+}
+
+void TerrainInstrumentAudioProcessorEditor::dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen)
+{
+    auto it = audioProcessor.cardWindows_.find (id);
+    if (it == audioProcessor.cardWindows_.end() || it->second == nullptr) return;
+    if (auto* cw = dynamic_cast<TerrainCardWindow*> (it->second.get()))
+        cw->dragMoveTo (mouseScreen);
 }
 
 void TerrainInstrumentAudioProcessorEditor::notifyCardWindowGone (const juce::String& id, bool redock)
