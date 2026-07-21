@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ARP card — C · Constellation</title>
+<title>GLITCH card — G3 · Splice</title>
 <style>
-/* ════ MOCKUP C — "CONSTELLATION" · picture == sound: the hero IS the arp's pitch
-   path — the 16 steps drawn as a white constellation joined by a hairline wire,
-   with the purple playhead dot traveling the wire. The rest of the card stays
-   whisper-quiet so the path owns the card. Signature: the wired path. ════ */
+/* ════ GLITCH G3 — "SPLICE" · the OP-1 tape, reimagined as a buffer slicer:
+   two thin-line reels, the tape stretched between them, razor cuts along it —
+   each spliced segment tagged with its glitch op, the frozen splice in purple.
+   Signature: the tape machine drawn in our thin white line. ════ */
 *{box-sizing:border-box;margin:0;padding:0}
 body{width:720px;height:640px;overflow:hidden;background:#16141F;
   font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
@@ -15,15 +15,12 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .bg{position:absolute;inset:0;background:
   radial-gradient(420px 300px at 62% 30%,rgba(139,92,246,.14),transparent 70%),
   linear-gradient(180deg,#191726 0%,#1A1A2E 60%,#141221 100%)}
-.bg svg{position:absolute;inset:0;width:100%;height:100%;opacity:.11}
-
 .card{position:relative;width:316px;border-radius:14px;
   background:linear-gradient(180deg,rgba(38,34,62,.66),rgba(28,25,50,.78));
   -webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);
   border:1px solid rgba(255,255,255,.14);
   box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07)}
-.h{display:flex;align-items:center;gap:8px;padding:10px 13px 9px;
-  border-bottom:1px solid rgba(255,255,255,.08)}
+.h{display:flex;align-items:center;gap:8px;padding:10px 13px 9px;border-bottom:1px solid rgba(255,255,255,.08)}
 .h .g{letter-spacing:2px;color:rgba(255,255,255,.30);font-size:10px}
 .h .dot{width:5px;height:5px;border-radius:50%;background:#B794FF}
 .h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:uppercase;font-weight:600}
@@ -31,16 +28,15 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px}
 .b{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
 
-/* ── hero: the constellation ── */
+/* hero: the splice machine, boxless */
 .hero{position:relative;height:112px}
+.hero svg{position:absolute;inset:0;width:100%;height:100%}
 .hero .tag{position:absolute;top:-2px;right:0;font-size:6.5px;letter-spacing:1.4px;
   text-transform:uppercase;color:rgba(255,255,255,.32)}
-.hero svg{position:absolute;inset:6px 0 12px 0;width:100%;height:calc(100% - 18px)}
-.leds{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(16,1fr)}
-.leds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.16)}
-.leds i.on{background:#B794FF}
+.hero .cnt{position:absolute;top:-2px;left:0;font-size:13px;font-weight:100;
+  letter-spacing:1px;color:rgba(255,255,255,.85);font-family:-apple-system,'SF Pro Display',sans-serif}
+.hero .cnt i{font-style:normal;font-size:7px;font-weight:400;letter-spacing:1px;color:rgba(255,255,255,.35);text-transform:uppercase}
 
-/* ── tabs ── */
 .tabs{display:flex;justify-content:center;gap:26px}
 .tab{position:relative;font-size:8px;letter-spacing:1.8px;text-transform:uppercase;
   color:rgba(255,255,255,.40);font-weight:500;padding-bottom:5px}
@@ -48,24 +44,23 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .tab.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
   bottom:0;width:14px;height:2px;border-radius:1px;background:#B794FF}
 
-/* ── lanes as quiet text row (no box at all) ── */
-.lanes{display:flex;justify-content:space-between;padding:0 6px}
-.lane{position:relative;font-size:7px;letter-spacing:.8px;text-transform:uppercase;
-  color:rgba(255,255,255,.38);padding-bottom:4px}
-.lane.on{color:rgba(255,255,255,.95)}
-.lane.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
-  bottom:0;width:3px;height:3px;border-radius:50%;background:#B794FF}
+.fx{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.fxb{aspect-ratio:1;border:1px solid rgba(255,255,255,.20);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:6.5px;
+  letter-spacing:.3px;text-transform:uppercase;color:rgba(255,255,255,.50)}
+.fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600}
+.fleds{display:grid;grid-template-columns:repeat(8,1fr);margin-top:4px}
+.fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14)}
+.fleds i.on{background:#B794FF}
 
-/* ── knobs ── */
 .knobs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
 .k{display:flex;flex-direction:column;align-items:center;gap:4px}
-.k svg{width:34px;height:34px}
+.k svg{width:32px;height:32px}
 .k .lb{font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45)}
 .k .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;margin-top:-2px}
 
-/* ── slots as pure LED constellation (quietest possible) ── */
 .gl{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.32)}
-.slotrow{display:flex;align-items:center;gap:0;margin-top:5px;justify-content:space-between;padding:0 3px}
+.slotrow{display:flex;align-items:center;justify-content:space-between;padding:0 3px}
 .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px}
 .sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26)}
 .sd.on i{background:rgba(255,255,255,.92);border-color:transparent}
@@ -80,68 +75,74 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 </style>
 </head>
 <body>
-<div class="bg"><svg viewBox="0 0 720 640" preserveAspectRatio="none">
-  <g stroke="#fff" fill="none" stroke-width="1">
-    <path d="M0,430 Q180,360 360,395 T720,380"/><path d="M0,455 Q180,385 360,420 T720,405"/>
-    <path d="M0,480 Q180,412 360,447 T720,430"/><path d="M0,505 Q180,440 360,474 T720,456"/>
-    <path d="M0,530 Q180,468 360,501 T720,482"/></g></svg></div>
-
+<div class="bg"></div>
 <div class="card">
-  <div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">Arp</span>
+  <div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">Glitch</span>
     <span class="pop">Pop Out</span><span class="x">✕</span></div>
   <div class="b">
 
     <div class="hero">
-      <span class="tag">Pitch · 16 Steps</span>
-      <svg viewBox="0 0 288 88" preserveAspectRatio="none">
-        <line x1="0" y1="44" x2="288" y2="44" stroke="rgba(255,255,255,.07)" stroke-width="1"/>
-        <path d="M9,66 27,52 45,38 63,38 81,20 99,38 117,52 135,52 153,66 171,38 189,38 207,10 225,20 243,20 261,52 279,66"
-          fill="none" stroke="rgba(255,255,255,.34)" stroke-width="1"/>
-        <g fill="rgba(255,255,255,.92)">
-          <circle cx="9" cy="66" r="3"/><circle cx="27" cy="52" r="3"/><circle cx="45" cy="38" r="3"/>
-          <circle cx="63" cy="38" r="2.1"/><circle cx="81" cy="20" r="3"/>
-          <circle cx="117" cy="52" r="3"/><circle cx="135" cy="52" r="2.1"/><circle cx="153" cy="66" r="3"/>
-          <circle cx="171" cy="38" r="3"/><circle cx="189" cy="38" r="2.1"/><circle cx="207" cy="10" r="3"/>
-          <circle cx="225" cy="20" r="3"/><circle cx="243" cy="20" r="2.1"/><circle cx="261" cy="52" r="3"/>
-          <circle cx="279" cy="66" r="3"/>
+      <span class="cnt">1/16 <i>Grid</i></span>
+      <span class="tag">Splice · Armed</span>
+      <svg viewBox="0 0 288 100">
+        <!-- reels -->
+        <g fill="none" stroke="rgba(255,255,255,.80)" stroke-width="1.1">
+          <circle cx="52" cy="34" r="17"/><circle cx="52" cy="34" r="4"/>
+          <path d="M52,21 L52,27 M41,41 L46,38 M63,41 L58,38"/>
+          <circle cx="236" cy="34" r="17"/><circle cx="236" cy="34" r="4"/>
+          <path d="M236,21 L236,27 M225,41 L230,38 M247,41 L242,38"/>
         </g>
-        <line x1="99" y1="2" x2="99" y2="86" stroke="rgba(183,148,255,.35)" stroke-width="1"/>
-        <circle cx="99" cy="38" r="4.4" fill="#B794FF"/>
-        <circle cx="99" cy="38" r="8" fill="none" stroke="rgba(183,148,255,.30)" stroke-width="1"/>
+        <!-- tape path -->
+        <path d="M52,51 C70,64 96,68 122,68 L166,68 C192,68 218,64 236,51"
+          fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2"/>
+        <!-- splice cuts -->
+        <g stroke="rgba(255,255,255,.85)" stroke-width="1">
+          <path d="M100,60 L106,74"/><path d="M130,62 L134,75"/>
+          <path d="M158,62 L162,75"/><path d="M188,60 L192,73"/></g>
+        <!-- frozen splice: purple segment -->
+        <path d="M134,68.4 L160,68.4" stroke="#B794FF" stroke-width="3" stroke-linecap="round"/>
+        <!-- op tags per segment -->
+        <g font-family="-apple-system" font-size="6.5" letter-spacing="1"
+           fill="rgba(255,255,255,.45)" text-anchor="middle">
+          <text x="86" y="88">REP</text><text x="118" y="88">REV</text>
+          <text x="147" y="88" fill="#B794FF">FRZ</text><text x="176" y="88">—</text>
+          <text x="206" y="88">SCT</text></g>
+        <!-- playhead dot riding the tape -->
+        <circle cx="122" cy="68" r="3.6" fill="#B794FF"/>
+        <circle cx="122" cy="68" r="7" fill="none" stroke="rgba(183,148,255,.30)" stroke-width="1"/>
       </svg>
-      <div class="leds">
-        <i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i>
-        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     </div>
 
-    <div class="tabs"><span class="tab on">Pattern</span><span class="tab">Play</span><span class="tab">Motion</span></div>
+    <div class="tabs"><span class="tab on">Fire</span><span class="tab">FX</span><span class="tab">Motion</span></div>
 
-    <div class="lanes">
-      <span class="lane on">Pitch</span><span class="lane">Gate</span><span class="lane">Vel</span>
-      <span class="lane">Oct</span><span class="lane">Ratch</span><span class="lane">Prob</span><span class="lane">WT</span>
+    <div>
+      <div class="fx">
+        <span class="fxb on">Rep</span><span class="fxb">Rev</span><span class="fxb">Tape</span><span class="fxb">Gate</span>
+        <span class="fxb">Pit</span><span class="fxb">Crsh</span><span class="fxb on">Frz</span><span class="fxb">Sct</span></div>
+      <div class="fleds"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
     </div>
 
     <div class="knobs">
       <div class="k"><svg viewBox="0 0 36 36">
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-            stroke-linecap="round" stroke-dasharray="44 88" transform="rotate(128 18 18)"/></svg>
-        <span class="lb">Range</span><span class="vl">50</span></div>
+            stroke-linecap="round" stroke-dasharray="40 92" transform="rotate(128 18 18)"/></svg>
+        <span class="lb">Chance</span><span class="vl">50</span></div>
       <div class="k"><svg viewBox="0 0 36 36">
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-            stroke-linecap="round" stroke-dasharray="33 99" transform="rotate(128 18 18)"/></svg>
-        <span class="lb">Curve</span><span class="vl">50</span></div>
+            stroke-linecap="round" stroke-dasharray="18 114" transform="rotate(128 18 18)"/></svg>
+        <span class="lb">Hold</span><span class="vl">1</span></div>
       <div class="k"><svg viewBox="0 0 36 36">
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-            stroke-linecap="round" stroke-dasharray="22 110" transform="rotate(128 18 18)"/></svg>
-        <span class="lb">Quant</span><span class="vl">30</span></div>
+            stroke-linecap="round" stroke-dasharray="52 80" transform="rotate(128 18 18)"/></svg>
+        <span class="lb">Loop</span><span class="vl">8</span></div>
       <div class="k"><svg viewBox="0 0 36 36">
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
           <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-            stroke-linecap="round" stroke-dasharray="15 117" transform="rotate(128 18 18)"/></svg>
-        <span class="lb">Slide</span><span class="vl">20</span></div>
+            stroke-linecap="round" stroke-dasharray="28 104" transform="rotate(128 18 18)"/></svg>
+        <span class="lb">Swing</span><span class="vl">12</span></div>
     </div>
 
     <div>

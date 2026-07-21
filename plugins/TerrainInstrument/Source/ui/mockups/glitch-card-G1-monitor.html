@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GLITCH card — G1 · Monitor</title>
+<style>
+/* ════ GLITCH G1 — "MONITOR" · the approved Readout layout, translated: the dark
+   screen shows the BUFFER BEING MANGLED — slice bars with stutter clusters, a
+   reversed region, a purple frozen slice — mono readout left, dot-matrix right.
+   The 8 effects are the TE button bank. Signature: the mangle monitor. ════ */
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:720px;height:640px;overflow:hidden;background:#16141F;
+  font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
+  -webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center}
+.bg{position:absolute;inset:0;background:
+  radial-gradient(420px 300px at 62% 30%,rgba(139,92,246,.14),transparent 70%),
+  linear-gradient(180deg,#191726 0%,#1A1A2E 60%,#141221 100%)}
+.card{position:relative;width:316px;border-radius:14px;
+  background:linear-gradient(180deg,rgba(38,34,62,.66),rgba(28,25,50,.78));
+  -webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07)}
+.h{display:flex;align-items:center;gap:8px;padding:10px 13px 9px;border-bottom:1px solid rgba(255,255,255,.08)}
+.h .g{letter-spacing:2px;color:rgba(255,255,255,.30);font-size:10px}
+.h .dot{width:5px;height:5px;border-radius:50%;background:#B794FF}
+.h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:uppercase;font-weight:600}
+.h .pop{margin-left:auto;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:500}
+.h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px}
+.b{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
+
+.screen{display:grid;grid-template-columns:84px 1fr 26px;gap:8px;height:96px;
+  background:#100E1C;border-radius:9px;border:1px solid rgba(255,255,255,.07);
+  padding:9px 10px;box-shadow:inset 0 2px 10px rgba(0,0,0,.5)}
+.ro{display:flex;flex-direction:column;gap:5px;font-family:'SF Mono',ui-monospace,Menlo,monospace}
+.ro div{font-size:6.5px;letter-spacing:.8px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap}
+.ro b{color:rgba(255,255,255,.90);font-weight:500}
+.ro .live b{color:#B794FF}
+.ro .foot{margin-top:auto;color:rgba(255,255,255,.28)}
+.graph{position:relative}
+.graph svg{position:absolute;inset:0;width:100%;height:100%}
+.matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;align-content:start;padding-top:2px}
+.matrix i{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.13);justify-self:center}
+.matrix i.on{background:#B794FF}
+.matrix i.dim{background:rgba(183,148,255,.35)}
+
+.tabs{display:flex;justify-content:center;gap:26px}
+.tab{position:relative;font-size:8px;letter-spacing:1.8px;text-transform:uppercase;
+  color:rgba(255,255,255,.40);font-weight:500;padding-bottom:5px}
+.tab.on{color:rgba(255,255,255,.95)}
+.tab.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
+  bottom:0;width:14px;height:2px;border-radius:1px;background:#B794FF}
+
+/* effect bank: 8 TE squares + LEDs */
+.fx{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.fxb{aspect-ratio:1;border:1px solid rgba(255,255,255,.20);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:6.5px;
+  letter-spacing:.3px;text-transform:uppercase;color:rgba(255,255,255,.50)}
+.fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600}
+.fleds{display:grid;grid-template-columns:repeat(8,1fr);margin-top:4px}
+.fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14)}
+.fleds i.on{background:#B794FF}
+
+/* chance digits + knobs */
+.row{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
+.big{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding-left:6px}
+.big .n{font-size:34px;font-weight:100;letter-spacing:1px;color:rgba(255,255,255,.95);
+  font-family:-apple-system,'SF Pro Display',sans-serif;line-height:1}
+.big .n i{font-style:normal;font-size:15px;font-weight:200;color:rgba(255,255,255,.45)}
+.big .lb{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.40)}
+.knobs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.k{display:flex;flex-direction:column;align-items:center;gap:4px}
+.k svg{width:32px;height:32px}
+.k .lb{font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.k .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;margin-top:-2px}
+
+/* scene dots (the consistency rule: dots, no label) + chain */
+.gl{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.32)}
+.slotrow{display:flex;align-items:center;justify-content:space-between;padding:0 3px}
+.sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px}
+.sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26)}
+.sd.on i{background:rgba(255,255,255,.92);border-color:transparent}
+.sd b{font-size:6.5px;font-weight:400;color:rgba(255,255,255,.35)}
+.sd.on b{color:rgba(255,255,255,.85)}
+.chain{display:flex;align-items:center;gap:7px;margin-top:7px}
+.chip{min-width:15px;height:15px;padding:0 4px;border:1px solid rgba(255,255,255,.18);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;font-size:7px;color:rgba(255,255,255,.55)}
+.chip.cur{border-color:#B794FF;color:#B794FF}
+.arr{color:rgba(255,255,255,.25);font-size:8px}
+.add{margin-left:auto;color:rgba(255,255,255,.40);font-size:10px}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="card">
+  <div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">Glitch</span>
+    <span class="pop">Pop Out</span><span class="x">✕</span></div>
+  <div class="b">
+
+    <div class="screen">
+      <div class="ro">
+        <div>FX: <b>Repeat</b></div>
+        <div>Grid: <b>1/16</b></div>
+        <div>Seed: <b>7</b></div>
+        <div class="live">Status: <b>Armed</b></div>
+        <div class="foot">Slice 6 · 16</div>
+      </div>
+      <div class="graph"><svg viewBox="0 0 150 78" preserveAspectRatio="none">
+        <line x1="0" y1="70" x2="150" y2="70" stroke="rgba(255,255,255,.10)"/>
+        <g fill="rgba(255,255,255,.85)">
+          <rect x="4"  y="42" width="5" height="28"/><rect x="13" y="30" width="5" height="40"/>
+          <rect x="22" y="50" width="5" height="20"/>
+          <rect x="31" y="24" width="2" height="46"/><rect x="35" y="24" width="2" height="46"/>
+          <rect x="39" y="24" width="2" height="46"/>
+          <rect x="46" y="38" width="5" height="32"/>
+        </g>
+        <g fill="rgba(255,255,255,.38)">
+          <rect x="58" y="46" width="5" height="24"/><rect x="67" y="28" width="5" height="42"/>
+          <rect x="76" y="52" width="5" height="18"/>
+        </g>
+        <text x="69" y="20" font-size="8" fill="rgba(255,255,255,.45)">‹‹</text>
+        <rect x="88" y="18" width="9" height="52" fill="rgba(183,148,255,.55)"/>
+        <g fill="rgba(255,255,255,.85)">
+          <rect x="103" y="36" width="5" height="34"/><rect x="112" y="48" width="5" height="22"/>
+          <rect x="121" y="26" width="5" height="44"/><rect x="130" y="44" width="5" height="26"/>
+          <rect x="139" y="56" width="5" height="14"/>
+        </g>
+        <line x1="92" y1="6" x2="92" y2="74" stroke="#B794FF" stroke-width="1"/></svg></div>
+      <div class="matrix">
+        <i class="on"></i><i class="on"></i><i class="dim"></i>
+        <i class="on"></i><i class="dim"></i><i></i>
+        <i class="on"></i><i></i><i></i>
+        <i class="dim"></i><i></i><i></i>
+        <i class="on"></i><i></i><i></i>
+        <i></i><i></i><i></i>
+        <i class="dim"></i><i></i><i></i></div>
+    </div>
+
+    <div class="tabs"><span class="tab on">Fire</span><span class="tab">FX</span><span class="tab">Motion</span></div>
+
+    <div>
+      <div class="fx">
+        <span class="fxb on">Rep</span><span class="fxb">Rev</span><span class="fxb">Tape</span><span class="fxb">Gate</span>
+        <span class="fxb">Pit</span><span class="fxb">Crsh</span><span class="fxb on">Frz</span><span class="fxb">Sct</span></div>
+      <div class="fleds"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+    </div>
+
+    <div class="row">
+      <div class="big"><span class="n">50<i>%</i></span><span class="lb">Chance</span></div>
+      <div class="knobs">
+        <div class="k"><svg viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+              stroke-linecap="round" stroke-dasharray="18 114" transform="rotate(128 18 18)"/></svg>
+          <span class="lb">Hold</span><span class="vl">1</span></div>
+        <div class="k"><svg viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+              stroke-linecap="round" stroke-dasharray="52 80" transform="rotate(128 18 18)"/></svg>
+          <span class="lb">Loop</span><span class="vl">8</span></div>
+        <div class="k"><svg viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
+            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
+              stroke-linecap="round" stroke-dasharray="28 104" transform="rotate(128 18 18)"/></svg>
+          <span class="lb">Decay</span><span class="vl">30</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="slotrow">
+        <span class="sd on"><i></i><b>1</b></span><span class="sd"><i></i><b>2</b></span>
+        <span class="sd"><i></i><b>3</b></span><span class="sd"><i></i><b>4</b></span>
+        <span class="sd"><i></i><b>5</b></span><span class="sd"><i></i><b>6</b></span>
+        <span class="sd"><i></i><b>7</b></span><span class="sd"><i></i><b>8</b></span>
+        <span class="sd"><i></i><b>9</b></span><span class="sd"><i></i><b>10</b></span>
+        <span class="sd"><i></i><b>11</b></span><span class="sd"><i></i><b>12</b></span></div>
+      <div class="chain"><span class="gl" style="margin-right:2px">Chain</span>
+        <span class="chip cur">1</span><span class="arr">›</span><span class="chip">1</span>
+        <span class="arr">›</span><span class="chip">2</span><span class="arr">›</span><span class="chip">3</span>
+        <span class="add">+</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
