@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>GLITCH card — G1 · Monitor</title>
+<title>ROUND ROBIN card — Wheel</title>
 <style>
-/* ════ GLITCH G1 — "MONITOR" · the approved Readout layout, translated: the dark
-   screen shows the BUFFER BEING MANGLED — slice bars with stutter clusters, a
-   reversed region, a purple frozen slice — mono readout left, dot-matrix right.
-   The 8 effects are the TE button bank. Signature: the mangle monitor. ════ */
+/* ════ ROUND ROBIN — "WHEEL" · the cycle as a machine: four stations on a
+   thin-line wheel, the purple arm sweeps A→B→C→D, the sounding station lit.
+   Same anatomy as the locked GLITCH: hero / tabs / bank / measured grid row /
+   dot slots / chain. Hero persists across the Cycle·Behavior·Order pages. ════ */
 *{box-sizing:border-box;margin:0;padding:0}
 body{width:720px;height:640px;overflow:hidden;background:#16141F;
   font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
@@ -28,20 +28,15 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px}
 .b{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
 
-.screen{display:grid;grid-template-columns:84px 1fr 26px;gap:8px;height:96px;
-  background:#100E1C;border-radius:9px;border:1px solid rgba(255,255,255,.07);
-  padding:9px 10px;box-shadow:inset 0 2px 10px rgba(0,0,0,.5)}
-.ro{display:flex;flex-direction:column;gap:5px;font-family:'SF Mono',ui-monospace,Menlo,monospace}
-.ro div{font-size:6.5px;letter-spacing:.8px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap}
-.ro b{color:rgba(255,255,255,.90);font-weight:500}
-.ro .live b{color:#B794FF}
-.ro .foot{margin-top:auto;color:rgba(255,255,255,.28)}
-.graph{position:relative}
-.graph svg{position:absolute;inset:0;width:100%;height:100%}
-.matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;align-content:start;padding-top:2px}
-.matrix i{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.13);justify-self:center}
-.matrix i.on{background:#B794FF}
-.matrix i.dim{background:rgba(183,148,255,.35)}
+/* ── hero: the wheel + mono status column, boxless ── */
+.hero{display:grid;grid-template-columns:1fr 92px;gap:8px;height:116px}
+.wheel{position:relative}
+.wheel svg{position:absolute;inset:0;width:100%;height:100%}
+.stat{display:flex;flex-direction:column;gap:5px;justify-content:center;
+  font-family:'SF Mono',ui-monospace,Menlo,monospace}
+.stat div{font-size:6.5px;letter-spacing:.8px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap}
+.stat b{color:rgba(255,255,255,.90);font-weight:500}
+.stat .live b{color:#B794FF}
 
 .tabs{display:flex;justify-content:center;gap:26px}
 .tab{position:relative;font-size:8px;letter-spacing:1.8px;text-transform:uppercase;
@@ -50,21 +45,19 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .tab.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
   bottom:0;width:14px;height:2px;border-radius:1px;background:#B794FF}
 
-/* effect bank: 8 TE squares + LEDs */
-.fx{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
-.fxb{aspect-ratio:1;border:1px solid rgba(255,255,255,.20);border-radius:6px;
-  display:flex;align-items:center;justify-content:center;font-size:6.5px;
-  letter-spacing:.3px;text-transform:uppercase;color:rgba(255,255,255,.50)}
+/* ── station bank: which oscillators ride the cycle ── */
+.fx{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.fxb{height:30px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:8.5px;
+  letter-spacing:.5px;color:rgba(255,255,255,.55)}
 .fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600}
-.fleds{display:grid;grid-template-columns:repeat(8,1fr);margin-top:4px}
+.fxb.cur{border-color:#B794FF;color:#B794FF}
+.fleds{display:grid;grid-template-columns:repeat(4,1fr);margin-top:4px}
 .fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14)}
 .fleds i.on{background:#B794FF}
 
-/* THE GRID ROW (Max's draw-a-line law): five columns, every cell the same
-   skeleton — control zone bottom-anchored to ONE rail, then the shared LABEL
-   baseline, then the shared VALUE baseline. Draw a horizontal line anywhere
-   and it lands on the same thing in every column. */
-.grid5{display:grid;grid-template-columns:84px 70px 1fr 1fr 1fr;gap:8px}
+/* ── THE GRID ROW (the locked G1v3 recipe — shared rails, measured) ── */
+.grid5{display:grid;grid-template-columns:70px 70px 1fr 1fr 1fr;gap:8px}
 .cell{display:flex;flex-direction:column;align-items:center}
 .ctl{height:48px;display:flex;align-items:flex-end;justify-content:center;width:100%}
 .cell .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;
@@ -72,19 +65,18 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .cell .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1;margin-top:4px;min-height:9px}
 .big{font-size:44px;font-weight:100;letter-spacing:.5px;color:rgba(255,255,255,.95);
   font-family:-apple-system,'SF Pro Display',sans-serif;line-height:.82}
-.big i{font-style:normal;font-size:16px;font-weight:200;color:rgba(255,255,255,.42)}
 .mini{display:flex;flex-direction:column;gap:7px;width:100%;justify-content:flex-end}
-.roll{height:20px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
+.tog{height:20px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
   display:flex;align-items:center;justify-content:center;gap:5px;
   font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.72)}
-.roll svg{width:10px;height:10px}
+.tog i{width:5px;height:5px;border-radius:50%;background:#B794FF}
 .tr{height:3px;border-radius:2px;background:rgba(255,255,255,.12);position:relative;margin-bottom:3px}
-.tr i{position:absolute;left:0;top:0;bottom:0;width:22%;background:#B794FF;border-radius:2px}
-.tr b{position:absolute;top:50%;left:22%;width:7px;height:7px;border-radius:50%;
+.tr i{position:absolute;left:0;top:0;bottom:0;width:35%;background:#B794FF;border-radius:2px}
+.tr b{position:absolute;top:50%;left:35%;width:7px;height:7px;border-radius:50%;
   background:#fff;transform:translate(-50%,-50%)}
 .k svg{width:32px;height:32px;display:block}
 
-/* scene dots (the consistency rule: dots, no label) + chain */
+/* ── dot slots + chain (family furniture) ── */
 .gl{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.32)}
 .slotrow{display:flex;align-items:center;justify-content:space-between;padding:0 3px}
 .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px}
@@ -103,95 +95,85 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 <body>
 <div class="bg"></div>
 <div class="card">
-  <div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">Glitch</span>
+  <div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">Round Robin</span>
     <span class="pop">Pop Out</span><span class="x">✕</span></div>
   <div class="b">
 
-    <div class="screen">
-      <div class="ro">
-        <div>FX: <b>Repeat</b></div>
-        <div>Grid: <b>1/16</b></div>
-        <div>Seed: <b>7</b></div>
-        <div class="live">Status: <b>Armed</b></div>
-        <div class="foot">Slice 6 · 16</div>
+    <div class="hero">
+      <div class="wheel"><svg viewBox="0 0 196 116">
+        <!-- orbit -->
+        <circle cx="98" cy="58" r="40" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+        <!-- direction arrowhead on the orbit -->
+        <path d="M132,33 L137,37 L130,39 Z" fill="rgba(255,255,255,.45)"/>
+        <!-- sweep arm to the sounding station (B, right) -->
+        <line x1="98" y1="58" x2="132" y2="58" stroke="#B794FF" stroke-width="1.4"/>
+        <circle cx="98" cy="58" r="3" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1"/>
+        <!-- trail from previous station (A, top) -->
+        <path d="M98,24 A34,34 0 0 1 132,58" fill="none" stroke="rgba(183,148,255,.28)" stroke-width="2"/>
+        <!-- stations -->
+        <g font-family="-apple-system" font-size="9" font-weight="600" text-anchor="middle">
+          <circle cx="98" cy="18" r="9.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1"/>
+          <text x="98" y="21.5" fill="rgba(255,255,255,.60)">A</text>
+          <circle cx="138" cy="58" r="11" fill="rgba(255,255,255,.94)"/>
+          <circle cx="138" cy="58" r="15" fill="none" stroke="rgba(183,148,255,.55)" stroke-width="1"/>
+          <text x="138" y="61.5" fill="#1A1A2E">B</text>
+          <circle cx="98" cy="98" r="9.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1"/>
+          <text x="98" y="101.5" fill="rgba(255,255,255,.60)">C</text>
+          <circle cx="58" cy="58" r="9.5" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"
+            stroke-dasharray="2 2"/>
+          <text x="58" y="61.5" fill="rgba(255,255,255,.32)">D</text>
+        </g>
+      </svg></div>
+      <div class="stat">
+        <div>Now: <b>B</b></div>
+        <div>Next: <b>C</b></div>
+        <div>Notes: <b>3</b></div>
+        <div>In Cycle: <b>3</b></div>
+        <div class="live">Mode: <b>Cycle</b></div>
       </div>
-      <div class="graph"><svg viewBox="0 0 150 78" preserveAspectRatio="none">
-        <line x1="0" y1="70" x2="150" y2="70" stroke="rgba(255,255,255,.10)"/>
-        <g fill="rgba(255,255,255,.85)">
-          <rect x="4"  y="42" width="5" height="28"/><rect x="13" y="30" width="5" height="40"/>
-          <rect x="22" y="50" width="5" height="20"/>
-          <rect x="31" y="24" width="2" height="46"/><rect x="35" y="24" width="2" height="46"/>
-          <rect x="39" y="24" width="2" height="46"/>
-          <rect x="46" y="38" width="5" height="32"/>
-        </g>
-        <g fill="rgba(255,255,255,.38)">
-          <rect x="58" y="46" width="5" height="24"/><rect x="67" y="28" width="5" height="42"/>
-          <rect x="76" y="52" width="5" height="18"/>
-        </g>
-        <text x="69" y="20" font-size="8" fill="rgba(255,255,255,.45)">‹‹</text>
-        <rect x="88" y="18" width="9" height="52" fill="rgba(183,148,255,.55)"/>
-        <g fill="rgba(255,255,255,.85)">
-          <rect x="103" y="36" width="5" height="34"/><rect x="112" y="48" width="5" height="22"/>
-          <rect x="121" y="26" width="5" height="44"/><rect x="130" y="44" width="5" height="26"/>
-          <rect x="139" y="56" width="5" height="14"/>
-        </g>
-        <line x1="92" y1="6" x2="92" y2="74" stroke="#B794FF" stroke-width="1"/></svg></div>
-      <div class="matrix">
-        <i class="on"></i><i class="on"></i><i class="dim"></i>
-        <i class="on"></i><i class="dim"></i><i></i>
-        <i class="on"></i><i></i><i></i>
-        <i class="dim"></i><i></i><i></i>
-        <i class="on"></i><i></i><i></i>
-        <i></i><i></i><i></i>
-        <i class="dim"></i><i></i><i></i></div>
     </div>
 
-    <div class="tabs"><span class="tab on">Fire</span><span class="tab">FX</span><span class="tab">Motion</span></div>
+    <div class="tabs"><span class="tab on">Cycle</span><span class="tab">Behavior</span><span class="tab">Order</span></div>
 
     <div>
       <div class="fx">
-        <span class="fxb on">Rep</span><span class="fxb">Rev</span><span class="fxb">Tape</span><span class="fxb">Gate</span>
-        <span class="fxb">Pit</span><span class="fxb">Crsh</span><span class="fxb on">Frz</span><span class="fxb">Sct</span></div>
-      <div class="fleds"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+        <span class="fxb on">A</span><span class="fxb cur">B</span>
+        <span class="fxb on">C</span><span class="fxb">D</span></div>
+      <div class="fleds"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
     </div>
 
     <div class="grid5">
       <div class="cell">
-        <div class="ctl"><span class="big">50<i>%</i></span></div>
-        <span class="lb" style="transform:translateX(-5px)">Chance</span><span class="vl"></span>
+        <div class="ctl"><span class="big">B</span></div>
+        <span class="lb">Playing</span><span class="vl"></span>
       </div>
       <div class="cell">
         <div class="ctl"><div class="mini">
-          <div class="roll"><svg viewBox="0 0 12 12">
-              <rect x="1" y="1" width="10" height="10" rx="2.5" fill="none"
-                stroke="rgba(255,255,255,.75)" stroke-width="1"/>
-              <circle cx="4" cy="4" r="1" fill="#B794FF"/><circle cx="6" cy="6" r="1" fill="#B794FF"/>
-              <circle cx="8" cy="8" r="1" fill="#B794FF"/></svg>
-            Roll</div>
+          <div class="tog"><i></i>A First</div>
           <div class="tr"><i></i><b></b></div>
         </div></div>
-        <span class="lb">Déjà Vu</span><span class="vl">22%</span>
+        <span class="lb">Vary</span><span class="vl">35%</span>
       </div>
       <div class="cell k">
         <div class="ctl"><svg viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
             <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-              stroke-linecap="round" stroke-dasharray="18 114" transform="rotate(128 18 18)"/></svg></div>
-        <span class="lb">Hold</span><span class="vl">1</span>
+              stroke-linecap="round" stroke-dasharray="20 112" transform="rotate(128 18 18)"/></svg></div>
+        <span class="lb">Lvl ±</span><span class="vl">15%</span>
       </div>
       <div class="cell k">
         <div class="ctl"><svg viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
             <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-              stroke-linecap="round" stroke-dasharray="52 80" transform="rotate(128 18 18)"/></svg></div>
-        <span class="lb">Loop</span><span class="vl">8</span>
+              stroke-linecap="round" stroke-dasharray="14 118" transform="rotate(128 18 18)"/></svg></div>
+        <span class="lb">Pan ±</span><span class="vl">10%</span>
       </div>
       <div class="cell k">
         <div class="ctl"><svg viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
             <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2"
-              stroke-linecap="round" stroke-dasharray="28 104" transform="rotate(128 18 18)"/></svg></div>
-        <span class="lb">Decay</span><span class="vl">30</span>
+              stroke-linecap="round" stroke-dasharray="36 96" transform="rotate(128 18 18)"/></svg></div>
+        <span class="lb">After</span><span class="vl">2s</span>
       </div>
     </div>
 
