@@ -60,13 +60,25 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 .fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14)}
 .fleds i.on{background:#B794FF}
 
-/* chance digits + knobs */
-.row{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
-.big{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding-left:6px}
-.big .n{font-size:34px;font-weight:100;letter-spacing:1px;color:rgba(255,255,255,.95);
-  font-family:-apple-system,'SF Pro Display',sans-serif;line-height:1}
-.big .n i{font-style:normal;font-size:15px;font-weight:200;color:rgba(255,255,255,.45)}
+/* chance digits + die/déjà-vu stack + knobs — DENSE (Max: no empty spaces) */
+.row{display:grid;grid-template-columns:88px 62px 1fr;gap:8px;align-items:center}
+.big{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding-left:2px}
+.big .n{font-size:44px;font-weight:100;letter-spacing:.5px;color:rgba(255,255,255,.95);
+  font-family:-apple-system,'SF Pro Display',sans-serif;line-height:.9}
+.big .n i{font-style:normal;font-size:16px;font-weight:200;color:rgba(255,255,255,.42)}
 .big .lb{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.40)}
+.mini{display:flex;flex-direction:column;gap:6px}
+.roll{height:20px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.72)}
+.roll svg{width:10px;height:10px}
+.dv .dl{display:flex;justify-content:space-between;font-size:6px;letter-spacing:1px;
+  text-transform:uppercase;color:rgba(255,255,255,.40);margin-bottom:3px}
+.dv .dl b{color:rgba(255,255,255,.85);font-weight:500}
+.dv .tr{height:3px;border-radius:2px;background:rgba(255,255,255,.12);position:relative}
+.dv .tr i{position:absolute;left:0;top:0;bottom:0;width:22%;background:#B794FF;border-radius:2px}
+.dv .tr b{position:absolute;top:50%;left:22%;width:7px;height:7px;border-radius:50%;
+  background:#fff;transform:translate(-50%,-50%)}
 .knobs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 .k{display:flex;flex-direction:column;align-items:center;gap:4px}
 .k svg{width:32px;height:32px}
@@ -146,6 +158,18 @@ body{width:720px;height:640px;overflow:hidden;background:#16141F;
 
     <div class="row">
       <div class="big"><span class="n">50<i>%</i></span><span class="lb">Chance</span></div>
+      <div class="mini">
+        <div class="roll"><svg viewBox="0 0 12 12">
+            <rect x="1" y="1" width="10" height="10" rx="2.5" fill="none"
+              stroke="rgba(255,255,255,.75)" stroke-width="1"/>
+            <circle cx="4" cy="4" r="1" fill="#B794FF"/><circle cx="6" cy="6" r="1" fill="#B794FF"/>
+            <circle cx="8" cy="8" r="1" fill="#B794FF"/></svg>
+          Roll</div>
+        <div class="dv">
+          <div class="dl"><span>Déjà Vu</span><b>22%</b></div>
+          <div class="tr"><i></i><b></b></div>
+        </div>
+      </div>
       <div class="knobs">
         <div class="k"><svg viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>
