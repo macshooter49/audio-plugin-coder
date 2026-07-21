@@ -848,7 +848,6 @@ private:
                             std::optional<juce::Point<int>> grabOffset  = {},
                             std::optional<juce::Point<int>> mouseScreen = {});
     void dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen);
-    bool cardWindowsAttached_ = false;   // fb87 — one-shot: re-attach surviving cards to this editor's host window
 
     // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
     static constexpr int CAPTURE_STRIP_HEIGHT = 26;

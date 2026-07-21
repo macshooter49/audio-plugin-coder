@@ -4400,40 +4400,11 @@ public:
              | juce::ComponentPeer::windowIgnoresKeyPresses;
     }
 
-    // fb87 — THE VISIBILITY FIX: attach as a CHILD WINDOW of the host's own plugin
-    // window ([hostWindow addChildWindow:ours ordered:NSWindowAbove] — the canonical
-    // recipe for plugin satellite windows on macOS, per the JUCE forum's 2006-to-now
-    // saga). The fb84-86 logs proved our window was created, shown, and steered
-    // perfectly by the drag — yet Max never saw it: FL keeps its windows composited
-    // in a way that buries a free-floating plugin window no matter its level. A child
-    // window shares the host window's Space, rides its ordering, and stays above it —
-    // exactly how FL's own detached plugin windows behave. Detached when the editor
-    // dies (the card lives on, processor-owned); the next editor re-attaches it.
-    void attachToHost (juce::Component& editorComp)
-    {
-       #if JUCE_MAC
-        detachFromHost();
-        editorSp_ = &editorComp;   // fb88 — remembered so the reviver can re-attach
-        auto* ownPeer = getPeer();
-        auto* edPeer  = editorComp.getPeer();
-        if (ownPeer == nullptr || edPeer == nullptr)
-            { terrainCardLog ("attach BAIL " + id_ + " peer own=" + juce::String ((int)(ownPeer != nullptr)) + " ed=" + juce::String ((int)(edPeer != nullptr))); return; }
-        id ownView = (id) ownPeer->getNativeHandle();
-        id edView  = (id) edPeer->getNativeHandle();
-        if (ownView == nullptr || edView == nullptr)
-            { terrainCardLog ("attach BAIL " + id_ + " view own=" + juce::String ((int)(ownView != nullptr)) + " ed=" + juce::String ((int)(edView != nullptr))); return; }
-        id ownWin = ((id (*) (id, SEL)) objc_msgSend) (ownView, sel_registerName ("window"));
-        id edWin  = ((id (*) (id, SEL)) objc_msgSend) (edView,  sel_registerName ("window"));
-        if (ownWin == nullptr || edWin == nullptr || ownWin == edWin)
-            { terrainCardLog ("attach BAIL " + id_ + " win own=" + juce::String ((int)(ownWin != nullptr)) + " ed=" + juce::String ((int)(edWin != nullptr)) + " same=" + juce::String ((int)(ownWin == edWin))); return; }
-        ((void (*) (id, SEL, id, long)) objc_msgSend) (edWin, sel_registerName ("addChildWindow:ordered:"),
-                                                       ownWin, 1 /* NSWindowAbove */);
-        const long edNum = ((long (*) (id, SEL)) objc_msgSend) (edWin, sel_registerName ("windowNumber"));
-        terrainCardLog ("attached " + id_ + " as child of host winnum=" + juce::String (edNum) + nsStateString());
-       #else
-        juce::ignoreUnused (editorComp);
-       #endif
-    }
+    // fb91 — the fb87 child-window attach is GONE (Max: "moving Terrain grabs
+    // everything and moves it as well — the cards need to move on their own").
+    // addChildWindow: made the cards ride the host window's moves; and fb89 proved
+    // it was never what made them visible anyway (that was addToDesktop + the
+    // floating level + CanJoinAllSpaces). Fully independent windows = semi-modular.
 
    #if JUCE_MAC
     // fb88 — the peer's NSWindow, or null if the peer is gone.
@@ -4483,29 +4454,7 @@ public:
             terrainCardLog ("REVIVING " + id_ + " (window server ordered us out)");
             if (id w = nsWindow())
                 ((void (*) (id, SEL)) objc_msgSend) (w, sel_registerName ("orderFrontRegardless"));
-            if (editorSp_ != nullptr)
-                attachToHost (*editorSp_);
         }
-       #endif
-    }
-
-    void detachFromHost()
-    {
-       #if JUCE_MAC
-        if (auto* ownPeer = getPeer())
-            if (id ownView = (id) ownPeer->getNativeHandle())
-            {
-                id ownWin = ((id (*) (id, SEL)) objc_msgSend) (ownView, sel_registerName ("window"));
-                if (ownWin != nullptr)
-                {
-                    id parent = ((id (*) (id, SEL)) objc_msgSend) (ownWin, sel_registerName ("parentWindow"));
-                    if (parent != nullptr)
-                    {
-                        ((void (*) (id, SEL, id)) objc_msgSend) (parent, sel_registerName ("removeChildWindow:"), ownWin);
-                        terrainCardLog ("detached " + id_ + " from the host window");
-                    }
-                }
-            }
        #endif
     }
 
@@ -4529,7 +4478,6 @@ private:
     std::optional<juce::WebBrowserComponent::Resource> html_;
     juce::Point<int> dragOff_;
     double lastMoveLogMs_ = 0.0;
-    juce::Component::SafePointer<juce::Component> editorSp_;   // fb88 — for the reviver's re-attach
     long lastNum_ = -1; bool lastVis_ = true, lastPar_ = false; // fb88 — ns-state change detector
     std::unique_ptr<juce::WebBrowserComponent> web;
 };
@@ -4579,8 +4527,7 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
     auto win = std::make_unique<TerrainCardWindow> (audioProcessor, id,
         getResource ("index.html"), screenRect,
         grabOffset.value_or (juce::Point<int> (158, 12)));
-    win->attachToHost (*this);   // fb87 — child of FL's plugin window = actually visible
-    audioProcessor.adoptCardWindow (id, std::move (win));
+    audioProcessor.adoptCardWindow (id, std::move (win));   // fb91 — fully independent window (no child-of-host link: Terrain moves alone)
 }
 
 void TerrainInstrumentAudioProcessorEditor::dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen)
@@ -4603,12 +4550,8 @@ void TerrainInstrumentAudioProcessorEditor::notifyCardWindowGone (const juce::St
 
 TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 {
-    // fb87 — unhook popped cards from the dying host window (they live on, processor-
-    // owned, and the next editor re-attaches them via its timer one-shot).
-    for (auto& kv : audioProcessor.cardWindows_)
-        if (auto* cw = dynamic_cast<TerrainCardWindow*> (kv.second.get()))
-            cw->detachFromHost();
-
+    // Popped cards are fully independent windows (fb91) — nothing to unhook; they
+    // live on, processor-owned, until their own ✕/dock or the instance dies.
     stopTimer();
     blendPool_.removeAllJobs (true, 4000);   // drain bakes before members die
 }
@@ -4618,15 +4561,6 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
 
-    // fb87 — one-shot once our peer exists (it doesn't in the ctor): re-attach any
-    // surviving popped cards to THIS editor's host window so they show again.
-    if (! cardWindowsAttached_ && getPeer() != nullptr)
-    {
-        cardWindowsAttached_ = true;
-        for (auto& kv : audioProcessor.cardWindows_)
-            if (auto* cw = dynamic_cast<TerrainCardWindow*> (kv.second.get()))
-                cw->attachToHost (*this);
-    }
 
     // ── CHANNEL WATCHDOG (wd9) ── the eval channel to the WebContent process can die
     // silently: evals stop executing, no error surfaces, and the scopes freeze/flatline
