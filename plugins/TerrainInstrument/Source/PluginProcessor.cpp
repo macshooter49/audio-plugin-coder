@@ -6392,7 +6392,6 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // Presets themselves live on disk only (getUserPresetsFile)
     auto state = apvts.copyState();
     state.setProperty("presetIndex",      currentPresetIndex.load(),  nullptr);
-    state.setProperty("editorWidth",      editorWidth.load(),         nullptr);   // fb95 — remembered editor size
     state.setProperty("xyAutoEnabled",    xyAutoEnabled.load(),     nullptr);
     state.setProperty("xyAutoMode",       xyAutoMode.load(),        nullptr);
     state.setProperty("xyAutoSpeed",      xyAutoSpeed.load(),       nullptr);
@@ -6598,7 +6597,6 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
 
             // Restore preset index (clamped to valid range after disk presets load)
             int presetIdx = newState.getProperty("presetIndex", 0);
-            editorWidth.store ((int) newState.getProperty ("editorWidth", 0));   // fb95
 
             // Restore XY auto state
             xyAutoEnabled.store(static_cast<float>(newState.getProperty("xyAutoEnabled", 0.f)));

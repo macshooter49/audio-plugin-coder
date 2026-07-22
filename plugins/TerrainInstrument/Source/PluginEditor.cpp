@@ -25,7 +25,14 @@ static void terrainApplyPageZoom (juce::Component& root, double zoom)
         id v = stack.back(); stack.pop_back();
         if (((bool (*) (id, SEL, Class)) objc_msgSend) (v, sel_registerName ("isKindOfClass:"), wkClass))
         {
-            if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
+            // fb96 — MAGNIFICATION, not pageZoom: magnification scales the rendered
+            // content while the layout viewport stays a constant 820 CSS px, so a
+            // live window drag never reflows the 25k-line page (pageZoom re-laid it
+            // out every frame → Max: "hella laggy"). Event coords are mapped by
+            // WebKit. pageZoom kept as fallback for any OS without magnification.
+            if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setMagnification:")))
+                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setMagnification:"), zoom);
+            else if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
                 ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setPageZoom:"), zoom);
             return;
         }
@@ -5157,7 +5164,8 @@ void TerrainInstrumentAudioProcessorEditor::resized()
     if (webView != nullptr)
         webView->setBounds(b);
     uiZoom_ = sc;
-    zoomPushLeft_ = 12;
+    terrainApplyPageZoom (*this, sc);   // fb96 — synchronous: the scale tracks the drag frame-by-frame
+    zoomPushLeft_ = 12;                 // retries cover the first resized() (peer not up yet)
     audioProcessor.editorWidth.store (getWidth());
 }
 
