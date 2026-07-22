@@ -4,6 +4,40 @@
 
 #if JUCE_MAC
  #include <objc/message.h>   // fb84 — card windows need NSWindow.collectionBehavior (fullscreen-Space survival); JUCE doesn't expose it
+ #include <objc/runtime.h>
+#endif
+
+#if JUCE_MAC
+// fb95 — editor resize scales the WHOLE web UI via the native WKWebView pageZoom
+// (macOS 11+). This is real browser zoom — every JS coordinate API stays
+// consistent, unlike CSS zoom which skews clientX-vs-style.left math across the
+// 25k-line page. We reach the WKWebView by walking the editor peer's NSView tree.
+static void terrainApplyPageZoom (juce::Component& root, double zoom)
+{
+    auto* peer = root.getPeer();
+    if (peer == nullptr) return;
+    id rootView = (id) peer->getNativeHandle();
+    Class wkClass = objc_getClass ("WKWebView");
+    if (rootView == nullptr || wkClass == nullptr) return;
+    std::vector<id> stack { rootView };
+    while (! stack.empty())
+    {
+        id v = stack.back(); stack.pop_back();
+        if (((bool (*) (id, SEL, Class)) objc_msgSend) (v, sel_registerName ("isKindOfClass:"), wkClass))
+        {
+            if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
+                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setPageZoom:"), zoom);
+            return;
+        }
+        id subs = ((id (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("subviews"));
+        if (subs == nullptr) continue;
+        const auto nSubs = ((unsigned long (*) (id, SEL)) objc_msgSend) (subs, sel_registerName ("count"));
+        for (unsigned long i = 0; i < nSubs; ++i)
+            stack.push_back (((id (*) (id, SEL, unsigned long)) objc_msgSend) (subs, sel_registerName ("objectAtIndex:"), i));
+    }
+}
+#else
+static void terrainApplyPageZoom (juce::Component&, double) {}
 #endif
 
 //==============================================================================
@@ -4116,8 +4150,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // Load embedded web content
     webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
-    // Set size AFTER webView is created (setSize triggers resized())
-    setSize (820, 640 + CAPTURE_STRIP_HEIGHT);
+    // fb95 — RESIZABLE editor (Max: "every plugin has to have a resize"): the
+    // corner emblem drags it, aspect locked, 0.65×–1.9× of the base look.
+    // resized() scales the web UI via native pageZoom; the last size is
+    // remembered (processor atomic → plugin state), so reopen = your size.
+    {
+        constexpr int kBaseW = 820, kBaseH = 640 + CAPTURE_STRIP_HEIGHT;
+        setResizeLimits (juce::roundToInt (kBaseW * 0.65), juce::roundToInt (kBaseH * 0.65),
+                         juce::roundToInt (kBaseW * 1.90), juce::roundToInt (kBaseH * 1.90));
+        if (auto* cons = getConstrainer())
+            cons->setFixedAspectRatio ((double) kBaseW / (double) kBaseH);
+        setResizable (true, true);
+        const int savedW = audioProcessor.editorWidth.load();
+        const int w0 = (savedW >= juce::roundToInt (kBaseW * 0.65) && savedW <= juce::roundToInt (kBaseW * 1.90))
+                         ? savedW : kBaseW;
+        // Set size AFTER webView is created (setSize triggers resized())
+        setSize (w0, juce::roundToInt ((double) w0 * kBaseH / kBaseW));
+    }
 
     // Start visualization timer at 60Hz for smooth LFO/mod display
     startTimerHz(60);
@@ -4560,6 +4609,14 @@ TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
+
+    // fb95 — editor resize → native WKWebView pageZoom (retried: the peer may
+    // not exist yet on the first resized(); idempotent once it lands)
+    if (zoomPushLeft_ > 0 && (++zoomTick2_ % 10) == 0)
+    {
+        terrainApplyPageZoom (*this, uiZoom_);
+        --zoomPushLeft_;
+    }
 
 
     // ── CHANNEL WATCHDOG (wd9) ── the eval channel to the WebContent process can die
@@ -5092,9 +5149,16 @@ void TerrainInstrumentAudioProcessorEditor::paint (juce::Graphics& g)
 void TerrainInstrumentAudioProcessorEditor::resized()
 {
     auto b = getLocalBounds();
-    captureDragStrip.setBounds(b.removeFromBottom(CAPTURE_STRIP_HEIGHT));
+    // fb95 — the strip scales with the window so the web area keeps the exact
+    // 820-wide proportions; pageZoom (pushed from timerCallback until the peer
+    // exists) scales the page itself.
+    const double sc = getWidth() / 820.0;
+    captureDragStrip.setBounds (b.removeFromBottom (juce::roundToInt (CAPTURE_STRIP_HEIGHT * sc)));
     if (webView != nullptr)
         webView->setBounds(b);
+    uiZoom_ = sc;
+    zoomPushLeft_ = 12;
+    audioProcessor.editorWidth.store (getWidth());
 }
 
 //==============================================================================

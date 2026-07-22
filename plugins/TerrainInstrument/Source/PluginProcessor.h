@@ -743,6 +743,7 @@ public:
     std::atomic<int>                  oscScopeBad { 0 };// non-finite window samples sanitized at the last publish (overlay: F:PUSH-POISON)
 
     std::atomic<int> currentPresetIndex { 0 };
+    std::atomic<int> editorWidth { 0 };   // fb95 — remembered editor width (0 = default 820); saved in state
 
     // XY automation state (synced from JS, captured into presets)
     std::atomic<float> xyAutoEnabled { 0.f };
