@@ -588,6 +588,26 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         v = p->getValue();
                 complete (juce::var (v));
             })
+            .withNativeFunction("setArpLanes", [this](const juce::Array<juce::var>& args,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb105 — ARP card lane pattern: one JSON blob for all 7×16 steps
+                // (mod-matrix precedent: one round-trip, not 112 scalar calls).
+                if (args.size() >= 1) audioProcessor.setArpLanesFromJson (args[0].toString());
+                complete (juce::var{});
+            })
+            .withNativeFunction("getArpLanes", [this](const juce::Array<juce::var>&,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getArpLanesJson()));
+            })
+            .withNativeFunction("getArpFeed", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb105 — live playhead/fire/bpm snapshot; the card rAF-polls this
+                // (same pattern as getNoiseViz — costs nothing while the card is closed).
+                complete (juce::var (audioProcessor.getArpFeedJson()));
+            })
             .withNativeFunction("popOutCard", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4317,6 +4337,23 @@ public:
                         if (auto* p = proc.getAPVTS().getParameter (args[0].toString()))
                             v = p->getValue();
                     complete (juce::var (v));
+                })
+                .withNativeFunction ("setArpLanes", [&proc](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    // fb105 — popped ARP card edits lanes with the editor possibly closed
+                    if (args.size() >= 1) proc.setArpLanesFromJson (args[0].toString());
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getArpLanes", [&proc](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getArpLanesJson()));
+                })
+                .withNativeFunction ("getArpFeed", [&proc](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getArpFeedJson()));
                 })
                 .withNativeFunction ("dragCardWindow", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)

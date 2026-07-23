@@ -20,7 +20,9 @@
 #include "SynthModConfig.h"   // real routeContribution + kDestInfo (FLOW dests)
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
 #include <string>
+#include <vector>
 
 using namespace wc;
 static int g_pass = 0, g_fail = 0;
@@ -249,6 +251,152 @@ int main()
         // non-LFO source (Velocity) has no global value -> skipped
         as[3] = {}; as[3].source = wc::ModSource::Velocity; as[3].dest = wc::ModDest::FlowVary; as[3].depth = 1.0f; as[3].enabled = true;
         check (std::fabs (flowEff (0.2f, wc::ModDest::FlowVary, as, 4, lfo) - 0.2f) < 1e-6f, "non-LFO source skipped at block rate (base unchanged)");
+    }
+
+    // 10) EXTENSION-CARD LANE ENGINE (fb105) ------------------------------
+    std::printf ("[10] extension-card lane engine\n");
+    {
+        auto neutralExt = [] {
+            ArpExtParams x;
+            x.dir = 0; x.octaves = 1; x.sorted = true;
+            x.swing = 0; x.mroll = 0; x.timbre = 1; x.glide = 0;
+            x.pRange = 0; x.pCurve = .5f; x.pQuant = 0; x.pSlide = 0;
+            x.gLen = 0.52f; x.gCurve = .5f; x.gRand = 0; x.gSlide = 0;
+            x.vRange = 0; x.vCurve = .5f; x.vRand = 0; x.vFloor = 0;
+            x.oRange = 0; x.oBias = .5f; x.oRand = 0; x.oSpread = 0;
+            x.rCount = 0; x.rDecay = 0; x.rCurve = .5f; x.rAmt = 0;
+            x.cAmt = 0; x.cBias = .5f; x.cSeed = 0; x.cDrift = 0;
+            x.wDepth = 0; x.wCurve = .5f; x.wSlide = 0; x.wRand = 0;
+            return x; };
+        auto neutralLanes = [] {
+            ArpLaneData l; l.steps = 16;
+            for (int i = 0; i < kArpLaneMax; ++i)
+            { l.pitch[i]=3; l.gate[i]=1; l.vel[i]=1; l.oct[i]=0; l.ratchet[i]=1; l.prob[i]=1; l.wt[i]=.5f; }
+            return l; };
+
+        const double sr = 48000.0, bpm = 120.0;
+        const float  r16 = 11.0f / 18.0f;                 // rich-ladder index 11 = 1/16
+        const long long stepSmp = 6000;                   // 1/16 @120 BPM @48k
+        struct Ev { bool on; int note, vel; long long t; };
+        auto run = [&] (FlowArp& arp, int blockSize, int totalSamples, std::vector<Ev>& evs)
+        {
+            double ppq = 0.0; long long base = 0;
+            for (int done = 0; done < totalSamples; done += blockSize)
+            {
+                const int nsmp = std::min (blockSize, totalSamples - done);
+                ArpEvent ev[kArpMaxEvents];
+                const int n = arp.process (r16, 0.5f, 0, 0, 0, ppq, bpm, sr, nsmp, true, ev, kArpMaxEvents);
+                for (int i = 0; i < n; ++i) evs.push_back ({ ev[i].on, ev[i].note, ev[i].vel, base + ev[i].sampleOffset });
+                ppq += (bpm / 60.0) / sr * nsmp; base += nsmp;
+            }
+        };
+
+        // A characterful pattern: rests, a roll, a chance-kill, a soft step, swing.
+        ArpExtParams X = neutralExt(); ArpLaneData L = neutralLanes();
+        L.pitch[3] = -1; L.pitch[11] = -1; L.ratchet[4] = 3; L.prob[6] = 0.0f; L.vel[2] = 0.25f;
+        X.rAmt = 1.0f; X.rDecay = 0.5f; X.cAmt = 1.0f; X.vRange = 1.0f; X.swing = 0.3f;
+
+        // bin an on-time to its step: round to the NEAREST boundary — block-edge
+        // rounding can land a boundary hit ±1 sample, and swing (≤45%) stays well
+        // inside the half-step rounding window.
+        auto stepOf = [&] (long long t) { return (int) (((t + stepSmp / 2) / stepSmp) % 16); };
+        auto loopOf = [&] (long long t) { return (int) ((t + stepSmp / 2) / (stepSmp * 16)); };
+
+        std::vector<Ev> a, b;
+        {
+            FlowArp arp; arp.reset(); arp.setExt (X); arp.setLanes (L);
+            arp.noteOn (60, 100); arp.noteOn (64, 100); arp.noteOn (67, 100);
+            run (arp, 137, 384000, a);
+            ArpEvent rel[kArpMaxEvents]; const int rn = arp.releaseAll (rel, kArpMaxEvents);
+            long long ons = 0, offs = rn;
+            for (auto& e : a) (e.on ? ons : offs)++;
+            check (ons > 20 && ons == offs, "no stuck notes: every on has a matching off (incl. releaseAll flush)");
+        }
+        {
+            FlowArp arp; arp.reset(); arp.setExt (X); arp.setLanes (L);
+            arp.noteOn (60, 100); arp.noteOn (64, 100); arp.noteOn (67, 100);
+            run (arp, 480, 384000, b);
+        }
+        {
+            bool same = a.size() > 40 && a.size() == b.size();
+            for (size_t i = 0; same && i < a.size(); ++i)
+                same = a[i].on == b[i].on && a[i].note == b[i].note && a[i].vel == b[i].vel
+                       && std::llabs (a[i].t - b[i].t) <= 1;
+            check (same, "block-size invariance: 137- vs 480-sample blocks emit the identical stream");
+        }
+        {
+            bool rest = true, kill = true;
+            for (auto& e : a) if (e.on)
+            {
+                const int st = stepOf (e.t);
+                if (st == 3 || st == 11) rest = false;
+                if (st == 6)             kill = false;
+            }
+            check (rest, "REST: pitch row -1 steps fire nothing");
+            check (kill, "CHANCE: lane 0 at full Amount kills the step every loop");
+        }
+        {
+            int rolls = 0, firstV = -1, lastV = -1;
+            for (auto& e : a) if (e.on && e.t >= 4 * stepSmp && e.t < 5 * stepSmp)
+            { ++rolls; if (firstV < 0) firstV = e.vel; lastV = e.vel; }
+            check (rolls == 3,     "ROLL: ratchet-3 step fires 3 sub-hits inside the step");
+            check (lastV < firstV, "ROLL: sub-hit velocity decays");
+        }
+        {
+            int v2 = -1;
+            for (auto& e : a) if (e.on && e.t >= 2 * stepSmp && e.t < 3 * stepSmp) { v2 = e.vel; break; }
+            check (v2 == 25, "VEL lane: step 0.25 at full Range -> velocity 25");
+        }
+        {
+            long long t1 = -1;
+            for (auto& e : a) if (e.on && e.t >= stepSmp && e.t < 2 * stepSmp) { t1 = e.t; break; }
+            check (t1 >= 0 && std::llabs (t1 - (stepSmp + 810)) <= 2, "SWING 0.3 lands odd steps 810 samples late (0.3*0.45*step)");
+        }
+        {
+            // chance loop-lock: prob 0.5 everywhere, Drift 0 -> the SAME steps fire every loop
+            ArpExtParams Xc = neutralExt(); Xc.cAmt = 1.0f; Xc.cSeed = 0.44f;
+            ArpLaneData Lc = neutralLanes();
+            for (int i = 0; i < kArpLaneMax; ++i) Lc.prob[i] = 0.5f;
+            FlowArp arp; arp.reset(); arp.setExt (Xc); arp.setLanes (Lc);
+            arp.noteOn (60, 100);
+            std::vector<Ev> c; run (arp, 256, (int) (stepSmp * 64), c);   // 4 loops of 16 steps
+            bool fired[16] = {}, cur[16] = {}; bool seen = false, locked = true; int loops = 0; int nf = 0;
+            for (auto& e : c) if (e.on)
+            {
+                const int st = stepOf (e.t);
+                const int lp = loopOf (e.t);
+                if (lp != loops)
+                {
+                    if (! seen) { for (int i = 0; i < 16; ++i) fired[i] = cur[i]; seen = true; }
+                    else          for (int i = 0; i < 16; ++i) locked = locked && (cur[i] == fired[i]);
+                    for (int i = 0; i < 16; ++i) cur[i] = false;
+                    loops = lp;
+                }
+                cur[st] = true;
+            }
+            for (int i = 0; i < 16; ++i) nf += fired[i] ? 1 : 0;
+            check (seen && locked && nf > 2 && nf < 15, "CHANCE loop-lock: Drift 0 fires the same steps every loop (partial pattern)");
+        }
+        {
+            // sorted vs as-played first-loop order
+            ArpExtParams Xs = neutralExt(); Xs.sorted = false;
+            FlowArp arp; arp.reset(); arp.setExt (Xs); arp.setLanes (neutralLanes());
+            arp.noteOn (67, 100); arp.noteOn (60, 100); arp.noteOn (64, 100);
+            std::vector<Ev> c; run (arp, 256, (int) (3 * stepSmp + 100), c);
+            std::vector<int> ons; for (auto& e : c) if (e.on) ons.push_back (e.note);
+            check (ons.size() >= 3 && ons[0] == 67 && ons[1] == 60 && ons[2] == 64,
+                   "SORTED off: notes walk in as-played order (67,60,64)");
+        }
+        {
+            // WAVE lane: full depth/timbre, lane at 1, no slew -> +0.5 frame offset
+            ArpExtParams Xw = neutralExt(); Xw.wDepth = 1.0f; Xw.timbre = 1.0f; Xw.wSlide = 0.0f;
+            ArpLaneData Lw = neutralLanes();
+            for (int i = 0; i < kArpLaneMax; ++i) Lw.wt[i] = 1.0f;
+            FlowArp arp; arp.reset(); arp.setExt (Xw); arp.setLanes (Lw);
+            arp.noteOn (60, 100);
+            std::vector<Ev> c; run (arp, 256, 12000, c);
+            check (std::fabs (arp.waveMod() - 0.5f) < 0.01f, "WAVE lane at 1, full Depth+Timbre -> +0.5 frame offset");
+        }
     }
 
     std::printf ("\n");

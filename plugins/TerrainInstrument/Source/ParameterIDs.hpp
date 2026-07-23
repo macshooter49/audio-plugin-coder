@@ -156,6 +156,26 @@ namespace ParameterIDs
     constexpr char FLOW_CHOP_BLEND[]= "FLOW_CHOP_BLEND";  // float 0..1 — CHOP dry/wet (glass menu); default 0.60
     constexpr char FLOW_GLI_BLEND[] = "FLOW_GLI_BLEND";   // float 0..1 — GLITCH dry/wet (glass menu); default 0.60
     constexpr char FLOW_ARP_BLEND[] = "FLOW_ARP_BLEND";   // float 0..1 — ARP vs dry held-chord mix (glass menu); 1.0 = pure arp
+    // ── FLOW · ARP extension card (fb105) — PLAY/MOTION scalars + 28 lane depth knobs ──
+    constexpr char FLOW_ARP_DIR[]    = "FLOW_ARP_DIR";     // choice 0=Up 1=Down 2=Up-Dn 3=Random (card Direction; TRAJ>0 overrides)
+    constexpr char FLOW_ARP_OCTR[]   = "FLOW_ARP_OCTR";    // choice 0..3 -> 1..4 octaves (card Octaves)
+    constexpr char FLOW_ARP_SORTED[] = "FLOW_ARP_SORTED";  // bool — true=low->high, false=as-played
+    constexpr char FLOW_ARP_SWING[]  = "FLOW_ARP_SWING";   constexpr char FLOW_ARP_MROLL[]  = "FLOW_ARP_MROLL";
+    constexpr char FLOW_ARP_TIMBRE[] = "FLOW_ARP_TIMBRE";  constexpr char FLOW_ARP_GLIDE[]  = "FLOW_ARP_GLIDE";
+    constexpr char FLOW_ARP_P_RANGE[]= "FLOW_ARP_P_RANGE"; constexpr char FLOW_ARP_P_CURVE[]= "FLOW_ARP_P_CURVE";
+    constexpr char FLOW_ARP_P_QUANT[]= "FLOW_ARP_P_QUANT"; constexpr char FLOW_ARP_P_SLIDE[]= "FLOW_ARP_P_SLIDE";
+    constexpr char FLOW_ARP_G_LEN[]  = "FLOW_ARP_G_LEN";   constexpr char FLOW_ARP_G_CURVE[]= "FLOW_ARP_G_CURVE";
+    constexpr char FLOW_ARP_G_RAND[] = "FLOW_ARP_G_RAND";  constexpr char FLOW_ARP_G_SLIDE[]= "FLOW_ARP_G_SLIDE";
+    constexpr char FLOW_ARP_V_RANGE[]= "FLOW_ARP_V_RANGE"; constexpr char FLOW_ARP_V_CURVE[]= "FLOW_ARP_V_CURVE";
+    constexpr char FLOW_ARP_V_RAND[] = "FLOW_ARP_V_RAND";  constexpr char FLOW_ARP_V_FLOOR[]= "FLOW_ARP_V_FLOOR";
+    constexpr char FLOW_ARP_O_RANGE[]= "FLOW_ARP_O_RANGE"; constexpr char FLOW_ARP_O_BIAS[] = "FLOW_ARP_O_BIAS";
+    constexpr char FLOW_ARP_O_RAND[] = "FLOW_ARP_O_RAND";  constexpr char FLOW_ARP_O_SPREAD[]= "FLOW_ARP_O_SPREAD";
+    constexpr char FLOW_ARP_R_COUNT[]= "FLOW_ARP_R_COUNT"; constexpr char FLOW_ARP_R_DECAY[]= "FLOW_ARP_R_DECAY";
+    constexpr char FLOW_ARP_R_CURVE[]= "FLOW_ARP_R_CURVE"; constexpr char FLOW_ARP_R_AMT[]  = "FLOW_ARP_R_AMT";
+    constexpr char FLOW_ARP_C_AMT[]  = "FLOW_ARP_C_AMT";   constexpr char FLOW_ARP_C_BIAS[] = "FLOW_ARP_C_BIAS";
+    constexpr char FLOW_ARP_C_SEED[] = "FLOW_ARP_C_SEED";  constexpr char FLOW_ARP_C_DRIFT[]= "FLOW_ARP_C_DRIFT";
+    constexpr char FLOW_ARP_W_DEPTH[]= "FLOW_ARP_W_DEPTH"; constexpr char FLOW_ARP_W_CURVE[]= "FLOW_ARP_W_CURVE";
+    constexpr char FLOW_ARP_W_SLIDE[]= "FLOW_ARP_W_SLIDE"; constexpr char FLOW_ARP_W_RAND[] = "FLOW_ARP_W_RAND";
     // ── ANNULUS resonator — global key-tracked physical-modeling node (ResonatorNode.h) ──
     constexpr char SYN_RESO_STRUCTURE[]  = "SYN_RESO_STRUCTURE";   // float 0..1 — harmonic↔material morph
     constexpr char SYN_RESO_BRIGHTNESS[] = "SYN_RESO_BRIGHTNESS";  // float 0..1 — mode count + spectral tilt

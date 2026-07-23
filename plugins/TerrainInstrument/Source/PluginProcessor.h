@@ -592,6 +592,11 @@ public:
     void              setSynthModMatrix (const juce::String& json);
     juce::String      getSynthModMatrix() const { return synModJson; }
 
+    // ── FLOW · ARP extension card (fb105) — lane pattern + live playhead feed ──
+    void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
+    juce::String      getArpLanesJson() const;                          // for JS restore + state save
+    juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
+
     // ── Pitch-mode virtual slice ───────────────────────────────────────────
     // When SLICE_MODE == 0 (PITCH), the whole sample is played as a single
     // chromatic one-shot. This virtual slice carries per-chop features
@@ -834,6 +839,18 @@ public:
     //    pushes the route list as JSON via the setSynthMod native fn; we parse it into a
     //    thread-safe vector the audio thread copies into synModCfg each block. Persisted.
     struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; };
+    // FLOW · ARP lane pattern (fb105): UI pushes JSON, audio thread copies into the
+    // engine on version bump (synModLock pattern). Raw JSON kept verbatim for state save.
+    mutable juce::CriticalSection arpLaneLock_;
+    wc::ArpLaneData               arpLanesShared_;                 // guarded by arpLaneLock_
+    juce::String                  arpLanesJson_;                   // guarded by arpLaneLock_
+    std::atomic<int>              arpLanesVersion_ { 1 };
+    int                           arpLanesSeen_ = 0;               // audio-thread last-copied version
+    // ARP viz feed (audio thread writes after flowArp.process, UI rAF-polls getArpFeed)
+    std::atomic<float>            arpVizStepF_ { 0.0f };
+    std::atomic<int>              arpVizCount_ { 0 }, arpVizNote_ { -1 }, arpVizVel_ { 0 }, arpVizActive_ { 0 };
+    float                         arpWaveMod_ = 0.0f;              // audio-thread only; voices consume NEXT block (drift-lane pattern)
+
     mutable juce::CriticalSection synModLock;
     std::vector<SynModRoute>      synModRoutes;   // guarded by synModLock
     juce::String                  synModJson;     // last JSON received (for state save)

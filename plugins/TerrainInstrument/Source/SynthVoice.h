@@ -1387,6 +1387,11 @@ namespace tw
          *  oscillator, rotating through the enabled/audible set (Moog-Matriarch-style global
          *  rotation — the shared counter lives in the processor, audio-thread only). The pick is
          *  applied through the existing click-free osc gate; a voice keeps its osc through release. */
+        // FLOW · ARP WAVE lane (fb105): per-step timbre value from the arp engine,
+        // pushed every block (one-block latency, drift-lane pattern). Applied as a
+        // bipolar offset on every osc's effective wavetable frame position below.
+        void setFlowWave (float w) noexcept { flowWave_ = juce::jlimit (-0.5f, 0.5f, w); }
+
         void setRobin (bool on, int* counter, bool eA, bool eB, bool eC, bool eD) noexcept
         {
             robinOn_ = on; robinCtr_ = counter;
@@ -1880,20 +1885,20 @@ namespace tw
                 // FRAME/WARP/FOLD — keytrack crossfade + ROUTE + LFO mod, clamp once.
                 coarseModA_ = mCrs[0]; coarseModB_ = mCrs[1]; coarseModC_ = mCrs[2]; coarseModD_ = mCrs[3];
                 for (int o = 0; o < 4; ++o) { subWMod_[o] = mSw[o]; subHMod_[o] = mSh[o]; }
-                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA);
+                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA + flowWave_);
                 warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f) + mWpA);
                 foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f) + mFdA);
-                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f) + mFrB);
+                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f) + mFrB + flowWave_);
                 warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f) + mWpB);
                 warp2AmountA_ = warp2AmountBaseA_;   // WARP 2 base->effective (mod-matrix ready)
                 warp2AmountB_ = warp2AmountBaseB_;
                 foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f) + mFdB);
                 // OSC C / D — same keytrack + route + LFO mod, clamp once.
-                framePosC_   = juce::jlimit (0.0f, 1.0f, framePosBaseC_   + (ktDestC_ == kKtFrame ? ktDC * (ktRamp_ - framePosBaseC_)   : 0.0f) + (routeDestC_ == kRtFrame ? rtC : 0.0f) + mFrC);
+                framePosC_   = juce::jlimit (0.0f, 1.0f, framePosBaseC_   + (ktDestC_ == kKtFrame ? ktDC * (ktRamp_ - framePosBaseC_)   : 0.0f) + (routeDestC_ == kRtFrame ? rtC : 0.0f) + mFrC + flowWave_);
                 warpAmountC_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseC_ + (ktDestC_ == kKtWarp  ? ktDC * (ktRamp_ - warpAmountBaseC_) : 0.0f) + (routeDestC_ == kRtWarp  ? rtC : 0.0f) + mWpC);
                 foldAmountC_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseC_ + (ktDestC_ == kKtFold  ? ktDC * (ktRamp_ - foldAmountBaseC_) : 0.0f) + (routeDestC_ == kRtFold  ? rtC : 0.0f) + mFdC);
                 warp2AmountC_ = warp2AmountBaseC_;
-                framePosD_   = juce::jlimit (0.0f, 1.0f, framePosBaseD_   + (ktDestD_ == kKtFrame ? ktDD * (ktRamp_ - framePosBaseD_)   : 0.0f) + (routeDestD_ == kRtFrame ? rtD : 0.0f) + mFrD);
+                framePosD_   = juce::jlimit (0.0f, 1.0f, framePosBaseD_   + (ktDestD_ == kKtFrame ? ktDD * (ktRamp_ - framePosBaseD_)   : 0.0f) + (routeDestD_ == kRtFrame ? rtD : 0.0f) + mFrD + flowWave_);
                 warpAmountD_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseD_ + (ktDestD_ == kKtWarp  ? ktDD * (ktRamp_ - warpAmountBaseD_) : 0.0f) + (routeDestD_ == kRtWarp  ? rtD : 0.0f) + mWpD);
                 foldAmountD_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseD_ + (ktDestD_ == kKtFold  ? ktDD * (ktRamp_ - foldAmountBaseD_) : 0.0f) + (routeDestD_ == kRtFold  ? rtD : 0.0f) + mFdD);
                 warp2AmountD_ = warp2AmountBaseD_;
@@ -4293,6 +4298,8 @@ namespace tw
         float oscGate_[4]       { 1.0f, 1.0f, 1.0f, 1.0f };   // smoothed solo/mute gate (click-free)
         bool  oscDead_[4]       { false, false, false, false }; // gate fully settled at 0 → skip the osc's render entirely
         float oscGateTarget_[4] { 1.0f, 1.0f, 1.0f, 1.0f };
+        float flowWave_ = 0.0f;   // FLOW · ARP WAVE lane frame offset (fb105), block-pushed
+
         // FLOW · ROUND ROBIN state (see setRobin) — pick chosen at startNote, kept through release
         bool  robinOn_    = false;
         int*  robinCtr_   = nullptr;

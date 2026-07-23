@@ -3089,6 +3089,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_CHOP_BLEND,"Chop Blend",0.60f);   // dry/wet — 60% so dry plays under the chop (zero-latency), wet on top
     addFlowKnob (ParameterIDs::FLOW_GLI_BLEND, "Glitch Blend",0.60f); // GLITCH dry/wet — same 60% default
     addFlowKnob (ParameterIDs::FLOW_ARP_BLEND, "Arp Blend",1.00f);    // ARP vs dry held-chord — 1.0 = pure arp (normal); pull down to hear the sustained chord under it
+    // ── ARP extension card (fb105): PLAY/MOTION scalars + 28 lane depth knobs.
+    // Post-ceiling params: driven by setSynParam only (no relays). Choice params
+    // are read as the INDEX ((int)*rawParam) per the CLAUDE.md hard rule.
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
+        juce::StringArray { "Up", "Down", "Up-Dn", "Random" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_ARP_OCTR, 1 }, "Arp Octaves",
+        juce::StringArray { "1", "2", "3", "4" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { ParameterIDs::FLOW_ARP_SORTED, 1 }, "Arp Sorted", true));
+    addFlowKnob (ParameterIDs::FLOW_ARP_SWING, "Arp Swing", 0.12f);  addFlowKnob (ParameterIDs::FLOW_ARP_MROLL, "Arp Roll", 0.25f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_TIMBRE,"Arp Timbre",0.60f);  addFlowKnob (ParameterIDs::FLOW_ARP_GLIDE, "Arp Glide",0.15f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_P_RANGE,"Arp Pitch Range",0.50f); addFlowKnob (ParameterIDs::FLOW_ARP_P_CURVE,"Arp Pitch Curve",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_P_QUANT,"Arp Pitch Quant",0.60f); addFlowKnob (ParameterIDs::FLOW_ARP_P_SLIDE,"Arp Pitch Slide",0.20f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_G_LEN,  "Arp Gate Length",0.65f); addFlowKnob (ParameterIDs::FLOW_ARP_G_CURVE,"Arp Gate Curve",0.40f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_G_RAND, "Arp Gate Random",0.00f); addFlowKnob (ParameterIDs::FLOW_ARP_G_SLIDE,"Arp Gate Slide",0.15f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_V_RANGE,"Arp Vel Range",0.70f);   addFlowKnob (ParameterIDs::FLOW_ARP_V_CURVE,"Arp Vel Curve",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_V_RAND, "Arp Vel Random",0.12f);  addFlowKnob (ParameterIDs::FLOW_ARP_V_FLOOR,"Arp Vel Floor",0.20f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_O_RANGE,"Arp Oct Range",0.25f);   addFlowKnob (ParameterIDs::FLOW_ARP_O_BIAS, "Arp Oct Bias",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_O_RAND, "Arp Oct Random",0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_O_SPREAD,"Arp Oct Spread",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_R_COUNT,"Arp Roll Count",0.33f);  addFlowKnob (ParameterIDs::FLOW_ARP_R_DECAY,"Arp Roll Decay",0.40f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_R_CURVE,"Arp Roll Curve",0.30f);  addFlowKnob (ParameterIDs::FLOW_ARP_R_AMT,  "Arp Roll Amount",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_C_AMT,  "Arp Chance Amount",0.80f); addFlowKnob (ParameterIDs::FLOW_ARP_C_BIAS,"Arp Chance Bias",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_C_SEED, "Arp Chance Seed",0.44f);   addFlowKnob (ParameterIDs::FLOW_ARP_C_DRIFT,"Arp Chance Drift",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_W_DEPTH,"Arp Wave Depth",0.60f);    addFlowKnob (ParameterIDs::FLOW_ARP_W_CURVE,"Arp Wave Curve",0.45f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_W_SLIDE,"Arp Wave Slide",0.25f);    addFlowKnob (ParameterIDs::FLOW_ARP_W_RAND, "Arp Wave Random",0.10f);
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);
     addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);  // VARY = fire CHANCE; 0 = never fires (silent), 0.5 = glitches out of the box
     addFlowKnob (ParameterIDs::FLOW_GLI_MORPH,"Glitch Morph",0.00f);
@@ -4555,6 +4582,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setNoiseWidth         (noiseWidth);            // fb69 — noise stereo width (M/S)
                 sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
+                sv->setFlowWave (arpWaveMod_);        // FLOW · ARP WAVE lane → wavetable frame offset (last block's value)
                 sv->setPanC (panC);                   sv->setPanD (panD);
                 sv->setWavetableC (wtC);              sv->setWavetableD (wtD);
                 sv->setWavetableFrameC (wtFrameC);    sv->setWavetableFrameD (wtFrameD);
@@ -4785,6 +4813,37 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float kBlend  = flowBase (ParameterIDs::FLOW_ARP_BLEND);
         const float dryGain = 1.0f - kBlend;
 
+        // ── extension card (fb105): lane pattern copy-on-change + the 35 card scalars ──
+        {
+            const int lv = arpLanesVersion_.load (std::memory_order_acquire);
+            if (lv != arpLanesSeen_)
+            {
+                const juce::ScopedLock sl (arpLaneLock_);
+                flowArp.setLanes (arpLanesShared_);
+                arpLanesSeen_ = lv;
+            }
+            wc::ArpExtParams X;
+            X.dir     = (int) rawParam (ParameterIDs::FLOW_ARP_DIR)->load();       // choice = INDEX
+            X.octaves = 1 + (int) rawParam (ParameterIDs::FLOW_ARP_OCTR)->load();
+            X.sorted  = rawParam (ParameterIDs::FLOW_ARP_SORTED)->load() > 0.5f;
+            X.swing  = flowBase (ParameterIDs::FLOW_ARP_SWING);  X.mroll  = flowBase (ParameterIDs::FLOW_ARP_MROLL);
+            X.timbre = flowBase (ParameterIDs::FLOW_ARP_TIMBRE); X.glide  = flowBase (ParameterIDs::FLOW_ARP_GLIDE);
+            X.pRange = flowBase (ParameterIDs::FLOW_ARP_P_RANGE); X.pCurve = flowBase (ParameterIDs::FLOW_ARP_P_CURVE);
+            X.pQuant = flowBase (ParameterIDs::FLOW_ARP_P_QUANT); X.pSlide = flowBase (ParameterIDs::FLOW_ARP_P_SLIDE);
+            X.gLen   = flowBase (ParameterIDs::FLOW_ARP_G_LEN);   X.gCurve = flowBase (ParameterIDs::FLOW_ARP_G_CURVE);
+            X.gRand  = flowBase (ParameterIDs::FLOW_ARP_G_RAND);  X.gSlide = flowBase (ParameterIDs::FLOW_ARP_G_SLIDE);
+            X.vRange = flowBase (ParameterIDs::FLOW_ARP_V_RANGE); X.vCurve = flowBase (ParameterIDs::FLOW_ARP_V_CURVE);
+            X.vRand  = flowBase (ParameterIDs::FLOW_ARP_V_RAND);  X.vFloor = flowBase (ParameterIDs::FLOW_ARP_V_FLOOR);
+            X.oRange = flowBase (ParameterIDs::FLOW_ARP_O_RANGE); X.oBias  = flowBase (ParameterIDs::FLOW_ARP_O_BIAS);
+            X.oRand  = flowBase (ParameterIDs::FLOW_ARP_O_RAND);  X.oSpread= flowBase (ParameterIDs::FLOW_ARP_O_SPREAD);
+            X.rCount = flowBase (ParameterIDs::FLOW_ARP_R_COUNT); X.rDecay = flowBase (ParameterIDs::FLOW_ARP_R_DECAY);
+            X.rCurve = flowBase (ParameterIDs::FLOW_ARP_R_CURVE); X.rAmt   = flowBase (ParameterIDs::FLOW_ARP_R_AMT);
+            X.cAmt   = flowBase (ParameterIDs::FLOW_ARP_C_AMT);   X.cBias  = flowBase (ParameterIDs::FLOW_ARP_C_BIAS);
+            X.cSeed  = flowBase (ParameterIDs::FLOW_ARP_C_SEED);  X.cDrift = flowBase (ParameterIDs::FLOW_ARP_C_DRIFT);
+            X.wDepth = flowBase (ParameterIDs::FLOW_ARP_W_DEPTH); X.wCurve = flowBase (ParameterIDs::FLOW_ARP_W_CURVE);
+            X.wSlide = flowBase (ParameterIDs::FLOW_ARP_W_SLIDE); X.wRand  = flowBase (ParameterIDs::FLOW_ARP_W_RAND);
+            flowArp.setExt (X);
+        }
         flowArp.setLatch (kLatch);
         juce::MidiBuffer flowMidi;
         for (const auto meta : midiMessages)
@@ -4819,9 +4878,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 flowMidi.addEvent (juce::MidiMessage::noteOff (1, ev[i].note), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
         }
         synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
+
+        // publish the live playhead/fire feed (UI rAF-polls getArpFeed) + the WAVE
+        // lane's frame-offset for the voices (consumed NEXT block — drift-lane pattern)
+        arpVizStepF_.store  (flowArp.vizStepF(),            std::memory_order_relaxed);
+        arpVizCount_.store  ((int) flowArp.vizFireCount(),  std::memory_order_relaxed);
+        arpVizNote_.store   (flowArp.vizNote(),             std::memory_order_relaxed);
+        arpVizVel_.store    (flowArp.vizVel(),              std::memory_order_relaxed);
+        arpVizActive_.store (flowArp.vizActive() ? 1 : 0,   std::memory_order_relaxed);
+        arpWaveMod_ = flowArp.waveMod();
     }
     else
     {
+        arpVizActive_.store (0, std::memory_order_relaxed);
+        arpWaveMod_ = 0.0f;
         // ARP inactive (Off, or CHOP/GLITCH = end-of-block audio inserts, or DRIFT = mod source):
         // release any note the arp was holding so it can't hang, then pass raw MIDI straight through.
         wc::ArpEvent arel[wc::kArpMaxEvents]; const int an = flowArp.releaseAll (arel, wc::kArpMaxEvents);
@@ -6298,6 +6368,72 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
     synModJson   = json;
 }
 
+// ── FLOW · ARP extension lanes (fb105): JS pushes the 7×16 pattern as one JSON blob
+// (mod-matrix lifecycle: parse on the message thread, swap under lock, version-bump
+// so the audio thread copies into the engine exactly once per change).
+void TerrainInstrumentAudioProcessor::setArpLanesFromJson (const juce::String& json)
+{
+    auto v = juce::JSON::parse (json);
+    if (! v.isObject()) return;
+    wc::ArpLaneData l;
+    l.steps = juce::jlimit (1, wc::kArpLaneMax, (int) v.getProperty ("steps", 16));
+    auto fill = [&] (const char* key, float* dst, float lo, float hi, float def)
+    {
+        for (int i = 0; i < wc::kArpLaneMax; ++i) dst[i] = def;
+        if (auto* arr = v.getProperty (key, juce::var()).getArray())
+            for (int i = 0; i < arr->size() && i < wc::kArpLaneMax; ++i)
+                dst[i] = juce::jlimit (lo, hi, (float) (double) (*arr)[i]);
+    };
+    fill ("pitch",   l.pitch,   -1.0f, 6.0f, 3.0f);   // −1 = rest
+    fill ("gate",    l.gate,    0.05f, 1.0f, 0.72f);
+    fill ("vel",     l.vel,     0.0f,  1.0f, 0.8f);
+    fill ("oct",     l.oct,     -1.0f, 1.0f, 0.0f);
+    fill ("ratchet", l.ratchet, 1.0f,  4.0f, 1.0f);
+    fill ("prob",    l.prob,    0.0f,  1.0f, 1.0f);
+    fill ("wt",      l.wt,      0.0f,  1.0f, 0.5f);
+    {
+        const juce::ScopedLock sl (arpLaneLock_);
+        arpLanesShared_ = l;
+        arpLanesJson_   = json;
+    }
+    arpLanesVersion_.fetch_add (1, std::memory_order_release);
+}
+
+juce::String TerrainInstrumentAudioProcessor::getArpLanesJson() const
+{
+    const juce::ScopedLock sl (arpLaneLock_);
+    if (arpLanesJson_.isNotEmpty()) return arpLanesJson_;
+    // no push yet → serialize the engine defaults so the card always boots on DSP truth
+    auto arr = [&] (const float* v) {
+        juce::String o ("[");
+        for (int i = 0; i < arpLanesShared_.steps; ++i) { if (i) o << ","; o << juce::String (v[i], 3); }
+        return o + "]"; };
+    juce::String j ("{\"steps\":");
+    j << arpLanesShared_.steps
+      << ",\"pitch\""   << ":" << arr (arpLanesShared_.pitch)
+      << ",\"gate\""    << ":" << arr (arpLanesShared_.gate)
+      << ",\"vel\""     << ":" << arr (arpLanesShared_.vel)
+      << ",\"oct\""     << ":" << arr (arpLanesShared_.oct)
+      << ",\"ratchet\"" << ":" << arr (arpLanesShared_.ratchet)
+      << ",\"prob\""    << ":" << arr (arpLanesShared_.prob)
+      << ",\"wt\""      << ":" << arr (arpLanesShared_.wt) << "}";
+    return j;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getArpFeedJson() const
+{
+    const float sf = arpVizStepF_.load (std::memory_order_relaxed);
+    juce::String j ("{\"s\":");
+    j << juce::String (std::isfinite (sf) ? sf : 0.0f, 3)
+      << ",\"c\"" << ":" << arpVizCount_.load (std::memory_order_relaxed)
+      << ",\"n\"" << ":" << arpVizNote_.load (std::memory_order_relaxed)
+      << ",\"v\"" << ":" << arpVizVel_.load (std::memory_order_relaxed)
+      << ",\"a\"" << ":" << arpVizActive_.load (std::memory_order_relaxed)
+      << ",\"b\"" << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
+      << ",\"m\"" << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() << "}";
+    return j;
+}
+
 juce::String TerrainInstrumentAudioProcessor::getPitchSliceJson() const
 {
     // Serialise pitchModeSlice as a single-element object so JS can use
@@ -6411,6 +6547,11 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         const juce::ScopedLock sl (synModLock);
         if (synModJson.isNotEmpty())
             state.setProperty("synModJson", synModJson, nullptr);
+    }
+    {
+        const juce::ScopedLock sl (arpLaneLock_);
+        if (arpLanesJson_.isNotEmpty())
+            state.setProperty ("arpLanesJson", arpLanesJson_, nullptr);   // FLOW · ARP lane pattern (fb105)
     }
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
@@ -6648,6 +6789,10 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             {
                 auto sm = newState.getProperty("synModJson", "").toString();
                 if (sm.isNotEmpty()) setSynthModMatrix (sm);
+            }
+            {
+                auto al = newState.getProperty ("arpLanesJson", "").toString();
+                if (al.isNotEmpty()) setArpLanesFromJson (al);   // FLOW · ARP lane pattern (fb105)
             }
 
             // ── Task 13: V1 / V2 branching ────────────────────────────────────
