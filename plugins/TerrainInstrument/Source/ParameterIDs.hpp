@@ -176,6 +176,31 @@ namespace ParameterIDs
     constexpr char FLOW_ARP_C_SEED[] = "FLOW_ARP_C_SEED";  constexpr char FLOW_ARP_C_DRIFT[]= "FLOW_ARP_C_DRIFT";
     constexpr char FLOW_ARP_W_DEPTH[]= "FLOW_ARP_W_DEPTH"; constexpr char FLOW_ARP_W_CURVE[]= "FLOW_ARP_W_CURVE";
     constexpr char FLOW_ARP_W_SLIDE[]= "FLOW_ARP_W_SLIDE"; constexpr char FLOW_ARP_W_RAND[] = "FLOW_ARP_W_RAND";
+    // ── FLOW · CHOP extension card (fb106) — Ribbon scalars + 24 lane depth knobs ──
+    constexpr char FLOW_CHOP_CATCH[]  = "FLOW_CHOP_CATCH";   // bool — Catch mode (vs Always)
+    constexpr char FLOW_CHOP_SLICES[] = "FLOW_CHOP_SLICES";  // choice idx into {2,3,4,6,8,12,16}
+    constexpr char FLOW_CHOP_LOOP[]   = "FLOW_CHOP_LOOP";    // choice idx into {2,4,6,8,10,12,16} cells
+    constexpr char FLOW_CHOP_MODE[]   = "FLOW_CHOP_MODE";    // choice Step/Ping/Rand/Walk (TRAJ>0 overrides)
+    constexpr char FLOW_CHOP_SCAN[]   = "FLOW_CHOP_SCAN";    constexpr char FLOW_CHOP_WANDER[] = "FLOW_CHOP_WANDER";
+    constexpr char FLOW_CHOP_SPREAD[] = "FLOW_CHOP_SPREAD";  constexpr char FLOW_CHOP_SPEED[]  = "FLOW_CHOP_SPEED";
+    constexpr char FLOW_CHOP_FREEZE[] = "FLOW_CHOP_FREEZE";  constexpr char FLOW_CHOP_COLLECT[]= "FLOW_CHOP_COLLECT";
+    constexpr char FLOW_CHOP_RPTS[]   = "FLOW_CHOP_RPTS";    // choice 1..4 window repeats
+    constexpr char FLOW_CHOP_STEPS[]  = "FLOW_CHOP_STEPS";   constexpr char FLOW_CHOP_DETUNE[] = "FLOW_CHOP_DETUNE";
+    constexpr char FLOW_CHOP_WOW[]    = "FLOW_CHOP_WOW";     constexpr char FLOW_CHOP_SMOOTH[] = "FLOW_CHOP_SMOOTH";
+    constexpr char FLOW_CHOP_FILTER[] = "FLOW_CHOP_FILTER";  // choice Off/Low/Mid/High (wet bus)
+    constexpr char FLOW_CHOP_GRIT[]   = "FLOW_CHOP_GRIT";    constexpr char FLOW_CHOP_TRIM[]   = "FLOW_CHOP_TRIM";
+    constexpr char FLOW_CHOP_O_SPREAD[]= "FLOW_CHOP_O_SPREAD"; constexpr char FLOW_CHOP_O_BIAS[] = "FLOW_CHOP_O_BIAS";
+    constexpr char FLOW_CHOP_O_LOCK[]  = "FLOW_CHOP_O_LOCK";   constexpr char FLOW_CHOP_O_SEED[] = "FLOW_CHOP_O_SEED";
+    constexpr char FLOW_CHOP_P_RANGE[] = "FLOW_CHOP_P_RANGE";  constexpr char FLOW_CHOP_P_STEPS[]= "FLOW_CHOP_P_STEPS";
+    constexpr char FLOW_CHOP_P_GLIDE[] = "FLOW_CHOP_P_GLIDE";  constexpr char FLOW_CHOP_P_QUANT[]= "FLOW_CHOP_P_QUANT";
+    constexpr char FLOW_CHOP_RV_ODDS[] = "FLOW_CHOP_RV_ODDS";  constexpr char FLOW_CHOP_RV_RUN[] = "FLOW_CHOP_RV_RUN";
+    constexpr char FLOW_CHOP_RV_SPREAD[]="FLOW_CHOP_RV_SPREAD";constexpr char FLOW_CHOP_RV_SNAP[]= "FLOW_CHOP_RV_SNAP";
+    constexpr char FLOW_CHOP_T_LEN[]   = "FLOW_CHOP_T_LEN";    constexpr char FLOW_CHOP_T_CURVE[]= "FLOW_CHOP_T_CURVE";
+    constexpr char FLOW_CHOP_T_RAND[]  = "FLOW_CHOP_T_RAND";   constexpr char FLOW_CHOP_T_GATE[] = "FLOW_CHOP_T_GATE";
+    constexpr char FLOW_CHOP_R_COUNT[] = "FLOW_CHOP_R_COUNT";  constexpr char FLOW_CHOP_R_DECAY[]= "FLOW_CHOP_R_DECAY";
+    constexpr char FLOW_CHOP_R_CURVE[] = "FLOW_CHOP_R_CURVE";  constexpr char FLOW_CHOP_R_ODDS[] = "FLOW_CHOP_R_ODDS";
+    constexpr char FLOW_CHOP_D_AMT[]   = "FLOW_CHOP_D_AMT";    constexpr char FLOW_CHOP_D_SIZE[] = "FLOW_CHOP_D_SIZE";
+    constexpr char FLOW_CHOP_D_SPRAY[] = "FLOW_CHOP_D_SPRAY";  constexpr char FLOW_CHOP_D_TONE[] = "FLOW_CHOP_D_TONE";
     // ── ANNULUS resonator — global key-tracked physical-modeling node (ResonatorNode.h) ──
     constexpr char SYN_RESO_STRUCTURE[]  = "SYN_RESO_STRUCTURE";   // float 0..1 — harmonic↔material morph
     constexpr char SYN_RESO_BRIGHTNESS[] = "SYN_RESO_BRIGHTNESS";  // float 0..1 — mode count + spectral tilt

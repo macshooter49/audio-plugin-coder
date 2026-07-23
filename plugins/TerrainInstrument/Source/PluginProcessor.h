@@ -596,6 +596,8 @@ public:
     void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
     juce::String      getArpLanesJson() const;                          // for JS restore + state save
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
+    juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
+    void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
 
     // ── Pitch-mode virtual slice ───────────────────────────────────────────
     // When SLICE_MODE == 0 (PITCH), the whole sample is played as a single
@@ -850,6 +852,10 @@ public:
     std::atomic<float>            arpVizStepF_ { 0.0f };
     std::atomic<int>              arpVizCount_ { 0 }, arpVizNote_ { -1 }, arpVizVel_ { 0 }, arpVizActive_ { 0 };
     float                         arpWaveMod_ = 0.0f;              // audio-thread only; voices consume NEXT block (drift-lane pattern)
+    // FLOW · CHOP viz feed + Wipe request (fb106)
+    std::atomic<float>            chopVizStepF_ { 0.0f }, chopVizWet_ { 0.0f };
+    std::atomic<int>              chopVizCount_ { 0 }, chopVizSlice_ { 0 }, chopVizActive_ { 0 };
+    std::atomic<bool>             chopWipeReq_ { false };
 
     mutable juce::CriticalSection synModLock;
     std::vector<SynModRoute>      synModRoutes;   // guarded by synModLock

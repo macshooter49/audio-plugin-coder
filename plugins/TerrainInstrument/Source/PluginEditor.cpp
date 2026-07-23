@@ -608,6 +608,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // (same pattern as getNoiseViz — costs nothing while the card is closed).
                 complete (juce::var (audioProcessor.getArpFeedJson()));
             })
+            .withNativeFunction("getChopFeed", [this](const juce::Array<juce::var>&,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb106 — Ribbon playhead/slice/wet snapshot (rAF-polled by the chop card)
+                complete (juce::var (audioProcessor.getChopFeedJson()));
+            })
+            .withNativeFunction("chopWipe", [this](const juce::Array<juce::var>&,
+                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.requestChopWipe();   // fb106 — Wipe: clear the chop memory
+                complete (juce::var{});
+            })
             .withNativeFunction("popOutCard", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4354,6 +4366,17 @@ public:
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     complete (juce::var (proc.getArpFeedJson()));
+                })
+                .withNativeFunction ("getChopFeed", [&proc](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getChopFeedJson()));
+                })
+                .withNativeFunction ("chopWipe", [&proc](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    proc.requestChopWipe();
+                    complete (juce::var{});
                 })
                 .withNativeFunction ("dragCardWindow", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)

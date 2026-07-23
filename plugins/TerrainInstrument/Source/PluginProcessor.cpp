@@ -3116,6 +3116,46 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_ARP_C_SEED, "Arp Chance Seed",0.44f);   addFlowKnob (ParameterIDs::FLOW_ARP_C_DRIFT,"Arp Chance Drift",0.00f);
     addFlowKnob (ParameterIDs::FLOW_ARP_W_DEPTH,"Arp Wave Depth",0.60f);    addFlowKnob (ParameterIDs::FLOW_ARP_W_CURVE,"Arp Wave Curve",0.45f);
     addFlowKnob (ParameterIDs::FLOW_ARP_W_SLIDE,"Arp Wave Slide",0.25f);    addFlowKnob (ParameterIDs::FLOW_ARP_W_RAND, "Arp Wave Random",0.10f);
+    // ── CHOP extension card (fb106): Ribbon scalars + 24 lane depth knobs.
+    // Same law as fb105: setSynParam-only, choices read as INDEX.
+    layout.add (std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_CATCH, 1 }, "Chop Catch", false));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_SLICES, 1 }, "Chop Slices",
+        juce::StringArray { "2", "3", "4", "6", "8", "12", "16" }, 4));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_LOOP, 1 }, "Chop Loop",
+        juce::StringArray { "2", "4", "6", "8", "10", "12", "16" }, 3));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_MODE, 1 }, "Chop Order Mode",
+        juce::StringArray { "Step", "Ping", "Rand", "Walk" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_RPTS, 1 }, "Chop Repeats",
+        juce::StringArray { "1", "2", "3", "4" }, 1));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_FILTER, 1 }, "Chop Filter",
+        juce::StringArray { "Off", "Low", "Mid", "High" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_FREEZE, 1 }, "Chop Freeze", false));
+    layout.add (std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { ParameterIDs::FLOW_CHOP_COLLECT, 1 }, "Chop Collect", false));
+    addFlowKnob (ParameterIDs::FLOW_CHOP_SCAN,  "Chop Scan",  0.50f);  addFlowKnob (ParameterIDs::FLOW_CHOP_WANDER,"Chop Wander",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_SPREAD,"Chop Spread",0.25f);  addFlowKnob (ParameterIDs::FLOW_CHOP_SPEED, "Chop Speed", 0.00f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_STEPS, "Chop Steps", 0.50f);  addFlowKnob (ParameterIDs::FLOW_CHOP_DETUNE,"Chop Detune",0.12f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_WOW,   "Chop Wow",   0.10f);  addFlowKnob (ParameterIDs::FLOW_CHOP_SMOOTH,"Chop Smooth",0.60f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_GRIT,  "Chop Grit",  0.00f);  addFlowKnob (ParameterIDs::FLOW_CHOP_TRIM,  "Chop Trim",  0.50f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_O_SPREAD,"Chop Order Spread",0.50f); addFlowKnob (ParameterIDs::FLOW_CHOP_O_BIAS,"Chop Order Bias",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_O_LOCK,  "Chop Order Lock",  0.20f); addFlowKnob (ParameterIDs::FLOW_CHOP_O_SEED,"Chop Order Seed",0.44f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_P_RANGE, "Chop Pitch Range", 0.33f); addFlowKnob (ParameterIDs::FLOW_CHOP_P_STEPS,"Chop Pitch Odds",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_P_GLIDE, "Chop Pitch Glide", 0.15f); addFlowKnob (ParameterIDs::FLOW_CHOP_P_QUANT,"Chop Pitch Quant",0.60f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_RV_ODDS, "Chop Rev Odds",    0.30f); addFlowKnob (ParameterIDs::FLOW_CHOP_RV_RUN, "Chop Rev Run",  0.25f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_RV_SPREAD,"Chop Rev Spread", 0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_RV_SNAP,"Chop Rev Snap", 0.60f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_T_LEN,   "Chop Trim Length", 0.70f); addFlowKnob (ParameterIDs::FLOW_CHOP_T_CURVE,"Chop Trim Curve",0.40f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_T_RAND,  "Chop Trim Random", 0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_T_GATE, "Chop Trim Gate", 0.20f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_R_COUNT, "Chop Repeat Count",0.33f); addFlowKnob (ParameterIDs::FLOW_CHOP_R_DECAY,"Chop Repeat Decay",0.40f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_R_CURVE, "Chop Repeat Curve",0.30f); addFlowKnob (ParameterIDs::FLOW_CHOP_R_ODDS, "Chop Repeat Odds",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_D_AMT,   "Chop Drop Amount", 0.30f); addFlowKnob (ParameterIDs::FLOW_CHOP_D_SIZE, "Chop Drop Size", 0.40f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_D_SPRAY, "Chop Drop Spray",  0.10f); addFlowKnob (ParameterIDs::FLOW_CHOP_D_TONE, "Chop Drop Tone", 0.50f);
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);
     addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);  // VARY = fire CHANCE; 0 = never fires (silent), 0.5 = glitches out of the box
     addFlowKnob (ParameterIDs::FLOW_GLI_MORPH,"Glitch Morph",0.00f);
@@ -3236,7 +3276,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
 
     // FLOW · ARP — prepare the block-rate global LFO bank + reset the engine
     for (auto& l : flowLfo_) l.prepare (sampleRate);
-    chop.prepare   (sampleRate, 4.0);   // FLOW · CHOP capture ring (4 s) — allocation happens here only
+    chop.prepare   (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates
     glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
     prevFlowMode_ = 0;                   // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
@@ -5747,6 +5787,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //    click-free (FlowChop.h). MIDI passed through normally above; this chops the mix.
     //    Engine defaults (AlwaysOn, 8 slices, full wet) groove out of the box; the 5 mode-2
     //    macros (FLOW_SEQ_* IDs, now CHOP) ride it. Always call process so it free-runs when stopped.
+    if (flowMode != 2) chopVizActive_.store (0, std::memory_order_relaxed);
     if (flowMode == 2)
     {
         const float cRate  = flowKnob (ParameterIDs::FLOW_SEQ_RATE,  wc::ModDest::ChopRate);
@@ -5755,10 +5796,55 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float cTraj  = flowKnob (ParameterIDs::FLOW_SEQ_TRAJ,  wc::ModDest::ChopTraj);
         const float cMorph = flowKnob (ParameterIDs::FLOW_SEQ_MORPH, wc::ModDest::ChopMorph);
         chop.setMix (flowBase (ParameterIDs::FLOW_CHOP_BLEND));   // dry/wet (glass menu); default 0.60
+
+        // ── fb106 extension card: every Ribbon control, read per block ──
+        {
+            static constexpr int kSliceL[7] = { 2, 3, 4, 6, 8, 12, 16 };
+            static constexpr int kLoopL[7]  = { 2, 4, 6, 8, 10, 12, 16 };
+            wc::FlowChop::ChopExtParams X;
+            X.slices    = kSliceL[juce::jlimit (0, 6, (int) *rawParam (ParameterIDs::FLOW_CHOP_SLICES))];
+            X.loopCells = kLoopL [juce::jlimit (0, 6, (int) *rawParam (ParameterIDs::FLOW_CHOP_LOOP))];
+            X.modeOrder = (int) *rawParam (ParameterIDs::FLOW_CHOP_MODE);
+            X.rpts      = 1 + (int) *rawParam (ParameterIDs::FLOW_CHOP_RPTS);
+            X.filter    = (int) *rawParam (ParameterIDs::FLOW_CHOP_FILTER);
+            X.freeze    = *rawParam (ParameterIDs::FLOW_CHOP_FREEZE)  > 0.5f;
+            X.collect   = *rawParam (ParameterIDs::FLOW_CHOP_COLLECT) > 0.5f;
+            X.scan   = flowBase (ParameterIDs::FLOW_CHOP_SCAN);   X.wander = flowBase (ParameterIDs::FLOW_CHOP_WANDER);
+            X.spread = flowBase (ParameterIDs::FLOW_CHOP_SPREAD); X.speed  = flowBase (ParameterIDs::FLOW_CHOP_SPEED);
+            X.steps  = flowBase (ParameterIDs::FLOW_CHOP_STEPS);  X.detune = flowBase (ParameterIDs::FLOW_CHOP_DETUNE);
+            X.wow    = flowBase (ParameterIDs::FLOW_CHOP_WOW);    X.smooth = flowBase (ParameterIDs::FLOW_CHOP_SMOOTH);
+            X.grit   = flowBase (ParameterIDs::FLOW_CHOP_GRIT);   X.trim   = flowBase (ParameterIDs::FLOW_CHOP_TRIM);
+            X.oSpread= flowBase (ParameterIDs::FLOW_CHOP_O_SPREAD); X.oBias = flowBase (ParameterIDs::FLOW_CHOP_O_BIAS);
+            X.oLock  = flowBase (ParameterIDs::FLOW_CHOP_O_LOCK);   X.oSeed = flowBase (ParameterIDs::FLOW_CHOP_O_SEED);
+            X.pRange = flowBase (ParameterIDs::FLOW_CHOP_P_RANGE);  X.pSteps= flowBase (ParameterIDs::FLOW_CHOP_P_STEPS);
+            X.pGlide = flowBase (ParameterIDs::FLOW_CHOP_P_GLIDE);  X.pQuant= flowBase (ParameterIDs::FLOW_CHOP_P_QUANT);
+            X.rvOdds = flowBase (ParameterIDs::FLOW_CHOP_RV_ODDS);  X.rvRun = flowBase (ParameterIDs::FLOW_CHOP_RV_RUN);
+            X.rvSpread=flowBase (ParameterIDs::FLOW_CHOP_RV_SPREAD);X.rvSnap= flowBase (ParameterIDs::FLOW_CHOP_RV_SNAP);
+            X.tLen   = flowBase (ParameterIDs::FLOW_CHOP_T_LEN);    X.tCurve= flowBase (ParameterIDs::FLOW_CHOP_T_CURVE);
+            X.tRand  = flowBase (ParameterIDs::FLOW_CHOP_T_RAND);   X.tGate = flowBase (ParameterIDs::FLOW_CHOP_T_GATE);
+            X.rCount = flowBase (ParameterIDs::FLOW_CHOP_R_COUNT);  X.rDecay= flowBase (ParameterIDs::FLOW_CHOP_R_DECAY);
+            X.rCurve = flowBase (ParameterIDs::FLOW_CHOP_R_CURVE);  X.rOdds = flowBase (ParameterIDs::FLOW_CHOP_R_ODDS);
+            X.dAmt   = flowBase (ParameterIDs::FLOW_CHOP_D_AMT);    X.dSize = flowBase (ParameterIDs::FLOW_CHOP_D_SIZE);
+            X.dSpray = flowBase (ParameterIDs::FLOW_CHOP_D_SPRAY);  X.dTone = flowBase (ParameterIDs::FLOW_CHOP_D_TONE);
+            chop.setExt (X);
+            chop.setMode (*rawParam (ParameterIDs::FLOW_CHOP_CATCH) > 0.5f ? wc::ChopMode::Catch
+                                                                            : wc::ChopMode::AlwaysOn);
+            chop.setCatchHeld (resoHeldN_ > 0);                 // CATCH rides the real held keys
+            if (resoHeldN_ > 0) chop.noteOnRoot (resoHeld_[resoHeldN_ - 1]);
+            if (chopWipeReq_.exchange (false)) chop.wipe();     // Wipe button (UI native)
+        }
+
         float* cl = buffer.getWritePointer (0);
         float* cr = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : cl;
         chop.process (cRate, cGate, cVary, cTraj, cMorph,
                       flowPpq, flowBpm, getSampleRate(), cl, cr, numSamples, flowPlaying);
+
+        // live Ribbon feed (UI rAF-polls getChopFeed)
+        chopVizStepF_.store (chop.vizStepF(),             std::memory_order_relaxed);
+        chopVizCount_.store ((int) chop.vizFireCount(),   std::memory_order_relaxed);
+        chopVizSlice_.store (chop.lastSliceIndex(),       std::memory_order_relaxed);
+        chopVizWet_.store   (chop.wetLevel(),             std::memory_order_relaxed);
+        chopVizActive_.store(chop.isActive() ? 1 : 0,     std::memory_order_relaxed);
     }
 
     // ── FLOW · GLITCH (mode 3): audio insert — beat-synced buffer-mangler IN PLACE, click-free
@@ -6431,6 +6517,21 @@ juce::String TerrainInstrumentAudioProcessor::getArpFeedJson() const
       << ",\"a\"" << ":" << arpVizActive_.load (std::memory_order_relaxed)
       << ",\"b\"" << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\"" << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() << "}";
+    return j;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getChopFeedJson() const
+{
+    const float sf = chopVizStepF_.load (std::memory_order_relaxed);
+    const float wt = chopVizWet_.load (std::memory_order_relaxed);
+    juce::String j ("{\"s\":");
+    j << juce::String (std::isfinite (sf) ? sf : 0.0f, 3)
+      << ",\"c\""  << ":" << chopVizCount_.load (std::memory_order_relaxed)
+      << ",\"sl\"" << ":" << chopVizSlice_.load (std::memory_order_relaxed)
+      << ",\"a\""  << ":" << chopVizActive_.load (std::memory_order_relaxed)
+      << ",\"w\""  << ":" << juce::String (std::isfinite (wt) ? wt : 0.0f, 3)
+      << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
+      << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() << "}";
     return j;
 }
 

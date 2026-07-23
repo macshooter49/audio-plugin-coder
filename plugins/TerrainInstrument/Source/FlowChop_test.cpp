@@ -267,6 +267,116 @@ int main()
         check (rmsUp > 0.01 && rmsUp == rmsUp, "T13 not silent/NaN at 1/256 itself");
     }
 
+    // ── T14 (fb106): EXTENSION CARD — click-free under the full card, every knob live ──
+    {
+        auto cardExt = [] (float dAmt) {
+            FlowChop::ChopExtParams x;
+            x.slices = 8; x.loopCells = 8; x.scan = 0.5f; x.wander = 0.4f; x.spread = 0.3f;
+            x.speed = 0.4f; x.rpts = 2; x.modeOrder = 2;
+            x.oSpread = .7f; x.oBias = .4f; x.oLock = .2f; x.oSeed = .44f;
+            x.pRange = .5f; x.pSteps = .8f; x.pGlide = .4f; x.pQuant = .6f;
+            x.rvOdds = .5f; x.rvRun = .5f; x.rvSpread = .25f; x.rvSnap = .6f;
+            x.tLen = .6f; x.tCurve = .7f; x.tRand = .4f; x.tGate = .3f;
+            x.rCount = .8f; x.rDecay = .5f; x.rCurve = .7f; x.rOdds = .6f;
+            x.dAmt = dAmt; x.dSize = .4f; x.dSpray = .5f; x.dTone = .5f;
+            x.steps = .8f; x.detune = .5f; x.wow = .6f; x.smooth = .3f;
+            x.filter = 2; x.grit = .6f; x.trim = .6f;
+            return x; };
+
+        // click-free with EVERYTHING engaged (drops, revs, rolls, glide, wet bus)
+        Run r = drive ([&] (FlowChop& c) { c.setExt (cardExt (0.3f)); },
+                       sineSig, 0.6111f, 0.8f, 0.6f, 0.0f, 0.5f, 240);
+        const float mj = maxJump (r.out, (size_t) (SR * 0.5));
+        char b[120]; std::snprintf (b, sizeof b, "T14 CARD click-free: all 40+ controls hot, maxJump=%.4f", mj);
+        check (mj < 0.075f, b);
+        double e = 0; for (float v : r.out) e += std::fabs (v);
+        check (e / (double) r.out.size() > 0.01, "T14 card settings still make sound (not silent)");
+    }
+    {
+        // geometry: loop 4 cells cut into 8 slices → slice grid at half a cell →
+        // the loop wraps twice as fast as slices==loop (fire count roughly doubles)
+        auto fires = [] (int slices, int loopCells) {
+            FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
+            FlowChop::ChopExtParams x; x.slices = slices; x.loopCells = loopCells;
+            x.scan = 1.0f; x.dAmt = 0; x.rvOdds = 0; x.rOdds = 0; x.pSteps = 0; x.tGate = 0; x.tRand = 0;
+            x.wander = 0; x.spread = 0; x.speed = 0; x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0;
+            c.setExt (x);
+            std::vector<float> L (512), R (512); double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            for (int bb = 0; bb < 200; ++bb)
+            {
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 0.8f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                gc += 512; ppq += pps * 512;
+            }
+            return (int) c.vizFireCount(); };
+        const int f88 = fires (8, 8), f84 = fires (8, 4);
+        char b[120]; std::snprintf (b, sizeof b, "T15 geometry: loop 4/slices 8 fires ~2x loop 8/slices 8 (%d vs %d)", f84, f88);
+        check (f84 > (int) (f88 * 1.6f) && f84 < (int) (f88 * 2.5f), b);
+    }
+    {
+        // DROP at full density, size 0 → the groove becomes mostly holes (wet ≈ dry-off gaps)
+        FlowChop::ChopExtParams x; x.dAmt = 1.0f; x.dSize = 0.0f;
+        x.rvOdds = 0; x.rOdds = 0; x.pSteps = 0; x.wander = 0; x.spread = 0; x.speed = 0;
+        x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0; x.tGate = 0; x.tRand = 0;
+        Run r = drive ([&] (FlowChop& c) { c.setExt (x); c.setMix (1.0f); },
+                       sineSig, 0.6111f, 0.9f, 0.f, 0.f, 0.f, 160);
+        double e = 0; size_t from = (size_t) (SR * 0.5);
+        for (size_t i = from; i < r.out.size(); ++i) e += std::fabs (r.out[i]);
+        e /= (double) (r.out.size() - from);
+        char b[120]; std::snprintf (b, sizeof b, "T16 DROP 100%%/size 0 = holes (mean |out| %.4f << dry)", e);
+        check (e < 0.06, b);
+    }
+    {
+        // WIPE: memory clear → wet goes near-flat until new audio is recorded
+        FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
+        FlowChop::ChopExtParams x; x.dAmt = 0; x.rvOdds = 0; x.rOdds = 0; x.pSteps = 0;
+        x.wander = 0; x.spread = 0; x.speed = 0; x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0;
+        x.freeze = true;   // freeze AFTER wipe → memory stays empty → wet stays flat
+        c.setExt (x); c.setMix (1.0f);
+        std::vector<float> L (512), R (512); double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+        auto go = [&] (int blocks, bool measure, double& acc, long long& n) {
+            for (int bb = 0; bb < blocks; ++bb) {
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 0.9f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                if (measure) for (int i = 0; i < 512; ++i) { acc += std::fabs (L[(size_t) i]); ++n; }
+                gc += 512; ppq += pps * 512; } };
+        double junk = 0; long long jn = 0;
+        { FlowChop::ChopExtParams w = x; w.freeze = false; c.setExt (w); }
+        go (60, false, junk, jn);                        // fill memory, grooving
+        c.wipe(); { FlowChop::ChopExtParams w = x; w.freeze = true; c.setExt (w); }
+        go (8, false, junk, jn);                         // let tails release
+        double e = 0; long long n = 0; go (40, true, e, n);
+        e /= (double) n;
+        char b[120]; std::snprintf (b, sizeof b, "T17 WIPE + freeze: memory empty, wet flat (mean |out| %.4f)", e);
+        check (e < 0.02, b);
+    }
+    {
+        // locked SEED: the flip repeats — slice order identical across two loops
+        auto seqOf = [] () {
+            FlowChop c; c.prepare (SR, 4.0); c.setScale (60, MAJOR);
+            FlowChop::ChopExtParams x; x.modeOrder = 2; x.oSeed = 0.5f; x.oLock = 0.f; x.rpts = 1;
+            x.dAmt = 0; x.rvOdds = 0; x.rOdds = 0; x.pSteps = 0; x.wander = 0; x.spread = 0; x.speed = 0;
+            x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0; x.tGate = 0; x.tRand = 0;
+            c.setExt (x);
+            std::vector<int> seq; std::vector<float> L (STEP), R (STEP);
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            for (int st = 0; st < 32; ++st)
+            {
+                for (int i = 0; i < STEP; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 1.0f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), STEP, true);
+                seq.push_back (c.lastSliceIndex());
+                gc += STEP; ppq += pps * STEP;
+            }
+            return seq; };
+        auto sq = seqOf();
+        bool locked = true;
+        for (int i = 8; i < 16; ++i) locked = locked && (sq[(size_t) i] == sq[(size_t) (i + 8)]) && (sq[(size_t) i + 8] == sq[(size_t) (i + 16)]);
+        check (locked, "T18 locked SEED: slice order repeats loop after loop");
+        bool moved = false; for (int i = 9; i < 16; ++i) moved = moved || sq[(size_t) i] != sq[(size_t) i - 1] - 0; // shuffled, not constant
+        bool notFwd = false; for (int i = 8; i < 16; ++i) notFwd = notFwd || sq[(size_t) i] != (i % 8);
+        check (notFwd, "T18 locked SEED is a real shuffle (not forward order)");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

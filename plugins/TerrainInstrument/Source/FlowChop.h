@@ -94,6 +94,11 @@ public:
         for (int i = 0; i < kChopMaxLoop; ++i) { backValid_[i] = false; }
         rng_.seed (seed_ ? seed_ : 0xC40F5EEDu);
         regenPattern_ = true;
+        // fb106 runtime (config ext_/extOn_ persists — it mirrors the card)
+        revRunLeft_ = revCool_ = 0; subLvl_ = 1.f; pendDrop_ = false; subsFired_ = 0;
+        colEnv_ = 0.f; spAcc_ = 0.0; lastRate_ = 1.0; wanderCur_ = 0.f;
+        lpL_ = lpR_ = hpL_ = hpR_ = 0.f; wowPh_ = 0.f;
+        fireCount_ = 0; vizStepF_ = 0.f; scanBackSamp_ = 0.0;
     }
 
     // ── configuration (card → engine) ───────────────────────────────────────────
@@ -116,6 +121,41 @@ public:
     int   lastSliceIndex() const noexcept { return lastSlice_; }            // for UI / test
     ChopStyle activeStyle() const noexcept { return curStyle_; }
 
+    // ── extension card (fb106): every Ribbon-card control in one struct. ────
+    // setExt() flips the engine into card mode; until then every path below is
+    // bit-exact legacy (the offline click-proofs run against that).
+    struct ChopExtParams
+    {
+        int   slices = 8, loopCells = 8;   // window: loopCells memory cells cut into `slices` pieces
+        float scan = 1.0f;                 // window position in the 16-cell memory (1 = Now)
+        float wander = 0.0f;               // window drift per pattern
+        float spread = 0.0f;               // per-slice source scatter
+        float speed = 0.0f;                // memory stretch (decimated capture, pitch-compensated)
+        bool  freeze = false, collect = false;
+        int   rpts = 2;                    // window repeats before a free-seed re-roll
+        int   modeOrder = 0;               // 0 Step · 1 Ping · 2 Rand · 3 Walk (style override)
+        float oSpread=.5f, oBias=.5f, oLock=.2f, oSeed=.44f;                 // ORDER
+        float pRange=.33f, pSteps=.5f, pGlide=.15f, pQuant=.6f;              // PITCH
+        float rvOdds=.3f, rvRun=.25f, rvSpread=0.f, rvSnap=.6f;              // REV
+        float tLen=.7f, tCurve=.4f, tRand=0.f, tGate=.2f;                    // TRIM
+        float rCount=.33f, rDecay=.4f, rCurve=.3f, rOdds=.5f;                // REPEAT
+        float dAmt=.3f, dSize=.4f, dSpray=.1f, dTone=.5f;                    // DROP
+        float steps=.5f, detune=.12f, wow=.1f, smooth=.6f;                   // CHARACTER
+        int   filter = 0;                  // 0 Off · 1 Low · 2 Mid · 3 High (wet bus)
+        float grit=0.f, trim=.5f;          // BUS
+    };
+    void setExt (const ChopExtParams& x) noexcept
+    { ext_ = x; extOn_ = true; len_ = arpClampi (x.slices, 2, kChopMaxLoop); }
+
+    // instant memory clear — RT-safe: an empty written window makes every read
+    // clamp to the newest sample (flat hold ≈ silence). No memset on the audio thread.
+    void wipe() noexcept { written_ = 0; }
+
+    // viz feed (audio thread writes, processor copies to atomics after process)
+    float    vizStepF()     const noexcept { return vizStepF_; }   // slice index + frac in the loop
+    uint32_t vizFireCount() const noexcept { return fireCount_; }
+    float    wetLevel()     const noexcept { return wetEnv_; }
+
     // ── main: process the synth output in place ───────────────────────────────────
     void process (float rate, float gate, float vary, float traj, float morph,
                   double hostPpq, double bpm, double sampleRate,
@@ -125,11 +165,43 @@ public:
         const double SR  = (sampleRate > 0.0 ? sampleRate : sr_);
         const double BP  = (bpm > 0.0 ? bpm : 120.0);
         const double pps = (BP / 60.0) / SR;
-        const float  beats = arpBeatsPerStepRich (rate);
+        const float  cellBeats = arpBeatsPerStepRich (rate);
+        // fb106 geometry: the RATE grid defines memory CELLS; the card window spans
+        // loopCells of them, cut into `slices` pieces — so the audible slice grid is
+        // cellBeats * loop/slices. Legacy (no card): slice == cell, unchanged.
+        const float  beats = extOn_ ? cellBeats * (float) ext_.loopCells / (float) len_ : cellBeats;
         const double stepSamp = (double) beats / pps;
+        const double cellSamp = (double) cellBeats / pps;
         const double sw = (double) arpClamp01 (morph > 0.9f ? 0.9f : morph) * ((double) beats * 0.5);
 
-        curStyle_ = (styleOv_ >= 0 && styleOv_ < kChopStyleN) ? (ChopStyle) styleOv_ : chopStyle (traj);
+        // window back-offset: Scan positions the loop window in the 16-cell memory
+        // (1 = Now = legacy anchor); Wander re-rolls a drift each pattern regen.
+        scanBackSamp_ = 0.0;
+        if (extOn_)
+        {
+            const float cellsBack = arpClamp01 (1.0f - ext_.scan) * (float) (16 - arpClampi (ext_.loopCells, 2, 16));
+            float drift = wanderCur_ * (float) (16 - arpClampi (ext_.loopCells, 2, 16)) * 0.5f;
+            float total = cellsBack + drift;
+            if (total < 0.f) total = 0.f;
+            if (total > 15.f) total = 15.f;
+            scanBackSamp_ = (double) total * cellSamp;
+            // per-block hoisted wet-bus + character coefficients
+            crushLv_  = (ext_.steps > 0.02f) ? std::pow (2.0f, 16.0f - ext_.steps * 11.0f) : 0.f;
+            gritDrv_  = 1.0f + ext_.grit * 6.0f;
+            gritNorm_ = 1.0f / std::tanh (gritDrv_);
+            trimGain_ = 0.5f + arpClamp01 (ext_.trim);                       // .5x .. 1.5x, unity at .5
+            fadeEff_  = (int) std::lround ((float) fade_ * (0.5f + arpClamp01 (ext_.smooth) * 3.5f));
+            if (fadeEff_ < 2) fadeEff_ = 2;
+            const float lpHz = 900.0f, hpHz = 300.0f;
+            lpC_ = 1.0f - std::exp (-2.0f * 3.14159265f * lpHz / (float) SR);
+            hpC_ = 1.0f - std::exp (-2.0f * 3.14159265f * hpHz / (float) SR);
+            wowInc_ = 2.0f * 3.14159265f * 0.7f / (float) SR;                // 0.7 Hz tape wow
+        }
+
+        curStyle_ = (extOn_)
+            ? ((traj > 0.004f) ? chopStyle (traj)                            // TRAJ macro engaged → its 6-style ladder
+                               : kOrderStyle[arpClampi (ext_.modeOrder, 0, 3)])
+            : ((styleOv_ >= 0 && styleOv_ < kChopStyleN) ? (ChopStyle) styleOv_ : chopStyle (traj));
         const float gFrac   = arpClamp01 (gate < 0.05f ? 0.05f : gate);
         const float pitchAmt = arpClamp01 (morph);                          // MORPH adds pitch spice
         const float flipAmt  = arpClamp01 (vary);
@@ -159,9 +231,31 @@ public:
         for (int i = 0; i < numSamples; ++i, p += pps)
         {
             const float dryL = L[i], dryR = R[i];
-            // record dry into ring (absolute index)
-            bufL_[(size_t) (wAbs_ % cap_)] = dryL;
-            bufR_[(size_t) (wAbs_ % cap_)] = dryR;
+            // record dry into ring (absolute index) — fb106: Freeze stops the tape,
+            // Collect only keeps audible moments, Speed stretches (decimated capture,
+            // playback pitch-compensated via rateComp_). Skipped samples do NOT
+            // advance wAbs_ so slice math stays anchored to what memory holds.
+            bool wr = true;
+            if (extOn_)
+            {
+                if (ext_.freeze) wr = false;
+                if (wr && ext_.collect)
+                {
+                    const float a = std::fabs (dryL) + std::fabs (dryR);
+                    colEnv_ = (a > colEnv_) ? a : colEnv_ * 0.9995f;
+                    wr = colEnv_ > 0.02f;
+                }
+                if (wr && ext_.speed > 0.01f)
+                {
+                    spAcc_ += 1.0 / (1.0 + (double) ext_.speed * 3.0);
+                    if (spAcc_ >= 1.0) spAcc_ -= 1.0; else wr = false;
+                }
+            }
+            if (wr)
+            {
+                bufL_[(size_t) (wAbs_ % cap_)] = dryL;
+                bufR_[(size_t) (wAbs_ % cap_)] = dryR;
+            }
 
             // step boundaries (swung) → schedule slice triggers
             int guard = 0;
@@ -178,15 +272,58 @@ public:
                 if (--subTimer_ <= 0)
                 {
                     subPitchAccum_ += subPitchStep_;
-                    triggerVoice (pendBack_, pendRev_, pendPitch_ + subPitchAccum_, pendGate_, stepSamp);
+                    if (extOn_) subLvl_ *= 1.0f - 0.6f * arpClamp01 (ext_.rDecay);   // rolls fade out
+                    triggerVoice (pendBack_, pendRev_, pendPitch_ + subPitchAccum_, pendGate_, stepSamp, subLvl_, pendDrop_);
                     --subRemain_;
-                    subTimer_ = subInterval_;
+                    ++subsFired_;
+                    int iv = subInterval_;
+                    if (extOn_)
+                    {   // Roll Curve — accelerando / ritardando spacing
+                        const float f = std::pow (2.0f, (arpClamp01 (ext_.rCurve) - 0.5f) * 1.2f);
+                        iv = (int) std::lround ((double) subInterval_ * std::pow ((double) f, (double) subsFired_));
+                        if (iv < 1) iv = 1;
+                    }
+                    subTimer_ = iv;
                 }
             }
 
             // render voice pool (sum) — each voice cosine-enveloped, continuous read
             float wetL = 0.f, wetR = 0.f;
-            for (int v = 0; v < kChopVoices; ++v) if (voice_[v].active) renderVoice (voice_[v], wetL, wetR);
+            float wowMul = 1.0f;
+            if (extOn_ && ext_.wow > 0.01f)
+            {
+                wowPh_ += wowInc_; if (wowPh_ > 6.2831853f) wowPh_ -= 6.2831853f;
+                wowMul = 1.0f + ext_.wow * 0.012f * std::sin (wowPh_);
+            }
+            for (int v = 0; v < kChopVoices; ++v) if (voice_[v].active) renderVoice (voice_[v], wetL, wetR, wowMul);
+
+            // fb106 wet bus: Steps (bit-step) → Grit (drive) → Filter → Trim
+            if (extOn_)
+            {
+                if (crushLv_ > 0.f)
+                { wetL = std::round (wetL * crushLv_) / crushLv_; wetR = std::round (wetR * crushLv_) / crushLv_; }
+                if (ext_.grit > 0.01f)
+                { wetL = std::tanh (wetL * gritDrv_) * gritNorm_; wetR = std::tanh (wetR * gritDrv_) * gritNorm_; }
+                switch (ext_.filter)
+                {
+                    case 1:  // Low — one-pole LP
+                        lpL_ += lpC_ * (wetL - lpL_); wetL = lpL_;
+                        lpR_ += lpC_ * (wetR - lpR_); wetR = lpR_;
+                        break;
+                    case 2:  // Mid — HP into LP (band focus)
+                        hpL_ += hpC_ * (wetL - hpL_); wetL -= hpL_;
+                        hpR_ += hpC_ * (wetR - hpR_); wetR -= hpR_;
+                        lpL_ += lpC_ * (wetL - lpL_); wetL = lpL_;
+                        lpR_ += lpC_ * (wetR - lpR_); wetR = lpR_;
+                        break;
+                    case 3:  // High — one-pole HP
+                        hpL_ += hpC_ * (wetL - hpL_); wetL -= hpL_;
+                        hpR_ += hpC_ * (wetR - hpR_); wetR -= hpR_;
+                        break;
+                    default: break;
+                }
+                wetL *= trimGain_; wetR *= trimGain_;
+            }
 
             // wet gate (cosine) for mode enter/exit click-free
             const float target = wantWet ? 1.f : 0.f;
@@ -199,11 +336,21 @@ public:
             L[i] = flush (dryL + (wetL - dryL) * a);
             R[i] = flush (dryR + (wetR - dryR) * a);
 
-            ++wAbs_;
-            if (written_ < cap_) ++written_;
+            if (wr)
+            {
+                ++wAbs_;
+                if (written_ < cap_) ++written_;
+            }
         }
 
         freePpq_ = (playing ? hostPpq : freePpq_) + pps * (double) numSamples;
+
+        // viz playhead: slice position within the loop (time-based, linear)
+        {
+            double m = std::fmod (p / (double) beats, (double) len_);
+            if (m < 0) m += len_;
+            vizStepF_ = (float) m;
+        }
     }
 
 private:
@@ -220,7 +367,15 @@ private:
         int    aLen = 1, rLen = 1, aPos = 0, rPos = 0;
         int    gate = 0;           // output samples until release
         float  relStart = 1.0f;    // envelope shape value when release began
+        // fb106 extension
+        double rateFrom = 1.0;     // glide origin (varispeed portamento)
+        int    glideLen = 0, glidePos = 0;
+        bool   lpOn = false;       // Drop Tone one-pole
+        float  lpC = 1.f, lpZL = 0.f, lpZR = 0.f;
     };
+
+    static constexpr ChopStyle kOrderStyle[4] = {
+        ChopStyle::Forward, ChopStyle::PingPong, ChopStyle::Shuffle, (ChopStyle) 6 };   // 6 = Walk (card-only)
 
     static double boundaryTime (long long step, float beats, double sw) noexcept
     { return (double) step * (double) beats + ((step & 1LL) ? sw : 0.0); }
@@ -228,7 +383,22 @@ private:
     // schedule the slice(s) for a step
     void onBoundary (long long step, double stepSamp, float gFrac, float flipAmt, float pitchAmt) noexcept
     {
-        if (regenPattern_ || (step % len_) == 0) { regeneratePattern(); regenPattern_ = false; }
+        // fb106: Rpts holds a flip for N windows before a free re-roll; a locked
+        // Seed makes every regen identical (the flip repeats forever); Wander
+        // re-rolls the window drift on each regen.
+        const long long loopIdx = (long long) ((step >= 0 ? step : 0) / (long long) len_);
+        const bool atLoopStart = (step % len_) == 0;
+        if (regenPattern_ || (atLoopStart && (! extOn_ || ext_.rpts <= 1 || (loopIdx % (long long) arpClampi (ext_.rpts, 1, 4)) == 0)))
+        {
+            if (extOn_)
+            {
+                const int seedIdx = (int) std::lround (arpClamp01 (ext_.oSeed) * 16.0f);
+                if (seedIdx > 0) rng_.seed (0xC40F5EEDu ^ (uint32_t) seedIdx * 2654435761u);   // locked flip
+                wanderCur_ = (ext_.wander > 0.01f) ? (rng_.unit() - 0.5f) * ext_.wander * 2.0f : 0.0f;
+            }
+            regeneratePattern();
+            regenPattern_ = false;
+        }
         const int li = (int) (((step % len_) + len_) % len_);
 
         // back-offset to replay captured slice order_[li] live-anchored:
@@ -239,47 +409,119 @@ private:
         if (back < 0) back += len_;
         lastSlice_ = slice;
 
-        // reverse + pitch spice (probabilities scale with VARY / MORPH), déjà-vu locked
-        bool rev = (rng_.unit() < revProb_ * flipAmt);
-        int  semi = 0;
-        if (pitchRangeDeg_ > 0 && rng_.unit() < flipAmt)
+        // DROP lane: the slice goes silent — Size 0 = a real hole, else a scattered grain
+        bool dropped = false;
+        if (extOn_ && ext_.dAmt > 0.01f && rng_.unit() < ext_.dAmt * 0.85f) dropped = true;
+        if (dropped && ext_.dSize <= 0.03f)
+        {
+            if (cur_ >= 0 && voice_[cur_].active && voice_[cur_].phase < 2) startRelease (voice_[cur_]);
+            subRemain_ = 0;
+            return;
+        }
+
+        // REV — card: absolute Odds (+VARY spice), runs of Len, spaced by Sprd,
+        // Snap flips THIS moment in place; legacy: probability × VARY.
+        bool rev; bool snapSelf = false;
+        if (extOn_)
+        {
+            if (revRunLeft_ > 0)      { rev = true;  --revRunLeft_; }
+            else if (revCool_ > 0)    { rev = false; --revCool_; }
+            else
+            {
+                rev = rng_.unit() < arpClamp01 (ext_.rvOdds + flipAmt * 0.4f);
+                if (rev)
+                {
+                    revRunLeft_ = (int) std::lround (ext_.rvRun * 3.0f);
+                    revCool_    = (int) std::lround (ext_.rvSpread * 4.0f);
+                }
+            }
+            if (rev && rng_.unit() < ext_.rvSnap) snapSelf = true;
+        }
+        else rev = (rng_.unit() < revProb_ * flipAmt);
+        if (snapSelf) back = 0;
+
+        // PITCH — card: Steps = odds, Range = reach (degrees), Quant = in-key vs
+        // chromatic, full depth; legacy: VARY odds × MORPH depth.
+        int semi = 0;
+        if (extOn_)
+        {
+            const int reach = (int) std::lround (arpClamp01 (ext_.pRange) * 12.0f);
+            if (reach > 0 && rng_.unit() < arpClamp01 (ext_.pSteps * 0.9f + flipAmt * 0.3f))
+            {
+                const int deg = (int) rng_.below ((uint32_t) reach + 1) * (rng_.unit() < 0.5f ? 1 : -1);
+                semi = (rng_.unit() < ext_.pQuant) ? scaleSemis (deg) : deg;
+            }
+        }
+        else if (pitchRangeDeg_ > 0 && rng_.unit() < flipAmt)
         {
             const int deg = (int) rng_.below (pitchRangeDeg_ + 1) * (rng_.unit() < 0.5f ? 1 : -1);
             semi = scaleSemis (deg);
             semi = (int) std::lround (semi * (double) pitchAmt);   // MORPH scales the spice depth
         }
-        const float gateFull = (float) (stepSamp * (double) gFrac);
 
-        // StutterRoll / GrainSpray / ratchet → sub-triggers across the step
+        // TRIM — Len shapes the gate, Rand humanizes, Gate chokes staccato
+        float gF = gFrac;
+        if (extOn_)
+        {
+            gF *= 0.3f + arpClamp01 (ext_.tLen) * 0.8f;
+            gF *= 1.0f + (rng_.unit() - 0.5f) * arpClamp01 (ext_.tRand) * 0.8f;
+            if (ext_.tGate > 0.01f && rng_.unit() < ext_.tGate * 0.6f) gF *= 0.35f;
+            if (gF < 0.05f) gF = 0.05f; if (gF > 1.0f) gF = 1.0f;
+        }
+        float gateFull = (float) (stepSamp * (double) gF);
+        float lvl = 1.0f;
+        if (dropped)
+        {   // grain survivor: a short scattered blip where the slice used to be
+            gateFull = (float) std::max ((double) (4 * fadeCur()), (double) gateFull * (double) arpClamp01 (ext_.dSize) * 0.5);
+            lvl = 0.9f;
+        }
+
+        // REPEAT lane (Odds × Count) + StutterRoll / GrainSpray style minimums
         int rolls = ratchet_;
         float pitchStep = 0.f;
+        if (extOn_)
+        {
+            const int rc = 1 + (int) std::lround (arpClamp01 (ext_.rCount) * 3.0f);
+            if (rc > 1 && rng_.unit() < arpClamp01 (ext_.rOdds) * 0.8f) rolls = rc;
+        }
         if (curStyle_ == ChopStyle::StutterRoll) { rolls = (rolls < 4) ? 4 : rolls; pitchStep = (float) scaleSemis (1); } // ascending in-key
         if (curStyle_ == ChopStyle::GrainSpray)  { rolls = (rolls < 6) ? 6 : rolls; }
 
         subInterval_ = (rolls > 1) ? (int) std::lround (stepSamp / (double) rolls) : 0;
         if (rolls > 1 && subInterval_ < 1) subInterval_ = 1;
         // per-hit gate: rolls last one sub-slot (so voices never pile past the pool); else fill the step
-        const float perGate = (rolls > 1) ? (float) std::max (2 * fade_, subInterval_) : gateFull;
+        const float perGate = (rolls > 1) ? (float) std::max (2 * fadeCur(), subInterval_) : gateFull;
 
         // fire the first hit now; queue the remaining as timed sub-triggers
-        triggerVoice (back, rev, (float) semi, perGate, stepSamp);
+        triggerVoice (back, rev, (float) semi, perGate, stepSamp, lvl, dropped);
         subRemain_ = rolls - 1;
+        subsFired_ = 0;
+        subLvl_    = lvl;
         if (subRemain_ > 0)
         {
             subTimer_      = subInterval_;
             subPitchAccum_ = 0.f;
             subPitchStep_  = pitchStep;
-            pendBack_      = back;  pendRev_ = rev; pendPitch_ = (float) semi; pendGate_ = perGate;
+            pendBack_      = back;  pendRev_ = rev; pendPitch_ = (float) semi; pendGate_ = perGate; pendDrop_ = dropped;
             if (curStyle_ == ChopStyle::GrainSpray) { pendBack_ = -1; }     // -1 = random per sub (set in trigger)
         }
     }
 
     // allocate a voice, release the current, attack the new (overlap = click-free)
-    void triggerVoice (int back, bool rev, float semi, float gateSamples, double stepSamp) noexcept
+    void triggerVoice (int back, bool rev, float semi, float gateSamples, double stepSamp,
+                       float lvl = 1.0f, bool toneGrain = false) noexcept
     {
         if (back < 0) back = (int) rng_.below (len_);                    // GrainSpray random pick
         const double sliceLen = stepSamp;
-        const double srcStart = (double) wAbs_ - (double) (back + 1) * sliceLen;
+        double srcStart = (double) wAbs_ - (double) (back + 1) * sliceLen;
+        if (extOn_)
+        {
+            srcStart -= scanBackSamp_;                                   // Scan/Wander window offset
+            if (ext_.spread > 0.01f)                                     // per-slice source scatter
+                srcStart -= (double) rng_.unit() * (double) ext_.spread * sliceLen * 2.0;
+            if (toneGrain && ext_.dSpray > 0.01f)                        // dropped-grain scatter
+                srcStart -= (double) rng_.unit() * (double) ext_.dSpray * sliceLen * 4.0;
+        }
 
         // release whoever is current
         if (cur_ >= 0 && voice_[cur_].active && voice_[cur_].phase < 2) startRelease (voice_[cur_]);
@@ -290,11 +532,41 @@ private:
         v.srcStart = srcStart; v.sliceLen = sliceLen; v.readPos = 0.0;
         v.reverse = rev;
         v.rate = std::pow (2.0, (double) semi / 12.0);
-        v.level = 1.0f;
-        v.aLen = clampFade ((int) gateSamples); v.rLen = v.aLen;
+        v.level = lvl;
+        v.rateFrom = v.rate; v.glideLen = 0; v.glidePos = 0;
+        v.lpOn = false; v.lpZL = 0.f; v.lpZR = 0.f; v.lpC = 1.f;
+        if (extOn_)
+        {
+            if (ext_.detune > 0.01f)                                     // per-slice tape detune
+                v.rate *= std::pow (2.0, (double) (rng_.unit() - 0.5f) * (double) ext_.detune * 100.0 / 1200.0);
+            if (ext_.speed > 0.01f)                                      // decimated memory → pitch-compensate
+                v.rate *= 1.0 / (1.0 + (double) ext_.speed * 3.0);
+            if (ext_.pGlide > 0.01f)                                     // varispeed portamento from the last slice
+            {
+                v.rateFrom = lastRate_;
+                v.glideLen = (int) std::lround ((double) arpClamp01 (ext_.pGlide) * sliceLen * 0.8);
+            }
+            if (toneGrain)                                               // Drop Tone: per-grain one-pole color
+            {
+                const float hz = 400.0f * std::pow (2.0f, arpClamp01 (ext_.dTone) * 4.3f);
+                v.lpOn = true;
+                v.lpC  = 1.0f - std::exp (-2.0f * 3.14159265f * hz / (float) sr_);
+            }
+            lastRate_ = v.rate;
+        }
+        v.aLen = clampFade ((int) gateSamples);
+        if (extOn_)
+        {   // Trim Curve: soft swell ↔ snap attack (re-clamped inside the gate)
+            v.aLen = (int) std::lround ((float) v.aLen * (0.4f + arpClamp01 (ext_.tCurve) * 2.1f));
+            const int half = (int) gateSamples / 2;
+            if (v.aLen > half) v.aLen = half;
+            if (v.aLen < 1) v.aLen = 1;
+        }
+        v.rLen = v.aLen;
         v.gate = (int) gateSamples < 1 ? 1 : (int) gateSamples;
         v.relStart = 1.0f;
         cur_ = slot;
+        ++fireCount_;
     }
 
     int allocVoice() noexcept
@@ -306,9 +578,10 @@ private:
         return best;
     }
 
+    int fadeCur() const noexcept { return extOn_ ? fadeEff_ : fade_; }
     int clampFade (int gateSamples) const noexcept
     {
-        int f = fade_;
+        int f = fadeCur();
         if (f > gateSamples / 2) f = gateSamples / 2;       // fade must fit inside the gate
         if (f < 1) f = 1;
         return f;
@@ -322,7 +595,7 @@ private:
         v.relStart = shape; v.phase = 2; v.rPos = 0;
     }
 
-    void renderVoice (Voice& v, float& wetL, float& wetR) noexcept
+    void renderVoice (Voice& v, float& wetL, float& wetR, float wowMul = 1.0f) noexcept
     {
         // ---- envelope (cosine, zero-slope endpoints) ----
         float shape;
@@ -347,11 +620,24 @@ private:
         // ---- continuous read (forward, or backward for reverse) ----
         const double idx = v.reverse ? (v.srcStart + v.sliceLen - 1.0 - v.readPos)
                                      : (v.srcStart + v.readPos);
-        const float sL = sampleAt (bufL_, idx);
-        const float sR = sampleAt (bufR_, idx);
+        float sL = sampleAt (bufL_, idx);
+        float sR = sampleAt (bufR_, idx);
+        if (v.lpOn)                                   // Drop Tone grain color
+        {
+            v.lpZL += v.lpC * (sL - v.lpZL); sL = v.lpZL;
+            v.lpZR += v.lpC * (sR - v.lpZR); sR = v.lpZR;
+        }
         wetL += g * sL; wetR += g * sR;
 
-        v.readPos += v.rate;
+        // varispeed: glide from the previous slice's rate (tape portamento), wow wobble
+        double eff = v.rate;
+        if (v.glideLen > 0 && v.glidePos < v.glideLen)
+        {
+            const double t = (double) v.glidePos / (double) v.glideLen;
+            eff = v.rateFrom + (v.rate - v.rateFrom) * t;
+            ++v.glidePos;
+        }
+        v.readPos += eff * (double) wowMul;
 
         // gate countdown → release at step end
         if (v.phase < 2) { if (--v.gate <= 0) startRelease (v); }
@@ -360,6 +646,7 @@ private:
     // read ring at absolute fractional index, clamped to the valid written window (Hermite)
     float sampleAt (const std::vector<float>& b, double absIdx) const noexcept
     {
+        if (written_ <= 0) return 0.f;                  // wiped/empty memory = silence, not a stale DC hold
         const double newest = (double) (wAbs_ - 1);
         const double oldest = (double) (wAbs_ - (long long) (written_ < cap_ ? written_ : cap_));
         if (absIdx > newest) absIdx = newest;               // flat hold (no jump) if reading ahead
@@ -389,6 +676,16 @@ private:
     void regeneratePattern() noexcept
     {
         const int L = len_;
+        if (extOn_ && (int) curStyle_ == 6)            // Walk: wander to a neighbor each slice
+        {
+            int cur = arpClampi (order_[0], 0, L - 1);
+            for (int i = 0; i < L; ++i)
+            {
+                order_[i] = cur;
+                cur = arpClampi (cur + ((rng_.next() & 1u) ? 1 : -1), 0, L - 1);
+            }
+            return;
+        }
         switch (curStyle_)
         {
             case ChopStyle::Forward:   for (int i = 0; i < L; ++i) order_[i] = i; break;             // recorded order (delayed passthrough)
@@ -399,6 +696,18 @@ private:
             case ChopStyle::StutterRoll:
             default:
             {
+                if (extOn_)
+                {   // ORDER lane: Lock keeps seats in place, Sprd bounds the reach, Bias leans old/new
+                    const int span    = 1 + (int) std::lround (arpClamp01 (ext_.oSpread) * (float) (L - 1));
+                    const int biasOff = (int) std::lround ((arpClamp01 (ext_.oBias) - 0.5f) * (float) L);
+                    for (int i = 0; i < L; ++i)
+                    {
+                        if (rng_.unit() < arpClamp01 (ext_.oLock)) { order_[i] = i; continue; }
+                        const int off = (int) rng_.below ((uint32_t) (2 * span + 1)) - span + biasOff;
+                        order_[i] = arpClampi (i + off, 0, L - 1);
+                    }
+                    break;
+                }
                 for (int i = 0; i < L; ++i)
                 {
                     if (! (backValid_[i] && rng_.unit() < dejavu_))          // déjà-vu: keep cached order when locked
@@ -465,6 +774,20 @@ private:
 
     // clock
     bool     haveClock_ = false; long long nextStep_ = 0; double nextBoundary_ = 0.0, freePpq_ = 0.0, lastBeats_ = 0.0;
+
+    // ── fb106 extension state ──────────────────────────────────────────────
+    bool          extOn_ = false;
+    ChopExtParams ext_;
+    double        scanBackSamp_ = 0.0, spAcc_ = 0.0, lastRate_ = 1.0;
+    float         wanderCur_ = 0.f, colEnv_ = 0.f;
+    float         crushLv_ = 0.f, gritDrv_ = 1.f, gritNorm_ = 1.f, trimGain_ = 1.f;
+    int           fadeEff_ = 2;
+    float         lpC_ = 1.f, hpC_ = 1.f, lpL_ = 0.f, lpR_ = 0.f, hpL_ = 0.f, hpR_ = 0.f;
+    float         wowPh_ = 0.f, wowInc_ = 0.f;
+    int           revRunLeft_ = 0, revCool_ = 0;
+    float         subLvl_ = 1.f; bool pendDrop_ = false; int subsFired_ = 0;
+    uint32_t      fireCount_ = 0;
+    float         vizStepF_ = 0.f;
 
     mutable ArpRng rng_;
 };
