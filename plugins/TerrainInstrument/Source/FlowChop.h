@@ -134,13 +134,13 @@ public:
         bool  freeze = false, collect = false;
         int   rpts = 2;                    // window repeats before a free-seed re-roll
         int   modeOrder = 0;               // 0 Step · 1 Ping · 2 Rand · 3 Walk (style override)
-        float oSpread=.5f, oBias=.5f, oLock=.2f, oSeed=.44f;                 // ORDER
-        float pRange=.33f, pSteps=.5f, pGlide=.15f, pQuant=.6f;              // PITCH
-        float rvOdds=.3f, rvRun=.25f, rvSpread=0.f, rvSnap=.6f;              // REV
-        float tLen=.7f, tCurve=.4f, tRand=0.f, tGate=.2f;                    // TRIM
-        float rCount=.33f, rDecay=.4f, rCurve=.3f, rOdds=.5f;                // REPEAT
-        float dAmt=.3f, dSize=.4f, dSpray=.1f, dTone=.5f;                    // DROP
-        float steps=.5f, detune=.12f, wow=.1f, smooth=.6f;                   // CHARACTER
+        float oSpread=.5f, oBias=.5f, oLock=0.f, oSeed=.44f;                 // ORDER
+        float pRange=.33f, pSteps=0.f, pGlide=.15f, pQuant=.6f;              // PITCH (odds off by default)
+        float rvOdds=0.f, rvRun=.25f, rvSpread=0.f, rvSnap=.6f;              // REV (odds off by default)
+        float tLen=.875f, tCurve=.3f, tRand=0.f, tGate=0.f;                  // TRIM (×1.0 neutral)
+        float rCount=.33f, rDecay=.4f, rCurve=.5f, rOdds=0.f;                // REPEAT (odds off by default)
+        float dAmt=0.f, dSize=.4f, dSpray=.1f, dTone=.5f;                    // DROP (off by default)
+        float steps=0.f, detune=0.f, wow=0.f, smooth=.15f;                   // CHARACTER (neutral; smooth .15 = fade ×1.0)
         int   filter = 0;                  // 0 Off · 1 Low · 2 Mid · 3 High (wet bus)
         float grit=0.f, trim=.5f;          // BUS
     };

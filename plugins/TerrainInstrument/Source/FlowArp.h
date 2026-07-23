@@ -268,12 +268,15 @@ struct ArpLaneData
 
     ArpLaneData() noexcept
     {
-        static constexpr float seed[16] = { 0,1,3,3,5,3,1,1,0,3,3,6,5,5,1,0 };
+        // fb107 — NEUTRAL by default (Max: "dots centered, everything at zero"):
+        // a flat pattern plays a textbook arp until the user draws. Lane values
+        // of 1 make every depth knob a neutral multiplier, so the FIRST touch of
+        // any control is clearly audible and attributable.
         for (int i = 0; i < kArpLaneMax; ++i)
         {
-            pitch[i]   = seed[i % 16];
-            gate[i]    = 0.72f; vel[i] = 0.8f; oct[i] = 0.0f;
-            ratchet[i] = 1.0f;  prob[i] = 1.0f; wt[i] = 0.5f;
+            pitch[i]   = 3.0f;                 // centre row = zero offset
+            gate[i]    = 1.0f; vel[i] = 1.0f; oct[i] = 0.0f;
+            ratchet[i] = 1.0f; prob[i] = 1.0f; wt[i] = 0.5f;
         }
     }
 };
@@ -285,21 +288,21 @@ struct ArpExtParams
     int   dir = 0;          // 0 Up · 1 Down · 2 Up-Dn · 3 Random  (card Direction)
     int   octaves = 2;      // 1..4                                 (card Octaves)
     bool  sorted = true;    // true = low→high, false = as-played   (card Sorted)
-    float swing = 0.12f, mroll = 0.25f, timbre = 0.6f, glide = 0.15f;   // MOTION
+    float swing = 0.0f, mroll = 0.0f, timbre = 0.6f, glide = 0.15f;     // MOTION (fb107: straight + no surprise rolls)
     // PITCH: row span (semis), contour bend, snap-to-chord chance, slide chance
-    float pRange = 0.5f, pCurve = 0.5f, pQuant = 0.6f, pSlide = 0.2f;
+    float pRange = 0.5f, pCurve = 0.5f, pQuant = 0.6f, pSlide = 0.0f;
     // GATE: master length, contrast, humanize, tie chance
-    float gLen = 0.65f, gCurve = 0.4f, gRand = 0.0f, gSlide = 0.15f;
+    float gLen = 0.52f, gCurve = 0.5f, gRand = 0.0f, gSlide = 0.0f;
     // VEL: lane depth, contrast, humanize, floor
-    float vRange = 0.7f, vCurve = 0.5f, vRand = 0.12f, vFloor = 0.2f;
+    float vRange = 0.7f, vCurve = 0.5f, vRand = 0.0f, vFloor = 0.2f;
     // OCT: lane reach (×4 oct), constant bias (±4), random jump, alt-step zigzag
     float oRange = 0.25f, oBias = 0.5f, oRand = 0.0f, oSpread = 0.0f;
     // ROLL: global roll count, per-hit decay, spacing curve, programmed-roll odds
-    float rCount = 0.33f, rDecay = 0.4f, rCurve = 0.3f, rAmt = 0.5f;
+    float rCount = 0.33f, rDecay = 0.4f, rCurve = 0.5f, rAmt = 0.5f;
     // CHANCE: lane depth, bias, dice seed (0..16), per-loop mutation
     float cAmt = 0.8f, cBias = 0.5f, cSeed = 0.44f, cDrift = 0.0f;
     // WAVE: send depth, contrast, slew, humanize
-    float wDepth = 0.6f, wCurve = 0.45f, wSlide = 0.25f, wRand = 0.1f;
+    float wDepth = 0.6f, wCurve = 0.45f, wSlide = 0.25f, wRand = 0.0f;
 };
 
 // =============================================================================
@@ -327,7 +330,7 @@ public:
     {
         held_.count = 0; latched_.count = 0; latchActive_ = false;
         curNote_ = -1; curOffPpq_ = 0.0; freePpq_ = 0.0; lastVel_ = 100; rng_.seed (0x12345678u);
-        actN_ = 0; lastKey_ = (long long) -0x7FFFFFFFFFLL; lastPos_ = 0.0;
+        actN_ = 0; lastKey_ = (long long) -0x7FFFFFFFFFLL; lastPos_ = 0.0; guardBeats_ = -1.0f;
         waveCur_ = waveTarget_ = 0.5f; vizStepF_ = 0.0f; vizNote_ = -1; vizVel_ = 0;
         vizCount_ = 0; vizActive_ = false;              // ext_/lanes_/extOn_ persist (config, not runtime)
     }
@@ -536,6 +539,10 @@ private:
         // classic-path leftover (mode was switched into ext mid-note): close it
         if (curNote_ >= 0) { emitOff (curNote_, 0); curNote_ = -1; }
 
+        // RATE moved → the absolute step index rescales: a SLOWER rate shrinks idx,
+        // and a stale high-water refire guard would eat every step forever (fb107 —
+        // the "can go up the ladder, never back down" bug). Re-arm on grid change.
+        if (beats != guardBeats_) { guardBeats_ = beats; lastKey_ = (long long) -0x7FFFFFFFFFLL; }
         // host loop/relocate jumped backwards → re-arm the refire guard
         if (pos < lastPos_ - 0.25) lastKey_ = (long long) -0x7FFFFFFFFFLL;
         lastPos_ = pos;
@@ -783,6 +790,7 @@ private:
     ArpLaneData  lanes_;
     Act          act_[kArpActMax]; int actN_ = 0;   // sounding notes (ties/slides overlap)
     long long    lastKey_ = (long long) -0x7FFFFFFFFFLL;   // refire guard (idx*8+k)
+    float        guardBeats_ = -1.0f;                      // grid the guard was armed for
     double       lastPos_ = 0.0;
     float        waveCur_ = 0.5f, waveTarget_ = 0.5f;      // WAVE lane slew state
     float        vizStepF_ = 0.0f;

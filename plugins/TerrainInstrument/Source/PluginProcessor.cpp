@@ -3079,11 +3079,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     auto addFlowKnob = [&] (const char* id, const char* name, float def) {
         layout.add (std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
-    addFlowKnob (ParameterIDs::FLOW_ARP_RATE,"Arp Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_ARP_GATE,"Arp Gate",0.55f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_RATE,"Arp Rate",0.6111f);  addFlowKnob (ParameterIDs::FLOW_ARP_GATE,"Arp Gate",0.55f);   // fb107: rate default = 1/16 (rich idx 11)
     addFlowKnob (ParameterIDs::FLOW_ARP_VARY,"Arp Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_TRAJ,"Arp Traj",0.00f);
     addFlowKnob (ParameterIDs::FLOW_ARP_MORPH,"Arp Morph",0.00f);
     // mode-2 macros — IDs stay FLOW_SEQ_* (preset-stable) but now drive CHOP (Rate/Gate/Vary/Style/Morph)
-    addFlowKnob (ParameterIDs::FLOW_SEQ_RATE,"Chop Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_SEQ_GATE,"Chop Gate",0.55f);
+    addFlowKnob (ParameterIDs::FLOW_SEQ_RATE,"Chop Rate",0.6111f);  addFlowKnob (ParameterIDs::FLOW_SEQ_GATE,"Chop Gate",0.55f);   // fb107: chop grid default = 1/16
     addFlowKnob (ParameterIDs::FLOW_SEQ_VARY,"Chop Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_SEQ_TRAJ,"Chop Style",0.00f);
     addFlowKnob (ParameterIDs::FLOW_SEQ_MORPH,"Chop Morph",0.00f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_BLEND,"Chop Blend",0.60f);   // dry/wet — 60% so dry plays under the chop (zero-latency), wet on top
@@ -3100,22 +3100,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "1", "2", "3", "4" }, 1));
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_SORTED, 1 }, "Arp Sorted", true));
-    addFlowKnob (ParameterIDs::FLOW_ARP_SWING, "Arp Swing", 0.12f);  addFlowKnob (ParameterIDs::FLOW_ARP_MROLL, "Arp Roll", 0.25f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_SWING, "Arp Swing", 0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_MROLL, "Arp Roll", 0.00f);   // fb107 neutral: straight, no surprise rolls
     addFlowKnob (ParameterIDs::FLOW_ARP_TIMBRE,"Arp Timbre",0.60f);  addFlowKnob (ParameterIDs::FLOW_ARP_GLIDE, "Arp Glide",0.15f);
     addFlowKnob (ParameterIDs::FLOW_ARP_P_RANGE,"Arp Pitch Range",0.50f); addFlowKnob (ParameterIDs::FLOW_ARP_P_CURVE,"Arp Pitch Curve",0.50f);
-    addFlowKnob (ParameterIDs::FLOW_ARP_P_QUANT,"Arp Pitch Quant",0.60f); addFlowKnob (ParameterIDs::FLOW_ARP_P_SLIDE,"Arp Pitch Slide",0.20f);
-    addFlowKnob (ParameterIDs::FLOW_ARP_G_LEN,  "Arp Gate Length",0.65f); addFlowKnob (ParameterIDs::FLOW_ARP_G_CURVE,"Arp Gate Curve",0.40f);
-    addFlowKnob (ParameterIDs::FLOW_ARP_G_RAND, "Arp Gate Random",0.00f); addFlowKnob (ParameterIDs::FLOW_ARP_G_SLIDE,"Arp Gate Slide",0.15f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_P_QUANT,"Arp Pitch Quant",0.60f); addFlowKnob (ParameterIDs::FLOW_ARP_P_SLIDE,"Arp Pitch Slide",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_G_LEN,  "Arp Gate Length",0.52f); addFlowKnob (ParameterIDs::FLOW_ARP_G_CURVE,"Arp Gate Curve",0.50f);   // fb107: ×1.0 neutral
+    addFlowKnob (ParameterIDs::FLOW_ARP_G_RAND, "Arp Gate Random",0.00f); addFlowKnob (ParameterIDs::FLOW_ARP_G_SLIDE,"Arp Gate Slide",0.00f);
     addFlowKnob (ParameterIDs::FLOW_ARP_V_RANGE,"Arp Vel Range",0.70f);   addFlowKnob (ParameterIDs::FLOW_ARP_V_CURVE,"Arp Vel Curve",0.50f);
-    addFlowKnob (ParameterIDs::FLOW_ARP_V_RAND, "Arp Vel Random",0.12f);  addFlowKnob (ParameterIDs::FLOW_ARP_V_FLOOR,"Arp Vel Floor",0.20f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_V_RAND, "Arp Vel Random",0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_V_FLOOR,"Arp Vel Floor",0.20f);
     addFlowKnob (ParameterIDs::FLOW_ARP_O_RANGE,"Arp Oct Range",0.25f);   addFlowKnob (ParameterIDs::FLOW_ARP_O_BIAS, "Arp Oct Bias",0.50f);
     addFlowKnob (ParameterIDs::FLOW_ARP_O_RAND, "Arp Oct Random",0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_O_SPREAD,"Arp Oct Spread",0.00f);
     addFlowKnob (ParameterIDs::FLOW_ARP_R_COUNT,"Arp Roll Count",0.33f);  addFlowKnob (ParameterIDs::FLOW_ARP_R_DECAY,"Arp Roll Decay",0.40f);
-    addFlowKnob (ParameterIDs::FLOW_ARP_R_CURVE,"Arp Roll Curve",0.30f);  addFlowKnob (ParameterIDs::FLOW_ARP_R_AMT,  "Arp Roll Amount",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_R_CURVE,"Arp Roll Curve",0.50f);  addFlowKnob (ParameterIDs::FLOW_ARP_R_AMT,  "Arp Roll Amount",0.50f);
     addFlowKnob (ParameterIDs::FLOW_ARP_C_AMT,  "Arp Chance Amount",0.80f); addFlowKnob (ParameterIDs::FLOW_ARP_C_BIAS,"Arp Chance Bias",0.50f);
     addFlowKnob (ParameterIDs::FLOW_ARP_C_SEED, "Arp Chance Seed",0.44f);   addFlowKnob (ParameterIDs::FLOW_ARP_C_DRIFT,"Arp Chance Drift",0.00f);
     addFlowKnob (ParameterIDs::FLOW_ARP_W_DEPTH,"Arp Wave Depth",0.60f);    addFlowKnob (ParameterIDs::FLOW_ARP_W_CURVE,"Arp Wave Curve",0.45f);
-    addFlowKnob (ParameterIDs::FLOW_ARP_W_SLIDE,"Arp Wave Slide",0.25f);    addFlowKnob (ParameterIDs::FLOW_ARP_W_RAND, "Arp Wave Random",0.10f);
+    addFlowKnob (ParameterIDs::FLOW_ARP_W_SLIDE,"Arp Wave Slide",0.25f);    addFlowKnob (ParameterIDs::FLOW_ARP_W_RAND, "Arp Wave Random",0.00f);
     // ── CHOP extension card (fb106): Ribbon scalars + 24 lane depth knobs.
     // Same law as fb105: setSynParam-only, choices read as INDEX.
     layout.add (std::make_unique<juce::AudioParameterBool>(
@@ -3139,22 +3139,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::FLOW_CHOP_FREEZE, 1 }, "Chop Freeze", false));
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_CHOP_COLLECT, 1 }, "Chop Collect", false));
-    addFlowKnob (ParameterIDs::FLOW_CHOP_SCAN,  "Chop Scan",  0.50f);  addFlowKnob (ParameterIDs::FLOW_CHOP_WANDER,"Chop Wander",0.00f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_SPREAD,"Chop Spread",0.25f);  addFlowKnob (ParameterIDs::FLOW_CHOP_SPEED, "Chop Speed", 0.00f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_STEPS, "Chop Steps", 0.50f);  addFlowKnob (ParameterIDs::FLOW_CHOP_DETUNE,"Chop Detune",0.12f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_WOW,   "Chop Wow",   0.10f);  addFlowKnob (ParameterIDs::FLOW_CHOP_SMOOTH,"Chop Smooth",0.60f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_SCAN,  "Chop Scan",  1.00f);  addFlowKnob (ParameterIDs::FLOW_CHOP_WANDER,"Chop Wander",0.00f);   // fb107: Scan = Now (live chop, not a fixed delay)
+    addFlowKnob (ParameterIDs::FLOW_CHOP_SPREAD,"Chop Spread",0.00f);  addFlowKnob (ParameterIDs::FLOW_CHOP_SPEED, "Chop Speed", 0.00f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_STEPS, "Chop Steps", 0.00f);  addFlowKnob (ParameterIDs::FLOW_CHOP_DETUNE,"Chop Detune",0.00f);   // fb107 neutral bus
+    addFlowKnob (ParameterIDs::FLOW_CHOP_WOW,   "Chop Wow",   0.00f);  addFlowKnob (ParameterIDs::FLOW_CHOP_SMOOTH,"Chop Smooth",0.15f);   // smooth .15 = legacy fade ×1.0
     addFlowKnob (ParameterIDs::FLOW_CHOP_GRIT,  "Chop Grit",  0.00f);  addFlowKnob (ParameterIDs::FLOW_CHOP_TRIM,  "Chop Trim",  0.50f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_O_SPREAD,"Chop Order Spread",0.50f); addFlowKnob (ParameterIDs::FLOW_CHOP_O_BIAS,"Chop Order Bias",0.50f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_O_LOCK,  "Chop Order Lock",  0.20f); addFlowKnob (ParameterIDs::FLOW_CHOP_O_SEED,"Chop Order Seed",0.44f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_P_RANGE, "Chop Pitch Range", 0.33f); addFlowKnob (ParameterIDs::FLOW_CHOP_P_STEPS,"Chop Pitch Odds",0.50f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_O_LOCK,  "Chop Order Lock",  0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_O_SEED,"Chop Order Seed",0.44f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_P_RANGE, "Chop Pitch Range", 0.33f); addFlowKnob (ParameterIDs::FLOW_CHOP_P_STEPS,"Chop Pitch Odds",0.00f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_P_GLIDE, "Chop Pitch Glide", 0.15f); addFlowKnob (ParameterIDs::FLOW_CHOP_P_QUANT,"Chop Pitch Quant",0.60f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_RV_ODDS, "Chop Rev Odds",    0.30f); addFlowKnob (ParameterIDs::FLOW_CHOP_RV_RUN, "Chop Rev Run",  0.25f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_RV_ODDS, "Chop Rev Odds",    0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_RV_RUN, "Chop Rev Run",  0.25f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_RV_SPREAD,"Chop Rev Spread", 0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_RV_SNAP,"Chop Rev Snap", 0.60f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_T_LEN,   "Chop Trim Length", 0.70f); addFlowKnob (ParameterIDs::FLOW_CHOP_T_CURVE,"Chop Trim Curve",0.40f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_T_RAND,  "Chop Trim Random", 0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_T_GATE, "Chop Trim Gate", 0.20f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_T_LEN,   "Chop Trim Length", 0.875f); addFlowKnob (ParameterIDs::FLOW_CHOP_T_CURVE,"Chop Trim Curve",0.30f);   // ×1.0 neutral
+    addFlowKnob (ParameterIDs::FLOW_CHOP_T_RAND,  "Chop Trim Random", 0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_T_GATE, "Chop Trim Gate", 0.00f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_R_COUNT, "Chop Repeat Count",0.33f); addFlowKnob (ParameterIDs::FLOW_CHOP_R_DECAY,"Chop Repeat Decay",0.40f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_R_CURVE, "Chop Repeat Curve",0.30f); addFlowKnob (ParameterIDs::FLOW_CHOP_R_ODDS, "Chop Repeat Odds",0.50f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_D_AMT,   "Chop Drop Amount", 0.30f); addFlowKnob (ParameterIDs::FLOW_CHOP_D_SIZE, "Chop Drop Size", 0.40f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_R_CURVE, "Chop Repeat Curve",0.50f); addFlowKnob (ParameterIDs::FLOW_CHOP_R_ODDS, "Chop Repeat Odds",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_CHOP_D_AMT,   "Chop Drop Amount", 0.00f); addFlowKnob (ParameterIDs::FLOW_CHOP_D_SIZE, "Chop Drop Size", 0.40f);
     addFlowKnob (ParameterIDs::FLOW_CHOP_D_SPRAY, "Chop Drop Spray",  0.10f); addFlowKnob (ParameterIDs::FLOW_CHOP_D_TONE, "Chop Drop Tone", 0.50f);
     addFlowKnob (ParameterIDs::FLOW_GLI_RATE,"Glitch Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_GLI_GATE,"Glitch Gate",0.55f);
     addFlowKnob (ParameterIDs::FLOW_GLI_VARY,"Glitch Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_GLI_TRAJ,"Glitch Traj",0.00f);  // VARY = fire CHANCE; 0 = never fires (silent), 0.5 = glitches out of the box

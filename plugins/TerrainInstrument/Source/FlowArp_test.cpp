@@ -388,6 +388,24 @@ int main()
                    "SORTED off: notes walk in as-played order (67,60,64)");
         }
         {
+            // fb107 regression: the RATE ladder must come back DOWN — a stale
+            // high-water refire guard used to eat every step after fast->slow
+            FlowArp arp; arp.reset(); arp.setExt (neutralExt()); arp.setLanes (neutralLanes());
+            arp.noteOn (60, 100);
+            std::vector<Ev> c;
+            double ppq = 0; long long base = 0;
+            auto seg = [&] (float rate, int total, std::vector<Ev>* out) {
+                for (int done = 0; done < total; done += 256) {
+                    ArpEvent ev[kArpMaxEvents];
+                    const int n = arp.process (rate, 0.5f, 0, 0, 0, ppq, bpm, sr, 256, true, ev, kArpMaxEvents);
+                    if (out) for (int i = 0; i < n; ++i) out->push_back ({ ev[i].on, ev[i].note, ev[i].vel, base + ev[i].sampleOffset });
+                    ppq += (bpm / 60.0) / sr * 256; base += 256; } };
+            seg (16.0f / 18.0f, 48000, nullptr);     // 1/64 for a second (huge step indices)
+            seg (5.0f  / 18.0f, 96000, &c);          // drop to 1/4 for two seconds
+            int ons = 0; for (auto& e : c) if (e.on) ++ons;
+            check (ons >= 2, "fb107: RATE fast->slow keeps firing (refire guard re-arms on grid change)");
+        }
+        {
             // WAVE lane: full depth/timbre, lane at 1, no slew -> +0.5 frame offset
             ArpExtParams Xw = neutralExt(); Xw.wDepth = 1.0f; Xw.timbre = 1.0f; Xw.wSlide = 0.0f;
             ArpLaneData Lw = neutralLanes();
