@@ -4173,6 +4173,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         const int savedW = audioProcessor.editorWidth.load();
         const int w0 = (savedW >= juce::roundToInt (kBaseW * 0.65) && savedW <= juce::roundToInt (kBaseW * 1.90))
                          ? savedW : kBaseW;
+        intendedW_ = w0;   // fb103 — the self-heal defends this against host junk
         // Set size AFTER webView is created (setSize triggers resized())
         setSize (w0, juce::roundToInt ((double) w0 * kBaseH / kBaseW));
     }
@@ -4620,26 +4621,30 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     if (webView == nullptr) return;
 
     // fb102 — settle: after the drag stops, pageZoom takes the real scale
-    // (crisp re-raster) and magnification returns to 1.
+    // (crisp re-raster) and magnification returns to 1. fb103: the page is told
+    // the settled scale so every canvas re-buffers at TRUE device resolution.
     if (settleTicks_ > 0 && --settleTicks_ == 0)
     {
         restZoom_ = uiZoom_;
         terrainApplyWebScale (*this, restZoom_, 1.0);
+        webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");");
     }
     // boot retries: the peer may not exist on the first resized(); idempotent
     if (zoomPushLeft_ > 0 && (++zoomTick2_ % 10) == 0)
     {
         terrainApplyWebScale (*this, restZoom_, uiZoom_ / restZoom_);
+        webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");");
         --zoomPushLeft_;
     }
-    // fb102 — SIZE SELF-HEAL (first ~3s): hosts can restore junk view sizes
-    // (Live handed back a sub-minimum window → the whole UI rendered shrunken
-    // and blurry, Max: "baby mini size"). Below-minimum = junk → default 820.
-    if (healTicks_ < 180)
+    // fb103 — SIZE SELF-HEAL (first ~4s): hosts replay remembered junk sizes at
+    // attach (FL kept restoring the 533 minimum from one old shrink → "baby mini
+    // size" + blur). Until the USER drags, the editor insists on its intended
+    // size — the ctor default (820) or this instance's real user choice.
+    if (healTicks_ < 240 && ! userSized_)
     {
         ++healTicks_;
-        if (getWidth() < juce::roundToInt (820 * 0.65) - 2)
-            setSize (820, 640 + CAPTURE_STRIP_HEIGHT);
+        if (std::abs (getWidth() - intendedW_) > 4)
+            setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (640 + CAPTURE_STRIP_HEIGHT) / 820.0));
     }
 
 
@@ -5188,7 +5193,13 @@ void TerrainInstrumentAudioProcessorEditor::resized()
     terrainApplyWebScale (*this, restZoom_, sc / restZoom_);
     settleTicks_ = 10;                  // ~160ms after the last resize → settle crisp
     zoomPushLeft_ = 12;                 // retries cover the first resized() (peer not up yet)
-    audioProcessor.editorWidth.store (getWidth());
+    // fb103 — a size only becomes the USER'S intent when a real drag set it. Hosts
+    // (FL) replay remembered junk through resized() too — that must never stick.
+    if (juce::Desktop::getInstance().getMainMouseSource().isDragging())
+    {
+        userSized_ = true;
+        audioProcessor.editorWidth.store (getWidth());
+    }
 }
 
 //==============================================================================
