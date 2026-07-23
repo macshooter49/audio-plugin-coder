@@ -12,7 +12,7 @@
 // (macOS 11+). This is real browser zoom — every JS coordinate API stays
 // consistent, unlike CSS zoom which skews clientX-vs-style.left math across the
 // 25k-line page. We reach the WKWebView by walking the editor peer's NSView tree.
-static void terrainApplyPageZoom (juce::Component& root, double zoom)
+static void terrainApplyWebScale (juce::Component& root, double pageZoom, double magnification)
 {
     auto* peer = root.getPeer();
     if (peer == nullptr) return;
@@ -25,15 +25,17 @@ static void terrainApplyPageZoom (juce::Component& root, double zoom)
         id v = stack.back(); stack.pop_back();
         if (((bool (*) (id, SEL, Class)) objc_msgSend) (v, sel_registerName ("isKindOfClass:"), wkClass))
         {
-            // fb96 — MAGNIFICATION, not pageZoom: magnification scales the rendered
-            // content while the layout viewport stays a constant 820 CSS px, so a
-            // live window drag never reflows the 25k-line page (pageZoom re-laid it
-            // out every frame → Max: "hella laggy"). Event coords are mapped by
-            // WebKit. pageZoom kept as fallback for any OS without magnification.
+            // fb102 — TWO-PHASE scaling. While a drag streams resized() calls we only
+            // move MAGNIFICATION (a compositor scale — smooth, no reflow, but it shows
+            // tiles rasterized at the old zoom = temporarily soft). ~160ms after the
+            // last resize we SETTLE: pageZoom takes the real scale (full re-raster —
+            // crisp text/SVG at any size) and magnification returns to 1. Both are set
+            // on every call so the pair can never drift apart. (fb96 used magnification
+            // alone: smooth, but it NEVER re-rasters → Max: "low quality PNG shit".)
+            if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
+                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setPageZoom:"), pageZoom);
             if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setMagnification:")))
-                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setMagnification:"), zoom);
-            else if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
-                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setPageZoom:"), zoom);
+                ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setMagnification:"), magnification);
             return;
         }
         id subs = ((id (*) (id, SEL)) objc_msgSend) (v, sel_registerName ("subviews"));
@@ -44,7 +46,7 @@ static void terrainApplyPageZoom (juce::Component& root, double zoom)
     }
 }
 #else
-static void terrainApplyPageZoom (juce::Component&, double) {}
+static void terrainApplyWebScale (juce::Component&, double, double) {}
 #endif
 
 //==============================================================================
@@ -4617,12 +4619,27 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
 
-    // fb95 — editor resize → native WKWebView pageZoom (retried: the peer may
-    // not exist yet on the first resized(); idempotent once it lands)
+    // fb102 — settle: after the drag stops, pageZoom takes the real scale
+    // (crisp re-raster) and magnification returns to 1.
+    if (settleTicks_ > 0 && --settleTicks_ == 0)
+    {
+        restZoom_ = uiZoom_;
+        terrainApplyWebScale (*this, restZoom_, 1.0);
+    }
+    // boot retries: the peer may not exist on the first resized(); idempotent
     if (zoomPushLeft_ > 0 && (++zoomTick2_ % 10) == 0)
     {
-        terrainApplyPageZoom (*this, uiZoom_);
+        terrainApplyWebScale (*this, restZoom_, uiZoom_ / restZoom_);
         --zoomPushLeft_;
+    }
+    // fb102 — SIZE SELF-HEAL (first ~3s): hosts can restore junk view sizes
+    // (Live handed back a sub-minimum window → the whole UI rendered shrunken
+    // and blurry, Max: "baby mini size"). Below-minimum = junk → default 820.
+    if (healTicks_ < 180)
+    {
+        ++healTicks_;
+        if (getWidth() < juce::roundToInt (820 * 0.65) - 2)
+            setSize (820, 640 + CAPTURE_STRIP_HEIGHT);
     }
 
 
@@ -5150,7 +5167,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
 //==============================================================================
 void TerrainInstrumentAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    // fb102 — Terrain's own night, not LookAndFeel grey: during live resizes the
+    // native webview lags a frame and this background flashes through ("gray bars").
+    g.fillAll (juce::Colour (0xFF16141F));
 }
 
 void TerrainInstrumentAudioProcessorEditor::resized()
@@ -5164,7 +5183,10 @@ void TerrainInstrumentAudioProcessorEditor::resized()
     if (webView != nullptr)
         webView->setBounds(b);
     uiZoom_ = sc;
-    terrainApplyPageZoom (*this, sc);   // fb96 — synchronous: the scale tracks the drag frame-by-frame
+    // fb102 — live phase: magnification rides the drag (no reflow); pageZoom stays
+    // at the last settled value. timerCallback settles to a crisp re-raster.
+    terrainApplyWebScale (*this, restZoom_, sc / restZoom_);
+    settleTicks_ = 10;                  // ~160ms after the last resize → settle crisp
     zoomPushLeft_ = 12;                 // retries cover the first resized() (peer not up yet)
     audioProcessor.editorWidth.store (getWidth());
 }

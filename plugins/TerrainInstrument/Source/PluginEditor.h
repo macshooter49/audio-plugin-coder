@@ -849,9 +849,10 @@ private:
                             std::optional<juce::Point<int>> mouseScreen = {});
     void dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen);
 
-    // fb95 — resizable editor: native page zoom, retried until the peer exists
-    double uiZoom_ = 1.0;
-    int    zoomPushLeft_ = 0, zoomTick2_ = 0;
+    // fb95/fb102 — resizable editor: magnification rides the drag, pageZoom
+    // settles crisp; junk host sizes self-heal in the first ~3s
+    double uiZoom_ = 1.0, restZoom_ = 1.0;
+    int    zoomPushLeft_ = 0, zoomTick2_ = 0, settleTicks_ = 0, healTicks_ = 0;
 
     // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
     static constexpr int CAPTURE_STRIP_HEIGHT = 26;
