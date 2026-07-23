@@ -3097,7 +3097,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "Up", "Down", "Up-Dn", "Random" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_OCTR, 1 }, "Arp Octaves",
-        juce::StringArray { "1", "2", "3", "4" }, 1));
+        juce::StringArray { "1", "2", "3", "4" }, 0));   // fb108: industry init = ONE octave (research law)
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_SORTED, 1 }, "Arp Sorted", true));
     addFlowKnob (ParameterIDs::FLOW_ARP_SWING, "Arp Swing", 0.00f);  addFlowKnob (ParameterIDs::FLOW_ARP_MROLL, "Arp Roll", 0.00f);   // fb107 neutral: straight, no surprise rolls
