@@ -20,7 +20,7 @@ static int g_checks = 0, g_fail = 0;
 static void check (bool ok, const char* what) { ++g_checks; if (! ok) { ++g_fail; std::printf ("  FAIL: %s\n", what); } }
 
 constexpr double BPM = 120, SR = 48000;
-constexpr int    STEP = 6000;                  // rate 0.5 @120/48k -> boundaries every 6000 samples
+[[maybe_unused]] constexpr int STEP = 6000;    // rate 0.5 @120/48k -> boundaries every 6000 samples
 
 static float sineSig (long long n) { return 0.5f * std::sin (2.0f * 3.14159265f * (float) n / 1500.0f); }
 
