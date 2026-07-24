@@ -134,7 +134,7 @@ public:
         bool  freeze = false, collect = false;
         int   rpts = 2;                    // window repeats before a free-seed re-roll
         int   modeOrder = 0;               // 0 Step · 1 Ping · 2 Rand · 3 Walk (style override)
-        float oSpread=.5f, oBias=.5f, oLock=0.f, oSeed=.44f;                 // ORDER
+        float oSpread=0.f, oBias=.5f, oLock=0.f, oSeed=.44f;                 // ORDER (scatter opt-in)
         float pRange=.33f, pSteps=0.f, pGlide=.15f, pQuant=.6f;              // PITCH (odds off by default)
         float rvOdds=0.f, rvRun=.25f, rvSpread=0.f, rvSnap=.6f;              // REV (odds off by default)
         float tLen=.875f, tCurve=.3f, tRand=0.f, tGate=0.f;                  // TRIM (×1.0 neutral)
@@ -464,14 +464,16 @@ private:
             semi = (int) std::lround (semi * (double) pitchAmt);   // MORPH scales the spice depth
         }
 
-        // TRIM — Len shapes the gate, Rand humanizes, Gate chokes staccato
+        // TRIM — fb110: Len is the AUTHORITY (Max: "it trims too much — chopped,
+        // not minced"): 1.0 = full legato no matter what the front GATE macro says;
+        // the macro rides ±0.2 around its default on top (still LFO-modulatable).
         float gF = gFrac;
         if (extOn_)
         {
-            gF *= 0.3f + arpClamp01 (ext_.tLen) * 0.8f;
+            gF = 0.10f + 0.90f * arpClamp01 (ext_.tLen) + (gFrac - 0.56f) * 0.5f;
             gF *= 1.0f + (rng_.unit() - 0.5f) * arpClamp01 (ext_.tRand) * 0.8f;
             if (ext_.tGate > 0.01f && rng_.unit() < ext_.tGate * 0.6f) gF *= 0.35f;
-            if (gF < 0.05f) gF = 0.05f; if (gF > 1.0f) gF = 1.0f;
+            if (gF < 0.05f) gF = 0.05f; if (gF > 0.98f) gF = 0.98f;
         }
         float gateFull = (float) (stepSamp * (double) gF);
         float lvl = 1.0f;
@@ -706,15 +708,8 @@ private:
             default:
             {
                 if (extOn_)
-                {   // ORDER lane: Lock keeps seats in place, Sprd bounds the reach, Bias leans old/new
-                    const int span    = 1 + (int) std::lround (arpClamp01 (ext_.oSpread) * (float) (L - 1));
-                    const int biasOff = (int) std::lround ((arpClamp01 (ext_.oBias) - 0.5f) * (float) L);
-                    for (int i = 0; i < L; ++i)
-                    {
-                        if (rng_.unit() < arpClamp01 (ext_.oLock)) { order_[i] = i; continue; }
-                        const int off = (int) rng_.below ((uint32_t) (2 * span + 1)) - span + biasOff;
-                        order_[i] = arpClampi (i + off, 0, L - 1);
-                    }
+                {   // Rand mode base: pure shuffle (the scatter pass below shapes it)
+                    for (int i = 0; i < L; ++i) order_[i] = (int) rng_.below (L);
                     break;
                 }
                 for (int i = 0; i < L; ++i)
@@ -723,6 +718,23 @@ private:
                     { order_[i] = (int) rng_.below (L); backValid_[i] = true; }
                 }
                 break;
+            }
+        }
+
+        // fb110 — the ORDER lane applies to EVERY mode (it was Rand-only, so the
+        // knobs read as dead — Max: "the order doesn't work"). Sprd = odds+reach a
+        // slice strays from the mode's pattern, Bias leans strays old/new, Lock
+        // pins seats, Seed picks the dice (locked Seed = the same flip forever).
+        if (extOn_)
+        {
+            const float amt = arpClamp01 (ext_.oSpread);
+            const int   span    = 1 + (int) std::lround (amt * (float) (L - 1));
+            const int   biasOff = (int) std::lround ((arpClamp01 (ext_.oBias) - 0.5f) * (float) L);
+            for (int i = 0; i < L; ++i)
+            {
+                if (ext_.oLock > 0.01f && rng_.unit() < arpClamp01 (ext_.oLock)) { order_[i] = i; continue; }
+                if (amt > 0.01f && rng_.unit() < amt)
+                    order_[i] = arpClampi (order_[i] + (int) rng_.below ((uint32_t) (2 * span + 1)) - span + biasOff, 0, L - 1);
             }
         }
     }

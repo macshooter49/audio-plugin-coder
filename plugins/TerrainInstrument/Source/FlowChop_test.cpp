@@ -380,6 +380,54 @@ int main()
         check (notFwd, "T18 locked SEED is a real shuffle (not forward order)");
     }
 
+    // ── T19 (fb110): ORDER lane works in EVERY mode ──────────────────────────
+    {
+        auto seqIn = [] (float sprd, int mode) {
+            FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
+            FlowChop::ChopExtParams x; x.slices = 8; x.loopCells = 8; x.modeOrder = mode;
+            x.oSpread = sprd; x.oSeed = 0.5f; x.rpts = 1;
+            x.dAmt = 0; x.rvOdds = 0; x.rOdds = 0; x.pSteps = 0; x.wander = 0; x.spread = 0;
+            x.speed = 0; x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0; x.tGate = 0; x.tRand = 0;
+            c.setExt (x); c.setMix (1.0f);
+            std::vector<int> seq; std::vector<float> L (STEP), R (STEP);
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            for (int st = 0; st < 16; ++st)
+            {
+                for (int i = 0; i < STEP; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 0.55f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), STEP, true);
+                seq.push_back (c.lastSliceIndex());
+                gc += STEP; ppq += pps * STEP;
+            }
+            return seq; };
+        auto s0 = seqIn (0.0f, 0), s1 = seqIn (1.0f, 0);
+        bool fwd = true; for (int i = 0; i < 16; ++i) fwd = fwd && (s0[(size_t) i] == i % 8);
+        bool strays = false; for (int i = 0; i < 16; ++i) strays = strays || (s1[(size_t) i] != i % 8);
+        check (fwd,    "T19 ORDER Sprd 0 in Step mode = exact forward (transparent default)");
+        check (strays, "T19 ORDER Sprd 1 in Step mode = slices stray (the lane works in EVERY mode)");
+    }
+    // ── T20 (fb110): TRIM Len is the authority — 1.0 reaches (near-)full legato ──
+    {
+        auto meanAt = [] (float tLen) {
+            FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
+            FlowChop::ChopExtParams x; x.tLen = tLen;
+            x.dAmt = 0; x.rvOdds = 0; x.rOdds = 0; x.pSteps = 0; x.wander = 0; x.spread = 0;
+            x.speed = 0; x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0; x.tGate = 0; x.tRand = 0;
+            c.setExt (x); c.setMix (1.0f);
+            std::vector<float> L (512), R (512);
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0; double acc = 0; long long n = 0;
+            for (int b = 0; b < 300; ++b)
+            {
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 0.55f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                if (b > 40) for (int i = 0; i < 512; ++i) { acc += std::fabs (L[(size_t) i]); ++n; }
+                gc += 512; ppq += pps * 512;
+            }
+            return acc / (double) n; };
+        const double full = meanAt (1.0f), tiny = meanAt (0.05f);
+        char b[140]; std::snprintf (b, sizeof b, "T20 TRIM authority: Len 1.0 near-legato vs Len 0.05 minced (%.4f vs %.4f)", full, tiny);
+        check (full > tiny * 2.5 && full > 0.15, b);
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;
