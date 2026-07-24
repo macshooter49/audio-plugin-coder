@@ -598,6 +598,8 @@ public:
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
     void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
+    juce::String      getGliFeedJson() const;                           // fb115: Monitor playhead/fire/levels snapshot
+    void              requestGliRoll() noexcept { gliRollReq_.store (true); }     // Roll button → audio thread (quantized)
 
     // ── Pitch-mode virtual slice ───────────────────────────────────────────
     // When SLICE_MODE == 0 (PITCH), the whole sample is played as a single
@@ -856,6 +858,12 @@ public:
     std::atomic<float>            chopVizStepF_ { 0.0f }, chopVizWet_ { 0.0f };
     std::atomic<int>              chopVizCount_ { 0 }, chopVizSlice_ { 0 }, chopVizActive_ { 0 };
     std::atomic<bool>             chopWipeReq_ { false };
+    // FLOW · GLITCH viz feed + Roll request (fb115)
+    std::atomic<float>            gliVizStepF_ { 0.0f }, gliVizLoopF_ { 0.0f }, gliVizFireS_ { 0.0f },
+                                  gliVizHold_ { 1.0f }, gliVizWet_ { 0.0f };
+    std::atomic<int>              gliVizFx_ { -1 }, gliVizCount_ { 0 }, gliVizActive_ { 0 };
+    std::atomic<float>            gliVizLvl_[16] {};
+    std::atomic<bool>             gliRollReq_ { false };
 
     mutable juce::CriticalSection synModLock;
     std::vector<SynModRoute>      synModRoutes;   // guarded by synModLock

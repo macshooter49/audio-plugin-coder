@@ -201,6 +201,36 @@ namespace ParameterIDs
     constexpr char FLOW_CHOP_R_CURVE[] = "FLOW_CHOP_R_CURVE";  constexpr char FLOW_CHOP_R_ODDS[] = "FLOW_CHOP_R_ODDS";
     constexpr char FLOW_CHOP_D_AMT[]   = "FLOW_CHOP_D_AMT";    constexpr char FLOW_CHOP_D_SIZE[] = "FLOW_CHOP_D_SIZE";
     constexpr char FLOW_CHOP_D_SPRAY[] = "FLOW_CHOP_D_SPRAY";  constexpr char FLOW_CHOP_D_TONE[] = "FLOW_CHOP_D_TONE";
+    // ── FLOW · GLITCH extension card (fb115) — Monitor scalars + 32 per-effect knobs ──
+    constexpr char FLOW_GLI_EN_REP[]  = "FLOW_GLI_EN_REP";   constexpr char FLOW_GLI_EN_REV[]  = "FLOW_GLI_EN_REV";
+    constexpr char FLOW_GLI_EN_TAPE[] = "FLOW_GLI_EN_TAPE";  constexpr char FLOW_GLI_EN_GATE[] = "FLOW_GLI_EN_GATE";
+    constexpr char FLOW_GLI_EN_PIT[]  = "FLOW_GLI_EN_PIT";   constexpr char FLOW_GLI_EN_CRSH[] = "FLOW_GLI_EN_CRSH";
+    constexpr char FLOW_GLI_EN_FRZ[]  = "FLOW_GLI_EN_FRZ";   constexpr char FLOW_GLI_EN_SCT[]  = "FLOW_GLI_EN_SCT";
+    constexpr char FLOW_GLI_DEJAVU[]  = "FLOW_GLI_DEJAVU";   constexpr char FLOW_GLI_DECAY[]   = "FLOW_GLI_DECAY";
+    constexpr char FLOW_GLI_BEND[]    = "FLOW_GLI_BEND";     constexpr char FLOW_GLI_SEED[]    = "FLOW_GLI_SEED";    // 0 = Free, else 1..99
+    constexpr char FLOW_GLI_HOLD[]    = "FLOW_GLI_HOLD";     // choice {1,2,3,4,6,8} steps
+    constexpr char FLOW_GLI_LOOP[]    = "FLOW_GLI_LOOP";     // choice {2,4,8,12,16} pattern length
+    constexpr char FLOW_GLI_QUANT[]   = "FLOW_GLI_QUANT";    // choice 1/4..1/32 (Roll punch-in grid)
+    constexpr char FLOW_GLI_RELEASE[] = "FLOW_GLI_RELEASE";  // choice End/Now
+    constexpr char FLOW_GLI_FILTER[]  = "FLOW_GLI_FILTER";   // choice Off/Low/Mid/High (wet bus)
+    constexpr char FLOW_GLI_PAN[]     = "FLOW_GLI_PAN";      // choice L/C/R (wet bus)
+    constexpr char FLOW_GLI_SYNC[]    = "FLOW_GLI_SYNC";     // choice Free/Sync (clock)
+    constexpr char FLOW_GLI_REP_SIZE[]  = "FLOW_GLI_REP_SIZE";  constexpr char FLOW_GLI_REP_SPEED[] = "FLOW_GLI_REP_SPEED";
+    constexpr char FLOW_GLI_REP_FADE[]  = "FLOW_GLI_REP_FADE";  constexpr char FLOW_GLI_REP_VARY[]  = "FLOW_GLI_REP_VARY";
+    constexpr char FLOW_GLI_REV_LEN[]   = "FLOW_GLI_REV_LEN";   constexpr char FLOW_GLI_REV_FADE[]  = "FLOW_GLI_REV_FADE";
+    constexpr char FLOW_GLI_REV_SPRD[]  = "FLOW_GLI_REV_SPRD";  constexpr char FLOW_GLI_REV_SNAP[]  = "FLOW_GLI_REV_SNAP";
+    constexpr char FLOW_GLI_TAPE_CURVE[]= "FLOW_GLI_TAPE_CURVE";constexpr char FLOW_GLI_TAPE_TIME[] = "FLOW_GLI_TAPE_TIME";
+    constexpr char FLOW_GLI_TAPE_DEPTH[]= "FLOW_GLI_TAPE_DEPTH";constexpr char FLOW_GLI_TAPE_SPIN[] = "FLOW_GLI_TAPE_SPIN";
+    constexpr char FLOW_GLI_GATE_RATE[] = "FLOW_GLI_GATE_RATE"; constexpr char FLOW_GLI_GATE_SHAPE[]= "FLOW_GLI_GATE_SHAPE";
+    constexpr char FLOW_GLI_GATE_NUDGE[]= "FLOW_GLI_GATE_NUDGE";constexpr char FLOW_GLI_GATE_AMT[]  = "FLOW_GLI_GATE_AMT";
+    constexpr char FLOW_GLI_PIT_SHIFT[] = "FLOW_GLI_PIT_SHIFT"; constexpr char FLOW_GLI_PIT_WALK[]  = "FLOW_GLI_PIT_WALK";
+    constexpr char FLOW_GLI_PIT_GLIDE[] = "FLOW_GLI_PIT_GLIDE"; constexpr char FLOW_GLI_PIT_JUMP[]  = "FLOW_GLI_PIT_JUMP";
+    constexpr char FLOW_GLI_CRSH_BITS[] = "FLOW_GLI_CRSH_BITS"; constexpr char FLOW_GLI_CRSH_RATE[] = "FLOW_GLI_CRSH_RATE";
+    constexpr char FLOW_GLI_CRSH_TONE[] = "FLOW_GLI_CRSH_TONE"; constexpr char FLOW_GLI_CRSH_AMT[]  = "FLOW_GLI_CRSH_AMT";
+    constexpr char FLOW_GLI_FRZ_SIZE[]  = "FLOW_GLI_FRZ_SIZE";  constexpr char FLOW_GLI_FRZ_SPRAY[] = "FLOW_GLI_FRZ_SPRAY";
+    constexpr char FLOW_GLI_FRZ_SHINE[] = "FLOW_GLI_FRZ_SHINE"; constexpr char FLOW_GLI_FRZ_MELT[]  = "FLOW_GLI_FRZ_MELT";
+    constexpr char FLOW_GLI_SCT_SIZE[]  = "FLOW_GLI_SCT_SIZE";  constexpr char FLOW_GLI_SCT_AMT[]   = "FLOW_GLI_SCT_AMT";
+    constexpr char FLOW_GLI_SCT_VARY[]  = "FLOW_GLI_SCT_VARY";  constexpr char FLOW_GLI_SCT_WIDTH[] = "FLOW_GLI_SCT_WIDTH";
     // ── ANNULUS resonator — global key-tracked physical-modeling node (ResonatorNode.h) ──
     constexpr char SYN_RESO_STRUCTURE[]  = "SYN_RESO_STRUCTURE";   // float 0..1 — harmonic↔material morph
     constexpr char SYN_RESO_BRIGHTNESS[] = "SYN_RESO_BRIGHTNESS";  // float 0..1 — mode count + spectral tilt

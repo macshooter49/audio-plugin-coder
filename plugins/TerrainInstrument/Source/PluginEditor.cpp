@@ -620,6 +620,18 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.requestChopWipe();   // fb106 — Wipe: clear the chop memory
                 complete (juce::var{});
             })
+            .withNativeFunction("getGliFeed", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb115 — Monitor playhead/fire/levels snapshot (rAF-polled by the glitch card)
+                complete (juce::var (audioProcessor.getGliFeedJson()));
+            })
+            .withNativeFunction("gliRoll", [this](const juce::Array<juce::var>&,
+                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.requestGliRoll();    // fb115 — Roll: quantized punch-in
+                complete (juce::var{});
+            })
             .withNativeFunction("popOutCard", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4376,6 +4388,17 @@ public:
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     proc.requestChopWipe();
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getGliFeed", [&proc](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getGliFeedJson()));
+                })
+                .withNativeFunction ("gliRoll", [&proc](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    proc.requestGliRoll();
                     complete (juce::var{});
                 })
                 .withNativeFunction ("dragCardWindow", [this](const juce::Array<juce::var>& args,
