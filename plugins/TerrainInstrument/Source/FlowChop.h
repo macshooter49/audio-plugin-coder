@@ -100,6 +100,7 @@ public:
         lpL_ = lpR_ = hpL_ = hpR_ = 0.f; wowPh_ = 0.f;
         fireCount_ = 0; vizStepF_ = 0.f; scanBackSamp_ = 0.0;
         nonce_ = 1; rngHum_.seed (0xB0BACAFEu);
+        colOpen_ = false; colQuiet_ = 0; colG_ = 0.f; colWg_ = 1.f;
     }
 
     // ── configuration (card → engine) ───────────────────────────────────────────
@@ -139,7 +140,7 @@ public:
         float pRange=.33f, pSteps=0.f, pGlide=.15f, pQuant=.6f;              // PITCH (odds off by default)
         float rvOdds=0.f, rvRun=.25f, rvSpread=0.f, rvSnap=.6f;              // REV (odds off by default)
         float tLen=.875f, tCurve=.3f, tRand=0.f, tGate=0.f;                  // TRIM (×1.0 neutral)
-        float rCount=.33f, rDecay=.4f, rCurve=.5f, rOdds=0.f;                // REPEAT (odds off by default)
+        float rCount=0.f, rDecay=.4f, rCurve=.5f, rOdds=1.f;                 // REPEAT: Count=1 neutral, Odds=All — cranking Count is instantly audible
         float dAmt=0.f, dSize=.4f, dSpray=.1f, dTone=.5f;                    // DROP (off by default)
         float steps=0.f, detune=0.f, wow=0.f, smooth=.15f;                   // CHARACTER (neutral; smooth .15 = fade ×1.0)
         int   filter = 0;                  // 0 Off · 1 Low · 2 Mid · 3 High (wet bus)
@@ -201,6 +202,9 @@ public:
             lpC_ = 1.0f - std::exp (-2.0f * 3.14159265f * lpHz / (float) SR);
             hpC_ = 1.0f - std::exp (-2.0f * 3.14159265f * hpHz / (float) SR);
             wowInc_ = 2.0f * 3.14159265f * 0.7f / (float) SR;                // 0.7 Hz tape wow
+            colRel_  = std::exp (-1.0f / (0.003f * (float) SR));             // fb113: 3 ms level follower
+            colStep_ = 1.0f / (0.010f * (float) SR);                         // 10 ms splice crossfade
+            colHold_ = (int) std::lround (SR * 0.020);                       // 20 ms close — memory ends where the music ends
         }
 
         curStyle_ = (extOn_)
@@ -246,10 +250,26 @@ public:
                 if (ext_.freeze) wr = false;
                 if (wr && ext_.collect)
                 {
+                    // fb113 — the old slow follower kept writing ~160 ms of DEAD AIR
+                    // after every phrase, so the newest memory was always silence
+                    // (Max: "collect is ass — it plays back static"). Now: fast
+                    // follower + hysteresis (no chatter), hard 20 ms close (the
+                    // memory ends where the music ends), and every open/close is a
+                    // 10 ms write-gain crossfade — splices are fades, never joints.
                     const float a = std::fabs (dryL) + std::fabs (dryR);
-                    colEnv_ = (a > colEnv_) ? a : colEnv_ * 0.9995f;
-                    wr = colEnv_ > 0.02f;
+                    colEnv_ = (a > colEnv_) ? a : colEnv_ * colRel_;
+                    if (colOpen_)
+                    {
+                        if (colEnv_ < 0.012f) { if (++colQuiet_ > colHold_) colOpen_ = false; }
+                        else colQuiet_ = 0;
+                    }
+                    else if (colEnv_ > 0.03f) { colOpen_ = true; colQuiet_ = 0; }
+                    colG_ += colOpen_ ? colStep_ : -colStep_;
+                    if (colG_ < 0.f) colG_ = 0.f; if (colG_ > 1.f) colG_ = 1.f;
+                    wr = colG_ > 0.0005f;
+                    colWg_ = colG_ * colG_;
                 }
+                else colWg_ = 1.0f;
                 if (wr && ext_.speed > 0.01f)
                 {
                     spAcc_ += 1.0 / (1.0 + (double) ext_.speed * 3.0);
@@ -258,8 +278,8 @@ public:
             }
             if (wr)
             {
-                bufL_[(size_t) (wAbs_ % cap_)] = dryL;
-                bufR_[(size_t) (wAbs_ % cap_)] = dryR;
+                bufL_[(size_t) (wAbs_ % cap_)] = dryL * colWg_;
+                bufR_[(size_t) (wAbs_ % cap_)] = dryR * colWg_;
             }
 
             // step boundaries (swung) → schedule slice triggers
@@ -647,6 +667,9 @@ private:
         // ---- continuous read (forward, or backward for reverse) ----
         const double idx = v.reverse ? (v.srcStart + v.sliceLen - 1.0 - v.readPos)
                                      : (v.srcStart + v.readPos);
+        // fb113 — frozen/collect-paused memory: a forward read that catches the
+        // write head would DC-hold; release the voice instead (cosine fade = clean)
+        if (! v.reverse && v.phase < 2 && idx > (double) (wAbs_ - 1)) startRelease (v);
         float sL = sampleAt (bufL_, idx);
         float sR = sampleAt (bufR_, idx);
         if (v.lpOn)                                   // Drop Tone grain color
@@ -827,6 +850,10 @@ private:
     float         vizStepF_ = 0.f;
     uint32_t      nonce_ = 1;          // fb111: per-pattern dice base — every lane hashes its OWN purpose off it
     ArpRng        rngHum_;             // humanize-only stream (detune/spray) — pattern knobs can never re-roll it
+    // fb113 — collect gate: fast follower, hysteresis, hold, crossfaded writes
+    bool          colOpen_ = false;
+    int           colQuiet_ = 0, colHold_ = 960;
+    float         colG_ = 0.f, colWg_ = 1.f, colRel_ = 0.993f, colStep_ = 0.002f;
 
     mutable ArpRng rng_;
 };

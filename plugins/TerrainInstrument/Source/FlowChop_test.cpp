@@ -455,6 +455,75 @@ int main()
         check (d / (double) a1.size() > 0.01, "T21 Range 12 / Steps All audibly repitches (octave jumps present)");
     }
 
+    // ── T22 (fb113): COLLECT keeps the MOMENT, not the silence ───────────────
+    {
+        // half a second of melody, then true silence. The old slow gate recorded
+        // ~160 ms of dead air after the phrase, so the "newest memory" was silence
+        // and collected playback dropped out (Max: "collect is ass"). Now the
+        // memory must end where the music ends — chopping during the silence
+        // replays the MELODY; and the crossfaded splices must stay impulse-free.
+        auto noteThenSilence = [] (long long t) {
+            // real notes END with a release fade — an instant cut would put the
+            // input's own click into the memory and frame the engine for it
+            float env = 0.0f;
+            if      (t < 23520) env = 1.0f;
+            else if (t < 24000) env = 0.5f + 0.5f * std::cos (3.14159265f * (float) (t - 23520) / 480.0f);
+            return 0.4f * env * std::sin (2.0f * 3.14159265f * (float) t / 218.0f); };
+        auto silRms = [&] (bool collect) {
+            FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
+            FlowChop::ChopExtParams x; x.collect = collect; x.tLen = 1.0f;
+            x.dAmt = 0; x.rvOdds = 0; x.rOdds = 0; x.pSteps = 0; x.wander = 0; x.spread = 0;
+            x.speed = 0; x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0; x.tGate = 0; x.tRand = 0;
+            c.setExt (x); c.setMix (1.0f);
+            std::vector<float> L (512), R (512);
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            double acc = 0, d2max = 0; long long n = 0; float p1 = 0, p2 = 0;
+            for (int b = 0; b < 400; ++b)
+            {
+                for (int i = 0; i < 512; ++i) { float v = noteThenSilence (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 0.55f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                for (int i = 0; i < 512; ++i)
+                {
+                    if (gc > 96256)   // history warm — never seed the detector with zeros mid-signal
+                    {
+                        acc += (double) L[(size_t) i] * (double) L[(size_t) i]; ++n;
+                        const double d2 = std::fabs ((double) L[(size_t) i] - 2.0 * p1 + p2);
+                        if (d2 > d2max) d2max = d2;
+                    }
+                    p2 = p1; p1 = L[(size_t) i];
+                }
+                gc += 512; ppq += pps * 512;
+            }
+            return std::pair<double,double> (std::sqrt (acc / (double) n), d2max); };
+        auto on = silRms (true), off = silRms (false);
+        char b[160];
+        std::snprintf (b, sizeof b, "T22 COLLECT keeps the moment: melody replays through the silence (RMS %.3f vs %.3f off)", on.first, off.first);
+        check (on.first > 0.05 && off.first < 0.005, b);
+        std::snprintf (b, sizeof b, "T22 collected splices are fades, not joints (max 2nd-diff %.4f)", on.second);
+        check (on.second < 0.012, b);
+    }
+    // ── T23 (fb113): REPEAT Count is instantly audible (Odds carves down from All) ──
+    {
+        auto fires = [] (float count) {
+            FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
+            FlowChop::ChopExtParams x; x.rCount = count;   // Odds stays at its default (All)
+            x.dAmt = 0; x.rvOdds = 0; x.pSteps = 0; x.wander = 0; x.spread = 0;
+            x.speed = 0; x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0; x.tGate = 0; x.tRand = 0;
+            c.setExt (x); c.setMix (1.0f);
+            std::vector<float> L (512), R (512);
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            for (int b = 0; b < 200; ++b)
+            {
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 0.55f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                gc += 512; ppq += pps * 512;
+            }
+            return (int) c.vizFireCount(); };
+        const int f1 = fires (0.0f), f4 = fires (1.0f);
+        char b[140]; std::snprintf (b, sizeof b, "T23 REPEAT: Count 4 rolls ~4x Count 1 on first touch (%d vs %d fires)", f4, f1);
+        check (f4 > f1 * 3 && f4 < f1 * 5, b);
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;
