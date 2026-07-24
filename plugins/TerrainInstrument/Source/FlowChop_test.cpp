@@ -428,6 +428,33 @@ int main()
         check (full > tiny * 2.5 && full > 0.15, b);
     }
 
+    // ── T21 (fb111): PITCH is a deterministic musical pattern — no dice anywhere ──
+    {
+        auto runOut = [] (float range, float steps) {
+            FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
+            FlowChop::ChopExtParams x;
+            x.pRange = range; x.pSteps = steps; x.pQuant = 0.0f; x.pGlide = 0.0f;
+            x.dAmt = 0; x.rvOdds = 0; x.rOdds = 0; x.wander = 0; x.spread = 0; x.speed = 0;
+            x.detune = 0; x.wow = 0; x.grit = 0; x.steps = 0; x.filter = 0; x.tGate = 0; x.tRand = 0;
+            c.setExt (x); c.setMix (1.0f);
+            std::vector<float> out; std::vector<float> L (512), R (512);
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            for (int b = 0; b < 200; ++b)
+            {
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                c.process (0.6111f, 0.55f, 0.f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                for (int i = 0; i < 512; ++i) out.push_back (L[(size_t) i]);
+                gc += 512; ppq += pps * 512;
+            }
+            return out; };
+        auto a1 = runOut (1.0f, 1.0f), a2 = runOut (1.0f, 1.0f), b0 = runOut (0.0f, 1.0f);
+        bool identical = a1.size() == a2.size();
+        for (size_t i = 0; identical && i < a1.size(); ++i) identical = a1[i] == a2[i];
+        check (identical, "T21 PITCH pattern fully deterministic (two fresh instances = bit-identical)");
+        double d = 0; for (size_t i = 0; i < a1.size(); ++i) d += std::fabs (a1[(size_t) i] - b0[(size_t) i]);
+        check (d / (double) a1.size() > 0.01, "T21 Range 12 / Steps All audibly repitches (octave jumps present)");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

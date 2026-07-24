@@ -99,6 +99,7 @@ public:
         colEnv_ = 0.f; spAcc_ = 0.0; lastRate_ = 1.0; wanderCur_ = 0.f;
         lpL_ = lpR_ = hpL_ = hpR_ = 0.f; wowPh_ = 0.f;
         fireCount_ = 0; vizStepF_ = 0.f; scanBackSamp_ = 0.0;
+        nonce_ = 1; rngHum_.seed (0xB0BACAFEu);
     }
 
     // ── configuration (card → engine) ───────────────────────────────────────────
@@ -397,7 +398,12 @@ private:
             if (extOn_)
             {
                 const int seedIdx = (int) std::lround (arpClamp01 (ext_.oSeed) * 16.0f);
-                if (seedIdx > 0) rng_.seed (0xC40F5EEDu ^ (uint32_t) seedIdx * 2654435761u);   // locked flip
+                if (seedIdx > 0)
+                {
+                    rng_.seed (0xC40F5EEDu ^ (uint32_t) seedIdx * 2654435761u);   // locked flip
+                    nonce_ = arpHash ((uint32_t) seedIdx, 0x9E1u, 0u);            // fb111: locked dice for EVERY lane
+                }
+                else nonce_ = rng_.next();                                        // free seed: fresh dice per pattern
                 wanderCur_ = (ext_.wander > 0.01f) ? (rng_.unit() - 0.5f) * ext_.wander * 2.0f : 0.0f;
             }
             regeneratePattern();
@@ -415,7 +421,7 @@ private:
 
         // DROP lane: the slice goes silent — Size 0 = a real hole, else a scattered grain
         bool dropped = false;
-        if (extOn_ && ext_.dAmt > 0.01f && rng_.unit() < ext_.dAmt * 0.85f) dropped = true;
+        if (extOn_ && ext_.dAmt > 0.01f && arpHash01 (nonce_, (uint32_t) li, 0xD1u) < ext_.dAmt * 0.85f) dropped = true;
         if (dropped && ext_.dSize <= 0.03f)
         {
             if (cur_ >= 0 && voice_[cur_].active && voice_[cur_].phase < 2) startRelease (voice_[cur_]);
@@ -432,29 +438,36 @@ private:
             else if (revCool_ > 0)    { rev = false; --revCool_; }
             else
             {
-                rev = rng_.unit() < arpClamp01 (ext_.rvOdds + flipAmt * 0.4f);
+                rev = arpHash01 (nonce_, (uint32_t) li, 0xE1u) < arpClamp01 (ext_.rvOdds + flipAmt * 0.4f);
                 if (rev)
                 {
                     revRunLeft_ = (int) std::lround (ext_.rvRun * 3.0f);
                     revCool_    = (int) std::lround (ext_.rvSpread * 4.0f);
                 }
             }
-            if (rev && rng_.unit() < ext_.rvSnap) snapSelf = true;
+            if (rev && arpHash01 (nonce_, (uint32_t) li, 0xE2u) < ext_.rvSnap) snapSelf = true;
         }
         else rev = (rng_.unit() < revProb_ * flipAmt);
         if (snapSelf) back = 0;
 
-        // PITCH — card: Steps = odds, Range = reach (degrees), Quant = in-key vs
-        // chromatic, full depth; legacy: VARY odds × MORPH depth.
+        // PITCH — fb111: NO DICE (Max: "complex patterns through basic algorithms").
+        // Range = the interval in SEMITONES (12 = octave, 7 = fifth — what a
+        // musician expects). Steps = WHICH slices jump (every 8th/4th/3rd/2nd/all —
+        // a deterministic pattern). Fall (ex-Quant) = jumps rise, fall, or alternate.
         int semi = 0;
         if (extOn_)
         {
             const int reach = (int) std::lround (arpClamp01 (ext_.pRange) * 12.0f);
-            if (reach > 0 && rng_.unit() < arpClamp01 (ext_.pSteps * 0.9f + flipAmt * 0.3f))
+            static constexpr int kEvery[6] = { 0, 8, 4, 3, 2, 1 };
+            const int ev = kEvery[arpClampi ((int) (arpClamp01 (ext_.pSteps) * 5.999f), 0, 5)];
+            if (reach > 0 && ev > 0 && (li % ev) == 0)
             {
-                const int deg = (int) rng_.below ((uint32_t) reach + 1) * (rng_.unit() < 0.5f ? 1 : -1);
-                semi = (rng_.unit() < ext_.pQuant) ? scaleSemis (deg) : deg;
-                semi = arpClampi (semi, -12, 12);   // fb109: repitch caps at one octave — degrees can reach ±20 semis (Max: "staticky bullshit")
+                const float fall = arpClamp01 (ext_.pQuant);
+                bool down;
+                if      (fall < 0.25f) down = false;                 // all jumps rise
+                else if (fall > 0.75f) down = true;                  // all jumps fall
+                else                   down = ((li / ev) & 1) != 0;  // alternate, deterministically
+                semi = down ? -reach : reach;
             }
         }
         else if (pitchRangeDeg_ > 0 && rng_.unit() < flipAmt)
@@ -471,8 +484,8 @@ private:
         if (extOn_)
         {
             gF = 0.10f + 0.90f * arpClamp01 (ext_.tLen) + (gFrac - 0.56f) * 0.5f;
-            gF *= 1.0f + (rng_.unit() - 0.5f) * arpClamp01 (ext_.tRand) * 0.8f;
-            if (ext_.tGate > 0.01f && rng_.unit() < ext_.tGate * 0.6f) gF *= 0.35f;
+            gF *= 1.0f + (rngHum_.unit() - 0.5f) * arpClamp01 (ext_.tRand) * 0.8f;
+            if (ext_.tGate > 0.01f && arpHash01 (nonce_, (uint32_t) li, 0xC1u) < ext_.tGate * 0.6f) gF *= 0.35f;
             if (gF < 0.05f) gF = 0.05f; if (gF > 0.98f) gF = 0.98f;
         }
         float gateFull = (float) (stepSamp * (double) gF);
@@ -489,7 +502,7 @@ private:
         if (extOn_)
         {
             const int rc = 1 + (int) std::lround (arpClamp01 (ext_.rCount) * 3.0f);
-            if (rc > 1 && rng_.unit() < arpClamp01 (ext_.rOdds) * 0.8f) rolls = rc;
+            if (rc > 1 && arpHash01 (nonce_, (uint32_t) li, 0xA1u) < arpClamp01 (ext_.rOdds) * 0.8f) rolls = rc;
         }
         if (curStyle_ == ChopStyle::StutterRoll) { rolls = (rolls < 4) ? 4 : rolls; pitchStep = (float) scaleSemis (1); } // ascending in-key
         if (curStyle_ == ChopStyle::GrainSpray)  { rolls = (rolls < 6) ? 6 : rolls; }
@@ -518,7 +531,7 @@ private:
     void triggerVoice (int back, bool rev, float semi, float gateSamples, double stepSamp,
                        float lvl = 1.0f, bool toneGrain = false) noexcept
     {
-        if (back < 0) back = (int) rng_.below (len_);                    // GrainSpray random pick
+        if (back < 0) back = (int) rngHum_.below (len_);                 // GrainSpray random pick
         const double sliceLen = stepSamp;
         // fb109: `back` counts PADS (loop/slices cells each) — the source jump
         // distance; playback still spans one Time step read behind the write head.
@@ -527,9 +540,9 @@ private:
         {
             srcStart -= scanBackSamp_;                                   // Scan/Wander window offset
             if (ext_.spread > 0.01f)                                     // per-slice source scatter
-                srcStart -= (double) rng_.unit() * (double) ext_.spread * sliceLen * 2.0;
+                srcStart -= (double) rngHum_.unit() * (double) ext_.spread * sliceLen * 2.0;
             if (toneGrain && ext_.dSpray > 0.01f)                        // dropped-grain scatter
-                srcStart -= (double) rng_.unit() * (double) ext_.dSpray * sliceLen * 4.0;
+                srcStart -= (double) rngHum_.unit() * (double) ext_.dSpray * sliceLen * 4.0;
         }
 
         // release whoever is current
@@ -547,7 +560,7 @@ private:
         if (extOn_)
         {
             if (ext_.detune > 0.01f)                                     // per-slice tape detune
-                v.rate *= std::pow (2.0, (double) (rng_.unit() - 0.5f) * (double) ext_.detune * 100.0 / 1200.0);
+                v.rate *= std::pow (2.0, (double) (rngHum_.unit() - 0.5f) * (double) ext_.detune * 100.0 / 1200.0);
             if (ext_.speed > 0.01f)                                      // decimated memory → pitch-compensate
                 v.rate *= 1.0 / (1.0 + (double) ext_.speed * 3.0);
             if (ext_.pGlide > 0.01f)                                     // varispeed portamento from the last slice
@@ -809,6 +822,8 @@ private:
     float         subLvl_ = 1.f; bool pendDrop_ = false; int subsFired_ = 0;
     uint32_t      fireCount_ = 0;
     float         vizStepF_ = 0.f;
+    uint32_t      nonce_ = 1;          // fb111: per-pattern dice base — every lane hashes its OWN purpose off it
+    ArpRng        rngHum_;             // humanize-only stream (detune/spray) — pattern knobs can never re-roll it
 
     mutable ArpRng rng_;
 };
