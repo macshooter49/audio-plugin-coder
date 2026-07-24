@@ -166,12 +166,16 @@ public:
         const double BP  = (bpm > 0.0 ? bpm : 120.0);
         const double pps = (BP / 60.0) / SR;
         const float  cellBeats = arpBeatsPerStepRich (rate);
-        // fb106 geometry: the RATE grid defines memory CELLS; the card window spans
-        // loopCells of them, cut into `slices` pieces — so the audible slice grid is
-        // cellBeats * loop/slices. Legacy (no card): slice == cell, unchanged.
-        const float  beats = extOn_ ? cellBeats * (float) ext_.loopCells / (float) len_ : cellBeats;
+        // fb109 — TIME IS TRUTHFUL (Max: "1/16 must chop at 1/16"): the audible
+        // slice grid is ALWAYS the Time division. Slices = pattern length (variety
+        // before the flip repeats); Loop = how far apart source picks jump in the
+        // memory (pad size = loop/slices cells); Scan = how deep. fb106's
+        // grid-scaling made Time lie by loop/slices — the "can't speed it up" bug.
+        const float  beats = cellBeats;
         const double stepSamp = (double) beats / pps;
         const double cellSamp = (double) cellBeats / pps;
+        padSamp_ = extOn_ ? ((double) arpClampi (ext_.loopCells, 2, 16) / (double) len_) * cellSamp
+                          : stepSamp;
         const double sw = (double) arpClamp01 (morph > 0.9f ? 0.9f : morph) * ((double) beats * 0.5);
 
         // window back-offset: Scan positions the loop window in the 16-cell memory
@@ -450,6 +454,7 @@ private:
             {
                 const int deg = (int) rng_.below ((uint32_t) reach + 1) * (rng_.unit() < 0.5f ? 1 : -1);
                 semi = (rng_.unit() < ext_.pQuant) ? scaleSemis (deg) : deg;
+                semi = arpClampi (semi, -12, 12);   // fb109: repitch caps at one octave — degrees can reach ±20 semis (Max: "staticky bullshit")
             }
         }
         else if (pitchRangeDeg_ > 0 && rng_.unit() < flipAmt)
@@ -513,7 +518,9 @@ private:
     {
         if (back < 0) back = (int) rng_.below (len_);                    // GrainSpray random pick
         const double sliceLen = stepSamp;
-        double srcStart = (double) wAbs_ - (double) (back + 1) * sliceLen;
+        // fb109: `back` counts PADS (loop/slices cells each) — the source jump
+        // distance; playback still spans one Time step read behind the write head.
+        double srcStart = (double) wAbs_ - (double) back * padSamp_ - sliceLen;
         if (extOn_)
         {
             srcStart -= scanBackSamp_;                                   // Scan/Wander window offset
@@ -545,6 +552,8 @@ private:
             {
                 v.rateFrom = lastRate_;
                 v.glideLen = (int) std::lround ((double) arpClamp01 (ext_.pGlide) * sliceLen * 0.8);
+                const int gCap = (int) std::lround (sr_ * 0.08);         // fb109: ≤80 ms — fast grids stay snappy, no seasick warble
+                if (v.glideLen > gCap) v.glideLen = gCap;
             }
             if (toneGrain)                                               // Drop Tone: per-grain one-pole color
             {
@@ -778,7 +787,7 @@ private:
     // ── fb106 extension state ──────────────────────────────────────────────
     bool          extOn_ = false;
     ChopExtParams ext_;
-    double        scanBackSamp_ = 0.0, spAcc_ = 0.0, lastRate_ = 1.0;
+    double        scanBackSamp_ = 0.0, spAcc_ = 0.0, lastRate_ = 1.0, padSamp_ = 0.0;
     float         wanderCur_ = 0.f, colEnv_ = 0.f;
     float         crushLv_ = 0.f, gritDrv_ = 1.f, gritNorm_ = 1.f, trimGain_ = 1.f;
     int           fadeEff_ = 2;

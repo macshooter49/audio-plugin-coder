@@ -293,8 +293,8 @@ int main()
         check (e / (double) r.out.size() > 0.01, "T14 card settings still make sound (not silent)");
     }
     {
-        // geometry: loop 4 cells cut into 8 slices → slice grid at half a cell →
-        // the loop wraps twice as fast as slices==loop (fire count roughly doubles)
+        // fb109 — TIME IS TRUTHFUL: the audible grid is ALWAYS the Time division;
+        // Slices/Loop change pattern length + source jumps, NEVER the chop rate.
         auto fires = [] (int slices, int loopCells) {
             FlowChop c; c.prepare (SR, 8.0); c.setScale (60, MAJOR);
             FlowChop::ChopExtParams x; x.slices = slices; x.loopCells = loopCells;
@@ -309,9 +309,12 @@ int main()
                 gc += 512; ppq += pps * 512;
             }
             return (int) c.vizFireCount(); };
-        const int f88 = fires (8, 8), f84 = fires (8, 4);
-        char b[120]; std::snprintf (b, sizeof b, "T15 geometry: loop 4/slices 8 fires ~2x loop 8/slices 8 (%d vs %d)", f84, f88);
-        check (f84 > (int) (f88 * 1.6f) && f84 < (int) (f88 * 2.5f), b);
+        const int f88 = fires (8, 8), f84 = fires (8, 4), f416 = fires (4, 16);
+        char b[160]; std::snprintf (b, sizeof b, "T15 TIME truthful: fire rate identical across geometries (8/8=%d, 8/4=%d, 4/16=%d)", f88, f84, f416);
+        check (std::abs (f88 - f84) <= 2 && std::abs (f88 - f416) <= 2, b);
+        // and the count matches the Time division itself: 200 blocks * 512 @48k = 2.133s
+        // at 1/16 @120 BPM = 0.125 s/step ≈ 17 fires
+        check (f88 >= 15 && f88 <= 19, "T15 fire count == the Time division (1/16 -> ~17 fires in 2.13 s)");
     }
     {
         // DROP at full density, size 0 → the groove becomes mostly holes (wet ≈ dry-off gaps)
