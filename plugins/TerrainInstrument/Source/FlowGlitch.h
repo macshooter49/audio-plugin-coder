@@ -128,7 +128,7 @@ public:
         xf_ = 0; xfLen_ = fade_; seamInterval_ = 1 << 30;
         lastIdx_ = 0.0; lastStep_ = 0.0; tailIdx_ = 0.0; tailStep_ = 0.0; haveLast_ = false;
         pendingFire_ = false;
-        haveClock_ = false; nextStep_ = 0; nextBoundary_ = 0.0; freePpq_ = 0.0;
+        haveClock_ = false; nextStep_ = 0; nextBoundary_ = 0.0; freePpq_ = 0.0; lastBeats_ = -1.f;
         for (int i = 0; i < 64; ++i) lockFireValid_[i] = false;
         rng_.seed (seed_ ? seed_ : 0x6117C40Du);
         // ext render state
@@ -196,7 +196,17 @@ public:
 
         const bool useHost = playing && (! extOn_ || ext_.sync);      // ext Free-run ignores host pos
         double p = useHost ? hostPpq : freePpq_;
-        if (! haveClock_) { nextStep_ = (long long) std::floor (p / (double) beats); nextBoundary_ = boundaryTime (nextStep_, beats, sw); haveClock_ = true; }
+        if (! haveClock_) { nextStep_ = (long long) std::floor (p / (double) beats); nextBoundary_ = boundaryTime (nextStep_, beats, sw); haveClock_ = true; lastBeats_ = beats; }
+        else if (beats != lastBeats_)
+        {
+            // fb116 — THE LADDER LAW (fb107): nextStep_ is counted in GRID UNITS. On a
+            // fast->slow rate move the old (huge) index times the new (large) beats lands
+            // the boundary MINUTES ahead -> silent forever ("can't come back down from
+            // 1/256"). Re-anchor the clock to the next boundary of the NEW grid.
+            lastBeats_ = beats;
+            nextStep_ = (long long) std::floor (p / (double) beats) + 1;
+            nextBoundary_ = boundaryTime (nextStep_, beats, sw);
+        }
 
         // ext: hoist per-block coefs (wet bus one-poles, bend LFO inc)
         if (extOn_)
@@ -1042,6 +1052,7 @@ private:
 
     // clock
     bool     haveClock_ = false; long long nextStep_ = 0; double nextBoundary_ = 0.0, freePpq_ = 0.0;
+    float    lastBeats_ = -1.f;                    // fb116: re-anchor the step clock on any grid change
 
     ArpRng   rng_;
 };

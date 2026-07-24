@@ -438,6 +438,30 @@ int main()
         check (fin && bnd, "T23 all-hot + crush overlay: finite and bounded");
     }
 
+    // ── T24: THE LADDER comes back down — 1/256 then 1/4 keeps firing (fb107/fb116 law) ─
+    {
+        FlowGlitch g; g.prepare (SR, 4.0); g.setMix (1.0f); GlitchExtParams p0; g.setExt (p0);
+        std::vector<float> out; std::vector<float> L (512), R (512);
+        double ppq = 0; const double pps = (BPM/60.0)/SR; long long gc = 0;
+        auto run = [&](float rate, int samples)
+        {
+            for (int done = 0; done < samples; done += 512)
+            {
+                for (int i=0;i<512;++i){ float v=sineSig(gc+i); L[(size_t)i]=v; R[(size_t)i]=v; }
+                g.process (rate, 0.55f, 1.0f, 0.0f, 0.0f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                for (int i=0;i<512;++i) out.push_back (L[(size_t)i]);
+                gc += 512; ppq += pps*512;
+            }
+        };
+        run (1.0f, 48000);                                    // one second at 1/256 (rich idx 18)
+        const long long cTop = g.vizFireCount();
+        run (0.27778f, 96000);                                // drop to 1/4 (idx 5) for two seconds
+        const long long cNew = g.vizFireCount() - cTop;
+        char buf[96]; std::snprintf (buf, sizeof buf, "T24 rate 1/256 -> 1/4 keeps firing (%lld fires after the drop)", cNew);
+        check (cTop > 50 && cNew >= 3, buf);
+        check (maxJump (out, 30000, (size_t) out.size()) < 0.07f, "T24 the grid drop itself is click-free");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;
