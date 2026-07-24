@@ -404,7 +404,10 @@ private:
                     nonce_ = arpHash ((uint32_t) seedIdx, 0x9E1u, 0u);            // fb111: locked dice for EVERY lane
                 }
                 else nonce_ = rng_.next();                                        // free seed: fresh dice per pattern
-                wanderCur_ = (ext_.wander > 0.01f) ? (rng_.unit() - 0.5f) * ext_.wander * 2.0f : 0.0f;
+                // fb112 sweep — wander dice come from the hash, not the shared rng:
+                // a conditional rng_ draw meant toggling Wander re-rolled the ORDER
+                // pattern (the exact coupling the fb111 law forbids).
+                wanderCur_ = (arpHash01 (nonce_, 0xABu, 0x77u) - 0.5f) * arpClamp01 (ext_.wander) * 2.0f;
             }
             regeneratePattern();
             regenPattern_ = false;
