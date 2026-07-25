@@ -906,6 +906,7 @@ public:
     std::atomic<int>              gliVizFx_ { -1 }, gliVizCount_ { 0 }, gliVizActive_ { 0 };
     std::atomic<float>            gliVizLvl_[16] {};
     std::atomic<float>            gliVizOut_ { 0.0f };   // fb124 — speaker meter level
+    std::atomic<float>*           gliFxFltP_[8] { nullptr }, * gliFxPanP_[8] { nullptr };   // fb125 — cached at prepare
     std::atomic<bool>             gliRollReq_ { false };
     // FLOW · ROBIN viz feed (fb122)
     std::atomic<int>              rbnVizNow_ { -1 }, rbnVizNext_ { -1 }, rbnVizNotes_ { 1 },

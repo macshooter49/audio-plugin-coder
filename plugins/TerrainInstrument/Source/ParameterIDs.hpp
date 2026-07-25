@@ -231,6 +231,15 @@ namespace ParameterIDs
     constexpr char FLOW_GLI_FRZ_SHINE[] = "FLOW_GLI_FRZ_SHINE"; constexpr char FLOW_GLI_FRZ_MELT[]  = "FLOW_GLI_FRZ_MELT";
     constexpr char FLOW_GLI_SCT_SIZE[]  = "FLOW_GLI_SCT_SIZE";  constexpr char FLOW_GLI_SCT_AMT[]   = "FLOW_GLI_SCT_AMT";
     constexpr char FLOW_GLI_SCT_VARY[]  = "FLOW_GLI_SCT_VARY";  constexpr char FLOW_GLI_SCT_WIDTH[] = "FLOW_GLI_SCT_WIDTH";
+    // fb125 — per-EFFECT Out routing (the Bus is dead): each effect's own Filter + Pan
+    constexpr char FLOW_GLI_REP_FLT[]  = "FLOW_GLI_REP_FLT";   constexpr char FLOW_GLI_REP_PAN[]  = "FLOW_GLI_REP_PAN";
+    constexpr char FLOW_GLI_REV_FLT[]  = "FLOW_GLI_REV_FLT";   constexpr char FLOW_GLI_REV_PAN[]  = "FLOW_GLI_REV_PAN";
+    constexpr char FLOW_GLI_TAPE_FLT[] = "FLOW_GLI_TAPE_FLT";  constexpr char FLOW_GLI_TAPE_PAN[] = "FLOW_GLI_TAPE_PAN";
+    constexpr char FLOW_GLI_GATE_FLT[] = "FLOW_GLI_GATE_FLT";  constexpr char FLOW_GLI_GATE_PAN[] = "FLOW_GLI_GATE_PAN";
+    constexpr char FLOW_GLI_PIT_FLT[]  = "FLOW_GLI_PIT_FLT";   constexpr char FLOW_GLI_PIT_PAN[]  = "FLOW_GLI_PIT_PAN";
+    constexpr char FLOW_GLI_CRSH_FLT[] = "FLOW_GLI_CRSH_FLT";  constexpr char FLOW_GLI_CRSH_PAN[] = "FLOW_GLI_CRSH_PAN";
+    constexpr char FLOW_GLI_FRZ_FLT[]  = "FLOW_GLI_FRZ_FLT";   constexpr char FLOW_GLI_FRZ_PAN[]  = "FLOW_GLI_FRZ_PAN";
+    constexpr char FLOW_GLI_SCT_FLT[]  = "FLOW_GLI_SCT_FLT";   constexpr char FLOW_GLI_SCT_PAN[]  = "FLOW_GLI_SCT_PAN";
     // ── FLOW · ROBIN extension card (fb122) — the Wheel: rotation brain scalars ──
     constexpr char FLOW_RBN_A[]      = "FLOW_RBN_A";       constexpr char FLOW_RBN_B[]      = "FLOW_RBN_B";
     constexpr char FLOW_RBN_C[]      = "FLOW_RBN_C";       constexpr char FLOW_RBN_D[]      = "FLOW_RBN_D";

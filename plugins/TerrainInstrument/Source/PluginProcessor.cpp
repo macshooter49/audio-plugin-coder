@@ -3230,6 +3230,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         addRbnChoice (ParameterIDs::FLOW_RBN_TIMES,  "Robin Times",   { "1", "2", "3", "4" }, 0);
         addRbnChoice (ParameterIDs::FLOW_RBN_RESET,  "Robin Reset",   { "Free", "Bar", "Phrase" }, 0);
         addRbnChoice (ParameterIDs::FLOW_RBN_RUN,    "Robin Run",     { "Forward", "Backward" }, 0);
+        // fb125 — glitch per-effect Out routing (Filter Off/Low/Mid/High + Pan L/C/R)
+        {
+            static const char* fx[8]  = { "REP", "REV", "TAPE", "GATE", "PIT", "CRSH", "FRZ", "SCT" };
+            static const char* nm[8]  = { "Repeat", "Rev", "Tape", "Gate FX", "Pitch", "Crush", "Freeze", "Scatter" };
+            for (int i = 0; i < 8; ++i)
+            {
+                layout.add (std::make_unique<juce::AudioParameterChoice>(
+                    juce::ParameterID { juce::String ("FLOW_GLI_") + fx[i] + "_FLT", 1 },
+                    juce::String ("Glitch ") + nm[i] + " Filter",
+                    juce::StringArray { "Off", "Low", "Mid", "High" }, 0));
+                layout.add (std::make_unique<juce::AudioParameterChoice>(
+                    juce::ParameterID { juce::String ("FLOW_GLI_") + fx[i] + "_PAN", 1 },
+                    juce::String ("Glitch ") + nm[i] + " Pan",
+                    juce::StringArray { "L", "C", "R" }, 1));
+            }
+        }
         addRbnChoice (ParameterIDs::FLOW_RBN_O1, "Robin Order 1st", { "A", "B", "C", "D" }, 0);
         addRbnChoice (ParameterIDs::FLOW_RBN_O2, "Robin Order 2nd", { "A", "B", "C", "D" }, 1);
         addRbnChoice (ParameterIDs::FLOW_RBN_O3, "Robin Order 3rd", { "A", "B", "C", "D" }, 2);
@@ -3362,6 +3378,14 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     prevFlowMode_ = 0;                   // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
     flowRobin_.prepare (sampleRate);    // fb122 ROBIN rotation brain
+    {   // fb125 — glitch per-effect Out routing: resolve the 16 raw pointers ONCE (RT-safe reads)
+        static const char* fxIds[8] = { "REP", "REV", "TAPE", "GATE", "PIT", "CRSH", "FRZ", "SCT" };
+        for (int fi = 0; fi < 8; ++fi)
+        {
+            gliFxFltP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_FLT");
+            gliFxPanP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_PAN");
+        }
+    }
     synthEngine.setRobinBrain (&flowRobin_);
     reso.prepare   (sampleRate);        // ANNULUS resonator — allocates mode/delay state here only
     for (auto& e : resoVizEnergy_) e.store (0.0f, std::memory_order_relaxed);
@@ -5967,8 +5991,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             X.loopLen    = kLoopG[juce::jlimit (0, 4, (int) *rawParam (ParameterIDs::FLOW_GLI_LOOP))];
             X.quantIdx   = (int) *rawParam (ParameterIDs::FLOW_GLI_QUANT);
             X.releaseNow = (int) *rawParam (ParameterIDs::FLOW_GLI_RELEASE) == 1;
-            X.filter     = (int) *rawParam (ParameterIDs::FLOW_GLI_FILTER);
-            X.pan        = (int) *rawParam (ParameterIDs::FLOW_GLI_PAN);
+            // fb125 — per-effect Out routing (pointers cached at prepare; FLOW_GLI_FILTER/PAN
+            // retired but stay registered for old sessions)
+            for (int fi = 0; fi < 8; ++fi)
+            {
+                X.fxFlt[fi] = gliFxFltP_[fi] != nullptr ? (int) gliFxFltP_[fi]->load() : 0;
+                X.fxPan[fi] = gliFxPanP_[fi] != nullptr ? (int) gliFxPanP_[fi]->load() : 1;
+            }
             X.sync       = (int) *rawParam (ParameterIDs::FLOW_GLI_SYNC) == 1;
             X.repSize  = flowBase (ParameterIDs::FLOW_GLI_REP_SIZE);   X.repSpeed = flowBase (ParameterIDs::FLOW_GLI_REP_SPEED);
             X.repFade  = flowBase (ParameterIDs::FLOW_GLI_REP_FADE);   X.repVary  = flowBase (ParameterIDs::FLOW_GLI_REP_VARY);

@@ -426,7 +426,7 @@ int main()
         p.pitShift = 1.0f; p.pitWalk = 1.0f; p.pitGlide = 1.0f; p.pitJump = 1.0f;
         p.frzSize = 0.05f; p.frzSpray = 1.0f; p.frzShine = 1.0f; p.frzMelt = 1.0f;
         p.sctSize = 0.1f; p.sctAmt = 0.5f; p.sctVary = 1.0f; p.sctWidth = 1.0f;
-        p.filter = 2; p.pan = 0;
+        for (int k = 0; k < kGlitchFxN; ++k) { p.fxFlt[k] = 2; p.fxPan[k] = 0; }   // fb125 per-effect Out
         GRun r = driveG ([&](FlowGlitch& g){ g.setMix (1.0f); g.setExt (p); },
                          allVary1, 0.6111f, 0.55f, 0.9f, 0.4f, 200);
         check (maxJump (r.out, 34000, 100000) < 0.07f, "T23 all-hot (no crush): still click-free");
@@ -460,6 +460,50 @@ int main()
         char buf[96]; std::snprintf (buf, sizeof buf, "T24 rate 1/256 -> 1/4 keeps firing (%lld fires after the drop)", cNew);
         check (cTop > 50 && cNew >= 3, buf);
         check (maxJump (out, 30000, (size_t) out.size()) < 0.07f, "T24 the grid drop itself is click-free");
+    }
+
+    // ── T25: per-effect OUT routing — the fire carries its own Pan + Filter (fb125) ─
+    {
+        GlitchExtParams pl = soloExt (GlitchFx::Repeat);
+        pl.fxPan[(int) GlitchFx::Repeat] = 0;                  // Repeat hard LEFT
+        GRun r = driveG ([&](FlowGlitch& g){ g.setMix (1.0f); g.setExt (pl); }, allVary1, 0.55f, 0.55f, 0.0f, 0.0f, 120);
+        // R channel of the buffer is processed in place too — drive with the same signal;
+        // during fires the wet replaces both, R attenuated to 0.25x
+        double eL = 0, eR = 0;
+        {   // re-run capturing both channels
+            FlowGlitch g; g.prepare (SR, 4.0); g.setMix (1.0f); g.setExt (pl);
+            std::vector<float> L (512), R (512); double ppq = 0; const double pps=(BPM/60.0)/SR; long long gc=0;
+            for (int b = 0; b < 120; ++b)
+            {
+                for (int i=0;i<512;++i){ float v=sineSig(gc+i); L[(size_t)i]=v; R[(size_t)i]=v; }
+                g.process (0.55f, 0.55f, 1.0f, 0.0f, 0.0f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                if (b > 60) for (int i=0;i<512;++i) { eL += (double) L[(size_t)i]*L[(size_t)i]; eR += (double) R[(size_t)i]*R[(size_t)i]; }
+                gc += 512; ppq += pps*512;
+            }
+        }
+        char buf[96]; std::snprintf (buf, sizeof buf, "T25 Repeat panned LEFT: energy L %.2f >> R %.2f", eL, eR);
+        check (eL > eR * 2.0, buf);
+        (void) r;
+
+        GlitchExtParams pf = soloExt (GlitchFx::Repeat);
+        pf.fxFlt[(int) GlitchFx::Repeat] = 1;                  // Repeat -> Low (LP900)
+        auto hfRms = [&](const GlitchExtParams& pp)
+        {
+            FlowGlitch g; g.prepare (SR, 4.0); g.setMix (1.0f); g.setExt (pp);
+            std::vector<float> L (512), R (512); double ppq = 0; const double pps=(BPM/60.0)/SR; long long gc=0;
+            double acc = 0; long long cnt = 0; float prev = 0;
+            for (int b = 0; b < 120; ++b)
+            {
+                for (int i=0;i<512;++i){ float v=0.4f*std::sin(2.0f*3.14159265f*(float)(gc+i)/16.0f); L[(size_t)i]=v; R[(size_t)i]=v; }   // 3 kHz
+                g.process (0.55f, 0.55f, 1.0f, 0.0f, 0.0f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                if (b > 60) for (int i=0;i<512;++i) { const float d = L[(size_t)i]-prev; acc += (double) d*d; prev = L[(size_t)i]; ++cnt; }
+                gc += 512; ppq += pps*512;
+            }
+            return std::sqrt (acc / (double) cnt);
+        };
+        const double hOff = hfRms (soloExt (GlitchFx::Repeat)), hLow = hfRms (pf);
+        char buf2[96]; std::snprintf (buf2, sizeof buf2, "T25 Repeat->Low filter darkens the wet (%.4f -> %.4f)", hOff, hLow);
+        check (hLow < hOff * 0.6, buf2);
     }
 
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);

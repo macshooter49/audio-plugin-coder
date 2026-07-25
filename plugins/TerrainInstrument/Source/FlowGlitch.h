@@ -85,8 +85,10 @@ struct GlitchExtParams
     int   quantIdx = 2;           // Roll punch-in grid: 1/4, 1/8, 1/16, 1/32
     bool  releaseNow = false;     // false = "End": Rep/Rev holds round UP to whole repeats
     float bend = 0.0f;            // slow read-rate warble on readers (tape drift)
-    int   filter = 0;             // wet bus: Off / Low / Mid / High
-    int   pan = 1;                // wet bus: L / C / R
+    int   filter = 0;             // (legacy global bus — superseded by fxFlt/fxPan, fb125)
+    int   pan = 1;
+    int   fxFlt[kGlitchFxN] = { 0, 0, 0, 0, 0, 0, 0, 0 };   // fb125 — per-EFFECT Out: Filter Off/Low/Mid/High
+    int   fxPan[kGlitchFxN] = { 1, 1, 1, 1, 1, 1, 1, 1 };   //         and Pan L/C/R ("pitch left, tape right")
     bool  sync = true;            // false = Free-run clock (ignore host bar position)
     // per-effect (4 each) — names match the card. Research-confirmed inits (fb115):
     // Rep/Rev Size = the whole step (turning DOWN speeds the stutter), Pitch = -12
@@ -514,6 +516,8 @@ private:
         if (extOn_)
         {
             fireNonce_ = pendNonce_; fireStep16_ = pendStep16_; ++fireCount_;
+            curFlt_ = ext_.fxFlt[(int) gFx_ & 7];             // fb125 — the FIRE latches its own
+            curPan_ = ext_.fxPan[(int) gFx_ & 7];             //         Out routing (no mid-fire jumps)
             phF_ = 0.0; lenCur_ = (double) gLen_; lvlCur_ = 1.f; driftOff_ = 0.0; wrapN_ = 0;
             chunkOff_ = 0.0; semisAcc_ = (double) pendSemis_;
             prTgt_ = latchedPitch_;
@@ -966,8 +970,8 @@ private:
         if (ext_.en[(int) GlitchFx::Gate] && gFx_ != GlitchFx::Gate)
             gateApply (gCounter_, wl, wr, wl, wr);
 
-        // wet bus: Filter (chop's one-poles) then Pan
-        switch (ext_.filter)
+        // per-effect Out (fb125): the active fire's own Filter then Pan
+        switch (curFlt_)
         {
             case 1:  lpL_ += lpC_ * (wl - lpL_); wl = lpL_;
                      lpR_ += lpC_ * (wr - lpR_); wr = lpR_; break;
@@ -979,8 +983,8 @@ private:
                      hpR_ += hpC_ * (wr - hpR_); wr -= hpR_; break;
             default: break;
         }
-        if (ext_.pan == 0)      wr *= 0.25f;
-        else if (ext_.pan == 2) wl *= 0.25f;
+        if (curPan_ == 0)      wr *= 0.25f;
+        else if (curPan_ == 2) wl *= 0.25f;
 
         // master Decay: the glitch eases back to DRY over the hold
         if (ext_.decay > 0.001f && gDur_ > 0)
@@ -1031,6 +1035,7 @@ private:
     float    lpC_ = 1.f, hpC_ = 1.f, toneC_ = 1.f;
     float    lpL_ = 0.f, lpR_ = 0.f, hpL_ = 0.f, hpR_ = 0.f, tone1L_ = 0.f, tone1R_ = 0.f;
     double   sctRate_ = 1.0, chanOffR_ = 0.0; int sctWin_ = 1;
+    int      curFlt_ = 0, curPan_ = 1;                       // fb125 — latched per fire
     float    gGain_ = 1.f, gGainPrev_ = 1.f, gGainTail_ = 1.f;
     double   lvlAcc_ = 0.0; int lvlN_ = 0; float lvl16_[16] = { 0.f };
     float    vizStepF_ = 0.f, vizLoopF_ = 0.f, outLvl_ = 0.f;
