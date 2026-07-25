@@ -1,0 +1,264 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Glitch + Robin emblems â F2</title><style>
+  html,body{margin:0;padding:0;background:#1D1A31;font-family:-apple-system,"SF Pro Text",sans-serif;}
+  #syn-panel{padding:32px 38px;}
+  h1{color:#ECE8F2;font-size:13px;font-weight:600;letter-spacing:.14em;margin:0 0 4px;}
+  .sub{color:#9B93B0;font-size:11px;margin:0 0 22px;}
+  .set{margin-bottom:26px;}
+  .set h2{color:#ECE8F2;font-size:11px;font-weight:600;letter-spacing:.08em;margin:0 0 3px;}
+  .set p{color:#9B93B0;font-size:10px;line-height:1.45;margin:0 0 10px;}
+  .pair{display:flex;gap:30px;}
+  .pair>div.wrap{width:238px;}
+  .cap{color:#6F688A;font-size:9px;letter-spacing:.06em;margin:6px 0 0;text-align:center;}
+  .flow-modes{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:9px;}
+  .flow-mode{position:relative;min-height:58px;border-radius:11px;cursor:pointer;
+    border:1px solid rgba(255,255,255,0.45);display:flex;align-items:center;justify-content:center;
+    color:#C5BFD2;background:transparent;}
+  .flow-mode .clip{position:absolute;inset:0;border-radius:inherit;overflow:hidden;z-index:0;pointer-events:none;}
+  .flow-mode .orbit{display:none;}
+  .flow-mode .emb{width:42px;height:42px;display:block;position:relative;z-index:2;opacity:.55;}
+  .flow-mode .emb [stroke]{stroke:currentColor;}
+  .flow-mode .emb circle{transform-box:fill-box;transform-origin:center;}
+  .flow-mode.act{border-color:#B794FF;color:#fff;background:transparent;}
+  .flow-mode.act .emb{color:#fff;opacity:1;filter:drop-shadow(0 0 4px rgba(255,255,255,0.5));}
+  .flow-mode.act .emb [opacity]{opacity:.75;}
+</style></head><body><div id="syn-panel"><h1>NEW EMBLEMS · GLITCH + ROUND ROBIN</h1><p class="sub">All SMIL in viewBox space (zoom-immune) · Big Pop select state · mechanical, grid-locked motion</p><div class="set"><h2>1 · Echo bars + Step ring</h2><p>Glitch: a hit and two stutter echoes flashing in rhythm â the card’s bar language. Robin: the runner dot hops station to station while a thin arc sweeps.</p><div class="pair"><div class="wrap"><div class="flow-modes"><div class="flow-mode" data-mode="arp" title="Arp">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot arpHold" fill="currentColor"><circle cx="9" cy="13" r="2.4"/><circle cx="9" cy="21" r="2.4"/><circle cx="9" cy="29" r="2.4"/></g>
+                  <g class="arpfan" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path class="arpLine l1" d="M12,13 C22,13 24,8 33,8"/>
+                    <path class="arpLine l2" d="M12,21 C22,21 24,21 33,21"/>
+                    <path class="arpLine l3" d="M12,29 C22,29 24,34 33,34"/>
+                  </g>
+                  <g class="dot" fill="currentColor"><circle class="arpNote n1" cx="34" cy="8" r="2.2"/><circle class="arpNote n2" cx="34" cy="21" r="2.2"/><circle class="arpNote n3" cx="34" cy="34" r="2.2"/></g>
+                </svg>
+              </div><div class="flow-mode" data-mode="chop" title="Chop">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot" fill="currentColor">
+                    <circle class="sq s1" cx="9" cy="21" r="2.2"/><circle class="sq s2" cx="17" cy="21" r="2.2"/>
+                    <circle class="sq s3" cx="25" cy="21" r="2.2"/><circle class="sq s4" cx="33" cy="21" r="3.2"/>
+                    <circle class="seqBall" cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle>
+                  </g>
+                </svg>
+              </div><div class="flow-mode act" data-mode="glitch" title="Glitch">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none" stroke-width="2.6" stroke-linecap="round">
+    <path d="M13,14 V28" stroke="currentColor"/>
+    <path d="M21,14 V28" stroke="currentColor" opacity="0.25">
+      <animate attributeName="opacity" dur="2.4s" repeatCount="indefinite" calcMode="discrete"
+        keyTimes="0;0.5;0.72;0.86" values="0.25;1;0.5;0.25"/></path>
+    <path d="M29,14 V28" stroke="currentColor" opacity="0.25">
+      <animate attributeName="opacity" dur="2.4s" repeatCount="indefinite" calcMode="discrete"
+        keyTimes="0;0.58;0.78;0.9" values="0.25;1;0.5;0.25"/></path>
+  </svg></div><div class="flow-mode " data-mode="drift" title="Round Robin">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none">
+    <circle cx="21" cy="8"  r="2.1" fill="currentColor" opacity="0.45"/>
+    <circle cx="34" cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+    <circle cx="21" cy="34" r="2.1" fill="currentColor" opacity="0.45"/>
+    <circle cx="8"  cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+    <g><path d="M21,8 A13,13 0 0 1 34,21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/>
+      <animateTransform attributeName="transform" type="rotate" from="0 21 21" to="360 21 21" dur="3.2s" repeatCount="indefinite"/></g>
+    <circle r="2.9" fill="currentColor">
+      <animate attributeName="cx" dur="3.2s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.25;0.5;0.75" values="34;21;8;21"/>
+      <animate attributeName="cy" dur="3.2s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.25;0.5;0.75" values="21;34;21;8"/>
+    </circle>
+  </svg></div></div><div class="cap">GLITCH SELECTED</div></div><div class="wrap"><div class="flow-modes"><div class="flow-mode" data-mode="arp" title="Arp">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot arpHold" fill="currentColor"><circle cx="9" cy="13" r="2.4"/><circle cx="9" cy="21" r="2.4"/><circle cx="9" cy="29" r="2.4"/></g>
+                  <g class="arpfan" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path class="arpLine l1" d="M12,13 C22,13 24,8 33,8"/>
+                    <path class="arpLine l2" d="M12,21 C22,21 24,21 33,21"/>
+                    <path class="arpLine l3" d="M12,29 C22,29 24,34 33,34"/>
+                  </g>
+                  <g class="dot" fill="currentColor"><circle class="arpNote n1" cx="34" cy="8" r="2.2"/><circle class="arpNote n2" cx="34" cy="21" r="2.2"/><circle class="arpNote n3" cx="34" cy="34" r="2.2"/></g>
+                </svg>
+              </div><div class="flow-mode" data-mode="chop" title="Chop">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot" fill="currentColor">
+                    <circle class="sq s1" cx="9" cy="21" r="2.2"/><circle class="sq s2" cx="17" cy="21" r="2.2"/>
+                    <circle class="sq s3" cx="25" cy="21" r="2.2"/><circle class="sq s4" cx="33" cy="21" r="3.2"/>
+                    <circle class="seqBall" cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle>
+                  </g>
+                </svg>
+              </div><div class="flow-mode " data-mode="glitch" title="Glitch">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none" stroke-width="2.6" stroke-linecap="round">
+    <path d="M13,14 V28" stroke="currentColor"/>
+    <path d="M21,14 V28" stroke="currentColor" opacity="0.25">
+      <animate attributeName="opacity" dur="2.4s" repeatCount="indefinite" calcMode="discrete"
+        keyTimes="0;0.5;0.72;0.86" values="0.25;1;0.5;0.25"/></path>
+    <path d="M29,14 V28" stroke="currentColor" opacity="0.25">
+      <animate attributeName="opacity" dur="2.4s" repeatCount="indefinite" calcMode="discrete"
+        keyTimes="0;0.58;0.78;0.9" values="0.25;1;0.5;0.25"/></path>
+  </svg></div><div class="flow-mode act" data-mode="drift" title="Round Robin">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none">
+    <circle cx="21" cy="8"  r="2.1" fill="currentColor" opacity="0.45"/>
+    <circle cx="34" cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+    <circle cx="21" cy="34" r="2.1" fill="currentColor" opacity="0.45"/>
+    <circle cx="8"  cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+    <g><path d="M21,8 A13,13 0 0 1 34,21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/>
+      <animateTransform attributeName="transform" type="rotate" from="0 21 21" to="360 21 21" dur="3.2s" repeatCount="indefinite"/></g>
+    <circle r="2.9" fill="currentColor">
+      <animate attributeName="cx" dur="3.2s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.25;0.5;0.75" values="34;21;8;21"/>
+      <animate attributeName="cy" dur="3.2s" repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.25;0.5;0.75" values="21;34;21;8"/>
+    </circle>
+  </svg></div></div><div class="cap">ROBIN SELECTED</div></div></div></div><div class="set"><h2>2 · Slice jump + Dial click</h2><p>Glitch: the middle slice of the waveform snaps out of place and back. Robin: the whole four-dot wheel clicks 90° like a camera dial.</p><div class="pair"><div class="wrap"><div class="flow-modes"><div class="flow-mode" data-mode="arp" title="Arp">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot arpHold" fill="currentColor"><circle cx="9" cy="13" r="2.4"/><circle cx="9" cy="21" r="2.4"/><circle cx="9" cy="29" r="2.4"/></g>
+                  <g class="arpfan" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path class="arpLine l1" d="M12,13 C22,13 24,8 33,8"/>
+                    <path class="arpLine l2" d="M12,21 C22,21 24,21 33,21"/>
+                    <path class="arpLine l3" d="M12,29 C22,29 24,34 33,34"/>
+                  </g>
+                  <g class="dot" fill="currentColor"><circle class="arpNote n1" cx="34" cy="8" r="2.2"/><circle class="arpNote n2" cx="34" cy="21" r="2.2"/><circle class="arpNote n3" cx="34" cy="34" r="2.2"/></g>
+                </svg>
+              </div><div class="flow-mode" data-mode="chop" title="Chop">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot" fill="currentColor">
+                    <circle class="sq s1" cx="9" cy="21" r="2.2"/><circle class="sq s2" cx="17" cy="21" r="2.2"/>
+                    <circle class="sq s3" cx="25" cy="21" r="2.2"/><circle class="sq s4" cx="33" cy="21" r="3.2"/>
+                    <circle class="seqBall" cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle>
+                  </g>
+                </svg>
+              </div><div class="flow-mode act" data-mode="glitch" title="Glitch">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none" stroke-width="2" stroke-linecap="round">
+    <path d="M10,14 H32" stroke="currentColor" opacity="0.4"/>
+    <path d="M10,28 H32" stroke="currentColor" opacity="0.4"/>
+    <path d="M10,21 H16.5" stroke="currentColor"/>
+    <path d="M25.5,21 H32" stroke="currentColor"/>
+    <g><path d="M18.5,21 H23.5" stroke="currentColor"/>
+      <animateTransform attributeName="transform" type="translate" dur="2.4s" repeatCount="indefinite"
+        calcMode="discrete" keyTimes="0;0.7;0.76;0.82;0.88;0.94" values="0 0;0 -5;0 4;0 -2;0 5;0 0"/></g>
+  </svg></div><div class="flow-mode " data-mode="drift" title="Round Robin">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none">
+    <g>
+      <circle cx="21" cy="9"  r="3.1" fill="currentColor"/>
+      <circle cx="33" cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+      <circle cx="21" cy="33" r="2.1" fill="currentColor" opacity="0.45"/>
+      <circle cx="9"  cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+      <animateTransform attributeName="transform" type="rotate" dur="3.2s" repeatCount="indefinite"
+        calcMode="spline" keyTimes="0;0.22;0.25;0.47;0.5;0.72;0.75;0.97;1"
+        keySplines="0 0 1 1;0.3 0 0.1 1;0 0 1 1;0.3 0 0.1 1;0 0 1 1;0.3 0 0.1 1;0 0 1 1;0.3 0 0.1 1"
+        values="0 21 21;0 21 21;90 21 21;90 21 21;180 21 21;180 21 21;270 21 21;270 21 21;360 21 21"/>
+    </g>
+  </svg></div></div><div class="cap">GLITCH SELECTED</div></div><div class="wrap"><div class="flow-modes"><div class="flow-mode" data-mode="arp" title="Arp">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot arpHold" fill="currentColor"><circle cx="9" cy="13" r="2.4"/><circle cx="9" cy="21" r="2.4"/><circle cx="9" cy="29" r="2.4"/></g>
+                  <g class="arpfan" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path class="arpLine l1" d="M12,13 C22,13 24,8 33,8"/>
+                    <path class="arpLine l2" d="M12,21 C22,21 24,21 33,21"/>
+                    <path class="arpLine l3" d="M12,29 C22,29 24,34 33,34"/>
+                  </g>
+                  <g class="dot" fill="currentColor"><circle class="arpNote n1" cx="34" cy="8" r="2.2"/><circle class="arpNote n2" cx="34" cy="21" r="2.2"/><circle class="arpNote n3" cx="34" cy="34" r="2.2"/></g>
+                </svg>
+              </div><div class="flow-mode" data-mode="chop" title="Chop">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot" fill="currentColor">
+                    <circle class="sq s1" cx="9" cy="21" r="2.2"/><circle class="sq s2" cx="17" cy="21" r="2.2"/>
+                    <circle class="sq s3" cx="25" cy="21" r="2.2"/><circle class="sq s4" cx="33" cy="21" r="3.2"/>
+                    <circle class="seqBall" cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle>
+                  </g>
+                </svg>
+              </div><div class="flow-mode " data-mode="glitch" title="Glitch">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none" stroke-width="2" stroke-linecap="round">
+    <path d="M10,14 H32" stroke="currentColor" opacity="0.4"/>
+    <path d="M10,28 H32" stroke="currentColor" opacity="0.4"/>
+    <path d="M10,21 H16.5" stroke="currentColor"/>
+    <path d="M25.5,21 H32" stroke="currentColor"/>
+    <g><path d="M18.5,21 H23.5" stroke="currentColor"/>
+      <animateTransform attributeName="transform" type="translate" dur="2.4s" repeatCount="indefinite"
+        calcMode="discrete" keyTimes="0;0.7;0.76;0.82;0.88;0.94" values="0 0;0 -5;0 4;0 -2;0 5;0 0"/></g>
+  </svg></div><div class="flow-mode act" data-mode="drift" title="Round Robin">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none">
+    <g>
+      <circle cx="21" cy="9"  r="3.1" fill="currentColor"/>
+      <circle cx="33" cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+      <circle cx="21" cy="33" r="2.1" fill="currentColor" opacity="0.45"/>
+      <circle cx="9"  cy="21" r="2.1" fill="currentColor" opacity="0.45"/>
+      <animateTransform attributeName="transform" type="rotate" dur="3.2s" repeatCount="indefinite"
+        calcMode="spline" keyTimes="0;0.22;0.25;0.47;0.5;0.72;0.75;0.97;1"
+        keySplines="0 0 1 1;0.3 0 0.1 1;0 0 1 1;0.3 0 0.1 1;0 0 1 1;0.3 0 0.1 1;0 0 1 1;0.3 0 0.1 1"
+        values="0 21 21;0 21 21;90 21 21;90 21 21;180 21 21;180 21 21;270 21 21;270 21 21;360 21 21"/>
+    </g>
+  </svg></div></div><div class="cap">ROBIN SELECTED</div></div></div></div><div class="set"><h2>3 · Teleport + Orbit</h2><p>Glitch: a square teleports between ghost frames. Robin: one dot orbits smoothly past four ticks.</p><div class="pair"><div class="wrap"><div class="flow-modes"><div class="flow-mode" data-mode="arp" title="Arp">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot arpHold" fill="currentColor"><circle cx="9" cy="13" r="2.4"/><circle cx="9" cy="21" r="2.4"/><circle cx="9" cy="29" r="2.4"/></g>
+                  <g class="arpfan" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path class="arpLine l1" d="M12,13 C22,13 24,8 33,8"/>
+                    <path class="arpLine l2" d="M12,21 C22,21 24,21 33,21"/>
+                    <path class="arpLine l3" d="M12,29 C22,29 24,34 33,34"/>
+                  </g>
+                  <g class="dot" fill="currentColor"><circle class="arpNote n1" cx="34" cy="8" r="2.2"/><circle class="arpNote n2" cx="34" cy="21" r="2.2"/><circle class="arpNote n3" cx="34" cy="34" r="2.2"/></g>
+                </svg>
+              </div><div class="flow-mode" data-mode="chop" title="Chop">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot" fill="currentColor">
+                    <circle class="sq s1" cx="9" cy="21" r="2.2"/><circle class="sq s2" cx="17" cy="21" r="2.2"/>
+                    <circle class="sq s3" cx="25" cy="21" r="2.2"/><circle class="sq s4" cx="33" cy="21" r="3.2"/>
+                    <circle class="seqBall" cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle>
+                  </g>
+                </svg>
+              </div><div class="flow-mode act" data-mode="glitch" title="Glitch">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none" stroke-width="2">
+    <rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.28"/>
+    <rect x="24" y="24" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.28"/>
+    <g><rect x="0" y="0" width="7" height="7" rx="1.5" fill="currentColor"/>
+      <animateTransform attributeName="transform" type="translate" dur="2.4s" repeatCount="indefinite"
+        calcMode="discrete" keyTimes="0;0.34;0.4;0.68;0.74" values="11 11;24 11;24 24;11 24;11 11"/></g>
+  </svg></div><div class="flow-mode " data-mode="drift" title="Round Robin">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none">
+    <path d="M21,6.4 V10 M35.6,21 H32 M21,35.6 V32 M6.4,21 H10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.45"/>
+    <g><circle cx="21" cy="8.5" r="2.7" fill="currentColor"/>
+      <animateTransform attributeName="transform" type="rotate" from="0 21 21" to="360 21 21" dur="3.2s" repeatCount="indefinite"/></g>
+  </svg></div></div><div class="cap">GLITCH SELECTED</div></div><div class="wrap"><div class="flow-modes"><div class="flow-mode" data-mode="arp" title="Arp">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot arpHold" fill="currentColor"><circle cx="9" cy="13" r="2.4"/><circle cx="9" cy="21" r="2.4"/><circle cx="9" cy="29" r="2.4"/></g>
+                  <g class="arpfan" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path class="arpLine l1" d="M12,13 C22,13 24,8 33,8"/>
+                    <path class="arpLine l2" d="M12,21 C22,21 24,21 33,21"/>
+                    <path class="arpLine l3" d="M12,29 C22,29 24,34 33,34"/>
+                  </g>
+                  <g class="dot" fill="currentColor"><circle class="arpNote n1" cx="34" cy="8" r="2.2"/><circle class="arpNote n2" cx="34" cy="21" r="2.2"/><circle class="arpNote n3" cx="34" cy="34" r="2.2"/></g>
+                </svg>
+              </div><div class="flow-mode" data-mode="chop" title="Chop">
+                <span class="clip"><span class="orbit"></span></span>
+                <svg class="emb" viewBox="0 0 42 42">
+                  <g class="dot" fill="currentColor">
+                    <circle class="sq s1" cx="9" cy="21" r="2.2"/><circle class="sq s2" cx="17" cy="21" r="2.2"/>
+                    <circle class="sq s3" cx="25" cy="21" r="2.2"/><circle class="sq s4" cx="33" cy="21" r="3.2"/>
+                    <circle class="seqBall" cx="9" cy="21" r="2.6" fill="#fff"><animate attributeName="cx" values="9;9;17;25;33;33;33;33" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;1;1;1;0;0" keyTimes="0;0.08;0.18;0.36;0.54;0.7;0.86;1" dur="2.2s" repeatCount="indefinite"/></circle>
+                  </g>
+                </svg>
+              </div><div class="flow-mode " data-mode="glitch" title="Glitch">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none" stroke-width="2">
+    <rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.28"/>
+    <rect x="24" y="24" width="7" height="7" rx="1.5" stroke="currentColor" opacity="0.28"/>
+    <g><rect x="0" y="0" width="7" height="7" rx="1.5" fill="currentColor"/>
+      <animateTransform attributeName="transform" type="translate" dur="2.4s" repeatCount="indefinite"
+        calcMode="discrete" keyTimes="0;0.34;0.4;0.68;0.74" values="11 11;24 11;24 24;11 24;11 11"/></g>
+  </svg></div><div class="flow-mode act" data-mode="drift" title="Round Robin">
+  <span class="clip"><span class="orbit"></span></span>
+  <svg class="emb" viewBox="0 0 42 42" fill="none">
+    <path d="M21,6.4 V10 M35.6,21 H32 M21,35.6 V32 M6.4,21 H10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.45"/>
+    <g><circle cx="21" cy="8.5" r="2.7" fill="currentColor"/>
+      <animateTransform attributeName="transform" type="rotate" from="0 21 21" to="360 21 21" dur="3.2s" repeatCount="indefinite"/></g>
+  </svg></div></div><div class="cap">ROBIN SELECTED</div></div></div></div></div></body></html>
