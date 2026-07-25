@@ -3271,7 +3271,6 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // just guarantees a missed path can never leak the budget permanently.
     granGrainsLive_  = 0;
     geodePartialsLive_ = 0;   // GEODE — reset the shared partial budget (self-heals a leaked count)
-    robinCounter_ = 0;        // (legacy counter, superseded by the fb122 brain)
     flowRobin_.reset();       // fb122 — the Wheel restarts from the first station
 
     // Task 5: singleton synth removed. Prep all layer synths instead.

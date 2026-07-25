@@ -1185,7 +1185,6 @@ private:
     // HARM-ENGINE — per-osc knob snapshots for the editor's display banks (written in the
     // processBlock gather; read on the message thread — cosmetic, tear-tolerant)
     std::array<tw::HarmParams, 4> harmDisplayParams_ {};
-    int robinCounter_ = 0;                               // FLOW · ROUND ROBIN global note rotation (audio-thread only)
 
     void timerCallback() override;        // message thread — rebuilds morph tables
     void rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
