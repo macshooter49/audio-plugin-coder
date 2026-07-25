@@ -140,7 +140,7 @@ public:
         fireNonce_ = 1u; fireStep16_ = 0.f; sctRate_ = 1.0; chanOffR_ = 0.0;
         gGain_ = 1.f; gGainPrev_ = 1.f; gGainTail_ = 1.f;
         lvlAcc_ = 0.0; lvlN_ = 0; for (int i = 0; i < 16; ++i) lvl16_[i] = 0.f;
-        vizStepF_ = 0.f; vizLoopF_ = 0.f;
+        vizStepF_ = 0.f; vizLoopF_ = 0.f; outLvl_ = 0.f;
     }
 
     // -- configuration (card -> engine) -------------------------------------------
@@ -179,6 +179,7 @@ public:
     float vizHoldSteps() const noexcept { return extOn_ ? ext_.holdSteps : holdSteps_; }
     long long vizFireCount() const noexcept { return fireCount_; }
     float wetLevelViz()  const noexcept { return wetLevel_; }
+    float outLevel()     const noexcept { return outLvl_; }        // fb124 — speaker meter
     float stepLevel (int i) const noexcept { return lvl16_[i & 15]; }
 
     // -- main: process the audio buffer in place ----------------------------------
@@ -326,6 +327,13 @@ public:
 
         if (extOn_)
         {
+            // fb124 — output level for the monitor's speaker meter (fast peak, ~160ms release)
+            float pk = 0.f;
+            for (int i = 0; i < numSamples; ++i)
+            { const float aa = std::fabs (L[i]) + std::fabs (R[i]); if (aa > pk) pk = aa; }
+            const float dec = std::exp (-(float) numSamples / ((float) SR * 0.16f));
+            outLvl_ = std::max (pk * 0.5f, outLvl_ * dec);
+
             const double stepF = p / (double) beats;
             const double s16 = std::fmod (std::fmod (stepF, 16.0) + 16.0, 16.0);
             const int    ll  = ext_.loopLen;
@@ -1025,7 +1033,7 @@ private:
     double   sctRate_ = 1.0, chanOffR_ = 0.0; int sctWin_ = 1;
     float    gGain_ = 1.f, gGainPrev_ = 1.f, gGainTail_ = 1.f;
     double   lvlAcc_ = 0.0; int lvlN_ = 0; float lvl16_[16] = { 0.f };
-    float    vizStepF_ = 0.f, vizLoopF_ = 0.f;
+    float    vizStepF_ = 0.f, vizLoopF_ = 0.f, outLvl_ = 0.f;
 
     // active glitch instance
     GlitchFx gFx_ = GlitchFx::Repeat;

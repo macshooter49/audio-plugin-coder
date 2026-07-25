@@ -6004,6 +6004,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         gliVizWet_.store   (glitch.wetLevelViz(),         std::memory_order_relaxed);
         gliVizCount_.store ((int) glitch.vizFireCount(),  std::memory_order_relaxed);
         gliVizActive_.store(glitch.isActive() ? 1 : 0,    std::memory_order_relaxed);
+        gliVizOut_.store   (glitch.outLevel(),            std::memory_order_relaxed);
         for (int vi = 0; vi < 16; ++vi) gliVizLvl_[vi].store (glitch.stepLevel (vi), std::memory_order_relaxed);
     }
 
@@ -6741,6 +6742,7 @@ juce::String TerrainInstrumentAudioProcessor::getGliFeedJson() const
       << ",\"sd\"" << ":" << (int) std::lround (apvts.getRawParameterValue (ParameterIDs::FLOW_GLI_SEED)->load() * 99.0f)
       << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
+      << ",\"ol\"" << ":" << juce::String (juce::jlimit (0.0f, 1.5f, gliVizOut_.load (std::memory_order_relaxed)), 3)
       << ",\"lv\":[";
     for (int i = 0; i < 16; ++i)
     {
