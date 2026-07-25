@@ -3073,7 +3073,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── FLOW ───────────────────────────────────────────────────────────────
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_MODE, 1 }, "Flow Mode",
-        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Round Robin" }, 0));   // 0 = Off; 2 = CHOP (replaced Seq); 4 = ROUND ROBIN (replaced Drift — index frozen)
+        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Robin" }, 0));   // 0 = Off; 2 = CHOP (replaced Seq); 4 = ROBIN (replaced Drift — index frozen; fb121: "Round Robin" -> "Robin", Max's name)
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_LATCH, 1 }, "Arp Latch", false));
     auto addFlowKnob = [&] (const char* id, const char* name, float def) {
