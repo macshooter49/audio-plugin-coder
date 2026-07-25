@@ -586,7 +586,14 @@ struct CombCore
     CombMode mode = CombMode::Plus;
 
     float fbk = 0.0f;          // feedback magnitude g (sign applied per mode)
-    float dLine = 8.0f;        // fractional delay, phase-compensated
+    float dLine = 8.0f;        // TARGET fractional delay, phase-compensated
+    float dCur = -1.0f;        // fb126 — SMOOTHED delay: glides to dLine per sample. setParams
+                               // used to SNAP dLine, teleporting the read point through a loop
+                               // ringing at up to 0.995 feedback — every filter-env sweep (i.e.
+                               // every note-on) clicked, worst at high cutoff where delays are
+                               // tiny and jumps are violently large relative. A comb sweep now
+                               // BENDS like a flanger (that's the physics). <0 = snap on first use.
+    float dSlewA = 0.001f;     // per-sample glide coef (~2.5 ms), set in prepare
     float dampA = 0.0f, dampZ = 0.0f;     // in-loop one-pole damping
     float dcX = 0.0f, dcY = 0.0f;         // in-loop DC blocker
 
@@ -612,6 +619,7 @@ struct CombCore
         size = 1; while (size < need) size <<= 1;            // power of two
         buf.assign ((size_t) size, 0.0f);
         mask = size - 1;
+        dSlewA = 1.0f - std::exp (-1.0f / (0.0025f * (float) fs));   // fb126 — 2.5 ms delay glide
         reset();
     }
 
@@ -619,6 +627,7 @@ struct CombCore
     {
         std::fill (buf.begin(), buf.end(), 0.0f);
         w = 0; dampZ = 0.0f; dcX = dcY = 0.0f; shimPhase = 0.0f; exciteCount = 0;
+        dCur = -1.0f;                                        // fb126 — snap to target on first use
     }
 
     // Catmull-Rom cubic read, D samples back from the write head.
@@ -693,7 +702,9 @@ struct CombCore
         float in = x;
         if (exciteCount > 0) { in += exciteGain * noise(); --exciteCount; }
 
-        float d = (mode == CombMode::Shimmer) ? shimmerRead (dLine) : readCubic (dLine);
+        if (dCur < 0.0f) dCur = dLine;                       // fb126 — fresh state: snap (buffer is silent)
+        else             dCur += dSlewA * (dLine - dCur);    //         live: GLIDE (sweeps bend, never click)
+        float d = (mode == CombMode::Shimmer) ? shimmerRead (dCur) : readCubic (dCur);
         dampZ = (1.0f - dampA) * d + dampA * dampZ;          // in-loop damping LP
         d = dampZ;
         const float fb = (mode == CombMode::Minus) ? (-fbk * d) : (fbk * d);
