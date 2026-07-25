@@ -11,6 +11,7 @@
 #include "TerrainFilters.h"
 #include "TerrainEnvelope.h"
 #include "SynthModConfig.h"   // Batch 1 — per-voice LFOs + mod routing (namespace wc)
+#include "FlowRobin.h"        // fb122 — the ROBIN Wheel rotation brain (no-JUCE)
 #include "SampleEngine.h"          // SAMPLE-ENGINE-VOICE — per-OSC sample playback core
 #include "SampleBuffer.h"          // SAMPLE-ENGINE-VOICE — shared lock-free buffer
 #include "GranularEngine.h"        // GRANULAR-ENGINE-VOICE — per-OSC granular core
@@ -906,6 +907,18 @@ namespace tw
 
         /** Set up the glide for a note-on. Returns the starting pitch (glideNote_).
          *  Snaps when porta is off / no origin / (ALWAYS off and nothing held). */
+        // fb122 ROBIN Glide — like beginGlideLegato but with an explicit duration
+        // (independent of the global portamento time, which is usually 0 in poly)
+        void beginGlideRobin (double fromPitch, int targetNote, float durSec) noexcept
+        {
+            glideTarget_ = (double) targetNote;
+            if (fromPitch == glideTarget_) return;
+            glideStart_    = fromPitch;
+            glideNote_     = fromPitch;
+            glideProgress_ = 0.0;
+            glideDurSamples_ = juce::jmax (1.0, (double) durSec * sampleRate_);
+        }
+
         void beginGlide (int targetNote) noexcept
         {
             glideTarget_ = (double) targetNote;
@@ -1392,11 +1405,21 @@ namespace tw
         // bipolar offset on every osc's effective wavetable frame position below.
         void setFlowWave (float w) noexcept { flowWave_ = juce::jlimit (-0.5f, 0.5f, w); }
 
-        void setRobin (bool on, int* counter, bool eA, bool eB, bool eC, bool eD) noexcept
+        void setRobin (bool on, wc::FlowRobin* brain, bool eA, bool eB, bool eC, bool eD) noexcept
         {
-            robinOn_ = on; robinCtr_ = counter;
+            robinOn_ = on; robinBrain_ = brain;        // fb122: the Wheel brain decides stations
             robinEn_[0] = eA; robinEn_[1] = eB; robinEn_[2] = eC; robinEn_[3] = eD;
-            if (! on && ! playing_) robinPick_ = -1;   // mode off → clear once the voice is idle
+            if (! on && ! playing_) { robinPick_ = -1; robinAmpL_ = robinAmpR_ = 1.0f; }
+        }
+        int  robinStation() const noexcept { return robinPick_; }
+        void robinSwapStation (int st) noexcept { robinPick_ = st; }   // Legato New: gates crossfade (smoothed)
+        // Fade/Overlap: the OLD station's ringing tail hands over — after `wait` samples
+        // it arms the standard steal fade with a custom length. Click-free by construction.
+        void robinHandover (int waitSamp, float fadeSec) noexcept
+        {
+            if (! playing_ || stealing_) return;
+            robinHandWait_ = waitSamp < 0 ? 0 : waitSamp;
+            robinHandFadeSec_ = fadeSec < 0.005f ? 0.005f : fadeSec;
         }
         // effective per-osc gate target = SOLO/MUTE gate masked by this note's round-robin pick
         float robinGate (int g) const noexcept
@@ -1534,23 +1557,26 @@ namespace tw
             // legato retargets above keep the phrase's osc (Matriarch behavior). Gates snap
             // here (the amp envelope starts at silence, so the snap is click-free).
             robinPick_ = -1;
-            if (robinOn_ && robinCtr_ != nullptr)
+            robinAmpL_ = robinAmpR_ = 1.0f; robinDelay_ = 0;
+            robinGlideFrom_ = -1.0; robinGlideSec_ = 0.0f;
+            robinHandWait_ = -1;
+            if (robinOn_ && robinBrain_ != nullptr)
             {
-                int en = 0;
-                for (int k = 0; k < 4; ++k) if (robinEn_[k]) ++en;
-                if (en >= 2)
-                {
-                    int idx = *robinCtr_ % en;
-                    *robinCtr_ = (*robinCtr_ + 1) & 0x3FFFFFFF;
-                    for (int k = 0; k < 4; ++k)
-                        if (robinEn_[k] && idx-- == 0) { robinPick_ = k; break; }
-                }
+                // fb122 — the Wheel brain staged this hit in UnisonSynth::noteOn
+                const wc::RobinHit h = robinBrain_->takeHit();
+                robinPick_ = h.station;
+                velocity  *= h.vel;                        // Vary + per-station Level
+                robinAmpL_ = h.ampL; robinAmpR_ = h.ampR;  // per-station Pan
+                robinDelay_ = h.delaySamp;                 // Wobble: humanized late start
+                robinGlideFrom_ = h.glideFrom; robinGlideSec_ = h.glideSec;
             }
             for (int g = 0; g < 4; ++g) oscGate_[g] = robinGate (g);
 
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
             beginGlide (midiNote);     // PORTAMENTO — snap or start the slide (sets glideNote_)
+            if (robinGlideFrom_ >= 0.0)                    // fb122 — Glide: slide in from the last station's note
+                beginGlideRobin (robinGlideFrom_, midiNote, robinGlideSec_);
             // FM WEATHERING note-on: arm the STRIKE transient, roll AGE's per-note offset
             // (no two notes beat the same), reset QUAKE's sub phase (below), set DX key scaling
             // (index halves every 1.5 octaves above C5 so the top end stays sweet).
@@ -1749,6 +1775,27 @@ namespace tw
                               int startSample, int numSamples) override
         {
             if (! playing_) return;
+
+            // fb122 ROBIN Wobble — humanized late start: hold silence, then begin.
+            // The envelope hasn't started, so the delayed entry is click-free.
+            if (robinDelay_ > 0)
+            {
+                const int skip = juce::jmin (robinDelay_, numSamples);
+                robinDelay_ -= skip; startSample += skip; numSamples -= skip;
+                if (numSamples <= 0) return;
+            }
+            // fb122 ROBIN Fade/Overlap — a scheduled handover: after the wait, the old
+            // station's tail arms the standard steal fade with the card's fade length.
+            if (robinHandWait_ >= 0 && ! stealing_)
+            {
+                if (robinHandWait_ >= numSamples) robinHandWait_ -= numSamples;
+                else
+                {
+                    robinHandWait_ = -1;
+                    stealing_ = true; stealingFade_ = 1.0f;
+                    stealingFadeStep_ = std::pow (0.001f, 1.0f / std::max (1.0f, robinHandFadeSec_ * (float) sampleRate_));
+                }
+            }
 
             // Phase 9: stereo scratch (OSC A + OSC B each pan independently).
             if (scratch_.getNumChannels() < 2 || scratch_.getNumSamples() < numSamples)
@@ -3526,6 +3573,15 @@ namespace tw
                 for (int mc = 0; mc < 4; ++mc) modPrev_[mc] = juce::jlimit (-4.f, 4.f, modPrev_[mc]);
             }
 
+            // fb122 ROBIN Pan — the station leans (unity at center, applied to every bus)
+            if (robinAmpL_ != 1.0f || robinAmpR_ != 1.0f)
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    scratchL[i] *= robinAmpL_;  scratchR[i] *= robinAmpR_;
+                    busB2L[i]   *= robinAmpL_;  busB2R[i]   *= robinAmpR_;
+                    busDryL[i]  *= robinAmpL_;  busDryR[i]  *= robinAmpR_;
+                }
+
             // Phase 8a polish — apply steal-fade and decide if voice should die
             if (stealing_)
             {
@@ -4300,11 +4356,15 @@ namespace tw
         float oscGateTarget_[4] { 1.0f, 1.0f, 1.0f, 1.0f };
         float flowWave_ = 0.0f;   // FLOW · ARP WAVE lane frame offset (fb105), block-pushed
 
-        // FLOW · ROUND ROBIN state (see setRobin) — pick chosen at startNote, kept through release
+        // FLOW · ROBIN state (see setRobin) — the Wheel brain stages, startNote applies
         bool  robinOn_    = false;
-        int*  robinCtr_   = nullptr;
+        wc::FlowRobin* robinBrain_ = nullptr;
         bool  robinEn_[4] { true, false, false, false };
         int   robinPick_  = -1;
+        float robinAmpL_ = 1.0f, robinAmpR_ = 1.0f;           // per-station Pan
+        int   robinDelay_ = 0;                                // Wobble: late-start samples
+        double robinGlideFrom_ = -1.0; float robinGlideSec_ = 0.0f;
+        int   robinHandWait_ = -1; float robinHandFadeSec_ = 0.03f;   // Fade/Overlap handover
         float oscGateCoef_ = 0.006f;                          // one-pole coef, set in setCurrentPlaybackSampleRate
 
         int   octOffset_   = 0;

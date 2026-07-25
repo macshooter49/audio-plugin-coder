@@ -231,6 +231,24 @@ namespace ParameterIDs
     constexpr char FLOW_GLI_FRZ_SHINE[] = "FLOW_GLI_FRZ_SHINE"; constexpr char FLOW_GLI_FRZ_MELT[]  = "FLOW_GLI_FRZ_MELT";
     constexpr char FLOW_GLI_SCT_SIZE[]  = "FLOW_GLI_SCT_SIZE";  constexpr char FLOW_GLI_SCT_AMT[]   = "FLOW_GLI_SCT_AMT";
     constexpr char FLOW_GLI_SCT_VARY[]  = "FLOW_GLI_SCT_VARY";  constexpr char FLOW_GLI_SCT_WIDTH[] = "FLOW_GLI_SCT_WIDTH";
+    // ── FLOW · ROBIN extension card (fb122) — the Wheel: rotation brain scalars ──
+    constexpr char FLOW_RBN_A[]      = "FLOW_RBN_A";       constexpr char FLOW_RBN_B[]      = "FLOW_RBN_B";
+    constexpr char FLOW_RBN_C[]      = "FLOW_RBN_C";       constexpr char FLOW_RBN_D[]      = "FLOW_RBN_D";
+    constexpr char FLOW_RBN_AFIRST[] = "FLOW_RBN_AFIRST";  constexpr char FLOW_RBN_RETRIG[] = "FLOW_RBN_RETRIG";
+    constexpr char FLOW_RBN_MODE[]   = "FLOW_RBN_MODE";    // choice Cycle/Shuffle/Random/Pong
+    constexpr char FLOW_RBN_LEGATO[] = "FLOW_RBN_LEGATO";  // choice Keep/New
+    constexpr char FLOW_RBN_STEAL[]  = "FLOW_RBN_STEAL";   // choice Follow/Stay
+    constexpr char FLOW_RBN_RELEASE[]= "FLOW_RBN_RELEASE"; // choice Hold/Free (default Free)
+    constexpr char FLOW_RBN_TIMES[]  = "FLOW_RBN_TIMES";   // choice 1..4 notes per station
+    constexpr char FLOW_RBN_RESET[]  = "FLOW_RBN_RESET";   // choice Free/Bar/Phrase
+    constexpr char FLOW_RBN_RUN[]    = "FLOW_RBN_RUN";     // choice Forward/Backward
+    constexpr char FLOW_RBN_O1[]     = "FLOW_RBN_O1";      constexpr char FLOW_RBN_O2[]     = "FLOW_RBN_O2";
+    constexpr char FLOW_RBN_O3[]     = "FLOW_RBN_O3";      constexpr char FLOW_RBN_O4[]     = "FLOW_RBN_O4";
+    constexpr char FLOW_RBN_VARY[]   = "FLOW_RBN_VARY";    constexpr char FLOW_RBN_DRIFT[]  = "FLOW_RBN_DRIFT";
+    constexpr char FLOW_RBN_WOBBLE[] = "FLOW_RBN_WOBBLE";  constexpr char FLOW_RBN_LVL[]    = "FLOW_RBN_LVL";
+    constexpr char FLOW_RBN_PAN[]    = "FLOW_RBN_PAN";     constexpr char FLOW_RBN_AFTER[]  = "FLOW_RBN_AFTER";
+    constexpr char FLOW_RBN_GLIDE[]  = "FLOW_RBN_GLIDE";   constexpr char FLOW_RBN_OVERLAP[]= "FLOW_RBN_OVERLAP";
+    constexpr char FLOW_RBN_FADE[]   = "FLOW_RBN_FADE";
     // ── ANNULUS resonator — global key-tracked physical-modeling node (ResonatorNode.h) ──
     constexpr char SYN_RESO_STRUCTURE[]  = "SYN_RESO_STRUCTURE";   // float 0..1 — harmonic↔material morph
     constexpr char SYN_RESO_BRIGHTNESS[] = "SYN_RESO_BRIGHTNESS";  // float 0..1 — mode count + spectral tilt

@@ -70,7 +70,7 @@ public:
 
     void reset() noexcept
     {
-        haveClock_ = false; nextStep_ = 0; nextBoundary_ = 0.0; freePpq_ = 0.0;
+        haveClock_ = false; nextStep_ = 0; nextBoundary_ = 0.0; freePpq_ = 0.0; lastBeats_ = -1.f;
         stepPhase_ = 0.0; stepLen_ = 1.0; phase2_ = 0.0;
         reseedAll (seed_);
         for (int l = 0; l < kDriftLanes; ++l)
@@ -124,7 +124,15 @@ public:
         const bool   cont = (curShape_ == DriftShape::Human || curShape_ == DriftShape::Pink || curShape_ == DriftShape::Woggle);
 
         double p = playing ? hostPpq : freePpq_;
-        if (! haveClock_) { nextStep_ = (long long) std::floor (p / (double) beats); nextBoundary_ = (double) nextStep_ * (double) beats; haveClock_ = true; }
+        if (! haveClock_) { nextStep_ = (long long) std::floor (p / (double) beats); nextBoundary_ = (double) nextStep_ * (double) beats; haveClock_ = true; lastBeats_ = beats; }
+        else if (beats != lastBeats_)
+        {
+            // fb122 — THE LADDER LAW (fb107/fb116): the step clock counts GRID UNITS;
+            // a fast->slow rate move strands nextBoundary_ minutes ahead. Re-anchor.
+            lastBeats_ = beats;
+            nextStep_ = (long long) std::floor (p / (double) beats) + 1;
+            nextBoundary_ = (double) nextStep_ * (double) beats;
+        }
 
         for (int i = 0; i < numSamples; ++i, p += pps)
         {
@@ -333,6 +341,7 @@ private:
     DriftShape curShape_ = DriftShape::Walk;
 
     bool     haveClock_ = false; long long nextStep_ = 0; double nextBoundary_ = 0.0, freePpq_ = 0.0;
+    float lastBeats_ = -1.f;   // fb122: re-anchor the step clock on any grid change
     double   stepPhase_ = 0.0, stepLen_ = 1.0, phase2_ = 0.0;
 };
 

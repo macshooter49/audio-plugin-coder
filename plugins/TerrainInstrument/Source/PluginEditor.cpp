@@ -632,6 +632,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 audioProcessor.requestGliRoll();    // fb115 — Roll: quantized punch-in
                 complete (juce::var{});
             })
+            .withNativeFunction("getRbnFeed", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb122 — Wheel now/next/notes snapshot (rAF-polled by the robin card)
+                complete (juce::var (audioProcessor.getRbnFeedJson()));
+            })
             .withNativeFunction("popOutCard", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4400,6 +4406,11 @@ public:
                 {
                     proc.requestGliRoll();
                     complete (juce::var{});
+                })
+                .withNativeFunction ("getRbnFeed", [&proc](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getRbnFeedJson()));
                 })
                 .withNativeFunction ("dragCardWindow", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)

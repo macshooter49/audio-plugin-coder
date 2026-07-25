@@ -132,6 +132,7 @@ class UnisonSynth : public juce::Synthesiser
 {
 public:
     void setVoiceCap (int cap) noexcept { voiceCap_ = juce::jlimit (1, 96, cap); }
+    void setRobinBrain (wc::FlowRobin* b) noexcept { robinBrain_ = b; }   // fb122 — the Wheel
 
     /** MONO/LEGATO voice modes, pushed per-block from the processor (audio thread —
      *  same thread as noteOn/noteOff, no extra locking needed). The held-note stack
@@ -167,6 +168,7 @@ public:
         // If at cap, steal the OLDEST non-stealing voice (Serum 2 picks oldest;
         // we use a monotonic noteStartStamp set in startNote). Loop in case we
         // need to steal multiple (e.g. rapid chord change with cap drop).
+        bool stoleAny = false; int stolenStation = -1;                 // fb122 — Steal Stay
         while (activeCount >= voiceCap_)
         {
             tw::SynthVoice* oldest = nullptr;
@@ -181,6 +183,7 @@ public:
                 if (stamp < oldestStamp) { oldestStamp = stamp; oldest = sv; }
             }
             if (oldest == nullptr) break;
+            stoleAny = true; stolenStation = oldest->robinStation();
             // stopVoice → SynthVoice::stopNote(0, allowTailOff=false) starts the
             // 30ms fade and (since Phase 12) does NOT clear the slot, so the next
             // findFreeVoice call lands on a different idle slot from the pool.
@@ -188,11 +191,13 @@ public:
             --activeCount;
         }
 
+        robinStage (midiNoteNumber, stoleAny, stolenStation, true);    // fb122 — brain + handover
         juce::Synthesiser::noteOn (midiChannel, midiNoteNumber, velocity);
     }
 
     void noteOff (int midiChannel, int midiNoteNumber, float velocity, bool allowTailOff) override
     {
+        if (robinBrain_ != nullptr) robinBrain_->onNoteOff (midiNoteNumber);   // fb122
         if (monoMode_) { monoNoteOff (midiChannel, midiNoteNumber, velocity, allowTailOff); return; }
         juce::Synthesiser::noteOff (midiChannel, midiNoteNumber, velocity, allowTailOff);
     }
@@ -200,7 +205,29 @@ public:
     void allNotesOff (int midiChannel, bool allowTailOff) override
     {
         heldCount_ = 0;   // never let panic/transport-stop leave stale stack entries
+        if (robinBrain_ != nullptr) robinBrain_->allOff();                     // fb122
         juce::Synthesiser::allNotesOff (midiChannel, allowTailOff);
+    }
+
+    // fb122 — stage a ROBIN hit for the next startNote + hand the OLD stations'
+    // ringing tails over (Fade/Overlap). Called under the synth lock.
+    void robinStage (int note, bool stole, int stolenStation, bool countHeld)
+    {
+        if (robinBrain_ == nullptr || ! robinBrain_->active()) return;
+        robinBrain_->onNoteOn (note, stole, stolenStation, countHeld);
+        const wc::RobinHit& h = robinBrain_->peekHit();
+        if (h.changed && h.station >= 0 && robinBrain_->fadeEnabled())
+        {
+            const int   wait = robinBrain_->handoverWaitSamp();
+            const float fsec = robinBrain_->handoverFadeSec();
+            for (auto* v : voices)
+            {
+                auto* sv = dynamic_cast<tw::SynthVoice*> (v);
+                if (sv == nullptr || ! sv->isVoiceActive() || sv->isKeyDown()) continue;
+                if (sv->robinStation() >= 0 && sv->robinStation() != h.station)
+                    sv->robinHandover (wait, fsec);
+            }
+        }
     }
 
 private:
@@ -258,10 +285,16 @@ private:
         pushHeld (midiNoteNumber, velocity);
 
         auto* active = findActiveSynthVoice();
-        if (legatoMode_ && wasHeld && active != nullptr)
+        const bool robinRetrig = robinBrain_ != nullptr && robinBrain_->retrigOn();   // fb122
+        if (legatoMode_ && wasHeld && active != nullptr && ! robinRetrig)
         {
             if (auto* sound = firstSoundFor (midiChannel, midiNoteNumber))
             {
+                if (robinBrain_ != nullptr)                                   // fb122 Legato Keep/New
+                {
+                    const int st = robinBrain_->onLegatoRetarget (midiNoteNumber);
+                    if (st >= 0) active->robinSwapStation (st);               // New: oscs crossfade
+                }
                 active->beginLegatoRetarget();     // glide to the new pitch, retrigger nothing
                 startVoice (active, sound, midiChannel, midiNoteNumber, velocity);
                 return;
@@ -275,6 +308,7 @@ private:
             if (sv != nullptr && sv->getCurrentlyPlayingNote() >= 0 && ! sv->isStealing())
                 stopVoice (sv, 0.0f, false);
         }
+        robinStage (midiNoteNumber, false, -1, true);                         // fb122
         juce::Synthesiser::noteOn (midiChannel, midiNoteNumber, velocity);
     }
 
@@ -296,16 +330,22 @@ private:
         if (heldCount_ > 0)
         {
             const Held ret = held_[heldCount_ - 1];   // most recent still-held key
-            if (legatoMode_)
+            if (legatoMode_ && ! (robinBrain_ != nullptr && robinBrain_->retrigOn()))
             {
                 if (auto* sound = firstSoundFor (midiChannel, ret.note))
                 {
+                    if (robinBrain_ != nullptr)                               // fb122 (return leg)
+                    {
+                        const int st = robinBrain_->onLegatoRetarget (ret.note, false);
+                        if (st >= 0) active->robinSwapStation (st);
+                    }
                     active->beginLegatoRetarget();
                     startVoice (active, sound, midiChannel, ret.note, ret.vel);
                     return;
                 }
             }
             stopVoice (active, 0.0f, false);                                // fade the released note
+            robinStage (ret.note, false, -1, false);                        // fb122: key already counted
             juce::Synthesiser::noteOn (midiChannel, ret.note, ret.vel);     // retrigger the held one
             return;
         }
@@ -319,6 +359,7 @@ private:
     bool legatoMode_  = false;
 
     int voiceCap_ = 32;  // safe default; PluginProcessor pushes the real value per-block
+    wc::FlowRobin* robinBrain_ = nullptr;   // fb122 — owned by the processor
 };
 
 //==============================================================================
@@ -599,6 +640,7 @@ public:
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
     void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
     juce::String      getGliFeedJson() const;                           // fb115: Monitor playhead/fire/levels snapshot
+    juce::String      getRbnFeedJson() const;                           // fb122: Wheel now/next/notes snapshot
     void              requestGliRoll() noexcept { gliRollReq_.store (true); }     // Roll button → audio thread (quantized)
 
     // ── Pitch-mode virtual slice ───────────────────────────────────────────
@@ -864,6 +906,9 @@ public:
     std::atomic<int>              gliVizFx_ { -1 }, gliVizCount_ { 0 }, gliVizActive_ { 0 };
     std::atomic<float>            gliVizLvl_[16] {};
     std::atomic<bool>             gliRollReq_ { false };
+    // FLOW · ROBIN viz feed (fb122)
+    std::atomic<int>              rbnVizNow_ { -1 }, rbnVizNext_ { -1 }, rbnVizNotes_ { 1 },
+                                  rbnVizMask_ { 15 }, rbnVizWrap_ { 0 }, rbnVizHits_ { 0 };
 
     mutable juce::CriticalSection synModLock;
     std::vector<SynModRoute>      synModRoutes;   // guarded by synModLock
@@ -1041,6 +1086,8 @@ private:
     int                         prevFlowMode_ = 0;          // FLOW · prev-block mode (enable-edge detection; resets glitch clock on (re)enable)
     wc::FlowDrift               drift;                      // FLOW · DRIFT engine (mode 4) — generative mod source
     float                       driftLane_[wc::kDriftLanes] {};  // per-block DRIFT lane values (mod sources; matrix routing = phase-2)
+    wc::FlowRobin               flowRobin_;                      // fb122 — the Wheel rotation brain (audio thread)
+    float                       robinDriftCents_[4] {};          // per-station wander (drift lanes × card Drift)
     wc::SynthLFO                flowLfo_[wc::NUM_LFOS];     // block-rate global LFO bank for FLOW-knob mod
     wc::ResonatorNode           reso;                       // ANNULUS resonator — global node, audio insert at end of processBlock
     int                         resoHeld_[16] {};           // held MIDI notes (resonator polyphony — one voice per note)

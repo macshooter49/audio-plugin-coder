@@ -3211,6 +3211,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_GLI_FRZ_SHINE, "Glitch Freeze Shine",0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_FRZ_MELT,  "Glitch Freeze Melt", 0.30f);
     addFlowKnob (ParameterIDs::FLOW_GLI_SCT_SIZE,  "Glitch Scatter Size",0.26f); addFlowKnob (ParameterIDs::FLOW_GLI_SCT_AMT,   "Glitch Scatter Amount",1.00f);
     addFlowKnob (ParameterIDs::FLOW_GLI_SCT_VARY,  "Glitch Scatter Vary",0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_SCT_WIDTH, "Glitch Scatter Width",0.00f);
+    // ── fb122 ROBIN Wheel card: station bank + behavior + rotation + feel ──
+    {
+        auto addRbnBool = [&] (const char* id, const char* name, bool def) {
+            layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { id, 1 }, name, def)); };
+        addRbnBool (ParameterIDs::FLOW_RBN_A, "Robin Station A", true);
+        addRbnBool (ParameterIDs::FLOW_RBN_B, "Robin Station B", true);
+        addRbnBool (ParameterIDs::FLOW_RBN_C, "Robin Station C", true);
+        addRbnBool (ParameterIDs::FLOW_RBN_D, "Robin Station D", true);
+        addRbnBool (ParameterIDs::FLOW_RBN_AFIRST, "Robin A First", true);
+        addRbnBool (ParameterIDs::FLOW_RBN_RETRIG, "Robin Retrig", false);
+        auto addRbnChoice = [&] (const char* id, const char* name, juce::StringArray xs, int def) {
+            layout.add (std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { id, 1 }, name, xs, def)); };
+        addRbnChoice (ParameterIDs::FLOW_RBN_MODE,   "Robin Mode",    { "Cycle", "Shuffle", "Random", "Pong" }, 0);
+        addRbnChoice (ParameterIDs::FLOW_RBN_LEGATO, "Robin Legato",  { "Keep", "New" }, 0);
+        addRbnChoice (ParameterIDs::FLOW_RBN_STEAL,  "Robin Steal",   { "Follow", "Stay" }, 0);
+        addRbnChoice (ParameterIDs::FLOW_RBN_RELEASE,"Robin Release", { "Hold", "Free" }, 1);
+        addRbnChoice (ParameterIDs::FLOW_RBN_TIMES,  "Robin Times",   { "1", "2", "3", "4" }, 0);
+        addRbnChoice (ParameterIDs::FLOW_RBN_RESET,  "Robin Reset",   { "Free", "Bar", "Phrase" }, 0);
+        addRbnChoice (ParameterIDs::FLOW_RBN_RUN,    "Robin Run",     { "Forward", "Backward" }, 0);
+        addRbnChoice (ParameterIDs::FLOW_RBN_O1, "Robin Order 1st", { "A", "B", "C", "D" }, 0);
+        addRbnChoice (ParameterIDs::FLOW_RBN_O2, "Robin Order 2nd", { "A", "B", "C", "D" }, 1);
+        addRbnChoice (ParameterIDs::FLOW_RBN_O3, "Robin Order 3rd", { "A", "B", "C", "D" }, 2);
+        addRbnChoice (ParameterIDs::FLOW_RBN_O4, "Robin Order 4th", { "A", "B", "C", "D" }, 3);
+    }
+    addFlowKnob (ParameterIDs::FLOW_RBN_VARY,  "Robin Vary",  0.00f); addFlowKnob (ParameterIDs::FLOW_RBN_DRIFT,  "Robin Drift",  0.00f);
+    addFlowKnob (ParameterIDs::FLOW_RBN_WOBBLE,"Robin Wobble",0.00f); addFlowKnob (ParameterIDs::FLOW_RBN_LVL,    "Robin Level",  0.00f);
+    addFlowKnob (ParameterIDs::FLOW_RBN_PAN,   "Robin Pan",   0.00f); addFlowKnob (ParameterIDs::FLOW_RBN_AFTER,  "Robin After",  0.40f);
+    addFlowKnob (ParameterIDs::FLOW_RBN_GLIDE, "Robin Glide", 0.00f); addFlowKnob (ParameterIDs::FLOW_RBN_OVERLAP,"Robin Overlap",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_RBN_FADE,  "Robin Fade",  0.00f);
     addFlowKnob (ParameterIDs::FLOW_DRF_RATE,"Drift Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_DRF_GATE,"Drift Gate",0.55f);
     addFlowKnob (ParameterIDs::FLOW_DRF_VARY,"Drift Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_DRF_TRAJ,"Drift Traj",0.00f);
     addFlowKnob (ParameterIDs::FLOW_DRF_MORPH,"Drift Depth",0.50f);  // DEPTH = output amplitude; 0 = inert (no modulation), 0.5 = breathes out of the box
@@ -3242,7 +3271,8 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // just guarantees a missed path can never leak the budget permanently.
     granGrainsLive_  = 0;
     geodePartialsLive_ = 0;   // GEODE — reset the shared partial budget (self-heals a leaked count)
-    robinCounter_ = 0;        // FLOW · ROUND ROBIN — rotation restarts from osc A
+    robinCounter_ = 0;        // (legacy counter, superseded by the fb122 brain)
+    flowRobin_.reset();       // fb122 — the Wheel restarts from the first station
 
     // Task 5: singleton synth removed. Prep all layer synths instead.
     // Mark 2 task 4: prep per-layer scratch buffers and per-layer synth rates.
@@ -3332,6 +3362,8 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
     prevFlowMode_ = 0;                   // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
+    flowRobin_.prepare (sampleRate);    // fb122 ROBIN rotation brain
+    synthEngine.setRobinBrain (&flowRobin_);
     reso.prepare   (sampleRate);        // ANNULUS resonator — allocates mode/delay state here only
     for (auto& e : resoVizEnergy_) e.store (0.0f, std::memory_order_relaxed);
     resoVizOut_.store (0.0f, std::memory_order_relaxed);
@@ -4604,6 +4636,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             tuneModCents[o] = (modSums[(int) wc::ModDest::OctA  + o]
                              + modSums[(int) wc::ModDest::SemiA + o]
                              + modSums[(int) wc::ModDest::CentA + o]) * 100.0f;
+        if ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4)          // fb122 ROBIN
+            for (int o = 0; o < 4; ++o) tuneModCents[o] += robinDriftCents_[o];   // per-station wander
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
             if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
@@ -4672,8 +4706,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setNoiseFreePos       (noiseFreePos_);        // fb66/fb67 — latest global tape position (a Free note reads it once at note-on; no per-block resync)
                 sv->setNoiseCarrier       (! monoNoise || (sv == noiseCarrierVoice));   // fb68 — Free = only the newest voice sounds the noise (mono); poly modes = all carry
                 sv->setNoiseWidth         (noiseWidth);            // fb69 — noise stereo width (M/S)
-                sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &robinCounter_,   // FLOW · ROUND ROBIN
+                sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &flowRobin_,     // fb122: the Wheel brain
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
+                flowRobin_.setAudible (gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setFlowWave (arpWaveMod_);        // FLOW · ARP WAVE lane → wavetable frame offset (last block's value)
                 sv->setPanC (panC);                   sv->setPanD (panD);
                 sv->setWavetableC (wtC);              sv->setWavetableD (wtD);
@@ -4862,6 +4897,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
     const int flowMode = (int) rawParam (ParameterIDs::FLOW_MODE)->load();
+    flowRobin_.setActive (flowMode == 4);   // fb122 — the Wheel brain follows the mode
 
     // FLOW · GLITCH (mode 3): reset the engine on the ENABLE EDGE so its step clock re-anchors to
     // the live transport ppq instead of resuming from a stale free-run phase (fired late / "whenever",
@@ -5986,6 +6022,48 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         drift.process (dRate, dGlide, dVary, dTraj, dDepth,
                        flowPpq, flowBpm, getSampleRate(), lanes, numSamples, flowPlaying);
         for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = lanes[i];
+
+        // ── fb122 ROBIN Wheel card: the rotation brain, read per block ──
+        {
+            wc::RobinExtParams X;
+            X.bank[0]  = *rawParam (ParameterIDs::FLOW_RBN_A) > 0.5f;
+            X.bank[1]  = *rawParam (ParameterIDs::FLOW_RBN_B) > 0.5f;
+            X.bank[2]  = *rawParam (ParameterIDs::FLOW_RBN_C) > 0.5f;
+            X.bank[3]  = *rawParam (ParameterIDs::FLOW_RBN_D) > 0.5f;
+            X.aFirst   = *rawParam (ParameterIDs::FLOW_RBN_AFIRST) > 0.5f;
+            X.retrig   = *rawParam (ParameterIDs::FLOW_RBN_RETRIG) > 0.5f;
+            X.mode     = (int) *rawParam (ParameterIDs::FLOW_RBN_MODE);
+            X.legato   = (int) *rawParam (ParameterIDs::FLOW_RBN_LEGATO);
+            X.steal    = (int) *rawParam (ParameterIDs::FLOW_RBN_STEAL);
+            X.release  = (int) *rawParam (ParameterIDs::FLOW_RBN_RELEASE);
+            X.times    = 1 + (int) *rawParam (ParameterIDs::FLOW_RBN_TIMES);
+            X.reset    = (int) *rawParam (ParameterIDs::FLOW_RBN_RESET);
+            X.backward = (int) *rawParam (ParameterIDs::FLOW_RBN_RUN) == 1;
+            X.order[0] = (int) *rawParam (ParameterIDs::FLOW_RBN_O1);
+            X.order[1] = (int) *rawParam (ParameterIDs::FLOW_RBN_O2);
+            X.order[2] = (int) *rawParam (ParameterIDs::FLOW_RBN_O3);
+            X.order[3] = (int) *rawParam (ParameterIDs::FLOW_RBN_O4);
+            X.vary   = flowBase (ParameterIDs::FLOW_RBN_VARY);   X.wobble = flowBase (ParameterIDs::FLOW_RBN_WOBBLE);
+            X.lvl    = flowBase (ParameterIDs::FLOW_RBN_LVL);    X.pan    = flowBase (ParameterIDs::FLOW_RBN_PAN);
+            X.after  = 0.05f + flowBase (ParameterIDs::FLOW_RBN_AFTER) * 4.95f;   // 0.05..5 s (card readout)
+            X.glide  = flowBase (ParameterIDs::FLOW_RBN_GLIDE);  X.overlap = flowBase (ParameterIDs::FLOW_RBN_OVERLAP);
+            X.fade   = flowBase (ParameterIDs::FLOW_RBN_FADE);
+            flowRobin_.setExt (X);
+            flowRobin_.tick (flowPpq, numSamples, flowPlaying);
+
+            // Drift: per-STATION slow pitch wander — the drift engine's first four lanes
+            // (already MORPH/MIX-scaled) feed each station's cents, capped ±18 (perceptual law)
+            const float dAmt = flowBase (ParameterIDs::FLOW_RBN_DRIFT);
+            for (int k = 0; k < 4; ++k) robinDriftCents_[k] = driftLane_[k] * dAmt * 18.0f;
+
+            // live Wheel feed (UI rAF-polls getRbnFeed)
+            rbnVizNow_.store  (flowRobin_.nowStation(),        std::memory_order_relaxed);
+            rbnVizNext_.store (flowRobin_.nextStation(),       std::memory_order_relaxed);
+            rbnVizNotes_.store(flowRobin_.notesOnCur(),        std::memory_order_relaxed);
+            rbnVizMask_.store (flowRobin_.cycleMaskViz(),      std::memory_order_relaxed);
+            rbnVizWrap_.store ((int) flowRobin_.wrapCount(),   std::memory_order_relaxed);
+            rbnVizHits_.store ((int) flowRobin_.hitCount(),    std::memory_order_relaxed);
+        }
     }
 
     // PREVIEW STOP (Max: double-click to select / closing the browser must SILENCE the audition immediately —
@@ -6671,6 +6749,23 @@ juce::String TerrainInstrumentAudioProcessor::getGliFeedJson() const
         j << (i ? "," : "") << juce::jlimit (0, 99, (int) std::lround (std::sqrt (l > 0.f ? l : 0.f) * 125.0f));
     }
     j << "]}";
+    return j;
+}
+
+juce::String TerrainInstrumentAudioProcessor::getRbnFeedJson() const
+{
+    // fb122 — Wheel snapshot: current/next station, notes-on-station, cycle mask,
+    // wrap count (chain), hit count (pulse), mode + flow mode + bpm.
+    juce::String j ("{\"now\":");
+    j << rbnVizNow_.load (std::memory_order_relaxed)
+      << ",\"nx\""  << ":" << rbnVizNext_.load (std::memory_order_relaxed)
+      << ",\"nc\""  << ":" << rbnVizNotes_.load (std::memory_order_relaxed)
+      << ",\"mask\""<< ":" << rbnVizMask_.load (std::memory_order_relaxed)
+      << ",\"wr\""  << ":" << rbnVizWrap_.load (std::memory_order_relaxed)
+      << ",\"c\""   << ":" << rbnVizHits_.load (std::memory_order_relaxed)
+      << ",\"md\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_RBN_MODE)->load()
+      << ",\"b\""   << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
+      << ",\"m\""   << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() << "}";
     return j;
 }
 
