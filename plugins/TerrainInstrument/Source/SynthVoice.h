@@ -1837,6 +1837,18 @@ namespace tw
                 noiseCoD_ = (! noiseSrc1_ && ! noiseSrc2_) ? 1.0f : 0.0f;
                 anySrc1_ = anySrc1_ || (noiseCo1_ != 0.0f);
                 anySrc2_ = anySrc2_ || (noiseCo2_ != 0.0f);
+
+                // fb123 — DRIVE NORMALIZATION: the post-filter drive is a SATURATOR; feeding it a
+                // send-scaled signal ERASES the send once hot (tanh ceiling: a 5% send and a 100%
+                // send come out identical — Max: "at 3% it's already 100"). pdrive now drives the
+                // signal normalized to the bus's send level and restores it after: the TONE stays
+                // constant, the LOUDNESS tracks the send. Full sends (norm 1) are bit-exact.
+                float dn1 = 0.0f, dn2 = 0.0f;
+                for (int k = 0; k < 5; ++k) { dn1 = juce::jmax (dn1, busCo1_[k]); dn2 = juce::jmax (dn2, busCo2_[k]); }
+                dn1 = juce::jmax (dn1, noiseCo1_); dn2 = juce::jmax (dn2, noiseCo2_);
+                if (! par) dn2 = juce::jmax (dn2, dn1);       // series: F1's restored output flows on
+                drvNorm1_ = dn1 > 0.0005f ? juce::jlimit (0.05f, 1.0f, dn1) : 1.0f;
+                drvNorm2_ = dn2 > 0.0005f ? juce::jlimit (0.05f, 1.0f, dn2) : 1.0f;
             }
 
             // KEYTRACK + ROUTE — resolve effective destination values, clamped.
@@ -3751,12 +3763,13 @@ namespace tw
                     const bool a2  = (filterType2_ != kNoneType) && (par ? anySrc2_ : (anySrc1_ || anySrc2_));
                     // Post-filter output drive (back-panel Drive) — soft tanh saturation blended by
                     // amount, applied to each filter's wet output (F1's lands pre-F2 in series).
-                    auto pdrive = [] (float& L, float& R, float amt, int type) noexcept
+                    auto pdrive = [] (float& L, float& R, float amt, int type, float nrm) noexcept
                     {
                         if (amt <= 0.0001f) return;
                         const float d = 1.0f + amt * 4.0f;
-                        L = L + amt * (fShape (L, type, d, amt) - L);
-                        R = R + amt * (fShape (R, type, d, amt) - R);
+                        const float inv = 1.0f / nrm;          // fb123 — drive the SHAPE, not the send level
+                        L = L + amt * (nrm * fShape (L * inv, type, d, amt) - L);
+                        R = R + amt * (nrm * fShape (R * inv, type, d, amt) - R);
                     };
                     // POST-FILTER STEREO WIDTH (filter Spread) — mid/side all-pass widener. The mid stays
                     // centred; a decorrelated copy of it (first-order all-pass = FLAT magnitude ⇒ ZERO pitch
@@ -3782,13 +3795,13 @@ namespace tw
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
                                       w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
                                       w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
-                            pdrive (w1L, w1R, postDrv1_, driveType1_);
+                            pdrive (w1L, w1R, postDrv1_, driveType1_, drvNorm1_);
                             const float pL = w1L + b2L, pR = w1R + b2R;
                             float w2L = pL, w2R = pR;
                             if (a2) { float wl = pL, wr = pR; filterSlot2_.processStereo (wl, wr);
                                       w2L = filterMix2_ * wl + (1.0f - filterMix2_) * pL;
                                       w2R = filterMix2_ * wr + (1.0f - filterMix2_) * pR; }
-                            pdrive (w2L, w2R, postDrv2_, driveType2_);
+                            pdrive (w2L, w2R, postDrv2_, driveType2_, drvNorm2_);
                             outL = w2L; outR = w2R;
                         }
                         else         // PARALLEL: F1(bus1) + F2(bus2), each with its own post-drive
@@ -3797,12 +3810,12 @@ namespace tw
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
                                       w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
                                       w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
-                            pdrive (w1L, w1R, postDrv1_, driveType1_);
+                            pdrive (w1L, w1R, postDrv1_, driveType1_, drvNorm1_);
                             float w2L = b2L, w2R = b2R;
                             if (a2) { float wl = b2L, wr = b2R; filterSlot2_.processStereo (wl, wr);
                                       w2L = filterMix2_ * wl + (1.0f - filterMix2_) * b2L;
                                       w2R = filterMix2_ * wr + (1.0f - filterMix2_) * b2R; }
-                            pdrive (w2L, w2R, postDrv2_, driveType2_);
+                            pdrive (w2L, w2R, postDrv2_, driveType2_, drvNorm2_);
                             outL = w1L + w2L; outR = w1R + w2R;
                         }
                     };
@@ -4322,6 +4335,7 @@ namespace tw
         juce::AudioBuffer<float> fltBus2_, fltDry_;              // F2 + dry buses (bus1 = scratch_)
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
+        float                   drvNorm1_ = 1.0f, drvNorm2_ = 1.0f;  // fb123 — bus send level (drive normalization)
         int                     driveType1_ = 0, driveType2_ = 0;    // Drive TYPE (0=Tube..5=Fuzz)
         float                   spread1_ = 0.0f, spread2_ = 0.0f;    // filter SPREAD → post-filter stereo width (no detune)
         float                   apMx1_ = 0.0f, apMy1_ = 0.0f;        // width all-pass state (mid-channel decorrelator)
