@@ -25,6 +25,7 @@
 #include "FlowChop.h"           // FLOW · CHOP engine  (mode 2) — audio insert
 #include "FlowGlitch.h"         // FLOW · GLITCH engine(mode 3) — audio insert
 #include "FlowDrift.h"          // FLOW · DRIFT engine (mode 4) — generative mod source
+#include "FlowChain.h"          // fb131 — MODE CHAIN resolver (click order = signal path; pure)
 #include "ResonatorNode.h"      // ANNULUS resonator — global key-tracked physical-modeling node
 #include "SynthLFO.h"          // block-rate global FLOW LFO bank (guarded; likely transitive)
 #include "TerrainConstants.h"
@@ -1049,6 +1050,18 @@ private:
         rawParamCache_.emplace ((const void*) id, p);
         return p;
     }
+
+    // fb131 — MODE CHAIN: FLOW_CHAIN_1..4 (click order) resolved to the active set; an
+    // all-empty chain falls back to the legacy single FLOW_MODE (old saves untouched).
+    // Cheap enough to call per block AND from the message-thread feeds (atomic loads only).
+    wc::FlowChainState flowChainNow() const
+    {
+        const int s[4] = { (int) rawParam (ParameterIDs::FLOW_CHAIN_1)->load(),
+                           (int) rawParam (ParameterIDs::FLOW_CHAIN_2)->load(),
+                           (int) rawParam (ParameterIDs::FLOW_CHAIN_3)->load(),
+                           (int) rawParam (ParameterIDs::FLOW_CHAIN_4)->load() };
+        return wc::resolveFlowChain (s, (int) rawParam (ParameterIDs::FLOW_MODE)->load());
+    }
     static constexpr int kNumVoices = 32;  // bumped 16→32 for LAYER mode headroom (4 slices × 8 keys)
 
     // ── Synth section (Phase 1 MPV — see Design/v1-syn-spec.md) ──────────
@@ -1086,7 +1099,7 @@ private:
     wc::FlowArp                 flowArp;                    // FLOW · ARP engine (one global instance)
     wc::FlowChop                chop;                       // FLOW · CHOP engine (mode 2) — audio insert at end of processBlock
     wc::FlowGlitch              glitch;                     // FLOW · GLITCH engine (mode 3) — audio insert at end of processBlock
-    int                         prevFlowMode_ = 0;          // FLOW · prev-block mode (enable-edge detection; resets glitch clock on (re)enable)
+    bool                        prevGlitchOn_ = false;      // FLOW · prev-block glitch-on (enable-edge detection; resets glitch clock on (re)enable)
     wc::FlowDrift               drift;                      // FLOW · DRIFT engine (mode 4) — generative mod source
     float                       driftLane_[wc::kDriftLanes] {};  // per-block DRIFT lane values (mod sources; matrix routing = phase-2)
     wc::FlowRobin               flowRobin_;                      // fb122 — the Wheel rotation brain (audio thread)

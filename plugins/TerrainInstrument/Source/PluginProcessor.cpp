@@ -3074,6 +3074,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_MODE, 1 }, "Flow Mode",
         juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Robin" }, 0));   // 0 = Off; 2 = CHOP (replaced Seq); 4 = ROBIN (replaced Drift — index frozen; fb121: "Round Robin" -> "Robin", Max's name)
+    // fb131 — MODE CHAIN: the ordered multi-select (click order = signal path). Each slot
+    // shares FLOW_MODE's index space so a slot IS a mode id; "Off" = empty. All-empty =
+    // legacy single FLOW_MODE (old saves untouched); a non-empty chain owns the truth.
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHAIN_1, 1 }, "Flow Chain 1",
+        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Robin" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHAIN_2, 1 }, "Flow Chain 2",
+        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Robin" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHAIN_3, 1 }, "Flow Chain 3",
+        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Robin" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_CHAIN_4, 1 }, "Flow Chain 4",
+        juce::StringArray { "Off", "Arp", "Chop", "Glitch", "Robin" }, 0));
     layout.add (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_LATCH, 1 }, "Arp Latch", false));
     auto addFlowKnob = [&] (const char* id, const char* name, float def) {
@@ -3086,8 +3101,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_SEQ_RATE,"Chop Rate",0.6111f);  addFlowKnob (ParameterIDs::FLOW_SEQ_GATE,"Chop Gate",0.55f);   // fb107: chop grid default = 1/16
     addFlowKnob (ParameterIDs::FLOW_SEQ_VARY,"Chop Vary",0.00f);  addFlowKnob (ParameterIDs::FLOW_SEQ_TRAJ,"Chop Style",0.00f);
     addFlowKnob (ParameterIDs::FLOW_SEQ_MORPH,"Chop Morph",0.00f);
-    addFlowKnob (ParameterIDs::FLOW_CHOP_BLEND,"Chop Blend",0.60f);   // dry/wet — 60% so dry plays under the chop (zero-latency), wet on top
-    addFlowKnob (ParameterIDs::FLOW_GLI_BLEND, "Glitch Blend",0.60f); // GLITCH dry/wet — same 60% default
+    addFlowKnob (ParameterIDs::FLOW_CHOP_BLEND,"Chop Blend",1.00f);   // dry/wet — fb131: default 100% wet (Max: "when I select it, the mix is at 100")
+    addFlowKnob (ParameterIDs::FLOW_GLI_BLEND, "Glitch Blend",1.00f); // GLITCH dry/wet — fb131: default 100% wet (Max's law)
     addFlowKnob (ParameterIDs::FLOW_ARP_BLEND, "Arp Blend",1.00f);    // ARP vs dry held-chord — 1.0 = pure arp (normal); pull down to hear the sustained chord under it
     // ── ARP extension card (fb105): PLAY/MOTION scalars + 28 lane depth knobs.
     // Post-ceiling params: driven by setSynParam only (no relays). Choice params
@@ -3268,7 +3283,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addFlowKnob (ParameterIDs::FLOW_RBN_FADE,  "Robin Fade",  0.00f);
     addFlowKnob (ParameterIDs::FLOW_DRF_RATE,"Drift Rate",0.40f);  addFlowKnob (ParameterIDs::FLOW_DRF_GATE,"Drift Gate",0.55f);
     addFlowKnob (ParameterIDs::FLOW_DRF_VARY,"Drift Vary",0.50f);  addFlowKnob (ParameterIDs::FLOW_DRF_TRAJ,"Drift Traj",0.00f);
-    addFlowKnob (ParameterIDs::FLOW_DRF_MORPH,"Drift Depth",0.50f);  // DEPTH = output amplitude; 0 = inert (no modulation), 0.5 = breathes out of the box
+    addFlowKnob (ParameterIDs::FLOW_DRF_MORPH,"Drift Depth",1.00f);  // DEPTH = output amplitude; 0 = inert (no modulation), 0.5 = breathes out of the box
 
     // ── ANNULUS resonator (global key-tracked physical-modeling node) ──
     addFlowKnob (ParameterIDs::SYN_RESO_STRUCTURE,  "Reso Structure",  0.30f);
@@ -3385,7 +3400,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     for (auto& l : flowLfo_) l.prepare (sampleRate);
     chop.prepare   (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates
     glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
-    prevFlowMode_ = 0;                   // FLOW · re-anchor the glitch enable-edge on (re)prepare
+    prevGlitchOn_ = false;               // FLOW · re-anchor the glitch enable-edge on (re)prepare
     drift.prepare  (sampleRate);        // FLOW · DRIFT generator (no audio buffer)
     flowRobin_.prepare (sampleRate);    // fb122 ROBIN rotation brain
     {   // fb125 — glitch per-effect Out routing: resolve the 16 raw pointers ONCE (RT-safe reads)
@@ -4666,12 +4681,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // fb77 — BACK-PANEL TUNING MOD (Oct/Semi/Cent): all three sums arrive in SEMITONES
         // (kDestInfo domains: Oct ±12 st = ±1 octave, Semi ±12 st, Cent ±1 st at full depth)
         // and fold into the voice's CENTS lane next to COARSE — continuous pitch, no re-quantize.
+        // fb131 — MODE CHAIN: resolve once for this scope's voice hooks (the flow stage
+        // below re-resolves; both read the same params so the truth cannot diverge).
+        const wc::FlowChainState flowChain = flowChainNow();
         float tuneModCents[4];
         for (int o = 0; o < 4; ++o)
             tuneModCents[o] = (modSums[(int) wc::ModDest::OctA  + o]
                              + modSums[(int) wc::ModDest::SemiA + o]
                              + modSums[(int) wc::ModDest::CentA + o]) * 100.0f;
-        if ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4)          // fb122 ROBIN
+        if (flowChain.robin)                                                // fb122 ROBIN (fb131: chain-aware)
             for (int o = 0; o < 4; ++o) tuneModCents[o] += robinDriftCents_[o];   // per-station wander
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
         {
@@ -4741,7 +4759,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setNoiseFreePos       (noiseFreePos_);        // fb66/fb67 — latest global tape position (a Free note reads it once at note-on; no per-block resync)
                 sv->setNoiseCarrier       (! monoNoise || (sv == noiseCarrierVoice));   // fb68 — Free = only the newest voice sounds the noise (mono); poly modes = all carry
                 sv->setNoiseWidth         (noiseWidth);            // fb69 — noise stereo width (M/S)
-                sv->setRobin ((int) rawParam (ParameterIDs::FLOW_MODE)->load() == 4, &flowRobin_,     // fb122: the Wheel brain
+                sv->setRobin (flowChain.robin, &flowRobin_,     // fb122: the Wheel brain (fb131: chain-aware)
                               gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 flowRobin_.setAudible (gateA > 0.001f, gateB > 0.001f, gateC > 0.001f, gateD > 0.001f);
                 sv->setFlowWave (arpWaveMod_);        // FLOW · ARP WAVE lane → wavetable frame offset (last block's value)
@@ -4931,16 +4949,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     geodePartialsLive_ = 0;
 
     // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
-    const int flowMode = (int) rawParam (ParameterIDs::FLOW_MODE)->load();
-    flowRobin_.setActive (flowMode == 4);   // fb122 — the Wheel brain follows the mode
+    // fb131 — MODE CHAIN: re-resolve at the flow stage (the voice scope above owns its own
+    // copy). Multiple modes run at once now — the chop/glitch audio inserts process in CHAIN
+    // ORDER below; arp/robin act at the note stage wherever they sit in the chain.
+    const wc::FlowChainState flowChain = flowChainNow();
+    flowRobin_.setActive (flowChain.robin);   // fb122 — the Wheel brain follows the chain
 
     // FLOW · GLITCH (mode 3): reset the engine on the ENABLE EDGE so its step clock re-anchors to
     // the live transport ppq instead of resuming from a stale free-run phase (fired late / "whenever",
     // worse the longer the editor was closed). reset() clears haveClock_/nextStep_/freePpq_ and the
     // next process() re-anchors to hostPpq. Default-identical: only fires when GLITCH is (re)selected.
-    if (flowMode == 3 && prevFlowMode_ != 3)
+    if (flowChain.glitch && ! prevGlitchOn_)
         glitch.reset();
-    prevFlowMode_ = flowMode;
+    prevGlitchOn_ = flowChain.glitch;
 
     // EFFECTIVE FLOW knobs = base param + Σ(global-LFO × depth), clamp once. Shared by ARP + SEQ —
     // SEQ reuses the same FLOW_ARP_* params (per-mode memory lives in the JS).  (proven: 35/35)
@@ -4961,7 +4982,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     auto flowKnob = [&] (const char* id, wc::ModDest d) { return juce::jlimit (0.f, 1.f, flowBase (id) + flowMod (d)); };
     const bool  kLatch = *rawParam (ParameterIDs::FLOW_ARP_LATCH) > 0.5f;
 
-    if (flowMode == 1)   // ── ARP (mode 1) ──
+    if (flowChain.arp)   // ── ARP (mode 1) ──
     {
         const float kRate  = flowKnob (ParameterIDs::FLOW_ARP_RATE,  wc::ModDest::FlowTime);
         const float kGate  = flowKnob (ParameterIDs::FLOW_ARP_GATE,  wc::ModDest::FlowGate);
@@ -5910,8 +5931,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //    click-free (FlowChop.h). MIDI passed through normally above; this chops the mix.
     //    Engine defaults (AlwaysOn, 8 slices, full wet) groove out of the box; the 5 mode-2
     //    macros (FLOW_SEQ_* IDs, now CHOP) ride it. Always call process so it free-runs when stopped.
-    if (flowMode != 2) chopVizActive_.store (0, std::memory_order_relaxed);
-    if (flowMode == 2)
+    if (! flowChain.chop) chopVizActive_.store (0, std::memory_order_relaxed);
+    auto chopStage = [&]   // fb131 — dispatched in chain order below
     {
         const float cRate  = flowKnob (ParameterIDs::FLOW_SEQ_RATE,  wc::ModDest::ChopRate);
         const float cGate  = flowKnob (ParameterIDs::FLOW_SEQ_GATE,  wc::ModDest::ChopGate);
@@ -5968,12 +5989,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         chopVizSlice_.store (chop.lastSliceIndex(),       std::memory_order_relaxed);
         chopVizWet_.store   (chop.wetLevel(),             std::memory_order_relaxed);
         chopVizActive_.store(chop.isActive() ? 1 : 0,     std::memory_order_relaxed);
-    }
+    };
 
     // ── FLOW · GLITCH (mode 3): audio insert — beat-synced buffer-mangler IN PLACE, click-free
     //    (FlowGlitch.h, equal-power seams + exponential tape-stop). Same insert shape as CHOP.
-    //    Macros read FLOW_GLI_* (RATE/GATE/VARY=CHANCE/TRAJ=CHAOS/MORPH=SWING); BLEND default 0.60.
-    else if (flowMode == 3)
+    //    Macros read FLOW_GLI_* (RATE/GATE/VARY=CHANCE/TRAJ=CHAOS/MORPH=SWING); BLEND default 1.0.
+    auto glitchStage = [&]   // fb131 — dispatched in chain order below
     {
         const float gRate  = flowKnob (ParameterIDs::FLOW_GLI_RATE,  wc::ModDest::FlowTime);
         const float gGate  = flowKnob (ParameterIDs::FLOW_GLI_GATE,  wc::ModDest::FlowGate);
@@ -6049,12 +6070,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         gliVizActive_.store(glitch.isActive() ? 1 : 0,    std::memory_order_relaxed);
         gliVizOut_.store   (glitch.outLevel(),            std::memory_order_relaxed);
         for (int vi = 0; vi < 16; ++vi) gliVizLvl_[vi].store (glitch.stepLevel (vi), std::memory_order_relaxed);
+    };
+
+    // fb131 — MODE CHAIN dispatch: the audio stages run in CLICK ORDER. Chop-then-glitch
+    // stutters the chopped groove; glitch-then-chop re-grooves the stutters. Each stage is
+    // the untouched fb106/fb115 insert — the chain only decides who reads the buffer first.
+    for (int ci = 0; ci < flowChain.len; ++ci)
+    {
+        if      (flowChain.order[ci] == 2) chopStage();
+        else if (flowChain.order[ci] == 3) glitchStage();
     }
 
     // ── FLOW · DRIFT (mode 4): generative MOD SOURCE — makes no audio; advances 8 bipolar lanes
     //    (FlowDrift.h). Kept alive every block so the card scopes have live motion and the lanes
     //    are ready for the mod matrix. DEPTH = MORPH macro. (Lane→ModDest routing = mod-matrix phase.)
-    else if (flowMode == 4)
+    if (flowChain.robin)
     {
         const float dRate  = flowKnob (ParameterIDs::FLOW_DRF_RATE,  wc::ModDest::FlowTime);
         const float dGlide = flowBase (ParameterIDs::FLOW_DRF_GATE);    // GATE macro = GLIDE/slew
@@ -6745,7 +6775,8 @@ juce::String TerrainInstrumentAudioProcessor::getArpFeedJson() const
       << ",\"v\"" << ":" << arpVizVel_.load (std::memory_order_relaxed)
       << ",\"a\"" << ":" << arpVizActive_.load (std::memory_order_relaxed)
       << ",\"b\"" << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
-      << ",\"m\"" << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() << "}";
+      << ",\"m\"" << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
+      << ",\"on\":" << (flowChainNow().arp ? 1 : 0) << "}";   // fb131 — this card's chain membership
     return j;
 }
 
@@ -6760,7 +6791,8 @@ juce::String TerrainInstrumentAudioProcessor::getChopFeedJson() const
       << ",\"a\""  << ":" << chopVizActive_.load (std::memory_order_relaxed)
       << ",\"w\""  << ":" << juce::String (std::isfinite (wt) ? wt : 0.0f, 3)
       << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
-      << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() << "}";
+      << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
+      << ",\"on\":" << (flowChainNow().chop ? 1 : 0) << "}";   // fb131 — chain membership
     return j;
 }
 
@@ -6785,6 +6817,7 @@ juce::String TerrainInstrumentAudioProcessor::getGliFeedJson() const
       << ",\"sd\"" << ":" << (int) std::lround (apvts.getRawParameterValue (ParameterIDs::FLOW_GLI_SEED)->load() * 99.0f)
       << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
+      << ",\"on\":" << (flowChainNow().glitch ? 1 : 0)   // fb131 — chain membership
       << ",\"ol\"" << ":" << juce::String (juce::jlimit (0.0f, 1.5f, gliVizOut_.load (std::memory_order_relaxed)), 3)
       << ",\"lv\":[";
     for (int i = 0; i < 16; ++i)
@@ -6809,7 +6842,8 @@ juce::String TerrainInstrumentAudioProcessor::getRbnFeedJson() const
       << ",\"c\""   << ":" << rbnVizHits_.load (std::memory_order_relaxed)
       << ",\"md\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_RBN_MODE)->load()
       << ",\"b\""   << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
-      << ",\"m\""   << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load() << "}";
+      << ",\"m\""   << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
+      << ",\"on\":" << (flowChainNow().robin ? 1 : 0) << "}";   // fb131 — chain membership
     return j;
 }
 

@@ -140,6 +140,10 @@ namespace ParameterIDs
     constexpr char LFO9_PHASE[] = "LFO9_PHASE"; constexpr char LFO10_PHASE[]= "LFO10_PHASE";
     // ── FLOW (performance engine) — mode + per-mode knobs (remember per mode) ──
     constexpr char FLOW_MODE[]     = "FLOW_MODE";        // choice: ARP, SEQ, GLITCH, DRIFT
+    constexpr char FLOW_CHAIN_1[]  = "FLOW_CHAIN_1";     // fb131 — MODE CHAIN slots (click order = signal path;
+    constexpr char FLOW_CHAIN_2[]  = "FLOW_CHAIN_2";     //   values mirror FLOW_MODE indices, 0 = empty slot;
+    constexpr char FLOW_CHAIN_3[]  = "FLOW_CHAIN_3";     //   all-empty chain = legacy single FLOW_MODE)
+    constexpr char FLOW_CHAIN_4[]  = "FLOW_CHAIN_4";
     constexpr char FLOW_ARP_LATCH[]= "FLOW_ARP_LATCH";   // bool — ARP latch (perf essential)
     constexpr char FLOW_ARP_RATE[] = "FLOW_ARP_RATE";  constexpr char FLOW_ARP_GATE[] = "FLOW_ARP_GATE";
     constexpr char FLOW_ARP_VARY[] = "FLOW_ARP_VARY";  constexpr char FLOW_ARP_TRAJ[] = "FLOW_ARP_TRAJ";
