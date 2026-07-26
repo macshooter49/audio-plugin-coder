@@ -28,7 +28,43 @@ static juce::String tiSafePresetName (const juce::String& name)
 #if JUCE_MAC
  #include <objc/message.h>   // fb84 — card windows need NSWindow.collectionBehavior (fullscreen-Space survival); JUCE doesn't expose it
  #include <objc/runtime.h>
+ #include <cstring>
 #endif
+
+#if JUCE_MAC
+// fb134 — TYPING IN THE WEBVIEW: hosts (FL) keep the plugin window's first responder on
+// their own views, so the WKWebView paints a DOM selection but never receives keystrokes.
+// When an inline editor opens (chain chip, preset save), JS calls grabKeys and we walk the
+// peer's NSView tree to the WKWebView and make it the window's first responder.
+static void* tiFindWKWebView (void* nsview)
+{
+    if (nsview == nullptr) return nullptr;
+    if (strstr (class_getName (object_getClass ((id) nsview)), "WKWebView") != nullptr) return nsview;
+    id subs = ((id (*) (id, SEL)) objc_msgSend) ((id) nsview, sel_registerName ("subviews"));
+    const unsigned long n = ((unsigned long (*) (id, SEL)) objc_msgSend) (subs, sel_registerName ("count"));
+    for (unsigned long i = 0; i < n; ++i)
+    {
+        id sub = ((id (*) (id, SEL, unsigned long)) objc_msgSend) (subs, sel_registerName ("objectAtIndex:"), i);
+        if (void* hit = tiFindWKWebView (sub)) return hit;
+    }
+    return nullptr;
+}
+#endif
+static void tiGrabWebKeys (juce::Component* comp)
+{
+   #if JUCE_MAC
+    if (comp == nullptr) return;
+    if (auto* peer = comp->getPeer())
+        if (void* wk = tiFindWKWebView (peer->getNativeHandle()))
+        {
+            id win = ((id (*) (id, SEL)) objc_msgSend) ((id) wk, sel_registerName ("window"));
+            if (win != nullptr)
+                ((void (*) (id, SEL, id)) objc_msgSend) (win, sel_registerName ("makeFirstResponder:"), (id) wk);
+        }
+   #else
+    juce::ignoreUnused (comp);
+   #endif
+}
 
 #if JUCE_MAC
 // fb95 — editor resize scales the WHOLE web UI via the native WKWebView pageZoom
@@ -610,6 +646,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     if (auto* p = audioProcessor.getAPVTS().getParameter (args[0].toString()))
                         v = p->getValue();
                 complete (juce::var (v));
+            })
+            .withNativeFunction("grabKeys", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb134 — an inline text editor just opened in the page: hand the OS keyboard
+                // to the WKWebView (message thread; the peer walk is a few objc calls).
+                tiGrabWebKeys (this);
+                complete (juce::var{});
             })
             .withNativeFunction("savePreset", [](const juce::Array<juce::var>& args,
                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -4433,6 +4477,12 @@ public:
                         if (auto* p = proc.getAPVTS().getParameter (args[0].toString()))
                             v = p->getValue();
                     complete (juce::var (v));
+                })
+                .withNativeFunction ("grabKeys", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    tiGrabWebKeys (web.get());   // fb134 — popped card windows type too
+                    complete (juce::var{});
                 })
                 .withNativeFunction ("savePreset", [](const juce::Array<juce::var>& args,
                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
