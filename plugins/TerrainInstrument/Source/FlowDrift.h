@@ -124,13 +124,14 @@ public:
         const bool   cont = (curShape_ == DriftShape::Human || curShape_ == DriftShape::Pink || curShape_ == DriftShape::Woggle);
 
         double p = playing ? hostPpq : freePpq_;
-        if (! haveClock_) { nextStep_ = (long long) std::floor (p / (double) beats); nextBoundary_ = (double) nextStep_ * (double) beats; haveClock_ = true; lastBeats_ = beats; }
-        else if (beats != lastBeats_)
+        const long long curStepP = (long long) std::floor (p / (double) beats);
+        if (! haveClock_) { nextStep_ = curStepP; nextBoundary_ = (double) nextStep_ * (double) beats; haveClock_ = true; lastBeats_ = beats; }
+        else if (beats != lastBeats_ || nextStep_ > curStepP + 2 || nextStep_ < curStepP - 2)
         {
-            // fb122 — THE LADDER LAW (fb107/fb116): the step clock counts GRID UNITS;
-            // a fast->slow rate move strands nextBoundary_ minutes ahead. Re-anchor.
+            // fb122/fb128 — THE STRANDED-CLOCK LAW (fb107 class): re-anchor on any grid
+            // change OR transport jump (DAW loop wraps stranded the wander mid-play).
             lastBeats_ = beats;
-            nextStep_ = (long long) std::floor (p / (double) beats) + 1;
+            nextStep_ = curStepP + 1;
             nextBoundary_ = (double) nextStep_ * (double) beats;
         }
 

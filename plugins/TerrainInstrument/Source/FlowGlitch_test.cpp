@@ -567,6 +567,27 @@ int main()
         check (repF > pitF * 6 && pitF >= 1, buf);
     }
 
+    // ── T28: DAW LOOP WRAP — ppq snaps backwards every pass; fires must survive (fb128) ─
+    {
+        FlowGlitch g; g.prepare (SR, 4.0); g.setMix (1.0f);
+        GlitchExtParams p; g.setExt (p);                       // REP only, Main grid, Sync
+        std::vector<float> L (512), R (512); long long gc = 0;
+        double ppq = 0; const double pps=(BPM/60.0)/SR;
+        const double LOOPB = 2.0;                              // a 2-beat DAW loop region
+        for (int b = 0; b < 800; ++b)                          // 17 beats = ~8.5 loop passes
+        {
+            for (int i=0;i<512;++i){ float v=sineSig(gc+i); L[(size_t)i]=v; R[(size_t)i]=v; }
+            g.process (0.6111f, 0.55f, 1.0f, 0.0f, 0.0f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+            gc += 512; ppq += pps*512;
+            if (ppq >= LOOPB) ppq -= LOOPB;                    // the wrap: position snaps back
+        }
+        // 17 beats = 68 sixteenth steps; chance 1 => ~a fire per step across every wrap
+        // (the stranded pre-fix clock stopped after pass ONE: ~8 fires)
+        const long long fires = g.vizFireCount();
+        char buf[96]; std::snprintf (buf, sizeof buf, "T28 loop-wrap survival: %lld fires across ~8 wraps (expect ~66, stranded ~8)", fires);
+        check (fires > 55, buf);
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

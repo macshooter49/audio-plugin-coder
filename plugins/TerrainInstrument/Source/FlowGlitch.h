@@ -207,16 +207,20 @@ public:
 
         const bool useHost = playing && (! extOn_ || ext_.sync);      // ext Free-run ignores host pos
         double p = useHost ? hostPpq : freePpq_;
-        if (! haveClock_) { nextStep_ = (long long) std::floor (p / (double) beats); nextBoundary_ = boundaryTime (nextStep_, beats, sw); haveClock_ = true; lastBeats_ = beats; }
-        else if (beats != lastBeats_)
+        const long long curStepP = (long long) std::floor (p / (double) beats);
+        if (! haveClock_) { nextStep_ = curStepP; nextBoundary_ = boundaryTime (nextStep_, beats, sw); haveClock_ = true; lastBeats_ = beats; }
+        else if (beats != lastBeats_ || nextStep_ > curStepP + 2 || nextStep_ < curStepP - 2)
         {
-            // fb116 — THE LADDER LAW (fb107): nextStep_ is counted in GRID UNITS. On a
-            // fast->slow rate move the old (huge) index times the new (large) beats lands
-            // the boundary MINUTES ahead -> silent forever ("can't come back down from
-            // 1/256"). Re-anchor the clock to the next boundary of the NEW grid.
+            // fb116/fb128 — THE STRANDED-CLOCK LAW (fb107 class, chop's fb109 window):
+            // a latched boundary strands on ANY discontinuity — a ladder move (fb116) OR
+            // a transport jump (fb128: a DAW LOOP WRAP throws ppq backwards every pass —
+            // "the cards stop a couple seconds after I press play over my drum loop").
+            // Re-anchor whenever the step counter drifts outside a sane window of the
+            // ppq-derived truth, exactly like FlowChop has done since fb109.
             lastBeats_ = beats;
-            nextStep_ = (long long) std::floor (p / (double) beats) + 1;
+            nextStep_ = curStepP + 1;
             nextBoundary_ = boundaryTime (nextStep_, beats, sw);
+            rollArmed_ = false;                       // a stale Roll boundary is meaningless now
         }
 
         // fb127 — FIRE GROUPS: every active (clock, division) pair runs its OWN boundary
@@ -240,10 +244,12 @@ public:
                 const float gb = dk == 0 ? beats : kArpRateRich[dk - 1];
                 const double ref = cls == 0 ? p : freePpqF_;
                 const double off = cls == 0 ? 0.0 : 0.5 * (double) gb;   // free interleaves
-                if (! t.have || gb != t.beats)
-                {   // THE LADDER LAW (fb107/116/122): (re)anchor on first use or any grid change
+                const long long curG = (long long) std::floor ((ref - off) / (double) gb);
+                if (! t.have || gb != t.beats || t.step > curG + 2 || t.step < curG - 2)
+                {   // STRANDED-CLOCK LAW (fb107/116/122/128): (re)anchor on first use, any
+                    // grid change, or any transport jump (DAW loop wraps, relocates)
                     t.beats = gb;
-                    t.step  = (long long) std::floor ((ref - off) / (double) gb) + 1;
+                    t.step  = curG + 1;
                     t.bnd   = (double) t.step * (double) gb + off;
                     t.have  = true;
                 }
