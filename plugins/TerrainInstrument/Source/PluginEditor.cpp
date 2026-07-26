@@ -2,6 +2,29 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
+// fb132 — CARD PRESETS: user presets live beside the imports registry
+// (~/Library/WavesCrate/TerrainInstrument/presets/<card>/<name>.json — the proven
+// sandbox-writable home; App Support and temp are NOT). Each file IS one preset
+// payload (the JS owns the schema); the natives below are dumb couriers.
+static juce::File tiPresetDir (const juce::String& card)
+{
+    return juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+             .getChildFile ("Library/WavesCrate/TerrainInstrument/presets")
+             .getChildFile (card.retainCharacters ("abcdefghijklmnopqrstuvwxyz"));
+}
+static juce::String tiSafePresetName (const juce::String& name)
+{
+    juce::String out;
+    const auto trimmed = name.trim().substring (0, 48);
+    for (int i = 0; i < trimmed.length(); ++i)
+    {
+        const auto c = trimmed[i];
+        const bool ok = juce::CharacterFunctions::isLetterOrDigit (c) || c == ' ' || c == '-' || c == '_';
+        out << (ok ? juce::String::charToString (c) : juce::String ("_"));
+    }
+    return out.trim();
+}
+
 #if JUCE_MAC
  #include <objc/message.h>   // fb84 — card windows need NSWindow.collectionBehavior (fullscreen-Space survival); JUCE doesn't expose it
  #include <objc/runtime.h>
@@ -587,6 +610,49 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     if (auto* p = audioProcessor.getAPVTS().getParameter (args[0].toString()))
                         v = p->getValue();
                 complete (juce::var (v));
+            })
+            .withNativeFunction("savePreset", [](const juce::Array<juce::var>& args,
+                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb132 — args = [card, name, payloadJson]; same-name overwrite is the save semantics
+                if (args.size() >= 3)
+                {
+                    auto dir = tiPresetDir (args[0].toString());
+                    dir.createDirectory();
+                    dir.getChildFile (tiSafePresetName (args[1].toString()) + ".json")
+                       .replaceWithText (args[2].toString());
+                }
+                complete (juce::var{});
+            })
+            .withNativeFunction("getPresets", [](const juce::Array<juce::var>& args,
+                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb132 — returns a JSON array of the card's saved payloads (each file is one object)
+                juce::String out ("[");
+                if (args.size() >= 1)
+                {
+                    bool first = true;
+                    for (const auto& f : tiPresetDir (args[0].toString())
+                                             .findChildFiles (juce::File::findFiles, false, "*.json"))
+                    {
+                        const auto t = f.loadFileAsString().trim();
+                        if (t.startsWith ("{") && t.endsWith ("}"))
+                        {
+                            if (! first) out << ",";
+                            out << t; first = false;
+                        }
+                    }
+                }
+                out << "]";
+                complete (juce::var (out));
+            })
+            .withNativeFunction("deletePreset", [](const juce::Array<juce::var>& args,
+                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 2)
+                    tiPresetDir (args[0].toString())
+                        .getChildFile (tiSafePresetName (args[1].toString()) + ".json").deleteFile();
+                complete (juce::var{});
             })
             .withNativeFunction("setArpLanes", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -4367,6 +4433,49 @@ public:
                         if (auto* p = proc.getAPVTS().getParameter (args[0].toString()))
                             v = p->getValue();
                     complete (juce::var (v));
+                })
+                .withNativeFunction ("savePreset", [](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    // fb132 — args = [card, name, payloadJson]; same-name overwrite is the save semantics
+                    if (args.size() >= 3)
+                    {
+                        auto dir = tiPresetDir (args[0].toString());
+                        dir.createDirectory();
+                        dir.getChildFile (tiSafePresetName (args[1].toString()) + ".json")
+                           .replaceWithText (args[2].toString());
+                    }
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getPresets", [](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    // fb132 — returns a JSON array of the card's saved payloads (each file is one object)
+                    juce::String out ("[");
+                    if (args.size() >= 1)
+                    {
+                        bool first = true;
+                        for (const auto& f : tiPresetDir (args[0].toString())
+                                                 .findChildFiles (juce::File::findFiles, false, "*.json"))
+                        {
+                            const auto t = f.loadFileAsString().trim();
+                            if (t.startsWith ("{") && t.endsWith ("}"))
+                            {
+                                if (! first) out << ",";
+                                out << t; first = false;
+                            }
+                        }
+                    }
+                    out << "]";
+                    complete (juce::var (out));
+                })
+                .withNativeFunction ("deletePreset", [](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() >= 2)
+                        tiPresetDir (args[0].toString())
+                            .getChildFile (tiSafePresetName (args[1].toString()) + ".json").deleteFile();
+                    complete (juce::var{});
                 })
                 .withNativeFunction ("setArpLanes", [&proc](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
