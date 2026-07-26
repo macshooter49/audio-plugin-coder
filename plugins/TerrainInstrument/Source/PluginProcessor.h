@@ -26,6 +26,7 @@
 #include "FlowGlitch.h"         // FLOW · GLITCH engine(mode 3) — audio insert
 #include "FlowDrift.h"          // FLOW · DRIFT engine (mode 4) — generative mod source
 #include "FlowChain.h"          // fb131 — MODE CHAIN resolver (click order = signal path; pure)
+#include <map>                  // fb137 — per-card slots+chain store
 #include "ResonatorNode.h"      // ANNULUS resonator — global key-tracked physical-modeling node
 #include "SynthLFO.h"          // block-rate global FLOW LFO bank (guarded; likely transitive)
 #include "TerrainConstants.h"
@@ -636,6 +637,16 @@ public:
 
     // ── FLOW · ARP extension card (fb105) — lane pattern + live playhead feed ──
     void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
+    // fb137 — CARD STATE (slots + chain JSON per card): both surfaces share ONE truth so
+    // pop-out / dock-back / editor reopen never lose the chain (the arp-lanes precedent).
+    void setCardStateJson (const juce::String& card, const juce::String& json)
+    { const juce::ScopedLock sl (cardStateLock_); cardStates_[card] = json; }
+    juce::String getCardStateJson (const juce::String& card) const
+    { const juce::ScopedLock sl (cardStateLock_); const auto it = cardStates_.find (card);
+      return it != cardStates_.end() ? it->second : juce::String(); }
+    mutable juce::CriticalSection cardStateLock_;
+    std::map<juce::String, juce::String> cardStates_;
+    std::atomic<int> flowPlayingViz_ { 0 };   // fb137 — transport state for the feeds ("pl")
     juce::String      getArpLanesJson() const;                          // for JS restore + state save
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot

@@ -4906,6 +4906,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // ── FLOW transport + global LFO bank (block-rate mirror; free or transport-locked) ──
     double flowBpm = (double) synModBpm, flowPpq = 0.0; bool flowPlaying = false;
+    // (fb137: flowPlayingViz_ stored right after the playhead read below)
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
         {
@@ -4953,6 +4954,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // copy). Multiple modes run at once now — the chop/glitch audio inserts process in CHAIN
     // ORDER below; arp/robin act at the note stage wherever they sit in the chain.
     const wc::FlowChainState flowChain = flowChainNow();
+    flowPlayingViz_.store (flowPlaying ? 1 : 0, std::memory_order_relaxed);   // fb137 — feeds carry "pl"
     flowRobin_.setActive (flowChain.robin);   // fb122 — the Wheel brain follows the chain
 
     // FLOW · GLITCH (mode 3): reset the engine on the ENABLE EDGE so its step clock re-anchors to
@@ -6776,7 +6778,8 @@ juce::String TerrainInstrumentAudioProcessor::getArpFeedJson() const
       << ",\"a\"" << ":" << arpVizActive_.load (std::memory_order_relaxed)
       << ",\"b\"" << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\"" << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
-      << ",\"on\":" << (flowChainNow().arp ? 1 : 0) << "}";   // fb131 — this card's chain membership
+      << ",\"on\":" << (flowChainNow().arp ? 1 : 0)
+      << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";   // fb131/137 — chain membership + transport
     return j;
 }
 
@@ -6792,7 +6795,8 @@ juce::String TerrainInstrumentAudioProcessor::getChopFeedJson() const
       << ",\"w\""  << ":" << juce::String (std::isfinite (wt) ? wt : 0.0f, 3)
       << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
-      << ",\"on\":" << (flowChainNow().chop ? 1 : 0) << "}";   // fb131 — chain membership
+      << ",\"on\":" << (flowChainNow().chop ? 1 : 0)
+      << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";   // fb131/137
     return j;
 }
 
@@ -6818,6 +6822,7 @@ juce::String TerrainInstrumentAudioProcessor::getGliFeedJson() const
       << ",\"b\""  << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
       << ",\"on\":" << (flowChainNow().glitch ? 1 : 0)   // fb131 — chain membership
+      << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed)
       << ",\"ol\"" << ":" << juce::String (juce::jlimit (0.0f, 1.5f, gliVizOut_.load (std::memory_order_relaxed)), 3)
       << ",\"lv\":[";
     for (int i = 0; i < 16; ++i)
@@ -6843,7 +6848,8 @@ juce::String TerrainInstrumentAudioProcessor::getRbnFeedJson() const
       << ",\"md\""  << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_RBN_MODE)->load()
       << ",\"b\""   << ":" << juce::String (juce::jlimit (1.0f, 999.0f, currentBPM.load()), 2)
       << ",\"m\""   << ":" << (int) apvts.getRawParameterValue (ParameterIDs::FLOW_MODE)->load()
-      << ",\"on\":" << (flowChainNow().robin ? 1 : 0) << "}";   // fb131 — chain membership
+      << ",\"on\":" << (flowChainNow().robin ? 1 : 0)
+      << ",\"pl\":" << flowPlayingViz_.load (std::memory_order_relaxed) << "}";   // fb131/137
     return j;
 }
 

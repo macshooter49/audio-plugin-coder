@@ -675,6 +675,19 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 tiGrabWebKeys (this);
                 complete (juce::var{});
             })
+            .withNativeFunction("setCardState", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb137 — [card, slotsChainJson]: the processor holds one truth for both surfaces
+                if (args.size() >= 2) audioProcessor.setCardStateJson (args[0].toString(), args[1].toString());
+                complete (juce::var{});
+            })
+            .withNativeFunction("getCardState", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (args.size() >= 1 ? audioProcessor.getCardStateJson (args[0].toString())
+                                                      : juce::String()));
+            })
             .withNativeFunction("editArm", [this](const juce::Array<juce::var>& args,
                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4513,6 +4526,18 @@ public:
                 {
                     tiGrabWebKeys (web.get());   // fb134 — popped card windows type too
                     complete (juce::var{});
+                })
+                .withNativeFunction ("setCardState", [&proc](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() >= 2) proc.setCardStateJson (args[0].toString(), args[1].toString());
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getCardState", [&proc](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (args.size() >= 1 ? proc.getCardStateJson (args[0].toString())
+                                                          : juce::String()));
                 })
                 .withNativeFunction ("editArm", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
