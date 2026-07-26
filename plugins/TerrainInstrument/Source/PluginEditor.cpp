@@ -12,6 +12,26 @@ static juce::File tiPresetDir (const juce::String& card)
              .getChildFile ("Library/WavesCrate/TerrainInstrument/presets")
              .getChildFile (card.retainCharacters ("abcdefghijklmnopqrstuvwxyz"));
 }
+// fb135 — HOST-KEY BRIDGE: KeyPress -> the DOM KeyboardEvent key name __tiHostKey expects
+static juce::String tiKeyToWebKey (const juce::KeyPress& k)
+{
+    const int code = k.getKeyCode();
+    if (code == juce::KeyPress::backspaceKey) return "Backspace";
+    if (code == juce::KeyPress::deleteKey)    return "Delete";
+    if (code == juce::KeyPress::returnKey)    return "Enter";
+    if (code == juce::KeyPress::escapeKey)    return "Escape";
+    if (code == juce::KeyPress::leftKey)      return "ArrowLeft";
+    if (code == juce::KeyPress::rightKey)     return "ArrowRight";
+    const auto c = k.getTextCharacter();
+    if (c >= 32 && c != 127) return juce::String::charToString (c);
+    return {};
+}
+static juce::String tiHostKeyJs (const juce::String& key)
+{
+    return "window.__tiHostKey&&window.__tiHostKey('"
+         + key.replace ("\\", "\\\\").replace ("'", "\\'") + "')";
+}
+
 static juce::String tiSafePresetName (const juce::String& name)
 {
     juce::String out;
@@ -653,6 +673,16 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // fb134 — an inline text editor just opened in the page: hand the OS keyboard
                 // to the WKWebView (message thread; the peer walk is a few objc calls).
                 tiGrabWebKeys (this);
+                complete (juce::var{});
+            })
+            .withNativeFunction("editArm", [this](const juce::Array<juce::var>& args,
+                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb135 — a web inline editor opened(1)/closed(0). While armed, JUCE (not the
+                // WKWebView) owns keyboard focus; keyPressed below pipes keys into the page.
+                const bool on = args.size() > 0 && static_cast<double> (args[0]) > 0.5;
+                tiEditArmed_ = on;
+                if (on) { setWantsKeyboardFocus (true); grabKeyboardFocus(); }
                 complete (juce::var{});
             })
             .withNativeFunction("savePreset", [](const juce::Array<juce::var>& args,
@@ -4484,6 +4514,14 @@ public:
                     tiGrabWebKeys (web.get());   // fb134 — popped card windows type too
                     complete (juce::var{});
                 })
+                .withNativeFunction ("editArm", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    const bool on = args.size() > 0 && static_cast<double> (args[0]) > 0.5;
+                    tiEditArmed_ = on;
+                    if (on) { setWantsKeyboardFocus (true); grabKeyboardFocus(); }
+                    complete (juce::var{});
+                })
                 .withNativeFunction ("savePreset", [](const juce::Array<juce::var>& args,
                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
@@ -4791,6 +4829,17 @@ private:
     juce::Point<int> dragOff_;
     double lastMoveLogMs_ = 0.0;
     long lastNum_ = -1; bool lastVis_ = true, lastPar_ = false; // fb88 — ns-state change detector
+    // fb135 — HOST-KEY BRIDGE (popped cards type too)
+    bool keyPressed (const juce::KeyPress& k) override
+    {
+        if (! tiEditArmed_.load() || web == nullptr) return false;
+        const auto key = tiKeyToWebKey (k);
+        if (key.isEmpty()) return false;
+        web->evaluateJavascript (tiHostKeyJs (key));
+        return true;
+    }
+    std::atomic<bool> tiEditArmed_ { false };
+
     std::unique_ptr<juce::WebBrowserComponent> web;
 };
 
@@ -12564,4 +12613,15 @@ void TerrainInstrumentAudioProcessorEditor::importTerrainPack (const juce::File&
         webView->evaluateJavascript (
             "if (window.onLoadError) window.onLoadError('Pack import lands in v0a Phase E.');",
             nullptr);
+}
+
+// fb135 — HOST-KEY BRIDGE: while a web inline editor is armed, keystrokes the host delivers
+// to the plugin land here (JUCE focus) and get piped into the page's registered input.
+bool TerrainInstrumentAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+{
+    if (! tiEditArmed_.load() || webView == nullptr) return false;
+    const auto k = tiKeyToWebKey (key);
+    if (k.isEmpty()) return false;
+    webView->evaluateJavascript (tiHostKeyJs (k));
+    return true;
 }

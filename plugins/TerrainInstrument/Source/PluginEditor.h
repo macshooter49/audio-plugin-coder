@@ -831,6 +831,11 @@ private:
     juce::WebSliderRelay resoMaterialRelay   { ParameterIDs::SYN_RESO_MATERIAL };
 
     // 2. WEBVIEW SECOND (destroyed middle)
+    // fb135 — HOST-KEY BRIDGE: while a web inline editor is armed (editArm native), JUCE
+    // holds keyboard focus and keyPressed pipes every keystroke into the page (__tiHostKey).
+    bool keyPressed (const juce::KeyPress& key) override;
+    std::atomic<bool> tiEditArmed_ { false };
+
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
     // 2a. POPPED-OUT FLOW EXTENSION CARDS (fb82/fb83) — ⧉ on a card header detaches
