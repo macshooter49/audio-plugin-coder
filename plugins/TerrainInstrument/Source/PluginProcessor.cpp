@@ -3244,6 +3244,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                     juce::ParameterID { juce::String ("FLOW_GLI_") + fx[i] + "_PAN", 1 },
                     juce::String ("Glitch ") + nm[i] + " Pan",
                     juce::StringArray { "L", "C", "R" }, 1));
+                layout.add (std::make_unique<juce::AudioParameterChoice>(
+                    juce::ParameterID { juce::String ("FLOW_GLI_") + fx[i] + "_TRG", 1 },
+                    juce::String ("Glitch ") + nm[i] + " Trig",
+                    juce::StringArray { "Sync", "Free", "Roll" }, 0));
+                layout.add (std::make_unique<juce::AudioParameterChoice>(
+                    juce::ParameterID { juce::String ("FLOW_GLI_") + fx[i] + "_GRID", 1 },
+                    juce::String ("Glitch ") + nm[i] + " Grid",
+                    juce::StringArray { "Main", "1/1", "1/2.", "1/2", "1/4.", "1/2T", "1/4", "1/8.", "1/4T",
+                                        "1/8", "1/16.", "1/8T", "1/16", "1/32.", "1/16T", "1/32", "1/32T",
+                                        "1/64", "1/128", "1/256" }, 0));
             }
         }
         addRbnChoice (ParameterIDs::FLOW_RBN_O1, "Robin Order 1st", { "A", "B", "C", "D" }, 0);
@@ -3384,6 +3394,8 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
         {
             gliFxFltP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_FLT");
             gliFxPanP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_PAN");
+            gliFxTrgP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_TRG");
+            gliFxGrdP_[fi] = apvts.getRawParameterValue (juce::String ("FLOW_GLI_") + fxIds[fi] + "_GRID");
         }
     }
     synthEngine.setRobinBrain (&flowRobin_);
@@ -5997,6 +6009,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 X.fxFlt[fi] = gliFxFltP_[fi] != nullptr ? (int) gliFxFltP_[fi]->load() : 0;
                 X.fxPan[fi] = gliFxPanP_[fi] != nullptr ? (int) gliFxPanP_[fi]->load() : 1;
+                X.fxTrig[fi] = gliFxTrgP_[fi] != nullptr ? (int) gliFxTrgP_[fi]->load() : 0;
+                X.fxGrid[fi] = gliFxGrdP_[fi] != nullptr ? (int) gliFxGrdP_[fi]->load() : 0;
             }
             X.sync       = (int) *rawParam (ParameterIDs::FLOW_GLI_SYNC) == 1;
             X.repSize  = flowBase (ParameterIDs::FLOW_GLI_REP_SIZE);   X.repSpeed = flowBase (ParameterIDs::FLOW_GLI_REP_SPEED);

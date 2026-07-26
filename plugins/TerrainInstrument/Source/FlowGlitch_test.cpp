@@ -506,6 +506,67 @@ int main()
         check (hLow < hOff * 0.6, buf2);
     }
 
+    // ── T26: per-effect TRIG — sync stalls with the host, Free keeps going; Roll-only is manual ─
+    {
+        auto runFrozen = [&](int repTrig, int frzTrig, bool frozen, bool doRoll)
+        {
+            FlowGlitch g; g.prepare (SR, 4.0); g.setMix (1.0f);
+            GlitchExtParams p; for (int k=0;k<kGlitchFxN;++k) p.en[k]=false;
+            p.en[(int) GlitchFx::Repeat] = true;  p.fxTrig[(int) GlitchFx::Repeat] = repTrig;
+            p.en[(int) GlitchFx::Freeze] = true;  p.fxTrig[(int) GlitchFx::Freeze] = frzTrig;
+            g.setExt (p);
+            std::vector<float> L (512), R (512); long long gc = 0;
+            double ppq = 0; const double pps=(BPM/60.0)/SR;
+            int frzFires = 0, repFires = 0; long long lastC = 0; int lastFx = -1;
+            for (int b = 0; b < 160; ++b)
+            {
+                if (doRoll && b == 80) g.rollNow();
+                for (int i=0;i<512;++i){ float v=sineSig(gc+i); L[(size_t)i]=v; R[(size_t)i]=v; }
+                g.process (0.6111f, 0.55f, 1.0f, 0.0f, 0.0f, frozen ? 10.0 : ppq, BPM, SR, L.data(), R.data(), 512, true);
+                if (g.vizFireCount() > lastC) { lastC = g.vizFireCount(); lastFx = g.vizFx();
+                    if (lastFx == (int) GlitchFx::Freeze) ++frzFires;
+                    if (lastFx == (int) GlitchFx::Repeat) ++repFires; }
+                gc += 512; ppq += pps*512;
+            }
+            return std::pair<int,int> (repFires, frzFires);
+        };
+        // REP sync + FRZ free, host FROZEN: the sync grid stalls, the free grid keeps firing FRZ
+        auto fz = runFrozen (0, 1, true, false);
+        char buf[96]; std::snprintf (buf, sizeof buf, "T26 frozen host: sync REP stalls (%d), free FRZ keeps firing (%d)", fz.first, fz.second);
+        check (fz.first <= 1 && fz.second > 8, buf);
+        // both running: both fire
+        auto rn = runFrozen (0, 1, false, false);
+        check (rn.first > 4 && rn.second > 4, "T26 running host: sync REP and free FRZ BOTH fire");
+        // FRZ = Roll-only: never fires from any grid at Chance 1... until Roll
+        auto ro = runFrozen (0, 2, false, false);
+        check (ro.second == 0, "T26 Roll-only FRZ never fires from the grids");
+        auto ro2 = runFrozen (0, 2, false, true);
+        check (ro2.second >= 1, "T26 Roll-only FRZ fires when Roll is pressed");
+    }
+
+    // ── T27: per-effect GRID — "pitch at 1/1 while repeat runs 1/16" (fb127) ─────
+    {
+        FlowGlitch g; g.prepare (SR, 4.0); g.setMix (1.0f);
+        GlitchExtParams p; for (int k=0;k<kGlitchFxN;++k) p.en[k]=false;
+        p.en[(int) GlitchFx::Repeat] = true;                       // Main grid (1/16 at rate 0.6111)
+        p.en[(int) GlitchFx::Pitch]  = true; p.fxGrid[(int) GlitchFx::Pitch] = 1;   // its own 1/1
+        g.setExt (p);
+        std::vector<float> L (512), R (512); long long gc = 0;
+        double ppq = 0; const double pps=(BPM/60.0)/SR;
+        int repF = 0, pitF = 0; long long lastC = 0;
+        for (int b = 0; b < 400; ++b)                              // ~4.3 s ≈ 34 sixteenths / 2 wholes
+        {
+            for (int i=0;i<512;++i){ float v=sineSig(gc+i); L[(size_t)i]=v; R[(size_t)i]=v; }
+            g.process (0.6111f, 0.55f, 1.0f, 0.0f, 0.0f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+            if (g.vizFireCount() > lastC) { lastC = g.vizFireCount();
+                if (g.vizFx() == (int) GlitchFx::Repeat) ++repF;
+                if (g.vizFx() == (int) GlitchFx::Pitch)  ++pitF; }
+            gc += 512; ppq += pps*512;
+        }
+        char buf[96]; std::snprintf (buf, sizeof buf, "T27 own grids: REP(1/16) %d fires >> PIT(1/1) %d fires", repF, pitF);
+        check (repF > pitF * 6 && pitF >= 1, buf);
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

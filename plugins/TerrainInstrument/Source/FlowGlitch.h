@@ -89,6 +89,12 @@ struct GlitchExtParams
     int   pan = 1;
     int   fxFlt[kGlitchFxN] = { 0, 0, 0, 0, 0, 0, 0, 0 };   // fb125 — per-EFFECT Out: Filter Off/Low/Mid/High
     int   fxPan[kGlitchFxN] = { 1, 1, 1, 1, 1, 1, 1, 1 };   //         and Pan L/C/R ("pitch left, tape right")
+    int   fxTrig[kGlitchFxN] = { 0, 0, 0, 0, 0, 0, 0, 0 };  // fb127 — per-EFFECT Trig: 0 Sync (the beat grid)
+                                                            // 1 Free (its own drifting clock) 2 Roll-only (manual)
+    int   fxGrid[kGlitchFxN] = { 0, 0, 0, 0, 0, 0, 0, 0 };  // fb127 — per-EFFECT Grid: 0 = Main (follow the
+                                                            // master Grid), 1..19 = its own ladder division
+                                                            // ("pitch at 1/1 while repeat runs 1/16") — the
+                                                            // fire's slice/hold lengths use ITS division too
     bool  sync = true;            // false = Free-run clock (ignore host bar position)
     // per-effect (4 each) — names match the card. Research-confirmed inits (fb115):
     // Rep/Rev Size = the whole step (turning DOWN speeds the stutter), Pitch = -12
@@ -131,6 +137,8 @@ public:
         lastIdx_ = 0.0; lastStep_ = 0.0; tailIdx_ = 0.0; tailStep_ = 0.0; haveLast_ = false;
         pendingFire_ = false;
         haveClock_ = false; nextStep_ = 0; nextBoundary_ = 0.0; freePpq_ = 0.0; lastBeats_ = -1.f;
+        freePpqF_ = 0.0; nActiveG_ = 0;
+        for (int i = 0; i <= kArpRateRichN; ++i) { trkS_[i] = GridTrk(); trkF_[i] = GridTrk(); }
         for (int i = 0; i < 64; ++i) lockFireValid_[i] = false;
         rng_.seed (seed_ ? seed_ : 0x6117C40Du);
         // ext render state
@@ -211,6 +219,41 @@ public:
             nextBoundary_ = boundaryTime (nextStep_, beats, sw);
         }
 
+        // fb127 — FIRE GROUPS: every active (clock, division) pair runs its OWN boundary
+        // tracker. Trig picks the clock (Sync = the host grid p; Free = a self-running
+        // timeline, half a step out of phase so the grids interleave; Roll = manual only),
+        // Grid picks the division (Main = the master Grid, or the effect's own ladder step
+        // — "pitch at 1/1 while repeat runs 1/16"). Each group fires ONE pick among its
+        // own effects; a fire's slice/hold lengths come from ITS division.
+        nActiveG_ = 0;
+        if (extOn_)
+        {
+            bool seenG[2][kArpRateRichN + 1] = {};
+            for (int fi = 0; fi < kGlitchFxN; ++fi)
+            {
+                if (! ext_.en[fi] || ext_.fxTrig[fi] > 1) continue;      // Roll-only: no grid
+                const int cls = ext_.fxTrig[fi];
+                int dk = ext_.fxGrid[fi]; if (dk < 0) dk = 0; if (dk > kArpRateRichN) dk = kArpRateRichN;
+                if (seenG[cls][dk]) continue;
+                seenG[cls][dk] = true;
+                GridTrk& t = (cls == 0 ? trkS_[dk] : trkF_[dk]);
+                const float gb = dk == 0 ? beats : kArpRateRich[dk - 1];
+                const double ref = cls == 0 ? p : freePpqF_;
+                const double off = cls == 0 ? 0.0 : 0.5 * (double) gb;   // free interleaves
+                if (! t.have || gb != t.beats)
+                {   // THE LADDER LAW (fb107/116/122): (re)anchor on first use or any grid change
+                    t.beats = gb;
+                    t.step  = (long long) std::floor ((ref - off) / (double) gb) + 1;
+                    t.bnd   = (double) t.step * (double) gb + off;
+                    t.have  = true;
+                }
+                activeG_[nActiveG_].trk = &t; activeG_[nActiveG_].cls = cls;
+                activeG_[nActiveG_].divKey = dk; activeG_[nActiveG_].off = off;
+                activeG_[nActiveG_].stepSamp = (double) gb / pps;
+                ++nActiveG_;
+            }
+        }
+
         // ext: hoist per-block coefs (wet bus one-poles, bend LFO inc)
         if (extOn_)
         {
@@ -235,14 +278,29 @@ public:
             while (p >= nextBoundary_ && guard++ < 64)
             {
                 if (extOn_)
-                {
-                    publishLevel (nextStep_);
-                    onBoundaryExt (nextStep_, gate, vary, traj, stepSamp);
-                }
+                    publishLevel (nextStep_);          // fb127: fires live in the groups now
                 else
                     onBoundary (nextStep_, gate, vary, traj, stepSamp);
                 ++nextStep_;
                 nextBoundary_ = boundaryTime (nextStep_, beats, sw);
+            }
+            if (extOn_)
+            {   // fb127 — every fire group checks its own boundary (sync rides p, free
+                // rides the self-running timeline; ≤8 compares per sample)
+                freePpqF_ += pps;
+                for (int gi = 0; gi < nActiveG_; ++gi)
+                {
+                    ActiveG& ag = activeG_[gi];
+                    const double ref = ag.cls == 0 ? p : freePpqF_;
+                    int guardG = 0;
+                    while (ref >= ag.trk->bnd && guardG++ < 64)
+                    {
+                        onBoundaryExt (ag.trk->step, gate, vary, traj, ag.stepSamp, ag.cls, ag.divKey);
+                        ++ag.trk->step;
+                        ag.trk->bnd = (double) ag.trk->step * (double) ag.trk->beats + ag.off
+                                      + ((ag.cls == 0 && ag.divKey == 0 && (ag.trk->step & 1LL)) ? sw : 0.0);
+                    }
+                }
             }
 
             // Roll punch-in: fires on its own quant grid, independent of Chance
@@ -377,12 +435,14 @@ private:
     //  Locked stream (Seed) vs fresh stream (Seed ^ loop). Déjà Vu picks per slot.
     uint32_t seedBase() const noexcept { return ext_.seed > 0 ? (uint32_t) ext_.seed * 2654435761u + 0x9E3779B9u : 0x6117C40Du; }
 
-    void onBoundaryExt (long long step, float gate, float vary, float traj, double stepSamp) noexcept
+    void onBoundaryExt (long long step, float gate, float vary, float traj, double stepSamp,
+                        int clockClass, int divKey) noexcept   // fb127: the fire group's identity
     {
         const int  ll    = ext_.loopLen;
         const int  slot  = (int) (((step % ll) + ll) % ll);
         const long long loopN = (long long) std::floor ((double) step / (double) ll);
-        const uint32_t kLock  = seedBase();
+        const uint32_t kLock  = seedBase() ^ (clockClass ? 0xF2EE0000u : 0u)
+                              ^ ((uint32_t) divKey * 0x9E3779B9u);              // decorrelated per group
         const uint32_t kFresh = kLock ^ ((uint32_t) (loopN & 0xffffffff) * 2246822519u + 0x85EBCA6Bu);
         const bool useLock = arpHash01 (kLock, (uint32_t) slot, 0xDAu) < ext_.dejavu;
         const uint32_t kUse = useLock ? kLock : kFresh;
@@ -394,12 +454,12 @@ private:
         else                     fire = arpHash01 (kUse, (uint32_t) slot, 0xF1u) < chance;
         if (! fire) return;
 
-        GlitchFx fx = pickFxExt (kUse, (uint32_t) slot);
-        if ((int) fx < 0) return;                                      // nothing enabled at all
-        // Chaos: sometimes substitute a different enabled reader (explicit-chaos knob)
+        GlitchFx fx = pickFxExt (kUse, (uint32_t) slot, clockClass, divKey);
+        if ((int) fx < 0) return;                                      // nothing in this group
+        // Chaos: sometimes substitute a different reader FROM THE SAME GROUP
         if (traj > 0.f && arpHash01 (kFresh, (uint32_t) slot, 0xC7u) < traj * 0.35f)
         {
-            const GlitchFx alt = pickFxExt (kFresh ^ 0x27d4eb2fu, (uint32_t) slot);
+            const GlitchFx alt = pickFxExt (kFresh ^ 0x27d4eb2fu, (uint32_t) slot, clockClass, divKey);
             if ((int) alt >= 0) fx = alt;
         }
 
@@ -453,19 +513,38 @@ private:
         pendingFire_ = true;
     }
 
-    GlitchFx pickFxExt (uint32_t kUse, uint32_t slot) const noexcept
+    int effDiv (int fi) const noexcept
+    { int d = ext_.fxGrid[fi]; return d < 0 ? 0 : (d > kArpRateRichN ? kArpRateRichN : d); }
+    // clockClass: 0 sync · 1 free · 2 Roll (prefers Roll-assigned, falls back to any; divKey -1 = any)
+    GlitchFx pickFxExt (uint32_t kUse, uint32_t slot, int clockClass, int divKey) const noexcept
     {
         int readers[6]; int nr = 0;
         const int rlist[6] = { (int) GlitchFx::Repeat, (int) GlitchFx::Reverse, (int) GlitchFx::TapeStop,
                                (int) GlitchFx::Pitch,  (int) GlitchFx::Freeze,  (int) GlitchFx::Scatter };
-        for (int i = 0; i < 6; ++i) if (ext_.en[rlist[i]]) readers[nr++] = rlist[i];
-        if (nr > 0)
+        for (int pass = 0; pass < 2; ++pass)
         {
-            const int pick = (int) (arpHash01 (kUse, slot, 0xB1u) * (float) nr);
-            return (GlitchFx) readers[pick >= nr ? nr - 1 : pick];
+            nr = 0;
+            for (int i = 0; i < 6; ++i)
+            {
+                if (! ext_.en[rlist[i]]) continue;
+                const int tg = ext_.fxTrig[rlist[i]];
+                const bool want = (clockClass == 2) ? (pass == 0 ? tg == 2 : true)   // Roll: its own first
+                                 : (tg == clockClass && effDiv (rlist[i]) == divKey);  // groups: exact match
+                if (want) readers[nr++] = rlist[i];
+            }
+            if (nr > 0)
+            {
+                const int pick = (int) (arpHash01 (kUse, slot, 0xB1u) * (float) nr);
+                return (GlitchFx) readers[pick >= nr ? nr - 1 : pick];
+            }
+            if (clockClass != 2) break;                    // grids never fall back across groups
         }
-        if (ext_.en[(int) GlitchFx::Gate])  return GlitchFx::Gate;      // overlays alone = main
-        if (ext_.en[(int) GlitchFx::Crush]) return GlitchFx::Crush;
+        // overlays alone = main (they follow their own Trig + Grid assignment too)
+        const int gI = (int) GlitchFx::Gate, cI = (int) GlitchFx::Crush;
+        const bool okG = (clockClass == 2) ? true : (ext_.fxTrig[gI] == clockClass && effDiv (gI) == divKey);
+        const bool okC = (clockClass == 2) ? true : (ext_.fxTrig[cI] == clockClass && effDiv (cI) == divKey);
+        if (ext_.en[gI] && okG) return GlitchFx::Gate;
+        if (ext_.en[cI] && okC) return GlitchFx::Crush;
         return (GlitchFx) (-1);
     }
 
@@ -482,7 +561,7 @@ private:
     {
         ++rollN_;
         const uint32_t k = 0x9011E4A7u ^ ((uint32_t) rollN_ * 2654435761u);
-        GlitchFx fx = pickFxExt (k, 0x77u);
+        GlitchFx fx = pickFxExt (k, 0x77u, 2, -1);
         if ((int) fx < 0) return;
         latchFireExt (fx, k, 0x77u, gate, 0.f, 0.f, stepSamp, nextStep_);
     }
@@ -1066,6 +1145,12 @@ private:
     // clock
     bool     haveClock_ = false; long long nextStep_ = 0; double nextBoundary_ = 0.0, freePpq_ = 0.0;
     float    lastBeats_ = -1.f;                    // fb116: re-anchor the step clock on any grid change
+    // fb127 — fire groups: one boundary tracker per active (clock, division) pair
+    struct GridTrk { bool have = false; long long step = 0; double bnd = 0.0; float beats = -1.f; };
+    struct ActiveG { GridTrk* trk = nullptr; int cls = 0, divKey = 0; double off = 0.0, stepSamp = 1.0; };
+    GridTrk  trkS_[kArpRateRichN + 1], trkF_[kArpRateRichN + 1];
+    ActiveG  activeG_[kGlitchFxN]; int nActiveG_ = 0;
+    double   freePpqF_ = 0.0;
 
     ArpRng   rng_;
 };
