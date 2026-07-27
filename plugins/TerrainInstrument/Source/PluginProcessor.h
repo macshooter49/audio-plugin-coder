@@ -558,6 +558,7 @@ public:
     int modDragIdleTicks_ = 0;                          // fb150 — drop phase auto-idles after ~200ms
     float modDragX_ = 0.f, modDragY_ = 0.f;
     juce::uint32 modDragSeq_ = 0;
+    static bool physicalLeftButtonDown();               // fb151 — window-server button truth (see PluginProcessor.cpp)
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
     void closeCardWindow (const juce::String& id);   // erase + notify the active editor (if any)
     void dockCardWindow  (const juce::String& id);   // erase + reopen in-plugin via the active editor

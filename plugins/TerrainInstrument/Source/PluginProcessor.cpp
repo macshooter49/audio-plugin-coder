@@ -4,6 +4,10 @@
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
 #include "ParametricEQ.h"
 #include <cmath>
+#if JUCE_MAC
+ #include <objc/message.h>   // fb151 — physical mouse-button state via +[NSEvent pressedMouseButtons]
+ #include <objc/runtime.h>
+#endif
 
 //==============================================================================
 TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
@@ -468,6 +472,27 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     slot.builtAmount = amount;
 }
 
+// fb151 — THE PHANTOM-DROP FIX (Max live: "hover links it... flashing constantly").
+// juce::ModifierKeys::getCurrentModifiersRealtime() on macOS refreshes only KEYBOARD
+// flags ([NSEvent modifierFlags]); its mouse-button bits are set solely by JUCE peer
+// mouse handlers — and an LFO-chip drag starts INSIDE the WKWebView, which JUCE never
+// sees. The old check read "released" for the entire drag, so the 60Hz timer declared
+// a drop every tick (assigning whatever was hovered) while the next JS move re-armed
+// phase 0: the 0↔1 strobe. Ask the window server instead — +[NSEvent pressedMouseButtons]
+// bit 0 is the physical left button for the whole session, any app, any view, no TCC
+// prompt (JUCE itself polls it: juce_NSViewComponentPeer_mac.mm:1867).
+bool TerrainInstrumentAudioProcessor::physicalLeftButtonDown()
+{
+   #if JUCE_MAC
+    using Fn = unsigned long (*) (id, SEL);
+    if (id cls = (id) objc_getClass ("NSEvent"))
+        return (reinterpret_cast<Fn> (&objc_msgSend) (cls, sel_registerName ("pressedMouseButtons")) & 1UL) != 0;
+    return false;
+   #else
+    return juce::ModifierKeys::getCurrentModifiersRealtime().isLeftButtonDown();   // Windows realtime IS physical (GetKeyState)
+   #endif
+}
+
 void TerrainInstrumentAudioProcessor::timerCallback()
 {
     // fb149 — NATIVE mod-drag tracking: while an LFO drag is live, the PROCESSOR follows
@@ -479,7 +504,7 @@ void TerrainInstrumentAudioProcessor::timerCallback()
         auto ms = juce::Desktop::getInstance().getMainMouseSource();   // by-value handle
         const auto p = ms.getScreenPosition();
         modDragX_ = (float) p.x; modDragY_ = (float) p.y; ++modDragSeq_;
-        if (! juce::ModifierKeys::getCurrentModifiersRealtime().isLeftButtonDown())
+        if (! physicalLeftButtonDown())   // fb151 — the JUCE realtime check can't see WKWebView-held buttons
         { modDragPhase_ = 1; modDragIdleTicks_ = 0; ++modDragSeq_; }   // native drop
     }
     else if (modDragPhase_ == 1 && ++modDragIdleTicks_ > 12)

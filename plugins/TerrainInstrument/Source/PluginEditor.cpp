@@ -650,11 +650,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const auto wb = webView != nullptr ? webView->getScreenBounds() : juce::Rectangle<int>();
                 const double z = uiZoom_ > 0.01 ? uiZoom_ : 1.0;
                 const double lx = (proc.modDragX_ - wb.getX()) / z, ly = (proc.modDragY_ - wb.getY()) / z;
+                bool inside = wb.contains ((int) proc.modDragX_, (int) proc.modDragY_);
+                // fb151 — card windows are setAlwaysOnTop: one parked OVER the editor owns
+                // the pixels it covers. Without this, a drop onto that card ALSO landed in
+                // the docked UI behind it (bounds-only 'in' said yes in both windows).
+                if (inside)
+                    for (auto& cw : proc.cardWindows_)
+                        if (cw.second != nullptr && cw.second->isShowing()
+                            && cw.second->getScreenBounds().contains ((int) proc.modDragX_, (int) proc.modDragY_))
+                        { inside = false; break; }
                 juce::String j; j.preallocateBytes (128);
                 j << "{\"l\":" << proc.modDragLfo_ << ",\"p\":" << proc.modDragPhase_
                   << ",\"c\":" << proc.modDragSrc_ << ",\"s\":" << (juce::int64) proc.modDragSeq_
                   << ",\"lx\":" << juce::String (lx, 1) << ",\"ly\":" << juce::String (ly, 1)
-                  << ",\"in\":" << (wb.contains ((int) proc.modDragX_, (int) proc.modDragY_) ? 1 : 0) << "}";
+                  << ",\"in\":" << (inside ? 1 : 0) << "}";
                 complete (j);
             })
             .withNativeFunction("setModDrag", [this](const juce::Array<juce::var>& args,
@@ -665,6 +674,11 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // processor's 60Hz timer keeps tracking + detects release natively.
                 if (args.size() >= 4)
                 {
+                    // fb151 — a phase-0 (move) is only valid while the button is physically
+                    // held: a late throttled pointermove arriving after release must not
+                    // resurrect a finished drag (drop → re-arm → second drop).
+                    if ((int) args[3] == 0 && ! TerrainInstrumentAudioProcessor::physicalLeftButtonDown())
+                    { complete ({}); return; }
                     audioProcessor.modDragLfo_   = (int) args[0];
                     audioProcessor.modDragPhase_ = (int) args[3];
                     audioProcessor.modDragSrc_   = (args.size() > 4 ? (int) args[4] : 0);
@@ -4718,6 +4732,9 @@ public:
                     // coords come from the real mouse, tracking + release are native (60Hz timer)
                     if (args.size() >= 4)
                     {
+                        // fb151 — same stale-move gate as the main window's native
+                        if ((int) args[3] == 0 && ! TerrainInstrumentAudioProcessor::physicalLeftButtonDown())
+                        { complete ({}); return; }
                         proc.modDragLfo_   = (int) args[0];
                         proc.modDragPhase_ = (int) args[3];
                         proc.modDragSrc_   = (args.size() > 4 ? (int) args[4] : 1);
