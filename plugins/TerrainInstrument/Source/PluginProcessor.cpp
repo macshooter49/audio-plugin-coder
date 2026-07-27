@@ -470,6 +470,19 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
 
 void TerrainInstrumentAudioProcessor::timerCallback()
 {
+    // fb149 — NATIVE mod-drag tracking: while an LFO drag is live, the PROCESSOR follows
+    // the real mouse (Desktop) and detects the release itself. WebKit's event delivery
+    // outside a window can never strand a cross-window drag, and screen coords are
+    // zoom-proof (the per-window getModDrag natives transform to local).
+    if (modDragPhase_ == 0)
+    {
+        auto ms = juce::Desktop::getInstance().getMainMouseSource();   // by-value handle
+        const auto p = ms.getScreenPosition();
+        modDragX_ = (float) p.x; modDragY_ = (float) p.y; ++modDragSeq_;
+        if (! juce::ModifierKeys::getCurrentModifiersRealtime().isLeftButtonDown())
+        { modDragPhase_ = 1; ++modDragSeq_; }                          // native drop
+    }
+
     rebuildMorphIfNeeded (morphA_, 0, ParameterIDs::SYN_OSC_A_WT_PRESET,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_AMT);

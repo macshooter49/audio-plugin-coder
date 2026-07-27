@@ -641,16 +641,35 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.getSynthModMatrix());
             })
+            .withNativeFunction("getModDrag", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb149 — the blackboard with THIS window's local coords (screen -> webview,
+                // divided by the settled zoom; elementFromPoint-ready)
+                auto& proc = audioProcessor;
+                const auto wb = webView != nullptr ? webView->getScreenBounds() : juce::Rectangle<int>();
+                const double z = uiZoom_ > 0.01 ? uiZoom_ : 1.0;
+                const double lx = (proc.modDragX_ - wb.getX()) / z, ly = (proc.modDragY_ - wb.getY()) / z;
+                juce::String j; j.preallocateBytes (128);
+                j << "{\"l\":" << proc.modDragLfo_ << ",\"p\":" << proc.modDragPhase_
+                  << ",\"c\":" << proc.modDragSrc_ << ",\"s\":" << (juce::int64) proc.modDragSeq_
+                  << ",\"lx\":" << juce::String (lx, 1) << ",\"ly\":" << juce::String (ly, 1)
+                  << ",\"in\":" << (wb.contains ((int) proc.modDragX_, (int) proc.modDragY_) ? 1 : 0) << "}";
+                complete (j);
+            })
             .withNativeFunction("setModDrag", [this](const juce::Array<juce::var>& args,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // fb145 — LFO-chip drag broadcast (lfo, screenX, screenY, phase 0/1)
+                // fb145/149 — LFO-chip drag broadcast (lfo, _x, _y, phase, src). Coords are
+                // seeded from the REAL mouse (Desktop) — zoom/window-chrome-proof; the
+                // processor's 60Hz timer keeps tracking + detects release natively.
                 if (args.size() >= 4)
                 {
                     audioProcessor.modDragLfo_   = (int) args[0];
-                    audioProcessor.modDragX_     = (float) (double) args[1];
-                    audioProcessor.modDragY_     = (float) (double) args[2];
                     audioProcessor.modDragPhase_ = (int) args[3];
+                    audioProcessor.modDragSrc_   = (args.size() > 4 ? (int) args[4] : 0);
+                    const auto p = juce::Desktop::getInstance().getMainMouseSource().getScreenPosition();
+                    audioProcessor.modDragX_ = (float) p.x; audioProcessor.modDragY_ = (float) p.y;
                     ++audioProcessor.modDragSeq_;
                 }
                 complete({});
@@ -4676,15 +4695,37 @@ public:
                     if (args.size() > 0) proc.setSynthModMatrix (args[0].toString());   // fb145 — drops in popped cards write it
                     complete ({});
                 })
-                .withNativeFunction ("getModDrag", [&proc](const juce::Array<juce::var>&,
-                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                .withNativeFunction ("getModDrag", [this, &proc](const juce::Array<juce::var>&,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
-                    // fb145 — the drag blackboard, polled by popped cards each frame
-                    juce::String j; j.preallocateBytes (96);
+                    // fb145/149 — the drag blackboard with THIS window's local coords
+                    // (borderless TopLevelWindow: window origin == content origin; the
+                    // card element's CSS zoom is elementFromPoint's problem, not ours)
+                    const auto wb = getScreenBounds();
+                    const double lx = proc.modDragX_ - wb.getX(), ly = proc.modDragY_ - wb.getY();
+                    juce::String j; j.preallocateBytes (144);
                     j << "{\"l\":" << proc.modDragLfo_ << ",\"x\":" << juce::String (proc.modDragX_, 1)
                       << ",\"y\":" << juce::String (proc.modDragY_, 1) << ",\"p\":" << proc.modDragPhase_
-                      << ",\"s\":" << (juce::int64) proc.modDragSeq_ << "}";
+                      << ",\"c\":" << proc.modDragSrc_ << ",\"s\":" << (juce::int64) proc.modDragSeq_
+                      << ",\"lx\":" << juce::String (lx, 1) << ",\"ly\":" << juce::String (ly, 1)
+                      << ",\"in\":" << (wb.contains ((int) proc.modDragX_, (int) proc.modDragY_) ? 1 : 0) << "}";
                     complete (j);
+                })
+                .withNativeFunction ("setModDrag", [&proc](const juce::Array<juce::var>& args,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    // fb149 — the POP-OUT LFO PALETTE originates drags too (lfo,_,_,phase,src);
+                    // coords come from the real mouse, tracking + release are native (60Hz timer)
+                    if (args.size() >= 4)
+                    {
+                        proc.modDragLfo_   = (int) args[0];
+                        proc.modDragPhase_ = (int) args[3];
+                        proc.modDragSrc_   = (args.size() > 4 ? (int) args[4] : 1);
+                        const auto p = juce::Desktop::getInstance().getMainMouseSource().getScreenPosition();
+                        proc.modDragX_ = (float) p.x; proc.modDragY_ = (float) p.y;
+                        ++proc.modDragSeq_;
+                    }
+                    complete ({});
                 })
                 .withNativeFunction ("dragCardWindow", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -4925,7 +4966,7 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
                                                               std::optional<juce::Point<int>> mouseScreen)
 {
     // Whitelist — the id lands in window titles and dock evals; only the 4 FLOW cards exist.
-    if (id != "arp" && id != "chop" && id != "gli" && id != "rbn") return;
+    if (id != "arp" && id != "chop" && id != "gli" && id != "rbn" && id != "mod") return;   // fb149 — "mod" = the pop-out LFO palette
 
     auto& wins = audioProcessor.cardWindows_;
     if (auto it = wins.find (id); it != wins.end() && it->second != nullptr)

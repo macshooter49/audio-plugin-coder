@@ -554,6 +554,7 @@ public:
     // fb145 — mod-drag blackboard: the main window streams LFO-chip drags here (screen
     // coords); popped card windows poll it each frame. Message thread only.
     int modDragLfo_ = 0, modDragPhase_ = 2;            // phase: 0 move · 1 drop · 2 idle
+    int modDragSrc_ = 0;                                // fb149 — 0 = main window · 1 = the LFO palette
     float modDragX_ = 0.f, modDragY_ = 0.f;
     juce::uint32 modDragSeq_ = 0;
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
