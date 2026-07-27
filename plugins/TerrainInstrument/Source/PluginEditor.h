@@ -1436,6 +1436,7 @@ private:
     // SAVE phase: pull serialized state from JS every 5 ticks (only after pageReady)
     int modStateTickCount { 0 };
     bool pageReady { false };
+    juce::String bootSettingsJson_;   // fb148 — InstrumentSettings.json read ONCE at open (the pre-ready tick was hitting disk ~60x/sec)
 
     // CHANNEL WATCHDOG (wd9) — the WKWebView eval channel can die silently (evals
     // no-op, callbacks stop; scopes freeze/flatline until the editor is reopened).

@@ -841,6 +841,12 @@ public:
     // editor restores the page, while every NEW instance (or project reload) starts on the front page.
     std::atomic<int> uiPage { 0 };
 
+    // fb148 — UI-consumer census: the main editor + every popped card window. The audio
+    // thread gates PURE-VIZ production on this (spectrum FFTs, osc-scope publish), so a
+    // closed UI costs nothing to visualize for — "closed <= open" by construction.
+    std::atomic<int> uiClients_ { 0 };
+    bool vizConsumersLive() const noexcept { return uiClients_.load (std::memory_order_relaxed) > 0; }
+
     // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)
     SpectrumAnalyzer analyzerPre, analyzerPost;
 

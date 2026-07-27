@@ -111,6 +111,12 @@ static void terrainApplyWebScale (juce::Component& root, double pageZoom, double
             // crisp text/SVG at any size) and magnification returns to 1. Both are set
             // on every call so the pair can never drift apart. (fb96 used magnification
             // alone: smooth, but it NEVER re-rasters → Max: "low quality PNG shit".)
+            // fb148 — kill WKWebView's WHITE backing (the open-flash): drawsBackground=NO via KVC
+            {
+                id no  = ((id (*) (Class, SEL, signed char)) objc_msgSend) (objc_getClass ("NSNumber"), sel_registerName ("numberWithBool:"), 0);
+                id key = ((id (*) (Class, SEL, const char*)) objc_msgSend) (objc_getClass ("NSString"), sel_registerName ("stringWithUTF8String:"), "drawsBackground");
+                ((void (*) (id, SEL, id, id)) objc_msgSend) (v, sel_registerName ("setValue:forKey:"), no, key);
+            }
             if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setPageZoom:")))
                 ((void (*) (id, SEL, double)) objc_msgSend) (v, sel_registerName ("setPageZoom:"), pageZoom);
             if (((bool (*) (id, SEL, SEL)) objc_msgSend) (v, sel_registerName ("respondsToSelector:"), sel_registerName ("setMagnification:")))
@@ -135,6 +141,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // Create WebBrowserComponent with all relay options
     webView = std::make_unique<juce::WebBrowserComponent>(
         juce::WebBrowserComponent::Options()
+            .withKeepPageLoadedWhenBrowserIsHidden()   // fb148 — FL hides/shows plugin windows; default = navigate to about:blank + goBack (a visible reload risk)
             .withBackend(juce::WebBrowserComponent::Options::Backend::webview2)
             .withWinWebView2Options(
                 juce::WebBrowserComponent::Options::WinWebView2{}
@@ -4395,8 +4402,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         setSize (w0, juce::roundToInt ((double) w0 * kBaseH / kBaseW));
     }
 
+    // fb148 — one boot-time read of the settings file (the pre-ready push used to re-read it every tick)
+    {
+        auto sf = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                    .getChildFile ("Waves Crate").getChildFile ("Terrain").getChildFile ("InstrumentSettings.json");
+        if (sf.existsAsFile())
+            bootSettingsJson_ = sf.loadFileAsString().replace ("\\", "\\\\").replace ("'", "\\'");
+    }
+
     // Start visualization timer at 60Hz for smooth LFO/mod display
     startTimerHz(60);
+    audioProcessor.uiClients_.fetch_add (1, std::memory_order_relaxed);   // fb148 — viz census
 
     // Auto-reload the previously-loaded sample(s).
     //
@@ -4509,6 +4525,7 @@ public:
 
         web = std::make_unique<juce::WebBrowserComponent>(
             juce::WebBrowserComponent::Options()
+                .withKeepPageLoadedWhenBrowserIsHidden()   // fb148 — protect card pages from hide-triggered about:blank round-trips
                 .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
                 .withWinWebView2Options (
                     juce::WebBrowserComponent::Options::WinWebView2{}
@@ -4974,6 +4991,7 @@ TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
     // Popped cards are fully independent windows (fb91) — nothing to unhook; they
     // live on, processor-owned, until their own ✕/dock or the instance dies.
     stopTimer();
+    audioProcessor.uiClients_.fetch_sub (1, std::memory_order_relaxed);   // fb148 — viz census
     blendPool_.removeAllJobs (true, 4000);   // drain bakes before members die
 }
 
@@ -5287,7 +5305,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // CRITICAL: never save before pageReady or we'd overwrite saved data with empty/default state
     modStateTickCount++;
 
-    if (!pageReady)
+    if (!pageReady && (modStateTickCount % 6) == 0)   // fb148 — 10Hz pre-boot (60Hz eval spam competed with the page parse)
     {
         // Push mod state JSON restore (repeat every tick until page signals ready)
         if (audioProcessor.modStateJson.isNotEmpty())
@@ -5318,12 +5336,10 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         js << "if(typeof restoreUiPage==='function'){restoreUiPage("
            << juce::String(audioProcessor.uiPage.load()) << ");}";
 
-        // Push plugin settings (theme) during restore window
-        auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                              .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
-        if (settingsFile.existsAsFile())
+        // Push plugin settings (theme) during restore window — fb148: from the boot cache, not disk
+        if (bootSettingsJson_.isNotEmpty())
         {
-            auto sJson = settingsFile.loadFileAsString().replace("\\", "\\\\").replace("'", "\\'");
+            const auto& sJson = bootSettingsJson_;
             js << "if(typeof restoreSettings==='function'){restoreSettings('" << sJson << "');}";
             captureDragStrip.setDarkMode(sJson.contains("\"dark\""));
         }

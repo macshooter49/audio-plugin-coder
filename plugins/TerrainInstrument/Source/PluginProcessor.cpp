@@ -80,6 +80,7 @@ TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 {
     if (! cardWindows_.empty())
         terrainCardLogP ("instance dtor clearing " + juce::String ((int) cardWindows_.size()) + " card window(s)");
+    uiClients_.fetch_sub ((int) cardWindows_.size(), std::memory_order_relaxed);   // fb148 — viz census
     cardWindows_.clear();   // fb83 — popped card windows die with the plugin INSTANCE (hosts destroy processors on the message thread)
 
     // Stop the morph rebuild timer BEFORE any members are destroyed — the
@@ -107,13 +108,16 @@ static void terrainCardLogP (const juce::String& msg)
 
 void TerrainInstrumentAudioProcessor::adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w)
 {
+    if (cardWindows_.find (id) == cardWindows_.end())
+        uiClients_.fetch_add (1, std::memory_order_relaxed);              // fb148 — viz census
     cardWindows_[id] = std::move (w);
 }
 
 void TerrainInstrumentAudioProcessor::closeCardWindow (const juce::String& id)
 {
     terrainCardLogP ("closing " + id + " (card ✕)");
-    cardWindows_.erase (id);
+    if (cardWindows_.erase (id) > 0)
+        uiClients_.fetch_sub (1, std::memory_order_relaxed);              // fb148 — viz census
     if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
         ed->notifyCardWindowGone (id, false);
 }
@@ -121,7 +125,8 @@ void TerrainInstrumentAudioProcessor::closeCardWindow (const juce::String& id)
 void TerrainInstrumentAudioProcessor::dockCardWindow (const juce::String& id)
 {
     terrainCardLogP ("docking " + id + " (card ⧉)");
-    cardWindows_.erase (id);
+    if (cardWindows_.erase (id) > 0)
+        uiClients_.fetch_sub (1, std::memory_order_relaxed);              // fb148 — viz census
     if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
         ed->notifyCardWindowGone (id, true);    // no editor open → dock degrades to a plain close
 }
@@ -3560,6 +3565,7 @@ static bool modCfgEq (const wc::ModConfig& a, const wc::ModConfig& b) noexcept
 void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+    const bool vizLive = vizConsumersLive();   // fb148 — no UI, no viz work (Serum does the same)
 
     const auto numSamples = buffer.getNumSamples();
     const auto numChannels = buffer.getNumChannels();
@@ -5140,7 +5146,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
         oscScopePubAccum_ += (double) numSamples;
-        const bool oscDoPub = (oscScopePubAccum_ >= getSampleRate() / 60.0);
+        if (! vizLive) oscScopePubAccum_ = 0.0;   // fb148 — no backlog while closed (a grown accumulator would publish every block on reopen)
+        const bool oscDoPub = vizLive && (oscScopePubAccum_ >= getSampleRate() / 60.0);
         if (oscDoPub) oscScopePubAccum_ -= getSampleRate() / 60.0;
         // HARM-VIZ (hm2) — the most-active voice's LIVE partial bank feeds the white bars,
         // so every key press moves the display (the params-only bake is the idle fallback).
@@ -5866,11 +5873,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 eqR.setBandParams (b, bf, bg, bq, bByp);
             }
 
-            analyzerPre.pushSample (0.5f * (wetL + wetR));
+            if (vizLive) analyzerPre.pushSample (0.5f * (wetL + wetR));
             wetL = eqL.processSample (wetL);
             if (rightChannel != nullptr) wetR = eqR.processSample (wetR);
             else wetR = wetL;
-            analyzerPost.pushSample (0.5f * (wetL + wetR));
+            if (vizLive) analyzerPost.pushSample (0.5f * (wetL + wetR));
         }
 
         // Master mix + output gain
