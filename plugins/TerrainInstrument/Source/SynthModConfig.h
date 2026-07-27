@@ -153,6 +153,39 @@ enum class ModDest : int
     // ── fb79 — per-osc FILTER SENDS (the F1/F2 pills went per-oscillator; default 0 = dry) ──
     OscF1SendA, OscF1SendB, OscF1SendC, OscF1SendD,
     OscF2SendA, OscF2SendB, OscF2SendC, OscF2SendD,
+    // ── fb145 — EVERY CARD KNOB + SLIDER (append-only; block-rate, applied via flowKnob
+    //    at the processor read sites; steppers/toggles/chain excluded by design) ──
+    FlowArpSwing, FlowArpRoll, FlowArpTimbre, FlowArpGlide,
+    FlowArpPRange, FlowArpPCurve, FlowArpPQuant, FlowArpPSlide,
+    FlowArpGLen, FlowArpGCurve, FlowArpGRand, FlowArpGSlide,
+    FlowArpVRange, FlowArpVCurve, FlowArpVRand, FlowArpVFloor,
+    FlowArpORange, FlowArpOBias, FlowArpORand, FlowArpOSpread,
+    FlowArpRCount, FlowArpRDecay, FlowArpRCurve, FlowArpRAmt,
+    FlowArpCAmt, FlowArpCBias, FlowArpCSeed, FlowArpCDrift,
+    FlowArpWDepth, FlowArpWCurve, FlowArpWSlide, FlowArpWRand,
+    FlowArpMix,
+    FlowChopScan, FlowChopWander, FlowChopSpread, FlowChopSpeed,
+    FlowChopCrush, FlowChopDetune, FlowChopWow, FlowChopSmooth,
+    FlowChopGrit, FlowChopTrim, FlowChopOSpread, FlowChopOBias,
+    FlowChopOLock, FlowChopOSeed, FlowChopPRange, FlowChopPSteps,
+    FlowChopPGlide, FlowChopPQuant, FlowChopRvOdds, FlowChopRvRun,
+    FlowChopRvSpread, FlowChopRvSnap, FlowChopTLen, FlowChopTCurve,
+    FlowChopTRand, FlowChopTGate, FlowChopRCount, FlowChopRDecay,
+    FlowChopRCurve, FlowChopROdds, FlowChopDAmt, FlowChopDSize,
+    FlowChopDSpray, FlowChopDTone, FlowChopMix,
+    FlowGliDecay, FlowGliDrop, FlowGliBurst, FlowGliPing,
+    FlowGliBend, FlowGliRepSize, FlowGliRepSpeed, FlowGliRepFade,
+    FlowGliRepVary, FlowGliRevLen, FlowGliRevFade, FlowGliRevSprd,
+    FlowGliRevSnap, FlowGliTapeCurve, FlowGliTapeTime, FlowGliTapeDepth,
+    FlowGliTapeSpin, FlowGliGateRate, FlowGliGateShape, FlowGliGateNudge,
+    FlowGliGateAmt, FlowGliPitShift, FlowGliPitWalk, FlowGliPitGlide,
+    FlowGliPitJump, FlowGliCrshBits, FlowGliCrshRate, FlowGliCrshTone,
+    FlowGliCrshAmt, FlowGliFrzSize, FlowGliFrzSpray, FlowGliFrzShine,
+    FlowGliFrzMelt, FlowGliSctSize, FlowGliSctAmt, FlowGliSctVary,
+    FlowGliSctWidth, FlowGliMix,
+    FlowRbnVary, FlowRbnDrift, FlowRbnWobble, FlowRbnLvl,
+    FlowRbnPan, FlowRbnAfter, FlowRbnGlide, FlowRbnOverlap,
+    FlowRbnFade,
     NumDests
 };
 
@@ -536,6 +569,122 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // OscF2SendB
     { ModDomain::Linear01,  1.0f },  // OscF2SendC
     { ModDomain::Linear01,  1.0f },  // OscF2SendD
+    // ── fb145 — card knob/slider dests (all normalized 0..1 params; Linear01 full-span) ──
+    { ModDomain::Linear01,  1.0f },  // FlowArpSwing
+    { ModDomain::Linear01,  1.0f },  // FlowArpRoll
+    { ModDomain::Linear01,  1.0f },  // FlowArpTimbre
+    { ModDomain::Linear01,  1.0f },  // FlowArpGlide
+    { ModDomain::Linear01,  1.0f },  // FlowArpPRange
+    { ModDomain::Linear01,  1.0f },  // FlowArpPCurve
+    { ModDomain::Linear01,  1.0f },  // FlowArpPQuant
+    { ModDomain::Linear01,  1.0f },  // FlowArpPSlide
+    { ModDomain::Linear01,  1.0f },  // FlowArpGLen
+    { ModDomain::Linear01,  1.0f },  // FlowArpGCurve
+    { ModDomain::Linear01,  1.0f },  // FlowArpGRand
+    { ModDomain::Linear01,  1.0f },  // FlowArpGSlide
+    { ModDomain::Linear01,  1.0f },  // FlowArpVRange
+    { ModDomain::Linear01,  1.0f },  // FlowArpVCurve
+    { ModDomain::Linear01,  1.0f },  // FlowArpVRand
+    { ModDomain::Linear01,  1.0f },  // FlowArpVFloor
+    { ModDomain::Linear01,  1.0f },  // FlowArpORange
+    { ModDomain::Linear01,  1.0f },  // FlowArpOBias
+    { ModDomain::Linear01,  1.0f },  // FlowArpORand
+    { ModDomain::Linear01,  1.0f },  // FlowArpOSpread
+    { ModDomain::Linear01,  1.0f },  // FlowArpRCount
+    { ModDomain::Linear01,  1.0f },  // FlowArpRDecay
+    { ModDomain::Linear01,  1.0f },  // FlowArpRCurve
+    { ModDomain::Linear01,  1.0f },  // FlowArpRAmt
+    { ModDomain::Linear01,  1.0f },  // FlowArpCAmt
+    { ModDomain::Linear01,  1.0f },  // FlowArpCBias
+    { ModDomain::Linear01,  1.0f },  // FlowArpCSeed
+    { ModDomain::Linear01,  1.0f },  // FlowArpCDrift
+    { ModDomain::Linear01,  1.0f },  // FlowArpWDepth
+    { ModDomain::Linear01,  1.0f },  // FlowArpWCurve
+    { ModDomain::Linear01,  1.0f },  // FlowArpWSlide
+    { ModDomain::Linear01,  1.0f },  // FlowArpWRand
+    { ModDomain::Linear01,  1.0f },  // FlowArpMix
+    { ModDomain::Linear01,  1.0f },  // FlowChopScan
+    { ModDomain::Linear01,  1.0f },  // FlowChopWander
+    { ModDomain::Linear01,  1.0f },  // FlowChopSpread
+    { ModDomain::Linear01,  1.0f },  // FlowChopSpeed
+    { ModDomain::Linear01,  1.0f },  // FlowChopCrush
+    { ModDomain::Linear01,  1.0f },  // FlowChopDetune
+    { ModDomain::Linear01,  1.0f },  // FlowChopWow
+    { ModDomain::Linear01,  1.0f },  // FlowChopSmooth
+    { ModDomain::Linear01,  1.0f },  // FlowChopGrit
+    { ModDomain::Linear01,  1.0f },  // FlowChopTrim
+    { ModDomain::Linear01,  1.0f },  // FlowChopOSpread
+    { ModDomain::Linear01,  1.0f },  // FlowChopOBias
+    { ModDomain::Linear01,  1.0f },  // FlowChopOLock
+    { ModDomain::Linear01,  1.0f },  // FlowChopOSeed
+    { ModDomain::Linear01,  1.0f },  // FlowChopPRange
+    { ModDomain::Linear01,  1.0f },  // FlowChopPSteps
+    { ModDomain::Linear01,  1.0f },  // FlowChopPGlide
+    { ModDomain::Linear01,  1.0f },  // FlowChopPQuant
+    { ModDomain::Linear01,  1.0f },  // FlowChopRvOdds
+    { ModDomain::Linear01,  1.0f },  // FlowChopRvRun
+    { ModDomain::Linear01,  1.0f },  // FlowChopRvSpread
+    { ModDomain::Linear01,  1.0f },  // FlowChopRvSnap
+    { ModDomain::Linear01,  1.0f },  // FlowChopTLen
+    { ModDomain::Linear01,  1.0f },  // FlowChopTCurve
+    { ModDomain::Linear01,  1.0f },  // FlowChopTRand
+    { ModDomain::Linear01,  1.0f },  // FlowChopTGate
+    { ModDomain::Linear01,  1.0f },  // FlowChopRCount
+    { ModDomain::Linear01,  1.0f },  // FlowChopRDecay
+    { ModDomain::Linear01,  1.0f },  // FlowChopRCurve
+    { ModDomain::Linear01,  1.0f },  // FlowChopROdds
+    { ModDomain::Linear01,  1.0f },  // FlowChopDAmt
+    { ModDomain::Linear01,  1.0f },  // FlowChopDSize
+    { ModDomain::Linear01,  1.0f },  // FlowChopDSpray
+    { ModDomain::Linear01,  1.0f },  // FlowChopDTone
+    { ModDomain::Linear01,  1.0f },  // FlowChopMix
+    { ModDomain::Linear01,  1.0f },  // FlowGliDecay
+    { ModDomain::Linear01,  1.0f },  // FlowGliDrop
+    { ModDomain::Linear01,  1.0f },  // FlowGliBurst
+    { ModDomain::Linear01,  1.0f },  // FlowGliPing
+    { ModDomain::Linear01,  1.0f },  // FlowGliBend
+    { ModDomain::Linear01,  1.0f },  // FlowGliRepSize
+    { ModDomain::Linear01,  1.0f },  // FlowGliRepSpeed
+    { ModDomain::Linear01,  1.0f },  // FlowGliRepFade
+    { ModDomain::Linear01,  1.0f },  // FlowGliRepVary
+    { ModDomain::Linear01,  1.0f },  // FlowGliRevLen
+    { ModDomain::Linear01,  1.0f },  // FlowGliRevFade
+    { ModDomain::Linear01,  1.0f },  // FlowGliRevSprd
+    { ModDomain::Linear01,  1.0f },  // FlowGliRevSnap
+    { ModDomain::Linear01,  1.0f },  // FlowGliTapeCurve
+    { ModDomain::Linear01,  1.0f },  // FlowGliTapeTime
+    { ModDomain::Linear01,  1.0f },  // FlowGliTapeDepth
+    { ModDomain::Linear01,  1.0f },  // FlowGliTapeSpin
+    { ModDomain::Linear01,  1.0f },  // FlowGliGateRate
+    { ModDomain::Linear01,  1.0f },  // FlowGliGateShape
+    { ModDomain::Linear01,  1.0f },  // FlowGliGateNudge
+    { ModDomain::Linear01,  1.0f },  // FlowGliGateAmt
+    { ModDomain::Linear01,  1.0f },  // FlowGliPitShift
+    { ModDomain::Linear01,  1.0f },  // FlowGliPitWalk
+    { ModDomain::Linear01,  1.0f },  // FlowGliPitGlide
+    { ModDomain::Linear01,  1.0f },  // FlowGliPitJump
+    { ModDomain::Linear01,  1.0f },  // FlowGliCrshBits
+    { ModDomain::Linear01,  1.0f },  // FlowGliCrshRate
+    { ModDomain::Linear01,  1.0f },  // FlowGliCrshTone
+    { ModDomain::Linear01,  1.0f },  // FlowGliCrshAmt
+    { ModDomain::Linear01,  1.0f },  // FlowGliFrzSize
+    { ModDomain::Linear01,  1.0f },  // FlowGliFrzSpray
+    { ModDomain::Linear01,  1.0f },  // FlowGliFrzShine
+    { ModDomain::Linear01,  1.0f },  // FlowGliFrzMelt
+    { ModDomain::Linear01,  1.0f },  // FlowGliSctSize
+    { ModDomain::Linear01,  1.0f },  // FlowGliSctAmt
+    { ModDomain::Linear01,  1.0f },  // FlowGliSctVary
+    { ModDomain::Linear01,  1.0f },  // FlowGliSctWidth
+    { ModDomain::Linear01,  1.0f },  // FlowGliMix
+    { ModDomain::Linear01,  1.0f },  // FlowRbnVary
+    { ModDomain::Linear01,  1.0f },  // FlowRbnDrift
+    { ModDomain::Linear01,  1.0f },  // FlowRbnWobble
+    { ModDomain::Linear01,  1.0f },  // FlowRbnLvl
+    { ModDomain::Linear01,  1.0f },  // FlowRbnPan
+    { ModDomain::Linear01,  1.0f },  // FlowRbnAfter
+    { ModDomain::Linear01,  1.0f },  // FlowRbnGlide
+    { ModDomain::Linear01,  1.0f },  // FlowRbnOverlap
+    { ModDomain::Linear01,  1.0f },  // FlowRbnFade
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

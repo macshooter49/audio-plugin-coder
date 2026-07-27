@@ -551,6 +551,11 @@ public:
     // on the message thread) or its own ✕/dock. Type-erased as juce::Component so the
     // concrete window class stays private to PluginEditor.cpp.
     std::map<juce::String, std::unique_ptr<juce::Component>> cardWindows_;
+    // fb145 — mod-drag blackboard: the main window streams LFO-chip drags here (screen
+    // coords); popped card windows poll it each frame. Message thread only.
+    int modDragLfo_ = 0, modDragPhase_ = 2;            // phase: 0 move · 1 drop · 2 idle
+    float modDragX_ = 0.f, modDragY_ = 0.f;
+    juce::uint32 modDragSeq_ = 0;
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
     void closeCardWindow (const juce::String& id);   // erase + notify the active editor (if any)
     void dockCardWindow  (const juce::String& id);   // erase + reopen in-plugin via the active editor

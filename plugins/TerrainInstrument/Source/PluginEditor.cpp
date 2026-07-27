@@ -634,6 +634,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.getSynthModMatrix());
             })
+            .withNativeFunction("setModDrag", [this](const juce::Array<juce::var>& args,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb145 — LFO-chip drag broadcast (lfo, screenX, screenY, phase 0/1)
+                if (args.size() >= 4)
+                {
+                    audioProcessor.modDragLfo_   = (int) args[0];
+                    audioProcessor.modDragX_     = (float) (double) args[1];
+                    audioProcessor.modDragY_     = (float) (double) args[2];
+                    audioProcessor.modDragPhase_ = (int) args[3];
+                    ++audioProcessor.modDragSeq_;
+                }
+                complete({});
+            })
             .withNativeFunction("setDelayFreeze", [this](const juce::Array<juce::var>& args,
                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4633,6 +4647,27 @@ public:
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     complete (juce::var (proc.getRbnFeedJson()));
+                })
+                .withNativeFunction ("getSynthMod", [&proc](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (proc.getSynthModMatrix());          // fb145 — cards read the matrix
+                })
+                .withNativeFunction ("setSynthMod", [&proc](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() > 0) proc.setSynthModMatrix (args[0].toString());   // fb145 — drops in popped cards write it
+                    complete ({});
+                })
+                .withNativeFunction ("getModDrag", [&proc](const juce::Array<juce::var>&,
+                                                           juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    // fb145 — the drag blackboard, polled by popped cards each frame
+                    juce::String j; j.preallocateBytes (96);
+                    j << "{\"l\":" << proc.modDragLfo_ << ",\"x\":" << juce::String (proc.modDragX_, 1)
+                      << ",\"y\":" << juce::String (proc.modDragY_, 1) << ",\"p\":" << proc.modDragPhase_
+                      << ",\"s\":" << (juce::int64) proc.modDragSeq_ << "}";
+                    complete (j);
                 })
                 .withNativeFunction ("dragCardWindow", [this](const juce::Array<juce::var>& args,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)

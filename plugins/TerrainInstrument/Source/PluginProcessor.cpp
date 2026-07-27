@@ -5003,7 +5003,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // chord sustaining under the arp — the held note-ons pass through at vel×(1-blend), the arp
         // events play at vel×blend (velocity crossfade through the shared poly synth). Changing the
         // blend affects newly-struck notes (MIDI velocity is set at note-on).
-        const float kBlend  = flowBase (ParameterIDs::FLOW_ARP_BLEND);
+        const float kBlend  = flowKnob (ParameterIDs::FLOW_ARP_BLEND, wc::ModDest::FlowArpMix);
         const float dryGain = 1.0f - kBlend;
 
         // ── extension card (fb105): lane pattern copy-on-change + the 35 card scalars ──
@@ -5019,22 +5019,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             X.dir     = (int) rawParam (ParameterIDs::FLOW_ARP_DIR)->load();       // choice = INDEX
             X.octaves = 1 + (int) rawParam (ParameterIDs::FLOW_ARP_OCTR)->load();
             X.sorted  = rawParam (ParameterIDs::FLOW_ARP_SORTED)->load() > 0.5f;
-            X.swing  = flowBase (ParameterIDs::FLOW_ARP_SWING);  X.mroll  = flowBase (ParameterIDs::FLOW_ARP_MROLL);
-            X.timbre = flowBase (ParameterIDs::FLOW_ARP_TIMBRE); X.glide  = flowBase (ParameterIDs::FLOW_ARP_GLIDE);
-            X.pRange = flowBase (ParameterIDs::FLOW_ARP_P_RANGE); X.pCurve = flowBase (ParameterIDs::FLOW_ARP_P_CURVE);
-            X.pQuant = flowBase (ParameterIDs::FLOW_ARP_P_QUANT); X.pSlide = flowBase (ParameterIDs::FLOW_ARP_P_SLIDE);
-            X.gLen   = flowBase (ParameterIDs::FLOW_ARP_G_LEN);   X.gCurve = flowBase (ParameterIDs::FLOW_ARP_G_CURVE);
-            X.gRand  = flowBase (ParameterIDs::FLOW_ARP_G_RAND);  X.gSlide = flowBase (ParameterIDs::FLOW_ARP_G_SLIDE);
-            X.vRange = flowBase (ParameterIDs::FLOW_ARP_V_RANGE); X.vCurve = flowBase (ParameterIDs::FLOW_ARP_V_CURVE);
-            X.vRand  = flowBase (ParameterIDs::FLOW_ARP_V_RAND);  X.vFloor = flowBase (ParameterIDs::FLOW_ARP_V_FLOOR);
-            X.oRange = flowBase (ParameterIDs::FLOW_ARP_O_RANGE); X.oBias  = flowBase (ParameterIDs::FLOW_ARP_O_BIAS);
-            X.oRand  = flowBase (ParameterIDs::FLOW_ARP_O_RAND);  X.oSpread= flowBase (ParameterIDs::FLOW_ARP_O_SPREAD);
-            X.rCount = flowBase (ParameterIDs::FLOW_ARP_R_COUNT); X.rDecay = flowBase (ParameterIDs::FLOW_ARP_R_DECAY);
-            X.rCurve = flowBase (ParameterIDs::FLOW_ARP_R_CURVE); X.rAmt   = flowBase (ParameterIDs::FLOW_ARP_R_AMT);
-            X.cAmt   = flowBase (ParameterIDs::FLOW_ARP_C_AMT);   X.cBias  = flowBase (ParameterIDs::FLOW_ARP_C_BIAS);
-            X.cSeed  = flowBase (ParameterIDs::FLOW_ARP_C_SEED);  X.cDrift = flowBase (ParameterIDs::FLOW_ARP_C_DRIFT);
-            X.wDepth = flowBase (ParameterIDs::FLOW_ARP_W_DEPTH); X.wCurve = flowBase (ParameterIDs::FLOW_ARP_W_CURVE);
-            X.wSlide = flowBase (ParameterIDs::FLOW_ARP_W_SLIDE); X.wRand  = flowBase (ParameterIDs::FLOW_ARP_W_RAND);
+            X.swing  = flowKnob (ParameterIDs::FLOW_ARP_SWING, wc::ModDest::FlowArpSwing);  X.mroll  = flowKnob (ParameterIDs::FLOW_ARP_MROLL, wc::ModDest::FlowArpRoll);
+            X.timbre = flowKnob (ParameterIDs::FLOW_ARP_TIMBRE, wc::ModDest::FlowArpTimbre); X.glide  = flowKnob (ParameterIDs::FLOW_ARP_GLIDE, wc::ModDest::FlowArpGlide);
+            X.pRange = flowKnob (ParameterIDs::FLOW_ARP_P_RANGE, wc::ModDest::FlowArpPRange); X.pCurve = flowKnob (ParameterIDs::FLOW_ARP_P_CURVE, wc::ModDest::FlowArpPCurve);
+            X.pQuant = flowKnob (ParameterIDs::FLOW_ARP_P_QUANT, wc::ModDest::FlowArpPQuant); X.pSlide = flowKnob (ParameterIDs::FLOW_ARP_P_SLIDE, wc::ModDest::FlowArpPSlide);
+            X.gLen   = flowKnob (ParameterIDs::FLOW_ARP_G_LEN, wc::ModDest::FlowArpGLen);   X.gCurve = flowKnob (ParameterIDs::FLOW_ARP_G_CURVE, wc::ModDest::FlowArpGCurve);
+            X.gRand  = flowKnob (ParameterIDs::FLOW_ARP_G_RAND, wc::ModDest::FlowArpGRand);  X.gSlide = flowKnob (ParameterIDs::FLOW_ARP_G_SLIDE, wc::ModDest::FlowArpGSlide);
+            X.vRange = flowKnob (ParameterIDs::FLOW_ARP_V_RANGE, wc::ModDest::FlowArpVRange); X.vCurve = flowKnob (ParameterIDs::FLOW_ARP_V_CURVE, wc::ModDest::FlowArpVCurve);
+            X.vRand  = flowKnob (ParameterIDs::FLOW_ARP_V_RAND, wc::ModDest::FlowArpVRand);  X.vFloor = flowKnob (ParameterIDs::FLOW_ARP_V_FLOOR, wc::ModDest::FlowArpVFloor);
+            X.oRange = flowKnob (ParameterIDs::FLOW_ARP_O_RANGE, wc::ModDest::FlowArpORange); X.oBias  = flowKnob (ParameterIDs::FLOW_ARP_O_BIAS, wc::ModDest::FlowArpOBias);
+            X.oRand  = flowKnob (ParameterIDs::FLOW_ARP_O_RAND, wc::ModDest::FlowArpORand);  X.oSpread= flowKnob (ParameterIDs::FLOW_ARP_O_SPREAD, wc::ModDest::FlowArpOSpread);
+            X.rCount = flowKnob (ParameterIDs::FLOW_ARP_R_COUNT, wc::ModDest::FlowArpRCount); X.rDecay = flowKnob (ParameterIDs::FLOW_ARP_R_DECAY, wc::ModDest::FlowArpRDecay);
+            X.rCurve = flowKnob (ParameterIDs::FLOW_ARP_R_CURVE, wc::ModDest::FlowArpRCurve); X.rAmt   = flowKnob (ParameterIDs::FLOW_ARP_R_AMT, wc::ModDest::FlowArpRAmt);
+            X.cAmt   = flowKnob (ParameterIDs::FLOW_ARP_C_AMT, wc::ModDest::FlowArpCAmt);   X.cBias  = flowKnob (ParameterIDs::FLOW_ARP_C_BIAS, wc::ModDest::FlowArpCBias);
+            X.cSeed  = flowKnob (ParameterIDs::FLOW_ARP_C_SEED, wc::ModDest::FlowArpCSeed);  X.cDrift = flowKnob (ParameterIDs::FLOW_ARP_C_DRIFT, wc::ModDest::FlowArpCDrift);
+            X.wDepth = flowKnob (ParameterIDs::FLOW_ARP_W_DEPTH, wc::ModDest::FlowArpWDepth); X.wCurve = flowKnob (ParameterIDs::FLOW_ARP_W_CURVE, wc::ModDest::FlowArpWCurve);
+            X.wSlide = flowKnob (ParameterIDs::FLOW_ARP_W_SLIDE, wc::ModDest::FlowArpWSlide); X.wRand  = flowKnob (ParameterIDs::FLOW_ARP_W_RAND, wc::ModDest::FlowArpWRand);
             flowArp.setExt (X);
         }
         flowArp.setLatch (kLatch);
@@ -5948,7 +5948,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float cVary  = flowKnob (ParameterIDs::FLOW_SEQ_VARY,  wc::ModDest::ChopVary);
         const float cTraj  = flowKnob (ParameterIDs::FLOW_SEQ_TRAJ,  wc::ModDest::ChopTraj);
         const float cMorph = flowKnob (ParameterIDs::FLOW_SEQ_MORPH, wc::ModDest::ChopMorph);
-        chop.setMix (flowBase (ParameterIDs::FLOW_CHOP_BLEND));   // dry/wet (glass menu); default 0.60
+        chop.setMix (flowKnob (ParameterIDs::FLOW_CHOP_BLEND, wc::ModDest::FlowChopMix));   // dry/wet (glass menu); default 0.60
 
         // ── fb106 extension card: every Ribbon control, read per block ──
         {
@@ -5962,23 +5962,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             X.filter    = (int) *rawParam (ParameterIDs::FLOW_CHOP_FILTER);
             X.freeze    = *rawParam (ParameterIDs::FLOW_CHOP_FREEZE)  > 0.5f;
             X.collect   = *rawParam (ParameterIDs::FLOW_CHOP_COLLECT) > 0.5f;
-            X.scan   = flowBase (ParameterIDs::FLOW_CHOP_SCAN);   X.wander = flowBase (ParameterIDs::FLOW_CHOP_WANDER);
-            X.spread = flowBase (ParameterIDs::FLOW_CHOP_SPREAD); X.speed  = flowBase (ParameterIDs::FLOW_CHOP_SPEED);
-            X.steps  = flowBase (ParameterIDs::FLOW_CHOP_STEPS);  X.detune = flowBase (ParameterIDs::FLOW_CHOP_DETUNE);
-            X.wow    = flowBase (ParameterIDs::FLOW_CHOP_WOW);    X.smooth = flowBase (ParameterIDs::FLOW_CHOP_SMOOTH);
-            X.grit   = flowBase (ParameterIDs::FLOW_CHOP_GRIT);   X.trim   = flowBase (ParameterIDs::FLOW_CHOP_TRIM);
-            X.oSpread= flowBase (ParameterIDs::FLOW_CHOP_O_SPREAD); X.oBias = flowBase (ParameterIDs::FLOW_CHOP_O_BIAS);
-            X.oLock  = flowBase (ParameterIDs::FLOW_CHOP_O_LOCK);   X.oSeed = flowBase (ParameterIDs::FLOW_CHOP_O_SEED);
-            X.pRange = flowBase (ParameterIDs::FLOW_CHOP_P_RANGE);  X.pSteps= flowBase (ParameterIDs::FLOW_CHOP_P_STEPS);
-            X.pGlide = flowBase (ParameterIDs::FLOW_CHOP_P_GLIDE);  X.pQuant= flowBase (ParameterIDs::FLOW_CHOP_P_QUANT);
-            X.rvOdds = flowBase (ParameterIDs::FLOW_CHOP_RV_ODDS);  X.rvRun = flowBase (ParameterIDs::FLOW_CHOP_RV_RUN);
-            X.rvSpread=flowBase (ParameterIDs::FLOW_CHOP_RV_SPREAD);X.rvSnap= flowBase (ParameterIDs::FLOW_CHOP_RV_SNAP);
-            X.tLen   = flowBase (ParameterIDs::FLOW_CHOP_T_LEN);    X.tCurve= flowBase (ParameterIDs::FLOW_CHOP_T_CURVE);
-            X.tRand  = flowBase (ParameterIDs::FLOW_CHOP_T_RAND);   X.tGate = flowBase (ParameterIDs::FLOW_CHOP_T_GATE);
-            X.rCount = flowBase (ParameterIDs::FLOW_CHOP_R_COUNT);  X.rDecay= flowBase (ParameterIDs::FLOW_CHOP_R_DECAY);
-            X.rCurve = flowBase (ParameterIDs::FLOW_CHOP_R_CURVE);  X.rOdds = flowBase (ParameterIDs::FLOW_CHOP_R_ODDS);
-            X.dAmt   = flowBase (ParameterIDs::FLOW_CHOP_D_AMT);    X.dSize = flowBase (ParameterIDs::FLOW_CHOP_D_SIZE);
-            X.dSpray = flowBase (ParameterIDs::FLOW_CHOP_D_SPRAY);  X.dTone = flowBase (ParameterIDs::FLOW_CHOP_D_TONE);
+            X.scan   = flowKnob (ParameterIDs::FLOW_CHOP_SCAN, wc::ModDest::FlowChopScan);   X.wander = flowKnob (ParameterIDs::FLOW_CHOP_WANDER, wc::ModDest::FlowChopWander);
+            X.spread = flowKnob (ParameterIDs::FLOW_CHOP_SPREAD, wc::ModDest::FlowChopSpread); X.speed  = flowKnob (ParameterIDs::FLOW_CHOP_SPEED, wc::ModDest::FlowChopSpeed);
+            X.steps  = flowKnob (ParameterIDs::FLOW_CHOP_STEPS, wc::ModDest::FlowChopCrush);  X.detune = flowKnob (ParameterIDs::FLOW_CHOP_DETUNE, wc::ModDest::FlowChopDetune);
+            X.wow    = flowKnob (ParameterIDs::FLOW_CHOP_WOW, wc::ModDest::FlowChopWow);    X.smooth = flowKnob (ParameterIDs::FLOW_CHOP_SMOOTH, wc::ModDest::FlowChopSmooth);
+            X.grit   = flowKnob (ParameterIDs::FLOW_CHOP_GRIT, wc::ModDest::FlowChopGrit);   X.trim   = flowKnob (ParameterIDs::FLOW_CHOP_TRIM, wc::ModDest::FlowChopTrim);
+            X.oSpread= flowKnob (ParameterIDs::FLOW_CHOP_O_SPREAD, wc::ModDest::FlowChopOSpread); X.oBias = flowKnob (ParameterIDs::FLOW_CHOP_O_BIAS, wc::ModDest::FlowChopOBias);
+            X.oLock  = flowKnob (ParameterIDs::FLOW_CHOP_O_LOCK, wc::ModDest::FlowChopOLock);   X.oSeed = flowKnob (ParameterIDs::FLOW_CHOP_O_SEED, wc::ModDest::FlowChopOSeed);
+            X.pRange = flowKnob (ParameterIDs::FLOW_CHOP_P_RANGE, wc::ModDest::FlowChopPRange);  X.pSteps= flowKnob (ParameterIDs::FLOW_CHOP_P_STEPS, wc::ModDest::FlowChopPSteps);
+            X.pGlide = flowKnob (ParameterIDs::FLOW_CHOP_P_GLIDE, wc::ModDest::FlowChopPGlide);  X.pQuant= flowKnob (ParameterIDs::FLOW_CHOP_P_QUANT, wc::ModDest::FlowChopPQuant);
+            X.rvOdds = flowKnob (ParameterIDs::FLOW_CHOP_RV_ODDS, wc::ModDest::FlowChopRvOdds);  X.rvRun = flowKnob (ParameterIDs::FLOW_CHOP_RV_RUN, wc::ModDest::FlowChopRvRun);
+            X.rvSpread=flowKnob (ParameterIDs::FLOW_CHOP_RV_SPREAD, wc::ModDest::FlowChopRvSpread);X.rvSnap= flowKnob (ParameterIDs::FLOW_CHOP_RV_SNAP, wc::ModDest::FlowChopRvSnap);
+            X.tLen   = flowKnob (ParameterIDs::FLOW_CHOP_T_LEN, wc::ModDest::FlowChopTLen);    X.tCurve= flowKnob (ParameterIDs::FLOW_CHOP_T_CURVE, wc::ModDest::FlowChopTCurve);
+            X.tRand  = flowKnob (ParameterIDs::FLOW_CHOP_T_RAND, wc::ModDest::FlowChopTRand);   X.tGate = flowKnob (ParameterIDs::FLOW_CHOP_T_GATE, wc::ModDest::FlowChopTGate);
+            X.rCount = flowKnob (ParameterIDs::FLOW_CHOP_R_COUNT, wc::ModDest::FlowChopRCount);  X.rDecay= flowKnob (ParameterIDs::FLOW_CHOP_R_DECAY, wc::ModDest::FlowChopRDecay);
+            X.rCurve = flowKnob (ParameterIDs::FLOW_CHOP_R_CURVE, wc::ModDest::FlowChopRCurve);  X.rOdds = flowKnob (ParameterIDs::FLOW_CHOP_R_ODDS, wc::ModDest::FlowChopROdds);
+            X.dAmt   = flowKnob (ParameterIDs::FLOW_CHOP_D_AMT, wc::ModDest::FlowChopDAmt);    X.dSize = flowKnob (ParameterIDs::FLOW_CHOP_D_SIZE, wc::ModDest::FlowChopDSize);
+            X.dSpray = flowKnob (ParameterIDs::FLOW_CHOP_D_SPRAY, wc::ModDest::FlowChopDSpray);  X.dTone = flowKnob (ParameterIDs::FLOW_CHOP_D_TONE, wc::ModDest::FlowChopDTone);
             chop.setExt (X);
             chop.setMode (*rawParam (ParameterIDs::FLOW_CHOP_CATCH) > 0.5f ? wc::ChopMode::Catch
                                                                             : wc::ChopMode::AlwaysOn);
@@ -6010,9 +6010,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float gVary  = flowKnob (ParameterIDs::FLOW_GLI_VARY,  wc::ModDest::FlowVary);
         const float gTraj  = flowKnob (ParameterIDs::FLOW_GLI_TRAJ,  wc::ModDest::FlowTraj);
         const float gMorph = flowKnob (ParameterIDs::FLOW_GLI_MORPH, wc::ModDest::FlowMorph);
-        glitch.setMix (flowBase (ParameterIDs::FLOW_GLI_BLEND));   // dry/wet (card MIX header); default 0.60
+        glitch.setMix (flowKnob (ParameterIDs::FLOW_GLI_BLEND, wc::ModDest::FlowGliMix));   // dry/wet (card MIX header); default 0.60
         glitch.setOutMode ((int) *rawParam (ParameterIDs::FLOW_GLI_OUTMODE));   // fb142 — Mix/Cut/Gate
-        glitch.setPing (flowBase (ParameterIDs::FLOW_GLI_PING));                // fb142 — stereo bounce
+        glitch.setPing (flowKnob (ParameterIDs::FLOW_GLI_PING, wc::ModDest::FlowGliPing));                // fb142 — stereo bounce
 
         // ── fb115 extension card: every Monitor control, read per block ──
         {
@@ -6028,10 +6028,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             X.en[6] = *rawParam (ParameterIDs::FLOW_GLI_EN_FRZ)  > 0.5f;
             X.en[7] = *rawParam (ParameterIDs::FLOW_GLI_EN_SCT)  > 0.5f;
             X.dejavu = flowBase (ParameterIDs::FLOW_GLI_DEJAVU);
-            X.decay  = flowBase (ParameterIDs::FLOW_GLI_DECAY);
-            X.drop   = flowBase (ParameterIDs::FLOW_GLI_DROP);               // fb143 — hole fires
-            X.burst  = flowBase (ParameterIDs::FLOW_GLI_BURST);              // fb143 — fires streak
-            X.bend   = flowBase (ParameterIDs::FLOW_GLI_BEND);
+            X.decay  = flowKnob (ParameterIDs::FLOW_GLI_DECAY, wc::ModDest::FlowGliDecay);
+            X.drop   = flowKnob (ParameterIDs::FLOW_GLI_DROP, wc::ModDest::FlowGliDrop);               // fb143 — hole fires
+            X.burst  = flowKnob (ParameterIDs::FLOW_GLI_BURST, wc::ModDest::FlowGliBurst);              // fb143 — fires streak
+            X.bend   = flowKnob (ParameterIDs::FLOW_GLI_BEND, wc::ModDest::FlowGliBend);
             X.seed   = (int) std::lround (flowBase (ParameterIDs::FLOW_GLI_SEED) * 99.0f);
             X.holdSteps  = kHoldL[juce::jlimit (0, 5, (int) *rawParam (ParameterIDs::FLOW_GLI_HOLD))];
             X.loopLen    = kLoopG[juce::jlimit (0, 4, (int) *rawParam (ParameterIDs::FLOW_GLI_LOOP))];
@@ -6047,22 +6047,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 X.fxGrid[fi] = gliFxGrdP_[fi] != nullptr ? (int) gliFxGrdP_[fi]->load() : 0;
             }
             X.sync       = (int) *rawParam (ParameterIDs::FLOW_GLI_SYNC) == 1;
-            X.repSize  = flowBase (ParameterIDs::FLOW_GLI_REP_SIZE);   X.repSpeed = flowBase (ParameterIDs::FLOW_GLI_REP_SPEED);
-            X.repFade  = flowBase (ParameterIDs::FLOW_GLI_REP_FADE);   X.repVary  = flowBase (ParameterIDs::FLOW_GLI_REP_VARY);
-            X.revLen   = flowBase (ParameterIDs::FLOW_GLI_REV_LEN);    X.revFade  = flowBase (ParameterIDs::FLOW_GLI_REV_FADE);
-            X.revSprd  = flowBase (ParameterIDs::FLOW_GLI_REV_SPRD);   X.revSnap  = flowBase (ParameterIDs::FLOW_GLI_REV_SNAP);
-            X.tapeCurve= flowBase (ParameterIDs::FLOW_GLI_TAPE_CURVE); X.tapeTime = flowBase (ParameterIDs::FLOW_GLI_TAPE_TIME);
-            X.tapeDepth= flowBase (ParameterIDs::FLOW_GLI_TAPE_DEPTH); X.tapeSpin = flowBase (ParameterIDs::FLOW_GLI_TAPE_SPIN);
-            X.gateRate = flowBase (ParameterIDs::FLOW_GLI_GATE_RATE);  X.gateShape= flowBase (ParameterIDs::FLOW_GLI_GATE_SHAPE);
-            X.gateNudge= flowBase (ParameterIDs::FLOW_GLI_GATE_NUDGE); X.gateAmt  = flowBase (ParameterIDs::FLOW_GLI_GATE_AMT);
-            X.pitShift = flowBase (ParameterIDs::FLOW_GLI_PIT_SHIFT);  X.pitWalk  = flowBase (ParameterIDs::FLOW_GLI_PIT_WALK);
-            X.pitGlide = flowBase (ParameterIDs::FLOW_GLI_PIT_GLIDE);  X.pitJump  = flowBase (ParameterIDs::FLOW_GLI_PIT_JUMP);
-            X.crshBits = flowBase (ParameterIDs::FLOW_GLI_CRSH_BITS);  X.crshRate = flowBase (ParameterIDs::FLOW_GLI_CRSH_RATE);
-            X.crshTone = flowBase (ParameterIDs::FLOW_GLI_CRSH_TONE);  X.crshAmt  = flowBase (ParameterIDs::FLOW_GLI_CRSH_AMT);
-            X.frzSize  = flowBase (ParameterIDs::FLOW_GLI_FRZ_SIZE);   X.frzSpray = flowBase (ParameterIDs::FLOW_GLI_FRZ_SPRAY);
-            X.frzShine = flowBase (ParameterIDs::FLOW_GLI_FRZ_SHINE);  X.frzMelt  = flowBase (ParameterIDs::FLOW_GLI_FRZ_MELT);
-            X.sctSize  = flowBase (ParameterIDs::FLOW_GLI_SCT_SIZE);   X.sctAmt   = flowBase (ParameterIDs::FLOW_GLI_SCT_AMT);
-            X.sctVary  = flowBase (ParameterIDs::FLOW_GLI_SCT_VARY);   X.sctWidth = flowBase (ParameterIDs::FLOW_GLI_SCT_WIDTH);
+            X.repSize  = flowKnob (ParameterIDs::FLOW_GLI_REP_SIZE, wc::ModDest::FlowGliRepSize);   X.repSpeed = flowKnob (ParameterIDs::FLOW_GLI_REP_SPEED, wc::ModDest::FlowGliRepSpeed);
+            X.repFade  = flowKnob (ParameterIDs::FLOW_GLI_REP_FADE, wc::ModDest::FlowGliRepFade);   X.repVary  = flowKnob (ParameterIDs::FLOW_GLI_REP_VARY, wc::ModDest::FlowGliRepVary);
+            X.revLen   = flowKnob (ParameterIDs::FLOW_GLI_REV_LEN, wc::ModDest::FlowGliRevLen);    X.revFade  = flowKnob (ParameterIDs::FLOW_GLI_REV_FADE, wc::ModDest::FlowGliRevFade);
+            X.revSprd  = flowKnob (ParameterIDs::FLOW_GLI_REV_SPRD, wc::ModDest::FlowGliRevSprd);   X.revSnap  = flowKnob (ParameterIDs::FLOW_GLI_REV_SNAP, wc::ModDest::FlowGliRevSnap);
+            X.tapeCurve= flowKnob (ParameterIDs::FLOW_GLI_TAPE_CURVE, wc::ModDest::FlowGliTapeCurve); X.tapeTime = flowKnob (ParameterIDs::FLOW_GLI_TAPE_TIME, wc::ModDest::FlowGliTapeTime);
+            X.tapeDepth= flowKnob (ParameterIDs::FLOW_GLI_TAPE_DEPTH, wc::ModDest::FlowGliTapeDepth); X.tapeSpin = flowKnob (ParameterIDs::FLOW_GLI_TAPE_SPIN, wc::ModDest::FlowGliTapeSpin);
+            X.gateRate = flowKnob (ParameterIDs::FLOW_GLI_GATE_RATE, wc::ModDest::FlowGliGateRate);  X.gateShape= flowKnob (ParameterIDs::FLOW_GLI_GATE_SHAPE, wc::ModDest::FlowGliGateShape);
+            X.gateNudge= flowKnob (ParameterIDs::FLOW_GLI_GATE_NUDGE, wc::ModDest::FlowGliGateNudge); X.gateAmt  = flowKnob (ParameterIDs::FLOW_GLI_GATE_AMT, wc::ModDest::FlowGliGateAmt);
+            X.pitShift = flowKnob (ParameterIDs::FLOW_GLI_PIT_SHIFT, wc::ModDest::FlowGliPitShift);  X.pitWalk  = flowKnob (ParameterIDs::FLOW_GLI_PIT_WALK, wc::ModDest::FlowGliPitWalk);
+            X.pitGlide = flowKnob (ParameterIDs::FLOW_GLI_PIT_GLIDE, wc::ModDest::FlowGliPitGlide);  X.pitJump  = flowKnob (ParameterIDs::FLOW_GLI_PIT_JUMP, wc::ModDest::FlowGliPitJump);
+            X.crshBits = flowKnob (ParameterIDs::FLOW_GLI_CRSH_BITS, wc::ModDest::FlowGliCrshBits);  X.crshRate = flowKnob (ParameterIDs::FLOW_GLI_CRSH_RATE, wc::ModDest::FlowGliCrshRate);
+            X.crshTone = flowKnob (ParameterIDs::FLOW_GLI_CRSH_TONE, wc::ModDest::FlowGliCrshTone);  X.crshAmt  = flowKnob (ParameterIDs::FLOW_GLI_CRSH_AMT, wc::ModDest::FlowGliCrshAmt);
+            X.frzSize  = flowKnob (ParameterIDs::FLOW_GLI_FRZ_SIZE, wc::ModDest::FlowGliFrzSize);   X.frzSpray = flowKnob (ParameterIDs::FLOW_GLI_FRZ_SPRAY, wc::ModDest::FlowGliFrzSpray);
+            X.frzShine = flowKnob (ParameterIDs::FLOW_GLI_FRZ_SHINE, wc::ModDest::FlowGliFrzShine);  X.frzMelt  = flowKnob (ParameterIDs::FLOW_GLI_FRZ_MELT, wc::ModDest::FlowGliFrzMelt);
+            X.sctSize  = flowKnob (ParameterIDs::FLOW_GLI_SCT_SIZE, wc::ModDest::FlowGliSctSize);   X.sctAmt   = flowKnob (ParameterIDs::FLOW_GLI_SCT_AMT, wc::ModDest::FlowGliSctAmt);
+            X.sctVary  = flowKnob (ParameterIDs::FLOW_GLI_SCT_VARY, wc::ModDest::FlowGliSctVary);   X.sctWidth = flowKnob (ParameterIDs::FLOW_GLI_SCT_WIDTH, wc::ModDest::FlowGliSctWidth);
             glitch.setExt (X);
             if (gliRollReq_.exchange (false)) glitch.rollNow();   // Roll button (UI native, quantized)
         }
@@ -6103,7 +6103,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float dGlide = flowBase (ParameterIDs::FLOW_DRF_GATE);    // GATE macro = GLIDE/slew
         const float dVary  = flowBase (ParameterIDs::FLOW_DRF_VARY);    // VARY  = volatility/character
         const float dTraj  = flowBase (ParameterIDs::FLOW_DRF_TRAJ);    // TRAJ  = shape selector
-        const float dDepth = flowBase (ParameterIDs::FLOW_DRF_MORPH);   // MORPH = DEPTH (the "blend")
+        const float dDepth = flowKnob (ParameterIDs::FLOW_DRF_MORPH, wc::ModDest::FlowMorph);   // MORPH = DEPTH (the robin MIX header; LFO-moddable fb145)
         float lanes[wc::kDriftLanes] = { 0.0f };
         drift.process (dRate, dGlide, dVary, dTraj, dDepth,
                        flowPpq, flowBpm, getSampleRate(), lanes, numSamples, flowPlaying);
@@ -6129,17 +6129,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             X.order[1] = (int) *rawParam (ParameterIDs::FLOW_RBN_O2);
             X.order[2] = (int) *rawParam (ParameterIDs::FLOW_RBN_O3);
             X.order[3] = (int) *rawParam (ParameterIDs::FLOW_RBN_O4);
-            X.vary   = flowBase (ParameterIDs::FLOW_RBN_VARY);   X.wobble = flowBase (ParameterIDs::FLOW_RBN_WOBBLE);
-            X.lvl    = flowBase (ParameterIDs::FLOW_RBN_LVL);    X.pan    = flowBase (ParameterIDs::FLOW_RBN_PAN);
-            X.after  = 0.05f + flowBase (ParameterIDs::FLOW_RBN_AFTER) * 4.95f;   // 0.05..5 s (card readout)
-            X.glide  = flowBase (ParameterIDs::FLOW_RBN_GLIDE);  X.overlap = flowBase (ParameterIDs::FLOW_RBN_OVERLAP);
-            X.fade   = flowBase (ParameterIDs::FLOW_RBN_FADE);
+            X.vary   = flowKnob (ParameterIDs::FLOW_RBN_VARY, wc::ModDest::FlowRbnVary);   X.wobble = flowKnob (ParameterIDs::FLOW_RBN_WOBBLE, wc::ModDest::FlowRbnWobble);
+            X.lvl    = flowKnob (ParameterIDs::FLOW_RBN_LVL, wc::ModDest::FlowRbnLvl);    X.pan    = flowKnob (ParameterIDs::FLOW_RBN_PAN, wc::ModDest::FlowRbnPan);
+            X.after  = 0.05f + flowKnob (ParameterIDs::FLOW_RBN_AFTER, wc::ModDest::FlowRbnAfter) * 4.95f;   // 0.05..5 s (card readout)
+            X.glide  = flowKnob (ParameterIDs::FLOW_RBN_GLIDE, wc::ModDest::FlowRbnGlide);  X.overlap = flowKnob (ParameterIDs::FLOW_RBN_OVERLAP, wc::ModDest::FlowRbnOverlap);
+            X.fade   = flowKnob (ParameterIDs::FLOW_RBN_FADE, wc::ModDest::FlowRbnFade);
             flowRobin_.setExt (X);
             flowRobin_.tick (flowPpq, numSamples, flowPlaying);
 
             // Drift: per-STATION slow pitch wander — the drift engine's first four lanes
             // (already MORPH/MIX-scaled) feed each station's cents, capped ±18 (perceptual law)
-            const float dAmt = flowBase (ParameterIDs::FLOW_RBN_DRIFT);
+            const float dAmt = flowKnob (ParameterIDs::FLOW_RBN_DRIFT, wc::ModDest::FlowRbnDrift);
             for (int k = 0; k < 4; ++k) robinDriftCents_[k] = driftLane_[k] * dAmt * 18.0f;
 
             // live Wheel feed (UI rAF-polls getRbnFeed)
