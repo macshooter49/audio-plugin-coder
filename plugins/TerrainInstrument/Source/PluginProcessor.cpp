@@ -3209,6 +3209,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             juce::StringArray { "Free", "Sync" }, 1));
     }
     addFlowKnob (ParameterIDs::FLOW_GLI_DEJAVU,"Glitch Deja Vu",0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_DECAY,"Glitch Decay",0.00f);
+    // fb142 — the Fire pane's two new fronts: OUT MODE (Beat Repeat's Mix/Insert/Gate law)
+    // + PING (each fire bounces across the stereo field). Defaults = bit-exact old behavior.
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::FLOW_GLI_OUTMODE, 1 }, "Glitch Out Mode",
+        juce::StringArray { "Mix", "Cut", "Gate" }, 0));
+    addFlowKnob (ParameterIDs::FLOW_GLI_PING,"Glitch Ping",0.00f);
     addFlowKnob (ParameterIDs::FLOW_GLI_BEND,  "Glitch Bend",  0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_SEED, "Glitch Seed", 0.00f);
     addFlowKnob (ParameterIDs::FLOW_GLI_REP_SIZE,  "Glitch Repeat Size", 1.00f); addFlowKnob (ParameterIDs::FLOW_GLI_REP_SPEED, "Glitch Repeat Speed",0.00f);
     addFlowKnob (ParameterIDs::FLOW_GLI_REP_FADE,  "Glitch Repeat Fade", 0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_REP_VARY,  "Glitch Repeat Vary", 0.00f);
@@ -6004,6 +6010,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float gTraj  = flowKnob (ParameterIDs::FLOW_GLI_TRAJ,  wc::ModDest::FlowTraj);
         const float gMorph = flowKnob (ParameterIDs::FLOW_GLI_MORPH, wc::ModDest::FlowMorph);
         glitch.setMix (flowBase (ParameterIDs::FLOW_GLI_BLEND));   // dry/wet (card MIX header); default 0.60
+        glitch.setOutMode ((int) *rawParam (ParameterIDs::FLOW_GLI_OUTMODE));   // fb142 — Mix/Cut/Gate
+        glitch.setPing (flowBase (ParameterIDs::FLOW_GLI_PING));                // fb142 — stereo bounce
 
         // ── fb115 extension card: every Monitor control, read per block ──
         {

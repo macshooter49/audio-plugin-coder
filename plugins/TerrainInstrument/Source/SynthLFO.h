@@ -73,6 +73,18 @@ public:
         sr_ = (sampleRate > 0.0 ? sampleRate : 44100.0);
         // deterministic per-instance RNG seed; reseeded per note for variety later
         rngState_ = 0x2545F4914F6CDD1DULL;
+        // fb142-lfo — OUTPUT SLEW (the fb126 comb law: a modulated value must GLIDE,
+        // never snap). ~2.5ms one-pole on the returned value turns every step the
+        // discontinuous shapes make (S&H hold jump, Square edge, Saw wrap, Random
+        // re-roll, note-on phase reset, transport re-lock) into a short fade — the
+        // click Max hears on S&H/Saw/Square→cutoff dies here, at the source, so all
+        // ~366 destinations benefit at once. Sine/Triangle pass through ~unchanged
+        // (<0.05% at LFO rates). Reset snaps (RESET == LOAD-DEFAULT): first output
+        // after prepare() takes the raw value, no glide from stale state.
+        slewRate_ = 1.0f / (0.0025f * (float) sr_);
+        slewK1_   = 1.0f - std::exp (-slewRate_);
+        slew_     = 0.0f;
+        slewInit_ = false;
     }
 
     void setSettings (const LFOSettings& s) noexcept { s_ = s; }
@@ -130,7 +142,7 @@ public:
                 }
             }
         }
-        return applyPolarity (out);
+        return slewAdvance (applyPolarity (out), 1.0f);   // fb142-lfo — glide, never snap
     }
 
     // CPU: advance the phase by n samples WITHOUT evaluating the shape — for LFOs that
@@ -138,29 +150,55 @@ public:
     // only needs phase). S&H/Random roll one new step per wrap so peek() stays plausible.
     void skipSamples (int n) noexcept
     {
-        if (s_.trigger == LFOTrigger::Env && finished_) return;
-        const float inc = hz_ / static_cast<float> (sr_);
-        phase_ += inc * (float) n;
-        if (phase_ >= 1.0f)
+        if (! (s_.trigger == LFOTrigger::Env && finished_))
         {
-            if (s_.trigger == LFOTrigger::Env) { phase_ = 1.0f; finished_ = true; }
-            else
+            const float inc = hz_ / static_cast<float> (sr_);
+            phase_ += inc * (float) n;
+            if (phase_ >= 1.0f)
             {
-                phase_ -= std::floor (phase_);
-                stepPrev_ = stepHeld_;
-                stepHeld_ = nextRandom();
+                if (s_.trigger == LFOTrigger::Env) { phase_ = 1.0f; finished_ = true; }
+                else
+                {
+                    phase_ -= std::floor (phase_);
+                    stepPrev_ = stepHeld_;
+                    stepHeld_ = nextRandom();
+                }
             }
         }
+        // fb142-lfo — advance the output slew across the skipped span (n-sample compound
+        // coefficient = same trajectory the per-sample path walks), so peek() stays smooth
+        // AND non-stale for block-rate consumers. Runs even when a finished Env holds, or
+        // a mid-glide slew would strand slightly off the held end value forever.
+        slewAdvance (applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset))), (float) n);
     }
 
     // For tempo-sync mode: set phase directly from host transport (Batch 2 uses this).
-    void setPhaseFromTransport (float phase01) noexcept { phase_ = wrap01 (phase01); }
+    void setPhaseFromTransport (float phase01) noexcept
+    {
+        const float np = wrap01 (phase01);
+        // fb142-lfo — the transport-locked branch is the ONLY advance a sync'd global LFO
+        // gets while playing (the owner teleports phase per block instead of calling
+        // processSample), so the output slew must move HERE or peek() strands stale.
+        // Elapsed samples come from the phase delta (dp·sr/hz — exact while the transport
+        // rolls continuously); a transport JUMP (loop wrap, relocate) clamps the estimate
+        // and simply GLIDES — the phase-jump value click dies with the shape-step click.
+        float dp = np - phase_; dp -= std::floor (dp);            // wrapped forward delta
+        float nSamp = (hz_ > 1.0e-6f) ? dp * (float) sr_ / hz_ : 256.0f;
+        if (nSamp < 1.0f) nSamp = 1.0f; else if (nSamp > 8192.0f) nSamp = 8192.0f;
+        phase_ = np;
+        slewAdvance (applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset))), nSamp);
+    }
 
     float currentPhase() const noexcept { return phase_; }
 
     // Current modulation value at the present phase WITHOUT advancing — for per-block
     // (frame/warp/fold/pitch) modulation that's computed before the per-sample loop.
-    float peek() const noexcept { return applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset))); }
+    // fb142-lfo — returns the SLEWED tracker (every advance path keeps it current), so
+    // block-rate consumers ride the same click-free glide; raw until the first advance.
+    float peek() const noexcept
+    {
+        return slewInit_ ? slew_ : applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset)));
+    }
 
 private:
     // Map phase [0,1) -> bipolar [-1,+1]
@@ -197,6 +235,17 @@ private:
 
     static float wrap01 (float p) noexcept { p -= std::floor (p); return p; }
 
+    // fb142-lfo — one-pole toward target across n samples of wall-time (n=1 uses the
+    // precomputed per-sample coefficient; block spans compound: 1-exp(-n/(τ·sr))).
+    // First call after prepare() SNAPS — reset must equal load-default.
+    float slewAdvance (float target, float n) noexcept
+    {
+        if (! slewInit_) { slew_ = target; slewInit_ = true; return slew_; }
+        const float k = (n == 1.0f) ? slewK1_ : 1.0f - std::exp (-n * slewRate_);
+        slew_ += k * (target - slew_);
+        return slew_;
+    }
+
     // xorshift64* — cheap, deterministic, audio-thread safe (no allocation/locks)
     float nextRandom() noexcept
     {
@@ -217,6 +266,10 @@ private:
     bool        finished_  = false;
     int         heldPhaseQuadrant_ = -1;
     uint64_t    rngState_  = 0x2545F4914F6CDD1DULL;
+    float       slew_      = 0.0f;    // fb142-lfo — slewed output tracker (what peek() serves)
+    float       slewK1_    = 0.0091f; //   per-sample one-pole coefficient (~2.5ms @ 44.1k)
+    float       slewRate_  = 0.0091f; //   1/(τ·sr) — compound coefficient base for n-sample spans
+    bool        slewInit_  = false;   //   false until first advance after prepare() (snap once)
     LFOSettings s_;
 };
 

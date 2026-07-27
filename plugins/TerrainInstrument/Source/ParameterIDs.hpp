@@ -211,6 +211,7 @@ namespace ParameterIDs
     constexpr char FLOW_GLI_EN_PIT[]  = "FLOW_GLI_EN_PIT";   constexpr char FLOW_GLI_EN_CRSH[] = "FLOW_GLI_EN_CRSH";
     constexpr char FLOW_GLI_EN_FRZ[]  = "FLOW_GLI_EN_FRZ";   constexpr char FLOW_GLI_EN_SCT[]  = "FLOW_GLI_EN_SCT";
     constexpr char FLOW_GLI_DEJAVU[]  = "FLOW_GLI_DEJAVU";   constexpr char FLOW_GLI_DECAY[]   = "FLOW_GLI_DECAY";
+    constexpr char FLOW_GLI_OUTMODE[] = "FLOW_GLI_OUTMODE";   constexpr char FLOW_GLI_PING[]    = "FLOW_GLI_PING";   // fb142 — Mix/Cut/Gate + per-fire stereo bounce
     constexpr char FLOW_GLI_BEND[]    = "FLOW_GLI_BEND";     constexpr char FLOW_GLI_SEED[]    = "FLOW_GLI_SEED";    // 0 = Free, else 1..99
     constexpr char FLOW_GLI_HOLD[]    = "FLOW_GLI_HOLD";     // choice {1,2,3,4,6,8} steps
     constexpr char FLOW_GLI_LOOP[]    = "FLOW_GLI_LOOP";     // choice {2,4,8,12,16} pattern length

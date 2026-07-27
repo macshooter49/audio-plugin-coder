@@ -588,6 +588,39 @@ int main()
         check (fires > 55, buf);
     }
 
+    // ── T29: OUT MODE (fb142) — Gate silences the dry between fires; Cut ducks it during ─
+    {
+        auto en = [](FlowGlitch& g){ GlitchExtParams x; x.en[0] = true; g.setExt (x); g.setMix (1.f); };
+        auto gate = driveG ([&](FlowGlitch& g){ en (g); g.setOutMode (2); },
+                            [](int){ return 0.0f; }, 0.6111f, 0.5f, 0.f, 0.f, 60);   // chance 0 = never fires
+        double eG = 0; for (auto v : gate.out) eG += (double) v * v;
+        check (eG < 1e-6, "T29 GATE + no fires = silence (dry never passes)");
+        auto mix = driveG ([&](FlowGlitch& g){ en (g); g.setOutMode (0); },
+                           [](int){ return 0.0f; }, 0.6111f, 0.5f, 0.f, 0.f, 60);
+        double eM = 0; for (auto v : mix.out) eM += (double) v * v;
+        check (eM > 1.0, "T29 MIX + no fires = dry passes untouched");
+    }
+    // ── T30: PING (fb142) — consecutive fires alternate across the stereo field ─────────
+    {
+        FlowGlitch g; g.prepare (SR, 4.0);
+        GlitchExtParams x; x.en[0] = true; g.setExt (x); g.setMix (1.f); g.setPing (1.f);
+        std::vector<float> L (512), R (512);
+        double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+        int flips = 0; double prevSide = 0;
+        for (int b = 0; b < 400; ++b)
+        {
+            for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+            g.process (0.6111f, 0.5f, 1.0f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+            double el = 0, er = 0;
+            for (int i = 0; i < 512; ++i) { el += (double) L[(size_t) i] * L[(size_t) i]; er += (double) R[(size_t) i] * R[(size_t) i]; }
+            const double side = el - er;
+            if (std::fabs (side) > 0.05) { if (prevSide != 0 && side * prevSide < 0) ++flips; if (std::fabs (side) > 0.05) prevSide = side; }
+            gc += 512; ppq += pps * 512;
+        }
+        char buf[96]; std::snprintf (buf, sizeof buf, "T30 PING alternates the field (%d L/R flips seen)", flips);
+        check (flips >= 4, buf);
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

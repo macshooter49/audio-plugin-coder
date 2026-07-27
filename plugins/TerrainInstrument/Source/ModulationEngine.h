@@ -154,6 +154,11 @@ public:
     void prepare (double sr)
     {
         sampleRate = sr;
+        // fb142-lfo — output slew coefficient (~2.5ms one-pole, the fb126 comb law:
+        // a modulated value must GLIDE, never snap). Reset snaps: first sample after
+        // prepare takes the raw value (RESET == LOAD-DEFAULT).
+        slewK = 1.0f - std::exp (-1.0f / (0.0025f * (float) (sr > 0.0 ? sr : 44100.0)));
+        slewInit = false;
         for (int i = 0; i < NUM_LFOS; i++)
         {
             lfoState[i] = {};
@@ -247,11 +252,17 @@ public:
             }
 
             float polarized = applyPolarity (raw, lfo.polarity);
-            lfoValues[i] = polarized * lfo.depth;
+            // fb142-lfo — GLIDE, never snap: ~2.5ms one-pole on the output turns the
+            // stepped shapes' jumps (square edge, saw wrap, S&H re-roll) into short
+            // fades so modulated FX params stop clicking; sine/tri pass ~unchanged.
+            const float target = polarized * lfo.depth;
+            lfoValues[i] = slewInit ? lfoValues[i] + slewK * (target - lfoValues[i])
+                                    : target;   // first sample after prepare snaps
 
             lfoOutputsAtomic[i].store (lfoValues[i], std::memory_order_relaxed);
             lfoPhasesAtomic[i].store (st.phase, std::memory_order_relaxed);
         }
+        slewInit = true;   // fb142-lfo — all three snapped once; glide from here on
 
         float xySourceX = (xyX - 0.5f) * 2.0f;
         float xySourceY = (xyY - 0.5f) * 2.0f;
@@ -414,6 +425,8 @@ private:
     float xyX = 0.5f, xyY = 0.5f;
     float currentBpm = 120.0f;
     double sampleRate = 44100.0;
+    float slewK = 0.00903f;    // fb142-lfo — per-sample output-slew coefficient (~2.5ms @ 44.1k)
+    bool  slewInit = false;    // fb142-lfo — false until the first post-prepare sample (snap once)
 
     uint32_t rngState = 12345;
 

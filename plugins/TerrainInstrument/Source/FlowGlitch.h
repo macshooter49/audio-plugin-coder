@@ -157,6 +157,13 @@ public:
     void setEnabled (GlitchFx fx, bool on) noexcept { enabled_[(int) fx] = on; }
     void setWeight (GlitchFx fx, float wgt) noexcept { weight_[(int) fx] = wgt < 0.f ? 0.f : wgt; }
     void setMix (float wet) noexcept { mix_ = arpClamp01 (wet); }
+    // fb142 — OUT MODE (Beat Repeat's most consequential switch): 0 Mix (wet replaces dry
+    // during fires, dry between) · 1 Cut (dry mutes for the WHOLE fire window, even through
+    // wet gaps) · 2 Gate (only the glitch ever sounds — silence between fires).
+    void setOutMode (int m) noexcept { outMode_ = m < 0 ? 0 : (m > 2 ? 2 : m); }
+    // fb142 — PING: each fire lands on the other side of the stereo field (equal-power,
+    // alternating, deterministic — "predictability with random uniqueness", Max).
+    void setPing (float a) noexcept { pingAmt_ = arpClamp01 (a); }
     void setHoldSteps (float steps) noexcept { holdSteps_ = steps < 0.25f ? 0.25f : (steps > 32.f ? 32.f : steps); }
     void setSeed (uint32_t s) noexcept { seed_ = s; }
     void setDejavu (float d) noexcept { dejavu_ = arpClamp01 (d); }
@@ -369,8 +376,13 @@ public:
                 const float wenv = 0.5f - 0.5f * std::cos (3.14159265f * arpClamp01 (wetLevel_));
                 const float a = mix_ * wenv * aScale;
 
-                outL = dryL + (wl - dryL) * a;
-                outR = dryR + (wr - dryR) * a;
+                wl *= pingL_; wr *= pingR_;                        // fb142 — per-fire stereo bounce
+                if (outMode_ == 1)                                 // fb142 CUT: dry dies for the fire window
+                { outL = dryL * (1.0f - wenv) + wl * a; outR = dryR * (1.0f - wenv) + wr * a; }
+                else if (outMode_ == 2)                            // fb142 GATE: only the glitch sounds
+                { outL = wl * a; outR = wr * a; }
+                else
+                { outL = dryL + (wl - dryL) * a; outR = dryR + (wr - dryR) * a; }
 
                 ++gCounter_;
                 if (! pendingFire_ && gCounter_ >= gDur_) { glitchActive_ = false; haveLast_ = false; }
@@ -378,6 +390,11 @@ public:
             else
             {
                 if (wetLevel_ > 0.f) wetLevel_ = std::max (0.f, wetLevel_ - 1.0f / (float) fade_);
+                if (outMode_ == 2)                                 // fb142 GATE: silence between fires
+                {
+                    const float g = 0.5f - 0.5f * std::cos (3.14159265f * arpClamp01 (wetLevel_));
+                    outL *= g; outR *= g;
+                }
             }
 
             if (extOn_) { bendPh_ += bendInc_; if (bendPh_ > 6.28318530718) bendPh_ -= 6.28318530718; }
@@ -620,6 +637,16 @@ private:
                                 * (double) arpClamp01 (ext_.sctWidth) * (double) seamInterval_ * 2.0;
             }
         }
+        // fb142 — PING latches per fire (click-safe: gains change only at the commit seam)
+        pingFlip_ = ! pingFlip_;
+        if (pingAmt_ > 0.001f)
+        {
+            const float off = (pingFlip_ ? 1.0f : -1.0f) * pingAmt_;          // -1..1 across fires
+            const float ang = (0.5f + off * 0.45f) * 1.57079632679f;          // keep off full rails
+            pingL_ = std::cos (ang) / 0.70710678f;                            // center = unity
+            pingR_ = std::sin (ang) / 0.70710678f;
+        }
+        else { pingL_ = 1.0f; pingR_ = 1.0f; }
         glitchActive_ = true;
         pendingFire_ = false;
     }
@@ -1094,6 +1121,9 @@ private:
     bool     enabled_ [kGlitchFxN] = { true, true, true, true, true, true, true, true };
     float    weight_  [kGlitchFxN] = { 1, 1, 1, 1, 1, 1, 1, 1 };
     float    mix_ = 1.0f, holdSteps_ = 1.0f, dejavu_ = 0.0f;
+    int      outMode_ = 0;                                          // fb142 — 0 Mix · 1 Cut · 2 Gate
+    float    pingAmt_ = 0.0f, pingL_ = 1.0f, pingR_ = 1.0f;         // fb142 — per-fire stereo bounce
+    bool     pingFlip_ = false;
     int      loopLen_ = 8;
     float    pitchRatio_ = 2.0f;
     float    tapeCurve_ = 3.5f;        // tape-stop deceleration curve: 0 linear -> ~3.5 exponential coast (default tape)
