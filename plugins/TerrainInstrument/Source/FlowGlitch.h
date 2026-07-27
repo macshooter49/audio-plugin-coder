@@ -81,6 +81,8 @@ struct GlitchExtParams
     float holdSteps = 1.0f;       // 1,2,3,4,6,8 grid steps
     int   loopLen = 8;            // pattern length in steps (2,4,8,12,16)
     float decay = 0.0f;           // master: wet eases back to DRY over the hold
+    float drop  = 0.0f;           // fb143 — chance a fire lands as pure SILENCE (a hole in the loop)
+    float burst = 0.0f;           // fb143 — chance a landed fire STREAKS onto the next step, same dice
     int   seed = 0;               // 0 = Free (re-rolls), 1..99 = locked dice
     int   quantIdx = 2;           // Roll punch-in grid: 1/4, 1/8, 1/16, 1/32
     bool  releaseNow = false;     // false = "End": Rep/Rev holds round UP to whole repeats
@@ -112,12 +114,13 @@ struct GlitchExtParams
 class FlowGlitch
 {
 public:
-    FlowGlitch() { rng_.seed (0x6117C40Du); }
+    FlowGlitch() { rng_.seed (0x6117C40Du); for (auto& s : bStep_) s = kBNever; }
 
     // -- lifecycle ----------------------------------------------------------------
     void prepare (double sampleRate, double captureSeconds = 4.0) noexcept
     {
         sr_  = (sampleRate > 0.0 ? sampleRate : 44100.0);
+        kHole_ = 1.0f - std::exp (-1.0f / (0.0025f * (float) sr_));   // fb143 — 2.5ms hole glide
         cap_ = (int) std::ceil (sr_ * (captureSeconds > 0.5 ? captureSeconds : 0.5));
         if (cap_ < 1024) cap_ = 1024;
         bufL_.assign ((size_t) cap_, 0.0f);
@@ -147,6 +150,8 @@ public:
         ovCnt_ = 0; ovL_ = 0.f; ovR_ = 0.f; bendPh_ = 0.0;
         lpL_ = lpR_ = hpL_ = hpR_ = 0.f; tone1L_ = tone1R_ = 0.f;
         rollArmed_ = false; rollB_ = 0.0; rollN_ = 0; fireCount_ = 0;
+        for (auto& s : bStep_) s = kBNever;                         // fb143 — no phantom streaks
+        pendHole_ = false; holeFire_ = false; holeG_ = 1.f;
         fireNonce_ = 1u; fireStep16_ = 0.f; sctRate_ = 1.0; chanOffR_ = 0.0;
         gGain_ = 1.f; gGainPrev_ = 1.f; gGainTail_ = 1.f;
         lvlAcc_ = 0.0; lvlN_ = 0; for (int i = 0; i < 16; ++i) lvl16_[i] = 0.f;
@@ -368,6 +373,13 @@ public:
 
                 float aScale = 1.f;
                 if (extOn_) aScale = extPost (isRead, wl, wr);            // overlays + bus + master decay
+                if (extOn_)
+                {
+                    // fb143 DROP — a hole fire: the wet glides to silence (2.5ms one-pole,
+                    // the slew law), so a hole can never click, even landing mid-crossfade.
+                    holeG_ += ((holeFire_ ? 0.f : 1.f) - holeG_) * kHole_;
+                    wl *= holeG_; wr *= holeG_;
+                }
 
                 // master wet gate (cosine, zero-slope)
                 const float inc = 1.0f / (float) fade_;
@@ -475,19 +487,42 @@ private:
         if (chance >= 1.0f)      fire = true;
         else if (chance <= 0.0f) fire = false;
         else                     fire = arpHash01 (kUse, (uint32_t) slot, 0xF1u) < chance;
+
+        // fb143 BURST — a landed fire STREAKS: when this group's PREVIOUS boundary fired,
+        // the next one can re-fire with the SAME dice (nonce + reader), so the exact same
+        // glitch repeats — clusters, not confetti. Stateless hash stream (fb111 law).
+        const int gk = burstKey (clockClass, divKey);
+        bool cont = false;
+        if (! fire && ext_.burst > 0.001f && bStep_[gk] == step - 1
+            && arpHash01 (kFresh, (uint32_t) slot, 0xB7u) < arpClamp01 (ext_.burst))
+        { fire = true; cont = true; }
         if (! fire) return;
 
-        GlitchFx fx = pickFxExt (kUse, (uint32_t) slot, clockClass, divKey);
-        if ((int) fx < 0) return;                                      // nothing in this group
-        // Chaos: sometimes substitute a different reader FROM THE SAME GROUP
-        if (traj > 0.f && arpHash01 (kFresh, (uint32_t) slot, 0xC7u) < traj * 0.35f)
+        GlitchFx fx;
+        if (cont && ext_.en[bFx_[gk] & 7])
+            fx = (GlitchFx) bFx_[gk];                                  // the streak keeps its reader
+        else
         {
-            const GlitchFx alt = pickFxExt (kFresh ^ 0x27d4eb2fu, (uint32_t) slot, clockClass, divKey);
-            if ((int) alt >= 0) fx = alt;
+            cont = false;
+            fx = pickFxExt (kUse, (uint32_t) slot, clockClass, divKey);
+            if ((int) fx < 0) return;                                  // nothing in this group
+            // Chaos: sometimes substitute a different reader FROM THE SAME GROUP
+            if (traj > 0.f && arpHash01 (kFresh, (uint32_t) slot, 0xC7u) < traj * 0.35f)
+            {
+                const GlitchFx alt = pickFxExt (kFresh ^ 0x27d4eb2fu, (uint32_t) slot, clockClass, divKey);
+                if ((int) alt >= 0) fx = alt;
+            }
         }
 
         latchFireExt (fx, kUse, (uint32_t) slot, gate, traj,
                       arpHash01 (kFresh, (uint32_t) slot, 0xC9u), stepSamp, step);
+        if (cont) pendNonce_ = bNonce_[gk];                            // the SAME dice — the moment repeats
+        // fb143 DROP — some fires land as pure SILENCE (a hole punched in the loop). A
+        // streak keeps its hole-ness: a cluster is all-glitch or all-hole, never a coin toss.
+        pendHole_ = cont ? (bHole_[gk] != 0)
+                         : (ext_.drop > 0.001f
+                            && arpHash01 (kUse, (uint32_t) slot, 0xD0Du) < arpClamp01 (ext_.drop));
+        bStep_[gk] = step; bNonce_[gk] = pendNonce_; bFx_[gk] = (int) fx; bHole_[gk] = pendHole_ ? 1 : 0;
     }
 
     // shared ext fire latch (boundary fires + Roll punch-ins)
@@ -528,6 +563,7 @@ private:
         pendSemis_ = semis;
         pendPitch_ = (float) std::pow (2.0, (double) semis / 12.0);
         pendReverse_ = false;
+        pendHole_    = false;                                          // fb143 — Roll punch-ins always sound
 
         // the fire nonce: a locked slot replays its ENTIRE internal dice (true déjà vu)
         pendNonce_ = kUse ^ (slot * 2246822519u + 0x165667B1u);
@@ -604,6 +640,7 @@ private:
         gFx_ = pendFx_; gStartW_ = pendStartW_;
         gLen_ = pendGLen_; gDur_ = pendGDur_;
         latchedPitch_ = pendPitch_; latchedReverse_ = pendReverse_;
+        holeFire_ = extOn_ && pendHole_;                             // fb143 — this fire is a hole
         gCounter_ = 0; readPosF_ = 0.0; shCnt_ = 0; shHold_ = 0.f; shHoldR_ = 0.f; lastSubGrain_ = -1; lastWrap_ = -1;
         seamInterval_ = extOn_ ? computeSeamIntervalExt() : computeSeamInterval();
         xfLen_ = fade_;
@@ -1140,6 +1177,18 @@ private:
     int      pendSemis_ = 0;
     float    pendStep16_ = 0.f, fireStep16_ = 0.f;
     long long fireCount_ = 0;
+    // fb143 BURST — per fire-group streak memory (the master + every fb127 group)
+    static constexpr long long kBNever = -(1LL << 62);
+    static int burstKey (int clockClass, int divKey) noexcept
+    {
+        const int c = clockClass < 0 ? 0 : (clockClass > 2 ? 2 : clockClass);
+        const int d = divKey    < -1 ? -1 : (divKey    > 19 ? 19 : divKey);
+        return (d + 1) * 3 + c;                                        // 0..62
+    }
+    long long bStep_[63]; uint32_t bNonce_[63] {}; int bFx_[63] {}; int bHole_[63] {};
+    // fb143 DROP — hole-fire state + the 2.5ms wet glide (the slew law)
+    bool  pendHole_ = false, holeFire_ = false;
+    float holeG_ = 1.f, kHole_ = 0.02f;
     double   phF_ = 0.0, lenCur_ = 0.0, driftOff_ = 0.0, chunkOff_ = 0.0;
     float    lvlCur_ = 1.f;
     int      wrapN_ = 0;

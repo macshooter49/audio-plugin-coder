@@ -3215,6 +3215,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::FLOW_GLI_OUTMODE, 1 }, "Glitch Out Mode",
         juce::StringArray { "Mix", "Cut", "Gate" }, 0));
     addFlowKnob (ParameterIDs::FLOW_GLI_PING,"Glitch Ping",0.00f);
+    addFlowKnob (ParameterIDs::FLOW_GLI_DROP,"Glitch Drop",0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_BURST,"Glitch Burst",0.00f);   // fb143
     addFlowKnob (ParameterIDs::FLOW_GLI_BEND,  "Glitch Bend",  0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_SEED, "Glitch Seed", 0.00f);
     addFlowKnob (ParameterIDs::FLOW_GLI_REP_SIZE,  "Glitch Repeat Size", 1.00f); addFlowKnob (ParameterIDs::FLOW_GLI_REP_SPEED, "Glitch Repeat Speed",0.00f);
     addFlowKnob (ParameterIDs::FLOW_GLI_REP_FADE,  "Glitch Repeat Fade", 0.00f); addFlowKnob (ParameterIDs::FLOW_GLI_REP_VARY,  "Glitch Repeat Vary", 0.00f);
@@ -6028,6 +6029,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             X.en[7] = *rawParam (ParameterIDs::FLOW_GLI_EN_SCT)  > 0.5f;
             X.dejavu = flowBase (ParameterIDs::FLOW_GLI_DEJAVU);
             X.decay  = flowBase (ParameterIDs::FLOW_GLI_DECAY);
+            X.drop   = flowBase (ParameterIDs::FLOW_GLI_DROP);               // fb143 — hole fires
+            X.burst  = flowBase (ParameterIDs::FLOW_GLI_BURST);              // fb143 — fires streak
             X.bend   = flowBase (ParameterIDs::FLOW_GLI_BEND);
             X.seed   = (int) std::lround (flowBase (ParameterIDs::FLOW_GLI_SEED) * 99.0f);
             X.holdSteps  = kHoldL[juce::jlimit (0, 5, (int) *rawParam (ParameterIDs::FLOW_GLI_HOLD))];

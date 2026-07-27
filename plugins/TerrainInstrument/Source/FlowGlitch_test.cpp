@@ -621,6 +621,49 @@ int main()
         check (flips >= 4, buf);
     }
 
+    // ── T31: DROP (fb143) — hole fires punch silence into the loop, click-free ─────────
+    {
+        auto run = [](float drop){
+            FlowGlitch g; g.prepare (SR, 4.0);
+            GlitchExtParams x; x.en[0] = true; x.drop = drop; g.setExt (x); g.setMix (1.f);
+            std::vector<float> L (512), R (512), acc;
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            for (int b = 0; b < 200; ++b)
+            {
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                g.process (0.6111f, 0.5f, 1.0f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                for (int i = 0; i < 512; ++i) acc.push_back (L[(size_t) i]);
+                gc += 512; ppq += pps * 512;
+            }
+            return acc; };
+        auto loud = run (0.f), holes = run (1.f), mixd = run (0.6f);
+        double eL = 0, eH = 0; for (auto v : loud) eL += (double) v * v; for (auto v : holes) eH += (double) v * v;
+        check (eH < eL * 0.10, "T31 DROP 100% = the loop goes silent (holes everywhere; residual = the pre-first-fire dry lead-in + seam blips)");
+        double mj = 0; bool fin = true;
+        for (size_t i = 1; i < mixd.size(); ++i) { mj = std::max (mj, (double) std::fabs (mixd[i] - mixd[i - 1])); fin = fin && std::isfinite (mixd[i]); }
+        char buf[96]; std::snprintf (buf, sizeof buf, "T31 DROP 60%% is click-free (max jump %.4f)", mj);
+        check (mj < 0.15 && fin, buf);
+    }
+    // ── T32: BURST (fb143) — fires streak into clusters; off = the fb142 count exactly ──
+    {
+        auto count = [](float burst){
+            FlowGlitch g; g.prepare (SR, 4.0);
+            GlitchExtParams x; x.en[0] = true; x.burst = burst; g.setExt (x); g.setMix (1.f);
+            std::vector<float> L (512), R (512);
+            double ppq = 0; const double pps = (BPM / 60.0) / SR; long long gc = 0;
+            for (int b = 0; b < 400; ++b)
+            {
+                for (int i = 0; i < 512; ++i) { float v = sineSig (gc + i); L[(size_t) i] = v; R[(size_t) i] = v; }
+                g.process (0.6111f, 0.5f, 0.30f, 0.f, 0.f, ppq, BPM, SR, L.data(), R.data(), 512, true);
+                gc += 512; ppq += pps * 512;
+            }
+            return g.vizFireCount(); };
+        const auto n0 = count (0.f), nA = count (0.f), n1 = count (1.f);
+        char buf[96]; std::snprintf (buf, sizeof buf, "T32 BURST streaks (%lld fires off -> %lld on)", n0, n1);
+        check (n1 > n0 + n0 / 2, buf);
+        check (n0 == nA, "T32 burst off is deterministic (hash streams, no RNG)");
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;
