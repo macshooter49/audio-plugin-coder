@@ -480,8 +480,10 @@ void TerrainInstrumentAudioProcessor::timerCallback()
         const auto p = ms.getScreenPosition();
         modDragX_ = (float) p.x; modDragY_ = (float) p.y; ++modDragSeq_;
         if (! juce::ModifierKeys::getCurrentModifiersRealtime().isLeftButtonDown())
-        { modDragPhase_ = 1; ++modDragSeq_; }                          // native drop
+        { modDragPhase_ = 1; modDragIdleTicks_ = 0; ++modDragSeq_; }   // native drop
     }
+    else if (modDragPhase_ == 1 && ++modDragIdleTicks_ > 12)
+    { modDragPhase_ = 2; modDragIdleTicks_ = 0; }                      // fb150 — consumed; back to idle
 
     rebuildMorphIfNeeded (morphA_, 0, ParameterIDs::SYN_OSC_A_WT_PRESET,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE,
