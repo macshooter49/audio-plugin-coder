@@ -393,6 +393,13 @@ namespace tw
 
         /** Most-recent L1 value (bipolar -1..+1) for the editor's live LFO dot. */
         float getSynthLfoVis() const noexcept { return lfoVisValue_; }
+
+        /** fb163 — LIVE FILTER CURVE: this voice's effective (post-mod: LFO + env routes +
+            keytrack + drift + velocity) cutoff Hz and resonance per slot, for the display. */
+        float getFltVisHz1()  const noexcept { return lastCutHz1_; }
+        float getFltVisHz2()  const noexcept { return lastCutHz2_; }
+        float getFltVisRes1() const noexcept { return visRes1_; }
+        float getFltVisRes2() const noexcept { return visRes2_; }
         void setFilterType (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
@@ -3742,7 +3749,7 @@ namespace tw
                     }
                     const float res1 = juce::jlimit (0.0f, 1.0f,
                         baseRes01_ + resWander * driftState_ * 0.5f);
-                    filterSlot_.setParams (lastCutHz1_, res1, drv01_, coefSr);
+                    filterSlot_.setParams (lastCutHz1_, res1, drv01_, coefSr); visRes1_ = res1;
 
                     // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
                     const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis + ktCutSemis2 + velAmt2_ * currentVelocity_ * 72.0f;
@@ -3753,7 +3760,7 @@ namespace tw
                     }
                     const float res2 = juce::jlimit (0.0f, 1.0f,
                         baseRes012_ + resWander * driftState_ * 0.5f);
-                    filterSlot2_.setParams (lastCutHz2_, res2, drv012_, coefSr);
+                    filterSlot2_.setParams (lastCutHz2_, res2, drv012_, coefSr); visRes2_ = res2;
 
                     // PER-OSC ROUTING combine. Buses: bus1 = scratch (F1's sources), bus2 = fltBus2_
                     // (F2 sources in parallel / F2-only in series), dry = fltDry_ (unrouted, bypass).
@@ -4314,6 +4321,7 @@ namespace tw
         // CPU: semitone→Hz pow() change-gates (unmodulated cutoff = bit-identical per sample).
         // Sentinel -1e9 never matches a real semitone sum, so the first sample always computes.
         float                   lastCutSemis1_ = -1.0e9f, lastCutHz1_ = 20000.0f;
+        float                   visRes1_ = 0.3f, visRes2_ = 0.3f;   // fb163 — live res for the display (post-drift)
         float                   lastCutSemis2_ = -1.0e9f, lastCutHz2_ = 20000.0f;
         // Routing between the two filters + per-filter wet/dry mix.
         int                     filterRouting_ = 0;    // 0 = series, 1 = parallel

@@ -641,6 +641,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.getSynthModMatrix());
             })
+            .withNativeFunction("getFilterLive", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb163 — LIVE FILTER CURVE: [hz1,res1,hz2,res2] from the loudest voice
+                // (hz -1 = idle). Polled per frame by the filter display so the curve
+                // moves with whatever modulates cutoff/res.
+                auto& p = audioProcessor;
+                juce::String j; j.preallocateBytes (96);
+                j << "[" << p.fltVisHz1_.load (std::memory_order_relaxed)
+                  << "," << p.fltVisRes1_.load (std::memory_order_relaxed)
+                  << "," << p.fltVisHz2_.load (std::memory_order_relaxed)
+                  << "," << p.fltVisRes2_.load (std::memory_order_relaxed) << "]";
+                complete (j);
+            })
             .withNativeFunction("getModDrag", [this](const juce::Array<juce::var>&,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

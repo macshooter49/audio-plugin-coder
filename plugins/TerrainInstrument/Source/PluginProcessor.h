@@ -563,6 +563,9 @@ public:
     int modDragSrc_ = 0;                                // fb149 — 0 = main window · 1 = the LFO palette
     int modDragIdleTicks_ = 0;                          // fb150 — drop phase auto-idles after ~200ms
     float modDragX_ = 0.f, modDragY_ = 0.f;
+    // fb163 — LIVE FILTER CURVE: loudest voice's post-mod cutoff/res per slot (Hz, 0..1);
+    // hz = -1 while idle so the display falls back to the base params.
+    std::atomic<float> fltVisHz1_ { -1.f }, fltVisRes1_ { 0.f }, fltVisHz2_ { -1.f }, fltVisRes2_ { 0.f };
     juce::uint32 modDragSeq_ = 0;
     static bool physicalLeftButtonDown();               // fb151 — window-server button truth (see PluginProcessor.cpp)
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);

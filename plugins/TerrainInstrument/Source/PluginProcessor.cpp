@@ -5189,6 +5189,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
         // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
         synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
+        // fb163 — LIVE FILTER CURVE: same loudest-voice pick feeds the filter display.
+        fltVisHz1_.store  (any && bestVoice != nullptr ? bestVoice->getFltVisHz1()  : -1.f, std::memory_order_relaxed);
+        fltVisRes1_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes1() :  0.f, std::memory_order_relaxed);
+        fltVisHz2_.store  (any && bestVoice != nullptr ? bestVoice->getFltVisHz2()  : -1.f, std::memory_order_relaxed);
+        fltVisRes2_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes2() :  0.f, std::memory_order_relaxed);
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
         oscScopePubAccum_ += (double) numSamples;
         if (! vizLive) oscScopePubAccum_ = 0.0;   // fb148 — no backlog while closed (a grown accumulator would publish every block on reopen)
