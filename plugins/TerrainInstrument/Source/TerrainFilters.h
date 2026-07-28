@@ -109,9 +109,33 @@ enum class Type : int
     RING_MOD    = 21,   BODE_SHIFT  = 22,    BIT_CRUSH   = 23,
     WAVESHAPER  = 24,   GRAIN_MASK  = 25,
     REVERB_FILT_2 = 26,
-    NONE        = 27
+    NONE        = 27,   // ── FROZEN: everything below is fb165 APPEND-ONLY (saved states hold raw indices) ──
+    // fb165 — THE FILTER EXPANSION (Serum-2-scale taxonomy, Max 2026-07-28)
+    LADDER_LP6  = 28,   LADDER_LP18 = 29,    GERMAN_LP   = 30,
+    GERMANIUM_LP= 31,   FRENCH_LP   = 32,    ACID_SCREAM = 33,
+    XPD_HP6     = 34,   XPD_HP12    = 35,    XPD_HP18    = 36,
+    XPD_BP12    = 37,   XPD_BP24    = 38,    XPD_BP6     = 39,
+    XPD_NOTCH   = 40,   XPD_PHASE   = 41,    XPD_LP1     = 42,
+    SVF_LP24    = 43,   SVF_HP24    = 44,    SVF_BP24    = 45,
+    SVF_N24     = 46,   SVF_PEAK    = 47,
+    SEM_LP      = 48,   SEM_NOTCH   = 49,    SEM_HP      = 50,  SEM_BP = 51,
+    MULTI_LH    = 52,   MULTI_LB    = 53,    MULTI_LN    = 54,
+    MULTI_HB    = 55,   MULTI_HN    = 56,    MULTI_BB    = 57,
+    MULTI_BN    = 58,   MULTI_PP    = 59,    MULTI_NN    = 60,  MULTI_PH = 61,
+    COMB_WIDE   = 62,   COMB_OCTAVE = 63,    COMB_FIFTH  = 64,
+    COMB_DAMP   = 65,   KARPLUS_BRIGHT = 66, KARPLUS_MUTE = 67,
+    FORMANT_O   = 68,   FORMANT_U   = 69,    FORMANT_WIDE = 70, FORMANT_GROWL = 71,
+    PHASER_6P   = 72,   PHASER_12P  = 73,    PHASER_16P  = 74,
+    DIFFUSOR    = 75,   BODE_DOWN   = 76,
+    TILT        = 77,   LOW_EQ      = 78,    HIGH_EQ     = 79,
+    BAND_EQ     = 80,   AIR         = 81,    ADD_BASS    = 82,
+    SAMPHOLD    = 83,   SAMPHOLD_MINUS = 84,
+    SCREAM_LP   = 85,   SCREAM_BP   = 86,
+    WASP        = 87,   MS20_LP     = 88,    POLIVOKS    = 89,
+    RING_X2     = 90,   RADIO       = 91,
+    REVERB_DARK = 92,   REVERB_METAL = 93
 };
-constexpr int kNumTypes = 28;
+constexpr int kNumTypes = 94;
 
 // ─── 1. Moog Ladder LP·24 (Huovilainen, corrected ZDF) — report §1 ─────
 //
@@ -866,7 +890,7 @@ struct AllpassStage
 // (DRV, louder). 4 stages -> 2 notches; 8 -> 4. CUT/ENV sweep the notches.
 struct PhaserCore
 {
-    static constexpr int MAXST = 8;
+    static constexpr int MAXST = 16;   // fb165 — 12P/16P types
     AllpassStage ap[MAXST];
     int   nStages = 4;
     float fb = 0.f, fbState = 0.f, preDrv = 1.f, drvMk = 1.f;
@@ -1107,6 +1131,7 @@ struct BodeShifter
     double osC = 1.0, osS = 0.0, oscCos = 1.0, oscSin = 0.0;
     int    renorm = 0;
     float  fb = 0.0f, fbState = 0.0f, preDrv = 1.0f, drvMk = 1.0f;
+    float  dirMul = 1.0f;   // fb165 — BODE DOWN mirrors the shift direction
     DCBlocker dc;
 
     void reset() noexcept
@@ -1124,7 +1149,7 @@ struct BodeShifter
         const float d01  = cut01 - 0.5f;
         const float FMAX = 1000.0f;
         float fshift = (d01 < 0.0f ? -1.0f : 1.0f) * (std::pow (FMAX + 1.0f, 2.0f * std::fabs (d01)) - 1.0f);
-        fshift = juce::jlimit (-2000.0f, 2000.0f, fshift);
+        fshift = dirMul * juce::jlimit (-2000.0f, 2000.0f, fshift);
         const double w = 2.0 * juce::MathConstants<double>::pi * (double) fshift / fs;
         oscCos = std::cos (w);  oscSin = std::sin (w);
         fb     = 0.95f * res01;
@@ -1268,6 +1293,96 @@ struct CombReverb
 // in via setCoeffs — caller is responsible for oversampling around this
 // call when type is LADDER_LP24/LP12/HP24, DIODE_LP, or ACID_303.
 
+// ═══ fb165 — THE FILTER EXPANSION cores (Max: "add like 100 more filters") ═══
+
+// RBJ bell / shelf biquad (EQ & TONE group). One instance = one band. TDF2.
+struct BellEQ
+{
+    float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+    void reset() noexcept { z1 = z2 = 0; }
+    void setBell (float fc, float gainDb, float Q, double fs) noexcept
+    {
+        const float A  = std::pow (10.0f, gainDb / 40.0f);
+        const float w  = 2.0f * juce::MathConstants<float>::pi
+                       * juce::jlimit (20.0f, 0.45f * (float) fs, fc) / (float) fs;
+        const float sn = std::sin (w), cs = std::cos (w);
+        const float al = sn / (2.0f * juce::jmax (0.1f, Q));
+        const float a0 = 1.0f + al / A;
+        b0 = (1.0f + al * A) / a0;  b1 = (-2.0f * cs) / a0;  b2 = (1.0f - al * A) / a0;
+        a1 = b1;                    a2 = (1.0f - al / A) / a0;
+    }
+    void setShelf (float fc, float gainDb, bool high, double fs) noexcept
+    {
+        const float A  = std::pow (10.0f, gainDb / 40.0f);
+        const float w  = 2.0f * juce::MathConstants<float>::pi
+                       * juce::jlimit (20.0f, 0.45f * (float) fs, fc) / (float) fs;
+        const float sn = std::sin (w), cs = std::cos (w);
+        const float al = 0.5f * sn * std::sqrt (2.0f);            // S = 1
+        const float tA = 2.0f * std::sqrt (A) * al;
+        float A0;
+        if (high)
+        {
+            b0 =      A * ((A + 1) + (A - 1) * cs + tA);
+            b1 = -2 * A * ((A - 1) + (A + 1) * cs);
+            b2 =      A * ((A + 1) + (A - 1) * cs - tA);
+            A0 =          (A + 1) - (A - 1) * cs + tA;
+            a1 =      2 * ((A - 1) - (A + 1) * cs);
+            a2 =          (A + 1) - (A - 1) * cs - tA;
+        }
+        else
+        {
+            b0 =      A * ((A + 1) - (A - 1) * cs + tA);
+            b1 =  2 * A * ((A - 1) - (A + 1) * cs);
+            b2 =      A * ((A + 1) - (A - 1) * cs - tA);
+            A0 =          (A + 1) + (A - 1) * cs + tA;
+            a1 =     -2 * ((A - 1) + (A + 1) * cs);
+            a2 =          (A + 1) + (A - 1) * cs - tA;
+        }
+        b0 /= A0; b1 /= A0; b2 /= A0; a1 /= A0; a2 /= A0;
+    }
+    inline float process (float x) noexcept
+    {
+        const float y = b0 * x + z1;
+        z1 = b1 * x - a1 * y + z2;
+        z2 = b2 * x - a2 * y;
+        return y;
+    }
+};
+
+// SAMP-HOLD "filter" (Serum Misc homage): hold the input at rate = CUT.
+struct SampHoldFx
+{
+    float held = 0.0f, acc = 1.0f, inc = 0.001f;
+    bool  minus = false;
+    void reset() noexcept { held = 0.0f; acc = 1.0f; }
+    void setParams (float rateHz, double fs) noexcept
+    { inc = juce::jlimit (1.0e-4f, 0.9f, rateHz / (float) fs); }
+    inline float process (float x) noexcept
+    {
+        acc += inc; if (acc >= 1.0f) { acc -= 1.0f; held = x; }
+        return minus ? (x - held) * 1.4f : held;
+    }
+};
+
+// Variable-length Schroeder allpass (DIFFUSOR stages + ADD BASS phase rotator).
+struct VarAllpass
+{
+    float buf[1024] = { 0.0f };
+    int   idx = 0, len = 256;
+    float g = 0.5f;
+    void reset() noexcept { for (int i = 0; i < 1024; ++i) buf[i] = 0.0f; idx = 0; }
+    void setLen (int L) noexcept { len = juce::jlimit (4, 1023, L); if (idx >= len) idx = 0; }
+    inline float process (float x) noexcept
+    {
+        const float d = buf[idx];
+        const float v = x + g * d;
+        const float y = -g * v + d;
+        buf[idx] = v;
+        if (++idx >= len) idx = 0;
+        return y;
+    }
+};
+
 class FilterSlot
 {
 public:
@@ -1296,6 +1411,13 @@ public:
         bodeL_.reset();     bodeR_.reset();
         grainL_.reset();    grainR_.reset();
         combrevL_.reset();  combrevR_.reset();
+        svf2L_.reset();     svf2R_.reset();
+        ring2L_.reset();    ring2R_.reset();
+        dampL_.reset();     dampR_.reset();
+        eqAL_.reset(); eqAR_.reset(); eqBL_.reset(); eqBR_.reset();
+        shfxL_.reset();     shfxR_.reset();
+        for (int i = 0; i < 4; ++i) { vapL_[i].reset(); vapR_[i].reset(); }
+        fbScrL_ = 0.0f; fbScrR_ = 0.0f;
     }
 
     /** Set the active type. State of inactive filters is left dirty —
@@ -1487,6 +1609,7 @@ public:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
                 break;
             case Type::BODE_SHIFT:
+                bodeL_.dirMul = 1.0f; bodeR_.dirMul = 1.0f;
                 bodeL_.setParams (cutHz, res01, driveLin, fs);
                 bodeR_.setParams (cutHz, res01, driveLin, fs);
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -1499,6 +1622,294 @@ public:
             case Type::REVERB_FILT_2:
                 combrevL_.setParams (cutHz, res01, driveLin, fs);
                 combrevR_.setParams (cutHz, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            // ═══ fb165 — THE FILTER EXPANSION ═══
+            case Type::LADDER_LP6:
+            case Type::LADDER_LP18:
+            {
+                const int tap = (type_ == Type::LADDER_LP6) ? 0 : 2;
+                ladderL_.poleTap = tap; ladderR_.poleTap = tap;
+                const float mk = std::pow (kLadder12Makeup, (3 - tap) * 0.5f);
+                ladderL_.poleMakeup = mk; ladderR_.poleMakeup = mk;
+                ladderL_.setCoeffs (cutHzL, res01, fs);
+                ladderR_.setCoeffs (cutHzR, res01, fs);
+                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                break;
+            }
+            case Type::GERMAN_LP:      // clean ZDF voicing (Serum "German LP" homage): tamed res, soft drive
+                ladderL_.poleTap = 3; ladderR_.poleTap = 3;
+                ladderL_.poleMakeup = 1.0f; ladderR_.poleMakeup = 1.0f;
+                ladderL_.setCoeffs (cutHzL, res01 * 0.85f, fs);
+                ladderR_.setCoeffs (cutHzR, res01 * 0.85f, fs);
+                preDrive_ = 1.0f + (driveLin - 1.0f) * 0.4f;
+                postMakeup_ = driveMakeup (preDrive_);
+                break;
+            case Type::GERMANIUM_LP:   // fuzzy-forward diode voicing (transistor grit)
+                diodeL_.setCoeffs (cutHzL, res01, fs);
+                diodeR_.setCoeffs (cutHzR, res01, fs);
+                preDrive_ = driveLin * 1.8f; postMakeup_ = driveMakeup (driveLin) * 0.8f;
+                break;
+            case Type::FRENCH_LP:      // nonlinear-responding LP (Serum "French LP" homage)
+                diodeL_.setCoeffs (cutHzL, std::pow (res01, 0.7f), fs);
+                diodeR_.setCoeffs (cutHzR, std::pow (res01, 0.7f), fs);
+                preDrive_ = driveLin * 1.3f; postMakeup_ = driveMakeup (driveLin) * 0.9f;
+                break;
+            case Type::ACID_SCREAM:
+                acidL_.setCoeffs (cutHzL, juce::jmin (1.0f, res01 * 1.1f), fs);
+                acidR_.setCoeffs (cutHzR, juce::jmin (1.0f, res01 * 1.1f), fs);
+                preDrive_ = driveLin * 2.2f; postMakeup_ = driveMakeup (driveLin) * 0.75f;
+                break;
+            case Type::XPD_HP6:  case Type::XPD_HP12: case Type::XPD_HP18:
+            case Type::XPD_BP12: case Type::XPD_BP24: case Type::XPD_BP6:
+            case Type::XPD_NOTCH: case Type::XPD_PHASE: case Type::XPD_LP1:
+            {
+                // Oberheim-Xpander pole mixing: ONE ladder core, per-type tap weights
+                // (Electric Druid tables). Resonance stays around the 4-pole loop = authentic.
+                struct W { float w0, w1, w2, w3, w4, mk; };
+                const W w = (type_ == Type::XPD_HP6)   ? W{ 1, -1,  0,  0, 0, 1.0f }
+                          : (type_ == Type::XPD_HP12)  ? W{ 1, -2,  1,  0, 0, 1.0f }
+                          : (type_ == Type::XPD_HP18)  ? W{ 1, -3,  3, -1, 0, 1.0f }
+                          : (type_ == Type::XPD_BP12)  ? W{ 0,  2, -2,  0, 0, 1.6f }
+                          : (type_ == Type::XPD_BP24)  ? W{ 0,  0,  4, -8, 4, 1.5f }
+                          : (type_ == Type::XPD_BP6)   ? W{ 0,  1, -1,  0, 0, 2.0f }
+                          : (type_ == Type::XPD_NOTCH) ? W{ 1, -2,  2,  0, 0, 1.0f }
+                          : (type_ == Type::XPD_PHASE) ? W{ 1, -4,  4,  0, 0, 1.0f }
+                          :                              W{ 0,  1,  0,  0, 0, 1.0f };
+                auto cfg = [&] (LadderPoleMix& m, float c)
+                { m.w0 = w.w0; m.w1 = w.w1; m.w2 = w.w2; m.w3 = w.w3; m.w4 = w.w4;
+                  m.outMakeup = w.mk; m.setCoeffs (c, res01, fs); };
+                cfg (ladderHpL_, cutHzL); cfg (ladderHpR_, cutHzR);
+                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin) * kLadderHp24Makeup;
+                break;
+            }
+            case Type::SVF_LP24: case Type::SVF_HP24: case Type::SVF_BP24: case Type::SVF_N24:
+            {
+                const SvfMultimode::Output o = (type_ == Type::SVF_LP24) ? SvfMultimode::Output::LP
+                                             : (type_ == Type::SVF_HP24) ? SvfMultimode::Output::HP
+                                             : (type_ == Type::SVF_BP24) ? SvfMultimode::Output::BP
+                                             :                             SvfMultimode::Output::Notch;
+                setSvf (o, 2000.0f, cutHz_, res01, driveLin, fs);
+                const float sMul = std::exp2 (spread_ * kSpreadSemis / 12.0f);
+                svf2L_.qMax = 2000.0f; svf2R_.qMax = 2000.0f; svf2L_.out = o; svf2R_.out = o;
+                svf2L_.setCoeffs (cutHz_ / sMul, res01 * 0.5f, fs);
+                svf2R_.setCoeffs (cutHz_ * sMul, res01 * 0.5f, fs);
+                svf2L_.setDrive (1.0f); svf2R_.setDrive (1.0f);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            }
+            case Type::SVF_PEAK:
+                setSvf (SvfMultimode::Output::Peak, 2000.0f, cutHz_, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 0.7f;
+                break;
+            case Type::SEM_LP: case Type::SEM_NOTCH: case Type::SEM_HP: case Type::SEM_BP:
+                if (type_ == Type::SEM_BP)
+                    setSvf (SvfMultimode::Output::BP, 60.0f, cutHz_, res01, driveLin, fs);
+                else
+                {
+                    svfL_.morph = (type_ == Type::SEM_LP) ? 0.0f : (type_ == Type::SEM_NOTCH) ? 0.5f : 1.0f;
+                    svfR_.morph = svfL_.morph;
+                    setSvf (SvfMultimode::Output::SEM, 60.0f, cutHz_, res01, driveLin, fs);
+                }
+                preDrive_ = 1.0f; postMakeup_ = kObxMakeup;
+                break;
+            case Type::MULTI_LH: case Type::MULTI_LB: case Type::MULTI_LN: case Type::MULTI_HB:
+            case Type::MULTI_HN: case Type::MULTI_BB: case Type::MULTI_BN: case Type::MULTI_PP:
+            case Type::MULTI_NN: case Type::MULTI_PH:
+            {
+                // Serum "Multi" homage: dual SVF in parallel, second band fixed +2 octaves.
+                using O = SvfMultimode::Output;
+                struct M { O a, b; };
+                const M m = (type_ == Type::MULTI_LH) ? M{ O::LP, O::HP }
+                          : (type_ == Type::MULTI_LB) ? M{ O::LP, O::BP }
+                          : (type_ == Type::MULTI_LN) ? M{ O::LP, O::Notch }
+                          : (type_ == Type::MULTI_HB) ? M{ O::HP, O::BP }
+                          : (type_ == Type::MULTI_HN) ? M{ O::HP, O::Notch }
+                          : (type_ == Type::MULTI_BB) ? M{ O::BP, O::BP }
+                          : (type_ == Type::MULTI_BN) ? M{ O::BP, O::Notch }
+                          : (type_ == Type::MULTI_PP) ? M{ O::Peak, O::Peak }
+                          : (type_ == Type::MULTI_NN) ? M{ O::Notch, O::Notch }
+                          :                             M{ O::Peak, O::HP };
+                setSvf (m.a, 2000.0f, cutHz_, res01, driveLin, fs);
+                const float f2   = juce::jmin (cutHz_ * 4.0f, 18000.0f);
+                const float sMul = std::exp2 (spread_ * kSpreadSemis / 12.0f);
+                svf2L_.qMax = 2000.0f; svf2R_.qMax = 2000.0f; svf2L_.out = m.b; svf2R_.out = m.b;
+                svf2L_.setCoeffs (f2 / sMul, res01 * 0.7f, fs);
+                svf2R_.setCoeffs (f2 * sMul, res01 * 0.7f, fs);
+                svf2L_.setDrive (driveLin); svf2R_.setDrive (driveLin);
+                preDrive_ = 1.0f; postMakeup_ = 0.7f;
+                break;
+            }
+            case Type::COMB_WIDE: case Type::COMB_OCTAVE: case Type::COMB_FIFTH:
+            {
+                const float ratio = (type_ == Type::COMB_WIDE) ? 1.012f
+                                  : (type_ == Type::COMB_OCTAVE) ? 2.0f : 1.5f;
+                combL_.mode = CombMode::Plus; combR_.mode = CombMode::Plus;
+                combL_.setParams (cutHzL, res01, fs);
+                combR_.setParams (juce::jmin (cutHzR * ratio, 18000.0f), res01, fs);
+                preDrive_ = driveLin; postMakeup_ = kCombPlusMakeup;
+                break;
+            }
+            case Type::KARPLUS_BRIGHT: case Type::KARPLUS_MUTE:
+            {
+                const float rr = (type_ == Type::KARPLUS_BRIGHT)
+                               ? juce::jmin (1.0f, res01 * 1.15f + 0.08f) : res01 * 0.45f;
+                combL_.mode = CombMode::Karplus; combR_.mode = CombMode::Karplus;
+                combL_.setParams (cutHzL, rr, fs);
+                combR_.setParams (cutHzR * 1.0015f, rr, fs);
+                preDrive_ = driveLin;
+                postMakeup_ = kCombKarplusMakeup * ((type_ == Type::KARPLUS_MUTE) ? 1.4f : 1.0f);
+                break;
+            }
+            case Type::COMB_DAMP:
+            {
+                const int len = (int) juce::jlimit (8.0f, 4790.0f, (float) fs / juce::jmax (20.0f, cutHz_));
+                dampL_.setLen (len); dampR_.setLen ((int) (len * 1.007f) + 1);
+                dampL_.fb = 0.5f + res01 * 0.47f;  dampR_.fb = dampL_.fb;
+                dampL_.damp = 0.5f;                dampR_.damp = 0.5f;
+                preDrive_ = driveLin; postMakeup_ = 1.0f;
+                break;
+            }
+            case Type::FORMANT_O: case Type::FORMANT_U:
+            {
+                const float cut01  = juce::jlimit (0.0f, 1.0f,
+                    std::log (juce::jmax (20.0f, cutHz_) / 20.0f) / std::log (1000.0f));
+                const float qScale = std::pow (0.1f, res01) * 2.0f;
+                const float shift  = std::exp2 ((cut01 - 0.5f) * 2.0f);
+                const int   v      = (type_ == Type::FORMANT_O) ? 3 : 4;
+                formantL_.setVowel (v, shift, qScale, fs);
+                formantR_.setVowel (v, shift, qScale, fs);
+                formantL_.setDrive (driveLin); formantR_.setDrive (driveLin);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            }
+            case Type::FORMANT_WIDE: case Type::FORMANT_GROWL:
+            {
+                const float cut01  = juce::jlimit (0.0f, 1.0f,
+                    std::log (juce::jmax (20.0f, cutHz_) / 20.0f) / std::log (1000.0f));
+                const float qScale = (type_ == Type::FORMANT_WIDE)
+                                   ? std::pow (0.1f, res01) * 4.5f
+                                   : std::pow (0.1f, juce::jmin (1.0f, res01 * 1.2f + 0.15f)) * 1.6f;
+                formantL_.setMorph (cut01, qScale, fs);
+                formantR_.setMorph (cut01, qScale, fs);
+                const float dd = (type_ == Type::FORMANT_GROWL) ? driveLin * 2.0f : driveLin;
+                formantL_.setDrive (dd); formantR_.setDrive (dd);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            }
+            case Type::PHASER_6P: case Type::PHASER_12P: case Type::PHASER_16P:
+            {
+                const int st = (type_ == Type::PHASER_6P) ? 6 : (type_ == Type::PHASER_12P) ? 12 : 16;
+                phaserL_.setParams (st, cutHz_, res01, driveLin, fs);
+                phaserR_.setParams (st, cutHz_, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            }
+            case Type::DIFFUSOR:
+            {
+                const float base = juce::jlimit (16.0f, 1000.0f, (float) fs / juce::jmax (60.0f, cutHz_));
+                static constexpr float kR[4] = { 1.0f, 1.37f, 1.93f, 2.71f };
+                for (int i = 0; i < 4; ++i)
+                {
+                    vapL_[i].setLen ((int) (base * kR[i]));
+                    vapR_[i].setLen ((int) (base * kR[i] * 1.011f) + 1);
+                    vapL_[i].g = 0.4f + res01 * 0.5f; vapR_[i].g = vapL_[i].g;
+                }
+                preDrive_ = driveLin; postMakeup_ = 1.0f;
+                break;
+            }
+            case Type::BODE_DOWN:
+                bodeL_.dirMul = -1.0f; bodeR_.dirMul = -1.0f;
+                bodeL_.setParams (cutHz_, res01, driveLin, fs);
+                bodeR_.setParams (cutHz_, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::TILT:
+            {
+                const float g = (res01 - 0.5f) * 18.0f;   // RES: dark <-> bright around CUT
+                eqAL_.setShelf (cutHz_, -g, false, fs); eqAR_.setShelf (cutHz_, -g, false, fs);
+                eqBL_.setShelf (cutHz_,  g, true,  fs); eqBR_.setShelf (cutHz_,  g, true,  fs);
+                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                break;
+            }
+            case Type::LOW_EQ: case Type::HIGH_EQ: case Type::AIR:
+            {
+                const bool  hi  = (type_ != Type::LOW_EQ);
+                const float fc2 = (type_ == Type::AIR) ? juce::jmax (cutHz_, 4000.0f) : cutHz_;
+                const float g   = (type_ == Type::AIR) ? res01 * 15.0f : res01 * 24.0f - 12.0f;
+                eqAL_.setShelf (fc2, g, hi, fs); eqAR_.setShelf (fc2, g, hi, fs);
+                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                break;
+            }
+            case Type::BAND_EQ:
+                eqAL_.setBell (cutHz_, res01 * 24.0f - 12.0f, 0.7f + drv01 * 4.0f, fs);
+                eqAR_.setBell (cutHz_, res01 * 24.0f - 12.0f, 0.7f + drv01 * 4.0f, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::ADD_BASS:
+            {
+                // Serum's joke-but-useful: phase-rotated LP folded onto the dry with a touch of drive.
+                vapL_[0].setLen ((int) (fs * 0.0008)); vapR_[0].setLen ((int) (fs * 0.0008) + 3);
+                vapL_[1].setLen ((int) (fs * 0.0019)); vapR_[1].setLen ((int) (fs * 0.0019) + 5);
+                vapL_[0].g = vapL_[1].g = vapR_[0].g = vapR_[1].g = 0.5f;
+                setSvf (SvfMultimode::Output::LP, 60.0f, juce::jmax (60.0f, cutHz_),
+                        0.15f + res01 * 0.3f, 1.0f, fs);
+                preDrive_ = driveLin; postMakeup_ = 1.0f;
+                break;
+            }
+            case Type::SAMPHOLD: case Type::SAMPHOLD_MINUS:
+                shfxL_.minus = shfxR_.minus = (type_ == Type::SAMPHOLD_MINUS);
+                shfxL_.setParams (juce::jmax (30.0f, cutHz_), fs);
+                shfxR_.setParams (juce::jmax (30.0f, cutHz_) * 1.003f, fs);
+                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                break;
+            case Type::SCREAM_LP: case Type::SCREAM_BP:
+                setSvf ((type_ == Type::SCREAM_LP) ? SvfMultimode::Output::LP : SvfMultimode::Output::BP,
+                        400.0f, cutHz_, juce::jmin (1.0f, res01 * 0.9f + 0.05f), 1.0f, fs);
+                preDrive_ = driveLin; postMakeup_ = 0.8f;
+                break;
+            case Type::WASP:
+                setSvf (SvfMultimode::Output::LP, 200.0f, cutHz_, res01, driveLin * 3.0f + 2.0f, fs);
+                preDrive_ = 1.2f; postMakeup_ = 0.9f;
+                break;
+            case Type::MS20_LP:
+                setSvf (SvfMultimode::Output::LP, 500.0f, cutHz_, std::pow (res01, 0.8f),
+                        driveLin * 1.6f + 0.5f, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::POLIVOKS:
+                diodeL_.setCoeffs (cutHzL, juce::jmin (1.0f, res01 * 1.25f), fs);
+                diodeR_.setCoeffs (cutHzR, juce::jmin (1.0f, res01 * 1.25f), fs);
+                preDrive_ = driveLin * 2.5f; postMakeup_ = driveMakeup (driveLin) * 0.7f;
+                break;
+            case Type::RING_X2:
+                ringL_.setParams (cutHz_, res01, driveLin, fs);
+                ringR_.setParams (cutHz_, res01, driveLin, fs);
+                ring2L_.setParams (juce::jmin (cutHz_ * 1.5f, 18000.0f), res01, 1.0f, fs);
+                ring2R_.setParams (juce::jmin (cutHz_ * 1.5f, 18000.0f), res01, 1.0f, fs);
+                preDrive_ = 1.0f; postMakeup_ = 0.8f;
+                break;
+            case Type::RADIO:
+            {
+                setSvf (SvfMultimode::Output::BP, 2000.0f, cutHz_, juce::jmax (0.4f, res01), 1.0f, fs);
+                svf2L_.qMax = 2000.0f; svf2R_.qMax = 2000.0f;
+                svf2L_.out = SvfMultimode::Output::BP; svf2R_.out = SvfMultimode::Output::BP;
+                svf2L_.setCoeffs (cutHz_, juce::jmax (0.3f, res01 * 0.8f), fs);
+                svf2R_.setCoeffs (cutHz_, juce::jmax (0.3f, res01 * 0.8f), fs);
+                svf2L_.setDrive (1.0f); svf2R_.setDrive (1.0f);
+                crushL_.setParams (juce::jmax (2000.0f, cutHz_), 0.25f, driveLin, fs);
+                crushR_.setParams (juce::jmax (2000.0f, cutHz_), 0.25f, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.6f;
+                break;
+            }
+            case Type::REVERB_DARK:
+                reverbL_.setParams (cutHz_ * 0.6f, res01, driveLin * 0.85f, fs);
+                reverbR_.setParams (cutHz_ * 0.6f, res01, driveLin * 0.85f, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            case Type::REVERB_METAL:
+                combrevL_.setParams (cutHz_, juce::jmin (1.0f, res01 * 1.25f + 0.1f), driveLin, fs);
+                combrevR_.setParams (cutHz_, juce::jmin (1.0f, res01 * 1.25f + 0.1f), driveLin, fs);
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
                 break;
             case Type::NONE:
@@ -1515,14 +1926,19 @@ public:
         {
             case Type::LADDER_LP24:
             case Type::LADDER_LP12:
+            case Type::LADDER_LP6:  case Type::LADDER_LP18: case Type::GERMAN_LP:
                 l = ladderL_.process (l * preDrive_) * postMakeup_;
                 r = ladderR_.process (r * preDrive_) * postMakeup_;
                 break;
             case Type::LADDER_HP24:
+            case Type::XPD_HP6:  case Type::XPD_HP12: case Type::XPD_HP18:
+            case Type::XPD_BP12: case Type::XPD_BP24: case Type::XPD_BP6:
+            case Type::XPD_NOTCH: case Type::XPD_PHASE: case Type::XPD_LP1:
                 l = ladderHpL_.process (l * preDrive_) * postMakeup_;
                 r = ladderHpR_.process (r * preDrive_) * postMakeup_;
                 break;
             case Type::DIODE_LP:
+            case Type::GERMANIUM_LP: case Type::FRENCH_LP: case Type::POLIVOKS:
                 l = diodeL_.process (l * preDrive_) * postMakeup_;
                 r = diodeR_.process (r * preDrive_) * postMakeup_;
                 break;
@@ -1531,10 +1947,14 @@ public:
             case Type::SVF_BP:
             case Type::SVF_NOTCH:
             case Type::OBX_SVF:
+            case Type::SVF_PEAK:
+            case Type::SEM_LP: case Type::SEM_NOTCH: case Type::SEM_HP: case Type::SEM_BP:
+            case Type::WASP:   case Type::MS20_LP:
                 l = svfL_.process (l * preDrive_) * postMakeup_;
                 r = svfR_.process (r * preDrive_) * postMakeup_;
                 break;
             case Type::ACID_303:
+            case Type::ACID_SCREAM:
                 l = acidL_.process (l * preDrive_) * postMakeup_;
                 r = acidR_.process (r * preDrive_) * postMakeup_;
                 break;
@@ -1542,6 +1962,8 @@ public:
             case Type::COMB_MINUS:
             case Type::COMB_SHIMMER:
             case Type::KARPLUS:
+            case Type::COMB_WIDE: case Type::COMB_OCTAVE: case Type::COMB_FIFTH:
+            case Type::KARPLUS_BRIGHT: case Type::KARPLUS_MUTE:
                 l = combL_.process (l * preDrive_) * postMakeup_;
                 r = combR_.process (r * preDrive_) * postMakeup_;
                 break;
@@ -1549,11 +1971,14 @@ public:
             case Type::FORMANT_E:
             case Type::FORMANT_I:
             case Type::FORMANT_MORPH:
+            case Type::FORMANT_O: case Type::FORMANT_U:
+            case Type::FORMANT_WIDE: case Type::FORMANT_GROWL:
                 l = formantL_.process (l * preDrive_) * postMakeup_;
                 r = formantR_.process (r * preDrive_) * postMakeup_;
                 break;
             case Type::PHASER_4P:
             case Type::PHASER_8P:
+            case Type::PHASER_6P: case Type::PHASER_12P: case Type::PHASER_16P:
                 l = phaserL_.process (l); r = phaserR_.process (r); break;
             case Type::RING_MOD:
                 l = ringL_.process (l);   r = ringR_.process (r);   break;
@@ -1562,13 +1987,85 @@ public:
             case Type::WAVESHAPER:
                 l = shaperL_.process (l); r = shaperR_.process (r); break;
             case Type::REVERB_FILT:
+            case Type::REVERB_DARK:
                 l = reverbL_.process (l); r = reverbR_.process (r); break;
             case Type::BODE_SHIFT:
+            case Type::BODE_DOWN:
                 l = bodeL_.process (l);   r = bodeR_.process (r);   break;
             case Type::GRAIN_MASK:
                 l = grainL_.process (l);  r = grainR_.process (r);  break;
             case Type::REVERB_FILT_2:
+            case Type::REVERB_METAL:
                 l = combrevL_.process (l); r = combrevR_.process (r); break;
+            // ═══ fb165 — genuinely new signal paths ═══
+            case Type::SVF_LP24: case Type::SVF_HP24: case Type::SVF_BP24: case Type::SVF_N24:
+                l = svf2L_.process (svfL_.process (l)) * postMakeup_;
+                r = svf2R_.process (svfR_.process (r)) * postMakeup_;
+                break;
+            case Type::MULTI_LH: case Type::MULTI_LB: case Type::MULTI_LN: case Type::MULTI_HB:
+            case Type::MULTI_HN: case Type::MULTI_BB: case Type::MULTI_BN: case Type::MULTI_PP:
+            case Type::MULTI_NN: case Type::MULTI_PH:
+            {
+                const float li = l, ri = r;
+                l = (svfL_.process (li) + svf2L_.process (li)) * postMakeup_;
+                r = (svfR_.process (ri) + svf2R_.process (ri)) * postMakeup_;
+                break;
+            }
+            case Type::COMB_DAMP:
+            {
+                const float li = l * preDrive_, ri = r * preDrive_;
+                l = 0.5f * (li + dampL_.process (li));
+                r = 0.5f * (ri + dampR_.process (ri));
+                break;
+            }
+            case Type::DIFFUSOR:
+            {
+                float v = l * preDrive_; for (int i = 0; i < 4; ++i) v = vapL_[i].process (v); l = v;
+                v = r * preDrive_;       for (int i = 0; i < 4; ++i) v = vapR_[i].process (v); r = v;
+                break;
+            }
+            case Type::TILT:
+                l = eqBL_.process (eqAL_.process (l * preDrive_)) * postMakeup_;
+                r = eqBR_.process (eqAR_.process (r * preDrive_)) * postMakeup_;
+                break;
+            case Type::LOW_EQ: case Type::HIGH_EQ: case Type::AIR: case Type::BAND_EQ:
+                l = eqAL_.process (l * preDrive_) * postMakeup_;
+                r = eqAR_.process (r * preDrive_) * postMakeup_;
+                break;
+            case Type::ADD_BASS:
+            {
+                float v = vapL_[1].process (vapL_[0].process (l));
+                l = fastTanh ((l + svfL_.process (v)) * preDrive_ * 0.8f) * 1.25f;
+                v = vapR_[1].process (vapR_[0].process (r));
+                r = fastTanh ((r + svfR_.process (v)) * preDrive_ * 0.8f) * 1.25f;
+                break;
+            }
+            case Type::SAMPHOLD: case Type::SAMPHOLD_MINUS:
+                l = shfxL_.process (l * preDrive_) * postMakeup_;
+                r = shfxR_.process (r * preDrive_) * postMakeup_;
+                break;
+            case Type::SCREAM_LP: case Type::SCREAM_BP:
+            {
+                const float fbAmt = 0.3f + res01_ * 0.65f;
+                const float dGain = 1.0f + drv01_ * 6.0f;
+                float in = l * preDrive_ + fastTanh (fbScrL_ * dGain) * fbAmt;
+                l = svfL_.process (in) * postMakeup_; fbScrL_ = l;
+                in = r * preDrive_ + fastTanh (fbScrR_ * dGain) * fbAmt;
+                r = svfR_.process (in) * postMakeup_; fbScrR_ = r;
+                break;
+            }
+            case Type::RING_X2:
+                l = ring2L_.process (ringL_.process (l)) * postMakeup_;
+                r = ring2R_.process (ringR_.process (r)) * postMakeup_;
+                break;
+            case Type::RADIO:
+            {
+                float v = svf2L_.process (svfL_.process (l));
+                l = crushL_.process (v) * postMakeup_;
+                v = svf2R_.process (svfR_.process (r));
+                r = crushR_.process (v) * postMakeup_;
+                break;
+            }
             case Type::NONE:
             default:
                 // True bypass — Max finally hears the oscillators clean.
@@ -1591,7 +2088,14 @@ public:
             || type_ == Type::LADDER_HP24 || type_ == Type::DIODE_LP
             || type_ == Type::ACID_303
             || type_ == Type::WAVESHAPER  || type_ == Type::RING_MOD
-            || type_ == Type::BODE_SHIFT;
+            || type_ == Type::BODE_SHIFT
+            // fb165 — same nonlinear cores, new voicings/mixes
+            || type_ == Type::LADDER_LP6  || type_ == Type::LADDER_LP18
+            || type_ == Type::GERMAN_LP   || type_ == Type::GERMANIUM_LP
+            || type_ == Type::FRENCH_LP   || type_ == Type::POLIVOKS
+            || type_ == Type::ACID_SCREAM
+            || (type_ >= Type::XPD_HP6 && type_ <= Type::XPD_LP1)
+            || type_ == Type::RING_X2     || type_ == Type::BODE_DOWN;
     }
 
     /** Set the OB-X / SEM morph (0=LP, .5=Notch, 1=HP). Wired for when a
@@ -1676,6 +2180,15 @@ private:
     BodeShifter   bodeL_,     bodeR_;         // BODE SHIFTER
     GrainMask     grainL_,    grainR_;        // GRAIN MASK
     CombReverb    combrevL_,  combrevR_;      // REVERB FILTER 2 (Serum/Pigments comb)
+
+    // ── fb165 expansion cores ──
+    SvfMultimode   svf2L_,  svf2R_;      // 24 dB cascades / MULTI 2nd band / RADIO 2nd BP
+    RingMod        ring2L_, ring2R_;     // RING X2 second carrier
+    DampComb<4800> dampL_,  dampR_;      // COMB DAMP (fs/20Hz fits at 48k x2)
+    BellEQ         eqAL_, eqAR_, eqBL_, eqBR_;   // EQ & TONE (B pair = TILT's high band)
+    SampHoldFx     shfxL_,  shfxR_;
+    VarAllpass     vapL_[4], vapR_[4];   // DIFFUSOR 4-stage + ADD BASS rotator (stages 0-1)
+    float          fbScrL_ = 0.0f, fbScrR_ = 0.0f;   // SCREAM feedback state
 };
 
 } // namespace filters
