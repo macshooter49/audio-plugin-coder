@@ -512,6 +512,12 @@ struct NoisePreviewGen
 };
 
 //==============================================================================
+// fb158 — card-window forensic log gate (cardwin.log in ~/Library/WavesCrate). The
+// fb82-90 pop-out saga and the fb149-151 drag hunt are closed; a shipped plugin must
+// not grow a log on every card event. Flip to 1 to hunt card lifecycle bugs again —
+// single-sourced here so BOTH loggers (processor + editor) obey the same switch.
+#define TERRAIN_CARDWIN_LOG 0
+
 class TerrainInstrumentAudioProcessor  : public juce::AudioProcessor,
                                          private juce::Timer
 {

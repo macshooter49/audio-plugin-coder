@@ -4527,10 +4527,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
 // persists to from FL (fb60), so it's writable where temp/App Support are not.
 static void terrainCardLog (const juce::String& msg)
 {
+   #if TERRAIN_CARDWIN_LOG   // fb158 — gated with its processor twin (see PluginProcessor.cpp)
     auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("cardwin.log");
     f.getParentDirectory().createDirectory();
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + msg + "\n");
+   #else
+    juce::ignoreUnused (msg);
+   #endif
 }
 
 class TerrainCardWindow : public juce::TopLevelWindow, private juce::Timer

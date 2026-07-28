@@ -102,12 +102,17 @@ TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 // window dtor's "destroyed" line in cardwin.log always has a named cause; a
 // "destroyed" with no preceding marker = external teardown (the smoking gun).
 //==============================================================================
+// fb158 — gate single-sourced in PluginProcessor.h (TERRAIN_CARDWIN_LOG)
 static void terrainCardLogP (const juce::String& msg)
 {
+   #if TERRAIN_CARDWIN_LOG
     auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("cardwin.log");
     f.getParentDirectory().createDirectory();
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + msg + "\n");
+   #else
+    juce::ignoreUnused (msg);
+   #endif
 }
 
 void TerrainInstrumentAudioProcessor::adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w)
