@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RANDOMIZER · Topographic Map — F1/F2/F3</title>
+<style>
+  body { margin:0; padding:34px; background:#12101E; font-family:-apple-system,'SF Pro Text',sans-serif;
+         display:flex; gap:34px; flex-wrap:wrap; align-items:flex-start; }
+  .slot { display:flex; flex-direction:column; gap:9px; }
+  .stage { width:200px; height:146px; border:1px solid rgba(255,255,255,0.10); border-radius:10px;
+           background:#131120; overflow:hidden; cursor:pointer; position:relative; }
+  canvas { width:200px; height:146px; display:block; }
+  .lab { color:rgba(255,255,255,.55); font-size:10px; letter-spacing:1.6px; }
+  .lab b { color:#fff; font-weight:600; }
+  .hint { color:rgba(255,255,255,.30); font-size:8.5px; letter-spacing:.6px; margin-top:-4px; }
+  /* right-click menu mock — the house glass menu grammar */
+  .menu { width:150px; background:rgba(22,20,34,0.86); -webkit-backdrop-filter:blur(20px) saturate(1.4);
+          border:1px solid rgba(255,255,255,0.11); border-radius:10px; padding:5px;
+          box-shadow:0 16px 40px rgba(0,0,0,.55); }
+  .mrow { display:flex; align-items:center; gap:8px; padding:6px 9px; border-radius:6px;
+          font-size:9.5px; letter-spacing:.6px; color:rgba(255,255,255,.5); }
+  .mrow.on { color:#fff; }
+  .mrow.on .chk { color:#B794FF; }
+  .chk { width:10px; font-size:9px; }
+  .mtitle { font-size:8px; letter-spacing:1.4px; color:rgba(255,255,255,.32); padding:4px 9px 6px; }
+  .msep { height:1px; background:rgba(255,255,255,.07); margin:4px 6px; }
+  .mact { color:rgba(255,255,255,.75); font-size:9.5px; letter-spacing:.6px; padding:6px 9px; }
+</style>
+</head>
+<body>
+
+<div class="slot">
+  <div class="stage" id="s1"><canvas id="c1" width="400" height="292"></canvas></div>
+  <div class="lab"><b>F1 · SURVEY</b> — flat topo, overhead</div>
+  <div class="hint">contour rings drift like weather · click = new landform</div>
+</div>
+
+<div class="slot">
+  <div class="stage" id="s2"><canvas id="c2" width="400" height="292"></canvas></div>
+  <div class="lab"><b>F2 · TERRACES</b> — isometric stacked slices</div>
+  <div class="hint">the reference: 3D elevation terraces · click = new landform</div>
+</div>
+
+<div class="slot">
+  <div class="stage" id="s3"><canvas id="c3" width="400" height="292"></canvas></div>
+  <div class="lab"><b>F3 · RIDGELINE</b> — wireframe flyover</div>
+  <div class="hint">terrain scrolls under you · click = new landform</div>
+</div>
+
+<div class="slot">
+  <div class="menu">
+    <div class="mtitle">RANDOMIZE MODES</div>
+    <div class="mrow"><span class="chk"></span>Arp</div>
+    <div class="mrow on"><span class="chk">✓</span>Chop</div>
+    <div class="mrow on"><span class="chk">✓</span>Glitch</div>
+    <div class="mrow"><span class="chk"></span>Robin</div>
+    <div class="msep"></div>
+    <div class="mrow"><span class="chk"></span>Chains too</div>
+  </div>
+  <div class="lab" style="margin-top:9px;"><b>RIGHT-CLICK</b> — pick what the dice touch</div>
+  <div class="hint">left-click the map = randomize the picked modes (params + chains)</div>
+</div>
+
+<script>
+/* ── shared: 3D value noise (x, y, t) — the landform generator ── */
+function hash3(x,y,z){ var n=x*127.1+y*311.7+z*74.7; n=Math.sin(n)*43758.5453; return n-Math.floor(n); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function sm(t){ return t*t*(3-2*t); }
+function vnoise(x,y,z){
+  var xi=Math.floor(x), yi=Math.floor(y), zi=Math.floor(z);
+  var xf=x-xi, yf=y-yi, zf=z-zi;
+  var u=sm(xf), v=sm(yf), w=sm(zf), c=[];
+  for(var dz=0;dz<2;dz++)for(var dy=0;dy<2;dy++)for(var dx=0;dx<2;dx++)
+    c.push(hash3(xi+dx,yi+dy,zi+dz));
+  return lerp(lerp(lerp(c[0],c[1],u),lerp(c[2],c[3],u),v),
+              lerp(lerp(c[4],c[5],u),lerp(c[6],c[7],u),v),w);
+}
+function fbm(x,y,z){ return vnoise(x,y,z)*0.62 + vnoise(x*2.1,y*2.1,z*1.3)*0.26 + vnoise(x*4.3,y*4.3,z*1.7)*0.12; }
+
+/* each variant owns a field-offset that GLIDES to a new random place on click = the morph */
+function mkField(){
+  return { ox:Math.random()*40, oy:Math.random()*40, tox:0, toy:0, mt:1,
+    jump(){ this.fox=this.ox; this.foy=this.oy;
+            this.tox=this.ox+(Math.random()*24+10)*(Math.random()<0.5?-1:1);
+            this.toy=this.oy+(Math.random()*24+10)*(Math.random()<0.5?-1:1); this.mt=0; },
+    tick(dt){ if(this.mt<1){ this.mt=Math.min(1,this.mt+dt/0.55); var e=1-Math.pow(1-this.mt,3);
+              this.ox=lerp(this.fox,this.tox,e); this.oy=lerp(this.foy,this.toy,e); } },
+    h(nx,ny,t){ var d=fbm(nx*3.1+this.ox, ny*3.1+this.oy, t*0.05);
+                /* dome mask keeps the landform ISLANDED inside the box */
+                var cx=nx-0.5, cy=ny-0.5, m=1-Math.min(1,(cx*cx+cy*cy)*2.6);
+                return Math.max(0, (d-0.28)*1.5) * m; },
+    /* smooth variant — blobby plateaus for the terraces */
+    hs(nx,ny,t){ var d=vnoise(nx*2.3+this.ox, ny*2.3+this.oy, t*0.05)*0.74
+                     + vnoise(nx*4.6+this.ox, ny*4.6+this.oy, t*0.08)*0.26;
+                var cx=nx-0.5, cy=ny-0.5, m=1-Math.min(1,(cx*cx+cy*cy)*2.4);
+                return Math.max(0, (d-0.18)*2.2) * m; },
+    /* raw variant — full-range relief for the ridgeline flyover */
+    hr(nx,ny,t){ return Math.pow(fbm(nx*2.6+this.ox, ny*2.6+this.oy, t*0.05), 1.6); } };
+}
+
+/* marching squares over a grid at a threshold — returns line segments */
+function contour(f, W, H, gx, gy, th, t, fn){ fn=fn||'h';
+  var g=[], segs=[];
+  for(var j=0;j<=gy;j++){ var row=[]; for(var i=0;i<=gx;i++) row.push(f[fn](i/gx, j/gy, t)); g.push(row); }
+  function ix(a,b,va,vb){ return (th-va)/(vb-va||1e-6)*(b-a)+a; }
+  for(var j=0;j<gy;j++)for(var i=0;i<gx;i++){
+    var x0=i/gx*W, x1=(i+1)/gx*W, y0=j/gy*H, y1=(j+1)/gy*H;
+    var a=g[j][i], b=g[j][i+1], c=g[j+1][i+1], d=g[j+1][i];
+    var cs=(a>th?8:0)|(b>th?4:0)|(c>th?2:0)|(d>th?1:0);
+    if(cs===0||cs===15) continue;
+    var T=[ix(x0,x1,a,b),y0], R=[x1,ix(y0,y1,b,c)], B=[ix(x0,x1,d,c),y1], L=[x0,ix(y0,y1,a,d)];
+    var M={1:[L,B],2:[B,R],3:[L,R],4:[T,R],5:[T,L,B,R],6:[T,B],7:[T,L],8:[T,L],9:[T,B],10:[T,R,B,L],11:[T,R],12:[L,R],13:[B,R],14:[L,B]}[cs];
+    for(var k=0;k<M.length;k+=2) segs.push([M[k],M[k+1]]);
+  }
+  return segs;
+}
+
+var LEVELS=[0.10,0.19,0.28,0.37,0.46,0.55,0.66];
+
+/* ── F1 · SURVEY — flat overhead topo ── */
+(function(){
+  var cv=document.getElementById('c1'), ctx=cv.getContext('2d'), f=mkField(), last=0;
+  document.getElementById('s1').addEventListener('click',function(){ f.jump(); });
+  function frame(ts){ var t=ts/1000, dt=Math.min(0.05,t-last); last=t; f.tick(dt);
+    ctx.setTransform(2,0,0,2,0,0); ctx.clearRect(0,0,200,146);
+    LEVELS.forEach(function(th,li){
+      ctx.strokeStyle='rgba(255,255,255,'+(0.16+li*0.115)+')';
+      ctx.lineWidth=(li===3)?1.1:0.6;   /* every 4th ring = an "index contour", like real maps */
+      ctx.beginPath();
+      contour(f,200,146,46,34,th,t).forEach(function(s){ ctx.moveTo(s[0][0],s[0][1]); ctx.lineTo(s[1][0],s[1][1]); });
+      ctx.stroke();
+    });
+    /* summit dots — tiny survey markers on local peaks */
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    for(var i=2;i<12;i++)for(var j=2;j<9;j++){
+      var nx=i/13, ny=j/10, h=f.h(nx,ny,t);
+      if(h>0.68 && h>f.h(nx-0.08,ny,t) && h>f.h(nx+0.08,ny,t) && h>f.h(nx,ny-0.1,t) && h>f.h(nx,ny+0.1,t))
+        ctx.fillRect(nx*200-1, ny*146-1, 2, 2);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ── F2 · TERRACES — isometric stacked elevation slices (the reference) ── */
+(function(){
+  var cv=document.getElementById('c2'), ctx=cv.getContext('2d'), f=mkField(), last=0;
+  document.getElementById('s2').addEventListener('click',function(){ f.jump(); });
+  var SQ=0.40, LIFT=10, TLEV=[0.08,0.19,0.30,0.41,0.52,0.63,0.74];   /* seven nested slices = the terraced island */
+  function frame(ts){ var t=ts/1000, dt=Math.min(0.05,t-last); last=t; f.tick(dt);
+    ctx.setTransform(2,0,0,2,0,0); ctx.clearRect(0,0,200,146);
+    var baseY=146*0.86;
+    TLEV.forEach(function(th,li){
+      ctx.strokeStyle='rgba(255,255,255,'+(0.18+li*0.115)+')';
+      ctx.lineWidth=0.6+li*0.09;
+      ctx.beginPath();
+      contour(f,200,120,46,32,th,t,'hs').forEach(function(s){
+        var ay=baseY+(s[0][1]-60)*SQ-li*LIFT, by=baseY+(s[1][1]-60)*SQ-li*LIFT;
+        ctx.moveTo(s[0][0],ay); ctx.lineTo(s[1][0],by);
+      });
+      ctx.stroke();
+    });
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ── F3 · RIDGELINE — wireframe flyover ── */
+(function(){
+  var cv=document.getElementById('c3'), ctx=cv.getContext('2d'), f=mkField(), last=0, fly=0;
+  document.getElementById('s3').addEventListener('click',function(){ f.jump(); });
+  function frame(ts){ var t=ts/1000, dt=Math.min(0.05,t-last); last=t; f.tick(dt); fly+=dt*0.055;
+    ctx.setTransform(2,0,0,2,0,0); ctx.clearRect(0,0,200,146);
+    var ROWS=16;
+    for(var r=ROWS-1;r>=0;r--){
+      var depth=r/(ROWS-1);                      /* 0 = near, 1 = far */
+      var y0=138-depth*92;                        /* rows recede upward */
+      var amp=52*(1-depth*0.55);                  /* nearer rows taller */
+      ctx.strokeStyle='rgba(255,255,255,'+(0.66-depth*0.52)+')';
+      ctx.lineWidth=depth<0.12?1.0:0.6;
+      ctx.beginPath();
+      for(var i=0;i<=52;i++){
+        var nx=i/52, h=f.hr(nx, depth*0.9+fly, t);
+        var y=y0-h*amp, x=nx*200;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      }
+      ctx.stroke();
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
