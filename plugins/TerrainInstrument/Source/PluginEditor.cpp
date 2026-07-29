@@ -5084,6 +5084,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         restZoom_ = uiZoom_;
         terrainApplyWebScale (*this, restZoom_, 1.0);
         webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");");
+        zoomVerifyTicks_ = 20;                     // fb175 — verify the settle actually took (~330ms)
     }
     // boot retries: the peer may not exist on the first resized(); idempotent
     if (zoomPushLeft_ > 0 && (++zoomTick2_ % 10) == 0)
@@ -5091,6 +5092,29 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         terrainApplyWebScale (*this, restZoom_, uiZoom_ / restZoom_);
         webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");");
         --zoomPushLeft_;
+        if (zoomPushLeft_ == 0) zoomVerifyTicks_ = 20;
+    }
+    // fb175 — CLOSED-LOOP ZOOM. The settle above was fire-and-forget, and in a host
+    // where the apply misses its moment (peer/webview lifecycle) the page silently
+    // lays out at DEVICE px — nothing rescales, letters overlap at small sizes (Max's
+    // mini-size screenshot). The contract is verifiable: a WORKING pageZoom means the
+    // page sees ~820 CSS px at ANY window size. So ask the page what it sees; while
+    // the answer isn't ~820, re-apply and re-ask, gently, forever.
+    if (zoomVerifyTicks_ > 0 && --zoomVerifyTicks_ == 0)
+        webView->evaluateJavascript ("String(window.innerWidth||0)",
+            [this] (juce::WebBrowserComponent::EvaluationResult r)
+            { if (auto* v = r.getResult()) pageVW_ = v->toString().getDoubleValue(); });
+    if (pageVW_ >= 0.0)
+    {
+        const bool landed = std::abs (pageVW_ - 820.0) < 8.0;
+        pageVW_ = -1.0;
+        if (! landed)
+        {
+            terrainApplyWebScale (*this, restZoom_, uiZoom_ / restZoom_);
+            webView->evaluateJavascript ("window.__setUIScale&&window.__setUIScale(" + juce::String (restZoom_, 4) + ");"
+                                         "window.__zoomHeals=(window.__zoomHeals||0)+1;");
+            zoomVerifyTicks_ = 30;                 // re-verify ~500ms — converges or hands to the JS fallback
+        }
     }
     // fb103 — SIZE SELF-HEAL (first ~4s): hosts replay remembered junk sizes at
     // attach (FL kept restoring the 533 minimum from one old shrink → "baby mini

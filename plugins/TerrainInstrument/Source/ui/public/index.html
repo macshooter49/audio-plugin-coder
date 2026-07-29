@@ -23,6 +23,31 @@ window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod)/)||[])
     try{ window.dispatchEvent(new Event('__dprchange')); }catch(e){}
     try{ window.dispatchEvent(new Event('resize')); }catch(e){} };
 })();
+/* fb175 — LAYOUT SELF-HEAL (last resort): a WORKING native pageZoom means this page
+   sees ~820 CSS px at ANY window size — that is the design contract. If the layout is
+   instead seeing DEVICE px (a host where the native apply never lands), scale the page
+   ourselves: root CSS zoom = innerWidth/820. A 1.2s grace lets the native closed-loop
+   heal (fb175 C++) win first; self-clears the moment native takes over (innerWidth
+   returns to ~820 -> z=1). Cards keep their own sizing. __vw()/__vh() = the viewport in
+   LAYOUT px for popup clamps — an exact no-op (/1) whenever native is healthy. */
+(function(){ var W=window;
+  W.__zoomFix=1;
+  W.__vw=function(){ return (W.innerWidth||820)/(W.__zoomFix||1); };
+  W.__vh=function(){ return (W.innerHeight||660)/(W.__zoomFix||1); };
+  if(W.__cardOnly)return;
+  var t0=Date.now(), pend=0;
+  function apply(){ pend=0;
+    var z=(W.innerWidth||820)/820;
+    if(Math.abs(z-1)<0.02||Date.now()-t0<1200) z=1;
+    if(Math.abs(z-(W.__zoomFix||1))<0.002)return;
+    W.__zoomFix=z;
+    document.documentElement.style.zoom=(z===1?'':String(z));
+    try{ W.dispatchEvent(new Event('__dprchange')); }catch(e){}
+  }
+  function kick(){ if(!pend){ pend=1; requestAnimationFrame(apply); } }
+  W.addEventListener('resize',kick);
+  setTimeout(apply,1300); setTimeout(apply,2600); setTimeout(apply,5000);
+})();
 if(window.__cardOnly)document.documentElement.className+=' card-only';
 /* fb147 — CLEAN ENTRANCE (Max: "it kind of forges itself... ugly"): the page builds at
    opacity 0 and fades in as ONE finished piece after load + two frames. The failsafe
@@ -8910,8 +8935,8 @@ window.__synArc = function (ring, n, bipolar) {
          until .open; measuring first returns 0, the clamp runs on a guess, and the menu shears
          off at the plugin edge (Max's catch at the map corner) */
       var mw=menuEl.offsetWidth||160, mh=menuEl.offsetHeight||160;
-      menuEl.style.left=Math.max(6,Math.min(ev.clientX,window.innerWidth-mw-6))+'px';
-      menuEl.style.top =Math.max(6,Math.min(ev.clientY,window.innerHeight-mh-6))+'px';
+      menuEl.style.left=Math.max(6,Math.min(ev.clientX,window.__vw()-mw-6))+'px';
+      menuEl.style.top =Math.max(6,Math.min(ev.clientY,window.__vh()-mh-6))+'px';
       setTimeout(function(){ document.addEventListener('pointerdown',onAway,true); },0);
     }
     cv.style.cursor='pointer';
@@ -11432,8 +11457,8 @@ setTimeout(function wireSynControls () {
           '<div data-a="blend">'   + ic ('<circle cx="6.2" cy="8" r="3.8"/><circle cx="9.8" cy="8" r="3.8"/>') + 'Blend</div>';
         m.classList.add ('open');
         var mw = m.offsetWidth || 140, mh = m.offsetHeight || 76;
-        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth  - mw - 6)) + 'px';
-        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - mh - 6)) + 'px';
+        m.style.left = Math.max (6, Math.min (e.clientX, window.__vw()  - mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.__vh() - mh - 6)) + 'px';
         m.querySelectorAll ('div[data-a]').forEach (function (d) {
           d.onclick = function () {
             m.classList.remove ('open');
@@ -11466,8 +11491,8 @@ setTimeout(function wireSynControls () {
           '<div data-a="wt">'   + ic ('<path d="M1.5 5 q2 -2.4 4 0 t4 0 M1.5 8 q2 -2.4 4 0 t4 0 M1.5 11 q2 -2.4 4 0 t4 0"/>') + 'Wavetable</div>';
         m.classList.add ('open');
         var mw = m.offsetWidth || 140, mh = m.offsetHeight || 110;
-        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth  - mw - 6)) + 'px';
-        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - mh - 6)) + 'px';
+        m.style.left = Math.max (6, Math.min (e.clientX, window.__vw()  - mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.__vh() - mh - 6)) + 'px';
         m.querySelectorAll ('div[data-a]').forEach (function (d) {
           d.onclick = function () {
             m.classList.remove ('open');
@@ -11514,8 +11539,8 @@ setTimeout(function wireSynControls () {
         html += '<div data-clear="1">Clear Wavetable</div>';
         m.innerHTML = html; m.classList.add ('open');
         var mw = m.offsetWidth || 130, mh = m.offsetHeight || 150;
-        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth  - mw - 6)) + 'px';
-        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - mh - 6)) + 'px';
+        m.style.left = Math.max (6, Math.min (e.clientX, window.__vw()  - mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.__vh() - mh - 6)) + 'px';
         m.querySelectorAll ('div[data-r]').forEach (function (d) {
           d.onclick = function () { m.classList.remove ('open'); var idx = + d.dataset.r; if (WT) WT.res[osc] = idx;
             try { var fn = nf ('setImportFrames'); if (fn) Promise.resolve (fn (osc, WT_RES_FRAMES[idx])).then (function () { if (WT) WT.fetch (osc); }); } catch (_) {} };
@@ -11578,8 +11603,8 @@ setTimeout(function wireSynControls () {
         // the WHOLE menu — including Air at the very bottom — stays on screen. If it's taller than the
         // viewport, max-height:88vh + overflow-y:auto lets it scroll. (Fixes: couldn't reach Air.)
         var _mw = m.offsetWidth || 178, _mh = m.offsetHeight || 372;
-        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth - _mw - 6)) + 'px';
-        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - _mh - 6)) + 'px';
+        m.style.left = Math.max (6, Math.min (e.clientX, window.__vw() - _mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.__vh() - _mh - 6)) + 'px';
         m.querySelectorAll ('div[data-a]').forEach (function (d) {
           d.onclick = function () {
             var a = d.dataset.a, st = S.st;
@@ -11821,8 +11846,8 @@ setTimeout(function wireSynControls () {
         // Measure the ACTUAL (now-populated) menu and clamp — with the wavetable rows added it's taller,
         // so the old fixed 150px estimate would push Clear Wavetable off the bottom.
         var _qmw = m.offsetWidth || 190, _qmh = m.offsetHeight || 150;
-        m.style.left = Math.max (6, Math.min (e.clientX, window.innerWidth  - _qmw - 6)) + 'px';
-        m.style.top  = Math.max (6, Math.min (e.clientY, window.innerHeight - _qmh - 6)) + 'px';
+        m.style.left = Math.max (6, Math.min (e.clientX, window.__vw()  - _qmw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (e.clientY, window.__vh() - _qmh - 6)) + 'px';
       }
 
       function wireSample (view) {
@@ -14367,7 +14392,7 @@ setTimeout(function wireSynControls () {
         menuEl.setAttribute('aria-hidden', 'false');
         // Position: clamp to viewport. Use measured menu size after rendering
         // so tall menus (filter type with 5 sections + 27 items) clamp right.
-        const pw = synPanel ? synPanel.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        const pw = synPanel ? synPanel.getBoundingClientRect() : { left: 0, top: 0, width: window.__vw(), height: window.__vh() };
         // Cap height to panel BEFORE measuring so a 27-item menu becomes scrollable.
         menuEl.style.maxHeight = Math.max(120, pw.height - 16) + 'px';
         menuEl.style.left = '0px';
@@ -18090,12 +18115,12 @@ function drawRandomizeIcon() {
     const margin = 8;
     // Anchor menu's right edge to chevron's right edge, top below chevron
     let top = r.bottom + margin;
-    let right = window.innerWidth - r.right;
+    let right = window.__vw() - r.right;
     // Clamp so menu can't fall off-screen
     const menuW = Math.max(menuEl.offsetWidth, 340);
-    if (right + menuW > window.innerWidth - 4) right = Math.max(4, window.innerWidth - menuW - 4);
-    if (top + menuEl.offsetHeight > window.innerHeight - 4) {
-      top = Math.max(4, window.innerHeight - menuEl.offsetHeight - 4);
+    if (right + menuW > window.__vw() - 4) right = Math.max(4, window.__vw() - menuW - 4);
+    if (top + menuEl.offsetHeight > window.__vh() - 4) {
+      top = Math.max(4, window.__vh() - menuEl.offsetHeight - 4);
     }
     menuEl.style.top = top + 'px';
     menuEl.style.right = right + 'px';
@@ -19788,8 +19813,8 @@ function openModContextMenu(paramId, x, y) {
   const menuW = 240, menuH = hasSnap ? 310 : 280;
   let left = x;
   let top = y;
-  if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 8;
-  if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 8;
+  if (left + menuW > window.__vw()) left = window.__vw() - menuW - 8;
+  if (top + menuH > window.__vh()) top = window.__vh() - menuH - 8;
   menu.style.left = left + 'px';
   menu.style.top = top + 'px';
 
@@ -22575,7 +22600,7 @@ restoreThemeFromBackend();
   function openMenu(items,cur,atEl,cb){
     menu.innerHTML=items.map(function(it,i){return '<div class="'+(i===cur?'cur':'')+'" data-i="'+i+'">'+(it.ic||'')+'<span>'+it.t+'</span></div>';}).join('');
     var r=atEl.getBoundingClientRect();
-    menu.style.left=r.left+'px'; menu.style.top=''; menu.style.bottom=(window.innerHeight-r.top+6)+'px';
+    menu.style.left=r.left+'px'; menu.style.top=''; menu.style.bottom=(window.__vh()-r.top+6)+'px';
     menu.classList.add('open');
     menu.querySelectorAll('div[data-i]').forEach(function(d){ d.onclick=function(){ cb(+d.getAttribute('data-i')); menu.classList.remove('open'); }; });
   }
@@ -22637,11 +22662,11 @@ restoreThemeFromBackend();
     var eu=ext.querySelector('#ex-unit'); if(eu)eu.onclick=function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); buildExt(); render(); };
     // drag header
     var h=ext.querySelector('.h'); h.onmousedown=function(e){ if(e.target.classList.contains('x'))return; e.preventDefault(); h.classList.add('grab'); var r=ext.getBoundingClientRect(); var dx=e.clientX-r.left, dy=e.clientY-r.top;
-      function mv(ev){ extPos={x:Math.max(4,Math.min(window.innerWidth-ext.offsetWidth-4,ev.clientX-dx)),y:Math.max(4,Math.min(window.innerHeight-40,ev.clientY-dy))}; ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; }
+      function mv(ev){ extPos={x:Math.max(4,Math.min(window.__vw()-ext.offsetWidth-4,ev.clientX-dx)),y:Math.max(4,Math.min(window.__vh()-40,ev.clientY-dy))}; ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; }
       function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
   }
-  function openExt(){ buildExt(); if(!extPos){ var r=root.getBoundingClientRect(); extPos={x:Math.min(window.innerWidth-330, r.left+r.width-316), y:Math.max(8, r.top-120)}; } ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; ext.classList.add('open'); }
+  function openExt(){ buildExt(); if(!extPos){ var r=root.getBoundingClientRect(); extPos={x:Math.min(window.__vw()-330, r.left+r.width-316), y:Math.max(8, r.top-120)}; } ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; ext.classList.add('open'); }
 
   // ---- live playhead + follower (JS-computed so it rides every LFO's shape, in Hz OR beats) ----
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
@@ -22899,11 +22924,11 @@ restoreThemeFromBackend();
     document.body.appendChild(ext); extCv=ext.querySelector('canvas'); extCtx=extCv.getContext('2d'); attachXY(ext.querySelector('.fe-b'));
     ext.querySelector('.fe-x').onclick=function(){ ext.classList.remove('open'); extOpen=false; };
     var h=ext.querySelector('.fe-h'); h.onmousedown=function(e){ if(e.target.classList.contains('fe-x'))return; e.preventDefault(); var r=ext.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;
-      function mv(ev){ ext.style.left=Math.max(4,Math.min(window.innerWidth-ext.offsetWidth-4,ev.clientX-dx))+'px'; ext.style.top=Math.max(4,Math.min(window.innerHeight-60,ev.clientY-dy))+'px'; }
+      function mv(ev){ ext.style.left=Math.max(4,Math.min(window.__vw()-ext.offsetWidth-4,ev.clientX-dx))+'px'; ext.style.top=Math.max(4,Math.min(window.__vh()-60,ev.clientY-dy))+'px'; }
       function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
   }
-  function openExt(){ if(!ext)buildExt(); var dev=document.getElementById('filter-device'); var r=dev.getBoundingClientRect(); ext.style.left=Math.max(8,Math.min(window.innerWidth-478,r.left))+'px'; ext.style.top=Math.max(8,r.top-285)+'px'; ext.classList.add('open'); extOpen=true; }
+  function openExt(){ if(!ext)buildExt(); var dev=document.getElementById('filter-device'); var r=dev.getBoundingClientRect(); ext.style.left=Math.max(8,Math.min(window.__vw()-478,r.left))+'px'; ext.style.top=Math.max(8,r.top-285)+'px'; ext.classList.add('open'); extOpen=true; }
   /* fb161 — the display IS an instrument (Serum 2 homage; manual p.142: "graphically
      adjust the filter cutoff and resonance (in combination) by clicking and dragging in
      the filter display"). fb162: no grid hairlines (Max's call) — the CURSOR itself is
@@ -23554,8 +23579,8 @@ restoreThemeFromBackend();
           e.preventDefault(); h.classList.add('grab');
           var r=card.getBoundingClientRect(), dx=e.clientX-r.left, dy=e.clientY-r.top;
           function mv(ev){ if(window.__cardEdgeHandoff&&window.__cardEdgeHandoff(cfg.id,card,ev,dx,dy)){ up(); return; }
-            pos={x:Math.max(4,Math.min(window.innerWidth-card.getBoundingClientRect().width-4,ev.clientX-dx)),
-                 y:Math.max(4,Math.min(window.innerHeight-40,ev.clientY-dy))};
+            pos={x:Math.max(4,Math.min(window.__vw()-card.getBoundingClientRect().width-4,ev.clientX-dx)),
+                 y:Math.max(4,Math.min(window.__vh()-40,ev.clientY-dy))};
             card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; }
           function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
           document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
@@ -23563,7 +23588,7 @@ restoreThemeFromBackend();
         return { card:card, body:card.querySelector('.b'),
           open:function(){
             if(!pos){ var r=dev.getBoundingClientRect();
-              pos={x:Math.min(window.innerWidth-332,Math.max(8,r.right-316)), y:Math.max(8,r.top-40)}; }
+              pos={x:Math.min(window.__vw()-332,Math.max(8,r.right-316)), y:Math.max(8,r.top-40)}; }
             card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; card.classList.add('open');
             /* fb95 — equalize pane heights ONCE (needs the card visible to measure):
                switching tabs must never move the dots/chain furniture below */
@@ -23867,8 +23892,8 @@ restoreThemeFromBackend();
             if(user.length){ section('User'); user.forEach(function(p){ row(p,true); }); }
             document.body.appendChild(menu);
             var r=pn.getBoundingClientRect();
-            menu.style.left=Math.max(6,Math.min(window.innerWidth-menu.offsetWidth-6,r.left+r.width/2-menu.offsetWidth/2))+'px';
-            menu.style.top=Math.max(6,Math.min(window.innerHeight-menu.offsetHeight-6,r.bottom+6))+'px';
+            menu.style.left=Math.max(6,Math.min(window.__vw()-menu.offsetWidth-6,r.left+r.width/2-menu.offsetWidth/2))+'px';
+            menu.style.top=Math.max(6,Math.min(window.__vh()-menu.offsetHeight-6,r.bottom+6))+'px';
             setTimeout(function(){ document.addEventListener('pointerdown',outside,true); },0); }
         function openMenu(){ if(menu){ closeMenu(); return; }
           var names=user.map(function(u){ return u.name; }).join('|');
@@ -25709,7 +25734,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     function buildPanel (items, lvl, aRect) {
       closeFrom (lvl);
       var m = document.createElement ('div'); m.className = 'samp-menu'; m.style.overflowY = 'auto';
-      m.style.maxHeight = Math.min (360, window.innerHeight - 20) + 'px';
+      m.style.maxHeight = Math.min (360, window.__vh() - 20) + 'px';
       items.forEach (function (it) {
         var d = document.createElement ('div');
         if (it.folder !== undefined) {
@@ -25739,9 +25764,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       document.body.appendChild (m); m.classList.add ('open');   /* fb172 — measure the REAL box */
       var mw = m.offsetWidth || 160, mh = m.offsetHeight || 200, left, top;
       if (lvl === 0) { left = ev.clientX; top = ev.clientY; }
-      else { left = aRect.right + 2; top = aRect.top - 6; if (left + mw > window.innerWidth - 6) left = aRect.left - mw - 2; }
-      m.style.left = Math.max (6, Math.min (left, window.innerWidth - mw - 6)) + 'px';
-      m.style.top  = Math.max (6, Math.min (top, window.innerHeight - mh - 6)) + 'px';
+      else { left = aRect.right + 2; top = aRect.top - 6; if (left + mw > window.__vw() - 6) left = aRect.left - mw - 2; }
+      m.style.left = Math.max (6, Math.min (left, window.__vw() - mw - 6)) + 'px';
+      m.style.top  = Math.max (6, Math.min (top, window.__vh() - mh - 6)) + 'px';
       panels[lvl] = m; return m;
     }
 
@@ -26143,8 +26168,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       document.body.appendChild (panel);
       var pw = panel.offsetWidth || 384, ph = panel.offsetHeight || 294;
       var ex = (ev && ev.clientX) || 120, ey = (ev && ev.clientY) || 120;
-      panel.style.left = Math.max (6, Math.min (ex, window.innerWidth - pw - 6)) + 'px';
-      panel.style.top  = Math.max (6, Math.min (ey, window.innerHeight - ph - 6)) + 'px';
+      panel.style.left = Math.max (6, Math.min (ex, window.__vw() - pw - 6)) + 'px';
+      panel.style.top  = Math.max (6, Math.min (ey, window.__vh() - ph - 6)) + 'px';
       function close () { clearTimeout (window.__tpbPrevT);
         try { var sf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('stopPreview') : null; if (sf) sf (); } catch (e) {}   // silence any active audition (Max: it kept playing)
         if (panel.parentNode) panel.parentNode.removeChild (panel); document.removeEventListener ('pointerdown', onDown, true); window.__tpbClose = null; }
@@ -26220,7 +26245,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       function clearHL (m) { for (var i = 0; i < m.children.length; i++) if (m.children[i].classList) m.children[i].classList.remove ('hl'); }
       function panel (items, lvl, aRect) {
         closeFrom (lvl);
-        var m = document.createElement ('div'); m.className = 'samp-menu'; m.style.overflowY = 'auto'; m.style.maxHeight = Math.min (340, window.innerHeight - 20) + 'px';
+        var m = document.createElement ('div'); m.className = 'samp-menu'; m.style.overflowY = 'auto'; m.style.maxHeight = Math.min (340, window.__vh() - 20) + 'px';
         items.forEach (function (it) {
           var d = document.createElement ('div');
           if (it.folder !== undefined) {
@@ -26242,9 +26267,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         document.body.appendChild (m); m.classList.add ('open');   /* fb172 — measure the REAL box */
         var mw = m.offsetWidth || 150, mh = m.offsetHeight || 200, left, top;
         if (lvl === 0) { left = ev.clientX; top = ev.clientY; }
-        else { left = aRect.right + 2; top = aRect.top - 6; if (left + mw > window.innerWidth - 6) left = aRect.left - mw - 2; }
-        m.style.left = Math.max (6, Math.min (left, window.innerWidth - mw - 6)) + 'px';
-        m.style.top  = Math.max (6, Math.min (top, window.innerHeight - mh - 6)) + 'px';
+        else { left = aRect.right + 2; top = aRect.top - 6; if (left + mw > window.__vw() - 6) left = aRect.left - mw - 2; }
+        m.style.left = Math.max (6, Math.min (left, window.__vw() - mw - 6)) + 'px';
+        m.style.top  = Math.max (6, Math.min (top, window.__vh() - mh - 6)) + 'px';
         panels[lvl] = m; return m;
       }
       var tree = GROUPS.map (function (g) { return { folder: g.label, children: g.items.map (function (nm) { return { label: nm }; }) }; });
@@ -26666,7 +26691,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb174';   // bump per ship  [fb174 = GLITCH declick pass (DSP only): FREEZE Shine 2x-read linearized (mid-grain fmod wrap clicked at window peak) + 2.5ms gain slew; GATE Shape eg ceiling half/2 (attack swallowed the release above ~0.5 = 1->0 slam) + 0.5ms edge floor; full 123-run sweep clean, crush = character. 68/68 proofs.]
+  var TERRAIN_BUILD = 'fb175';   // bump per ship  [fb175 = PROPORTIONAL RESIZE at every size/page: C++ closed-loop zoom (settle now VERIFIES the page sees ~820 and re-applies until it does — FL's silent pageZoom miss) + JS layout self-heal fallback (root CSS zoom = innerWidth/820 after 1.2s grace, self-clears when native wins) + popup clamps -> __vw()/__vh() layout-px helpers (no-op when healthy).]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
