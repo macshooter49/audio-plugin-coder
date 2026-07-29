@@ -98,10 +98,13 @@ function mkField(){
     hr(nx,ny,t){ return Math.pow(fbm(nx*2.6+this.ox, ny*2.6+this.oy, t*0.05), 1.6); } };
 }
 
-/* marching squares over a grid at a threshold — returns line segments */
-function contour(f, W, H, gx, gy, th, t, fn){ fn=fn||'h';
-  var g=[], segs=[];
-  for(var j=0;j<=gy;j++){ var row=[]; for(var i=0;i<=gx;i++) row.push(f[fn](i/gx, j/gy, t)); g.push(row); }
+/* marching squares — sample the field ONCE per frame, cut all thresholds from the cached grid */
+function sampleGrid(f, gx, gy, t, fn){ fn=fn||'h';
+  var g=[]; for(var j=0;j<=gy;j++){ var row=[]; for(var i=0;i<=gx;i++) row.push(f[fn](i/gx, j/gy, t)); g.push(row); }
+  return g;
+}
+function contourG(g, W, H, gx, gy, th){
+  var segs=[];
   function ix(a,b,va,vb){ return (th-va)/(vb-va||1e-6)*(b-a)+a; }
   for(var j=0;j<gy;j++)for(var i=0;i<gx;i++){
     var x0=i/gx*W, x1=(i+1)/gx*W, y0=j/gy*H, y1=(j+1)/gy*H;
@@ -116,79 +119,110 @@ function contour(f, W, H, gx, gy, th, t, fn){ fn=fn||'h';
 }
 
 var LEVELS=[0.10,0.19,0.28,0.37,0.46,0.55,0.66];
+var TLEVS=[0.08,0.19,0.30,0.41,0.52,0.63,0.74];
 
-/* ── F1 · SURVEY — flat overhead topo ── */
-(function(){
-  var cv=document.getElementById('c1'), ctx=cv.getContext('2d'), f=mkField(), last=0;
-  document.getElementById('s1').addEventListener('click',function(){ f.jump(); });
-  function frame(ts){ var t=ts/1000, dt=Math.min(0.05,t-last); last=t; f.tick(dt);
-    ctx.setTransform(2,0,0,2,0,0); ctx.clearRect(0,0,200,146);
-    LEVELS.forEach(function(th,li){
-      ctx.strokeStyle='rgba(255,255,255,'+(0.16+li*0.115)+')';
-      ctx.lineWidth=(li===3)?1.1:0.6;   /* every 4th ring = an "index contour", like real maps */
-      ctx.beginPath();
-      contour(f,200,146,46,34,th,t).forEach(function(s){ ctx.moveTo(s[0][0],s[0][1]); ctx.lineTo(s[1][0],s[1][1]); });
-      ctx.stroke();
-    });
-    /* summit dots — tiny survey markers on local peaks */
-    ctx.fillStyle='rgba(255,255,255,0.9)';
-    for(var i=2;i<12;i++)for(var j=2;j<9;j++){
-      var nx=i/13, ny=j/10, h=f.h(nx,ny,t);
-      if(h>0.68 && h>f.h(nx-0.08,ny,t) && h>f.h(nx+0.08,ny,t) && h>f.h(nx,ny-0.1,t) && h>f.h(nx,ny+0.1,t))
-        ctx.fillRect(nx*200-1, ny*146-1, 2, 2);
-    }
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-})();
-
-/* ── F2 · TERRACES — isometric stacked elevation slices (the reference) ── */
-(function(){
-  var cv=document.getElementById('c2'), ctx=cv.getContext('2d'), f=mkField(), last=0;
-  document.getElementById('s2').addEventListener('click',function(){ f.jump(); });
-  var SQ=0.40, LIFT=10, TLEV=[0.08,0.19,0.30,0.41,0.52,0.63,0.74];   /* seven nested slices = the terraced island */
-  function frame(ts){ var t=ts/1000, dt=Math.min(0.05,t-last); last=t; f.tick(dt);
-    ctx.setTransform(2,0,0,2,0,0); ctx.clearRect(0,0,200,146);
-    var baseY=146*0.86;
-    TLEV.forEach(function(th,li){
-      ctx.strokeStyle='rgba(255,255,255,'+(0.18+li*0.115)+')';
-      ctx.lineWidth=0.6+li*0.09;
-      ctx.beginPath();
-      contour(f,200,120,46,32,th,t,'hs').forEach(function(s){
-        var ay=baseY+(s[0][1]-60)*SQ-li*LIFT, by=baseY+(s[1][1]-60)*SQ-li*LIFT;
-        ctx.moveTo(s[0][0],ay); ctx.lineTo(s[1][0],by);
-      });
-      ctx.stroke();
-    });
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-})();
-
-/* ── F3 · RIDGELINE — wireframe flyover ── */
-(function(){
-  var cv=document.getElementById('c3'), ctx=cv.getContext('2d'), f=mkField(), last=0, fly=0;
-  document.getElementById('s3').addEventListener('click',function(){ f.jump(); });
+/* ONE painter for every instance — canvas + click element + variant (0 survey / 1 terraces / 2 ridgeline) */
+function spawnMap(cv, clickEl, variant){
+  var ctx=cv.getContext('2d'), f=mkField(), last=0, fly=0;
+  clickEl.addEventListener('click',function(){ f.jump(); });
   function frame(ts){ var t=ts/1000, dt=Math.min(0.05,t-last); last=t; f.tick(dt); fly+=dt*0.055;
     ctx.setTransform(2,0,0,2,0,0); ctx.clearRect(0,0,200,146);
-    var ROWS=16;
-    for(var r=ROWS-1;r>=0;r--){
-      var depth=r/(ROWS-1);                      /* 0 = near, 1 = far */
-      var y0=138-depth*92;                        /* rows recede upward */
-      var amp=52*(1-depth*0.55);                  /* nearer rows taller */
-      ctx.strokeStyle='rgba(255,255,255,'+(0.66-depth*0.52)+')';
-      ctx.lineWidth=depth<0.12?1.0:0.6;
-      ctx.beginPath();
-      for(var i=0;i<=52;i++){
-        var nx=i/52, h=f.hr(nx, depth*0.9+fly, t);
-        var y=y0-h*amp, x=nx*200;
-        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    if(variant===0){
+      var g=sampleGrid(f,46,34,t,'h');
+      LEVELS.forEach(function(th,li){
+        ctx.strokeStyle='rgba(255,255,255,'+(0.16+li*0.115)+')';
+        ctx.lineWidth=(li===3)?1.1:0.6;
+        ctx.beginPath();
+        contourG(g,200,146,46,34,th).forEach(function(sg){ ctx.moveTo(sg[0][0],sg[0][1]); ctx.lineTo(sg[1][0],sg[1][1]); });
+        ctx.stroke();
+      });
+      ctx.fillStyle='rgba(255,255,255,0.9)';
+      for(var i=2;i<12;i++)for(var j=2;j<9;j++){
+        var nx=i/13, ny=j/10, h=f.h(nx,ny,t);
+        if(h>0.68&&h>f.h(nx-0.08,ny,t)&&h>f.h(nx+0.08,ny,t)&&h>f.h(nx,ny-0.1,t)&&h>f.h(nx,ny+0.1,t))
+          ctx.fillRect(nx*200-1,ny*146-1,2,2);
       }
-      ctx.stroke();
+    } else if(variant===1){
+      var baseY=146*0.86, SQ=0.40, LIFT=10;
+      var g2=sampleGrid(f,46,32,t,'hs');
+      TLEVS.forEach(function(th,li){
+        ctx.strokeStyle='rgba(255,255,255,'+(0.18+li*0.115)+')';
+        ctx.lineWidth=0.6+li*0.09;
+        ctx.beginPath();
+        contourG(g2,200,120,46,32,th).forEach(function(sg){
+          var ay=baseY+(sg[0][1]-60)*SQ-li*LIFT, by=baseY+(sg[1][1]-60)*SQ-li*LIFT;
+          ctx.moveTo(sg[0][0],ay); ctx.lineTo(sg[1][0],by);
+        });
+        ctx.stroke();
+      });
+    } else {
+      var ROWS=16;
+      for(var r=ROWS-1;r>=0;r--){
+        var depth=r/(ROWS-1), y0=138-depth*92, amp=52*(1-depth*0.55);
+        ctx.strokeStyle='rgba(255,255,255,'+(0.66-depth*0.52)+')';
+        ctx.lineWidth=depth<0.12?1.0:0.6;
+        ctx.beginPath();
+        for(var i2=0;i2<=52;i2++){
+          var nx2=i2/52, h2=f.hr(nx2, depth*0.9+fly, t);
+          var y=y0-h2*amp, x=nx2*200;
+          i2?ctx.lineTo(x,y):ctx.moveTo(x,y);
+        }
+        ctx.stroke();
+      }
     }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+}
+
+/* the three solo demos */
+spawnMap(document.getElementById('c1'), document.getElementById('s1'), 0);
+spawnMap(document.getElementById('c2'), document.getElementById('s2'), 1);
+spawnMap(document.getElementById('c3'), document.getElementById('s3'), 2);
+</script>
+
+<!-- ═══ IN CONTEXT — the map beside the real neighbors (mode tiles), one strip per variant ═══ -->
+<div style="width:100%;color:rgba(255,255,255,.55);font-size:10px;letter-spacing:1.6px;margin-top:10px;">
+  <b style="color:#fff;">IN CONTEXT</b> — how each sits next to the four modes (click any map = new landform)
+</div>
+<div id="ctx-root" style="display:flex;flex-direction:column;gap:22px;"></div>
+
+<script>
+(function(){
+  var TILE_SVGS = [
+    /* arp — dots + fan */
+    '<svg viewBox="0 0 42 42" width="34" height="34" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.6"><g fill="rgba(255,255,255,.55)" stroke="none"><circle cx="9" cy="13" r="2.2"/><circle cx="9" cy="21" r="2.2"/><circle cx="9" cy="29" r="2.2"/><circle cx="34" cy="8" r="2"/><circle cx="34" cy="21" r="2"/><circle cx="34" cy="34" r="2"/></g><path d="M12,13 C22,13 24,8 33,8"/><path d="M12,21 L33,21"/><path d="M12,29 C22,29 24,34 33,34"/></svg>',
+    /* chop — dot row */
+    '<svg viewBox="0 0 42 42" width="34" height="34"><g fill="rgba(255,255,255,.55)"><circle cx="9" cy="21" r="2.2"/><circle cx="17" cy="21" r="2.2"/><circle cx="25" cy="21" r="2.2"/><circle cx="33" cy="21" r="3"/></g></svg>',
+    /* glitch — dice squares */
+    '<svg viewBox="0 0 42 42" width="34" height="34" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2"><rect x="10" y="10" width="9" height="9" rx="2"/><rect x="23" y="10" width="9" height="9" rx="2" fill="rgba(255,255,255,.55)" stroke="none"/><rect x="10" y="23" width="9" height="9" rx="2" fill="rgba(255,255,255,.35)" stroke="none"/><rect x="23" y="23" width="9" height="9" rx="2"/></svg>',
+    /* robin — wave */
+    '<svg viewBox="0 0 42 42" width="34" height="34" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.8"><path d="M8 24 Q13 18 18 22 T30 22"/><path d="M28 20 q3 -4 6 0" stroke-dasharray="2 2"/></svg>'
+  ];
+  var root = document.getElementById('ctx-root');
+  ['F1 · SURVEY','F2 · TERRACES','F3 · RIDGELINE'].forEach(function(name, vi){
+    var strip = document.createElement('div');
+    strip.style.cssText = 'display:flex;align-items:center;gap:12px;background:#131120;border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:14px;width:max-content;';
+    var grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:9px;width:236px;height:146px;';
+    TILE_SVGS.forEach(function(svg){
+      var tile = document.createElement('div');
+      tile.style.cssText = 'border:1px solid rgba(255,255,255,0.45);border-radius:11px;display:flex;align-items:center;justify-content:center;background:transparent;';
+      tile.innerHTML = svg;
+      grid.appendChild(tile);
+    });
+    var stage = document.createElement('div');
+    stage.style.cssText = 'width:200px;height:146px;border-radius:10px;overflow:hidden;cursor:pointer;background:transparent;';
+    var cv = document.createElement('canvas'); cv.width=400; cv.height=292;
+    cv.style.cssText = 'width:200px;height:146px;display:block;';
+    stage.appendChild(cv);
+    var lab = document.createElement('div');
+    lab.style.cssText = 'color:rgba(255,255,255,.45);font-size:9px;letter-spacing:1.4px;width:86px;';
+    lab.innerHTML = '<b style="color:#fff;">' + name + '</b>';
+    strip.appendChild(grid); strip.appendChild(stage); strip.appendChild(lab);
+    root.appendChild(strip);
+    spawnMap(cv, stage, vi);
+  });
 })();
 </script>
 </body>
