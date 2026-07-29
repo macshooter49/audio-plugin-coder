@@ -664,6 +664,44 @@ int main()
         check (n0 == nA, "T32 burst off is deterministic (hash streams, no RNG)");
     }
 
+    // ── T33: FREEZE SHINE is click-free (fb174) — the 2x octave-up layer reads
+    //    LINEARLY over 2*grain of history (the old fmod wrap teleported mid-grain,
+    //    exactly where the raised-cosine window PEAKS = a click every grain) ──
+    {
+        auto varyOneShot = [](int b){ return (b >= 68 && b < 73) ? 1.0f : 0.0f; };
+        auto run = [&](float shine, float spray, float size){
+            GlitchExtParams p = soloExt (GlitchFx::Freeze);
+            p.holdSteps = 4.0f; p.frzShine = shine; p.frzSpray = spray; p.frzSize = size;
+            return driveG ([&](FlowGlitch& g){ g.setMix (1.0f); g.setExt (p); },
+                           varyOneShot, 0.5f, 0.55f, 0.0f, 0.0f, 170); };
+        GRun off = run (0.f, 0.f, 0.2f), on = run (1.f, 0.f, 0.2f), tor = run (1.f, 1.f, 0.f);
+        const float jOn = maxJump (on.out, 36000, 70000);
+        char buf[96]; std::snprintf (buf, sizeof buf, "T33 SHINE max jump %.4f (was 0.304 at every grain/2)", jOn);
+        check (jOn < 0.02f, buf);
+        auto dev = [](const GRun& r){ float d = 0.f; for (size_t i = 0; i < r.out.size(); ++i) d = std::max (d, std::fabs (r.out[i] - r.dry[i])); return d; };
+        check (dev (on) > dev (off) + 0.1f, "T33 SHINE still shimmers (wet deviates beyond the plain freeze)");
+        check (maxJump (tor.out, 36000, 70000) < 0.02f, "T33 SHINE + full SPRAY at min Size stays click-free");
+    }
+    // ── T34: GATE Shape is click-free (fb174) — eg tops out at half/2 (attack and
+    //    release just meet = a full raised-cosine; the old ceiling let the attack
+    //    SWALLOW the release above Shape ~0.5, a one-sample 1->0 slam every period),
+    //    plus a 0.5ms edge floor so the fastest divisions ramp instead of rasp ──
+    {
+        auto varyOneShot = [](int b){ return (b >= 68 && b < 73) ? 1.0f : 0.0f; };
+        auto run = [&](float rate, float shape){
+            GlitchExtParams p = soloExt (GlitchFx::Gate);
+            p.holdSteps = 4.0f; p.gateRate = rate; p.gateShape = shape; p.gateAmt = 1.0f;
+            return driveG ([&](FlowGlitch& g){ g.setMix (1.0f); g.setExt (p); },
+                           varyOneShot, 0.5f, 0.55f, 0.0f, 0.0f, 170); };
+        const float jFull = maxJump (run (0.14f, 1.0f).out, 36000, 70000);
+        char buf[96]; std::snprintf (buf, sizeof buf, "T34 GATE Shape=1 max jump %.4f (was a one-sample slam, 0.183)", jFull);
+        check (jFull < 0.02f, buf);
+        check (maxJump (run (1.0f, 1.0f).out, 36000, 70000) < 0.02f, "T34 GATE Shape=1 clean at the fastest Rate too");
+        const float jSnap = maxJump (run (1.0f, 0.0f).out, 36000, 70000);
+        std::snprintf (buf, sizeof buf, "T34 GATE snappiest edge is a RAMP not a step (max jump %.4f, the 0.5ms cosine bound)", jSnap);
+        check (jSnap < 0.045f, buf);
+    }
+
     std::printf ("\n%d checks, %d failed\n", g_checks, g_fail);
     if (g_fail == 0) std::printf ("ALL %d CHECKS PASSED\n", g_checks);
     return g_fail == 0 ? 0 : 1;

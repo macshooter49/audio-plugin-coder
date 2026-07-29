@@ -146,6 +146,7 @@ public:
         rng_.seed (seed_ ? seed_ : 0x6117C40Du);
         // ext render state
         phF_ = 0.0; lenCur_ = 0.0; lvlCur_ = 1.f; driftOff_ = 0.0; wrapN_ = 0;
+        shimL_ = shimR_ = 0.f; shineG_ = 0.f;
         chunkOff_ = 0.0; prCur_ = 1.0; prTgt_ = 1.0; semisAcc_ = 0.0;
         ovCnt_ = 0; ovL_ = 0.f; ovR_ = 0.f; bendPh_ = 0.0;
         lpL_ = lpR_ = hpL_ = hpR_ = 0.f; tone1L_ = tone1R_ = 0.f;
@@ -1031,14 +1032,19 @@ private:
                 }
                 idx  = (double) gStartW_ - (double) grain + (double) ph + driftOff_;
                 step = bendMul();
-                // Shine: a windowed octave-up layer (raised-cosine over the grain, so it
-                // fades to zero at every edge — clicks structurally impossible)
-                if (ext_.frzShine > 0.005f)
+                // Shine: a windowed octave-up layer. The 2x read runs LINEARLY over the
+                // last 2*grain of history so it never wraps mid-grain — the old fmod wrap
+                // landed at the raised-cosine's PEAK, a full-level discontinuity every
+                // grain (fb174). Both edges still sit at window zero, and the gain slews
+                // (2.5ms one-pole, the slew law) so knob moves can't step either.
+                const float shineTgt = ext_.frzShine > 0.005f ? arpClamp01 (ext_.frzShine) * 0.7f : 0.f;
+                shineG_ += (shineTgt - shineG_) * kHole_;
+                if (shineG_ > 1.0e-4f)
                 {
                     const double wnd = 0.5 - 0.5 * std::cos (6.28318530718 * (double) ph / (double) grain);
-                    const double p2  = (double) gStartW_ - (double) grain + std::fmod ((double) ph * 2.0, (double) grain) + driftOff_;
-                    shimL_ = (float) (wnd * (double) interp (bufL_, p2)) * arpClamp01 (ext_.frzShine) * 0.7f;
-                    shimR_ = (float) (wnd * (double) interp (bufR_, p2)) * arpClamp01 (ext_.frzShine) * 0.7f;
+                    const double p2  = (double) gStartW_ - 2.0 * (double) grain + 2.0 * (double) ph + driftOff_;
+                    shimL_ = (float) (wnd * (double) interp (bufL_, p2)) * shineG_;
+                    shimR_ = (float) (wnd * (double) interp (bufR_, p2)) * shineG_;
                 }
                 else { shimL_ = shimR_ = 0.f; }
                 return true;
@@ -1068,8 +1074,15 @@ private:
         const int per  = per0 < 2 ? 2 : per0;
         const int ph   = (t + (int) ((double) arpClamp01 (ext_.gateNudge) * (double) per)) % per;
         const int half = per / 2 > 0 ? per / 2 : 1;
-        int eg = (int) ((double) per * (0.02 + (double) arpClamp01 (ext_.gateShape) * 0.46)) + 1;
-        if (eg > half) eg = half;
+        // Shape tops out at eg = half/2 — attack and release just meeting (a full
+        // raised-cosine pulse). The old ceiling (eg = half) let the attack SWALLOW the
+        // release above Shape ~0.5: the else-if handed 1.0 straight to the release's
+        // tail — a one-sample 1 -> 0 slam every period (fb174).
+        int eg = (int) ((double) per * (0.02 + (double) arpClamp01 (ext_.gateShape) * 0.23)) + 1;
+        const int egFloor = (int) std::lround (sr_ * 0.0005);        // 0.5ms edge floor: at the
+        if (eg < egFloor) eg = egFloor;                              // fastest divisions 2% of the
+        if (eg > half / 2) eg = half / 2;                            // period is ~7 samp = a rasp,
+        if (eg < 1) eg = 1;                                          // not a snap (fb174)
         float g;
         if (ph < half)
         {
@@ -1087,7 +1100,7 @@ private:
     // (filter + pan), master Decay. Returns a scale for the wet mix amount.
     float extPost (bool isRead, float& wl, float& wr) noexcept
     {
-        if (gFx_ == GlitchFx::Freeze && ext_.frzShine > 0.005f) { wl += shimL_; wr += shimR_; }
+        if (gFx_ == GlitchFx::Freeze) { wl += shimL_; wr += shimR_; }   // shim slews to 0 on its own (fb174)
 
         // CRUSH — as main (solo) or overlay on any other effect's wet
         if (ext_.en[(int) GlitchFx::Crush] || gFx_ == GlitchFx::Crush)
@@ -1193,7 +1206,7 @@ private:
     float    lvlCur_ = 1.f;
     int      wrapN_ = 0;
     double   prCur_ = 1.0; float prTgt_ = 1.0f; double semisAcc_ = 0.0;
-    float    shimL_ = 0.f, shimR_ = 0.f;
+    float    shimL_ = 0.f, shimR_ = 0.f, shineG_ = 0.f;
     int      ovCnt_ = 0; float ovL_ = 0.f, ovR_ = 0.f;
     double   bendPh_ = 0.0, bendInc_ = 0.0;
     float    lpC_ = 1.f, hpC_ = 1.f, toneC_ = 1.f;
