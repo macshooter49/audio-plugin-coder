@@ -14186,6 +14186,7 @@ setTimeout(function wireSynControls () {
 
         function setEnv(id){
           curEnv=id;
+          window.__selMod = { env: envNumOf(id) || 1 };   /* fb182 — S3 signification follows the hub */
           if(window.__envUpdateChip) window.__envUpdateChip();
           else if(selChip) selChip.innerHTML = LABELS[id]+' <span class="env-sel-arrow">&#9662;</span>';
           wire(); syncLoopUi(); render(); renderDepth();
@@ -23069,7 +23070,15 @@ restoreThemeFromBackend();
     '.sm-att.on{display:block;}'+
     '.sm-att::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(255,255,255,.3);}'+
     '.sm-att .f{position:absolute;left:1px;right:1px;background:#B794FF;border-radius:3px;box-shadow:0 0 7px rgba(139,92,246,.85);}'+
-    '.sm-att .vv{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;font:600 9px -apple-system,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap;}';
+    '.sm-att .vv{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;font:600 9px -apple-system,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap;}'+
+    /* fb182 — S3 signification: the underline (filter-tab grammar: 1.5px, purple-400, r1) */
+    '.sm-ul{position:fixed;z-index:2147483644;height:1.5px;border-radius:1px;background:rgba(255,255,255,0.22);cursor:pointer;}'+
+    '.sm-ul.sel{background:#B794FF;}'+
+    '.sm-routes{position:fixed;z-index:2147483647;background:rgba(24,24,38,0.92);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid rgba(255,255,255,0.10);border-radius:8px;padding:5px 4px;min-width:128px;font:400 10px -apple-system,\'SF Pro Text\',sans-serif;color:rgba(255,255,255,0.85);}'+
+    '.sm-routes .rr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 8px;border-radius:5px;}'+
+    '.sm-routes .rr:hover{background:rgba(167,139,250,0.12);}'+
+    '.sm-routes .rx{color:rgba(255,255,255,0.45);cursor:pointer;padding:0 2px;}'+
+    '.sm-routes .rx:hover{color:#fff;}';
   document.head.appendChild(st);
   // shared attenuation meter (shown while holding a badge)
   var att=document.createElement('div'); att.className='sm-att'; att.innerHTML='<div class="vv"></div><div class="f"></div>'; document.body.appendChild(att);
@@ -23132,6 +23141,11 @@ restoreThemeFromBackend();
   var FSLOT_BACK ={ 'Mix':[62,63], 'Drive':[60,61], 'Env':[56,57], 'Vel':[340,341], 'Track':[342,343] };   // fb78 — the WHOLE back row routes now; front RES/DRV/ENV target the runtime .fk-em emblems
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
+  /* fb182 — S3: the currently SELECTED modulator (env or LFO). Underlines paint purple
+     for its routes, dim for everyone else's; switching selection repaints live. */
+  window.__selMod = window.__selMod || { env:1 };
+  document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('#mod-engine .mv-tabs .t');
+    if(!t)return; var n=+t.getAttribute('data-tab'); if(n>=1&&n<=10) window.__selMod={lfo:n}; });
   var badgeBusy=false;                                        // fb145 — a live depth drag wins over restore()
   var mdFn=null; window.__tiModDragPush=function(l,x,y,p){ try{ if(!mdFn&&window.Juce&&window.Juce.getNativeFunction)mdFn=window.Juce.getNativeFunction('setModDrag'); if(mdFn)mdFn(l,x,y,p,0); }catch(e){} };   /* src 0 = the main window */
 
@@ -23215,6 +23229,26 @@ restoreThemeFromBackend();
      window still works, and the docked foreign receiver stays LIVE — it also caches
      window.__tiModIn every tick, which the fb151 occlusion gate depends on. */
 
+  // ── fb182 S3 — underline bars + the hover route-list ──
+  var ulMap=new Map(), rtMenu=null, rtHideT=null;
+  function srcName(a){ return a.env?('Env '+a.env):('LFO '+a.lfo); }
+  function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
+  function hideRoutesSoon(){ if(rtHideT)clearTimeout(rtHideT); rtHideT=setTimeout(hideRoutes,250); }
+  document.addEventListener('pointerdown',function(e){ if(rtMenu&&!rtMenu.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('sm-ul'))) hideRoutes(); });
+  function showRoutes(el,u){ hideRoutes();
+    var list=assigns.filter(function(a){ return curEl(a)===el; }); if(!list.length)return;
+    rtMenu=document.createElement('div'); rtMenu.className='sm-routes';
+    list.forEach(function(a){ var row=document.createElement('div'); row.className='rr';
+      var lab=document.createElement('span'); lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%';
+      var x=document.createElement('span'); x.className='rx'; x.textContent='\u2715'; x.title='remove';
+      x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); hideRoutes(); });
+      row.appendChild(lab); row.appendChild(x); rtMenu.appendChild(row); });
+    document.body.appendChild(rtMenu);
+    var r=u.getBoundingClientRect(), mw=rtMenu.offsetWidth, mh=rtMenu.offsetHeight;   // measure AFTER append (fb172 law)
+    rtMenu.style.left=Math.max(6,Math.min(r.left, window.__vw()-mw-6))+'px';
+    rtMenu.style.top =Math.max(6,Math.min(r.bottom+5, window.__vh()-mh-6))+'px';
+    rtMenu.addEventListener('mouseenter',function(){ if(rtHideT)clearTimeout(rtHideT); });
+    rtMenu.addEventListener('mouseleave',function(){ hideRoutesSoon(); }); }
   // ── live loop: bob each badge/dot in its LFO's shape × depth × master ──
   function loop(ts){ if(window.__cardOnly)return; var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
     for(var n=1;n<=10;n++){ phase[n-1]+=dt*lfoHz(n); if(phase[n-1]>=1)phase[n-1]-=Math.floor(phase[n-1]); }   // (kept for the future "knob moves with the LFO" pass)
@@ -23233,6 +23267,28 @@ restoreThemeFromBackend();
       else {
         // knobs / LFO tabs — superscript at the top-right corner; multiples step left with a clear gap
         a.badge.style.left=(r.right+2-idx*11)+'px'; a.badge.style.top=(r.top-7)+'px'; } });
+    // fb182 S3 — underlines: one bar per modulated element; purple = the selected
+    // modulator's route lives here, dim = someone else's. Repaints every frame, so
+    // switching envelopes/LFOs flips the map instantly (Max's signification).
+    var seen=new Map(), sm=window.__selMod||{};
+    assigns.forEach(function(a){ var el=curEl(a); if(!el)return;
+      var m=seen.get(el); if(!m){ m={sel:false}; seen.set(el,m); }
+      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)) m.sel=true; });
+    seen.forEach(function(m,el){
+      var u=ulMap.get(el);
+      if(!u){ u=document.createElement('div'); u.className='sm-ul'; document.body.appendChild(u);
+        u.addEventListener('mouseenter',function(){ if(rtHideT)clearTimeout(rtHideT); showRoutes(el,u); });
+        u.addEventListener('mouseleave',function(){ hideRoutesSoon(); });
+        u.addEventListener('click',function(ev){ ev.stopPropagation(); showRoutes(el,u); });
+        ulMap.set(el,u); }
+      var lb=(el.querySelector&&el.querySelector('.knob-label'))||el;
+      var r2=lb.getBoundingClientRect?lb.getBoundingClientRect():null;
+      if(!on||!r2||r2.width===0){ u.style.display='none'; return; }
+      u.style.display='block';
+      u.style.left=(r2.left+r2.width*0.08)+'px'; u.style.width=(r2.width*0.84)+'px';
+      u.style.top=(r2.bottom+2)+'px';
+      u.classList.toggle('sel',m.sel); });
+    ulMap.forEach(function(u,el){ if(!seen.has(el)){ u.remove(); ulMap.delete(el); } });
     requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
 
@@ -26785,7 +26841,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb181';   // bump per ship  [fb181 = hub menu pruned: the legacy 'Route to' + Depth section retired — drag-drop IS the routing (Max). Hub = envelopes + New/Remove + resets.]
+  var TERRAIN_BUILD = 'fb182';   // bump per ship  [fb182 = S3 THE SIGNIFICATION: every modulated param wears an underline (the exact filter-tab grammar — 1.5px purple-400) — PURPLE when the currently selected env/LFO owns it, dim when another does; switching selection flips the map live. Hover/click the underline = the route list (source, depth, remove). Manual right-click assign deferred to S5 (right-click = macros).]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
