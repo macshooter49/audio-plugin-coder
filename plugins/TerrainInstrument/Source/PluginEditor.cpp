@@ -645,6 +645,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(audioProcessor.getSynthModMatrix());
             })
+            .withNativeFunction("setSynthEnvs", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion completion)
+            {
+                if (args.size() > 0) audioProcessor.setSynthDynEnvs (args[0].toString());
+                completion ({});
+            })
+            .withNativeFunction("getSynthEnvs", [this](const juce::Array<juce::var>&,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion completion)
+            {
+                completion (audioProcessor.getSynthDynEnvsJson());
+            })
             .withNativeFunction("getFilterLive", [this](const juce::Array<juce::var>&,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

@@ -63,6 +63,7 @@ namespace tw
             sampleRate_ = (sr > 0.0) ? sr : 48000.0;
             noiseSR_ = (float) sampleRate_;   // NOISE engine Hz-based math (hum/wind/rumble/SVF)
             ampEnv_.prepare (sampleRate_);
+            for (auto& de : dynEnv_) de.prepare (sampleRate_);   // fb177 — dynamic pool
             fltEnvT_.prepare (sampleRate_);
             pitchEnvT_.prepare (sampleRate_);
             mod1EnvT_.prepare (sampleRate_);
@@ -127,6 +128,14 @@ namespace tw
         void setAmpEnv (float dl,float a,float h,float d,float s,float r,
                         float ca,float cd,float cr,bool lp) noexcept
         { setEnvelopeDAHDSR (ampEnv_, dl,a,h,d,s,r,ca,cd,cr,lp); }
+
+        /** fb177 — dynamic envelope pool (Env 6..32). Count + per-slot DAHDSR
+            arrive from the processor's blob broadcast (no APVTS params). */
+        static constexpr int kMaxDynEnvs = 27;
+        void setDynEnvCount (int n) noexcept { dynEnvCount_ = juce::jlimit (0, kMaxDynEnvs, n); }
+        void setDynEnvDAHDSR (int k, float dl,float a,float h,float d,float s,float r,
+                              float ca,float cd,float cr,bool lp) noexcept
+        { if (k >= 0 && k < kMaxDynEnvs) setEnvelopeDAHDSR (dynEnv_[k], dl,a,h,d,s,r,ca,cd,cr,lp); }
 
         // ── Envelope follower taps (for the UI playhead dot) ──
         // Live amp-env output [0,1] and whether this voice is sounding. The editor
@@ -1721,6 +1730,7 @@ namespace tw
             pitchEnvT_.reset(); pitchEnvT_.noteOn();
             mod1EnvT_.reset();  mod1EnvT_.noteOn();
             mod2EnvT_.reset();  mod2EnvT_.noteOn();
+            for (int k = 0; k < dynEnvCount_; ++k) { dynEnv_[k].reset(); dynEnv_[k].noteOn(); }   // fb177
             // Batch 1 — retrigger the per-voice LFO bank. Trig/Env/SustainLoop modes
             // reset phase to startPhase here; Free/Sync keep running.
             for (auto& lfo : synthLfo_) lfo.noteOn();
@@ -1749,6 +1759,7 @@ namespace tw
                 pitchEnvT_.noteOff();
                 mod1EnvT_.noteOff();
                 mod2EnvT_.noteOff();
+                for (int k = 0; k < dynEnvCount_; ++k) dynEnv_[k].noteOff();   // fb177
             }
             else
             {
@@ -4283,6 +4294,11 @@ namespace tw
         terrain::TerrainEnvelope pitchEnvT_;
         terrain::TerrainEnvelope mod1EnvT_;
         terrain::TerrainEnvelope mod2EnvT_;
+        // fb177 — DYNAMIC envelope pool (Row 3 S1): Env 6..32, created from the UI.
+        // Dormant slots cost nothing — never ticked or read until the mod matrix
+        // routes them (S2); noteOn/noteOff state flips are O(1).
+        terrain::TerrainEnvelope dynEnv_[kMaxDynEnvs];
+        int dynEnvCount_ = 0;
         float  pitchEnvDepth_ = 0.0f;     // semitones, bipolar (Batch 3)
         double pitchEnvSemis_ = 0.0;      // per-block: depth × pitchEnv tick
 

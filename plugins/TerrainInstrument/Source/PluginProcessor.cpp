@@ -4832,6 +4832,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setFilterDrive            (filtDrv);
                 sv->setFilterEnvAmount        (filtEnv);
                 sv->setFltEnvDAHDSR           (fltDly, fltEnvA, fltHld, fltEnvD, fltEnvS, fltEnvR, fltCa, fltCd, fltCr, fltLoop);
+                // fb177 — dynamic envelope pool: version-gated copy (once per change,
+                // try-lock never blocks audio), then the per-voice broadcast.
+                if (dynEnvSeen_ != dynEnvVersion_.load (std::memory_order_acquire))
+                {
+                    const juce::ScopedTryLock dsl (dynEnvLock_);
+                    if (dsl.isLocked())
+                    {
+                        for (int k = 0; k < kMaxDynEnvs; ++k) dynEnvAudio_[k] = dynEnvShapes_[k];
+                        dynEnvAudioCount_ = dynEnvCount_;
+                        dynEnvSeen_ = dynEnvVersion_.load (std::memory_order_acquire);
+                    }
+                }
+                sv->setDynEnvCount (dynEnvAudioCount_);
+                for (int k = 0; k < dynEnvAudioCount_; ++k)
+                {
+                    const auto& de = dynEnvAudio_[k];
+                    sv->setDynEnvDAHDSR (k, de.dl, de.a, de.h, de.d, de.s, de.r, de.ca, de.cd, de.cr, de.loop);
+                }
                 sv->setFilterParameters2      (cut2, res2);
                 sv->setFilterType2            (filtType2);
                 sv->setFilterDrive2           (filtDrv2);
@@ -6850,6 +6868,47 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
     synModJson   = json;
 }
 
+// ── fb177 — DYNAMIC ENVELOPES (Env 6..32): the UI pushes {n, e:[{dl,a,h,d,s,r,ca,
+// cd,cr,lp}..]} in natural units. Same lifecycle as the mod-matrix blob: parse on
+// the message thread, swap under lock, version-bump; audio thread copies once per
+// change (try-lock — never blocks) and broadcasts to the voices.
+void TerrainInstrumentAudioProcessor::setSynthDynEnvs (const juce::String& json)
+{
+    auto v = juce::JSON::parse (json);
+    if (! v.isObject()) return;
+    DynEnvShape parsed[kMaxDynEnvs];
+    const int n = juce::jlimit (0, kMaxDynEnvs, (int) v.getProperty ("n", 0));
+    if (auto* arr = v.getProperty ("e", juce::var()).getArray())
+        for (int i = 0; i < arr->size() && i < n; ++i)
+        {
+            const auto& it = (*arr)[i]; DynEnvShape sh;
+            sh.dl   = juce::jlimit (0.0f, 8000.0f, (float) (double) it.getProperty ("dl", 0.0));
+            sh.a    = juce::jlimit (1.0f, 8000.0f, (float) (double) it.getProperty ("a",  5.0));
+            sh.h    = juce::jlimit (0.0f, 8000.0f, (float) (double) it.getProperty ("h",  0.0));
+            sh.d    = juce::jlimit (1.0f, 8000.0f, (float) (double) it.getProperty ("d",  200.0));
+            sh.s    = juce::jlimit (0.0f, 1.0f,    (float) (double) it.getProperty ("s",  0.7));
+            sh.r    = juce::jlimit (1.0f, 8000.0f, (float) (double) it.getProperty ("r",  300.0));
+            sh.ca   = juce::jlimit (-1.0f, 1.0f,   (float) (double) it.getProperty ("ca", 0.0));
+            sh.cd   = juce::jlimit (-1.0f, 1.0f,   (float) (double) it.getProperty ("cd", 0.0));
+            sh.cr   = juce::jlimit (-1.0f, 1.0f,   (float) (double) it.getProperty ("cr", 0.0));
+            sh.loop = (bool) it.getProperty ("lp", false);
+            parsed[i] = sh;
+        }
+    {
+        const juce::ScopedLock sl2 (dynEnvLock_);
+        for (int i = 0; i < kMaxDynEnvs; ++i) dynEnvShapes_[i] = (i < n ? parsed[i] : DynEnvShape());
+        dynEnvCount_ = n;
+        dynEnvJson_  = json;
+    }
+    dynEnvVersion_.fetch_add (1, std::memory_order_release);
+}
+
+juce::String TerrainInstrumentAudioProcessor::getSynthDynEnvsJson() const
+{
+    const juce::ScopedLock sl2 (dynEnvLock_);
+    return dynEnvJson_.isNotEmpty() ? dynEnvJson_ : juce::String ("{\"n\":0,\"e\":[]}");
+}
+
 // ── FLOW · ARP extension lanes (fb105): JS pushes the 7×16 pattern as one JSON blob
 // (mod-matrix lifecycle: parse on the message thread, swap under lock, version-bump
 // so the audio thread copies into the engine exactly once per change).
@@ -7101,6 +7160,11 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         const juce::ScopedLock sl (synModLock);
         if (synModJson.isNotEmpty())
             state.setProperty("synModJson", synModJson, nullptr);
+        {
+            const juce::ScopedLock del (dynEnvLock_);
+            if (dynEnvJson_.isNotEmpty())
+                state.setProperty ("dynEnvJson", dynEnvJson_, nullptr);   // fb177
+        }
     }
     {
         const juce::ScopedLock sl (arpLaneLock_);
@@ -7343,6 +7407,8 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             {
                 auto sm = newState.getProperty("synModJson", "").toString();
                 if (sm.isNotEmpty()) setSynthModMatrix (sm);
+                auto de = newState.getProperty ("dynEnvJson", "").toString();   // fb177
+                if (de.isNotEmpty()) setSynthDynEnvs (de);
             }
             {
                 auto al = newState.getProperty ("arpLanesJson", "").toString();

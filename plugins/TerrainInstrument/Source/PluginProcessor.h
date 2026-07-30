@@ -652,6 +652,15 @@ public:
     void              setSynthModMatrix (const juce::String& json);
     juce::String      getSynthModMatrix() const { return synModJson; }
 
+    // fb177 — dynamic envelopes (Env 6..32): shapes arrive from the UI as ONE JSON
+    // blob (relay-ceiling law: no APVTS params for dynamic slots), persist in state,
+    // broadcast to voices per block via a version-bumped shared copy (arp-lanes
+    // pattern). Natural units: ms / 0..1 sustain / curve -1..+1.
+    struct DynEnvShape { float dl=0, a=5, h=0, d=200, s=0.7f, r=300, ca=0, cd=0, cr=0; bool loop=false; };
+    static constexpr int kMaxDynEnvs = 27;
+    void              setSynthDynEnvs (const juce::String& json);
+    juce::String      getSynthDynEnvsJson() const;
+
     // ── FLOW · ARP extension card (fb105) — lane pattern + live playhead feed ──
     void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
     // fb137 — CARD STATE (slots + chain JSON per card): both surfaces share ONE truth so
@@ -951,6 +960,14 @@ public:
     mutable juce::CriticalSection synModLock;
     std::vector<SynModRoute>      synModRoutes;   // guarded by synModLock
     juce::String                  synModJson;     // last JSON received (for state save)
+    juce::CriticalSection         dynEnvLock_;    // fb177 — dynamic envelope blob
+    DynEnvShape                   dynEnvShapes_[kMaxDynEnvs];
+    int                           dynEnvCount_ = 0;
+    juce::String                  dynEnvJson_;
+    std::atomic<int>              dynEnvVersion_ { 0 };
+    DynEnvShape                   dynEnvAudio_[kMaxDynEnvs];   // audio-thread mirror
+    int                           dynEnvAudioCount_ = 0;
+    int                           dynEnvSeen_ = -1;
 
     // Tape loop read-only state (set by processBlock for UI)
     bool getTapeLoopHasContent() const { return tapeLoop.hasContent(); }
