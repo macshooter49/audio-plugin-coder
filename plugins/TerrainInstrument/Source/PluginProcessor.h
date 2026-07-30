@@ -972,6 +972,25 @@ public:
     terrain::TerrainEnvelope      monoDynEnv_[kMaxDynEnvs];
     int                           monoHeld_ = 0;
     std::atomic<uint32_t>         monoEnvGlobalMask_ { 0 };   // env n bit set = env n routed to a global dest
+    float monoEnvLevelOf (int modSource) const noexcept   // fb179 — KNOB-IS-THE-PEAK (level−1)
+    {
+        double lv = 0.0;
+        switch ((wc::ModSource) modSource)
+        {
+            case wc::ModSource::EnvAmp:    lv = monoLegEnv_[0].level(); break;
+            case wc::ModSource::EnvFilter: lv = monoLegEnv_[1].level(); break;
+            case wc::ModSource::EnvPitch:  lv = monoLegEnv_[2].level(); break;
+            case wc::ModSource::EnvMod1:   lv = monoLegEnv_[3].level(); break;
+            case wc::ModSource::EnvMod2:   lv = monoLegEnv_[4].level(); break;
+            default:
+            {
+                const int k = modSource - (int) wc::ModSource::EnvD1;
+                if (k >= 0 && k < kMaxDynEnvs) lv = monoDynEnv_[k].level();
+                break;
+            }
+        }
+        return (float) lv - 1.0f;
+    }
     DynEnvShape                   dynEnvAudio_[kMaxDynEnvs];   // audio-thread mirror
     int                           dynEnvAudioCount_ = 0;
     int                           dynEnvSeen_ = -1;

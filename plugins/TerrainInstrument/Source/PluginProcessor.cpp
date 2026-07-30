@@ -4121,6 +4121,25 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // change-gates below hold and this whole feature costs NOTHING at idle. Dests below
         // Res1 (the per-voice batch: frame/warp/fold/cutoff/coarse/sub…) keep their richer
         // per-voice application in SynthVoice and are skipped here (no double-modulation).
+        // ZPROBE-ENV (TERRAIN_ENV_PROBE=1): drive the whole env→global chain without a UI or MIDI
+        {
+            static const bool envProbe = (getenv ("TERRAIN_ENV_PROBE") != nullptr);
+            static int pb = 0;
+            if (envProbe)
+            {
+                ++pb;
+                if (pb == 5)
+                {
+                    setSynthDynEnvs ("{\"n\":2,\"e\":[{\"a\":5,\"d\":200,\"s\":0.7,\"r\":300},{\"a\":80,\"d\":400,\"s\":0.4,\"r\":250}]}");
+                    setSynthModMatrix ("[{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::Res1 + 6) + ",\"v\":1.0}]");
+                }
+                const uint32_t gmp = monoEnvGlobalMask_.load (std::memory_order_acquire);
+                if (pb > 5 && (pb % 120) == 0 && (gmp & (1u << 6)))
+                { ++monoHeld_; monoDynEnv_[1].reset(); monoDynEnv_[1].noteOn(); }
+                if (pb > 5 && (pb % 120) == 60 && (gmp & (1u << 6)))
+                { if (--monoHeld_ <= 0) { monoHeld_ = 0; monoDynEnv_[1].noteOff(); } }
+            }
+        }
         // ── fb178 — MONO ENVELOPE TAP upkeep (only when an env feeds a global dest) ──
         {
             const uint32_t gm = monoEnvGlobalMask_.load (std::memory_order_acquire);
@@ -4190,9 +4209,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
                 {
-                    const int en = r.src - wc::kEnvSrcBase;   // 0-based env index
-                    const float lv = (en < 5) ? (float) monoLegEnv_[en].level()
-                                              : (float) monoDynEnv_[en - 5].level();
+                    const float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));   // fb179 — knob-is-the-peak
                     modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], lv, r.depth);
                     continue;
                 }
@@ -4201,6 +4218,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
                                                           flowLfo_[r.src].peek(), r.depth * master);
             }
+        }
+        { // ZPROBE-ENV log
+            static const bool envProbe2 = (getenv ("TERRAIN_ENV_PROBE") != nullptr);
+            static int pb2 = 0;
+            if (envProbe2 && (++pb2 % 60) == 0)
+                juce::File ("/tmp/envprobe.log").appendText (
+                    "pb=" + juce::String (pb2)
+                    + " gm=" + juce::String ((int) monoEnvGlobalMask_.load())
+                    + " held=" + juce::String (monoHeld_)
+                    + " dynN=" + juce::String (dynEnvAudioCount_)
+                    + " e7=" + juce::String (monoDynEnv_[1].level(), 4)
+                    + " sumLevA=" + juce::String (modSums[(int) wc::ModDest::Res1 + 6], 4) + "\n");
         }
         // Wrap helper: base param + this block's mod sum, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
@@ -5202,6 +5231,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const auto& as = synModCfg.assignments[a];
             if (! as.enabled || as.dest != dest) continue;
             const int si = (int) as.source - (int) wc::ModSource::L1;
+            if (wc::isEnvModSource ((int) as.source))             // fb179 — envelopes read the mono tap
+            { sum += wc::routeContribution (info, monoEnvLevelOf ((int) as.source), as.depth); continue; }
             if (si < 0 || si >= wc::NUM_LFOS) continue;           // only LFO sources have a global value
             sum += wc::routeContribution (info, flowLfo_[si].peek(), as.depth);
         }
@@ -6953,9 +6984,8 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
     // fb178 — which envelopes feed GLOBAL (processor-side) dests → the mono tap
     uint32_t gm = 0;
     for (const auto& r : parsed)
-        if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32
-            && r.dest >= (int) wc::ModDest::Res1)
-            gm |= (1u << (r.src - wc::kEnvSrcBase));
+        if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
+            gm |= (1u << (r.src - wc::kEnvSrcBase));   // ANY env route arms the mono tap (flow knobs sit below Res1)
     monoEnvGlobalMask_.store (gm, std::memory_order_release);
     const juce::ScopedLock sl (synModLock);
     synModRoutes = std::move (parsed);

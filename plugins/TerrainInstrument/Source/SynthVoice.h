@@ -137,21 +137,29 @@ namespace tw
                               float ca,float cd,float cr,bool lp) noexcept
         { if (k >= 0 && k < kMaxDynEnvs) setEnvelopeDAHDSR (dynEnv_[k], dl,a,h,d,s,r,ca,cd,cr,lp); }
 
-        /** fb178 — envelope value for a mod-matrix source (block-rate; envelopes
-            advance once per block, so this IS the per-sample value too). */
+        /** fb178/fb179 — envelope value for a mod-matrix source. KNOB-IS-THE-PEAK
+            semantics (Max's law): the matrix sees level−1, so at the envelope's PEAK
+            the parameter equals the knob and everywhere below it follows the shape
+            DOWN by depth×scale. A pluck on a maxed volume knob just WORKS — the old
+            additive-up read as "does nothing" (clamped at the ceiling). */
         float envSourceValue (int sI) const noexcept
         {
+            double lv = 0.0;
             switch ((wc::ModSource) sI)
             {
-                case wc::ModSource::EnvAmp:    return (float) ampEnv_.level();
-                case wc::ModSource::EnvFilter: return (float) fltEnvT_.level();
-                case wc::ModSource::EnvPitch:  return (float) pitchEnvT_.level();
-                case wc::ModSource::EnvMod1:   return (float) mod1EnvT_.level();
-                case wc::ModSource::EnvMod2:   return (float) mod2EnvT_.level();
-                default: break;
+                case wc::ModSource::EnvAmp:    lv = ampEnv_.level();   break;
+                case wc::ModSource::EnvFilter: lv = fltEnvT_.level();  break;
+                case wc::ModSource::EnvPitch:  lv = pitchEnvT_.level();break;
+                case wc::ModSource::EnvMod1:   lv = mod1EnvT_.level(); break;
+                case wc::ModSource::EnvMod2:   lv = mod2EnvT_.level(); break;
+                default:
+                {
+                    const int k = sI - (int) wc::ModSource::EnvD1;
+                    if (k >= 0 && k < kMaxDynEnvs) lv = dynEnv_[k].level();
+                    break;
+                }
             }
-            const int k = sI - (int) wc::ModSource::EnvD1;
-            return (k >= 0 && k < kMaxDynEnvs) ? (float) dynEnv_[k].level() : 0.0f;
+            return (float) lv - 1.0f;
         }
 
         // ── Envelope follower taps (for the UI playhead dot) ──
