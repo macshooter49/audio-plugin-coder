@@ -93,6 +93,10 @@ static void tiGrabWebKeys (juce::Component* comp)
 // 25k-line page. We reach the WKWebView by walking the editor peer's NSView tree.
 static void terrainApplyWebScale (juce::Component& root, double pageZoom, double magnification)
 {
+    // fb176 — TERRAIN_ZOOM_KILL=1: diagnostic mode. Neuters the native zoom (simulates the
+    // FL failure) so the page-side self-heal can be exercised and verified in any host.
+    static const bool zoomKill = (getenv ("TERRAIN_ZOOM_KILL") != nullptr);
+    if (zoomKill) { pageZoom = 1.0; magnification = 1.0; }
     auto* peer = root.getPeer();
     if (peer == nullptr) return;
     id rootView = (id) peer->getNativeHandle();
@@ -4442,8 +4446,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             cons->setFixedAspectRatio ((double) kBaseW / (double) kBaseH);
         setResizable (true, true);
         const int savedW = audioProcessor.editorWidth.load();
-        const int w0 = (savedW >= juce::roundToInt (kBaseW * 0.65) && savedW <= juce::roundToInt (kBaseW * 1.90))
+        int w0 = (savedW >= juce::roundToInt (kBaseW * 0.65) && savedW <= juce::roundToInt (kBaseW * 1.90))
                          ? savedW : kBaseW;
+        if (getenv ("TERRAIN_ZOOM_KILL") != nullptr) w0 = juce::roundToInt (kBaseW * 0.65);   // fb176 diag: worst case
         intendedW_ = w0;   // fb103 — the self-heal defends this against host junk
         // Set size AFTER webView is created (setSize triggers resized())
         setSize (w0, juce::roundToInt ((double) w0 * kBaseH / kBaseW));
@@ -5079,6 +5084,23 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // fb102 — settle: after the drag stops, pageZoom takes the real scale
     // (crisp re-raster) and magnification returns to 1. fb103: the page is told
     // the settled scale so every canvas re-buffers at TRUE device resolution.
+    // fb176 — TERRAIN_ZOOM_KILL diag: log the page's layout truth over time (inert unless set)
+    {
+        static const bool zoomDiag = (getenv ("TERRAIN_ZOOM_KILL") != nullptr);
+        static int zdTick = 0;
+        if (zoomDiag && ++zdTick == 140)
+            webView->evaluateJavascript ("var b=document.getElementById('syn-btn'); b&&b.click();");
+        if (zoomDiag && (zdTick == 30 || zdTick == 150 || zdTick == 300 || zdTick == 600))
+            webView->evaluateJavascript (
+                "(function(){var b=document.body,sp=document.getElementById('syn-panel');"
+                "var spr=sp?sp.getBoundingClientRect():null;"
+                "return 'T'+((window.performance&&performance.now())|0)+' iw:'+window.innerWidth"
+                "+' zf:'+((window.__zoomFix||0).toFixed(3))+' heals:'+(window.__zoomHeals||0)"
+                "+' bodyVis:'+b.getBoundingClientRect().width.toFixed(0)"
+                "+' synVis:'+(spr?spr.width.toFixed(0):'none');})()",
+                [] (juce::WebBrowserComponent::EvaluationResult r)
+                { if (auto* v = r.getResult()) juce::File ("/tmp/tzoom3.log").appendText (v->toString() + "\n"); });
+    }
     if (settleTicks_ > 0 && --settleTicks_ == 0)
     {
         restZoom_ = uiZoom_;
@@ -5673,9 +5695,13 @@ void TerrainInstrumentAudioProcessorEditor::resized()
     zoomPushLeft_ = 12;                 // retries cover the first resized() (peer not up yet)
     // fb103 — a size only becomes the USER'S intent when a real drag set it. Hosts
     // (FL) replay remembered junk through resized() too — that must never stick.
-    if (juce::Desktop::getInstance().getMainMouseSource().isDragging())
+    // fb176 STICKY — FL can deliver the final size after mouse-up: past the 4s heal
+    // window ANY new size is the user's (junk replays only happen at attach).
+    if (juce::Desktop::getInstance().getMainMouseSource().isDragging()
+        || (healTicks_ >= 240 && std::abs (getWidth() - intendedW_) > 4))
     {
         userSized_ = true;
+        intendedW_ = getWidth();
         audioProcessor.editorWidth.store (getWidth());
     }
 }

@@ -44,7 +44,9 @@ window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod)/)||[])
     document.documentElement.style.zoom=(z===1?'':String(z));
     try{ W.dispatchEvent(new Event('__dprchange')); }catch(e){}
   }
-  function kick(){ if(!pend){ pend=1; requestAnimationFrame(apply); } }
+  function kick(){ if(pend)clearTimeout(pend); pend=setTimeout(apply,400); }   /* fb176 — trailing
+    debounce: during a native drag magnification already scales; jumping in mid-drag would
+    double-scale. 400ms after the last resize the native settle (160ms) has already won or lost. */
   W.addEventListener('resize',kick);
   setTimeout(apply,1300); setTimeout(apply,2600); setTimeout(apply,5000);
 })();
@@ -129,6 +131,11 @@ body {
   -webkit-font-smoothing: antialiased;
   width: 820px;
   height: 640px;
+  position: relative;   /* fb176 — absolute layers (#syn-panel) must anchor to the 820 DESIGN
+                           box, not the raw viewport: WebKit's zoom does not scale the initial
+                           containing block, so ICB-anchored panels stayed squeezed while their
+                           content shrank (FL, small window). Healthy hosts: viewport == body
+                           box == identical behavior. */
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
@@ -26691,7 +26698,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb175';   // bump per ship  [fb175 = PROPORTIONAL RESIZE at every size/page: C++ closed-loop zoom (settle now VERIFIES the page sees ~820 and re-applies until it does — FL's silent pageZoom miss) + JS layout self-heal fallback (root CSS zoom = innerWidth/820 after 1.2s grace, self-clears when native wins) + popup clamps -> __vw()/__vh() layout-px helpers (no-op when healthy).]
+  var TERRAIN_BUILD = 'fb176';   // bump per ship  [fb176 = RESIZE FIXED FOR REAL: body position:relative (absolute layers anchored the raw viewport — WebKit zoom does NOT scale the ICB, so #syn-panel stayed squeezed while its content shrank; Chrome scales the ICB, which is why headless verification lied) + fallback 400ms trailing debounce (no mid-drag double-scale) + STICKY size (post-heal-window resizes persist) + TERRAIN_ZOOM_KILL=1 diag mode.]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
