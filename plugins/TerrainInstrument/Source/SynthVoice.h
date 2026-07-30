@@ -88,6 +88,7 @@ namespace tw
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
             airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
             oscGateCoef_ = 1.0f - std::exp (-1.0f / (0.004f * (float) juce::jmax (1.0, sampleRate_)));  // ~4ms mute fade — click-free
+            lvlSmCoef_ = 1.0f - std::exp (-1.0f / (0.0025f * (float) juce::jmax (1.0, sampleRate_)));   // fb180 — level glide
         }
 
         /** Set AMP envelope params. attackMs/decayMs/releaseMs are milliseconds;
@@ -3577,14 +3578,22 @@ namespace tw
                 for (int g = 0; g < 4; ++g) oscGate_[g] += (robinGate (g) - oscGate_[g]) * oscGateCoef_;
                 const float gA = oscGate_[0], gB = oscGate_[1], gC = oscGate_[2], gD = oscGate_[3];
 
+                // fb180 — LEVELS GLIDE (2.5ms one-pole, the slew law): fb178 made LevelA-D
+                // live mod dests, so a plucking envelope stepped the gain at block rate —
+                // audible crackle. Same pattern as the mute gates one line up.
+                lvlSmA_ += (level_  - lvlSmA_) * lvlSmCoef_;
+                lvlSmB_ += (levelB_ - lvlSmB_) * lvlSmCoef_;
+                lvlSmC_ += (levelC_ - lvlSmC_) * lvlSmCoef_;
+                lvlSmD_ += (levelD_ - lvlSmD_) * lvlSmCoef_;
+
                 // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate), split
                 // into the 3 filter-routing buses. Each osc's full signal = osc-only (sX-subMono)
                 // + its sub (subMono); routed by busCo*_ (F1 bus = scratch, F2 = fltBus2_, dry =
                 // fltDry_). Default (all sources → F1) makes scratch = the old full mix exactly.
-                const float gAL = level_  * panL_  * gA * velEnv, gAR = level_  * panR_  * gA * velEnv;
-                const float gBL = levelB_ * panLB_ * gB * velEnv, gBR = levelB_ * panRB_ * gB * velEnv;
-                const float gCL = levelC_ * panLC_ * gC * velEnv, gCR = levelC_ * panRC_ * gC * velEnv;
-                const float gDL = levelD_ * panLD_ * gD * velEnv, gDR = levelD_ * panRD_ * gD * velEnv;
+                const float gAL = lvlSmA_ * panL_  * gA * velEnv, gAR = lvlSmA_ * panR_  * gA * velEnv;   // fb180 — glided
+                const float gBL = lvlSmB_ * panLB_ * gB * velEnv, gBR = lvlSmB_ * panRB_ * gB * velEnv;
+                const float gCL = lvlSmC_ * panLC_ * gC * velEnv, gCR = lvlSmC_ * panRC_ * gC * velEnv;
+                const float gDL = lvlSmD_ * panLD_ * gD * velEnv, gDR = lvlSmD_ * panRD_ * gD * velEnv;
                 const float oAL = (sA_L - subMono0) * gAL, oAR = (sA_R - subMono0) * gAR;   // osc-only (sub removed)
                 const float oBL = (sB_L - subMono1) * gBL, oBR = (sB_R - subMono1) * gBR;
                 const float oCL = (sC_L - subMono2) * gCL, oCR = (sC_R - subMono2) * gCR;
@@ -4453,6 +4462,7 @@ namespace tw
 
         juce::AudioBuffer<float>       scratch_;
         float                          level_ = 0.7f;
+        float lvlSmA_ = 0.0f, lvlSmB_ = 0.0f, lvlSmC_ = 0.0f, lvlSmD_ = 0.0f, lvlSmCoef_ = 0.02f;   // fb180
         float                          panL_  = 0.7071f;  // cos(pi/4)
         float                          panR_  = 0.7071f;  // sin(pi/4)
 
@@ -4684,8 +4694,9 @@ namespace tw
             float* wR = blk.getWritePointer (1);
             outL = wL; outR = wR;
             if (! isSamp) return;
-            // CPU: an osc at LEVEL 0 contributes exactly 0 to the sum (out × level_ × pan), and
-            // level_ is block-constant (not per-sample modulated — Level isn't a mod dest). So skip
+            // CPU: an osc at LEVEL 0 contributes exactly 0 to the sum (out × level_ × pan). Since
+            // fb178 Level IS a mod dest (block-rate + fb180 glide): at exact 0 the glide has already
+            // rung out below audibility, so the skip stays bit-safe. So skip
             // the whole tick/snap/region/warp render and just clear — bit-identical to ×0, but no
             // phase-vocoder etc. for a silent/unused sample osc. (Mute is separate: its gate is
             // per-sample smoothed, so it is NOT folded in here — only the true level knob at 0.)

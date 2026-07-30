@@ -1869,12 +1869,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     const juce::StringArray envDestChoices {
         "Off", "Amp", "Filter 1", "Filter 2", "Filter 1+2", "Mod 1", "Mod 2", "Pitch" };
     layout.add (std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { ParameterIDs::SYN_ENV2_DEST, 1 }, "Synth Env 2 Destination", envDestChoices, 2)); // Filter 1
+        juce::ParameterID { ParameterIDs::SYN_ENV2_DEST, 1 }, "Synth Env 2 Destination", envDestChoices, 0)); // fb180 — Off (no auto-routes; Env 1 = Amp is the only lock, per Max)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV2_DEPTH, 1 }, "Synth Env 2 Depth",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { ParameterIDs::SYN_ENV3_DEST, 1 }, "Synth Env 3 Destination", envDestChoices, 7)); // Pitch
+        juce::ParameterID { ParameterIDs::SYN_ENV3_DEST, 1 }, "Synth Env 3 Destination", envDestChoices, 0)); // fb180 — Off
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV3_DEPTH, 1 }, "Synth Env 3 Depth",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.0f));
@@ -4178,8 +4178,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     if (msg.isNoteOn())
                     {
                         ++monoHeld_;
-                        for (int k = 0; k < 5; ++k)           if (gm & (1u << k))       { monoLegEnv_[k].reset(); monoLegEnv_[k].noteOn(); }
-                        for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) { monoDynEnv_[k].reset(); monoDynEnv_[k].noteOn(); }
+                        for (int k = 0; k < 5; ++k)           if (gm & (1u << k))       monoLegEnv_[k].noteOn();   // fb180 — no reset: click-free retrigger from the current level
+                        for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) monoDynEnv_[k].noteOn();
                     }
                     else if (msg.isNoteOff())
                     {
@@ -4210,7 +4210,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
                 {
                     const float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));   // fb179 — knob-is-the-peak
-                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], lv, r.depth);
+                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], lv, std::abs (r.depth));   // fb180 — magnitude
                     continue;
                 }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
@@ -4804,7 +4804,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     {
                         synModCfg.assignments[na].source  = wc::envSourceFor (r.src - wc::kEnvSrcBase + 1);
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
-                        synModCfg.assignments[na].depth   = r.depth;          // envelopes have no master ring
+                        synModCfg.assignments[na].depth   = std::abs (r.depth);   // fb180 — envelope depth is MAGNITUDE (direction is always knob-is-the-peak; the inverted mode read as 'the sound comes back')
                         synModCfg.assignments[na].enabled = true;
                         ++na; continue;
                     }

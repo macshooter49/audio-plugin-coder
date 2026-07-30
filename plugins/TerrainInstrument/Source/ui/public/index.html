@@ -14246,7 +14246,7 @@ setTimeout(function wireSynControls () {
         // Route-to labels. Index 1 (Amp) is intentionally NOT offered as a destination —
         // Env 1 is the amplitude envelope; nothing else routes to amp.
         var DEST_LABELS = ['Off','Amp','Filter 1','Filter 2','Filter 1 + 2','Mod 1','Mod 2','Pitch'];
-        var DEST_DEFAULT= { FLT:2, PIT:7, M1:0, M2:0 };          // matches the APVTS defaults
+        var DEST_DEFAULT= { FLT:0, PIT:0, M1:0, M2:0 };          // fb180 — no auto-routes (matches the APVTS defaults)
         var FILT_ENV_PARAM = { 1:'SYN_FILTER1_ENV', 2:'SYN_FILTER2_ENV' };
         var _ssCache = {};
         function ssOf(pid){ if(_ssCache[pid]) return _ssCache[pid];   // cache only resolved states
@@ -14262,7 +14262,7 @@ setTimeout(function wireSynControls () {
           return (v>=0?'+':'')+(v*100).toFixed(0)+'%'; }            // Filter/Mod as %
         function updateChip(){ if(!selChip) return;
           if(isDynEnv(curEnv)){ selChip.innerHTML='Env '+envNumOf(curEnv)+' \u00B7 Free'; return; }   // fb177
-          var id=curEnv, dest=(id==='AMP')?'Amp':DEST_LABELS[destIdx(id)];
+          var id=curEnv, dest=(id==='AMP')?'Amp':(destIdx(id)===0?'Free':DEST_LABELS[destIdx(id)]);   /* fb180 */
           selChip.innerHTML = 'Env '+ENVNUM[id]+' \u00B7 '+dest; }
         window.__envUpdateChip = updateChip;
         window.__envCurNum = function(){ return envNumOf(curEnv) || 1; };   /* fb178 — the drag source */
@@ -14355,7 +14355,7 @@ setTimeout(function wireSynControls () {
               dynEnvs.push(dynDefShape()); rebuildDynStates(); dynPush();
               setEnv('D'+(dynEnvs.length+5)); showHub(x,y); } });
           [1,2,3,4,5].forEach(function(n){ var id=BYNUM[n];
-            var sub=(id==='AMP')?'Amp':DEST_LABELS[destIdx(id)];
+            var sub=(id==='AMP')?'Amp':(destIdx(id)===0?'Free':DEST_LABELS[destIdx(id)]);   /* fb180 */
             items.push({ label:'Env '+n, badge:sub, isChecked:(id===curEnv), keepOpen:true,
                          onPick:function(){ setEnv(id); showHub(x,y); } }); });
           dynEnvs.forEach(function(_,i){ var id='D'+(i+6);                  /* fb177 — dynamic rows */
@@ -23174,7 +23174,7 @@ restoreThemeFromBackend();
     var down=false,moved=false,y0=0,v0=0;
     b.addEventListener('pointerdown',function(e){ e.preventDefault(); e.stopPropagation(); down=true; moved=false; badgeBusy=true; y0=e.clientY; v0=a.depth; b.setPointerCapture&&b.setPointerCapture(e.pointerId);
       var br=b.getBoundingClientRect(); showAtt(a, br.right+7, br.top+br.height/2-25);   // attenuation meter pops next to the number
-      function mv(ev){ if(!down)return; if(Math.abs(ev.clientY-y0)>2)moved=true; a.depth=Math.max(-1,Math.min(1,v0+(y0-ev.clientY)*0.008)); updAtt(a); push(); }
+      function mv(ev){ if(!down)return; if(Math.abs(ev.clientY-y0)>2)moved=true; a.depth=Math.max(a.env?0:-1,Math.min(1,v0+(y0-ev.clientY)*0.008)); updAtt(a); push(); }   /* fb180 — env depth is magnitude (0..100) */
       function up(){ down=false; badgeBusy=false; hideAtt(); document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); if(!moved) removeAssign(a); }
       document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
     b.title='hold + drag = depth · click = remove'; }
@@ -26797,7 +26797,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb179';   // bump per ship  [fb179 = KNOB-IS-THE-PEAK envelope semantics (Max's law): the matrix sees env level-1 — at the envelope's PEAK the parameter equals the knob, below it follows the shape DOWN by depth. A pluck on a maxed volume knob just works (the old additive-up clamped at the ceiling = 'does nothing'). + flowMod env support, mono-tap mask arms on ANY env route, TERRAIN_ENV_PROBE diag.]
+  var TERRAIN_BUILD = 'fb180';   // bump per ship  [fb180 = THE MONOGAMY SHIP: levels GLIDE (2.5ms one-pole — the env-pluck crackle was block-rate gain steps), env depth = MAGNITUDE only (the negative badge inverted the pluck = 'the sound comes back'), mono retrigger click-free (no reset snap), AUTO-ROUTES PURGED (Env 2/3 dest defaults -> Off; rows read 'Free'; Env 1 = Amp stays the only lock).]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
