@@ -965,6 +965,13 @@ public:
     int                           dynEnvCount_ = 0;
     juce::String                  dynEnvJson_;
     std::atomic<int>              dynEnvVersion_ { 0 };
+    // fb178 — MONO ENVELOPE TAP: the processor-side (global) dests — Res/Drive/mixes/
+    // sends/card knobs — have no per-voice context, so envelope sources there read a
+    // mono pool retriggered by ANY note-on (released when the last note lifts).
+    terrain::TerrainEnvelope      monoLegEnv_[5];
+    terrain::TerrainEnvelope      monoDynEnv_[kMaxDynEnvs];
+    int                           monoHeld_ = 0;
+    std::atomic<uint32_t>         monoEnvGlobalMask_ { 0 };   // env n bit set = env n routed to a global dest
     DynEnvShape                   dynEnvAudio_[kMaxDynEnvs];   // audio-thread mirror
     int                           dynEnvAudioCount_ = 0;
     int                           dynEnvSeen_ = -1;

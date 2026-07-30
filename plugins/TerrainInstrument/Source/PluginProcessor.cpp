@@ -1,4 +1,14 @@
 #include "PluginProcessor.h"
+
+// fb178 — mono-tap DAHDSR forwarding (mirrors SynthVoice::setEnvelopeDAHDSR's mapping)
+static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a, float h,
+                                  float d, float sv, float r, float ca, float cd, float cr, bool lp)
+{
+    e.setDelay (dl * 0.001); e.setAttack (a * 0.001); e.setHold (h * 0.001);
+    e.setDecay (d * 0.001);  e.setSustain (sv);       e.setRelease (r * 0.001);
+    e.setAttackCurve (ca);   e.setDecayCurve (cd);    e.setReleaseCurve (cr);
+    e.setLoop (lp);
+}
 #include "PluginEditor.h"
 
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
@@ -3427,6 +3437,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
 //==============================================================================
 void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    for (auto& e : monoLegEnv_) e.prepare (sampleRate);   // fb178 — mono env tap
+    for (auto& e : monoDynEnv_) e.prepare (sampleRate);
+    monoHeld_ = 0;
     // CPU: prepare resets voice state — force the change-gated broadcasts (ModConfig +
     // engine params) to re-push on the first block after any prepare.
     synCfgPushed_    = false;
@@ -4108,6 +4121,62 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // change-gates below hold and this whole feature costs NOTHING at idle. Dests below
         // Res1 (the per-voice batch: frame/warp/fold/cutoff/coarse/sub…) keep their richer
         // per-voice application in SynthVoice and are skipped here (no double-modulation).
+        // ── fb178 — MONO ENVELOPE TAP upkeep (only when an env feeds a global dest) ──
+        {
+            const uint32_t gm = monoEnvGlobalMask_.load (std::memory_order_acquire);
+            if (gm != 0)
+            {
+                // legacy 1..5 shapes from their params (same values the voices consume)
+                static const char* const kPfx[5] = { "SYN_ENV_AMP_", "SYN_ENV_FLT_", "SYN_ENV_PIT_", "SYN_ENV_M1_", "SYN_ENV_M2_" };
+                for (int k = 0; k < 5; ++k)
+                {
+                    if ((gm & (1u << k)) == 0) continue;
+                    auto rp = [&] (const char* f) -> float { auto* v = apvts.getRawParameterValue (juce::String (kPfx[k]) + f); return v ? v->load() : 0.0f; };
+                    terrain_setEnvDAHDSR (monoLegEnv_[k], rp("DLY"), rp("A"), rp("H"), rp("D"), rp("S"), rp("R"),
+                                          rp("CA"), rp("CD"), rp("CR"), rp("LOOP") > 0.5f);
+                }
+                // dynamic 6..32 shapes from the blob mirror (refresh if stale)
+                if (dynEnvSeen_ != dynEnvVersion_.load (std::memory_order_acquire))
+                {
+                    const juce::ScopedTryLock dsl (dynEnvLock_);
+                    if (dsl.isLocked())
+                    {
+                        for (int k = 0; k < kMaxDynEnvs; ++k) dynEnvAudio_[k] = dynEnvShapes_[k];
+                        dynEnvAudioCount_ = dynEnvCount_;
+                        dynEnvSeen_ = dynEnvVersion_.load (std::memory_order_acquire);
+                    }
+                }
+                for (int k = 0; k < dynEnvAudioCount_; ++k)
+                {
+                    if ((gm & (1u << (5 + k))) == 0) continue;
+                    const auto& de = dynEnvAudio_[k];
+                    terrain_setEnvDAHDSR (monoDynEnv_[k], de.dl, de.a, de.h, de.d, de.s, de.r, de.ca, de.cd, de.cr, de.loop);
+                }
+                // ANY note-on retriggers the pool; the last note-off releases it.
+                for (const auto meta : midiMessages)
+                {
+                    const auto msg = meta.getMessage();
+                    if (msg.isNoteOn())
+                    {
+                        ++monoHeld_;
+                        for (int k = 0; k < 5; ++k)           if (gm & (1u << k))       { monoLegEnv_[k].reset(); monoLegEnv_[k].noteOn(); }
+                        for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) { monoDynEnv_[k].reset(); monoDynEnv_[k].noteOn(); }
+                    }
+                    else if (msg.isNoteOff())
+                    {
+                        if (--monoHeld_ <= 0)
+                        {
+                            monoHeld_ = 0;
+                            for (int k = 0; k < 5; ++k)           if (gm & (1u << k))       monoLegEnv_[k].noteOff();
+                            for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) monoDynEnv_[k].noteOff();
+                        }
+                    }
+                }
+                const int nAdv = buffer.getNumSamples();
+                for (int k = 0; k < 5; ++k)           if (gm & (1u << k))       for (int n2 = 0; n2 < nAdv; ++n2) monoLegEnv_[k].tick();
+                for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) for (int n2 = 0; n2 < nAdv; ++n2) monoDynEnv_[k].tick();
+            }
+        }
         float modSums[(int) wc::ModDest::NumDests] = { 0 };
         {
             static const char* const kLfoDepthIds[wc::NUM_LFOS] = {
@@ -4119,6 +4188,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (const auto& r : synModRoutes)
             {
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
+                if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
+                {
+                    const int en = r.src - wc::kEnvSrcBase;   // 0-based env index
+                    const float lv = (en < 5) ? (float) monoLegEnv_[en].level()
+                                              : (float) monoDynEnv_[en - 5].level();
+                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], lv, r.depth);
+                    continue;
+                }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
                 const float master = *rawParam (kLfoDepthIds[r.src]);   // per-LFO MASTER ring (same law as the matrix merge below)
                 modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
@@ -4694,6 +4771,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (const auto& r : synModRoutes)
                 {
                     if (na >= wc::MAX_ASSIGNMENTS) break;
+                    if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — envelope source
+                    {
+                        synModCfg.assignments[na].source  = wc::envSourceFor (r.src - wc::kEnvSrcBase + 1);
+                        synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
+                        synModCfg.assignments[na].depth   = r.depth;          // envelopes have no master ring
+                        synModCfg.assignments[na].enabled = true;
+                        ++na; continue;
+                    }
                     if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
                     const float master = *rawParam (lp[r.src].depth);
                     synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + r.src);
@@ -6857,12 +6942,21 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
             r.src   = (int)   item.getProperty ("s", 0);
             r.dest  = (int)   item.getProperty ("d", 0);
             r.depth = (float) (double) item.getProperty ("v", 0.0);
-            if (r.src  < 0 || r.src  >= wc::NUM_LFOS)            continue;
+            const bool lfoSrc = (r.src >= 0 && r.src < wc::NUM_LFOS);
+            const bool envSrc = (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32);   // fb178
+            if (! lfoSrc && ! envSrc)                                continue;
             if (r.dest < 0 || r.dest >= (int) wc::ModDest::NumDests) continue;
             r.depth = juce::jlimit (-1.0f, 1.0f, r.depth);
             if (parsed.size() < (size_t) wc::MAX_ASSIGNMENTS) parsed.push_back (r);
         }
     }
+    // fb178 — which envelopes feed GLOBAL (processor-side) dests → the mono tap
+    uint32_t gm = 0;
+    for (const auto& r : parsed)
+        if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32
+            && r.dest >= (int) wc::ModDest::Res1)
+            gm |= (1u << (r.src - wc::kEnvSrcBase));
+    monoEnvGlobalMask_.store (gm, std::memory_order_release);
     const juce::ScopedLock sl (synModLock);
     synModRoutes = std::move (parsed);
     synModJson   = json;

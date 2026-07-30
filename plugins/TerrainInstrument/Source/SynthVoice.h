@@ -137,6 +137,23 @@ namespace tw
                               float ca,float cd,float cr,bool lp) noexcept
         { if (k >= 0 && k < kMaxDynEnvs) setEnvelopeDAHDSR (dynEnv_[k], dl,a,h,d,s,r,ca,cd,cr,lp); }
 
+        /** fb178 — envelope value for a mod-matrix source (block-rate; envelopes
+            advance once per block, so this IS the per-sample value too). */
+        float envSourceValue (int sI) const noexcept
+        {
+            switch ((wc::ModSource) sI)
+            {
+                case wc::ModSource::EnvAmp:    return (float) ampEnv_.level();
+                case wc::ModSource::EnvFilter: return (float) fltEnvT_.level();
+                case wc::ModSource::EnvPitch:  return (float) pitchEnvT_.level();
+                case wc::ModSource::EnvMod1:   return (float) mod1EnvT_.level();
+                case wc::ModSource::EnvMod2:   return (float) mod2EnvT_.level();
+                default: break;
+            }
+            const int k = sI - (int) wc::ModSource::EnvD1;
+            return (k >= 0 && k < kMaxDynEnvs) ? (float) dynEnv_[k].level() : 0.0f;
+        }
+
         // ── Envelope follower taps (for the UI playhead dot) ──
         // Live amp-env output [0,1] and whether this voice is sounding. The editor
         // polls the most-active voice each timer tick and pushes this to the WebUI.
@@ -397,6 +414,24 @@ namespace tw
                 const float hz = cfg.lfos[i].sync ? wc::syncedHz (cfg.lfos[i].syncIdx, bpm)
                                                   : cfg.lfos[i].rateHz;
                 synthLfo_[i].setFrequency (hz);
+            }
+            // fb178 — scan which envelope sources the matrix references (once per push):
+            // dormant dyn envs stay untouched; legacy envs 2-5 must TICK even at legacy
+            // depth 0 when the matrix reads them (the CPU gate below honors this mask).
+            dynEnvUsedMask_ = 0; legEnvUsedMask_ = 0; anyEnvSource_ = false;
+            for (int a2 = 0; a2 < modConfig_.numAssignments; ++a2)
+            {
+                const auto& as2 = modConfig_.assignments[a2];
+                if (! as2.enabled) continue;
+                const int sI = (int) as2.source;
+                if (! wc::isEnvModSource (sI)) continue;
+                anyEnvSource_ = true;
+                if      (sI == (int) wc::ModSource::EnvFilter) legEnvUsedMask_ |= 1u;
+                else if (sI == (int) wc::ModSource::EnvPitch)  legEnvUsedMask_ |= 2u;
+                else if (sI == (int) wc::ModSource::EnvMod1)   legEnvUsedMask_ |= 4u;
+                else if (sI == (int) wc::ModSource::EnvMod2)   legEnvUsedMask_ |= 8u;
+                const int k = sI - (int) wc::ModSource::EnvD1;
+                if (k >= 0 && k < kMaxDynEnvs) dynEnvUsedMask_ |= (1u << k);
             }
         }
 
@@ -1898,6 +1933,13 @@ namespace tw
                 const float rtD = routeAmtD_ * rtSrcD;
                 // ── Mod-matrix: LFO → frame/warp/fold per OSC (block-rate via peek(), so the
                 //    per-sample OSC render stays cheap). LFO→LFO 'amt' scales the source first.
+                // fb178 — matrix-routed dynamic envelopes advance once per block
+                // (dormant slots stay untouched — the zero-CPU law).
+                if (dynEnvUsedMask_ != 0)
+                    for (int kD = 0; kD < dynEnvCount_; ++kD)
+                        if (dynEnvUsedMask_ & (1u << kD))
+                            for (int n2 = 0; n2 < numSamples; ++n2) dynEnv_[kD].tick();
+                envCutBlk1_ = 0.0f; envCutBlk2_ = 0.0f;
                 float lfoPk[wc::NUM_LFOS];
                 for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] = synthLfo_[L].peek();
                 {
@@ -1907,9 +1949,12 @@ namespace tw
                         const auto& as = modConfig_.assignments[a];
                         if (! as.enabled) continue;
                         const int sI = (int) as.source, dI = (int) as.dest;
-                        if (sI < 0 || sI >= wc::NUM_LFOS) continue;
+                        float sv2;
+                        if      (sI >= 0 && sI < wc::NUM_LFOS) sv2 = lfoPk[sI];
+                        else if (wc::isEnvModSource (sI))      sv2 = envSourceValue (sI);   // fb178
+                        else continue;
                         if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
-                            amt[dI - (int) wc::ModDest::LfoAmt1] += lfoPk[sI] * as.depth;
+                            amt[dI - (int) wc::ModDest::LfoAmt1] += sv2 * as.depth;
                     }
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                 }
@@ -1928,8 +1973,16 @@ namespace tw
                     if      (sI >= 0 && sI < wc::NUM_LFOS) srcV = lfoPk[sI];
                     else if (sI >= (int) wc::ModSource::Drift1 && sI < (int) wc::ModSource::Drift1 + 8)
                                                           srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
+                    else if (wc::isEnvModSource (sI))     srcV = envSourceValue (sI);   // fb178
                     else continue;
                     const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
+                    // fb178 — env→cutoff joins the filter's semitone sum as a block constant
+                    // (LFO→cutoff stays per-sample below; envs advance per block anyway).
+                    if (wc::isEnvModSource (sI))
+                    {
+                        if      (as.dest == wc::ModDest::Cut1) { envCutBlk1_ += c; continue; }
+                        else if (as.dest == wc::ModDest::Cut2) { envCutBlk2_ += c; continue; }
+                    }
                     switch (as.dest)
                     {
                         case wc::ModDest::Frame:  mFrA += c; break;
@@ -2012,10 +2065,10 @@ namespace tw
                 // anywhere — skip its per-sample tick and write 0 (bit-identical output). By
                 // default all four depths are 0, so an UNROUTED envelope now costs nothing
                 // instead of ticking (and exp'ing its curve) 48 000×/s per voice. AMP always ticks.
-                const bool needFlt = (envDepth_[1] != 0.0f);
-                const bool needPit = (envDepth_[2] != 0.0f);
-                const bool needM1  = (envDepth_[3] != 0.0f);
-                const bool needM2  = (envDepth_[4] != 0.0f);
+                const bool needFlt = (envDepth_[1] != 0.0f) || (legEnvUsedMask_ & 1u) != 0;   // fb178
+                const bool needPit = (envDepth_[2] != 0.0f) || (legEnvUsedMask_ & 2u) != 0;
+                const bool needM1  = (envDepth_[3] != 0.0f) || (legEnvUsedMask_ & 4u) != 0;
+                const bool needM2  = (envDepth_[4] != 0.0f) || (legEnvUsedMask_ & 8u) != 0;
                 for (int k = 0; k < numSamples; ++k)
                 {
                     eAmp[k] = (float) ampEnv_.tick();
@@ -3709,9 +3762,12 @@ namespace tw
                             const auto& as = modConfig_.assignments[a];
                             if (! as.enabled) continue;
                             const int sI = (int) as.source, dI = (int) as.dest;
-                            if (sI < 0 || sI >= wc::NUM_LFOS) continue;
+                            float sv3;
+                            if      (sI >= 0 && sI < wc::NUM_LFOS) sv3 = lfoOut_[sI];
+                            else if (wc::isEnvModSource (sI))      sv3 = envSourceValue (sI);   // fb178
+                            else continue;
                             if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
-                                amt[dI - (int) wc::ModDest::LfoAmt1] += lfoOut_[sI] * as.depth;
+                                amt[dI - (int) wc::ModDest::LfoAmt1] += sv3 * as.depth;
                         }
                         for (int L = 0; L < wc::NUM_LFOS; ++L) lfoOut_[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                     }
@@ -3752,7 +3808,7 @@ namespace tw
                     // Filter 1 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
                     // CPU: the semitone→Hz pow(2,x) is gated on change — with nothing modulating,
                     // cutSemis is bit-identical every sample and the pow never re-runs.
-                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + driftSemis + ktCutSemis1 + velAmt1_ * currentVelocity_ * 72.0f;
+                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + envCutBlk1_ + driftSemis + ktCutSemis1 + velAmt1_ * currentVelocity_ * 72.0f;   // fb178
                     if (cutSemis1 != lastCutSemis1_)
                     {
                         lastCutSemis1_ = cutSemis1;
@@ -3763,7 +3819,7 @@ namespace tw
                     filterSlot_.setParams (lastCutHz1_, res1, drv01_, coefSr); visRes1_ = res1;
 
                     // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
-                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + driftSemis + ktCutSemis2 + velAmt2_ * currentVelocity_ * 72.0f;
+                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + envCutBlk2_ + driftSemis + ktCutSemis2 + velAmt2_ * currentVelocity_ * 72.0f;
                     if (cutSemis2 != lastCutSemis2_)
                     {
                         lastCutSemis2_ = cutSemis2;
@@ -4299,6 +4355,10 @@ namespace tw
         // routes them (S2); noteOn/noteOff state flips are O(1).
         terrain::TerrainEnvelope dynEnv_[kMaxDynEnvs];
         int dynEnvCount_ = 0;
+        uint32_t dynEnvUsedMask_ = 0;      // fb178 — matrix-referenced dyn envs (advance per block)
+        uint32_t legEnvUsedMask_ = 0;      // fb178 — matrix-referenced legacy envs (FLT/PIT/M1/M2 bits)
+        bool     anyEnvSource_   = false;
+        float    envCutBlk1_ = 0.0f, envCutBlk2_ = 0.0f;   // fb178 — env→cutoff, block-rate semis
         float  pitchEnvDepth_ = 0.0f;     // semitones, bipolar (Batch 3)
         double pitchEnvSemis_ = 0.0;      // per-block: depth × pitchEnv tick
 

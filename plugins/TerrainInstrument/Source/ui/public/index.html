@@ -14265,6 +14265,7 @@ setTimeout(function wireSynControls () {
           var id=curEnv, dest=(id==='AMP')?'Amp':DEST_LABELS[destIdx(id)];
           selChip.innerHTML = 'Env '+ENVNUM[id]+' \u00B7 '+dest; }
         window.__envUpdateChip = updateChip;
+        window.__envCurNum = function(){ return envNumOf(curEnv) || 1; };   /* fb178 — the drag source */
 
         // ── Filter ENV knob  <->  depth link ───────────────────────────────────
         // The filter's ENV knob (SYN_FILTER{1,2}_ENV, bipolar -1..+1) IS the env
@@ -23093,7 +23094,7 @@ restoreThemeFromBackend();
 
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
   var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
-    var arr=assigns.map(function(a){return {s:a.lfo-1,d:a.dest,v:+a.depth.toFixed(4)};});
+    var arr=assigns.map(function(a){return {s:(a.env?100+(a.env-1):a.lfo-1),d:a.dest,v:+a.depth.toFixed(4)};});   /* fb178 — env sources ride 100+ */
     if(pushFn)try{ pushFn(JSON.stringify(arr)); }catch(e){} }
 
   // ── LFO shape + rate (JS mirror of the engine, for the live visual) ──
@@ -23169,7 +23170,7 @@ restoreThemeFromBackend();
     return out; }
 
   // ── badges + dots ──
-  function mkBadge(a){ var b=document.createElement('div'); b.className='sm-badge'; b.textContent=a.lfo; document.body.appendChild(b); a.badge=b;
+  function mkBadge(a){ var b=document.createElement('div'); b.className='sm-badge'; b.textContent=(a.env?('E'+a.env):a.lfo); document.body.appendChild(b); a.badge=b;   /* fb178 */
     var down=false,moved=false,y0=0,v0=0;
     b.addEventListener('pointerdown',function(e){ e.preventDefault(); e.stopPropagation(); down=true; moved=false; badgeBusy=true; y0=e.clientY; v0=a.depth; b.setPointerCapture&&b.setPointerCapture(e.pointerId);
       var br=b.getBoundingClientRect(); showAtt(a, br.right+7, br.top+br.height/2-25);   // attenuation meter pops next to the number
@@ -23179,7 +23180,11 @@ restoreThemeFromBackend();
     b.title='hold + drag = depth · click = remove'; }
   function removeAssign(a){ var i=assigns.indexOf(a); if(i<0)return; assigns.splice(i,1); if(a.badge)a.badge.remove(); markTargets(); push(); }
   function addAssign(lfo,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].lfo===lfo&&assigns[i].dest===dest) return; // dedupe
-    if(assigns.length>=32)return; var a={lfo:lfo,dest:dest,depth:0.5,el:el}; assigns.push(a); mkBadge(a); markTargets(); push(); }
+    if(assigns.length>=128)return; var a={lfo:lfo,dest:dest,depth:0.5,el:el}; assigns.push(a); mkBadge(a); markTargets(); push(); }
+  /* fb178 — envelope routes: same machinery, depth lands at FULL (+100%) per the drop-
+     is-all-envelope decision; the badge stays for the day you want 40%. */
+  function addEnvAssign(env,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].env===env&&assigns[i].dest===dest) return;
+    if(assigns.length>=128)return; var a={env:env,dest:dest,depth:1.0,el:el}; assigns.push(a); mkBadge(a); markTargets(); push(); }
   function markTargets(){ document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
 
   // ── drag from the LFO tabs ──
@@ -23200,8 +23205,23 @@ restoreThemeFromBackend();
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   function hit(x,y){ for(var i=0;i<TG.length;i++){ var r=TG[i].el.getBoundingClientRect(); if(x>=r.left-3&&x<=r.right+3&&y>=r.top-3&&y<=r.bottom+3) return TG[i]; } return null; }
+  /* fb178 — drag an ENVELOPE from its chip onto any knob (Serum-style). Same ghost,
+     same targets, same hit; the drop lands at +100% depth. Click still opens the hub
+     (drag only past the 5px threshold; the switch-click suppressor below covers it). */
+  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel .env-sel'); if(!t)return;
+    var en=(window.__envCurNum?window.__envCurNum():1)|0; if(!en)en=1; var sx=e.clientX, sy=e.clientY, started=false;
+    function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
+        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='E'+en; document.body.appendChild(ghost);
+        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+      ghost.style.left=ev.clientX+'px'; ghost.style.top=ev.clientY+'px';
+      var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
+    function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+      if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addEnvAssign(en,dest,g.el); }
+        if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   // suppress the tab's switch-click right after a drag
-  document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('#mod-engine .mv-tabs .t'); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);
+  document.addEventListener('click',function(e){ var t=e.target.closest&&(e.target.closest('#mod-engine .mv-tabs .t')||e.target.closest('#syn-panel .env-sel')); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);   /* fb178 — env chip too */
   /* fb153 — the fb149 'Pop' palette launcher is retired (chip + handler). The palette
      page mode (?card=mod, bootModPal) stays DORMANT so an already-open/restored palette
      window still works, and the docked foreign receiver stays LIVE — it also caches
@@ -23251,9 +23271,10 @@ restoreThemeFromBackend();
     return found; }
   function restore(){ if(window.__cardOnly)return;   /* fb145 — card windows run their own badge module */
     try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g)return;
-    g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); arr.forEach(function(o){ var lfo=(o.s|0)+1, dest=o.d|0, el=elForDest(dest); if(!el)return;
-      for(var i=0;i<assigns.length;i++) if(assigns[i].lfo===lfo&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
-      var a={lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el}; assigns.push(a); mkBadge(a); }); markTargets(); }catch(e){} }); }catch(e){} }
+    g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest); if(!el)return;
+      var env=(sv>=100)?(sv-100+1):0, lfo=env?0:(sv+1);   /* fb178 — env sources ride 100+ */
+      for(var i=0;i<assigns.length;i++) if((env?assigns[i].env===env:assigns[i].lfo===lfo)&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
+      var a=env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}:{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el}; assigns.push(a); mkBadge(a); }); markTargets(); }catch(e){} }); }catch(e){} }
   setInterval(function(){ try{restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */
   /* fb149 — FOREIGN-drag receiver: drags born in the LFO PALETTE window (src 1) land on
      the DOCKED UI too. Local coords come pre-transformed from the main getModDrag native. */
@@ -26776,7 +26797,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb177';   // bump per ship  [fb177 = ROW 3 S1: DYNAMIC ENVELOPES — '+ New Envelope' in the env hub (top, per Max) mints Env 6..32; shapes ride ONE JSON blob (setSynthEnvs/getSynthEnvs native fns, no APVTS — relay ceiling law); virtual slider-states drive the SAME sculpt editor; per-voice pool triggers on note-on, dormant slots cost zero until the matrix routes them (S2).]
+  var TERRAIN_BUILD = 'fb178';   // bump per ship  [fb178 = ROW 3 S2: ENVELOPES RIDE THE DRAG MACHINE — drag any envelope's chip onto any knob (ghost 'E6', +100%% depth on drop, badge adjusts); env sources join the matrix per-voice (frames/warps/folds/coarse/sub/cutoff/LFO-amts, TRUE polyphonic) and a MONO retriggered tap covers the global dests (res/drive/mixes/sends/cards) so no drop is silent; blob src = 100+(env-1); MAX_ASSIGNMENTS 128.]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

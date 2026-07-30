@@ -32,6 +32,8 @@ enum class ModSource : int
     EnvMod1, EnvMod2,          // the spare envelopes
     Velocity, Note,            // (Batch 2+)
     Drift1, Drift2, Drift3, Drift4, Drift5, Drift6, Drift7, Drift8,  // FLOW·DRIFT lanes (block-rate bipolar) — append-only (replaced dead SeqMod)
+    EnvPitch,                  // fb178 — the fifth legacy envelope (pitch) as a matrix source
+    EnvD1, EnvD2, EnvD3, EnvD4, EnvD5, EnvD6, EnvD7, EnvD8, EnvD9, EnvD10, EnvD11, EnvD12, EnvD13, EnvD14, EnvD15, EnvD16, EnvD17, EnvD18, EnvD19, EnvD20, EnvD21, EnvD22, EnvD23, EnvD24, EnvD25, EnvD26, EnvD27,   // fb178 — dynamic envelopes 6..32 (Row 3)
     NumSources
 };
 static constexpr int NUM_LFOS = 10;
@@ -718,7 +720,7 @@ struct Assignment
     bool      enabled = false;
 };
 
-static constexpr int MAX_ASSIGNMENTS = 32;
+static constexpr int MAX_ASSIGNMENTS = 128;   // fb178 — envelopes joined the matrix (was 32)
 
 // The whole modulation table. Published to the audio thread as an immutable copy.
 struct ModConfig
@@ -728,6 +730,26 @@ struct ModConfig
     int         numAssignments = 0;
     float       driftLanes[8] = { 0 };   // FLOW·DRIFT block-rate lane values (sources Drift1..Drift8)
 };
+
+// fb178 — envelope sources (Row 3 S2). Blob src encoding: 100 + (envNum-1), Env 1..32.
+static constexpr int kEnvSrcBase = 100;
+inline ModSource envSourceFor (int envNum) noexcept   // envNum 1..32
+{
+    switch (envNum)
+    {
+        case 1: return ModSource::EnvAmp;   case 2: return ModSource::EnvFilter;
+        case 3: return ModSource::EnvPitch; case 4: return ModSource::EnvMod1;
+        case 5: return ModSource::EnvMod2;
+        default: return (ModSource) ((int) ModSource::EnvD1 + (envNum - 6));
+    }
+}
+inline bool isEnvModSource (int sI) noexcept
+{
+    return sI == (int) ModSource::EnvAmp  || sI == (int) ModSource::EnvFilter
+        || sI == (int) ModSource::EnvMod1 || sI == (int) ModSource::EnvMod2
+        || sI == (int) ModSource::EnvPitch
+        || (sI >= (int) ModSource::EnvD1 && sI <= (int) ModSource::EnvD1 + 26);
+}
 
 // ---------------------------------------------------------------------------
 //  Accumulation helpers — the "base + sum(source*depth)" model, clamp ONCE.
