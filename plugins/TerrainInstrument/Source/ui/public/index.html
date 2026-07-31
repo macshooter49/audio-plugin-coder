@@ -14009,6 +14009,9 @@ setTimeout(function wireSynControls () {
             // ADSR nodes. ADSR structural nodes always stay; only these vanish on overlap.
             if (Math.abs(dy)<6 || Math.abs(dx)<4 || Math.sqrt(dx*dx+dy*dy)<18) return;
             var m=midOf(x0,y0,x1,y1,tension);
+            /* fb193 (Max) — a curve handle hugging a stage node reads as a dead duplicate
+               dot ("the extra circle under Sustain"): hide it until the stages separate. */
+            if (Math.min(Math.hypot(m.x-x0,m.y-y0), Math.hypot(m.x-x1,m.y-y1)) < 8) return;
             addHit(m.x,m.y,7,kind,true);
             var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
             c.setAttribute('cx',m.x); c.setAttribute('cy',m.y); c.setAttribute('r',1.7);
@@ -14019,9 +14022,9 @@ setTimeout(function wireSynControls () {
           addCurveDot(L.hasDly?L.xD:PADX, YBASE, L.xA, YTOP, tA, 'CA');
           addCurveDot(L.hasHld?L.xH:L.xA, YTOP, L.xS, L.ySus, tD, 'CD');
           addCurveDot(L.xS, L.ySus, L.xE, YBASE, tR, 'CR');
-          if(L.hasDly) addNode(L.xD,YBASE,'DLY',true,false);
+          if(L.hasDly) addNode(L.xD,YBASE,'DLY',false,false);   /* fb193 — circles everywhere (Max) */
           addNode(L.xA,YTOP,'A',false,false);
-          if(L.hasHld) addNode(L.xH,YTOP,'H',true,false);
+          if(L.hasHld) addNode(L.xH,YTOP,'H',false,false);   /* fb193 — circles everywhere (Max) */
           addNode(L.xS,L.ySus,'S',false,true);
           if (Math.abs(L.xE-L.xS)<4 && Math.abs(L.ySus-YBASE)<4) addHit(L.xE,YBASE,9,'R',false);
           else addNode(L.xE,YBASE,'R',false,false);
@@ -14405,12 +14408,16 @@ setTimeout(function wireSynControls () {
            Double-click = type (the fb130/fb136 inline-editor contract: host-key bridge armed,
            refocus tick survives the arming blur, Enter commits, Escape/click-away per law). */
         var shelf=document.getElementById('env-shelf');
+        var ENVPB=481;   /* fb193 — mirrors (int)ModDest::EnvPBase EXACTLY (append-only law) */
+        var __stampedEnv=null;
         var CHIPDEFS=[['DLY','Dly'],['A','Atk'],['H','Hld'],['D','Dec'],['S','Sus'],['R','Rel']];
         var chipEls={};
         function chipText(key){ var s=st(); if(!s||!s[key])return '\u2014';
           if(key==='S') return Math.round(nv(s['S'])*100)+'%';
           return fmtMs(msOf(nv(s[key]))); }
         function refreshChips(){ if(!shelf)return;
+          if(__stampedEnv!==curEnv){ __stampedEnv=curEnv; var bn=(envNumOf(curEnv)-1)*6;   /* fb193 — chips are DROP TARGETS for the SELECTED env's params */
+            CHIPDEFS.forEach(function(cd,i){ var c=chipEls[cd[0]]; if(c)c.setAttribute('data-mod-dest', ENVPB + bn + i); }); }
           CHIPDEFS.forEach(function(cd){ var c=chipEls[cd[0]]; if(c&&c.__val&&!c.querySelector('input')) c.__val.textContent=chipText(cd[0]); }); }
         function beginChipEdit(cd,c){ if(c.querySelector('input'))return;
           var key=cd[0], b=c.__val;
@@ -23276,7 +23283,13 @@ restoreThemeFromBackend();
       if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo))hit=a; });
     return hit||first; }
   var ssCache={};   /* fb189 — knob normalized value for the territory anchor */
-  function knobNorm(a){ var pid=d2pid(a.dest); if(!pid)return 0;
+  function knobNorm(a){
+    if(a.dest>=481&&a.dest<481+192){ var kE=a.dest-481, eN=Math.floor(kE/6);   /* fb193 — legacy env params have real params; dyn anchor at 0 */
+      if(eN<5){ var pidE='SYN_ENV_'+['AMP','FLT','PIT','M1','M2'][eN]+'_'+['DLY','A','H','D','S','R'][kE%6];
+        var stE=ssCache[pidE]; if(stE===undefined){ stE=ssCache[pidE]=(window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(pidE):null; }
+        try{ return stE?stE.getNormalisedValue():0; }catch(e){ return 0; } }
+      return 0; }
+    var pid=d2pid(a.dest); if(!pid)return 0;
     var st=ssCache[pid]; if(st===undefined){ st=ssCache[pid]=(window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(pid):null; }
     try{ return st?st.getNormalisedValue():0; }catch(e){ return 0; } }
 
@@ -23444,6 +23457,7 @@ restoreThemeFromBackend();
     60:'Drive 1',61:'Drive 2',62:'F Mix 1',63:'F Mix 2',340:'Vel 1',341:'Vel 2',342:'Track 1',343:'Track 2',
     344:'Spread',345:'Spread',72:'Noise',73:'Noise',74:'Noise'};
   function destShortName(d){
+    if(d>=481&&d<481+192){ var kE=d-481; return 'Env '+(Math.floor(kE/6)+1)+' '+['Dly','Atk','Hld','Dec','Sus','Rel'][kE%6]; }   /* fb193 */
     if(d>=12&&d<=21) return 'LFO '+(d-11)+' Amt';
     var pid=d2pid(d);
     if(pid){ var m=/^SYN_OSC_([A-D])_(.+)$/.exec(pid); if(m) return prettySfx(m[2])+' '+m[1]; }
@@ -26985,7 +26999,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb192';   // bump per ship  [fb192 = shelf polish (Max): one continuous box (hero bg + bottom radius), LFO bar down to the shelf's line, chips LIVE during graph sculpts (render hook)]
+  var TERRAIN_BUILD = 'fb193';   // bump per ship  [fb193 = S4b THE LINK: ADSR chips are DROP TARGETS (Env/LFO on Dly..Rel, 192 EnvP dests, ownership law at both broadcast paths); DLY/HLD nodes circles; curve-dot proximity guard (the ghost dot)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

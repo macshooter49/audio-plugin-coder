@@ -4139,7 +4139,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     setSynthModMatrix ("[{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::LevelA) + ",\"v\":1.0},"
                                         "{\"s\":105,\"d\":" + juce::String ((int) wc::ModDest::Res1)   + ",\"v\":1.0},"
                                         "{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::FmFbA)  + ",\"v\":1.0},"
-                                        "{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::Warp)   + ",\"v\":1.0}]");
+                                        "{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::Warp)   + ",\"v\":1.0},"
+                                        "{\"s\":105,\"d\":" + juce::String ((int) wc::ModDest::EnvPBase + 1) + ",\"v\":1.0}]");
                     if (auto* pL = apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_LEVEL)) pL->store (0.0f);
                     if (auto* pW = apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_AMOUNT)) pW->store (0.0f);   // fb188 — the iffy-warp repro: knob at ZERO
                     if (auto* pR = apvts.getRawParameterValue ("SYN_ENV_AMP_R"))               pR->store (2000.0f);
@@ -4272,7 +4273,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     + " wFb=" + juce::String (envOwnW[(int) wc::ModDest::FmFbA], 2)
                     + " vFb=" + juce::String (envOwnV[(int) wc::ModDest::FmFbA], 4)
                     + " vRes=" + juce::String (envOwnV[(int) wc::ModDest::Res1], 4)
-                    + " w60=" + juce::String (w60, 4) + "\n");
+                    + " w60=" + juce::String (w60, 4)
+                    + " wA1=" + juce::String (envOwnW[(int) wc::ModDest::EnvPBase + 1], 2)
+                    + " vA1=" + juce::String (envOwnV[(int) wc::ModDest::EnvPBase + 1], 4) + "\n");
             }
         }
         // fb184 — OWNERSHIP at the app site: the env's claim w crossfades the (LFO-modulated)
@@ -4285,6 +4288,35 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Wrap helper: base param + this block's mod, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
         { return ownM (*rawParam (pid), (int) d, lo, hi); };
+        // fb193 — S4b env-param dests: the same ownership law applied in the param's own
+        // normalized space (convertTo0to1 honors range+skew). Early-out when unrouted.
+        auto modP = [&] (const char* pid, float raw, int d) -> float
+        {
+            const float w0 = envOwnW[d];
+            if (w0 <= 0.0f && modSums[d] == 0.0f) return raw;
+            if (auto* p = apvts.getParameter (juce::String (pid)))
+            {
+                const float w = w0 > 1.0f ? 1.0f : w0;
+                const float n = p->convertTo0to1 (raw);
+                return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]));
+            }
+            return raw;
+        };
+        // dyn envs (blob ms, no APVTS param) — the editor's own norm curve (1..8000ms, skew .3)
+        auto dynModMs = [&] (float ms, int d) -> float
+        {
+            const float w0 = envOwnW[d]; if (w0 <= 0.0f && modSums[d] == 0.0f) return ms;
+            const float w = w0 > 1.0f ? 1.0f : w0;
+            const float n = std::pow (juce::jlimit (0.0f, 1.0f, (ms - 1.0f) / 7999.0f), 0.3f);
+            const float e = juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]);
+            return 1.0f + std::pow (e, 1.0f / 0.3f) * 7999.0f;
+        };
+        auto dynModS = [&] (float s, int d) -> float
+        {
+            const float w0 = envOwnW[d]; if (w0 <= 0.0f && modSums[d] == 0.0f) return s;
+            const float w = w0 > 1.0f ? 1.0f : w0;
+            return juce::jlimit (0.0f, 1.0f, (s + modSums[d]) * (1.0f - w) + envOwnV[d]);
+        };
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
         const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
         const float cent    =         *rawParam (ParameterIDs::SYN_OSC_A_CENT);
@@ -4334,55 +4366,55 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                  *rawParam (ParameterIDs::SYN_FILTER2_SRC_SUB) > 0.5f ? 1.0f : 0.0f };
         const bool  noiseF1 = *rawParam (ParameterIDs::SYN_FILTER1_SRC_NOISE) > 0.5f;   // fb63 — noise → filter routing
         const bool  noiseF2 = *rawParam (ParameterIDs::SYN_FILTER2_SRC_NOISE) > 0.5f;
-        const float fltEnvA =         *rawParam (ParameterIDs::SYN_ENV_FLT_A);
-        const float fltEnvD =         *rawParam (ParameterIDs::SYN_ENV_FLT_D);
-        const float fltEnvS =         *rawParam (ParameterIDs::SYN_ENV_FLT_S);
-        const float fltEnvR =         *rawParam (ParameterIDs::SYN_ENV_FLT_R);
-        const float ampA    =         *rawParam (ParameterIDs::SYN_ENV_AMP_A);
-        const float ampD    =         *rawParam (ParameterIDs::SYN_ENV_AMP_D);
-        const float ampS    =         *rawParam (ParameterIDs::SYN_ENV_AMP_S);
-        const float ampR    =         *rawParam (ParameterIDs::SYN_ENV_AMP_R);
+        const float fltEnvA =         modP (ParameterIDs::SYN_ENV_FLT_A, *rawParam (ParameterIDs::SYN_ENV_FLT_A), (int) wc::ModDest::EnvPBase + 7);   // fb193
+        const float fltEnvD =         modP (ParameterIDs::SYN_ENV_FLT_D, *rawParam (ParameterIDs::SYN_ENV_FLT_D), (int) wc::ModDest::EnvPBase + 9);   // fb193
+        const float fltEnvS =         modP (ParameterIDs::SYN_ENV_FLT_S, *rawParam (ParameterIDs::SYN_ENV_FLT_S), (int) wc::ModDest::EnvPBase + 10);   // fb193
+        const float fltEnvR =         modP (ParameterIDs::SYN_ENV_FLT_R, *rawParam (ParameterIDs::SYN_ENV_FLT_R), (int) wc::ModDest::EnvPBase + 11);   // fb193
+        const float ampA    =         modP (ParameterIDs::SYN_ENV_AMP_A, *rawParam (ParameterIDs::SYN_ENV_AMP_A), (int) wc::ModDest::EnvPBase + 1);   // fb193
+        const float ampD    =         modP (ParameterIDs::SYN_ENV_AMP_D, *rawParam (ParameterIDs::SYN_ENV_AMP_D), (int) wc::ModDest::EnvPBase + 3);   // fb193
+        const float ampS    =         modP (ParameterIDs::SYN_ENV_AMP_S, *rawParam (ParameterIDs::SYN_ENV_AMP_S), (int) wc::ModDest::EnvPBase + 4);   // fb193
+        const float ampR    =         modP (ParameterIDs::SYN_ENV_AMP_R, *rawParam (ParameterIDs::SYN_ENV_AMP_R), (int) wc::ModDest::EnvPBase + 5);   // fb193
 
         // ── Envelope DAHDSR extension reads (Batch 2/3) ──
-        const float ampDly = *rawParam (ParameterIDs::SYN_ENV_AMP_DLY);
-        const float ampHld = *rawParam (ParameterIDs::SYN_ENV_AMP_H);
+        const float ampDly = modP (ParameterIDs::SYN_ENV_AMP_DLY, *rawParam (ParameterIDs::SYN_ENV_AMP_DLY), (int) wc::ModDest::EnvPBase + 0);   // fb193
+        const float ampHld = modP (ParameterIDs::SYN_ENV_AMP_H, *rawParam (ParameterIDs::SYN_ENV_AMP_H), (int) wc::ModDest::EnvPBase + 2);   // fb193
         const float ampCa = *rawParam (ParameterIDs::SYN_ENV_AMP_CA);
         const float ampCd = *rawParam (ParameterIDs::SYN_ENV_AMP_CD);
         const float ampCr = *rawParam (ParameterIDs::SYN_ENV_AMP_CR);
         const bool  ampLoop = *rawParam (ParameterIDs::SYN_ENV_AMP_LOOP) > 0.5f;
-        const float fltDly = *rawParam (ParameterIDs::SYN_ENV_FLT_DLY);
-        const float fltHld = *rawParam (ParameterIDs::SYN_ENV_FLT_H);
+        const float fltDly = modP (ParameterIDs::SYN_ENV_FLT_DLY, *rawParam (ParameterIDs::SYN_ENV_FLT_DLY), (int) wc::ModDest::EnvPBase + 6);   // fb193
+        const float fltHld = modP (ParameterIDs::SYN_ENV_FLT_H, *rawParam (ParameterIDs::SYN_ENV_FLT_H), (int) wc::ModDest::EnvPBase + 8);   // fb193
         const float fltCa = *rawParam (ParameterIDs::SYN_ENV_FLT_CA);
         const float fltCd = *rawParam (ParameterIDs::SYN_ENV_FLT_CD);
         const float fltCr = *rawParam (ParameterIDs::SYN_ENV_FLT_CR);
         const bool  fltLoop = *rawParam (ParameterIDs::SYN_ENV_FLT_LOOP) > 0.5f;
-        const float pitDly = *rawParam (ParameterIDs::SYN_ENV_PIT_DLY);
-        const float pitA = *rawParam (ParameterIDs::SYN_ENV_PIT_A);
-        const float pitHld = *rawParam (ParameterIDs::SYN_ENV_PIT_H);
-        const float pitD = *rawParam (ParameterIDs::SYN_ENV_PIT_D);
-        const float pitS = *rawParam (ParameterIDs::SYN_ENV_PIT_S);
-        const float pitR = *rawParam (ParameterIDs::SYN_ENV_PIT_R);
+        const float pitDly = modP (ParameterIDs::SYN_ENV_PIT_DLY, *rawParam (ParameterIDs::SYN_ENV_PIT_DLY), (int) wc::ModDest::EnvPBase + 12);   // fb193
+        const float pitA = modP (ParameterIDs::SYN_ENV_PIT_A, *rawParam (ParameterIDs::SYN_ENV_PIT_A), (int) wc::ModDest::EnvPBase + 13);   // fb193
+        const float pitHld = modP (ParameterIDs::SYN_ENV_PIT_H, *rawParam (ParameterIDs::SYN_ENV_PIT_H), (int) wc::ModDest::EnvPBase + 14);   // fb193
+        const float pitD = modP (ParameterIDs::SYN_ENV_PIT_D, *rawParam (ParameterIDs::SYN_ENV_PIT_D), (int) wc::ModDest::EnvPBase + 15);   // fb193
+        const float pitS = modP (ParameterIDs::SYN_ENV_PIT_S, *rawParam (ParameterIDs::SYN_ENV_PIT_S), (int) wc::ModDest::EnvPBase + 16);   // fb193
+        const float pitR = modP (ParameterIDs::SYN_ENV_PIT_R, *rawParam (ParameterIDs::SYN_ENV_PIT_R), (int) wc::ModDest::EnvPBase + 17);   // fb193
         const float pitCa = *rawParam (ParameterIDs::SYN_ENV_PIT_CA);
         const float pitCd = *rawParam (ParameterIDs::SYN_ENV_PIT_CD);
         const float pitCr = *rawParam (ParameterIDs::SYN_ENV_PIT_CR);
         const bool  pitLoop = *rawParam (ParameterIDs::SYN_ENV_PIT_LOOP) > 0.5f;
         const float pitDepth = *rawParam (ParameterIDs::SYN_ENV_PIT_DEPTH);
-        const float m1eDly = *rawParam (ParameterIDs::SYN_ENV_M1_DLY);
-        const float m1eA = *rawParam (ParameterIDs::SYN_ENV_M1_A);
-        const float m1eHld = *rawParam (ParameterIDs::SYN_ENV_M1_H);
-        const float m1eD = *rawParam (ParameterIDs::SYN_ENV_M1_D);
-        const float m1eS = *rawParam (ParameterIDs::SYN_ENV_M1_S);
-        const float m1eR = *rawParam (ParameterIDs::SYN_ENV_M1_R);
+        const float m1eDly = modP (ParameterIDs::SYN_ENV_M1_DLY, *rawParam (ParameterIDs::SYN_ENV_M1_DLY), (int) wc::ModDest::EnvPBase + 18);   // fb193
+        const float m1eA = modP (ParameterIDs::SYN_ENV_M1_A, *rawParam (ParameterIDs::SYN_ENV_M1_A), (int) wc::ModDest::EnvPBase + 19);   // fb193
+        const float m1eHld = modP (ParameterIDs::SYN_ENV_M1_H, *rawParam (ParameterIDs::SYN_ENV_M1_H), (int) wc::ModDest::EnvPBase + 20);   // fb193
+        const float m1eD = modP (ParameterIDs::SYN_ENV_M1_D, *rawParam (ParameterIDs::SYN_ENV_M1_D), (int) wc::ModDest::EnvPBase + 21);   // fb193
+        const float m1eS = modP (ParameterIDs::SYN_ENV_M1_S, *rawParam (ParameterIDs::SYN_ENV_M1_S), (int) wc::ModDest::EnvPBase + 22);   // fb193
+        const float m1eR = modP (ParameterIDs::SYN_ENV_M1_R, *rawParam (ParameterIDs::SYN_ENV_M1_R), (int) wc::ModDest::EnvPBase + 23);   // fb193
         const float m1eCa = *rawParam (ParameterIDs::SYN_ENV_M1_CA);
         const float m1eCd = *rawParam (ParameterIDs::SYN_ENV_M1_CD);
         const float m1eCr = *rawParam (ParameterIDs::SYN_ENV_M1_CR);
         const bool  m1eLoop = *rawParam (ParameterIDs::SYN_ENV_M1_LOOP) > 0.5f;
-        const float m2eDly = *rawParam (ParameterIDs::SYN_ENV_M2_DLY);
-        const float m2eA = *rawParam (ParameterIDs::SYN_ENV_M2_A);
-        const float m2eHld = *rawParam (ParameterIDs::SYN_ENV_M2_H);
-        const float m2eD = *rawParam (ParameterIDs::SYN_ENV_M2_D);
-        const float m2eS = *rawParam (ParameterIDs::SYN_ENV_M2_S);
-        const float m2eR = *rawParam (ParameterIDs::SYN_ENV_M2_R);
+        const float m2eDly = modP (ParameterIDs::SYN_ENV_M2_DLY, *rawParam (ParameterIDs::SYN_ENV_M2_DLY), (int) wc::ModDest::EnvPBase + 24);   // fb193
+        const float m2eA = modP (ParameterIDs::SYN_ENV_M2_A, *rawParam (ParameterIDs::SYN_ENV_M2_A), (int) wc::ModDest::EnvPBase + 25);   // fb193
+        const float m2eHld = modP (ParameterIDs::SYN_ENV_M2_H, *rawParam (ParameterIDs::SYN_ENV_M2_H), (int) wc::ModDest::EnvPBase + 26);   // fb193
+        const float m2eD = modP (ParameterIDs::SYN_ENV_M2_D, *rawParam (ParameterIDs::SYN_ENV_M2_D), (int) wc::ModDest::EnvPBase + 27);   // fb193
+        const float m2eS = modP (ParameterIDs::SYN_ENV_M2_S, *rawParam (ParameterIDs::SYN_ENV_M2_S), (int) wc::ModDest::EnvPBase + 28);   // fb193
+        const float m2eR = modP (ParameterIDs::SYN_ENV_M2_R, *rawParam (ParameterIDs::SYN_ENV_M2_R), (int) wc::ModDest::EnvPBase + 29);   // fb193
         const float m2eCa = *rawParam (ParameterIDs::SYN_ENV_M2_CA);
         const float m2eCd = *rawParam (ParameterIDs::SYN_ENV_M2_CD);
         const float m2eCr = *rawParam (ParameterIDs::SYN_ENV_M2_CR);
@@ -5013,7 +5045,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int k = 0; k < dynEnvAudioCount_; ++k)
                 {
                     const auto& de = dynEnvAudio_[k];
-                    sv->setDynEnvDAHDSR (k, de.dl, de.a, de.h, de.d, de.s, de.r, de.ca, de.cd, de.cr, de.loop);
+                    const int dBk = (int) wc::ModDest::EnvPBase + (5 + k) * 6;   // fb193 — Env (6+k) params
+                    sv->setDynEnvDAHDSR (k, dynModMs (de.dl, dBk + 0), dynModMs (de.a, dBk + 1), dynModMs (de.h, dBk + 2),
+                                         dynModMs (de.d, dBk + 3), dynModS (de.s, dBk + 4), dynModMs (de.r, dBk + 5),
+                                         de.ca, de.cd, de.cr, de.loop);
                 }
                 sv->setFilterParameters2      (cut2, res2);
                 sv->setFilterType2            (filtType2);
