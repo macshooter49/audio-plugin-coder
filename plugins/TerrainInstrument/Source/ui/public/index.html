@@ -23258,16 +23258,19 @@ restoreThemeFromBackend();
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
   function srcName(a){ return a.env?('Env '+a.env):('LFO '+a.lfo); }
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
-  function hideRoutesSoon(){ if(rtHideT)clearTimeout(rtHideT); rtHideT=setTimeout(hideRoutes,250); }
-  document.addEventListener('pointerdown',function(e){ if(rtMenu&&!rtMenu.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('sm-ul'))) hideRoutes(); });
+  function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
+    rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%'; }); }
+  function hideRoutesSoon(){ if(rtHideT)clearTimeout(rtHideT); rtHideT=setTimeout(function(){ if(!badgeBusy)hideRoutes(); },250); }   /* fb190 — never hide mid-drag */
+  document.addEventListener('pointerdown',function(e){ if(rtMenu&&!rtMenu.contains(e.target)&&!(e.target.closest&&e.target.closest('.sm-ul'))) hideRoutes(); });   /* fb190 — closest: the ul's children are the target now */
   function showRoutes(el,u){ hideRoutes();
     var list=assigns.filter(function(a){ return curEl(a)===el; }); if(!list.length)return;
     rtMenu=document.createElement('div'); rtMenu.className='sm-routes';
+    rtMenu.__rows=[];   /* fb190 — the list IS the attenuator readout: rows update live during drags */
     list.forEach(function(a){ var row=document.createElement('div'); row.className='rr';
       var lab=document.createElement('span'); lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%';
       var x=document.createElement('span'); x.className='rx'; x.textContent='\u2715'; x.title='remove';
       x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); hideRoutes(); });
-      row.appendChild(lab); row.appendChild(x); rtMenu.appendChild(row); });
+      row.appendChild(lab); row.appendChild(x); rtMenu.appendChild(row); rtMenu.__rows.push({a:a,lab:lab}); });
     document.body.appendChild(rtMenu);
     var r=u.getBoundingClientRect(), mw=rtMenu.offsetWidth, mh=rtMenu.offsetHeight;   // measure AFTER append (fb172 law)
     rtMenu.style.left=Math.max(6,Math.min(r.left, window.__vw()-mw-6))+'px';
@@ -23292,14 +23295,19 @@ restoreThemeFromBackend();
         u.innerHTML='<div class="smu-rail"></div><div class="smu-span"></div><div class="smu-comet" style="display:none"></div>';
         u.addEventListener('mouseenter',function(){ if(rtHideT)clearTimeout(rtHideT); showRoutes(el,u); });
         u.addEventListener('mouseleave',function(){ hideRoutesSoon(); });
-        (function(uu,tEl){ var down=false,moved=false,y0=0,v0=0,ra=null;   /* fb188 — the badge's depth meter, transplanted */
+        (function(uu,tEl){ var down=false,moved=false,y0=0,v0=0,ra=null;   /* fb188 depth drag · fb190 (Max):
+             for ENV routes the hover LIST is the attenuator readout — the old side meter is
+             retired here (LFOs keep it until the LFO arc). */
           uu.addEventListener('pointerdown',function(e){ ra=routeFor(tEl); if(!ra)return; e.preventDefault(); e.stopPropagation();
             down=true; moved=false; badgeBusy=true; y0=e.clientY; v0=ra.depth; uu.setPointerCapture&&uu.setPointerCapture(e.pointerId);
-            var br=uu.getBoundingClientRect(); showAtt(ra, br.right+7, br.top-25);
+            if(ra.env){ if(rtHideT)clearTimeout(rtHideT); if(!rtMenu)showRoutes(tEl,uu); }
+            else { var br=uu.getBoundingClientRect(); showAtt(ra, br.right+7, br.top-25); }
             function mv(ev){ if(!down)return; if(Math.abs(ev.clientY-y0)>2)moved=true;
-              ra.depth=Math.max(ra.env?0:-1,Math.min(1,v0+(y0-ev.clientY)*0.008)); updAtt(ra); push(); }
-            function up2(){ down=false; badgeBusy=false; hideAtt(); document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up2);
-              if(!moved){ if(rtHideT)clearTimeout(rtHideT); showRoutes(tEl,uu); } }
+              ra.depth=Math.max(ra.env?0:-1,Math.min(1,v0+(y0-ev.clientY)*0.008));
+              if(ra.env)updRouteList(ra); else updAtt(ra); push(); }
+            function up2(){ down=false; badgeBusy=false; if(ra&&!ra.env)hideAtt(); document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up2);
+              if(!moved){ if(rtHideT)clearTimeout(rtHideT); if(!rtMenu)showRoutes(tEl,uu); }
+              else if(ra&&ra.env)hideRoutesSoon(); }
             document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up2); });
         })(u,el);
         ulMap.set(el,u); }
@@ -26911,7 +26919,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb189';   // bump per ship  [fb189 = THE COMET (Max's F3): underline = rail + depth TERRITORY + live white comet riding the engine feed (env per most-active voice, LFO bank); hover=routes, drag=depth]
+  var TERRAIN_BUILD = 'fb190';   // bump per ship  [fb190 = env attenuator readout = the hover LIST (live % during drags); the old side meter retired for envs (LFOs keep it until the LFO arc)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
