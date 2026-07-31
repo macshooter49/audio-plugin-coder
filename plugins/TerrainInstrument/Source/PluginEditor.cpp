@@ -5271,6 +5271,14 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
            << SF(envFollow, 4) << "," << SF(envStage, 4) << ");}}catch(e){}";
     }
 
+    // fb189 — the living underline: all env slots + the LFO bank, one compact call.
+    {
+        juce::String eArr, lArr;
+        for (int k = 0; k < 32; ++k) { if (k) eArr << ","; eArr << SF(audioProcessor.modVizEnv (k), 3); }
+        for (int k = 0; k < 10; ++k) { if (k) lArr << ","; lArr << SF(audioProcessor.modVizLfo (k), 3); }
+        js << "try{if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "]);}}catch(e){}";
+    }
+
     // ── Sample engine MIDI followers (one playhead per held note) ──
     // SAMPLE-FOLLOWER (multi) — push every sounding voice's per-osc read position as a flat
     // [voiceIdx,pos, voiceIdx,pos, …] list. JS keys each line by voiceIdx for stable identity and

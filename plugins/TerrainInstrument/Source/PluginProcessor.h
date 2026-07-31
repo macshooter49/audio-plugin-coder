@@ -773,6 +773,12 @@ public:
     // Live AMP envelope output [0,1] of the most-active synth voice, for the UI
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
+    // fb189 — LIVING UNDERLINE feed: most-active voice's env outputs (0..1, −1 = silent)
+    // + the global LFO bank (bipolar). 32 slots = 5 legacy + 27 dynamic.
+    std::atomic<float> modVizEnv_[32] {};
+    std::atomic<float> modVizLfo_[wc::NUM_LFOS] {};
+    float modVizEnv (int k) const noexcept { return (k >= 0 && k < 32) ? modVizEnv_[k].load (std::memory_order_relaxed) : -1.f; }
+    float modVizLfo (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfo_[k].load (std::memory_order_relaxed) : 0.f; }
     std::atomic<float> noiseVizLevel_ { 0.f };   // NOISE viz — env level while noise is sounding (0 when off/silent)
     std::atomic<float> noiseVizPos_  { -1.f };   // fb66 — NOISE waveform follower position 0..1 (representative), -1 = none
     std::atomic<float> noiseFreeNorm_{ 0.f  };   // fb66 — NOISE Free-mode global tape position 0..1

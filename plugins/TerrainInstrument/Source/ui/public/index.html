@@ -23089,8 +23089,12 @@ restoreThemeFromBackend();
     '.sm-att .f{position:absolute;left:1px;right:1px;background:#B794FF;border-radius:3px;box-shadow:0 0 7px rgba(139,92,246,.85);}'+
     '.sm-att .vv{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;font:600 9px -apple-system,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap;}'+
     /* fb182 — S3 signification: the underline (filter-tab grammar: 1.5px, purple-400, r1) */
-    '.sm-ul{position:fixed;z-index:2147483644;height:1.5px;background:rgba(255,255,255,0.22);cursor:ns-resize;}'+   /* fb188 — crisp hairline (the LFO-tab rule), drag = depth */
-    '.sm-ul.sel{background:#B794FF;}'+
+    '.sm-ul{position:fixed;z-index:2147483644;height:7px;background:transparent;cursor:ns-resize;}'+   /* fb189 — 7px hit strip; visuals are children */
+    '.smu-rail{position:absolute;left:0;right:0;top:3px;height:1.5px;background:rgba(255,255,255,0.10);}'+
+    '.smu-span{position:absolute;top:3px;height:1.5px;background:rgba(255,255,255,0.22);}'+   /* the depth's TERRITORY, anchored at (1−d)·knob */
+    '.sm-ul.sel .smu-span{background:#B794FF;}'+
+    '.smu-comet{position:absolute;top:2.25px;height:3px;pointer-events:none;background:linear-gradient(90deg,rgba(231,222,255,0),rgba(231,222,255,0.95));box-shadow:0 0 4px rgba(167,139,250,0.55);}'+   /* fb189 — F3 THE COMET (Max's pick) */
+    '.smu-comet.rev{background:linear-gradient(270deg,rgba(231,222,255,0),rgba(231,222,255,0.95));}'+
     '.sm-routes{position:fixed;z-index:2147483647;background:rgba(24,24,38,0.92);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid rgba(255,255,255,0.10);border-radius:8px;padding:5px 4px;min-width:128px;font:400 10px -apple-system,\'SF Pro Text\',sans-serif;color:rgba(255,255,255,0.85);}'+
     '.sm-routes .rr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 8px;border-radius:5px;}'+
     '.sm-routes .rr:hover{background:rgba(167,139,250,0.12);}'+
@@ -23158,6 +23162,8 @@ restoreThemeFromBackend();
   var FSLOT_BACK ={ 'Mix':[62,63], 'Drive':[60,61], 'Env':[56,57], 'Vel':[340,341], 'Track':[342,343] };   // fb78 — the WHOLE back row routes now; front RES/DRV/ENV target the runtime .fk-em emblems
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
+  var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
+  window.__modViz=function(e,l){ mvE=e; mvL=l; };
   /* fb182 — S3: the currently SELECTED modulator (env or LFO). Underlines paint purple
      for its routes, dim for everyone else's; switching selection repaints live. */
   window.__selMod = window.__selMod || { env:1 };
@@ -23203,6 +23209,10 @@ restoreThemeFromBackend();
     assigns.forEach(function(a){ if(curEl(a)!==el)return; if(!first)first=a;
       if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo))hit=a; });
     return hit||first; }
+  var ssCache={};   /* fb189 — knob normalized value for the territory anchor */
+  function knobNorm(a){ var pid=d2pid(a.dest); if(!pid)return 0;
+    var st=ssCache[pid]; if(st===undefined){ st=ssCache[pid]=(window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(pid):null; }
+    try{ return st?st.getNormalisedValue():0; }catch(e){ return 0; } }
 
   // ── drag from the LFO tabs ──
   var ghost=null, drag=null, lastDragEnd=0, TG=[];
@@ -23279,6 +23289,7 @@ restoreThemeFromBackend();
     seen.forEach(function(m,el){
       var u=ulMap.get(el);
       if(!u){ u=document.createElement('div'); u.className='sm-ul'; document.body.appendChild(u);
+        u.innerHTML='<div class="smu-rail"></div><div class="smu-span"></div><div class="smu-comet" style="display:none"></div>';
         u.addEventListener('mouseenter',function(){ if(rtHideT)clearTimeout(rtHideT); showRoutes(el,u); });
         u.addEventListener('mouseleave',function(){ hideRoutesSoon(); });
         (function(uu,tEl){ var down=false,moved=false,y0=0,v0=0,ra=null;   /* fb188 — the badge's depth meter, transplanted */
@@ -23300,8 +23311,24 @@ restoreThemeFromBackend();
       if(!on||!r2||r2.width===0){ u.style.display='none'; return; }
       u.style.display='block';
       u.style.left=r2.left+'px'; u.style.width=r2.width+'px';
-      u.style.top=(r2.bottom+2)+'px';
-      u.classList.toggle('sel',m.sel); });
+      u.style.top=(r2.bottom-1)+'px';   /* fb189 — 7px strip; the visual line (children top:3) stays at bottom+2 */
+      u.classList.toggle('sel',m.sel);
+      /* fb189 — THE COMET: territory = [(1−d)·knob, (1−d)·knob + d]; the live value rides it.
+         Fast attack = streak, slow = pour, LFO = breathe. −1 (no voice) → still. */
+      var ra=routeFor(el), sp=u.children[1], cm=u.children[2], gw=r2.width;
+      if(ra){
+        var d=Math.min(1,Math.abs(ra.depth)), kn=knobNorm(ra);
+        var v=ra.env?((mvE&&mvE[ra.env-1]!=null)?mvE[ra.env-1]:-1)
+                    :((mvL&&mvL[ra.lfo-1]!=null)?(mvL[ra.lfo-1]+1)/2:-1);
+        var anchor=(1-d)*kn;
+        sp.style.left=(anchor*gw)+'px'; sp.style.width=(Math.max(0.02,d)*gw)+'px';
+        if(v>=0&&!(ra.env&&v<0.004)){
+          var eff=anchor+d*v, a1=Math.min(anchor,eff), tl=Math.min(0.32,Math.max(0.06,Math.abs(eff-anchor)));
+          cm.style.display='block';
+          if(eff>=anchor){ cm.classList.remove('rev'); cm.style.left=(Math.max(a1,eff-tl)*gw)+'px'; cm.style.width=(Math.max(0.012,Math.min(tl,eff-a1))*gw)+'px'; }
+          else { cm.classList.add('rev'); cm.style.left=(eff*gw)+'px'; cm.style.width=(Math.max(0.012,Math.min(tl,anchor-eff))*gw)+'px'; }
+        } else cm.style.display='none';
+      } else { sp.style.width='0px'; cm.style.display='none'; } });
     ulMap.forEach(function(u,el){ if(!seen.has(el)){ u.remove(); ulMap.delete(el); } });
     requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
@@ -26884,7 +26911,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb188';   // bump per ship  [fb188 = letter badges RETIRED — the underline is the grammar (ink-exact span, 1.5px crisp, drag = depth, hover/click = routes); voice trio Frame/Warp/Fold gets OWNERSHIP (iffy warp dead)]
+  var TERRAIN_BUILD = 'fb189';   // bump per ship  [fb189 = THE COMET (Max's F3): underline = rail + depth TERRITORY + live white comet riding the engine feed (env per most-active voice, LFO bank); hover=routes, drag=depth]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
