@@ -2421,7 +2421,7 @@ body {
 @keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
 #mod-engine .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
 #mod-engine .mv-ov.top{top:6px;padding:0 11px;justify-content:flex-end;}
-#mod-engine .mv-ov.bot{bottom:6px;padding:0 13px;justify-content:space-between;}
+#mod-engine .mv-ov.bot{bottom:0;padding:0 13px;justify-content:space-between;}   /* fb192 — centered with the env shelf (the tab underline keeps its 3px air inside the bar) */
 #mod-engine .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:var(--ghost);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;}
 #mod-engine .mv-c:hover{color:#fff;}
 #mod-engine .mv-c.drag{cursor:ns-resize;}
@@ -4681,7 +4681,8 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 #syn-panel .envs { padding: 0; gap: 0; }
 /* fb191 S4 — THE SHELF (F2): six value chips on a hairline rail under the graph.
    Drag = nudge · double-click = type. The graph pays ~15px and keeps its shape. */
-#syn-panel .env-shelf { flex: 0 0 15px; display: flex; align-items: center; justify-content: space-evenly;
+#syn-panel .env-shelf { flex: 0 0 17px; display: flex; align-items: center; justify-content: space-evenly;
+  background: var(--bg-hero); border-radius: 0 0 10px 10px;   /* fb192 (Max) — same glass as the graph, one continuous box */
   border-top: 1px solid var(--border); }
 #syn-panel .env-shelf .ec { position: relative; font-size: 8.5px; font-weight: 300; letter-spacing: 0.3px;
   color: rgba(255,255,255,0.34); cursor: ns-resize; padding: 1px 3px; -webkit-user-select: none; user-select: none; }
@@ -4690,7 +4691,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 #syn-panel .env-shelf .ec:hover b { color: #FFFFFF; }
 #syn-panel .env-shelf .ec input { width: 34px; background: transparent; border: none; outline: none;
   color: #FFFFFF; font: inherit; text-align: center; padding: 0; margin: 0; }
-#syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px; cursor: crosshair; }
+#syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px 10px 0 0; cursor: crosshair; }   /* fb192 — the shelf completes the box below */
 #syn-panel #env-svg { touch-action: none; }
 #syn-panel .env-sel { position: absolute; top: 6px; right: 2px; z-index: 3;
   /* WC-chip: transparent + blended text, brightens to white on hover. No box, no glass fill.
@@ -14450,7 +14451,8 @@ setTimeout(function wireSynControls () {
           c.addEventListener('dblclick',function(e){ e.preventDefault(); e.stopPropagation(); beginChipEdit(cd,c); });
           shelf.appendChild(c); });
         refreshChips();
-        window.__envShowHub = window.__envShowHub;   /* keep the export adjacent (no-op) */
+        var __renderBase = render;   /* fb192 — chips ride every paint: graph sculpts, wire() sync, boot */
+        render = function(){ __renderBase(); refreshChips(); };
         updateChip();
 
         function boot(){
@@ -26983,7 +26985,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb191';   // bump per ship  [fb191 = S4 THE SHELF (Max's F2): Dly/Atk/Hld/Dec/Sus/Rel chips on a hairline rail under the graph — drag = nudge, double-click = type (fb130/fb136 contract); shelf follows env switches]
+  var TERRAIN_BUILD = 'fb192';   // bump per ship  [fb192 = shelf polish (Max): one continuous box (hero bg + bottom radius), LFO bar down to the shelf's line, chips LIVE during graph sculpts (render hook)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
