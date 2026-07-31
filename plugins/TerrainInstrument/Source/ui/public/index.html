@@ -4679,6 +4679,17 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 #syn-panel .env-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* -- Serum-grade DAHDSR envelope (Batch 4 v5) -- */
 #syn-panel .envs { padding: 0; gap: 0; }
+/* fb191 S4 — THE SHELF (F2): six value chips on a hairline rail under the graph.
+   Drag = nudge · double-click = type. The graph pays ~15px and keeps its shape. */
+#syn-panel .env-shelf { flex: 0 0 15px; display: flex; align-items: center; justify-content: space-evenly;
+  border-top: 1px solid var(--border); }
+#syn-panel .env-shelf .ec { position: relative; font-size: 8.5px; font-weight: 300; letter-spacing: 0.3px;
+  color: rgba(255,255,255,0.34); cursor: ns-resize; padding: 1px 3px; -webkit-user-select: none; user-select: none; }
+#syn-panel .env-shelf .ec b { font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 3px; }
+#syn-panel .env-shelf .ec:hover { color: rgba(255,255,255,0.6); }
+#syn-panel .env-shelf .ec:hover b { color: #FFFFFF; }
+#syn-panel .env-shelf .ec input { width: 34px; background: transparent; border: none; outline: none;
+  color: #FFFFFF; font: inherit; text-align: center; padding: 0; margin: 0; }
 #syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px; cursor: crosshair; }
 #syn-panel #env-svg { touch-action: none; }
 #syn-panel .env-sel { position: absolute; top: 6px; right: 2px; z-index: 3;
@@ -6945,6 +6956,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               </svg>
               <div class="env-hud-row" id="env-hud-row"><div class="env-read-hud" id="env-read-hud"></div><div class="env-sel" id="env-sel">Amp <span class="env-sel-arrow">&#9662;</span></div></div>
             </div>
+            <div class="env-shelf" id="env-shelf"></div><!-- fb191 S4 — THE SHELF (Max's F2) -->
           </div>
 
           <div class="device mod">
@@ -14272,7 +14284,7 @@ setTimeout(function wireSynControls () {
           return (v>=0?'+':'')+(v*100).toFixed(0)+'%'; }            // Filter/Mod as %
         function updateChip(){ if(!selChip) return;   /* fb187 — chip = 'Env N' only (Max):
              short forever, the readout legend can never collide; routing lives in the hub + underlines */
-          selChip.innerHTML='Env '+envNumOf(curEnv); }
+          selChip.innerHTML='Env '+envNumOf(curEnv); refreshChips(); }   /* fb191 — shelf follows the env */
         window.__envUpdateChip = updateChip;
         window.__envCurNum = function(){ return envNumOf(curEnv) || 1; };   /* fb178 — the drag source */
 
@@ -14387,6 +14399,58 @@ setTimeout(function wireSynControls () {
           window.__synShowMenu(null, items, x, y);   // null header — the "Envelope" section titles it
         }
         window.__envShowHub = showHub;
+        /* fb191 S4 — THE SHELF: Dly·Atk·Hld·Dec·Sus·Rel chips bound to the live env state.
+           Drag = nudge (0.004/px in normalized space — the same skew the graph rides).
+           Double-click = type (the fb130/fb136 inline-editor contract: host-key bridge armed,
+           refocus tick survives the arming blur, Enter commits, Escape/click-away per law). */
+        var shelf=document.getElementById('env-shelf');
+        var CHIPDEFS=[['DLY','Dly'],['A','Atk'],['H','Hld'],['D','Dec'],['S','Sus'],['R','Rel']];
+        var chipEls={};
+        function chipText(key){ var s=st(); if(!s||!s[key])return '\u2014';
+          if(key==='S') return Math.round(nv(s['S'])*100)+'%';
+          return fmtMs(msOf(nv(s[key]))); }
+        function refreshChips(){ if(!shelf)return;
+          CHIPDEFS.forEach(function(cd){ var c=chipEls[cd[0]]; if(c&&c.__val&&!c.querySelector('input')) c.__val.textContent=chipText(cd[0]); }); }
+        function beginChipEdit(cd,c){ if(c.querySelector('input'))return;
+          var key=cd[0], b=c.__val;
+          var inp=document.createElement('input'); inp.type='text'; inp.maxLength=7; inp.value=String(b.textContent).replace('\u2014','');
+          b.textContent=''; b.appendChild(inp);
+          try{ inp.focus(); inp.select(); }catch(e){}
+          window.__tiActiveInp=inp; if(window.__tiEditArm)window.__tiEditArm(1);
+          setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(e){} },80);   /* fb136 — survive the arming blur */
+          var closed=false;
+          function out(ev){ if(!c.contains(ev.target)) done(true); }
+          setTimeout(function(){ document.addEventListener('pointerdown',out,true); },0);
+          function done(commit){ if(closed)return; closed=true;
+            document.removeEventListener('pointerdown',out,true);
+            window.__tiActiveInp=null; if(window.__tiEditArm)window.__tiEditArm(0);
+            var rawKeep=String(inp.value); try{ inp.remove(); }catch(e){}   /* fb191 — the editor must LEAVE the chip or refresh skips it */
+            if(commit){ var raw=rawKeep.trim().toLowerCase();
+              var num=parseFloat(raw.replace(/[^\d.\-]/g,''));
+              if(isFinite(num)){
+                if(key==='S') setnv(st()['S'], Math.max(0,Math.min(1,num/100)));
+                else { var ms=(raw.indexOf('s')>=0&&raw.indexOf('ms')<0)?num*1000:num;
+                       setnv(st()[key], normOfMs(ms)); } } }
+            syncLoopUi(); scheduleRender(); refreshChips(); }
+          inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
+            if(ev.key==='Enter')done(true); else if(ev.key==='Escape')done(false); });
+          inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }
+        if(shelf) CHIPDEFS.forEach(function(cd){
+          var c=document.createElement('span'); c.className='ec'; c.title='drag = adjust \u00b7 double-click = type';
+          c.appendChild(document.createTextNode(cd[1]));
+          var b=document.createElement('b'); c.appendChild(b); c.__val=b; chipEls[cd[0]]=c;
+          var down=false,y0=0,v0=0;
+          c.addEventListener('pointerdown',function(e){ if(c.querySelector('input'))return; e.preventDefault();
+            down=true; y0=e.clientY; v0=nv(st()[cd[0]]); try{c.setPointerCapture(e.pointerId);}catch(ex){} });
+          c.addEventListener('pointermove',function(e){ if(!down)return;
+            setnv(st()[cd[0]], Math.max(0,Math.min(1, v0+(y0-e.clientY)*0.004)));
+            scheduleRender(); refreshChips(); });
+          function fin(e){ if(!down)return; down=false; try{c.releasePointerCapture(e.pointerId);}catch(ex){} }
+          c.addEventListener('pointerup',fin); c.addEventListener('pointercancel',fin);
+          c.addEventListener('dblclick',function(e){ e.preventDefault(); e.stopPropagation(); beginChipEdit(cd,c); });
+          shelf.appendChild(c); });
+        refreshChips();
+        window.__envShowHub = window.__envShowHub;   /* keep the export adjacent (no-op) */
         updateChip();
 
         function boot(){
@@ -26919,7 +26983,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb190';   // bump per ship  [fb190 = env attenuator readout = the hover LIST (live % during drags); the old side meter retired for envs (LFOs keep it until the LFO arc)]
+  var TERRAIN_BUILD = 'fb191';   // bump per ship  [fb191 = S4 THE SHELF (Max's F2): Dly/Atk/Hld/Dec/Sus/Rel chips on a hairline rail under the graph — drag = nudge, double-click = type (fb130/fb136 contract); shelf follows env switches]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
