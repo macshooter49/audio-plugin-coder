@@ -4137,7 +4137,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {
                     setSynthDynEnvs ("{\"n\":2,\"e\":[{\"a\":80,\"d\":400,\"s\":0.4,\"r\":250},{\"a\":5,\"d\":200,\"s\":0.0,\"r\":300}]}");
                     setSynthModMatrix ("[{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::LevelA) + ",\"v\":1.0},"
-                                        "{\"s\":105,\"d\":" + juce::String ((int) wc::ModDest::Res1)   + ",\"v\":1.0}]");
+                                        "{\"s\":105,\"d\":" + juce::String ((int) wc::ModDest::Res1)   + ",\"v\":1.0},"
+                                        "{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::FmFbA)  + ",\"v\":1.0}]");
                     if (auto* pL = apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_LEVEL)) pL->store (0.0f);
                     if (auto* pR = apvts.getRawParameterValue ("SYN_ENV_AMP_R"))               pR->store (2000.0f);
                 }
@@ -4207,6 +4208,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
         }
         float modSums[(int) wc::ModDest::NumDests] = { 0 };
+        float envOwnW[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth| of env claims per Linear01 dest
+        float envOwnV[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth|·env: the owned target (0..1 of span)
         {
             static const char* const kLfoDepthIds[wc::NUM_LFOS] = {
                 ParameterIDs::LFO1_DEPTH, ParameterIDs::LFO2_DEPTH, ParameterIDs::LFO3_DEPTH,
@@ -4223,8 +4226,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     // mono tap re-opened every sounding voice's level on any note-on — the
                     // ghost-note gate Max heard. Levels never read the tap again.
                     if (r.dest >= (int) wc::ModDest::LevelA && r.dest <= (int) wc::ModDest::LevelD) continue;
-                    const float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));   // fb179 — knob-is-the-peak
-                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], lv, std::abs (r.depth));   // fb180 — magnitude
+                    const float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));
+                    // fb184 — OWNERSHIP for every unipolar (Linear01) dest: the env claims the
+                    // knob by |depth| instead of offsetting it — knob-down + atten-100 follows
+                    // the shape (Max's law, generalized from fb183 Levels). Semitone/Bipolar
+                    // dests keep the fb179 offset (a pitch/pan pluck swings AROUND the knob).
+                    const auto& diR = wc::kDestInfo[r.dest];
+                    if (diR.domain == wc::ModDomain::Linear01)
+                    {
+                        const float dwR = std::abs (r.depth);
+                        envOwnW[r.dest] += dwR;
+                        envOwnV[r.dest] += dwR * (lv + 1.0f);
+                        continue;
+                    }
+                    modSums[r.dest] += wc::routeContribution (diR, lv, std::abs (r.depth));   // fb180 — magnitude
                     continue;
                 }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
@@ -4252,12 +4267,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     + " v60=" + juce::String (v60, 4) + "/" + juce::String (a60)
                     + " v65=" + juce::String (v65, 4) + "/" + juce::String (a65)
                     + " sumLevA=" + juce::String (modSums[(int) wc::ModDest::LevelA], 4)
-                    + " sumRes1=" + juce::String (modSums[(int) wc::ModDest::Res1], 4) + "\n");
+                    + " wFb=" + juce::String (envOwnW[(int) wc::ModDest::FmFbA], 2)
+                    + " vFb=" + juce::String (envOwnV[(int) wc::ModDest::FmFbA], 4)
+                    + " vRes=" + juce::String (envOwnV[(int) wc::ModDest::Res1], 4) + "\n");
             }
         }
-        // Wrap helper: base param + this block's mod sum, clamped ONCE to the param's range.
+        // fb184 — OWNERSHIP at the app site: the env's claim w crossfades the (LFO-modulated)
+        // base toward the env's own shape mapped across lo..hi. w=0 → legacy additive exactly.
+        auto ownM = [&] (float base, int d, float lo, float hi)
+        {
+            const float w = envOwnW[d] > 1.0f ? 1.0f : envOwnW[d];
+            return juce::jlimit (lo, hi, (base + modSums[d]) * (1.0f - w) + lo * w + envOwnV[d] * (hi - lo));
+        };
+        // Wrap helper: base param + this block's mod, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
-        { return juce::jlimit (lo, hi, *rawParam (pid) + modSums[(int) d]); };
+        { return ownM (*rawParam (pid), (int) d, lo, hi); };
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
         const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
         const float cent    =         *rawParam (ParameterIDs::SYN_OSC_A_CENT);
@@ -4265,7 +4289,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float pan     =         mdP (ParameterIDs::SYN_OSC_A_PAN, wc::ModDest::PanA, -1.0f, 1.0f);
         const float cut     =         *rawParam (ParameterIDs::SYN_FILTER1_CUT);
         const float res     =         mdP (ParameterIDs::SYN_FILTER1_RES, wc::ModDest::Res1, 0.0f, 1.0f);
-        const float fltKt1  =         juce::jlimit (0.0f, 100.0f, *rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK) + modSums[(int) wc::ModDest::FTrack1] * 100.0f);   // fb78 — back-panel Track mod
+        const float fltKt1  =         100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack1, 0.0f, 1.0f);   // fb78 Track mod · fb184 ownership
         // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
         const int   filtType= (int)   *rawParam (ParameterIDs::SYN_FILTER1_TYPE);
         const float filtDrv =         mdP (ParameterIDs::SYN_FILTER1_DRV, wc::ModDest::FDrv1, 0.0f, 1.0f);
@@ -4273,7 +4297,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Filter 2 (independent) + per-filter mix + routing.
         const float cut2     =        *rawParam (ParameterIDs::SYN_FILTER2_CUT);
         const float res2     =        mdP (ParameterIDs::SYN_FILTER2_RES, wc::ModDest::Res2, 0.0f, 1.0f);
-        const float fltKt2   =        juce::jlimit (0.0f, 100.0f, *rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK) + modSums[(int) wc::ModDest::FTrack2] * 100.0f);
+        const float fltKt2   =        100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack2, 0.0f, 1.0f);   // fb184 ownership
         const int   filtType2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_TYPE);
         const float filtDrv2 =        mdP (ParameterIDs::SYN_FILTER2_DRV, wc::ModDest::FDrv2, 0.0f, 1.0f);
         const float filtEnv2 =        mdP (ParameterIDs::SYN_FILTER2_ENV, wc::ModDest::FEnv2, -1.0f, 1.0f);
@@ -4543,12 +4567,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (int o = 0; o < 4; ++o)
             {
                 auto& sp = *spMod[o];
-                sp.scan    = juce::jlimit (-1.0f, 1.0f, sp.scan    + modSums[(int) wc::ModDest::SampScanA    + o]);
-                sp.stretch = juce::jlimit ( 0.0f, 1.0f, sp.stretch + modSums[(int) wc::ModDest::SampStretchA + o]);
-                sp.formant = juce::jlimit (-1.0f, 1.0f, sp.formant + modSums[(int) wc::ModDest::SampFormantA + o]);   // param range IS -1..1 (bipolar formant)
-                sp.air     = juce::jlimit ( 0.0f, 1.0f, sp.air     + modSums[(int) wc::ModDest::SampAirA     + o]);
-                sp.spray   = juce::jlimit ( 0.0f, 1.0f, sp.spray   + modSums[(int) wc::ModDest::SampSprayA   + o]);
-                sp.xfade   = juce::jlimit ( 0.0f, 1.0f, sp.xfade   + modSums[(int) wc::ModDest::SampXfadeA   + o]);
+                sp.scan    = ownM (sp.scan, (int) wc::ModDest::SampScanA + o, -1.0f, 1.0f);
+                sp.stretch = ownM (sp.stretch, (int) wc::ModDest::SampStretchA + o, 0.0f, 1.0f);
+                sp.formant = ownM (sp.formant, (int) wc::ModDest::SampFormantA + o, -1.0f, 1.0f);   // param range IS -1..1 (bipolar formant)
+                sp.air     = ownM (sp.air, (int) wc::ModDest::SampAirA + o, 0.0f, 1.0f);
+                sp.spray   = ownM (sp.spray, (int) wc::ModDest::SampSprayA + o, 0.0f, 1.0f);
+                sp.xfade   = ownM (sp.xfade, (int) wc::ModDest::SampXfadeA + o, 0.0f, 1.0f);
             }
         }
         static const char* const GRAIN_IDS[4][12] = {
@@ -4598,18 +4622,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (int o = 0; o < 4; ++o)
             {
                 auto& g = *gpMod[o];
-                g.position   = juce::jlimit ( 0.0f, 1.0f, g.position   + modSums[(int) wc::ModDest::GrainPosA     + o]);
-                g.density    = juce::jlimit ( 0.0f, 1.0f, g.density    + modSums[(int) wc::ModDest::GrainDensityA + o]);
-                g.size       = juce::jlimit ( 0.0f, 1.0f, g.size       + modSums[(int) wc::ModDest::GrainSizeA    + o]);
-                g.pitch      = juce::jlimit (-48.0f, 48.0f, g.pitch    + modSums[(int) wc::ModDest::GrainPitchA   + o]);
-                g.spray      = juce::jlimit ( 0.0f, 1.0f, g.spray      + modSums[(int) wc::ModDest::GrainSprayA   + o]);
-                g.pitchSpray = juce::jlimit ( 0.0f, 1.0f, g.pitchSpray + modSums[(int) wc::ModDest::GrainPSprayA  + o]);
-                g.shape      = juce::jlimit ( 0.0f, 1.0f, g.shape      + modSums[(int) wc::ModDest::GrainShapeA   + o]);
-                g.skew       = juce::jlimit (-1.0f, 1.0f, g.skew       + modSums[(int) wc::ModDest::GrainSkewA    + o]);
-                g.width      = juce::jlimit ( 0.0f, 1.0f, g.width      + modSums[(int) wc::ModDest::GrainWidthA   + o]);
-                g.scan       = juce::jlimit (-1.0f, 1.0f, g.scan       + modSums[(int) wc::ModDest::GrainScanA    + o]);
-                g.dir        = juce::jlimit (-1.0f, 1.0f, g.dir        + modSums[(int) wc::ModDest::GrainDirA     + o]);   // fb78
-                g.key        = juce::jlimit (0, 6, (int) std::lround ((float) g.key + modSums[(int) wc::ModDest::GrainKeyA + o]));   // fb78 — stepped ("madman mode": modulate the KEY)
+                g.position   = ownM (g.position, (int) wc::ModDest::GrainPosA + o, 0.0f, 1.0f);
+                g.density    = ownM (g.density   , (int) wc::ModDest::GrainDensityA + o, 0.0f, 1.0f);
+                g.size       = ownM (g.size, (int) wc::ModDest::GrainSizeA + o, 0.0f, 1.0f);
+                g.pitch      = ownM (g.pitch, (int) wc::ModDest::GrainPitchA + o, -48.0f, 48.0f);
+                g.spray      = ownM (g.spray, (int) wc::ModDest::GrainSprayA + o, 0.0f, 1.0f);
+                g.pitchSpray = ownM (g.pitchSpray, (int) wc::ModDest::GrainPSprayA + o, 0.0f, 1.0f);
+                g.shape      = ownM (g.shape, (int) wc::ModDest::GrainShapeA + o, 0.0f, 1.0f);
+                g.skew       = ownM (g.skew, (int) wc::ModDest::GrainSkewA + o, -1.0f, 1.0f);
+                g.width      = ownM (g.width, (int) wc::ModDest::GrainWidthA + o, 0.0f, 1.0f);
+                g.scan       = ownM (g.scan, (int) wc::ModDest::GrainScanA + o, -1.0f, 1.0f);
+                g.dir        = ownM (g.dir, (int) wc::ModDest::GrainDirA + o, -1.0f, 1.0f);   // fb78
+                g.key        = juce::jlimit (0, 6, (int) std::lround (ownM ((float) g.key, (int) wc::ModDest::GrainKeyA + o, 0.0f, 6.0f)));   // fb78 stepped · fb184 ownership
             }
         }
 
@@ -4633,17 +4657,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // fb75/78 — FM knob mod (block-rate): ratios/depths (k=1..4), fb (k=5), WEATHERING (k=6..11). algo untouched.
         for (int o = 0; o < 4; ++o)
         {
-            fmVals[o][1]  = juce::jlimit (0.25f, 16.0f, fmVals[o][1] + modSums[(int) wc::ModDest::FmRatio1A + o]);   // fb78
-            fmVals[o][2]  = juce::jlimit (0.0f, 1.0f, fmVals[o][2]  + modSums[(int) wc::ModDest::FmDepth1A + o]);
-            fmVals[o][3]  = juce::jlimit (0.25f, 16.0f, fmVals[o][3] + modSums[(int) wc::ModDest::FmRatio2A + o]);
-            fmVals[o][4]  = juce::jlimit (0.0f, 1.0f, fmVals[o][4]  + modSums[(int) wc::ModDest::FmDepth2A + o]);
-            fmVals[o][5]  = juce::jlimit (0.0f, 1.0f, fmVals[o][5]  + modSums[(int) wc::ModDest::FmFbA     + o]);
-            fmVals[o][6]  = juce::jlimit (0.0f, 1.0f, fmVals[o][6]  + modSums[(int) wc::ModDest::FmStrikeA + o]);
-            fmVals[o][7]  = juce::jlimit (0.0f, 1.0f, fmVals[o][7]  + modSums[(int) wc::ModDest::FmAgeA    + o]);
-            fmVals[o][8]  = juce::jlimit (0.0f, 1.0f, fmVals[o][8]  + modSums[(int) wc::ModDest::FmRustA   + o]);
-            fmVals[o][9]  = juce::jlimit (0.0f, 1.0f, fmVals[o][9]  + modSums[(int) wc::ModDest::FmGaleA   + o]);
-            fmVals[o][10] = juce::jlimit (0.0f, 1.0f, fmVals[o][10] + modSums[(int) wc::ModDest::FmBendA   + o]);
-            fmVals[o][11] = juce::jlimit (0.0f, 1.0f, fmVals[o][11] + modSums[(int) wc::ModDest::FmStormA  + o]);
+            fmVals[o][1]  = ownM (fmVals[o][1], (int) wc::ModDest::FmRatio1A + o, 0.25f, 16.0f);   // fb78
+            fmVals[o][2]  = ownM (fmVals[o][2] , (int) wc::ModDest::FmDepth1A + o, 0.0f, 1.0f);
+            fmVals[o][3]  = ownM (fmVals[o][3], (int) wc::ModDest::FmRatio2A + o, 0.25f, 16.0f);
+            fmVals[o][4]  = ownM (fmVals[o][4] , (int) wc::ModDest::FmDepth2A + o, 0.0f, 1.0f);
+            fmVals[o][5]  = ownM (fmVals[o][5], (int) wc::ModDest::FmFbA + o, 0.0f, 1.0f);
+            fmVals[o][6]  = ownM (fmVals[o][6] , (int) wc::ModDest::FmStrikeA + o, 0.0f, 1.0f);
+            fmVals[o][7]  = ownM (fmVals[o][7], (int) wc::ModDest::FmAgeA + o, 0.0f, 1.0f);
+            fmVals[o][8]  = ownM (fmVals[o][8], (int) wc::ModDest::FmRustA + o, 0.0f, 1.0f);
+            fmVals[o][9]  = ownM (fmVals[o][9], (int) wc::ModDest::FmGaleA + o, 0.0f, 1.0f);
+            fmVals[o][10] = ownM (fmVals[o][10], (int) wc::ModDest::FmBendA + o, 0.0f, 1.0f);
+            fmVals[o][11] = ownM (fmVals[o][11], (int) wc::ModDest::FmStormA + o, 0.0f, 1.0f);
         }
 
         // ── RESYNTH engine: gather the resynthesis params per OSC (GEODE-ENGINE-GATHER) ──
@@ -4677,18 +4701,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.fadeIn      = *rawParam (id[24]);  g.fadeOut      = *rawParam (id[25]);
             g.fadeInCurve = *rawParam (id[26]);  g.fadeOutCurve = *rawParam (id[27]);
             // fb75 — RESYNTH knob mod (block-rate; struct fields are all 0..1)
-            g.quality = juce::jlimit (0.0f, 1.0f, g.quality + modSums[(int) wc::ModDest::GeoQualityA + o]);
-            g.formant = juce::jlimit (0.0f, 1.0f, g.formant + modSums[(int) wc::ModDest::GeoFormantA + o]);
-            g.tilt    = juce::jlimit (0.0f, 1.0f, g.tilt    + modSums[(int) wc::ModDest::GeoTiltA    + o]);
-            g.crush   = juce::jlimit (0.0f, 1.0f, g.crush   + modSums[(int) wc::ModDest::GeoCrushA   + o]);
-            g.start   = juce::jlimit (0.0f, 1.0f, g.start   + modSums[(int) wc::ModDest::GeoStartA   + o]);
-            g.smear   = juce::jlimit (0.0f, 1.0f, g.smear   + modSums[(int) wc::ModDest::GeoMeltA    + o]);
-            g.scan    = juce::jlimit (0.0f, 1.0f, g.scan    + modSums[(int) wc::ModDest::GeoScanA    + o]);
-            g.cut     = juce::jlimit (0.0f, 1.0f, g.cut     + modSums[(int) wc::ModDest::GeoCutA     + o]);
-            g.shape   = juce::jlimit (0.0f, 1.0f, g.shape   + modSums[(int) wc::ModDest::GeoShapeA   + o]);
-            g.stretch = juce::jlimit (0.0f, 1.0f, g.stretch + modSums[(int) wc::ModDest::GeoStretchA + o]);
-            g.drive   = juce::jlimit (0.0f, 1.0f, g.drive   + modSums[(int) wc::ModDest::GeoDriveA   + o]);
-            g.sieve   = juce::jlimit (0.0f, 1.0f, g.sieve   + modSums[(int) wc::ModDest::GeoSieveA   + o]);
+            g.quality = ownM (g.quality, (int) wc::ModDest::GeoQualityA + o, 0.0f, 1.0f);
+            g.formant = ownM (g.formant, (int) wc::ModDest::GeoFormantA + o, 0.0f, 1.0f);
+            g.tilt    = ownM (g.tilt, (int) wc::ModDest::GeoTiltA + o, 0.0f, 1.0f);
+            g.crush   = ownM (g.crush, (int) wc::ModDest::GeoCrushA + o, 0.0f, 1.0f);
+            g.start   = ownM (g.start, (int) wc::ModDest::GeoStartA + o, 0.0f, 1.0f);
+            g.smear   = ownM (g.smear, (int) wc::ModDest::GeoMeltA + o, 0.0f, 1.0f);
+            g.scan    = ownM (g.scan, (int) wc::ModDest::GeoScanA + o, 0.0f, 1.0f);
+            g.cut     = ownM (g.cut, (int) wc::ModDest::GeoCutA + o, 0.0f, 1.0f);
+            g.shape   = ownM (g.shape, (int) wc::ModDest::GeoShapeA + o, 0.0f, 1.0f);
+            g.stretch = ownM (g.stretch, (int) wc::ModDest::GeoStretchA + o, 0.0f, 1.0f);
+            g.drive   = ownM (g.drive, (int) wc::ModDest::GeoDriveA + o, 0.0f, 1.0f);
+            g.sieve   = ownM (g.sieve, (int) wc::ModDest::GeoSieveA + o, 0.0f, 1.0f);
             geodeP[o] = g;
         }
         // ── HARMONIC engine: gather the additive params per OSC (HARM-ENGINE-GATHER) ──
@@ -4710,18 +4734,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             h.carve = *rawParam (id[8]);  h.churn = *rawParam (id[9]);  h.root  = *rawParam (id[10]);
             h.shine = *rawParam (id[11]); h.wilt  = *rawParam (id[12]); h.forge = *rawParam (id[13]);
             // fb75 — HARMONIC knob mod (block-rate; all fields 0..1, knobs MORPH not switch)
-            h.hue   = juce::jlimit (0.0f, 1.0f, h.hue   + modSums[(int) wc::ModDest::HarmHueA   + o]);
-            h.count = juce::jlimit (0.0f, 1.0f, h.count + modSums[(int) wc::ModDest::HarmCountA + o]);
-            h.lean  = juce::jlimit (0.0f, 1.0f, h.lean  + modSums[(int) wc::ModDest::HarmLeanA  + o]);
-            h.fan   = juce::jlimit (0.0f, 1.0f, h.fan   + modSums[(int) wc::ModDest::HarmFanA   + o]);
-            h.grit  = juce::jlimit (0.0f, 1.0f, h.grit  + modSums[(int) wc::ModDest::HarmGritA  + o]);
-            h.braid = juce::jlimit (0.0f, 1.0f, h.braid + modSums[(int) wc::ModDest::HarmBraidA + o]);
-            h.carve = juce::jlimit (0.0f, 1.0f, h.carve + modSums[(int) wc::ModDest::HarmCarveA + o]);
-            h.churn = juce::jlimit (0.0f, 1.0f, h.churn + modSums[(int) wc::ModDest::HarmChurnA + o]);
-            h.root  = juce::jlimit (0.0f, 1.0f, h.root  + modSums[(int) wc::ModDest::HarmRootA  + o]);
-            h.shine = juce::jlimit (0.0f, 1.0f, h.shine + modSums[(int) wc::ModDest::HarmShineA + o]);
-            h.wilt  = juce::jlimit (0.0f, 1.0f, h.wilt  + modSums[(int) wc::ModDest::HarmWiltA  + o]);
-            h.forge = juce::jlimit (0.0f, 1.0f, h.forge + modSums[(int) wc::ModDest::HarmFizzA  + o]);
+            h.hue   = ownM (h.hue, (int) wc::ModDest::HarmHueA + o, 0.0f, 1.0f);
+            h.count = ownM (h.count, (int) wc::ModDest::HarmCountA + o, 0.0f, 1.0f);
+            h.lean  = ownM (h.lean, (int) wc::ModDest::HarmLeanA + o, 0.0f, 1.0f);
+            h.fan   = ownM (h.fan, (int) wc::ModDest::HarmFanA + o, 0.0f, 1.0f);
+            h.grit  = ownM (h.grit, (int) wc::ModDest::HarmGritA + o, 0.0f, 1.0f);
+            h.braid = ownM (h.braid, (int) wc::ModDest::HarmBraidA + o, 0.0f, 1.0f);
+            h.carve = ownM (h.carve, (int) wc::ModDest::HarmCarveA + o, 0.0f, 1.0f);
+            h.churn = ownM (h.churn, (int) wc::ModDest::HarmChurnA + o, 0.0f, 1.0f);
+            h.root  = ownM (h.root, (int) wc::ModDest::HarmRootA + o, 0.0f, 1.0f);
+            h.shine = ownM (h.shine, (int) wc::ModDest::HarmShineA + o, 0.0f, 1.0f);
+            h.wilt  = ownM (h.wilt, (int) wc::ModDest::HarmWiltA + o, 0.0f, 1.0f);
+            h.forge = ownM (h.forge, (int) wc::ModDest::HarmFizzA + o, 0.0f, 1.0f);
             harmP[o] = h;
         }
         harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread
@@ -4777,7 +4801,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 const char* const* id = WSLOT_IDS[o];
                 blendCfg[o][s] = { (int) *rawParam (id[s * 3 + 0]), (int) *rawParam (id[s * 3 + 1]), *rawParam (id[s * 3 + 2]) };
-                blendCfg[o][s].depth = juce::jlimit (0.0f, 1.0f, blendCfg[o][s].depth + modSums[(int) wc::ModDest::BlendDepthA1 + o * 4 + s]);   // fb75 — blend-slot depth mod
+                blendCfg[o][s].depth = ownM (blendCfg[o][s].depth, (int) wc::ModDest::BlendDepthA1 + o * 4 + s, 0.0f, 1.0f);   // fb75 blend-slot depth mod · fb184 ownership
             }
 
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
@@ -4875,10 +4899,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float coarseB = *rawParam (ParameterIDs::SYN_OSC_B_COARSE);
         const float coarseC = *rawParam (ParameterIDs::SYN_OSC_C_COARSE);
         const float coarseD = *rawParam (ParameterIDs::SYN_OSC_D_COARSE);
-        const int   subRngA = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_A_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 0])), subFrmA = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_A_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 0]));   // fb78 — stepped sub octave/shape mod
-        const int   subRngB = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_B_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 1])), subFrmB = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_B_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 1]));   // fb78 — stepped sub octave/shape mod
-        const int   subRngC = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_C_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 2])), subFrmC = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_C_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 2]));   // fb78 — stepped sub octave/shape mod
-        const int   subRngD = juce::jlimit (0, 8, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_D_SUB_RANGE) + modSums[(int) wc::ModDest::SubRangeA + 3])), subFrmD = juce::jlimit (0, 3, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_D_SUB_FORM) + modSums[(int) wc::ModDest::SubFormA + 3]));   // fb78 — stepped sub octave/shape mod
+        const int   subRngA = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_A_SUB_RANGE), (int) wc::ModDest::SubRangeA + 0, 0.0f, 8.0f))), subFrmA = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_A_SUB_FORM), (int) wc::ModDest::SubFormA + 0, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
+        const int   subRngB = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_B_SUB_RANGE), (int) wc::ModDest::SubRangeA + 1, 0.0f, 8.0f))), subFrmB = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_B_SUB_FORM), (int) wc::ModDest::SubFormA + 1, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
+        const int   subRngC = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_SUB_RANGE), (int) wc::ModDest::SubRangeA + 2, 0.0f, 8.0f))), subFrmC = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_SUB_FORM), (int) wc::ModDest::SubFormA + 2, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
+        const int   subRngD = juce::jlimit (0, 8, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_SUB_RANGE), (int) wc::ModDest::SubRangeA + 3, 0.0f, 8.0f))), subFrmD = juce::jlimit (0, 3, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_SUB_FORM), (int) wc::ModDest::SubFormA + 3, 0.0f, 3.0f)));   // fb78 — stepped sub octave/shape mod
         const float subWgtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_WEIGHT), subHtA = *rawParam (ParameterIDs::SYN_OSC_A_SUB_HEAT);
         const float subWgtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_HEAT);
         const float subWgtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_HEAT);
@@ -5093,14 +5117,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         juce::ignoreUnused (unisonCount, unisonSpread01);   // global UNISON/SPREAD retired → per-OSC below
 
         // Per-OSC UNISON (replaces global). Voices 1..16 + Detune/Blend/Width (0..100 %→0..1).
-        const int   uniCountA = juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_A_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 0]));   // fb78 — stepped voices mod
-        const float uniDetA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f + modSums[(int) wc::ModDest::UniDetA]);     // fb77 — unison pill mod
-        const float uniBlnA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f + modSums[(int) wc::ModDest::UniBlendA]);
-        const float uniWidA   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f + modSums[(int) wc::ModDest::UniWidthA]);
-        const int   uniCountB = juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_B_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 1]));   // fb78 — stepped voices mod
-        const float uniDetB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f + modSums[(int) wc::ModDest::UniDetB]);
-        const float uniBlnB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f + modSums[(int) wc::ModDest::UniBlendB]);
-        const float uniWidB   =       juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f + modSums[(int) wc::ModDest::UniWidthB]);
+        const int   uniCountA = juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_A_UNISON), (int) wc::ModDest::UniVoicesA + 0, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetA, 0.0f, 1.0f);     // fb77 — unison pill mod
+        const float uniBlnA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendA, 0.0f, 1.0f);
+        const float uniWidA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthA, 0.0f, 1.0f);
+        const int   uniCountB = juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_B_UNISON), (int) wc::ModDest::UniVoicesA + 1, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetB, 0.0f, 1.0f);
+        const float uniBlnB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendB, 0.0f, 1.0f);
+        const float uniWidB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthB, 0.0f, 1.0f);
 
         // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
@@ -5123,14 +5147,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int interpModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_INTERP_MODE);
         const int interpModeB = (int) *rawParam (ParameterIDs::SYN_OSC_B_INTERP_MODE);
         // OSC C / D — unison / blur / fold / interp (4-osc)
-        const int   uniCountC=juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_C_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 2]));   // fb78 — stepped voices mod
-        const float uniDetC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f + modSums[(int) wc::ModDest::UniDetC]), uniBlnC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f + modSums[(int) wc::ModDest::UniBlendC]), uniWidC=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f + modSums[(int) wc::ModDest::UniWidthC]);
+        const int   uniCountC=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_UNISON), (int) wc::ModDest::UniVoicesA + 2, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, (int) wc::ModDest::UniDetC, 0.0f, 1.0f), uniBlnC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, (int) wc::ModDest::UniBlendC, 0.0f, 1.0f), uniWidC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthC, 0.0f, 1.0f);
         const float blurC=mdP (ParameterIDs::SYN_OSC_C_FRAME_SPREAD, wc::ModDest::BlurC, 0.0f, 1.0f);
         const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
         const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
         const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
-        const int   uniCountD=juce::jlimit (1, 16, (int) std::lround (*rawParam (ParameterIDs::SYN_OSC_D_UNISON) + modSums[(int) wc::ModDest::UniVoicesA + 3]));   // fb78 — stepped voices mod
-        const float uniDetD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f + modSums[(int) wc::ModDest::UniDetD]), uniBlnD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f + modSums[(int) wc::ModDest::UniBlendD]), uniWidD=juce::jlimit (0.0f, 1.0f, *rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f + modSums[(int) wc::ModDest::UniWidthD]);
+        const int   uniCountD=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_UNISON), (int) wc::ModDest::UniVoicesA + 3, 1.0f, 16.0f)));   // fb78 — stepped voices mod
+        const float uniDetD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, (int) wc::ModDest::UniDetD, 0.0f, 1.0f), uniBlnD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, (int) wc::ModDest::UniBlendD, 0.0f, 1.0f), uniWidD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthD, 0.0f, 1.0f);
         const float blurD=mdP (ParameterIDs::SYN_OSC_D_FRAME_SPREAD, wc::ModDest::BlurD, 0.0f, 1.0f);
         const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
         const float foldAmtD=*rawParam (ParameterIDs::SYN_OSC_D_FOLD_AMT);
@@ -5249,14 +5273,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // EFFECTIVE FLOW knobs = base param + Σ(global-LFO × depth), clamp once. Shared by ARP + SEQ —
     // SEQ reuses the same FLOW_ARP_* params (per-mode memory lives in the JS).  (proven: 35/35)
     auto flowBase = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, rawParam (id)->load()); };  // ->load(): atomic<float> can't deduce in jlimit
-    auto flowMod  = [&] (wc::ModDest dest) -> float {
+    auto flowMod  = [&] (wc::ModDest dest, float& oW, float& oV) -> float {
         float sum = 0.0f; const auto& info = wc::kDestInfo[(int) dest];
         for (int a = 0; a < synModCfg.numAssignments; ++a) {
             const auto& as = synModCfg.assignments[a];
             if (! as.enabled || as.dest != dest) continue;
             const int si = (int) as.source - (int) wc::ModSource::L1;
-            if (wc::isEnvModSource ((int) as.source))             // fb179 — envelopes read the mono tap
-            { sum += wc::routeContribution (info, monoEnvLevelOf ((int) as.source), as.depth); continue; }
+            if (wc::isEnvModSource ((int) as.source))             // fb184 — envs OWN flow/card knobs (mono tap value, ownership math)
+            { const float dwF = std::abs (as.depth);
+              oW += dwF; oV += dwF * (monoEnvLevelOf ((int) as.source) + 1.0f); continue; }
             if (si < 0 || si >= wc::NUM_LFOS) continue;           // only LFO sources have a global value
             sum += wc::routeContribution (info, flowLfo_[si].peek(), as.depth);
         }
@@ -5264,7 +5289,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Each mode reads its OWN 5 knob params (per-mode knob memory: ARP=FLOW_ARP_*, SEQ=FLOW_SEQ_*).
     // The FLOW mod-dests are shared, so the LFO→FLOW-knob contribution is added on top of whichever
     // mode's base value. Latch is a single shared param (no per-mode latch exists).
-    auto flowKnob = [&] (const char* id, wc::ModDest d) { return juce::jlimit (0.f, 1.f, flowBase (id) + flowMod (d)); };
+    auto flowKnob = [&] (const char* id, wc::ModDest d) {
+        float oW = 0.0f, oV = 0.0f; const float m = flowMod (d, oW, oV);
+        const float w = juce::jmin (1.0f, oW);   // fb184 — ownership crossfade, same law as ownM
+        return juce::jlimit (0.f, 1.f, (flowBase (id) + m) * (1.0f - w) + oV); };
     const bool  kLatch = *rawParam (ParameterIDs::FLOW_ARP_LATCH) > 0.5f;
 
     if (flowChain.arp)   // ── ARP (mode 1) ──
