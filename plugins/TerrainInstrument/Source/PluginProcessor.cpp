@@ -4138,8 +4138,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     setSynthDynEnvs ("{\"n\":2,\"e\":[{\"a\":80,\"d\":400,\"s\":0.4,\"r\":250},{\"a\":5,\"d\":200,\"s\":0.0,\"r\":300}]}");
                     setSynthModMatrix ("[{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::LevelA) + ",\"v\":1.0},"
                                         "{\"s\":105,\"d\":" + juce::String ((int) wc::ModDest::Res1)   + ",\"v\":1.0},"
-                                        "{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::FmFbA)  + ",\"v\":1.0}]");
+                                        "{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::FmFbA)  + ",\"v\":1.0},"
+                                        "{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::Warp)   + ",\"v\":1.0}]");
                     if (auto* pL = apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_LEVEL)) pL->store (0.0f);
+                    if (auto* pW = apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_WARP_AMOUNT)) pW->store (0.0f);   // fb188 — the iffy-warp repro: knob at ZERO
                     if (auto* pR = apvts.getRawParameterValue ("SYN_ENV_AMP_R"))               pR->store (2000.0f);
                 }
                 if (pb >= 5)
@@ -4253,12 +4255,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             static int pb2 = 0;
             if (envProbe2 && (++pb2 % 8) == 0)
             {
-                float v60 = -1.f, v65 = -1.f; int a60 = 0, a65 = 0;
+                float v60 = -1.f, v65 = -1.f, w60 = -1.f; int a60 = 0, a65 = 0;
                 for (int i = 0; i < synthEngine.getNumVoices(); ++i)
                     if (auto* sv = synthVoices_[(size_t) i])
                     {
                         const int n = sv->getCurrentlyPlayingNote();
-                        if (n == 60) { v60 = sv->dbgLvlSm (0); a60 = sv->isAmpEnvActive() ? 1 : 0; }
+                        if (n == 60) { v60 = sv->dbgLvlSm (0); a60 = sv->isAmpEnvActive() ? 1 : 0; w60 = sv->dbgWarpEffA(); }
                         if (n == 65) { v65 = sv->dbgLvlSm (0); a65 = sv->isAmpEnvActive() ? 1 : 0; }
                     }
                 juce::File ("/tmp/envprobe.log").appendText (
@@ -4269,7 +4271,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     + " sumLevA=" + juce::String (modSums[(int) wc::ModDest::LevelA], 4)
                     + " wFb=" + juce::String (envOwnW[(int) wc::ModDest::FmFbA], 2)
                     + " vFb=" + juce::String (envOwnV[(int) wc::ModDest::FmFbA], 4)
-                    + " vRes=" + juce::String (envOwnV[(int) wc::ModDest::Res1], 4) + "\n");
+                    + " vRes=" + juce::String (envOwnV[(int) wc::ModDest::Res1], 4)
+                    + " w60=" + juce::String (w60, 4) + "\n");
             }
         }
         // fb184 — OWNERSHIP at the app site: the env's claim w crossfades the (LFO-modulated)

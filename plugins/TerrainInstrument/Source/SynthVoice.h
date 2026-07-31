@@ -172,6 +172,7 @@ namespace tw
         // polls the most-active voice each timer tick and pushes this to the WebUI.
         float getAmpEnvLevel() const noexcept { return (float) ampEnv_.level(); }
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
+        float dbgWarpEffA() const noexcept { return warpAmount_; }   // fb188 — probe tap
         float dbgLvlSm (int g) const noexcept   // fb183 — probe tap: the glided per-voice level
         { switch (g) { case 0: return lvlSmA_; case 1: return lvlSmB_; case 2: return lvlSmC_; default: return lvlSmD_; } }
         // SAMPLE-FOLLOWER — per-osc sample read position [0,1] for the UI MIDI follower,
@@ -1975,6 +1976,7 @@ namespace tw
                 }
                 envLvlOwn_[0] = envLvlOwn_[1] = envLvlOwn_[2] = envLvlOwn_[3] = 0.0f;
                 envLvlDrive_[0] = envLvlDrive_[1] = envLvlDrive_[2] = envLvlDrive_[3] = 0.0f;
+                float vOwnW[12] = { 0 }, vOwnV[12] = { 0 };   // fb188 — ownership claims [Fr,Wp,Fd]×[A..D]: knob-0 + atten-100 follows the shape (Max's iffy warp)
                 float mFrA = 0.0f, mWpA = 0.0f, mFdA = 0.0f, mFrB = 0.0f, mWpB = 0.0f, mFdB = 0.0f;
                 float mFrC = 0.0f, mWpC = 0.0f, mFdC = 0.0f, mFrD = 0.0f, mWpD = 0.0f, mFdD = 0.0f;
                 float mCrs[4] = { 0.f, 0.f, 0.f, 0.f };   // COARSE mod (semitones, per osc)
@@ -2005,6 +2007,27 @@ namespace tw
                         envLvlOwn_[gI]   += dW;
                         envLvlDrive_[gI] += dW * (srcV + 1.0f);   // srcV is level−1 → restore raw 0..1
                         continue;
+                    }
+                    // fb188 — same OWNERSHIP law for the voice-evaluated wavetable trio
+                    // (Frame/Warp/Fold, all four oscs). Semitone dests (Coarse/Cut) stay
+                    // offset; LfoAmt stays multiplicative.
+                    if (wc::isEnvModSource (sI))
+                    {
+                        int vi = -1;
+                        switch (as.dest)
+                        {
+                            case wc::ModDest::Frame:  vi = 0;  break; case wc::ModDest::Warp:  vi = 1;  break; case wc::ModDest::Fold:  vi = 2;  break;
+                            case wc::ModDest::FrameB: vi = 3;  break; case wc::ModDest::WarpB: vi = 4;  break; case wc::ModDest::FoldB: vi = 5;  break;
+                            case wc::ModDest::FrameC: vi = 6;  break; case wc::ModDest::WarpC: vi = 7;  break; case wc::ModDest::FoldC: vi = 8;  break;
+                            case wc::ModDest::FrameD: vi = 9;  break; case wc::ModDest::WarpD: vi = 10; break; case wc::ModDest::FoldD: vi = 11; break;
+                            default: break;
+                        }
+                        if (vi >= 0)
+                        {
+                            const float dwV = std::abs (as.depth);
+                            vOwnW[vi] += dwV; vOwnV[vi] += dwV * (srcV + 1.0f);
+                            continue;
+                        }
                     }
                     const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
                     // fb178 — env→cutoff joins the filter's semitone sum as a block constant
@@ -2046,22 +2069,25 @@ namespace tw
                 // FRAME/WARP/FOLD — keytrack crossfade + ROUTE + LFO mod, clamp once.
                 coarseModA_ = mCrs[0]; coarseModB_ = mCrs[1]; coarseModC_ = mCrs[2]; coarseModD_ = mCrs[3];
                 for (int o = 0; o < 4; ++o) { subWMod_[o] = mSw[o]; subHMod_[o] = mSh[o]; }
-                framePos_    = juce::jlimit (0.0f, 1.0f, framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA + flowWave_);
-                warpAmount_  = juce::jlimit (0.0f, 1.0f, warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f) + mWpA);
-                foldAmountA_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f) + mFdA);
-                framePosB_   = juce::jlimit (0.0f, 1.0f, framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f) + mFrB + flowWave_);
-                warpAmountB_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f) + mWpB);
+                // fb188 — ownership applied at the wavetable-trio app sites (w=0 → legacy exactly)
+                auto ownV = [&] (float base, int vi) noexcept
+                { const float w = juce::jmin (1.0f, vOwnW[vi]); return juce::jlimit (0.0f, 1.0f, base * (1.0f - w) + vOwnV[vi]); };
+                framePos_    = ownV (framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA + flowWave_, 0);
+                warpAmount_  = ownV (warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f) + mWpA, 1);
+                foldAmountA_ = ownV (foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f) + mFdA, 2);
+                framePosB_   = ownV (framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f) + mFrB + flowWave_, 3);
+                warpAmountB_ = ownV (warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f) + mWpB, 4);
                 warp2AmountA_ = warp2AmountBaseA_;   // WARP 2 base->effective (mod-matrix ready)
                 warp2AmountB_ = warp2AmountBaseB_;
-                foldAmountB_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f) + mFdB);
+                foldAmountB_ = ownV (foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f) + mFdB, 5);
                 // OSC C / D — same keytrack + route + LFO mod, clamp once.
-                framePosC_   = juce::jlimit (0.0f, 1.0f, framePosBaseC_   + (ktDestC_ == kKtFrame ? ktDC * (ktRamp_ - framePosBaseC_)   : 0.0f) + (routeDestC_ == kRtFrame ? rtC : 0.0f) + mFrC + flowWave_);
-                warpAmountC_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseC_ + (ktDestC_ == kKtWarp  ? ktDC * (ktRamp_ - warpAmountBaseC_) : 0.0f) + (routeDestC_ == kRtWarp  ? rtC : 0.0f) + mWpC);
-                foldAmountC_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseC_ + (ktDestC_ == kKtFold  ? ktDC * (ktRamp_ - foldAmountBaseC_) : 0.0f) + (routeDestC_ == kRtFold  ? rtC : 0.0f) + mFdC);
+                framePosC_   = ownV (framePosBaseC_   + (ktDestC_ == kKtFrame ? ktDC * (ktRamp_ - framePosBaseC_)   : 0.0f) + (routeDestC_ == kRtFrame ? rtC : 0.0f) + mFrC + flowWave_, 6);
+                warpAmountC_ = ownV (warpAmountBaseC_ + (ktDestC_ == kKtWarp  ? ktDC * (ktRamp_ - warpAmountBaseC_) : 0.0f) + (routeDestC_ == kRtWarp  ? rtC : 0.0f) + mWpC, 7);
+                foldAmountC_ = ownV (foldAmountBaseC_ + (ktDestC_ == kKtFold  ? ktDC * (ktRamp_ - foldAmountBaseC_) : 0.0f) + (routeDestC_ == kRtFold  ? rtC : 0.0f) + mFdC, 8);
                 warp2AmountC_ = warp2AmountBaseC_;
-                framePosD_   = juce::jlimit (0.0f, 1.0f, framePosBaseD_   + (ktDestD_ == kKtFrame ? ktDD * (ktRamp_ - framePosBaseD_)   : 0.0f) + (routeDestD_ == kRtFrame ? rtD : 0.0f) + mFrD + flowWave_);
-                warpAmountD_ = juce::jlimit (0.0f, 1.0f, warpAmountBaseD_ + (ktDestD_ == kKtWarp  ? ktDD * (ktRamp_ - warpAmountBaseD_) : 0.0f) + (routeDestD_ == kRtWarp  ? rtD : 0.0f) + mWpD);
-                foldAmountD_ = juce::jlimit (0.0f, 1.0f, foldAmountBaseD_ + (ktDestD_ == kKtFold  ? ktDD * (ktRamp_ - foldAmountBaseD_) : 0.0f) + (routeDestD_ == kRtFold  ? rtD : 0.0f) + mFdD);
+                framePosD_   = ownV (framePosBaseD_   + (ktDestD_ == kKtFrame ? ktDD * (ktRamp_ - framePosBaseD_)   : 0.0f) + (routeDestD_ == kRtFrame ? rtD : 0.0f) + mFrD + flowWave_, 9);
+                warpAmountD_ = ownV (warpAmountBaseD_ + (ktDestD_ == kKtWarp  ? ktDD * (ktRamp_ - warpAmountBaseD_) : 0.0f) + (routeDestD_ == kRtWarp  ? rtD : 0.0f) + mWpD, 10);
+                foldAmountD_ = ownV (foldAmountBaseD_ + (ktDestD_ == kKtFold  ? ktDD * (ktRamp_ - foldAmountBaseD_) : 0.0f) + (routeDestD_ == kRtFold  ? rtD : 0.0f) + mFdD, 11);
                 warp2AmountD_ = warp2AmountBaseD_;
             }
 
