@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Terrain — S4 value chips (F1 / F2 / F3)</title>
+<style>
+  html,body { margin:0; padding:0; background:#131320; }
+  body { font-family:-apple-system,"SF Pro Text","Helvetica Neue",sans-serif; color:#fff;
+         display:flex; flex-direction:column; align-items:center; padding:34px 0 60px; }
+  h1 { font-size:15px; font-weight:400; letter-spacing:.4px; color:rgba(255,255,255,.85); margin:0 0 4px; }
+  .sub { font-size:11px; font-weight:300; color:rgba(255,255,255,.42); margin:0 0 28px; letter-spacing:.3px; }
+  .variant { background:#1A1A2E; border:1px solid rgba(255,255,255,.08); border-radius:10px;
+             padding:18px 24px 22px; margin-bottom:24px; width:600px; }
+  .vhead { display:flex; align-items:baseline; gap:10px; margin-bottom:2px; }
+  .vtag { font-size:10px; letter-spacing:1.6px; color:#B794FF; font-weight:600; }
+  .vname { font-size:13px; font-weight:400; color:rgba(255,255,255,.9); }
+  .vdesc { font-size:10.5px; font-weight:300; color:rgba(255,255,255,.45); margin:0 0 14px; line-height:1.5; }
+  /* ── the env pane replica (516×148, the real proportions) ── */
+  .pane { position:relative; width:516px; height:148px; background:#15152A;
+          border:1px solid rgba(255,255,255,.07); border-radius:6px; overflow:hidden; margin:0 auto; }
+  .pane.short { height:134px; }
+  .pane svg.graph { position:absolute; inset:0; width:100%; height:100%; }
+  .envsel { position:absolute; top:6px; right:6px; font-size:11px; font-weight:300;
+            color:rgba(255,255,255,.55); letter-spacing:.3px; }
+  /* chips */
+  .chips { position:absolute; left:0; right:0; bottom:0; height:17px; display:flex;
+           align-items:center; justify-content:space-evenly; }
+  .chip { font-size:8.5px; font-weight:300; letter-spacing:.3px; color:rgba(255,255,255,.34);
+          cursor:ns-resize; position:relative; padding:1px 2px; }
+  .chip b { font-weight:400; color:rgba(255,255,255,.55); margin-left:3px; }
+  .chip.hot { color:rgba(255,255,255,.6); }
+  .chip.hot b { color:#fff; }
+  .chip .cul { position:absolute; left:2px; right:2px; bottom:-1px; height:1.5px; }
+  .chip .cul .t { position:absolute; inset:0; background:rgba(183,148,255,.45); }
+  .chip .cul .c { position:absolute; top:-0.75px; height:3px; width:34%;
+                  background:linear-gradient(90deg,rgba(231,222,255,0),rgba(231,222,255,.95));
+                  box-shadow:0 0 4px rgba(167,139,250,.55); animation:ride 1.6s infinite; }
+  @keyframes ride { 0%{left:0%} 18%{left:66%} 60%{left:8%} 100%{left:0%} }
+  /* F2 shelf */
+  .shelf { width:516px; height:15px; margin:0 auto; display:flex; align-items:center;
+           justify-content:space-evenly; border-top:1px solid rgba(255,255,255,.09); }
+  .shelf .chip { font-size:8.5px; }
+  /* F3 ghost scrim */
+  .ghost .chips { background:linear-gradient(180deg, rgba(21,21,42,0), rgba(21,21,42,.92) 45%);
+                  height:22px; opacity:0; transition:opacity .18s; }
+  .ghost:hover .chips { opacity:1; }
+  .hint { position:absolute; left:0; right:0; bottom:4px; text-align:center; font-size:9px;
+          color:rgba(255,255,255,.22); letter-spacing:.4px; transition:opacity .18s; }
+  .ghost:hover .hint { opacity:0; }
+</style>
+</head>
+<body>
+<h1>S4 — the value chips</h1>
+<p class="sub">Six precision handles: Dly · Atk · Hld · Dec · Sus · Rel. Drag = nudge, double-click = type. Every chip is a DROP TARGET — an envelope on Decay wears the same underline + comet as any knob (shown live on Dec). Hover F3 to see its trick.</p>
+<div id="stage"></div>
+<script>
+function graphSvg(){
+  // the real pane geometry: viewBox 280x70 → 516x148; ceiling 19, baseline 62.
+  var g='<svg class="graph" viewBox="0 0 280 70" preserveAspectRatio="none">';
+  g+='<g stroke="rgba(201,190,239,0.06)" stroke-width="0.4">';
+  for(var x=35;x<=245;x+=35) g+='<line x1="'+x+'" y1="2" x2="'+x+'" y2="62"/>';
+  for(var y=26;y<=50;y+=12) g+='<line x1="0" y1="'+y+'" x2="280" y2="'+y+'"/>';
+  g+='</g><line x1="0" y1="62" x2="280" y2="62" stroke="rgba(201,190,239,0.22)" stroke-width="0.6"/>';
+  var path='M2,62 L18,62 L52,19 L72,19 C 100,45 105,45 118,45 L215,45 C 240,58 252,62 268,62';
+  g+='<path d="'+path+' L268,62 L2,62 Z" fill="rgba(139,92,246,0.10)" stroke="none"/>';
+  g+='<path d="'+path+'" stroke="#C9BEEF" stroke-width="1.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>';
+  [[18,62],[52,19],[72,19],[118,45],[215,45],[268,62]].forEach(function(p){
+    g+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.2" fill="#E7DEFF"/>'; });
+  return g+'</svg>';
+}
+function chipsHtml(){
+  var vals=[['Dly','0ms'],['Atk','120ms'],['Hld','45ms'],['Dec','360ms'],['Sus','58%'],['Rel','410ms']];
+  return vals.map(function(v,i){
+    var mod=(i===3), hot=(i===1);
+    return '<span class="chip'+(hot?' hot':'')+'">'+v[0]+'<b>'+v[1]+'</b>'
+      + (mod?'<span class="cul"><span class="t"></span><span class="c"></span></span>':'')
+      + '</span>'; }).join('');
+}
+var V=[
+ { tag:'F1', name:'The footer', desc:'The chips live INSIDE the graph, in the quiet strip under the baseline — space the pane already owns, so the curve loses nothing. Dim until you need them; the modulated one (Dec) wears its underline + comet right there.',
+   html:'<div class="pane">'+graphSvg()+'<div class="envsel">Env 2</div><div class="chips">'+chipsHtml()+'</div></div>' },
+ { tag:'F2', name:'The shelf', desc:'A dedicated 15px rail UNDER the pane, hairline-separated — maximum legibility and the fattest drag targets, paid for with ~10% graph height (the curve pane shrinks like this).',
+   html:'<div class="pane short">'+graphSvg()+'<div class="envsel">Env 2</div></div><div class="shelf">'+chipsHtml()+'</div>' },
+ { tag:'F3', name:'The ghosts', desc:'Invisible until your pointer enters the pane — then the six values fade in over the baseline strip on a soft scrim, and vanish when you leave. Zero permanent ink; the sculpt canvas stays pure. (Hover this pane.)',
+   html:'<div class="pane ghost">'+graphSvg()+'<div class="envsel">Env 2</div><div class="chips">'+chipsHtml()+'</div><div class="hint">hover to reveal</div></div>' },
+];
+var stage=document.getElementById('stage');
+V.forEach(function(v){
+  var d=document.createElement('div'); d.className='variant';
+  d.innerHTML='<div class="vhead"><span class="vtag">'+v.tag+'</span><span class="vname">'+v.name+'</span></div>'
+    + '<p class="vdesc">'+v.desc+'</p>'+v.html;
+  stage.appendChild(d); });
+</script>
+</body>
+</html>
