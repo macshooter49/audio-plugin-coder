@@ -4682,18 +4682,15 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 #syn-panel .env-canvas { flex: 1 1 auto; min-height: 0; border: none; border-radius: 10px; cursor: crosshair; }
 #syn-panel #env-svg { touch-action: none; }
 #syn-panel .env-sel { position: absolute; top: 6px; right: 2px; z-index: 3;
-  /* fb184 (Max): a hairline EDGE + panel backing so the chip reads as UI sitting ON the
-     graph, not lettering floating IN it — and it stands aside while you sculpt (below). */
+  /* WC-chip: transparent + blended text, brightens to white on hover. No box, no glass fill.
+     fb185 — the fb184 pill+dodge is REVERTED (Max: ugly); instead the curve CEILING sits
+     below this lettering (YTOP raised) — the filter treatment: lettering owns dead airspace. */
   font-size: 11px; letter-spacing: 0.3px; color: rgba(255,255,255,0.55); font-weight: 300;
-  background: rgba(26,26,46,0.90); border: 1px solid rgba(201,190,239,0.20);
+  background: transparent; border: none;
   border-radius: 4px; padding: 2px 7px; cursor: pointer; user-select: none;
   transition: color .15s ease, opacity .15s ease; }
 #syn-panel .env-sel:hover { color: #FFFFFF; opacity: 1; }
 #syn-panel .env-sel-arrow { color: inherit; font-size: 7px; opacity: 0.7; }
-/* fb184 — THE DODGE: pointer over the sculpt canvas dims the chip to a whisper (unless
-   you're aiming AT the chip itself); an active node drag hides it completely. */
-#syn-panel #env-canvas:hover .env-sel:not(:hover) { opacity: 0.10; }
-#syn-panel #env-canvas.env-sculpt .env-sel { opacity: 0 !important; pointer-events: none; }
 #syn-panel .env-node { fill: #FFFFFF; cursor: grab; }
 #syn-panel .env-node:hover { fill: #FFFFFF; stroke: #FFFFFF; stroke-width: 1.2; }
 #syn-panel .env-node.sus { fill: #FFFFFF; cursor: grab; }
@@ -13857,7 +13854,7 @@ setTimeout(function wireSynControls () {
         var selChip = document.getElementById('env-sel');
         if (!svg || !nodesG || !lineP) return;
 
-        var W=280, H=70, PADX=2, YTOP=10, YBASE=62;
+        var W=280, H=70, PADX=2, YTOP=19, YBASE=62;   /* fb185 — ceiling BELOW the chip lettering (measured: chip bottoms at 17.3u; the filter treatment — Max) */
         function st(){ return grab(curEnv); }
         function nv(s){ try { return (s&&s.getNormalisedValue)? s.getNormalisedValue():0; } catch(e){ return 0; } }
         function setnv(s,v){ try { if(s&&s.setNormalisedValue) s.setNormalisedValue(Math.max(0,Math.min(1,v))); } catch(e){} }
@@ -14144,7 +14141,6 @@ setTimeout(function wireSynControls () {
           else kind=nearestStage(pxy(ev));
           if(!kind) return;
           drag={k:kind};
-          var _ec=document.getElementById('env-canvas'); if(_ec)_ec.classList.add('env-sculpt');   /* fb184 — chip stands aside */
           try{ svg.setPointerCapture(ev.pointerId); }catch(e){}
           showReadout(kind);
           ev.preventDefault();
@@ -14179,7 +14175,7 @@ setTimeout(function wireSynControls () {
           showReadout(drag.k);
           scheduleRender();
         });
-        function endDrag(ev){ if(depthDrag){ depthDrag=false; try{svg.releasePointerCapture(ev.pointerId);}catch(e){} } if(drag){ drag=null; hideReadout(); try{svg.releasePointerCapture(ev.pointerId);}catch(e){} render(); } var _ec2=document.getElementById('env-canvas'); if(_ec2)_ec2.classList.remove('env-sculpt'); }   /* fb184 */
+        function endDrag(ev){ if(depthDrag){ depthDrag=false; try{svg.releasePointerCapture(ev.pointerId);}catch(e){} } if(drag){ drag=null; hideReadout(); try{svg.releasePointerCapture(ev.pointerId);}catch(e){} render(); } }
         svg.addEventListener('pointerup', endDrag);
         svg.addEventListener('pointercancel', endDrag);
 
@@ -26847,7 +26843,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb184';   // bump per ship  [fb184 = OWNERSHIP everywhere: all Linear01 dests (engine macros/res/drive/flow/card knobs) follow the shape at any knob; env chip = bordered pill that DODGES while sculpting]
+  var TERRAIN_BUILD = 'fb185';   // bump per ship  [fb185 = pill+dodge reverted (ugly — Max); env curve ceiling YTOP 10→19 so the chip lettering owns dead airspace, the filter treatment]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
