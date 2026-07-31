@@ -4128,16 +4128,26 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (envProbe)
             {
                 ++pb;
+                // fb183 — the probe plays Max's exact repro through REAL MIDI: env 7 (pluck,
+                // sustain 0) owns osc A LEVEL with the knob AT ZERO; C held, then F while C's
+                // 2s amp release still rings. Old code: F re-opened C's level (the ghost).
+                static double probeMs = 0.0;
+                static bool pOnC = false, pOffC = false, pOnF = false;
                 if (pb == 5)
                 {
-                    setSynthDynEnvs ("{\"n\":2,\"e\":[{\"a\":5,\"d\":200,\"s\":0.7,\"r\":300},{\"a\":80,\"d\":400,\"s\":0.4,\"r\":250}]}");
-                    setSynthModMatrix ("[{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::Res1 + 6) + ",\"v\":1.0}]");
+                    setSynthDynEnvs ("{\"n\":2,\"e\":[{\"a\":80,\"d\":400,\"s\":0.4,\"r\":250},{\"a\":5,\"d\":200,\"s\":0.0,\"r\":300}]}");
+                    setSynthModMatrix ("[{\"s\":106,\"d\":" + juce::String ((int) wc::ModDest::LevelA) + ",\"v\":1.0},"
+                                        "{\"s\":105,\"d\":" + juce::String ((int) wc::ModDest::Res1)   + ",\"v\":1.0}]");
+                    if (auto* pL = apvts.getRawParameterValue (ParameterIDs::SYN_OSC_A_LEVEL)) pL->store (0.0f);
+                    if (auto* pR = apvts.getRawParameterValue ("SYN_ENV_AMP_R"))               pR->store (2000.0f);
                 }
-                const uint32_t gmp = monoEnvGlobalMask_.load (std::memory_order_acquire);
-                if (pb > 5 && (pb % 120) == 0 && (gmp & (1u << 6)))
-                { ++monoHeld_; monoDynEnv_[1].reset(); monoDynEnv_[1].noteOn(); }
-                if (pb > 5 && (pb % 120) == 60 && (gmp & (1u << 6)))
-                { if (--monoHeld_ <= 0) { monoHeld_ = 0; monoDynEnv_[1].noteOff(); } }
+                if (pb >= 5)
+                {
+                    if (! pOnC  && probeMs >= 100.0) { midiMessages.addEvent (juce::MidiMessage::noteOn  (1, 60, (juce::uint8) 100), 0); pOnC  = true; }
+                    if (! pOffC && probeMs >= 400.0) { midiMessages.addEvent (juce::MidiMessage::noteOff (1, 60), 0);                    pOffC = true; }
+                    if (! pOnF  && probeMs >= 430.0) { midiMessages.addEvent (juce::MidiMessage::noteOn  (1, 65, (juce::uint8) 100), 0); pOnF  = true; }
+                    probeMs += 1000.0 * (double) buffer.getNumSamples() / getSampleRate();
+                }
             }
         }
         // ── fb178 — MONO ENVELOPE TAP upkeep (only when an env feeds a global dest) ──
@@ -4209,6 +4219,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
                 {
+                    // fb183 — env→LEVEL went PER-VOICE (ownership in SynthVoice): the shared
+                    // mono tap re-opened every sounding voice's level on any note-on — the
+                    // ghost-note gate Max heard. Levels never read the tap again.
+                    if (r.dest >= (int) wc::ModDest::LevelA && r.dest <= (int) wc::ModDest::LevelD) continue;
                     const float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));   // fb179 — knob-is-the-peak
                     modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], lv, std::abs (r.depth));   // fb180 — magnitude
                     continue;
@@ -4222,14 +4236,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         { // ZPROBE-ENV log
             static const bool envProbe2 = (getenv ("TERRAIN_ENV_PROBE") != nullptr);
             static int pb2 = 0;
-            if (envProbe2 && (++pb2 % 60) == 0)
+            if (envProbe2 && (++pb2 % 8) == 0)
+            {
+                float v60 = -1.f, v65 = -1.f; int a60 = 0, a65 = 0;
+                for (int i = 0; i < synthEngine.getNumVoices(); ++i)
+                    if (auto* sv = synthVoices_[(size_t) i])
+                    {
+                        const int n = sv->getCurrentlyPlayingNote();
+                        if (n == 60) { v60 = sv->dbgLvlSm (0); a60 = sv->isAmpEnvActive() ? 1 : 0; }
+                        if (n == 65) { v65 = sv->dbgLvlSm (0); a65 = sv->isAmpEnvActive() ? 1 : 0; }
+                    }
                 juce::File ("/tmp/envprobe.log").appendText (
                     "pb=" + juce::String (pb2)
-                    + " gm=" + juce::String ((int) monoEnvGlobalMask_.load())
                     + " held=" + juce::String (monoHeld_)
-                    + " dynN=" + juce::String (dynEnvAudioCount_)
-                    + " e7=" + juce::String (monoDynEnv_[1].level(), 4)
-                    + " sumLevA=" + juce::String (modSums[(int) wc::ModDest::Res1 + 6], 4) + "\n");
+                    + " v60=" + juce::String (v60, 4) + "/" + juce::String (a60)
+                    + " v65=" + juce::String (v65, 4) + "/" + juce::String (a65)
+                    + " sumLevA=" + juce::String (modSums[(int) wc::ModDest::LevelA], 4)
+                    + " sumRes1=" + juce::String (modSums[(int) wc::ModDest::Res1], 4) + "\n");
+            }
         }
         // Wrap helper: base param + this block's mod sum, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)

@@ -163,11 +163,17 @@ namespace tw
             return (float) lv - 1.0f;
         }
 
+        /** fb183 — RAW envelope level 0..1 for OWNERSHIP dests (Level): the shape
+            itself. envSourceValue() keeps the knob-is-the-peak delta for offset dests. */
+        float envSourceRaw01 (int sI) const noexcept { return envSourceValue (sI) + 1.0f; }
+
         // ── Envelope follower taps (for the UI playhead dot) ──
         // Live amp-env output [0,1] and whether this voice is sounding. The editor
         // polls the most-active voice each timer tick and pushes this to the WebUI.
         float getAmpEnvLevel() const noexcept { return (float) ampEnv_.level(); }
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
+        float dbgLvlSm (int g) const noexcept   // fb183 — probe tap: the glided per-voice level
+        { switch (g) { case 0: return lvlSmA_; case 1: return lvlSmB_; case 2: return lvlSmC_; default: return lvlSmD_; } }
         // SAMPLE-FOLLOWER — per-osc sample read position [0,1] for the UI MIDI follower,
         // or -1 if that oscillator isn't a sounding Sample engine. osc: 0=A,1=B,2=C,3=D.
         float sampleFollowPos01 (int osc) const noexcept
@@ -1967,6 +1973,8 @@ namespace tw
                     }
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                 }
+                envLvlOwn_[0] = envLvlOwn_[1] = envLvlOwn_[2] = envLvlOwn_[3] = 0.0f;
+                envLvlDrive_[0] = envLvlDrive_[1] = envLvlDrive_[2] = envLvlDrive_[3] = 0.0f;
                 float mFrA = 0.0f, mWpA = 0.0f, mFdA = 0.0f, mFrB = 0.0f, mWpB = 0.0f, mFdB = 0.0f;
                 float mFrC = 0.0f, mWpC = 0.0f, mFdC = 0.0f, mFrD = 0.0f, mWpD = 0.0f, mFdD = 0.0f;
                 float mCrs[4] = { 0.f, 0.f, 0.f, 0.f };   // COARSE mod (semitones, per osc)
@@ -1984,6 +1992,20 @@ namespace tw
                                                           srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
                     else if (wc::isEnvModSource (sI))     srcV = envSourceValue (sI);   // fb178
                     else continue;
+                    // fb183 — env→LEVEL is OWNERSHIP, not offset: depth crossfades the knob
+                    // toward the envelope's own shape (eff = (1−Σd)·knob + Σd·env). At 100%
+                    // the shape IS the level — knob anywhere, Serum's level-down pluck included.
+                    // Per-voice: each note plucks its OWN level (the mono-tap ghost is dead).
+                    if (wc::isEnvModSource (sI)
+                        && (int) as.dest >= (int) wc::ModDest::LevelA
+                        && (int) as.dest <= (int) wc::ModDest::LevelD)
+                    {
+                        const int gI = (int) as.dest - (int) wc::ModDest::LevelA;
+                        const float dW = std::abs (as.depth);
+                        envLvlOwn_[gI]   += dW;
+                        envLvlDrive_[gI] += dW * (srcV + 1.0f);   // srcV is level−1 → restore raw 0..1
+                        continue;
+                    }
                     const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
                     // fb178 — env→cutoff joins the filter's semitone sum as a block constant
                     // (LFO→cutoff stays per-sample below; envs advance per block anyway).
@@ -3581,10 +3603,13 @@ namespace tw
                 // fb180 — LEVELS GLIDE (2.5ms one-pole, the slew law): fb178 made LevelA-D
                 // live mod dests, so a plucking envelope stepped the gain at block rate —
                 // audible crackle. Same pattern as the mute gates one line up.
-                lvlSmA_ += (level_  - lvlSmA_) * lvlSmCoef_;
-                lvlSmB_ += (levelB_ - lvlSmB_) * lvlSmCoef_;
-                lvlSmC_ += (levelC_ - lvlSmC_) * lvlSmCoef_;
-                lvlSmD_ += (levelD_ - lvlSmD_) * lvlSmCoef_;
+                // fb183 — OWNERSHIP CROSSFADE: eff = (1−Σd)·knob + Σ(d·env), per voice.
+                const float _loA = juce::jmin (1.0f, envLvlOwn_[0]), _loB = juce::jmin (1.0f, envLvlOwn_[1]);
+                const float _loC = juce::jmin (1.0f, envLvlOwn_[2]), _loD = juce::jmin (1.0f, envLvlOwn_[3]);
+                lvlSmA_ += (juce::jlimit (0.0f, 1.0f, level_  * (1.0f - _loA) + envLvlDrive_[0]) - lvlSmA_) * lvlSmCoef_;
+                lvlSmB_ += (juce::jlimit (0.0f, 1.0f, levelB_ * (1.0f - _loB) + envLvlDrive_[1]) - lvlSmB_) * lvlSmCoef_;
+                lvlSmC_ += (juce::jlimit (0.0f, 1.0f, levelC_ * (1.0f - _loC) + envLvlDrive_[2]) - lvlSmC_) * lvlSmCoef_;
+                lvlSmD_ += (juce::jlimit (0.0f, 1.0f, levelD_ * (1.0f - _loD) + envLvlDrive_[3]) - lvlSmD_) * lvlSmCoef_;
 
                 // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate), split
                 // into the 3 filter-routing buses. Each osc's full signal = osc-only (sX-subMono)
@@ -4463,6 +4488,8 @@ namespace tw
         juce::AudioBuffer<float>       scratch_;
         float                          level_ = 0.7f;
         float lvlSmA_ = 0.0f, lvlSmB_ = 0.0f, lvlSmC_ = 0.0f, lvlSmD_ = 0.0f, lvlSmCoef_ = 0.02f;   // fb180
+        float envLvlOwn_[4]   = { 0, 0, 0, 0 };   // fb183 — Σ|depth| of env routes owning each osc Level (block-rate)
+        float envLvlDrive_[4] = { 0, 0, 0, 0 };   // fb183 — Σ|depth|·env: the owned level target
         float                          panL_  = 0.7071f;  // cos(pi/4)
         float                          panR_  = 0.7071f;  // sin(pi/4)
 
