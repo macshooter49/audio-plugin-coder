@@ -4861,6 +4861,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               width: 6px;
               display: inline-block;
             }
+            #syn-panel .syn-ctx-menu .syn-ctx-sep { border-top: 1px solid var(--border); margin: 4px 0 4px; }   /* fb186 — replaces the blank-row spacer */
             /* Batch 1 Filter — section header (per-category in a long menu),
                disabled "soon" items, and trailing badge. */
             #syn-panel .syn-ctx-menu .syn-ctx-section {
@@ -14352,11 +14353,8 @@ setTimeout(function wireSynControls () {
         function showHub(x,y){
           if(!window.__synShowMenu){ setEnv(BYNUM[((ENVNUM[curEnv]||5)%5)+1]); return; }
           var items=[];
-          items.push({ isHeader:true, label:'Envelope' });
-          if(dynEnvs.length<DYN_MAX)                                        /* fb177 — at the top, per Max */
-            items.push({ label:'+  New Envelope', keepOpen:true, onPick:function(){
-              dynEnvs.push(dynDefShape()); rebuildDynStates(); dynPush();
-              setEnv('D'+(dynEnvs.length+5)); showHub(x,y); } });
+          /* fb186 (Max) — no title, LIST FIRST; actions live at the bottom: sep →
+             − Remove (when dyn exist) → + New Envelope → resets. No blank rows. */
           [1,2,3,4,5].forEach(function(n){ var id=BYNUM[n];
             var sub=(id==='AMP')?'Amp':(destIdx(id)===0?'Free':DEST_LABELS[destIdx(id)]);   /* fb180 */
             items.push({ label:'Env '+n, badge:sub, isChecked:(id===curEnv), keepOpen:true,
@@ -14364,14 +14362,17 @@ setTimeout(function wireSynControls () {
           dynEnvs.forEach(function(_,i){ var id='D'+(i+6);                  /* fb177 — dynamic rows */
             items.push({ label:'Env '+(i+6), badge:'Free', isChecked:(id===curEnv), keepOpen:true,
                          onPick:function(){ setEnv(id); showHub(x,y); } }); });
+          items.push({ isSep:true });
           if(dynEnvs.length>0)
             items.push({ label:'\u2212  Remove Env '+(dynEnvs.length+5), onPick:function(){
               var gone='D'+(dynEnvs.length+5); dynEnvs.pop(); rebuildDynStates(); dynPush();
               if(curEnv===gone) setEnv(dynEnvs.length?('D'+(dynEnvs.length+5)):'AMP');
               updateChip(); } });
-          /* fb181 — the legacy 'Route to' section is RETIRED (Max): dragging the chip
-             onto a knob IS the routing now. The hub is purely: envelopes + resets. */
-          items.push({ isHeader:true, label:'\u00A0' });
+          if(dynEnvs.length<DYN_MAX)
+            items.push({ label:'+  New Envelope', keepOpen:true, onPick:function(){
+              dynEnvs.push(dynDefShape()); rebuildDynStates(); dynPush();
+              setEnv('D'+(dynEnvs.length+5)); showHub(x,y); } });
+          /* fb181 — 'Route to' RETIRED: dragging the chip onto a knob IS the routing. */
           items.push({ label:'\u21BA  Reset Env '+envNumOf(curEnv), onPick:function(){ resetEnv(curEnv); } });
           items.push({ label:'\u21BA  Reset all envelopes', onPick:function(){ resetAllEnvs(); } });
           window.__synShowMenu(null, items, x, y);   // null header — the "Envelope" section titles it
@@ -14438,6 +14439,12 @@ setTimeout(function wireSynControls () {
           menuEl.appendChild(h);
         }
         items.forEach(it => {
+          if (it.isSep) {                                   /* fb186 — hairline separator */
+            const sp = document.createElement('div');
+            sp.className = 'syn-ctx-sep';
+            menuEl.appendChild(sp);
+            return;
+          }
           if (it.isHeader) {
             const sh = document.createElement('div');
             sh.className = 'syn-ctx-section';
@@ -26843,7 +26850,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb185';   // bump per ship  [fb185 = pill+dodge reverted (ugly — Max); env curve ceiling YTOP 10→19 so the chip lettering owns dead airspace, the filter treatment]
+  var TERRAIN_BUILD = 'fb186';   // bump per ship  [fb186 = env hub reordered (Max): no title, list first, sep → − Remove → + New Envelope → resets; blank-row spacer → hairline sep]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
