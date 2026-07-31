@@ -4886,12 +4886,18 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               color: var(--text-muted);
             }
             #syn-panel .syn-ctx-menu .syn-ctx-badge {
-              /* WC-badge: clean thin SF Pro, no box, no caps */
+              /* WC-badge: clean thin SF Pro, no box, no caps. fb187: route names cap with
+                 an ellipsis so a long destination can never stretch or collide. */
               margin-left: auto;
               font-size: 10px;
               letter-spacing: 0.2px;
               color: rgba(255,255,255,0.40);
               font-weight: 300;
+              max-width: 96px;
+              padding-left: 12px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
             }
             /* TwoFilters — 1/2 slot tabs: small, semi-transparent until active, aligned with the + swap button */
             #syn-panel .filter-toggle .ft-pill {
@@ -14264,10 +14270,9 @@ setTimeout(function wireSynControls () {
           if(d===0) return '\u2014';
           if(d===7) return (v>=0?'+':'')+(v*48).toFixed(0)+' st';   // Pitch in semitones
           return (v>=0?'+':'')+(v*100).toFixed(0)+'%'; }            // Filter/Mod as %
-        function updateChip(){ if(!selChip) return;
-          if(isDynEnv(curEnv)){ selChip.innerHTML='Env '+envNumOf(curEnv)+' \u00B7 Free'; return; }   // fb177
-          var id=curEnv, dest=(id==='AMP')?'Amp':(destIdx(id)===0?'Free':DEST_LABELS[destIdx(id)]);   /* fb180 */
-          selChip.innerHTML = 'Env '+ENVNUM[id]+' \u00B7 '+dest; }
+        function updateChip(){ if(!selChip) return;   /* fb187 — chip = 'Env N' only (Max):
+             short forever, the readout legend can never collide; routing lives in the hub + underlines */
+          selChip.innerHTML='Env '+envNumOf(curEnv); }
         window.__envUpdateChip = updateChip;
         window.__envCurNum = function(){ return envNumOf(curEnv) || 1; };   /* fb178 — the drag source */
 
@@ -14355,12 +14360,16 @@ setTimeout(function wireSynControls () {
           var items=[];
           /* fb186 (Max) — no title, LIST FIRST; actions live at the bottom: sep →
              − Remove (when dyn exist) → + New Envelope → resets. No blank rows. */
+          function routeBadge(n){ var ri=window.__envRouteInfo?window.__envRouteInfo(n):null;   /* fb187 */
+            return ri?(ri.first+(ri.n>1?' +'+(ri.n-1):'')):''; }
           [1,2,3,4,5].forEach(function(n){ var id=BYNUM[n];
-            var sub=(id==='AMP')?'Amp':(destIdx(id)===0?'Free':DEST_LABELS[destIdx(id)]);   /* fb180 */
+            /* fb187 (Max) — badge = the REAL routing ('Level A', 'WT Pos C +2'); 'Free' is dead.
+               Env 1 always reads Amp (the master VCA identity); legacy saved dests still honored. */
+            var sub=(id==='AMP')?'Amp':(routeBadge(n)||(destIdx(id)>0?DEST_LABELS[destIdx(id)]:''));
             items.push({ label:'Env '+n, badge:sub, isChecked:(id===curEnv), keepOpen:true,
                          onPick:function(){ setEnv(id); showHub(x,y); } }); });
           dynEnvs.forEach(function(_,i){ var id='D'+(i+6);                  /* fb177 — dynamic rows */
-            items.push({ label:'Env '+(i+6), badge:'Free', isChecked:(id===curEnv), keepOpen:true,
+            items.push({ label:'Env '+(i+6), badge:routeBadge(i+6), isChecked:(id===curEnv), keepOpen:true,
                          onPick:function(){ setEnv(id); showHub(x,y); } }); });
           items.push({ isSep:true });
           if(dynEnvs.length>0)
@@ -23322,6 +23331,35 @@ restoreThemeFromBackend();
     if(!found) document.querySelectorAll('#syn-panel .warp2-pill .warp2-val').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-warp2-amt')]===dest) found=k; });   // fb77
     if(!found) document.querySelectorAll('#syn-panel .uni-pill .uni-val').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-uni-detune')]===dest||KNOBDEST[k.getAttribute('data-uni-blend')]===dest||KNOBDEST[k.getAttribute('data-uni-width')]===dest||KNOBDEST[k.getAttribute('data-uni-voices')]===dest) found=k; });   // fb77/78
     return found; }
+  /* fb187 — dest → short display name ("Level A", "WT Pos C", "Feedback B") for the env
+     hub badges. Tiered: reverse-KNOBDEST + suffix prettifier → static non-osc ids →
+     harvest the element's own label. Names stay SHORT (the hub badge is ellipsis-capped). */
+  var DEST2PID=null;
+  function d2pid(d){ if(!DEST2PID){ DEST2PID={}; Object.keys(KNOBDEST).forEach(function(k){ DEST2PID[KNOBDEST[k]]=k; }); } return DEST2PID[d]; }
+  var SUFX={WT_FRAME:'WT Pos',WARP_AMOUNT:'Warp',FOLD_AMT:'Fold',FM_FB:'Feedback',F1MIX:'F1 Send',F2MIX:'F2 Send',
+    UDETUNE:'Detune',UBLEND:'Blend',UWIDTH:'Width',UNISON:'Voices',SUB_RANGE:'Sub Oct',SUB_FORM:'Sub Shape',
+    SUB_WEIGHT:'Sub',SUB_HEAT:'Heat',WARP2_AMT:'Warp 2',SPECTRAL_AMT:'Spectral',FRAME_SPREAD:'Spread',
+    GRAIN_PSPRAY:'P-Spray',GRAIN_DIR:'Direction',FM_RATIO1:'Ratio 1',FM_DEPTH1:'Depth 1',FM_RATIO2:'Ratio 2',FM_DEPTH2:'Depth 2'};
+  function prettySfx(s){ if(SUFX[s])return SUFX[s];
+    var p=s.split('_'); if(p.length>1&&/^(SAMPLE|GRAIN|GEODE|FM|HARM)$/.test(p[0]))p.shift();
+    return p.map(function(w){return w.charAt(0)+w.slice(1).toLowerCase();}).join(' '); }
+  var DEST_FIXED={0:'Cut 1',1:'Cut 2',54:'Res 1',55:'Res 2',56:'Flt Env 1',57:'Flt Env 2',58:'Drive 1',59:'Drive 2',
+    60:'Drive 1',61:'Drive 2',62:'F Mix 1',63:'F Mix 2',340:'Vel 1',341:'Vel 2',342:'Track 1',343:'Track 2',
+    344:'Spread',345:'Spread',72:'Noise',73:'Noise',74:'Noise'};
+  function destShortName(d){
+    if(d>=12&&d<=21) return 'LFO '+(d-11)+' Amt';
+    var pid=d2pid(d);
+    if(pid){ var m=/^SYN_OSC_([A-D])_(.+)$/.exec(pid); if(m) return prettySfx(m[2])+' '+m[1]; }
+    if(DEST_FIXED[d]) return DEST_FIXED[d];
+    var el=elForDest(d);
+    if(el){ var lb=el.querySelector&&el.querySelector('.knob-label'); var t=(lb?lb.textContent:(el.getAttribute&&el.getAttribute('data-label'))||el.title||el.textContent||'').trim();
+      if(t&&t.length<=14) return t; if(t) return t.slice(0,12)+'\u2026'; }
+    return 'Knob'; }
+  window.__destShortName = destShortName;
+  window.__envRouteInfo = function(envN){
+    var list=assigns.filter(function(a){ return a.env===envN; });
+    if(!list.length) return null;
+    return { n:list.length, first:destShortName(list[0].dest) }; };
   function restore(){ if(window.__cardOnly)return;   /* fb145 — card windows run their own badge module */
     try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g)return;
     g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest); if(!el)return;
@@ -26850,7 +26888,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb186';   // bump per ship  [fb186 = env hub reordered (Max): no title, list first, sep → − Remove → + New Envelope → resets; blank-row spacer → hairline sep]
+  var TERRAIN_BUILD = 'fb187';   // bump per ship  [fb187 = 'Free' is dead: hub badges = REAL routes ('Level A', 'WT Pos C +2') via destShortName; chip = 'Env N' only — legend-safe forever]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
