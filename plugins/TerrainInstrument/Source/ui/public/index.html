@@ -4680,9 +4680,8 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 /* -- Serum-grade DAHDSR envelope (Batch 4 v5) -- */
 #syn-panel .envs { padding: 0; gap: 0; }
 /* fb194 — THE BREATHING CURVE: the modulated DAHDSR drawn live over the base curve. */
-#syn-panel .env-mod-line { stroke: #E7DEFF; stroke-width: 1.2; fill: none; opacity: 0.55;
-  stroke-linejoin: round; stroke-linecap: round;
-  filter: drop-shadow(0 0 3px rgba(167,139,250,0.6)); }
+#syn-panel .env-mod-line { stroke: rgba(201,190,239,0.35); stroke-width: 1; fill: none;
+  stroke-linejoin: round; stroke-linecap: round; }   /* fb195 — now the faint BASE reference; the MAIN curve moves */
 /* fb191 S4 — THE SHELF (F2): six value chips on a hairline rail under the graph.
    Drag = nudge · double-click = type. The graph pays ~15px and keeps its shape. */
 #syn-panel .env-shelf { flex: 0 0 17px; display: flex; align-items: center; justify-content: space-evenly;
@@ -13804,9 +13803,9 @@ setTimeout(function wireSynControls () {
         var DYN_MAX=27, dynEnvs=[];            // [{DLY,A,H,D,S,R,CA,CD,CR,LOOP} normalized]
         var DYN_LO={ DLY:0, A:1, H:0, D:1, R:1 };
         function dynMsOf(n,f){ var lo=DYN_LO[f]; n=Math.max(0,Math.min(1,+n||0));
-          return lo+(8000-lo)*Math.pow(n,1/0.3); }
-        function dynNormOf(ms,f){ var lo=DYN_LO[f]; ms=Math.max(lo,Math.min(8000,+ms||lo));
-          return Math.pow((ms-lo)/(8000-lo),0.3); }
+          return lo+(10000-lo)*Math.pow(n,1/0.3); }   /* fb195 — 10s */
+        function dynNormOf(ms,f){ var lo=DYN_LO[f]; ms=Math.max(lo,Math.min(10000,+ms||lo));
+          return Math.pow((ms-lo)/(10000-lo),0.3); }   /* fb195 — 10s */
         function dynDefShape(){ return { DLY:0, A:dynNormOf(5,'A'), H:0, D:dynNormOf(200,'D'),
                                          S:0.7, R:dynNormOf(300,'R'), CA:0.75, CD:0.8, CR:0.8, LOOP:0 }; }
         function envNumOf(id){ return String(id).charAt(0)==='D' ? parseInt(String(id).slice(1),10) : ENVNUM[id]; }
@@ -13884,8 +13883,8 @@ setTimeout(function wireSynControls () {
         function setnv(s,v){ try { if(s&&s.setNormalisedValue) s.setNormalisedValue(Math.max(0,Math.min(1,v))); } catch(e){} }
         function tfrac(s){ return nv(s); }   // width fraction == normalized value (matches APVTS skew 0.3 -> what you see = what you hear)
         function curveT(s){ return nv(s)*2-1; }                  // param -1..+1 from norm
-        function msOf(norm){ return 1 + Math.pow(Math.max(0,norm), 1/0.3)*7999; }   // matches NormalisableRange(1,8000,skew0.3)
-        function normOfMs(ms){ return Math.pow(Math.max(0,Math.min(1,(ms-1)/7999)), 0.3); }
+        function msOf(norm){ return 1 + Math.pow(Math.max(0,norm), 1/0.3)*9999; }   // fb195 — matches NormalisableRange(1,10000,skew0.3)
+        function normOfMs(ms){ return Math.pow(Math.max(0,Math.min(1,(ms-1)/9999)), 0.3); }   /* fb195 — 10s */
         function fmtMs(ms){ return ms>=1000 ? (ms/1000).toFixed(2)+'s' : Math.round(ms)+'ms'; }
 
         // layout: attack can reach the HARD LEFT (no min span); release is the
@@ -14386,10 +14385,10 @@ setTimeout(function wireSynControls () {
             /* fb187 (Max) — badge = the REAL routing ('Level A', 'WT Pos C +2'); 'Free' is dead.
                Env 1 always reads Amp (the master VCA identity); legacy saved dests still honored. */
             var sub=(id==='AMP')?'Amp':(routeBadge(n)||(destIdx(id)>0?DEST_LABELS[destIdx(id)]:''));
-            items.push({ label:'Env '+n, badge:sub, isChecked:(id===curEnv), keepOpen:true,
+            items.push({ label:'Env '+n, badge:sub, isChecked:(id===curEnv), keepOpen:true, dragEnv:n,   /* fb195 — rows LIFT OUT as drags (env-on-env) */
                          onPick:function(){ setEnv(id); showHub(x,y); } }); });
           dynEnvs.forEach(function(_,i){ var id='D'+(i+6);                  /* fb177 — dynamic rows */
-            items.push({ label:'Env '+(i+6), badge:routeBadge(i+6), isChecked:(id===curEnv), keepOpen:true,
+            items.push({ label:'Env '+(i+6), badge:routeBadge(i+6), isChecked:(id===curEnv), keepOpen:true, dragEnv:(i+6),
                          onPick:function(){ setEnv(id); showHub(x,y); } }); });
           items.push({ isSep:true });
           if(dynEnvs.length>0)
@@ -14462,30 +14461,44 @@ setTimeout(function wireSynControls () {
           c.addEventListener('dblclick',function(e){ e.preventDefault(); e.stopPropagation(); beginChipEdit(cd,c); });
           shelf.appendChild(c); });
         refreshChips();
-        /* fb194 — THE BREATHING CURVE (Max: "I need to SEE the attack move"): a live overlay
-           of the SELECTED env's modulated DAHDSR. Same feed as the comet (mvE/mvL), same
-           ownership math as the engine, same pathD as the ghosts. Hidden when unrouted/idle. */
+        /* fb195 — THE BREATHING CURVE, take two (Max: "not a ghost — I should see envelope 2
+           MOVING"): the MAIN curve (line + fill + nodes) rides the modulated values live; the
+           faint reference behind it is the BASE shape you sculpted. Sculpt drags freeze the
+           motion (base truth under the pointer); idle restores base and hides the reference. */
         var modLineP=document.createElementNS('http://www.w3.org/2000/svg','path');
         modLineP.setAttribute('class','env-mod-line'); modLineP.setAttribute('pointer-events','none');
         modLineP.style.display='none';
-        if(lineP&&lineP.parentNode) lineP.parentNode.insertBefore(modLineP, lineP.nextSibling);
+        if(lineP&&lineP.parentNode) lineP.parentNode.insertBefore(modLineP, lineP);
+        function reflowNodes(L){
+          var pos={DLY:[L.xD,YBASE],A:[L.xA,YTOP],H:[L.xH,YTOP],S:[L.xS,L.ySus],R:[L.xE,YBASE]};
+          var kids=nodesG.childNodes;
+          for(var i=0;i<kids.length;i++){ var n=kids[i], k=(n.dataset?n.dataset.kind:null), p=k?pos[k]:null; if(!p)continue;
+            if(n.tagName==='rect'){ n.setAttribute('x',p[0]-2); n.setAttribute('y',p[1]-2); }
+            else { n.setAttribute('cx',p[0]); n.setAttribute('cy',p[1]); } } }
+        var __modActive=false, __baseD=null;
         function envModTick(){
+          if(typeof drag!=='undefined'&&drag) return;   /* sculpting wins */
           var pm=window.__envPModState?window.__envPModState(envNumOf(curEnv)):null;
-          if(!pm){ modLineP.style.display='none'; return; }
-          var s=st(), keys=['DLY','A','H','D','S','R'];
-          var out={CA:s['CA'],CD:s['CD'],CR:s['CR']}, changed=false;
-          for(var i=0;i<6;i++){ var b=nv(s[keys[i]]), p=pm[i];
-            var w=Math.min(1,p.w);
-            var e=Math.max(0,Math.min(1,(b+p.sum)*(1-w)+p.v));
-            if(Math.abs(e-b)>0.0005)changed=true;
-            (function(val){ out[keys[i]]={getNormalisedValue:function(){return val;}}; })(e); }
-          if(!changed){ modLineP.style.display='none'; return; }
-          modLineP.style.display='block';
-          modLineP.setAttribute('d', pathD(out).d); }
+          var s=st(), keys=['DLY','A','H','D','S','R'], out=null, changed=false;
+          if(pm){ out={CA:s['CA'],CD:s['CD'],CR:s['CR']};
+            for(var i=0;i<6;i++){ var b=nv(s[keys[i]]), p=pm[i];
+              var w=Math.min(1,p.w);
+              var e=Math.max(0,Math.min(1,(b+p.sum)*(1-w)+p.v));
+              if(Math.abs(e-b)>0.0005)changed=true;
+              (function(val){ out[keys[i]]={getNormalisedValue:function(){return val;}}; })(e); } }
+          if(!pm||!changed){
+            if(__modActive){ __modActive=false; modLineP.style.display='none'; scheduleRender(); }
+            return; }
+          __modActive=true;
+          var pd=pathD(out);
+          lineP.setAttribute('d',pd.d);
+          if(fillP) fillP.setAttribute('d', pd.d+' L'+pd.L.xE.toFixed(1)+','+YBASE+' L'+PADX+','+YBASE+' Z');
+          reflowNodes(pd.L);
+          if(__baseD){ modLineP.style.display='block'; modLineP.setAttribute('d',__baseD); } }
         window.__envModTick=envModTick;   /* probe surface (rAF starves under virtual time) */
         (function __modCurveLoop(){ try{ envModTick(); }catch(e){} requestAnimationFrame(__modCurveLoop); })();
         var __renderBase = render;   /* fb192 — chips ride every paint: graph sculpts, wire() sync, boot */
-        render = function(){ __renderBase(); refreshChips(); };
+        render = function(){ __renderBase(); __baseD=lineP.getAttribute('d'); refreshChips(); };
         updateChip();
 
         function boot(){
@@ -14566,6 +14579,7 @@ setTimeout(function wireSynControls () {
                         + (it.isChecked ? (it.white ? ' checked wsel' : ' checked') : '')   /* fb66 — white selection when {white:true} */
                         + (it.isDisabled ? ' disabled' : '');
           div.textContent = it.label;
+          if (it.dragEnv) div.setAttribute('data-drag-env', it.dragEnv);   /* fb195 — hub rows drag out as modulator sources */
           if (it.badge) {
             const b = document.createElement('span');
             b.className = 'syn-ctx-badge';
@@ -23290,7 +23304,8 @@ restoreThemeFromBackend();
     [['res',54,55],['drv',58,59],['env',56,57]].forEach(function(em){ var c=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="'+em[0]+'"]'); if(c) out.push({el:c.parentElement,dest:-2,kind:'fslot',pair:[em[1],em[2]]}); });   // fb75 — front RES/DRV/ENV emblems (runtime .fk-em canvases, like cut)
     document.querySelectorAll('#syn-panel .flt-back-knobs .knob').forEach(function(k){ var lb=k.querySelector('.knob-label'); var pr=lb&&FSLOT_BACK[lb.textContent]; if(pr) out.push({el:k,dest:-2,kind:'fslot',pair:pr}); });   // fb75/78 — back Mix/Drive/Env/Vel/Track
     var spp=document.getElementById('flt-spread-pill'); if(spp) out.push({el:spp,dest:-2,kind:'fslot',pair:[344,345]});   // fb78 — filter Spread (slot-resolved)
-    document.querySelectorAll('#mod-engine .mv-tabs .t').forEach(function(t){ var n=+t.getAttribute('data-tab'); if(!n)return; out.push({el:t,dest:11+n,kind:'lfo',lfo:n}); }); // LFO→LFO: LfoAmt{n} (skip page arrows)
+    (function(){ var atG=document.querySelector('#mod-engine .mv-tabs .t.act'), dpG=document.querySelector('#mod-engine .mv-dep');
+      if(atG&&dpG) out.push({el:dpG,dest:11+(+atG.getAttribute('data-tab')),kind:'knob'}); })();   /* fb195 — drops land on the Dep ring, targeting the SELECTED LFO's depth */
     return out; }
 
   // ── badges + dots ──
@@ -23369,8 +23384,24 @@ restoreThemeFromBackend();
         if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addEnvAssign(en,dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
+  /* fb195 — hub rows drag out as env sources (Max: put an envelope on ANOTHER envelope's
+     params — open the hub, pull the 'Env 1' row onto Env 2's Atk chip). Same machinery as
+     the chip drag; the menu hides the moment the pull starts. */
+  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel .syn-ctx-menu [data-drag-env]'); if(!t)return;
+    var en=+t.getAttribute('data-drag-env')||1; var sx=e.clientX, sy=e.clientY, started=false;
+    function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
+        if(window.__synHideMenu)window.__synHideMenu();
+        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='E'+en; document.body.appendChild(ghost);
+        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+      ghost.style.left=ev.clientX+'px'; ghost.style.top=ev.clientY+'px';
+      var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
+    function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+      if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addEnvAssign(en,dest,g.el); }
+        if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   // suppress the tab's switch-click right after a drag
-  document.addEventListener('click',function(e){ var t=e.target.closest&&(e.target.closest('#mod-engine .mv-tabs .t')||e.target.closest('#syn-panel .env-sel')); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);   /* fb178 — env chip too */
+  document.addEventListener('click',function(e){ var t=e.target.closest&&(e.target.closest('#mod-engine .mv-tabs .t')||e.target.closest('#syn-panel .env-sel')||e.target.closest('#syn-panel .syn-ctx-item')); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);   /* fb178 env chip · fb195 hub rows */
   /* fb153 — the fb149 'Pop' palette launcher is retired (chip + handler). The palette
      page mode (?card=mod, bootModPal) stays DORMANT so an already-open/restored palette
      window still works, and the docked foreign receiver stays LIVE — it also caches
@@ -23466,7 +23497,8 @@ restoreThemeFromBackend();
   // ── restore persisted matrix into the UI (so reload shows the badges, not a clobber) ──
   function elForDest(dest){
     if(dest===0||dest===1){ var c=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="cut"]'); return c?c.parentElement:null; }
-    if(dest>=12&&dest<=21){ return document.querySelector('#mod-engine .mv-tabs .t[data-tab="'+(dest-11)+'"]'); }
+    if(dest>=12&&dest<=21){ var atT=document.querySelector('#mod-engine .mv-tabs .t.act');   /* fb195 — the Dep RING is the surface (Max: the numbers aren't values) */
+      if(atT&&(+atT.getAttribute('data-tab'))===(dest-11)){ var dpR=document.querySelector('#mod-engine .mv-dep'); if(dpR)return dpR; } return null; }
     if(dest===344||dest===345){ var sp2=document.getElementById('flt-spread-pill'); if(sp2) return sp2; }   // fb78 — filter Spread pill
     if((dest>=54&&dest<=63)||(dest>=340&&dest<=343)){   // fb75/78 — slot filter dests: front RES/DRV/ENV emblems, back Mix/Drive/Vel/Track knobs
       var fe={54:'res',55:'res',58:'drv',59:'drv',56:'env',57:'env'}[dest];
@@ -27042,7 +27074,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb194';   // bump per ship  [fb194 = THE BREATHING CURVE: modulated DAHDSR drawn LIVE (comet-white overlay via pathD + the mod feed; hidden when unrouted/idle)]
+  var TERRAIN_BUILD = 'fb195';   // bump per ship  [fb195 = the MAIN curve breathes (base = faint reference; nodes ride) · 10s env times · Dep RING = the LFO value target (tabs untargeted) · hub rows drag out (env-on-env) · S6 env grid snap CANCELLED (LFO arc's crown)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

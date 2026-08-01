@@ -1697,11 +1697,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_A, 1 },
         "Synth Filter Env Attack",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 5.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 5.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_D, 1 },
         "Synth Filter Env Decay",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 200.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 200.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_S, 1 },
         "Synth Filter Env Sustain",
@@ -1709,18 +1709,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_R, 1 },
         "Synth Filter Env Release",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_A, 1 },
         "Synth Amp Attack",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f),
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f),
         5.0f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_D, 1 },
         "Synth Amp Decay",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f),
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f),
         200.0f));   // canonical env default (== reset shape) — uniform across all 5 envelopes
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -1732,16 +1732,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_R, 1 },
         "Synth Amp Release",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f),
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f),
         300.0f));   // canonical env default (== reset shape)
 
     // ── Envelope DAHDSR params (Batch 2/3): 5 envelopes × delay/hold/curves/loop (+ADSR for PIT/M1/M2) ──
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_DLY, 1 }, "Synth Amp Delay",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_H, 1 }, "Synth Amp Hold",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_CA, 1 }, "Synth Amp Attack Curve",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
@@ -1755,10 +1755,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_ENV_AMP_LOOP, 1 }, "Synth Amp Loop", false));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_DLY, 1 }, "Synth Filter Delay",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_H, 1 }, "Synth Filter Hold",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_CA, 1 }, "Synth Filter Attack Curve",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
@@ -1772,22 +1772,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_ENV_FLT_LOOP, 1 }, "Synth Filter Loop", false));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_A, 1 }, "Synth Pitch Attack",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 5.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 5.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_D, 1 }, "Synth Pitch Decay",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 200.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 200.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_S, 1 }, "Synth Pitch Sustain",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.7f));   // canonical env default (== reset shape)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_R, 1 }, "Synth Pitch Release",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_DLY, 1 }, "Synth Pitch Delay",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_H, 1 }, "Synth Pitch Hold",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_CA, 1 }, "Synth Pitch Attack Curve",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
@@ -1804,22 +1804,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_ENV_PIT_LOOP, 1 }, "Synth Pitch Loop", false));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_A, 1 }, "Synth Mod 1 Attack",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 5.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 5.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_D, 1 }, "Synth Mod 1 Decay",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 200.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 200.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_S, 1 }, "Synth Mod 1 Sustain",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.7f));   // canonical env default (== reset shape)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_R, 1 }, "Synth Mod 1 Release",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_DLY, 1 }, "Synth Mod 1 Delay",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_H, 1 }, "Synth Mod 1 Hold",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_CA, 1 }, "Synth Mod 1 Attack Curve",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
@@ -1833,22 +1833,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_ENV_M1_LOOP, 1 }, "Synth Mod 1 Loop", false));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_A, 1 }, "Synth Mod 2 Attack",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 5.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 5.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_D, 1 }, "Synth Mod 2 Decay",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 200.0f));
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 200.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_S, 1 }, "Synth Mod 2 Sustain",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.7f));   // canonical env default (== reset shape)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_R, 1 }, "Synth Mod 2 Release",
-        juce::NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
+        juce::NormalisableRange<float> (1.0f, 10000.0f, 0.0f, 0.3f), 300.0f));   // canonical env default (== reset shape)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_DLY, 1 }, "Synth Mod 2 Delay",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_H, 1 }, "Synth Mod 2 Hold",
-        juce::NormalisableRange<float> (0.0f, 8000.0f, 0.0f, 0.3f), 0.0f));
+        juce::NormalisableRange<float> (0.0f, 10000.0f, 0.0f, 0.3f), 0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_ENV_M2_CA, 1 }, "Synth Mod 2 Attack Curve",
         juce::NormalisableRange<float> (-1.0f, 1.0f, 0.001f), 0.5f));
@@ -4307,9 +4307,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             const float w0 = envOwnW[d]; if (w0 <= 0.0f && modSums[d] == 0.0f) return ms;
             const float w = w0 > 1.0f ? 1.0f : w0;
-            const float n = std::pow (juce::jlimit (0.0f, 1.0f, (ms - 1.0f) / 7999.0f), 0.3f);
+            const float n = std::pow (juce::jlimit (0.0f, 1.0f, (ms - 1.0f) / 9999.0f), 0.3f);
             const float e = juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]);
-            return 1.0f + std::pow (e, 1.0f / 0.3f) * 7999.0f;
+            return 1.0f + std::pow (e, 1.0f / 0.3f) * 9999.0f;
         };
         auto dynModS = [&] (float s, int d) -> float
         {
