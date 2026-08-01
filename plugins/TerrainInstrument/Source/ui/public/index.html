@@ -13962,12 +13962,10 @@ setTimeout(function wireSynControls () {
           return { d:'M'+PADX.toFixed(2)+','+YBASE.toFixed(2)+buildPath(run1)+buildPath(run2), L:L };
         }
         function renderGhosts(){
-          if(!ghostsG) return; ghostsG.innerHTML='';
-          for(var gi=0;gi<ENV_IDS.length;gi++){ var id=ENV_IDS[gi]; if(id===curEnv) continue;
-            if(destIdx(id)===0) continue;                 // not routed to anything → no ghost (Off)
-            var gs=grab(id); if(!gs||!gs['A']) continue;
-            var gp=document.createElementNS('http://www.w3.org/2000/svg','path');
-            gp.setAttribute('d', pathD(gs).d); gp.setAttribute('class','env-ghost'); ghostsG.appendChild(gp); }
+          /* fb198 (Max) — the ghost layer is RETIRED: ONE truth on screen. (The old filter
+             also mis-handled Env 1 — destIdx('AMP') is NaN, so its static ghost drew ALWAYS:
+             the 'bugged ghost env'.) Restore deliberately if the Serum Env-1 backdrop is missed. */
+          if(ghostsG) ghostsG.innerHTML='';
         }
         // CPU cleanup: many setnv() during a node-drag / "reset all" each request a render;
         // rAF-coalesce them to ONE render per animation frame. And the 4 GHOST curves don't move
@@ -27082,7 +27080,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb197';   // bump per ship  [fb197 = the static base-reference ghost is DEAD (Max) — only the living modulated curve draws]
+  var TERRAIN_BUILD = 'fb198';   // bump per ship  [fb198 = the legacy env GHOST LAYER retired (destIdx('AMP')=NaN drew Env 1's static ghost ALWAYS) — one truth on screen]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
