@@ -14041,7 +14041,7 @@ setTimeout(function wireSynControls () {
           if(followStage < 0 || followLevel < 0){            // no voice -> fade out
             followEl.style.opacity='0'; return;
           }
-          var L=layout();
+          var L=__modLayout||layout();   /* fb202 — the dot rides the BREATHING curve, not the base (Max: "it should react to the visualization") */
           var si=Math.floor(followStage), f=followStage-si;  // stage index + fraction
           var tA=curveT(st()['CA']), tD=curveT(st()['CD']), tR=curveT(st()['CR']);
           var x, y;
@@ -14473,9 +14473,9 @@ setTimeout(function wireSynControls () {
           for(var i=0;i<kids.length;i++){ var n=kids[i], k=(n.dataset?n.dataset.kind:null), p=k?pos[k]:null; if(!p)continue;
             if(n.tagName==='rect'){ n.setAttribute('x',p[0]-2); n.setAttribute('y',p[1]-2); }
             else { n.setAttribute('cx',p[0]); n.setAttribute('cy',p[1]); } } }
-        var __modActive=false;
+        var __modActive=false, __modLayout=null;   /* fb202 — published breathing layout: the follower rides it */
         function envModTick(){
-          if(typeof drag!=='undefined'&&drag) return;   /* sculpting wins */
+          if(typeof drag!=='undefined'&&drag){ __modLayout=null; return; }   /* sculpting wins */
           var pm=window.__envPModState?window.__envPModState(envNumOf(curEnv)):null;
           var s=st(), keys=['DLY','A','H','D','S','R'], out=null, changed=false;
           if(pm){ out={CA:s['CA'],CD:s['CD'],CR:s['CR']};
@@ -14484,15 +14484,16 @@ setTimeout(function wireSynControls () {
               var e=Math.max(0,Math.min(1,(b+p.sum)*(1-w)+p.v));
               if(Math.abs(e-b)>0.0005)changed=true;
               (function(val){ out[keys[i]]={getNormalisedValue:function(){return val;}}; })(e); } }
-          if(!pm||!changed){
+          if(!pm||!changed){ __modLayout=null;
             if(__modActive){ __modActive=false; scheduleRender(); }
             return; }
           __modActive=true;
           var pd=pathD(out);
           lineP.setAttribute('d',pd.d);
           if(fillP) fillP.setAttribute('d', pd.d+' L'+pd.L.xE.toFixed(1)+','+YBASE+' L'+PADX+','+YBASE+' Z');
-          reflowNodes(pd.L); }   /* fb197 (Max) — NO static base ghost: only the living curve */
+          reflowNodes(pd.L); __modLayout=pd.L; }   /* fb197 (Max) — NO static base ghost: only the living curve · fb202 — publish the layout for the follower */
         window.__envModTick=envModTick;   /* probe surface (rAF starves under virtual time) */
+        window.__envPlaceFollower=placeFollower;   /* fb202 — probe surface */
         (function __modCurveLoop(){ try{ envModTick(); }catch(e){} requestAnimationFrame(__modCurveLoop); })();
         var __renderBase = render;   /* fb192 — chips ride every paint: graph sculpts, wire() sync, boot */
         render = function(){ __renderBase(); refreshChips(); };
@@ -27081,7 +27082,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb201';   // bump per ship  [fb201 = shelf values in FIXED-width boxes — changing numbers can never shift the letters (no-jitter law)]
+  var TERRAIN_BUILD = 'fb202';   // bump per ship  [fb202 = NO-STATIC: pan/noise mod glides 2.5ms (DSP) + the follower dot rides the breathing curve]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

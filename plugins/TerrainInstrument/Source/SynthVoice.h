@@ -579,8 +579,8 @@ namespace tw
         {
             const float p = juce::jlimit (-1.0f, 1.0f, pan);
             const float angle = (p + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
-            panL_ = std::cos (angle);
-            panR_ = std::sin (angle);
+            panLT_ = std::cos (angle);   // fb202 — PAN GLIDE (Max: "no static"): targets only;
+            panRT_ = std::sin (angle);   // the render loop one-poles the live gains (2.5ms, fb180 law)
         }
 
         /** Octave (-3..+3), semitone (-12..+12), cents (-100..+100). Applied
@@ -790,8 +790,8 @@ namespace tw
         {
             const float p = juce::jlimit (-1.0f, 1.0f, pan);
             const float angle = (p + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
-            panLB_ = std::cos (angle);
-            panRB_ = std::sin (angle);
+            panLBT_ = std::cos (angle);   // fb202 — glide target
+            panRBT_ = std::sin (angle);
         }
 
         void setWavetableB (const tw::Wavetable* wt) noexcept { currentWavetableB_ = wt; }
@@ -1101,13 +1101,13 @@ namespace tw
         {
             noiseOn_    = on;
             noiseType_  = type;
-            noiseLevel_ = juce::jlimit (0.0f, 1.0f, level);
+            noiseLvlT_ = juce::jlimit (0.0f, 1.0f, level);   // fb202 — glided at the render site
             // "Scan" (formerly Pitch): drives the noise scan/playback RATE — 0 = very slow (0.1×) … 0.5 = 1× … 1 = 2×.
             const float sc = juce::jlimit (0.0f, 1.0f, pitch);
-            noiseScanRate_ = (sc < 0.5f) ? (0.1f + 1.8f * sc) : (1.0f + 2.0f * (sc - 0.5f));
+            noiseScanRateT_ = (sc < 0.5f) ? (0.1f + 1.8f * sc) : (1.0f + 2.0f * (sc - 0.5f));
             const float th = juce::jlimit (0.0f, 1.0f, pan) * 1.5707963268f;   // equal-power pan (−3 dB center)
-            noisePanL_ = std::cos (th);
-            noisePanR_ = std::sin (th);
+            noisePanLT_ = std::cos (th);   // fb202 — glide targets
+            noisePanRT_ = std::sin (th);
         }
         // fb66 — NOISE play mode (sample playback): 0 Random · 1 Envelope (one-shot) · 2 Free (global tape).
         void setNoisePlayMode (int m) noexcept { noisePlayMode_ = m; }
@@ -1117,7 +1117,7 @@ namespace tw
         // stay ~phase-locked because they all advance at the same rate from the same tape clock.
         void setNoiseFreePos (double posSamples) noexcept { noiseFreeLatest_ = posSamples; }
         void setNoiseCarrier (bool on) noexcept { noiseCarrierTarget_ = on ? 1.0f : 0.0f; }   // fb68 — Free-mode mono gate (poly modes push true to all)
-        void setNoiseWidth (float w) noexcept { noiseWidth_ = juce::jlimit (0.0f, 2.0f, w); }   // fb69 — stereo width (M/S)
+        void setNoiseWidth (float w) noexcept { noiseWidthT_ = juce::jlimit (0.0f, 2.0f, w); }   // fb69 — stereo width (M/S) · fb202 glided
         // Representative follower position 0..1 for the waveform viz (Random/Envelope read this voice's head); -1 = no sample.
         float noiseFollowPos01 () const noexcept
         { return (noiseSampLen_ > 1) ? (float) (noiseSampPos_ / (double) noiseSampLen_) : -1.0f; }
@@ -1250,6 +1250,7 @@ namespace tw
         bool  noiseOn_    = false;
         int   noiseType_  = 0;
         float noiseLevel_ = 0.0f, noisePitch_ = 0.5f, noisePanL_ = 0.70710678f, noisePanR_ = 0.70710678f;
+        float noiseLvlT_ = 0.0f, noisePanLT_ = 0.70710678f, noisePanRT_ = 0.70710678f;   // fb202 — glide targets (mod steps at block rate; gains glide 2.5ms)
         std::uint32_t noiseRngL_ = 0x9E3779B9u, noiseRngR_ = 0x85EBCA6Bu;
         float pkL_[7] = { 0 }, pkR_[7] = { 0 }, brL_ = 0.0f, brR_ = 0.0f, geValL_ = 0.0f, geValR_ = 0.0f;
         float tpL_ = 0.0f, tpR_ = 0.0f, spL_ = 0.0f, spL2_ = 0.0f, spR_ = 0.0f, spR2_ = 0.0f, noiseLpL_ = 0.0f, noiseLpR_ = 0.0f;
@@ -1257,6 +1258,7 @@ namespace tw
         float tpL2_ = 0.0f, tpR2_ = 0.0f, humPh_ = 0.0f, windPh_ = 0.0f, windPh2_ = 0.0f, gustL_ = 0.0f;
         // SCAN (was Pitch): sample-and-hold + interpolation at noiseScanRate_ (0.1×…2×) → the noise "scans" slower/faster.
         float noiseScanRate_ = 1.0f, scanPh_ = 0.0f, nCurL_ = 0.0f, nCurR_ = 0.0f, nPrevL_ = 0.0f, nPrevR_ = 0.0f;
+        float noiseScanRateT_ = 1.0f;   // fb202 — glide target
         float rumbL_[2] = { 0.0f, 0.0f }, rumbR_[2] = { 0.0f, 0.0f };   // Vinyl turntable rumble (2-pole LP, L/R)
         float noiseSR_ = 48000.0f;   // sample rate for Hz-based noise math (hum/wind/rumble/SVF); set in setCurrentPlaybackSampleRate
         // NOISE IMPORT (P5) — looping-sample source state (overrides the algorithmic type when a buffer is loaded).
@@ -1275,6 +1277,7 @@ namespace tw
         // click-free hand-offs. In non-Free modes every voice is a carrier (target 1) so this is a no-op.
         float  noiseCarrierTarget_ = 1.0f, noiseCarrierGain_ = 1.0f;
         float  noiseWidth_ = 1.0f;   // fb69 — noise stereo width (M/S): 0 mono · 1 normal · 2 wide
+        float  noiseWidthT_ = 1.0f;   // fb202 — glide target
     public:
 
         void setPhaseMode (int modeA, int modeB) noexcept
@@ -1497,8 +1500,8 @@ namespace tw
             oscGateTarget_[0] = a; oscGateTarget_[1] = b; oscGateTarget_[2] = c; oscGateTarget_[3] = d;
             if (! playing_) { for (int k = 0; k < 4; ++k) oscGate_[k] = robinGate (k); }  // snap when idle → fresh notes respect gate from sample 0, no blip
         }
-        void setPanC (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLC_=std::cos(a); panRC_=std::sin(a); }
-        void setPanD (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLD_=std::cos(a); panRD_=std::sin(a); }
+        void setPanC (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLCT_=std::cos(a); panRCT_=std::sin(a); }   // fb202 — glide targets
+        void setPanD (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLDT_=std::cos(a); panRDT_=std::sin(a); }   // fb202 — glide targets
         void setWavetableC (const tw::Wavetable* wt) noexcept { currentWavetableC_ = wt; }
         void setWavetableD (const tw::Wavetable* wt) noexcept { currentWavetableD_ = wt; }
         void setWavetableFrameC (float pos) noexcept { framePosBaseC_ = juce::jlimit (0.0f, 1.0f, pos); }
@@ -3637,6 +3640,14 @@ namespace tw
                 lvlSmC_ += (juce::jlimit (0.0f, 1.0f, levelC_ * (1.0f - _loC) + envLvlDrive_[2]) - lvlSmC_) * lvlSmCoef_;
                 lvlSmD_ += (juce::jlimit (0.0f, 1.0f, levelD_ * (1.0f - _loD) + envLvlDrive_[3]) - lvlSmD_) * lvlSmCoef_;
 
+                // fb202 — PAN GLIDE (Max: "no static"): the pan gains were still stepping at
+                // block rate while the levels beside them glided (fb180) — an LFO/env on any
+                // Pan crackled a sustained tone. Same one-pole, same 2.5ms coefficient.
+                panL_  += (panLT_  - panL_)  * lvlSmCoef_;  panR_  += (panRT_  - panR_)  * lvlSmCoef_;
+                panLB_ += (panLBT_ - panLB_) * lvlSmCoef_;  panRB_ += (panRBT_ - panRB_) * lvlSmCoef_;
+                panLC_ += (panLCT_ - panLC_) * lvlSmCoef_;  panRC_ += (panRCT_ - panRC_) * lvlSmCoef_;
+                panLD_ += (panLDT_ - panLD_) * lvlSmCoef_;  panRD_ += (panRDT_ - panRD_) * lvlSmCoef_;
+
                 // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate), split
                 // into the 3 filter-routing buses. Each osc's full signal = osc-only (sX-subMono)
                 // + its sub (subMono); routed by busCo*_ (F1 bus = scratch, F2 = fltBus2_, dry =
@@ -3657,6 +3668,13 @@ namespace tw
                 float noiseAddL = 0.0f, noiseAddR = 0.0f;
                 if (noiseOn_ || noiseForce_)   // fb64 — also generate when noise is a BLEND SOURCE (even if its own output is off)
                 {
+                    // fb202 — noise Level/Scan/Pan/Width glide (2.5ms): mod pushes step at block
+                    // rate; the noise itself masks small steps but blends/routes downstream don't.
+                    noiseLevel_    += (noiseLvlT_      - noiseLevel_)    * lvlSmCoef_;
+                    noiseScanRate_ += (noiseScanRateT_ - noiseScanRate_) * lvlSmCoef_;
+                    noisePanL_     += (noisePanLT_     - noisePanL_)     * lvlSmCoef_;
+                    noisePanR_     += (noisePanRT_     - noisePanR_)     * lvlSmCoef_;
+                    noiseWidth_    += (noiseWidthT_    - noiseWidth_)    * lvlSmCoef_;
                     float _nL, _nR;
                     if (noiseSampLen_ > 1 && noiseSampL_ != nullptr)
                     {
@@ -4518,6 +4536,8 @@ namespace tw
         float envLvlDrive_[4] = { 0, 0, 0, 0 };   // fb183 — Σ|depth|·env: the owned level target
         float                          panL_  = 0.7071f;  // cos(pi/4)
         float                          panR_  = 0.7071f;  // sin(pi/4)
+        float                          panLT_ = 0.7071f;  // fb202 — glide targets (setPan writes here;
+        float                          panRT_ = 0.7071f;  //         the render loop glides the live gains)
 
         // SOLO/MUTE — per-osc (A,B,C,D) click-free gate (smoothed one-pole, ~4ms fade)
         float oscGate_[4]       { 1.0f, 1.0f, 1.0f, 1.0f };   // smoothed solo/mute gate (click-free)
@@ -5321,6 +5341,7 @@ namespace tw
         float  levelB_          = 0.5f;      // default lower than A so they sum tastefully
         float  panLB_           = 0.7071f;   // cos(pi/4) — center
         float  panRB_           = 0.7071f;   // sin(pi/4) — center
+        float  panLBT_ = 0.7071f, panRBT_ = 0.7071f;   // fb202 — glide targets
         int    octOffsetB_      = 0;
         int    semiOffsetB_     = 0;
         float  centsOffsetB_    = 0.0f;
@@ -5541,6 +5562,7 @@ namespace tw
         // ── OSC C ──
         float  levelC_ = 0.0f;                           // start silent (spec)
         float  panLC_ = 0.7071f, panRC_ = 0.7071f;
+        float  panLCT_ = 0.7071f, panRCT_ = 0.7071f;   // fb202 — glide targets
         int    octOffsetC_ = 0, semiOffsetC_ = 0;
         float  centsOffsetC_ = 0.0f;
         const tw::Wavetable* currentWavetableC_ = nullptr;
@@ -5581,6 +5603,7 @@ namespace tw
         // ── OSC D ──
         float  levelD_ = 0.0f;                           // start silent (spec)
         float  panLD_ = 0.7071f, panRD_ = 0.7071f;
+        float  panLDT_ = 0.7071f, panRDT_ = 0.7071f;   // fb202 — glide targets
         int    octOffsetD_ = 0, semiOffsetD_ = 0;
         float  centsOffsetD_ = 0.0f;
         const tw::Wavetable* currentWavetableD_ = nullptr;
