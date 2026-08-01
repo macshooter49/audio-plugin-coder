@@ -4680,8 +4680,6 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 /* -- Serum-grade DAHDSR envelope (Batch 4 v5) -- */
 #syn-panel .envs { padding: 0; gap: 0; }
 /* fb194 — THE BREATHING CURVE: the modulated DAHDSR drawn live over the base curve. */
-#syn-panel .env-mod-line { stroke: rgba(201,190,239,0.35); stroke-width: 1; fill: none;
-  stroke-linejoin: round; stroke-linecap: round; }   /* fb195 — now the faint BASE reference; the MAIN curve moves */
 /* fb191 S4 — THE SHELF (F2): six value chips on a hairline rail under the graph.
    Drag = nudge · double-click = type. The graph pays ~15px and keeps its shape. */
 #syn-panel .env-shelf { flex: 0 0 17px; display: flex; align-items: center; justify-content: space-evenly;
@@ -14463,10 +14461,6 @@ setTimeout(function wireSynControls () {
            MOVING"): the MAIN curve (line + fill + nodes) rides the modulated values live; the
            faint reference behind it is the BASE shape you sculpted. Sculpt drags freeze the
            motion (base truth under the pointer); idle restores base and hides the reference. */
-        var modLineP=document.createElementNS('http://www.w3.org/2000/svg','path');
-        modLineP.setAttribute('class','env-mod-line'); modLineP.setAttribute('pointer-events','none');
-        modLineP.style.display='none';
-        if(lineP&&lineP.parentNode) lineP.parentNode.insertBefore(modLineP, lineP);
         function reflowNodes(L){
           var s0=st(), tA=curveT(s0['CA']), tD=curveT(s0['CD']), tR=curveT(s0['CR']);   /* fb199 — bend handles ride too */
           var mCA=midOf(L.hasDly?L.xD:PADX,YBASE,L.xA,YTOP,tA),
@@ -14478,7 +14472,7 @@ setTimeout(function wireSynControls () {
           for(var i=0;i<kids.length;i++){ var n=kids[i], k=(n.dataset?n.dataset.kind:null), p=k?pos[k]:null; if(!p)continue;
             if(n.tagName==='rect'){ n.setAttribute('x',p[0]-2); n.setAttribute('y',p[1]-2); }
             else { n.setAttribute('cx',p[0]); n.setAttribute('cy',p[1]); } } }
-        var __modActive=false, __baseD=null;
+        var __modActive=false;
         function envModTick(){
           if(typeof drag!=='undefined'&&drag) return;   /* sculpting wins */
           var pm=window.__envPModState?window.__envPModState(envNumOf(curEnv)):null;
@@ -14490,7 +14484,7 @@ setTimeout(function wireSynControls () {
               if(Math.abs(e-b)>0.0005)changed=true;
               (function(val){ out[keys[i]]={getNormalisedValue:function(){return val;}}; })(e); } }
           if(!pm||!changed){
-            if(__modActive){ __modActive=false; modLineP.style.display='none'; scheduleRender(); }
+            if(__modActive){ __modActive=false; scheduleRender(); }
             return; }
           __modActive=true;
           var pd=pathD(out);
@@ -14500,7 +14494,7 @@ setTimeout(function wireSynControls () {
         window.__envModTick=envModTick;   /* probe surface (rAF starves under virtual time) */
         (function __modCurveLoop(){ try{ envModTick(); }catch(e){} requestAnimationFrame(__modCurveLoop); })();
         var __renderBase = render;   /* fb192 — chips ride every paint: graph sculpts, wire() sync, boot */
-        render = function(){ __renderBase(); __baseD=lineP.getAttribute('d'); refreshChips(); };
+        render = function(){ __renderBase(); refreshChips(); };
         updateChip();
 
         function boot(){
@@ -27086,7 +27080,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb199';   // bump per ship  [fb199 = silence restores BASE (dead source ≠ zero — the frozen collapsed ghost) + bend handles ride the breathing curve]
+  var TERRAIN_BUILD = 'fb200';   // bump per ship  [fb200 = CLEAN UP: dead ghost machinery swept (modLineP, __baseD, .env-mod-line CSS)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
