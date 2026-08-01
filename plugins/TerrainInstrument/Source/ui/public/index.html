@@ -14493,8 +14493,7 @@ setTimeout(function wireSynControls () {
           var pd=pathD(out);
           lineP.setAttribute('d',pd.d);
           if(fillP) fillP.setAttribute('d', pd.d+' L'+pd.L.xE.toFixed(1)+','+YBASE+' L'+PADX+','+YBASE+' Z');
-          reflowNodes(pd.L);
-          if(__baseD){ modLineP.style.display='block'; modLineP.setAttribute('d',__baseD); } }
+          reflowNodes(pd.L); }   /* fb197 (Max) — NO static base ghost: only the living curve */
         window.__envModTick=envModTick;   /* probe surface (rAF starves under virtual time) */
         (function __modCurveLoop(){ try{ envModTick(); }catch(e){} requestAnimationFrame(__modCurveLoop); })();
         var __renderBase = render;   /* fb192 — chips ride every paint: graph sculpts, wire() sync, boot */
@@ -27083,7 +27082,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb196';   // bump per ship  [fb196 = torn-off card windows SEE env drags (blackboard relay, 100+ wire) · env/LFO on LFO RATE (LfoRateBase 673, Hz mode) · rate readout = target surface]
+  var TERRAIN_BUILD = 'fb197';   // bump per ship  [fb197 = the static base-reference ghost is DEAD (Max) — only the living modulated curve draws]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
