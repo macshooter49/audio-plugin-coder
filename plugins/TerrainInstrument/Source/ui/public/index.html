@@ -14468,7 +14468,12 @@ setTimeout(function wireSynControls () {
         modLineP.style.display='none';
         if(lineP&&lineP.parentNode) lineP.parentNode.insertBefore(modLineP, lineP);
         function reflowNodes(L){
-          var pos={DLY:[L.xD,YBASE],A:[L.xA,YTOP],H:[L.xH,YTOP],S:[L.xS,L.ySus],R:[L.xE,YBASE]};
+          var s0=st(), tA=curveT(s0['CA']), tD=curveT(s0['CD']), tR=curveT(s0['CR']);   /* fb199 — bend handles ride too */
+          var mCA=midOf(L.hasDly?L.xD:PADX,YBASE,L.xA,YTOP,tA),
+              mCD=midOf(L.hasHld?L.xH:L.xA,YTOP,L.xS,L.ySus,tD),
+              mCR=midOf(L.xS,L.ySus,L.xE,YBASE,tR);
+          var pos={DLY:[L.xD,YBASE],A:[L.xA,YTOP],H:[L.xH,YTOP],S:[L.xS,L.ySus],R:[L.xE,YBASE],
+                   CA:[mCA.x,mCA.y],CD:[mCD.x,mCD.y],CR:[mCR.x,mCR.y]};
           var kids=nodesG.childNodes;
           for(var i=0;i<kids.length;i++){ var n=kids[i], k=(n.dataset?n.dataset.kind:null), p=k?pos[k]:null; if(!p)continue;
             if(n.tagName==='rect'){ n.setAttribute('x',p[0]-2); n.setAttribute('y',p[1]-2); }
@@ -23326,18 +23331,19 @@ restoreThemeFromBackend();
      the exact C++ split — env sources = ownership claim, LFO sources = additive × master. */
   var ENVPB=481;   /* fb194 — mirrors (int)ModDest::EnvPBase (the badge module's own copy) */
   window.__envPModState=function(envN){
-    var base=ENVPB+(envN-1)*6, found=false;
+    var base=ENVPB+(envN-1)*6, found=false, live=false;   /* fb199 — a dead source (no voice, −1) must NOT collapse the curve: silence = idle = BASE */
     var out=[{w:0,v:0,sum:0},{w:0,v:0,sum:0},{w:0,v:0,sum:0},{w:0,v:0,sum:0},{w:0,v:0,sum:0},{w:0,v:0,sum:0}];
     assigns.forEach(function(a){ if(a.dest<base||a.dest>=base+6)return; found=true;
       var slot=out[a.dest-base];
-      if(a.env){ var ev=(mvE&&mvE[a.env-1]!=null&&mvE[a.env-1]>=0)?mvE[a.env-1]:0;
-        var dw=Math.abs(a.depth); slot.w+=dw; slot.v+=dw*ev; }
+      if(a.env){ var dead=!(mvE&&mvE[a.env-1]!=null&&mvE[a.env-1]>=0); if(!dead)live=true;
+        var ev=dead?0:mvE[a.env-1];
+        var dw=Math.abs(a.depth); if(!dead){ slot.w+=dw; slot.v+=dw*ev; } }
       else if(a.lfo){ var lv=(mvL&&mvL[a.lfo-1]!=null)?mvL[a.lfo-1]:0;
         var mst=1; var ms2=ssCache['LFO'+a.lfo+'_DEPTH'];
         if(ms2===undefined){ ms2=ssCache['LFO'+a.lfo+'_DEPTH']=(window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState('LFO'+a.lfo+'_DEPTH'):null; }
         try{ if(ms2)mst=ms2.getNormalisedValue(); }catch(e){}
-        slot.sum+=a.depth*mst*lv; } });
-    return found?out:null; };
+        slot.sum+=a.depth*mst*lv; live=true; } });
+    return (found&&live)?out:null; };
   window.__tiAddRoute=function(env,lfo,dest){ var el=elForDest(dest); if(env)addEnvAssign(env,dest,el); else addAssign(lfo,dest,el); };   /* fb194 — probe surface */
   var ssCache={};   /* fb189 — knob normalized value for the territory anchor */
   function knobNorm(a){
@@ -27080,7 +27086,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb198';   // bump per ship  [fb198 = the legacy env GHOST LAYER retired (destIdx('AMP')=NaN drew Env 1's static ghost ALWAYS) — one truth on screen]
+  var TERRAIN_BUILD = 'fb199';   // bump per ship  [fb199 = silence restores BASE (dead source ≠ zero — the frozen collapsed ghost) + bend handles ride the breathing curve]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
