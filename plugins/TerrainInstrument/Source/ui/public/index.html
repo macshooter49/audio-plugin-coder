@@ -4687,7 +4687,8 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
   border-top: 1px solid var(--border); }
 #syn-panel .env-shelf .ec { position: relative; font-size: 8.5px; font-weight: 300; letter-spacing: 0.3px;
   color: rgba(255,255,255,0.34); cursor: ns-resize; padding: 1px 3px; -webkit-user-select: none; user-select: none; }
-#syn-panel .env-shelf .ec b { font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 3px; }
+#syn-panel .env-shelf .ec b { font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 3px;
+  display: inline-block; width: 37px; text-align: left; white-space: nowrap; overflow: hidden; }   /* fb201 — FIXED value box: numbers change, letters NEVER move (the no-jitter law) */
 #syn-panel .env-shelf .ec:hover { color: rgba(255,255,255,0.6); }
 #syn-panel .env-shelf .ec:hover b { color: #FFFFFF; }
 #syn-panel .env-shelf .ec input { width: 34px; background: transparent; border: none; outline: none;
@@ -27080,7 +27081,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb200';   // bump per ship  [fb200 = CLEAN UP: dead ghost machinery swept (modLineP, __baseD, .env-mod-line CSS)]
+  var TERRAIN_BUILD = 'fb201';   // bump per ship  [fb201 = shelf values in FIXED-width boxes — changing numbers can never shift the letters (no-jitter law)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
