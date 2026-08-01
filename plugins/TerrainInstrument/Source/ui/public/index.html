@@ -23305,7 +23305,9 @@ restoreThemeFromBackend();
     document.querySelectorAll('#syn-panel .flt-back-knobs .knob').forEach(function(k){ var lb=k.querySelector('.knob-label'); var pr=lb&&FSLOT_BACK[lb.textContent]; if(pr) out.push({el:k,dest:-2,kind:'fslot',pair:pr}); });   // fb75/78 — back Mix/Drive/Env/Vel/Track
     var spp=document.getElementById('flt-spread-pill'); if(spp) out.push({el:spp,dest:-2,kind:'fslot',pair:[344,345]});   // fb78 — filter Spread (slot-resolved)
     (function(){ var atG=document.querySelector('#mod-engine .mv-tabs .t.act'), dpG=document.querySelector('#mod-engine .mv-dep');
-      if(atG&&dpG) out.push({el:dpG,dest:11+(+atG.getAttribute('data-tab')),kind:'knob'}); })();   /* fb195 — drops land on the Dep ring, targeting the SELECTED LFO's depth */
+      if(atG&&dpG) out.push({el:dpG,dest:11+(+atG.getAttribute('data-tab')),kind:'knob'});
+      var rtG=document.getElementById('mv-rate')||document.getElementById('mv-div');
+      if(atG&&rtG) out.push({el:rtG,dest:673+(+atG.getAttribute('data-tab'))-1,kind:'knob'}); })();   /* fb195/196 — Dep + RATE target the SELECTED LFO */
     return out; }
 
   // ── badges + dots ──
@@ -23378,9 +23380,11 @@ restoreThemeFromBackend();
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='E'+en; document.body.appendChild(ghost);
         document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=ev.clientX+'px'; ghost.style.top=ev.clientY+'px';
+      if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(100+en,ev.screenX,ev.screenY,0); }   /* fb196 — torn-off card windows see ENV drags (100+ = env wire) */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
     function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
       if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(window.__tiModDragPush) window.__tiModDragPush(100+en,ev.screenX,ev.screenY,1);   /* fb196 — a drop may land in a torn-off card window */
         if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addEnvAssign(en,dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
@@ -23394,9 +23398,11 @@ restoreThemeFromBackend();
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='E'+en; document.body.appendChild(ghost);
         document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=ev.clientX+'px'; ghost.style.top=ev.clientY+'px';
+      if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(100+en,ev.screenX,ev.screenY,0); }   /* fb196 — torn-off card windows see ENV drags (100+ = env wire) */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
     function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
       if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(window.__tiModDragPush) window.__tiModDragPush(100+en,ev.screenX,ev.screenY,1);   /* fb196 — a drop may land in a torn-off card window */
         if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addEnvAssign(en,dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
@@ -23499,6 +23505,8 @@ restoreThemeFromBackend();
     if(dest===0||dest===1){ var c=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="cut"]'); return c?c.parentElement:null; }
     if(dest>=12&&dest<=21){ var atT=document.querySelector('#mod-engine .mv-tabs .t.act');   /* fb195 — the Dep RING is the surface (Max: the numbers aren't values) */
       if(atT&&(+atT.getAttribute('data-tab'))===(dest-11)){ var dpR=document.querySelector('#mod-engine .mv-dep'); if(dpR)return dpR; } return null; }
+    if(dest>=673&&dest<683){ var atR=document.querySelector('#mod-engine .mv-tabs .t.act');   /* fb196 — the RATE surface */
+      if(atR&&(+atR.getAttribute('data-tab'))===(dest-672)){ return document.getElementById('mv-rate')||document.getElementById('mv-div'); } return null; }
     if(dest===344||dest===345){ var sp2=document.getElementById('flt-spread-pill'); if(sp2) return sp2; }   // fb78 — filter Spread pill
     if((dest>=54&&dest<=63)||(dest>=340&&dest<=343)){   // fb75/78 — slot filter dests: front RES/DRV/ENV emblems, back Mix/Drive/Vel/Track knobs
       var fe={54:'res',55:'res',58:'drv',59:'drv',56:'env',57:'env'}[dest];
@@ -23532,6 +23540,7 @@ restoreThemeFromBackend();
     60:'Drive 1',61:'Drive 2',62:'F Mix 1',63:'F Mix 2',340:'Vel 1',341:'Vel 2',342:'Track 1',343:'Track 2',
     344:'Spread',345:'Spread',72:'Noise',73:'Noise',74:'Noise'};
   function destShortName(d){
+    if(d>=673&&d<683) return 'LFO '+(d-672)+' Rate';   /* fb196 */
     if(d>=481&&d<481+192){ var kE=d-481; return 'Env '+(Math.floor(kE/6)+1)+' '+['Dly','Atk','Hld','Dec','Sus','Rel'][kE%6]; }   /* fb193 */
     if(d>=12&&d<=21) return 'LFO '+(d-11)+' Amt';
     var pid=d2pid(d);
@@ -27074,7 +27083,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb195';   // bump per ship  [fb195 = the MAIN curve breathes (base = faint reference; nodes ride) · 10s env times · Dep RING = the LFO value target (tabs untargeted) · hub rows drag out (env-on-env) · S6 env grid snap CANCELLED (LFO arc's crown)]
+  var TERRAIN_BUILD = 'fb196';   // bump per ship  [fb196 = torn-off card windows SEE env drags (blackboard relay, 100+ wire) · env/LFO on LFO RATE (LfoRateBase 673, Hz mode) · rate readout = target surface]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

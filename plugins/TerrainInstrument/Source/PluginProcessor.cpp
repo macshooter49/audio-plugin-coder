@@ -4868,7 +4868,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 const int  dv = (int) *rawParam (lp[i].div);
                 synModCfg.lfos[i].shape       = (wc::LFOShape) juce::jlimit (0, (int) wc::LFOShape::NumShapes - 1, sh);
                 synModCfg.lfos[i].sync        = sy;
-                synModCfg.lfos[i].rateHz      = *rawParam (lp[i].rate);
+                synModCfg.lfos[i].rateHz      = modP (lp[i].rate, *rawParam (lp[i].rate), (int) wc::ModDest::LfoRateBase + i);   // fb196 — env-on-RATE (Hz mode; sync stays grid-locked until the LFO arc)
                 synModCfg.lfos[i].syncIdx     = juce::jlimit (0, wc::kNumSyncDivisions - 1, dv);
                 synModCfg.lfos[i].phaseOffset = *rawParam (lp[i].phase);
                 synModCfg.lfos[i].trigger     = wc::LFOTrigger::Free;
