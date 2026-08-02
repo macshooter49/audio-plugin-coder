@@ -903,7 +903,11 @@ static constexpr SyncDiv kSyncDivisions[] = {
     { "8 bar",  32.0f }, { "4 bar", 16.0f }, { "2 bar", 8.0f }, { "1 bar", 4.0f },
     { "1/2",     2.0f }, { "1/4",    1.0f }, { "1/8",   0.5f }, { "1/16",  0.25f }, { "1/32", 0.125f },
     { "1/4.",    1.5f }, { "1/8.",   0.75f},                                   // dotted
-    { "1/4T",    1.0f * 2.0f/3.0f }, { "1/8T", 0.5f * 2.0f/3.0f }, { "1/16T", 0.25f * 2.0f/3.0f } // triplet
+    { "1/4T",    1.0f * 2.0f/3.0f }, { "1/8T", 0.5f * 2.0f/3.0f }, { "1/16T", 0.25f * 2.0f/3.0f }, // triplet
+    // fb219 — APPENDED (append-only law: saved div indices stay valid; the UI presents them
+    // in ladder order via a display map): the slow giants + the audio-rate multiples.
+    { "32 bar", 128.0f }, { "16 bar", 64.0f },
+    { "1/64",  0.0625f }, { "1/128", 0.03125f }, { "1/256", 0.015625f }
 };
 static constexpr int kNumSyncDivisions = (int) (sizeof (kSyncDivisions) / sizeof (SyncDiv));
 

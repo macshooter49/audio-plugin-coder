@@ -1444,7 +1444,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::LFO1_DIV, 1 },
         "LFO 1 Division",
-        juce::StringArray { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T" },
+        juce::StringArray { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T","32 bar","16 bar","1/64","1/128","1/256" },   // fb219 — appended (must match kSyncDivisions + the lambda list)
         5));
     // Per-LFO PHASE (slides the waveform). 0..1, default 0.
     for (auto* pid : { ParameterIDs::LFO1_PHASE, ParameterIDs::LFO2_PHASE, ParameterIDs::LFO3_PHASE, ParameterIDs::LFO4_PHASE, ParameterIDs::LFO5_PHASE,
@@ -1455,7 +1455,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── Mod redesign Stage 2 — LFOs 2..5 (same set as L1). Default depth 0 (silent until dialed).
     {
         const juce::StringArray lfoShapes { "SINE","TRIANGLE","SAW UP","SAW DOWN","SQUARE","S&H","RANDOM","CUSTOM" };   // LFO ARC L1 — must match the L1 inline list
-        const juce::StringArray lfoDivs   { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T" };
+        const juce::StringArray lfoDivs   { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T","32 bar","16 bar","1/64","1/128","1/256" };   // fb219 — must match the L1 inline list
         auto addLfo = [&] (int n, const char* rate, const char* depth, const char* shape, const char* sync, const char* div)
         {
             layout.add (std::make_unique<juce::AudioParameterFloat> (

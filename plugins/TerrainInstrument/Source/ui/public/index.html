@@ -2456,7 +2456,8 @@ body {
 #mod-engine .mv-bar::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(255,255,255,0.30);}
 #mod-engine .mv-bar .bf{position:absolute;background:#C9B3FF;box-shadow:0 0 5px rgba(183,148,255,0.65);}
 /* Hz/BPM toggle must not reshuffle the row — give the rate + shape slots a stable width. */
-#mod-engine .mv-ov.bot #mv-rate,#mod-engine .mv-ov.bot #mv-div{min-width:62px;justify-content:flex-start;}   /* fb211 — '40.00 Hz ⇅' still fits; frees room at 1:1 width */
+#mod-engine .mv-ov.bot #mv-rate{min-width:62px;justify-content:flex-start;}   /* fb211 — '40.00 Hz ⇅' still fits; frees room at 1:1 width */
+#mod-engine .mv-ov.bot #mv-div{min-width:62px;justify-content:center;}   /* fb219 — the division sits CENTERED in its slot (Max: BPM mode left dead end-space with the short labels left-justified) */
 #mod-engine .mv-ov.bot #mv-shape{min-width:64px;}   /* fb206 — 'Custom' is the longest label; no-jitter law */
 /* Extender scope = the same live glowing LFO (body-level, so it needs its own copy of the styling). */
 .mv-ext .es .mv-grid line{stroke:rgba(139,92,246,.14);stroke-width:.5;} .mv-ext .es .mv-grid line.mid{stroke:rgba(139,92,246,.22);}
@@ -2468,8 +2469,9 @@ body {
 /* body-level glass menu */
 .mv-menu{position:fixed;z-index:2147483646;background:rgba(24,24,38,0.46);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);
   border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);
-  padding:5px;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;max-height:228px;overflow:auto;}
+  padding:5px;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;max-height:228px;overflow-y:auto;overflow-x:hidden;}
 .mv-menu.open{display:block;}
+.mv-menu::-webkit-scrollbar{display:none;}   /* fb219 — NO white bars (Max): wheel-scroll only */
 .mv-menu div{display:flex;align-items:center;gap:9px;padding:6px 12px 6px 8px;border-radius:6px;cursor:pointer;color:rgba(255,255,255,.55);font-size:9.5px;letter-spacing:1px;white-space:nowrap;transition:.1s;}
 .mv-menu div:hover{background:rgba(255,255,255,0.08);color:#fff;}
 .mv-menu div.cur{color:#B794FF;} .mv-menu div.cur:hover{color:#fff;}
@@ -22739,7 +22741,8 @@ restoreThemeFromBackend();
   var SHORT=['Sine','Tri','Saw','Saw↓','Sqr','S&H','Rand','Custom'];      // idx -> LFO1_SHAPE choice (no needless caps; S&H mandatory) · fb206: Custom = the drawn shaper
   var NSHAPE=8;
   var CYC=3;   // wave cycles drawn across the scope — the follower sweep is divided by this so its rise/fall matches the audible rate
-  var DIVS=['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32','1/4.','1/8.','1/4T','1/8T','1/16T'];
+  var DIVS=['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32','1/4.','1/8.','1/4T','1/8T','1/16T','32 bar','16 bar','1/64','1/128','1/256'];   // fb219 — appended (enum order = saved indices)
+  var DIVORD=[14,15,0,1,2,3,4,5,6,7,8,16,17,18,9,10,11,12,13];   // fb219 — MENU display order: slow→fast then dotted/triplet (data stays append-only)
   var NDIV=DIVS.length;
   var SH=[ .65,.2,.85,.4,.95,.15,.7,.35 ], RP=[ .5,.85,.15,.7,.3,.95,.2,.6,.4,.5 ];
   var CUSTOM=[[0,.5],[.18,.92],[.4,.2],[.62,.78],[.82,.35],[1,.5]];
@@ -23026,7 +23029,7 @@ restoreThemeFromBackend();
       if(i<=4){ seedTo(seedFor(i),SHORT[i]); return; }   // fb212 — deterministic shapes load as EDITABLE seeds (Max: 'I wanna edit the sine ITSELF'); S&H/Rand stay generative until touched
       setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; render(); }); };
     var dv=root.querySelector('#mv-div');
-    if(dv)dv.onclick=function(){ openMenu(DIVS.map(function(s){return {t:s};}), st.div, dv, function(i){ setNorm(cur().div,i/(NDIV-1)); st.div=i; render(); }); };
+    if(dv)dv.onclick=function(){ openMenu(DIVORD.map(function(ri){return {t:DIVS[ri]};}), DIVORD.indexOf(st.div), dv, function(i){ var ri=DIVORD[i]; setNorm(cur().div,ri/(NDIV-1)); st.div=ri; render(); }); };   // fb219 — ladder-ordered display
     var bpm=root.querySelector('#mv-bpm'), hz=root.querySelector('#mv-hz');
     if(bpm)bpm.onclick=function(){ setNorm(cur().sync,1); st.sync=true; render(); };
     if(hz)hz.onclick=function(){ setNorm(cur().sync,0); st.sync=false; render(); };
@@ -23074,7 +23077,7 @@ restoreThemeFromBackend();
       +'</div>';
     ext.querySelector('.x').onclick=function(){ext.classList.remove('open');};
     var sh=ext.querySelector('#ex-shape'); if(sh)sh.onclick=function(){ openMenu(SHORT.map(function(s,i){return {t:s,ic:icon(i)};}), st.shape, sh, function(i){ setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; buildExt(); render(); }); };
-    var ed=ext.querySelector('#ex-div'); if(ed)ed.onclick=function(){ if(!st.sync){toast('switch to BPM to use divisions');return;} openMenu(DIVS.map(function(s){return {t:s};}), st.div, ed, function(i){ setNorm(cur().div,i/(NDIV-1)); st.div=i; buildExt(); render(); }); };
+    var ed=ext.querySelector('#ex-div'); if(ed)ed.onclick=function(){ if(!st.sync){toast('switch to BPM to use divisions');return;} openMenu(DIVORD.map(function(ri){return {t:DIVS[ri]};}), DIVORD.indexOf(st.div), ed, function(i){ var ri=DIVORD[i]; setNorm(cur().div,ri/(NDIV-1)); st.div=ri; buildExt(); render(); }); };   // fb219 — ladder-ordered display
     var eu=ext.querySelector('#ex-unit'); if(eu)eu.onclick=function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); buildExt(); render(); };
     // drag header
     var h=ext.querySelector('.h'); h.onmousedown=function(e){ if(e.target.classList.contains('x'))return; e.preventDefault(); h.classList.add('grab'); var r=ext.getBoundingClientRect(); var dx=e.clientX-r.left, dy=e.clientY-r.top;
@@ -23086,7 +23089,7 @@ restoreThemeFromBackend();
 
   // ---- live playhead + follower (JS-computed so it rides every LFO's shape, in Hz OR beats) ----
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
-  var DIVBEATS=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6];   // beats-per-cycle per DIVS entry
+  var DIVBEATS=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6,128,64,0.0625,0.03125,0.015625];   // beats-per-cycle per DIVS entry (fb219 tail appended)
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
   function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
     if(scope===root){   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
@@ -23449,7 +23452,7 @@ restoreThemeFromBackend();
     if(pushFn)try{ pushFn(JSON.stringify(arr)); }catch(e){} }
 
   // ── LFO shape + rate (JS mirror of the engine, for the live visual) ──
-  var DIVB=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6];
+  var DIVB=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6,128,64,0.0625,0.03125,0.015625];   // fb219 tail appended
   var SHA=[.65,.2,.85,.4,.95,.15,.7,.35], RPA=[.5,.85,.15,.7,.3,.95,.2,.6,.4,.5];
   function mval(k,t,n){ t=((t%1)+1)%1;
     if(k===7)return window.__lfoCustomEval?window.__lfoCustomEval(n||1,t):0;   // fb206 — drawn shape (shared eval, cross-IIFE via window)
@@ -23459,7 +23462,7 @@ restoreThemeFromBackend();
     if(k===6){var f=t*(RPA.length-1),i=Math.floor(f),fr=f-i,x=RPA[i],y=RPA[Math.min(i+1,RPA.length-1)],m=(1-Math.cos(fr*Math.PI))/2;return (x+(y-x)*m)*2-1;}
     return 0; }
   function lfoHz(n){ var sy=ss('LFO'+n+'_SYNC'), rt=ss('LFO'+n+'_RATE'), dv=ss('LFO'+n+'_DIV');
-    if(sy&&sy.getNormalisedValue()>0.5){ var di=dv?Math.round(dv.getNormalisedValue()*13):5; return (120/60)/(DIVB[di]||1); }
+    if(sy&&sy.getNormalisedValue()>0.5){ var di=dv?Math.round(dv.getNormalisedValue()*(DIVB.length-1)):5; return (120/60)/(DIVB[di]||1); }   // fb219 — norm scale = N-1, never a hardcode (the *13 trap)
     return rt?rt.getScaledValue():1; }
   function lfoShape(n){ var s=ss('LFO'+n+'_SHAPE'); return s?Math.round(s.getNormalisedValue()*7):0; }   // fb206 — 8 choices (CUSTOM appended); norm scale = N-1
   function lfoMaster(n){ var s=ss('LFO'+n+'_DEPTH'); return s?s.getScaledValue():0.35; }
@@ -27305,7 +27308,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb218';   // bump per ship  [fb218 = env 'Loop' corner tag retired (obsolete — the dashed curve IS the signifier)]
+  var TERRAIN_BUILD = 'fb219';   // bump per ship  [fb219 = divisions 32/16 bar + 1/64·1/128·1/256 (append-only + ladder-ordered menu), BPM chip centered, menu scrollbars gone]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
