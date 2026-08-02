@@ -2421,7 +2421,7 @@ body {
 @keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
 #mod-engine .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
 #mod-engine .mv-ov.top{top:6px;padding:0 11px;justify-content:flex-end;}
-#mod-engine .mv-ov.bot{bottom:0;padding:0 13px;justify-content:space-between;}   /* fb192 — centered with the env shelf (the tab underline keeps its 3px air inside the bar) */
+#mod-engine .mv-ov.bot{bottom:0;padding:0 11px 4px;justify-content:space-between;}   /* fb211 — 4px floor clearance: the Dep-ring shrink (fb209) had dropped the row's natural height, gluing text to the ground and CLIPPING the active-tab's purple underline outside the pane (Max's missing line). The lift brings it home + the row breathes. */
 #mod-engine .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:var(--ghost);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;}
 #mod-engine .mv-c:hover{color:#fff;}
 #mod-engine .mv-c.drag{cursor:ns-resize;}
@@ -2434,7 +2434,7 @@ body {
 #mod-engine .mv-exp:hover{color:#fff;}
 /* fb206 — THE SHAPER (custom LFO editor) */
 #mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
-#mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-2.2px;height:1px;background:rgba(255,255,255,.075);}   /* fb209 — THE RULER, collinear with the env shelf line (measured) */
+#mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-0.6px;height:1px;background:rgba(255,255,255,.075);}   /* fb211 — THE RULER, re-measured collinear after the footer lift (env 711.5 vs overlay 712.1) */
 /* fb210 — the right-click control room: notched grid sliders (spans dodge the .mv-menu div row styling) */
 .mv-menu.big{max-height:330px;}
 .mv-menu div.gsl{cursor:default;}
@@ -2452,7 +2452,7 @@ body {
 #mod-engine .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
 #mod-engine .sh-hit{fill:transparent;cursor:grab;}
 #mod-engine .sh-hit.cdh{cursor:ns-resize;}
-#mod-engine .mv-tabs{display:flex;align-items:center;gap:6px;}
+#mod-engine .mv-tabs{display:flex;align-items:center;gap:5px;}   /* fb211 — 1:1-width breathing room */
 /* fixed-width slots: paging 1-5 ↔ 6-10 (and the "10"/arrows) must never reflow the row */
 #mod-engine .mv-tabs .t{position:relative;width:13px;flex:none;text-align:center;font-size:10px;font-weight:400;color:var(--ghost-dim);cursor:pointer;transition:.12s;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-tabs .t:hover{color:var(--ghost);} #mod-engine .mv-tabs .t.act{color:#fff;font-weight:600;}
@@ -2468,7 +2468,7 @@ body {
 #mod-engine .mv-bar::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(255,255,255,0.30);}
 #mod-engine .mv-bar .bf{position:absolute;background:#C9B3FF;box-shadow:0 0 5px rgba(183,148,255,0.65);}
 /* Hz/BPM toggle must not reshuffle the row — give the rate + shape slots a stable width. */
-#mod-engine .mv-ov.bot #mv-rate,#mod-engine .mv-ov.bot #mv-div{min-width:66px;justify-content:flex-start;}
+#mod-engine .mv-ov.bot #mv-rate,#mod-engine .mv-ov.bot #mv-div{min-width:62px;justify-content:flex-start;}   /* fb211 — '40.00 Hz ⇅' still fits; frees room at 1:1 width */
 #mod-engine .mv-ov.bot #mv-shape{min-width:64px;}   /* fb206 — 'Custom' is the longest label; no-jitter law */
 /* Extender scope = the same live glowing LFO (body-level, so it needs its own copy of the styling). */
 .mv-ext .es .mv-grid line{stroke:rgba(139,92,246,.14);stroke-width:.5;} .mv-ext .es .mv-grid line.mid{stroke:rgba(139,92,246,.22);}
@@ -4702,10 +4702,10 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 /* fb194 — THE BREATHING CURVE: the modulated DAHDSR drawn live over the base curve. */
 /* fb191 S4 — THE SHELF (F2): six value chips on a hairline rail under the graph.
    Drag = nudge · double-click = type. The graph pays ~15px and keeps its shape. */
-#syn-panel .env-shelf { flex: 0 0 17px; display: grid; grid-template-columns: repeat(6, 1fr); align-items: center; justify-items: center;
+#syn-panel .env-shelf { flex: 0 0 20px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
   background: var(--bg-hero); border-radius: 0 0 10px 10px;   /* fb192 (Max) — same glass as the graph, one continuous box */
-  border-top: 1px solid var(--border); }   /* fb203 — 6 FIXED slots: content can never re-space the rail (no-jitter, structural) */
-#syn-panel .env-shelf .ec { position: relative; font-size: 8.5px; font-weight: 300; letter-spacing: 0.3px;
+  border-top: 1px solid var(--border); }   /* fb211 — space-between over CONSTANT-width chips (labels + fb203 fixed value boxes) = mathematically EQUAL gaps + 12px edge margins; taller band (17→20) lifts the letters off the floor. No-jitter holds: chip widths never change, so gaps never move. */
+#syn-panel .env-shelf .ec { position: relative; font-size: 9px; font-weight: 300; letter-spacing: 0.3px;   /* fb211 — a touch bigger (Max: 'too small, hard to fuck with') */
   color: rgba(255,255,255,0.34); cursor: ns-resize; padding: 1px 3px; -webkit-user-select: none; user-select: none;
   white-space: nowrap; }   /* fb203 (Max) — label and value INLINE like fb192; the fb201 box was wrapping them into two lines */
 #syn-panel .env-shelf .ec b { font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 3px;
@@ -27252,7 +27252,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb210';   // bump per ship  [fb210 = the control room — grid sliders + Extend into right-click, top reclaimed, footer restored, SERUM GRAB fat targets]
+  var TERRAIN_BUILD = 'fb211';   // bump per ship  [fb211 = THE FOOTERS — env shelf equal gaps + margins + taller, LFO row lifted (purple underline un-clipped), ruler re-measured]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
