@@ -2433,11 +2433,19 @@ body {
 #mod-engine .mv-exp{width:12px;height:12px;cursor:pointer;color:var(--ghost-dim);opacity:.8;transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));}   /* fb209 — quieter corner (Max: the cluster fought the graph) */
 #mod-engine .mv-exp:hover{color:#fff;}
 /* fb206 — THE SHAPER (custom LFO editor) */
-#mod-engine .mv-ov.top{gap:7px;}
 #mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
-#mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-2.2px;height:1px;background:rgba(255,255,255,.075);}   /* fb209 — THE RULER, raised to be COLLINEAR with the env shelf line (measured: env 716.4 vs overlay top 718.6 → −2.2px) */
-#mod-engine .mv-gr{gap:3px;}
-#mod-engine .mv-gr b{min-width:11px;font-weight:400;font-variant-numeric:tabular-nums;}
+#mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-2.2px;height:1px;background:rgba(255,255,255,.075);}   /* fb209 — THE RULER, collinear with the env shelf line (measured) */
+/* fb210 — the right-click control room: notched grid sliders (spans dodge the .mv-menu div row styling) */
+.mv-menu.big{max-height:330px;}
+.mv-menu div.gsl{cursor:default;}
+.mv-menu .gsl .gl{width:13px;opacity:.8;font-size:10px;flex:none;}
+.mv-menu .gsl .gt{position:relative;width:104px;height:13px;flex:none;cursor:ew-resize;display:inline-block;}
+.mv-menu .gsl .gt::before{content:'';position:absolute;left:0;right:0;top:6px;height:1.5px;background:rgba(255,255,255,.16);border-radius:1px;}
+.mv-menu .gsl .nk{position:absolute;top:4.5px;width:1px;height:5px;background:rgba(255,255,255,.22);}
+.mv-menu .gsl .gth{position:absolute;top:3.25px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:#B794FF;box-shadow:0 0 4px rgba(183,148,255,.7);}
+.mv-menu .gsl b{min-width:14px;text-align:right;font-weight:400;color:rgba(255,255,255,.75);font-variant-numeric:tabular-nums;}
+.mv-menu div.mvm-sep{padding:0;height:1px;margin:4px 6px;background:rgba(255,255,255,.09);cursor:default;}
+.mv-menu div.mvm-sep:hover{background:rgba(255,255,255,.09);}
 #mod-engine .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
 #mod-engine .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
 #mod-engine .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
@@ -22758,7 +22766,7 @@ restoreThemeFromBackend();
      via setSynthLfoShapes/getSynthLfoShapes (dyn-env lifecycle: debounced push, boot
      pull, local-edit-outranks-pull race guard). */
   var GRIDS=[2,3,4,6,8,12,16,24,32];
-  var SH_TOP=18, SH_BOT=70, SH_L=0, SH_R=456;   // fb209 — EDGE TO EDGE (Max: 'like Serum'): the field spans the full pane; endpoint dots kiss the edges exactly like Serum's
+  var SH_TOP=8, SH_BOT=70, SH_L=0, SH_R=456;   // fb210 — EDGE TO EDGE + the TOP RECLAIMED (Max: no emblems up there — spinners & Extend live in the right-click now, so the band ceiling rises to 8)
   function shX(x01){ return SH_L+(SH_R-SH_L)*x01; }
   var shapes={}, shTouched=false, shPushT=null;
   function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
@@ -22800,10 +22808,10 @@ restoreThemeFromBackend();
     var nd='',hd='',cdm='';
     sp.pts.forEach(function(q,idx){ var cx=shX(q[0]).toFixed(1),cy=shY(q[1]).toFixed(1);   // fb208 — exact: the dot IS the line end
       nd+='<circle class="sh-nd" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
-      hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="8"/>'; });
+      hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="12"/>'; });   // fb210 — fat targets (Max: 'open up the circumference')
     sp.pts.forEach(function(q,idx){ if(idx>=sp.pts.length-1)return; var r=sp.pts[idx+1]; if(r[0]-q[0]<=0.02)return;
       var mx=shX((q[0]+r[0])/2).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1);
-      cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="7"/>'; });
+      cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="10"/>'; });
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
       '<line class="mv-play" id="mv-ph" x1="0" y1="'+(SH_TOP-4)+'" x2="0" y2="'+(SH_BOT+4)+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+shY(.5)+'" r="2.4"/>'+nd+cdm+hd+'</svg>'; }
   function scopeSVG(){ return st.shape===7 ? shaperSVG() : waveSVG(456,96,st.shape,st.depth,st.phase); }
@@ -22819,26 +22827,35 @@ restoreThemeFromBackend();
     var xpx=(ev.clientX-r.left)/r.width*456, ypx=(ev.clientY-r.top)/r.height*96;
     return { x:Math.max(0,Math.min(1,(xpx-SH_L)/(SH_R-SH_L))), y:Math.max(0,Math.min(1,(SH_BOT-ypx)/(SH_BOT-SH_TOP))) }; }
   function shSnap(v,div){ return Math.round(v*div)/div; }
+  function shNear(sc,ev){   // fb210 — the SERUM GRAB (env nearestStage grammar): the closest node/curve-dot within ~13u wins, no pixel-perfect aim needed
+    var q=shPos(sc,ev),ux=shX(q.x),uy=shY(q.y),sp=shGet(),best=null,bd=169;
+    sp.pts.forEach(function(pq,i){ var dx=shX(pq[0])-ux,dy=shY(pq[1])-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'nd',i:i};} });
+    sp.pts.forEach(function(pq,i){ if(i>=sp.pts.length-1)return; var r=sp.pts[i+1]; if(r[0]-pq[0]<=0.02)return;
+      var mx=shX((pq[0]+r[0])/2),my=shY(shEvalPts(sp.pts,(pq[0]+r[0])/2)),dx=mx-ux,dy=my-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'cd',i:i};} });
+    return best; }
   function shConvert(){ if(st.shape===7)return; if(!shapes[st.tab])shapes[st.tab]={pts:seedFor(st.shape),gh:8,gv:8,sn:1};
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
   function bindShaper(){
     var sc=root.querySelector('.mv-scope'); if(!sc)return;
-    if(st.shape!==7){ sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=null; return; }   // dbl-click a stock shape = it becomes sculptable (Max: "turn into anything")
+    if(st.shape!==7){ sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ e.preventDefault(); shMenuStock(e); }; return; }   // dbl-click a stock shape = sculptable; right-click = Extend
     var svg=sc.querySelector('svg'); if(!svg)return;
     var sp=shGet();
-    sc.ondblclick=function(e){ var t=e.target;
-      if(t.classList&&t.classList.contains('cdh')){ var ci=+t.getAttribute('data-i'); if(sp.pts[ci]&&(sp.pts[ci][2]||0)!==0){ sp.pts[ci][2]=0; shTouched=true; shPush(); render(); } return; }   // fb208 — dbl-click a curve dot = perfectly straight segment
-      if(t.classList&&t.classList.contains('sh-hit')){
-        var di=+t.getAttribute('data-i');
-        if(di>0&&di<sp.pts.length-1&&sp.pts.length>2){ sp.pts.splice(di,1); shTouched=true; shPush(); render(); }
+    sc.ondblclick=function(e){ var t=e.target, hitCd=t.classList&&t.classList.contains('cdh'), hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
+      if(hitCd||hitNd) ni=+t.getAttribute('data-i');
+      else { var nb=shNear(sc,e); if(nb){ if(nb.t==='cd')hitCd=true; else hitNd=true; ni=nb.i; } }   // fb210 — proximity dbl-click
+      if(hitCd){ if(sp.pts[ni]&&(sp.pts[ni][2]||0)!==0){ sp.pts[ni][2]=0; shTouched=true; shPush(); render(); } return; }   // dbl-click a curve dot = perfectly straight segment
+      if(hitNd){
+        if(ni>0&&ni<sp.pts.length-1&&sp.pts.length>2){ sp.pts.splice(ni,1); shTouched=true; shPush(); render(); }
         return; }
       if(sp.pts.length>=64)return;
       var q=shPos(sc,e); var nx=sp.sn?shSnap(q.x,sp.gv):q.x, ny=sp.sn?shSnap(q.y,sp.gh):q.y;
       sp.pts.push([nx,ny,0]); sp.pts.sort(function(a,b){return a[0]-b[0];});
       shTouched=true; shPush(); render(); };
-    svg.addEventListener('pointerdown',function(e){ var t=e.target; if(!t.classList||!t.classList.contains('sh-hit'))return;
+    svg.addEventListener('pointerdown',function(e){ var t=e.target, isCd=false, i=-1;
+      if(t.classList&&t.classList.contains('sh-hit')){ isCd=t.classList.contains('cdh'); i=+t.getAttribute('data-i'); }
+      else { var nb=shNear(sc,e); if(!nb)return; isCd=(nb.t==='cd'); i=nb.i; }   // fb210 — the Serum grab: near counts, no aiming
       e.preventDefault(); try{svg.setPointerCapture(e.pointerId);}catch(e0){}
-      var isCd=t.classList.contains('cdh'), i=+t.getAttribute('data-i'), y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
+      var y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
       function mv(ev){ did=true;
         if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); return; }   // fb208 — zero DETENT: straight is easy to hit
         var q=shPos(sc,ev), lo=(i>0)?sp.pts[i-1][0]:0, hi=(i<sp.pts.length-1)?sp.pts[i+1][0]:1;   // fb208 — ties ALLOWED: stack two points = a true vertical step (the eval's later-point-rules handles it)
@@ -22849,15 +22866,44 @@ restoreThemeFromBackend();
         svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
         if(did){ shTouched=true; shPush(); render(); } }   // no-move release skips render so dbl-click delete still fires
       svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); });
-    sc.oncontextmenu=function(e){ e.preventDefault();
-      var at={getBoundingClientRect:function(){return {left:e.clientX,top:e.clientY,right:e.clientX,bottom:e.clientY,width:0,height:0};}};
-      openMenu([{t:sp.sn?'Snap · on':'Snap · off'},{t:'Straight line'},{t:'Ramp up'},{t:'Ramp down'},{t:'Square'},{t:'Triangle'},{t:'Sine'},{t:'Reset shape'}],-1,at,function(i){
-        if(i===0){ sp.sn=sp.sn?0:1; }
-        else if(i===1){ sp.pts=[[0,.5,0],[1,.5,0]]; }
-        else if(i===2){ sp.pts=seedFor(2); } else if(i===3){ sp.pts=seedFor(3); }
-        else if(i===4){ sp.pts=seedFor(4); } else if(i===5){ sp.pts=seedFor(1); }
-        else if(i===6){ sp.pts=seedFor(0); } else { sp.pts=seedFor(1); sp.gh=8; sp.gv=8; sp.sn=1; }
-        shTouched=true; shPush(); render(); }); };
+    sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); };
+  }
+  function shMenuAt(e){ menu.style.left=e.clientX+'px'; menu.style.top=''; menu.style.bottom=(window.__vh()-e.clientY+6)+'px'; menu.classList.add('open'); }
+  function shMenuStock(e){   // fb210 — stock shapes still reach the extender by right-click
+    menu.classList.add('big'); menu.innerHTML='<div data-a="ext"><span>Extend</span></div>';
+    shMenuAt(e); menu.querySelector('[data-a="ext"]').onclick=function(){ menu.classList.remove('open'); openExt(); }; }
+  function shMenu(e){   // fb210 — THE SHAPER'S CONTROL ROOM (Max: spinners + Extend into the right-click; notched sliders)
+    var sp=shGet(), NG=GRIDS.length-1;
+    function pct(v){ var i=GRIDS.indexOf(v); return (i<0?4:i)/NG*100; }
+    function notches(){ var o='',i; for(i=0;i<=NG;i++)o+='<span class="nk" style="left:'+(i/NG*100)+'%"></span>'; return o; }
+    function gslRow(k,gl,v){ return '<div class="gsl" data-k="'+k+'"><span class="gl">'+gl+'</span><span class="gt">'+notches()+'<span class="gth" style="left:'+pct(v)+'%"></span></span><b>'+v+'</b></div>'; }
+    menu.classList.add('big');
+    menu.innerHTML=
+      '<div data-a="snap"><span>'+(sp.sn?'Snap · on':'Snap · off')+'</span></div>'
+     +gslRow('gh','\u2261',sp.gh)+gslRow('gv','|||',sp.gv)
+     +'<div class="mvm-sep"></div>'
+     +[['line','Straight line'],['ru','Ramp up'],['rd','Ramp down'],['sq','Square'],['tri','Triangle'],['sin','Sine']].map(function(it){return '<div data-a="'+it[0]+'"><span>'+it[1]+'</span></div>';}).join('')
+     +'<div class="mvm-sep"></div>'
+     +'<div data-a="reset"><span>Reset shape</span></div>'
+     +'<div data-a="ext"><span>Extend</span></div>';
+    shMenuAt(e);
+    var sr=menu.querySelector('[data-a="snap"]');
+    sr.onclick=function(){ sp.sn=sp.sn?0:1; shTouched=true; shPush(); sr.querySelector('span').textContent=sp.sn?'Snap · on':'Snap · off'; render(); };
+    menu.querySelectorAll('.gsl .gt').forEach(function(tr){
+      tr.onmousedown=function(ev0){ ev0.preventDefault(); ev0.stopPropagation();
+        var key=tr.parentNode.getAttribute('data-k');
+        function setFrom(ev){ var r=tr.getBoundingClientRect(), t=Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width)), ni=Math.round(t*NG);
+          if(GRIDS[ni]!==sp[key]){ sp[key]=GRIDS[ni]; shTouched=true; shPush();
+            tr.querySelector('.gth').style.left=(ni/NG*100)+'%'; tr.parentNode.querySelector('b').textContent=GRIDS[ni]; render(); } }
+        setFrom(ev0);
+        function mv(ev){ setFrom(ev); } function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+        document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }; });
+    function seed(a){ if(a==='line')sp.pts=[[0,.5,0],[1,.5,0]]; else if(a==='ru')sp.pts=seedFor(2); else if(a==='rd')sp.pts=seedFor(3);
+      else if(a==='sq')sp.pts=seedFor(4); else if(a==='tri')sp.pts=seedFor(1); else if(a==='sin')sp.pts=seedFor(0);
+      else if(a==='reset'){ sp.pts=seedFor(1); sp.gh=8; sp.gv=8; sp.sn=1; }
+      shTouched=true; shPush(); render(); menu.classList.remove('open'); }
+    ['line','ru','rd','sq','tri','sin','reset'].forEach(function(a){ var el=menu.querySelector('[data-a="'+a+'"]'); if(el)el.onclick=function(){ seed(a); }; });
+    menu.querySelector('[data-a="ext"]').onclick=function(){ menu.classList.remove('open'); openExt(); };
   }
   function yfor(k,t){var c=(k===7?1:CYC),p=(t*c)%1;   // fb206 — Custom draws ONE cycle (the editor IS the cycle)
     if(k===0)return Math.sin(t*Math.PI*2*c); if(k===1)return p<0.5?(p*4-1):(3-p*4);
@@ -22905,18 +22951,13 @@ restoreThemeFromBackend();
     var base=st.page*5;
     var nums=[1,2,3,4,5].map(function(i){var n=base+i;return '<span class="t'+(n===st.tab?' act':'')+'" data-tab="'+n+'">'+n+'</span>';}).join('');
     var tabs='<div class="mv-tabs">'+(st.page?'<span class="t mv-pg" data-pg="0" title="LFOs 1–5">‹</span>':'')+nums+(st.page?'':'<span class="t mv-pg" data-pg="1" title="LFOs 6–10">›</span>')+'</div>';   /* fb153 — Pop chip retired: since fb151 the docked numbers drag onto every window, so the palette launcher just crowded the strip */
-    var GLH='<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M1 1.5 H9 M1 4 H9 M1 6.5 H9"/></svg>';
-    var GLV='<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg>';
-    var gtop = st.shape===7 ? (function(){var gs=shGet();return '<span class="mv-c drag mv-gr" id="mv-gl" title="level grid — drag">'+GLH+'<b>'+gs.gh+'</b></span><span class="mv-c drag mv-gr" id="mv-gt" title="time grid — drag">'+GLV+'<b>'+gs.gv+'</b></span>';})() : '';   // fb208 — matched-weight glyphs + fixed-width values (no-jitter law)
     return '<div class="mv-scope">'+scopeSVG()+'</div>'
-      +'<div class="mv-ov top">'+EXPAND+'</div>'
       +'<div class="mv-ov bot">'
         +'<span class="mv-c" id="mv-shape"><span class="ic">'+icon(st.shape)+'</span> '+SHORT[st.shape]+' '+CHEV+'</span>'
         +rate
         +'<span class="mv-seg"><b class="'+(st.sync?'on':'off')+'" id="mv-bpm">BPM</b> · <b class="'+(st.sync?'off':'on')+'" id="mv-hz">Hz</b></span>'
         +'<span class="mv-c drag" id="mv-shift" title="slide the LFO"><svg viewBox="0 0 14 10" width="13" height="9" style="opacity:.8" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3 L1 5 L4 7 M10 3 L13 5 L10 7 M1 5 H13"/></svg> <span id="mv-shv">'+Math.round(st.phase*360)+'°</span></span>'
         +tabs
-        +gtop
         +'<div class="mv-dep"><span class="l">Dep</span><div class="mv-ring" id="mv-depth" style="background:'+RINGBG(st.depth)+'"></div></div>'
       +'</div>'
       +'<div class="mv-err"></div>';
@@ -22960,12 +23001,6 @@ restoreThemeFromBackend();
     root.querySelectorAll('.mv-tabs .t').forEach(function(t){ t.onclick=function(){ var pg=t.getAttribute('data-pg');
       if(pg!==null){ st.page=+pg; var b=st.page*5; if(st.tab<=b||st.tab>b+5){ st.tab=b+1; pull(); } render(); return; }
       st.tab=+t.getAttribute('data-tab'); pull(); render(); }; });
-    var ex=root.querySelector('.mv-exp'); if(ex)ex.onclick=openExt;
-    function gridDrag(el,key){ if(!el)return; el.onmousedown=function(e){ e.preventDefault(); var gs=shGet(), y0=e.clientY, i0=GRIDS.indexOf(gs[key]); if(i0<0)i0=4;
-      function mv(ev){ var ni=Math.max(0,Math.min(GRIDS.length-1,i0+Math.round((y0-ev.clientY)/14))); if(GRIDS[ni]!==gs[key]){ gs[key]=GRIDS[ni]; shTouched=true; shPush(); render(); } }
-      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
-      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }; }
-    gridDrag(root.querySelector('#mv-gl'),'gh'); gridDrag(root.querySelector('#mv-gt'),'gv');
     bindShaper();
   }
 
@@ -27217,7 +27252,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb209';   // bump per ship  [fb209 = shaper frame FINAL — edge-to-edge field, spinners in the footer, quiet corner + Dep, ruler alignment]
+  var TERRAIN_BUILD = 'fb210';   // bump per ship  [fb210 = the control room — grid sliders + Extend into right-click, top reclaimed, footer restored, SERUM GRAB fat targets]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
