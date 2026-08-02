@@ -832,14 +832,16 @@ namespace tw
          *  unchanged; auto-gain (1/√Σgain²) holds perceived loudness as voices rise. */
         void setUnisonA (int count, float detune01, float blend01, float width01) noexcept
         {
-            setUnisonImpl (activeUnisonA_, uDetuneCentsA_, uPanLA_, uPanRA_, uNormA_,
+            setUnisonImpl (activeUnisonA_, uDetuneCentsA_, uPanLTA_, uPanRTA_, uNormTA_,
+                           uPanLA_, uPanRA_, uNormA_, uniSnapA_,
                            count, detune01, blend01, width01);
             updateUnisonFramePositions();
             if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsA (glideNote_);
         }
         void setUnisonB (int count, float detune01, float blend01, float width01) noexcept
         {
-            setUnisonImpl (activeUnisonB_, uDetuneCentsB_, uPanLB_, uPanRB_, uNormB_,
+            setUnisonImpl (activeUnisonB_, uDetuneCentsB_, uPanLTB_, uPanRTB_, uNormTB_,
+                           uPanLB_, uPanRB_, uNormB_, uniSnapB_,
                            count, detune01, blend01, width01);
             updateUnisonFramePositions();
             if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsB (glideNote_);
@@ -1028,8 +1030,12 @@ namespace tw
                             std::array<float, kMaxUnison>& panL,
                             std::array<float, kMaxUnison>& panR,
                             float& norm,
+                            std::array<float, kMaxUnison>& panLLive,   // fb204 — glide pair: this fn writes
+                            std::array<float, kMaxUnison>& panRLive,   // TARGETS; the render loop glides the
+                            float& normLive, bool& snapped,            // live tables (Width/Blend de-zipper)
                             int count, float detune01, float blend01, float width01) noexcept
         {
+            const int oldCount = activeCount;
             activeCount = juce::jlimit (1, kMaxUnison, count);
             const float det = juce::jlimit (0.0f, 1.0f, detune01);
             const float bl  = juce::jlimit (0.0f, 1.0f, blend01);
@@ -1068,6 +1074,10 @@ namespace tw
             }
             // AUTO-GAIN — RMS-constant: holds perceived loudness as voices/blend change.
             norm = (gainSq > 1.0e-9f) ? (1.0f / std::sqrt (gainSq)) : 1.0f;
+            // fb204 — structural change (voice count) = a NEW stereo image, snap don't glide;
+            // continuous Width/Blend moves ride the per-sample one-pole in the render loop.
+            if (! snapped || activeCount != oldCount)
+            { panLLive = panL; panRLive = panR; normLive = norm; snapped = true; }
         }
 
         /** Phase 11a — Set per-OSC FRAME SPREAD (0..1). Pushed per-block from
@@ -1510,8 +1520,8 @@ namespace tw
         void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,10,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
         void setEngineC (int idx) noexcept { engineC_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
         void setEngineD (int idx) noexcept { engineD_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
-        void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonC_, uDetuneCentsC_, uPanLC_, uPanRC_, uNormC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
-        void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonD_, uDetuneCentsD_, uPanLD_, uPanRD_, uNormD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
+        void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
+        void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
         void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,10,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,10,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
 
         /** FM-ENGINE-VOICE — per-OSC wavetable-carrier FM params (osc 0..3 = A..D).
@@ -1769,6 +1779,7 @@ namespace tw
             foldStateC_.fill ({});
             foldStateD_.fill ({});
             sampAirLpAL_ = sampAirLpAR_ = sampAirLpBL_ = sampAirLpBR_ = 0.f;
+            airSmA_ = airSmB_ = airSmC_ = airSmD_ = 0.f;   // fb204
             sampAirLpCL_ = sampAirLpCR_ = sampAirLpDL_ = sampAirLpDR_ = 0.f;
             sampWarpFoldAL_ = sampWarpFoldAR_ = sampWarpFoldBL_ = sampWarpFoldBR_ = {};   // SAMPLE WARP fold history reset
             sampWarpFoldCL_ = sampWarpFoldCR_ = sampWarpFoldDL_ = sampWarpFoldDR_ = {};
@@ -2075,23 +2086,36 @@ namespace tw
                 // fb188 — ownership applied at the wavetable-trio app sites (w=0 → legacy exactly)
                 auto ownV = [&] (float base, int vi) noexcept
                 { const float w = juce::jmin (1.0f, vOwnW[vi]); return juce::jlimit (0.0f, 1.0f, base * (1.0f - w) + vOwnV[vi]); };
-                framePos_    = ownV (framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA + flowWave_, 0);
-                warpAmount_  = ownV (warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f) + mWpA, 1);
-                foldAmountA_ = ownV (foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f) + mFdA, 2);
-                framePosB_   = ownV (framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f) + mFrB + flowWave_, 3);
-                warpAmountB_ = ownV (warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f) + mWpB, 4);
-                warp2AmountA_ = warp2AmountBaseA_;   // WARP 2 base->effective (mod-matrix ready)
-                warp2AmountB_ = warp2AmountBaseB_;
-                foldAmountB_ = ownV (foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f) + mFdB, 5);
+                framePosT_    = ownV (framePosBase_    + (ktDestA_ == kKtFrame ? ktDA * (ktRamp_ - framePosBase_)    : 0.0f) + (routeDestA_ == kRtFrame ? rtA : 0.0f) + mFrA + flowWave_, 0);
+                warpAmtT_  = ownV (warpAmountBase_  + (ktDestA_ == kKtWarp  ? ktDA * (ktRamp_ - warpAmountBase_)  : 0.0f) + (routeDestA_ == kRtWarp  ? rtA : 0.0f) + mWpA, 1);
+                foldAmtTA_ = ownV (foldAmountBaseA_ + (ktDestA_ == kKtFold  ? ktDA * (ktRamp_ - foldAmountBaseA_) : 0.0f) + (routeDestA_ == kRtFold  ? rtA : 0.0f) + mFdA, 2);
+                framePosTB_   = ownV (framePosBaseB_   + (ktDestB_ == kKtFrame ? ktDB * (ktRamp_ - framePosBaseB_)   : 0.0f) + (routeDestB_ == kRtFrame ? rtB : 0.0f) + mFrB + flowWave_, 3);
+                warpAmtTB_ = ownV (warpAmountBaseB_ + (ktDestB_ == kKtWarp  ? ktDB * (ktRamp_ - warpAmountBaseB_) : 0.0f) + (routeDestB_ == kRtWarp  ? rtB : 0.0f) + mWpB, 4);
+                warp2AmtTA_ = warp2AmountBaseA_;   // WARP 2 base->effective (mod-matrix ready)
+                warp2AmtTB_ = warp2AmountBaseB_;
+                foldAmtTB_ = ownV (foldAmountBaseB_ + (ktDestB_ == kKtFold  ? ktDB * (ktRamp_ - foldAmountBaseB_) : 0.0f) + (routeDestB_ == kRtFold  ? rtB : 0.0f) + mFdB, 5);
                 // OSC C / D — same keytrack + route + LFO mod, clamp once.
-                framePosC_   = ownV (framePosBaseC_   + (ktDestC_ == kKtFrame ? ktDC * (ktRamp_ - framePosBaseC_)   : 0.0f) + (routeDestC_ == kRtFrame ? rtC : 0.0f) + mFrC + flowWave_, 6);
-                warpAmountC_ = ownV (warpAmountBaseC_ + (ktDestC_ == kKtWarp  ? ktDC * (ktRamp_ - warpAmountBaseC_) : 0.0f) + (routeDestC_ == kRtWarp  ? rtC : 0.0f) + mWpC, 7);
-                foldAmountC_ = ownV (foldAmountBaseC_ + (ktDestC_ == kKtFold  ? ktDC * (ktRamp_ - foldAmountBaseC_) : 0.0f) + (routeDestC_ == kRtFold  ? rtC : 0.0f) + mFdC, 8);
-                warp2AmountC_ = warp2AmountBaseC_;
-                framePosD_   = ownV (framePosBaseD_   + (ktDestD_ == kKtFrame ? ktDD * (ktRamp_ - framePosBaseD_)   : 0.0f) + (routeDestD_ == kRtFrame ? rtD : 0.0f) + mFrD + flowWave_, 9);
-                warpAmountD_ = ownV (warpAmountBaseD_ + (ktDestD_ == kKtWarp  ? ktDD * (ktRamp_ - warpAmountBaseD_) : 0.0f) + (routeDestD_ == kRtWarp  ? rtD : 0.0f) + mWpD, 10);
-                foldAmountD_ = ownV (foldAmountBaseD_ + (ktDestD_ == kKtFold  ? ktDD * (ktRamp_ - foldAmountBaseD_) : 0.0f) + (routeDestD_ == kRtFold  ? rtD : 0.0f) + mFdD, 11);
-                warp2AmountD_ = warp2AmountBaseD_;
+                framePosTC_   = ownV (framePosBaseC_   + (ktDestC_ == kKtFrame ? ktDC * (ktRamp_ - framePosBaseC_)   : 0.0f) + (routeDestC_ == kRtFrame ? rtC : 0.0f) + mFrC + flowWave_, 6);
+                warpAmtTC_ = ownV (warpAmountBaseC_ + (ktDestC_ == kKtWarp  ? ktDC * (ktRamp_ - warpAmountBaseC_) : 0.0f) + (routeDestC_ == kRtWarp  ? rtC : 0.0f) + mWpC, 7);
+                foldAmtTC_ = ownV (foldAmountBaseC_ + (ktDestC_ == kKtFold  ? ktDC * (ktRamp_ - foldAmountBaseC_) : 0.0f) + (routeDestC_ == kRtFold  ? rtC : 0.0f) + mFdC, 8);
+                warp2AmtTC_ = warp2AmountBaseC_;
+                framePosTD_   = ownV (framePosBaseD_   + (ktDestD_ == kKtFrame ? ktDD * (ktRamp_ - framePosBaseD_)   : 0.0f) + (routeDestD_ == kRtFrame ? rtD : 0.0f) + mFrD + flowWave_, 9);
+                warpAmtTD_ = ownV (warpAmountBaseD_ + (ktDestD_ == kKtWarp  ? ktDD * (ktRamp_ - warpAmountBaseD_) : 0.0f) + (routeDestD_ == kRtWarp  ? rtD : 0.0f) + mWpD, 10);
+                foldAmtTD_ = ownV (foldAmountBaseD_ + (ktDestD_ == kKtFold  ? ktDD * (ktRamp_ - foldAmountBaseD_) : 0.0f) + (routeDestD_ == kRtFold  ? rtD : 0.0f) + mFdD, 11);
+                warp2AmtTD_ = warp2AmountBaseD_;
+                // fb204 — FRAME glide (block pole, the blur pattern): the blend cache rebuilds
+                // once per block, so smoothing lives at block rate — each hop shrinks the step ~4×.
+                auto bpole = [] (float& live, float tgt) noexcept
+                { if (std::abs (tgt - live) < 1.0e-4f) live = tgt; else live += (tgt - live) * 0.25f; };
+                bpole (framePos_, framePosT_);   bpole (framePosB_, framePosTB_);
+                bpole (framePosC_, framePosTC_); bpole (framePosD_, framePosTD_);
+                // fb204 — FOLD ramp (start/step): lands EXACTLY on target at block end so the
+                // ADAA change-gate re-idles; a free-running pole would thrash the Fx1 cache.
+                const float invN = 1.0f / (float) juce::jmax (1, numSamples);
+                foldStepA_ = (foldAmtTA_ - foldAmountA_) * invN;
+                foldStepB_ = (foldAmtTB_ - foldAmountB_) * invN;
+                foldStepC_ = (foldAmtTC_ - foldAmountC_) * invN;
+                foldStepD_ = (foldAmtTD_ - foldAmountD_) * invN;
             }
 
             // WAVER — advance per-(osc × unison sine) OU pitch drift this block. Slow,
@@ -2444,6 +2468,25 @@ namespace tw
             const bool uLoopD = (! oscDead_[3] || modSrcForce_[3]) && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL);
             for (int i = 0; i < numSamples; ++i)
             {
+                // fb204 — WARP/WARP2 glide (2.5ms) + FOLD ramp + UNISON table glide: every
+                // block-pushed shape amount steps at block rate when modulated; the applied
+                // values move per sample instead (the fb180 law, applied to the osc lane).
+                warpAmount_   += (warpAmtT_   - warpAmount_)   * lvlSmCoef_;
+                warpAmountB_  += (warpAmtTB_  - warpAmountB_)  * lvlSmCoef_;
+                warpAmountC_  += (warpAmtTC_  - warpAmountC_)  * lvlSmCoef_;
+                warpAmountD_  += (warpAmtTD_  - warpAmountD_)  * lvlSmCoef_;
+                warp2AmountA_ += (warp2AmtTA_ - warp2AmountA_) * lvlSmCoef_;
+                warp2AmountB_ += (warp2AmtTB_ - warp2AmountB_) * lvlSmCoef_;
+                warp2AmountC_ += (warp2AmtTC_ - warp2AmountC_) * lvlSmCoef_;
+                warp2AmountD_ += (warp2AmtTD_ - warp2AmountD_) * lvlSmCoef_;
+                foldAmountA_ += foldStepA_; foldAmountB_ += foldStepB_;
+                foldAmountC_ += foldStepC_; foldAmountD_ += foldStepD_;
+                for (int gu = 0; gu < activeUnisonA_; ++gu) { uPanLA_[(size_t) gu] += (uPanLTA_[(size_t) gu] - uPanLA_[(size_t) gu]) * lvlSmCoef_; uPanRA_[(size_t) gu] += (uPanRTA_[(size_t) gu] - uPanRA_[(size_t) gu]) * lvlSmCoef_; }
+                for (int gu = 0; gu < activeUnisonB_; ++gu) { uPanLB_[(size_t) gu] += (uPanLTB_[(size_t) gu] - uPanLB_[(size_t) gu]) * lvlSmCoef_; uPanRB_[(size_t) gu] += (uPanRTB_[(size_t) gu] - uPanRB_[(size_t) gu]) * lvlSmCoef_; }
+                for (int gu = 0; gu < activeUnisonC_; ++gu) { uPanLC_[(size_t) gu] += (uPanLTC_[(size_t) gu] - uPanLC_[(size_t) gu]) * lvlSmCoef_; uPanRC_[(size_t) gu] += (uPanRTC_[(size_t) gu] - uPanRC_[(size_t) gu]) * lvlSmCoef_; }
+                for (int gu = 0; gu < activeUnisonD_; ++gu) { uPanLD_[(size_t) gu] += (uPanLTD_[(size_t) gu] - uPanLD_[(size_t) gu]) * lvlSmCoef_; uPanRD_[(size_t) gu] += (uPanRTD_[(size_t) gu] - uPanRD_[(size_t) gu]) * lvlSmCoef_; }
+                uNormA_ += (uNormTA_ - uNormA_) * lvlSmCoef_; uNormB_ += (uNormTB_ - uNormB_) * lvlSmCoef_;
+                uNormC_ += (uNormTC_ - uNormC_) * lvlSmCoef_; uNormD_ += (uNormTD_ - uNormD_) * lvlSmCoef_;
                 // Per-osc SUB contributions this sample (mono, post-normalization) — filled by
                 // subMix, used by the filter router to route the Sub independently of its osc.
                 float subMono0 = 0.f, subMono1 = 0.f, subMono2 = 0.f, subMono3 = 0.f;
@@ -2549,32 +2592,42 @@ namespace tw
                             if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
                                 fmD1Now_[0] += (fmD1Eff_[0] - fmD1Now_[0]) * fmIdxGlideCoef_;
                                 fmD2Now_[0] += (fmD2Eff_[0] - fmD2Now_[0]) * fmIdxGlideCoef_;
+                                fmFbNow_[0]           += (fmFbEff_[0]        - fmFbNow_[0])           * fmIdxGlideCoef_;   // fb204 — FB/STORM/QUAKE/SCORCH ride the same de-zipper
+                                fmStormM12Now_[0]     += (fmStormM12_[0]     - fmStormM12Now_[0])     * fmIdxGlideCoef_;
+                                fmStormM21Now_[0]     += (fmStormM21_[0]     - fmStormM21Now_[0])     * fmIdxGlideCoef_;
+                                fmQuakeIdxNow_[0]     += (fmQuakeIdx_[0]     - fmQuakeIdxNow_[0])     * fmIdxGlideCoef_;
+                                fmQuakeFryNow_[0]     += (fmQuakeFry_[0]     - fmQuakeFryNow_[0])     * fmIdxGlideCoef_;
+                                fmScorchIdxMulNow_[0] += (fmScorchIdxMul_[0] - fmScorchIdxMulNow_[0]) * fmIdxGlideCoef_;
+                                fmScorchPreNow_[0]    += (fmScorchPre_[0]    - fmScorchPreNow_[0])    * fmIdxGlideCoef_;
+                                fmScorchBiasNow_[0]   += (fmScorchBias_[0]   - fmScorchBiasNow_[0])   * fmIdxGlideCoef_;
+                                fmScorchTanhBiasNow_[0] += (fmScorchTanhBias_[0] - fmScorchTanhBiasNow_[0]) * fmIdxGlideCoef_;
+                                fmScorchMakeupNow_[0] += (fmScorchMakeup_[0] - fmScorchMakeupNow_[0]) * fmIdxGlideCoef_;
                             }
-                            const float  d1  = fmD1Now_[0] * fmScorchIdxMul_[0];   // SCORCH index push (glided base)
-                            const float  d2  = fmD2Now_[0] * fmScorchIdxMul_[0];
-                            const float  fbk = fmFbEff_[0];                        // (SCORCH grit already folded in)
+                            const float  d1  = fmD1Now_[0] * fmScorchIdxMulNow_[0];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[0] * fmScorchIdxMulNow_[0];
+                            const float  fbk = fmFbNow_[0];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[0];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseA_[(size_t) u]
-                                                        + (double) (fmStormM12_[0] * fmPrevM1A_[(size_t) u]))));
+                                                        + (double) (fmStormM12Now_[0] * fmPrevM1A_[(size_t) u]))));
                             // SCORCH — asymmetric drive on M2 (adds harmonics → richer sidebands)
-                            if (fmScorchPre_[0] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[0] * m2 + fmScorchBias_[0]) - fmScorchTanhBias_[0]) * fmScorchMakeup_[0];
+                            if (fmScorchPreNow_[0] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[0] * m2 + fmScorchBiasNow_[0]) - fmScorchTanhBiasNow_[0]) * fmScorchMakeupNow_[0];
                             double m1Arg = uModPhaseA_[(size_t) u] + (double) (fbk * fmFbA_[(size_t) u])
-                                         + (double) (fmStormM21_[0] * m2);
+                                         + (double) (fmStormM21Now_[0] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 → M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
                             // SCORCH — same drive on M1 (the operator that hits the carrier)
-                            if (fmScorchPre_[0] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[0] * m1 + fmScorchBias_[0]) - fmScorchTanhBias_[0]) * fmScorchMakeup_[0];
+                            if (fmScorchPreNow_[0] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[0] * m1 + fmScorchBiasNow_[0]) - fmScorchTanhBiasNow_[0]) * fmScorchMakeupNow_[0];
                             fmFbA_[(size_t) u] = 0.5f * (fmFbA_[(size_t) u] + m1);
                             fmPrevM1A_[(size_t) u] = m1;
                             // QUAKE — phase-locked subharmonic operator folded into the carrier phase
                             double qSubA = 0.0;
-                            if (fmQuakeIdx_[0] > 1.0e-5f)
+                            if (fmQuakeIdxNow_[0] > 1.0e-5f)
                             {
                                 fmQuakePhaseA_[(size_t) u] += inc * (double) fmQuakeSubRatio_[0];
                                 fmQuakePhaseA_[(size_t) u] -= std::floor (fmQuakePhaseA_[(size_t) u]);
                                 float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseA_[(size_t) u]));
-                                if (fmQuakeFry_[0] > 0.0f) sub += fmQuakeFry_[0] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubA = (double) (fmQuakeIdx_[0] * sub);
+                                if (fmQuakeFryNow_[0] > 0.0f) sub += fmQuakeFryNow_[0] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubA = (double) (fmQuakeIdxNow_[0] * sub);
                             }
                             double cPh = uPhaseA_[(size_t) u] + qSubA + (double) blendOff[0];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
@@ -2637,7 +2690,8 @@ namespace tw
                 if (engine_ == Engine::HARM) { sA_L = harmBlkAL_[(size_t) i]; sA_R = harmBlkAR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engine_ == Engine::MODAL) { sA_L = modalBlkAL_[(size_t) i]; sA_R = modalBlkAR_[(size_t) i]; } // MODAL-ENGINE-VOICE
                 if (engine_ == Engine::SAMP) { sA_L = sampBlkAL_[(size_t) i]; sA_R = sampBlkAR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
-                    const float airA = sampleParamsA_.air;   // AIR exciter — add generated high harmonics
+                    airSmA_ += (sampleParamsA_.air - airSmA_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
+                    const float airA = airSmA_;
                     if (airA > 0.001f) {
                         const float drv = 1.0f + airA * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpAL_ += airHpCoef_ * (sA_L - sampAirLpAL_); const float hpL = sA_L - sampAirLpAL_;
@@ -2836,29 +2890,39 @@ namespace tw
                             if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
                                 fmD1Now_[1] += (fmD1Eff_[1] - fmD1Now_[1]) * fmIdxGlideCoef_;
                                 fmD2Now_[1] += (fmD2Eff_[1] - fmD2Now_[1]) * fmIdxGlideCoef_;
+                                fmFbNow_[1]           += (fmFbEff_[1]        - fmFbNow_[1])           * fmIdxGlideCoef_;   // fb204 — FB/STORM/QUAKE/SCORCH ride the same de-zipper
+                                fmStormM12Now_[1]     += (fmStormM12_[1]     - fmStormM12Now_[1])     * fmIdxGlideCoef_;
+                                fmStormM21Now_[1]     += (fmStormM21_[1]     - fmStormM21Now_[1])     * fmIdxGlideCoef_;
+                                fmQuakeIdxNow_[1]     += (fmQuakeIdx_[1]     - fmQuakeIdxNow_[1])     * fmIdxGlideCoef_;
+                                fmQuakeFryNow_[1]     += (fmQuakeFry_[1]     - fmQuakeFryNow_[1])     * fmIdxGlideCoef_;
+                                fmScorchIdxMulNow_[1] += (fmScorchIdxMul_[1] - fmScorchIdxMulNow_[1]) * fmIdxGlideCoef_;
+                                fmScorchPreNow_[1]    += (fmScorchPre_[1]    - fmScorchPreNow_[1])    * fmIdxGlideCoef_;
+                                fmScorchBiasNow_[1]   += (fmScorchBias_[1]   - fmScorchBiasNow_[1])   * fmIdxGlideCoef_;
+                                fmScorchTanhBiasNow_[1] += (fmScorchTanhBias_[1] - fmScorchTanhBiasNow_[1]) * fmIdxGlideCoef_;
+                                fmScorchMakeupNow_[1] += (fmScorchMakeup_[1] - fmScorchMakeupNow_[1]) * fmIdxGlideCoef_;
                             }
-                            const float  d1  = fmD1Now_[1] * fmScorchIdxMul_[1];   // SCORCH index push (glided base)
-                            const float  d2  = fmD2Now_[1] * fmScorchIdxMul_[1];
-                            const float  fbk = fmFbEff_[1];                        // (SCORCH grit already folded in)
+                            const float  d1  = fmD1Now_[1] * fmScorchIdxMulNow_[1];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[1] * fmScorchIdxMulNow_[1];
+                            const float  fbk = fmFbNow_[1];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[1];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseB_[(size_t) u]
-                                                        + (double) (fmStormM12_[1] * fmPrevM1B_[(size_t) u]))));
-                            if (fmScorchPre_[1] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[1] * m2 + fmScorchBias_[1]) - fmScorchTanhBias_[1]) * fmScorchMakeup_[1];
+                                                        + (double) (fmStormM12Now_[1] * fmPrevM1B_[(size_t) u]))));
+                            if (fmScorchPreNow_[1] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[1] * m2 + fmScorchBiasNow_[1]) - fmScorchTanhBiasNow_[1]) * fmScorchMakeupNow_[1];
                             double m1Arg = uModPhaseB_[(size_t) u] + (double) (fbk * fmFbB_[(size_t) u])
-                                         + (double) (fmStormM21_[1] * m2);
+                                         + (double) (fmStormM21Now_[1] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmScorchPre_[1] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[1] * m1 + fmScorchBias_[1]) - fmScorchTanhBias_[1]) * fmScorchMakeup_[1];
+                            if (fmScorchPreNow_[1] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[1] * m1 + fmScorchBiasNow_[1]) - fmScorchTanhBiasNow_[1]) * fmScorchMakeupNow_[1];
                             fmFbB_[(size_t) u] = 0.5f * (fmFbB_[(size_t) u] + m1);
                             fmPrevM1B_[(size_t) u] = m1;
                             double qSubB = 0.0;
-                            if (fmQuakeIdx_[1] > 1.0e-5f)
+                            if (fmQuakeIdxNow_[1] > 1.0e-5f)
                             {
                                 fmQuakePhaseB_[(size_t) u] += inc * (double) fmQuakeSubRatio_[1];
                                 fmQuakePhaseB_[(size_t) u] -= std::floor (fmQuakePhaseB_[(size_t) u]);
                                 float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseB_[(size_t) u]));
-                                if (fmQuakeFry_[1] > 0.0f) sub += fmQuakeFry_[1] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubB = (double) (fmQuakeIdx_[1] * sub);
+                                if (fmQuakeFryNow_[1] > 0.0f) sub += fmQuakeFryNow_[1] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubB = (double) (fmQuakeIdxNow_[1] * sub);
                             }
                             double cPh = uPhaseB_[(size_t) u] + qSubB + (double) blendOff[1];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
@@ -2917,7 +2981,8 @@ namespace tw
                 if (engineB_ == Engine::HARM) { sB_L = harmBlkBL_[(size_t) i]; sB_R = harmBlkBR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineB_ == Engine::MODAL) { sB_L = modalBlkBL_[(size_t) i]; sB_R = modalBlkBR_[(size_t) i]; } // MODAL-ENGINE-VOICE
                 if (engineB_ == Engine::SAMP) { sB_L = sampBlkBL_[(size_t) i]; sB_R = sampBlkBR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
-                    const float airB = sampleParamsB_.air;   // AIR exciter — add generated high harmonics
+                    airSmB_ += (sampleParamsB_.air - airSmB_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
+                    const float airB = airSmB_;
                     if (airB > 0.001f) {
                         const float drv = 1.0f + airB * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpBL_ += airHpCoef_ * (sB_L - sampAirLpBL_); const float hpL = sB_L - sampAirLpBL_;
@@ -3110,29 +3175,39 @@ namespace tw
                             if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
                                 fmD1Now_[2] += (fmD1Eff_[2] - fmD1Now_[2]) * fmIdxGlideCoef_;
                                 fmD2Now_[2] += (fmD2Eff_[2] - fmD2Now_[2]) * fmIdxGlideCoef_;
+                                fmFbNow_[2]           += (fmFbEff_[2]        - fmFbNow_[2])           * fmIdxGlideCoef_;   // fb204 — FB/STORM/QUAKE/SCORCH ride the same de-zipper
+                                fmStormM12Now_[2]     += (fmStormM12_[2]     - fmStormM12Now_[2])     * fmIdxGlideCoef_;
+                                fmStormM21Now_[2]     += (fmStormM21_[2]     - fmStormM21Now_[2])     * fmIdxGlideCoef_;
+                                fmQuakeIdxNow_[2]     += (fmQuakeIdx_[2]     - fmQuakeIdxNow_[2])     * fmIdxGlideCoef_;
+                                fmQuakeFryNow_[2]     += (fmQuakeFry_[2]     - fmQuakeFryNow_[2])     * fmIdxGlideCoef_;
+                                fmScorchIdxMulNow_[2] += (fmScorchIdxMul_[2] - fmScorchIdxMulNow_[2]) * fmIdxGlideCoef_;
+                                fmScorchPreNow_[2]    += (fmScorchPre_[2]    - fmScorchPreNow_[2])    * fmIdxGlideCoef_;
+                                fmScorchBiasNow_[2]   += (fmScorchBias_[2]   - fmScorchBiasNow_[2])   * fmIdxGlideCoef_;
+                                fmScorchTanhBiasNow_[2] += (fmScorchTanhBias_[2] - fmScorchTanhBiasNow_[2]) * fmIdxGlideCoef_;
+                                fmScorchMakeupNow_[2] += (fmScorchMakeup_[2] - fmScorchMakeupNow_[2]) * fmIdxGlideCoef_;
                             }
-                            const float  d1  = fmD1Now_[2] * fmScorchIdxMul_[2];   // SCORCH index push (glided base)
-                            const float  d2  = fmD2Now_[2] * fmScorchIdxMul_[2];
-                            const float  fbk = fmFbEff_[2];                        // (SCORCH grit already folded in)
+                            const float  d1  = fmD1Now_[2] * fmScorchIdxMulNow_[2];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[2] * fmScorchIdxMulNow_[2];
+                            const float  fbk = fmFbNow_[2];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[2];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseC_[(size_t) u]
-                                                        + (double) (fmStormM12_[2] * fmPrevM1C_[(size_t) u]))));
-                            if (fmScorchPre_[2] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[2] * m2 + fmScorchBias_[2]) - fmScorchTanhBias_[2]) * fmScorchMakeup_[2];
+                                                        + (double) (fmStormM12Now_[2] * fmPrevM1C_[(size_t) u]))));
+                            if (fmScorchPreNow_[2] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[2] * m2 + fmScorchBiasNow_[2]) - fmScorchTanhBiasNow_[2]) * fmScorchMakeupNow_[2];
                             double m1Arg = uModPhaseC_[(size_t) u] + (double) (fbk * fmFbC_[(size_t) u])
-                                         + (double) (fmStormM21_[2] * m2);
+                                         + (double) (fmStormM21Now_[2] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmScorchPre_[2] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[2] * m1 + fmScorchBias_[2]) - fmScorchTanhBias_[2]) * fmScorchMakeup_[2];
+                            if (fmScorchPreNow_[2] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[2] * m1 + fmScorchBiasNow_[2]) - fmScorchTanhBiasNow_[2]) * fmScorchMakeupNow_[2];
                             fmFbC_[(size_t) u] = 0.5f * (fmFbC_[(size_t) u] + m1);
                             fmPrevM1C_[(size_t) u] = m1;
                             double qSubC = 0.0;
-                            if (fmQuakeIdx_[2] > 1.0e-5f)
+                            if (fmQuakeIdxNow_[2] > 1.0e-5f)
                             {
                                 fmQuakePhaseC_[(size_t) u] += inc * (double) fmQuakeSubRatio_[2];
                                 fmQuakePhaseC_[(size_t) u] -= std::floor (fmQuakePhaseC_[(size_t) u]);
                                 float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseC_[(size_t) u]));
-                                if (fmQuakeFry_[2] > 0.0f) sub += fmQuakeFry_[2] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubC = (double) (fmQuakeIdx_[2] * sub);
+                                if (fmQuakeFryNow_[2] > 0.0f) sub += fmQuakeFryNow_[2] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubC = (double) (fmQuakeIdxNow_[2] * sub);
                             }
                             double cPh = uPhaseC_[(size_t) u] + qSubC + (double) blendOff[2];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
@@ -3191,7 +3266,8 @@ namespace tw
                 if (engineC_ == Engine::HARM) { sC_L = harmBlkCL_[(size_t) i]; sC_R = harmBlkCR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineC_ == Engine::MODAL) { sC_L = modalBlkCL_[(size_t) i]; sC_R = modalBlkCR_[(size_t) i]; } // MODAL-ENGINE-VOICE
                 if (engineC_ == Engine::SAMP) { sC_L = sampBlkCL_[(size_t) i]; sC_R = sampBlkCR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
-                    const float airC = sampleParamsC_.air;   // AIR exciter — add generated high harmonics
+                    airSmC_ += (sampleParamsC_.air - airSmC_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
+                    const float airC = airSmC_;
                     if (airC > 0.001f) {
                         const float drv = 1.0f + airC * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpCL_ += airHpCoef_ * (sC_L - sampAirLpCL_); const float hpL = sC_L - sampAirLpCL_;
@@ -3384,29 +3460,39 @@ namespace tw
                             if (u == 0) {   // AGE de-zipper — glide the FM index per-sample (kills block-step crackle)
                                 fmD1Now_[3] += (fmD1Eff_[3] - fmD1Now_[3]) * fmIdxGlideCoef_;
                                 fmD2Now_[3] += (fmD2Eff_[3] - fmD2Now_[3]) * fmIdxGlideCoef_;
+                                fmFbNow_[3]           += (fmFbEff_[3]        - fmFbNow_[3])           * fmIdxGlideCoef_;   // fb204 — FB/STORM/QUAKE/SCORCH ride the same de-zipper
+                                fmStormM12Now_[3]     += (fmStormM12_[3]     - fmStormM12Now_[3])     * fmIdxGlideCoef_;
+                                fmStormM21Now_[3]     += (fmStormM21_[3]     - fmStormM21Now_[3])     * fmIdxGlideCoef_;
+                                fmQuakeIdxNow_[3]     += (fmQuakeIdx_[3]     - fmQuakeIdxNow_[3])     * fmIdxGlideCoef_;
+                                fmQuakeFryNow_[3]     += (fmQuakeFry_[3]     - fmQuakeFryNow_[3])     * fmIdxGlideCoef_;
+                                fmScorchIdxMulNow_[3] += (fmScorchIdxMul_[3] - fmScorchIdxMulNow_[3]) * fmIdxGlideCoef_;
+                                fmScorchPreNow_[3]    += (fmScorchPre_[3]    - fmScorchPreNow_[3])    * fmIdxGlideCoef_;
+                                fmScorchBiasNow_[3]   += (fmScorchBias_[3]   - fmScorchBiasNow_[3])   * fmIdxGlideCoef_;
+                                fmScorchTanhBiasNow_[3] += (fmScorchTanhBias_[3] - fmScorchTanhBiasNow_[3]) * fmIdxGlideCoef_;
+                                fmScorchMakeupNow_[3] += (fmScorchMakeup_[3] - fmScorchMakeupNow_[3]) * fmIdxGlideCoef_;
                             }
-                            const float  d1  = fmD1Now_[3] * fmScorchIdxMul_[3];   // SCORCH index push (glided base)
-                            const float  d2  = fmD2Now_[3] * fmScorchIdxMul_[3];
-                            const float  fbk = fmFbEff_[3];                        // (SCORCH grit already folded in)
+                            const float  d1  = fmD1Now_[3] * fmScorchIdxMulNow_[3];   // SCORCH index push (glided base)
+                            const float  d2  = fmD2Now_[3] * fmScorchIdxMulNow_[3];
+                            const float  fbk = fmFbNow_[3];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[3];
                             float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseD_[(size_t) u]
-                                                        + (double) (fmStormM12_[3] * fmPrevM1D_[(size_t) u]))));
-                            if (fmScorchPre_[3] > 1.0f) m2 = (fmFastTanh (fmScorchPre_[3] * m2 + fmScorchBias_[3]) - fmScorchTanhBias_[3]) * fmScorchMakeup_[3];
+                                                        + (double) (fmStormM12Now_[3] * fmPrevM1D_[(size_t) u]))));
+                            if (fmScorchPreNow_[3] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[3] * m2 + fmScorchBiasNow_[3]) - fmScorchTanhBiasNow_[3]) * fmScorchMakeupNow_[3];
                             double m1Arg = uModPhaseD_[(size_t) u] + (double) (fbk * fmFbD_[(size_t) u])
-                                         + (double) (fmStormM21_[3] * m2);
+                                         + (double) (fmStormM21Now_[3] * m2);
                             if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
                             float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmScorchPre_[3] > 1.0f) m1 = (fmFastTanh (fmScorchPre_[3] * m1 + fmScorchBias_[3]) - fmScorchTanhBias_[3]) * fmScorchMakeup_[3];
+                            if (fmScorchPreNow_[3] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[3] * m1 + fmScorchBiasNow_[3]) - fmScorchTanhBiasNow_[3]) * fmScorchMakeupNow_[3];
                             fmFbD_[(size_t) u] = 0.5f * (fmFbD_[(size_t) u] + m1);
                             fmPrevM1D_[(size_t) u] = m1;
                             double qSubD = 0.0;
-                            if (fmQuakeIdx_[3] > 1.0e-5f)
+                            if (fmQuakeIdxNow_[3] > 1.0e-5f)
                             {
                                 fmQuakePhaseD_[(size_t) u] += inc * (double) fmQuakeSubRatio_[3];
                                 fmQuakePhaseD_[(size_t) u] -= std::floor (fmQuakePhaseD_[(size_t) u]);
                                 float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseD_[(size_t) u]));
-                                if (fmQuakeFry_[3] > 0.0f) sub += fmQuakeFry_[3] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubD = (double) (fmQuakeIdx_[3] * sub);
+                                if (fmQuakeFryNow_[3] > 0.0f) sub += fmQuakeFryNow_[3] * (sub - sub * sub * sub * (1.0f / 6.0f));
+                                qSubD = (double) (fmQuakeIdxNow_[3] * sub);
                             }
                             double cPh = uPhaseD_[(size_t) u] + qSubD + (double) blendOff[3];   // BLEND inject
                             if (alg != 2) cPh += (double) (d1 * m1);
@@ -3465,7 +3551,8 @@ namespace tw
                 if (engineD_ == Engine::HARM) { sD_L = harmBlkDL_[(size_t) i]; sD_R = harmBlkDR_[(size_t) i]; } // HARMONIC-ENGINE-VOICE
                 if (engineD_ == Engine::MODAL) { sD_L = modalBlkDL_[(size_t) i]; sD_R = modalBlkDR_[(size_t) i]; } // MODAL-ENGINE-VOICE
                 if (engineD_ == Engine::SAMP) { sD_L = sampBlkDL_[(size_t) i]; sD_R = sampBlkDR_[(size_t) i];  // SAMPLE-ENGINE-VOICE
-                    const float airD = sampleParamsD_.air;   // AIR exciter — add generated high harmonics
+                    airSmD_ += (sampleParamsD_.air - airSmD_) * lvlSmCoef_;   // fb204 — AIR glide (block-pushed mod stepped the shaper amount)
+                    const float airD = airSmD_;
                     if (airD > 0.001f) {
                         const float drv = 1.0f + airD * 20.0f;   // AMPLIFIED — night-and-day "fresh air" / overdrive at 100%
                         sampAirLpDL_ += airHpCoef_ * (sD_L - sampAirLpDL_); const float hpL = sD_L - sampAirLpDL_;
@@ -3830,6 +3917,23 @@ namespace tw
                 }
                 for (int i = 0; i < numSamples; ++i)
                 {
+                    // fb204 — FILTER-LANE GLIDE (2.5ms, fb180 law): every block-pushed value this
+                    // loop consumes steps at block rate when modulated — res, mix, vel, keytrack,
+                    // post-drive, and the env→cutoff latches all crackled under LFO/env routes.
+                    envCutSm1_ += (envCutBlk1_ - envCutSm1_) * lvlSmCoef_;
+                    envCutSm2_ += (envCutBlk2_ - envCutSm2_) * lvlSmCoef_;
+                    resSm1_    += (baseRes01_  - resSm1_)    * lvlSmCoef_;
+                    resSm2_    += (baseRes012_ - resSm2_)    * lvlSmCoef_;
+                    mixSm1_    += (filterMix1_ - mixSm1_)    * lvlSmCoef_;
+                    mixSm2_    += (filterMix2_ - mixSm2_)    * lvlSmCoef_;
+                    velSm1_    += (velAmt1_    - velSm1_)    * lvlSmCoef_;
+                    velSm2_    += (velAmt2_    - velSm2_)    * lvlSmCoef_;
+                    ktSm1_     += (ktCutSemis1 - ktSm1_)     * lvlSmCoef_;
+                    ktSm2_     += (ktCutSemis2 - ktSm2_)     * lvlSmCoef_;
+                    pdrvSm1_   += (postDrv1_   - pdrvSm1_)   * lvlSmCoef_;
+                    pdrvSm2_   += (postDrv2_   - pdrvSm2_)   * lvlSmCoef_;
+                    drvSm1_    += (drv01_      - drvSm1_)    * lvlSmCoef_;
+                    drvSm2_    += (drv012_     - drvSm2_)    * lvlSmCoef_;
                     // ── Batch 1 — per-voice LFO tick + route accumulation ──
                     // Tick the NEEDED LFOs once per output sample (free/synced Hz already
                     // resolved in setModConfig), then sum any enabled LFO→cutoff routes
@@ -3894,26 +3998,26 @@ namespace tw
                     // Filter 1 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
                     // CPU: the semitone→Hz pow(2,x) is gated on change — with nothing modulating,
                     // cutSemis is bit-identical every sample and the pow never re-runs.
-                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + envCutBlk1_ + driftSemis + ktCutSemis1 + velAmt1_ * currentVelocity_ * 72.0f;   // fb178
+                    const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + envCutSm1_ + driftSemis + ktSm1_ + velSm1_ * currentVelocity_ * 72.0f;   // fb178 · fb204 glided
                     if (cutSemis1 != lastCutSemis1_)
                     {
                         lastCutSemis1_ = cutSemis1;
                         lastCutHz1_ = juce::jlimit (20.0f, fmax, 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f));
                     }
                     const float res1 = juce::jlimit (0.0f, 1.0f,
-                        baseRes01_ + resWander * driftState_ * 0.5f);
-                    filterSlot_.setParams (lastCutHz1_, res1, drv01_, coefSr); visRes1_ = res1;
+                        resSm1_ + resWander * driftState_ * 0.5f);
+                    filterSlot_.setParams (lastCutHz1_, res1, drvSm1_, coefSr); visRes1_ = res1;   // fb204 — glided drive
 
                     // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
-                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + envCutBlk2_ + driftSemis + ktCutSemis2 + velAmt2_ * currentVelocity_ * 72.0f;
+                    const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + envCutSm2_ + driftSemis + ktSm2_ + velSm2_ * currentVelocity_ * 72.0f;   // fb204 glided
                     if (cutSemis2 != lastCutSemis2_)
                     {
                         lastCutSemis2_ = cutSemis2;
                         lastCutHz2_ = juce::jlimit (20.0f, fmax, 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f));
                     }
                     const float res2 = juce::jlimit (0.0f, 1.0f,
-                        baseRes012_ + resWander * driftState_ * 0.5f);
-                    filterSlot2_.setParams (lastCutHz2_, res2, drv012_, coefSr); visRes2_ = res2;
+                        resSm2_ + resWander * driftState_ * 0.5f);
+                    filterSlot2_.setParams (lastCutHz2_, res2, drvSm2_, coefSr); visRes2_ = res2;   // fb204 — glided drive
 
                     // PER-OSC ROUTING combine. Buses: bus1 = scratch (F1's sources), bus2 = fltBus2_
                     // (F2 sources in parallel / F2-only in series), dry = fltDry_ (unrouted, bypass).
@@ -3953,29 +4057,29 @@ namespace tw
                         {
                             float w1L = b1L, w1R = b1R;
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
-                                      w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
-                                      w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
-                            pdrive (w1L, w1R, postDrv1_, driveType1_, drvNorm1_);
+                                      w1L = mixSm1_ * wl + (1.0f - mixSm1_) * b1L;
+                                      w1R = mixSm1_ * wr + (1.0f - mixSm1_) * b1R; }
+                            pdrive (w1L, w1R, pdrvSm1_, driveType1_, drvNorm1_);
                             const float pL = w1L + b2L, pR = w1R + b2R;
                             float w2L = pL, w2R = pR;
                             if (a2) { float wl = pL, wr = pR; filterSlot2_.processStereo (wl, wr);
-                                      w2L = filterMix2_ * wl + (1.0f - filterMix2_) * pL;
-                                      w2R = filterMix2_ * wr + (1.0f - filterMix2_) * pR; }
-                            pdrive (w2L, w2R, postDrv2_, driveType2_, drvNorm2_);
+                                      w2L = mixSm2_ * wl + (1.0f - mixSm2_) * pL;
+                                      w2R = mixSm2_ * wr + (1.0f - mixSm2_) * pR; }
+                            pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
                             outL = w2L; outR = w2R;
                         }
                         else         // PARALLEL: F1(bus1) + F2(bus2), each with its own post-drive
                         {
                             float w1L = b1L, w1R = b1R;
                             if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
-                                      w1L = filterMix1_ * wl + (1.0f - filterMix1_) * b1L;
-                                      w1R = filterMix1_ * wr + (1.0f - filterMix1_) * b1R; }
-                            pdrive (w1L, w1R, postDrv1_, driveType1_, drvNorm1_);
+                                      w1L = mixSm1_ * wl + (1.0f - mixSm1_) * b1L;
+                                      w1R = mixSm1_ * wr + (1.0f - mixSm1_) * b1R; }
+                            pdrive (w1L, w1R, pdrvSm1_, driveType1_, drvNorm1_);
                             float w2L = b2L, w2R = b2R;
                             if (a2) { float wl = b2L, wr = b2R; filterSlot2_.processStereo (wl, wr);
-                                      w2L = filterMix2_ * wl + (1.0f - filterMix2_) * b2L;
-                                      w2R = filterMix2_ * wr + (1.0f - filterMix2_) * b2R; }
-                            pdrive (w2L, w2R, postDrv2_, driveType2_, drvNorm2_);
+                                      w2L = mixSm2_ * wl + (1.0f - mixSm2_) * b2L;
+                                      w2R = mixSm2_ * wr + (1.0f - mixSm2_) * b2R; }
+                            pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
                             outL = w1L + w2L; outR = w1R + w2R;
                         }
                     };
@@ -4445,6 +4549,13 @@ namespace tw
         uint32_t legEnvUsedMask_ = 0;      // fb178 — matrix-referenced legacy envs (FLT/PIT/M1/M2 bits)
         bool     anyEnvSource_   = false;
         float    envCutBlk1_ = 0.0f, envCutBlk2_ = 0.0f;   // fb178 — env→cutoff, block-rate semis
+        float    envCutSm1_ = 0.0f, envCutSm2_ = 0.0f;     // fb204 — glided (2.5ms)
+        float    resSm1_ = 0.0f, resSm2_ = 0.0f;           // fb204 — glided res
+        float    mixSm1_ = 1.0f, mixSm2_ = 1.0f;           // fb204 — glided filter mix
+        float    velSm1_ = 0.0f, velSm2_ = 0.0f;           // fb204 — glided vel→cutoff
+        float    ktSm1_ = 0.0f, ktSm2_ = 0.0f;             // fb204 — glided keytrack semis
+        float    pdrvSm1_ = 0.0f, pdrvSm2_ = 0.0f;         // fb204 — glided post-drive
+        float    drvSm1_ = 0.0f, drvSm2_ = 0.0f;           // fb204 — glided filter DRIVE (into setParams)
         float  pitchEnvDepth_ = 0.0f;     // semitones, bipolar (Batch 3)
         double pitchEnvSemis_ = 0.0;      // per-block: depth × pitchEnv tick
 
@@ -4737,6 +4848,7 @@ namespace tw
         tw::SampleBuffer::BufferPtr modalHeldBuf_[4];
         std::uint32_t sampleSprayRng_ = 0x12345u, spraySeedA_ = 0, spraySeedB_ = 0, spraySeedC_ = 0, spraySeedD_ = 0;
         // AIR exciter — per-voice/per-channel one-pole HP-split state + coefficient.
+        float airSmA_ = 0.f, airSmB_ = 0.f, airSmC_ = 0.f, airSmD_ = 0.f;   // fb204 — glided AIR amounts
         float sampAirLpAL_ = 0.f, sampAirLpAR_ = 0.f, sampAirLpBL_ = 0.f, sampAirLpBR_ = 0.f,
               sampAirLpCL_ = 0.f, sampAirLpCR_ = 0.f, sampAirLpDL_ = 0.f, sampAirLpDR_ = 0.f;
         float airHpCoef_ = 0.37f;
@@ -5353,6 +5465,17 @@ namespace tw
         int    warp2ModeA_       = 0;
         int    warp2ModeB_       = 0;
         float  warp2AmountA_     = 0.0f;
+        // fb204 — GLIDE TARGETS for the wavetable trio + unison tables: the block prologue
+        // writes targets; the render loop moves the live values (no block steps anywhere).
+        float  framePosT_ = 0.0f, framePosTB_ = 0.0f, framePosTC_ = 0.0f, framePosTD_ = 0.0f;
+        float  warpAmtT_ = 0.0f, warpAmtTB_ = 0.0f, warpAmtTC_ = 0.0f, warpAmtTD_ = 0.0f;
+        float  warp2AmtTA_ = 0.0f, warp2AmtTB_ = 0.0f, warp2AmtTC_ = 0.0f, warp2AmtTD_ = 0.0f;
+        float  foldAmtTA_ = 0.0f, foldAmtTB_ = 0.0f, foldAmtTC_ = 0.0f, foldAmtTD_ = 0.0f;
+        float  foldStepA_ = 0.0f, foldStepB_ = 0.0f, foldStepC_ = 0.0f, foldStepD_ = 0.0f;
+        std::array<float, kMaxUnison> uPanLTA_ { 0.7071f }, uPanRTA_ { 0.7071f }, uPanLTB_ { 0.7071f }, uPanRTB_ { 0.7071f };
+        std::array<float, kMaxUnison> uPanLTC_ { 0.7071f }, uPanRTC_ { 0.7071f }, uPanLTD_ { 0.7071f }, uPanRTD_ { 0.7071f };
+        float  uNormTA_ = 1.0f, uNormTB_ = 1.0f, uNormTC_ = 1.0f, uNormTD_ = 1.0f;
+        bool   uniSnapA_ = false, uniSnapB_ = false, uniSnapC_ = false, uniSnapD_ = false;
         float  warp2AmountB_     = 0.0f;
         float  warp2AmountBaseA_ = 0.0f;
         float  warp2AmountBaseB_ = 0.0f;
@@ -5406,6 +5529,14 @@ namespace tw
         // cPh = phase + d1·m1, a per-block index step is a phase discontinuity = a click train (crackle).
         // Glide the applied index toward the block target per-SAMPLE (~1.2ms) so the step can't click.
         std::array<float, 4>  fmD1Now_ {}, fmD2Now_ {};
+        // fb204 — the whole FM back panel rides the same de-zipper: feedback, STORM couples,
+        // QUAKE idx/fry, and the SCORCH shaper factors all stepped at block rate (confirmed
+        // zipper). Each glides toward its block-computed Eff value per sample.
+        std::array<float, 4>  fmFbNow_ {}, fmStormM12Now_ {}, fmStormM21Now_ {};
+        std::array<float, 4>  fmQuakeIdxNow_ {}, fmQuakeFryNow_ {};
+        std::array<float, 4>  fmScorchIdxMulNow_ { 1.0f, 1.0f, 1.0f, 1.0f };
+        std::array<float, 4>  fmScorchPreNow_ { 1.0f, 1.0f, 1.0f, 1.0f }, fmScorchMakeupNow_ { 1.0f, 1.0f, 1.0f, 1.0f };
+        std::array<float, 4>  fmScorchBiasNow_ {}, fmScorchTanhBiasNow_ {};
         float fmIdxGlideCoef_ { 0.02f };
         std::array<double, 4> fmR1Eff_ { 1.0, 1.0, 1.0, 1.0 }, fmR2Eff_ { 2.0, 2.0, 2.0, 2.0 };
         std::array<double, 4> fmRustTps_ {};                        // RUST — abs-Hz offset in turns/sample

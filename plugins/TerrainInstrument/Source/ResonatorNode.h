@@ -81,6 +81,7 @@ public:
     void prepare (double sampleRate) noexcept
     {
         sr_ = (sampleRate > 0.0 ? (float) sampleRate : 48000.0f);
+        smCoef_ = 1.0f - std::exp (-1.0f / (0.0025f * sr_));   // fb204: house per-sample glide (2.5 ms)
         reset();
     }
 
@@ -93,6 +94,7 @@ public:
         dcX_ = dcY_ = 0.0f;
         structSm_ = brightSm_ = dampSm_ = posSm_ = 0.0f;
         mixSm_ = 0.0f;
+        dryGainSm_ = 1.0f; wetGainSm_ = 0.0f;       // fb204: mix crossfade glides re-pose at dry
         excSmooth_ = 0.0f;
         engaged_ = false;
         vb0_ = vb1_ = vb2_ = 0.0f;
@@ -110,8 +112,8 @@ public:
         if (R == nullptr) R = L;
 
         const float mixT    = clamp01 (mix);
-        const float mixCoef = onePoleCoef (0.010f, n);
-        mixSm_ += (mixT - mixSm_) * mixCoef;
+        // fb204 — the macro one-poles moved INTO the sample loop: block-rate advances
+        // stepped every knob under LFO/env modulation (confirmed zipper on Mix/Position).
 
         if (mixT < 1.0e-4f && mixSm_ < 1.0e-4f)         // true bypass at Mix 0 (exact passthrough)
         {
@@ -123,11 +125,8 @@ public:
         }
         engaged_ = true;
 
-        const float mc = onePoleCoef (0.020f, n);        // macro smoothing (no PITCH glide — pitch snaps)
-        structSm_ += (clamp01 (structure)  - structSm_) * mc;
-        brightSm_ += (clamp01 (brightness) - brightSm_) * mc;
-        dampSm_   += (clamp01 (damping)    - dampSm_)   * mc;
-        posSm_    += (clamp01 (position)   - posSm_)    * mc;
+        const float structT = clamp01 (structure), brightT = clamp01 (brightness);
+        const float dampT   = clamp01 (damping),   posT    = clamp01 (position);
 
         const int   mat   = material < 0 ? 0 : (material >= kMaterials ? kMaterials - 1 : material);
         const bool  modal = (mat >= kBar);
@@ -169,8 +168,7 @@ public:
             default:      excMs = 9.0f;  break;   // bar
         }
         const float pluckDecay = std::exp (-1.0f / (0.001f * excMs * sr_));
-        const float dryGain    = std::cos (mixSm_ * 1.57079633f);
-        const float wetGain    = std::sin (mixSm_ * 1.57079633f);
+        // fb204 — dry/wet gains recomputed per sample from the glided mix (no block steps)
         const float gainTgt    = 12.0f + 95.0f * mixSm_;                  // resonant drive vs Mix
 
         int ringing = 0;
@@ -189,6 +187,13 @@ public:
 
         for (int i = 0; i < n; ++i)
         {
+            mixSm_    += (mixT    - mixSm_)    * smCoef_;   // fb204 — per-sample macro glide
+            structSm_ += (structT - structSm_) * smCoef_;
+            brightSm_ += (brightT - brightSm_) * smCoef_;
+            dampSm_   += (dampT   - dampSm_)   * smCoef_;
+            posSm_    += (posT    - posSm_)    * smCoef_;
+            dryGainSm_ = std::cos (mixSm_ * 1.57079633f);
+            wetGainSm_ = std::sin (mixSm_ * 1.57079633f);
             const float dryL = L[i], dryR = R[i];
             const float in   = 0.5f * (dryL + dryR);
             const float dcY  = in - dcX_ + 0.995f * dcY_;   // DC-block the exciter
@@ -221,8 +226,8 @@ public:
             wet  = fastTanh (wet);
             if (! (wet == wet) || wet > 1.0e6f || wet < -1.0e6f) { wet = 0.0f; sawBad = true; }
 
-            L[i] = clampUnit (dryGain * dryL + wetGain * wet);
-            R[i] = clampUnit (dryGain * dryR + wetGain * wet);
+            L[i] = clampUnit (dryGainSm_ * dryL + wetGainSm_ * wet);
+            R[i] = clampUnit (dryGainSm_ * dryR + wetGainSm_ * wet);
             outAccum += wet * wet;
 
             // live 4-band spectral fingerprint of the wet signal
@@ -265,6 +270,7 @@ private:
     {
         float buf[kMaxDelay] = { 0 }; int widx = 0;
         float delay = 100.0f, lp = 0.0f, nlp = 0.0f;
+        float dlySm = 100.0f, tapSm = 20.0f, loopGSm = 0.5f;   // fb204 — glided delay/tap/loop gain
         float apx[kAP] = { 0 }, apy[kAP] = { 0 };
         float fb = 0.0f, loopG = 0.5f, dispC = 0.0f, gain = 1.0f; int stages = 1;
         void clr() noexcept
@@ -405,8 +411,15 @@ private:
         for (int s = 0; s < vo.nStr; ++s)
         {
             Str& st = vo.str[s];
-            const float rd = readHermite (st.buf, kMaxDelay, st.widx, st.delay);
-            st.lp += st.loopG * (rd - st.lp);
+            // fb204 — COMB CLICK law: modulated delay lengths GLIDE (2.5ms); pitch jumps snap.
+            if (std::abs (st.delay - st.dlySm) > 8.0f) st.dlySm = st.delay;
+            else                                       st.dlySm += (st.delay - st.dlySm) * smCoef_;
+            st.loopGSm += (st.loopG - st.loopGSm) * smCoef_;
+            const float tapT = st.delay * wgPosFrac_;
+            if (std::abs (tapT - st.tapSm) > 8.0f) st.tapSm = tapT;
+            else                                   st.tapSm += (tapT - st.tapSm) * smCoef_;
+            const float rd = readHermite (st.buf, kMaxDelay, st.widx, st.dlySm);
+            st.lp += st.loopGSm * (rd - st.lp);
             float sig = st.lp;
             for (int j = 0; j < st.stages; ++j)
             {
@@ -418,7 +431,7 @@ private:
             st.buf[st.widx] = inSig + st.fb * sig;
             st.widx = (st.widx + 1 >= kMaxDelay) ? 0 : st.widx + 1;
 
-            const float pick = readHermite (st.buf, kMaxDelay, st.widx, st.delay * wgPosFrac_);
+            const float pick = readHermite (st.buf, kMaxDelay, st.widx, st.tapSm);
             // comb DEPTH rides POSITION too (0.72 direct -> 0.92 hollow) so the morph is clearly
             // audible across the sweep. Output-only tap (never written back) — no loop-stability effect.
             out += (sig - (0.72f + 0.20f * posSm_) * pick) * st.gain;
@@ -580,6 +593,7 @@ private:
 
     // per-block scratch (waveguide)
     float wgDrive_ = 0.0f, wgNoise_ = 0.0f, wgNoiseLP_ = 0.3f, wgPosFrac_ = 0.2f;
+    float smCoef_ = 0.02f, dryGainSm_ = 1.0f, wetGainSm_ = 0.0f;   // fb204 — per-sample glide state
     // per-block scratch (modal)
     float modalDrive_ = 1.0f, modalKick_ = 0.5f, malletCoef_ = 0.35f;
     // exciter transient softener (kills the resonant pluck-spike on non-string materials)

@@ -387,7 +387,8 @@ public:
                 if (wetLevel_ < wetTarget_)      wetLevel_ = std::min (wetTarget_, wetLevel_ + inc);
                 else if (wetLevel_ > wetTarget_) wetLevel_ = std::max (wetTarget_, wetLevel_ - inc);
                 const float wenv = 0.5f - 0.5f * std::cos (3.14159265f * arpClamp01 (wetLevel_));
-                const float a = mix_ * wenv * aScale;
+                mixSm_ += (mix_ - mixSm_) * kHole_;   // fb204 — glided mix (2.5ms, the hole coef)
+                const float a = mixSm_ * wenv * aScale;
 
                 wl *= pingL_; wr *= pingR_;                        // fb142 — per-fire stereo bounce
                 if (outMode_ == 1)                                 // fb142 CUT: dry dies for the fire window
@@ -643,6 +644,7 @@ private:
         latchedPitch_ = pendPitch_; latchedReverse_ = pendReverse_;
         holeFire_ = extOn_ && pendHole_;                             // fb143 — this fire is a hole
         gCounter_ = 0; readPosF_ = 0.0; shCnt_ = 0; shHold_ = 0.f; shHoldR_ = 0.f; lastSubGrain_ = -1; lastWrap_ = -1;
+        decayLatch_ = arpClamp01 (ext_.decay); gateLatchPer_ = 0;   // fb204 — Decay latches per FIRE; gate re-latches
         seamInterval_ = extOn_ ? computeSeamIntervalExt() : computeSeamInterval();
         xfLen_ = fade_;
         if (extOn_ && gFx_ == GlitchFx::Freeze)                       // Melt widens the smear
@@ -1066,13 +1068,20 @@ private:
         return false;
     }
 
-    void gateApply (int t, float inL, float inR, float& outL, float& outR) const noexcept
+    void gateApply (int t, float inL, float inR, float& outL, float& outR) noexcept
     {
         static const int DIVS[8] = { 1, 2, 3, 4, 6, 8, 12, 16 };
-        const int div = DIVS[(int) std::lround ((double) arpClamp01 (ext_.gateRate) * 7.0)];
-        const int per0 = (gLen_ > 1 ? gLen_ : 2) / div;
-        const int per  = per0 < 2 ? 2 : per0;
-        const int ph   = (t + (int) ((double) arpClamp01 (ext_.gateNudge) * (double) per)) % per;
+        // fb204 — RATE + NUDGE latch at the period boundary (LADDER-adjacent): re-dividing
+        // mid-period slammed the phase — a full-scale gate jump on every modulated block.
+        if (gateLatchPer_ <= 1 || (t % gateLatchPer_) == 0)
+        {
+            const int div = DIVS[(int) std::lround ((double) arpClamp01 (ext_.gateRate) * 7.0)];
+            const int per0 = (gLen_ > 1 ? gLen_ : 2) / div;
+            gateLatchPer_   = per0 < 2 ? 2 : per0;
+            gateLatchNudge_ = (int) ((double) arpClamp01 (ext_.gateNudge) * (double) gateLatchPer_);
+        }
+        const int per = gateLatchPer_;
+        const int ph  = (t + gateLatchNudge_) % per;
         const int half = per / 2 > 0 ? per / 2 : 1;
         // Shape tops out at eg = half/2 — attack and release just meeting (a full
         // raised-cosine pulse). The old ceiling (eg = half) let the attack SWALLOW the
@@ -1091,8 +1100,8 @@ private:
             else                      g = 1.f;
         }
         else g = 0.f;
-        const float amt = arpClamp01 (ext_.gateAmt);
-        g = 1.f - amt + amt * g;                       // Amt = gate depth (floor level)
+        gateAmtSm_ += (arpClamp01 (ext_.gateAmt) - gateAmtSm_) * kHole_;   // fb204 — glided depth
+        g = 1.f - gateAmtSm_ + gateAmtSm_ * g;         // Amt = gate depth (floor level)
         outL = inL * g; outR = inR * g;
     }
 
@@ -1123,8 +1132,8 @@ private:
                 if (toneC_ < 0.9995f)
                 { tone1L_ += toneC_ * (cl - tone1L_); cl = tone1L_;
                   tone1R_ += toneC_ * (cr - tone1R_); cr = tone1R_; }
-                const float amt = arpClamp01 (ext_.crshAmt);
-                wl += (cl - wl) * amt; wr += (cr - wr) * amt;
+                crshAmtSm_ += (arpClamp01 (ext_.crshAmt) - crshAmtSm_) * kHole_;   // fb204 — glided
+                wl += (cl - wl) * crshAmtSm_; wr += (cr - wr) * crshAmtSm_;
             }
         }
 
@@ -1148,9 +1157,10 @@ private:
         if (curPan_ == 0)      wr *= 0.25f;
         else if (curPan_ == 2) wl *= 0.25f;
 
-        // master Decay: the glitch eases back to DRY over the hold
-        if (ext_.decay > 0.001f && gDur_ > 0)
-            return std::exp (-3.5f * arpClamp01 (ext_.decay) * (float) gCounter_ / (float) gDur_);
+        // master Decay: the glitch eases back to DRY over the hold (fb204: latched per fire —
+        // a mid-fire modulated Decay re-bent the curve with a step)
+        if (decayLatch_ > 0.001f && gDur_ > 0)
+            return std::exp (-3.5f * decayLatch_ * (float) gCounter_ / (float) gDur_);
         return 1.f;
     }
 
@@ -1202,6 +1212,8 @@ private:
     // fb143 DROP — hole-fire state + the 2.5ms wet glide (the slew law)
     bool  pendHole_ = false, holeFire_ = false;
     float holeG_ = 1.f, kHole_ = 0.02f;
+    float mixSm_ = 1.f, gateAmtSm_ = 0.f, crshAmtSm_ = 0.f, decayLatch_ = 0.f;   // fb204 — glide/latch state
+    int   gateLatchPer_ = 0, gateLatchNudge_ = 0;                                 // fb204 — gate period latch
     double   phF_ = 0.0, lenCur_ = 0.0, driftOff_ = 0.0, chunkOff_ = 0.0;
     float    lvlCur_ = 1.f;
     int      wrapN_ = 0;

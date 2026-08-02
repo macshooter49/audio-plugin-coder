@@ -96,7 +96,11 @@ namespace tw
 
         void setStretchRatio (float r) noexcept
         {
-            stretchRatio = juce::jlimit (0.1f, 15.0f, r);
+            // fb204 — STRETCH glides at push rate (~3 blocks): block-stepped mod re-seeded
+            // the OLA engines with jumps; a pole keeps the trajectory continuous.
+            const float rT = juce::jlimit (0.1f, 15.0f, r);
+            stretchRatio += (rT - stretchRatio) * 0.35f;
+            if (std::abs (rT - stretchRatio) < 1.0e-3f) stretchRatio = rT;
             if (signalsmithEngine) signalsmithEngine->setStretchRatio (stretchRatio);
             if (beatsEngine)       beatsEngine      ->setStretchRatio (stretchRatio);
             if (textureEngine)     textureEngine    ->setStretchRatio (stretchRatio);
@@ -114,18 +118,25 @@ namespace tw
          *  at note-on. Post-process, so it works in any stretch mode (not Tones-only). */
         void processTilt (float* l, float* r, int n, float tilt, double sr) noexcept
         {
-            if (tilt > -1.0e-4f && tilt < 1.0e-4f) return;                 // neutral -> bypass
             const float  t  = (tilt < -1.f) ? -1.f : (tilt > 1.f ? 1.f : tilt);
+            // fb204 — the tilt GAINS glide per sample (2.5ms): block-pushed FORMANT mod
+            // stepped them (confirmed zipper). Bypass only once the glide has settled home.
+            const bool neutral = (t > -1.0e-4f && t < 1.0e-4f);
+            if (neutral && std::abs (tiltGLoSm_ - 1.0f) < 1.0e-3f && std::abs (tiltGHiSm_ - 1.0f) < 1.0e-3f)
+            { tiltGLoSm_ = tiltGHiSm_ = 1.0f; return; }
             const double fs = (sr > 0.0) ? sr : 48000.0;
             const float  a  = 1.0f - (float) std::exp (-2.0 * 3.14159265358979 * 700.0 / fs);
+            const float  k  = 1.0f - (float) std::exp (-1.0 / (0.0025 * fs));
             const float  gLow  = std::pow (10.0f, (-t * 9.0f) / 20.0f);
             const float  gHigh = std::pow (10.0f, ( t * 9.0f) / 20.0f);
             for (int i = 0; i < n; ++i)
             {
+                tiltGLoSm_ += k * (gLow  - tiltGLoSm_);
+                tiltGHiSm_ += k * (gHigh - tiltGHiSm_);
                 tiltLpL_ += a * (l[i] - tiltLpL_);
                 tiltLpR_ += a * (r[i] - tiltLpR_);
-                l[i] = tiltLpL_ * gLow + (l[i] - tiltLpL_) * gHigh;
-                r[i] = tiltLpR_ * gLow + (r[i] - tiltLpR_) * gHigh;
+                l[i] = tiltLpL_ * tiltGLoSm_ + (l[i] - tiltLpL_) * tiltGHiSm_;
+                r[i] = tiltLpR_ * tiltGLoSm_ + (r[i] - tiltLpR_) * tiltGHiSm_;
             }
         }
         void setPitchSemitones (float semis) noexcept
@@ -345,6 +356,7 @@ namespace tw
         WarpMode mode           = WarpMode::None;
         float    stretchRatio   = 1.0f;
         float    tiltLpL_ = 0.f, tiltLpR_ = 0.f;   // FORMANT-MODE — one-pole spectral-tilt state (post-warp)
+        float    tiltGLoSm_ = 1.f, tiltGHiSm_ = 1.f;   // fb204 — glided tilt gains
         float    pitchSemitones = 0.0f;
         float    formantFactor  = 1.0f;   // SAMPLE-ENGINE-FORMANT
 

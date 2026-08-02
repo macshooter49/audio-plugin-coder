@@ -41,6 +41,8 @@ public:
         outRate_ = (outputSampleRate > 0.0) ? outputSampleRate : 44100.0;
         endFadeLen_ = 0.0025 * outRate_;   // ~2.5 ms terminal micro fade-out (region-edge declick)
         transFadeLen_ = 0.003 * outRate_;  // ~3 ms loop-ENTRY (catch-snap) declick crossfade
+        xfSmCoef_ = 1.0 - std::exp (-1.0 / (0.0025 * outRate_));   // fb204: ~2.5 ms house glide coef
+        xfadeLen_ = xfadeLenT_;                                    // fb204: snap live = target at prepare
     }
 
     /** Point the engine at the loaded buffer. Call whenever the BufferPtr or
@@ -210,6 +212,12 @@ public:
     {
         if (! active_ || ! hasSample()) { outL = outR = 0.f; return false; }
 
+        // fb204 — X-FADE GLIDE: modulated X-Fade recomputes the region per block; the live
+        // loop-window length glides (2.5ms) instead of stepping mid-loop (audible zipper).
+        xfadeLen_ += (xfadeLenT_ - xfadeLen_) * xfSmCoef_;
+        const double seamMax204 = 0.0015 * outRate_;
+        seamFadeLen_ = (xfadeLen_ < seamMax204) ? xfadeLen_ : seamMax204;
+
         readFrame (pos_, outL, outR);
 
         // LOOP-ENTRY (catch-snap) DECLICK — only the Reverse loop arms this (it snaps loopStart →
@@ -342,7 +350,7 @@ private:
     // ── derived region/loop in samples (recomputed on any region/buffer change) ─
     void recomputeRegion() noexcept
     {
-        if (numSamples_ < 2) { regStart_ = regEnd_ = loopStart_ = loopEnd_ = 0.0; xfadeLen_ = 0.0; return; }
+        if (numSamples_ < 2) { regStart_ = regEnd_ = loopStart_ = loopEnd_ = 0.0; xfadeLenT_ = xfadeLen_ = 0.0; return; }
         const double N = (double) (numSamples_ - 1);
         regStart_ = start01_ * N;
         regEnd_   = end01_   * N;
@@ -359,17 +367,17 @@ private:
         // X-Fade length: fraction of loop, capped to half the loop (so it can't
         // overrun the seam) — this is the "auto-scaled in-bounds" rule.
         const double L = loopEnd_ - loopStart_;
-        xfadeLen_ = (double) xfade01_ * L;
+        xfadeLenT_ = (double) xfade01_ * L;   // fb204 — TARGET only; tick() glides the live length
         const double cap = 0.5 * L;
-        if (xfadeLen_ > cap) xfadeLen_ = cap;
-        if (xfadeLen_ < 0.0) xfadeLen_ = 0.0;
+        if (xfadeLenT_ > cap) xfadeLenT_ = cap;
+        if (xfadeLenT_ < 0.0) xfadeLenT_ = 0.0;
 
         // DECLICK — the loop content crossfade uses an ADAPTIVE per-edge window (see readFrame) that
         // limits its reads to the material available before loopStart / after loopEnd, so it runs at
         // ANY X-Fade without ever clamping to DC. The short seam amplitude micro-fade is the fallback
         // only for a BUFFER-EDGE loop where even that window has no room (see tick()).
         const double seamMax = 0.0015 * outRate_;   // ~1.5 ms declick
-        seamFadeLen_ = (xfadeLen_ < seamMax) ? xfadeLen_ : seamMax;
+        seamFadeLen_ = (xfadeLenT_ < seamMax) ? xfadeLenT_ : seamMax;   // fb204 — re-derived per sample in tick()
 
         // Terminal (region-edge) micro fade-out length — ~2.5 ms, capped to half the region so a
         // tiny region can't make the whole thing fade. UNCONDITIONAL "no clicks ever" tail.
@@ -671,6 +679,8 @@ private:
     double regStart_ = 0.0, regEnd_ = 0.0;
     double loopStart_ = 0.0, loopEnd_ = 0.0;
     double xfadeLen_ = 0.0;
+    double xfadeLenT_ = 0.0;   // fb204 — glide target (recomputeRegion writes here)
+    double xfSmCoef_  = 0.02;  // fb204 — 2.5ms one-pole coef, set in prepare()
     double fadeInLen_ = 0.0, fadeOutLen_ = 0.0;
 
     // ── playhead state ──

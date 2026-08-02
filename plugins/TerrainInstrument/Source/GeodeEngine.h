@@ -424,7 +424,7 @@ public:
         ampZ_.assign  (geode::kMaxPartials, 0.f);   // declick: per-partial previous-block gain
         scatMul_.fill (1.f);
         wr_.ratio.fill (0.f); wr_.amp.fill (0.f);
-        pos01_ = 0.f; prevPos_ = -1.f;
+        pos01_ = 0.f; prevPos_ = -1.f; driveSm_ = 0.f;   // fb204
         makeup_ = 1.0f;
         crushHoldL_ = crushHoldR_ = 0.f; crushCnt_ = 0;
     }
@@ -446,6 +446,7 @@ public:
     void setFrameStore (const GeodeFrameStore* s) noexcept { store_ = s; }
     bool hasStore() const noexcept { return store_ != nullptr && store_->valid && store_->numFrames() > 0; }
     float readPos01() const noexcept { return pos01_; }   // current read-head [0,1] (tests / UI follower)
+    float driveSm_ = 0.f;   // fb204 — block-ramped drive (postProcess)
 
     void setParams (const GeodeParams& p) noexcept
     {
@@ -454,8 +455,10 @@ public:
         {
             const float rs = clamp01 (p.regionStart);
             const float re = std::max (rs + 0.01f, clamp01 (p.regionEnd));
-            pos01_ = (p.loopMode == 2) ? re - clamp01 (p.start) * (re - rs)   // mirror noteOn's REVERSE map
-                                       : rs + clamp01 (p.start) * (re - rs);
+            const float tgt204 = (p.loopMode == 2) ? re - clamp01 (p.start) * (re - rs)   // mirror noteOn's REVERSE map
+                                                   : rs + clamp01 (p.start) * (re - rs);
+            pos01_ += (tgt204 - pos01_) * 0.35f;   // fb204 — modulated START scrubs (fast pole), never teleports (block-rate click)
+            if (std::fabs (tgt204 - pos01_) < 1e-4f) pos01_ = tgt204;
         }
         prevPos_ = p.start;
         p_ = p;
@@ -633,7 +636,11 @@ public:
     void postProcess (float* L, float* R, int n) noexcept
     {
         if (L == nullptr || R == nullptr || n <= 0) return;
-        const float drive = clamp01 (p_.drive);
+        const float driveT = clamp01 (p_.drive);
+        // fb204 — DRIVE ramps across the block (start/step lands exactly on target): the
+        // block-pushed mod stepped the shaper gain (confirmed zipper on Saturate/Fold/Ember).
+        const float drvStep204 = (driveT - driveSm_) / (float) n;
+        const float drive = driveT > driveSm_ ? driveT : driveSm_;   // gate on the louder end
         const float crush = clamp01 (p_.crush);
 
         if (drive > 1e-3f)
@@ -644,10 +651,11 @@ public:
                     break;                // grown in renderBlockAdd); no audio-domain shaping here.
                 case 4:                   // FOLDBACK — sine-fold: peaks REFLECT, spectrum keeps
                 {                         // reorganizing as you push (metallic / West-Coast shimmer)
-                    const float ang  = 0.5f * geode::kPi * (1.f + drive * 6.f);
-                    const float wmix = drive * 2.5f > 1.f ? 1.f : drive * 2.5f;   // dry→wet (identity at 0)
                     for (int i = 0; i < n; ++i)
                     {
+                        driveSm_ += drvStep204;   // fb204 — ramped drive, coefs per sample (cheap)
+                        const float ang  = 0.5f * geode::kPi * (1.f + driveSm_ * 6.f);
+                        const float wmix = driveSm_ * 2.5f > 1.f ? 1.f : driveSm_ * 2.5f;
                         const float wl = std::sin (L[i] * ang), wr2 = std::sin (R[i] * ang);
                         L[i] += (wl - L[i]) * wmix;
                         R[i] += (wr2 - R[i]) * wmix;
@@ -656,12 +664,13 @@ public:
                 }
                 case 5:                   // EMBER — asymmetric tube/tape bias: even harmonics, warm
                 {
-                    const float g  = 1.f + drive * 7.f;
-                    const float b  = drive * 0.4f;
-                    const float mk = 1.f / (1.f + drive * 0.8f);
-                    const float dc = softClip (b);
                     for (int i = 0; i < n; ++i)
                     {
+                        driveSm_ += drvStep204;   // fb204 — ramped
+                        const float g  = 1.f + driveSm_ * 7.f;
+                        const float b  = driveSm_ * 0.4f;
+                        const float mk = 1.f / (1.f + driveSm_ * 0.8f);
+                        const float dc = softClip (b);
                         L[i] = (softClip (L[i] * g + b) - dc) * mk;
                         R[i] = (softClip (R[i] * g + b) - dc) * mk;
                     }
@@ -669,10 +678,11 @@ public:
                 }
                 default:                  // SATURATE — the amplified rs4 soft-clip: slams the shaper
                 {                         // (g→37×) with gentle makeup so 100% is ear-blasting.
-                    const float g  = 1.f + drive * 36.f;
-                    const float mk = 1.f / (1.f + drive * 0.8f);
                     for (int i = 0; i < n; ++i)
                     {
+                        driveSm_ += drvStep204;   // fb204 — ramped
+                        const float g  = 1.f + driveSm_ * 36.f;
+                        const float mk = 1.f / (1.f + driveSm_ * 0.8f);
                         L[i] = softClip (L[i] * g) * mk;
                         R[i] = softClip (R[i] * g) * mk;
                     }
@@ -680,6 +690,8 @@ public:
                 }
             }
         }
+
+        driveSm_ = driveT;   // fb204 — settle exactly (spectral modes 1-3 stay block-rate by design)
 
         if (crush > 1e-3f)
         {

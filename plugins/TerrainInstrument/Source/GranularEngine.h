@@ -85,11 +85,11 @@ public:
         // AIR high-pass corner ~3 kHz one-pole (matches the Sample engine's exciter feel)
         airCoef_ = 1.f - std::exp (-2.f * kPi * 3000.f / (float) outRate_);
         if (airCoef_ < 0.f) airCoef_ = 0.f; if (airCoef_ > 1.f) airCoef_ = 1.f;
-        normAlpha_ = 1.f - std::exp (-1.f / (0.003f * (float) outRate_));   // ~3 ms norm glide
+        normAlpha_ = 1.f - std::exp (-1.f / (0.003f * (float) outRate_));   // ~3 ms norm glide (fb204: shape/skew ride it too)
         (void) windows();   // shared static LUTs — force the one-time build here, not mid-note
         resetPool();
         recomputeDerived();
-        normSm_ = norm_;
+        normSm_ = norm_; shapeSm_ = p_.shape; skewSm_ = p_.skew; airSm_ = p_.air;   // fb204 — snap with norm
     }
 
     // GLOBAL grain budget (optional) — `used` is owned by the processor and shared by every
@@ -139,6 +139,7 @@ public:
         releasing_ = false;
         airHpL_ = airHpR_ = 0.f;
         normSm_    = norm_;   // snap — a fresh note starts at the current target, no glide-in
+        shapeSm_   = p_.shape; skewSm_ = p_.skew; airSm_ = p_.air;   // fb204 — window params snap with it
         pingDir_   = (p_.scan < 0.f) ? -1.f : 1.f;   // Ping-Pong launches in the SCAN direction — full-left scan starts LEFT
         oneShotDone_ = false;  // One-Shot / Tailed: not yet reached the far edge
         caught_    = false;    // loop modes: head not yet inside the loop bracket (lead-in from the anchor)
@@ -175,7 +176,7 @@ public:
         {
             Grain& g = pool_[(size_t) activeIdx_[j]];
             const float ph = (float) g.age / (float) g.len;
-            const float w  = windowAt (p_.shape, p_.skew, ph);
+            const float w  = windowAt (shapeSm_, skewSm_, ph);   /* fb204 — glided window */
             float sl, sr; readHermite (g.readPos, sl, sr);
             accL += w * g.gain * g.panL * sl;
             accR += w * g.gain * g.panR * sr;
@@ -200,17 +201,21 @@ public:
         //    ~20× range in per-block steps, and applying those steps raw put an audible CLICK
         //    on the whole playing cloud every block. One-pole glide (~3 ms) makes it seamless.
         normSm_ += normAlpha_ * (norm_ - normSm_);
+        shapeSm_ += normAlpha_ * (p_.shape - shapeSm_);   // fb204 — Shape/Skew ride the same glide
+        skewSm_  += normAlpha_ * (p_.skew  - skewSm_);
+        if (std::fabs (skewSm_ - skewLut_) > 0.008f) { refreshSkewWarp (skewSm_); skewLut_ = skewSm_; }
         outL = accL * normSm_;
         outR = accR * normSm_;
 
         // 4) AIR — Chebyshev-style high-harmonic exciter (identical math to the Sample osc's AIR)
-        if (p_.air > 0.001f)
+        airSm_ += normAlpha_ * (p_.air - airSm_);   // fb204 — AIR glide (SampAir mirror)
+        if (airSm_ > 0.001f)
         {
-            const float drv = 1.f + p_.air * 20.f;
+            const float drv = 1.f + airSm_ * 20.f;
             airHpL_ += airCoef_ * (outL - airHpL_); const float hpL = outL - airHpL_;
-            outL += p_.air * 2.f * (std::tanh (hpL * drv) - hpL);
+            outL += airSm_ * 2.f * (std::tanh (hpL * drv) - hpL);
             airHpR_ += airCoef_ * (outR - airHpR_); const float hpR = outR - airHpR_;
-            outR += p_.air * 2.f * (std::tanh (hpR * drv) - hpR);
+            outR += airSm_ * 2.f * (std::tanh (hpR * drv) - hpR);
         }
 
         // 5) advance the read-head per LOOP MODE (factored — renderBlockAdd uses the same helper).
@@ -265,7 +270,7 @@ public:
                 for (; i < stop; ++i)
                 {
                     const float ph = (float) g.age / (float) g.len;
-                    const float w  = windowAt (p_.shape, p_.skew, ph);
+                    const float w  = windowAt (shapeSm_, skewSm_, ph);   /* fb204 — glided window */
                     float sl, sr; readHermite (g.readPos, sl, sr);
                     bufL[i] += w * g.gain * g.panL * sl;
                     bufR[i] += w * g.gain * g.panR * sr;
@@ -284,17 +289,19 @@ public:
             }
 
             // 3) normalization + AIR (identical math/order to tick steps 3-4), accumulate out
-            if (p_.air > 0.001f)
+            if (p_.air > 0.001f || airSm_ > 0.001f)
             {
-                const float drv = 1.f + p_.air * 20.f;
                 for (int i = 0; i < len; ++i)
                 {
                     normSm_ += normAlpha_ * (norm_ - normSm_);   // same per-sample glide as tick()
+                    shapeSm_ += normAlpha_ * (p_.shape - shapeSm_); skewSm_ += normAlpha_ * (p_.skew - skewSm_);   // fb204
+                    airSm_ += normAlpha_ * (p_.air - airSm_);   // fb204 — AIR glide (SampAir mirror)
+                    const float drv = 1.f + airSm_ * 20.f;
                     float l = bufL[i] * normSm_, r = bufR[i] * normSm_;
                     airHpL_ += airCoef_ * (l - airHpL_); const float hpL = l - airHpL_;
-                    l += p_.air * 2.f * (std::tanh (hpL * drv) - hpL);
+                    l += airSm_ * 2.f * (std::tanh (hpL * drv) - hpL);
                     airHpR_ += airCoef_ * (r - airHpR_); const float hpR = r - airHpR_;
-                    r += p_.air * 2.f * (std::tanh (hpR * drv) - hpR);
+                    r += airSm_ * 2.f * (std::tanh (hpR * drv) - hpR);
                     outL[base + i] += l;
                     outR[base + i] += r;
                 }
@@ -304,6 +311,7 @@ public:
                 for (int i = 0; i < len; ++i)
                 {
                     normSm_ += normAlpha_ * (norm_ - normSm_);   // same per-sample glide as tick()
+                    shapeSm_ += normAlpha_ * (p_.shape - shapeSm_); skewSm_ += normAlpha_ * (p_.skew - skewSm_);   // fb204
                     outL[base + i] += bufL[i] * normSm_;
                     outR[base + i] += bufR[i] * normSm_;
                 }
@@ -417,7 +425,7 @@ private:
         const float ov = densHz_ * glenSec;
         norm_ = 1.f / std::sqrt (ov < 1.f ? 1.f : ov);
         refreshLoopBounds();
-        refreshSkewWarp (p_.skew);   // rebuilds only when the Skew knob actually moved
+        if (std::fabs (skewSm_ - skewLut_) > 0.008f) { refreshSkewWarp (skewSm_); skewLut_ = skewSm_; }   // fb204 — glided LUT (chunk-rate rebuild)
     }
 
     // Effective LOOP bracket = [loopStart,loopEnd] sorted, intersected with the region; a
@@ -740,6 +748,7 @@ private:
     float  densHz_ = 8.f, grainLenSamp_ = 480.f, norm_ = 1.f;   // cached per-block derived values (CPU)
     float  headDiv_ = 1.f;   // Stretch time divisor for the scan head: 1 + stretch·3 (Sample parity)
     float  normSm_ = 1.f, normAlpha_ = 0.007f;   // norm_ glide (~3 ms) — declicks Size/Density knob moves
+    float  shapeSm_ = 0.5f, skewSm_ = 0.f, skewLut_ = 0.f, airSm_ = 0.f;   // fb204 — glided window/air params
     // Optional GLOBAL grain budget (shared across every engine in the instance, set by the
     // processor): spawns are refused once the plugin-wide live-grain count hits the cap, so
     // stacked dense voices thin gracefully instead of eating the whole core.

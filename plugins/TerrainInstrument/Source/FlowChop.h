@@ -80,6 +80,7 @@ public:
         bufR_.assign ((size_t) cap_, 0.0f);
         fade_ = (int) std::lround (sr_ * 0.0015);          // 1.5 ms cosine edge
         if (fade_ < 2) fade_ = 2;
+        kSm_ = 1.0f - (float) std::exp (-1.0 / (0.0025 * sr_));   // fb204 — 2.5ms glide coef
         reset();
     }
 
@@ -328,7 +329,8 @@ public:
                 if (crushLv_ > 0.f)
                 { wetL = std::round (wetL * crushLv_) / crushLv_; wetR = std::round (wetR * crushLv_) / crushLv_; }
                 if (ext_.grit > 0.01f)
-                { wetL = std::tanh (wetL * gritDrv_) * gritNorm_; wetR = std::tanh (wetR * gritDrv_) * gritNorm_; }
+                { gritDrvSm_ += (gritDrv_ - gritDrvSm_) * kSm_; gritNormSm_ += (gritNorm_ - gritNormSm_) * kSm_;   // fb204 — glided
+                  wetL = std::tanh (wetL * gritDrvSm_) * gritNormSm_; wetR = std::tanh (wetR * gritDrvSm_) * gritNormSm_; }
                 switch (ext_.filter)
                 {
                     case 1:  // Low — one-pole LP
@@ -347,7 +349,8 @@ public:
                         break;
                     default: break;
                 }
-                wetL *= trimGain_; wetR *= trimGain_;
+                trimSm_ += (trimGain_ - trimSm_) * kSm_;   // fb204 — glided trim
+                wetL *= trimSm_; wetR *= trimSm_;
             }
 
             // wet gate (cosine) for mode enter/exit click-free
@@ -357,7 +360,8 @@ public:
             else if (wetEnv_ > target) wetEnv_ = std::max (target, wetEnv_ - stepInc);
             const float wenv = 0.5f - 0.5f * std::cos (3.14159265358979f * arpClamp01 (wetEnv_)); // smooth the gate
 
-            const float a = mix_ * wenv;
+            mixSm_ += (mix_ - mixSm_) * kSm_;   // fb204 — glided mix
+            const float a = mixSm_ * wenv;
             L[i] = flush (dryL + (wetL - dryL) * a);
             R[i] = flush (dryR + (wetR - dryR) * a);
 
@@ -841,6 +845,7 @@ private:
     double        scanBackSamp_ = 0.0, spAcc_ = 0.0, lastRate_ = 1.0, padSamp_ = 0.0;
     float         wanderCur_ = 0.f, colEnv_ = 0.f;
     float         crushLv_ = 0.f, gritDrv_ = 1.f, gritNorm_ = 1.f, trimGain_ = 1.f;
+    float         kSm_ = 0.02f, mixSm_ = 1.f, trimSm_ = 1.f, gritDrvSm_ = 1.f, gritNormSm_ = 1.f;   // fb204 — glide state
     int           fadeEff_ = 2;
     float         lpC_ = 1.f, hpC_ = 1.f, lpL_ = 0.f, lpR_ = 0.f, hpL_ = 0.f, hpR_ = 0.f;
     float         wowPh_ = 0.f, wowInc_ = 0.f;

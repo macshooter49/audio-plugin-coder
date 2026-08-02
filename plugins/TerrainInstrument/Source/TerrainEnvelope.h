@@ -44,6 +44,7 @@ public:
     void prepare (double sampleRate) noexcept
     {
         sampleRate_ = (sampleRate > 0.0) ? sampleRate : 48000.0;
+        susSmCoef_  = 1.0 - std::exp (-1.0 / (0.0025 * sampleRate_)); // fb204: 2.5ms sustain glide
         reset();
     }
 
@@ -51,6 +52,7 @@ public:
     {
         stage_      = Stage::Idle;
         level_      = 0.0;
+        susSm_      = sustain_;   // fb204 — glide snaps to target at rest
         segPos_     = 0.0;
         segLen_     = 0.0;
         segStart_   = 0.0;
@@ -82,6 +84,7 @@ public:
     void noteOn() noexcept
     {
         gateOn_ = true;
+        if (stage_ == Stage::Idle) susSm_ = sustain_;   // fb204 — fresh note starts on-target
         if (delaySec_ > 0.0)
             enterStage (Stage::Delay);
         else
@@ -111,6 +114,11 @@ public:
     // ── per-sample tick — returns the envelope value in [0,1] ─────────────────
     double tick() noexcept
     {
+        // fb204 — SUSTAIN GLIDE (2.5ms): the owner pushes a modulated sustain once per
+        // block; consuming it raw staircased the level (audible zipper when an LFO rides
+        // Sus — worst on the AMP env, where sustain IS the gain). One one-pole here
+        // smooths every consumer: decay retarget, sustain stage, and the matrix taps.
+        susSm_ += (sustain_ - susSm_) * susSmCoef_;
         switch (stage_)
         {
             case Stage::Idle:
@@ -140,12 +148,12 @@ public:
             case Stage::Decay:
             {
                 const bool done = advanceSeg();
-                // decay target tracks the (possibly changing) sustain level
-                segTarget_ = sustain_;
+                // decay target tracks the (possibly changing) sustain level (fb204: glided)
+                segTarget_ = susSm_;
                 level_ = shape (segStart_, segTarget_, segPos_ / segLenSafe(), curveD_);
                 if (done)
                 {
-                    level_ = sustain_;
+                    level_ = susSm_;
                     if (loop_ && gateOn_) enterStage (Stage::Attack);   // env-as-LFO
                     else                  enterStage (Stage::Sustain);
                 }
@@ -153,8 +161,8 @@ public:
             }
 
             case Stage::Sustain:
-                // hold at the live sustain target (continuous update is safe)
-                level_ = sustain_;
+                // hold at the live sustain target (fb204: glided — no block staircase)
+                level_ = susSm_;
                 return level_;
 
             case Stage::Release:
@@ -270,6 +278,8 @@ private:
     double holdSec_    = 0.0;
     double decaySec_   = 0.10;
     double sustain_    = 0.70;
+    double susSm_      = 0.70;   // fb204 — glided sustain (2.5ms one-pole toward sustain_)
+    double susSmCoef_  = 0.02;   // fb204 — set in prepare()
     double releaseSec_ = 0.20;
     double curveA_     = 0.0;
     double curveD_     = 0.0;
