@@ -14638,8 +14638,10 @@ setTimeout(function wireSynControls () {
       };
       window.__synShowMenu = showMenu; window.__synHideMenu = hideMenu;
 
-      // Click outside menu closes it
-      document.addEventListener('mousedown', (e) => {
+      // Press outside menu closes it — POINTERDOWN, not mousedown: gestures that preventDefault
+      // their pointerdown (the shaper grid) suppress the compat mousedown, and the menu was
+      // surviving grid presses (fb222; the imports menu already dismisses this way).
+      document.addEventListener('pointerdown', (e) => {
         if (!menuEl.classList.contains('act')) return;
         if (menuEl.contains(e.target)) return;
         hideMenu();
@@ -22867,6 +22869,16 @@ restoreThemeFromBackend();
       if(box&&box.parentNode)box.parentNode.removeChild(box);
       if(!did)shSelClear(); }   // a plain click on empty ground = deselect
     svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); }
+  function shDelSel(){ if(st.shape!==7||!shSel.length)return false;   // fb222 — kill the selected point(s); endpoints immortal, works for one or many
+    var sp=shGet(), n0=sp.pts.length;
+    var keep=sp.pts.filter(function(p,ix){ return shSel.indexOf(ix)<0||ix===0||ix===n0-1; });
+    if(keep.length===n0)return false;
+    sp.pts=keep; shSelClear(); shTouched=true; shPush(); render(); return true; }
+  document.addEventListener('keydown',function(e){   // fb222 — Delete/Backspace = delete selection (typing guarded; unhandled keys pass to the host untouched)
+    if(e.key!=='Delete'&&e.key!=='Backspace')return;
+    var tg=e.target&&e.target.tagName; if(tg==='INPUT'||tg==='TEXTAREA')return;
+    var vis=document.getElementById('syn-panel'); if(!vis||vis.offsetParent===null)return;
+    if(shDelSel()){ e.preventDefault(); try{window.__synHideMenu&&window.__synHideMenu();}catch(e0){} } });
   function stampCell(q,T){ var sp=shGet(); T=T||shTool;   // fb221 — callers may force a tool (Shift-drag stamps Straight line without arming a brush)
     var gv=sp.gv, ci=Math.max(0,Math.min(gv-1,Math.floor(q.x*gv))), c0=ci/gv, c1=(ci+1)/gv;
     var lv=sp.sn?shSnap(q.y,sp.gh):q.y, m=(c0+c1)/2, S;
@@ -22949,7 +22961,8 @@ restoreThemeFromBackend();
         sp.pts[i][0]=nx; sp.pts[i][1]=ny; shRefresh(); }
       function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e1){}
         svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
-        if(did){ shTouched=true; shPush(); render(); } }   // no-move release skips render so dbl-click delete still fires
+        if(did){ shTouched=true; shPush(); render(); }
+        else if(!isCd&&!grp){ shSel=[i]; shSelTab=st.tab; shSelPaint(); } }   // no-move release skips render (dbl-click delete still fires) · fb222 — a plain click SELECTS the point (Delete key works on singles)
       svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); });
     sc.oncontextmenu=function(e){ e.preventDefault(); shCtx(e); };
   }
@@ -22966,9 +22979,7 @@ restoreThemeFromBackend();
     function sc0(){ return root.querySelector('.mv-scope'); }
     if(st.shape===7&&shSel.length>1&&window.__synShowMenu){   // fb221 — with a selection down, the right-click serves the selection; click empty ground to get the control room back
       window.__synShowMenu('', [
-        { node: shRedRow('Remove selected', function(){ var n0=sp.pts.length;
-            sp.pts=sp.pts.filter(function(p,ix){ return shSel.indexOf(ix)<0||ix===0||ix===n0-1; });
-            shSelClear(); shTouched=true; shPush(); render(); }) }
+        { node: shRedRow('Remove selected', function(){ shDelSel(); }) }
       ], e.clientX, e.clientY); return; }
     if(nb&&nb.t==='nd'&&nb.i>0&&nb.i<sp.pts.length-1&&sp.pts.length>2&&window.__synShowMenu){
       window.__synShowMenu('', [
@@ -27385,7 +27396,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb221';   // bump per ship  [fb221 = L2 COMPLETE: Shift-drag step draw · rubber-band multi-select + group move · Flip vertical/horizontal · Remove selected]
+  var TERRAIN_BUILD = 'fb222';   // bump per ship  [fb222 = menu closes on ANY press (pointerdown capture) · click-select a point · Delete/Backspace deletes selection]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
