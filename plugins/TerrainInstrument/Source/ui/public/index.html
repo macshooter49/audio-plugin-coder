@@ -6955,7 +6955,6 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                 <line x1="0" y1="62" x2="280" y2="62" stroke="rgba(201,190,239,0.22)" stroke-width="0.6"/>
                 <path id="env-fill" d="" fill="url(#env-grad)"/>
                 <path id="env-line" d="" stroke="#C9BEEF" stroke-width="1.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
-                <text id="env-loop-tag" x="8" y="12" fill="#8B5CF6" font-size="6.5" letter-spacing="2" style="display:none">Loop</text>
                 <text id="env-readout" x="140" y="12" text-anchor="middle" fill="#908599" font-size="7.5" letter-spacing="1" style="display:none"></text>
                 <g id="env-nodes"></g>
                 <circle id="env-follow" cx="-10" cy="-10" r="2.9" fill="#E7DEFF" style="opacity:0;filter:drop-shadow(0 0 3px rgba(167,139,250,0.95)) drop-shadow(0 0 7px rgba(167,139,250,0.55));pointer-events:none;transition:opacity .12s"/>
@@ -13880,7 +13879,6 @@ setTimeout(function wireSynControls () {
         var fillP   = document.getElementById('env-fill');
         var followEl= document.getElementById('env-follow');
         var canvas  = document.getElementById('env-canvas');
-        var loopTag = document.getElementById('env-loop-tag');
         var readout = document.getElementById('env-read-hud');
         var selChip = document.getElementById('env-sel');
         if (!svg || !nodesG || !lineP) return;
@@ -14213,7 +14211,6 @@ setTimeout(function wireSynControls () {
 
         function syncLoopUi(){
           var on = nv(st()['LOOP'])>0.5;
-          if(loopTag) loopTag.style.display = on?'block':'none';
           var envsEl = canvas ? canvas.parentElement : null;
           if(envsEl) envsEl.classList.toggle('env-loop-on', on);
         }
@@ -27308,7 +27305,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb217';   // bump per ship  [fb217 = THE TRUE FOLLOWER — the dot rides the DSP's real LFO phase (pushed per frame), fake 120-BPM sim demoted to stale-feed fallback]
+  var TERRAIN_BUILD = 'fb218';   // bump per ship  [fb218 = env 'Loop' corner tag retired (obsolete — the dashed curve IS the signifier)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
