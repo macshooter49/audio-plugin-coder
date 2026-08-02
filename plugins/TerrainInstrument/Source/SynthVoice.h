@@ -3870,7 +3870,6 @@ namespace tw
             // musical, per report §6).
             {
                 const double sr = sampleRate_;
-                const float  nyq = 0.5f * (float) sr;
                 const float  baseCutSemis = hzToSemi (baseCutHz_);
                 // EROSION scale: pow(e, 1.8) per prompt §5 / report §5. The
                 // resulting random walk drifts within ±~6 ST at max erosion.
