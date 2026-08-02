@@ -2430,11 +2430,12 @@ body {
 #mod-engine .mv-c .ic{display:inline-flex;width:20px;height:11px;color:inherit;}
 #mod-engine .mv-seg{font-size:9px;letter-spacing:1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-seg b{cursor:pointer;font-weight:300;} #mod-engine .mv-seg .on{color:#fff;} #mod-engine .mv-seg .off{color:var(--ghost-dim);}
-#mod-engine .mv-exp{width:14px;height:14px;cursor:pointer;color:var(--ghost);transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));}
+#mod-engine .mv-exp{width:12px;height:12px;cursor:pointer;color:var(--ghost-dim);opacity:.8;transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));}   /* fb209 — quieter corner (Max: the cluster fought the graph) */
 #mod-engine .mv-exp:hover{color:#fff;}
 /* fb206 — THE SHAPER (custom LFO editor) */
 #mod-engine .mv-ov.top{gap:7px;}
-#mod-engine.shp .mv-ov.bot{border-top:1px solid rgba(255,255,255,.075);}   /* fb208 — the footer ruler, same grammar as the env shelf line */
+#mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
+#mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-2.2px;height:1px;background:rgba(255,255,255,.075);}   /* fb209 — THE RULER, raised to be COLLINEAR with the env shelf line (measured: env 716.4 vs overlay top 718.6 → −2.2px) */
 #mod-engine .mv-gr{gap:3px;}
 #mod-engine .mv-gr b{min-width:11px;font-weight:400;font-variant-numeric:tabular-nums;}
 #mod-engine .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
@@ -2452,7 +2453,7 @@ body {
 #mod-engine .mv-dep{display:flex;align-items:center;gap:5px;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-dep .l{font-size:7.5px;letter-spacing:1px;color:var(--ghost-dim);}
 #mod-engine .mv-dep .v{font-size:9px;color:var(--gray);font-variant-numeric:tabular-nums;min-width:24px;}
-#mod-engine .mv-ring{width:18px;height:18px;border-radius:50%;cursor:ns-resize;
+#mod-engine .mv-ring{width:15px;height:15px;border-radius:50%;cursor:ns-resize;   /* fb209 — Dep quieted (sore-thumb call) */
   -webkit-mask:radial-gradient(closest-side,transparent 71%,#000 73%);mask:radial-gradient(closest-side,transparent 71%,#000 73%);}
 /* Depth = a thin bipolar purple sidebar (center = 0, fills up for +, down for −). */
 #mod-engine .mv-bar{position:relative;width:5px;height:22px;border-radius:2.5px;background:rgba(120,118,160,0.32);cursor:ns-resize;overflow:hidden;}
@@ -22757,7 +22758,7 @@ restoreThemeFromBackend();
      via setSynthLfoShapes/getSynthLfoShapes (dyn-env lifecycle: debounced push, boot
      pull, local-edit-outranks-pull race guard). */
   var GRIDS=[2,3,4,6,8,12,16,24,32];
-  var SH_TOP=18, SH_BOT=70, SH_L=5, SH_R=451;   // fb208 — the FIELD: stock airspace vertically (fb185 ceiling law) + inset ends so endpoint nodes sit fully inside the frame, ON their line
+  var SH_TOP=18, SH_BOT=70, SH_L=0, SH_R=456;   // fb209 — EDGE TO EDGE (Max: 'like Serum'): the field spans the full pane; endpoint dots kiss the edges exactly like Serum's
   function shX(x01){ return SH_L+(SH_R-SH_L)*x01; }
   var shapes={}, shTouched=false, shPushT=null;
   function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
@@ -22792,7 +22793,6 @@ restoreThemeFromBackend();
       for(var k2=1;k2<=n;k2++){ var t=k2/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+shY(a[1]+(b[1]-a[1])*shBias(t,cc)).toFixed(1)+' '; } }
     return d; }
   function shaperSVG(){ var w=456,h=96,sp=shGet(),i,g='';
-    g+='<line class="maj" x1="'+SH_L+'" y1="'+SH_TOP+'" x2="'+SH_L+'" y2="'+SH_BOT+'"/><line class="maj" x1="'+SH_R+'" y1="'+SH_TOP+'" x2="'+SH_R+'" y2="'+SH_BOT+'"/>';   // fb208 — the frame's side walls
     for(i=1;i<sp.gv;i++){ var gx=shX(i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+SH_TOP+'" x2="'+gx+'" y2="'+SH_BOT+'"/>'; }
     for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="'+SH_L+'" y1="'+gy+'" x2="'+SH_R+'" y2="'+gy+'"/>'; }
     var d=shPathD(sp.pts,w);
@@ -22902,7 +22902,6 @@ restoreThemeFromBackend();
     var rate = st.sync
       ? '<span class="mv-c" id="mv-div">'+DIVS[st.div]+' '+CHEV+'</span>'
       : '<span class="mv-c drag" id="mv-rate"><span id="mv-rv">'+st.rateHz.toFixed(2)+'</span> Hz <span class="ar">⇅</span></span>';
-    var dv=(st.depth>=0?'+':'')+Math.round(st.depth*100);
     var base=st.page*5;
     var nums=[1,2,3,4,5].map(function(i){var n=base+i;return '<span class="t'+(n===st.tab?' act':'')+'" data-tab="'+n+'">'+n+'</span>';}).join('');
     var tabs='<div class="mv-tabs">'+(st.page?'<span class="t mv-pg" data-pg="0" title="LFOs 1–5">‹</span>':'')+nums+(st.page?'':'<span class="t mv-pg" data-pg="1" title="LFOs 6–10">›</span>')+'</div>';   /* fb153 — Pop chip retired: since fb151 the docked numbers drag onto every window, so the palette launcher just crowded the strip */
@@ -22910,14 +22909,15 @@ restoreThemeFromBackend();
     var GLV='<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg>';
     var gtop = st.shape===7 ? (function(){var gs=shGet();return '<span class="mv-c drag mv-gr" id="mv-gl" title="level grid — drag">'+GLH+'<b>'+gs.gh+'</b></span><span class="mv-c drag mv-gr" id="mv-gt" title="time grid — drag">'+GLV+'<b>'+gs.gv+'</b></span>';})() : '';   // fb208 — matched-weight glyphs + fixed-width values (no-jitter law)
     return '<div class="mv-scope">'+scopeSVG()+'</div>'
-      +'<div class="mv-ov top">'+gtop+EXPAND+'</div>'
+      +'<div class="mv-ov top">'+EXPAND+'</div>'
       +'<div class="mv-ov bot">'
         +'<span class="mv-c" id="mv-shape"><span class="ic">'+icon(st.shape)+'</span> '+SHORT[st.shape]+' '+CHEV+'</span>'
         +rate
         +'<span class="mv-seg"><b class="'+(st.sync?'on':'off')+'" id="mv-bpm">BPM</b> · <b class="'+(st.sync?'off':'on')+'" id="mv-hz">Hz</b></span>'
         +'<span class="mv-c drag" id="mv-shift" title="slide the LFO"><svg viewBox="0 0 14 10" width="13" height="9" style="opacity:.8" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3 L1 5 L4 7 M10 3 L13 5 L10 7 M1 5 H13"/></svg> <span id="mv-shv">'+Math.round(st.phase*360)+'°</span></span>'
         +tabs
-        +'<div class="mv-dep"><span class="l">Dep</span><div class="mv-ring" id="mv-depth" style="background:'+RINGBG(st.depth)+'"></div><span class="v">'+dv+'</span></div>'
+        +gtop
+        +'<div class="mv-dep"><span class="l">Dep</span><div class="mv-ring" id="mv-depth" style="background:'+RINGBG(st.depth)+'"></div></div>'
       +'</div>'
       +'<div class="mv-err"></div>';
   }
@@ -27217,7 +27217,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb208';   // bump per ship  [fb208 = shaper geometry EXACT — segment-true path, x-ties = verticals, zero-detent curves, inset field, footer ruler, spinner glyphs]
+  var TERRAIN_BUILD = 'fb209';   // bump per ship  [fb209 = shaper frame FINAL — edge-to-edge field, spinners in the footer, quiet corner + Dep, ruler alignment]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
