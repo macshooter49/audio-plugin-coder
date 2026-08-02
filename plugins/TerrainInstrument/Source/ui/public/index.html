@@ -4693,14 +4693,14 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 /* fb194 — THE BREATHING CURVE: the modulated DAHDSR drawn live over the base curve. */
 /* fb191 S4 — THE SHELF (F2): six value chips on a hairline rail under the graph.
    Drag = nudge · double-click = type. The graph pays ~15px and keeps its shape. */
-#syn-panel .env-shelf { flex: 0 0 20px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
+#syn-panel .env-shelf { flex: 0 0 20px; display: flex; align-items: center; justify-content: space-between; padding: 0 9px;
   background: var(--bg-hero); border-radius: 0 0 10px 10px;   /* fb192 (Max) — same glass as the graph, one continuous box */
   border-top: 1px solid var(--border); }   /* fb211 — space-between over CONSTANT-width chips (labels + fb203 fixed value boxes) = mathematically EQUAL gaps + 12px edge margins; taller band (17→20) lifts the letters off the floor. No-jitter holds: chip widths never change, so gaps never move. */
-#syn-panel .env-shelf .ec { position: relative; font-size: 9px; font-weight: 300; letter-spacing: 0.3px;   /* fb211 — a touch bigger (Max: 'too small, hard to fuck with') */
-  color: rgba(255,255,255,0.34); cursor: ns-resize; padding: 1px 3px; -webkit-user-select: none; user-select: none;
+#syn-panel .env-shelf .ec { position: relative; font-size: 9px; font-weight: 300; letter-spacing: 0.2px;   /* fb211 — a touch bigger (Max: 'too small, hard to fuck with') */
+  color: rgba(255,255,255,0.34); cursor: ns-resize; padding: 1px 1px; -webkit-user-select: none; user-select: none;
   white-space: nowrap; }   /* fb203 (Max) — label and value INLINE like fb192; the fb201 box was wrapping them into two lines */
-#syn-panel .env-shelf .ec b { font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 3px;
-  display: inline-block; width: 31px; text-align: left; white-space: nowrap; }   /* fb212 — box re-sized for the 9px font: '10.00s'/'300ms' fit INSIDE (26px let triple digits overflow the box and eat the gap toward the next label — Max's Dec↔Sus crowding) */
+#syn-panel .env-shelf .ec b { font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 2px; font-size: 8.5px;
+  display: inline-block; width: 27px; text-align: left; white-space: nowrap; }   /* fb213 — MEASURED fit: labels 9px, values 8.5px in a 27px box sized for the widest string ('9.99s'/'300ms'/'10.0s'); tighter margins so all six chips + real gaps seat INSIDE the shelf — Rel can never clip the edge again */
 #syn-panel .env-shelf .ec:hover { color: rgba(255,255,255,0.6); }
 #syn-panel .env-shelf .ec:hover b { color: #FFFFFF; }
 #syn-panel .env-shelf .ec input { width: 34px; background: transparent; border: none; outline: none;
@@ -13896,7 +13896,7 @@ setTimeout(function wireSynControls () {
         function curveT(s){ return nv(s)*2-1; }                  // param -1..+1 from norm
         function msOf(norm){ return 1 + Math.pow(Math.max(0,norm), 1/0.3)*9999; }   // fb195 — matches NormalisableRange(1,10000,skew0.3)
         function normOfMs(ms){ return Math.pow(Math.max(0,Math.min(1,(ms-1)/9999)), 0.3); }   /* fb195 — 10s */
-        function fmtMs(ms){ return ms>=1000 ? (ms/1000).toFixed(2)+'s' : Math.round(ms)+'ms'; }
+        function fmtMs(ms){ return ms>=10000 ? (ms/1000).toFixed(1)+'s' : (ms>=1000 ? (ms/1000).toFixed(2)+'s' : Math.round(ms)+'ms'); }   // fb213 — '10.0s' not '10.00s': the widest value the shelf must seat
 
         // layout: attack can reach the HARD LEFT (no min span); release is the
         // ENDPOINT and grows RIGHT. Proven across 50,421 combos: always in-bounds.
@@ -22834,11 +22834,48 @@ restoreThemeFromBackend();
     sp.pts.forEach(function(pq,i){ if(i>=sp.pts.length-1)return; var r=sp.pts[i+1]; if(r[0]-pq[0]<=0.02)return;
       var mx=shX((pq[0]+r[0])/2),my=shY(shEvalPts(sp.pts,(pq[0]+r[0])/2)),dx=mx-ux,dy=my-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'cd',i:i};} });
     return best; }
+  var shTool=0;   // fb213 — THE BRUSHES (Max: 'now I have the ramp in my mouse'): 0=point/edit · 1=line · 2=ramp up · 3=ramp down · 4=square · 5=triangle · 6=sine — armed tools STAMP one grid cell per click/drag, at the cursor's level
+  function stampCell(q){ var sp=shGet();
+    var gv=sp.gv, ci=Math.max(0,Math.min(gv-1,Math.floor(q.x*gv))), c0=ci/gv, c1=(ci+1)/gv;
+    var lv=sp.sn?shSnap(q.y,sp.gh):q.y, m=(c0+c1)/2, S;
+    var v0=shEvalPts(sp.pts,Math.max(0,c0-1e-4)), v1=shEvalPts(sp.pts,Math.min(0.9999,c1+1e-4));
+    if(shTool===1)S=[[c0,lv,0],[c1,lv,0]];
+    else if(shTool===2)S=[[c0,0,0],[c1,lv,0]];
+    else if(shTool===3)S=[[c0,lv,0],[c1,0,0]];
+    else if(shTool===4)S=[[c0,lv,0],[m,lv,0],[m,0,0],[c1,0,0]];
+    else if(shTool===5)S=[[c0,0,0],[m,lv,0],[c1,0,0]];
+    else S=[[c0,0,.5],[m,lv,-.5],[c1,0,0]];
+    var out=[];
+    sp.pts.forEach(function(pp){ if(pp[0]<c0-1e-6||pp[0]>c1+1e-6)out.push(pp); });
+    if(c0>1e-6)out.push([c0,v0,0]);
+    S.forEach(function(pp){ out.push(pp.slice()); });
+    if(c1<1-1e-6)out.push([c1,v1,0]);
+    if(out.length>160)return false;
+    out.sort(function(a,b){return a[0]-b[0];});   // stable: ties keep insertion order (entry tie → stamp → exit tie = clean vertical steps)
+    sp.pts=out; return true; }
   function seedTo(pts,nm){ var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom';   // fb212 — grid/snap survive re-seeding; the chip wears the seed's name (no 'puts me on custom')
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
   function shConvert(){ if(st.shape===7)return; seedTo(seedFor(st.shape),SHORT[st.shape]); }
   function bindShaper(){
     var sc=root.querySelector('.mv-scope'); if(!sc)return;
+    sc.style.cursor = shTool? 'crosshair' : '';
+    if(shTool){   // fb213 — a BRUSH is armed: clicks/drags stamp cells (works from stock too — converts first); node editing pauses until Point is re-picked
+      sc.onpointerdown=function(e){ if(e.button===2)return; e.preventDefault();
+        if(st.shape!==7){ shConvert(); }
+        var lastCi=-1,lastLv=-9;
+        function apply(ev){ var sc2=root.querySelector('.mv-scope'); if(!sc2)return; var q=shPos(sc2,ev);
+          var sp2=shGet(), ci=Math.max(0,Math.min(sp2.gv-1,Math.floor(q.x*sp2.gv))), lv=sp2.sn?shSnap(q.y,sp2.gh):q.y;
+          if(ci===lastCi&&Math.abs(lv-lastLv)<0.002)return; lastCi=ci; lastLv=lv;
+          if(stampCell(q)){ var sc3=root.querySelector('.mv-scope'); if(sc3)sc3.innerHTML=scopeSVG(); } }
+        apply(e);
+        function mv(ev){ apply(ev); }
+        function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); shTouched=true; shPush(); render(); }
+        document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); };
+      sc.ondblclick=null;
+      sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); };
+      return;
+    }
+    sc.onpointerdown=null;
     if(st.shape!==7){ sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); }; return; }   // fb212 — ONE menu everywhere; dbl-click a stock shape = its seed, editable in place
     var svg=sc.querySelector('svg'); if(!svg)return;
     var sp=shGet();
@@ -22849,7 +22886,7 @@ restoreThemeFromBackend();
       if(hitNd){
         if(ni>0&&ni<sp.pts.length-1&&sp.pts.length>2){ sp.pts.splice(ni,1); shTouched=true; shPush(); render(); }
         return; }
-      if(sp.pts.length>=64)return;
+      if(sp.pts.length>=160)return;
       var q=shPos(sc,e); var nx=sp.sn?shSnap(q.x,sp.gv):q.x, ny=sp.sn?shSnap(q.y,sp.gh):q.y;
       sp.pts.push([nx,ny,0]); sp.pts.sort(function(a,b){return a[0]-b[0];});
       shTouched=true; shPush(); render(); };
@@ -22874,7 +22911,10 @@ restoreThemeFromBackend();
     var sp=shGet();
     var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
     var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;';
-    var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;'; lab.textContent=lbl;
+    var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;display:inline-flex;align-items:center;gap:5px;';
+    var GI = lbl==='lv' ? '<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M1 1.5 H9 M1 4 H9 M1 6.5 H9"/></svg>'
+                        : '<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg>';   // fb213 — MATCHED-WEIGHT emblems (Max: the ||| read way bigger than the ≡)
+    lab.innerHTML = GI + '<span>' + (lbl==='lv'?'Level':'Time') + '</span>';
     var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;';
     row.appendChild(lab); row.appendChild(val);
     var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
@@ -22897,22 +22937,22 @@ restoreThemeFromBackend();
     track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation(); if(sp[key]!==8){ sp[key]=8; shTouched=true; shPush(); paint(); render(); } });
     return wrap;
   }
-  function shMenu(e){   // fb212 — the CANONICAL syn-ctx glass (white rows, house sliders, clamps on-screen) — replaces the fb210 .mv-menu build entirely
+  function shMenu(e){   // fb213 — Grid header retired; sliders wear MATCHED emblems; the Shape section = TOOL RADIOS (brushes), not preset loaders (Max's Serum-tools call)
     if(!window.__synShowMenu) return;
     var sp=shGet();
+    function tool(lbl,t){ return { label:lbl, isChecked:shTool===t, white:true, onPick:function(){ shTool=(shTool===t&&t!==0)?0:t; render(); } }; }
     window.__synShowMenu('', [
-      { isHeader:true, label:'Grid' },
-      { node:gridSliderNode('\u2261 Level','gh') },
-      { node:gridSliderNode('||| Time','gv') },
+      { node:gridSliderNode('lv','gh') },
+      { node:gridSliderNode('tm','gv') },
       { label:'Snap', isChecked:!!sp.sn, white:true, onPick:function(){ sp.sn=sp.sn?0:1; shTouched=true; shPush(); render(); } },
       { isHeader:true, label:'Shape' },
-      { label:'Straight line', white:true, onPick:function(){ seedTo([[0,.5,0],[1,.5,0]],'Line'); } },
-      { label:'Ramp up', white:true, onPick:function(){ seedTo(seedFor(2),'Saw'); } },
-      { label:'Ramp down', white:true, onPick:function(){ seedTo(seedFor(3),'Saw\u2193'); } },
-      { label:'Square', white:true, onPick:function(){ seedTo(seedFor(4),'Sqr'); } },
-      { label:'Triangle', white:true, onPick:function(){ seedTo(seedFor(1),'Tri'); } },
-      { label:'Sine', white:true, onPick:function(){ seedTo(seedFor(0),'Sine'); } },
-      { label:'Reset shape', white:true, onPick:function(){ var gs=shGet(); gs.gh=8; gs.gv=8; gs.sn=1; seedTo(seedFor(1),'Tri'); } },
+      tool('Point \u00b7 edit',0),
+      tool('Straight line',1),
+      tool('Ramp up',2),
+      tool('Ramp down',3),
+      tool('Square',4),
+      tool('Triangle',5),
+      tool('Sine',6),
       { isHeader:true, label:'Window' },
       { label:'Extend', white:true, onPick:function(){ openExt(); } }
     ], e.clientX, e.clientY);
@@ -27270,7 +27310,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb212';   // bump per ship  [fb212 = ONE WORLD — unified field for every shape, canonical white menu + fb69 sliders, Pac-Man follower fix, seed names, equilibrium]
+  var TERRAIN_BUILD = 'fb213';   // bump per ship  [fb213 = THE BRUSHES — tool stamps (line/ramps/square/tri/sine per grid cell), shelf measured-fit (Rel un-clipped), matched slider emblems, caps 160]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

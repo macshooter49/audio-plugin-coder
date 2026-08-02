@@ -7185,10 +7185,10 @@ void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& jso
         auto* pa = e.getProperty ("pts", juce::var()).getArray();
         if (pa == nullptr || pa->size() < 2) continue;
         struct Pt { float x, y, c; };
-        Pt pts[64]; int np = 0;
+        Pt pts[160]; int np = 0;   // fb213 — the stamp brushes build dense step patterns (32 cells x ties); cap raised with the JS side
         for (const auto& pv : *pa)
         {
-            if (np >= 64) break;
+            if (np >= 160) break;
             auto* t = pv.getArray(); if (t == nullptr || t->size() < 2) continue;
             pts[np++] = { juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[0]),
                           juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[1]),
