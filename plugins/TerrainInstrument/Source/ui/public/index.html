@@ -2433,7 +2433,10 @@ body {
 #mod-engine .mv-exp{width:14px;height:14px;cursor:pointer;color:var(--ghost);transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));}
 #mod-engine .mv-exp:hover{color:#fff;}
 /* fb206 — THE SHAPER (custom LFO editor) */
-#mod-engine .mv-ov.top{gap:10px;}
+#mod-engine .mv-ov.top{gap:7px;}
+#mod-engine.shp .mv-ov.bot{border-top:1px solid rgba(255,255,255,.075);}   /* fb208 — the footer ruler, same grammar as the env shelf line */
+#mod-engine .mv-gr{gap:3px;}
+#mod-engine .mv-gr b{min-width:11px;font-weight:400;font-variant-numeric:tabular-nums;}
 #mod-engine .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
 #mod-engine .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
 #mod-engine .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
@@ -22754,7 +22757,8 @@ restoreThemeFromBackend();
      via setSynthLfoShapes/getSynthLfoShapes (dyn-env lifecycle: debounced push, boot
      pull, local-edit-outranks-pull race guard). */
   var GRIDS=[2,3,4,6,8,12,16,24,32];
-  var SH_TOP=18, SH_BOT=70;   // fb207 — the editing band = the STOCK wave's airspace (MID±26): the footer row owns the bottom 26u and the expand/spinner strip owns the top (the fb185 ceiling law — lettering owns dead airspace); depth lives on the Dep ring, Serum-style
+  var SH_TOP=18, SH_BOT=70, SH_L=5, SH_R=451;   // fb208 — the FIELD: stock airspace vertically (fb185 ceiling law) + inset ends so endpoint nodes sit fully inside the frame, ON their line
+  function shX(x01){ return SH_L+(SH_R-SH_L)*x01; }
   var shapes={}, shTouched=false, shPushT=null;
   function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
   function shEvalPts(pts,p){ p=((p%1)+1)%1; var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++;
@@ -22780,20 +22784,25 @@ restoreThemeFromBackend();
       (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1) shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0}; });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
   function shY(y01){ return SH_BOT-(SH_BOT-SH_TOP)*y01; }
-  function shPathD(pts,w){ var n=Math.max(96,pts.length*24),d='',i;
-    for(i=0;i<=n;i++){ var t=(i>=n)?0.999999:i/n; d+=(i?'L':'M')+((i>=n?1:t)*w).toFixed(1)+' '+shY(shEvalPts(pts,t)).toFixed(1)+' '; }
+  function shPathD(pts,w){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
+    d='M'+shX(pts[0][0]).toFixed(1)+' '+shY(pts[0][1]).toFixed(1)+' ';
+    for(i=0;i<pts.length-1;i++){ var a=pts[i],b=pts[i+1],x0=shX(a[0]),x1=shX(b[0]),cc=a[2]||0;
+      if(b[0]-a[0]<=1e-6||Math.abs(cc)<1e-4){ d+='L'+x1.toFixed(1)+' '+shY(b[1]).toFixed(1)+' '; continue; }
+      var n=Math.max(8,Math.min(48,Math.round((x1-x0)/3)));
+      for(var k2=1;k2<=n;k2++){ var t=k2/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+shY(a[1]+(b[1]-a[1])*shBias(t,cc)).toFixed(1)+' '; } }
     return d; }
   function shaperSVG(){ var w=456,h=96,sp=shGet(),i,g='';
-    for(i=1;i<sp.gv;i++){ var gx=(w*i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+SH_TOP+'" x2="'+gx+'" y2="'+SH_BOT+'"/>'; }
-    for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh).toFixed(1); g+='<line'+(i===0||i===sp.gh?' class="maj"':'')+' x1="0" y1="'+gy+'" x2="'+w+'" y2="'+gy+'"/>'; }
+    g+='<line class="maj" x1="'+SH_L+'" y1="'+SH_TOP+'" x2="'+SH_L+'" y2="'+SH_BOT+'"/><line class="maj" x1="'+SH_R+'" y1="'+SH_TOP+'" x2="'+SH_R+'" y2="'+SH_BOT+'"/>';   // fb208 — the frame's side walls
+    for(i=1;i<sp.gv;i++){ var gx=shX(i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+SH_TOP+'" x2="'+gx+'" y2="'+SH_BOT+'"/>'; }
+    for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="'+SH_L+'" y1="'+gy+'" x2="'+SH_R+'" y2="'+gy+'"/>'; }
     var d=shPathD(sp.pts,w);
-    var fillD='M0 '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+w+' '+SH_BOT+' Z';
+    var fillD='M'+SH_L+' '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+SH_R+' '+SH_BOT+' Z';
     var nd='',hd='',cdm='';
-    sp.pts.forEach(function(q,idx){ var cx=Math.max(3,Math.min(w-3,q[0]*w)).toFixed(1),cy=shY(q[1]).toFixed(1);   // fb207 — endpoints sit fully inside the rounded frame
+    sp.pts.forEach(function(q,idx){ var cx=shX(q[0]).toFixed(1),cy=shY(q[1]).toFixed(1);   // fb208 — exact: the dot IS the line end
       nd+='<circle class="sh-nd" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
       hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="8"/>'; });
     sp.pts.forEach(function(q,idx){ if(idx>=sp.pts.length-1)return; var r=sp.pts[idx+1]; if(r[0]-q[0]<=0.02)return;
-      var mx=((q[0]+r[0])/2*w).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1);
+      var mx=shX((q[0]+r[0])/2).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1);
       cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="7"/>'; });
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
       '<line class="mv-play" id="mv-ph" x1="0" y1="'+(SH_TOP-4)+'" x2="0" y2="'+(SH_BOT+4)+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+shY(.5)+'" r="2.4"/>'+nd+cdm+hd+'</svg>'; }
@@ -22802,13 +22811,13 @@ restoreThemeFromBackend();
     var stk=sc.querySelector('.mv-stroke'), fl=sc.querySelector('.mv-fill');
     var d=shPathD(sp.pts,w); if(stk)stk.setAttribute('d',d); if(fl)fl.setAttribute('d','M0 '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+w+' '+SH_BOT+' Z');
     function updSel(sel,fn){ sc.querySelectorAll(sel).forEach(fn); }
-    updSel('.sh-nd',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',Math.max(3,Math.min(w-3,q[0]*w)).toFixed(1)); c.setAttribute('cy',shY(q[1]).toFixed(1));} });
-    updSel('.sh-hit:not(.cdh)',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',Math.max(3,Math.min(w-3,q[0]*w)).toFixed(1)); c.setAttribute('cy',shY(q[1]).toFixed(1));} });
-    updSel('.sh-cd',function(c){ var i2=+c.getAttribute('data-i'),q=sp.pts[i2],r=sp.pts[i2+1]; if(q&&r){c.setAttribute('cx',((q[0]+r[0])/2*w).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1));} });
-    updSel('.sh-hit.cdh',function(c){ var i3=+c.getAttribute('data-i'),q=sp.pts[i3],r=sp.pts[i3+1]; if(q&&r){c.setAttribute('cx',((q[0]+r[0])/2*w).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1));} }); }
+    updSel('.sh-nd',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1]).toFixed(1));} });
+    updSel('.sh-hit:not(.cdh)',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1]).toFixed(1));} });
+    updSel('.sh-cd',function(c){ var i2=+c.getAttribute('data-i'),q=sp.pts[i2],r=sp.pts[i2+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1));} });
+    updSel('.sh-hit.cdh',function(c){ var i3=+c.getAttribute('data-i'),q=sp.pts[i3],r=sp.pts[i3+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1));} }); }
   function shPos(sc,ev){ var r=sc.getBoundingClientRect();
-    var x=(ev.clientX-r.left)/r.width, ypx=(ev.clientY-r.top)/r.height*96;
-    return { x:Math.max(0,Math.min(1,x)), y:Math.max(0,Math.min(1,(SH_BOT-ypx)/(SH_BOT-SH_TOP))) }; }
+    var xpx=(ev.clientX-r.left)/r.width*456, ypx=(ev.clientY-r.top)/r.height*96;
+    return { x:Math.max(0,Math.min(1,(xpx-SH_L)/(SH_R-SH_L))), y:Math.max(0,Math.min(1,(SH_BOT-ypx)/(SH_BOT-SH_TOP))) }; }
   function shSnap(v,div){ return Math.round(v*div)/div; }
   function shConvert(){ if(st.shape===7)return; if(!shapes[st.tab])shapes[st.tab]={pts:seedFor(st.shape),gh:8,gv:8,sn:1};
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
@@ -22818,7 +22827,7 @@ restoreThemeFromBackend();
     var svg=sc.querySelector('svg'); if(!svg)return;
     var sp=shGet();
     sc.ondblclick=function(e){ var t=e.target;
-      if(t.classList&&t.classList.contains('cdh'))return;
+      if(t.classList&&t.classList.contains('cdh')){ var ci=+t.getAttribute('data-i'); if(sp.pts[ci]&&(sp.pts[ci][2]||0)!==0){ sp.pts[ci][2]=0; shTouched=true; shPush(); render(); } return; }   // fb208 — dbl-click a curve dot = perfectly straight segment
       if(t.classList&&t.classList.contains('sh-hit')){
         var di=+t.getAttribute('data-i');
         if(di>0&&di<sp.pts.length-1&&sp.pts.length>2){ sp.pts.splice(di,1); shTouched=true; shPush(); render(); }
@@ -22831,8 +22840,8 @@ restoreThemeFromBackend();
       e.preventDefault(); try{svg.setPointerCapture(e.pointerId);}catch(e0){}
       var isCd=t.classList.contains('cdh'), i=+t.getAttribute('data-i'), y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
       function mv(ev){ did=true;
-        if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; sp.pts[i][2]=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); shRefresh(); return; }
-        var q=shPos(sc,ev), lo=(i>0)?sp.pts[i-1][0]+0.004:0, hi=(i<sp.pts.length-1)?sp.pts[i+1][0]-0.004:1;
+        if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); return; }   // fb208 — zero DETENT: straight is easy to hit
+        var q=shPos(sc,ev), lo=(i>0)?sp.pts[i-1][0]:0, hi=(i<sp.pts.length-1)?sp.pts[i+1][0]:1;   // fb208 — ties ALLOWED: stack two points = a true vertical step (the eval's later-point-rules handles it)
         var nx=(i===0)?0:(i===sp.pts.length-1?1:Math.max(lo,Math.min(hi,sp.sn?shSnap(q.x,sp.gv):q.x)));
         var ny=sp.sn?shSnap(q.y,sp.gh):q.y;
         sp.pts[i][0]=nx; sp.pts[i][1]=ny; shRefresh(); }
@@ -22897,7 +22906,9 @@ restoreThemeFromBackend();
     var base=st.page*5;
     var nums=[1,2,3,4,5].map(function(i){var n=base+i;return '<span class="t'+(n===st.tab?' act':'')+'" data-tab="'+n+'">'+n+'</span>';}).join('');
     var tabs='<div class="mv-tabs">'+(st.page?'<span class="t mv-pg" data-pg="0" title="LFOs 1–5">‹</span>':'')+nums+(st.page?'':'<span class="t mv-pg" data-pg="1" title="LFOs 6–10">›</span>')+'</div>';   /* fb153 — Pop chip retired: since fb151 the docked numbers drag onto every window, so the palette launcher just crowded the strip */
-    var gtop = st.shape===7 ? (function(){var gs=shGet();return '<span class="mv-c drag" id="mv-gl" title="level grid — drag">≡ <b>'+gs.gh+'</b></span><span class="mv-c drag" id="mv-gt" title="time grid — drag">||| <b>'+gs.gv+'</b></span>';})() : '';   // fb206 — the two grid spinners (Serum's ≡ / |||), custom mode only
+    var GLH='<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M1 1.5 H9 M1 4 H9 M1 6.5 H9"/></svg>';
+    var GLV='<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg>';
+    var gtop = st.shape===7 ? (function(){var gs=shGet();return '<span class="mv-c drag mv-gr" id="mv-gl" title="level grid — drag">'+GLH+'<b>'+gs.gh+'</b></span><span class="mv-c drag mv-gr" id="mv-gt" title="time grid — drag">'+GLV+'<b>'+gs.gv+'</b></span>';})() : '';   // fb208 — matched-weight glyphs + fixed-width values (no-jitter law)
     return '<div class="mv-scope">'+scopeSVG()+'</div>'
       +'<div class="mv-ov top">'+gtop+EXPAND+'</div>'
       +'<div class="mv-ov bot">'
@@ -22910,7 +22921,7 @@ restoreThemeFromBackend();
       +'</div>'
       +'<div class="mv-err"></div>';
   }
-  function render(){ root.innerHTML=front(); errEl=root.querySelector('.mv-err'); bindFront(); }
+  function render(){ root.innerHTML=front(); root.classList.toggle('shp',st.shape===7); errEl=root.querySelector('.mv-err'); bindFront(); }   // fb208 — .shp gates the footer ruler
 
   // ---- body-level menu (glass) ----
   var menu=document.createElement('div'); menu.className='mv-menu'; document.body.appendChild(menu);
@@ -22995,10 +23006,11 @@ restoreThemeFromBackend();
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
   var DIVBEATS=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6];   // beats-per-cycle per DIVS entry
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
-  function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd'), x=ph*456;
+  function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
+    var cust=(st.shape===7&&scope===root), x=cust?shX(ph):ph*456;   // fb208 — the custom playhead rides the inset field
     if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
     if(fd){ fd.setAttribute('cx',x.toFixed(1));
-      if(st.shape===7&&scope===root) fd.setAttribute('cy',shY(shEvalPts(shGet().pts,(ph+st.phase)%1)).toFixed(1));   // fb206 — full-height shaper band
+      if(cust) fd.setAttribute('cy',shY(shEvalPts(shGet().pts,(ph+st.phase)%1)).toFixed(1));
       else fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*amp).toFixed(1)); } }
   function tick(t){ if(window.__cardOnly)return; if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
     ph+=dt*effHz()/(st.shape===7?1:CYC); if(ph>=1)ph-=Math.floor(ph);   // ÷cycles-drawn so the follower's rise/fall matches the audible LFO rate (Custom draws one)
@@ -27205,7 +27217,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb207';   // bump per ship  [fb207 = shaper framing — band seated in the stock airspace (fb185 ceiling law), endpoint clamp, band playhead]
+  var TERRAIN_BUILD = 'fb208';   // bump per ship  [fb208 = shaper geometry EXACT — segment-true path, x-ties = verticals, zero-detent curves, inset field, footer ruler, spinner glyphs]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
