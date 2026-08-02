@@ -4848,6 +4848,8 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               -webkit-overflow-scrolling: touch;
             }
             #syn-panel .syn-ctx-menu::-webkit-scrollbar { width: 0; height: 0; display: none; }
+            #syn-panel .syn-ctx-menu .bp-lfo-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+            #syn-panel .syn-ctx-menu .bp-lfo-scroll { scrollbar-width: none; -ms-overflow-style: none; }
             #syn-panel .syn-ctx-menu { scrollbar-width: none; -ms-overflow-style: none; }
             #syn-panel .syn-ctx-menu.act { display: block; }
             #syn-panel .syn-ctx-menu .syn-ctx-header {
@@ -13459,11 +13461,21 @@ setTimeout(function wireSynControls () {
               onPick: function () { wSrc(o, s, 5); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
             if (b.mode === 2) items.push({ label: 'Self (feedback)', isChecked: (b.src === 6), keepOpen: true,   // self = PD only
               onPick: function () { wSrc(o, s, 6); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
-            items.push({ isHeader: true, label: 'LFO shape' });   // fb223 — WARP x LFO: the drawn shape as the warp curve (Max: 'Serum can't do that')
-            for (var li = 1; li <= 10; ++li) (function (ln) {
-              items.push({ label: 'LFO ' + ln, isChecked: (b.src === 6 + ln), keepOpen: true,
-                onPick: function () { wSrc(o, s, 6 + ln); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
-            })(li);
+            items.push({ isHeader: true, label: 'LFO shape' });   // fb224 — the LIVE LFO sweeps the warp; 10 rows in a contained scroll window (Max: 'don't limit — scroll')
+            items.push({ node: (function () {
+              var wrap = document.createElement('div');
+              wrap.className = 'bp-lfo-scroll';
+              wrap.style.cssText = 'max-height:148px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;';
+              for (var li = 1; li <= 10; ++li) (function (ln) {
+                var row = document.createElement('div');
+                row.className = 'syn-ctx-item' + ((b.src === 6 + ln) ? ' checked' : '');   // canonical rows — the menu CSS styles them verbatim (check dot, hover, white letters)
+                row.textContent = 'LFO ' + ln;
+                row.addEventListener('click', function (ev) { ev.stopPropagation(); wSrc(o, s, 6 + ln); paintLabel(pill, o, s); menu(pill, o, s, x, y); });
+                wrap.appendChild(row);
+              })(li);
+              wrap.addEventListener('wheel', function (ev) { wrap.scrollTop += ev.deltaY; ev.preventDefault(); ev.stopPropagation(); });   // WKWebView wheel-swallow belt (the menuEl handler's sibling)
+              return wrap;
+            })() });
           }
           if (window.__synShowMenu) window.__synShowMenu(null, items, x, y);
         }
@@ -27401,7 +27413,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb223';   // bump per ship  [fb223 = WARP x LFO: drawn LFO shapes as blend-warp sources (PD/FM/AM/RM read the shape at the carrier's phase)]
+  var TERRAIN_BUILD = 'fb224';   // bump per ship  [fb224 = WARP x LFO corrected to the LIVE value (the shape in MOTION, every engine) + the LFO list scrolls in a 148px window]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

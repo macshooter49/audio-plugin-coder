@@ -201,11 +201,6 @@ public:
 
     float currentPhase() const noexcept { return phase_; }
 
-    // WARP x LFO (fb223) — the shape evaluated at an ARBITRARY phase: no advance, no
-    // polarity, no slew. The blend engine reads the drawn table at the CARRIER's phase,
-    // turning any LFO shape into a pitch-tracked audio-rate transfer curve.
-    float valueAtPhase (float p) const noexcept { return shapeAt (wrap01 (p)); }
-
     // Current modulation value at the present phase WITHOUT advancing — for per-block
     // (frame/warp/fold/pitch) modulation that's computed before the per-sample loop.
     // fb142-lfo — returns the SLEWED tracker (every advance path keeps it current), so

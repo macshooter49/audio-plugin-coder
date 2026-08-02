@@ -2507,8 +2507,6 @@ namespace tw
                 {
                     const float repInc[4] = { (float) uPhaseIncA_[0], (float) uPhaseIncB_[0],
                                               (float) uPhaseIncC_[0], (float) uPhaseIncD_[0] };
-                    const float repPh[4]  = { (float) uPhaseA_[0], (float) uPhaseB_[0],
-                                              (float) uPhaseC_[0], (float) uPhaseD_[0] };   // fb223 — carrier voice-0 phase: the LFO-shape sources read the drawn table HERE
                     for (int c = 0; c < 4; ++c)
                     {
                         float pm = 0.f, fmDrive = 0.f, amp = 1.0f;
@@ -2522,8 +2520,8 @@ namespace tw
                             if      (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
                             else if (b.src == 5) mod = noiseModTap_;      // Noise (fb64) — FM/PD/AM/RM an osc WITH the noise
                             else if (b.src == 6) mod = modPrev_[c];       // Self (feedback)
-                            else if (b.src >= 7 && b.src <= 16)           // fb223 — WARP x LFO: the drawn shape as a pitch-tracked audio-rate transfer curve (read at the carrier's phase; costs one lerp, only while armed)
-                                                 mod = synthLfo_[b.src - 7].valueAtPhase (repPh[c]);
+                            else if (b.src >= 7 && b.src <= 16)           // fb224 — WARP x LFO, Max's ear ruling: the LIVE LFO value (the one the pane's dot rides) sweeps the warp — the shape IN MOTION. peek() is block-stepped + 2.5ms-slewed, so drawn steps chop click-free; blendOff/blendAmp carry it to EVERY engine (WT read-phase, blendReadBlock, amp gate).
+                                                 mod = synthLfo_[b.src - 7].peek();
                             else                 mod = 0.f;               // Sub(4): still no-op
                             if      (b.mode == 2) pm      += (1.20f * d) * mod;              // PD (phase, cycles)
                             else if (b.mode == 1) fmDrive += (12.0f * d) * mod;              // FM (freq deviation)
