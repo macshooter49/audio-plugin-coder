@@ -14,6 +14,8 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
 #include "ParametricEQ.h"
 #include <cmath>
+#include <algorithm>   // LFO ARC L1 — std::sort (shape-point ordering in setSynthLfoShapes)
+#include <cstring>     // LFO ARC L1 — std::memcpy (drawn-table shared→audio copy)
 #if JUCE_MAC
  #include <objc/message.h>   // fb151 — physical mouse-button state via +[NSEvent pressedMouseButtons]
  #include <objc/runtime.h>
@@ -26,6 +28,15 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
       apvts (*this, nullptr, "Parameters", createParameterLayout())
 {
     initializePresets();
+
+    // LFO ARC L1 — default every drawn-shape table to the triangle (a shape param restored
+    // to CUSTOM without blob data must still sound sane; setStateInformation re-bakes over this).
+    for (int li = 0; li < wc::NUM_LFOS; ++li)
+        for (int lk = 0; lk <= wc::kLfoTableN; ++lk)
+        {
+            const float lp = (float) (lk % wc::kLfoTableN) / (float) wc::kLfoTableN;
+            lfoTableShared_[li][lk] = lfoTableAudio_[li][lk] = 1.0f - 4.0f * std::fabs (lp - 0.5f);
+        }
 
     // === Sampler engine wiring — Task 5: singleton synth removed. Each layer's
     // synth is wired in LayerState's constructor using that layer's own atomics.
@@ -1425,7 +1436,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::LFO1_SHAPE, 1 },
         "LFO 1 Shape",
-        juce::StringArray { "SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "S&H", "RANDOM" },
+        juce::StringArray { "SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "S&H", "RANDOM", "CUSTOM" },   // LFO ARC L1 — CUSTOM appended (enum-append law; raw choice index preserved in saved state)
         0));
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::LFO1_SYNC, 1 },
@@ -1443,7 +1454,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     // ── Mod redesign Stage 2 — LFOs 2..5 (same set as L1). Default depth 0 (silent until dialed).
     {
-        const juce::StringArray lfoShapes { "SINE","TRIANGLE","SAW UP","SAW DOWN","SQUARE","S&H","RANDOM" };
+        const juce::StringArray lfoShapes { "SINE","TRIANGLE","SAW UP","SAW DOWN","SQUARE","S&H","RANDOM","CUSTOM" };   // LFO ARC L1 — must match the L1 inline list
         const juce::StringArray lfoDivs   { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T" };
         auto addLfo = [&] (int n, const char* rate, const char* depth, const char* shape, const char* sync, const char* div)
         {
@@ -3467,7 +3478,10 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     for (int i = 0; i < synthEngine.getNumVoices(); ++i)
     {
         if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
+        {
             sv->prepareToPlay (sampleRate, samplesPerBlock, 2);
+            sv->setLfoCustomTables (lfoTableAudio_);   // LFO ARC L1 — wire drawn-shape tables
+        }
     }
 
     grainEngineL.prepare(sampleRate, samplesPerBlock);
@@ -3535,6 +3549,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
 
     // FLOW · ARP — prepare the block-rate global LFO bank + reset the engine
     for (auto& l : flowLfo_) l.prepare (sampleRate);
+    for (int fli = 0; fli < wc::NUM_LFOS; ++fli) flowLfo_[fli].setCustomTable (lfoTableAudio_[fli]);   // LFO ARC L1 — wire drawn-shape tables
     chop.prepare   (sampleRate, 8.0);   // FLOW · CHOP capture ring — fb106: 8 s so the Ribbon's 16-cell memory holds at slow rates
     glitch.prepare (sampleRate, 4.0);   // FLOW · GLITCH capture ring (4 s)
     prevGlitchOn_ = false;               // FLOW · re-anchor the glitch enable-edge on (re)prepare
@@ -5257,6 +5272,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (auto q = pos->getPpqPosition()) flowPpq     = *q;
             flowPlaying = pos->getIsPlaying();
         }
+    // LFO ARC L1 — drawn-shape tables: copy shared→audio once per edit (try-lock never
+    // blocks; a one-block-stale table is inaudible). Runs before any LFO advances this
+    // block, so flowLfo_ and every voice read one coherent table set per callback.
+    if (lfoShapeSeen_ != lfoShapeVersion_.load (std::memory_order_acquire))
+    {
+        const juce::ScopedTryLock lts (lfoShapeLock_);
+        if (lts.isLocked())
+        {
+            std::memcpy (lfoTableAudio_, lfoTableShared_, sizeof (lfoTableAudio_));
+            lfoShapeSeen_ = lfoShapeVersion_.load (std::memory_order_acquire);
+        }
+    }
     for (int i = 0; i < wc::NUM_LFOS; ++i)
     {
         flowLfo_[i].setSettings (synModCfg.lfos[i]);
@@ -7131,6 +7158,69 @@ juce::String TerrainInstrumentAudioProcessor::getSynthDynEnvsJson() const
     return dynEnvJson_.isNotEmpty() ? dynEnvJson_ : juce::String ("{\"n\":0,\"e\":[]}");
 }
 
+// ── LFO ARC L1 — THE SHAPER. The UI pushes {"shapes":[{"n":1..10,"pts":[[x,y,c],..],
+// "gh":8,"gv":8,"sn":1},..]} (sparse per-LFO entries; pts sorted by x, y in 0..1 with
+// 1 = top, c = the bias tension of the segment AFTER the point). The bake uses the
+// EXACT env-editor curve ((e^{Pt}-1)/(e^P-1), P = -c·8 — TerrainEnvelope's biasCurve)
+// so the drawn graph is literally what you hear; y maps to bipolar 2y-1 (house LFO
+// grammar), and SynthLFO's 2.5ms output slew declicks drawn steps at the source.
+static float lfoShapeBias (float t, float c) noexcept
+{
+    if (std::fabs (c) < 1.0e-4f) return t;
+    const float P = -c * 8.0f;
+    return (std::exp (P * t) - 1.0f) / (std::exp (P) - 1.0f);
+}
+
+void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& json)
+{
+    auto v = juce::JSON::parse (json);
+    if (! v.isObject()) return;
+    auto* arr = v.getProperty ("shapes", juce::var()).getArray();
+    if (arr == nullptr) return;
+    const juce::ScopedLock sl (lfoShapeLock_);
+    for (const auto& e : *arr)
+    {
+        const int n = (int) e.getProperty ("n", 0);
+        if (n < 1 || n > wc::NUM_LFOS) continue;
+        auto* pa = e.getProperty ("pts", juce::var()).getArray();
+        if (pa == nullptr || pa->size() < 2) continue;
+        struct Pt { float x, y, c; };
+        Pt pts[64]; int np = 0;
+        for (const auto& pv : *pa)
+        {
+            if (np >= 64) break;
+            auto* t = pv.getArray(); if (t == nullptr || t->size() < 2) continue;
+            pts[np++] = { juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[0]),
+                          juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[1]),
+                          t->size() > 2 ? juce::jlimit (-1.0f, 1.0f, (float) (double) (*t)[2]) : 0.0f };
+        }
+        if (np < 2) continue;
+        std::sort (pts, pts + np, [] (const Pt& a, const Pt& b) { return a.x < b.x; });
+        pts[0].x = 0.0f; pts[np - 1].x = 1.0f;   // endpoints pin the cycle
+        float* tb = lfoTableShared_[n - 1];
+        int seg = 0;
+        for (int k = 0; k < wc::kLfoTableN; ++k)
+        {
+            const float p = (float) k / (float) wc::kLfoTableN;
+            while (seg < np - 2 && pts[seg + 1].x <= p) ++seg;   // zero-width segs = hard steps (later point rules)
+            const Pt& a = pts[seg]; const Pt& b = pts[seg + 1];
+            const float w = b.x - a.x;
+            const float y = (w <= 1.0e-6f) ? b.y
+                          : a.y + (b.y - a.y) * lfoShapeBias ((p - a.x) / w, a.c);
+            tb[k] = 2.0f * y - 1.0f;
+        }
+        tb[wc::kLfoTableN] = tb[0];   // wrap guard sample
+    }
+    lfoShapesJson_ = json;
+    lfoShapeVersion_.fetch_add (1, std::memory_order_release);
+}
+
+juce::String TerrainInstrumentAudioProcessor::getSynthLfoShapesJson() const
+{
+    const juce::ScopedLock sl (lfoShapeLock_);
+    return lfoShapesJson_.isNotEmpty() ? lfoShapesJson_ : juce::String ("{\"shapes\":[]}");
+}
+
 // ── FLOW · ARP extension lanes (fb105): JS pushes the 7×16 pattern as one JSON blob
 // (mod-matrix lifecycle: parse on the message thread, swap under lock, version-bump
 // so the audio thread copies into the engine exactly once per change).
@@ -7393,6 +7483,11 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         if (arpLanesJson_.isNotEmpty())
             state.setProperty ("arpLanesJson", arpLanesJson_, nullptr);   // FLOW · ARP lane pattern (fb105)
     }
+    {
+        const juce::ScopedLock lsl (lfoShapeLock_);
+        if (lfoShapesJson_.isNotEmpty())
+            state.setProperty ("lfoShapesJson", lfoShapesJson_, nullptr);   // LFO ARC L1 — drawn shapes
+    }
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
     if (noiseVizMode_ != 1)
@@ -7631,6 +7726,8 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 if (sm.isNotEmpty()) setSynthModMatrix (sm);
                 auto de = newState.getProperty ("dynEnvJson", "").toString();   // fb177
                 if (de.isNotEmpty()) setSynthDynEnvs (de);
+                auto lsj = newState.getProperty ("lfoShapesJson", "").toString();   // LFO ARC L1
+                if (lsj.isNotEmpty()) setSynthLfoShapes (lsj);
             }
             {
                 auto al = newState.getProperty ("arpLanesJson", "").toString();

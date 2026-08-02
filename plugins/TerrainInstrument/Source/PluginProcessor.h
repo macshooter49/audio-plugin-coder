@@ -660,6 +660,8 @@ public:
     static constexpr int kMaxDynEnvs = 27;
     void              setSynthDynEnvs (const juce::String& json);
     juce::String      getSynthDynEnvsJson() const;
+    void              setSynthLfoShapes (const juce::String& json);   // LFO ARC L1 — the shaper blob
+    juce::String      getSynthLfoShapesJson() const;
 
     // ── FLOW · ARP extension card (fb105) — lane pattern + live playhead feed ──
     void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
@@ -1000,6 +1002,18 @@ public:
     DynEnvShape                   dynEnvAudio_[kMaxDynEnvs];   // audio-thread mirror
     int                           dynEnvAudioCount_ = 0;
     int                           dynEnvSeen_ = -1;
+
+    // LFO ARC L1 — THE SHAPER: drawn LFO shapes. UI pushes {"shapes":[{n,pts:[[x,y,c]..],gh,gv,sn}..]};
+    // the message thread bakes each into a bipolar (kLfoTableN+1)-float table using the ENV-EDITOR bias
+    // math (the graph IS what you hear); the audio thread copies shared→audio once per version bump
+    // (try-lock, never blocks); every SynthLFO (per-voice banks + flowLfo_) reads the audio mirror via
+    // a pointer wired once at prepare — so table edits reach all consumers at ZERO per-block cost.
+    juce::CriticalSection         lfoShapeLock_;
+    juce::String                  lfoShapesJson_;
+    float                         lfoTableShared_[wc::NUM_LFOS][wc::kLfoTableN + 1] {};
+    float                         lfoTableAudio_ [wc::NUM_LFOS][wc::kLfoTableN + 1] {};
+    std::atomic<int>              lfoShapeVersion_ { 0 };
+    int                           lfoShapeSeen_ = -1;
 
     // Tape loop read-only state (set by processBlock for UI)
     bool getTapeLoopHasContent() const { return tapeLoop.hasContent(); }

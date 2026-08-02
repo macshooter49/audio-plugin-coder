@@ -24,6 +24,10 @@
 namespace wc
 {
 
+// LFO ARC L1 — drawn-shape table length. Tables carry kLfoTableN+1 floats with
+// [kLfoTableN] == [0] so the cycle-wrap linear interp never branches.
+constexpr int kLfoTableN = 256;
+
 // ── LFO built-in shapes (Batch 1 set; custom-curve mode arrives in Batch 4) ──
 enum class LFOShape : int
 {
@@ -34,6 +38,7 @@ enum class LFOShape : int
     Square,
     SampleHold, // stepped random, one new value per cycle
     Random,     // smooth random — cosine-interpolated wander between per-cycle targets
+    Custom,     // LFO ARC L1 — drawn breakpoint shape (table baked by the owner; setCustomTable)
     NumShapes
 };
 
@@ -88,6 +93,11 @@ public:
     }
 
     void setSettings (const LFOSettings& s) noexcept { s_ = s; }
+
+    // LFO ARC L1 — wire the drawn-shape table (kLfoTableN+1 floats, owner-managed stable
+    // storage; content updates in place at block top so edits reach every consumer with
+    // zero per-block copies). Null = triangle fallback, so an unwired Custom stays sane.
+    void setCustomTable (const float* t) noexcept { customTable_ = t; }
 
     // hz: the resolved frequency for THIS block (free rate, or synced Hz computed
     // by the owner from BPM). Kept as an explicit argument so the LFO stays free of
@@ -218,6 +228,15 @@ private:
                 const float m = 0.5f * (1.0f - std::cos (p * 3.14159265358979f));
                 return stepPrev_ + (stepHeld_ - stepPrev_) * m;
             }
+            case LFOShape::Custom:
+            {
+                if (customTable_ == nullptr)                        // unwired — triangle fallback
+                    return 1.0f - 4.0f * std::fabs (p - 0.5f);
+                const float f  = p * (float) kLfoTableN;            // p in [0,1) → f < kLfoTableN
+                const int   i0 = (int) f;
+                const float fr = f - (float) i0;
+                return customTable_[i0] + fr * (customTable_[i0 + 1] - customTable_[i0]);
+            }
             default:                 return 0.0f;
         }
     }
@@ -270,6 +289,7 @@ private:
     float       slewK1_    = 0.0091f; //   per-sample one-pole coefficient (~2.5ms @ 44.1k)
     float       slewRate_  = 0.0091f; //   1/(τ·sr) — compound coefficient base for n-sample spans
     bool        slewInit_  = false;   //   false until first advance after prepare() (snap once)
+    const float* customTable_ = nullptr;   // LFO ARC L1 — drawn shape (owner-managed lifetime)
     LFOSettings s_;
 };
 

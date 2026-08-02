@@ -656,6 +656,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 completion (audioProcessor.getSynthDynEnvsJson());
             })
+            .withNativeFunction("setSynthLfoShapes", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion completion)
+            {
+                if (args.size() > 0) audioProcessor.setSynthLfoShapes (args[0].toString());   // LFO ARC L1
+                completion ({});
+            })
+            .withNativeFunction("getSynthLfoShapes", [this](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion completion)
+            {
+                completion (audioProcessor.getSynthLfoShapesJson());   // LFO ARC L1
+            })
             .withNativeFunction("getFilterLive", [this](const juce::Array<juce::var>&,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
