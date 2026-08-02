@@ -5506,6 +5506,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                      : -1.f, std::memory_order_relaxed);
         for (int k = 0; k < wc::NUM_LFOS; ++k)
             modVizLfo_[k].store (flowLfo_[k].peek(), std::memory_order_relaxed);
+            modVizLfoPh_[k].store (flowLfo_[k].currentPhase(), std::memory_order_relaxed);   // fb217 — real phase for the follower
         noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
         // fb66 — waveform follower position. Free → the global tape head (visible even when idle);
         // Random/Envelope → the loudest sounding voice's read head; -1 = nothing to draw.

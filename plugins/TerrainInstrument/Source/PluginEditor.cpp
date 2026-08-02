@@ -5284,10 +5284,11 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
 
     // fb189 — the living underline: all env slots + the LFO bank, one compact call.
     {
-        juce::String eArr, lArr;
+        juce::String eArr, lArr, pArr;
         for (int k = 0; k < 32; ++k) { if (k) eArr << ","; eArr << SF(audioProcessor.modVizEnv (k), 3); }
         for (int k = 0; k < 10; ++k) { if (k) lArr << ","; lArr << SF(audioProcessor.modVizLfo (k), 3); }
-        js << "try{if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "]);}}catch(e){}";
+        for (int k = 0; k < 10; ++k) { if (k) pArr << ","; pArr << SF(audioProcessor.modVizLfoPh (k), 4); }   // fb217 — real LFO phases
+        js << "try{if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}}catch(e){}";
     }
 
     // ── Sample engine MIDI followers (one playhead per held note) ──

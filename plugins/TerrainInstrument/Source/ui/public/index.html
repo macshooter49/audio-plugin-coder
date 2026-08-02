@@ -23102,7 +23102,9 @@ restoreThemeFromBackend();
     if(pl){ pl.setAttribute('x1',x2); pl.setAttribute('x2',x2); }
     if(fd){ fd.setAttribute('cx',x2.toFixed(1)); fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*amp).toFixed(1)); } }
   function tick(t){ if(window.__cardOnly)return; if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
-    ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph);   // fb212 — the pane is ONE cycle for every shape (the ext popup's 3-cycle preview reads fast until its L5 rebuild)
+    var rP=window.__mvLfoPh;   // fb217 — THE TRUTH FEED: the DSP's actual LFO phase (Max: 'the follower is seconds off' — it was a free-running JS clock at a fake 120 BPM; now the dot IS the audible read position, sync/rate-mod/transport all inherently exact)
+    if(rP&&window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250){ ph=(((rP[st.tab-1]||0)%1)+1)%1; }
+    else { ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph); }   // stale/absent feed → the old simulation (boot, headless, suspended host)
     var amp=ampOf(st.depth);
     if(root) placeHead(root,amp);
     if(ext && ext.classList.contains('open')) placeHead(ext,amp);
@@ -23498,7 +23500,7 @@ restoreThemeFromBackend();
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
   var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
-  window.__modViz=function(e,l){ mvE=e; mvL=l; };
+  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(p&&p.length){ window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   // fb217 — real phases ride along (freshness-stamped, never a latch — the fb214 law)
   /* fb182 — S3: the currently SELECTED modulator (env or LFO). Underlines paint purple
      for its routes, dim for everyone else's; switching selection repaints live. */
   window.__selMod = window.__selMod || { env:1 };
@@ -27306,7 +27308,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb216';   // bump per ship  [fb216 = LFO tab underline = the filter's THIN original (1px square, label-box span, centered under the digit)]
+  var TERRAIN_BUILD = 'fb217';   // bump per ship  [fb217 = THE TRUE FOLLOWER — the dot rides the DSP's real LFO phase (pushed per frame), fake 120-BPM sim demoted to stale-feed fallback]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
