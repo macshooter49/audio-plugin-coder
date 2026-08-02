@@ -2421,7 +2421,8 @@ body {
 @keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
 #mod-engine .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
 #mod-engine .mv-ov.top{top:6px;padding:0 11px;justify-content:flex-end;}
-#mod-engine .mv-ov.bot{bottom:0;padding:0 11px 4px;justify-content:space-between;}   /* fb211 — 4px floor clearance: the Dep-ring shrink (fb209) had dropped the row's natural height, gluing text to the ground and CLIPPING the active-tab's purple underline outside the pane (Max's missing line). The lift brings it home + the row breathes. */
+#mod-engine .mv-ov.bot{bottom:0;padding:0 11px 4px;justify-content:space-between;}
+#mod-engine .mv-ov.bot .mv-c,#mod-engine .mv-ov.bot .mv-seg,#mod-engine .mv-ov.bot .mv-dep{position:relative;top:1px;}   /* fb212 — equilibrium (Max): everything except the 1-5 tabs rode 1px high of the row's true center */   /* fb211 — 4px floor clearance: the Dep-ring shrink (fb209) had dropped the row's natural height, gluing text to the ground and CLIPPING the active-tab's purple underline outside the pane (Max's missing line). The lift brings it home + the row breathes. */
 #mod-engine .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:var(--ghost);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;}
 #mod-engine .mv-c:hover{color:#fff;}
 #mod-engine .mv-c.drag{cursor:ns-resize;}
@@ -2435,17 +2436,7 @@ body {
 /* fb206 — THE SHAPER (custom LFO editor) */
 #mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
 #mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-0.6px;height:1px;background:rgba(255,255,255,.075);}   /* fb211 — THE RULER, re-measured collinear after the footer lift (env 711.5 vs overlay 712.1) */
-/* fb210 — the right-click control room: notched grid sliders (spans dodge the .mv-menu div row styling) */
-.mv-menu.big{max-height:330px;}
-.mv-menu div.gsl{cursor:default;}
-.mv-menu .gsl .gl{width:13px;opacity:.8;font-size:10px;flex:none;}
-.mv-menu .gsl .gt{position:relative;width:104px;height:13px;flex:none;cursor:ew-resize;display:inline-block;}
-.mv-menu .gsl .gt::before{content:'';position:absolute;left:0;right:0;top:6px;height:1.5px;background:rgba(255,255,255,.16);border-radius:1px;}
-.mv-menu .gsl .nk{position:absolute;top:4.5px;width:1px;height:5px;background:rgba(255,255,255,.22);}
-.mv-menu .gsl .gth{position:absolute;top:3.25px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:#B794FF;box-shadow:0 0 4px rgba(183,148,255,.7);}
-.mv-menu .gsl b{min-width:14px;text-align:right;font-weight:400;color:rgba(255,255,255,.75);font-variant-numeric:tabular-nums;}
-.mv-menu div.mvm-sep{padding:0;height:1px;margin:4px 6px;background:rgba(255,255,255,.09);cursor:default;}
-.mv-menu div.mvm-sep:hover{background:rgba(255,255,255,.09);}
+/* fb212 — the LFO right-click moved to the CANONICAL syn-ctx menu (white rows, fb69 house sliders, clamped) */
 #mod-engine .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
 #mod-engine .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
 #mod-engine .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
@@ -4709,7 +4700,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
   color: rgba(255,255,255,0.34); cursor: ns-resize; padding: 1px 3px; -webkit-user-select: none; user-select: none;
   white-space: nowrap; }   /* fb203 (Max) — label and value INLINE like fb192; the fb201 box was wrapping them into two lines */
 #syn-panel .env-shelf .ec b { font-weight: 400; color: rgba(255,255,255,0.55); margin-left: 3px;
-  display: inline-block; width: 26px; text-align: left; white-space: nowrap; }   /* fb201/fb203 — FIXED value box, right-sized: numbers change, letters NEVER move, nothing wraps */
+  display: inline-block; width: 31px; text-align: left; white-space: nowrap; }   /* fb212 — box re-sized for the 9px font: '10.00s'/'300ms' fit INSIDE (26px let triple digits overflow the box and eat the gap toward the next label — Max's Dec↔Sus crowding) */
 #syn-panel .env-shelf .ec:hover { color: rgba(255,255,255,0.6); }
 #syn-panel .env-shelf .ec:hover b { color: #FFFFFF; }
 #syn-panel .env-shelf .ec input { width: 34px; background: transparent; border: none; outline: none;
@@ -22785,12 +22776,12 @@ restoreThemeFromBackend();
     return [[0,0,0],[.5,1,0],[1,0,0]]; }
   function shGet(){ if(!shapes[st.tab])shapes[st.tab]={pts:seedFor(1),gh:8,gv:8,sn:1}; return shapes[st.tab]; }
   function shPush(){ clearTimeout(shPushT); shPushT=setTimeout(function(){ try{
-      var out=[],k; for(k in shapes){ var sp=shapes[k]; out.push({n:+k,pts:sp.pts.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0}); }
+      var out=[],k; for(k in shapes){ var sp=shapes[k]; out.push({n:+k,pts:sp.pts.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''}); }
       var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setSynthLfoShapes'):null;
       if(f)f(JSON.stringify({shapes:out})); }catch(e){} },120); }
   function shPull(){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
     f().then(function(j){ if(shTouched)return; try{ var v=JSON.parse(j);   // RACE LAW: a local edit outranks any pull
-      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1) shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0}; });
+      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1) shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null}; });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
   function shY(y01){ return SH_BOT-(SH_BOT-SH_TOP)*y01; }
   function shPathD(pts,w){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
@@ -22803,18 +22794,28 @@ restoreThemeFromBackend();
   function shaperSVG(){ var w=456,h=96,sp=shGet(),i,g='';
     for(i=1;i<sp.gv;i++){ var gx=shX(i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+SH_TOP+'" x2="'+gx+'" y2="'+SH_BOT+'"/>'; }
     for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="'+SH_L+'" y1="'+gy+'" x2="'+SH_R+'" y2="'+gy+'"/>'; }
-    var d=shPathD(sp.pts,w);
+    var custom=(st.shape===7);
+    var d=custom?shPathD(sp.pts,w):stockPathD(st.shape);   // fb212 — stock shapes draw in the SAME field (grid/band/ruler); nodes appear once they're seeds
     var fillD='M'+SH_L+' '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+SH_R+' '+SH_BOT+' Z';
     var nd='',hd='',cdm='';
+    if(custom){
     sp.pts.forEach(function(q,idx){ var cx=shX(q[0]).toFixed(1),cy=shY(q[1]).toFixed(1);   // fb208 — exact: the dot IS the line end
       nd+='<circle class="sh-nd" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
       hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="12"/>'; });   // fb210 — fat targets (Max: 'open up the circumference')
     sp.pts.forEach(function(q,idx){ if(idx>=sp.pts.length-1)return; var r=sp.pts[idx+1]; if(r[0]-q[0]<=0.02)return;
       var mx=shX((q[0]+r[0])/2).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1);
       cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="10"/>'; });
+    }
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
       '<line class="mv-play" id="mv-ph" x1="0" y1="'+(SH_TOP-4)+'" x2="0" y2="'+(SH_BOT+4)+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+shY(.5)+'" r="2.4"/>'+nd+cdm+hd+'</svg>'; }
-  function scopeSVG(){ return st.shape===7 ? shaperSVG() : waveSVG(456,96,st.shape,st.depth,st.phase); }
+  function stockVal(k,p){ p=((p%1)+1)%1;   // fb212 — ONE-CYCLE stock evaluator (the pane's single-cycle world; yfor keeps the 3-cycle look for icons/ext)
+    if(k===0)return Math.sin(p*6.2831853); if(k===1)return 1-4*Math.abs(p-0.5);
+    if(k===2)return 2*p-1; if(k===3)return 1-2*p; if(k===4)return p<0.5?1:-1;
+    if(k===5){var i=Math.floor(p*SH.length)%SH.length;return SH[i]*2-1;}
+    if(k===6)return smooth(RP,p)*2-1; return 0; }
+  function stockPathD(k){ var n=220,d='',i; for(i=0;i<=n;i++){ var t=(i>=n)?0.999999:i/n;
+    d+=(i?'L':'M')+shX(i>=n?1:t).toFixed(1)+' '+shY((stockVal(k,t)+1)/2).toFixed(1)+' '; } return d; }
+  function scopeSVG(){ return shaperSVG(); }   // fb212 — ONE WORLD (Max: 'the grid always plays the number one role'): every shape lives in the field
   function shRefresh(){ var sc=root?root.querySelector('.mv-scope svg'):null; if(!sc)return; var sp=shGet(),w=456;
     var stk=sc.querySelector('.mv-stroke'), fl=sc.querySelector('.mv-fill');
     var d=shPathD(sp.pts,w); if(stk)stk.setAttribute('d',d); if(fl)fl.setAttribute('d','M0 '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+w+' '+SH_BOT+' Z');
@@ -22833,11 +22834,12 @@ restoreThemeFromBackend();
     sp.pts.forEach(function(pq,i){ if(i>=sp.pts.length-1)return; var r=sp.pts[i+1]; if(r[0]-pq[0]<=0.02)return;
       var mx=shX((pq[0]+r[0])/2),my=shY(shEvalPts(sp.pts,(pq[0]+r[0])/2)),dx=mx-ux,dy=my-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'cd',i:i};} });
     return best; }
-  function shConvert(){ if(st.shape===7)return; if(!shapes[st.tab])shapes[st.tab]={pts:seedFor(st.shape),gh:8,gv:8,sn:1};
+  function seedTo(pts,nm){ var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom';   // fb212 — grid/snap survive re-seeding; the chip wears the seed's name (no 'puts me on custom')
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
+  function shConvert(){ if(st.shape===7)return; seedTo(seedFor(st.shape),SHORT[st.shape]); }
   function bindShaper(){
     var sc=root.querySelector('.mv-scope'); if(!sc)return;
-    if(st.shape!==7){ sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ e.preventDefault(); shMenuStock(e); }; return; }   // dbl-click a stock shape = sculptable; right-click = Extend
+    if(st.shape!==7){ sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); }; return; }   // fb212 — ONE menu everywhere; dbl-click a stock shape = its seed, editable in place
     var svg=sc.querySelector('svg'); if(!svg)return;
     var sp=shGet();
     sc.ondblclick=function(e){ var t=e.target, hitCd=t.classList&&t.classList.contains('cdh'), hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
@@ -22868,42 +22870,52 @@ restoreThemeFromBackend();
       svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); });
     sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); };
   }
-  function shMenuAt(e){ menu.style.left=e.clientX+'px'; menu.style.top=''; menu.style.bottom=(window.__vh()-e.clientY+6)+'px'; menu.classList.add('open'); }
-  function shMenuStock(e){   // fb210 — stock shapes still reach the extender by right-click
-    menu.classList.add('big'); menu.innerHTML='<div data-a="ext"><span>Extend</span></div>';
-    shMenuAt(e); menu.querySelector('[data-a="ext"]').onclick=function(){ menu.classList.remove('open'); openExt(); }; }
-  function shMenu(e){   // fb210 — THE SHAPER'S CONTROL ROOM (Max: spinners + Extend into the right-click; notched sliders)
-    var sp=shGet(), NG=GRIDS.length-1;
-    function pct(v){ var i=GRIDS.indexOf(v); return (i<0?4:i)/NG*100; }
-    function notches(){ var o='',i; for(i=0;i<=NG;i++)o+='<span class="nk" style="left:'+(i/NG*100)+'%"></span>'; return o; }
-    function gslRow(k,gl,v){ return '<div class="gsl" data-k="'+k+'"><span class="gl">'+gl+'</span><span class="gt">'+notches()+'<span class="gth" style="left:'+pct(v)+'%"></span></span><b>'+v+'</b></div>'; }
-    menu.classList.add('big');
-    menu.innerHTML=
-      '<div data-a="snap"><span>'+(sp.sn?'Snap · on':'Snap · off')+'</span></div>'
-     +gslRow('gh','\u2261',sp.gh)+gslRow('gv','|||',sp.gv)
-     +'<div class="mvm-sep"></div>'
-     +[['line','Straight line'],['ru','Ramp up'],['rd','Ramp down'],['sq','Square'],['tri','Triangle'],['sin','Sine']].map(function(it){return '<div data-a="'+it[0]+'"><span>'+it[1]+'</span></div>';}).join('')
-     +'<div class="mvm-sep"></div>'
-     +'<div data-a="reset"><span>Reset shape</span></div>'
-     +'<div data-a="ext"><span>Extend</span></div>';
-    shMenuAt(e);
-    var sr=menu.querySelector('[data-a="snap"]');
-    sr.onclick=function(){ sp.sn=sp.sn?0:1; shTouched=true; shPush(); sr.querySelector('span').textContent=sp.sn?'Snap · on':'Snap · off'; render(); };
-    menu.querySelectorAll('.gsl .gt').forEach(function(tr){
-      tr.onmousedown=function(ev0){ ev0.preventDefault(); ev0.stopPropagation();
-        var key=tr.parentNode.getAttribute('data-k');
-        function setFrom(ev){ var r=tr.getBoundingClientRect(), t=Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width)), ni=Math.round(t*NG);
-          if(GRIDS[ni]!==sp[key]){ sp[key]=GRIDS[ni]; shTouched=true; shPush();
-            tr.querySelector('.gth').style.left=(ni/NG*100)+'%'; tr.parentNode.querySelector('b').textContent=GRIDS[ni]; render(); } }
-        setFrom(ev0);
-        function mv(ev){ setFrom(ev); } function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
-        document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }; });
-    function seed(a){ if(a==='line')sp.pts=[[0,.5,0],[1,.5,0]]; else if(a==='ru')sp.pts=seedFor(2); else if(a==='rd')sp.pts=seedFor(3);
-      else if(a==='sq')sp.pts=seedFor(4); else if(a==='tri')sp.pts=seedFor(1); else if(a==='sin')sp.pts=seedFor(0);
-      else if(a==='reset'){ sp.pts=seedFor(1); sp.gh=8; sp.gv=8; sp.sn=1; }
-      shTouched=true; shPush(); render(); menu.classList.remove('open'); }
-    ['line','ru','rd','sq','tri','sin','reset'].forEach(function(a){ var el=menu.querySelector('[data-a="'+a+'"]'); if(el)el.onclick=function(){ seed(a); }; });
-    menu.querySelector('[data-a="ext"]').onclick=function(){ menu.classList.remove('open'); openExt(); };
+  function gridSliderNode(lbl,key){   // fb212 — the fb69 STEREO-WIDTH recipe VERBATIM (2px track, #8B5CF6 fill, thin white 2×9 marker, 1px notch ticks — THE house slider, no invented thumbs)
+    var sp=shGet();
+    var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
+    var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;';
+    var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;'; lab.textContent=lbl;
+    var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;';
+    row.appendChild(lab); row.appendChild(val);
+    var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
+    for(var i=0;i<GRIDS.length;i++){ var nk=document.createElement('div');
+      nk.style.cssText='position:absolute;top:-2px;width:1px;height:6px;background:rgba(255,255,255,0.28);left:'+(i/(GRIDS.length-1)*100)+'%;'; track.appendChild(nk); }
+    var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;left:0;height:2px;border-radius:1px;background:#8B5CF6;';
+    var marker=document.createElement('div'); marker.style.cssText='position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#FFFFFF;transform:translate(-50%,-50%);';
+    track.appendChild(fill); track.appendChild(marker);
+    wrap.appendChild(row); wrap.appendChild(track);
+    function paint(){ var ix=GRIDS.indexOf(sp[key]); if(ix<0)ix=4; var pct=ix/(GRIDS.length-1)*100;
+      marker.style.left=pct+'%'; fill.style.width=pct+'%'; val.textContent=GRIDS[ix]; }
+    paint();
+    function fromX(cx){ var r=track.getBoundingClientRect(); var t=Math.max(0,Math.min(1,(cx-r.left)/Math.max(1,r.width)));
+      var ni=Math.round(t*(GRIDS.length-1)); if(GRIDS[ni]!==sp[key]){ sp[key]=GRIDS[ni]; shTouched=true; shPush(); paint(); render(); } }
+    var dragging=false;
+    track.addEventListener('pointerdown',function(ev){ ev.preventDefault(); ev.stopPropagation(); dragging=true; try{track.setPointerCapture(ev.pointerId);}catch(e2){} fromX(ev.clientX); });
+    track.addEventListener('pointermove',function(ev){ if(dragging){ ev.preventDefault(); fromX(ev.clientX); } });
+    function up2(ev){ if(dragging){ dragging=false; try{track.releasePointerCapture(ev.pointerId);}catch(e2){} } }
+    track.addEventListener('pointerup',up2); track.addEventListener('pointercancel',up2);
+    track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation(); if(sp[key]!==8){ sp[key]=8; shTouched=true; shPush(); paint(); render(); } });
+    return wrap;
+  }
+  function shMenu(e){   // fb212 — the CANONICAL syn-ctx glass (white rows, house sliders, clamps on-screen) — replaces the fb210 .mv-menu build entirely
+    if(!window.__synShowMenu) return;
+    var sp=shGet();
+    window.__synShowMenu('', [
+      { isHeader:true, label:'Grid' },
+      { node:gridSliderNode('\u2261 Level','gh') },
+      { node:gridSliderNode('||| Time','gv') },
+      { label:'Snap', isChecked:!!sp.sn, white:true, onPick:function(){ sp.sn=sp.sn?0:1; shTouched=true; shPush(); render(); } },
+      { isHeader:true, label:'Shape' },
+      { label:'Straight line', white:true, onPick:function(){ seedTo([[0,.5,0],[1,.5,0]],'Line'); } },
+      { label:'Ramp up', white:true, onPick:function(){ seedTo(seedFor(2),'Saw'); } },
+      { label:'Ramp down', white:true, onPick:function(){ seedTo(seedFor(3),'Saw\u2193'); } },
+      { label:'Square', white:true, onPick:function(){ seedTo(seedFor(4),'Sqr'); } },
+      { label:'Triangle', white:true, onPick:function(){ seedTo(seedFor(1),'Tri'); } },
+      { label:'Sine', white:true, onPick:function(){ seedTo(seedFor(0),'Sine'); } },
+      { label:'Reset shape', white:true, onPick:function(){ var gs=shGet(); gs.gh=8; gs.gv=8; gs.sn=1; seedTo(seedFor(1),'Tri'); } },
+      { isHeader:true, label:'Window' },
+      { label:'Extend', white:true, onPick:function(){ openExt(); } }
+    ], e.clientX, e.clientY);
   }
   function yfor(k,t){var c=(k===7?1:CYC),p=(t*c)%1;   // fb206 — Custom draws ONE cycle (the editor IS the cycle)
     if(k===0)return Math.sin(t*Math.PI*2*c); if(k===1)return p<0.5?(p*4-1):(3-p*4);
@@ -22953,7 +22965,7 @@ restoreThemeFromBackend();
     var tabs='<div class="mv-tabs">'+(st.page?'<span class="t mv-pg" data-pg="0" title="LFOs 1–5">‹</span>':'')+nums+(st.page?'':'<span class="t mv-pg" data-pg="1" title="LFOs 6–10">›</span>')+'</div>';   /* fb153 — Pop chip retired: since fb151 the docked numbers drag onto every window, so the palette launcher just crowded the strip */
     return '<div class="mv-scope">'+scopeSVG()+'</div>'
       +'<div class="mv-ov bot">'
-        +'<span class="mv-c" id="mv-shape"><span class="ic">'+icon(st.shape)+'</span> '+SHORT[st.shape]+' '+CHEV+'</span>'
+        +'<span class="mv-c" id="mv-shape"><span class="ic">'+icon(st.shape)+'</span> '+(st.shape===7?((shapes[st.tab]&&shapes[st.tab].nm)||'Custom'):SHORT[st.shape])+' '+CHEV+'</span>'
         +rate
         +'<span class="mv-seg"><b class="'+(st.sync?'on':'off')+'" id="mv-bpm">BPM</b> · <b class="'+(st.sync?'off':'on')+'" id="mv-hz">Hz</b></span>'
         +'<span class="mv-c drag" id="mv-shift" title="slide the LFO"><svg viewBox="0 0 14 10" width="13" height="9" style="opacity:.8" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3 L1 5 L4 7 M10 3 L13 5 L10 7 M1 5 H13"/></svg> <span id="mv-shv">'+Math.round(st.phase*360)+'°</span></span>'
@@ -22962,7 +22974,7 @@ restoreThemeFromBackend();
       +'</div>'
       +'<div class="mv-err"></div>';
   }
-  function render(){ root.innerHTML=front(); root.classList.toggle('shp',st.shape===7); errEl=root.querySelector('.mv-err'); bindFront(); }   // fb208 — .shp gates the footer ruler
+  function render(){ root.innerHTML=front(); root.classList.add('shp'); errEl=root.querySelector('.mv-err'); bindFront(); }   // fb212 — the ruler is permanent (one world, one footer)
 
   // ---- body-level menu (glass) ----
   var menu=document.createElement('div'); menu.className='mv-menu'; document.body.appendChild(menu);
@@ -22977,7 +22989,9 @@ restoreThemeFromBackend();
 
   function bindFront(){
     var sb=root.querySelector('#mv-shape');
-    if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s,i){return {t:s,ic:icon(i)};}), st.shape, sb, function(i){ setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; render(); }); };
+    if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s2,i){return {t:s2,ic:icon(i)};}), st.shape, sb, function(i){
+      if(i<=4){ seedTo(seedFor(i),SHORT[i]); return; }   // fb212 — deterministic shapes load as EDITABLE seeds (Max: 'I wanna edit the sine ITSELF'); S&H/Rand stay generative until touched
+      setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; render(); }); };
     var dv=root.querySelector('#mv-div');
     if(dv)dv.onclick=function(){ openMenu(DIVS.map(function(s){return {t:s};}), st.div, dv, function(i){ setNorm(cur().div,i/(NDIV-1)); st.div=i; render(); }); };
     var bpm=root.querySelector('#mv-bpm'), hz=root.querySelector('#mv-hz');
@@ -23042,13 +23056,17 @@ restoreThemeFromBackend();
   var DIVBEATS=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6];   // beats-per-cycle per DIVS entry
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
   function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
-    var cust=(st.shape===7&&scope===root), x=cust?shX(ph):ph*456;   // fb208 — the custom playhead rides the inset field
-    if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
-    if(fd){ fd.setAttribute('cx',x.toFixed(1));
-      if(cust) fd.setAttribute('cy',shY(shEvalPts(shGet().pts,(ph+st.phase)%1)).toFixed(1));
-      else fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*amp).toFixed(1)); } }
+    if(scope===root){   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
+      var rp=(ph+st.phase)%1, x=shX(rp);
+      if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
+      if(fd){ fd.setAttribute('cx',x.toFixed(1));
+        fd.setAttribute('cy',(st.shape===7?shY(shEvalPts(shGet().pts,rp)):shY((stockVal(st.shape,rp)+1)/2)).toFixed(1)); }
+      return; }
+    var x2=ph*456;
+    if(pl){ pl.setAttribute('x1',x2); pl.setAttribute('x2',x2); }
+    if(fd){ fd.setAttribute('cx',x2.toFixed(1)); fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*amp).toFixed(1)); } }
   function tick(t){ if(window.__cardOnly)return; if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
-    ph+=dt*effHz()/(st.shape===7?1:CYC); if(ph>=1)ph-=Math.floor(ph);   // ÷cycles-drawn so the follower's rise/fall matches the audible LFO rate (Custom draws one)
+    ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph);   // fb212 — the pane is ONE cycle for every shape (the ext popup's 3-cycle preview reads fast until its L5 rebuild)
     var amp=ampOf(st.depth);
     if(root) placeHead(root,amp);
     if(ext && ext.classList.contains('open')) placeHead(ext,amp);
@@ -27252,7 +27270,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb211';   // bump per ship  [fb211 = THE FOOTERS — env shelf equal gaps + margins + taller, LFO row lifted (purple underline un-clipped), ruler re-measured]
+  var TERRAIN_BUILD = 'fb212';   // bump per ship  [fb212 = ONE WORLD — unified field for every shape, canonical white menu + fb69 sliders, Pac-Man follower fix, seed names, equilibrium]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
