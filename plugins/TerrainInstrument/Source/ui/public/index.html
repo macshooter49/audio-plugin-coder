@@ -22869,7 +22869,7 @@ restoreThemeFromBackend();
         function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); shTouched=true; shPush(); render(); }
         document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); };
       sc.ondblclick=null;
-      sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); };
+      sc.oncontextmenu=function(e){ e.preventDefault(); shCtx(e); };   // fb220 — point delete works with a brush in hand too
       return;
     }
     sc.onpointerdown=null;
@@ -22891,8 +22891,8 @@ restoreThemeFromBackend();
       if(t.classList&&t.classList.contains('sh-hit')){ isCd=t.classList.contains('cdh'); i=+t.getAttribute('data-i'); }
       else { var nb=shNear(sc,e); if(!nb)return; isCd=(nb.t==='cd'); i=nb.i; }   // fb210 — the Serum grab: near counts, no aiming
       e.preventDefault(); try{svg.setPointerCapture(e.pointerId);}catch(e0){}
-      var y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
-      function mv(ev){ did=true;
+      var x0=e.clientX, y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
+      function mv(ev){ if(!did&&Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0)<3)return; did=true;   // fb220 — 3px threshold: a plain click can't nudge/snap-teleport the point (it was sabotaging dbl-click delete)
         if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); return; }   // fb208 — zero DETENT: straight is easy to hit
         var q=shPos(sc,ev), lo=(i>0)?sp.pts[i-1][0]:0, hi=(i<sp.pts.length-1)?sp.pts[i+1][0]:1;   // fb208 — ties ALLOWED: stack two points = a true vertical step (the eval's later-point-rules handles it)
         var nx=(i===0)?0:(i===sp.pts.length-1?1:Math.max(lo,Math.min(hi,sp.sn?shSnap(q.x,sp.gv):q.x)));
@@ -22902,8 +22902,28 @@ restoreThemeFromBackend();
         svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
         if(did){ shTouched=true; shPush(); render(); } }   // no-move release skips render so dbl-click delete still fires
       svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); });
-    sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); };
+    sc.oncontextmenu=function(e){ e.preventDefault(); shCtx(e); };
   }
+  function shRedRow(txt,fn){   // fb220 — the red action row (the pane's danger red; canonical-menu node)
+    var d=document.createElement('div');
+    d.style.cssText='display:flex;align-items:center;padding:6px 14px 6px 10px;border-radius:6px;cursor:pointer;color:#ff6b6b;font-size:9.5px;letter-spacing:1px;white-space:nowrap;transition:.1s;';
+    d.textContent=txt;
+    d.onmouseenter=function(){ d.style.background='rgba(255,107,107,0.12)'; };
+    d.onmouseleave=function(){ d.style.background=''; };
+    d.onclick=function(){ try{window.__synHideMenu();}catch(e2){} fn(); };
+    return d; }
+  function shCtx(e){   // fb220 — right-click ON a point = the point's own menu (Max: 'right click, delete, gone'); anywhere else = the control room
+    var sp=shGet(), nb=(st.shape===7)?shNear(sc0(),e):null;
+    function sc0(){ return root.querySelector('.mv-scope'); }
+    if(nb&&nb.t==='nd'&&nb.i>0&&nb.i<sp.pts.length-1&&sp.pts.length>2&&window.__synShowMenu){
+      window.__synShowMenu('', [
+        { node: shRedRow('Delete point', function(){ sp.pts.splice(nb.i,1); shTouched=true; shPush(); render(); }) }
+      ], e.clientX, e.clientY); return; }
+    if(nb&&nb.t==='cd'&&(sp.pts[nb.i][2]||0)!==0&&window.__synShowMenu){
+      window.__synShowMenu('', [
+        { label:'Straighten curve', white:true, onPick:function(){ sp.pts[nb.i][2]=0; shTouched=true; shPush(); render(); } }
+      ], e.clientX, e.clientY); return; }
+    shMenu(e); }
   function gridSliderNode(lbl,key){   // fb212 — the fb69 STEREO-WIDTH recipe VERBATIM (2px track, #8B5CF6 fill, thin white 2×9 marker, 1px notch ticks — THE house slider, no invented thumbs)
     var sp=shGet();
     var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
@@ -27308,7 +27328,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb219';   // bump per ship  [fb219 = divisions 32/16 bar + 1/64·1/128·1/256 (append-only + ladder-ordered menu), BPM chip centered, menu scrollbars gone]
+  var TERRAIN_BUILD = 'fb220';   // bump per ship  [fb220 = right-click a point → red Delete (curve dot → Straighten) + 3px drag threshold (clicks can't snap-teleport points)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
