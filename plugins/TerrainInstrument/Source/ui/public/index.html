@@ -2440,6 +2440,8 @@ body {
 #mod-engine .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
 #mod-engine .sh-hit{fill:transparent;cursor:grab;}
 #mod-engine .sh-hit.cdh{cursor:ns-resize;}
+#mod-engine .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
+#mod-engine .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
 #mod-engine .mv-tabs{display:flex;align-items:center;gap:5px;}   /* fb211 — 1:1-width breathing room */
 /* fixed-width slots: paging 1-5 ↔ 6-10 (and the "10"/arrows) must never reflow the row */
 #mod-engine .mv-tabs .t{position:relative;width:13px;flex:none;text-align:center;font-size:10px;font-weight:400;color:var(--ghost-dim);cursor:pointer;transition:.12s;text-shadow:0 1px 3px rgba(0,0,0,.9);}
@@ -22763,6 +22765,9 @@ restoreThemeFromBackend();
     return a[1]+(b[1]-a[1])*shBias((p-a[0])/w,a[2]||0); }
   function shEval(n,p){ var sp=shapes[n]; if(!sp)return 1-4*Math.abs((((p%1)+1)%1)-0.5); return shEvalPts(sp.pts,p)*2-1; }
   window.__lfoCustomEval=shEval;   // the badge-module mirror (mval) + any future consumer reads this
+  function shFlipH(pts){ var n=pts.length,out=[],i;   // fb221 — time-mirror: reverse order, x -> 1-x; each segment's tension lands on its mirrored segment NEGATED (bias with -P is the exact horizontal mirror of bias with P)
+    for(i=n-1;i>=0;i--)out.push([1-pts[i][0],pts[i][1],(i>0)?-(pts[i-1][2]||0):0]);
+    return out; }
   function seedFor(k){   // stock shape -> starter breakpoints, sculptable from the first touch
     if(k===0)return [[0,.5,.22],[.25,1,-.22],[.5,.5,.22],[.75,0,-.22],[1,.5,0]];
     if(k===2)return [[0,0,0],[1,1,0]];
@@ -22788,7 +22793,7 @@ restoreThemeFromBackend();
       var n=Math.max(8,Math.min(48,Math.round((x1-x0)/3)));
       for(var k2=1;k2<=n;k2++){ var t=k2/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+shY(a[1]+(b[1]-a[1])*shBias(t,cc)).toFixed(1)+' '; } }
     return d; }
-  function shaperSVG(){ var w=456,h=96,sp=shGet(),i,g='';
+  function shaperSVG(){ var w=456,h=96,sp=shGet(),i,g=''; if(shSelTab!==st.tab){shSel=[];shSelTab=st.tab;}   // fb221 — a selection never survives a tab hop
     for(i=1;i<sp.gv;i++){ var gx=shX(i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+SH_TOP+'" x2="'+gx+'" y2="'+SH_BOT+'"/>'; }
     for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="'+SH_L+'" y1="'+gy+'" x2="'+SH_R+'" y2="'+gy+'"/>'; }
     var custom=(st.shape===7);
@@ -22797,7 +22802,7 @@ restoreThemeFromBackend();
     var nd='',hd='',cdm='';
     if(custom){
     sp.pts.forEach(function(q,idx){ var cx=shX(q[0]).toFixed(1),cy=shY(q[1]).toFixed(1);   // fb208 — exact: the dot IS the line end
-      nd+='<circle class="sh-nd" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
+      nd+='<circle class="sh-nd'+(shSel.indexOf(idx)>=0?' sel':'')+'" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
       hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="12"/>'; });   // fb210 — fat targets (Max: 'open up the circumference')
     sp.pts.forEach(function(q,idx){ if(idx>=sp.pts.length-1)return; var r=sp.pts[idx+1]; if(r[0]-q[0]<=0.02)return;
       var mx=shX((q[0]+r[0])/2).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1);
@@ -22832,15 +22837,45 @@ restoreThemeFromBackend();
       var mx=shX((pq[0]+r[0])/2),my=shY(shEvalPts(sp.pts,(pq[0]+r[0])/2)),dx=mx-ux,dy=my-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'cd',i:i};} });
     return best; }
   var shTool=0;   // fb213 — THE BRUSHES (Max: 'now I have the ramp in my mouse'): 0=point/edit · 1=line · 2=ramp up · 3=ramp down · 4=square · 5=triangle · 6=sine — armed tools STAMP one grid cell per click/drag, at the cursor's level
-  function stampCell(q){ var sp=shGet();
+  var shSel=[], shSelTab=-1;   // fb221 — MULTI-SELECT (L2): band-selected point indices; cleared on tab hops and any edit that renumbers points
+  function shSelClear(){ if(!shSel.length)return; shSel=[]; if(root)root.querySelectorAll('.sh-nd.sel').forEach(function(c){c.classList.remove('sel');}); }
+  function shSelPaint(){ if(!root)return; root.querySelectorAll('.sh-nd').forEach(function(c){ if(shSel.indexOf(+c.getAttribute('data-i'))>=0)c.classList.add('sel'); else c.classList.remove('sel'); }); }
+  function shGrpBounds(sp,org){   // fb221 — the selection is ONE body: dx/dy clamped so no member crosses an UNselected neighbor (ties inclusive — steps survive) or leaves the field
+    var n=sp.pts.length,dx0=-2,dx1=2,dy0=-2,dy1=2,i,j;
+    for(i=0;i<n;i++){ if(shSel.indexOf(i)<0)continue;
+      dy0=Math.max(dy0,-org[i][1]); dy1=Math.min(dy1,1-org[i][1]);
+      if(i===0||i===n-1)continue;
+      var lo=0,hi=1;
+      for(j=i-1;j>=0;j--)if(shSel.indexOf(j)<0){lo=org[j][0];break;}
+      for(j=i+1;j<n;j++)if(shSel.indexOf(j)<0){hi=org[j][0];break;}
+      dx0=Math.max(dx0,lo-org[i][0]); dx1=Math.min(dx1,hi-org[i][0]); }
+    return {x0:Math.min(dx0,0),x1:Math.max(dx1,0),y0:Math.min(dy0,0),y1:Math.max(dy1,0)}; }
+  function shBand(svg,sc,e){   // fb221 — drag empty ground = the rubber-band (thin white hairline, faint purple wash; points inside wear the select purple LIVE)
+    e.preventDefault(); try{svg.setPointerCapture(e.pointerId);}catch(e0){}
+    var r=sc.getBoundingClientRect(), cx0=e.clientX, cy0=e.clientY, did=false, box=null;
+    function vx(ev){ return (ev.clientX-r.left)/r.width*456; } function vy(ev){ return (ev.clientY-r.top)/r.height*96; }
+    var ax=vx(e), ay=vy(e);
+    function mv(ev){ if(!did){ if(Math.abs(ev.clientX-cx0)+Math.abs(ev.clientY-cy0)<3)return; did=true;
+        box=document.createElementNS('http://www.w3.org/2000/svg','rect'); box.setAttribute('class','sh-selbox'); svg.appendChild(box); }
+      var bx=vx(ev),by=vy(ev),x=Math.min(ax,bx),y=Math.min(ay,by),w2=Math.abs(bx-ax),h2=Math.abs(by-ay);
+      box.setAttribute('x',x.toFixed(1)); box.setAttribute('y',y.toFixed(1)); box.setAttribute('width',w2.toFixed(1)); box.setAttribute('height',h2.toFixed(1));
+      var sp2=shGet(); shSel=[];
+      sp2.pts.forEach(function(p,ix){ var px=shX(p[0]),py=shY(p[1]); if(px>=x-0.5&&px<=x+w2+0.5&&py>=y-0.5&&py<=y+h2+0.5)shSel.push(ix); });
+      shSelPaint(); }
+    function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e1){}
+      svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
+      if(box&&box.parentNode)box.parentNode.removeChild(box);
+      if(!did)shSelClear(); }   // a plain click on empty ground = deselect
+    svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); }
+  function stampCell(q,T){ var sp=shGet(); T=T||shTool;   // fb221 — callers may force a tool (Shift-drag stamps Straight line without arming a brush)
     var gv=sp.gv, ci=Math.max(0,Math.min(gv-1,Math.floor(q.x*gv))), c0=ci/gv, c1=(ci+1)/gv;
     var lv=sp.sn?shSnap(q.y,sp.gh):q.y, m=(c0+c1)/2, S;
     var v0=shEvalPts(sp.pts,Math.max(0,c0-1e-4)), v1=shEvalPts(sp.pts,Math.min(0.9999,c1+1e-4));
-    if(shTool===1)S=[[c0,lv,0],[c1,lv,0]];
-    else if(shTool===2)S=[[c0,0,0],[c1,lv,0]];
-    else if(shTool===3)S=[[c0,lv,0],[c1,0,0]];
-    else if(shTool===4)S=[[c0,lv,0],[m,lv,0],[m,0,0],[c1,0,0]];
-    else if(shTool===5)S=[[c0,0,0],[m,lv,0],[c1,0,0]];
+    if(T===1)S=[[c0,lv,0],[c1,lv,0]];
+    else if(T===2)S=[[c0,0,0],[c1,lv,0]];
+    else if(T===3)S=[[c0,lv,0],[c1,0,0]];
+    else if(T===4)S=[[c0,lv,0],[m,lv,0],[m,0,0],[c1,0,0]];
+    else if(T===5)S=[[c0,0,0],[m,lv,0],[c1,0,0]];
     else S=[[c0,0,.5],[m,lv,-.5],[c1,0,0]];
     var out=[];
     sp.pts.forEach(function(pp){ if(pp[0]<c0-1e-6||pp[0]>c1+1e-6)out.push(pp); });
@@ -22850,50 +22885,64 @@ restoreThemeFromBackend();
     if(out.length>160)return false;
     out.sort(function(a,b){return a[0]-b[0];});   // stable: ties keep insertion order (entry tie → stamp → exit tie = clean vertical steps)
     sp.pts=out; return true; }
-  function seedTo(pts,nm){ var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom';   // fb212 — grid/snap survive re-seeding; the chip wears the seed's name (no 'puts me on custom')
+  function seedTo(pts,nm){ shSelClear(); var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom';   // fb212 — grid/snap survive re-seeding; the chip wears the seed's name (no 'puts me on custom')
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
   function shConvert(){ if(st.shape===7)return; seedTo(seedFor(st.shape),SHORT[st.shape]); }
+  function shStampGesture(e,T){   // fb221 — ONE stamp gesture, two doors: an armed brush (fb213) or Shift-drag (the Serum step-sequencer gesture); doc-level drag survives the per-stamp rebuilds
+    shSelClear();
+    if(st.shape!==7){ shConvert(); }
+    var lastCi=-1,lastLv=-9;
+    function apply(ev){ var sc2=root.querySelector('.mv-scope'); if(!sc2)return; var q=shPos(sc2,ev);
+      var sp2=shGet(), ci=Math.max(0,Math.min(sp2.gv-1,Math.floor(q.x*sp2.gv))), lv=sp2.sn?shSnap(q.y,sp2.gh):q.y;
+      if(ci===lastCi&&Math.abs(lv-lastLv)<0.002)return; lastCi=ci; lastLv=lv;
+      if(stampCell(q,T)){ var sc3=root.querySelector('.mv-scope'); if(sc3)sc3.innerHTML=scopeSVG(); } }
+    apply(e);
+    function mv(ev){ apply(ev); }
+    function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); shTouched=true; shPush(); render(); }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }
   function bindShaper(){
     var sc=root.querySelector('.mv-scope'); if(!sc)return;
     sc.style.cursor = shTool? 'crosshair' : '';
     if(shTool){   // fb213 — a BRUSH is armed: clicks/drags stamp cells (works from stock too — converts first); node editing pauses until Point is re-picked
-      sc.onpointerdown=function(e){ if(e.button===2)return; e.preventDefault();
-        if(st.shape!==7){ shConvert(); }
-        var lastCi=-1,lastLv=-9;
-        function apply(ev){ var sc2=root.querySelector('.mv-scope'); if(!sc2)return; var q=shPos(sc2,ev);
-          var sp2=shGet(), ci=Math.max(0,Math.min(sp2.gv-1,Math.floor(q.x*sp2.gv))), lv=sp2.sn?shSnap(q.y,sp2.gh):q.y;
-          if(ci===lastCi&&Math.abs(lv-lastLv)<0.002)return; lastCi=ci; lastLv=lv;
-          if(stampCell(q)){ var sc3=root.querySelector('.mv-scope'); if(sc3)sc3.innerHTML=scopeSVG(); } }
-        apply(e);
-        function mv(ev){ apply(ev); }
-        function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); shTouched=true; shPush(); render(); }
-        document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); };
+      sc.onpointerdown=function(e){ if(e.button===2)return; e.preventDefault(); shStampGesture(e,shTool); };
       sc.ondblclick=null;
       sc.oncontextmenu=function(e){ e.preventDefault(); shCtx(e); };   // fb220 — point delete works with a brush in hand too
       return;
     }
     sc.onpointerdown=null;
-    if(st.shape!==7){ sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); }; return; }   // fb212 — ONE menu everywhere; dbl-click a stock shape = its seed, editable in place
+    if(st.shape!==7){ sc.onpointerdown=function(e){ if(!e.shiftKey||e.button===2)return; e.preventDefault(); shStampGesture(e,1); };   // fb221 — Shift-drag steps from a stock shape too (it converts under the first stamp)
+      sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); }; return; }   // fb212 — ONE menu everywhere; dbl-click a stock shape = its seed, editable in place
     var svg=sc.querySelector('svg'); if(!svg)return;
     var sp=shGet();
-    sc.ondblclick=function(e){ var t=e.target, hitCd=t.classList&&t.classList.contains('cdh'), hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
+    sc.ondblclick=function(e){ if(e.shiftKey)return;   // fb221 — Shift belongs to step-draw
+      var t=e.target, hitCd=t.classList&&t.classList.contains('cdh'), hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
       if(hitCd||hitNd) ni=+t.getAttribute('data-i');
       else { var nb=shNear(sc,e); if(nb){ if(nb.t==='cd')hitCd=true; else hitNd=true; ni=nb.i; } }   // fb210 — proximity dbl-click
       if(hitCd){ if(sp.pts[ni]&&(sp.pts[ni][2]||0)!==0){ sp.pts[ni][2]=0; shTouched=true; shPush(); render(); } return; }   // dbl-click a curve dot = perfectly straight segment
       if(hitNd){
-        if(ni>0&&ni<sp.pts.length-1&&sp.pts.length>2){ sp.pts.splice(ni,1); shTouched=true; shPush(); render(); }
+        if(ni>0&&ni<sp.pts.length-1&&sp.pts.length>2){ shSelClear(); sp.pts.splice(ni,1); shTouched=true; shPush(); render(); }
         return; }
       if(sp.pts.length>=160)return;
       var q=shPos(sc,e); var nx=sp.sn?shSnap(q.x,sp.gv):q.x, ny=sp.sn?shSnap(q.y,sp.gh):q.y;
-      sp.pts.push([nx,ny,0]); sp.pts.sort(function(a,b){return a[0]-b[0];});
+      shSelClear(); sp.pts.push([nx,ny,0]); sp.pts.sort(function(a,b){return a[0]-b[0];});
       shTouched=true; shPush(); render(); };
     svg.addEventListener('pointerdown',function(e){ var t=e.target, isCd=false, i=-1;
+      if(e.shiftKey&&e.button!==2){ e.preventDefault(); shStampGesture(e,1); return; }   // fb221 — Shift-drag = DRAW STEPS at the grid size (the Serum step-sequencer gesture), wherever you press
       if(t.classList&&t.classList.contains('sh-hit')){ isCd=t.classList.contains('cdh'); i=+t.getAttribute('data-i'); }
-      else { var nb=shNear(sc,e); if(!nb)return; isCd=(nb.t==='cd'); i=nb.i; }   // fb210 — the Serum grab: near counts, no aiming
+      else { var nb=shNear(sc,e); if(!nb){ if(e.button===0)shBand(svg,sc,e); return; } isCd=(nb.t==='cd'); i=nb.i; }   // fb210 — the Serum grab: near counts, no aiming · fb221 — empty ground = rubber-band select
       e.preventDefault(); try{svg.setPointerCapture(e.pointerId);}catch(e0){}
+      var grp=(!isCd&&shSel.length>1&&shSel.indexOf(i)>=0);   // fb221 — grab a selected point and the WHOLE selection rides (offsets kept; the anchor snaps, the rest follow)
+      if(!isCd&&!grp&&shSel.length)shSelClear();   // grabbing outside the selection drops it
       var x0=e.clientX, y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
+      var org=grp?sp.pts.map(function(p){return [p[0],p[1]];}):null, bnd=grp?shGrpBounds(sp,org):null;
       function mv(ev){ if(!did&&Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0)<3)return; did=true;   // fb220 — 3px threshold: a plain click can't nudge/snap-teleport the point (it was sabotaging dbl-click delete)
         if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); return; }   // fb208 — zero DETENT: straight is easy to hit
+        if(grp){ var qg=shPos(sc,ev);
+          var ax=(i===0||i===sp.pts.length-1)?org[i][0]:(sp.sn?shSnap(qg.x,sp.gv):qg.x), ay=sp.sn?shSnap(qg.y,sp.gh):qg.y;
+          var gdx=Math.max(bnd.x0,Math.min(bnd.x1,ax-org[i][0])), gdy=Math.max(bnd.y0,Math.min(bnd.y1,ay-org[i][1]));
+          shSel.forEach(function(si){ var ep=(si===0||si===sp.pts.length-1);
+            sp.pts[si][0]=ep?org[si][0]:org[si][0]+gdx; sp.pts[si][1]=org[si][1]+gdy; });
+          shRefresh(); return; }
         var q=shPos(sc,ev), lo=(i>0)?sp.pts[i-1][0]:0, hi=(i<sp.pts.length-1)?sp.pts[i+1][0]:1;   // fb208 — ties ALLOWED: stack two points = a true vertical step (the eval's later-point-rules handles it)
         var nx=(i===0)?0:(i===sp.pts.length-1?1:Math.max(lo,Math.min(hi,sp.sn?shSnap(q.x,sp.gv):q.x)));
         var ny=sp.sn?shSnap(q.y,sp.gh):q.y;
@@ -22915,9 +22964,15 @@ restoreThemeFromBackend();
   function shCtx(e){   // fb220 — right-click ON a point = the point's own menu (Max: 'right click, delete, gone'); anywhere else = the control room
     var sp=shGet(), nb=(st.shape===7)?shNear(sc0(),e):null;
     function sc0(){ return root.querySelector('.mv-scope'); }
+    if(st.shape===7&&shSel.length>1&&window.__synShowMenu){   // fb221 — with a selection down, the right-click serves the selection; click empty ground to get the control room back
+      window.__synShowMenu('', [
+        { node: shRedRow('Remove selected', function(){ var n0=sp.pts.length;
+            sp.pts=sp.pts.filter(function(p,ix){ return shSel.indexOf(ix)<0||ix===0||ix===n0-1; });
+            shSelClear(); shTouched=true; shPush(); render(); }) }
+      ], e.clientX, e.clientY); return; }
     if(nb&&nb.t==='nd'&&nb.i>0&&nb.i<sp.pts.length-1&&sp.pts.length>2&&window.__synShowMenu){
       window.__synShowMenu('', [
-        { node: shRedRow('Delete point', function(){ sp.pts.splice(nb.i,1); shTouched=true; shPush(); render(); }) }
+        { node: shRedRow('Delete point', function(){ shSelClear(); sp.pts.splice(nb.i,1); shTouched=true; shPush(); render(); }) }
       ], e.clientX, e.clientY); return; }
     if(nb&&nb.t==='cd'&&(sp.pts[nb.i][2]||0)!==0&&window.__synShowMenu){
       window.__synShowMenu('', [
@@ -22962,6 +23017,8 @@ restoreThemeFromBackend();
       { node:gridSliderNode('lv','gh') },
       { node:gridSliderNode('tm','gv') },
       { label:'Snap', isChecked:!!sp.sn, white:true, onPick:function(){ sp.sn=sp.sn?0:1; shTouched=true; shPush(); render(); } },
+      { label:'Flip vertical', white:true, onPick:function(){ if(st.shape!==7)shConvert(); var g2=shGet(); shSelClear(); g2.pts.forEach(function(p){ p[1]=1-p[1]; }); shTouched=true; shPush(); render(); } },   // fb221 — mirror in level (tensions ride UNchanged — the y-mirror algebra cancels)
+      { label:'Flip horizontal', white:true, onPick:function(){ if(st.shape!==7)shConvert(); var g2=shGet(); shSelClear(); g2.pts=shFlipH(g2.pts); shTouched=true; shPush(); render(); } },   // fb221 — mirror in time (segment tensions NEGATE — exact)
       { isHeader:true, label:'Shape' },
       tool('Point \u00b7 edit',0),
       tool('Straight line',1),
@@ -27328,7 +27385,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb220';   // bump per ship  [fb220 = right-click a point → red Delete (curve dot → Straighten) + 3px drag threshold (clicks can't snap-teleport points)]
+  var TERRAIN_BUILD = 'fb221';   // bump per ship  [fb221 = L2 COMPLETE: Shift-drag step draw · rubber-band multi-select + group move · Flip vertical/horizontal · Remove selected]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
