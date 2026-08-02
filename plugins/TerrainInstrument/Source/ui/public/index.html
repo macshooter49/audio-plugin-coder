@@ -2444,7 +2444,7 @@ body {
 /* fixed-width slots: paging 1-5 ↔ 6-10 (and the "10"/arrows) must never reflow the row */
 #mod-engine .mv-tabs .t{position:relative;width:13px;flex:none;text-align:center;font-size:10px;font-weight:400;color:var(--ghost-dim);cursor:pointer;transition:.12s;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-tabs .t:hover{color:var(--ghost);} #mod-engine .mv-tabs .t.act{color:#fff;font-weight:600;}
-#mod-engine .mv-tabs .t.act::after{content:'';position:absolute;left:-1px;right:-1px;bottom:-3px;height:1.5px;background:var(--purple-400);border-radius:1px;}
+#mod-engine .mv-tabs .t.act::after{content:'';position:absolute;left:0;right:0;bottom:-3px;height:1px;background:var(--purple-400);}   /* fb216 — the FILTER tab underline VERBATIM (1px, square, spans the label box = centered under the digit); the 1.5px+radius+overhang read FAT once fb211 un-clipped it */
 #mod-engine .mv-tabs .t.dis{opacity:.5;cursor:default;}
 #mod-engine .mv-dep{display:flex;align-items:center;gap:5px;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-dep .l{font-size:7.5px;letter-spacing:1px;color:var(--ghost-dim);}
@@ -27306,7 +27306,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb215';   // bump per ship  [fb215 = clean up — dead top-overlay fossils swept (EXPAND svg + .mv-exp/.mv-ov.top CSS); Extend lives in the right-click]
+  var TERRAIN_BUILD = 'fb216';   // bump per ship  [fb216 = LFO tab underline = the filter's THIN original (1px square, label-box span, centered under the digit)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
