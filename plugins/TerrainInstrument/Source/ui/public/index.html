@@ -2420,7 +2420,6 @@ body {
 #mod-engine .mv-foll{fill:#FFFFFF;filter:drop-shadow(0 0 2px rgba(167,139,250,0.95)) drop-shadow(0 0 5px rgba(167,139,250,0.6));}
 @keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
 #mod-engine .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
-#mod-engine .mv-ov.top{top:6px;padding:0 11px;justify-content:flex-end;}
 #mod-engine .mv-ov.bot{bottom:0;padding:0 11px 4px;justify-content:space-between;}
 #mod-engine .mv-ov.bot .mv-c,#mod-engine .mv-ov.bot .mv-seg,#mod-engine .mv-ov.bot .mv-dep{position:relative;top:1px;}   /* fb212 — equilibrium (Max): everything except the 1-5 tabs rode 1px high of the row's true center */   /* fb211 — 4px floor clearance: the Dep-ring shrink (fb209) had dropped the row's natural height, gluing text to the ground and CLIPPING the active-tab's purple underline outside the pane (Max's missing line). The lift brings it home + the row breathes. */
 #mod-engine .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:var(--ghost);cursor:pointer;transition:color .12s;text-shadow:0 1px 3px rgba(0,0,0,.9);-webkit-user-select:none;user-select:none;}
@@ -2431,8 +2430,6 @@ body {
 #mod-engine .mv-c .ic{display:inline-flex;width:20px;height:11px;color:inherit;}
 #mod-engine .mv-seg{font-size:9px;letter-spacing:1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);}
 #mod-engine .mv-seg b{cursor:pointer;font-weight:300;} #mod-engine .mv-seg .on{color:#fff;} #mod-engine .mv-seg .off{color:var(--ghost-dim);}
-#mod-engine .mv-exp{width:12px;height:12px;cursor:pointer;color:var(--ghost-dim);opacity:.8;transition:.12s;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9));}   /* fb209 — quieter corner (Max: the cluster fought the graph) */
-#mod-engine .mv-exp:hover{color:#fff;}
 /* fb206 — THE SHAPER (custom LFO editor) */
 #mod-engine.shp .mv-ov.bot{border-top:1px solid transparent;}   /* fb209 — geometry holder: keeps the overlay box identical while ::before carries the ink */
 #mod-engine.shp .mv-ov.bot::before{content:'';position:absolute;left:0;right:0;top:-0.6px;height:1px;background:rgba(255,255,255,.075);}   /* fb211 — THE RULER, re-measured collinear after the footer lift (env 711.5 vs overlay 712.1) */
@@ -22972,7 +22969,6 @@ restoreThemeFromBackend();
       '<line class="mv-play" id="mv-ph" x1="0" y1="0" x2="0" y2="'+h+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+mid+'" r="2.4"/></svg>';}
   function icon(k,phOff){phOff=phOff||0;var w=20,h=11,mid=h/2,n=60,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,(t+phOff)%1)*(h*0.34)).toFixed(1)+' ';}return '<svg viewBox="0 0 '+w+' '+h+'" fill="none" stroke="currentColor" stroke-width="1.3"><path d="'+d+'"/></svg>';}
   var CHEV='<svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>';
-  var EXPAND='<svg class="mv-exp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>';
   // Bipolar ring: purple fills from top-center toward the value — RIGHT for +, LEFT for − (so negative shows, fixing the "grayed out" bug).
   var RINGBG=function(d){d=Math.max(-1,Math.min(1,d||0));var lo=d>=0?140:140+d*140,hi=d>=0?140+d*140:140;return 'conic-gradient(from 220deg,var(--knob-track) 0 '+lo+'deg,var(--purple-400) '+lo+'deg '+hi+'deg,var(--knob-track) '+hi+'deg 280deg,transparent 280deg)';};
   var DONBG=function(v){return 'conic-gradient(from 220deg,#B794FF '+(v*280)+'deg,rgba(120,118,160,0.35) 0 280deg,transparent 0)';};
@@ -27310,7 +27306,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb213';   // bump per ship  [fb213 = THE BRUSHES — tool stamps (line/ramps/square/tri/sine per grid cell), shelf measured-fit (Rel un-clipped), matched slider emblems, caps 160]
+  var TERRAIN_BUILD = 'fb215';   // bump per ship  [fb215 = clean up — dead top-overlay fossils swept (EXPAND svg + .mv-exp/.mv-ov.top CSS); Extend lives in the right-click]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
