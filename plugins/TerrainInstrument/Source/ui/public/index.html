@@ -13412,7 +13412,7 @@ setTimeout(function wireSynControls () {
       try {
         var MODES = ['Off','FM','PD','AM','RM','Sync','Warp','Dist','Filter'];   // == SYN_OSC_x_WSLOTn_MODE choice order
         var P1ON  = { FM: 1, PD: 1, AM: 1, RM: 1 };                              // active families (FM/PD + AM/RM); Sync/Warp/Dist still 'soon'
-        var NSRC  = 7;                                                           // SRC choices: Osc A..D / Sub / Noise / Self
+        var NSRC  = 17;                                                          // SRC choices: Osc A..D / Sub / Noise / Self / LFO 1-10 (fb223 — MUST equal the C++ srcs StringArray count)
         var bstate = {};                                                         // "a1" -> {mode,src,depth}  (display source of truth)
         function st  (o, s) { var k = o + s; return bstate[k] || (bstate[k] = { mode: 0, src: ('abcd'.indexOf(o) + 1) % 4, depth: 0 }); }
         function pid (o, s, p) { return 'SYN_OSC_' + o.toUpperCase() + '_WSLOT' + s + '_' + p; }
@@ -13422,7 +13422,7 @@ setTimeout(function wireSynControls () {
 
         var MENU_FAM = ['Off','FM','PD','AM','RM'];   // FINAL blend arsenal — Sync/Warp/Dist removed (redundant with the front/back warp modes; Max 2026-07-12). Enum in C++ keeps them (frozen), just not shown.
         var pillOf = {};                                                   // "a1" -> pill element (for reopen refresh)
-        function srcLtr (v) { return (v < 4) ? 'ABCD'.charAt(v) : (v === 5 ? 'N' : (v === 6 ? 'S' : '?')); }   // N = Noise (fb64), S = Self (PD only)
+        function srcLtr (v) { return (v < 4) ? 'ABCD'.charAt(v) : (v === 5 ? 'N' : (v === 6 ? 'S' : (v >= 7 && v <= 16 ? 'L' + (v - 6) : '?'))); }   // N = Noise (fb64), S = Self (PD only), L1-L10 = LFO shapes (fb223)
 
         // Default view = "FM(D)" (mode + source, same style). Hover or drag → the big % value.
         function paintLabel (pill, o, s) {
@@ -13431,7 +13431,7 @@ setTimeout(function wireSynControls () {
             pill.title = 'Blend slot ' + s + ' — right-click to warp this oscillator with FM / PD / AM / RM from another oscillator.'; return; }
           pill.innerHTML = '<span class="bp-txt">' + MODES[b.mode] + '<span class="bp-par">(</span>' + srcLtr(b.src) + '<span class="bp-par">)</span></span>';
           pill.classList.add('act');
-          var _sn = (b.src === 5) ? 'the Noise' : (b.src === 6) ? 'itself (feedback)' : 'Osc ' + String(srcLtr(b.src)).toUpperCase();
+          var _sn = (b.src >= 7 && b.src <= 16) ? 'the LFO ' + (b.src - 6) + ' shape (drawn curve as the warp)' : (b.src === 5) ? 'the Noise' : (b.src === 6) ? 'itself (feedback)' : 'Osc ' + String(srcLtr(b.src)).toUpperCase();
           pill.title = MODES[b.mode] + ' from ' + _sn + ' — hover or drag for depth. The source modulates even at volume 0.';
         }
         function paintValue (pill, o, s) {
@@ -13459,6 +13459,11 @@ setTimeout(function wireSynControls () {
               onPick: function () { wSrc(o, s, 5); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
             if (b.mode === 2) items.push({ label: 'Self (feedback)', isChecked: (b.src === 6), keepOpen: true,   // self = PD only
               onPick: function () { wSrc(o, s, 6); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
+            items.push({ isHeader: true, label: 'LFO shape' });   // fb223 — WARP x LFO: the drawn shape as the warp curve (Max: 'Serum can't do that')
+            for (var li = 1; li <= 10; ++li) (function (ln) {
+              items.push({ label: 'LFO ' + ln, isChecked: (b.src === 6 + ln), keepOpen: true,
+                onPick: function () { wSrc(o, s, 6 + ln); paintLabel(pill, o, s); menu(pill, o, s, x, y); } });
+            })(li);
           }
           if (window.__synShowMenu) window.__synShowMenu(null, items, x, y);
         }
@@ -27396,7 +27401,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb222';   // bump per ship  [fb222 = menu closes on ANY press (pointerdown capture) · click-select a point · Delete/Backspace deletes selection]
+  var TERRAIN_BUILD = 'fb223';   // bump per ship  [fb223 = WARP x LFO: drawn LFO shapes as blend-warp sources (PD/FM/AM/RM read the shape at the carrier's phase)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

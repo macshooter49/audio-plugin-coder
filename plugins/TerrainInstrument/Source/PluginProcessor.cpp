@@ -2902,7 +2902,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         auto addBlendSlots = [&layout] (const char* const id[12], const juce::String& osc)
         {
             const juce::StringArray modes { "Off", "FM", "PD", "AM", "RM", "Sync", "Warp", "Dist", "Filter" };
-            const juce::StringArray srcs  { "Osc A", "Osc B", "Osc C", "Osc D", "Sub", "Noise", "Self" };
+            const juce::StringArray srcs  { "Osc A", "Osc B", "Osc C", "Osc D", "Sub", "Noise", "Self",
+                                            "LFO 1", "LFO 2", "LFO 3", "LFO 4", "LFO 5", "LFO 6", "LFO 7", "LFO 8", "LFO 9", "LFO 10" };   // fb223 — WARP x LFO: drawn shapes as blend sources (APPEND-ONLY; JS NSRC must equal this count)
             for (int s = 0; s < 4; ++s)
             {
                 const juce::String n = "Synth OSC " + osc + " Blend " + juce::String (s + 1) + " ";
