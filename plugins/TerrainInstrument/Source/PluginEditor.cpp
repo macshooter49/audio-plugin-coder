@@ -5384,7 +5384,19 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // still call it so JS parks and falls back to the static single-cycle renderer.
     // 4 x 1024 floats at 3 dp — comfortably under the proven ~80 KB EQ push below.
     {
-        const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed);
+        // fb214 — DEAD-FEED GUARD (the scope-freeze fix): oscScopeActive is a LATCH written
+        // only inside the audio thread's publish path. When the host stops calling
+        // processBlock (transport stopped, plugin suspended), the atoms freeze mid-frame and
+        // this timer would re-push the same waveform at 60 Hz forever ("a screenshot of the
+        // last audio position"). oscScopeSeq is the truth: it advances only when a frame is
+        // actually published — if it stalls ~250 ms we treat the feed as DEAD and push
+        // active:false, which lands in the existing fb72 release-fade → the trace glides to
+        // a flatline (the noise-scope dead-feed precedent: a dead feed IS silence).
+        const int seqNow = audioProcessor.oscScopeSeq.load (std::memory_order_relaxed);
+        if (seqNow == lastOscScopeSeq_) { if (oscScopeStaleTicks_ < 1000) ++oscScopeStaleTicks_; }
+        else                            { oscScopeStaleTicks_ = 0; lastOscScopeSeq_ = seqNow; }
+        const bool feedStale = oscScopeStaleTicks_ > 15;   // ~250 ms @ 60 Hz
+        const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed) && ! feedStale;
         if (oscActive)
         {
             // SPSC seqlock READ: snapshot the window into locals, retrying if the audio

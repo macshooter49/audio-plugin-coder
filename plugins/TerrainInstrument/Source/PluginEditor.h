@@ -32,6 +32,11 @@ public:
 
 private:
     void timerCallback() override;
+    // fb214 — OSC-scope dead-feed guard: oscScopeSeq advances ONLY when the audio thread
+    // publishes a frame; if it stalls (host stopped calling processBlock) the latched
+    // oscScopeActive would freeze the display — we count stale ticks and fall to inactive.
+    int lastOscScopeSeq_   = -1;
+    int oscScopeStaleTicks_ = 0;
 
     // Sample / patch loading helpers (Task 11; loadPatch + importTerrainPack
     // are stubs implemented in Tasks 18 / 22 of the v0a plan)
