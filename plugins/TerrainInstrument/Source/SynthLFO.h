@@ -66,6 +66,14 @@ struct LFOSettings
     float       phaseOffset = 0.0f;   // [0,1) read-phase shift — "slides" the waveform L/R
     LFOTrigger  trigger  = LFOTrigger::Free;
     LFOPolarity polarity = LFOPolarity::Bipolar;
+    // fb228 — L5 MOTION (blob-fed; the card's controls)
+    int   direction = 0;      // 0 Fwd · 1 Rev · 2 PingPong (phase remap at every read)
+    float loopPt    = -1.0f;  // Env mode: >=0 = play once to the end, then LOOP the tail from here
+    float riseMs    = 0.0f;   // per-note depth fade-in from the start value (Serum RISE)
+    float delayMs   = 0.0f;   // per-note hold before the LFO starts moving
+    float smoothMs  = 0.0f;   // user output smoothing (stretches the house 2.5ms slew)
+    float swing     = 0.0f;   // 0..1 — alternate cycles long/short (2:1 triplet feel at 1)
+    int   tripDot   = 0;      // 0 straight · 1 triplet (x1.5 rate) · 2 dotted (x2/3 rate)
     // depth lives on the *route* (Assignment), not here — one LFO can drive many
     // destinations at different depths. This struct is the *shape generator*.
 };
@@ -92,7 +100,11 @@ public:
         slewInit_ = false;
     }
 
-    void setSettings (const LFOSettings& s) noexcept { s_ = s; }
+    void setSettings (const LFOSettings& s) noexcept { s_ = s;
+        // fb228 — SMOOTH = the house slew with a user tau (never below the 2.5ms declick floor)
+        const float tau = (s_.smoothMs > 2.5f ? s_.smoothMs * 0.001f : 0.0025f);
+        slewRate_ = 1.0f / (tau * (float) sr_);
+        slewK1_   = 1.0f - std::exp (-slewRate_); }
 
     // LFO ARC L1 — wire the drawn-shape table (kLfoTableN+1 floats, owner-managed stable
     // storage; content updates in place at block top so edits reach every consumer with
@@ -107,6 +119,10 @@ public:
     // Note-on: apply the trigger mode's phase policy.
     void noteOn() noexcept
     {
+        delayLeft_ = (int) (s_.delayMs * 0.001f * (float) sr_);          // fb228 — DELAY
+        riseInc_   = (s_.riseMs > 1.0f) ? 1.0f / (s_.riseMs * 0.001f * (float) sr_) : 0.0f;
+        riseGain_  = (riseInc_ > 0.0f) ? 0.0f : 1.0f;                    // fb228 — RISE
+        swingOdd_  = false;
         switch (s_.trigger)
         {
             case LFOTrigger::Trig:
@@ -124,29 +140,43 @@ public:
                 // leave phase running
                 break;
         }
+        riseBase_ = shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset)));   // fb228 — RISE fades in FROM the start value (Serum grammar)
     }
 
     // Advance one sample and return the modulation value.
     float processSample() noexcept
     {
-        const float out = shapeAt (wrap01 (phase_ + s_.phaseOffset));   // phaseOffset slides the read point
+        if (delayLeft_ > 0)   // fb228 — DELAY: hold at the start value, phase frozen
+        {
+            --delayLeft_;
+            return slewAdvance (applyPolarity (applyRise (shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset))))), 1.0f);
+        }
+        if (riseGain_ < 1.0f) { riseGain_ += riseInc_; if (riseGain_ > 1.0f) riseGain_ = 1.0f; }
+        const float out = applyRise (shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset))));   // phaseOffset slides the read point · dirP maps direction
 
         // advance
         if (! (s_.trigger == LFOTrigger::Env && finished_))
         {
-            const float inc = hz_ / static_cast<float> (sr_);
+            const float inc = effInc();   // fb228 — trip/dot + swing live in the increment
             phase_ += inc;
             if (phase_ >= 1.0f)
             {
                 // one cycle completed
                 if (s_.trigger == LFOTrigger::Env)
                 {
-                    phase_ = 1.0f;          // hold at end (one-shot)
-                    finished_ = true;
+                    if (s_.loopPt >= 0.0f && s_.loopPt < 0.999f)   // fb228 — LOOPBACK: intro once, then cycle the tail
+                    {
+                        const float span = 1.0f - s_.loopPt;
+                        phase_ = s_.loopPt + std::fmod (phase_ - 1.0f, span);
+                        swingOdd_ = ! swingOdd_;
+                        stepPrev_ = stepHeld_; stepHeld_ = nextRandom();
+                    }
+                    else { phase_ = 1.0f; finished_ = true; }   // hold at end (one-shot)
                 }
                 else
                 {
                     phase_ -= std::floor (phase_);
+                    swingOdd_ = ! swingOdd_;
                     stepPrev_ = stepHeld_;        // remember last target for smooth Random
                     stepHeld_ = nextRandom();     // new S&H / Random step at the wrap
                 }
@@ -160,16 +190,29 @@ public:
     // only needs phase). S&H/Random roll one new step per wrap so peek() stays plausible.
     void skipSamples (int n) noexcept
     {
-        if (! (s_.trigger == LFOTrigger::Env && finished_))
+        if (delayLeft_ > 0) { const int eat = (n < delayLeft_ ? n : delayLeft_); delayLeft_ -= eat; n -= eat; }   // fb228 — DELAY holds
+        if (riseGain_ < 1.0f && n > 0) { riseGain_ += riseInc_ * (float) n; if (riseGain_ > 1.0f) riseGain_ = 1.0f; }
+        if (n > 0 && ! (s_.trigger == LFOTrigger::Env && finished_))
         {
-            const float inc = hz_ / static_cast<float> (sr_);
+            const float inc = effInc();
             phase_ += inc * (float) n;
             if (phase_ >= 1.0f)
             {
-                if (s_.trigger == LFOTrigger::Env) { phase_ = 1.0f; finished_ = true; }
+                if (s_.trigger == LFOTrigger::Env)
+                {
+                    if (s_.loopPt >= 0.0f && s_.loopPt < 0.999f)
+                    {
+                        const float span = 1.0f - s_.loopPt;
+                        phase_ = s_.loopPt + std::fmod (phase_ - 1.0f, span);
+                        swingOdd_ = ! swingOdd_;
+                        stepPrev_ = stepHeld_; stepHeld_ = nextRandom();
+                    }
+                    else { phase_ = 1.0f; finished_ = true; }
+                }
                 else
                 {
                     phase_ -= std::floor (phase_);
+                    swingOdd_ = ! swingOdd_;
                     stepPrev_ = stepHeld_;
                     stepHeld_ = nextRandom();
                 }
@@ -179,7 +222,7 @@ public:
         // coefficient = same trajectory the per-sample path walks), so peek() stays smooth
         // AND non-stale for block-rate consumers. Runs even when a finished Env holds, or
         // a mid-glide slew would strand slightly off the held end value forever.
-        slewAdvance (applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset))), (float) n);
+        slewAdvance (applyPolarity (applyRise (shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset))))), (float) (n > 0 ? n : 1));
     }
 
     // For tempo-sync mode: set phase directly from host transport (Batch 2 uses this).
@@ -207,10 +250,30 @@ public:
     // block-rate consumers ride the same click-free glide; raw until the first advance.
     float peek() const noexcept
     {
-        return slewInit_ ? slew_ : applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset)));
+        return slewInit_ ? slew_ : applyPolarity (applyRise (shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset)))));
     }
 
 private:
+    // fb228 — L5 motion helpers
+    float dirP (float p) const noexcept   // direction: Fwd / Rev / PingPong (fold = fwd+back inside one cycle)
+    {
+        if (s_.direction == 1) return 1.0f - p;
+        if (s_.direction == 2) return (p < 0.5f) ? p * 2.0f : 2.0f - p * 2.0f;
+        return p;
+    }
+    float effInc() const noexcept         // trip/dot rate multiplier + swing's alternate-cycle stretch
+    {
+        float h = hz_;
+        if      (s_.tripDot == 1) h *= 1.5f;
+        else if (s_.tripDot == 2) h *= (2.0f / 3.0f);
+        if (s_.swing > 0.001f)
+            h /= (1.0f + (swingOdd_ ? -1.0f : 1.0f) * (s_.swing * 0.3333f));
+        return h / (float) sr_;
+    }
+    float applyRise (float v) const noexcept   // RISE: fade from the note-on value toward the live shape
+    {
+        return (riseGain_ >= 1.0f) ? v : riseBase_ + (v - riseBase_) * riseGain_;
+    }
     // Map phase [0,1) -> bipolar [-1,+1]
     float shapeAt (float p) const noexcept
     {
@@ -279,6 +342,11 @@ private:
 
     double      sr_        = 44100.0;
     float       hz_        = 1.0f;
+    int   delayLeft_ = 0;                  // fb228 — DELAY countdown (samples)
+    float riseGain_  = 1.0f;               // fb228 — RISE ramp 0->1
+    float riseInc_   = 0.0f;
+    float riseBase_  = 0.0f;               // the value RISE fades from
+    bool  swingOdd_  = false;              // fb228 — SWING cycle parity
     float       phase_     = 0.0f;
     float       stepHeld_  = 0.0f;
     float       stepPrev_  = 0.0f;   // previous S&H target — smooth Random interpolates from it

@@ -1781,6 +1781,7 @@ namespace tw
             updateUnisonPhaseIncrementsC (glideNote_);
             updateUnisonPhaseIncrementsD (glideNote_);
             playing_         = true;
+            for (int li = 0; li < wc::NUM_LFOS; ++li) synthLfo_[li].noteOn();   // fb228 — trigger modes LIVE: Retrig/Env reset per fresh note (the legato path above deliberately does NOT)
             foldStateA_.fill ({});   // Phase 11d ADAA — clear per-sine fold history on note start
             foldStateB_.fill ({});
             foldStateC_.fill ({});

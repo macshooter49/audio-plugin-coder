@@ -3684,7 +3684,10 @@ static bool lfoSettingsEq (const wc::LFOSettings& a, const wc::LFOSettings& b) n
 {
     return a.shape == b.shape && a.sync == b.sync && a.rateHz == b.rateHz
         && a.syncIdx == b.syncIdx && a.startPhase == b.startPhase
-        && a.phaseOffset == b.phaseOffset && a.trigger == b.trigger && a.polarity == b.polarity;
+        && a.phaseOffset == b.phaseOffset && a.trigger == b.trigger && a.polarity == b.polarity
+        && a.direction == b.direction && a.loopPt == b.loopPt && a.riseMs == b.riseMs          // fb228 — motion edits must rebroadcast
+        && a.delayMs == b.delayMs && a.smoothMs == b.smoothMs && a.swing == b.swing
+        && a.tripDot == b.tripDot;
 }
 static bool modCfgEq (const wc::ModConfig& a, const wc::ModConfig& b) noexcept
 {
@@ -4887,8 +4890,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 synModCfg.lfos[i].rateHz      = modP (lp[i].rate, *rawParam (lp[i].rate), (int) wc::ModDest::LfoRateBase + i);   // fb196 — env-on-RATE (Hz mode; sync stays grid-locked until the LFO arc)
                 synModCfg.lfos[i].syncIdx     = juce::jlimit (0, wc::kNumSyncDivisions - 1, dv);
                 synModCfg.lfos[i].phaseOffset = *rawParam (lp[i].phase);
-                synModCfg.lfos[i].trigger     = wc::LFOTrigger::Free;
-                synModCfg.lfos[i].polarity    = wc::LFOPolarity::Bipolar;
+                {   // fb228 — L5 MOTION feeds the config (the Free-forcing is DEAD; RETRIG is the default)
+                    const auto& mo = lfoMotionAudio_[i];
+                    synModCfg.lfos[i].trigger   = mo.mn ? wc::LFOTrigger::Free                      // MONO: a Free pool is phase-locked = one shared LFO
+                                                : (mo.tg == 2 ? wc::LFOTrigger::Env
+                                                :  mo.tg == 1 ? wc::LFOTrigger::Trig
+                                                :               wc::LFOTrigger::Free);
+                    synModCfg.lfos[i].polarity  = wc::LFOPolarity::Bipolar;
+                    synModCfg.lfos[i].direction = mo.dir;
+                    synModCfg.lfos[i].loopPt    = mo.lb;
+                    synModCfg.lfos[i].riseMs    = mo.ri;
+                    synModCfg.lfos[i].delayMs   = mo.de;
+                    synModCfg.lfos[i].smoothMs  = mo.sm;
+                    synModCfg.lfos[i].swing     = mo.sw;
+                    synModCfg.lfos[i].tripDot   = mo.td;
+                }
             }
             // Assignments come from the UI drag-matrix. Effective depth = per-route badge (the dest
             // "meter") × that LFO's DEPTH ring (per-LFO MASTER amount, default full so every LFO works
@@ -5282,16 +5298,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         if (lts.isLocked())
         {
             std::memcpy (lfoTableAudio_, lfoTableShared_, sizeof (lfoTableAudio_));
+            std::memcpy (lfoMotionAudio_, lfoMotionShared_, sizeof (lfoMotionAudio_));   // fb228 — motion rides the same gate
             lfoShapeSeen_ = lfoShapeVersion_.load (std::memory_order_acquire);
         }
     }
     for (int i = 0; i < wc::NUM_LFOS; ++i)
     {
-        flowLfo_[i].setSettings (synModCfg.lfos[i]);
-        if (synModCfg.lfos[i].sync && flowPlaying)
+        {   // fb228 — the voice/mirror CONTRACT: the mirror (global dests + the viz dot) NEVER retrigs
+            //         and carries no per-note motion; voices honor the real trigger/rise/delay.
+            auto ms = synModCfg.lfos[i];
+            ms.trigger = wc::LFOTrigger::Free; ms.riseMs = 0.0f; ms.delayMs = 0.0f; ms.loopPt = -1.0f;
+            flowLfo_[i].setSettings (ms);
+        }
+        if (synModCfg.lfos[i].sync && flowPlaying && lfoMotionAudio_[i].ho != 0)   // fb228 — HOST off = a sync'd LFO free-runs at its tempo rate (no bar anchor)
         {
             const float bpc = wc::kSyncDivisions[ juce::jlimit (0, wc::kNumSyncDivisions - 1, synModCfg.lfos[i].syncIdx) ].beatsPerCycle;
-            flowLfo_[i].setPhaseFromTransport ((float) std::fmod (flowPpq / (double) bpc, 1.0)); // locks to bar + arp clock
+            const double tdScale = (synModCfg.lfos[i].tripDot == 1 ? (2.0 / 3.0) : synModCfg.lfos[i].tripDot == 2 ? 1.5 : 1.0);   // fb228 — TRIP/DOT scale the bar cycle
+            flowLfo_[i].setPhaseFromTransport ((float) std::fmod (flowPpq / ((double) bpc * tdScale), 1.0)); // locks to bar + arp clock
         }
         else
         {
@@ -7214,6 +7237,23 @@ void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& jso
             tb[k] = 2.0f * y - 1.0f;
         }
         tb[wc::kLfoTableN] = tb[0];   // wrap guard sample
+        {   // fb228 — blob v2: per-LFO MOTION rides beside the points (absent = the LfoMotion defaults, incl. RETRIG)
+            auto mo = e.getProperty ("mo", juce::var());
+            auto& M = lfoMotionShared_[n - 1];
+            if (mo.isObject())
+            {
+                M.tg  = juce::jlimit (0, 2, (int) mo.getProperty ("tg", 1));
+                M.lb  = juce::jlimit (-1.0f, 0.99f, (float) (double) mo.getProperty ("lb", -1.0));
+                M.dir = juce::jlimit (0, 2, (int) mo.getProperty ("dir", 0));
+                M.mn  = ((int) mo.getProperty ("mn", 0)) ? 1 : 0;
+                M.ri  = juce::jlimit (0.0f, 5000.0f, (float) (double) mo.getProperty ("ri", 0.0));
+                M.de  = juce::jlimit (0.0f, 5000.0f, (float) (double) mo.getProperty ("de", 0.0));
+                M.sm  = juce::jlimit (0.0f, 2000.0f, (float) (double) mo.getProperty ("sm", 0.0));
+                M.sw  = juce::jlimit (0.0f, 1.0f,    (float) (double) mo.getProperty ("sw", 0.0));
+                M.td  = juce::jlimit (0, 2, (int) mo.getProperty ("td", 0));
+                M.ho  = ((int) mo.getProperty ("ho", 1)) ? 1 : 0;
+            }
+        }
     }
     lfoShapesJson_ = json;
     lfoShapeVersion_.fetch_add (1, std::memory_order_release);
