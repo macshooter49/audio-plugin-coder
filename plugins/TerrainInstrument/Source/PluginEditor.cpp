@@ -4581,6 +4581,8 @@ static void terrainCardLog (const juce::String& msg)
 class TerrainCardWindow : public juce::TopLevelWindow, private juce::Timer
 {
 public:
+    void evalJs (const juce::String& s) { if (web != nullptr) web->evaluateJavascript (s, nullptr); }   // fb232 — targeted pushes (the LFO follower truth feed) land in this card's page
+
     TerrainCardWindow (TerrainInstrumentAudioProcessor& proc, const juce::String& cardId,
                        std::optional<juce::WebBrowserComponent::Resource> pageSnapshot,
                        juce::Rectangle<int> screenBounds,
@@ -4635,6 +4637,17 @@ public:
                 {
                     tiGrabWebKeys (web.get());   // fb134 — popped card windows type too
                     complete (juce::var{});
+                })
+                .withNativeFunction ("setSynthLfoShapes", [&proc](const juce::Array<juce::var>& args,
+                                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() > 0) proc.setSynthLfoShapes (args[0].toString());   // fb232 — the popped LFO card edits the SAME blob (shapes + motion)
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getSynthLfoShapes", [&proc](const juce::Array<juce::var>&,
+                                                                  juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getSynthLfoShapesJson()));   // fb232 — boot pull + the cross-window sync poll
                 })
                 .withNativeFunction ("setCardState", [&proc](const juce::Array<juce::var>& args,
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -5289,6 +5302,13 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         for (int k = 0; k < 10; ++k) { if (k) lArr << ","; lArr << SF(audioProcessor.modVizLfo (k), 3); }
         for (int k = 0; k < 10; ++k) { if (k) pArr << ","; pArr << SF(audioProcessor.modVizLfoPh (k), 4); }   // fb217 — real LFO phases
         js << "try{if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}}catch(e){}";
+
+        // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
+        // the dot in the floating window IS the audible read position too.
+        if (auto itL = audioProcessor.cardWindows_.find ("lfo");
+            itL != audioProcessor.cardWindows_.end() && itL->second != nullptr)
+            if (auto* cwv = dynamic_cast<TerrainCardWindow*> (itL->second.get()))
+                cwv->evalJs ("try{window.__mvLfoPh=[" + pArr + "];window.__mvLfoPhT=Date.now();}catch(e){}");
     }
 
     // ── Sample engine MIDI followers (one playhead per held note) ──

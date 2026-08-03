@@ -2483,42 +2483,12 @@ body {
 .mv-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;
   box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;}
 .mv-ext.open{display:block;}
-.lfo-ext{width:378px;z-index:96;background:linear-gradient(180deg,#26223E,#1C1932);border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.5);}
+/* ═══ fb232 — the LFO card rides the shared .ti-card kit (shell/header/presets/slots/chain
+   are the four modes' CSS verbatim). Only the hero skin + lane/button/knob sizing live here. ═══ */
 html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel-hosted card must survive the card-only visibility sweep */
-.lfo-ext .h{cursor:grab;font-size:10px;position:relative;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.07);}
-.lfo-ext .h .nm{font-weight:600;letter-spacing:2.2px;font-size:11px;color:#ECE8F2;}
-.lfo-ext .h .dot{width:5px;height:5px;border-radius:50%;background:#8B5CF6;box-shadow:0 0 6px rgba(139,92,246,.8);}
-.lfo-ext .h .pset{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.75);cursor:default;}
-.lfo-ext .h .pa{color:rgba(255,255,255,.4);font-size:11px;cursor:pointer;padding:0 2px;}
-.lfo-ext .h .pa:hover{color:#fff;}
-.lfo-ext .h .pn{font-size:10px;letter-spacing:.5px;cursor:pointer;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.lfo-ext .h .pn:hover{color:#fff;}
-.lfo-ext .h .sp{flex:1;}
-.lfo-ext .h .dep{color:rgba(255,255,255,.45);letter-spacing:1.6px;font-size:8.5px;cursor:ns-resize;}
-.lfo-ext .h .dep b{color:#fff;font-weight:400;font-size:10px;letter-spacing:0;}
-.lfo-ext .h .pop,.lfo-ext .h .x{color:rgba(255,255,255,.5);font-size:11px;cursor:pointer;}
-.lfo-ext .h .pop:hover,.lfo-ext .h .x:hover{color:#fff;}
-.lfo-ext .card-scope{margin:12px 12px 10px;background:rgba(10,9,20,.55);border:1px solid rgba(255,255,255,0.07);border-radius:8px;position:relative;overflow:hidden;}
-.lfo-ext .card-scope svg{display:block;width:100%;height:132px;}
-.lfo-ext .bz{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;padding:2px 14px 0;}
-.lfo-ext .bz+.bz{padding-top:7px;}
-.lfo-ext .bp2{text-align:center;font-size:8px;letter-spacing:1.4px;color:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:8px 0;cursor:pointer;transition:.12s;}
-.lfo-ext .bp2:hover{border-color:rgba(255,255,255,.4);color:#fff;}
-.lfo-ext .bp2.on{color:#0F0D1E;background:#ECE8F2;font-weight:600;border-color:transparent;}
-.lfo-ext .bp2.dim{opacity:.32;}
-.lfo-ext .kr{display:flex;justify-content:space-between;padding:14px 14px 4px;}
-.lfo-ext .kn2{text-align:center;cursor:ns-resize;}
-.lfo-ext .kn2 svg{display:block;margin:0 auto;}
-.lfo-ext .kl2{font-size:8px;letter-spacing:1.6px;color:rgba(255,255,255,.45);margin-top:4px;}
-.lfo-ext .kv2{font-size:10px;color:#fff;margin-top:2px;font-variant-numeric:tabular-nums;}
-.lfo-ext .ldots{display:flex;justify-content:space-between;padding:12px 14px 2px;}
-.lfo-ext .ld2{text-align:center;cursor:pointer;}
-.lfo-ext .ld2 .c2{width:8px;height:8px;border-radius:50%;border:1px solid rgba(255,255,255,.35);margin:0 auto;transition:.12s;}
-.lfo-ext .ld2:hover .c2{border-color:#fff;}
-.lfo-ext .ld2.on .c2{background:#ECE8F2;border-color:#ECE8F2;box-shadow:0 0 7px rgba(236,232,242,.6);}
-.lfo-ext .ld2 .n2{font-size:7px;color:rgba(255,255,255,.35);margin-top:4px;}
-.lfo-ext .chain2{display:flex;align-items:center;gap:8px;padding:6px 14px 12px;font-size:8px;letter-spacing:1.8px;color:rgba(255,255,255,.4);}
-.lfo-ext .chain2 .slot2{width:16px;height:16px;border:1px solid rgba(255,255,255,.3);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#ECE8F2;letter-spacing:0;}
+.lfo-ext .card-scope{background:rgba(10,9,20,.55);border:1px solid rgba(255,255,255,0.07);border-radius:8px;position:relative;overflow:hidden;cursor:crosshair;}
+.lfo-ext .card-scope svg{display:block;width:100%;height:110px;}   /* geometry 456x174 shown at 288x110 = ONE uniform scale */
+.lfo-ext .card-scope svg line,.lfo-ext .card-scope svg path,.lfo-ext .card-scope svg circle{vector-effect:non-scaling-stroke;}   /* fb232 — stroke weights render at authored px: the pane's exact line grammar at any card zoom */
 .lfo-ext .lbmark{stroke:rgba(183,148,255,.55);stroke-width:1;stroke-dasharray:3 3;}
 #syn-panel .syn-ctx-menu.act{z-index:2147483646;}   /* fb231 — the canonical menu must beat the floating card (z 2147483645) */
 /* fb230 — THE CSS-SCOPE LAW strikes: the shaper skin is scoped #mod-engine; the card lives at body level.
@@ -2527,6 +2497,18 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
 .lfo-ext .card-scope .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
 .lfo-ext .card-scope .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
+.lfo-ext .b{gap:12px;}
+.lfo-ext .lsel{display:flex;justify-content:space-between;padding:0 6px;}
+.lfo-ext .lsel .lane{position:relative;font-size:7px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.38);padding:0 6px 4px;cursor:pointer;transition:color .12s;}
+.lfo-ext .lsel .lane:hover{color:rgba(255,255,255,.70);}
+.lfo-ext .lsel .lane.on{color:rgba(255,255,255,.95);}
+.lfo-ext .lsel .lane.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:3px;height:3px;border-radius:50%;background:#B794FF;}
+.lfo-ext .bank{display:flex;flex-direction:column;gap:4px;}
+.lfo-ext .fx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;}
+.lfo-ext .fxb{height:22px;font-size:6.5px;letter-spacing:.4px;}
+.lfo-ext .fxb.dim{opacity:.32;}
+.lfo-ext .gr6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;}
+.lfo-ext .k svg{width:30px;height:30px;display:block;}
 .lfo-ext .card-scope .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
 .lfo-ext .card-scope .sh-hit{fill:transparent;cursor:grab;}
 .lfo-ext .card-scope .sh-hit.cdh{cursor:ns-resize;}
@@ -2933,6 +2915,8 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 html.card-only,html.card-only body{overflow:hidden!important;background:#1A1A2E!important;}
 html.card-only:not(.card-only-late) body>*:not(.ti-popcard){visibility:hidden!important;}
 html.card-only-late .ti-preboot{display:none!important;}
+html.card-only .ti-ghost{visibility:hidden!important;pointer-events:none!important;position:relative!important;z-index:2147483646!important;}   /* fb232 — the canonical menu's host branch: laid out, invisible, inert — and LIFTED into its own stacking context so the menu inside it beats the body-level card (a huge z inside an auto-z branch loses to any positive sibling) */
+html.card-only .ti-ghost #syn-ctx-menu.act{visibility:visible!important;pointer-events:auto!important;}
 html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!important;box-shadow:none!important;
   background:linear-gradient(180deg,#26223E,#1C1932)!important;
   -webkit-backdrop-filter:none!important;backdrop-filter:none!important;}
@@ -22833,7 +22817,7 @@ restoreThemeFromBackend();
   var motion={};   // fb229 — per-LFO L5 motion (the card's state; rides the blob as mo:{})
   var shActiveSc=null;   // fb229 — the scope a gesture/menu came from (main pane OR the card hero); coordinate math resolves against THIS
   function shPaintAll(){ var m=root?root.querySelector('.mv-scope'):null; if(m)m.innerHTML=scopeSVG();
-    var c=document.querySelector('.lfo-ext .card-scope'); if(c){ c.innerHTML=scopeSVG(); var cs=c.querySelector('svg'); if(cs)cs.setAttribute('viewBox','0 2 456 76'); bindShaper(c); } }
+    var c=document.querySelector('.lfo-ext .card-scope'); if(c){ c.innerHTML=shaperSVG(LGEO); var cs=c.querySelector('svg'); if(cs)cs.__shGeo=LGEO; bindShaper(c); } }   // fb232 — the hero renders in card geometry (no viewBox stretch)
   function moGet(){ shGet(); if(!motion[st.tab])motion[st.tab]={tg:1,lb:-1,dir:0,mn:0,ri:0,de:0,sm:0,sw:0,td:0,ho:1}; return motion[st.tab]; }
   function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
   function shEvalPts(pts,p){ p=((p%1)+1)%1; var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++;
@@ -22853,7 +22837,7 @@ restoreThemeFromBackend();
     if(k===6){var r6=[],j6;for(j6=0;j6<RP.length;j6++)r6.push([j6/(RP.length-1),RP[j6],j6%2?.3:-.3]);return r6;}
     return [[0,0,0],[.5,1,0],[1,0,0]]; }
   function shGet(){ if(!shapes[st.tab])shapes[st.tab]={pts:seedFor(1),gh:8,gv:8,sn:1}; return shapes[st.tab]; }
-  function shPush(){ clearTimeout(shPushT); shPushT=setTimeout(function(){ try{
+  function shPush(){ window.__shTouchT=Date.now(); clearTimeout(shPushT); shPushT=setTimeout(function(){ try{   // fb232 — the cross-window poll yields to fresh local edits
       var out=[],k; for(k in shapes){ var sp=shapes[k];
         var en={n:+k,pts:sp.pts.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''};
         if(motion[k])en.mo=motion[k];   // fb229 — motion rides beside the points
@@ -22865,60 +22849,61 @@ restoreThemeFromBackend();
       (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null};
         if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:1,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1}; } });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
-  function shY(y01){ return SH_BOT-(SH_BOT-SH_TOP)*y01; }
-  function shPathD(pts,w){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
-    d='M'+shX(pts[0][0]).toFixed(1)+' '+shY(pts[0][1]).toFixed(1)+' ';
+  function shY(y01,g){ var B=g?g.B:SH_BOT, T=g?g.T:SH_TOP; return B-(B-T)*y01; }   // fb232 — geometry-aware: the card hero renders in its OWN taller band (uniform scale, zero stretch)
+  function shPathD(pts,w,g){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
+    d='M'+shX(pts[0][0]).toFixed(1)+' '+shY(pts[0][1],g).toFixed(1)+' ';
     for(i=0;i<pts.length-1;i++){ var a=pts[i],b=pts[i+1],x0=shX(a[0]),x1=shX(b[0]),cc=a[2]||0;
-      if(b[0]-a[0]<=1e-6||Math.abs(cc)<1e-4){ d+='L'+x1.toFixed(1)+' '+shY(b[1]).toFixed(1)+' '; continue; }
+      if(b[0]-a[0]<=1e-6||Math.abs(cc)<1e-4){ d+='L'+x1.toFixed(1)+' '+shY(b[1],g).toFixed(1)+' '; continue; }
       var n=Math.max(8,Math.min(48,Math.round((x1-x0)/3)));
-      for(var k2=1;k2<=n;k2++){ var t=k2/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+shY(a[1]+(b[1]-a[1])*shBias(t,cc)).toFixed(1)+' '; } }
+      for(var k2=1;k2<=n;k2++){ var t=k2/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+shY(a[1]+(b[1]-a[1])*shBias(t,cc),g).toFixed(1)+' '; } }
     return d; }
-  function shaperSVG(){ var w=456,h=96,sp=shGet(),i,g=''; if(shSelTab!==st.tab){shSel=[];shSelTab=st.tab;}   // fb221 — a selection never survives a tab hop
-    for(i=1;i<sp.gv;i++){ var gx=shX(i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+SH_TOP+'" x2="'+gx+'" y2="'+SH_BOT+'"/>'; }
-    for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="'+SH_L+'" y1="'+gy+'" x2="'+SH_R+'" y2="'+gy+'"/>'; }
+  function shaperSVG(GEO){ var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,sp=shGet(),i,g=''; if(shSelTab!==st.tab){shSel=[];shSelTab=st.tab;}   // fb221 — a selection never survives a tab hop · fb232 — GEO = the card hero's taller band
+    for(i=1;i<sp.gv;i++){ var gx=shX(i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+T0+'" x2="'+gx+'" y2="'+B0+'"/>'; }
+    for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh,GEO).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="'+SH_L+'" y1="'+gy+'" x2="'+SH_R+'" y2="'+gy+'"/>'; }
     var custom=(st.shape===7);
-    var d=custom?shPathD(sp.pts,w):stockPathD(st.shape);   // fb212 — stock shapes draw in the SAME field (grid/band/ruler); nodes appear once they're seeds
-    var fillD='M'+SH_L+' '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+SH_R+' '+SH_BOT+' Z';
+    var d=custom?shPathD(sp.pts,w,GEO):stockPathD(st.shape,GEO);   // fb212 — stock shapes draw in the SAME field (grid/band/ruler); nodes appear once they're seeds
+    var fillD='M'+SH_L+' '+B0+' '+d.replace(/^M/,'L')+'L'+SH_R+' '+B0+' Z';
     var nd='',hd='',cdm='';
     if(custom){
-    sp.pts.forEach(function(q,idx){ var cx=shX(q[0]).toFixed(1),cy=shY(q[1]).toFixed(1);   // fb208 — exact: the dot IS the line end
+    sp.pts.forEach(function(q,idx){ var cx=shX(q[0]).toFixed(1),cy=shY(q[1],GEO).toFixed(1);   // fb208 — exact: the dot IS the line end
       nd+='<circle class="sh-nd'+(shSel.indexOf(idx)>=0?' sel':'')+'" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
       hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="12"/>'; });   // fb210 — fat targets (Max: 'open up the circumference')
     sp.pts.forEach(function(q,idx){ if(idx>=sp.pts.length-1)return; var r=sp.pts[idx+1]; if(r[0]-q[0]<=0.02)return;
-      var mx=shX((q[0]+r[0])/2).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1);
+      var mx=shX((q[0]+r[0])/2).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2),GEO).toFixed(1);
       cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="10"/>'; });
     }
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
-      (function(){ var mo2=motion[st.tab]; return (mo2&&mo2.tg===2&&mo2.lb>=0)? '<line class="lbmark" x1="'+shX(mo2.lb).toFixed(1)+'" y1="'+SH_TOP+'" x2="'+shX(mo2.lb).toFixed(1)+'" y2="'+SH_BOT+'"/>':''; })()+
-      '<line class="mv-play" id="mv-ph" x1="0" y1="'+(SH_TOP-4)+'" x2="0" y2="'+(SH_BOT+4)+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+shY(.5)+'" r="2.4"/>'+nd+cdm+hd+'</svg>'; }
+      (function(){ var mo2=motion[st.tab]; return (mo2&&mo2.tg===2&&mo2.lb>=0)? '<line class="lbmark" x1="'+shX(mo2.lb).toFixed(1)+'" y1="'+T0+'" x2="'+shX(mo2.lb).toFixed(1)+'" y2="'+B0+'"/>':''; })()+
+      '<line class="mv-play" id="mv-ph" x1="0" y1="'+(T0-4)+'" x2="0" y2="'+(B0+4)+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+shY(.5,GEO)+'" r="2.4"/>'+nd+cdm+hd+'</svg>'; }
   function stockVal(k,p){ p=((p%1)+1)%1;   // fb212 — ONE-CYCLE stock evaluator (the pane's single-cycle world; yfor keeps the 3-cycle look for icons/ext)
     if(k===0)return Math.sin(p*6.2831853); if(k===1)return 1-4*Math.abs(p-0.5);
     if(k===2)return 2*p-1; if(k===3)return 1-2*p; if(k===4)return p<0.5?1:-1;
     if(k===5){var i=Math.floor(p*SH.length)%SH.length;return SH[i]*2-1;}
     if(k===6)return smooth(RP,p)*2-1; return 0; }
-  function stockPathD(k){ var n=220,d='',i; for(i=0;i<=n;i++){ var t=(i>=n)?0.999999:i/n;
-    d+=(i?'L':'M')+shX(i>=n?1:t).toFixed(1)+' '+shY((stockVal(k,t)+1)/2).toFixed(1)+' '; } return d; }
+  function stockPathD(k,g){ var n=220,d='',i; for(i=0;i<=n;i++){ var t=(i>=n)?0.999999:i/n;
+    d+=(i?'L':'M')+shX(i>=n?1:t).toFixed(1)+' '+shY((stockVal(k,t)+1)/2,g).toFixed(1)+' '; } return d; }
   function scopeSVG(){ return shaperSVG(); }   // fb212 — ONE WORLD (Max: 'the grid always plays the number one role'): every shape lives in the field
   function shRefresh(){ shScopes().forEach(function(sc){ shRefreshOne(sc); }); }
   function shScopes(){ var a=[]; var m=root?root.querySelector('.mv-scope svg'):null; if(m)a.push(m);
     var c=document.querySelector('.lfo-ext .card-scope svg'); if(c)a.push(c); return a; }   // fb229 — the doctor's two screens
-  function shRefreshOne(sc){ if(!sc)return; var sp=shGet(),w=456;
+  function shRefreshOne(sc){ if(!sc)return; var sp=shGet(),w=456,g=sc.__shGeo||null,B1=g?g.B:SH_BOT;
     var stk=sc.querySelector('.mv-stroke'), fl=sc.querySelector('.mv-fill');
-    var d=shPathD(sp.pts,w); if(stk)stk.setAttribute('d',d); if(fl)fl.setAttribute('d','M0 '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+w+' '+SH_BOT+' Z');
+    var d=shPathD(sp.pts,w,g); if(stk)stk.setAttribute('d',d); if(fl)fl.setAttribute('d','M0 '+B1+' '+d.replace(/^M/,'L')+'L'+w+' '+B1+' Z');
     function updSel(sel,fn){ sc.querySelectorAll(sel).forEach(fn); }
-    updSel('.sh-nd',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1]).toFixed(1));} });
-    updSel('.sh-hit:not(.cdh)',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1]).toFixed(1));} });
-    updSel('.sh-cd',function(c){ var i2=+c.getAttribute('data-i'),q=sp.pts[i2],r=sp.pts[i2+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1));} });
-    updSel('.sh-hit.cdh',function(c){ var i3=+c.getAttribute('data-i'),q=sp.pts[i3],r=sp.pts[i3+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2)).toFixed(1));} }); }
-  function shPos(sc,ev){ var r=sc.getBoundingClientRect();
-    var xpx=(ev.clientX-r.left)/r.width*456, ypx=(ev.clientY-r.top)/r.height*96;
-    return { x:Math.max(0,Math.min(1,(xpx-SH_L)/(SH_R-SH_L))), y:Math.max(0,Math.min(1,(SH_BOT-ypx)/(SH_BOT-SH_TOP))) }; }
+    updSel('.sh-nd',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1],g).toFixed(1));} });
+    updSel('.sh-hit:not(.cdh)',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1],g).toFixed(1));} });
+    updSel('.sh-cd',function(c){ var i2=+c.getAttribute('data-i'),q=sp.pts[i2],r=sp.pts[i2+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2),g).toFixed(1));} });
+    updSel('.sh-hit.cdh',function(c){ var i3=+c.getAttribute('data-i'),q=sp.pts[i3],r=sp.pts[i3+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2),g).toFixed(1));} }); }
+  function shPos(sc,ev){ var r=sc.getBoundingClientRect(), g=sc.__shGeo||null, Hh=g?g.H:96, Tt=g?g.T:SH_TOP, Bb=g?g.B:SH_BOT;
+    var xpx=(ev.clientX-r.left)/r.width*456, ypx=(ev.clientY-r.top)/r.height*Hh;
+    return { x:Math.max(0,Math.min(1,(xpx-SH_L)/(SH_R-SH_L))), y:Math.max(0,Math.min(1,(Bb-ypx)/(Bb-Tt))) }; }
   function shSnap(v,div){ return Math.round(v*div)/div; }
   function shNear(sc,ev){   // fb210 — the SERUM GRAB (env nearestStage grammar): the closest node/curve-dot within ~13u wins, no pixel-perfect aim needed
-    var q=shPos(sc,ev),ux=shX(q.x),uy=shY(q.y),sp=shGet(),best=null,bd=169;
-    sp.pts.forEach(function(pq,i){ var dx=shX(pq[0])-ux,dy=shY(pq[1])-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'nd',i:i};} });
+    var g=sc.__shGeo||null;
+    var q=shPos(sc,ev),ux=shX(q.x),uy=shY(q.y,g),sp=shGet(),best=null,bd=169;
+    sp.pts.forEach(function(pq,i){ var dx=shX(pq[0])-ux,dy=shY(pq[1],g)-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'nd',i:i};} });
     sp.pts.forEach(function(pq,i){ if(i>=sp.pts.length-1)return; var r=sp.pts[i+1]; if(r[0]-pq[0]<=0.02)return;
-      var mx=shX((pq[0]+r[0])/2),my=shY(shEvalPts(sp.pts,(pq[0]+r[0])/2)),dx=mx-ux,dy=my-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'cd',i:i};} });
+      var mx=shX((pq[0]+r[0])/2),my=shY(shEvalPts(sp.pts,(pq[0]+r[0])/2),g),dx=mx-ux,dy=my-uy,d=dx*dx+dy*dy; if(d<bd){bd=d;best={t:'cd',i:i};} });
     return best; }
   var shTool=0;   // fb213 — THE BRUSHES (Max: 'now I have the ramp in my mouse'): 0=point/edit · 1=line · 2=ramp up · 3=ramp down · 4=square · 5=triangle · 6=sine — armed tools STAMP one grid cell per click/drag, at the cursor's level
   var shSel=[], shSelTab=-1;   // fb221 — MULTI-SELECT (L2): band-selected point indices; cleared on tab hops and any edit that renumbers points
@@ -22936,15 +22921,15 @@ restoreThemeFromBackend();
     return {x0:Math.min(dx0,0),x1:Math.max(dx1,0),y0:Math.min(dy0,0),y1:Math.max(dy1,0)}; }
   function shBand(svg,sc,e){   // fb221 — drag empty ground = the rubber-band (thin white hairline, faint purple wash; points inside wear the select purple LIVE)
     e.preventDefault(); try{svg.setPointerCapture(e.pointerId);}catch(e0){}
-    var r=sc.getBoundingClientRect(), cx0=e.clientX, cy0=e.clientY, did=false, box=null;
-    function vx(ev){ return (ev.clientX-r.left)/r.width*456; } function vy(ev){ return (ev.clientY-r.top)/r.height*96; }
+    var r=sc.getBoundingClientRect(), cx0=e.clientX, cy0=e.clientY, did=false, box=null, g=sc.__shGeo||null, Hh=g?g.H:96;
+    function vx(ev){ return (ev.clientX-r.left)/r.width*456; } function vy(ev){ return (ev.clientY-r.top)/r.height*Hh; }
     var ax=vx(e), ay=vy(e);
     function mv(ev){ if(!did){ if(Math.abs(ev.clientX-cx0)+Math.abs(ev.clientY-cy0)<3)return; did=true;
         box=document.createElementNS('http://www.w3.org/2000/svg','rect'); box.setAttribute('class','sh-selbox'); svg.appendChild(box); }
       var bx=vx(ev),by=vy(ev),x=Math.min(ax,bx),y=Math.min(ay,by),w2=Math.abs(bx-ax),h2=Math.abs(by-ay);
       box.setAttribute('x',x.toFixed(1)); box.setAttribute('y',y.toFixed(1)); box.setAttribute('width',w2.toFixed(1)); box.setAttribute('height',h2.toFixed(1));
       var sp2=shGet(); shSel=[];
-      sp2.pts.forEach(function(p,ix){ var px=shX(p[0]),py=shY(p[1]); if(px>=x-0.5&&px<=x+w2+0.5&&py>=y-0.5&&py<=y+h2+0.5)shSel.push(ix); });
+      sp2.pts.forEach(function(p,ix){ var px=shX(p[0]),py=shY(p[1],g); if(px>=x-0.5&&px<=x+w2+0.5&&py>=y-0.5&&py<=y+h2+0.5)shSel.push(ix); });
       shSelPaint(); }
     function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e1){}
       svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
@@ -23186,7 +23171,19 @@ restoreThemeFromBackend();
   function ssGet(id){try{return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null;}catch(e){return null;}}
   var LP={}, st={shape:0,sync:true,div:5,rateHz:2,depth:.35,phase:0,tab:1,page:0}, ph=0, lastT=0, root, errEl;
   var NLFO=10;
-  function cur(){ return LP[st.tab]||{}; }
+  function mkShimLP(n){   // fb232 — the popped card window has no relays: params ride the getSynParam/setSynParam shim, with local scaled-value math (rate skew 0.3 per the APVTS range)
+    function w(id,d,sc){ var sh0=window.__synSliderShim(id,d);
+      return { getNormalisedValue:sh0.getNormalisedValue, setNormalisedValue:sh0.setNormalisedValue,
+               valueChangedEvent:sh0.valueChangedEvent,
+               getScaledValue:function(){ return sc(sh0.getNormalisedValue()); } }; }
+    function lin(p){ return p; }
+    return { shape:w('LFO'+n+'_SHAPE',0,lin),
+             sync: w('LFO'+n+'_SYNC',0,lin),
+             div:  w('LFO'+n+'_DIV',5/(NDIV-1),lin),
+             rate: w('LFO'+n+'_RATE',0.407,function(p){ return 0.01+39.99*Math.pow(Math.max(0,p),1/0.3); }),
+             depth:w('LFO'+n+'_DEPTH',1,function(p){ return p*2-1; }),
+             phase:w('LFO'+n+'_PHASE',0,lin) }; }
+  function cur(){ if(window.__cardOnly==='lfo'&&!LP[st.tab]&&window.__synSliderShim)LP[st.tab]=mkShimLP(st.tab); return LP[st.tab]||{}; }
   function err(m){if(errEl){errEl.textContent=m;errEl.style.display='block';}if(window.console)console.error('mod-v4:',m);}
 
   function pull(){ var C=cur();
@@ -23267,108 +23264,156 @@ restoreThemeFromBackend();
   var to=document.createElement('div'); to.className='mv-toast'; document.body.appendChild(to); var toT;
   function toast(m){ to.textContent=m; to.style.opacity='1'; clearTimeout(toT); toT=setTimeout(function(){to.style.opacity='0';},1400); }
 
-  // ---- extender (body-level, draggable) ----
-  var ext=document.createElement('div'); ext.className='mv-ext lfo-ext';
-  (document.getElementById('syn-panel')||document.body).appendChild(ext); var extPos=null;   // fb231 — INSIDE the panel: the canonical menu (z100) now stacks above the card (z96); the old body-level card sat in the root context and beat every menu
-  if(window.__cardOnly==='lfo'){ ext.classList.add('ti-popcard'); setTimeout(function(){ try{ if(typeof setActivePanel==='function')setActivePanel('syn'); openExt(); ext.style.left='0px'; ext.style.top='0px'; }catch(e){} }, 160); }   // fb229/fb231 — ?card=lfo boot: the panel must be display:block for its child card to exist
-  function editScope(w,h){var N=CUSTOM,d='';N.forEach(function(p,i){var x=p[0]*w,y=h-6-p[1]*(h-12);if(i===0)d+='M'+x+' '+y+' ';else{var pv=N[i-1],cx=(pv[0]+p[0])/2*w;d+='C'+cx+' '+(h-6-pv[1]*(h-12))+' '+cx+' '+y+' '+x+' '+y+' ';}});
-    var fillD=d+'L'+w+' '+h+' L0 '+h+' Z';
-    var gh=[.25,.5,.75].map(function(g){return '<line class="gl2" x1="0" y1="'+(h*g).toFixed(0)+'" x2="'+w+'" y2="'+(h*g).toFixed(0)+'"/>';}).join('');
-    var gv=[.2,.4,.6,.8].map(function(g){return '<line class="gl2" x1="'+(w*g).toFixed(0)+'" y1="0" x2="'+(w*g).toFixed(0)+'" y2="'+h+'"/>';}).join('');
-    var dots=N.map(function(p){return '<circle class="nd" cx="'+(p[0]*w).toFixed(0)+'" cy="'+(h-6-p[1]*(h-12)).toFixed(0)+'" r="3.4"/>';}).join('');
-    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+gh+gv+'<path class="fl" d="'+fillD+'"/><path class="st" d="'+d+'"/></svg><svg viewBox="0 0 '+w+' '+h+'" style="position:absolute;inset:0">'+dots+'</svg>';}
-  function MK(l,v,n){return '<div class="mk"><div class="dn" style="background:'+DONBG(n)+'"></div><div class="kl">'+l+'</div><div class="kv">'+v+'</div></div>';}
+  // ---- THE CARD (fb232) — the LFO extension card IS a TIC family card: the four
+  // modes' shell, header light, centered preset walker + glass menu, Depth in the MIX
+  // slot, .fxb button bank, family knobs, 12 slots + CHAIN + [+], resize grip and the
+  // whole pop-out contract — copied from the factory, not rebuilt. Docked it lives
+  // INSIDE #syn-panel (fb231 stacking law: canonical menus rise above it); popped
+  // (?card=lfo) it stays a body-level .ti-popcard exactly like arp/chop/gli/rbn —
+  // the fb101 freeze only exempts body children, and display:none on a panel-hosted
+  // card's ancestors was THE blank-window root cause.
+  var ext=null, extPos=null, extSh=null, extSc=null, extBtn={}, extKn={}, extPushLs=[];
+  var LGEO={T:8,B:166,H:174};   // card hero geometry: the pane's 456u X space, taller Y band — drawn AT this size (uniform scale, no viewBox stretch, no fat grid)
   var LFOPRESETS=[{"k":"Basic","n":"Sine","p":[[0,0.5,0.42],[0.25,1,-0.42],[0.5,0.5,0.42],[0.75,0,-0.42],[1,0.5,0]]},{"k":"Basic","n":"Triangle","p":[[0,0,0],[0.5,1,0],[1,0,0]]},{"k":"Basic","n":"Saw up","p":[[0,0,0],[1,1,0]]},{"k":"Basic","n":"Saw down","p":[[0,1,0],[1,0,0]]},{"k":"Basic","n":"Square","p":[[0,1,0],[0.5,1,0],[0.5,0,0],[1,0,0]]},{"k":"Basic","n":"Pulse 25","p":[[0,1,0],[0.25,1,0],[0.25,0,0],[1,0,0]]},{"k":"Basic","n":"Pulse 75","p":[[0,1,0],[0.75,1,0],[0.75,0,0],[1,0,0]]},{"k":"Basic","n":"Half sine","p":[[0,0,0.42],[0.25,1,-0.42],[0.5,0,0],[1,0,0]]},{"k":"Basic","n":"Exp fall","p":[[0,1,0.6],[1,0,0]]},{"k":"Basic","n":"Exp rise","p":[[0,0,-0.6],[1,1,0]]},{"k":"Rhythmic","n":"Gate 1/4","p":[[0.0,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 1/8","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 1/16","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9375,1,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 3-3-2","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Offbeat 1/8","p":[[0.0,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[1.0,1,-0.0]]},{"k":"Rhythmic","n":"Stutter 4+rest","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Build 1/16","p":[[0.0,0.0625,-0.0],[0.0625,0.0625,-0.0],[0.0625,0.125,-0.0],[0.125,0.125,-0.0],[0.125,0.1875,-0.0],[0.1875,0.1875,-0.0],[0.1875,0.25,-0.0],[0.25,0.25,-0.0],[0.25,0.3125,-0.0],[0.3125,0.3125,-0.0],[0.3125,0.375,-0.0],[0.375,0.375,-0.0],[0.375,0.4375,-0.0],[0.4375,0.4375,-0.0],[0.4375,0.5,-0.0],[0.5,0.5,-0.0],[0.5,0.5625,-0.0],[0.5625,0.5625,-0.0],[0.5625,0.625,-0.0],[0.625,0.625,-0.0],[0.625,0.6875,-0.0],[0.6875,0.6875,-0.0],[0.6875,0.75,-0.0],[0.75,0.75,-0.0],[0.75,0.8125,-0.0],[0.8125,0.8125,-0.0],[0.8125,0.875,-0.0],[0.875,0.875,-0.0],[0.875,0.9375,-0.0],[0.9375,0.9375,-0.0],[0.9375,1.0,-0.0],[1.0,1.0,-0.0]]},{"k":"Rhythmic","n":"Fall 1/16","p":[[0.0,1.0,-0.0],[0.0625,1.0,-0.0],[0.0625,0.9375,-0.0],[0.125,0.9375,-0.0],[0.125,0.875,-0.0],[0.1875,0.875,-0.0],[0.1875,0.8125,-0.0],[0.25,0.8125,-0.0],[0.25,0.75,-0.0],[0.3125,0.75,-0.0],[0.3125,0.6875,-0.0],[0.375,0.6875,-0.0],[0.375,0.625,-0.0],[0.4375,0.625,-0.0],[0.4375,0.5625,-0.0],[0.5,0.5625,-0.0],[0.5,0.5,-0.0],[0.5625,0.5,-0.0],[0.5625,0.4375,-0.0],[0.625,0.4375,-0.0],[0.625,0.375,-0.0],[0.6875,0.375,-0.0],[0.6875,0.3125,-0.0],[0.75,0.3125,-0.0],[0.75,0.25,-0.0],[0.8125,0.25,-0.0],[0.8125,0.1875,-0.0],[0.875,0.1875,-0.0],[0.875,0.125,-0.0],[0.9375,0.125,-0.0],[0.9375,0.0625,-0.0],[1.0,0.0625,-0.0]]},{"k":"Rhythmic","n":"Trance gate A","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.4375,0,-0.0],[0.4375,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Trance gate B","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.6,-0.0],[0.375,0.6,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.6,-0.0],[0.75,0.6,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Polyrhythm 3v4","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.25,0,-0.0],[0.25,0.8,-0.0],[0.3333,0.8,-0.0],[0.3333,0.55,-0.0],[0.4167,0.55,-0.0],[0.4167,0,-0.0],[0.5,0,-0.0],[0.5,0.8,-0.0],[0.5833,0.8,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.55,-0.0],[0.75,0.55,-0.0],[0.75,0.8,-0.0],[0.8333,0.8,-0.0],[0.8333,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Swing gate","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.1667,0,-0.0],[0.1667,0.7,-0.0],[0.25,0.7,-0.0],[0.25,1,-0.0],[0.3333,1,-0.0],[0.3333,0,-0.0],[0.4167,0,-0.0],[0.4167,0.7,-0.0],[0.5,0.7,-0.0],[0.5,1,-0.0],[0.5833,1,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.7,-0.0],[0.75,0.7,-0.0],[0.75,1,-0.0],[0.8333,1,-0.0],[0.8333,0,-0.0],[0.9167,0,-0.0],[0.9167,0.7,-0.0],[1.0,0.7,-0.0]]},{"k":"Rhythmic","n":"Broken gate","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.6,-0.0],[0.8125,0.6,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9375,1,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Long-short","p":[[0.0,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Ratchet end","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.7812,1,-0.0],[0.7812,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.8438,1,-0.0],[0.8438,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9062,1,-0.0],[0.9062,0,-0.0],[0.9375,0,-0.0],[0.9375,1,-0.0],[0.9688,1,-0.0],[0.9688,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Ghost 8ths","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.5,-0.0],[0.1875,0.5,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,0.5,-0.0],[0.6875,0.5,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Son clave","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Quint gate","p":[[0.0,1,-0.0],[0.1,1,-0.0],[0.1,0,-0.0],[0.2,0,-0.0],[0.2,1,-0.0],[0.3,1,-0.0],[0.3,0,-0.0],[0.4,0,-0.0],[0.4,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.6,0,-0.0],[0.6,1,-0.0],[0.7,1,-0.0],[0.7,0,-0.0],[0.8,0,-0.0],[0.8,1,-0.0],[0.9,1,-0.0],[0.9,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Amen chop","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.9,-0.0],[0.1875,0.9,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.4375,0,-0.0],[0.4375,0.5,-0.0],[0.5,0.5,-0.0],[0.5,0,-0.0],[0.5625,0,-0.0],[0.5625,0.5,-0.0],[0.625,0.5,-0.0],[0.625,0.9,-0.0],[0.6875,0.9,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"Think break","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.4,-0.0],[0.25,0.4,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.4,-0.0],[0.8125,0.4,-0.0],[0.8125,0.9,-0.0],[0.875,0.9,-0.0],[0.875,0,-0.0],[0.9375,0,-0.0],[0.9375,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"Apache","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.4,-0.0],[0.25,0.4,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0.4,-0.0],[0.625,0.4,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.4,-0.0],[0.75,0.4,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"2-step shuffle","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.4375,0,-0.0],[0.4375,0.6,-0.0],[0.5,0.6,-0.0],[0.5,0,-0.0],[0.625,0,-0.0],[0.625,0.7,-0.0],[0.6875,0.7,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.5,-0.0],[1.0,0.5,-0.0]]},{"k":"Breakbeat","n":"Jungle roller","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0.3,-0.0],[0.125,0.3,-0.0],[0.125,0.5,-0.0],[0.1875,0.5,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,0.9,-0.0],[0.3125,0.9,-0.0],[0.3125,0.3,-0.0],[0.375,0.3,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0.6,-0.0],[0.5,0.6,-0.0],[0.5,0.4,-0.0],[0.5625,0.4,-0.0],[0.5625,0.3,-0.0],[0.625,0.3,-0.0],[0.625,0.8,-0.0],[0.6875,0.8,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0.4,-0.0],[0.875,0.4,-0.0],[0.875,0.6,-0.0],[0.9375,0.6,-0.0],[0.9375,0.3,-0.0],[1.0,0.3,-0.0]]},{"k":"Breakbeat","n":"Halftime snare","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.4,-0.0],[0.875,0.4,-0.0],[0.875,0,-0.0],[0.9375,0,-0.0],[0.9375,0.5,-0.0],[1.0,0.5,-0.0]]},{"k":"Breakbeat","n":"Ghost note groove","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0.3,-0.0],[0.125,0.3,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.3,-0.0],[0.5,0.3,-0.0],[0.5,0.6,-0.0],[0.5625,0.6,-0.0],[0.5625,0.3,-0.0],[0.625,0.3,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0.3,-0.0],[0.875,0.3,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0.3,-0.0],[1.0,0.3,-0.0]]},{"k":"Breakbeat","n":"Backbeat duck","p":[[0.0,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.5,-0.0],[0.875,0.5,-0.0],[0.875,1,-0.0],[1.0,1,-0.0]]},{"k":"Breakbeat","n":"Roll-up","p":[[0.0,0.5,-0.0],[0.08,0.5,-0.0],[0.08,0.0,-0.0],[0.25,0.0,-0.0],[0.25,0.55,-0.0],[0.32,0.55,-0.0],[0.32,0.0,-0.0],[0.5,0.0,-0.0],[0.5,0.65,-0.0],[0.56,0.65,-0.0],[0.56,0.0,-0.0],[0.625,0.0,-0.0],[0.625,0.7,-0.0],[0.675,0.7,-0.0],[0.675,0.0,-0.0],[0.75,0.0,-0.0],[0.75,0.78,-0.0],[0.79,0.78,-0.0],[0.79,0.0,-0.0],[0.8125,0.0,-0.0],[0.8125,0.85,-0.0],[0.8475,0.85,-0.0],[0.8475,0.0,-0.0],[0.875,0.0,-0.0],[0.875,0.9,-0.0],[0.9,0.9,-0.0],[0.9,0.0,-0.0],[0.9062,0.0,-0.0],[0.9062,0.95,-0.0],[0.9313,0.95,-0.0],[0.9313,0.0,-0.0],[0.9375,0.0,-0.0],[0.9375,1.0,-0.0],[0.9575,1.0,-0.0],[0.9575,0.0,-0.0],[0.9688,0.0,-0.0],[0.9688,1.0,-0.0],[0.9888,1.0,-0.0],[0.9888,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"Breakbeat","n":"Chopped 3/16","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.8,-0.0],[0.25,0.8,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,0.9,-0.0],[0.4375,0.9,-0.0],[0.4375,0,-0.0],[0.5625,0,-0.0],[0.5625,0.8,-0.0],[0.625,0.8,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.7,-0.0],[1.0,0.7,-0.0]]},{"k":"Breakbeat","n":"Stab pattern","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.3125,0,-0.0],[0.3125,0.9,-0.0],[0.375,0.9,-0.0],[0.375,0,-0.0],[0.625,0,-0.0],[0.625,0.8,-0.0],[0.6875,0.8,-0.0],[0.6875,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Drag triplet","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.1667,0,-0.0],[0.1667,0.5,-0.0],[0.25,0.5,-0.0],[0.25,0,-0.0],[0.3333,0,-0.0],[0.3333,0.8,-0.0],[0.4167,0.8,-0.0],[0.4167,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5833,1,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.5,-0.0],[0.8333,0.5,-0.0],[0.8333,0.9,-0.0],[0.9167,0.9,-0.0],[0.9167,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Skippy hats","p":[[0.0,0,-0.0],[0.0625,0,-0.0],[0.0625,0.6,-0.0],[0.125,0.6,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,0.7,-0.0],[0.4375,0.7,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.6,-0.0],[0.5625,0.6,-0.0],[0.5625,0,-0.0],[0.6875,0,-0.0],[0.6875,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.6,-0.0],[0.875,0.6,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Break fill","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.4,-0.0],[0.1875,0.4,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,0.4,-0.0],[0.6875,0.4,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.5,-0.0],[0.7812,0.5,-0.0],[0.7812,0.6,-0.0],[0.8125,0.6,-0.0],[0.8125,0.7,-0.0],[0.8438,0.7,-0.0],[0.8438,0.75,-0.0],[0.875,0.75,-0.0],[0.875,0.8,-0.0],[0.9062,0.8,-0.0],[0.9062,0.9,-0.0],[0.9375,0.9,-0.0],[0.9375,1,-0.0],[1.0,1,-0.0]]},{"k":"IDM","n":"Bitcrush stairs","p":[[0.0,0.2,-0.0],[0.1,0.2,-0.0],[0.1,0.9,-0.0],[0.2,0.9,-0.0],[0.2,0.4,-0.0],[0.3,0.4,-0.0],[0.3,0.65,-0.0],[0.4,0.65,-0.0],[0.4,0.1,-0.0],[0.5,0.1,-0.0],[0.5,1,-0.0],[0.6,1,-0.0],[0.6,0.3,-0.0],[0.7,0.3,-0.0],[0.7,0.75,-0.0],[0.8,0.75,-0.0],[0.8,0.5,-0.0],[0.9,0.5,-0.0],[0.9,0.05,-0.0],[1.0,0.05,-0.0]]},{"k":"IDM","n":"Glitch scatter","p":[[0.0,0.0,-0.0],[0.03,0.0,-0.0],[0.03,1.0,-0.0],[0.05,1.0,-0.0],[0.05,0.0,-0.0],[0.11,0.0,-0.0],[0.11,0.7,-0.0],[0.125,0.7,-0.0],[0.125,0.0,-0.0],[0.27,0.0,-0.0],[0.27,0.9,-0.0],[0.29,0.9,-0.0],[0.29,0.0,-0.0],[0.31,0.0,-0.0],[0.31,0.5,-0.0],[0.325,0.5,-0.0],[0.325,0.0,-0.0],[0.55,0.0,-0.0],[0.55,1.0,-0.0],[0.57,1.0,-0.0],[0.57,0.0,-0.0],[0.62,0.0,-0.0],[0.62,0.6,-0.0],[0.63,0.6,-0.0],[0.63,0.0,-0.0],[0.83,0.0,-0.0],[0.83,0.85,-0.0],[0.85,0.85,-0.0],[0.85,0.0,-0.0],[0.91,0.0,-0.0],[0.91,0.4,-0.0],[0.925,0.4,-0.0],[0.925,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"IDM","n":"Datamosh","p":[[0,0.7,0],[0.09,0.7,0],[0.09,0.2,-0.5],[0.22,0.9,0],[0.22,0.35,0.6],[0.4,0.6,0],[0.4,1,0],[0.52,1,0],[0.52,0.1,0],[0.66,0.1,-0.7],[0.8,0.8,0],[0.8,0.45,0.4],[0.93,0.15,0],[0.93,0.75,0],[1,0.7,0]]},{"k":"IDM","n":"Elastic bounce","p":[[0,1,-0.5],[0.3,0,0.5],[0.5,0.55,-0.5],[0.65,0,0.5],[0.78,0.3,-0.5],[0.87,0,0.5],[0.94,0.15,-0.55],[1,0,0]]},{"k":"IDM","n":"Zipper","p":[[0,1,-0.0],[0.28,1,-0.0],[0.28,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.66,1,-0.0],[0.66,0,-0.0],[0.78,0,-0.0],[0.78,1,-0.0],[0.86,1,-0.0],[0.86,0,-0.0],[0.92,0,-0.0],[0.92,1,-0.0],[0.96,1,-0.0],[0.96,0,-0.0],[0.98,0,-0.0],[0.98,1,-0.0],[1.0,1,-0.0]]},{"k":"IDM","n":"Morse","p":[[0.0,1,-0.0],[0.0357,1,-0.0],[0.0357,0,-0.0],[0.0714,0,-0.0],[0.0714,1,-0.0],[0.1071,1,-0.0],[0.1071,0,-0.0],[0.2143,0,-0.0],[0.2143,1,-0.0],[0.3214,1,-0.0],[0.3214,0,-0.0],[0.3571,0,-0.0],[0.3571,1,-0.0],[0.3929,1,-0.0],[0.3929,0,-0.0],[0.4286,0,-0.0],[0.4286,1,-0.0],[0.4643,1,-0.0],[0.4643,0,-0.0],[0.5714,0,-0.0],[0.5714,1,-0.0],[0.6786,1,-0.0],[0.6786,0,-0.0],[0.7143,0,-0.0],[0.7143,1,-0.0],[0.8214,1,-0.0],[0.8214,0,-0.0],[1.0,0,-0.0]]},{"k":"IDM","n":"Probability rain","p":[[0.0,0.0,-0.0],[0.07,0.0,-0.0],[0.07,0.8,-0.0],[0.085,0.8,-0.0],[0.085,0.0,-0.0],[0.19,0.0,-0.0],[0.19,0.4,-0.0],[0.202,0.4,-0.0],[0.202,0.0,-0.0],[0.23,0.0,-0.0],[0.23,1.0,-0.0],[0.248,1.0,-0.0],[0.248,0.0,-0.0],[0.41,0.0,-0.0],[0.41,0.6,-0.0],[0.424,0.6,-0.0],[0.424,0.0,-0.0],[0.59,0.0,-0.0],[0.59,0.9,-0.0],[0.61,0.9,-0.0],[0.61,0.0,-0.0],[0.66,0.0,-0.0],[0.66,0.3,-0.0],[0.672,0.3,-0.0],[0.672,0.0,-0.0],[0.79,0.0,-0.0],[0.79,0.7,-0.0],[0.806,0.7,-0.0],[0.806,0.0,-0.0],[0.93,0.0,-0.0],[0.93,0.5,-0.0],[0.944,0.5,-0.0],[0.944,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"IDM","n":"Sawtooth fractal","p":[[0,0,0],[0.25,0.5,0],[0.25,0.17,0],[0.5,0.67,0],[0.5,0.33,0],[0.75,0.83,0],[0.75,0.5,0],[1,1,0]]},{"k":"IDM","n":"Wonky lean","p":[[0,0.3,-0.6],[0.37,1,0],[0.37,0.55,0.5],[0.62,0.2,0],[0.62,0.75,0],[0.8,0.75,0],[0.8,0.05,-0.6],[1,0.3,0]]},{"k":"IDM","n":"Granular flutter","p":[[0.0,0.73,-0.0],[0.0417,0.73,-0.0],[0.0417,0.4088,-0.0],[0.0833,0.4088,-0.0],[0.0833,0.805,-0.0],[0.125,0.805,-0.0],[0.125,0.4761,-0.0],[0.1667,0.4761,-0.0],[0.1667,0.8599,-0.0],[0.2083,0.8599,-0.0],[0.2083,0.5149,-0.0],[0.25,0.5149,-0.0],[0.25,0.88,-0.0],[0.2917,0.88,-0.0],[0.2917,0.5149,-0.0],[0.3333,0.5149,-0.0],[0.3333,0.8599,-0.0],[0.375,0.8599,-0.0],[0.375,0.4761,-0.0],[0.4167,0.4761,-0.0],[0.4167,0.805,-0.0],[0.4583,0.805,-0.0],[0.4583,0.4088,-0.0],[0.5,0.4088,-0.0],[0.5,0.73,-0.0],[0.5417,0.73,-0.0],[0.5417,0.3312,-0.0],[0.5833,0.3312,-0.0],[0.5833,0.655,-0.0],[0.625,0.655,-0.0],[0.625,0.2639,-0.0],[0.6667,0.2639,-0.0],[0.6667,0.6001,-0.0],[0.7083,0.6001,-0.0],[0.7083,0.2251,-0.0],[0.75,0.2251,-0.0],[0.75,0.58,-0.0],[0.7917,0.58,-0.0],[0.7917,0.2251,-0.0],[0.8333,0.2251,-0.0],[0.8333,0.6001,-0.0],[0.875,0.6001,-0.0],[0.875,0.2639,-0.0],[0.9167,0.2639,-0.0],[0.9167,0.655,-0.0],[0.9583,0.655,-0.0],[0.9583,0.3312,-0.0],[1.0,0.3312,-0.0]]},{"k":"IDM","n":"Tape stop","p":[[0,1,0],[0.15,1,-0.5],[0.85,0,0],[1,0,0]]},{"k":"IDM","n":"VHS warble","p":[[0,0.6,0.35],[0.18,0.78,0],[0.18,0.72,-0.35],[0.38,0.5,0.35],[0.55,0.62,0],[0.55,0.68,-0.3],[0.75,0.45,0.3],[0.9,0.55,0],[0.9,0.58,0],[1,0.6,0]]},{"k":"IDM","n":"Circuit bent","p":[[0,0.5,0],[0.12,0.5,0],[0.12,1,0.7],[0.3,0.2,0],[0.3,0.85,0],[0.45,0.85,-0.6],[0.6,0.05,0],[0.6,0.6,0.5],[0.85,0.3,0],[0.85,0.9,-0.8],[1,0.5,0]]},{"k":"IDM","n":"Autechre","p":[[0,0.85,-0.0],[0.11,0.85,-0.0],[0.11,0.3,-0.0],[0.17,0.3,-0.0],[0.17,0.65,-0.0],[0.31,0.65,-0.0],[0.31,0.1,-0.0],[0.36,0.1,-0.0],[0.36,0.9,-0.0],[0.5,0.9,-0.0],[0.5,0.45,-0.0],[0.58,0.45,-0.0],[0.58,0.7,-0.0],[0.69,0.7,-0.0],[0.69,0.2,-0.0],[0.81,0.2,-0.0],[0.81,1,-0.0],[0.86,1,-0.0],[0.86,0.05,-0.0],[0.94,0.05,-0.0],[0.94,0.85,-0.0],[1.0,0.85,-0.0]]},{"k":"Sidechain","n":"Pump 1/4","p":[[0,0,0.5],[0.7,1,0],[1,1,0]]},{"k":"Sidechain","n":"Pump 1/2","p":[[0,0,0.45],[0.45,1,0],[1,1,0]]},{"k":"Sidechain","n":"Pump 1/8","p":[[0,0,0.6],[0.85,1,0],[1,1,0]]},{"k":"Sidechain","n":"Soft duck","p":[[0,0.4,0.4],[0.55,1,0],[1,1,0]]},{"k":"Sidechain","n":"Hard slam","p":[[0,0,0],[0.65,0,0.7],[0.95,1,0],[1,1,0]]},{"k":"Sidechain","n":"Double pump","p":[[0,0,0.5],[0.4,1,0],[0.5,1,0],[0.5,0,0.5],[0.9,1,0],[1,1,0]]},{"k":"Sidechain","n":"Triplet pump","p":[[0,0,0.5],[0.27,1,0],[0.3333,1,0],[0.3333,0,0.5],[0.6,1,0],[0.6667,1,0],[0.6667,0,0.5],[0.94,1,0],[1,1,0]]},{"k":"Sidechain","n":"Late recover","p":[[0,0,-0.4],[0.6,0.25,0.5],[0.9,1,0],[1,1,0]]},{"k":"Sidechain","n":"Fast attack slow release","p":[[0,0,0.7],[1,1,0]]},{"k":"Sidechain","n":"Ghost pump","p":[[0,0.6,0.4],[0.5,1,0],[1,1,0]]},{"k":"Sidechain","n":"Reverse pump","p":[[0,0.7,-0.3],[0.6,1,0],[0.75,1,-0.6],[1,0,0]]},{"k":"Sidechain","n":"Bounce back","p":[[0,0,0.6],[0.45,1,-0.3],[0.6,0.82,0.3],[0.75,1,0],[1,1,0]]},{"k":"Sidechain","n":"Long tail","p":[[0,0,0.35],[0.97,1,0],[1,1,0]]},{"k":"Sidechain","n":"Clip pump","p":[[0,0,0.65],[0.35,1,0],[1,1,0]]}];   // fb229 — the factory bank (70 shapes, 5 packs; c-signs flipped to house bias polarity at embed)
-  var preIdx=-1;
-  function applyPreset(ix){ if(ix<0||ix>=LFOPRESETS.length)return; preIdx=ix; var pr=LFOPRESETS[ix];
-    seedTo(pr.p.map(function(q){return q.slice();}), pr.n); }
-  function presetMenu(x,y){ if(!window.__synShowMenu)return; var items=[], lastK=null;
-    LFOPRESETS.forEach(function(pr,ix){ if(pr.k!==lastK){ items.push({isHeader:true,label:pr.k}); lastK=pr.k; }
-      items.push({ label:pr.n, isChecked:(preIdx===ix), white:true, onPick:function(){ applyPreset(ix); } }); });
-    window.__synShowMenu('', items, x, y); }
-  function K2(id,l,v,f){ var c=2*Math.PI*15,on=c*Math.max(0,Math.min(1,f))*0.8333;
-    return '<div class="kn2" id="'+id+'"><svg width="40" height="40" viewBox="0 0 40 40">'
-      +'<circle cx="20" cy="20" r="15" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.2"/>'
-      +'<circle cx="20" cy="20" r="15" fill="none" stroke="#ECE8F2" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="'+on.toFixed(1)+' '+(c-on).toFixed(1)+'" transform="rotate(120 20 20)"/></svg>'
-      +'<div class="kl2">'+l+'</div><div class="kv2">'+v+'</div></div>'; }
-  function B2(id,l,on,dim){ return '<span class="bp2'+(on?' on':'')+(dim?' dim':'')+'" id="'+id+'">'+l+'</span>'; }
+  var LFO_FACTORY=LFOPRESETS.map(function(pr){ return { name:pr.n, sect:pr.k,
+    v:{ pts:pr.p.map(function(q){ return q.slice(); }), nm:pr.n } }; });
+  var LDEF=(function(){ var o={ nm:'Sine', gh:8, gv:8, sn:1, tg:1, lb:-1, dir:0, mn:0, ri:0, de:0, sm:0, sw:0, td:0, ho:1 };
+    o.pts=LFOPRESETS[0].p.map(function(q){ return q.slice(); }); return o; })();   // Init = the sine seed + RETRIG (the fb228 product default); rate/div/sync/phase/depth stay LIVE (the MIX law)
   function fmtMs2(v){ return v>=1000?(v/1000).toFixed(2)+'s':Math.round(v)+'ms'; }
-  function buildExt(){
-    var mo=moGet(), nmc=(shGet().nm&&st.shape===7)?shGet().nm:SHORT[st.shape];
-    var dots=''; for(var di=1;di<=10;di++)dots+='<div class="ld2'+(di===st.tab?' on':'')+'" data-n="'+di+'"><div class="c2"></div><div class="n2">'+di+'</div></div>';
-    ext.innerHTML='<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="nm">LFO '+st.tab+'</span>'
-      +'<span class="pset"><span class="pa" id="lc-pp">‹</span><span class="pn" id="lc-pn">'+(preIdx>=0?LFOPRESETS[preIdx].n:nmc)+'</span><span class="pa" id="lc-px">›</span></span>'
-      +'<span class="sp"></span><span class="dep" id="lc-dep">DEP <b>'+Math.round((st.depth||0)*100)+'%</b></span>'
-      +'<span class="pop" title="Pop out">⧉</span><span class="x">✕</span></div>'
-      +'<div class="card-scope">'+scopeSVG()+'</div>'
-      +'<div class="bz">'+B2('lc-free','FREE',mo.tg===0&&!mo.mn)+B2('lc-trig','RETRIG',mo.tg===1&&!mo.mn)+B2('lc-env','ENV',mo.tg===2)
-        +B2('lc-loop','LOOP',mo.lb>=0&&mo.tg===2,mo.tg!==2)+B2('lc-mono','MONO',!!mo.mn)+B2('lc-host','HOST',!!mo.ho)+'</div>'
-      +'<div class="bz">'+B2('lc-fwd','FWD',mo.dir===0)+B2('lc-rev','REV',mo.dir===1)+B2('lc-ping','PING',mo.dir===2)
-        +B2('lc-trip','TRIP',mo.td===1)+B2('lc-dot','DOT',mo.td===2)+B2('lc-bpm',st.sync?'BPM':'HZ',st.sync)+'</div>'
-      +'<div class="kr">'
-      +K2('lc-rate','RATE',st.sync?DIVS[st.div]:(st.rateHz||1).toFixed(2),st.sync?(DIVORD.indexOf(st.div)/(NDIV-1)):((cur().rate?cur().rate.getNormalisedValue():0.3)))
-      +K2('lc-rise','RISE',fmtMs2(mo.ri),mo.ri/2000)
-      +K2('lc-del','DELAY',fmtMs2(mo.de),mo.de/2000)
-      +K2('lc-smo','SMOOTH',Math.round(mo.sm/5)+'%',mo.sm/500)
-      +K2('lc-pha','PHASE',Math.round((st.phase||0)*360)+'°',st.phase||0)
-      +K2('lc-swg','SWING',Math.round(mo.sw*100)+'%',mo.sw)
-      +'</div>'
-      +'<div class="ldots">'+dots+'</div>'
-      +'<div class="chain2"><span>CHAIN</span><span class="slot2">'+st.tab+'</span></div>';
-    var csvg=ext.querySelector('.card-scope svg'); if(csvg)csvg.setAttribute('viewBox','0 2 456 76');   // fb231 — crop to the BAND (the main pane's footer strip left a dead bottom)
-    ext.querySelector('.x').onclick=function(){ext.classList.remove('open');};
-    ext.querySelector('#lc-pp').onclick=function(){ applyPreset((preIdx-1+LFOPRESETS.length)%LFOPRESETS.length); };
-    ext.querySelector('#lc-px').onclick=function(){ applyPreset((preIdx+1)%LFOPRESETS.length); };
-    ext.querySelector('#lc-pn').onclick=function(ev){ presetMenu(ev.clientX,ev.clientY); };
-    var dep=ext.querySelector('#lc-dep');
-    dep.onmousedown=function(e){ e.preventDefault(); e.stopPropagation(); var D=cur().depth, y0=e.clientY, v0=D?D.getNormalisedValue():.5;
-      function mv(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.005)); setNorm(D,nv); if(D){st.depth=D.getScaledValue(); dep.innerHTML='DEP <b>'+Math.round(st.depth*100)+'%</b>';} }
-      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); render(); }
-      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
-    function MO(fn){ return function(){ var m2=moGet(); fn(m2); shTouched=true; shPush(); render(); }; }
-    ext.querySelector('#lc-free').onclick=MO(function(m){ m.tg=0; m.mn=0; });
-    ext.querySelector('#lc-trig').onclick=MO(function(m){ m.tg=1; m.mn=0; });
-    ext.querySelector('#lc-env').onclick =MO(function(m){ m.tg=2; });
-    ext.querySelector('#lc-loop').onclick=MO(function(m){ if(m.tg!==2){ toast('Loop pairs with Env mode'); return; }
-      if(m.lb<0){ m.lb=0.5; toast('right-click the graph \u2192 Set loopback point here'); } else m.lb=-1; });
-    ext.querySelector('#lc-mono').onclick=MO(function(m){ m.mn=m.mn?0:1; });
-    ext.querySelector('#lc-host').onclick=MO(function(m){ m.ho=m.ho?0:1; });
-    ext.querySelector('#lc-fwd').onclick =MO(function(m){ m.dir=0; });
-    ext.querySelector('#lc-rev').onclick =MO(function(m){ m.dir=1; });
-    ext.querySelector('#lc-ping').onclick=MO(function(m){ m.dir=2; });
-    ext.querySelector('#lc-trip').onclick=MO(function(m){ m.td=(m.td===1)?0:1; });
-    ext.querySelector('#lc-dot').onclick =MO(function(m){ m.td=(m.td===2)?0:2; });
-    ext.querySelector('#lc-bpm').onclick=function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); render(); };
-    function KD(el,get,set,fin){ el.onmousedown=function(e){ e.preventDefault(); var y0=e.clientY, v0=get();
-      function mv(ev){ set(Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.005))); }
-      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); if(fin)fin(); render(); }
-      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }; }
-    KD(ext.querySelector('#lc-rate'),
-      function(){ return st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (cur().rate?cur().rate.getNormalisedValue():0.3); },
-      function(v){ if(st.sync){ var ri=DIVORD[Math.round(v*(NDIV-1))]; if(ri!==st.div){ st.div=ri; setNorm(cur().div,ri/(NDIV-1)); var kv=ext.querySelector('#lc-rate .kv2'); if(kv)kv.textContent=DIVS[ri]; } }
-                   else { setNorm(cur().rate,v); if(cur().rate){ st.rateHz=cur().rate.getScaledValue(); var kv2=ext.querySelector('#lc-rate .kv2'); if(kv2)kv2.textContent=st.rateHz.toFixed(2); } } });
-    function MKD(id,key,scale,fmt){ KD(ext.querySelector(id),
-      function(){ return moGet()[key]/scale; },
-      function(v){ var m2=moGet(); m2[key]=+(v*scale).toFixed(1); shTouched=true; shPush();
-        var kv=ext.querySelector(id+' .kv2'); if(kv)kv.textContent=fmt(m2[key]); }); }
-    MKD('#lc-rise','ri',2000,fmtMs2);
-    MKD('#lc-del','de',2000,fmtMs2);
-    MKD('#lc-smo','sm',500,function(v){return Math.round(v/5)+'%';});
-    MKD('#lc-swg','sw',1,function(v){return Math.round(v*100)+'%';});
-    KD(ext.querySelector('#lc-pha'),
-      function(){ return cur().phase?cur().phase.getNormalisedValue():0; },
-      function(v){ setNorm(cur().phase,v); if(cur().phase){ st.phase=cur().phase.getScaledValue(); var kv=ext.querySelector('#lc-pha .kv2'); if(kv)kv.textContent=Math.round(st.phase*360)+'\u00b0'; } });
-    ext.querySelectorAll('.ld2').forEach(function(d){ d.onclick=function(){ var nn=+d.getAttribute('data-n');
-      if(nn===st.tab)return; st.tab=nn; st.page=(nn>5)?1:0; pull(); render(); }; });
-    bindShaper(ext.querySelector('.card-scope'));
-    var h=ext.querySelector('.h'); h.onmousedown=function(e){ if(e.target.closest('.x,.pop,.pset,.dep'))return; e.preventDefault(); h.classList.add('grab'); var r=ext.getBoundingClientRect(); var dx=e.clientX-r.left, dy=e.clientY-r.top;
-      function mv(ev){ if(window.__cardEdgeHandoff&&window.__cardEdgeHandoff('lfo',ext,ev,dx,dy)){ up(); return; }
-        extPos={x:Math.max(4,Math.min(window.__vw()-ext.offsetWidth-4,ev.clientX-dx)),y:Math.max(4,Math.min(window.__vh()-40,ev.clientY-dy))}; ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; }
-      function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
-      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
-  }
-  function extRefresh(){ buildExt(); }
-  function openExt(){ buildExt(); if(!extPos){ var r=root.getBoundingClientRect(); extPos={x:Math.min(window.__vw()-390, r.left+r.width-378), y:Math.max(8, r.top-160)}; } ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; ext.classList.add('open'); }
+  function extSnapGet(){ var sp=shGet(), m=moGet();
+    var P=(st.shape===7)?sp.pts:seedFor(st.shape), NM=(st.shape===7)?(sp.nm||'Custom'):SHORT[st.shape];
+    return JSON.stringify({ pts:P.map(function(q){ return q.slice(); }), nm:NM,
+      gh:sp.gh, gv:sp.gv, sn:sp.sn?1:0, tg:m.tg, lb:m.lb, dir:m.dir, mn:m.mn,
+      ri:m.ri, de:m.de, sm:m.sm, sw:m.sw, td:m.td, ho:m.ho }); }
+  function extSnapSet(sj){ var o; try{ o=JSON.parse(sj); }catch(e){ return; } if(!o)return;
+    var m=moGet();
+    ['tg','lb','dir','mn','ri','de','sm','sw','td','ho'].forEach(function(k){ if(o[k]!=null)m[k]=o[k]; });
+    if(o.pts&&o.pts.length>1){ shSelClear(); var gs=shGet();
+      gs.pts=o.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }); gs.nm=o.nm||'Custom';
+      if(o.gh)gs.gh=o.gh; if(o.gv)gs.gv=o.gv; if(o.sn!=null)gs.sn=o.sn?1:0;
+      setNorm(cur().shape,1); st.shape=7; }
+    shTouched=true; shPush(); render(); }
+  function extPush(){ for(var xi=0;xi<extPushLs.length;xi++){ try{ extPushLs[xi](); }catch(e){} } }
+  var LTIPS={ rate:'The speed, in beats or hertz', rise:'Fades the LFO in from the start',
+    delay:'Holds before the LFO starts', smooth:'Glides the output', phase:'Slides the start point',
+    swing:'Pushes every other beat late', free:'Runs forever on its own clock',
+    retrig:'Restarts from the top on every note', env:'Plays once per note, like an envelope',
+    loop:'Env only: plays the front once, then cycles from the loopback point',
+    mono:'One shared LFO for every note', host:'Only runs while the host plays',
+    fwd:'Plays forward', rev:'Plays backward', ping:'Bounces end to end',
+    trip:'Triplet time', dot:'Dotted time', bpm:'Beat-locked or free hertz', hz:'Beat-locked or free hertz' };
+  function buildExt(){ if(ext)return; var T=window.__TIC; if(!T)return;
+    extSh=T.shell({ cls:'lfo-ext', id:'lfo', title:'LFO '+st.tab, mixId:'LFO'+st.tab+'_DEPTH', mixDef:1.0,
+      mixLabel:'Depth', mixFmt:function(n){ return Math.round((n*2-1)*100)+'%'; } });
+    ext=extSh.card; ext.__mixLfo=st.tab;
+    if(!window.__cardOnly){ var sp0=document.getElementById('syn-panel'); if(sp0)sp0.appendChild(ext); }   // fb231 stacking law (docked only — popped stays a body child for the family boot)
+    var hero=T.el('<div class="card-scope"></div>'); hero.__shGeo=LGEO; extSh.body.appendChild(hero);
+    var ls=''; for(var li=1;li<=10;li++)ls+='<span class="lane'+(li===st.tab?' on':'')+'" data-n="'+li+'">'+li+'</span>';
+    var lsel=T.el('<div class="lsel">'+ls+'</div>');   // the arp-lanes/gli-fxsel grammar: which LFO this card is editing
+    lsel.addEventListener('click',function(e){ var b=e.target.closest('.lane'); if(!b)return;
+      var nn=+b.getAttribute('data-n'); if(nn===st.tab)return; st.tab=nn; st.page=(nn>5)?1:0; pull(); render(); });
+    extSh.body.appendChild(lsel);
+    var bank=T.el('<div class="bank"><div class="fx r1"></div><div class="fx r2"></div></div>');
+    var R1=[['free','Free'],['trig','Retrig'],['env','Env'],['loop','Loop'],['mono','Mono'],['host','Host']];
+    var R2=[['fwd','Fwd'],['rev','Rev'],['ping','Ping'],['trip','Trip'],['dot','Dot'],['bpm','BPM']];
+    function MO(fn){ return function(){ var m2=moGet(); fn(m2); shTouched=true; shPush(); extPush(); render(); }; }
+    var ACT={ free:MO(function(m){ m.tg=0; m.mn=0; }), trig:MO(function(m){ m.tg=1; m.mn=0; }),
+      env:MO(function(m){ m.tg=2; }),
+      loop:MO(function(m){ if(m.tg!==2){ toast('Loop pairs with Env mode'); return; }
+        if(m.lb<0){ m.lb=0.5; toast('Right-click the graph \u2192 Set loopback point here'); } else m.lb=-1; }),
+      mono:MO(function(m){ m.mn=m.mn?0:1; }), host:MO(function(m){ m.ho=m.ho?0:1; }),
+      fwd:MO(function(m){ m.dir=0; }), rev:MO(function(m){ m.dir=1; }), ping:MO(function(m){ m.dir=2; }),
+      trip:MO(function(m){ m.td=(m.td===1)?0:1; }), dot:MO(function(m){ m.td=(m.td===2)?0:2; }),
+      bpm:function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); extPush(); render(); } };
+    function mkRow(row,defs){ defs.forEach(function(d){ var b=T.el('<span class="fxb">'+d[1]+'</span>');
+      b.addEventListener('click',function(){ ACT[d[0]](); }); extBtn[d[0]]=b; row.appendChild(b); }); }
+    mkRow(bank.querySelector('.r1'),R1); mkRow(bank.querySelector('.r2'),R2);
+    extSh.body.appendChild(bank);
+    var kr=T.el('<div class="gr6"></div>');
+    function lknob(key,label){ var c=T.el('<div class="cell k"><div class="ctl">'+T.knobSVG()+'</div><span class="lb">'+label+'</span><span class="vl"></span></div>');
+      extKn[key]={ cell:c, vl:c.querySelector('.vl') }; kr.appendChild(c); }
+    lknob('rate','Rate'); lknob('rise','Rise'); lknob('delay','Delay');
+    lknob('smooth','Smooth'); lknob('phase','Phase'); lknob('swing','Swing');
+    T.dragify(extKn.rate.cell.querySelector('svg'),{ span:140,
+      get:function(){ return st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (cur().rate?cur().rate.getNormalisedValue():0.3); },
+      set:function(v){ if(st.sync){ var ri=DIVORD[Math.round(v*(NDIV-1))]; if(ri!==st.div){ st.div=ri; setNorm(cur().div,ri/(NDIV-1)); } }
+        else { setNorm(cur().rate,v); if(cur().rate&&cur().rate.getScaledValue)st.rateHz=cur().rate.getScaledValue(); }
+        extKnPaint(); extPush(); },
+      reset:DIVORD.indexOf(5)/(NDIV-1) });
+    function mkMoKnob(key,mkey,scale,fmt){ T.dragify(extKn[key].cell.querySelector('svg'),{ span:140,
+        get:function(){ return moGet()[mkey]/scale; },
+        set:function(v){ var m2=moGet(); m2[mkey]=+(v*scale).toFixed(1); shTouched=true; shPush();
+          T.setRing(extKn[key].cell,v); extKn[key].vl.textContent=fmt(m2[mkey]); extPush(); },
+        reset:0 }); }
+    mkMoKnob('rise','ri',2000,fmtMs2); mkMoKnob('delay','de',2000,fmtMs2);
+    mkMoKnob('smooth','sm',500,function(v){ return Math.round(v/5)+'%'; });
+    mkMoKnob('swing','sw',1,function(v){ return Math.round(v*100)+'%'; });
+    T.dragify(extKn.phase.cell.querySelector('svg'),{ span:140,
+      get:function(){ return cur().phase?cur().phase.getNormalisedValue():0; },
+      set:function(v){ setNorm(cur().phase,v); if(cur().phase&&cur().phase.getScaledValue)st.phase=cur().phase.getScaledValue();
+        T.setRing(extKn.phase.cell,v); extKn.phase.vl.textContent=Math.round((st.phase||0)*360)+'\u00b0';
+        var scM=root?root.querySelector('.mv-scope'):null; if(scM)scM.innerHTML=scopeSVG(); extPush(); },
+      reset:0 });
+    extSh.body.appendChild(kr);
+    extSc=T.slotsChain(extSnapGet,extSnapSet);
+    extSh.body.appendChild(extSc.el);
+    var Sbag={ v:{}, set:function(){}, on:function(f){ extPushLs.push(f); } };
+    T.presets({ id:'lfo', sh:extSh, S:Sbag, DEF:LDEF, snapGet:extSnapGet, snapSet:extSnapSet, sc:extSc, factory:LFO_FACTORY });
+    T.cardSync('lfo', extSc, Sbag, ext);
+    T.applyTips(ext, LTIPS);
+    extRefresh0(); }
+  function extKnPaint(){ if(!extKn.rate)return; var T=window.__TIC, m=moGet();
+    function ring(key,n,txt){ if(!extKn[key])return; T.setRing(extKn[key].cell,n); extKn[key].vl.textContent=txt; }
+    ring('rate', st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (cur().rate?cur().rate.getNormalisedValue():0.3),
+      st.sync? DIVS[st.div] : (st.rateHz||1).toFixed(2)+' Hz');
+    ring('rise', Math.max(0,Math.min(1,m.ri/2000)), fmtMs2(m.ri));
+    ring('delay', Math.max(0,Math.min(1,m.de/2000)), fmtMs2(m.de));
+    ring('smooth', Math.max(0,Math.min(1,m.sm/500)), Math.round(m.sm/5)+'%');
+    ring('phase', (cur().phase?cur().phase.getNormalisedValue():0), Math.round((st.phase||0)*360)+'\u00b0');
+    ring('swing', Math.max(0,Math.min(1,m.sw)), Math.round(m.sw*100)+'%'); }
+  function extRefresh0(){ if(!ext)return; var T=window.__TIC, m=moGet();
+    var tt=ext.querySelector('.tt'); if(tt)tt.textContent='LFO '+st.tab;
+    if(ext.__mixLfo!==st.tab&&ext.__mixRebind){ ext.__mixLfo=st.tab; ext.__mixRebind('LFO'+st.tab+'_DEPTH'); }
+    var hero=ext.querySelector('.card-scope');
+    if(hero){ hero.innerHTML=shaperSVG(LGEO); var hs=hero.querySelector('svg'); if(hs)hs.__shGeo=LGEO; bindShaper(hero); }
+    T.EA(ext.querySelectorAll('.lsel .lane'),function(b){ b.classList.toggle('on',+b.getAttribute('data-n')===st.tab); });
+    function on(k,v){ if(extBtn[k])extBtn[k].classList.toggle('on',!!v); }
+    on('free',m.tg===0&&!m.mn); on('trig',m.tg===1&&!m.mn); on('env',m.tg===2);
+    on('loop',m.lb>=0&&m.tg===2); if(extBtn.loop)extBtn.loop.classList.toggle('dim',m.tg!==2);
+    on('mono',m.mn); on('host',m.ho);
+    on('fwd',m.dir===0); on('rev',m.dir===1); on('ping',m.dir===2);
+    on('trip',m.td===1); on('dot',m.td===2);
+    if(extBtn.bpm){ extBtn.bpm.classList.toggle('on',!!st.sync); extBtn.bpm.textContent=st.sync?'BPM':'Hz'; }
+    extKnPaint(); }
+  function extRefresh(){ if(!ext||!ext.classList.contains('open'))return; extRefresh0(); }
+  function openExt(){
+    if(!window.__cardOnly&&window.__poppedCards&&window.__poppedCards.lfo){   // already floating — refocus, never duplicate (the __openFlowCard grammar)
+      try{ var pf=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('popOutCard'):null; if(pf){ pf('lfo',0,0,0,0); return; } }catch(e){}
+      return; }
+    buildExt(); if(!ext)return;
+    if(!ext.__placed){ ext.__placed=1;
+      var r=root?root.getBoundingClientRect():{left:200,top:200,width:400};
+      extPos={ x:Math.min(window.__vw()-390, r.left+r.width-378), y:Math.max(8, r.top-160) };
+      ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; }
+    ext.classList.add('open');
+    extRefresh0(); }
+  window.__openLfoCard=openExt;   // fb232 — the family card-only boot + __redockCard reach the card through this door
+  (function lfoXWinSync(){   // fb232 — TWO WINDOWS, ONE BLOB: whichever side edits, the other pulls (compare-gated; a fresh local edit outranks any pull for 1.5s)
+    var last=null;
+    setInterval(function(){
+      var need = window.__cardOnly==='lfo' || (window.__poppedCards&&window.__poppedCards.lfo);
+      if(!need)return;
+      if(Date.now()-(window.__shTouchT||0)<1500)return;
+      try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
+        f().then(function(j){ j=String(j||''); if(!j||j===last)return; var first=(last===null); last=j;
+          if(first)return;   // seed silently — shPull already loaded boot state
+          if(Date.now()-(window.__shTouchT||0)<1500)return;
+          try{ var v=JSON.parse(j); (v.shapes||[]).forEach(function(e2){ if(e2.n>=1&&e2.n<=10&&e2.pts&&e2.pts.length>1){
+              shapes[e2.n]={ pts:e2.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }), gh:e2.gh||8, gv:e2.gv||8, sn:e2.sn!==0?1:0, nm:e2.nm||null };
+              if(e2.mo)motion[e2.n]={ tg:e2.mo.tg!=null?e2.mo.tg:1, lb:e2.mo.lb!=null?e2.mo.lb:-1, dir:e2.mo.dir||0, mn:e2.mo.mn||0,
+                ri:e2.mo.ri||0, de:e2.mo.de||0, sm:e2.mo.sm||0, sw:e2.mo.sw||0, td:e2.mo.td||0, ho:e2.mo.ho!=null?e2.mo.ho:1 }; } });
+            render(); }catch(e3){} }).catch(function(){}); }catch(e){}
+    }, 900); })();
 
   // ---- live playhead + follower (JS-computed so it rides every LFO's shape, in Hz OR beats) ----
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
@@ -23376,10 +23421,11 @@ restoreThemeFromBackend();
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
   function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
     if(scope===root||scope===ext){   // fb229 — the card hero is the same field: exact geometry on both screens   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
+      var gG=(scope===ext)?LGEO:null;
       var rp=(ph+st.phase)%1, x=shX(rp);
       if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
       if(fd){ fd.setAttribute('cx',x.toFixed(1));
-        fd.setAttribute('cy',(st.shape===7?shY(shEvalPts(shGet().pts,rp)):shY((stockVal(st.shape,rp)+1)/2)).toFixed(1)); }
+        fd.setAttribute('cy',(st.shape===7?shY(shEvalPts(shGet().pts,rp),gG):shY((stockVal(st.shape,rp)+1)/2,gG)).toFixed(1)); }
       return; }
     var x2=ph*456;
     if(pl){ pl.setAttribute('x1',x2); pl.setAttribute('x2',x2); }
@@ -23397,7 +23443,7 @@ restoreThemeFromBackend();
   function boot(){
     root=document.getElementById('mod-engine');
     if(!root){ return; }
-    for(var qn=1;qn<=NLFO;qn++){ (function(n){ LP[n]={ shape:ssGet('LFO'+n+'_SHAPE'), sync:ssGet('LFO'+n+'_SYNC'), div:ssGet('LFO'+n+'_DIV'), rate:ssGet('LFO'+n+'_RATE'), depth:ssGet('LFO'+n+'_DEPTH'), phase:ssGet('LFO'+n+'_PHASE') }; })(qn); }
+    if(!window.__cardOnly) for(var qn=1;qn<=NLFO;qn++){ (function(n){ LP[n]={ shape:ssGet('LFO'+n+'_SHAPE'), sync:ssGet('LFO'+n+'_SYNC'), div:ssGet('LFO'+n+'_DIV'), rate:ssGet('LFO'+n+'_RATE'), depth:ssGet('LFO'+n+'_DEPTH'), phase:ssGet('LFO'+n+'_PHASE') }; })(qn); }   // fb232 — card windows shim lazily via cur() (relays serve exactly one WebView)
     pull(); render();
     // re-render on external (automation/host) changes of the ACTIVE lfo
     for(var ln=1;ln<=NLFO;ln++){ (function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s=LP[n][k]; if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); })(ln); }
@@ -24422,19 +24468,22 @@ restoreThemeFromBackend();
         S.on(function(k){ if(k===key)paint(); }); paint(); return t; }
 
       /* MIX in every header — param-backed (relay in-plugin, shim when popped) */
-      function mixBind(card,pid,def){
-        var st=null;
-        if(window.__cardOnly&&window.__synSliderShim){ st=window.__synSliderShim(pid,def); }
-        else if(J){ try{ st=J.getSliderState(pid); }catch(e){} }
-        var local=def, b=card.querySelector('.mix b'), mx=card.querySelector('.mix');
+      function mixBind(card,pid,def,fmt){
+        var st=null, local=def, b=card.querySelector('.mix b'), mx=card.querySelector('.mix');
         function cur(){ if(st){ try{ return st.getNormalisedValue(); }catch(e){} } return local; }
-        function paint(){ b.textContent=Math.round(cur()*100)+'%'; }
+        function paint(){ b.textContent=fmt?fmt(cur()):(Math.round(cur()*100)+'%'); }
+        function resolve(p){ st=null;
+          if(p!=null){
+            if(window.__cardOnly&&window.__synSliderShim){ st=window.__synSliderShim(p,def); }
+            else if(J){ try{ st=J.getSliderState(p); }catch(e){} }
+            if(st&&st.valueChangedEvent&&st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(paint); }
+          paint(); }
         dragify(mx,{axis:'x',span:160,get:cur,
           set:function(n){ local=n; if(st){ try{ st.setNormalisedValue(n); }catch(e){} } paint(); },
           reset:def});
-        if(st&&st.valueChangedEvent&&st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(paint);
         mx.title='Drag = mix · double-click = '+Math.round(def*100)+'%';
-        paint(); }
+        card.__mixRebind=resolve;   /* fb232 — the LFO card re-aims its Depth at whichever LFO is selected */
+        resolve(pid); }
 
       /* card shell: header (⠿ · dot · title · MIX · Pop Out · ✕) + body + drag/handoff */
       function shell(cfg){
@@ -24484,7 +24533,9 @@ restoreThemeFromBackend();
             card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; }
           function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
           document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
-        mixBind(card,cfg.mixId,cfg.mixDef);
+        if(cfg.mixLabel){ var mxl=card.querySelector('.mix');
+          if(mxl&&mxl.firstChild&&mxl.firstChild.nodeType===3) mxl.firstChild.textContent=cfg.mixLabel+' '; }   /* fb232 — the LFO card's MIX slot holds Depth (Max: 'the depth can be the mix') */
+        mixBind(card,cfg.mixId,cfg.mixDef,cfg.mixFmt);
         return { card:card, body:card.querySelector('.b'),
           open:function(){
             if(!pos){ var r=dev.getBoundingClientRect();
@@ -24787,8 +24838,10 @@ restoreThemeFromBackend();
               if(sv.__ow){ doSave(sv.__ow); return; }        /* the confirm click */
               beginSaveInput(sv); });
             menu.appendChild(sv);
-            section('Factory');
-            cfg.factory.forEach(function(p){ row(p,false); });
+            var lastSect=null, anySect=false;
+            cfg.factory.forEach(function(p){ if(p.sect)anySect=true; });
+            if(!anySect) section('Factory');
+            cfg.factory.forEach(function(p){ if(anySect&&p.sect!==lastSect){ section(p.sect); lastSect=p.sect; } row(p,false); });
             if(user.length){ section('User'); user.forEach(function(p){ row(p,true); }); }
             document.body.appendChild(menu);
             var r=pn.getBoundingClientRect();
@@ -24857,6 +24910,7 @@ restoreThemeFromBackend();
         togEl:togEl, shell:shell, tabsPanes:tabsPanes, slotsChain:slotsChain, applyTips:applyTips,
         presets:presets, cardSync:cardSync, runLoop:runLoop, stepsPerSec:stepsPerSec };
     })();
+    window.__TIC=TIC;   /* fb232 — the LFO card (shaper module) builds through the SAME factory */
 
     /* ───────── ARP · "Constellation" — the hero IS the pitch path ───────── */
     var arpCard=(function(){
@@ -26099,7 +26153,7 @@ restoreThemeFromBackend();
         else if(m==='drift')  rbnCard.open();   // mode 4 = ROBIN (key 'drift' frozen)
         else                  openCard();
       }catch(e){} };
-    window.__redockCard=function(id){ if(id==='mod')return; window.__openFlowCard({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[id]||'arp'); };   /* fb149 — the palette has no docked twin */
+    window.__redockCard=function(id){ if(id==='mod')return; if(id==='lfo'){ if(window.__openLfoCard)window.__openLfoCard(); return; } window.__openFlowCard({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[id]||'arp'); };   /* fb149 — the palette has no docked twin · fb232 — lfo docks home through its own door (it fell to 'arp') */
     window.__cardWinGone=function(id){ if(window.__poppedCards) delete window.__poppedCards[id]; };
     // expand button → the active mode's extension card
     if(exp) exp.addEventListener('click', function(){ window.__openFlowCard(displayMode); });
@@ -26223,8 +26277,13 @@ restoreThemeFromBackend();
   }
   function boot(){
     if(window.__cardOnly==='mod'){ bootModPal(); return; }
-    if(!window.__openFlowCard){ setTimeout(boot,150); return; }
-    window.__openFlowCard(MODE);
+    if(window.__cardOnly==='lfo'){   // fb232 — the LFO card boots through the SAME family path (body-level .ti-popcard, not the dead panel-hosted hack)
+      if(!window.__openLfoCard){ setTimeout(boot,150); return; }
+      try{ if(typeof setActivePanel==='function')setActivePanel('syn'); }catch(eSA){}
+      window.__openLfoCard(); }
+    else {
+      if(!window.__openFlowCard){ setTimeout(boot,150); return; }
+      window.__openFlowCard(MODE); }
     var card=document.querySelector('.'+CARDS[window.__cardOnly]);
     if(!card||!card.classList.contains('open')){ setTimeout(boot,150); return; }
     card.classList.add('ti-popcard');                     // pinned 0,0 by the card-only CSS
@@ -26233,7 +26292,10 @@ restoreThemeFromBackend();
     // diagnosis lives on via strings/lsof checks.
     // page init is done — freeze everything that isn't the card (kills hidden draw
     // cost); anything appended LATER (glass menus) stays visible over the card.
-    Array.prototype.forEach.call(document.body.children,function(el){ if(el!==card)el.classList.add('ti-preboot'); });
+    Array.prototype.forEach.call(document.body.children,function(el){ if(el===card)return;
+      if(window.__cardOnly==='lfo'&&el.querySelector&&el.querySelector('#syn-ctx-menu')){ el.classList.add('ti-ghost'); return; }   // fb232 — the canonical menu's branch stays LAID OUT (invisible, inert) so the card's right-click menus can rise; the no-reparent law holds
+      if(el.classList&&(el.classList.contains('mv-menu')||el.classList.contains('mv-toast'))) return;   // body-level glass (shape menus, toast) stays live over the card
+      el.classList.add('ti-preboot'); });
     document.documentElement.classList.add('card-only-late');
     // the native window tracks the card's size (subtab switches change its height)
     var rs=NF('resizeCardWindow');
@@ -27591,7 +27653,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb231';   // bump per ship  [fb231 = pop-out whitelist joins lfo + follower rides the VOICE on retrig/env + hero band crop + card panel-hosted (menus stack above)]
+  var TERRAIN_BUILD = 'fb232';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
