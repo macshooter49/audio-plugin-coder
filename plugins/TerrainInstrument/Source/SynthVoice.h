@@ -2520,8 +2520,11 @@ namespace tw
                             if      (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
                             else if (b.src == 5) mod = noiseModTap_;      // Noise (fb64) — FM/PD/AM/RM an osc WITH the noise
                             else if (b.src == 6) mod = modPrev_[c];       // Self (feedback)
-                            else if (b.src >= 7 && b.src <= 16)           // fb224 — WARP x LFO, Max's ear ruling: the LIVE LFO value (the one the pane's dot rides) sweeps the warp — the shape IN MOTION. peek() is block-stepped + 2.5ms-slewed, so drawn steps chop click-free; blendOff/blendAmp carry it to EVERY engine (WT read-phase, blendReadBlock, amp gate).
-                                                 mod = synthLfo_[b.src - 7].peek();
+                            else if (b.src >= 7 && b.src <= 16)           // fb224/fb225 — WARP x LFO: the LIVE LFO value (the one the pane's dot rides) sweeps the warp. peek() steps once per BLOCK, so a per-sample 2.5ms glide (lvlSmCoef_, the same coefficient the warp knobs ride) melts the staircase — motion kept, static gone. Osc/noise taps stay raw (audio-rate must never be low-passed).
+                            {
+                                blendLfoSm_[c][s] += (synthLfo_[b.src - 7].peek() - blendLfoSm_[c][s]) * lvlSmCoef_;
+                                mod = blendLfoSm_[c][s];
+                            }
                             else                 mod = 0.f;               // Sub(4): still no-op
                             if      (b.mode == 2) pm      += (1.20f * d) * mod;              // PD (phase, cycles)
                             else if (b.mode == 1) fmDrive += (12.0f * d) * mod;              // FM (freq deviation)
@@ -4823,6 +4826,7 @@ namespace tw
         struct BlendSlotV { int mode = 0; int src = 0; float depth = 0.f; };   // depth = exp-biased target
         BlendSlotV blendSlot_[4][4];
         float blendDepthSm_[4][4] = {};   // per-sample de-zippered depth
+        float blendLfoSm_[4][4]   = {};   // fb225 — per-sample glide over the BLOCK-STEPPED LFO value (peek updates once per block; consumed per sample = a ~344Hz staircase = Max's 'heavy static'. The COMB-CLICK law applied at the consumption site.)
         float modPrev_[4] = { 0.f, 0.f, 0.f, 0.f };   // prev-sample pre-gain osc outputs = the modulator taps
         float noiseModTap_ = 0.0f;                    // fb64 — the NOISE modulator tap (src=5), pre-gain, 1-sample delayed
         bool  noiseForce_  = false;                   // fb64 — noise is used as a blend source this block → generate it even if output off
