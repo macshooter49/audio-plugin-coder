@@ -5028,7 +5028,7 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
                                                               std::optional<juce::Point<int>> mouseScreen)
 {
     // Whitelist — the id lands in window titles and dock evals; only the 4 FLOW cards exist.
-    if (id != "arp" && id != "chop" && id != "gli" && id != "rbn" && id != "mod") return;   // fb149 — "mod" = the pop-out LFO palette
+    if (id != "arp" && id != "chop" && id != "gli" && id != "rbn" && id != "mod" && id != "lfo") return;   // fb149 — "mod" = the pop-out LFO palette · fb231 — "lfo" = the L5 card (the disappear-on-drag was THIS whitelist bouncing it)
 
     auto& wins = audioProcessor.cardWindows_;
     if (auto it = wins.find (id); it != wins.end() && it->second != nullptr)

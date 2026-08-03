@@ -5531,7 +5531,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int k = 0; k < wc::NUM_LFOS; ++k)
         {
             modVizLfo_[k].store (flowLfo_[k].peek(), std::memory_order_relaxed);
-            modVizLfoPh_[k].store (flowLfo_[k].currentPhase(), std::memory_order_relaxed);   // fb217 — real phase for the follower
+            {   // fb231 — RETRIG/ENV made VISIBLE: a non-Free LFO's dot rides the most-active VOICE's phase
+                //         (resets per note, pins at Env end); Free/mono keep the mirror. (fb228 contract intact.)
+                const bool vTrig = synModCfg.lfos[k].trigger != wc::LFOTrigger::Free;
+                modVizLfoPh_[k].store ((vTrig && any && bestVoice != nullptr)
+                                           ? bestVoice->lfoPhase (k)
+                                           : flowLfo_[k].currentPhase(), std::memory_order_relaxed);   // fb217 — real phase for the follower
+            }
         }
         noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
         // fb66 — waveform follower position. Free → the global tape head (visible even when idle);

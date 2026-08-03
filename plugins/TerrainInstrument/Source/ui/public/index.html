@@ -2483,7 +2483,8 @@ body {
 .mv-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;
   box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;}
 .mv-ext.open{display:block;}
-.lfo-ext{width:378px;background:linear-gradient(180deg,#26223E,#1C1932);border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.5);}
+.lfo-ext{width:378px;z-index:96;background:linear-gradient(180deg,#26223E,#1C1932);border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.5);}
+html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel-hosted card must survive the card-only visibility sweep */
 .lfo-ext .h{cursor:grab;font-size:10px;position:relative;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.07);}
 .lfo-ext .h .nm{font-weight:600;letter-spacing:2.2px;font-size:11px;color:#ECE8F2;}
 .lfo-ext .h .dot{width:5px;height:5px;border-radius:50%;background:#8B5CF6;box-shadow:0 0 6px rgba(139,92,246,.8);}
@@ -2519,6 +2520,7 @@ body {
 .lfo-ext .chain2{display:flex;align-items:center;gap:8px;padding:6px 14px 12px;font-size:8px;letter-spacing:1.8px;color:rgba(255,255,255,.4);}
 .lfo-ext .chain2 .slot2{width:16px;height:16px;border:1px solid rgba(255,255,255,.3);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#ECE8F2;letter-spacing:0;}
 .lfo-ext .lbmark{stroke:rgba(183,148,255,.55);stroke-width:1;stroke-dasharray:3 3;}
+#syn-panel .syn-ctx-menu.act{z-index:2147483646;}   /* fb231 — the canonical menu must beat the floating card (z 2147483645) */
 /* fb230 — THE CSS-SCOPE LAW strikes: the shaper skin is scoped #mod-engine; the card lives at body level.
    The hero needs its own copy or hit-circles render default-BLACK (the blob monster). */
 .lfo-ext .card-scope .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
@@ -22831,7 +22833,7 @@ restoreThemeFromBackend();
   var motion={};   // fb229 — per-LFO L5 motion (the card's state; rides the blob as mo:{})
   var shActiveSc=null;   // fb229 — the scope a gesture/menu came from (main pane OR the card hero); coordinate math resolves against THIS
   function shPaintAll(){ var m=root?root.querySelector('.mv-scope'):null; if(m)m.innerHTML=scopeSVG();
-    var c=document.querySelector('.lfo-ext .card-scope'); if(c){ c.innerHTML=scopeSVG(); bindShaper(c); } }
+    var c=document.querySelector('.lfo-ext .card-scope'); if(c){ c.innerHTML=scopeSVG(); var cs=c.querySelector('svg'); if(cs)cs.setAttribute('viewBox','0 2 456 76'); bindShaper(c); } }
   function moGet(){ shGet(); if(!motion[st.tab])motion[st.tab]={tg:1,lb:-1,dir:0,mn:0,ri:0,de:0,sm:0,sw:0,td:0,ho:1}; return motion[st.tab]; }
   function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
   function shEvalPts(pts,p){ p=((p%1)+1)%1; var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++;
@@ -23266,8 +23268,9 @@ restoreThemeFromBackend();
   function toast(m){ to.textContent=m; to.style.opacity='1'; clearTimeout(toT); toT=setTimeout(function(){to.style.opacity='0';},1400); }
 
   // ---- extender (body-level, draggable) ----
-  var ext=document.createElement('div'); ext.className='mv-ext lfo-ext'; document.body.appendChild(ext); var extPos=null;
-  if(window.__cardOnly==='lfo'){ ext.classList.add('ti-popcard'); setTimeout(function(){ try{ openExt(); ext.style.left='0px'; ext.style.top='0px'; }catch(e){} }, 120); }   // fb229 — ?card=lfo boot: this window IS the card
+  var ext=document.createElement('div'); ext.className='mv-ext lfo-ext';
+  (document.getElementById('syn-panel')||document.body).appendChild(ext); var extPos=null;   // fb231 — INSIDE the panel: the canonical menu (z100) now stacks above the card (z96); the old body-level card sat in the root context and beat every menu
+  if(window.__cardOnly==='lfo'){ ext.classList.add('ti-popcard'); setTimeout(function(){ try{ if(typeof setActivePanel==='function')setActivePanel('syn'); openExt(); ext.style.left='0px'; ext.style.top='0px'; }catch(e){} }, 160); }   // fb229/fb231 — ?card=lfo boot: the panel must be display:block for its child card to exist
   function editScope(w,h){var N=CUSTOM,d='';N.forEach(function(p,i){var x=p[0]*w,y=h-6-p[1]*(h-12);if(i===0)d+='M'+x+' '+y+' ';else{var pv=N[i-1],cx=(pv[0]+p[0])/2*w;d+='C'+cx+' '+(h-6-pv[1]*(h-12))+' '+cx+' '+y+' '+x+' '+y+' ';}});
     var fillD=d+'L'+w+' '+h+' L0 '+h+' Z';
     var gh=[.25,.5,.75].map(function(g){return '<line class="gl2" x1="0" y1="'+(h*g).toFixed(0)+'" x2="'+w+'" y2="'+(h*g).toFixed(0)+'"/>';}).join('');
@@ -23312,6 +23315,7 @@ restoreThemeFromBackend();
       +'</div>'
       +'<div class="ldots">'+dots+'</div>'
       +'<div class="chain2"><span>CHAIN</span><span class="slot2">'+st.tab+'</span></div>';
+    var csvg=ext.querySelector('.card-scope svg'); if(csvg)csvg.setAttribute('viewBox','0 2 456 76');   // fb231 — crop to the BAND (the main pane's footer strip left a dead bottom)
     ext.querySelector('.x').onclick=function(){ext.classList.remove('open');};
     ext.querySelector('#lc-pp').onclick=function(){ applyPreset((preIdx-1+LFOPRESETS.length)%LFOPRESETS.length); };
     ext.querySelector('#lc-px').onclick=function(){ applyPreset((preIdx+1)%LFOPRESETS.length); };
@@ -27587,7 +27591,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb230';   // bump per ship  [fb230 = the card hero wears the shaper skin (CSS-scope law: body-level card needs its own copy — the black-blob fix)]
+  var TERRAIN_BUILD = 'fb231';   // bump per ship  [fb231 = pop-out whitelist joins lfo + follower rides the VOICE on retrig/env + hero band crop + card panel-hosted (menus stack above)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

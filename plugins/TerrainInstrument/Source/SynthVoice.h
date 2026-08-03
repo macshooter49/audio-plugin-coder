@@ -423,6 +423,7 @@ namespace tw
          *  Cheap to call every block; copies a small POD struct. */
         // LFO ARC L1 — wire the drawn-shape tables (processor-owned audio mirror, stable
         // lifetime; set once at prepare — table CONTENT updates in place, never the pointer).
+        float lfoPhase (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? synthLfo_[k].currentPhase() : 0.0f; }   // fb231 — the follower's retrig truth
         void setLfoCustomTables (const float (*tables)[wc::kLfoTableN + 1]) noexcept
         {
             for (int i = 0; i < wc::NUM_LFOS; ++i) synthLfo_[i].setCustomTable (tables[i]);
