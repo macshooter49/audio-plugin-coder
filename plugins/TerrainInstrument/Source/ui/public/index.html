@@ -2519,6 +2519,20 @@ body {
 .lfo-ext .chain2{display:flex;align-items:center;gap:8px;padding:6px 14px 12px;font-size:8px;letter-spacing:1.8px;color:rgba(255,255,255,.4);}
 .lfo-ext .chain2 .slot2{width:16px;height:16px;border:1px solid rgba(255,255,255,.3);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#ECE8F2;letter-spacing:0;}
 .lfo-ext .lbmark{stroke:rgba(183,148,255,.55);stroke-width:1;stroke-dasharray:3 3;}
+/* fb230 — THE CSS-SCOPE LAW strikes: the shaper skin is scoped #mod-engine; the card lives at body level.
+   The hero needs its own copy or hit-circles render default-BLACK (the blob monster). */
+.lfo-ext .card-scope .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
+.lfo-ext .card-scope .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
+.lfo-ext .card-scope .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
+.lfo-ext .card-scope .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
+.lfo-ext .card-scope .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
+.lfo-ext .card-scope .sh-hit{fill:transparent;cursor:grab;}
+.lfo-ext .card-scope .sh-hit.cdh{cursor:ns-resize;}
+.lfo-ext .card-scope .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
+.lfo-ext .card-scope .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.8;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));}
+.lfo-ext .card-scope .mv-fill{fill:rgba(224,216,245,0.07);}
+.lfo-ext .card-scope .mv-play{stroke:rgba(236,232,242,.42);stroke-width:1;}
+.lfo-ext .card-scope .mv-foll{fill:#FFFFFF;filter:drop-shadow(0 0 5px rgba(167,139,250,0.7));}
 .mv-ext .h{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.025);}
 .mv-ext .h.grab{cursor:grabbing;}
 .mv-ext .h .g{letter-spacing:2px;color:#4a4f68;font-size:10px;} .mv-ext .h .tt{font-size:9px;letter-spacing:1.8px;color:#C5BFD2;text-transform:uppercase;font-weight:600;}
@@ -27573,7 +27587,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb229';   // bump per ship  [fb229 = THE LFO CARD: mockup B v4 wired live (two-screen mirror, motion controls, dots, loopback, popout) + 70 factory presets embedded]
+  var TERRAIN_BUILD = 'fb230';   // bump per ship  [fb230 = the card hero wears the shaper skin (CSS-scope law: body-level card needs its own copy — the black-blob fix)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
