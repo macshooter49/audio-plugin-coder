@@ -2597,7 +2597,7 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
   font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.40);}
 .ti-card .mix b{font-size:11px;font-weight:200;letter-spacing:.3px;color:rgba(255,255,255,.92);
   font-family:-apple-system,'SF Pro Display',sans-serif;min-width:27px;text-align:right;}
-.ti-card .h .pop{position:relative;top:2px;margin-left:12px;font-size:7px;   /* fb235 — 2px down: optically centered (Max) */letter-spacing:1.2px;text-transform:uppercase;
+.ti-card .h .pop{position:relative;top:1px;margin-left:12px;font-size:7px;   /* fb236 — MEASURED: ink center was +1.92px below the header line at 2px (title/Init/100%/x all within ±0.35); 1px = the optical center between Max's two readings */letter-spacing:1.2px;text-transform:uppercase;
   color:rgba(255,255,255,.45);font-weight:500;cursor:pointer;line-height:1;white-space:nowrap;}
 .ti-card .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px;cursor:pointer;line-height:1;}
 .ti-card .h .pop:hover,.ti-card .h .x:hover{color:#fff;}
@@ -23012,7 +23012,7 @@ restoreThemeFromBackend();
     function apply(ev){ var sc2=shActiveSc||root.querySelector('.mv-scope'); if(!sc2)return; var q=shPos(sc2,ev);
       var sp2=shGet(), ci=Math.max(0,Math.min(sp2.gv-1,Math.floor(q.x*sp2.gv))), lv=sp2.sn?shSnap(q.y,sp2.gh):q.y;
       if(ci===lastCi&&Math.abs(lv-lastLv)<0.002)return; lastCi=ci; lastLv=lv;
-      if(stampCell(q,T)){ shPaintAll(); shPush(); } }   // fb229 — both screens live during a stamp drag · fb235 — and the other WINDOW too
+      if(stampCell(q,T)){ shPaintAll(); shPush(); shLiveSend(); } }   // fb229 — both screens live during a stamp drag · fb235 — and the other WINDOW too
     apply(e);
     function mv(ev){ apply(ev); }
     function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); shTouched=true; shPush(); render(); }
@@ -23054,17 +23054,17 @@ restoreThemeFromBackend();
       var x0=e.clientX, y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
       var org=grp?sp.pts.map(function(p){return [p[0],p[1]];}):null, bnd=grp?shGrpBounds(sp,org):null;
       function mv(ev){ if(!did&&Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0)<3)return; did=true;   // fb220 — 3px threshold: a plain click can't nudge/snap-teleport the point (it was sabotaging dbl-click delete)
-        if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); shPush(); return; }   // fb208 — zero DETENT: straight is easy to hit
+        if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); shPush(); shLiveSend(); return; }   // fb208 — zero DETENT: straight is easy to hit
         if(grp){ var qg=shPos(sc,ev);
           var ax=(i===0||i===sp.pts.length-1)?org[i][0]:(sp.sn?shSnap(qg.x,sp.gv):qg.x), ay=sp.sn?shSnap(qg.y,sp.gh):qg.y;
           var gdx=Math.max(bnd.x0,Math.min(bnd.x1,ax-org[i][0])), gdy=Math.max(bnd.y0,Math.min(bnd.y1,ay-org[i][1]));
           shSel.forEach(function(si){ var ep=(si===0||si===sp.pts.length-1);
             sp.pts[si][0]=ep?org[si][0]:org[si][0]+gdx; sp.pts[si][1]=org[si][1]+gdy; });
-          shRefresh(); shPush(); return; }
+          shRefresh(); shPush(); shLiveSend(); return; }
         var q=shPos(sc,ev), lo=(i>0)?sp.pts[i-1][0]:0, hi=(i<sp.pts.length-1)?sp.pts[i+1][0]:1;   // fb208 — ties ALLOWED: stack two points = a true vertical step (the eval's later-point-rules handles it)
         var nx=(i===0)?0:(i===sp.pts.length-1?1:Math.max(lo,Math.min(hi,sp.sn?shSnap(q.x,sp.gv):q.x)));
         var ny=sp.sn?shSnap(q.y,sp.gh):q.y;
-        sp.pts[i][0]=nx; sp.pts[i][1]=ny; shRefresh(); shPush(); }
+        sp.pts[i][0]=nx; sp.pts[i][1]=ny; shRefresh(); shPush(); shLiveSend(); }
       function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e1){}
         svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
         if(did){ shTouched=true; shPush(); render(); }
@@ -23412,6 +23412,24 @@ restoreThemeFromBackend();
     ext.classList.add('open');
     extRefresh0(); }
   window.__openLfoCard=openExt;   // fb232 — the family card-only boot + __redockCard reach the card through this door
+  var __lfoWinTag = (window.__cardOnly==='lfo') ? 'card' : 'main';
+  var shLiveT=0;
+  function shLiveSend(){ /* fb236 — the 60Hz cross-window stroke wire (visual lane; the DSP rides shPush's own cadence) */
+    var nw=Date.now(); if(nw-shLiveT<16)return; shLiveT=nw;
+    try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('lfoLiveStroke'):null; if(!f)return;
+      var sp=shGet();
+      f(JSON.stringify({ src:__lfoWinTag, n:st.tab, nm:sp.nm||'',
+        pts:sp.pts.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)]; }) })); }catch(e){} }
+  window.__lfoLiveApply=function(o){ try{
+    if(!o||o.src===__lfoWinTag)return;
+    if(Date.now()-(window.__shTouchT||0)<250)return;   // a local gesture owns the graph
+    if(!(o.n>=1&&o.n<=10)||!o.pts||o.pts.length<2)return;
+    if(!shapes[o.n])shapes[o.n]={pts:[],gh:8,gv:8,sn:1};
+    var sp=shapes[o.n], changed=(sp.pts||[]).length!==o.pts.length;
+    sp.pts=o.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }); if(o.nm)sp.nm=o.nm;
+    if(o.n===st.tab){ if(st.shape!==7)st.shape=7;
+      if(changed)shPaintAll(); else shRefresh(); }   // count changed = rebuild both screens; else cheap attr updates
+  }catch(e){} };
   (function lfoXWinSync(){   // fb232 — TWO WINDOWS, ONE BLOB: whichever side edits, the other pulls (compare-gated; a fresh local edit outranks any pull for 1.5s)
     var last=null;
     setInterval(function(){
@@ -27667,7 +27685,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb235';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb236';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

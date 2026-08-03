@@ -863,6 +863,7 @@ private:
     // settles crisp (+ DPR push so canvases re-raster); junk host sizes self-heal
     // to the intended size until the user really drags
     double uiZoom_ = 1.0, restZoom_ = 1.0;
+    juce::int64 lfoLiveSeen_ = 0;   // fb236 — last relayed live-stroke seq
     int    zoomPushLeft_ = 0, zoomTick2_ = 0, settleTicks_ = 0, healTicks_ = 0;
     int    zoomVerifyTicks_ = 0;    // fb175 — countdown to the post-settle layout verify
     double pageVW_ = -1.0;          // fb175 — page-reported innerWidth (eval callback, message thread)

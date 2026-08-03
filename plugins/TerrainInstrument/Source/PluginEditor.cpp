@@ -656,6 +656,22 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 completion (audioProcessor.getSynthDynEnvsJson());
             })
+            .withNativeFunction("lfoLiveStroke", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion completion)
+            {
+                // fb236 — live-stroke visual lane (the DSP rides setSynthLfoShapes' own cadence)
+                if (args.size() > 0)
+                {
+                    auto j = args[0].toString();
+                    if (j.length() < 32768)
+                    {
+                        const juce::ScopedLock sl (audioProcessor.lfoLiveLock_);
+                        audioProcessor.lfoLiveJson_ = j;
+                        audioProcessor.lfoLiveSeq_.fetch_add (1, std::memory_order_release);
+                    }
+                }
+                completion ({});
+            })
             .withNativeFunction("setSynthLfoShapes", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion completion)
             {
@@ -4638,6 +4654,21 @@ public:
                     tiGrabWebKeys (web.get());   // fb134 — popped card windows type too
                     complete (juce::var{});
                 })
+                .withNativeFunction ("lfoLiveStroke", [&proc](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() > 0)
+                    {
+                        auto j = args[0].toString();
+                        if (j.length() < 32768)
+                        {
+                            const juce::ScopedLock sl (proc.lfoLiveLock_);
+                            proc.lfoLiveJson_ = j;
+                            proc.lfoLiveSeq_.fetch_add (1, std::memory_order_release);   // fb236 — the card side of the stroke wire
+                        }
+                    }
+                    complete (juce::var{});
+                })
                 .withNativeFunction ("setSynthLfoShapes", [&proc](const juce::Array<juce::var>& args,
                                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
@@ -5309,6 +5340,26 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             itL != audioProcessor.cardWindows_.end() && itL->second != nullptr)
             if (auto* cwv = dynamic_cast<TerrainCardWindow*> (itL->second.get()))
                 cwv->evalJs ("try{window.__mvLfoPh=[" + pArr + "];window.__mvLfoPhT=Date.now();}catch(e){}");
+    }
+
+    // fb236 — LIVE STROKE relay: a drawing gesture on either surface lands on the OTHER
+    // window at timer rate (60Hz). The 150ms poll lane only reconciles idle state now.
+    {
+        const auto liveSeq = audioProcessor.lfoLiveSeq_.load (std::memory_order_acquire);
+        if (liveSeq != lfoLiveSeen_)
+        {
+            lfoLiveSeen_ = liveSeq;
+            juce::String lj;
+            { const juce::ScopedLock sl (audioProcessor.lfoLiveLock_); lj = audioProcessor.lfoLiveJson_; }
+            if (lj.isNotEmpty() && lj.startsWithChar ('{'))
+            {
+                js << "try{if(window.__lfoLiveApply){window.__lfoLiveApply(" << lj << ");}}catch(e){}";
+                if (auto itW = audioProcessor.cardWindows_.find ("lfo");
+                    itW != audioProcessor.cardWindows_.end() && itW->second != nullptr)
+                    if (auto* cw2 = dynamic_cast<TerrainCardWindow*> (itW->second.get()))
+                        cw2->evalJs ("try{if(window.__lfoLiveApply){window.__lfoLiveApply(" + lj + ");}}catch(e){}");
+            }
+        }
     }
 
     // ── Sample engine MIDI followers (one playhead per held note) ──

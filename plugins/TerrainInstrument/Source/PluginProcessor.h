@@ -557,6 +557,11 @@ public:
     // on the message thread) or its own ✕/dock. Type-erased as juce::Component so the
     // concrete window class stays private to PluginEditor.cpp.
     std::map<juce::String, std::unique_ptr<juce::Component>> cardWindows_;
+    // fb236 — the cross-window LIVE STROKE lane: whichever surface is being drawn on posts
+    // the active shape here; the 60Hz editor timer relays it to the OTHER window's page.
+    juce::CriticalSection         lfoLiveLock_;
+    juce::String                  lfoLiveJson_;
+    std::atomic<juce::int64>      lfoLiveSeq_ { 0 };
     // fb145 — mod-drag blackboard: the main window streams LFO-chip drags here (screen
     // coords); popped card windows poll it each frame. Message thread only.
     int modDragLfo_ = 0, modDragPhase_ = 2;            // phase: 0 move · 1 drop · 2 idle
