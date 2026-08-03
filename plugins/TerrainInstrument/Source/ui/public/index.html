@@ -22917,6 +22917,34 @@ restoreThemeFromBackend();
   function seedTo(pts,nm){ shSelClear(); var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom';   // fb212 — grid/snap survive re-seeding; the chip wears the seed's name (no 'puts me on custom')
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
   function shConvert(){ if(st.shape===7)return; seedTo(seedFor(st.shape),SHORT[st.shape]); }
+  function shRand(kind){   // fb227 — THE RANDOM DICE (Max: 'complete randomness... random both goes the craziest'). One-shot UI RNG (the never-reseed law guards DSP RNG, not dice).
+    var sp=shGet(), n=sp.gv||8, pts=[], i, r=Math.random;
+    function lv(){ var y=r(); return sp.sn? shSnap(y,sp.gh) : y; }
+    if(kind===0){                              // FLAT — random steps on the Time grid (snap quantizes levels = instant rhythmic gates)
+      for(i=0;i<n;i++){ var y=lv(); pts.push([i/n,y,0]); pts.push([(i+1)/n,y,0]); }
+    } else if(kind===1){                       // CURVE — free-flowing breakpoints, every segment a random tension (snap ignored — curves want freedom)
+      var m=4+Math.floor(r()*5), xs=[];
+      pts.push([0,r(),r()*1.8-0.9]);
+      for(i=0;i<m;i++)xs.push(0.06+0.88*r()); xs.sort(function(a,b){return a-b;});
+      for(i=0;i<m;i++)pts.push([xs[i],r(),r()*1.8-0.9]);
+      pts.push([1,r(),0]);
+    } else {                                   // BOTH — the cell-walk chaos: steps, ramps, spikes, jumps and curves rolled per cell
+      var x=0; pts.push([0,lv(),0]);
+      while(x<1-1e-6){
+        var w=(1+Math.floor(r()*2))/n; if(x+w>1)w=1-x; var x1=x+w;
+        var pick=Math.floor(r()*4), a=lv(), b=lv();
+        if(pick===0){ pts.push([x,a,0]); pts.push([x1,a,0]); }                       // flat shelf
+        else if(pick===1){ pts.push([x,a,r()*1.8-0.9]); }                            // curved run toward whatever's next
+        else if(pick===2){ pts.push([x,a,0]); pts.push([x+w/2,b,0]); }               // triangle spike
+        else { pts.push([x,a,0]); pts.push([x,b,0]); }                               // vertical cliff
+        x=x1;
+      }
+      pts.push([1,lv(),0]);
+    }
+    pts.sort(function(a,b){return a[0]-b[0];});
+    pts[0][0]=0; pts[pts.length-1][0]=1;
+    if(pts.length>160)pts.length=160;
+    seedTo(pts,'Random'); }
   function shStampGesture(e,T){   // fb221 — ONE stamp gesture, two doors: an armed brush (fb213) or Shift-drag (the Serum step-sequencer gesture); doc-level drag survives the per-stamp rebuilds
     shSelClear();
     if(st.shape!==7){ shConvert(); }
@@ -23047,6 +23075,10 @@ restoreThemeFromBackend();
       { label:'Snap', isChecked:!!sp.sn, white:true, onPick:function(){ sp.sn=sp.sn?0:1; shTouched=true; shPush(); render(); } },
       { label:'Flip vertical', white:true, onPick:function(){ if(st.shape!==7)shConvert(); var g2=shGet(); shSelClear(); g2.pts.forEach(function(p){ p[1]=1-p[1]; }); shTouched=true; shPush(); render(); } },   // fb221 — mirror in level (tensions ride UNchanged — the y-mirror algebra cancels)
       { label:'Flip horizontal', white:true, onPick:function(){ if(st.shape!==7)shConvert(); var g2=shGet(); shSelClear(); g2.pts=shFlipH(g2.pts); shTouched=true; shPush(); render(); } },   // fb221 — mirror in time (segment tensions NEGATE — exact)
+      { isHeader:true, label:'Random' },   // fb227 — the dice: keepOpen so every click is a fresh roll (spam for joy)
+      { label:'Random flat', white:true, keepOpen:true, onPick:function(){ shRand(0); } },
+      { label:'Random curve', white:true, keepOpen:true, onPick:function(){ shRand(1); } },
+      { label:'Random both', white:true, keepOpen:true, onPick:function(){ shRand(2); } },
       { isHeader:true, label:'Shape' },
       tool('Point \u00b7 edit',0),
       tool('Straight line',1),
@@ -27413,7 +27445,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb226';   // bump per ship  [fb226 = the LFO source window trims to 3 visible rows]
+  var TERRAIN_BUILD = 'fb227';   // bump per ship  [fb227 = THE RANDOM DICE: Random flat / Random curve / Random both in the shaper right-click (keepOpen = every click a new roll)]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
