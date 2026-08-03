@@ -8,7 +8,7 @@
 /* fb82 — POPPED-CARD BOOT FLAG. A popped-out FLOW extension card is this SAME page
    loaded in its own native window with ?card=<id>; sniffed synchronously here (before
    any CSS/JS) so the card-only chrome applies from frame one — no full-UI flash. */
-window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod)/)||[])[1]||'';   /* fb149 — mod = the pop-out LFO palette */
+window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod|lfo)/)||[])[1]||'';   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */
 /* fb103 — CRISP AT ANY SIZE: the editor's settled pageZoom is pushed here; the
    devicePixelRatio the page sees becomes base×zoom (capped 3 for CPU), so every
    canvas that sizes buffers from clientWidth×dpr re-rasters at TRUE device
@@ -2483,6 +2483,42 @@ body {
 .mv-ext{position:fixed;z-index:2147483645;width:316px;background:#2A2A48;border:1px solid rgba(140,130,180,0.45);border-radius:12px;
   box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;}
 .mv-ext.open{display:block;}
+.lfo-ext{width:378px;background:linear-gradient(180deg,#26223E,#1C1932);border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.5);}
+.lfo-ext .h{cursor:grab;font-size:10px;position:relative;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.07);}
+.lfo-ext .h .nm{font-weight:600;letter-spacing:2.2px;font-size:11px;color:#ECE8F2;}
+.lfo-ext .h .dot{width:5px;height:5px;border-radius:50%;background:#8B5CF6;box-shadow:0 0 6px rgba(139,92,246,.8);}
+.lfo-ext .h .pset{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.75);cursor:default;}
+.lfo-ext .h .pa{color:rgba(255,255,255,.4);font-size:11px;cursor:pointer;padding:0 2px;}
+.lfo-ext .h .pa:hover{color:#fff;}
+.lfo-ext .h .pn{font-size:10px;letter-spacing:.5px;cursor:pointer;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lfo-ext .h .pn:hover{color:#fff;}
+.lfo-ext .h .sp{flex:1;}
+.lfo-ext .h .dep{color:rgba(255,255,255,.45);letter-spacing:1.6px;font-size:8.5px;cursor:ns-resize;}
+.lfo-ext .h .dep b{color:#fff;font-weight:400;font-size:10px;letter-spacing:0;}
+.lfo-ext .h .pop,.lfo-ext .h .x{color:rgba(255,255,255,.5);font-size:11px;cursor:pointer;}
+.lfo-ext .h .pop:hover,.lfo-ext .h .x:hover{color:#fff;}
+.lfo-ext .card-scope{margin:12px 12px 10px;background:rgba(10,9,20,.55);border:1px solid rgba(255,255,255,0.07);border-radius:8px;position:relative;overflow:hidden;}
+.lfo-ext .card-scope svg{display:block;width:100%;height:132px;}
+.lfo-ext .bz{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;padding:2px 14px 0;}
+.lfo-ext .bz+.bz{padding-top:7px;}
+.lfo-ext .bp2{text-align:center;font-size:8px;letter-spacing:1.4px;color:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:8px 0;cursor:pointer;transition:.12s;}
+.lfo-ext .bp2:hover{border-color:rgba(255,255,255,.4);color:#fff;}
+.lfo-ext .bp2.on{color:#0F0D1E;background:#ECE8F2;font-weight:600;border-color:transparent;}
+.lfo-ext .bp2.dim{opacity:.32;}
+.lfo-ext .kr{display:flex;justify-content:space-between;padding:14px 14px 4px;}
+.lfo-ext .kn2{text-align:center;cursor:ns-resize;}
+.lfo-ext .kn2 svg{display:block;margin:0 auto;}
+.lfo-ext .kl2{font-size:8px;letter-spacing:1.6px;color:rgba(255,255,255,.45);margin-top:4px;}
+.lfo-ext .kv2{font-size:10px;color:#fff;margin-top:2px;font-variant-numeric:tabular-nums;}
+.lfo-ext .ldots{display:flex;justify-content:space-between;padding:12px 14px 2px;}
+.lfo-ext .ld2{text-align:center;cursor:pointer;}
+.lfo-ext .ld2 .c2{width:8px;height:8px;border-radius:50%;border:1px solid rgba(255,255,255,.35);margin:0 auto;transition:.12s;}
+.lfo-ext .ld2:hover .c2{border-color:#fff;}
+.lfo-ext .ld2.on .c2{background:#ECE8F2;border-color:#ECE8F2;box-shadow:0 0 7px rgba(236,232,242,.6);}
+.lfo-ext .ld2 .n2{font-size:7px;color:rgba(255,255,255,.35);margin-top:4px;}
+.lfo-ext .chain2{display:flex;align-items:center;gap:8px;padding:6px 14px 12px;font-size:8px;letter-spacing:1.8px;color:rgba(255,255,255,.4);}
+.lfo-ext .chain2 .slot2{width:16px;height:16px;border:1px solid rgba(255,255,255,.3);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#ECE8F2;letter-spacing:0;}
+.lfo-ext .lbmark{stroke:rgba(183,148,255,.55);stroke-width:1;stroke-dasharray:3 3;}
 .mv-ext .h{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.025);}
 .mv-ext .h.grab{cursor:grabbing;}
 .mv-ext .h .g{letter-spacing:2px;color:#4a4f68;font-size:10px;} .mv-ext .h .tt{font-size:9px;letter-spacing:1.8px;color:#C5BFD2;text-transform:uppercase;font-weight:600;}
@@ -22778,6 +22814,11 @@ restoreThemeFromBackend();
   var SH_TOP=8, SH_BOT=70, SH_L=0, SH_R=456;   // fb210 — EDGE TO EDGE + the TOP RECLAIMED (Max: no emblems up there — spinners & Extend live in the right-click now, so the band ceiling rises to 8)
   function shX(x01){ return SH_L+(SH_R-SH_L)*x01; }
   var shapes={}, shTouched=false, shPushT=null;
+  var motion={};   // fb229 — per-LFO L5 motion (the card's state; rides the blob as mo:{})
+  var shActiveSc=null;   // fb229 — the scope a gesture/menu came from (main pane OR the card hero); coordinate math resolves against THIS
+  function shPaintAll(){ var m=root?root.querySelector('.mv-scope'):null; if(m)m.innerHTML=scopeSVG();
+    var c=document.querySelector('.lfo-ext .card-scope'); if(c){ c.innerHTML=scopeSVG(); bindShaper(c); } }
+  function moGet(){ shGet(); if(!motion[st.tab])motion[st.tab]={tg:1,lb:-1,dir:0,mn:0,ri:0,de:0,sm:0,sw:0,td:0,ho:1}; return motion[st.tab]; }
   function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
   function shEvalPts(pts,p){ p=((p%1)+1)%1; var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++;
     var a=pts[i],b=pts[i+1],w=b[0]-a[0]; if(w<=1e-6)return b[1];
@@ -22797,12 +22838,16 @@ restoreThemeFromBackend();
     return [[0,0,0],[.5,1,0],[1,0,0]]; }
   function shGet(){ if(!shapes[st.tab])shapes[st.tab]={pts:seedFor(1),gh:8,gv:8,sn:1}; return shapes[st.tab]; }
   function shPush(){ clearTimeout(shPushT); shPushT=setTimeout(function(){ try{
-      var out=[],k; for(k in shapes){ var sp=shapes[k]; out.push({n:+k,pts:sp.pts.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''}); }
+      var out=[],k; for(k in shapes){ var sp=shapes[k];
+        var en={n:+k,pts:sp.pts.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''};
+        if(motion[k])en.mo=motion[k];   // fb229 — motion rides beside the points
+        out.push(en); }
       var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setSynthLfoShapes'):null;
       if(f)f(JSON.stringify({shapes:out})); }catch(e){} },120); }
   function shPull(){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
     f().then(function(j){ if(shTouched)return; try{ var v=JSON.parse(j);   // RACE LAW: a local edit outranks any pull
-      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1) shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null}; });
+      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null};
+        if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:1,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1}; } });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
   function shY(y01){ return SH_BOT-(SH_BOT-SH_TOP)*y01; }
   function shPathD(pts,w){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
@@ -22828,6 +22873,7 @@ restoreThemeFromBackend();
       cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="10"/>'; });
     }
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
+      (function(){ var mo2=motion[st.tab]; return (mo2&&mo2.tg===2&&mo2.lb>=0)? '<line class="lbmark" x1="'+shX(mo2.lb).toFixed(1)+'" y1="'+SH_TOP+'" x2="'+shX(mo2.lb).toFixed(1)+'" y2="'+SH_BOT+'"/>':''; })()+
       '<line class="mv-play" id="mv-ph" x1="0" y1="'+(SH_TOP-4)+'" x2="0" y2="'+(SH_BOT+4)+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+shY(.5)+'" r="2.4"/>'+nd+cdm+hd+'</svg>'; }
   function stockVal(k,p){ p=((p%1)+1)%1;   // fb212 — ONE-CYCLE stock evaluator (the pane's single-cycle world; yfor keeps the 3-cycle look for icons/ext)
     if(k===0)return Math.sin(p*6.2831853); if(k===1)return 1-4*Math.abs(p-0.5);
@@ -22837,7 +22883,10 @@ restoreThemeFromBackend();
   function stockPathD(k){ var n=220,d='',i; for(i=0;i<=n;i++){ var t=(i>=n)?0.999999:i/n;
     d+=(i?'L':'M')+shX(i>=n?1:t).toFixed(1)+' '+shY((stockVal(k,t)+1)/2).toFixed(1)+' '; } return d; }
   function scopeSVG(){ return shaperSVG(); }   // fb212 — ONE WORLD (Max: 'the grid always plays the number one role'): every shape lives in the field
-  function shRefresh(){ var sc=root?root.querySelector('.mv-scope svg'):null; if(!sc)return; var sp=shGet(),w=456;
+  function shRefresh(){ shScopes().forEach(function(sc){ shRefreshOne(sc); }); }
+  function shScopes(){ var a=[]; var m=root?root.querySelector('.mv-scope svg'):null; if(m)a.push(m);
+    var c=document.querySelector('.lfo-ext .card-scope svg'); if(c)a.push(c); return a; }   // fb229 — the doctor's two screens
+  function shRefreshOne(sc){ if(!sc)return; var sp=shGet(),w=456;
     var stk=sc.querySelector('.mv-stroke'), fl=sc.querySelector('.mv-fill');
     var d=shPathD(sp.pts,w); if(stk)stk.setAttribute('d',d); if(fl)fl.setAttribute('d','M0 '+SH_BOT+' '+d.replace(/^M/,'L')+'L'+w+' '+SH_BOT+' Z');
     function updSel(sel,fn){ sc.querySelectorAll(sel).forEach(fn); }
@@ -22949,29 +22998,30 @@ restoreThemeFromBackend();
     shSelClear();
     if(st.shape!==7){ shConvert(); }
     var lastCi=-1,lastLv=-9;
-    function apply(ev){ var sc2=root.querySelector('.mv-scope'); if(!sc2)return; var q=shPos(sc2,ev);
+    function apply(ev){ var sc2=shActiveSc||root.querySelector('.mv-scope'); if(!sc2)return; var q=shPos(sc2,ev);
       var sp2=shGet(), ci=Math.max(0,Math.min(sp2.gv-1,Math.floor(q.x*sp2.gv))), lv=sp2.sn?shSnap(q.y,sp2.gh):q.y;
       if(ci===lastCi&&Math.abs(lv-lastLv)<0.002)return; lastCi=ci; lastLv=lv;
-      if(stampCell(q,T)){ var sc3=root.querySelector('.mv-scope'); if(sc3)sc3.innerHTML=scopeSVG(); } }
+      if(stampCell(q,T))shPaintAll(); }   // fb229 — both screens live during a stamp drag
     apply(e);
     function mv(ev){ apply(ev); }
     function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); shTouched=true; shPush(); render(); }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }
-  function bindShaper(){
-    var sc=root.querySelector('.mv-scope'); if(!sc)return;
+  function bindShaper(scArg){
+    var sc=scArg||root.querySelector('.mv-scope'); if(!sc)return;
     sc.style.cursor = shTool? 'crosshair' : '';
+    function arm(){ shActiveSc=sc; }   // fb229 — this container owns the coordinate space for the gesture
     if(shTool){   // fb213 — a BRUSH is armed: clicks/drags stamp cells (works from stock too — converts first); node editing pauses until Point is re-picked
-      sc.onpointerdown=function(e){ if(e.button===2)return; e.preventDefault(); shStampGesture(e,shTool); };
+      sc.onpointerdown=function(e){ if(e.button===2)return; arm(); e.preventDefault(); shStampGesture(e,shTool); };
       sc.ondblclick=null;
-      sc.oncontextmenu=function(e){ e.preventDefault(); shCtx(e); };   // fb220 — point delete works with a brush in hand too
+      sc.oncontextmenu=function(e){ arm(); e.preventDefault(); shCtx(e); };   // fb220 — point delete works with a brush in hand too
       return;
     }
     sc.onpointerdown=null;
-    if(st.shape!==7){ sc.onpointerdown=function(e){ if(!e.shiftKey||e.button===2)return; e.preventDefault(); shStampGesture(e,1); };   // fb221 — Shift-drag steps from a stock shape too (it converts under the first stamp)
-      sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ e.preventDefault(); shMenu(e); }; return; }   // fb212 — ONE menu everywhere; dbl-click a stock shape = its seed, editable in place
+    if(st.shape!==7){ sc.onpointerdown=function(e){ if(!e.shiftKey||e.button===2)return; arm(); e.preventDefault(); shStampGesture(e,1); };   // fb221 — Shift-drag steps from a stock shape too (it converts under the first stamp)
+      sc.ondblclick=function(){ shConvert(); }; sc.oncontextmenu=function(e){ arm(); e.preventDefault(); shMenu(e); }; return; }   // fb212 — ONE menu everywhere; dbl-click a stock shape = its seed, editable in place
     var svg=sc.querySelector('svg'); if(!svg)return;
     var sp=shGet();
-    sc.ondblclick=function(e){ if(e.shiftKey)return;   // fb221 — Shift belongs to step-draw
+    sc.ondblclick=function(e){ if(e.shiftKey)return; arm();   // fb221 — Shift belongs to step-draw
       var t=e.target, hitCd=t.classList&&t.classList.contains('cdh'), hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
       if(hitCd||hitNd) ni=+t.getAttribute('data-i');
       else { var nb=shNear(sc,e); if(nb){ if(nb.t==='cd')hitCd=true; else hitNd=true; ni=nb.i; } }   // fb210 — proximity dbl-click
@@ -22983,7 +23033,7 @@ restoreThemeFromBackend();
       var q=shPos(sc,e); var nx=sp.sn?shSnap(q.x,sp.gv):q.x, ny=sp.sn?shSnap(q.y,sp.gh):q.y;
       shSelClear(); sp.pts.push([nx,ny,0]); sp.pts.sort(function(a,b){return a[0]-b[0];});
       shTouched=true; shPush(); render(); };
-    svg.addEventListener('pointerdown',function(e){ var t=e.target, isCd=false, i=-1;
+    svg.addEventListener('pointerdown',function(e){ var t=e.target, isCd=false, i=-1; arm();
       if(e.shiftKey&&e.button!==2){ e.preventDefault(); shStampGesture(e,1); return; }   // fb221 — Shift-drag = DRAW STEPS at the grid size (the Serum step-sequencer gesture), wherever you press
       if(t.classList&&t.classList.contains('sh-hit')){ isCd=t.classList.contains('cdh'); i=+t.getAttribute('data-i'); }
       else { var nb=shNear(sc,e); if(!nb){ if(e.button===0)shBand(svg,sc,e); return; } isCd=(nb.t==='cd'); i=nb.i; }   // fb210 — the Serum grab: near counts, no aiming · fb221 — empty ground = rubber-band select
@@ -23009,7 +23059,7 @@ restoreThemeFromBackend();
         if(did){ shTouched=true; shPush(); render(); }
         else if(!isCd&&!grp){ shSel=[i]; shSelTab=st.tab; shSelPaint(); } }   // no-move release skips render (dbl-click delete still fires) · fb222 — a plain click SELECTS the point (Delete key works on singles)
       svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); });
-    sc.oncontextmenu=function(e){ e.preventDefault(); shCtx(e); };
+    sc.oncontextmenu=function(e){ arm(); e.preventDefault(); shCtx(e); };
   }
   function shRedRow(txt,fn){   // fb220 — the red action row (the pane's danger red; canonical-menu node)
     var d=document.createElement('div');
@@ -23021,7 +23071,7 @@ restoreThemeFromBackend();
     return d; }
   function shCtx(e){   // fb220 — right-click ON a point = the point's own menu (Max: 'right click, delete, gone'); anywhere else = the control room
     var sp=shGet(), nb=(st.shape===7)?shNear(sc0(),e):null;
-    function sc0(){ return root.querySelector('.mv-scope'); }
+    function sc0(){ return shActiveSc||root.querySelector('.mv-scope'); }
     if(st.shape===7&&shSel.length>1&&window.__synShowMenu){   // fb221 — with a selection down, the right-click serves the selection; click empty ground to get the control room back
       window.__synShowMenu('', [
         { node: shRedRow('Remove selected', function(){ shDelSel(); }) }
@@ -23067,7 +23117,12 @@ restoreThemeFromBackend();
   }
   function shMenu(e){   // fb213 — Grid header retired; sliders wear MATCHED emblems; the Shape section = TOOL RADIOS (brushes), not preset loaders (Max's Serum-tools call)
     if(!window.__synShowMenu) return;
-    var sp=shGet();
+    var sp=shGet(), moM=moGet(), lbRows=[];
+    if(moM.tg===2){   // fb229 — LOOPBACK lives in Env mode: plant the marker where you clicked
+      var q0=shPos(shActiveSc||root.querySelector('.mv-scope'),e);
+      lbRows.push({ label:'Set loopback point here', white:true, onPick:function(){ moM.lb=+q0.x.toFixed(3); shTouched=true; shPush(); render(); } });
+      if(moM.lb>=0) lbRows.push({ label:'Remove loopback point', white:true, onPick:function(){ moM.lb=-1; shTouched=true; shPush(); render(); } });
+    }
     function tool(lbl,t){ return { label:lbl, isChecked:shTool===t, white:true, onPick:function(){ shTool=(shTool===t&&t!==0)?0:t; render(); } }; }
     window.__synShowMenu('', [
       { node:gridSliderNode('lv','gh') },
@@ -23089,7 +23144,7 @@ restoreThemeFromBackend();
       tool('Sine',6),
       { isHeader:true, label:'Window' },
       { label:'Extend', white:true, onPick:function(){ openExt(); } }
-    ], e.clientX, e.clientY);
+    ].concat(lbRows.length?[{isHeader:true,label:'Loopback'}].concat(lbRows):[]), e.clientX, e.clientY);
   }
   function yfor(k,t){var c=(k===7?1:CYC),p=(t*c)%1;   // fb206 — Custom draws ONE cycle (the editor IS the cycle)
     if(k===0)return Math.sin(t*Math.PI*2*c); if(k===1)return p<0.5?(p*4-1):(3-p*4);
@@ -23147,7 +23202,8 @@ restoreThemeFromBackend();
       +'</div>'
       +'<div class="mv-err"></div>';
   }
-  function render(){ root.innerHTML=front(); root.classList.add('shp'); errEl=root.querySelector('.mv-err'); bindFront(); }   // fb212 — the ruler is permanent (one world, one footer)
+  function render(){ root.innerHTML=front(); root.classList.add('shp'); errEl=root.querySelector('.mv-err'); bindFront();
+    if(ext&&ext.classList.contains('open'))extRefresh(); }   // fb212 — the ruler is permanent · fb229 — the card follows every tab hop and edit
 
   // ---- body-level menu (glass) ----
   var menu=document.createElement('div'); menu.className='mv-menu'; document.body.appendChild(menu);
@@ -23196,7 +23252,8 @@ restoreThemeFromBackend();
   function toast(m){ to.textContent=m; to.style.opacity='1'; clearTimeout(toT); toT=setTimeout(function(){to.style.opacity='0';},1400); }
 
   // ---- extender (body-level, draggable) ----
-  var ext=document.createElement('div'); ext.className='mv-ext'; document.body.appendChild(ext); var extPos=null;
+  var ext=document.createElement('div'); ext.className='mv-ext lfo-ext'; document.body.appendChild(ext); var extPos=null;
+  if(window.__cardOnly==='lfo'){ ext.classList.add('ti-popcard'); setTimeout(function(){ try{ openExt(); ext.style.left='0px'; ext.style.top='0px'; }catch(e){} }, 120); }   // fb229 — ?card=lfo boot: this window IS the card
   function editScope(w,h){var N=CUSTOM,d='';N.forEach(function(p,i){var x=p[0]*w,y=h-6-p[1]*(h-12);if(i===0)d+='M'+x+' '+y+' ';else{var pv=N[i-1],cx=(pv[0]+p[0])/2*w;d+='C'+cx+' '+(h-6-pv[1]*(h-12))+' '+cx+' '+y+' '+x+' '+y+' ';}});
     var fillD=d+'L'+w+' '+h+' L0 '+h+' Z';
     var gh=[.25,.5,.75].map(function(g){return '<line class="gl2" x1="0" y1="'+(h*g).toFixed(0)+'" x2="'+w+'" y2="'+(h*g).toFixed(0)+'"/>';}).join('');
@@ -23204,32 +23261,103 @@ restoreThemeFromBackend();
     var dots=N.map(function(p){return '<circle class="nd" cx="'+(p[0]*w).toFixed(0)+'" cy="'+(h-6-p[1]*(h-12)).toFixed(0)+'" r="3.4"/>';}).join('');
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+gh+gv+'<path class="fl" d="'+fillD+'"/><path class="st" d="'+d+'"/></svg><svg viewBox="0 0 '+w+' '+h+'" style="position:absolute;inset:0">'+dots+'</svg>';}
   function MK(l,v,n){return '<div class="mk"><div class="dn" style="background:'+DONBG(n)+'"></div><div class="kl">'+l+'</div><div class="kv">'+v+'</div></div>';}
+  var LFOPRESETS=[{"k":"Basic","n":"Sine","p":[[0,0.5,0.42],[0.25,1,-0.42],[0.5,0.5,0.42],[0.75,0,-0.42],[1,0.5,0]]},{"k":"Basic","n":"Triangle","p":[[0,0,0],[0.5,1,0],[1,0,0]]},{"k":"Basic","n":"Saw up","p":[[0,0,0],[1,1,0]]},{"k":"Basic","n":"Saw down","p":[[0,1,0],[1,0,0]]},{"k":"Basic","n":"Square","p":[[0,1,0],[0.5,1,0],[0.5,0,0],[1,0,0]]},{"k":"Basic","n":"Pulse 25","p":[[0,1,0],[0.25,1,0],[0.25,0,0],[1,0,0]]},{"k":"Basic","n":"Pulse 75","p":[[0,1,0],[0.75,1,0],[0.75,0,0],[1,0,0]]},{"k":"Basic","n":"Half sine","p":[[0,0,0.42],[0.25,1,-0.42],[0.5,0,0],[1,0,0]]},{"k":"Basic","n":"Exp fall","p":[[0,1,0.6],[1,0,0]]},{"k":"Basic","n":"Exp rise","p":[[0,0,-0.6],[1,1,0]]},{"k":"Rhythmic","n":"Gate 1/4","p":[[0.0,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 1/8","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 1/16","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9375,1,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 3-3-2","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Offbeat 1/8","p":[[0.0,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[1.0,1,-0.0]]},{"k":"Rhythmic","n":"Stutter 4+rest","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Build 1/16","p":[[0.0,0.0625,-0.0],[0.0625,0.0625,-0.0],[0.0625,0.125,-0.0],[0.125,0.125,-0.0],[0.125,0.1875,-0.0],[0.1875,0.1875,-0.0],[0.1875,0.25,-0.0],[0.25,0.25,-0.0],[0.25,0.3125,-0.0],[0.3125,0.3125,-0.0],[0.3125,0.375,-0.0],[0.375,0.375,-0.0],[0.375,0.4375,-0.0],[0.4375,0.4375,-0.0],[0.4375,0.5,-0.0],[0.5,0.5,-0.0],[0.5,0.5625,-0.0],[0.5625,0.5625,-0.0],[0.5625,0.625,-0.0],[0.625,0.625,-0.0],[0.625,0.6875,-0.0],[0.6875,0.6875,-0.0],[0.6875,0.75,-0.0],[0.75,0.75,-0.0],[0.75,0.8125,-0.0],[0.8125,0.8125,-0.0],[0.8125,0.875,-0.0],[0.875,0.875,-0.0],[0.875,0.9375,-0.0],[0.9375,0.9375,-0.0],[0.9375,1.0,-0.0],[1.0,1.0,-0.0]]},{"k":"Rhythmic","n":"Fall 1/16","p":[[0.0,1.0,-0.0],[0.0625,1.0,-0.0],[0.0625,0.9375,-0.0],[0.125,0.9375,-0.0],[0.125,0.875,-0.0],[0.1875,0.875,-0.0],[0.1875,0.8125,-0.0],[0.25,0.8125,-0.0],[0.25,0.75,-0.0],[0.3125,0.75,-0.0],[0.3125,0.6875,-0.0],[0.375,0.6875,-0.0],[0.375,0.625,-0.0],[0.4375,0.625,-0.0],[0.4375,0.5625,-0.0],[0.5,0.5625,-0.0],[0.5,0.5,-0.0],[0.5625,0.5,-0.0],[0.5625,0.4375,-0.0],[0.625,0.4375,-0.0],[0.625,0.375,-0.0],[0.6875,0.375,-0.0],[0.6875,0.3125,-0.0],[0.75,0.3125,-0.0],[0.75,0.25,-0.0],[0.8125,0.25,-0.0],[0.8125,0.1875,-0.0],[0.875,0.1875,-0.0],[0.875,0.125,-0.0],[0.9375,0.125,-0.0],[0.9375,0.0625,-0.0],[1.0,0.0625,-0.0]]},{"k":"Rhythmic","n":"Trance gate A","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.4375,0,-0.0],[0.4375,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Trance gate B","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.6,-0.0],[0.375,0.6,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.6,-0.0],[0.75,0.6,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Polyrhythm 3v4","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.25,0,-0.0],[0.25,0.8,-0.0],[0.3333,0.8,-0.0],[0.3333,0.55,-0.0],[0.4167,0.55,-0.0],[0.4167,0,-0.0],[0.5,0,-0.0],[0.5,0.8,-0.0],[0.5833,0.8,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.55,-0.0],[0.75,0.55,-0.0],[0.75,0.8,-0.0],[0.8333,0.8,-0.0],[0.8333,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Swing gate","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.1667,0,-0.0],[0.1667,0.7,-0.0],[0.25,0.7,-0.0],[0.25,1,-0.0],[0.3333,1,-0.0],[0.3333,0,-0.0],[0.4167,0,-0.0],[0.4167,0.7,-0.0],[0.5,0.7,-0.0],[0.5,1,-0.0],[0.5833,1,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.7,-0.0],[0.75,0.7,-0.0],[0.75,1,-0.0],[0.8333,1,-0.0],[0.8333,0,-0.0],[0.9167,0,-0.0],[0.9167,0.7,-0.0],[1.0,0.7,-0.0]]},{"k":"Rhythmic","n":"Broken gate","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.6,-0.0],[0.8125,0.6,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9375,1,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Long-short","p":[[0.0,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Ratchet end","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.7812,1,-0.0],[0.7812,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.8438,1,-0.0],[0.8438,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9062,1,-0.0],[0.9062,0,-0.0],[0.9375,0,-0.0],[0.9375,1,-0.0],[0.9688,1,-0.0],[0.9688,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Ghost 8ths","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.5,-0.0],[0.1875,0.5,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,0.5,-0.0],[0.6875,0.5,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Son clave","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Quint gate","p":[[0.0,1,-0.0],[0.1,1,-0.0],[0.1,0,-0.0],[0.2,0,-0.0],[0.2,1,-0.0],[0.3,1,-0.0],[0.3,0,-0.0],[0.4,0,-0.0],[0.4,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.6,0,-0.0],[0.6,1,-0.0],[0.7,1,-0.0],[0.7,0,-0.0],[0.8,0,-0.0],[0.8,1,-0.0],[0.9,1,-0.0],[0.9,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Amen chop","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.9,-0.0],[0.1875,0.9,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.4375,0,-0.0],[0.4375,0.5,-0.0],[0.5,0.5,-0.0],[0.5,0,-0.0],[0.5625,0,-0.0],[0.5625,0.5,-0.0],[0.625,0.5,-0.0],[0.625,0.9,-0.0],[0.6875,0.9,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"Think break","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.4,-0.0],[0.25,0.4,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.4,-0.0],[0.8125,0.4,-0.0],[0.8125,0.9,-0.0],[0.875,0.9,-0.0],[0.875,0,-0.0],[0.9375,0,-0.0],[0.9375,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"Apache","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.4,-0.0],[0.25,0.4,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0.4,-0.0],[0.625,0.4,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.4,-0.0],[0.75,0.4,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"2-step shuffle","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.4375,0,-0.0],[0.4375,0.6,-0.0],[0.5,0.6,-0.0],[0.5,0,-0.0],[0.625,0,-0.0],[0.625,0.7,-0.0],[0.6875,0.7,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.5,-0.0],[1.0,0.5,-0.0]]},{"k":"Breakbeat","n":"Jungle roller","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0.3,-0.0],[0.125,0.3,-0.0],[0.125,0.5,-0.0],[0.1875,0.5,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,0.9,-0.0],[0.3125,0.9,-0.0],[0.3125,0.3,-0.0],[0.375,0.3,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0.6,-0.0],[0.5,0.6,-0.0],[0.5,0.4,-0.0],[0.5625,0.4,-0.0],[0.5625,0.3,-0.0],[0.625,0.3,-0.0],[0.625,0.8,-0.0],[0.6875,0.8,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0.4,-0.0],[0.875,0.4,-0.0],[0.875,0.6,-0.0],[0.9375,0.6,-0.0],[0.9375,0.3,-0.0],[1.0,0.3,-0.0]]},{"k":"Breakbeat","n":"Halftime snare","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.4,-0.0],[0.875,0.4,-0.0],[0.875,0,-0.0],[0.9375,0,-0.0],[0.9375,0.5,-0.0],[1.0,0.5,-0.0]]},{"k":"Breakbeat","n":"Ghost note groove","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0.3,-0.0],[0.125,0.3,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.3,-0.0],[0.5,0.3,-0.0],[0.5,0.6,-0.0],[0.5625,0.6,-0.0],[0.5625,0.3,-0.0],[0.625,0.3,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0.3,-0.0],[0.875,0.3,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0.3,-0.0],[1.0,0.3,-0.0]]},{"k":"Breakbeat","n":"Backbeat duck","p":[[0.0,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.5,-0.0],[0.875,0.5,-0.0],[0.875,1,-0.0],[1.0,1,-0.0]]},{"k":"Breakbeat","n":"Roll-up","p":[[0.0,0.5,-0.0],[0.08,0.5,-0.0],[0.08,0.0,-0.0],[0.25,0.0,-0.0],[0.25,0.55,-0.0],[0.32,0.55,-0.0],[0.32,0.0,-0.0],[0.5,0.0,-0.0],[0.5,0.65,-0.0],[0.56,0.65,-0.0],[0.56,0.0,-0.0],[0.625,0.0,-0.0],[0.625,0.7,-0.0],[0.675,0.7,-0.0],[0.675,0.0,-0.0],[0.75,0.0,-0.0],[0.75,0.78,-0.0],[0.79,0.78,-0.0],[0.79,0.0,-0.0],[0.8125,0.0,-0.0],[0.8125,0.85,-0.0],[0.8475,0.85,-0.0],[0.8475,0.0,-0.0],[0.875,0.0,-0.0],[0.875,0.9,-0.0],[0.9,0.9,-0.0],[0.9,0.0,-0.0],[0.9062,0.0,-0.0],[0.9062,0.95,-0.0],[0.9313,0.95,-0.0],[0.9313,0.0,-0.0],[0.9375,0.0,-0.0],[0.9375,1.0,-0.0],[0.9575,1.0,-0.0],[0.9575,0.0,-0.0],[0.9688,0.0,-0.0],[0.9688,1.0,-0.0],[0.9888,1.0,-0.0],[0.9888,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"Breakbeat","n":"Chopped 3/16","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.8,-0.0],[0.25,0.8,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,0.9,-0.0],[0.4375,0.9,-0.0],[0.4375,0,-0.0],[0.5625,0,-0.0],[0.5625,0.8,-0.0],[0.625,0.8,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.7,-0.0],[1.0,0.7,-0.0]]},{"k":"Breakbeat","n":"Stab pattern","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.3125,0,-0.0],[0.3125,0.9,-0.0],[0.375,0.9,-0.0],[0.375,0,-0.0],[0.625,0,-0.0],[0.625,0.8,-0.0],[0.6875,0.8,-0.0],[0.6875,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Drag triplet","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.1667,0,-0.0],[0.1667,0.5,-0.0],[0.25,0.5,-0.0],[0.25,0,-0.0],[0.3333,0,-0.0],[0.3333,0.8,-0.0],[0.4167,0.8,-0.0],[0.4167,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5833,1,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.5,-0.0],[0.8333,0.5,-0.0],[0.8333,0.9,-0.0],[0.9167,0.9,-0.0],[0.9167,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Skippy hats","p":[[0.0,0,-0.0],[0.0625,0,-0.0],[0.0625,0.6,-0.0],[0.125,0.6,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,0.7,-0.0],[0.4375,0.7,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.6,-0.0],[0.5625,0.6,-0.0],[0.5625,0,-0.0],[0.6875,0,-0.0],[0.6875,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.6,-0.0],[0.875,0.6,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Break fill","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.4,-0.0],[0.1875,0.4,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,0.4,-0.0],[0.6875,0.4,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.5,-0.0],[0.7812,0.5,-0.0],[0.7812,0.6,-0.0],[0.8125,0.6,-0.0],[0.8125,0.7,-0.0],[0.8438,0.7,-0.0],[0.8438,0.75,-0.0],[0.875,0.75,-0.0],[0.875,0.8,-0.0],[0.9062,0.8,-0.0],[0.9062,0.9,-0.0],[0.9375,0.9,-0.0],[0.9375,1,-0.0],[1.0,1,-0.0]]},{"k":"IDM","n":"Bitcrush stairs","p":[[0.0,0.2,-0.0],[0.1,0.2,-0.0],[0.1,0.9,-0.0],[0.2,0.9,-0.0],[0.2,0.4,-0.0],[0.3,0.4,-0.0],[0.3,0.65,-0.0],[0.4,0.65,-0.0],[0.4,0.1,-0.0],[0.5,0.1,-0.0],[0.5,1,-0.0],[0.6,1,-0.0],[0.6,0.3,-0.0],[0.7,0.3,-0.0],[0.7,0.75,-0.0],[0.8,0.75,-0.0],[0.8,0.5,-0.0],[0.9,0.5,-0.0],[0.9,0.05,-0.0],[1.0,0.05,-0.0]]},{"k":"IDM","n":"Glitch scatter","p":[[0.0,0.0,-0.0],[0.03,0.0,-0.0],[0.03,1.0,-0.0],[0.05,1.0,-0.0],[0.05,0.0,-0.0],[0.11,0.0,-0.0],[0.11,0.7,-0.0],[0.125,0.7,-0.0],[0.125,0.0,-0.0],[0.27,0.0,-0.0],[0.27,0.9,-0.0],[0.29,0.9,-0.0],[0.29,0.0,-0.0],[0.31,0.0,-0.0],[0.31,0.5,-0.0],[0.325,0.5,-0.0],[0.325,0.0,-0.0],[0.55,0.0,-0.0],[0.55,1.0,-0.0],[0.57,1.0,-0.0],[0.57,0.0,-0.0],[0.62,0.0,-0.0],[0.62,0.6,-0.0],[0.63,0.6,-0.0],[0.63,0.0,-0.0],[0.83,0.0,-0.0],[0.83,0.85,-0.0],[0.85,0.85,-0.0],[0.85,0.0,-0.0],[0.91,0.0,-0.0],[0.91,0.4,-0.0],[0.925,0.4,-0.0],[0.925,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"IDM","n":"Datamosh","p":[[0,0.7,0],[0.09,0.7,0],[0.09,0.2,-0.5],[0.22,0.9,0],[0.22,0.35,0.6],[0.4,0.6,0],[0.4,1,0],[0.52,1,0],[0.52,0.1,0],[0.66,0.1,-0.7],[0.8,0.8,0],[0.8,0.45,0.4],[0.93,0.15,0],[0.93,0.75,0],[1,0.7,0]]},{"k":"IDM","n":"Elastic bounce","p":[[0,1,-0.5],[0.3,0,0.5],[0.5,0.55,-0.5],[0.65,0,0.5],[0.78,0.3,-0.5],[0.87,0,0.5],[0.94,0.15,-0.55],[1,0,0]]},{"k":"IDM","n":"Zipper","p":[[0,1,-0.0],[0.28,1,-0.0],[0.28,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.66,1,-0.0],[0.66,0,-0.0],[0.78,0,-0.0],[0.78,1,-0.0],[0.86,1,-0.0],[0.86,0,-0.0],[0.92,0,-0.0],[0.92,1,-0.0],[0.96,1,-0.0],[0.96,0,-0.0],[0.98,0,-0.0],[0.98,1,-0.0],[1.0,1,-0.0]]},{"k":"IDM","n":"Morse","p":[[0.0,1,-0.0],[0.0357,1,-0.0],[0.0357,0,-0.0],[0.0714,0,-0.0],[0.0714,1,-0.0],[0.1071,1,-0.0],[0.1071,0,-0.0],[0.2143,0,-0.0],[0.2143,1,-0.0],[0.3214,1,-0.0],[0.3214,0,-0.0],[0.3571,0,-0.0],[0.3571,1,-0.0],[0.3929,1,-0.0],[0.3929,0,-0.0],[0.4286,0,-0.0],[0.4286,1,-0.0],[0.4643,1,-0.0],[0.4643,0,-0.0],[0.5714,0,-0.0],[0.5714,1,-0.0],[0.6786,1,-0.0],[0.6786,0,-0.0],[0.7143,0,-0.0],[0.7143,1,-0.0],[0.8214,1,-0.0],[0.8214,0,-0.0],[1.0,0,-0.0]]},{"k":"IDM","n":"Probability rain","p":[[0.0,0.0,-0.0],[0.07,0.0,-0.0],[0.07,0.8,-0.0],[0.085,0.8,-0.0],[0.085,0.0,-0.0],[0.19,0.0,-0.0],[0.19,0.4,-0.0],[0.202,0.4,-0.0],[0.202,0.0,-0.0],[0.23,0.0,-0.0],[0.23,1.0,-0.0],[0.248,1.0,-0.0],[0.248,0.0,-0.0],[0.41,0.0,-0.0],[0.41,0.6,-0.0],[0.424,0.6,-0.0],[0.424,0.0,-0.0],[0.59,0.0,-0.0],[0.59,0.9,-0.0],[0.61,0.9,-0.0],[0.61,0.0,-0.0],[0.66,0.0,-0.0],[0.66,0.3,-0.0],[0.672,0.3,-0.0],[0.672,0.0,-0.0],[0.79,0.0,-0.0],[0.79,0.7,-0.0],[0.806,0.7,-0.0],[0.806,0.0,-0.0],[0.93,0.0,-0.0],[0.93,0.5,-0.0],[0.944,0.5,-0.0],[0.944,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"IDM","n":"Sawtooth fractal","p":[[0,0,0],[0.25,0.5,0],[0.25,0.17,0],[0.5,0.67,0],[0.5,0.33,0],[0.75,0.83,0],[0.75,0.5,0],[1,1,0]]},{"k":"IDM","n":"Wonky lean","p":[[0,0.3,-0.6],[0.37,1,0],[0.37,0.55,0.5],[0.62,0.2,0],[0.62,0.75,0],[0.8,0.75,0],[0.8,0.05,-0.6],[1,0.3,0]]},{"k":"IDM","n":"Granular flutter","p":[[0.0,0.73,-0.0],[0.0417,0.73,-0.0],[0.0417,0.4088,-0.0],[0.0833,0.4088,-0.0],[0.0833,0.805,-0.0],[0.125,0.805,-0.0],[0.125,0.4761,-0.0],[0.1667,0.4761,-0.0],[0.1667,0.8599,-0.0],[0.2083,0.8599,-0.0],[0.2083,0.5149,-0.0],[0.25,0.5149,-0.0],[0.25,0.88,-0.0],[0.2917,0.88,-0.0],[0.2917,0.5149,-0.0],[0.3333,0.5149,-0.0],[0.3333,0.8599,-0.0],[0.375,0.8599,-0.0],[0.375,0.4761,-0.0],[0.4167,0.4761,-0.0],[0.4167,0.805,-0.0],[0.4583,0.805,-0.0],[0.4583,0.4088,-0.0],[0.5,0.4088,-0.0],[0.5,0.73,-0.0],[0.5417,0.73,-0.0],[0.5417,0.3312,-0.0],[0.5833,0.3312,-0.0],[0.5833,0.655,-0.0],[0.625,0.655,-0.0],[0.625,0.2639,-0.0],[0.6667,0.2639,-0.0],[0.6667,0.6001,-0.0],[0.7083,0.6001,-0.0],[0.7083,0.2251,-0.0],[0.75,0.2251,-0.0],[0.75,0.58,-0.0],[0.7917,0.58,-0.0],[0.7917,0.2251,-0.0],[0.8333,0.2251,-0.0],[0.8333,0.6001,-0.0],[0.875,0.6001,-0.0],[0.875,0.2639,-0.0],[0.9167,0.2639,-0.0],[0.9167,0.655,-0.0],[0.9583,0.655,-0.0],[0.9583,0.3312,-0.0],[1.0,0.3312,-0.0]]},{"k":"IDM","n":"Tape stop","p":[[0,1,0],[0.15,1,-0.5],[0.85,0,0],[1,0,0]]},{"k":"IDM","n":"VHS warble","p":[[0,0.6,0.35],[0.18,0.78,0],[0.18,0.72,-0.35],[0.38,0.5,0.35],[0.55,0.62,0],[0.55,0.68,-0.3],[0.75,0.45,0.3],[0.9,0.55,0],[0.9,0.58,0],[1,0.6,0]]},{"k":"IDM","n":"Circuit bent","p":[[0,0.5,0],[0.12,0.5,0],[0.12,1,0.7],[0.3,0.2,0],[0.3,0.85,0],[0.45,0.85,-0.6],[0.6,0.05,0],[0.6,0.6,0.5],[0.85,0.3,0],[0.85,0.9,-0.8],[1,0.5,0]]},{"k":"IDM","n":"Autechre","p":[[0,0.85,-0.0],[0.11,0.85,-0.0],[0.11,0.3,-0.0],[0.17,0.3,-0.0],[0.17,0.65,-0.0],[0.31,0.65,-0.0],[0.31,0.1,-0.0],[0.36,0.1,-0.0],[0.36,0.9,-0.0],[0.5,0.9,-0.0],[0.5,0.45,-0.0],[0.58,0.45,-0.0],[0.58,0.7,-0.0],[0.69,0.7,-0.0],[0.69,0.2,-0.0],[0.81,0.2,-0.0],[0.81,1,-0.0],[0.86,1,-0.0],[0.86,0.05,-0.0],[0.94,0.05,-0.0],[0.94,0.85,-0.0],[1.0,0.85,-0.0]]},{"k":"Sidechain","n":"Pump 1/4","p":[[0,0,0.5],[0.7,1,0],[1,1,0]]},{"k":"Sidechain","n":"Pump 1/2","p":[[0,0,0.45],[0.45,1,0],[1,1,0]]},{"k":"Sidechain","n":"Pump 1/8","p":[[0,0,0.6],[0.85,1,0],[1,1,0]]},{"k":"Sidechain","n":"Soft duck","p":[[0,0.4,0.4],[0.55,1,0],[1,1,0]]},{"k":"Sidechain","n":"Hard slam","p":[[0,0,0],[0.65,0,0.7],[0.95,1,0],[1,1,0]]},{"k":"Sidechain","n":"Double pump","p":[[0,0,0.5],[0.4,1,0],[0.5,1,0],[0.5,0,0.5],[0.9,1,0],[1,1,0]]},{"k":"Sidechain","n":"Triplet pump","p":[[0,0,0.5],[0.27,1,0],[0.3333,1,0],[0.3333,0,0.5],[0.6,1,0],[0.6667,1,0],[0.6667,0,0.5],[0.94,1,0],[1,1,0]]},{"k":"Sidechain","n":"Late recover","p":[[0,0,-0.4],[0.6,0.25,0.5],[0.9,1,0],[1,1,0]]},{"k":"Sidechain","n":"Fast attack slow release","p":[[0,0,0.7],[1,1,0]]},{"k":"Sidechain","n":"Ghost pump","p":[[0,0.6,0.4],[0.5,1,0],[1,1,0]]},{"k":"Sidechain","n":"Reverse pump","p":[[0,0.7,-0.3],[0.6,1,0],[0.75,1,-0.6],[1,0,0]]},{"k":"Sidechain","n":"Bounce back","p":[[0,0,0.6],[0.45,1,-0.3],[0.6,0.82,0.3],[0.75,1,0],[1,1,0]]},{"k":"Sidechain","n":"Long tail","p":[[0,0,0.35],[0.97,1,0],[1,1,0]]},{"k":"Sidechain","n":"Clip pump","p":[[0,0,0.65],[0.35,1,0],[1,1,0]]}];   // fb229 — the factory bank (70 shapes, 5 packs; c-signs flipped to house bias polarity at embed)
+  var preIdx=-1;
+  function applyPreset(ix){ if(ix<0||ix>=LFOPRESETS.length)return; preIdx=ix; var pr=LFOPRESETS[ix];
+    seedTo(pr.p.map(function(q){return q.slice();}), pr.n); }
+  function presetMenu(x,y){ if(!window.__synShowMenu)return; var items=[], lastK=null;
+    LFOPRESETS.forEach(function(pr,ix){ if(pr.k!==lastK){ items.push({isHeader:true,label:pr.k}); lastK=pr.k; }
+      items.push({ label:pr.n, isChecked:(preIdx===ix), white:true, onPick:function(){ applyPreset(ix); } }); });
+    window.__synShowMenu('', items, x, y); }
+  function K2(id,l,v,f){ var c=2*Math.PI*15,on=c*Math.max(0,Math.min(1,f))*0.8333;
+    return '<div class="kn2" id="'+id+'"><svg width="40" height="40" viewBox="0 0 40 40">'
+      +'<circle cx="20" cy="20" r="15" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.2"/>'
+      +'<circle cx="20" cy="20" r="15" fill="none" stroke="#ECE8F2" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="'+on.toFixed(1)+' '+(c-on).toFixed(1)+'" transform="rotate(120 20 20)"/></svg>'
+      +'<div class="kl2">'+l+'</div><div class="kv2">'+v+'</div></div>'; }
+  function B2(id,l,on,dim){ return '<span class="bp2'+(on?' on':'')+(dim?' dim':'')+'" id="'+id+'">'+l+'</span>'; }
+  function fmtMs2(v){ return v>=1000?(v/1000).toFixed(2)+'s':Math.round(v)+'ms'; }
   function buildExt(){
-    ext.innerHTML='<div class="h"><span class="g">⠿</span><span class="tt">LFO</span><span class="tg">'+st.tab+'</span><span class="x">✕</span></div>'
-      +'<div class="b">'
-      +'<div class="es">'+waveSVG(456,96,st.shape,st.depth,st.phase)+'</div>'
-      +'<div><div class="gl">Rate</div><div class="g3"><div class="pill" id="ex-shape"><span class="ic">'+icon(st.shape)+'</span>'+SHORT[st.shape]+CHEV+'</div><div class="pill" id="ex-div"><span class="k">Sync</span>'+DIVS[st.div]+CHEV+'</div><div class="pill" id="ex-unit"><span class="k">Unit</span>'+(st.sync?'BPM':'Hz')+CHEV+'</div></div></div>'
-      +'<div><div class="gl">Behaviour</div><div class="g4"><div class="pill"><span class="k">Trig</span>Free</div><div class="pill"><span class="k">Dir</span>Up</div><div class="tog">Trip</div><div class="tog on">Mono</div></div></div>'
-      +'<div><div class="gl">Motion</div><div class="mo">'+MK('Rise','12ms',.3)+MK('Delay','0',0)+MK('Smooth','30%',.45)+MK('Phase','0°',.5)+'</div></div>'
-      +'</div>';
+    var mo=moGet(), nmc=(shGet().nm&&st.shape===7)?shGet().nm:SHORT[st.shape];
+    var dots=''; for(var di=1;di<=10;di++)dots+='<div class="ld2'+(di===st.tab?' on':'')+'" data-n="'+di+'"><div class="c2"></div><div class="n2">'+di+'</div></div>';
+    ext.innerHTML='<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="nm">LFO '+st.tab+'</span>'
+      +'<span class="pset"><span class="pa" id="lc-pp">‹</span><span class="pn" id="lc-pn">'+(preIdx>=0?LFOPRESETS[preIdx].n:nmc)+'</span><span class="pa" id="lc-px">›</span></span>'
+      +'<span class="sp"></span><span class="dep" id="lc-dep">DEP <b>'+Math.round((st.depth||0)*100)+'%</b></span>'
+      +'<span class="pop" title="Pop out">⧉</span><span class="x">✕</span></div>'
+      +'<div class="card-scope">'+scopeSVG()+'</div>'
+      +'<div class="bz">'+B2('lc-free','FREE',mo.tg===0&&!mo.mn)+B2('lc-trig','RETRIG',mo.tg===1&&!mo.mn)+B2('lc-env','ENV',mo.tg===2)
+        +B2('lc-loop','LOOP',mo.lb>=0&&mo.tg===2,mo.tg!==2)+B2('lc-mono','MONO',!!mo.mn)+B2('lc-host','HOST',!!mo.ho)+'</div>'
+      +'<div class="bz">'+B2('lc-fwd','FWD',mo.dir===0)+B2('lc-rev','REV',mo.dir===1)+B2('lc-ping','PING',mo.dir===2)
+        +B2('lc-trip','TRIP',mo.td===1)+B2('lc-dot','DOT',mo.td===2)+B2('lc-bpm',st.sync?'BPM':'HZ',st.sync)+'</div>'
+      +'<div class="kr">'
+      +K2('lc-rate','RATE',st.sync?DIVS[st.div]:(st.rateHz||1).toFixed(2),st.sync?(DIVORD.indexOf(st.div)/(NDIV-1)):((cur().rate?cur().rate.getNormalisedValue():0.3)))
+      +K2('lc-rise','RISE',fmtMs2(mo.ri),mo.ri/2000)
+      +K2('lc-del','DELAY',fmtMs2(mo.de),mo.de/2000)
+      +K2('lc-smo','SMOOTH',Math.round(mo.sm/5)+'%',mo.sm/500)
+      +K2('lc-pha','PHASE',Math.round((st.phase||0)*360)+'°',st.phase||0)
+      +K2('lc-swg','SWING',Math.round(mo.sw*100)+'%',mo.sw)
+      +'</div>'
+      +'<div class="ldots">'+dots+'</div>'
+      +'<div class="chain2"><span>CHAIN</span><span class="slot2">'+st.tab+'</span></div>';
     ext.querySelector('.x').onclick=function(){ext.classList.remove('open');};
-    var sh=ext.querySelector('#ex-shape'); if(sh)sh.onclick=function(){ openMenu(SHORT.map(function(s,i){return {t:s,ic:icon(i)};}), st.shape, sh, function(i){ setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; buildExt(); render(); }); };
-    var ed=ext.querySelector('#ex-div'); if(ed)ed.onclick=function(){ if(!st.sync){toast('switch to BPM to use divisions');return;} openMenu(DIVORD.map(function(ri){return {t:DIVS[ri]};}), DIVORD.indexOf(st.div), ed, function(i){ var ri=DIVORD[i]; setNorm(cur().div,ri/(NDIV-1)); st.div=ri; buildExt(); render(); }); };   // fb219 — ladder-ordered display
-    var eu=ext.querySelector('#ex-unit'); if(eu)eu.onclick=function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); buildExt(); render(); };
-    // drag header
-    var h=ext.querySelector('.h'); h.onmousedown=function(e){ if(e.target.classList.contains('x'))return; e.preventDefault(); h.classList.add('grab'); var r=ext.getBoundingClientRect(); var dx=e.clientX-r.left, dy=e.clientY-r.top;
-      function mv(ev){ extPos={x:Math.max(4,Math.min(window.__vw()-ext.offsetWidth-4,ev.clientX-dx)),y:Math.max(4,Math.min(window.__vh()-40,ev.clientY-dy))}; ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; }
+    ext.querySelector('#lc-pp').onclick=function(){ applyPreset((preIdx-1+LFOPRESETS.length)%LFOPRESETS.length); };
+    ext.querySelector('#lc-px').onclick=function(){ applyPreset((preIdx+1)%LFOPRESETS.length); };
+    ext.querySelector('#lc-pn').onclick=function(ev){ presetMenu(ev.clientX,ev.clientY); };
+    var dep=ext.querySelector('#lc-dep');
+    dep.onmousedown=function(e){ e.preventDefault(); e.stopPropagation(); var D=cur().depth, y0=e.clientY, v0=D?D.getNormalisedValue():.5;
+      function mv(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.005)); setNorm(D,nv); if(D){st.depth=D.getScaledValue(); dep.innerHTML='DEP <b>'+Math.round(st.depth*100)+'%</b>';} }
+      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); render(); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
+    function MO(fn){ return function(){ var m2=moGet(); fn(m2); shTouched=true; shPush(); render(); }; }
+    ext.querySelector('#lc-free').onclick=MO(function(m){ m.tg=0; m.mn=0; });
+    ext.querySelector('#lc-trig').onclick=MO(function(m){ m.tg=1; m.mn=0; });
+    ext.querySelector('#lc-env').onclick =MO(function(m){ m.tg=2; });
+    ext.querySelector('#lc-loop').onclick=MO(function(m){ if(m.tg!==2){ toast('Loop pairs with Env mode'); return; }
+      if(m.lb<0){ m.lb=0.5; toast('right-click the graph \u2192 Set loopback point here'); } else m.lb=-1; });
+    ext.querySelector('#lc-mono').onclick=MO(function(m){ m.mn=m.mn?0:1; });
+    ext.querySelector('#lc-host').onclick=MO(function(m){ m.ho=m.ho?0:1; });
+    ext.querySelector('#lc-fwd').onclick =MO(function(m){ m.dir=0; });
+    ext.querySelector('#lc-rev').onclick =MO(function(m){ m.dir=1; });
+    ext.querySelector('#lc-ping').onclick=MO(function(m){ m.dir=2; });
+    ext.querySelector('#lc-trip').onclick=MO(function(m){ m.td=(m.td===1)?0:1; });
+    ext.querySelector('#lc-dot').onclick =MO(function(m){ m.td=(m.td===2)?0:2; });
+    ext.querySelector('#lc-bpm').onclick=function(){ st.sync=!st.sync; setNorm(cur().sync, st.sync?1:0); render(); };
+    function KD(el,get,set,fin){ el.onmousedown=function(e){ e.preventDefault(); var y0=e.clientY, v0=get();
+      function mv(ev){ set(Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.005))); }
+      function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); if(fin)fin(); render(); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }; }
+    KD(ext.querySelector('#lc-rate'),
+      function(){ return st.sync? DIVORD.indexOf(st.div)/(NDIV-1) : (cur().rate?cur().rate.getNormalisedValue():0.3); },
+      function(v){ if(st.sync){ var ri=DIVORD[Math.round(v*(NDIV-1))]; if(ri!==st.div){ st.div=ri; setNorm(cur().div,ri/(NDIV-1)); var kv=ext.querySelector('#lc-rate .kv2'); if(kv)kv.textContent=DIVS[ri]; } }
+                   else { setNorm(cur().rate,v); if(cur().rate){ st.rateHz=cur().rate.getScaledValue(); var kv2=ext.querySelector('#lc-rate .kv2'); if(kv2)kv2.textContent=st.rateHz.toFixed(2); } } });
+    function MKD(id,key,scale,fmt){ KD(ext.querySelector(id),
+      function(){ return moGet()[key]/scale; },
+      function(v){ var m2=moGet(); m2[key]=+(v*scale).toFixed(1); shTouched=true; shPush();
+        var kv=ext.querySelector(id+' .kv2'); if(kv)kv.textContent=fmt(m2[key]); }); }
+    MKD('#lc-rise','ri',2000,fmtMs2);
+    MKD('#lc-del','de',2000,fmtMs2);
+    MKD('#lc-smo','sm',500,function(v){return Math.round(v/5)+'%';});
+    MKD('#lc-swg','sw',1,function(v){return Math.round(v*100)+'%';});
+    KD(ext.querySelector('#lc-pha'),
+      function(){ return cur().phase?cur().phase.getNormalisedValue():0; },
+      function(v){ setNorm(cur().phase,v); if(cur().phase){ st.phase=cur().phase.getScaledValue(); var kv=ext.querySelector('#lc-pha .kv2'); if(kv)kv.textContent=Math.round(st.phase*360)+'\u00b0'; } });
+    ext.querySelectorAll('.ld2').forEach(function(d){ d.onclick=function(){ var nn=+d.getAttribute('data-n');
+      if(nn===st.tab)return; st.tab=nn; st.page=(nn>5)?1:0; pull(); render(); }; });
+    bindShaper(ext.querySelector('.card-scope'));
+    var h=ext.querySelector('.h'); h.onmousedown=function(e){ if(e.target.closest('.x,.pop,.pset,.dep'))return; e.preventDefault(); h.classList.add('grab'); var r=ext.getBoundingClientRect(); var dx=e.clientX-r.left, dy=e.clientY-r.top;
+      function mv(ev){ if(window.__cardEdgeHandoff&&window.__cardEdgeHandoff('lfo',ext,ev,dx,dy)){ up(); return; }
+        extPos={x:Math.max(4,Math.min(window.__vw()-ext.offsetWidth-4,ev.clientX-dx)),y:Math.max(4,Math.min(window.__vh()-40,ev.clientY-dy))}; ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; }
       function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
   }
-  function openExt(){ buildExt(); if(!extPos){ var r=root.getBoundingClientRect(); extPos={x:Math.min(window.__vw()-330, r.left+r.width-316), y:Math.max(8, r.top-120)}; } ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; ext.classList.add('open'); }
+  function extRefresh(){ buildExt(); }
+  function openExt(){ buildExt(); if(!extPos){ var r=root.getBoundingClientRect(); extPos={x:Math.min(window.__vw()-390, r.left+r.width-378), y:Math.max(8, r.top-160)}; } ext.style.left=extPos.x+'px'; ext.style.top=extPos.y+'px'; ext.classList.add('open'); }
 
   // ---- live playhead + follower (JS-computed so it rides every LFO's shape, in Hz OR beats) ----
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
   var DIVBEATS=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6,128,64,0.0625,0.03125,0.015625];   // beats-per-cycle per DIVS entry (fb219 tail appended)
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
   function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
-    if(scope===root){   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
+    if(scope===root||scope===ext){   // fb229 — the card hero is the same field: exact geometry on both screens   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
       var rp=(ph+st.phase)%1, x=shX(rp);
       if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
       if(fd){ fd.setAttribute('cx',x.toFixed(1));
@@ -23238,7 +23366,7 @@ restoreThemeFromBackend();
     var x2=ph*456;
     if(pl){ pl.setAttribute('x1',x2); pl.setAttribute('x2',x2); }
     if(fd){ fd.setAttribute('cx',x2.toFixed(1)); fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*amp).toFixed(1)); } }
-  function tick(t){ if(window.__cardOnly)return; if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
+  function tick(t){ if(window.__cardOnly&&window.__cardOnly!=='lfo')return; if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
     var rP=window.__mvLfoPh;   // fb217 — THE TRUTH FEED: the DSP's actual LFO phase (Max: 'the follower is seconds off' — it was a free-running JS clock at a fake 120 BPM; now the dot IS the audible read position, sync/rate-mod/transport all inherently exact)
     if(rP&&window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250){ ph=(((rP[st.tab-1]||0)%1)+1)%1; }
     else { ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph); }   // stale/absent feed → the old simulation (boot, headless, suspended host)
@@ -25975,7 +26103,7 @@ restoreThemeFromBackend();
    ════════════════════════════════════════════════════════════════════════════ */
 (function(){
   function NF(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
-  var CARDS={arp:'arp-ext',chop:'chop-ext',gli:'gli-ext',rbn:'rbn-ext'};
+  var CARDS={arp:'arp-ext',chop:'chop-ext',gli:'gli-ext',rbn:'rbn-ext',lfo:'lfo-ext'};   /* fb229 */
 
   // SliderState look-alike over the setSynParam/getSynParam bypass — the popped
   // window has NO WebSliderRelays (a relay serves exactly one WebView), so the
@@ -26023,7 +26151,7 @@ restoreThemeFromBackend();
       try{ Promise.resolve(g()).then(function(s){ String(s||'').split(',').forEach(function(id){ if(id)window.__poppedCards[id]=1; }); }).catch(function(){}); }catch(e){} })();
     document.addEventListener('click',function(e){
       var p=e.target&&e.target.closest?e.target.closest('.pop'):null; if(!p)return;
-      var card=p.closest('.arp-ext,.chop-ext,.gli-ext,.rbn-ext'); if(!card)return;
+      var card=p.closest('.arp-ext,.chop-ext,.gli-ext,.rbn-ext,.lfo-ext'); if(!card)return;
       e.preventDefault(); e.stopPropagation();
       var id=null,k; for(k in CARDS){ if(card.classList.contains(CARDS[k])){ id=k; break; } }
       if(!id)return;
@@ -27445,7 +27573,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb228';   // bump per ship  [fb228 = L5 DSP CORE: trigger modes LIVE (RETRIG default) + loopback + direction + rise/delay/smooth/swing + trip/dot + mono + host gate]
+  var TERRAIN_BUILD = 'fb229';   // bump per ship  [fb229 = THE LFO CARD: mockup B v4 wired live (two-screen mirror, motion controls, dots, loopback, popout) + 70 factory presets embedded]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
