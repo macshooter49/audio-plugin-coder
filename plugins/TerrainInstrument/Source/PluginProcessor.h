@@ -1016,7 +1016,7 @@ public:
     float                         lfoTableAudio_ [wc::NUM_LFOS][wc::kLfoTableN + 1] {};
     // fb228 — L5 MOTION per LFO (blob-fed beside the tables; same shared->audio copy discipline).
     // Defaults ARE the product defaults: tg=1 (RETRIG — Max: 'every LFO retrigs from here on out').
-    struct LfoMotion { int tg = 1; float lb = -1.0f; int dir = 0; int mn = 0;
+    struct LfoMotion { int tg = 0; float lb = -1.0f; int dir = 0; int mn = 0;   // fb235 — FREE is the product default again (Max reversed the fb228 Retrig call)
                        float ri = 0.0f, de = 0.0f, sm = 0.0f, sw = 0.0f; int td = 0; int ho = 1; };
     LfoMotion                     lfoMotionShared_[wc::NUM_LFOS];
     LfoMotion                     lfoMotionAudio_ [wc::NUM_LFOS];

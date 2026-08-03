@@ -7250,12 +7250,12 @@ void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& jso
             tb[k] = 2.0f * y - 1.0f;
         }
         tb[wc::kLfoTableN] = tb[0];   // wrap guard sample
-        {   // fb228 — blob v2: per-LFO MOTION rides beside the points (absent = the LfoMotion defaults, incl. RETRIG)
+        {   // fb228 — blob v2: per-LFO MOTION rides beside the points (absent = the LfoMotion defaults; fb235 — FREE)
             auto mo = e.getProperty ("mo", juce::var());
             auto& M = lfoMotionShared_[n - 1];
             if (mo.isObject())
             {
-                M.tg  = juce::jlimit (0, 2, (int) mo.getProperty ("tg", 1));
+                M.tg  = juce::jlimit (0, 2, (int) mo.getProperty ("tg", 0));   // fb235 — absent tg = Free
                 M.lb  = juce::jlimit (-1.0f, 0.99f, (float) (double) mo.getProperty ("lb", -1.0));
                 M.dir = juce::jlimit (0, 2, (int) mo.getProperty ("dir", 0));
                 M.mn  = ((int) mo.getProperty ("mn", 0)) ? 1 : 0;

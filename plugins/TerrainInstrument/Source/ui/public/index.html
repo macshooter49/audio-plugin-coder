@@ -2485,9 +2485,10 @@ body {
 .mv-ext.open{display:block;}
 /* ═══ fb232 — the LFO card rides the shared .ti-card kit (shell/header/presets/slots/chain
    are the four modes' CSS verbatim). Only the hero skin + lane/button/knob sizing live here. ═══ */
+.lfo-ext{width:378px;}   /* fb235 — the approved mockup width: the cloned pane graph lands near pane size */
 html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel-hosted card must survive the card-only visibility sweep */
 .lfo-ext .card-scope{background:rgba(10,9,20,.55);border:1px solid rgba(255,255,255,0.07);border-radius:8px;position:relative;overflow:hidden;cursor:crosshair;}
-.lfo-ext .card-scope svg{display:block;width:100%;height:110px;}   /* geometry 456x174 shown at 288x110 = ONE uniform scale */
+.lfo-ext .card-scope svg{display:block;width:100%;height:auto;aspect-ratio:456/76;}   /* fb235 — the pane's exact band, uniform scale: same graph, same grid */
 .lfo-ext .card-scope svg line,.lfo-ext .card-scope svg path,.lfo-ext .card-scope svg circle{vector-effect:non-scaling-stroke;}   /* fb232 — stroke weights render at authored px: the pane's exact line grammar at any card zoom */
 .lfo-ext .lbmark{stroke:rgba(183,148,255,.55);stroke-width:1;stroke-dasharray:3 3;}
 #syn-panel .syn-ctx-menu.act{z-index:2147483646;}   /* fb231 — the canonical menu must beat the floating card (z 2147483645) */
@@ -2596,7 +2597,7 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
   font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.40);}
 .ti-card .mix b{font-size:11px;font-weight:200;letter-spacing:.3px;color:rgba(255,255,255,.92);
   font-family:-apple-system,'SF Pro Display',sans-serif;min-width:27px;text-align:right;}
-.ti-card .h .pop{margin-left:12px;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;
+.ti-card .h .pop{position:relative;top:2px;margin-left:12px;font-size:7px;   /* fb235 — 2px down: optically centered (Max) */letter-spacing:1.2px;text-transform:uppercase;
   color:rgba(255,255,255,.45);font-weight:500;cursor:pointer;line-height:1;white-space:nowrap;}
 .ti-card .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px;cursor:pointer;line-height:1;}
 .ti-card .h .pop:hover,.ti-card .h .x:hover{color:#fff;}
@@ -14660,15 +14661,19 @@ setTimeout(function wireSynControls () {
         // Position: clamp to viewport. Use measured menu size after rendering
         // so tall menus (filter type with 5 sections + 27 items) clamp right.
         const pw = synPanel ? synPanel.getBoundingClientRect() : { left: 0, top: 0, width: window.__vw(), height: window.__vh() };
-        // Cap height to panel BEFORE measuring so a 27-item menu becomes scrollable.
-        menuEl.style.maxHeight = Math.max(120, pw.height - 16) + 'px';
+        // fb235 — a popped card window is far smaller than the ghost layout: clamp to the
+        // NATIVE window box, not the panel rect, so the menu never renders past the edge.
+        const bw = window.__cardOnly ? Math.max (120, Math.min (pw.width,  window.innerWidth  - pw.left)) : pw.width;
+        const bh = window.__cardOnly ? Math.max (120, Math.min (pw.height, window.innerHeight - pw.top))  : pw.height;
+        // Cap height to the box BEFORE measuring so a 27-item menu becomes scrollable.
+        menuEl.style.maxHeight = Math.max(120, bh - 16) + 'px';
         menuEl.style.left = '0px';
         menuEl.style.top = '0px';
         const mrect = menuEl.getBoundingClientRect();
         const mw = mrect.width  || 180;
         const mh = mrect.height || (items.length * 22 + (header ? 22 : 0) + 8);
-        const localX = Math.max(0, Math.min(pw.width - mw, x - pw.left));
-        const localY = Math.max(0, Math.min(pw.height - mh, y - pw.top));
+        const localX = Math.max(0, Math.min(bw - mw, x - pw.left));
+        const localY = Math.max(0, Math.min(bh - mh, y - pw.top));
         menuEl.style.left = localX + 'px';
         menuEl.style.top = localY + 'px';
         // Belt-and-suspenders wheel handler for the rare case JUCE WKWebView
@@ -22817,8 +22822,8 @@ restoreThemeFromBackend();
   var motion={};   // fb229 — per-LFO L5 motion (the card's state; rides the blob as mo:{})
   var shActiveSc=null;   // fb229 — the scope a gesture/menu came from (main pane OR the card hero); coordinate math resolves against THIS
   function shPaintAll(){ var m=root?root.querySelector('.mv-scope'):null; if(m)m.innerHTML=scopeSVG();
-    var c=document.querySelector('.lfo-ext .card-scope'); if(c){ c.innerHTML=shaperSVG(LGEO); var cs=c.querySelector('svg'); if(cs)cs.__shGeo=LGEO; bindShaper(c); } }   // fb232 — the hero renders in card geometry (no viewBox stretch)
-  function moGet(){ shGet(); if(!motion[st.tab])motion[st.tab]={tg:1,lb:-1,dir:0,mn:0,ri:0,de:0,sm:0,sw:0,td:0,ho:1}; return motion[st.tab]; }
+    var c=document.querySelector('.lfo-ext .card-scope'); if(c){ c.innerHTML=scopeSVG(); var cs=c.querySelector('svg'); if(cs){ cs.setAttribute('viewBox','0 2 456 76'); cs.__shGeo=null; } bindShaper(c); } }   // fb235 — the card hero IS the pane svg, band-cropped
+  function moGet(){ shGet(); if(!motion[st.tab])motion[st.tab]={tg:0,lb:-1,dir:0,mn:0,ri:0,de:0,sm:0,sw:0,td:0,ho:1}; /* fb235 — FREE is the product default again (Max: retrig is annoying) */ return motion[st.tab]; }
   function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
   function shEvalPts(pts,p){ p=((p%1)+1)%1; var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++;
     var a=pts[i],b=pts[i+1],w=b[0]-a[0]; if(w<=1e-6)return b[1];
@@ -22837,17 +22842,21 @@ restoreThemeFromBackend();
     if(k===6){var r6=[],j6;for(j6=0;j6<RP.length;j6++)r6.push([j6/(RP.length-1),RP[j6],j6%2?.3:-.3]);return r6;}
     return [[0,0,0],[.5,1,0],[1,0,0]]; }
   function shGet(){ if(!shapes[st.tab])shapes[st.tab]={pts:seedFor(1),gh:8,gv:8,sn:1}; return shapes[st.tab]; }
-  function shPush(){ window.__shTouchT=Date.now(); clearTimeout(shPushT); shPushT=setTimeout(function(){ try{   // fb232 — the cross-window poll yields to fresh local edits
+  var shPushLastT=0;
+  function shPushNow(){ try{   // fb232 — the cross-window poll yields to fresh local edits
       var out=[],k; for(k in shapes){ var sp=shapes[k];
         var en={n:+k,pts:sp.pts.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''};
         if(motion[k])en.mo=motion[k];   // fb229 — motion rides beside the points
         out.push(en); }
       var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setSynthLfoShapes'):null;
-      if(f)f(JSON.stringify({shapes:out})); }catch(e){} },120); }
+      if(f)f(JSON.stringify({shapes:out})); }catch(e){} }
+  function shPush(){ window.__shTouchT=Date.now(); clearTimeout(shPushT);
+    if(Date.now()-shPushLastT>90){ shPushLastT=Date.now(); shPushNow(); }   // fb235 — leading edge: the OTHER window mirrors WHILE you draw (and the DSP rides the stroke)
+    shPushT=setTimeout(function(){ shPushLastT=Date.now(); shPushNow(); },130); }   // trailing — the settled truth
   function shPull(){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
     f().then(function(j){ if(shTouched)return; try{ var v=JSON.parse(j);   // RACE LAW: a local edit outranks any pull
       (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null};
-        if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:1,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1}; } });
+        if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:0,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1}; } });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
   function shY(y01,g){ var B=g?g.B:SH_BOT, T=g?g.T:SH_TOP; return B-(B-T)*y01; }   // fb232 — geometry-aware: the card hero renders in its OWN taller band (uniform scale, zero stretch)
   function shPathD(pts,w,g){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
@@ -22894,8 +22903,9 @@ restoreThemeFromBackend();
     updSel('.sh-hit:not(.cdh)',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1],g).toFixed(1));} });
     updSel('.sh-cd',function(c){ var i2=+c.getAttribute('data-i'),q=sp.pts[i2],r=sp.pts[i2+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2),g).toFixed(1));} });
     updSel('.sh-hit.cdh',function(c){ var i3=+c.getAttribute('data-i'),q=sp.pts[i3],r=sp.pts[i3+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2),g).toFixed(1));} }); }
-  function shPos(sc,ev){ var r=sc.getBoundingClientRect(), g=sc.__shGeo||null, Hh=g?g.H:96, Tt=g?g.T:SH_TOP, Bb=g?g.B:SH_BOT;
-    var xpx=(ev.clientX-r.left)/r.width*456, ypx=(ev.clientY-r.top)/r.height*Hh;
+  function shPos(sc,ev){ var r=sc.getBoundingClientRect(), g=sc.__shGeo||null, vw=sc.__shView||null,
+      Hh=vw?vw.h:(g?g.H:96), Y0=vw?vw.y0:0, Tt=g?g.T:SH_TOP, Bb=g?g.B:SH_BOT;
+    var xpx=(ev.clientX-r.left)/r.width*456, ypx=Y0+(ev.clientY-r.top)/r.height*Hh;
     return { x:Math.max(0,Math.min(1,(xpx-SH_L)/(SH_R-SH_L))), y:Math.max(0,Math.min(1,(Bb-ypx)/(Bb-Tt))) }; }
   function shSnap(v,div){ return Math.round(v*div)/div; }
   function shNear(sc,ev){   // fb210 — the SERUM GRAB (env nearestStage grammar): the closest node/curve-dot within ~13u wins, no pixel-perfect aim needed
@@ -22921,8 +22931,8 @@ restoreThemeFromBackend();
     return {x0:Math.min(dx0,0),x1:Math.max(dx1,0),y0:Math.min(dy0,0),y1:Math.max(dy1,0)}; }
   function shBand(svg,sc,e){   // fb221 — drag empty ground = the rubber-band (thin white hairline, faint purple wash; points inside wear the select purple LIVE)
     e.preventDefault(); try{svg.setPointerCapture(e.pointerId);}catch(e0){}
-    var r=sc.getBoundingClientRect(), cx0=e.clientX, cy0=e.clientY, did=false, box=null, g=sc.__shGeo||null, Hh=g?g.H:96;
-    function vx(ev){ return (ev.clientX-r.left)/r.width*456; } function vy(ev){ return (ev.clientY-r.top)/r.height*Hh; }
+    var r=sc.getBoundingClientRect(), cx0=e.clientX, cy0=e.clientY, did=false, box=null, g=sc.__shGeo||null, vw2=sc.__shView||null, Hh=vw2?vw2.h:(g?g.H:96), Y0b=vw2?vw2.y0:0;
+    function vx(ev){ return (ev.clientX-r.left)/r.width*456; } function vy(ev){ return Y0b+(ev.clientY-r.top)/r.height*Hh; }
     var ax=vx(e), ay=vy(e);
     function mv(ev){ if(!did){ if(Math.abs(ev.clientX-cx0)+Math.abs(ev.clientY-cy0)<3)return; did=true;
         box=document.createElementNS('http://www.w3.org/2000/svg','rect'); box.setAttribute('class','sh-selbox'); svg.appendChild(box); }
@@ -23002,7 +23012,7 @@ restoreThemeFromBackend();
     function apply(ev){ var sc2=shActiveSc||root.querySelector('.mv-scope'); if(!sc2)return; var q=shPos(sc2,ev);
       var sp2=shGet(), ci=Math.max(0,Math.min(sp2.gv-1,Math.floor(q.x*sp2.gv))), lv=sp2.sn?shSnap(q.y,sp2.gh):q.y;
       if(ci===lastCi&&Math.abs(lv-lastLv)<0.002)return; lastCi=ci; lastLv=lv;
-      if(stampCell(q,T))shPaintAll(); }   // fb229 — both screens live during a stamp drag
+      if(stampCell(q,T)){ shPaintAll(); shPush(); } }   // fb229 — both screens live during a stamp drag · fb235 — and the other WINDOW too
     apply(e);
     function mv(ev){ apply(ev); }
     function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); shTouched=true; shPush(); render(); }
@@ -23044,17 +23054,17 @@ restoreThemeFromBackend();
       var x0=e.clientX, y0=e.clientY, c0=isCd?(sp.pts[i][2]||0):0, did=false;
       var org=grp?sp.pts.map(function(p){return [p[0],p[1]];}):null, bnd=grp?shGrpBounds(sp,org):null;
       function mv(ev){ if(!did&&Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0)<3)return; did=true;   // fb220 — 3px threshold: a plain click can't nudge/snap-teleport the point (it was sabotaging dbl-click delete)
-        if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); return; }   // fb208 — zero DETENT: straight is easy to hit
+        if(isCd){ var dir=(sp.pts[i+1][1]>=sp.pts[i][1])?1:-1; var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0; sp.pts[i][2]=nc; shRefresh(); shPush(); return; }   // fb208 — zero DETENT: straight is easy to hit
         if(grp){ var qg=shPos(sc,ev);
           var ax=(i===0||i===sp.pts.length-1)?org[i][0]:(sp.sn?shSnap(qg.x,sp.gv):qg.x), ay=sp.sn?shSnap(qg.y,sp.gh):qg.y;
           var gdx=Math.max(bnd.x0,Math.min(bnd.x1,ax-org[i][0])), gdy=Math.max(bnd.y0,Math.min(bnd.y1,ay-org[i][1]));
           shSel.forEach(function(si){ var ep=(si===0||si===sp.pts.length-1);
             sp.pts[si][0]=ep?org[si][0]:org[si][0]+gdx; sp.pts[si][1]=org[si][1]+gdy; });
-          shRefresh(); return; }
+          shRefresh(); shPush(); return; }
         var q=shPos(sc,ev), lo=(i>0)?sp.pts[i-1][0]:0, hi=(i<sp.pts.length-1)?sp.pts[i+1][0]:1;   // fb208 — ties ALLOWED: stack two points = a true vertical step (the eval's later-point-rules handles it)
         var nx=(i===0)?0:(i===sp.pts.length-1?1:Math.max(lo,Math.min(hi,sp.sn?shSnap(q.x,sp.gv):q.x)));
         var ny=sp.sn?shSnap(q.y,sp.gh):q.y;
-        sp.pts[i][0]=nx; sp.pts[i][1]=ny; shRefresh(); }
+        sp.pts[i][0]=nx; sp.pts[i][1]=ny; shRefresh(); shPush(); }
       function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e1){}
         svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
         if(did){ shTouched=true; shPush(); render(); }
@@ -23183,7 +23193,10 @@ restoreThemeFromBackend();
              rate: w('LFO'+n+'_RATE',0.407,function(p){ return 0.01+39.99*Math.pow(Math.max(0,p),1/0.3); }),
              depth:w('LFO'+n+'_DEPTH',1,function(p){ return p*2-1; }),
              phase:w('LFO'+n+'_PHASE',0,lin) }; }
-  function cur(){ if(window.__cardOnly==='lfo'&&!LP[st.tab]&&window.__synSliderShim)LP[st.tab]=mkShimLP(st.tab); return LP[st.tab]||{}; }
+  function cur(){ if(window.__cardOnly==='lfo'&&!LP[st.tab]&&window.__synSliderShim){ LP[st.tab]=mkShimLP(st.tab);
+      (function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s2=LP[n][k];
+        if(s2&&s2.valueChangedEvent&&s2.valueChangedEvent.addListener) s2.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); })(st.tab); }
+    return LP[st.tab]||{}; }
   function err(m){if(errEl){errEl.textContent=m;errEl.style.display='block';}if(window.console)console.error('mod-v4:',m);}
 
   function pull(){ var C=cur();
@@ -23273,11 +23286,10 @@ restoreThemeFromBackend();
   // the fb101 freeze only exempts body children, and display:none on a panel-hosted
   // card's ancestors was THE blank-window root cause.
   var ext=null, extPos=null, extSh=null, extSc=null, extBtn={}, extKn={}, extPushLs=[];
-  var LGEO={T:8,B:166,H:174};   // card hero geometry: the pane's 456u X space, taller Y band — drawn AT this size (uniform scale, no viewBox stretch, no fat grid)
   var LFOPRESETS=[{"k":"Basic","n":"Sine","p":[[0,0.5,0.42],[0.25,1,-0.42],[0.5,0.5,0.42],[0.75,0,-0.42],[1,0.5,0]]},{"k":"Basic","n":"Triangle","p":[[0,0,0],[0.5,1,0],[1,0,0]]},{"k":"Basic","n":"Saw up","p":[[0,0,0],[1,1,0]]},{"k":"Basic","n":"Saw down","p":[[0,1,0],[1,0,0]]},{"k":"Basic","n":"Square","p":[[0,1,0],[0.5,1,0],[0.5,0,0],[1,0,0]]},{"k":"Basic","n":"Pulse 25","p":[[0,1,0],[0.25,1,0],[0.25,0,0],[1,0,0]]},{"k":"Basic","n":"Pulse 75","p":[[0,1,0],[0.75,1,0],[0.75,0,0],[1,0,0]]},{"k":"Basic","n":"Half sine","p":[[0,0,0.42],[0.25,1,-0.42],[0.5,0,0],[1,0,0]]},{"k":"Basic","n":"Exp fall","p":[[0,1,0.6],[1,0,0]]},{"k":"Basic","n":"Exp rise","p":[[0,0,-0.6],[1,1,0]]},{"k":"Rhythmic","n":"Gate 1/4","p":[[0.0,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 1/8","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 1/16","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9375,1,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Gate 3-3-2","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Offbeat 1/8","p":[[0.0,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[1.0,1,-0.0]]},{"k":"Rhythmic","n":"Stutter 4+rest","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Build 1/16","p":[[0.0,0.0625,-0.0],[0.0625,0.0625,-0.0],[0.0625,0.125,-0.0],[0.125,0.125,-0.0],[0.125,0.1875,-0.0],[0.1875,0.1875,-0.0],[0.1875,0.25,-0.0],[0.25,0.25,-0.0],[0.25,0.3125,-0.0],[0.3125,0.3125,-0.0],[0.3125,0.375,-0.0],[0.375,0.375,-0.0],[0.375,0.4375,-0.0],[0.4375,0.4375,-0.0],[0.4375,0.5,-0.0],[0.5,0.5,-0.0],[0.5,0.5625,-0.0],[0.5625,0.5625,-0.0],[0.5625,0.625,-0.0],[0.625,0.625,-0.0],[0.625,0.6875,-0.0],[0.6875,0.6875,-0.0],[0.6875,0.75,-0.0],[0.75,0.75,-0.0],[0.75,0.8125,-0.0],[0.8125,0.8125,-0.0],[0.8125,0.875,-0.0],[0.875,0.875,-0.0],[0.875,0.9375,-0.0],[0.9375,0.9375,-0.0],[0.9375,1.0,-0.0],[1.0,1.0,-0.0]]},{"k":"Rhythmic","n":"Fall 1/16","p":[[0.0,1.0,-0.0],[0.0625,1.0,-0.0],[0.0625,0.9375,-0.0],[0.125,0.9375,-0.0],[0.125,0.875,-0.0],[0.1875,0.875,-0.0],[0.1875,0.8125,-0.0],[0.25,0.8125,-0.0],[0.25,0.75,-0.0],[0.3125,0.75,-0.0],[0.3125,0.6875,-0.0],[0.375,0.6875,-0.0],[0.375,0.625,-0.0],[0.4375,0.625,-0.0],[0.4375,0.5625,-0.0],[0.5,0.5625,-0.0],[0.5,0.5,-0.0],[0.5625,0.5,-0.0],[0.5625,0.4375,-0.0],[0.625,0.4375,-0.0],[0.625,0.375,-0.0],[0.6875,0.375,-0.0],[0.6875,0.3125,-0.0],[0.75,0.3125,-0.0],[0.75,0.25,-0.0],[0.8125,0.25,-0.0],[0.8125,0.1875,-0.0],[0.875,0.1875,-0.0],[0.875,0.125,-0.0],[0.9375,0.125,-0.0],[0.9375,0.0625,-0.0],[1.0,0.0625,-0.0]]},{"k":"Rhythmic","n":"Trance gate A","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.4375,0,-0.0],[0.4375,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Trance gate B","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.6,-0.0],[0.375,0.6,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.6,-0.0],[0.75,0.6,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Polyrhythm 3v4","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.25,0,-0.0],[0.25,0.8,-0.0],[0.3333,0.8,-0.0],[0.3333,0.55,-0.0],[0.4167,0.55,-0.0],[0.4167,0,-0.0],[0.5,0,-0.0],[0.5,0.8,-0.0],[0.5833,0.8,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.55,-0.0],[0.75,0.55,-0.0],[0.75,0.8,-0.0],[0.8333,0.8,-0.0],[0.8333,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Swing gate","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.1667,0,-0.0],[0.1667,0.7,-0.0],[0.25,0.7,-0.0],[0.25,1,-0.0],[0.3333,1,-0.0],[0.3333,0,-0.0],[0.4167,0,-0.0],[0.4167,0.7,-0.0],[0.5,0.7,-0.0],[0.5,1,-0.0],[0.5833,1,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.7,-0.0],[0.75,0.7,-0.0],[0.75,1,-0.0],[0.8333,1,-0.0],[0.8333,0,-0.0],[0.9167,0,-0.0],[0.9167,0.7,-0.0],[1.0,0.7,-0.0]]},{"k":"Rhythmic","n":"Broken gate","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.6,-0.0],[0.8125,0.6,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9375,1,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Long-short","p":[[0.0,1,-0.0],[0.1875,1,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Ratchet end","p":[[0.0,1,-0.0],[0.125,1,-0.0],[0.125,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.375,1,-0.0],[0.375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.625,1,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.7812,1,-0.0],[0.7812,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.8438,1,-0.0],[0.8438,0,-0.0],[0.875,0,-0.0],[0.875,1,-0.0],[0.9062,1,-0.0],[0.9062,0,-0.0],[0.9375,0,-0.0],[0.9375,1,-0.0],[0.9688,1,-0.0],[0.9688,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Ghost 8ths","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.5,-0.0],[0.1875,0.5,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,0.5,-0.0],[0.6875,0.5,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Son clave","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,1,-0.0],[0.4375,1,-0.0],[0.4375,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[1.0,0,-0.0]]},{"k":"Rhythmic","n":"Quint gate","p":[[0.0,1,-0.0],[0.1,1,-0.0],[0.1,0,-0.0],[0.2,0,-0.0],[0.2,1,-0.0],[0.3,1,-0.0],[0.3,0,-0.0],[0.4,0,-0.0],[0.4,1,-0.0],[0.5,1,-0.0],[0.5,0,-0.0],[0.6,0,-0.0],[0.6,1,-0.0],[0.7,1,-0.0],[0.7,0,-0.0],[0.8,0,-0.0],[0.8,1,-0.0],[0.9,1,-0.0],[0.9,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Amen chop","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.9,-0.0],[0.1875,0.9,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.4375,0,-0.0],[0.4375,0.5,-0.0],[0.5,0.5,-0.0],[0.5,0,-0.0],[0.5625,0,-0.0],[0.5625,0.5,-0.0],[0.625,0.5,-0.0],[0.625,0.9,-0.0],[0.6875,0.9,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"Think break","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.4,-0.0],[0.25,0.4,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,1,-0.0],[0.6875,1,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.4,-0.0],[0.8125,0.4,-0.0],[0.8125,0.9,-0.0],[0.875,0.9,-0.0],[0.875,0,-0.0],[0.9375,0,-0.0],[0.9375,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"Apache","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.4,-0.0],[0.25,0.4,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0.4,-0.0],[0.625,0.4,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.4,-0.0],[0.75,0.4,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.875,0,-0.0],[0.875,0.4,-0.0],[1.0,0.4,-0.0]]},{"k":"Breakbeat","n":"2-step shuffle","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.4375,0,-0.0],[0.4375,0.6,-0.0],[0.5,0.6,-0.0],[0.5,0,-0.0],[0.625,0,-0.0],[0.625,0.7,-0.0],[0.6875,0.7,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.5,-0.0],[1.0,0.5,-0.0]]},{"k":"Breakbeat","n":"Jungle roller","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0.3,-0.0],[0.125,0.3,-0.0],[0.125,0.5,-0.0],[0.1875,0.5,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,0.9,-0.0],[0.3125,0.9,-0.0],[0.3125,0.3,-0.0],[0.375,0.3,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0.6,-0.0],[0.5,0.6,-0.0],[0.5,0.4,-0.0],[0.5625,0.4,-0.0],[0.5625,0.3,-0.0],[0.625,0.3,-0.0],[0.625,0.8,-0.0],[0.6875,0.8,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0.4,-0.0],[0.875,0.4,-0.0],[0.875,0.6,-0.0],[0.9375,0.6,-0.0],[0.9375,0.3,-0.0],[1.0,0.3,-0.0]]},{"k":"Breakbeat","n":"Halftime snare","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,0.4,-0.0],[0.4375,0.4,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5625,1,-0.0],[0.5625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.4,-0.0],[0.875,0.4,-0.0],[0.875,0,-0.0],[0.9375,0,-0.0],[0.9375,0.5,-0.0],[1.0,0.5,-0.0]]},{"k":"Breakbeat","n":"Ghost note groove","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0.3,-0.0],[0.125,0.3,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,0.3,-0.0],[0.25,0.3,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.3,-0.0],[0.5,0.3,-0.0],[0.5,0.6,-0.0],[0.5625,0.6,-0.0],[0.5625,0.3,-0.0],[0.625,0.3,-0.0],[0.625,0,-0.0],[0.6875,0,-0.0],[0.6875,0.3,-0.0],[0.75,0.3,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0.3,-0.0],[0.875,0.3,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0.3,-0.0],[1.0,0.3,-0.0]]},{"k":"Breakbeat","n":"Backbeat duck","p":[[0.0,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.5,-0.0],[0.875,0.5,-0.0],[0.875,1,-0.0],[1.0,1,-0.0]]},{"k":"Breakbeat","n":"Roll-up","p":[[0.0,0.5,-0.0],[0.08,0.5,-0.0],[0.08,0.0,-0.0],[0.25,0.0,-0.0],[0.25,0.55,-0.0],[0.32,0.55,-0.0],[0.32,0.0,-0.0],[0.5,0.0,-0.0],[0.5,0.65,-0.0],[0.56,0.65,-0.0],[0.56,0.0,-0.0],[0.625,0.0,-0.0],[0.625,0.7,-0.0],[0.675,0.7,-0.0],[0.675,0.0,-0.0],[0.75,0.0,-0.0],[0.75,0.78,-0.0],[0.79,0.78,-0.0],[0.79,0.0,-0.0],[0.8125,0.0,-0.0],[0.8125,0.85,-0.0],[0.8475,0.85,-0.0],[0.8475,0.0,-0.0],[0.875,0.0,-0.0],[0.875,0.9,-0.0],[0.9,0.9,-0.0],[0.9,0.0,-0.0],[0.9062,0.0,-0.0],[0.9062,0.95,-0.0],[0.9313,0.95,-0.0],[0.9313,0.0,-0.0],[0.9375,0.0,-0.0],[0.9375,1.0,-0.0],[0.9575,1.0,-0.0],[0.9575,0.0,-0.0],[0.9688,0.0,-0.0],[0.9688,1.0,-0.0],[0.9888,1.0,-0.0],[0.9888,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"Breakbeat","n":"Chopped 3/16","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.1875,0,-0.0],[0.1875,0.8,-0.0],[0.25,0.8,-0.0],[0.25,0,-0.0],[0.375,0,-0.0],[0.375,0.9,-0.0],[0.4375,0.9,-0.0],[0.4375,0,-0.0],[0.5625,0,-0.0],[0.5625,0.8,-0.0],[0.625,0.8,-0.0],[0.625,0,-0.0],[0.75,0,-0.0],[0.75,1,-0.0],[0.8125,1,-0.0],[0.8125,0,-0.0],[0.9375,0,-0.0],[0.9375,0.7,-0.0],[1.0,0.7,-0.0]]},{"k":"Breakbeat","n":"Stab pattern","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.3125,0,-0.0],[0.3125,0.9,-0.0],[0.375,0.9,-0.0],[0.375,0,-0.0],[0.625,0,-0.0],[0.625,0.8,-0.0],[0.6875,0.8,-0.0],[0.6875,0,-0.0],[0.8125,0,-0.0],[0.8125,1,-0.0],[0.875,1,-0.0],[0.875,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Drag triplet","p":[[0.0,1,-0.0],[0.0833,1,-0.0],[0.0833,0,-0.0],[0.1667,0,-0.0],[0.1667,0.5,-0.0],[0.25,0.5,-0.0],[0.25,0,-0.0],[0.3333,0,-0.0],[0.3333,0.8,-0.0],[0.4167,0.8,-0.0],[0.4167,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.5833,1,-0.0],[0.5833,0,-0.0],[0.6667,0,-0.0],[0.6667,0.5,-0.0],[0.8333,0.5,-0.0],[0.8333,0.9,-0.0],[0.9167,0.9,-0.0],[0.9167,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Skippy hats","p":[[0.0,0,-0.0],[0.0625,0,-0.0],[0.0625,0.6,-0.0],[0.125,0.6,-0.0],[0.125,0,-0.0],[0.1875,0,-0.0],[0.1875,1,-0.0],[0.25,1,-0.0],[0.25,0,-0.0],[0.3125,0,-0.0],[0.3125,0.5,-0.0],[0.375,0.5,-0.0],[0.375,0.7,-0.0],[0.4375,0.7,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.6,-0.0],[0.5625,0.6,-0.0],[0.5625,0,-0.0],[0.6875,0,-0.0],[0.6875,1,-0.0],[0.75,1,-0.0],[0.75,0,-0.0],[0.8125,0,-0.0],[0.8125,0.6,-0.0],[0.875,0.6,-0.0],[0.875,0.5,-0.0],[0.9375,0.5,-0.0],[0.9375,0,-0.0],[1.0,0,-0.0]]},{"k":"Breakbeat","n":"Break fill","p":[[0.0,1,-0.0],[0.0625,1,-0.0],[0.0625,0,-0.0],[0.125,0,-0.0],[0.125,0.4,-0.0],[0.1875,0.4,-0.0],[0.1875,0,-0.0],[0.25,0,-0.0],[0.25,1,-0.0],[0.3125,1,-0.0],[0.3125,0,-0.0],[0.375,0,-0.0],[0.375,0.5,-0.0],[0.4375,0.5,-0.0],[0.4375,0,-0.0],[0.5,0,-0.0],[0.5,0.9,-0.0],[0.5625,0.9,-0.0],[0.5625,0,-0.0],[0.625,0,-0.0],[0.625,0.4,-0.0],[0.6875,0.4,-0.0],[0.6875,0,-0.0],[0.75,0,-0.0],[0.75,0.5,-0.0],[0.7812,0.5,-0.0],[0.7812,0.6,-0.0],[0.8125,0.6,-0.0],[0.8125,0.7,-0.0],[0.8438,0.7,-0.0],[0.8438,0.75,-0.0],[0.875,0.75,-0.0],[0.875,0.8,-0.0],[0.9062,0.8,-0.0],[0.9062,0.9,-0.0],[0.9375,0.9,-0.0],[0.9375,1,-0.0],[1.0,1,-0.0]]},{"k":"IDM","n":"Bitcrush stairs","p":[[0.0,0.2,-0.0],[0.1,0.2,-0.0],[0.1,0.9,-0.0],[0.2,0.9,-0.0],[0.2,0.4,-0.0],[0.3,0.4,-0.0],[0.3,0.65,-0.0],[0.4,0.65,-0.0],[0.4,0.1,-0.0],[0.5,0.1,-0.0],[0.5,1,-0.0],[0.6,1,-0.0],[0.6,0.3,-0.0],[0.7,0.3,-0.0],[0.7,0.75,-0.0],[0.8,0.75,-0.0],[0.8,0.5,-0.0],[0.9,0.5,-0.0],[0.9,0.05,-0.0],[1.0,0.05,-0.0]]},{"k":"IDM","n":"Glitch scatter","p":[[0.0,0.0,-0.0],[0.03,0.0,-0.0],[0.03,1.0,-0.0],[0.05,1.0,-0.0],[0.05,0.0,-0.0],[0.11,0.0,-0.0],[0.11,0.7,-0.0],[0.125,0.7,-0.0],[0.125,0.0,-0.0],[0.27,0.0,-0.0],[0.27,0.9,-0.0],[0.29,0.9,-0.0],[0.29,0.0,-0.0],[0.31,0.0,-0.0],[0.31,0.5,-0.0],[0.325,0.5,-0.0],[0.325,0.0,-0.0],[0.55,0.0,-0.0],[0.55,1.0,-0.0],[0.57,1.0,-0.0],[0.57,0.0,-0.0],[0.62,0.0,-0.0],[0.62,0.6,-0.0],[0.63,0.6,-0.0],[0.63,0.0,-0.0],[0.83,0.0,-0.0],[0.83,0.85,-0.0],[0.85,0.85,-0.0],[0.85,0.0,-0.0],[0.91,0.0,-0.0],[0.91,0.4,-0.0],[0.925,0.4,-0.0],[0.925,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"IDM","n":"Datamosh","p":[[0,0.7,0],[0.09,0.7,0],[0.09,0.2,-0.5],[0.22,0.9,0],[0.22,0.35,0.6],[0.4,0.6,0],[0.4,1,0],[0.52,1,0],[0.52,0.1,0],[0.66,0.1,-0.7],[0.8,0.8,0],[0.8,0.45,0.4],[0.93,0.15,0],[0.93,0.75,0],[1,0.7,0]]},{"k":"IDM","n":"Elastic bounce","p":[[0,1,-0.5],[0.3,0,0.5],[0.5,0.55,-0.5],[0.65,0,0.5],[0.78,0.3,-0.5],[0.87,0,0.5],[0.94,0.15,-0.55],[1,0,0]]},{"k":"IDM","n":"Zipper","p":[[0,1,-0.0],[0.28,1,-0.0],[0.28,0,-0.0],[0.5,0,-0.0],[0.5,1,-0.0],[0.66,1,-0.0],[0.66,0,-0.0],[0.78,0,-0.0],[0.78,1,-0.0],[0.86,1,-0.0],[0.86,0,-0.0],[0.92,0,-0.0],[0.92,1,-0.0],[0.96,1,-0.0],[0.96,0,-0.0],[0.98,0,-0.0],[0.98,1,-0.0],[1.0,1,-0.0]]},{"k":"IDM","n":"Morse","p":[[0.0,1,-0.0],[0.0357,1,-0.0],[0.0357,0,-0.0],[0.0714,0,-0.0],[0.0714,1,-0.0],[0.1071,1,-0.0],[0.1071,0,-0.0],[0.2143,0,-0.0],[0.2143,1,-0.0],[0.3214,1,-0.0],[0.3214,0,-0.0],[0.3571,0,-0.0],[0.3571,1,-0.0],[0.3929,1,-0.0],[0.3929,0,-0.0],[0.4286,0,-0.0],[0.4286,1,-0.0],[0.4643,1,-0.0],[0.4643,0,-0.0],[0.5714,0,-0.0],[0.5714,1,-0.0],[0.6786,1,-0.0],[0.6786,0,-0.0],[0.7143,0,-0.0],[0.7143,1,-0.0],[0.8214,1,-0.0],[0.8214,0,-0.0],[1.0,0,-0.0]]},{"k":"IDM","n":"Probability rain","p":[[0.0,0.0,-0.0],[0.07,0.0,-0.0],[0.07,0.8,-0.0],[0.085,0.8,-0.0],[0.085,0.0,-0.0],[0.19,0.0,-0.0],[0.19,0.4,-0.0],[0.202,0.4,-0.0],[0.202,0.0,-0.0],[0.23,0.0,-0.0],[0.23,1.0,-0.0],[0.248,1.0,-0.0],[0.248,0.0,-0.0],[0.41,0.0,-0.0],[0.41,0.6,-0.0],[0.424,0.6,-0.0],[0.424,0.0,-0.0],[0.59,0.0,-0.0],[0.59,0.9,-0.0],[0.61,0.9,-0.0],[0.61,0.0,-0.0],[0.66,0.0,-0.0],[0.66,0.3,-0.0],[0.672,0.3,-0.0],[0.672,0.0,-0.0],[0.79,0.0,-0.0],[0.79,0.7,-0.0],[0.806,0.7,-0.0],[0.806,0.0,-0.0],[0.93,0.0,-0.0],[0.93,0.5,-0.0],[0.944,0.5,-0.0],[0.944,0.0,-0.0],[1.0,0.0,-0.0]]},{"k":"IDM","n":"Sawtooth fractal","p":[[0,0,0],[0.25,0.5,0],[0.25,0.17,0],[0.5,0.67,0],[0.5,0.33,0],[0.75,0.83,0],[0.75,0.5,0],[1,1,0]]},{"k":"IDM","n":"Wonky lean","p":[[0,0.3,-0.6],[0.37,1,0],[0.37,0.55,0.5],[0.62,0.2,0],[0.62,0.75,0],[0.8,0.75,0],[0.8,0.05,-0.6],[1,0.3,0]]},{"k":"IDM","n":"Granular flutter","p":[[0.0,0.73,-0.0],[0.0417,0.73,-0.0],[0.0417,0.4088,-0.0],[0.0833,0.4088,-0.0],[0.0833,0.805,-0.0],[0.125,0.805,-0.0],[0.125,0.4761,-0.0],[0.1667,0.4761,-0.0],[0.1667,0.8599,-0.0],[0.2083,0.8599,-0.0],[0.2083,0.5149,-0.0],[0.25,0.5149,-0.0],[0.25,0.88,-0.0],[0.2917,0.88,-0.0],[0.2917,0.5149,-0.0],[0.3333,0.5149,-0.0],[0.3333,0.8599,-0.0],[0.375,0.8599,-0.0],[0.375,0.4761,-0.0],[0.4167,0.4761,-0.0],[0.4167,0.805,-0.0],[0.4583,0.805,-0.0],[0.4583,0.4088,-0.0],[0.5,0.4088,-0.0],[0.5,0.73,-0.0],[0.5417,0.73,-0.0],[0.5417,0.3312,-0.0],[0.5833,0.3312,-0.0],[0.5833,0.655,-0.0],[0.625,0.655,-0.0],[0.625,0.2639,-0.0],[0.6667,0.2639,-0.0],[0.6667,0.6001,-0.0],[0.7083,0.6001,-0.0],[0.7083,0.2251,-0.0],[0.75,0.2251,-0.0],[0.75,0.58,-0.0],[0.7917,0.58,-0.0],[0.7917,0.2251,-0.0],[0.8333,0.2251,-0.0],[0.8333,0.6001,-0.0],[0.875,0.6001,-0.0],[0.875,0.2639,-0.0],[0.9167,0.2639,-0.0],[0.9167,0.655,-0.0],[0.9583,0.655,-0.0],[0.9583,0.3312,-0.0],[1.0,0.3312,-0.0]]},{"k":"IDM","n":"Tape stop","p":[[0,1,0],[0.15,1,-0.5],[0.85,0,0],[1,0,0]]},{"k":"IDM","n":"VHS warble","p":[[0,0.6,0.35],[0.18,0.78,0],[0.18,0.72,-0.35],[0.38,0.5,0.35],[0.55,0.62,0],[0.55,0.68,-0.3],[0.75,0.45,0.3],[0.9,0.55,0],[0.9,0.58,0],[1,0.6,0]]},{"k":"IDM","n":"Circuit bent","p":[[0,0.5,0],[0.12,0.5,0],[0.12,1,0.7],[0.3,0.2,0],[0.3,0.85,0],[0.45,0.85,-0.6],[0.6,0.05,0],[0.6,0.6,0.5],[0.85,0.3,0],[0.85,0.9,-0.8],[1,0.5,0]]},{"k":"IDM","n":"Autechre","p":[[0,0.85,-0.0],[0.11,0.85,-0.0],[0.11,0.3,-0.0],[0.17,0.3,-0.0],[0.17,0.65,-0.0],[0.31,0.65,-0.0],[0.31,0.1,-0.0],[0.36,0.1,-0.0],[0.36,0.9,-0.0],[0.5,0.9,-0.0],[0.5,0.45,-0.0],[0.58,0.45,-0.0],[0.58,0.7,-0.0],[0.69,0.7,-0.0],[0.69,0.2,-0.0],[0.81,0.2,-0.0],[0.81,1,-0.0],[0.86,1,-0.0],[0.86,0.05,-0.0],[0.94,0.05,-0.0],[0.94,0.85,-0.0],[1.0,0.85,-0.0]]},{"k":"Sidechain","n":"Pump 1/4","p":[[0,0,0.5],[0.7,1,0],[1,1,0]]},{"k":"Sidechain","n":"Pump 1/2","p":[[0,0,0.45],[0.45,1,0],[1,1,0]]},{"k":"Sidechain","n":"Pump 1/8","p":[[0,0,0.6],[0.85,1,0],[1,1,0]]},{"k":"Sidechain","n":"Soft duck","p":[[0,0.4,0.4],[0.55,1,0],[1,1,0]]},{"k":"Sidechain","n":"Hard slam","p":[[0,0,0],[0.65,0,0.7],[0.95,1,0],[1,1,0]]},{"k":"Sidechain","n":"Double pump","p":[[0,0,0.5],[0.4,1,0],[0.5,1,0],[0.5,0,0.5],[0.9,1,0],[1,1,0]]},{"k":"Sidechain","n":"Triplet pump","p":[[0,0,0.5],[0.27,1,0],[0.3333,1,0],[0.3333,0,0.5],[0.6,1,0],[0.6667,1,0],[0.6667,0,0.5],[0.94,1,0],[1,1,0]]},{"k":"Sidechain","n":"Late recover","p":[[0,0,-0.4],[0.6,0.25,0.5],[0.9,1,0],[1,1,0]]},{"k":"Sidechain","n":"Fast attack slow release","p":[[0,0,0.7],[1,1,0]]},{"k":"Sidechain","n":"Ghost pump","p":[[0,0.6,0.4],[0.5,1,0],[1,1,0]]},{"k":"Sidechain","n":"Reverse pump","p":[[0,0.7,-0.3],[0.6,1,0],[0.75,1,-0.6],[1,0,0]]},{"k":"Sidechain","n":"Bounce back","p":[[0,0,0.6],[0.45,1,-0.3],[0.6,0.82,0.3],[0.75,1,0],[1,1,0]]},{"k":"Sidechain","n":"Long tail","p":[[0,0,0.35],[0.97,1,0],[1,1,0]]},{"k":"Sidechain","n":"Clip pump","p":[[0,0,0.65],[0.35,1,0],[1,1,0]]}];   // fb229 — the factory bank (70 shapes, 5 packs; c-signs flipped to house bias polarity at embed)
   var LFO_FACTORY=LFOPRESETS.map(function(pr){ return { name:pr.n, sect:pr.k,
     v:{ pts:pr.p.map(function(q){ return q.slice(); }), nm:pr.n } }; });
-  var LDEF=(function(){ var o={ nm:'Sine', gh:8, gv:8, sn:1, tg:1, lb:-1, dir:0, mn:0, ri:0, de:0, sm:0, sw:0, td:0, ho:1 };
+  var LDEF=(function(){ var o={ nm:'Sine', gh:8, gv:8, sn:1, tg:0, lb:-1, dir:0, mn:0, ri:0, de:0, sm:0, sw:0, td:0, ho:1 };
     o.pts=LFOPRESETS[0].p.map(function(q){ return q.slice(); }); return o; })();   // Init = the sine seed + RETRIG (the fb228 product default); rate/div/sync/phase/depth stay LIVE (the MIX law)
   function fmtMs2(v){ return v>=1000?(v/1000).toFixed(2)+'s':Math.round(v)+'ms'; }
   function extSnapGet(){ var sp=shGet(), m=moGet();
@@ -23307,7 +23319,7 @@ restoreThemeFromBackend();
       mixLabel:'Depth', mixFmt:function(n){ return Math.round((n*2-1)*100)+'%'; } });
     ext=extSh.card; ext.__mixLfo=st.tab;
     if(!window.__cardOnly){ var sp0=document.getElementById('syn-panel'); if(sp0)sp0.appendChild(ext); }   // fb231 stacking law (docked only — popped stays a body child for the family boot)
-    var hero=T.el('<div class="card-scope"></div>'); hero.__shGeo=LGEO; extSh.body.appendChild(hero);
+    var hero=T.el('<div class="card-scope"></div>'); hero.__shGeo=null; hero.__shView={y0:2,h:76}; extSh.body.appendChild(hero);   // fb235 — SAME GRAPH SAME GRID (Max): the card renders the pane's exact svg, band-cropped; __shView maps pointer math onto the crop
     var ls=''; for(var li=1;li<=10;li++)ls+='<span class="lane'+(li===st.tab?' on':'')+'" data-n="'+li+'">'+li+'</span>';
     var lsel=T.el('<div class="lsel">'+ls+'</div>');   // the arp-lanes/gli-fxsel grammar: which LFO this card is editing
     lsel.addEventListener('click',function(e){ var b=e.target.closest('.lane'); if(!b)return;
@@ -23375,7 +23387,9 @@ restoreThemeFromBackend();
     var tt=ext.querySelector('.tt'); if(tt)tt.textContent='LFO '+st.tab;
     if(ext.__mixLfo!==st.tab&&ext.__mixRebind){ ext.__mixLfo=st.tab; ext.__mixRebind('LFO'+st.tab+'_DEPTH'); }
     var hero=ext.querySelector('.card-scope');
-    if(hero){ hero.innerHTML=shaperSVG(LGEO); var hs=hero.querySelector('svg'); if(hs)hs.__shGeo=LGEO; bindShaper(hero); }
+    if(hero){ hero.innerHTML=scopeSVG(); var hs=hero.querySelector('svg');
+      if(hs){ hs.setAttribute('viewBox','0 2 456 76'); hs.__shGeo=null; }   // fb235 — the EXACT pane svg, band-cropped (uniform scale = same grid, same nodes, same line)
+      bindShaper(hero); }
     T.EA(ext.querySelectorAll('.lsel .lane'),function(b){ b.classList.toggle('on',+b.getAttribute('data-n')===st.tab); });
     function on(k,v){ if(extBtn[k])extBtn[k].classList.toggle('on',!!v); }
     on('free',m.tg===0&&!m.mn); on('trig',m.tg===1&&!m.mn); on('env',m.tg===2);
@@ -23403,17 +23417,17 @@ restoreThemeFromBackend();
     setInterval(function(){
       var need = window.__cardOnly==='lfo' || (window.__poppedCards&&window.__poppedCards.lfo);
       if(!need)return;
-      if(Date.now()-(window.__shTouchT||0)<1500)return;
+      if(Date.now()-(window.__shTouchT||0)<450)return;
       try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
         f().then(function(j){ j=String(j||''); if(!j||j===last)return; var first=(last===null); last=j;
           if(first)return;   // seed silently — shPull already loaded boot state
-          if(Date.now()-(window.__shTouchT||0)<1500)return;
+          if(Date.now()-(window.__shTouchT||0)<450)return;
           try{ var v=JSON.parse(j); (v.shapes||[]).forEach(function(e2){ if(e2.n>=1&&e2.n<=10&&e2.pts&&e2.pts.length>1){
               shapes[e2.n]={ pts:e2.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }), gh:e2.gh||8, gv:e2.gv||8, sn:e2.sn!==0?1:0, nm:e2.nm||null };
-              if(e2.mo)motion[e2.n]={ tg:e2.mo.tg!=null?e2.mo.tg:1, lb:e2.mo.lb!=null?e2.mo.lb:-1, dir:e2.mo.dir||0, mn:e2.mo.mn||0,
+              if(e2.mo)motion[e2.n]={ tg:e2.mo.tg!=null?e2.mo.tg:0, lb:e2.mo.lb!=null?e2.mo.lb:-1, dir:e2.mo.dir||0, mn:e2.mo.mn||0,
                 ri:e2.mo.ri||0, de:e2.mo.de||0, sm:e2.mo.sm||0, sw:e2.mo.sw||0, td:e2.mo.td||0, ho:e2.mo.ho!=null?e2.mo.ho:1 }; } });
             render(); }catch(e3){} }).catch(function(){}); }catch(e){}
-    }, 900); })();
+    }, 150); })();   // fb235 — 150ms: near-live mirror (Max: 'as soon as I'm drawing over here it's drawing over there')
 
   // ---- live playhead + follower (JS-computed so it rides every LFO's shape, in Hz OR beats) ----
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
@@ -23421,7 +23435,7 @@ restoreThemeFromBackend();
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
   function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
     if(scope===root||scope===ext){   // fb229 — the card hero is the same field: exact geometry on both screens   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
-      var gG=(scope===ext)?LGEO:null;
+      var gG=null;   // fb235 — card hero = pane geometry (exact clone)
       var rp=(ph+st.phase)%1, x=shX(rp);
       if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
       if(fd){ fd.setAttribute('cx',x.toFixed(1));
@@ -23446,7 +23460,7 @@ restoreThemeFromBackend();
     if(!window.__cardOnly) for(var qn=1;qn<=NLFO;qn++){ (function(n){ LP[n]={ shape:ssGet('LFO'+n+'_SHAPE'), sync:ssGet('LFO'+n+'_SYNC'), div:ssGet('LFO'+n+'_DIV'), rate:ssGet('LFO'+n+'_RATE'), depth:ssGet('LFO'+n+'_DEPTH'), phase:ssGet('LFO'+n+'_PHASE') }; })(qn); }   // fb232 — card windows shim lazily via cur() (relays serve exactly one WebView)
     pull(); render();
     // re-render on external (automation/host) changes of the ACTIVE lfo
-    for(var ln=1;ln<=NLFO;ln++){ (function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s=LP[n][k]; if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); })(ln); }
+    for(var ln=1;ln<=NLFO;ln++){ (function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s=LP[n]&&LP[n][k]; /* fb235 — guarded: the unguarded read threw at n=2 in card windows (lazy LP), killing boot before tick/shPull — dead follower + stale shapes when popped */ if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); })(ln); }
     setTimeout(shPull,600); setTimeout(shPull,2500);   // fb206 — hydrate drawn shapes (dynPull race law)
     requestAnimationFrame(tick);
   }
@@ -27653,7 +27667,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb234';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb235';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
