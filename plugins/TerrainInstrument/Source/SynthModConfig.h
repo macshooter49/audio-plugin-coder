@@ -497,10 +497,10 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // BlurB
     { ModDomain::Linear01,  1.0f },  // BlurC
     { ModDomain::Linear01,  1.0f },  // BlurD
-    { ModDomain::Semitone, 12.0f },  // OctA: ±1 octave at full depth — osc A
-    { ModDomain::Semitone, 12.0f },  // OctB
-    { ModDomain::Semitone, 12.0f },  // OctC
-    { ModDomain::Semitone, 12.0f },  // OctD
+    { ModDomain::Semitone, 48.0f },  // OctA: ±4 OCTAVES at full depth — osc A. fb233 (Max): the sum is SNAPPED to whole octaves at the fold (PluginProcessor tuneModCents) — octave mod JUMPS, never wobbles
+    { ModDomain::Semitone, 48.0f },  // OctB
+    { ModDomain::Semitone, 48.0f },  // OctC
+    { ModDomain::Semitone, 48.0f },  // OctD
     { ModDomain::Semitone, 12.0f },  // SemiA: ±12 st at full depth (the knob's own span)
     { ModDomain::Semitone, 12.0f },  // SemiB
     { ModDomain::Semitone, 12.0f },  // SemiC

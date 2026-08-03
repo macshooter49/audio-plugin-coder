@@ -5032,17 +5032,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             noiseCarrierVoice = (held != nullptr) ? held : anyv;
         }
 
-        // fb77 — BACK-PANEL TUNING MOD (Oct/Semi/Cent): all three sums arrive in SEMITONES
-        // (kDestInfo domains: Oct ±12 st = ±1 octave, Semi ±12 st, Cent ±1 st at full depth)
-        // and fold into the voice's CENTS lane next to COARSE — continuous pitch, no re-quantize.
+        // fb77 — BACK-PANEL TUNING MOD (Oct/Semi/Cent): the sums arrive in SEMITONES and fold
+        // into the voice's CENTS lane next to COARSE. fb233 (Max) — THE OCTAVE SNAP LAW: the Oct
+        // lane (±48 st = ±4 octaves at full depth) is clamped then ROUNDED to whole octaves before
+        // the fold — an octave knob under an LFO JUMPS through octaves (square = octave gate,
+        // triangle = staircase), it never reads as continuous detune. Semi/Cent stay continuous
+        // (the vibrato lanes). Steps are phase-continuous frequency changes — clickless by nature.
         // fb131 — MODE CHAIN: resolve once for this scope's voice hooks (the flow stage
         // below re-resolves; both read the same params so the truth cannot diverge).
         const wc::FlowChainState flowChain = flowChainNow();
         float tuneModCents[4];
         for (int o = 0; o < 4; ++o)
-            tuneModCents[o] = (modSums[(int) wc::ModDest::OctA  + o]
+        {
+            const float octSt = 12.0f * std::round (juce::jlimit (-48.0f, 48.0f,
+                                    modSums[(int) wc::ModDest::OctA + o]) * (1.0f / 12.0f));   // fb233 — snap to whole octaves, rail ±4
+            tuneModCents[o] = (octSt
                              + modSums[(int) wc::ModDest::SemiA + o]
                              + modSums[(int) wc::ModDest::CentA + o]) * 100.0f;
+        }
         if (flowChain.robin)                                                // fb122 ROBIN (fb131: chain-aware)
             for (int o = 0; o < 4; ++o) tuneModCents[o] += robinDriftCents_[o];   // per-station wander
         for (int i = 0; i < synthEngine.getNumVoices(); ++i)
