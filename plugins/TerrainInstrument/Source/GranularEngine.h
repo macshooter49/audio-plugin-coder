@@ -203,7 +203,7 @@ public:
         normSm_ += normAlpha_ * (norm_ - normSm_);
         shapeSm_ += normAlpha_ * (p_.shape - shapeSm_);   // fb204 — Shape/Skew ride the same glide
         skewSm_  += normAlpha_ * (p_.skew  - skewSm_);
-        if (std::fabs (skewSm_ - skewLut_) > 0.008f) { refreshSkewWarp (skewSm_); skewLut_ = skewSm_; }
+        if (std::fabs (skewSm_ - skewLut_) > 0.008f || (skewSm_ != 0.f && skewKCached_ < 0.f)) { refreshSkewWarp (skewSm_); skewLut_ = skewSm_; }   // fb234 — never-built guard
         outL = accL * normSm_;
         outR = accR * normSm_;
 
@@ -240,6 +240,7 @@ public:
         while (base < n)
         {
             const int len = (n - base) < kChunk ? (n - base) : kChunk;
+            if (std::fabs (skewSm_ - skewLut_) > 0.008f || (skewSm_ != 0.f && skewKCached_ < 0.f)) { refreshSkewWarp (skewSm_); skewLut_ = skewSm_; }   // fb234 — the chunk-rate rebuild fb204 promised; this path had NONE (noteOn snaps skewSm_ AFTER setParams -> the zero LUT windowed every grain to 0)
 
             // 1) head + scheduler, per sample (cheap — no grain work here). Grains capture
             //    their bounds AT SPAWN (same caught_ state as tick() sees), so a mid-chunk
@@ -425,7 +426,7 @@ private:
         const float ov = densHz_ * glenSec;
         norm_ = 1.f / std::sqrt (ov < 1.f ? 1.f : ov);
         refreshLoopBounds();
-        if (std::fabs (skewSm_ - skewLut_) > 0.008f) { refreshSkewWarp (skewSm_); skewLut_ = skewSm_; }   // fb204 — glided LUT (chunk-rate rebuild)
+        if (std::fabs (skewSm_ - skewLut_) > 0.008f || (skewSm_ != 0.f && skewKCached_ < 0.f)) { refreshSkewWarp (skewSm_); skewLut_ = skewSm_; }   // fb204 — glided LUT · fb234 never-built guard: 0<|skew|<=0.008 never crossed the threshold -> zero LUT -> TOTAL SILENCE (the fb204 regression Max caught)
     }
 
     // Effective LOOP bracket = [loopStart,loopEnd] sorted, intersected with the region; a
@@ -624,8 +625,9 @@ private:
     // measured); k is block-constant, so the warp bakes into a 257-entry table + lerp.
     void refreshSkewWarp (float skew) noexcept
     {
-        if (skew == 0.f) return;
-        // +skew pushes the peak later (swell), -skew earlier (pluck)
+        // +skew pushes the peak later (swell), -skew earlier (pluck); skew 0 builds the k=1
+        // identity table (once — the k-cache early-out below makes repeats free) so the LUT
+        // content always matches skewKCached_/skewLut_ (the old early-return left stale content behind)
         float k = 1.f + (skew < 0.f ? skew * 0.6f : skew * 1.5f);
         if (k < 0.05f) k = 0.05f;
         if (k == skewKCached_) return;
