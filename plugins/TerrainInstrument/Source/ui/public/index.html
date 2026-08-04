@@ -2443,10 +2443,10 @@ body {
 #mod-engine .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
 #mod-engine .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb238 — the Serum range bar (dashed = the path) */
 #mod-engine .sh-ghost{fill:none;stroke:rgba(183,148,255,.55);stroke-width:1;pointer-events:none;}   /* fb238 — the live modulated curve */
-#mod-engine .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 — the drawn Path */
-#mod-engine .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb239 — the free-run trajectory (dim body) */
+#mod-engine .mv-path{fill:none;stroke:rgba(236,232,242,.8);stroke-width:1;stroke-linejoin:round;stroke-linecap:round;}   /* fb242 — thin white */
+#mod-engine .mv-traj{fill:none;stroke:rgba(236,232,242,.72);stroke-width:.9;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb242 — thin white S&H */
 #mod-engine .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}   /* the bright recent head — a comet */
-#mod-engine .mv-ctrail{fill:none;stroke:#C3B3FF;stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;opacity:.95;pointer-events:none;}   /* fb241 — the live attractor trail (Serum-style, no ghost) */
+#mod-engine .mv-ctrail{fill:none;stroke:rgba(236,232,242,.72);stroke-width:.85;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb242 — thin light white, no glow (Max) */
 #mod-engine .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}   /* fb239 — terrain contour rings */
 #mod-engine .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 #mod-engine .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
@@ -2508,10 +2508,10 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
 .lfo-ext .card-scope .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb238 */
 .lfo-ext .card-scope .sh-ghost{fill:none;stroke:rgba(183,148,255,.55);stroke-width:1;pointer-events:none;}   /* fb238 */
-.lfo-ext .card-scope .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 */
-.lfo-ext .card-scope .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}
+.lfo-ext .card-scope .mv-path{fill:none;stroke:rgba(236,232,242,.8);stroke-width:1;stroke-linejoin:round;stroke-linecap:round;}   /* fb242 */
+.lfo-ext .card-scope .mv-traj{fill:none;stroke:rgba(236,232,242,.72);stroke-width:.9;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}
 .lfo-ext .card-scope .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}
-.lfo-ext .card-scope .mv-ctrail{fill:none;stroke:#C3B3FF;stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;opacity:.95;pointer-events:none;}   /* fb241 */
+.lfo-ext .card-scope .mv-ctrail{fill:none;stroke:rgba(236,232,242,.72);stroke-width:.85;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb242 */
 .lfo-ext .card-scope .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}
 .lfo-ext .card-scope .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 .lfo-ext .b{gap:12px;}
@@ -22901,8 +22901,16 @@ restoreThemeFromBackend();
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g>'+
       '<path class="mv-path" d="'+d+'"/>'+
       '<circle class="mv-foll" id="mv-fd" cx="'+shX(p0[0]).toFixed(1)+'" cy="'+shY(p0[1],GEO)+'" r="3"/></svg>'; }
-  function chaosSpread(shape){ return shape===9?3.1:2.6; }   // fb241 — wings spread to fill the wide band
-  function chaosMap(T0,B0,cy,shape){ var yS=((B0-T0)/2)*0.92; return {cx:228,cy:cy,yS:yS,xS:yS*chaosSpread(shape)}; }
+  var __chaosBox={};
+  function chaosBox(shape){ if(__chaosBox[shape])return __chaosBox[shape];   // fb242 — the attractor's invariant extent, for auto-fit (fill the band)
+    var x=0.1,y=0,z=(shape===9?18:0),h=(shape===9?0.005:0.02),n=(shape===9?24000:30000),i,xmn=1e9,xmx=-1e9,ymn=1e9,ymx=-1e9;
+    for(i=0;i<n;i++){ var dx,dy,dz;
+      if(shape===9){ dx=10*(y-x);dy=x*(28-z)-y;dz=x*y-2.6667*z; } else { dx=-y-z;dy=x+0.2*y;dz=0.2+z*(x-5.7); }
+      x+=h*dx;y+=h*dy;z+=h*dz;
+      if(i>400){ var nx=(shape===9?x/22:x/11), ny=(shape===9?(z-24)/26:y/11); if(nx<xmn)xmn=nx; if(nx>xmx)xmx=nx; if(ny<ymn)ymn=ny; if(ny>ymx)ymx=ny; } }
+    __chaosBox[shape]={xc:(xmn+xmx)/2,yc:(ymn+ymx)/2,xh:Math.max(0.01,(xmx-xmn)/2),yh:Math.max(0.01,(ymx-ymn)/2)}; return __chaosBox[shape]; }
+  function chaosMap(T0,B0,cy,shape){ var b=chaosBox(shape), wF=(shape===9?0.80:0.68), hF=0.92;   // fb242 — auto-fit to FILL the band both dims
+    return {cx:228,cy:cy,box:b,XS:(228*wF)/b.xh,YS:(((B0-T0)/2)*hF)/b.yh}; }
   // fb241 — SERUM-STYLE LIVE TRAIL: the UI integrates the attractor at the LFO's rate (the 60Hz DSP feed is too
   // coarse for smooth loops), gated on notes (animates only while MIDI plays) but FREE (state persists, never
   // resets on note-on). A long rolling window traces the recognizable butterfly/scroll and wanders the grid.
@@ -22916,7 +22924,7 @@ restoreThemeFromBackend();
       if(shape===9){ dx=10*(S.y-S.x); dy=S.x*(28-S.z)-S.y; dz=S.x*S.y-2.6667*S.z; } else { dx=-S.y-S.z; dy=S.x+0.2*S.y; dz=0.2+S.z*(S.x-5.7); }
       S.x+=hh*dx; S.y+=hh*dy; S.z+=hh*dz; S.acc+=hh;
       if(S.acc>=pe){ S.acc-=pe; var nx=(shape===9?S.x/22:S.x/11), ny=(shape===9?(S.z-24)/26:S.y/11);
-        chaosTrail.push([Math.max(-1,Math.min(1,nx)),Math.max(-1,Math.min(1,ny))]); if(chaosTrail.length>cap)chaosTrail.shift(); } }
+        chaosTrail.push([nx,ny]); if(chaosTrail.length>cap)chaosTrail.shift(); } }
     if(!isFinite(S.x)||Math.abs(S.x)>60){ S.x=0.1; S.y=0; S.z=(shape===9?18:0); } }
   function chaosPrime(shape){ chaosReset(shape); chaosAdvance(shape,(shape===9?1300*0.010:1000*0.045)+6); }   // fill a static butterfly preview on entry (not animating)
   function trajSVG(shape,GEO){   // fb241 — S&H = scrolling seismograph · LORENZ/ROSSLER = a clean live trail on the grid (no ghost, no rings)
@@ -22924,13 +22932,11 @@ restoreThemeFromBackend();
     if(shape===5){
       var base='<line class="sh-base" x1="0" y1="'+cy.toFixed(1)+'" x2="'+w+'" y2="'+cy.toFixed(1)+'"/>';
       return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+base+'</g>'+
-        '<path class="mv-traj" d=""/>'+
-        '<circle class="mv-foll" id="mv-fd" cx="'+(w-3)+'" cy="'+cy.toFixed(1)+'" r="2.6"/></svg>'; }
+        '<path class="mv-traj" d=""/></svg>'; }
     var g=''; for(i=1;i<12;i++){ var gx=(w*i/12).toFixed(1); g+='<line x1="'+gx+'" y1="'+T0+'" x2="'+gx+'" y2="'+B0+'"/>'; }
     for(i=0;i<=6;i++){ var gy=(T0+(B0-T0)*i/6).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="0" y1="'+gy+'" x2="'+w+'" y2="'+gy+'"/>'; }
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g>'+
-      '<path class="mv-ctrail" d=""/>'+
-      '<circle class="mv-foll" id="mv-fd" cx="228" cy="'+cy.toFixed(1)+'" r="2.8"/></svg>'; }
+      '<path class="mv-ctrail" d=""/></svg>'; }
   function trajGeo(sc){ var g=sc.__shGeo||null,T0=g?g.T:SH_TOP,B0=g?g.B:SH_BOT; return {T0:T0,B0:B0,cy:(T0+B0)/2,R:(B0-T0)*0.46,w:456}; }
   function shTrajTick(){   // fb241 — free-run viz every frame
     if(st.shape!==5&&st.shape!==9&&st.shape!==10)return;
@@ -22942,15 +22948,13 @@ restoreThemeFromBackend();
       var v=(window.__mvLfoVal&&window.__mvLfoVal[st.tab-1]!=null)?window.__mvLfoVal[st.tab-1]:((typeof mvL!=='undefined'&&mvL)?(mvL[st.tab-1]||0):0);
       duneHist.push(v); if(duneHist.length>170)duneHist.shift();
     }
-    shScopes().forEach(function(sc){ var G=trajGeo(sc),fd=sc.querySelector('#mv-fd'),i;
+    shScopes().forEach(function(sc){ var G=trajGeo(sc),i;
       if(st.shape===9||st.shape===10){
         var tr=sc.querySelector('.mv-ctrail'); if(!tr)return;
         var M=chaosMap(G.T0,G.B0,G.cy,st.shape),n=chaosTrail.length;
-        if(redraw||!tr.getAttribute('d')){ var d=''; for(i=0;i<n;i++){ d+=(i?'L':'M')+(M.cx+chaosTrail[i][0]*M.xS).toFixed(1)+' '+(G.cy-chaosTrail[i][1]*M.yS).toFixed(1)+' '; } tr.setAttribute('d',d); }
-        if(fd&&n){ var L=chaosTrail[n-1]; fd.setAttribute('cx',(M.cx+L[0]*M.xS).toFixed(1)); fd.setAttribute('cy',(G.cy-L[1]*M.yS).toFixed(1)); }
+        if(redraw||!tr.getAttribute('d')){ var d=''; for(i=0;i<n;i++){ d+=(i?'L':'M')+(M.cx+(chaosTrail[i][0]-M.box.xc)*M.XS).toFixed(1)+' '+(G.cy-(chaosTrail[i][1]-M.box.yc)*M.YS).toFixed(1)+' '; } tr.setAttribute('d',d); }
       } else {
-        var tp=sc.querySelector('.mv-traj'); if(!tp)return; var nn=duneHist.length,DN=170,dd=''; for(i=0;i<nn;i++){ var dx=(i/(DN-1))*G.w, dy=G.cy-duneHist[i]*G.R; dd+=(i?'L':'M')+dx.toFixed(1)+' '+dy.toFixed(1)+' '; } tp.setAttribute('d',dd);
-        if(fd&&nn){ fd.setAttribute('cx',((nn-1)/(DN-1)*G.w).toFixed(1)); fd.setAttribute('cy',(G.cy-duneHist[nn-1]*G.R).toFixed(1)); }
+        var tp=sc.querySelector('.mv-traj'); if(!tp)return; var nn=duneHist.length,DN=170,dd=''; for(i=0;i<nn;i++){ var vv=Math.max(-1,Math.min(1,duneHist[i]*1.3)); var dx=(i/(DN-1))*G.w, dy=G.cy-vv*G.R; dd+=(i?'L':'M')+dx.toFixed(1)+' '+dy.toFixed(1)+' '; } tp.setAttribute('d',dd);
       } }); }
   function shaperSVG(GEO){
     if(st.shape===8) return pathSVG(GEO);                                    // fb239 — free 2D path
@@ -27907,7 +27911,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb241';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb242';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
