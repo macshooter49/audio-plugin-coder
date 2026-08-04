@@ -5306,8 +5306,48 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             std::memcpy (lfoTableAudio_, lfoTableShared_, sizeof (lfoTableAudio_));
             std::memcpy (lfoMotionAudio_, lfoMotionShared_, sizeof (lfoMotionAudio_));   // fb228 — motion rides the same gate
+            std::memcpy (lfoPtAudio_,       lfoPtShared_,       sizeof (lfoPtAudio_));        // fb238 — the point lists ride too
+            std::memcpy (lfoPtNpAudio_,     lfoPtNpShared_,     sizeof (lfoPtNpAudio_));
+            std::memcpy (lfoPtHasModAudio_, lfoPtHasModShared_, sizeof (lfoPtHasModAudio_));
+            for (int n2 = 0; n2 < wc::NUM_LFOS; ++n2) lfoPtDirty_[n2] = true;
             lfoShapeSeen_ = lfoShapeVersion_.load (std::memory_order_acquire);
         }
+    }
+    // fb238 — LIVE PER-POINT MODULATION: re-bake a modded LFO's audio table in place from the
+    // current source LFO values (flowLfo peeks — end of last block, one block of lag, inaudible
+    // at LFO rates). Voices and the mirror hold pointers into these rows (the setCustomTable
+    // contract: content updates in place at block top), so the edit reaches every consumer with
+    // zero copies. Gates: no mods = zero cost; not in Custom shape = skip; sources still = skip.
+    for (int nP = 0; nP < wc::NUM_LFOS; ++nP)
+    {
+        if (! lfoPtHasModAudio_[nP]) continue;
+        if (synModCfg.lfos[nP].shape != wc::LFOShape::Custom) continue;
+        const int np = lfoPtNpAudio_[nP];
+        if (np < 2) continue;
+        float sv[wc::NUM_LFOS];
+        for (int mS = 0; mS < wc::NUM_LFOS; ++mS) sv[mS] = flowLfo_[mS].peek();
+        bool need = lfoPtDirty_[nP];
+        for (int i2 = 0; i2 < np && ! need; ++i2)
+        {
+            const auto& q = lfoPtAudio_[nP][i2];
+            if (q.xs > 0 && std::fabs (sv[q.xs - 1] - lfoPtSrcLast_[nP][q.xs - 1]) > 0.002f) need = true;
+            if (q.ys > 0 && std::fabs (sv[q.ys - 1] - lfoPtSrcLast_[nP][q.ys - 1]) > 0.002f) need = true;
+        }
+        if (! need) continue;
+        lfoPtDirty_[nP] = false;
+        for (int mS = 0; mS < wc::NUM_LFOS; ++mS) lfoPtSrcLast_[nP][mS] = sv[mS];
+        LfoShapePtM eff[160];
+        for (int i2 = 0; i2 < np; ++i2)
+        {
+            eff[i2] = lfoPtAudio_[nP][i2];
+            if (eff[i2].xs > 0 && i2 > 0 && i2 < np - 1)
+                eff[i2].x = juce::jlimit (0.0f, 1.0f, eff[i2].x + eff[i2].xa * sv[eff[i2].xs - 1]);
+            if (eff[i2].ys > 0)
+                eff[i2].y = juce::jlimit (0.0f, 1.0f, eff[i2].y + eff[i2].ya * sv[eff[i2].ys - 1]);
+        }
+        std::sort (eff, eff + np, [] (const LfoShapePtM& a, const LfoShapePtM& b) { return a.x < b.x; });
+        eff[0].x = 0.0f; eff[np - 1].x = 1.0f;
+        bakeLfoShapeTable (eff, np, lfoTableAudio_[nP]);
     }
     for (int i = 0; i < wc::NUM_LFOS; ++i)
     {
@@ -7211,6 +7251,22 @@ static float lfoShapeBias (float t, float c) noexcept
     return (std::exp (P * t) - 1.0f) / (std::exp (P) - 1.0f);
 }
 
+void TerrainInstrumentAudioProcessor::bakeLfoShapeTable (const LfoShapePtM* pts, int np, float* tb) noexcept
+{
+    int seg = 0;
+    for (int k = 0; k < wc::kLfoTableN; ++k)
+    {
+        const float p = (float) k / (float) wc::kLfoTableN;
+        while (seg < np - 2 && pts[seg + 1].x <= p) ++seg;   // zero-width segs = hard steps (later point rules)
+        const auto& a = pts[seg]; const auto& b = pts[seg + 1];
+        const float w = b.x - a.x;
+        const float y = (w <= 1.0e-6f) ? b.y
+                      : a.y + (b.y - a.y) * lfoShapeBias ((p - a.x) / w, a.c);
+        tb[k] = 2.0f * y - 1.0f;
+    }
+    tb[wc::kLfoTableN] = tb[0];   // wrap guard sample
+}
+
 void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& json)
 {
     auto v = juce::JSON::parse (json);
@@ -7224,32 +7280,33 @@ void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& jso
         if (n < 1 || n > wc::NUM_LFOS) continue;
         auto* pa = e.getProperty ("pts", juce::var()).getArray();
         if (pa == nullptr || pa->size() < 2) continue;
-        struct Pt { float x, y, c; };
-        Pt pts[160]; int np = 0;   // fb213 — the stamp brushes build dense step patterns (32 cells x ties); cap raised with the JS side
+        LfoShapePtM pts[160]; int np = 0;   // fb213 cap · fb238 — points may carry per-axis mods at index 3
         for (const auto& pv : *pa)
         {
             if (np >= 160) break;
             auto* t = pv.getArray(); if (t == nullptr || t->size() < 2) continue;
-            pts[np++] = { juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[0]),
-                          juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[1]),
-                          t->size() > 2 ? juce::jlimit (-1.0f, 1.0f, (float) (double) (*t)[2]) : 0.0f };
+            LfoShapePtM P;
+            P.x = juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[0]);
+            P.y = juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[1]);
+            P.c = t->size() > 2 ? juce::jlimit (-1.0f, 1.0f, (float) (double) (*t)[2]) : 0.0f;
+            if (t->size() > 3 && (*t)[3].isObject())   // fb238 — {xs,xa,ys,ya} rides at index 3
+            {
+                const auto& m3 = (*t)[3];
+                P.xs = juce::jlimit (0, wc::NUM_LFOS, (int) m3.getProperty ("xs", 0));
+                P.xa = juce::jlimit (-1.0f, 1.0f, (float) (double) m3.getProperty ("xa", 0.0));
+                P.ys = juce::jlimit (0, wc::NUM_LFOS, (int) m3.getProperty ("ys", 0));
+                P.ya = juce::jlimit (-1.0f, 1.0f, (float) (double) m3.getProperty ("ya", 0.0));
+            }
+            pts[np++] = P;
         }
         if (np < 2) continue;
-        std::sort (pts, pts + np, [] (const Pt& a, const Pt& b) { return a.x < b.x; });
+        std::sort (pts, pts + np, [] (const LfoShapePtM& a, const LfoShapePtM& b) { return a.x < b.x; });
         pts[0].x = 0.0f; pts[np - 1].x = 1.0f;   // endpoints pin the cycle
-        float* tb = lfoTableShared_[n - 1];
-        int seg = 0;
-        for (int k = 0; k < wc::kLfoTableN; ++k)
-        {
-            const float p = (float) k / (float) wc::kLfoTableN;
-            while (seg < np - 2 && pts[seg + 1].x <= p) ++seg;   // zero-width segs = hard steps (later point rules)
-            const Pt& a = pts[seg]; const Pt& b = pts[seg + 1];
-            const float w = b.x - a.x;
-            const float y = (w <= 1.0e-6f) ? b.y
-                          : a.y + (b.y - a.y) * lfoShapeBias ((p - a.x) / w, a.c);
-            tb[k] = 2.0f * y - 1.0f;
-        }
-        tb[wc::kLfoTableN] = tb[0];   // wrap guard sample
+        bakeLfoShapeTable (pts, np, lfoTableShared_[n - 1]);
+        std::memcpy (lfoPtShared_[n - 1], pts, sizeof (LfoShapePtM) * (size_t) np);   // fb238 — keep the list for live re-bakes
+        lfoPtNpShared_[n - 1] = np;
+        { bool hm = false; for (int i2 = 0; i2 < np; ++i2) if (pts[i2].xs > 0 || pts[i2].ys > 0) { hm = true; break; }
+          lfoPtHasModShared_[n - 1] = hm; }
         {   // fb228 — blob v2: per-LFO MOTION rides beside the points (absent = the LfoMotion defaults; fb235 — FREE)
             auto mo = e.getProperty ("mo", juce::var());
             auto& M = lfoMotionShared_[n - 1];

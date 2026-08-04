@@ -2441,6 +2441,8 @@ body {
 #mod-engine .sh-hit{fill:transparent;cursor:grab;}
 #mod-engine .sh-hit.cdh{cursor:ns-resize;}
 #mod-engine .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
+#mod-engine .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb238 — the Serum range bar (dashed = the path) */
+#mod-engine .sh-ghost{fill:none;stroke:rgba(183,148,255,.55);stroke-width:1;pointer-events:none;}   /* fb238 — the live modulated curve */
 #mod-engine .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
 #mod-engine .mv-tabs{display:flex;align-items:center;gap:5px;}   /* fb211 — 1:1-width breathing room */
 /* fixed-width slots: paging 1-5 ↔ 6-10 (and the "10"/arrows) must never reflow the row */
@@ -2498,6 +2500,8 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
 .lfo-ext .card-scope .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
 .lfo-ext .card-scope .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
+.lfo-ext .card-scope .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb238 */
+.lfo-ext .card-scope .sh-ghost{fill:none;stroke:rgba(183,148,255,.55);stroke-width:1;pointer-events:none;}   /* fb238 */
 .lfo-ext .b{gap:12px;}
 .lfo-ext .lsel{display:flex;justify-content:space-between;padding:0 6px;}
 .lfo-ext .lsel .lane{position:relative;font-size:7px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.38);padding:0 6px 4px;cursor:pointer;transition:color .12s;}
@@ -22828,7 +22832,7 @@ restoreThemeFromBackend();
   function shEvalPts(pts,p){ p=((p%1)+1)%1; var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++;
     var a=pts[i],b=pts[i+1],w=b[0]-a[0]; if(w<=1e-6)return b[1];
     return a[1]+(b[1]-a[1])*shBias((p-a[0])/w,a[2]||0); }
-  function shEval(n,p){ var sp=shapes[n]; if(!sp)return 1-4*Math.abs((((p%1)+1)%1)-0.5); return shEvalPts(sp.pts,p)*2-1; }
+  function shEval(n,p){ if(n===st.tab&&__shEffCache)return shEvalPts(__shEffCache,p)*2-1;   /* fb238 — the live modulated curve IS the audible read */ var sp=shapes[n]; if(!sp)return 1-4*Math.abs((((p%1)+1)%1)-0.5); return shEvalPts(sp.pts,p)*2-1; }
   window.__lfoCustomEval=shEval;   // the badge-module mirror (mval) + any future consumer reads this
   function shFlipH(pts){ var n=pts.length,out=[],i;   // fb221 — time-mirror: reverse order, x -> 1-x; each segment's tension lands on its mirrored segment NEGATED (bias with -P is the exact horizontal mirror of bias with P)
     for(i=n-1;i>=0;i--)out.push([1-pts[i][0],pts[i][1],(i>0)?-(pts[i-1][2]||0):0]);
@@ -22845,7 +22849,7 @@ restoreThemeFromBackend();
   var shPushLastT=0;
   function shPushNow(){ try{   // fb232 — the cross-window poll yields to fresh local edits
       var out=[],k; for(k in shapes){ var sp=shapes[k];
-        var en={n:+k,pts:sp.pts.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''};
+        var en={n:+k,pts:sp.pts.map(function(q){var t3=[+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)]; if(q[3]&&(q[3].xs>0||q[3].ys>0))t3.push(q[3]); return t3;}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''};   /* fb238 — per-point mods ride at index 3 */
         if(motion[k])en.mo=motion[k];   // fb229 — motion rides beside the points
         out.push(en); }
       var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setSynthLfoShapes'):null;
@@ -22855,7 +22859,7 @@ restoreThemeFromBackend();
     shPushT=setTimeout(function(){ shPushLastT=Date.now(); shPushNow(); },130); }   // trailing — the settled truth
   function shPull(){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
     f().then(function(j){ if(shTouched)return; try{ var v=JSON.parse(j);   // RACE LAW: a local edit outranks any pull
-      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){return [q[0],q[1],q[2]||0];}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null};
+      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){var t3=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')t3[3]=q[3]; return t3;}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null};
         if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:0,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1}; } });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
   function shY(y01,g){ var B=g?g.B:SH_BOT, T=g?g.T:SH_TOP; return B-(B-T)*y01; }   // fb232 — geometry-aware: the card hero renders in its OWN taller band (uniform scale, zero stretch)
@@ -22872,8 +22876,14 @@ restoreThemeFromBackend();
     var custom=(st.shape===7);
     var d=custom?shPathD(sp.pts,w,GEO):stockPathD(st.shape,GEO);   // fb212 — stock shapes draw in the SAME field (grid/band/ruler); nodes appear once they're seeds
     var fillD='M'+SH_L+' '+B0+' '+d.replace(/^M/,'L')+'L'+SH_R+' '+B0+' Z';
-    var nd='',hd='',cdm='';
+    var nd='',hd='',cdm='',mb='';
     if(custom){
+    sp.pts.forEach(function(q,idx){ var m=q[3]; if(!m||!(m.xs>0||m.ys>0))return;   // fb238 — the Serum range bar: the shaded min→max travel of a modulated point
+      var cx=shX(q[0]),cy=shY(q[1],GEO);
+      if(m.ys>0){ var yT=shY(shC01(q[1]+Math.abs(m.ya||0)),GEO),yB2=shY(shC01(q[1]-Math.abs(m.ya||0)),GEO);
+        mb+='<rect class="sh-modr" data-i="'+idx+'" data-ax="y" x="'+(cx-2.2).toFixed(1)+'" y="'+yT.toFixed(1)+'" width="4.4" height="'+Math.max(1.2,yB2-yT).toFixed(1)+'" rx="2.2"/>'; }
+      if(m.xs>0&&idx>0&&idx<sp.pts.length-1){ var xL=shX(shC01(q[0]-Math.abs(m.xa||0))),xR=shX(shC01(q[0]+Math.abs(m.xa||0)));
+        mb+='<rect class="sh-modr" data-i="'+idx+'" data-ax="x" x="'+xL.toFixed(1)+'" y="'+(cy-2.2).toFixed(1)+'" width="'+Math.max(1.2,xR-xL).toFixed(1)+'" height="4.4" rx="2.2"/>'; } });
     sp.pts.forEach(function(q,idx){ var cx=shX(q[0]).toFixed(1),cy=shY(q[1],GEO).toFixed(1);   // fb208 — exact: the dot IS the line end
       nd+='<circle class="sh-nd'+(shSel.indexOf(idx)>=0?' sel':'')+'" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
       hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="12"/>'; });   // fb210 — fat targets (Max: 'open up the circumference')
@@ -22881,7 +22891,7 @@ restoreThemeFromBackend();
       var mx=shX((q[0]+r[0])/2).toFixed(1), my=shY(shEvalPts(sp.pts,(q[0]+r[0])/2),GEO).toFixed(1);
       cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="10"/>'; });
     }
-    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
+    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+(custom?mb+'<path class="sh-ghost" d=""/>':'')+
       (function(){ var mo2=motion[st.tab]; return (mo2&&mo2.tg===2&&mo2.lb>=0)? '<line class="lbmark" x1="'+shX(mo2.lb).toFixed(1)+'" y1="'+T0+'" x2="'+shX(mo2.lb).toFixed(1)+'" y2="'+B0+'"/>':''; })()+
       '<line class="mv-play" id="mv-ph" x1="0" y1="'+(T0-4)+'" x2="0" y2="'+(B0+4)+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+shY(.5,GEO)+'" r="2.4"/>'+nd+cdm+hd+'</svg>'; }
   function stockVal(k,p){ p=((p%1)+1)%1;   // fb212 — ONE-CYCLE stock evaluator (the pane's single-cycle world; yfor keeps the 3-cycle look for icons/ext)
@@ -22902,7 +22912,12 @@ restoreThemeFromBackend();
     updSel('.sh-nd',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1],g).toFixed(1));} });
     updSel('.sh-hit:not(.cdh)',function(c){ var q=sp.pts[+c.getAttribute('data-i')]; if(q){c.setAttribute('cx',shX(q[0]).toFixed(1)); c.setAttribute('cy',shY(q[1],g).toFixed(1));} });
     updSel('.sh-cd',function(c){ var i2=+c.getAttribute('data-i'),q=sp.pts[i2],r=sp.pts[i2+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2),g).toFixed(1));} });
-    updSel('.sh-hit.cdh',function(c){ var i3=+c.getAttribute('data-i'),q=sp.pts[i3],r=sp.pts[i3+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2),g).toFixed(1));} }); }
+    updSel('.sh-hit.cdh',function(c){ var i3=+c.getAttribute('data-i'),q=sp.pts[i3],r=sp.pts[i3+1]; if(q&&r){c.setAttribute('cx',shX((q[0]+r[0])/2).toFixed(1)); c.setAttribute('cy',shY(shEvalPts(sp.pts,(q[0]+r[0])/2),g).toFixed(1));} });
+    updSel('.sh-modr',function(r2){ var ix=+r2.getAttribute('data-i'),ax=r2.getAttribute('data-ax'),q=sp.pts[ix]; if(!q||!q[3])return;   // fb238 — bars ride the drag
+      if(ax==='y'){ var yT=shY(shC01(q[1]+Math.abs(q[3].ya||0)),g),yB3=shY(shC01(q[1]-Math.abs(q[3].ya||0)),g);
+        r2.setAttribute('x',(shX(q[0])-2.2).toFixed(1)); r2.setAttribute('y',yT.toFixed(1)); r2.setAttribute('height',Math.max(1.2,yB3-yT).toFixed(1)); }
+      else { var xL2=shX(shC01(q[0]-Math.abs(q[3].xa||0))),xR2=shX(shC01(q[0]+Math.abs(q[3].xa||0)));
+        r2.setAttribute('x',xL2.toFixed(1)); r2.setAttribute('y',(shY(q[1],g)-2.2).toFixed(1)); r2.setAttribute('width',Math.max(1.2,xR2-xL2).toFixed(1)); } }); }
   function shPos(sc,ev){ var r=sc.getBoundingClientRect(), g=sc.__shGeo||null, vw=sc.__shView||null,
       Hh=vw?vw.h:(g?g.H:96), Y0=vw?vw.y0:0, Tt=g?g.T:SH_TOP, Bb=g?g.B:SH_BOT;
     var xpx=(ev.clientX-r.left)/r.width*456, ypx=Y0+(ev.clientY-r.top)/r.height*Hh;
@@ -23080,17 +23095,90 @@ restoreThemeFromBackend();
     d.onmouseleave=function(){ d.style.background=''; };
     d.onclick=function(){ try{window.__synHideMenu();}catch(e2){} fn(); };
     return d; }
+  function shC01(v){ return Math.max(0,Math.min(1,v)); }   // fb238
+  var __shEffCache=null;   // fb238 — this frame's effective (modulated) points; placeHead + shEval ride it
+  function shEffPts(){   // fb238 — DSP-twin: offsets from the pushed __mvLfoVal truth (fb214 law: freshness-stamped, never a latch)
+    if(st.shape!==7)return null;
+    var lv=window.__mvLfoVal; if(!lv||!window.__mvLfoPhT||(Date.now()-window.__mvLfoPhT)>250)return null;
+    var sp=shGet(), last=sp.pts.length-1, any=false;
+    var eff=sp.pts.map(function(q,ix){ var m=q[3], x=q[0], y=q[1];
+      if(m&&m.xs>0&&ix>0&&ix<last){ x=shC01(x+(m.xa||0)*(lv[m.xs-1]||0)); any=true; }
+      if(m&&m.ys>0){ y=shC01(y+(m.ya||0)*(lv[m.ys-1]||0)); any=true; }
+      return [x,y,q[2]||0]; });
+    if(!any)return null;
+    eff.sort(function(a,b){return a[0]-b[0];}); eff[0][0]=0; eff[eff.length-1][0]=1; return eff; }
+  function shGhostTick(){   // fb238 — the breathing curve: both screens, every frame, same geometry as the base stroke
+    __shEffCache=(st.shape===7)?shEffPts():null;
+    shScopes().forEach(function(sc){ var gp=sc.querySelector('.sh-ghost'); if(!gp)return;
+      gp.setAttribute('d', __shEffCache?shPathD(__shEffCache,456,sc.__shGeo||null):''); }); }
+  function shModAmtNode(idxs,axis){   // fb238 — THE slider grammar (fb69/fb143): 2px track, purple fill from center, white 2x9 marker, 1x7 center notch
+    var sp=shGet();
+    function get(){ var q0=sp.pts[idxs[0]]; return (q0&&q0[3]&&q0[3][axis+'a'])||0; }
+    var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
+    var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;';
+    var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;';
+    lab.textContent=(axis==='x'?'X amount':'Y amount');
+    var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;';
+    row.appendChild(lab); row.appendChild(val);
+    var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
+    var notch=document.createElement('div'); notch.style.cssText='position:absolute;top:-2.5px;left:50%;width:1px;height:7px;background:rgba(255,255,255,0.28);transform:translateX(-50%);';
+    var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;height:2px;border-radius:1px;background:#8B5CF6;';
+    var marker=document.createElement('div'); marker.style.cssText='position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#FFFFFF;transform:translate(-50%,-50%);';
+    track.appendChild(notch); track.appendChild(fill); track.appendChild(marker);
+    wrap.appendChild(row); wrap.appendChild(track);
+    function paint(){ var a=get(), pct=(a+1)/2*100; marker.style.left=pct+'%'; val.textContent=(a>0?'+':'')+Math.round(a*100)+'%';
+      if(a>=0){ fill.style.left='50%'; fill.style.width=(a*50)+'%'; } else { fill.style.left=(50+a*50)+'%'; fill.style.width=(-a*50)+'%'; } }
+    paint();
+    function fromX(cx){ var r=track.getBoundingClientRect(); var t=Math.max(0,Math.min(1,(cx-r.left)/Math.max(1,r.width)));
+      var a=Math.round((t*2-1)*100)/100;
+      idxs.forEach(function(ix){ var q=sp.pts[ix]; if(q&&q[3]&&q[3][axis+'s']>0)q[3][axis+'a']=a; });
+      shTouched=true; shPush(); paint(); render(); }
+    var dragging=false;
+    track.addEventListener('pointerdown',function(ev){ ev.preventDefault(); ev.stopPropagation(); dragging=true; try{track.setPointerCapture(ev.pointerId);}catch(e2){} fromX(ev.clientX); });
+    track.addEventListener('pointermove',function(ev){ if(dragging){ ev.preventDefault(); fromX(ev.clientX); } });
+    function up2(ev){ if(dragging){ dragging=false; try{track.releasePointerCapture(ev.pointerId);}catch(e2){} } }
+    track.addEventListener('pointerup',up2); track.addEventListener('pointercancel',up2);
+    track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation();
+      idxs.forEach(function(ix){ var q=sp.pts[ix]; if(q&&q[3]&&q[3][axis+'s']>0)q[3][axis+'a']=(axis==='x'?0.25:0.5); });
+      shTouched=true; shPush(); paint(); render(); });
+    return wrap; }
+  function shModSrcMenu(idxs,axis,e,after){   // fb238 — the source picker (LFO 1..10), chained IN PLACE (the blend-pill keepOpen pattern)
+    if(!window.__synShowMenu)return;
+    var sp=shGet(), lbl=(axis==='x'?'X':'Y');
+    var q0=sp.pts[idxs[0]], curSrc=(q0&&q0[3]&&q0[3][axis+'s'])||0;
+    var items=[{isHeader:true,label:'Modulate '+lbl}], m2;
+    for(m2=1;m2<=NLFO;m2++)(function(mm){
+      items.push({ label:'LFO '+mm, white:true, isChecked:curSrc===mm, keepOpen:!!after, onPick:function(){
+        idxs.forEach(function(ix){ var q=sp.pts[ix]; if(!q)return;
+          if(axis==='x'&&(ix===0||ix===sp.pts.length-1))return;   // endpoints pin the cycle — no X travel
+          var mo=q[3]||(q[3]={}); mo[axis+'s']=mm; if(mo[axis+'a']==null)mo[axis+'a']=(axis==='x'?0.25:0.5); });
+        shTouched=true; shPush(); render(); if(after)after(); } });
+    })(m2);
+    if(curSrc>0)items.push({isSep:true},{ label:'Remove '+lbl+' modulation', white:true, keepOpen:!!after, onPick:function(){
+      idxs.forEach(function(ix){ var q=sp.pts[ix]; if(q&&q[3]){ delete q[3][axis+'s']; delete q[3][axis+'a'];
+        if(!(q[3].xs>0)&&!(q[3].ys>0))q.length=3; } });
+      shTouched=true; shPush(); render(); if(after)after(); } });
+    window.__synShowMenu('', items, e.clientX, e.clientY); }
+  function shPtMenu(i,e){   // fb238 — Serum 'Modulating LFO Points': Modulate X/Y → source → amount, plus the fb220 delete
+    var sp=shGet(), q=sp.pts[i]; if(!q||!window.__synShowMenu)return;
+    var ep=(i===0||i===sp.pts.length-1), m=q[3]||null, items=[];
+    if(!ep)items.push({ label:'Modulate X \u203a', white:true, keepOpen:true, onPick:function(){ shModSrcMenu([i],'x',e,function(){ shPtMenu(i,e); }); } });
+    items.push({ label:'Modulate Y \u203a', white:true, keepOpen:true, onPick:function(){ shModSrcMenu([i],'y',e,function(){ shPtMenu(i,e); }); } });
+    if(m&&m.xs>0)items.push({ node:shModAmtNode([i],'x') });
+    if(m&&m.ys>0)items.push({ node:shModAmtNode([i],'y') });
+    if(!ep&&sp.pts.length>2)items.push({ node:shRedRow('Delete point', function(){ shSelClear(); sp.pts.splice(i,1); shTouched=true; shPush(); render(); }) });
+    window.__synShowMenu('', items, e.clientX, e.clientY); }
   function shCtx(e){   // fb220 — right-click ON a point = the point's own menu (Max: 'right click, delete, gone'); anywhere else = the control room
     var sp=shGet(), nb=(st.shape===7)?shNear(sc0(),e):null;
     function sc0(){ return shActiveSc||root.querySelector('.mv-scope'); }
-    if(st.shape===7&&shSel.length>1&&window.__synShowMenu){   // fb221 — with a selection down, the right-click serves the selection; click empty ground to get the control room back
+    if(st.shape===7&&shSel.length>1&&window.__synShowMenu){   // fb221 selection menu · fb238 — one assignment serves the whole selection (the Serum multi-select tip)
+      var selIx=shSel.slice();
       window.__synShowMenu('', [
+        { label:'Modulate X \u203a', white:true, keepOpen:true, onPick:function(){ shModSrcMenu(selIx,'x',e,null); } },
+        { label:'Modulate Y \u203a', white:true, keepOpen:true, onPick:function(){ shModSrcMenu(selIx,'y',e,null); } },
         { node: shRedRow('Remove selected', function(){ shDelSel(); }) }
       ], e.clientX, e.clientY); return; }
-    if(nb&&nb.t==='nd'&&nb.i>0&&nb.i<sp.pts.length-1&&sp.pts.length>2&&window.__synShowMenu){
-      window.__synShowMenu('', [
-        { node: shRedRow('Delete point', function(){ shSelClear(); sp.pts.splice(nb.i,1); shTouched=true; shPush(); render(); }) }
-      ], e.clientX, e.clientY); return; }
+    if(nb&&nb.t==='nd'&&window.__synShowMenu){ shPtMenu(nb.i,e); return; }   // fb238 — Y-mod lives on endpoints too; delete/X stay interior-only inside
     if(nb&&nb.t==='cd'&&(sp.pts[nb.i][2]||0)!==0&&window.__synShowMenu){
       window.__synShowMenu('', [
         { label:'Straighten curve', white:true, onPick:function(){ sp.pts[nb.i][2]=0; shTouched=true; shPush(); render(); } }
@@ -23412,6 +23500,7 @@ restoreThemeFromBackend();
     ext.classList.add('open');
     extRefresh0(); }
   window.__openLfoCard=openExt;   // fb232 — the family card-only boot + __redockCard reach the card through this door
+  window.__lfoGhostTick=function(){ shGhostTick(); var am=ampOf(st.depth); if(root)placeHead(root,am); if(ext&&ext.classList.contains('open'))placeHead(ext,am); };   // fb238 — one manual ghost+follower frame (probe door; rAF drives it live)
   var __lfoWinTag = (window.__cardOnly==='lfo') ? 'card' : 'main';
   var shLiveT=0;
   function shLiveSend(){ /* fb236 — the 60Hz cross-window stroke wire (visual lane; the DSP rides shPush's own cadence) */
@@ -23457,7 +23546,7 @@ restoreThemeFromBackend();
       var rp=(ph+st.phase)%1, x=shX(rp);
       if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
       if(fd){ fd.setAttribute('cx',x.toFixed(1));
-        fd.setAttribute('cy',(st.shape===7?shY(shEvalPts(shGet().pts,rp),gG):shY((stockVal(st.shape,rp)+1)/2,gG)).toFixed(1)); }
+        fd.setAttribute('cy',(st.shape===7?shY(shEvalPts(__shEffCache||shGet().pts,rp),gG):shY((stockVal(st.shape,rp)+1)/2,gG)).toFixed(1)); }   /* fb238 — the dot rides the LIVE modulated curve */
       return; }
     var x2=ph*456;
     if(pl){ pl.setAttribute('x1',x2); pl.setAttribute('x2',x2); }
@@ -23467,6 +23556,7 @@ restoreThemeFromBackend();
     if(rP&&window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250){ ph=(((rP[st.tab-1]||0)%1)+1)%1; }
     else { ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph); }   // stale/absent feed → the old simulation (boot, headless, suspended host)
     var amp=ampOf(st.depth);
+    shGhostTick();   /* fb238 — per-point mod: ghost curve + eff-cache refresh at frame rate */
     if(root) placeHead(root,amp);
     if(ext && ext.classList.contains('open')) placeHead(ext,amp);
     if(root){ var sic=root.querySelector('#mv-shape .ic'); if(sic) sic.innerHTML=icon(st.shape, ph); }   // little living shape emblem
@@ -23861,7 +23951,7 @@ restoreThemeFromBackend();
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
   var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
-  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(p&&p.length){ window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   // fb217 — real phases ride along (freshness-stamped, never a latch — the fb214 law)
+  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(l&&l.length)window.__mvLfoVal=l; if(p&&p.length){ window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb238 — values ride for the point-mod ghost */   // fb217 — real phases ride along (freshness-stamped, never a latch — the fb214 law)
   /* fb182 — S3: the currently SELECTED modulator (env or LFO). Underlines paint purple
      for its routes, dim for everyone else's; switching selection repaints live. */
   window.__selMod = window.__selMod || { env:1 };
@@ -27685,7 +27775,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb237';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb238';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

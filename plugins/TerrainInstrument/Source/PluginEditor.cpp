@@ -5339,7 +5339,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         if (auto itL = audioProcessor.cardWindows_.find ("lfo");
             itL != audioProcessor.cardWindows_.end() && itL->second != nullptr)
             if (auto* cwv = dynamic_cast<TerrainCardWindow*> (itL->second.get()))
-                cwv->evalJs ("try{window.__mvLfoPh=[" + pArr + "];window.__mvLfoPhT=Date.now();}catch(e){}");
+                cwv->evalJs ("try{window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];window.__mvLfoPhT=Date.now();}catch(e){}");   // fb238 — values ride for the point-mod ghost
     }
 
     // fb236 — LIVE STROKE relay: a drawing gesture on either surface lands on the OTHER

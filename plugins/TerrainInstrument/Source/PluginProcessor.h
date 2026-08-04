@@ -1019,6 +1019,22 @@ public:
     juce::String                  lfoShapesJson_;
     float                         lfoTableShared_[wc::NUM_LFOS][wc::kLfoTableN + 1] {};
     float                         lfoTableAudio_ [wc::NUM_LFOS][wc::kLfoTableN + 1] {};
+    // fb238 — PER-POINT MODULATION (Serum 'Modulating LFO Points'): a drawn point may carry
+    // {xs,xa,ys,ya} — per-axis source LFO (1..10, 0 = none) and amount (−1..+1). The message
+    // thread stores the parsed list beside the base bake; the audio thread re-bakes the AUDIO
+    // table in place at block top from the live flowLfo peeks (the same carrier truth the
+    // follower dot rides), gated so an un-modded LFO costs zero and a modded one only pays
+    // (256 lerps) when a source it listens to actually moved.
+    struct LfoShapePtM { float x = 0, y = 0, c = 0; int xs = 0; float xa = 0; int ys = 0; float ya = 0; };
+    static void bakeLfoShapeTable (const LfoShapePtM* pts, int np, float* tb) noexcept;   // one bake, both threads
+    LfoShapePtM                   lfoPtShared_[wc::NUM_LFOS][160];
+    LfoShapePtM                   lfoPtAudio_ [wc::NUM_LFOS][160];
+    int                           lfoPtNpShared_[wc::NUM_LFOS] {};
+    int                           lfoPtNpAudio_ [wc::NUM_LFOS] {};
+    bool                          lfoPtHasModShared_[wc::NUM_LFOS] {};
+    bool                          lfoPtHasModAudio_ [wc::NUM_LFOS] {};
+    float                         lfoPtSrcLast_[wc::NUM_LFOS][wc::NUM_LFOS] {};
+    bool                          lfoPtDirty_[wc::NUM_LFOS] {};
     // fb228 — L5 MOTION per LFO (blob-fed beside the tables; same shared->audio copy discipline).
     // Defaults ARE the product defaults: tg=1 (RETRIG — Max: 'every LFO retrigs from here on out').
     struct LfoMotion { int tg = 0; float lb = -1.0f; int dir = 0; int mn = 0;   // fb235 — FREE is the product default again (Max reversed the fb228 Retrig call)
