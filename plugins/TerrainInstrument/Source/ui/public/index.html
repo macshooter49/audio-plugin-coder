@@ -2446,9 +2446,7 @@ body {
 #mod-engine .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 — the drawn Path */
 #mod-engine .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb239 — the free-run trajectory (dim body) */
 #mod-engine .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}   /* the bright recent head — a comet */
-#mod-engine .mv-cghost{fill:none;stroke:rgba(201,190,242,.17);stroke-width:.7;stroke-linejoin:round;pointer-events:none;}   /* fb240 — the full attractor ghost */
-#mod-engine .mv-comet{fill:none;stroke:rgba(201,190,242,.45);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
-#mod-engine .mv-comet-hd{fill:none;stroke:#EDE7FF;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
+#mod-engine .mv-ctrail{fill:none;stroke:#C3B3FF;stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;opacity:.95;pointer-events:none;}   /* fb241 — the live attractor trail (Serum-style, no ghost) */
 #mod-engine .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}   /* fb239 — terrain contour rings */
 #mod-engine .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 #mod-engine .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
@@ -2513,9 +2511,7 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 */
 .lfo-ext .card-scope .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}
 .lfo-ext .card-scope .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}
-.lfo-ext .card-scope .mv-cghost{fill:none;stroke:rgba(201,190,242,.17);stroke-width:.7;stroke-linejoin:round;pointer-events:none;}
-.lfo-ext .card-scope .mv-comet{fill:none;stroke:rgba(201,190,242,.45);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
-.lfo-ext .card-scope .mv-comet-hd{fill:none;stroke:#EDE7FF;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
+.lfo-ext .card-scope .mv-ctrail{fill:none;stroke:#C3B3FF;stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;opacity:.95;pointer-events:none;}   /* fb241 */
 .lfo-ext .card-scope .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}
 .lfo-ext .card-scope .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 .lfo-ext .b{gap:12px;}
@@ -22905,48 +22901,55 @@ restoreThemeFromBackend();
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g>'+
       '<path class="mv-path" d="'+d+'"/>'+
       '<circle class="mv-foll" id="mv-fd" cx="'+shX(p0[0]).toFixed(1)+'" cy="'+shY(p0[1],GEO)+'" r="3"/></svg>'; }
-  var __chaosGhost={};
-  function chaosGhost(shape){ if(__chaosGhost[shape])return __chaosGhost[shape];   // fb240 — the FULL attractor, integrated once (its shape is invariant); the comet rides the SAME projection the DSP pushes
-    var pts=[],x=0.1,y=0,z=(shape===9?18:0),i,n=(shape===9?9000:11000),h=(shape===9?0.005:0.02);
-    for(i=0;i<n;i++){ var dx,dy,dz;
-      if(shape===9){ dx=10*(y-x); dy=x*(28-z)-y; dz=x*y-2.6667*z; } else { dx=-y-z; dy=x+0.2*y; dz=0.2+z*(x-5.7); }
-      x+=h*dx; y+=h*dy; z+=h*dz;
-      if(i>600&&(i&1)===0){ var nx=(shape===9?x/22:x/11), ny=(shape===9?(z-24)/26:y/11); pts.push([Math.max(-1,Math.min(1,nx)),Math.max(-1,Math.min(1,ny))]); } }
-    __chaosGhost[shape]=pts; return pts; }
-  function chaosSpread(shape){ return shape===9?3.2:2.6; }   // fb240 — wings spread to fill the wide band
+  function chaosSpread(shape){ return shape===9?3.1:2.6; }   // fb241 — wings spread to fill the wide band
   function chaosMap(T0,B0,cy,shape){ var yS=((B0-T0)/2)*0.92; return {cx:228,cy:cy,yS:yS,xS:yS*chaosSpread(shape)}; }
-  function trajSVG(shape,GEO){   // fb240 — S&H = scrolling seismograph · LORENZ/ROSSLER = dense ghost + live comet
-    var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,cy=((T0+B0)/2);
+  // fb241 — SERUM-STYLE LIVE TRAIL: the UI integrates the attractor at the LFO's rate (the 60Hz DSP feed is too
+  // coarse for smooth loops), gated on notes (animates only while MIDI plays) but FREE (state persists, never
+  // resets on note-on). A long rolling window traces the recognizable butterfly/scroll and wanders the grid.
+  var chaosSt=null, chaosStShape=-1;
+  function chaosReset(shape){ chaosSt={x:0.1,y:0,z:(shape===9?18:0),acc:0}; chaosStShape=shape; chaosTrail=[]; }
+  function chaosAdvance(shape,dt){
+    if(chaosStShape!==shape)chaosReset(shape);
+    var S=chaosSt,h=(shape===9?0.005:0.02),pe=(shape===9?0.010:0.045),cap=(shape===9?1300:1000);
+    var steps=Math.max(1,Math.min(4000,Math.round(dt/h))),hh=dt/steps,i;
+    for(i=0;i<steps;i++){ var dx,dy,dz;
+      if(shape===9){ dx=10*(S.y-S.x); dy=S.x*(28-S.z)-S.y; dz=S.x*S.y-2.6667*S.z; } else { dx=-S.y-S.z; dy=S.x+0.2*S.y; dz=0.2+S.z*(S.x-5.7); }
+      S.x+=hh*dx; S.y+=hh*dy; S.z+=hh*dz; S.acc+=hh;
+      if(S.acc>=pe){ S.acc-=pe; var nx=(shape===9?S.x/22:S.x/11), ny=(shape===9?(S.z-24)/26:S.y/11);
+        chaosTrail.push([Math.max(-1,Math.min(1,nx)),Math.max(-1,Math.min(1,ny))]); if(chaosTrail.length>cap)chaosTrail.shift(); } }
+    if(!isFinite(S.x)||Math.abs(S.x)>60){ S.x=0.1; S.y=0; S.z=(shape===9?18:0); } }
+  function chaosPrime(shape){ chaosReset(shape); chaosAdvance(shape,(shape===9?1300*0.010:1000*0.045)+6); }   // fill a static butterfly preview on entry (not animating)
+  function trajSVG(shape,GEO){   // fb241 — S&H = scrolling seismograph · LORENZ/ROSSLER = a clean live trail on the grid (no ghost, no rings)
+    var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,cy=((T0+B0)/2),i;
     if(shape===5){
       var base='<line class="sh-base" x1="0" y1="'+cy.toFixed(1)+'" x2="'+w+'" y2="'+cy.toFixed(1)+'"/>';
       return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+base+'</g>'+
         '<path class="mv-traj" d=""/>'+
         '<circle class="mv-foll" id="mv-fd" cx="'+(w-3)+'" cy="'+cy.toFixed(1)+'" r="2.6"/></svg>'; }
-    var M=chaosMap(T0,B0,cy,shape), halfH=(B0-T0)/2;
-    var rings='',rn; for(rn=1;rn<=3;rn++){ var rr=halfH*(0.5+rn*0.5); rings+='<ellipse class="sh-ring" cx="228" cy="'+cy.toFixed(1)+'" rx="'+(rr*chaosSpread(shape)*0.95).toFixed(1)+'" ry="'+rr.toFixed(1)+'"/>'; }
-    var gp=chaosGhost(shape),gd='',i; for(i=0;i<gp.length;i++){ gd+=(i?'L':'M')+(M.cx+gp[i][0]*M.xS).toFixed(1)+' '+(cy-gp[i][1]*M.yS).toFixed(1)+' '; }
-    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+rings+'</g>'+
-      '<path class="mv-cghost" d="'+gd+'"/><path class="mv-comet" d=""/><path class="mv-comet-hd" d=""/>'+
-      '<circle class="mv-foll" id="mv-fd" cx="'+M.cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="2.8"/></svg>'; }
+    var g=''; for(i=1;i<12;i++){ var gx=(w*i/12).toFixed(1); g+='<line x1="'+gx+'" y1="'+T0+'" x2="'+gx+'" y2="'+B0+'"/>'; }
+    for(i=0;i<=6;i++){ var gy=(T0+(B0-T0)*i/6).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="0" y1="'+gy+'" x2="'+w+'" y2="'+gy+'"/>'; }
+    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g>'+
+      '<path class="mv-ctrail" d=""/>'+
+      '<circle class="mv-foll" id="mv-fd" cx="228" cy="'+cy.toFixed(1)+'" r="2.8"/></svg>'; }
   function trajGeo(sc){ var g=sc.__shGeo||null,T0=g?g.T:SH_TOP,B0=g?g.B:SH_BOT; return {T0:T0,B0:B0,cy:(T0+B0)/2,R:(B0-T0)*0.46,w:456}; }
-  function shTrajTick(){   // fb239 — drive the free-run viz every frame from the DSP truth feed
+  function shTrajTick(){   // fb241 — free-run viz every frame
     if(st.shape!==5&&st.shape!==9&&st.shape!==10)return;
-    var fresh=window.__mvChaosT&&(Date.now()-window.__mvChaosT<250);   // fb239 — window global (cross-module feed, like __mvLfoVal)
+    var redraw=false;
     if(st.shape===9||st.shape===10){
-      if(fresh&&window.__mvChaosX){ chaosTrail.push([window.__mvChaosX[st.tab-1]||0,window.__mvChaosY[st.tab-1]||0]); if(chaosTrail.length>150)chaosTrail.shift(); }
+      if(chaosStShape!==st.shape){ chaosPrime(st.shape); redraw=true; }   // static butterfly preview on entry
+      if(window.__notesActive){ chaosAdvance(st.shape, Math.max(0.001,effHz())*(st.shape===9?7:4.5)/60); redraw=true; }   // Serum: animate only while a note plays; FREE = state persists
     } else {
       var v=(window.__mvLfoVal&&window.__mvLfoVal[st.tab-1]!=null)?window.__mvLfoVal[st.tab-1]:((typeof mvL!=='undefined'&&mvL)?(mvL[st.tab-1]||0):0);
       duneHist.push(v); if(duneHist.length>170)duneHist.shift();
     }
     shScopes().forEach(function(sc){ var G=trajGeo(sc),fd=sc.querySelector('#mv-fd'),i;
       if(st.shape===9||st.shape===10){
-        var cb=sc.querySelector('.mv-comet'),ch=sc.querySelector('.mv-comet-hd'); if(!cb)return;
+        var tr=sc.querySelector('.mv-ctrail'); if(!tr)return;
         var M=chaosMap(G.T0,G.B0,G.cy,st.shape),n=chaosTrail.length;
-        var b0=Math.max(0,n-90),bd=''; for(i=b0;i<n;i++){ bd+=(i>b0?'L':'M')+(M.cx+chaosTrail[i][0]*M.xS).toFixed(1)+' '+(G.cy-chaosTrail[i][1]*M.yS).toFixed(1)+' '; } cb.setAttribute('d',bd);
-        var h0=Math.max(0,n-26),hd=''; for(i=h0;i<n;i++){ hd+=(i>h0?'L':'M')+(M.cx+chaosTrail[i][0]*M.xS).toFixed(1)+' '+(G.cy-chaosTrail[i][1]*M.yS).toFixed(1)+' '; } if(ch)ch.setAttribute('d',hd);
+        if(redraw||!tr.getAttribute('d')){ var d=''; for(i=0;i<n;i++){ d+=(i?'L':'M')+(M.cx+chaosTrail[i][0]*M.xS).toFixed(1)+' '+(G.cy-chaosTrail[i][1]*M.yS).toFixed(1)+' '; } tr.setAttribute('d',d); }
         if(fd&&n){ var L=chaosTrail[n-1]; fd.setAttribute('cx',(M.cx+L[0]*M.xS).toFixed(1)); fd.setAttribute('cy',(G.cy-L[1]*M.yS).toFixed(1)); }
       } else {
-        var tp=sc.querySelector('.mv-traj'); if(!tp)return; var nn=duneHist.length,DN=170,d=''; for(i=0;i<nn;i++){ var dx=(i/(DN-1))*G.w, dy=G.cy-duneHist[i]*G.R; d+=(i?'L':'M')+dx.toFixed(1)+' '+dy.toFixed(1)+' '; } tp.setAttribute('d',d);
+        var tp=sc.querySelector('.mv-traj'); if(!tp)return; var nn=duneHist.length,DN=170,dd=''; for(i=0;i<nn;i++){ var dx=(i/(DN-1))*G.w, dy=G.cy-duneHist[i]*G.R; dd+=(i?'L':'M')+dx.toFixed(1)+' '+dy.toFixed(1)+' '; } tp.setAttribute('d',dd);
         if(fd&&nn){ fd.setAttribute('cx',((nn-1)/(DN-1)*G.w).toFixed(1)); fd.setAttribute('cy',(G.cy-duneHist[nn-1]*G.R).toFixed(1)); }
       } }); }
   function shaperSVG(GEO){
@@ -27904,7 +27907,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb240';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb241';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

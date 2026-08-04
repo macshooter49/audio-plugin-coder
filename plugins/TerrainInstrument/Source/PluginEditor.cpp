@@ -5334,7 +5334,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         for (int k = 0; k < 10; ++k) { if (k) pArr << ","; pArr << SF(audioProcessor.modVizLfoPh (k), 4); }   // fb217 — real LFO phases
         for (int k = 0; k < 10; ++k) { if (k) xArr << ","; xArr << SF(audioProcessor.modVizLfoVX (k), 3); }   // fb239 — the swirl feed
         for (int k = 0; k < 10; ++k) { if (k) yArr << ","; yArr << SF(audioProcessor.modVizLfoVY (k), 3); }
-        js << "try{if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
+        const int notesOn = (audioProcessor.ampEnvVis.load (std::memory_order_relaxed) >= 0.0f) ? 1 : 0;   // fb241 — note-gated chaos viz (free-running motion, animates only while MIDI plays)
+        js << "try{window.__notesActive=" << notesOn << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
               "if(window.__mvChaos){window.__mvChaos([" << xArr << "],[" << yArr << "]);}}catch(e){}";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
@@ -5342,9 +5343,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         if (auto itL = audioProcessor.cardWindows_.find ("lfo");
             itL != audioProcessor.cardWindows_.end() && itL->second != nullptr)
             if (auto* cwv = dynamic_cast<TerrainCardWindow*> (itL->second.get()))
-                cwv->evalJs ("try{window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];"
+                cwv->evalJs ("try{window.__notesActive=" + juce::String (notesOn) + ";window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];"
                              "if(window.__mvChaos){window.__mvChaos([" + xArr + "],[" + yArr + "]);}"
-                             "window.__mvLfoPhT=Date.now();}catch(e){}");   // fb238 vals + fb239 swirl ride to the card
+                             "window.__mvLfoPhT=Date.now();}catch(e){}");   // fb238 vals + fb239 swirl + fb241 note flag ride to the card
     }
 
     // fb236 — LIVE STROKE relay: a drawing gesture on either surface lands on the OTHER
