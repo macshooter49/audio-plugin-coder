@@ -4107,7 +4107,12 @@ namespace tw
                         float yMidL, yMidR; filterBuses (m1L, m1R, m2L, m2R, yMidL, yMidR);
                         float yL, yR;       filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], yL, yR);
                         float wetL = 0.5f * (yMidL + yL), wetR = 0.5f * (yMidR + yR);
-                        osPrevL_ = wetL + dryL; osPrevR_ = wetR + dryR;   // OS feedback = un-widened output (keeps the loop stable)
+                        // fb237 — ROUTING INTEGRITY: the interp history is the BUS INPUT (bus2's exact
+                        // grammar below). It stored the OUTPUT (wet + dry) — so every UNROUTED source
+                        // bled at half gain into the oversampled filter input (Ladder/Acid303 only) and
+                        // got filtered + driven against the pills (Max: 'my osc C is still being shaped'),
+                        // plus a covert half-sample output-feedback color on the routed signal itself.
+                        osPrevL_ = sL[i]; osPrevR_ = sR[i];
                         osPrevB2L_ = busB2L[i]; osPrevB2R_ = busB2R[i];
                         widen (wetL, wetR);
                         sL[i] = wetL + dryL; sR[i] = wetR + dryR;
