@@ -22942,7 +22942,7 @@ restoreThemeFromBackend();
     if(st.shape!==5&&st.shape!==9&&st.shape!==10)return;
     var redraw=false;
     if(st.shape===9||st.shape===10){
-      if(chaosStShape!==st.shape){ chaosPrime(st.shape); redraw=true; }   // static butterfly preview on entry
+      if(chaosStShape!==st.shape||chaosTrail.length===0){ chaosPrime(st.shape); redraw=true; }   // fb244 — static butterfly on entry OR after a tab-hop clear (was: empty scope until a note)
       if(window.__notesActive){ chaosAdvance(st.shape, Math.max(0.001,effHz())*(st.shape===9?7:4.5)/60); redraw=true; }   // Serum: animate only while a note plays; FREE = state persists
     } else {
       var v=(window.__mvLfoVal&&window.__mvLfoVal[st.tab-1]!=null)?window.__mvLfoVal[st.tab-1]:((typeof mvL!=='undefined'&&mvL)?(mvL[st.tab-1]||0):0);
@@ -27911,7 +27911,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb243';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb244';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
