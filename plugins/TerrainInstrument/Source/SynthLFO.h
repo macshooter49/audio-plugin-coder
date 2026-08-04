@@ -40,8 +40,8 @@ enum class LFOShape : int
     Random,     // smooth random — cosine-interpolated wander between per-cycle targets
     Custom,     // LFO ARC L1 — drawn breakpoint shape (table baked by the owner; setCustomTable)
     Path,       // idx 8 — fb239 PATH: free 2D drawing, baked to the table by arc-length (owner) — DSP-identical to Custom
-    Eddy,       // idx 9 — fb239 EDDY: Lorenz-style strange attractor (free-running, integrated per-sample)
-    Vortex,     // idx 10 — fb239 VORTEX: Rossler-style strange attractor (free-running)
+    Lorenz,     // idx 9 — fb239 (fb240 renamed from Eddy): Lorenz strange attractor, free-running per-sample
+    Rossler,    // idx 10 — fb239 (fb240 renamed from Vortex): Rossler strange attractor, free-running
     NumShapes
 };
 
@@ -49,7 +49,7 @@ enum class LFOShape : int
 // the rate. The owner (processor) uses this to skip the transport-phase lock for them.
 inline bool isFreeRunShape (LFOShape s) noexcept
 {
-    return s == LFOShape::SampleHold || s == LFOShape::Eddy || s == LFOShape::Vortex;
+    return s == LFOShape::SampleHold || s == LFOShape::Lorenz || s == LFOShape::Rossler;
 }
 
 // ── Trigger / retrigger behaviour (Vital's taxonomy) ──
@@ -383,7 +383,7 @@ private:
     {
         // deterministic start + startPhase jitter so poly voices diverge (chaos = sensitive to seed)
         const double j = (double) s_.startPhase;
-        cx_ = 0.10 + 0.90 * j; cy_ = 0.0; cz_ = (s_.shape == LFOShape::Eddy) ? 18.0 : 0.0;
+        cx_ = 0.10 + 0.90 * j; cy_ = 0.0; cz_ = (s_.shape == LFOShape::Lorenz) ? 18.0 : 0.0;
         freeOut_ = 0.0f; vx_ = 0.0f; vy_ = 0.0f;
         duneAcc_  = 0.0f; duneSeg_  = 0.5f;  dunePrev_  = nextRandom(); duneTgt_  = nextRandom();
         duneAcc2_ = 0.0f; duneSeg2_ = 0.17f; dunePrev2_ = nextRandom(); duneTgt2_ = nextRandom();
@@ -391,8 +391,8 @@ private:
 
     void advanceFreeRun (float nSamp) noexcept
     {
-        if      (s_.shape == LFOShape::Eddy)   advanceLorenz  (nSamp);
-        else if (s_.shape == LFOShape::Vortex) advanceRossler (nSamp);
+        if      (s_.shape == LFOShape::Lorenz)  advanceLorenz  (nSamp);
+        else if (s_.shape == LFOShape::Rossler) advanceRossler (nSamp);
         else                                   advanceDune    (nSamp);   // SampleHold slot = DUNE
     }
 

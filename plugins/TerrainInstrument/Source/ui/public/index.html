@@ -2446,6 +2446,9 @@ body {
 #mod-engine .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 — the drawn Path */
 #mod-engine .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb239 — the free-run trajectory (dim body) */
 #mod-engine .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}   /* the bright recent head — a comet */
+#mod-engine .mv-cghost{fill:none;stroke:rgba(201,190,242,.17);stroke-width:.7;stroke-linejoin:round;pointer-events:none;}   /* fb240 — the full attractor ghost */
+#mod-engine .mv-comet{fill:none;stroke:rgba(201,190,242,.45);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
+#mod-engine .mv-comet-hd{fill:none;stroke:#EDE7FF;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
 #mod-engine .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}   /* fb239 — terrain contour rings */
 #mod-engine .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 #mod-engine .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
@@ -2510,6 +2513,9 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 */
 .lfo-ext .card-scope .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}
 .lfo-ext .card-scope .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}
+.lfo-ext .card-scope .mv-cghost{fill:none;stroke:rgba(201,190,242,.17);stroke-width:.7;stroke-linejoin:round;pointer-events:none;}
+.lfo-ext .card-scope .mv-comet{fill:none;stroke:rgba(201,190,242,.45);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
+.lfo-ext .card-scope .mv-comet-hd{fill:none;stroke:#EDE7FF;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
 .lfo-ext .card-scope .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}
 .lfo-ext .card-scope .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 .lfo-ext .b{gap:12px;}
@@ -22814,7 +22820,7 @@ restoreThemeFromBackend();
 /* MOD V4 component */
 (function(){
   if(window.__modv4)return; window.__modv4=true;
-  var SHORT=['Sine','Tri','Saw','Saw↓','Sqr','Dune','Rand','Custom','Path','Eddy','Vortex'];   // fb239 — idx5 S&H→DUNE (ever-going); PATH/EDDY/VORTEX appended (enum-append law)
+  var SHORT=['Sine','Tri','Saw','Saw↓','Sqr','S&H','Rand','Custom','Path','Lorenz','Rossler'];   // fb239/fb240 — idx5 S&H (ever-going wander); PATH/LORENZ/ROSSLER appended
   var NSHAPE=11;
   var CYC=3;   // wave cycles drawn across the scope — the follower sweep is divided by this so its rise/fall matches the audible rate
   var DIVS=['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32','1/4.','1/8.','1/4T','1/8T','1/16T','32 bar','16 bar','1/64','1/128','1/256'];   // fb219 — appended (enum order = saved indices)
@@ -22899,18 +22905,30 @@ restoreThemeFromBackend();
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g>'+
       '<path class="mv-path" d="'+d+'"/>'+
       '<circle class="mv-foll" id="mv-fd" cx="'+shX(p0[0]).toFixed(1)+'" cy="'+shY(p0[1],GEO)+'" r="3"/></svg>'; }
-  function trajSVG(shape,GEO){   // fb239 — EDDY/VORTEX = 2D trajectory on contour rings · DUNE = a scrolling seismograph
-    var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,cy=((T0+B0)/2),R=(B0-T0)*0.42;
+  var __chaosGhost={};
+  function chaosGhost(shape){ if(__chaosGhost[shape])return __chaosGhost[shape];   // fb240 — the FULL attractor, integrated once (its shape is invariant); the comet rides the SAME projection the DSP pushes
+    var pts=[],x=0.1,y=0,z=(shape===9?18:0),i,n=(shape===9?9000:11000),h=(shape===9?0.005:0.02);
+    for(i=0;i<n;i++){ var dx,dy,dz;
+      if(shape===9){ dx=10*(y-x); dy=x*(28-z)-y; dz=x*y-2.6667*z; } else { dx=-y-z; dy=x+0.2*y; dz=0.2+z*(x-5.7); }
+      x+=h*dx; y+=h*dy; z+=h*dz;
+      if(i>600&&(i&1)===0){ var nx=(shape===9?x/22:x/11), ny=(shape===9?(z-24)/26:y/11); pts.push([Math.max(-1,Math.min(1,nx)),Math.max(-1,Math.min(1,ny))]); } }
+    __chaosGhost[shape]=pts; return pts; }
+  function chaosSpread(shape){ return shape===9?3.2:2.6; }   // fb240 — wings spread to fill the wide band
+  function chaosMap(T0,B0,cy,shape){ var yS=((B0-T0)/2)*0.92; return {cx:228,cy:cy,yS:yS,xS:yS*chaosSpread(shape)}; }
+  function trajSVG(shape,GEO){   // fb240 — S&H = scrolling seismograph · LORENZ/ROSSLER = dense ghost + live comet
+    var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,cy=((T0+B0)/2);
     if(shape===5){
       var base='<line class="sh-base" x1="0" y1="'+cy.toFixed(1)+'" x2="'+w+'" y2="'+cy.toFixed(1)+'"/>';
       return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+base+'</g>'+
-        '<path class="mv-traj tail" d=""/><path class="mv-traj" d=""/>'+
-        '<circle class="mv-foll" id="mv-fd" cx="'+(w-2)+'" cy="'+cy.toFixed(1)+'" r="2.6"/></svg>'; }
-    var rings='',rn; for(rn=1;rn<=4;rn++){ var rr=R*rn/4; rings+='<ellipse class="sh-ring" cx="'+(w/2).toFixed(1)+'" cy="'+cy.toFixed(1)+'" rx="'+(rr*1.7).toFixed(1)+'" ry="'+rr.toFixed(1)+'"/>'; }
+        '<path class="mv-traj" d=""/>'+
+        '<circle class="mv-foll" id="mv-fd" cx="'+(w-3)+'" cy="'+cy.toFixed(1)+'" r="2.6"/></svg>'; }
+    var M=chaosMap(T0,B0,cy,shape), halfH=(B0-T0)/2;
+    var rings='',rn; for(rn=1;rn<=3;rn++){ var rr=halfH*(0.5+rn*0.5); rings+='<ellipse class="sh-ring" cx="228" cy="'+cy.toFixed(1)+'" rx="'+(rr*chaosSpread(shape)*0.95).toFixed(1)+'" ry="'+rr.toFixed(1)+'"/>'; }
+    var gp=chaosGhost(shape),gd='',i; for(i=0;i<gp.length;i++){ gd+=(i?'L':'M')+(M.cx+gp[i][0]*M.xS).toFixed(1)+' '+(cy-gp[i][1]*M.yS).toFixed(1)+' '; }
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+rings+'</g>'+
-      '<path class="mv-traj tail" d=""/><path class="mv-traj" d=""/>'+
-      '<circle class="mv-foll" id="mv-fd" cx="'+(w/2).toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="2.6"/></svg>'; }
-  function trajGeo(sc){ var g=sc.__shGeo||null,T0=g?g.T:SH_TOP,B0=g?g.B:SH_BOT; return {T0:T0,B0:B0,cy:(T0+B0)/2,R:(B0-T0)*0.42,w:456}; }
+      '<path class="mv-cghost" d="'+gd+'"/><path class="mv-comet" d=""/><path class="mv-comet-hd" d=""/>'+
+      '<circle class="mv-foll" id="mv-fd" cx="'+M.cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="2.8"/></svg>'; }
+  function trajGeo(sc){ var g=sc.__shGeo||null,T0=g?g.T:SH_TOP,B0=g?g.B:SH_BOT; return {T0:T0,B0:B0,cy:(T0+B0)/2,R:(B0-T0)*0.46,w:456}; }
   function shTrajTick(){   // fb239 — drive the free-run viz every frame from the DSP truth feed
     if(st.shape!==5&&st.shape!==9&&st.shape!==10)return;
     var fresh=window.__mvChaosT&&(Date.now()-window.__mvChaosT<250);   // fb239 — window global (cross-module feed, like __mvLfoVal)
@@ -22920,15 +22938,16 @@ restoreThemeFromBackend();
       var v=(window.__mvLfoVal&&window.__mvLfoVal[st.tab-1]!=null)?window.__mvLfoVal[st.tab-1]:((typeof mvL!=='undefined'&&mvL)?(mvL[st.tab-1]||0):0);
       duneHist.push(v); if(duneHist.length>170)duneHist.shift();
     }
-    shScopes().forEach(function(sc){ var G=trajGeo(sc),tp=sc.querySelector('.mv-traj:not(.tail)'),tl=sc.querySelector('.mv-traj.tail'),fd=sc.querySelector('#mv-fd'); if(!tp)return; var d='',i;
+    shScopes().forEach(function(sc){ var G=trajGeo(sc),fd=sc.querySelector('#mv-fd'),i;
       if(st.shape===9||st.shape===10){
-        for(i=0;i<chaosTrail.length;i++){ var px=G.w/2+chaosTrail[i][0]*G.R*1.7, py=G.cy+chaosTrail[i][1]*G.R; d+=(i?'L':'M')+px.toFixed(1)+' '+py.toFixed(1)+' '; }
-        tp.setAttribute('d',d); if(tl){ var hd='',h0=Math.max(0,chaosTrail.length-34),j; for(j=h0;j<chaosTrail.length;j++){ var hx=G.w/2+chaosTrail[j][0]*G.R*1.7, hy=G.cy+chaosTrail[j][1]*G.R; hd+=(j>h0?'L':'M')+hx.toFixed(1)+' '+hy.toFixed(1)+' '; } tl.setAttribute('d',hd); }
-        if(fd&&chaosTrail.length){ var L=chaosTrail[chaosTrail.length-1]; fd.setAttribute('cx',(G.w/2+L[0]*G.R*1.7).toFixed(1)); fd.setAttribute('cy',(G.cy+L[1]*G.R).toFixed(1)); }
+        var cb=sc.querySelector('.mv-comet'),ch=sc.querySelector('.mv-comet-hd'); if(!cb)return;
+        var M=chaosMap(G.T0,G.B0,G.cy,st.shape),n=chaosTrail.length;
+        var b0=Math.max(0,n-90),bd=''; for(i=b0;i<n;i++){ bd+=(i>b0?'L':'M')+(M.cx+chaosTrail[i][0]*M.xS).toFixed(1)+' '+(G.cy-chaosTrail[i][1]*M.yS).toFixed(1)+' '; } cb.setAttribute('d',bd);
+        var h0=Math.max(0,n-26),hd=''; for(i=h0;i<n;i++){ hd+=(i>h0?'L':'M')+(M.cx+chaosTrail[i][0]*M.xS).toFixed(1)+' '+(G.cy-chaosTrail[i][1]*M.yS).toFixed(1)+' '; } if(ch)ch.setAttribute('d',hd);
+        if(fd&&n){ var L=chaosTrail[n-1]; fd.setAttribute('cx',(M.cx+L[0]*M.xS).toFixed(1)); fd.setAttribute('cy',(G.cy-L[1]*M.yS).toFixed(1)); }
       } else {
-        var n=duneHist.length,DN=170; for(i=0;i<n;i++){ var dx=(i/(DN-1))*G.w, dy=G.cy-duneHist[i]*G.R; d+=(i?'L':'M')+dx.toFixed(1)+' '+dy.toFixed(1)+' '; }
-        tp.setAttribute('d',d); if(tl)tl.setAttribute('d','');
-        if(fd&&n){ fd.setAttribute('cx',((n-1)/(DN-1)*G.w).toFixed(1)); fd.setAttribute('cy',(G.cy-duneHist[n-1]*G.R).toFixed(1)); }
+        var tp=sc.querySelector('.mv-traj'); if(!tp)return; var nn=duneHist.length,DN=170,d=''; for(i=0;i<nn;i++){ var dx=(i/(DN-1))*G.w, dy=G.cy-duneHist[i]*G.R; d+=(i?'L':'M')+dx.toFixed(1)+' '+dy.toFixed(1)+' '; } tp.setAttribute('d',d);
+        if(fd&&nn){ fd.setAttribute('cx',((nn-1)/(DN-1)*G.w).toFixed(1)); fd.setAttribute('cy',(G.cy-duneHist[nn-1]*G.R).toFixed(1)); }
       } }); }
   function shaperSVG(GEO){
     if(st.shape===8) return pathSVG(GEO);                                    // fb239 — free 2D path
@@ -23056,7 +23075,7 @@ restoreThemeFromBackend();
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
   function shConvert(){ if(st.shape===7)return; seedTo(seedFor(st.shape),SHORT[st.shape]); }
   function seedPath(){   // fb239 — a friendly starter loop so Path shows its 2D nature at a glance
-    var pts=[],i,N=28; for(i=0;i<N;i++){ var a=i/N*6.2831853; pts.push([0.5+0.36*Math.cos(a),0.5+0.36*Math.sin(a),0]); } pts.push([pts[0][0],pts[0][1],0]); return pts; }
+    var pts=[],i,N=40; for(i=0;i<N;i++){ var a=i/N*6.2831853; pts.push([0.5+0.42*Math.sin(a),0.5+0.42*Math.sin(2*a),0]); } pts.push([pts[0][0],pts[0][1],0]); return pts; }   // fb240 — a bigger figure-8 seed (shows the 2D nature)
   function enterPath(){   // fb239 — free 2D drawing mode
     var gs=shGet(); if(!gs.pm||!gs.pts||gs.pts.length<2){ gs.pts=seedPath(); gs.nm='Path'; }
     gs.pm=1; setNorm(cur().shape,8/(NSHAPE-1)); st.shape=8; shTouched=true; shPush(); render(); }
@@ -27885,7 +27904,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb239';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb240';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
