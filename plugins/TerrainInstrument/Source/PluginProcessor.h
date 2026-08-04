@@ -785,9 +785,13 @@ public:
     std::atomic<float> modVizEnv_[32] {};
     std::atomic<float> modVizLfo_[wc::NUM_LFOS] {};
     std::atomic<float> modVizLfoPh_[wc::NUM_LFOS] {};   // fb217 — the LFO bank's REAL phases: the pane follower rides DSP truth, not a free-running JS clock
+    std::atomic<float> modVizLfoVX_[wc::NUM_LFOS] {};   // fb239 — free-run 2D trajectory (chaos/dune): the swirl on screen IS the audible swirl
+    std::atomic<float> modVizLfoVY_[wc::NUM_LFOS] {};
     float modVizEnv (int k) const noexcept { return (k >= 0 && k < 32) ? modVizEnv_[k].load (std::memory_order_relaxed) : -1.f; }
     float modVizLfo (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfo_[k].load (std::memory_order_relaxed) : 0.f; }
     float modVizLfoPh (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoPh_[k].load (std::memory_order_relaxed) : 0.f; }
+    float modVizLfoVX (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoVX_[k].load (std::memory_order_relaxed) : 0.f; }
+    float modVizLfoVY (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoVY_[k].load (std::memory_order_relaxed) : 0.f; }
     std::atomic<float> noiseVizLevel_ { 0.f };   // NOISE viz — env level while noise is sounding (0 when off/silent)
     std::atomic<float> noiseVizPos_  { -1.f };   // fb66 — NOISE waveform follower position 0..1 (representative), -1 = none
     std::atomic<float> noiseFreeNorm_{ 0.f  };   // fb66 — NOISE Free-mode global tape position 0..1
@@ -1027,6 +1031,7 @@ public:
     // (256 lerps) when a source it listens to actually moved.
     struct LfoShapePtM { float x = 0, y = 0, c = 0; int xs = 0; float xa = 0; int ys = 0; float ya = 0; };
     static void bakeLfoShapeTable (const LfoShapePtM* pts, int np, float* tb) noexcept;   // one bake, both threads
+    static void bakeLfoPathTable  (const LfoShapePtM* pts, int np, float* tb) noexcept;   // fb239 — Path: arc-length traversal of a free 2D drawing
     LfoShapePtM                   lfoPtShared_[wc::NUM_LFOS][160];
     LfoShapePtM                   lfoPtAudio_ [wc::NUM_LFOS][160];
     int                           lfoPtNpShared_[wc::NUM_LFOS] {};

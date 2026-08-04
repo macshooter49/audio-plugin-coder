@@ -2443,6 +2443,11 @@ body {
 #mod-engine .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
 #mod-engine .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb238 — the Serum range bar (dashed = the path) */
 #mod-engine .sh-ghost{fill:none;stroke:rgba(183,148,255,.55);stroke-width:1;pointer-events:none;}   /* fb238 — the live modulated curve */
+#mod-engine .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 — the drawn Path */
+#mod-engine .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb239 — the free-run trajectory (dim body) */
+#mod-engine .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}   /* the bright recent head — a comet */
+#mod-engine .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}   /* fb239 — terrain contour rings */
+#mod-engine .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 #mod-engine .sh-selbox{fill:rgba(139,92,246,.08);stroke:rgba(255,255,255,.35);stroke-width:.7;pointer-events:none;}
 #mod-engine .mv-tabs{display:flex;align-items:center;gap:5px;}   /* fb211 — 1:1-width breathing room */
 /* fixed-width slots: paging 1-5 ↔ 6-10 (and the "10"/arrows) must never reflow the row */
@@ -2502,6 +2507,11 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
 .lfo-ext .card-scope .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb238 */
 .lfo-ext .card-scope .sh-ghost{fill:none;stroke:rgba(183,148,255,.55);stroke-width:1;pointer-events:none;}   /* fb238 */
+.lfo-ext .card-scope .mv-path{fill:none;stroke:#C9BEF2;stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;}   /* fb239 */
+.lfo-ext .card-scope .mv-traj{fill:none;stroke:rgba(201,190,242,.42);stroke-width:1.1;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}
+.lfo-ext .card-scope .mv-traj.tail{stroke:#EDE7FF;stroke-width:1.4;}
+.lfo-ext .card-scope .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}
+.lfo-ext .card-scope .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
 .lfo-ext .b{gap:12px;}
 .lfo-ext .lsel{display:flex;justify-content:space-between;padding:0 6px;}
 .lfo-ext .lsel .lane{position:relative;font-size:7px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.38);padding:0 6px 4px;cursor:pointer;transition:color .12s;}
@@ -22804,8 +22814,8 @@ restoreThemeFromBackend();
 /* MOD V4 component */
 (function(){
   if(window.__modv4)return; window.__modv4=true;
-  var SHORT=['Sine','Tri','Saw','Saw↓','Sqr','S&H','Rand','Custom'];      // idx -> LFO1_SHAPE choice (no needless caps; S&H mandatory) · fb206: Custom = the drawn shaper
-  var NSHAPE=8;
+  var SHORT=['Sine','Tri','Saw','Saw↓','Sqr','Dune','Rand','Custom','Path','Eddy','Vortex'];   // fb239 — idx5 S&H→DUNE (ever-going); PATH/EDDY/VORTEX appended (enum-append law)
+  var NSHAPE=11;
   var CYC=3;   // wave cycles drawn across the scope — the follower sweep is divided by this so its rise/fall matches the audible rate
   var DIVS=['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32','1/4.','1/8.','1/4T','1/8T','1/16T','32 bar','16 bar','1/64','1/128','1/256'];   // fb219 — appended (enum order = saved indices)
   var DIVORD=[14,15,0,1,2,3,4,5,6,7,8,16,17,18,9,10,11,12,13];   // fb219 — MENU display order: slow→fast then dotted/triplet (data stays append-only)
@@ -22823,6 +22833,7 @@ restoreThemeFromBackend();
   var SH_TOP=8, SH_BOT=70, SH_L=0, SH_R=456;   // fb210 — EDGE TO EDGE + the TOP RECLAIMED (Max: no emblems up there — spinners & Extend live in the right-click now, so the band ceiling rises to 8)
   function shX(x01){ return SH_L+(SH_R-SH_L)*x01; }
   var shapes={}, shTouched=false, shPushT=null;
+  var chaosTrail=[], duneHist=[];   // fb239 — free-run viz accumulators (module-local; the feed itself rides window.__mvChaos* cross-module)
   var motion={};   // fb229 — per-LFO L5 motion (the card's state; rides the blob as mo:{})
   var shActiveSc=null;   // fb229 — the scope a gesture/menu came from (main pane OR the card hero); coordinate math resolves against THIS
   function shPaintAll(){ var m=root?root.querySelector('.mv-scope'):null; if(m)m.innerHTML=scopeSVG();
@@ -22850,6 +22861,7 @@ restoreThemeFromBackend();
   function shPushNow(){ try{   // fb232 — the cross-window poll yields to fresh local edits
       var out=[],k; for(k in shapes){ var sp=shapes[k];
         var en={n:+k,pts:sp.pts.map(function(q){var t3=[+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)]; if(q[3]&&(q[3].xs>0||q[3].ys>0))t3.push(q[3]); return t3;}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''};   /* fb238 — per-point mods ride at index 3 */
+        if(sp.pm)en.pm=1;   /* fb239 — Path mode: bake by arc-length */
         if(motion[k])en.mo=motion[k];   // fb229 — motion rides beside the points
         out.push(en); }
       var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setSynthLfoShapes'):null;
@@ -22859,7 +22871,7 @@ restoreThemeFromBackend();
     shPushT=setTimeout(function(){ shPushLastT=Date.now(); shPushNow(); },130); }   // trailing — the settled truth
   function shPull(){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
     f().then(function(j){ if(shTouched)return; try{ var v=JSON.parse(j);   // RACE LAW: a local edit outranks any pull
-      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){var t3=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')t3[3]=q[3]; return t3;}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null};
+      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){var t3=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')t3[3]=q[3]; return t3;}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null,pm:e.pm?1:0};
         if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:0,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1}; } });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
   function shY(y01,g){ var B=g?g.B:SH_BOT, T=g?g.T:SH_TOP; return B-(B-T)*y01; }   // fb232 — geometry-aware: the card hero renders in its OWN taller band (uniform scale, zero stretch)
@@ -22870,7 +22882,58 @@ restoreThemeFromBackend();
       var n=Math.max(8,Math.min(48,Math.round((x1-x0)/3)));
       for(var k2=1;k2<=n;k2++){ var t=k2/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+shY(a[1]+(b[1]-a[1])*shBias(t,cc),g).toFixed(1)+' '; } }
     return d; }
-  function shaperSVG(GEO){ var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,sp=shGet(),i,g=''; if(shSelTab!==st.tab){shSel=[];shSelTab=st.tab;}   // fb221 — a selection never survives a tab hop · fb232 — GEO = the card hero's taller band
+  function pathPointAt(f){   // fb239 — arc-length position along the drawn path (mirrors the C++ bake)
+    var sp=shGet(),p=sp.pts||[]; if(p.length<2)return [0.5,0.5];
+    var seg=[],total=0,i; for(i=0;i<p.length-1;i++){ var dx=p[i+1][0]-p[i][0],dy=p[i+1][1]-p[i][1]; seg[i]=Math.sqrt(dx*dx+dy*dy); total+=seg[i]; }
+    if(total<1e-6)return [p[0][0],p[0][1]];
+    var target=(((f%1)+1)%1)*total,acc=0,k=0;
+    while(k<p.length-2&&acc+seg[k]<target){acc+=seg[k];k++;}
+    var t=seg[k]>1e-6?(target-acc)/seg[k]:0;
+    return [p[k][0]+(p[k+1][0]-p[k][0])*t, p[k][1]+(p[k+1][1]-p[k][1])*t]; }
+  function pathSVG(GEO){   // fb239 — PATH: the free 2D drawing (draw order, may loop) + an orbiting dot
+    var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,sp=shGet(),i,g='';
+    for(i=1;i<8;i++){ var gx=shX(i/8).toFixed(1); g+='<line x1="'+gx+'" y1="'+T0+'" x2="'+gx+'" y2="'+B0+'"/>'; }
+    for(i=0;i<=8;i++){ var gy=shY(i/8,GEO).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="0" y1="'+gy+'" x2="'+w+'" y2="'+gy+'"/>'; }
+    var d='',p=sp.pts||[]; for(i=0;i<p.length;i++){ d+=(i?'L':'M')+shX(p[i][0]).toFixed(1)+' '+shY(p[i][1],GEO).toFixed(1)+' '; }
+    var p0=p.length?p[0]:[0.5,0.5];
+    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+g+'</g>'+
+      '<path class="mv-path" d="'+d+'"/>'+
+      '<circle class="mv-foll" id="mv-fd" cx="'+shX(p0[0]).toFixed(1)+'" cy="'+shY(p0[1],GEO)+'" r="3"/></svg>'; }
+  function trajSVG(shape,GEO){   // fb239 — EDDY/VORTEX = 2D trajectory on contour rings · DUNE = a scrolling seismograph
+    var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,cy=((T0+B0)/2),R=(B0-T0)*0.42;
+    if(shape===5){
+      var base='<line class="sh-base" x1="0" y1="'+cy.toFixed(1)+'" x2="'+w+'" y2="'+cy.toFixed(1)+'"/>';
+      return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+base+'</g>'+
+        '<path class="mv-traj tail" d=""/><path class="mv-traj" d=""/>'+
+        '<circle class="mv-foll" id="mv-fd" cx="'+(w-2)+'" cy="'+cy.toFixed(1)+'" r="2.6"/></svg>'; }
+    var rings='',rn; for(rn=1;rn<=4;rn++){ var rr=R*rn/4; rings+='<ellipse class="sh-ring" cx="'+(w/2).toFixed(1)+'" cy="'+cy.toFixed(1)+'" rx="'+(rr*1.7).toFixed(1)+'" ry="'+rr.toFixed(1)+'"/>'; }
+    return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="sh-grid">'+rings+'</g>'+
+      '<path class="mv-traj tail" d=""/><path class="mv-traj" d=""/>'+
+      '<circle class="mv-foll" id="mv-fd" cx="'+(w/2).toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="2.6"/></svg>'; }
+  function trajGeo(sc){ var g=sc.__shGeo||null,T0=g?g.T:SH_TOP,B0=g?g.B:SH_BOT; return {T0:T0,B0:B0,cy:(T0+B0)/2,R:(B0-T0)*0.42,w:456}; }
+  function shTrajTick(){   // fb239 — drive the free-run viz every frame from the DSP truth feed
+    if(st.shape!==5&&st.shape!==9&&st.shape!==10)return;
+    var fresh=window.__mvChaosT&&(Date.now()-window.__mvChaosT<250);   // fb239 — window global (cross-module feed, like __mvLfoVal)
+    if(st.shape===9||st.shape===10){
+      if(fresh&&window.__mvChaosX){ chaosTrail.push([window.__mvChaosX[st.tab-1]||0,window.__mvChaosY[st.tab-1]||0]); if(chaosTrail.length>150)chaosTrail.shift(); }
+    } else {
+      var v=(window.__mvLfoVal&&window.__mvLfoVal[st.tab-1]!=null)?window.__mvLfoVal[st.tab-1]:((typeof mvL!=='undefined'&&mvL)?(mvL[st.tab-1]||0):0);
+      duneHist.push(v); if(duneHist.length>170)duneHist.shift();
+    }
+    shScopes().forEach(function(sc){ var G=trajGeo(sc),tp=sc.querySelector('.mv-traj:not(.tail)'),tl=sc.querySelector('.mv-traj.tail'),fd=sc.querySelector('#mv-fd'); if(!tp)return; var d='',i;
+      if(st.shape===9||st.shape===10){
+        for(i=0;i<chaosTrail.length;i++){ var px=G.w/2+chaosTrail[i][0]*G.R*1.7, py=G.cy+chaosTrail[i][1]*G.R; d+=(i?'L':'M')+px.toFixed(1)+' '+py.toFixed(1)+' '; }
+        tp.setAttribute('d',d); if(tl){ var hd='',h0=Math.max(0,chaosTrail.length-34),j; for(j=h0;j<chaosTrail.length;j++){ var hx=G.w/2+chaosTrail[j][0]*G.R*1.7, hy=G.cy+chaosTrail[j][1]*G.R; hd+=(j>h0?'L':'M')+hx.toFixed(1)+' '+hy.toFixed(1)+' '; } tl.setAttribute('d',hd); }
+        if(fd&&chaosTrail.length){ var L=chaosTrail[chaosTrail.length-1]; fd.setAttribute('cx',(G.w/2+L[0]*G.R*1.7).toFixed(1)); fd.setAttribute('cy',(G.cy+L[1]*G.R).toFixed(1)); }
+      } else {
+        var n=duneHist.length,DN=170; for(i=0;i<n;i++){ var dx=(i/(DN-1))*G.w, dy=G.cy-duneHist[i]*G.R; d+=(i?'L':'M')+dx.toFixed(1)+' '+dy.toFixed(1)+' '; }
+        tp.setAttribute('d',d); if(tl)tl.setAttribute('d','');
+        if(fd&&n){ fd.setAttribute('cx',((n-1)/(DN-1)*G.w).toFixed(1)); fd.setAttribute('cy',(G.cy-duneHist[n-1]*G.R).toFixed(1)); }
+      } }); }
+  function shaperSVG(GEO){
+    if(st.shape===8) return pathSVG(GEO);                                    // fb239 — free 2D path
+    if(st.shape===5||st.shape===9||st.shape===10) return trajSVG(st.shape,GEO);   // fb239 — dune + chaos
+    var w=456,h=GEO?GEO.H:96,T0=GEO?GEO.T:SH_TOP,B0=GEO?GEO.B:SH_BOT,sp=shGet(),i,g=''; if(shSelTab!==st.tab){shSel=[];shSelTab=st.tab;}   // fb221 — a selection never survives a tab hop · fb232 — GEO = the card hero's taller band
     for(i=1;i<sp.gv;i++){ var gx=shX(i/sp.gv).toFixed(1); g+='<line'+(sp.gv%2===0&&i===sp.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+T0+'" x2="'+gx+'" y2="'+B0+'"/>'; }
     for(i=0;i<=sp.gh;i++){ var gy=shY(i/sp.gh,GEO).toFixed(1); g+='<line'+(i===0?' class="maj"':'')+' x1="'+SH_L+'" y1="'+gy+'" x2="'+SH_R+'" y2="'+gy+'"/>'; }
     var custom=(st.shape===7);
@@ -22989,9 +23052,20 @@ restoreThemeFromBackend();
     if(out.length>160)return false;
     out.sort(function(a,b){return a[0]-b[0];});   // stable: ties keep insertion order (entry tie → stamp → exit tie = clean vertical steps)
     sp.pts=out; return true; }
-  function seedTo(pts,nm){ shSelClear(); var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom';   // fb212 — grid/snap survive re-seeding; the chip wears the seed's name (no 'puts me on custom')
+  function seedTo(pts,nm){ shSelClear(); var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom'; gs.pm=0;   // fb212 — grid/snap survive re-seeding · fb239 clears path mode
     setNorm(cur().shape,1); st.shape=7; shTouched=true; shPush(); render(); }
   function shConvert(){ if(st.shape===7)return; seedTo(seedFor(st.shape),SHORT[st.shape]); }
+  function seedPath(){   // fb239 — a friendly starter loop so Path shows its 2D nature at a glance
+    var pts=[],i,N=28; for(i=0;i<N;i++){ var a=i/N*6.2831853; pts.push([0.5+0.36*Math.cos(a),0.5+0.36*Math.sin(a),0]); } pts.push([pts[0][0],pts[0][1],0]); return pts; }
+  function enterPath(){   // fb239 — free 2D drawing mode
+    var gs=shGet(); if(!gs.pm||!gs.pts||gs.pts.length<2){ gs.pts=seedPath(); gs.nm='Path'; }
+    gs.pm=1; setNorm(cur().shape,8/(NSHAPE-1)); st.shape=8; shTouched=true; shPush(); render(); }
+  function pickShape(i){
+    if(i<=4){ seedTo(seedFor(i),SHORT[i]); return; }        // 0-4 editable seeds
+    if(i===7){ var g=shGet(); g.pm=0; setNorm(cur().shape,7/(NSHAPE-1)); st.shape=7; render(); return; }   // Custom shaper
+    if(i===8){ enterPath(); return; }                       // Path free-draw
+    var g2=shGet(); if(g2)g2.pm=0;                           // 5 Dune · 6 Rand · 9 Eddy · 10 Vortex = generative
+    setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; chaosTrail=[]; duneHist=[]; render(); }
   function shRand(kind){   // fb227 — THE RANDOM DICE (Max: 'complete randomness... random both goes the craziest'). One-shot UI RNG (the never-reseed law guards DSP RNG, not dice).
     var sp=shGet(), n=sp.gv||8, pts=[], i, r=Math.random;
     function lv(){ var y=r(); return sp.sn? shSnap(y,sp.gh) : y; }
@@ -23036,6 +23110,22 @@ restoreThemeFromBackend();
     var sc=scArg||root.querySelector('.mv-scope'); if(!sc)return;
     sc.style.cursor = shTool? 'crosshair' : '';
     function arm(){ shActiveSc=sc; }   // fb229 — this container owns the coordinate space for the gesture
+    if(st.shape===8){   // fb239 — PATH: free 2D drawing (drag paints a trail the LFO orbits)
+      sc.ondblclick=null;
+      sc.oncontextmenu=function(e){ arm(); e.preventDefault(); shPathMenu(e); };
+      sc.onpointerdown=function(e){ if(e.button===2)return; arm(); e.preventDefault();
+        var svg=sc.querySelector('svg'); if(!svg)return; try{svg.setPointerCapture(e.pointerId);}catch(e0){}
+        var sp=shGet(); sp.pts=[]; sp.pm=1;
+        function add(ev){ var q=shPos(sc,ev); sp.pts.push([Math.max(0,Math.min(1,q.x)),Math.max(0,Math.min(1,q.y)),0]); }
+        add(e);
+        function live(){ var pth=sc.querySelector('.mv-path'); if(pth){ var d='',i; for(i=0;i<sp.pts.length;i++){ d+=(i?'L':'M')+shX(sp.pts[i][0]).toFixed(1)+' '+shY(sp.pts[i][1],sc.__shGeo||null).toFixed(1)+' '; } pth.setAttribute('d',d); } }
+        function mv(ev){ ev.preventDefault(); var q=shPos(sc,ev),last=sp.pts[sp.pts.length-1];
+          if(!last||Math.abs(q.x-last[0])+Math.abs(q.y-last[1])>0.012){ add(ev); if(sp.pts.length>160)sp.pts.shift(); shTouched=true; live(); shPush(); } }
+        function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e0){} svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
+          if(sp.pts.length<2)sp.pts=seedPath(); shTouched=true; shPush(); render(); }
+        svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); };
+      return;
+    }
     if(shTool){   // fb213 — a BRUSH is armed: clicks/drags stamp cells (works from stock too — converts first); node editing pauses until Point is re-picked
       sc.onpointerdown=function(e){ if(e.button===2)return; arm(); e.preventDefault(); shStampGesture(e,shTool); };
       sc.ondblclick=null;
@@ -23214,6 +23304,13 @@ restoreThemeFromBackend();
     track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation(); if(sp[key]!==8){ sp[key]=8; shTouched=true; shPush(); paint(); render(); } });
     return wrap;
   }
+  function shPathMenu(e){   // fb239 — PATH right-click
+    if(!window.__synShowMenu)return;
+    window.__synShowMenu('', [
+      { isHeader:true, label:'Path — drag to draw, the LFO orbits it' },
+      { label:'New loop', white:true, onPick:function(){ var g=shGet(); g.pts=seedPath(); g.pm=1; g.nm='Path'; shTouched=true; shPush(); render(); } },
+      { label:'Clear', white:true, onPick:function(){ var g=shGet(); g.pts=[[0.5,0.5,0],[0.5,0.5,0]]; g.pm=1; shTouched=true; shPush(); render(); } }
+    ], e.clientX, e.clientY); }
   function shMenu(e){   // fb213 — Grid header retired; sliders wear MATCHED emblems; the Shape section = TOOL RADIOS (brushes), not preset loaders (Max's Serum-tools call)
     if(!window.__synShowMenu) return;
     var sp=shGet(), moM=moGet(), lbRows=[];
@@ -23258,7 +23355,12 @@ restoreThemeFromBackend();
     var gv=[.1,.2,.3,.4,.5,.6,.7,.8,.9].map(function(g){return '<line class="'+(g===0.5?'mid':'')+'" x1="'+(w*g).toFixed(1)+'" y1="0" x2="'+(w*g).toFixed(1)+'" y2="'+h+'"/>';}).join('');
     return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><g class="mv-grid">'+gh+gv+'</g><path class="mv-fill" d="'+fillD+'"/><path class="mv-stroke" d="'+d+'"/>'+
       '<line class="mv-play" id="mv-ph" x1="0" y1="0" x2="0" y2="'+h+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+mid+'" r="2.4"/></svg>';}
-  function icon(k,phOff){phOff=phOff||0;var w=20,h=11,mid=h/2,n=60,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,(t+phOff)%1)*(h*0.34)).toFixed(1)+' ';}return '<svg viewBox="0 0 '+w+' '+h+'" fill="none" stroke="currentColor" stroke-width="1.3"><path d="'+d+'"/></svg>';}
+  var ICONG={ 5:'M1 8L4 3.5L6.5 7L9.5 2.5L12.5 8L15 4L19 6.5',   // fb239 — Dune: irregular wander
+              8:'M2 6C2 2.5 7 2.5 7 6C7 9.5 13 9.5 13 6C13 2.5 18 3 18 6',   // Path: a traced loop
+              9:'M10 6C7 3 4.5 5.5 6.5 7.2C8 8.4 10 6 10 6C10 6 12 8.4 13.5 7.2C15.5 5.5 13 3 10 6',   // Eddy: twin swirl
+              10:'M15 6C15 3.4 11 3 10.4 6C10 8 13 8.6 13 6.2C13 4.8 11.6 5 11.4 6.2' };   // Vortex: inward spiral
+  function icon(k,phOff){ if(ICONG[k]) return '<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="'+ICONG[k]+'"/></svg>';
+    phOff=phOff||0;var w=20,h=11,mid=h/2,n=60,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,(t+phOff)%1)*(h*0.34)).toFixed(1)+' ';}return '<svg viewBox="0 0 '+w+' '+h+'" fill="none" stroke="currentColor" stroke-width="1.3"><path d="'+d+'"/></svg>';}
   var CHEV='<svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>';
   // Bipolar ring: purple fills from top-center toward the value — RIGHT for +, LEFT for − (so negative shows, fixing the "grayed out" bug).
   var RINGBG=function(d){d=Math.max(-1,Math.min(1,d||0));var lo=d>=0?140:140+d*140,hi=d>=0?140+d*140:140;return 'conic-gradient(from 220deg,var(--knob-track) 0 '+lo+'deg,var(--purple-400) '+lo+'deg '+hi+'deg,var(--knob-track) '+hi+'deg 280deg,transparent 280deg)';};
@@ -23332,9 +23434,8 @@ restoreThemeFromBackend();
 
   function bindFront(){
     var sb=root.querySelector('#mv-shape');
-    if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s2,i){return {t:s2,ic:icon(i)};}), st.shape, sb, function(i){
-      if(i<=4){ seedTo(seedFor(i),SHORT[i]); return; }   // fb212 — deterministic shapes load as EDITABLE seeds (Max: 'I wanna edit the sine ITSELF'); S&H/Rand stay generative until touched
-      setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; render(); }); };
+    // fb239 — the picker router: 0-4 editable seeds · 7 Custom shaper · 8 Path free-draw · 5/6/9/10 generative
+    if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s2,i){return {t:s2,ic:icon(i)};}), st.shape, sb, function(i){ pickShape(i); }); };
     var dv=root.querySelector('#mv-div');
     if(dv)dv.onclick=function(){ openMenu(DIVORD.map(function(ri){return {t:DIVS[ri]};}), DIVORD.indexOf(st.div), dv, function(i){ var ri=DIVORD[i]; setNorm(cur().div,ri/(NDIV-1)); st.div=ri; render(); }); };   // fb219 — ladder-ordered display
     var bpm=root.querySelector('#mv-bpm'), hz=root.querySelector('#mv-hz');
@@ -23357,7 +23458,7 @@ restoreThemeFromBackend();
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
     root.querySelectorAll('.mv-tabs .t').forEach(function(t){ t.onclick=function(){ var pg=t.getAttribute('data-pg');
       if(pg!==null){ st.page=+pg; var b=st.page*5; if(st.tab<=b||st.tab>b+5){ st.tab=b+1; pull(); } render(); return; }
-      st.tab=+t.getAttribute('data-tab'); pull(); render(); }; });
+      st.tab=+t.getAttribute('data-tab'); chaosTrail=[]; duneHist=[]; pull(); render(); }; });   // fb239 — a tab hop starts the trajectory fresh
     bindShaper();
   }
 
@@ -23501,6 +23602,7 @@ restoreThemeFromBackend();
     extRefresh0(); }
   window.__openLfoCard=openExt;   // fb232 — the family card-only boot + __redockCard reach the card through this door
   window.__lfoGhostTick=function(){ shGhostTick(); var am=ampOf(st.depth); if(root)placeHead(root,am); if(ext&&ext.classList.contains('open'))placeHead(ext,am); };   // fb238 — one manual ghost+follower frame (probe door; rAF drives it live)
+  window.__lfoTrajTick=function(){ shTrajTick(); };   // fb239 — one manual trajectory frame (probe door; rAF drives it live)
   var __lfoWinTag = (window.__cardOnly==='lfo') ? 'card' : 'main';
   var shLiveT=0;
   function shLiveSend(){ /* fb236 — the 60Hz cross-window stroke wire (visual lane; the DSP rides shPush's own cadence) */
@@ -23515,7 +23617,7 @@ restoreThemeFromBackend();
     if(!(o.n>=1&&o.n<=10)||!o.pts||o.pts.length<2)return;
     if(!shapes[o.n])shapes[o.n]={pts:[],gh:8,gv:8,sn:1};
     var sp=shapes[o.n], changed=(sp.pts||[]).length!==o.pts.length;
-    sp.pts=o.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }); if(o.nm)sp.nm=o.nm;
+    sp.pts=o.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }); if(o.nm)sp.nm=o.nm; sp.pm=o.pm?1:0;
     if(o.n===st.tab){ if(st.shape!==7)st.shape=7;
       if(changed)shPaintAll(); else shRefresh(); }   // count changed = rebuild both screens; else cheap attr updates
   }catch(e){} };
@@ -23540,7 +23642,13 @@ restoreThemeFromBackend();
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
   var DIVBEATS=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6,128,64,0.0625,0.03125,0.015625];   // beats-per-cycle per DIVS entry (fb219 tail appended)
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
-  function placeHead(scope,amp){ if(!scope)return; var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
+  function placeHead(scope,amp){ if(!scope)return;
+    if(st.shape===5||st.shape===9||st.shape===10) return;   // fb239 — the trail tick owns these dots
+    var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
+    if(st.shape===8){   // fb239 — PATH: the dot orbits the drawn path at arc-fraction = phase
+      var svg8=scope.querySelector('.mv-scope svg')||scope.querySelector('.card-scope svg'); var G8=(svg8&&svg8.__shGeo)||null;
+      if(fd){ var pt=pathPointAt((ph+st.phase)%1); fd.setAttribute('cx',shX(pt[0]).toFixed(1)); fd.setAttribute('cy',shY(pt[1],G8).toFixed(1)); }
+      return; }
     if(scope===root||scope===ext){   // fb229 — the card hero is the same field: exact geometry on both screens   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
       var gG=null;   // fb235 — card hero = pane geometry (exact clone)
       var rp=(ph+st.phase)%1, x=shX(rp);
@@ -23557,6 +23665,7 @@ restoreThemeFromBackend();
     else { ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph); }   // stale/absent feed → the old simulation (boot, headless, suspended host)
     var amp=ampOf(st.depth);
     shGhostTick();   /* fb238 — per-point mod: ghost curve + eff-cache refresh at frame rate */
+    shTrajTick();    /* fb239 — chaos/dune trajectory at frame rate */
     if(root) placeHead(root,amp);
     if(ext && ext.classList.contains('open')) placeHead(ext,amp);
     if(root){ var sic=root.querySelector('#mv-shape .ic'); if(sic) sic.innerHTML=icon(st.shape, ph); }   // little living shape emblem
@@ -23951,7 +24060,8 @@ restoreThemeFromBackend();
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
   var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
-  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(l&&l.length)window.__mvLfoVal=l; if(p&&p.length){ window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb238 — values ride for the point-mod ghost */   // fb217 — real phases ride along (freshness-stamped, never a latch — the fb214 law)
+  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(l&&l.length)window.__mvLfoVal=l; if(p&&p.length){ window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb238 — values ride for the point-mod ghost */
+  window.__mvChaos=function(vx,vy){ window.__mvChaosX=vx; window.__mvChaosY=vy; window.__mvChaosT=Date.now(); };   /* fb239 — the free-run swirl feed (window globals: this handler lives in the emblems module, shTrajTick in mod-v4) */   // fb217 — real phases ride along (freshness-stamped, never a latch — the fb214 law)
   /* fb182 — S3: the currently SELECTED modulator (env or LFO). Underlines paint purple
      for its routes, dim for everyone else's; switching selection repaints live. */
   window.__selMod = window.__selMod || { env:1 };
@@ -27775,7 +27885,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb238';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb239';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

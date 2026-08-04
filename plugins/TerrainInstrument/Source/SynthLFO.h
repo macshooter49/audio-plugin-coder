@@ -36,11 +36,21 @@ enum class LFOShape : int
     SawUp,      // ramp up   -1 -> +1
     SawDown,    // ramp down +1 -> -1
     Square,
-    SampleHold, // stepped random, one new value per cycle
+    SampleHold, // idx 5 — fb239 DUNE: repurposed to an ever-going free-running wander (no cycle lock)
     Random,     // smooth random — cosine-interpolated wander between per-cycle targets
     Custom,     // LFO ARC L1 — drawn breakpoint shape (table baked by the owner; setCustomTable)
+    Path,       // idx 8 — fb239 PATH: free 2D drawing, baked to the table by arc-length (owner) — DSP-identical to Custom
+    Eddy,       // idx 9 — fb239 EDDY: Lorenz-style strange attractor (free-running, integrated per-sample)
+    Vortex,     // idx 10 — fb239 VORTEX: Rossler-style strange attractor (free-running)
     NumShapes
 };
+
+// fb239 — free-running shapes ignore phase/cycle: they carry continuous state advanced by
+// the rate. The owner (processor) uses this to skip the transport-phase lock for them.
+inline bool isFreeRunShape (LFOShape s) noexcept
+{
+    return s == LFOShape::SampleHold || s == LFOShape::Eddy || s == LFOShape::Vortex;
+}
 
 // ── Trigger / retrigger behaviour (Vital's taxonomy) ──
 enum class LFOTrigger : int
@@ -98,13 +108,19 @@ public:
         slewK1_   = 1.0f - std::exp (-slewRate_);
         slew_     = 0.0f;
         slewInit_ = false;
+        freeRunSeeded_ = false;   // fb239 — first free-run setSettings will seed (honours startPhase)
+        seedFreeRun();            // deterministic state (reset == load-default)
     }
 
     void setSettings (const LFOSettings& s) noexcept { s_ = s;
         // fb228 — SMOOTH = the house slew with a user tau (never below the 2.5ms declick floor)
         const float tau = (s_.smoothMs > 2.5f ? s_.smoothMs * 0.001f : 0.0025f);
         slewRate_ = 1.0f / (tau * (float) sr_);
-        slewK1_   = 1.0f - std::exp (-slewRate_); }
+        slewK1_   = 1.0f - std::exp (-slewRate_);
+        // fb239 — seed the free-run engine ONCE on entry into a chaos/dune shape (so startPhase is
+        // honoured and the Free-mode mirror starts cleanly); never reseed per-block or the swirl freezes.
+        if (isFreeRunShape (s_.shape)) { if (! freeRunSeeded_) { seedFreeRun(); freeRunSeeded_ = true; } }
+        else                            freeRunSeeded_ = false; }
 
     // LFO ARC L1 — wire the drawn-shape table (kLfoTableN+1 floats, owner-managed stable
     // storage; content updates in place at block top so edits reach every consumer with
@@ -131,8 +147,9 @@ public:
                 phase_ = wrap01 (s_.startPhase);
                 finished_ = false;
                 stepPrev_ = nextRandom();               // two distinct seeds so Random wanders
-                stepHeld_ = nextRandom();               // from cycle one (S&H just uses held)
+                stepHeld_ = nextRandom();               // from cycle one
                 heldPhaseQuadrant_ = -1;
+                seedFreeRun();                          // fb239 — Trig/Env restart the swirl/wander per note
                 break;
             case LFOTrigger::Free:
             case LFOTrigger::Sync:
@@ -152,6 +169,11 @@ public:
             return slewAdvance (applyPolarity (applyRise (shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset))))), 1.0f);
         }
         if (riseGain_ < 1.0f) { riseGain_ += riseInc_; if (riseGain_ > 1.0f) riseGain_ = 1.0f; }
+        if (isFreeRunShape (s_.shape))   // fb239 — chaos/dune: integrate the continuous system, ignore phase
+        {
+            advanceFreeRun (1.0f);
+            return slewAdvance (applyPolarity (applyRise (freeOut_)), 1.0f);
+        }
         const float out = applyRise (shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset))));   // phaseOffset slides the read point · dirP maps direction
 
         // advance
@@ -192,6 +214,12 @@ public:
     {
         if (delayLeft_ > 0) { const int eat = (n < delayLeft_ ? n : delayLeft_); delayLeft_ -= eat; n -= eat; }   // fb228 — DELAY holds
         if (riseGain_ < 1.0f && n > 0) { riseGain_ += riseInc_ * (float) n; if (riseGain_ > 1.0f) riseGain_ = 1.0f; }
+        if (isFreeRunShape (s_.shape))   // fb239 — advance the swirl/wander, keep peek() live & non-stale
+        {
+            if (n > 0) advanceFreeRun ((float) n);
+            slewAdvance (applyPolarity (applyRise (freeOut_)), (float) (n > 0 ? n : 1));
+            return;
+        }
         if (n > 0 && ! (s_.trigger == LFOTrigger::Env && finished_))
         {
             const float inc = effInc();
@@ -239,10 +267,20 @@ public:
         float nSamp = (hz_ > 1.0e-6f) ? dp * (float) sr_ / hz_ : 256.0f;
         if (nSamp < 1.0f) nSamp = 1.0f; else if (nSamp > 8192.0f) nSamp = 8192.0f;
         phase_ = np;
+        if (isFreeRunShape (s_.shape))   // fb239 — sync'd chaos/dune: integrate by elapsed time, no phase meaning
+        {
+            advanceFreeRun (nSamp);
+            slewAdvance (applyPolarity (applyRise (freeOut_)), nSamp);
+            return;
+        }
         slewAdvance (applyPolarity (shapeAt (wrap01 (phase_ + s_.phaseOffset))), nSamp);
     }
 
     float currentPhase() const noexcept { return phase_; }
+
+    // fb239 — free-run 2D viz projection (Eddy/Vortex trajectory · Dune drift). Range ~[-1,1].
+    float chaosVX() const noexcept { return vx_; }
+    float chaosVY() const noexcept { return vy_; }
 
     // Current modulation value at the present phase WITHOUT advancing — for per-block
     // (frame/warp/fold/pitch) modulation that's computed before the per-sample loop.
@@ -292,6 +330,7 @@ private:
                 return stepPrev_ + (stepHeld_ - stepPrev_) * m;
             }
             case LFOShape::Custom:
+            case LFOShape::Path:      // fb239 — Path traverses its arc-length-baked table exactly like Custom
             {
                 if (customTable_ == nullptr)                        // unwired — triangle fallback
                     return 1.0f - 4.0f * std::fabs (p - 0.5f);
@@ -328,6 +367,86 @@ private:
         return slew_;
     }
 
+    // ── fb239 — FREE-RUNNING ENGINES (chaos attractors + the ever-going dune wander) ──
+    static float  clampf (float v, float lo, float hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
+    static double clampd (double v, double lo, double hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
+
+    // integration + speed tuning (see the offline sim: bounded, non-repeating, lively at rate 2Hz)
+    static constexpr double kLorenzSpeed = 7.0;   // attractor-time units per (Hz·second)
+    static constexpr double kLorenzHMax  = 0.006; // Euler stability ceiling per sub-step
+    static constexpr double kRosslerSpeed= 4.5;
+    static constexpr double kRosslerHMax = 0.02;
+    static constexpr int    kSubCap      = 16;
+    static constexpr float  kDuneSpeed   = 2.4f;  // wander-phase units per (Hz·second)
+
+    void seedFreeRun() noexcept
+    {
+        // deterministic start + startPhase jitter so poly voices diverge (chaos = sensitive to seed)
+        const double j = (double) s_.startPhase;
+        cx_ = 0.10 + 0.90 * j; cy_ = 0.0; cz_ = (s_.shape == LFOShape::Eddy) ? 18.0 : 0.0;
+        freeOut_ = 0.0f; vx_ = 0.0f; vy_ = 0.0f;
+        duneAcc_  = 0.0f; duneSeg_  = 0.5f;  dunePrev_  = nextRandom(); duneTgt_  = nextRandom();
+        duneAcc2_ = 0.0f; duneSeg2_ = 0.17f; dunePrev2_ = nextRandom(); duneTgt2_ = nextRandom();
+    }
+
+    void advanceFreeRun (float nSamp) noexcept
+    {
+        if      (s_.shape == LFOShape::Eddy)   advanceLorenz  (nSamp);
+        else if (s_.shape == LFOShape::Vortex) advanceRossler (nSamp);
+        else                                   advanceDune    (nSamp);   // SampleHold slot = DUNE
+    }
+
+    void advanceLorenz (float nSamp) noexcept
+    {
+        const double SIG = 10.0, RHO = 28.0, BET = 8.0 / 3.0;
+        double dtSim = (double) hz_ * kLorenzSpeed * (double) nSamp / sr_;
+        int nsub = (int) std::ceil (dtSim / kLorenzHMax); if (nsub < 1) nsub = 1; if (nsub > kSubCap) nsub = kSubCap;
+        const double h = dtSim / (double) nsub;
+        for (int i = 0; i < nsub; ++i)
+        {
+            const double dx = SIG * (cy_ - cx_), dy = cx_ * (RHO - cz_) - cy_, dz = cx_ * cy_ - BET * cz_;
+            cx_ += h * dx; cy_ += h * dy; cz_ += h * dz;
+        }
+        if (! std::isfinite (cx_) || std::fabs (cx_) > 60.0) { cx_ = 0.1; cy_ = 0.0; cz_ = 18.0; }   // blow-up guard
+        freeOut_ = clampf ((float) (cx_ / 18.0), -1.0f, 1.0f);
+        vx_ = clampf ((float) (cx_ / 22.0), -1.0f, 1.0f);
+        vy_ = clampf ((float) ((cz_ - 24.0) / 26.0), -1.0f, 1.0f);   // x–z plane = the butterfly
+    }
+
+    void advanceRossler (float nSamp) noexcept
+    {
+        const double A = 0.2, B = 0.2, C = 5.7;
+        double dtSim = (double) hz_ * kRosslerSpeed * (double) nSamp / sr_;
+        int nsub = (int) std::ceil (dtSim / kRosslerHMax); if (nsub < 1) nsub = 1; if (nsub > kSubCap) nsub = kSubCap;
+        const double h = dtSim / (double) nsub;
+        for (int i = 0; i < nsub; ++i)
+        {
+            const double dx = -cy_ - cz_, dy = cx_ + A * cy_, dz = B + cz_ * (cx_ - C);
+            cx_ += h * dx; cy_ += h * dy; cz_ += h * dz;
+        }
+        if (! std::isfinite (cx_) || std::fabs (cx_) > 40.0) { cx_ = 0.1; cy_ = 0.0; cz_ = 0.0; }
+        freeOut_ = clampf ((float) (cx_ / 9.0), -1.0f, 1.0f);
+        vx_ = clampf ((float) (cx_ / 11.0), -1.0f, 1.0f);
+        vy_ = clampf ((float) (cy_ / 11.0), -1.0f, 1.0f);   // x–y plane = the single scroll
+    }
+
+    void advanceDune (float nSamp) noexcept
+    {
+        const float sp = hz_ * kDuneSpeed / (float) sr_ * nSamp;   // wander-phase advanced this call
+        duneAcc_ += sp;                                            // main octave — irregular segments, smoothstep between
+        while (duneAcc_ >= duneSeg_) { duneAcc_ -= duneSeg_; dunePrev_ = duneTgt_; duneTgt_ = nextRandom();
+            duneSeg_ = 0.35f + 0.9f * (0.5f * (nextRandom() + 1.0f)); }
+        const float t = (duneSeg_ > 1e-6f) ? duneAcc_ / duneSeg_ : 0.0f; const float sm = t * t * (3.0f - 2.0f * t);
+        const float base = dunePrev_ + (duneTgt_ - dunePrev_) * sm;
+        duneAcc2_ += sp * 3.3f;                                    // faster octave = 'turns into so many shapes'
+        while (duneAcc2_ >= duneSeg2_) { duneAcc2_ -= duneSeg2_; dunePrev2_ = duneTgt2_; duneTgt2_ = nextRandom();
+            duneSeg2_ = 0.12f + 0.30f * (0.5f * (nextRandom() + 1.0f)); }
+        const float t2 = (duneSeg2_ > 1e-6f) ? duneAcc2_ / duneSeg2_ : 0.0f; const float sm2 = t2 * t2 * (3.0f - 2.0f * t2);
+        const float oct2 = dunePrev2_ + (duneTgt2_ - dunePrev2_) * sm2;
+        freeOut_ = clampf (base * 0.82f + oct2 * 0.28f, -1.0f, 1.0f);
+        vx_ = base; vy_ = oct2;
+    }
+
     // xorshift64* — cheap, deterministic, audio-thread safe (no allocation/locks)
     float nextRandom() noexcept
     {
@@ -350,6 +469,12 @@ private:
     float       phase_     = 0.0f;
     float       stepHeld_  = 0.0f;
     float       stepPrev_  = 0.0f;   // previous S&H target — smooth Random interpolates from it
+    // fb239 — free-run state
+    double      cx_ = 0.1, cy_ = 0.0, cz_ = 0.0;   // attractor coordinates
+    float       freeOut_ = 0.0f, vx_ = 0.0f, vy_ = 0.0f;   // free-run output + 2D viz projection
+    float       duneAcc_ = 0.0f, duneSeg_ = 0.5f,  dunePrev_ = 0.0f, duneTgt_ = 0.0f;
+    float       duneAcc2_ = 0.0f, duneSeg2_ = 0.17f, dunePrev2_ = 0.0f, duneTgt2_ = 0.0f;
+    bool        freeRunSeeded_ = false;
     bool        finished_  = false;
     int         heldPhaseQuadrant_ = -1;
     uint64_t    rngState_  = 0x2545F4914F6CDD1DULL;

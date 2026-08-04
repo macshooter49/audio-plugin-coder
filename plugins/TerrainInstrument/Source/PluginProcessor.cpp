@@ -1436,7 +1436,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::LFO1_SHAPE, 1 },
         "LFO 1 Shape",
-        juce::StringArray { "SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "S&H", "RANDOM", "CUSTOM" },   // LFO ARC L1 — CUSTOM appended (enum-append law; raw choice index preserved in saved state)
+        juce::StringArray { "SINE", "TRIANGLE", "SAW UP", "SAW DOWN", "SQUARE", "DUNE", "RANDOM", "CUSTOM", "PATH", "EDDY", "VORTEX" },   // LFO ARC L1 + fb239 (enum-append law; DUNE = idx5 repurposed; PATH/EDDY/VORTEX appended)
         0));
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParameterIDs::LFO1_SYNC, 1 },
@@ -1454,7 +1454,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     // ── Mod redesign Stage 2 — LFOs 2..5 (same set as L1). Default depth 0 (silent until dialed).
     {
-        const juce::StringArray lfoShapes { "SINE","TRIANGLE","SAW UP","SAW DOWN","SQUARE","S&H","RANDOM","CUSTOM" };   // LFO ARC L1 — must match the L1 inline list
+        const juce::StringArray lfoShapes { "SINE","TRIANGLE","SAW UP","SAW DOWN","SQUARE","DUNE","RANDOM","CUSTOM","PATH","EDDY","VORTEX" };   // LFO ARC L1 + fb239 — must match the L1 inline list
         const juce::StringArray lfoDivs   { "8 bar","4 bar","2 bar","1 bar","1/2","1/4","1/8","1/16","1/32","1/4.","1/8.","1/4T","1/8T","1/16T","32 bar","16 bar","1/64","1/128","1/256" };   // fb219 — must match the L1 inline list
         auto addLfo = [&] (int n, const char* rate, const char* depth, const char* shape, const char* sync, const char* div)
         {
@@ -5357,7 +5357,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             ms.trigger = wc::LFOTrigger::Free; ms.riseMs = 0.0f; ms.delayMs = 0.0f; ms.loopPt = -1.0f;
             flowLfo_[i].setSettings (ms);
         }
-        if (synModCfg.lfos[i].sync && flowPlaying && lfoMotionAudio_[i].ho != 0)   // fb228 — HOST off = a sync'd LFO free-runs at its tempo rate (no bar anchor)
+        if (synModCfg.lfos[i].sync && flowPlaying && lfoMotionAudio_[i].ho != 0
+            && ! wc::isFreeRunShape (synModCfg.lfos[i].shape))   // fb239 — chaos/dune have no transport phase: always free-run at rate
+
         {
             const float bpc = wc::kSyncDivisions[ juce::jlimit (0, wc::kNumSyncDivisions - 1, synModCfg.lfos[i].syncIdx) ].beatsPerCycle;
             const double tdScale = (synModCfg.lfos[i].tripDot == 1 ? (2.0 / 3.0) : synModCfg.lfos[i].tripDot == 2 ? 1.5 : 1.0);   // fb228 — TRIP/DOT scale the bar cycle
@@ -5578,6 +5580,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int k = 0; k < wc::NUM_LFOS; ++k)
         {
             modVizLfo_[k].store (flowLfo_[k].peek(), std::memory_order_relaxed);
+            modVizLfoVX_[k].store (flowLfo_[k].chaosVX(), std::memory_order_relaxed);   // fb239 — the swirl feed
+            modVizLfoVY_[k].store (flowLfo_[k].chaosVY(), std::memory_order_relaxed);
             {   // fb231 — RETRIG/ENV made VISIBLE: a non-Free LFO's dot rides the most-active VOICE's phase
                 //         (resets per note, pins at Env end); Free/mono keep the mirror. (fb228 contract intact.)
                 const bool vTrig = synModCfg.lfos[k].trigger != wc::LFOTrigger::Free;
@@ -7251,6 +7255,31 @@ static float lfoShapeBias (float t, float c) noexcept
     return (std::exp (P * t) - 1.0f) / (std::exp (P) - 1.0f);
 }
 
+void TerrainInstrumentAudioProcessor::bakeLfoPathTable (const LfoShapePtM* pts, int np, float* tb) noexcept
+{
+    // fb239 — PATH: traverse the free 2D drawing at constant speed (arc-length), output = Y.
+    // A path can loop/double-back (multi-valued in x), so we parameterise by cumulative length,
+    // never by x. Periodic: slot [wc::kLfoTableN] == [0] so the cycle wraps (the 2.5ms slew declicks
+    // any open-path seam).
+    float seglen[160]; float total = 0.0f;
+    for (int i = 0; i < np - 1; ++i)
+    {
+        const float dx = pts[i + 1].x - pts[i].x, dy = pts[i + 1].y - pts[i].y;
+        seglen[i] = std::sqrt (dx * dx + dy * dy); total += seglen[i];
+    }
+    if (total < 1.0e-6f) { const float y0 = 2.0f * pts[0].y - 1.0f; for (int k = 0; k <= wc::kLfoTableN; ++k) tb[k] = y0; return; }
+    int seg = 0; float acc = 0.0f;
+    for (int k = 0; k < wc::kLfoTableN; ++k)
+    {
+        const float target = (float) k / (float) wc::kLfoTableN * total;
+        while (seg < np - 2 && acc + seglen[seg] < target) { acc += seglen[seg]; ++seg; }
+        const float sp = (seglen[seg] > 1.0e-6f) ? (target - acc) / seglen[seg] : 0.0f;
+        const float y  = pts[seg].y + (pts[seg + 1].y - pts[seg].y) * sp;
+        tb[k] = 2.0f * y - 1.0f;
+    }
+    tb[wc::kLfoTableN] = tb[0];
+}
+
 void TerrainInstrumentAudioProcessor::bakeLfoShapeTable (const LfoShapePtM* pts, int np, float* tb) noexcept
 {
     int seg = 0;
@@ -7300,13 +7329,22 @@ void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& jso
             pts[np++] = P;
         }
         if (np < 2) continue;
-        std::sort (pts, pts + np, [] (const LfoShapePtM& a, const LfoShapePtM& b) { return a.x < b.x; });
-        pts[0].x = 0.0f; pts[np - 1].x = 1.0f;   // endpoints pin the cycle
-        bakeLfoShapeTable (pts, np, lfoTableShared_[n - 1]);
-        std::memcpy (lfoPtShared_[n - 1], pts, sizeof (LfoShapePtM) * (size_t) np);   // fb238 — keep the list for live re-bakes
-        lfoPtNpShared_[n - 1] = np;
-        { bool hm = false; for (int i2 = 0; i2 < np; ++i2) if (pts[i2].xs > 0 || pts[i2].ys > 0) { hm = true; break; }
-          lfoPtHasModShared_[n - 1] = hm; }
+        const bool pathMode = ((int) e.getProperty ("pm", 0)) != 0;   // fb239 — Path bakes by arc-length, no sort
+        if (pathMode)
+        {
+            bakeLfoPathTable (pts, np, lfoTableShared_[n - 1]);
+            lfoPtNpShared_[n - 1] = 0; lfoPtHasModShared_[n - 1] = false;   // Path carries no per-point mods
+        }
+        else
+        {
+            std::sort (pts, pts + np, [] (const LfoShapePtM& a, const LfoShapePtM& b) { return a.x < b.x; });
+            pts[0].x = 0.0f; pts[np - 1].x = 1.0f;   // endpoints pin the cycle
+            bakeLfoShapeTable (pts, np, lfoTableShared_[n - 1]);
+            std::memcpy (lfoPtShared_[n - 1], pts, sizeof (LfoShapePtM) * (size_t) np);   // fb238 — keep the list for live re-bakes
+            lfoPtNpShared_[n - 1] = np;
+            { bool hm = false; for (int i2 = 0; i2 < np; ++i2) if (pts[i2].xs > 0 || pts[i2].ys > 0) { hm = true; break; }
+              lfoPtHasModShared_[n - 1] = hm; }
+        }
         {   // fb228 — blob v2: per-LFO MOTION rides beside the points (absent = the LfoMotion defaults; fb235 — FREE)
             auto mo = e.getProperty ("mo", juce::var());
             auto& M = lfoMotionShared_[n - 1];
