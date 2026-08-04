@@ -23383,8 +23383,8 @@ restoreThemeFromBackend();
       '<line class="mv-play" id="mv-ph" x1="0" y1="0" x2="0" y2="'+h+'"/><circle class="mv-foll" id="mv-fd" cx="0" cy="'+mid+'" r="2.4"/></svg>';}
   var ICONG={ 5:'M1 8L4 3.5L6.5 7L9.5 2.5L12.5 8L15 4L19 6.5',   // fb239 — Dune: irregular wander
               8:'M2 6C2 2.5 7 2.5 7 6C7 9.5 13 9.5 13 6C13 2.5 18 3 18 6',   // Path: a traced loop
-              9:'M10 6C7 3 4.5 5.5 6.5 7.2C8 8.4 10 6 10 6C10 6 12 8.4 13.5 7.2C15.5 5.5 13 3 10 6',   // Eddy: twin swirl
-              10:'M15 6C15 3.4 11 3 10.4 6C10 8 13 8.6 13 6.2C13 4.8 11.6 5 11.4 6.2' };   // Vortex: inward spiral
+              9:'M10 5.5C7 2.5 2 3 2.5 5.5C3 8 7 8.5 10 5.5C13 2.5 17 3 17.5 5.5C18 8 13 8.5 10 5.5',   // fb243 — Lorenz: box-filling butterfly (matches S&H/Path size)
+              10:'M9.8 5.6C10.6 5.2 10.9 6.1 10.2 6.6C9.2 7.3 8.2 5.9 8.8 4.8C9.6 3.2 12.2 3.6 12.4 5.6C12.7 8 8.8 8.8 6.8 6.8C4.4 4.4 8 1.6 11.4 2.4C15 3.2 16.4 6.4 14.6 8.4' };   // fb243 — Rossler: box-filling spiral scroll
   function icon(k,phOff){ if(ICONG[k]) return '<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="'+ICONG[k]+'"/></svg>';
     phOff=phOff||0;var w=20,h=11,mid=h/2,n=60,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,(t+phOff)%1)*(h*0.34)).toFixed(1)+' ';}return '<svg viewBox="0 0 '+w+' '+h+'" fill="none" stroke="currentColor" stroke-width="1.3"><path d="'+d+'"/></svg>';}
   var CHEV='<svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>';
@@ -27911,7 +27911,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb242';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
+  var TERRAIN_BUILD = 'fb243';   // bump per ship  [fb232 = the LFO card joins the TIC family for real: shell/presets/slots/chain/pop-out copied, hero in card geometry (no stretch), body-level card-only boot (blank pop-out root cause), ghost branch = right-click menus live when popped]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
