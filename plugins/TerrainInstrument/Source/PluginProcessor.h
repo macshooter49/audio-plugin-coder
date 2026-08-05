@@ -1043,7 +1043,7 @@ public:
     // fb228 — L5 MOTION per LFO (blob-fed beside the tables; same shared->audio copy discipline).
     // Defaults ARE the product defaults: tg=1 (RETRIG — Max: 'every LFO retrigs from here on out').
     struct LfoMotion { int tg = 0; float lb = -1.0f; int dir = 0; int mn = 0;   // fb235 — FREE is the product default again (Max reversed the fb228 Retrig call)
-                       float ri = 0.0f, de = 0.0f, sm = 0.0f, sw = 0.0f; int td = 0; int ho = 1; int rs = 0; };   // fb245 — rs = per-note reseed (default off)
+                       float ri = 0.0f, de = 0.0f, sm = 0.0f, sw = 0.0f; int td = 0; int ho = 1; int rs = 0; int pol = 0; };   // fb245 rs=reseed · fb246 pol=polarity (0 Bi · 1 Uni+ · 2 Uni−)
     LfoMotion                     lfoMotionShared_[wc::NUM_LFOS];
     LfoMotion                     lfoMotionAudio_ [wc::NUM_LFOS];
     std::atomic<int>              lfoShapeVersion_ { 0 };

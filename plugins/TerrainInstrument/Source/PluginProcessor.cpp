@@ -4908,7 +4908,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                                 : (mo.tg == 2 ? wc::LFOTrigger::Env
                                                 :  mo.tg == 1 ? wc::LFOTrigger::Trig
                                                 :               wc::LFOTrigger::Free);
-                    synModCfg.lfos[i].polarity  = wc::LFOPolarity::Bipolar;
+                    synModCfg.lfos[i].polarity  = (mo.pol == 1) ? wc::LFOPolarity::UniPlus
+                                                : (mo.pol == 2) ? wc::LFOPolarity::UniMinus
+                                                :                 wc::LFOPolarity::Bipolar;   // fb246 — Uni/Bi toggle (was force-locked Bipolar)
                     synModCfg.lfos[i].direction = mo.dir;
                     synModCfg.lfos[i].loopPt    = mo.lb;
                     synModCfg.lfos[i].riseMs    = mo.ri;
@@ -7388,6 +7390,7 @@ void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& jso
                 M.td  = juce::jlimit (0, 2, (int) mo.getProperty ("td", 0));
                 M.ho  = ((int) mo.getProperty ("ho", 1)) ? 1 : 0;
                 M.rs  = ((int) mo.getProperty ("rs", 0)) ? 1 : 0;   // fb245 — per-note reseed
+                M.pol = juce::jlimit (0, 2, (int) mo.getProperty ("pol", 0));   // fb246 — polarity (0 Bi · 1 Uni+ · 2 Uni−)
             }
         }
     }
