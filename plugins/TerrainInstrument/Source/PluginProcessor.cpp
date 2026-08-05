@@ -4417,6 +4417,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float w = w0 > 1.0f ? 1.0f : w0;
             return juce::jlimit (0.0f, 1.0f, (s + modSums[d]) * (1.0f - w) + envOwnV[d]);
         };
+        // fb252 — SPECTRAL MOD: publish the effective (base + LFO/env) spectral amount per osc so the
+        // message-thread morph rebuild (rebuildMorphIfNeeded reads spectralEffAmt_) follows modulation.
+        // mdP applies the same ownership law as every other Linear01 dest (LFO additive via modSums, env
+        // via envOwnW/V). Quantize to 1/128 ONLY when routed, so a moving LFO doesn't churn the throttled
+        // rebuild (~20 Hz on the message thread — the audio thread never builds a wavetable).
+        {
+            static const char* const kSpecIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT, ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
+                                                     ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
+            for (int o = 0; o < 4; ++o)
+            {
+                const int d = (int) wc::ModDest::SpectralA + o;   // fb76 dests already exist (line ~128); only the WRITE was missing
+                float eff = mdP (kSpecIds[o], (wc::ModDest) d, 0.0f, 1.0f);
+                if (envOwnW[d] > 0.0f || modSums[d] != 0.0f) eff = std::round (eff * 128.0f) / 128.0f;   // anti-churn, routed only
+                spectralEffAmt_[o].store (eff, std::memory_order_relaxed);
+            }
+        }
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);
         const int   semi    = (int)   *rawParam (ParameterIDs::SYN_OSC_A_SEMI);
         const float cent    =         *rawParam (ParameterIDs::SYN_OSC_A_CENT);
