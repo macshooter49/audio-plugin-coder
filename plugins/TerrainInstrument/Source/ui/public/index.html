@@ -23337,18 +23337,29 @@ restoreThemeFromBackend();
       { label:'New loop', white:true, onPick:function(){ var g=shGet(); g.pts=seedPath(); g.pm=1; g.nm='Path'; shTouched=true; shPush(); render(); } },
       { label:'Clear', white:true, onPick:function(){ var g=shGet(); g.pts=[[0.5,0.5,0],[0.5,0.5,0]]; g.pm=1; shTouched=true; shPush(); render(); } }
     ], e.clientX, e.clientY); }
-  function wtToLfo(o){   // fb247 — WAVETABLE → LFO: bake oscillator o's CURRENT frame into this LFO's custom shape (rides the seedTo/custom pipeline)
+  function rdpSimplify(pts,eps){   // fb248 — Douglas-Peucker: keep ONLY the breakpoints (a triangle → its 3 corners), exact lines between
+    if(pts.length<3) return pts.slice();
+    var keep=new Array(pts.length); keep[0]=keep[pts.length-1]=true;
+    var stack=[[0,pts.length-1]];
+    while(stack.length){ var seg=stack.pop(), a=seg[0], b=seg[1];
+      var ax=pts[a][0], ay=pts[a][1], dx=pts[b][0]-ax, dy=pts[b][1]-ay, L=Math.sqrt(dx*dx+dy*dy)||1e-9, dmax=0, idx=-1;
+      for(var i=a+1;i<b;i++){ var d=Math.abs((pts[i][0]-ax)*dy-(pts[i][1]-ay)*dx)/L; if(d>dmax){ dmax=d; idx=i; } }
+      if(dmax>eps&&idx>0){ keep[idx]=true; stack.push([a,idx]); stack.push([idx,b]); } }
+    var out=[]; for(var j=0;j<pts.length;j++) if(keep[j]) out.push(pts[j]); return out; }
+  function wtToLfo(o){   // fb248 — WAVETABLE → LFO: read the EXACT current frame (getOscLfoWave), simplify to clean breakpoints → the LFO IS the wavetable shape
     var names=['A','B','C','D'];
-    var fn=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getOscWavetable'):null;
+    var fn=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getOscLfoWave'):null;
     if(!fn){ toast('Wavetable unavailable here'); return; }
-    var fp=0; try{ var fs=window.Juce.getSliderState('SYN_OSC_'+names[o]+'_WT_FRAME'); if(fs)fp=fs.getNormalisedValue(); }catch(e){}
     try{ fn(o).then(function(js){
       try{ var d=(typeof js==='string')?JSON.parse(js):js;
         if(!d||!d.d||!d.d.length||!d.n){ toast('Osc '+names[o]+' has no wavetable'); return; }
-        var n=d.n, p=d.p, fi=Math.max(0,Math.min(n-1,Math.round(fp*(n-1))));   // the frame you're hearing
-        var base=fi*p, pts=[], STEP=Math.max(1,Math.round(p/48));   // ~48 editable nodes (wavetables are smooth)
-        for(var j=0;j<p;j+=STEP){ var v=d.d[base+j]; pts.push([+(j/p).toFixed(4), Math.max(0,Math.min(1,(v+1)/2)), 0]); }
-        pts.push([1, Math.max(0,Math.min(1,(d.d[base]+1)/2)), 0]);   // close the cycle to the start value
+        var N=d.n, raw=[];
+        for(var i=0;i<N;i++) raw.push([i/N, Math.max(0,Math.min(1,(d.d[i]+1)/2))]);
+        raw.push([1, Math.max(0,Math.min(1,(d.d[0]+1)/2))]);   // close the cycle at the start value (cyclic)
+        var simp=rdpSimplify(raw,0.015);                        // clean breakpoints; simple shapes → a few, complex → faithful
+        if(simp.length>110) simp=rdpSimplify(raw,0.03);         // cap runaway detail on crazy tables
+        if(simp.length>170) simp=rdpSimplify(raw,0.055);
+        var pts=simp.map(function(q){ return [+q[0].toFixed(4), +q[1].toFixed(4), 0]; });
         seedTo(pts, 'Osc '+names[o]);
         toast('Osc '+names[o]+' → LFO '+st.tab);
       }catch(e2){ toast('Wavetable read failed'); }
@@ -27967,7 +27978,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb247';   // bump per ship  [fb247 = LFO ENDGAME viz: the follower mirrors EVERYTHING audible — Direction (dirP: Rev right→left, Ping bounce), Polarity fold (Uni→a half, Bi full), Rise ramp + Smooth glide (note-aware); Env/Delay/Swing/Retrig ride the fb231 phase feed. + WT→LFO: right-click scope → Osc A/B/C/D bakes the osc's current wavetable frame into the LFO custom shape]
+  var TERRAIN_BUILD = 'fb248';   // fb248 = wavetable fixes: WT->LFO reads the EXACT frame + Douglas-Peucker breakpoints (clean shapes); frame-move CROSSFADE declick (no clicks sweeping WT Pos / LFO on it); async import build (no UI freeze/purple flash)
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

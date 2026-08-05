@@ -2351,6 +2351,7 @@ namespace tw
             if (std::abs (blurTargetD_ - blurD_) < 1.0e-4f) blurD_ = blurTargetD_;
             else                                            blurD_ += (blurTargetD_ - blurD_) * 0.25f;
 
+            blendXfA_ = blendXfB_ = blendXfC_ = blendXfD_ = false;   // fb248 — armed only on a fresh blend rebuild below
             if (currentWavetable_ != nullptr)
             {
                 float fpA = framePos_;
@@ -2361,7 +2362,9 @@ namespace tw
                 const int epA = currentWavetable_->buildEpoch();
                 if (fpA != lastFpA_ || blurA_ != lastBlurA_ || currentMipLevelA_ != lastMipA_ || currentWavetable_ != lastWtA_ || epA != lastEpochA_)
                 {
+                    if (blendValidA_) { blendPrevA_ = blendA_; blendXfA_ = true; }   // fb248 — keep old, glide to new across the block
                     currentWavetable_->renderBlend (currentMipLevelA_, fpA, blurA_, blendA_.data());
+                    blendValidA_ = true;
                     lastFpA_ = fpA; lastBlurA_ = blurA_; lastMipA_ = currentMipLevelA_; lastWtA_ = currentWavetable_; lastEpochA_ = epA;
                 }
             }
@@ -2372,7 +2375,9 @@ namespace tw
                 const int epB = currentWavetableB_->buildEpoch();
                 if (fpB != lastFpB_ || blurB_ != lastBlurB_ || currentMipLevelB_ != lastMipB_ || currentWavetableB_ != lastWtB_ || epB != lastEpochB_)
                 {
+                    if (blendValidB_) { blendPrevB_ = blendB_; blendXfB_ = true; }   // fb248
                     currentWavetableB_->renderBlend (currentMipLevelB_, fpB, blurB_, blendB_.data());
+                    blendValidB_ = true;
                     lastFpB_ = fpB; lastBlurB_ = blurB_; lastMipB_ = currentMipLevelB_; lastWtB_ = currentWavetableB_; lastEpochB_ = epB;
                 }
             }
@@ -2383,7 +2388,9 @@ namespace tw
                 const int epC = currentWavetableC_->buildEpoch();
                 if (fpC != lastFpC_ || blurC_ != lastBlurC_ || currentMipLevelC_ != lastMipC_ || currentWavetableC_ != lastWtC_ || epC != lastEpochC_)
                 {
+                    if (blendValidC_) { blendPrevC_ = blendC_; blendXfC_ = true; }   // fb248
                     currentWavetableC_->renderBlend (currentMipLevelC_, fpC, blurC_, blendC_.data());
+                    blendValidC_ = true;
                     lastFpC_ = fpC; lastBlurC_ = blurC_; lastMipC_ = currentMipLevelC_; lastWtC_ = currentWavetableC_; lastEpochC_ = epC;
                 }
             }
@@ -2394,7 +2401,9 @@ namespace tw
                 const int epD = currentWavetableD_->buildEpoch();
                 if (fpD != lastFpD_ || blurD_ != lastBlurD_ || currentMipLevelD_ != lastMipD_ || currentWavetableD_ != lastWtD_ || epD != lastEpochD_)
                 {
+                    if (blendValidD_) { blendPrevD_ = blendD_; blendXfD_ = true; }   // fb248
                     currentWavetableD_->renderBlend (currentMipLevelD_, fpD, blurD_, blendD_.data());
+                    blendValidD_ = true;
                     lastFpD_ = fpD; lastBlurD_ = blurD_; lastMipD_ = currentMipLevelD_; lastWtD_ = currentWavetableD_; lastEpochD_ = epD;
                 }
             }
@@ -2475,8 +2484,10 @@ namespace tw
             const bool uLoopB = (! oscDead_[1] || modSrcForce_[1]) && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC && engineB_ != Engine::HARM && engineB_ != Engine::MODAL);
             const bool uLoopC = (! oscDead_[2] || modSrcForce_[2]) && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC && engineC_ != Engine::HARM && engineC_ != Engine::MODAL);
             const bool uLoopD = (! oscDead_[3] || modSrcForce_[3]) && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL);
+            const float invNsBlend = 1.0f / (float) juce::jmax (1, numSamples);   // fb248 — frame-crossfade ramp denom
             for (int i = 0; i < numSamples; ++i)
             {
+                const float blendFrac = (float) (i + 1) * invNsBlend;   // fb248 — 0→1 across the block: prev blend → new blend (seamless frame move)
                 // fb204 — WARP/WARP2 glide (2.5ms) + FOLD ramp + UNISON table glide: every
                 // block-pushed shape amount steps at block rate when modulated; the applied
                 // values move per sample instead (the fb180 law, applied to the osc lane).
@@ -2571,7 +2582,7 @@ namespace tw
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer
                                     // (frame position, stepped-interp and blur already applied at block rate).
-                                    double rpA = warpedPhase + (double) blendOff[0]; rpA -= std::floor (rpA); sAu = tw::Wavetable::readCycle (blendA_.data(), (float) rpA);   // BLEND inject
+                                    double rpA = warpedPhase + (double) blendOff[0]; rpA -= std::floor (rpA); sAu = wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rpA);   // BLEND inject · fb248 crossfade
                                     sAu *= window;
 
                                     sAu = applyAmpWarp (warpMode_,    warpAmount_,    sAu);   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
@@ -2657,7 +2668,7 @@ namespace tw
                             else
                             {
                                 sAu = (currentWavetable_ != nullptr)
-                                        ? tw::Wavetable::readCycle (blendA_.data(), (float) cPh)
+                                        ? wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
                                 sAu *= fmWin;
                                 sAu = applyAmpWarp (warp2ModeA_, warp2AmountA_, sAu);
@@ -2878,7 +2889,7 @@ namespace tw
                                 else
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
-                                    double rpB = warpedPhase + (double) blendOff[1]; rpB -= std::floor (rpB); sBu = tw::Wavetable::readCycle (blendB_.data(), (float) rpB);   // BLEND inject
+                                    double rpB = warpedPhase + (double) blendOff[1]; rpB -= std::floor (rpB); sBu = wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rpB);   // BLEND inject · fb248 crossfade
                                     sBu *= window;
 
                                     sBu = applyAmpWarp (warpModeB_,   warpAmountB_,   sBu);   // slot 1 amp-domain
@@ -2949,7 +2960,7 @@ namespace tw
                             else
                             {
                                 sBu = (currentWavetableB_ != nullptr)
-                                        ? tw::Wavetable::readCycle (blendB_.data(), (float) cPh)
+                                        ? wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sBu *= fmWin;
                                 sBu = applyAmpWarp (warp2ModeB_, warp2AmountB_, sBu);
@@ -3163,7 +3174,7 @@ namespace tw
                                 else
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
-                                    double rpC = warpedPhase + (double) blendOff[2]; rpC -= std::floor (rpC); sCu = tw::Wavetable::readCycle (blendC_.data(), (float) rpC);   // BLEND inject
+                                    double rpC = warpedPhase + (double) blendOff[2]; rpC -= std::floor (rpC); sCu = wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rpC);   // BLEND inject · fb248 crossfade
                                     sCu *= window;
 
                                     sCu = applyAmpWarp (warpModeC_,   warpAmountC_,   sCu);   // slot 1 amp-domain
@@ -3234,7 +3245,7 @@ namespace tw
                             else
                             {
                                 sCu = (currentWavetableC_ != nullptr)
-                                        ? tw::Wavetable::readCycle (blendC_.data(), (float) cPh)
+                                        ? wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sCu *= fmWin;
                                 sCu = applyAmpWarp (warp2ModeC_, warp2AmountC_, sCu);
@@ -3448,7 +3459,7 @@ namespace tw
                                 else
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
-                                    double rpD = warpedPhase + (double) blendOff[3]; rpD -= std::floor (rpD); sDu = tw::Wavetable::readCycle (blendD_.data(), (float) rpD);   // BLEND inject
+                                    double rpD = warpedPhase + (double) blendOff[3]; rpD -= std::floor (rpD); sDu = wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rpD);   // BLEND inject · fb248 crossfade
                                     sDu *= window;
 
                                     sDu = applyAmpWarp (warpModeD_,   warpAmountD_,   sDu);   // slot 1 amp-domain
@@ -3519,7 +3530,7 @@ namespace tw
                             else
                             {
                                 sDu = (currentWavetableD_ != nullptr)
-                                        ? tw::Wavetable::readCycle (blendD_.data(), (float) cPh)
+                                        ? wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sDu *= fmWin;
                                 sDu = applyAmpWarp (warp2ModeD_, warp2AmountD_, sDu);
@@ -5619,6 +5630,18 @@ namespace tw
         float blurA_ = 0.0f, blurB_ = 0.0f;
         std::array<float, tw::Wavetable::kFrameSize> blendA_ {};
         std::array<float, tw::Wavetable::kFrameSize> blendB_ {};
+        // fb248 — FRAME-MOVE CROSSFADE: the per-block blend cache only rebuilds when the frame position
+        // changes, so a moving WT Pos steps the read waveform at block boundaries = clicks (worse on
+        // detailed tables). Hold the PREVIOUS block's blend + a "crossfade this block" flag, and glide
+        // the read prev→new across the block (a per-sample lerp). Seamless sweeps + LFO/env-safe on WT Pos.
+        std::array<float, tw::Wavetable::kFrameSize> blendPrevA_ {}, blendPrevB_ {}, blendPrevC_ {}, blendPrevD_ {};
+        bool blendXfA_ = false, blendXfB_ = false, blendXfC_ = false, blendXfD_ = false;   // crossfade THIS block?
+        bool blendValidA_ = false, blendValidB_ = false, blendValidC_ = false, blendValidD_ = false;   // a real previous blend exists (skip the very first render)
+        static inline float wtBlendRead (const float* cur, const float* prev, bool xf, float frac, float ph) noexcept
+        {   // frac: 0 at block start → prev (continuous with last block), 1 at block end → new
+            const float c = tw::Wavetable::readCycle (cur, ph);
+            return xf ? (c + (tw::Wavetable::readCycle (prev, ph) - c) * (1.0f - frac)) : c;
+        }
         float lastFpA_ = -2.0f, lastBlurA_ = -2.0f; int lastMipA_ = -2; int lastEpochA_ = -1;
         float lastFpB_ = -2.0f, lastBlurB_ = -2.0f; int lastMipB_ = -2; int lastEpochB_ = -1;
         // The source table pointer is ALSO a blend dependency: Spectral Morph and live

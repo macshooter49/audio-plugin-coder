@@ -198,6 +198,24 @@ void TerrainInstrumentAudioProcessor::rebuildImport (int osc)
     slot.nextIdx = 1 - idx;
 }
 
+// fb248 — the SAME build, off the message thread. Snapshot the source (fast copy on the msg thread), then
+// the heavy 8-mip FFT reconstruction runs on wtBuildPool_ (1 serialized worker) so the UI never freezes on a
+// big Serum-size table. live is published atomically when done; the audio thread reads the old table meanwhile.
+void TerrainInstrumentAudioProcessor::rebuildImportAsync (int osc)
+{
+    osc = juce::jlimit (0, 3, osc);
+    auto snap = std::make_shared<std::vector<float>> (importedPcm_[osc]);
+    const int frames = importFrames_[osc];
+    wtBuildPool_.addJob ([this, osc, snap, frames]
+    {
+        auto& slot = importSlot_[osc];
+        const int idx = slot.nextIdx;
+        slot.buf[idx].buildFromPcm (snap->data(), (int) snap->size(), frames);
+        slot.live.store (&slot.buf[idx], std::memory_order_release);
+        slot.nextIdx = 1 - idx;
+    });
+}
+
 void TerrainInstrumentAudioProcessor::importAudioAsWavetable (int osc, const float* pcm, int numSamples)
 {
     osc = juce::jlimit (0, 3, osc);
@@ -210,14 +228,14 @@ void TerrainInstrumentAudioProcessor::importAudioAsWavetable (int osc, const flo
     const int n  = (int) importedPcm_[osc].size();
     importIsFile_[osc] = (n >= fs * 2 && (n % fs) == 0 && (n / fs) <= tw::Wavetable::kMaxFrames);
     if (importIsFile_[osc]) importFrames_[osc] = n / fs;
-    rebuildImport (osc);
+    rebuildImportAsync (osc);   // fb248 — off the message thread (no UI freeze / purple flash on big tables)
 }
 
 void TerrainInstrumentAudioProcessor::setImportFrames (int osc, int frames)
 {
     osc = juce::jlimit (0, 3, osc);
     importFrames_[osc] = juce::jlimit (2, tw::Wavetable::kMaxFrames, frames);
-    if (! importedPcm_[osc].empty()) rebuildImport (osc);   // re-slice at the chosen density (audio AND wavetable files → always a visible change)
+    if (! importedPcm_[osc].empty()) rebuildImportAsync (osc);   // fb248 — re-slice off the message thread (no freeze)
 }
 
 void TerrainInstrumentAudioProcessor::clearImportedWavetable (int osc)
@@ -322,6 +340,36 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
             if (i || p) out << ',';
             out << juce::String (v, 4);
         }
+    }
+    out << "]}";
+    return out.toString();
+}
+
+// fb248 — WT→LFO: the EXACT current frame at full resolution (no viz decimation, no frame rounding).
+// Reads the same base WT_FRAME the user sees/hears, mip 0 (full bandwidth), N clean samples of ONE cycle.
+// JS simplifies these to minimal breakpoints (Douglas-Peucker) so the LFO becomes the precise shape.
+juce::String TerrainInstrumentAudioProcessor::getOscLfoWaveJson (int osc)
+{
+    osc = juce::jlimit (0, 3, osc);
+    const tw::Wavetable* wt = importSlot_[osc].live.load (std::memory_order_acquire);
+    if (wt == nullptr)
+    {
+        static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                            ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+        wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[osc]));
+    }
+    if (wt == nullptr) return "{}";
+    static const char* const WTF[4] = { ParameterIDs::SYN_OSC_A_WT_FRAME, ParameterIDs::SYN_OSC_B_WT_FRAME,
+                                        ParameterIDs::SYN_OSC_C_WT_FRAME, ParameterIDs::SYN_OSC_D_WT_FRAME };
+    const float framePos = juce::jlimit (0.0f, 1.0f, (float) *apvts.getRawParameterValue (WTF[osc]));
+    const int N = 256;
+    juce::MemoryOutputStream out;
+    out << "{\"n\":" << N << ",\"d\":[";
+    for (int i = 0; i < N; ++i)
+    {
+        const float v = wt->lookup (0, framePos, (float) i / (float) N);
+        if (i) out << ',';
+        out << juce::String (v, 5);
     }
     out << "]}";
     return out.toString();

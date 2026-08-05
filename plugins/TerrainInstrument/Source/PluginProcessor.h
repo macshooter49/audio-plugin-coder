@@ -638,6 +638,7 @@ public:
     // Wavetable EXTENDER viz — compact JSON of the osc's LIVE table (imported or factory) for the
     // 3D waterfall: { n:<displayFrames>, p:<pointsPerFrame>, nf:<realFrames>, d:[ n*p samples ] }.
     juce::String getOscWavetableJson (int osc);
+    juce::String getOscLfoWaveJson (int osc);   // fb248 — exact current frame for WT→LFO
 
     juce::String getCachedOscPayload (int idx) const
     { if (idx < 0 || idx > 3) return {}; juce::ScopedLock sl (samplePayloadLock); return cachedOscPayloads_[(size_t) idx]; }
@@ -1294,9 +1295,14 @@ private:
     std::vector<float> importedPcm_[4];                          // stored mono source per osc (re-slice on resolution change)
     int                importFrames_[4] = { 40, 40, 40, 40 };    // current frame count per osc (resolution mode)
     bool               importIsFile_[4] = { false, false, false, false };  // true = a real wavetable FILE (fixed frames), false = arbitrary audio (resolution-adjustable)
+    // fb248 — imported-table build pool (1 serialized worker). The FFT reconstruction of 8 mip levels ×
+    // frames × 2048 is heavy (Serum-size tables freeze the UI when built on the message thread + flash purple).
+    // Declared AFTER importSlot_/importedPcm_ so it destructs FIRST (joins any in-flight build before those die).
+    juce::ThreadPool   wtBuildPool_ { 1 };
     juce::String       importName_[4];                                     // display/persist name (file/table) per osc
     bool               wt3dView_[4] = { false, false, false, false };       // 3D-waterfall view toggle per osc (survives editor reopen + preset)
     void rebuildImport (int osc);                                // message thread — (re)build importSlot_[osc] from importedPcm_
+    void rebuildImportAsync (int osc);                           // fb248 — snapshot on msg thread, build on wtBuildPool_ (UI never freezes)
     // Audio thread: the wavetable a voice should read for one osc — the imported table if one
     // was dropped, else the morphed/factory table. Atomic load only (no locks).
     const tw::Wavetable* wavetableForOsc (int osc, MorphSlot& slot, int presetIdx) noexcept

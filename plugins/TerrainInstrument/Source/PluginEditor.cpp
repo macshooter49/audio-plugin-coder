@@ -2982,6 +2982,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
             })
+            .withNativeFunction("getOscLfoWave", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb248 — WT→LFO: exact current frame (numeric osc index 0..3).
+                const int oscIdx = args.size() > 0 ? juce::jlimit (0, 3, (int) args[0]) : 0;
+                complete (juce::var (audioProcessor.getOscLfoWaveJson (oscIdx)));
+            })
             .withNativeFunction("setWaterfallView", [this](const juce::Array<juce::var>& args,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
