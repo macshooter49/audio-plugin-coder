@@ -119,8 +119,8 @@ namespace tw
                     //      flat, buzzing, brilliant tone. Without this the spread just thinned
                     //      out (RMS halved); with it the morph gets LOUDER and brighter — the
                     //      "night and day" turn. amount→0 ⇒ s→1, bright→0 ⇒ exact identity.
-                    const float s      = 1.0f + 3.0f * amount;     // spread factor 1 → 4
-                    const float bright = 0.9f * amount;             // brightness ramp 0 → 0.9
+                    const float s      = 1.0f + 5.5f * amount;     // fb251 — spread 1 → 6.5 (was 4): harder fan, night-and-day
+                    const float bright = 1.15f * amount;            // fb251 — brightness 0 → 1.15 (was 0.9): more brilliance
                     for (int i = 0; i < n; ++i)
                     {
                         const float newR = 1.0f + (p[(size_t) i].ratio - 1.0f) * s;
@@ -137,8 +137,8 @@ namespace tw
                     // dense clangorous cluster. A brightness boost ∝ ratio^(bright·amount)
                     // keeps the metal RINGING and present instead of dull. The fundamental
                     // (ratio 1) stays pinned; everything above explodes outward + up.
-                    const float pw     = 1.0f + 1.6f * amount;      // exponent 1 → 2.6
-                    const float bright = 0.8f * amount;             // brightness ramp 0 → 0.8
+                    const float pw     = 1.0f + 2.3f * amount;      // fb251 — exponent 1 → 3.3 (was 2.6): denser, clangier
+                    const float bright = 1.05f * amount;            // fb251 — brightness 0 → 1.05 (was 0.8): rings brighter
                     for (int i = 0; i < n; ++i)
                     {
                         const float newR = std::pow (p[(size_t) i].ratio, pw);
@@ -174,10 +174,10 @@ namespace tw
                     for (int i = 0; i < n; ++i)
                     {
                         const float freq = p[(size_t) i].ratio * F0;
-                        const float env  = 0.02f
-                            + 1.60f * Wavetable::lorentzian (freq, F1, 90.0f)
-                            + 1.20f * Wavetable::lorentzian (freq, F2, 120.0f)
-                            + 0.80f * Wavetable::lorentzian (freq, F3, 160.0f);
+                        const float env  = 0.012f                                          // fb251 — deeper valleys (was 0.02)
+                            + 2.10f * Wavetable::lorentzian (freq, F1,  72.0f)              // fb251 — sharper, taller formants (BW 90→72)
+                            + 1.55f * Wavetable::lorentzian (freq, F2,  96.0f)              // fb251 — (1.20→1.55, BW 120→96)
+                            + 1.05f * Wavetable::lorentzian (freq, F3, 130.0f);             // fb251 — (0.80→1.05, BW 160→130) → clearer vowels
                         p[(size_t) i].amp *= (1.0f - depth) + depth * env;
                     }
                     break;
@@ -193,14 +193,14 @@ namespace tw
                     // opens), blurs neighbours together, and scatters phases — a bright, hard
                     // tone melts into a soft, dark, washy pad. The rolloff is the big move;
                     // the blur + scatter diffuse what's left. amount 0 = identity.
-                    const float cut = 4.0f + (1.0f - amount) * (1.0f - amount) * 90.0f;  // ~94 → 4 harmonics
+                    const float cut = 3.0f + (1.0f - amount) * (1.0f - amount) * 92.0f;  // fb251 — ~95 → 3 (darker melt, was →4)
                     for (int i = 0; i < n; ++i)
                     {
                         const float r    = p[(size_t) i].ratio / cut;
                         const float roll = 1.0f / (1.0f + r * r * r * r);      // soft LP in harmonic space
                         p[(size_t) i].amp *= (1.0f - amount) + amount * roll;
                     }
-                    const int W = (int) std::round (amount * 8.0f);            // ± blur window, 0..8 partials
+                    const int W = (int) std::round (amount * 11.0f);           // fb251 — ± blur window 0..11 (was 8): wider wash
                     if (W > 0)
                     {
                         float src[FrameSpec::kMaxPartials];
@@ -224,7 +224,7 @@ namespace tw
                         rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
                         return ((float) rng / (float) 0xFFFFFFFFu) * 2.0f - 1.0f; };
                     for (int i = 0; i < n; ++i)
-                        p[(size_t) i].phase += amount * 3.14159265f * rnd11();
+                        p[(size_t) i].phase += amount * 4.1f * rnd11();            // fb251 — deeper phase scatter (was π≈3.14)
                     break;
                 }
 
@@ -242,7 +242,7 @@ namespace tw
                     for (int i = 0; i < n; ++i)
                     {
                         const float r   = rnd01();
-                        float       mul = 0.02f + r * r * 3.5f;                  // 0.02 .. 3.52 (wild)
+                        float       mul = 0.02f + r * r * 5.5f;                  // fb251 — 0.02 .. 5.52 (wilder mutation, was 3.52)
                         if (p[(size_t) i].ratio <= 1.01f) mul = 0.7f + 0.3f * r;  // keep the root present
                         p[(size_t) i].amp *= (1.0f - amount) + amount * mul;
                     }
@@ -258,8 +258,8 @@ namespace tw
                     // amount 0 = 64 levels + keep-all ≈ identity; the root is always kept.
                     float maxA = 1.0e-9f;
                     for (int i = 0; i < n; ++i) maxA = std::max (maxA, std::abs (p[(size_t) i].amp));
-                    const int   levels    = std::max (2, (int) std::round (64.0f - amount * 61.0f)); // 64 → 3
-                    const int   keepEvery = 1 + (int) std::round (amount * 2.0f);                    // 1 → 3
+                    const int   levels    = std::max (2, (int) std::round (64.0f - amount * 62.0f)); // fb251 — 64 → 2 (harder crush)
+                    const int   keepEvery = 1 + (int) std::round (amount * 3.0f);                    // fb251 — 1 → 4 (more decimation, was 3)
                     const float invMax    = 1.0f / maxA;
                     for (int i = 0; i < n; ++i)
                     {
@@ -282,13 +282,13 @@ namespace tw
                     // notches march up/down the spectrum (true phaser motion). amount 0 =
                     // depth 0 = identity.
                     const float depth  = amount;
-                    const float period = 2.0f;             // tighter spacing → more notches
-                    const float sweep  = amount * 3.0f;    // notch position slides up the spectrum
+                    const float period = 1.7f;             // fb251 — tighter spacing → MORE notches (was 2.0)
+                    const float sweep  = amount * 4.5f;    // fb251 — notches slide farther up the spectrum (was 3.0)
                     for (int i = 0; i < n; ++i)
                     {
                         const float x     = (p[(size_t) i].ratio + sweep) / period;
                         float       notch = std::abs (std::sin (3.14159265f * x));
-                        notch             = std::pow (notch, 1.6f);   // deep, wide troughs (kills more)
+                        notch             = std::pow (notch, 2.0f);   // fb251 — deeper, wider troughs (was 1.6)
                         p[(size_t) i].amp *= (1.0f - depth) + depth * notch;
                     }
                     break;
