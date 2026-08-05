@@ -522,7 +522,13 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     const float effAmt = spectralEffAmt_[juce::jlimit (0, 3, oscIdx)].load (std::memory_order_relaxed);
     const float amount = (effAmt >= 0.0f) ? effAmt : apvts.getRawParameterValue (amtId)->load();   // ->load(): atomic<float> can't deduce in a ternary
 
-    // None (or zero amount) → publish nullptr so voices read the plain bank table.
+    // fb253 — the morph SOURCE is the loaded IMPORT if one exists, else the factory preset spec.
+    const int  oi        = juce::jlimit (0, 3, oscIdx);
+    const tw::Wavetable* imp = importSlot_[(size_t) oi].live.load (std::memory_order_acquire);
+    const bool hasImport = (imp != nullptr);
+    const int  impEpoch  = hasImport ? imp->buildEpoch() : -1;
+
+    // None (or zero amount) → publish nullptr; voices then read the RAW import (fb253) or the bank.
     if (mode <= 0 || amount <= 0.0f)
     {
         if (slot.live.load (std::memory_order_relaxed) != nullptr)
@@ -531,11 +537,17 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
         slot.builtPreset = preset;
         slot.builtMode   = mode;
         slot.builtAmount = amount;
+        slot.builtImportPtr   = imp;         // fb253
+        slot.builtImportEpoch = impEpoch;
         return;
     }
 
-    // Nothing changed since the last build → skip.
-    if (preset == slot.builtPreset && mode == slot.builtMode
+    // Nothing changed since the last build → skip. fb253 — the SOURCE identity is the import
+    // (pointer + buildEpoch) when one is loaded, else the preset index; a re-import re-morphs.
+    const bool srcSame = hasImport
+        ? (imp == slot.builtImportPtr && impEpoch == slot.builtImportEpoch)
+        : (slot.builtImportPtr == nullptr && preset == slot.builtPreset);
+    if (srcSame && mode == slot.builtMode
         && std::abs (amount - slot.builtAmount) < 1.0e-4f)
         return;
 
@@ -553,10 +565,30 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
 
     // Mark the build in flight FIRST: any resolve during the rebuild parks voices on
     // the plain bank table (audible) instead of a half-zeroed morph buffer (silence).
+    // fb253 — pick the morph source spec: a cached analysis of the loaded IMPORT (re-derived only when
+    // the import changes — toSpec is 16 FFTs), else the factory preset spec. Both are 16-frame specs, so
+    // morph-of-import behaves exactly like morph-of-preset (raw import still plays full-res when morph off).
+    tw::WavetableSpec presetSpec;
+    const tw::WavetableSpec* srcSpec;
+    if (hasImport)
+    {
+        if (imp != importSpecSrc_[oi] || impEpoch != importSpecEpoch_[oi])
+        {
+            importSpec_[oi]      = imp->toSpec();
+            importSpecSrc_[oi]   = imp;
+            importSpecEpoch_[oi] = impEpoch;
+        }
+        srcSpec = &importSpec_[oi];
+    }
+    else
+    {
+        presetSpec = tw::WavetableBank::specForPreset (preset);
+        srcSpec    = &presetSpec;
+    }
+
     slot.ready[target].store (false, std::memory_order_release);
     slot.buf[target].buildFromSpec (
-        tw::SpectralMorph::apply (tw::WavetableBank::specForPreset (preset),
-                                  (tw::SpectralMode) mode, amount));
+        tw::SpectralMorph::apply (*srcSpec, (tw::SpectralMode) mode, amount));
     slot.ready[target].store (true, std::memory_order_release);
 
     slot.live.store (&slot.buf[target], std::memory_order_release);
@@ -565,6 +597,8 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     slot.builtPreset = preset;
     slot.builtMode   = mode;
     slot.builtAmount = amount;
+    slot.builtImportPtr   = imp;         // fb253 — remember the morphed source so a re-import re-morphs
+    slot.builtImportEpoch = impEpoch;
 }
 
 // fb151 — THE PHANTOM-DROP FIX (Max live: "hover links it... flashing constantly").

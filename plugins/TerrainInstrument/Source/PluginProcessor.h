@@ -1273,6 +1273,8 @@ private:
         int   builtPreset = -1;
         int   builtMode   = -1;
         float builtAmount = -1.0f;
+        const tw::Wavetable* builtImportPtr = nullptr;   // fb253 — morph SOURCE was this import (nullptr = a factory preset)
+        int   builtImportEpoch = -1;                     // fb253 — the import's buildEpoch when morphed (re-import → re-morph)
     };
     MorphSlot morphA_, morphB_, morphC_, morphD_;
     // fb76 — the audio thread publishes the EFFECTIVE (LFO-modulated) spectral amount per osc each
@@ -1295,6 +1297,13 @@ private:
     std::vector<float> importedPcm_[4];                          // stored mono source per osc (re-slice on resolution change)
     int                importFrames_[4] = { 40, 40, 40, 40 };    // current frame count per osc (resolution mode)
     bool               importIsFile_[4] = { false, false, false, false };  // true = a real wavetable FILE (fixed frames), false = arbitrary audio (resolution-adjustable)
+    // fb253 — SPECTRAL ON CUSTOM TABLES: SpectralMorph consumes a 16-frame WavetableSpec. For an imported
+    // table we derive one via Wavetable::toSpec() and cache it (message-thread only in rebuildMorphIfNeeded),
+    // re-deriving only when the import changes (pointer/buildEpoch). The morph then acts on THIS instead of
+    // the factory preset spec — so custom tables get spectral (and modulate, via fb252) exactly like presets.
+    tw::WavetableSpec  importSpec_[4];
+    const tw::Wavetable* importSpecSrc_[4]   = { nullptr, nullptr, nullptr, nullptr };
+    int                importSpecEpoch_[4]   = { -1, -1, -1, -1 };
     // fb248 — imported-table build pool (1 serialized worker). The FFT reconstruction of 8 mip levels ×
     // frames × 2048 is heavy (Serum-size tables freeze the UI when built on the message thread + flash purple).
     // Declared AFTER importSlot_/importedPcm_ so it destructs FIRST (joins any in-flight build before those die).
@@ -1307,9 +1316,24 @@ private:
     // was dropped, else the morphed/factory table. Atomic load only (no locks).
     const tw::Wavetable* wavetableForOsc (int osc, MorphSlot& slot, int presetIdx) noexcept
     {
-        if (auto* imp = importSlot_[(size_t) juce::jlimit (0, 3, osc)].live.load (std::memory_order_acquire))
-            return imp;
-        return resolveMorphTable (slot, presetIdx);
+        osc = juce::jlimit (0, 3, osc);
+        auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_acquire);
+        // fb253 — the morph now applies to the IMPORT too (rebuildMorphIfNeeded sources its spec from the
+        // loaded table). A live+ready morph wins (morph-of-import OR morph-of-preset); otherwise fall back to
+        // the RAW import if one is loaded (NEVER the factory bank — that was the wrong sound), else the bank.
+        // (Inlines resolveMorphTable's race-hardened read so the fallback can be the import, not the bank.)
+        if (auto* m = slot.live.load (std::memory_order_acquire))
+        {
+            const int idx = (m == &slot.buf[1]) ? 1 : 0;
+            if (slot.ready[idx].load (std::memory_order_acquire))
+            {
+                slot.audioReadingIdx.store (idx, std::memory_order_release);
+                return m;
+            }
+        }
+        slot.audioReadingIdx.store (-1, std::memory_order_release);
+        if (imp != nullptr) return imp;
+        return wavetableBank.getTable (presetIdx);
     }
 
     // ── GEODE resynthesis analysis (Engine::SPEC) ────────────────────────

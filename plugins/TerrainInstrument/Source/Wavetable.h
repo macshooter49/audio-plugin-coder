@@ -250,6 +250,41 @@ namespace tw
             buildEpoch_.fetch_add (1, std::memory_order_release);
         }
 
+        /** fb253 — analyze THIS table into a 16-frame WavetableSpec (per-frame harmonic amps+phases),
+         *  so the SpectralMorph engine (which consumes a WavetableSpec) can act on ANY loaded table —
+         *  imported / custom, not just factory presets. Exact inverse of buildFromSpec's synthesis
+         *  convention (verified round-trip to machine precision): with c = X_fwd[h]/N,
+         *  A_h = 2|c|, phi_h = atan2(Re c, -Im c). Reads mip 0 (full bandwidth). Message-thread use
+         *  (16 FFTs); cache the result and re-derive only when the source table changes (buildEpoch). */
+        WavetableSpec toSpec() const noexcept
+        {
+            WavetableSpec spec;
+            const int N = frameSize_;
+            if (numFrames_ < 1 || N < 4 || mipData_.empty()) return spec;
+            std::vector<std::complex<double>> buf ((size_t) N);
+            const int hMax = std::min (FrameSpec::kMaxHarmonics, N / 2 - 1);
+            const double invN = 1.0 / (double) N;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const int srcFrame = (numFrames_ > 1)
+                    ? (int) std::lround ((double) f / (double) (WavetableSpec::kNumFrames - 1) * (double) (numFrames_ - 1))
+                    : 0;
+                const float* src = &mipData_[(size_t) ((size_t) srcFrame * (size_t) frameSize_)];   // mip level 0
+                for (int n = 0; n < N; ++n) buf[(size_t) n] = std::complex<double> ((double) src[(size_t) n], 0.0);
+                forwardFFT (buf);
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numPartials  = 0;                 // harmonic representation
+                fs.numHarmonics = hMax;
+                for (int h = 1; h <= hMax; ++h)
+                {
+                    const std::complex<double> c = buf[(size_t) h] * invN;
+                    fs.amplitudes[(size_t) (h - 1)] = (float) (2.0 * std::abs (c));
+                    fs.phases[(size_t) (h - 1)]     = (float) std::atan2 (c.real(), -c.imag());
+                }
+            }
+            return spec;
+        }
+
         /** BUILD EPOCH — increments after every COMPLETED (re)build. The spectral-morph
          *  slots rebuild their two Wavetable objects IN PLACE forever (same addresses),
          *  so a pointer-keyed cache (the voice's blend composite) can never tell that
