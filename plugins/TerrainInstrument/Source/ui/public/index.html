@@ -22989,7 +22989,7 @@ restoreThemeFromBackend();
     if(k===5){var i=Math.floor(p*SH.length)%SH.length;return SH[i]*2-1;}
     if(k===6)return smooth(RP,p)*2-1; return 0; }
   function stockPathD(k,g){ var n=220,d='',i; for(i=0;i<=n;i++){ var t=(i>=n)?0.999999:i/n;
-    d+=(i?'L':'M')+shX(i>=n?1:t).toFixed(1)+' '+shY((stockVal(k,t)+1)/2,g).toFixed(1)+' '; } return d; }
+    d+=(i?'L':'M')+shX(i>=n?1:t).toFixed(1)+' '+shY(polFrac(stockVal(k,t)),g).toFixed(1)+' '; } return d; }   // fb247 — polarity folds the stroke (Uni → a half)
   function scopeSVG(){ return shaperSVG(); }   // fb212 — ONE WORLD (Max: 'the grid always plays the number one role'): every shape lives in the field
   function shRefresh(){ shScopes().forEach(function(sc){ shRefreshOne(sc); }); }
   function shScopes(){ var a=[]; var m=root?root.querySelector('.mv-scope svg'):null; if(m)a.push(m);
@@ -23337,6 +23337,23 @@ restoreThemeFromBackend();
       { label:'New loop', white:true, onPick:function(){ var g=shGet(); g.pts=seedPath(); g.pm=1; g.nm='Path'; shTouched=true; shPush(); render(); } },
       { label:'Clear', white:true, onPick:function(){ var g=shGet(); g.pts=[[0.5,0.5,0],[0.5,0.5,0]]; g.pm=1; shTouched=true; shPush(); render(); } }
     ], e.clientX, e.clientY); }
+  function wtToLfo(o){   // fb247 — WAVETABLE → LFO: bake oscillator o's CURRENT frame into this LFO's custom shape (rides the seedTo/custom pipeline)
+    var names=['A','B','C','D'];
+    var fn=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getOscWavetable'):null;
+    if(!fn){ toast('Wavetable unavailable here'); return; }
+    var fp=0; try{ var fs=window.Juce.getSliderState('SYN_OSC_'+names[o]+'_WT_FRAME'); if(fs)fp=fs.getNormalisedValue(); }catch(e){}
+    try{ fn(o).then(function(js){
+      try{ var d=(typeof js==='string')?JSON.parse(js):js;
+        if(!d||!d.d||!d.d.length||!d.n){ toast('Osc '+names[o]+' has no wavetable'); return; }
+        var n=d.n, p=d.p, fi=Math.max(0,Math.min(n-1,Math.round(fp*(n-1))));   // the frame you're hearing
+        var base=fi*p, pts=[], STEP=Math.max(1,Math.round(p/48));   // ~48 editable nodes (wavetables are smooth)
+        for(var j=0;j<p;j+=STEP){ var v=d.d[base+j]; pts.push([+(j/p).toFixed(4), Math.max(0,Math.min(1,(v+1)/2)), 0]); }
+        pts.push([1, Math.max(0,Math.min(1,(d.d[base]+1)/2)), 0]);   // close the cycle to the start value
+        seedTo(pts, 'Osc '+names[o]);
+        toast('Osc '+names[o]+' → LFO '+st.tab);
+      }catch(e2){ toast('Wavetable read failed'); }
+    }).catch(function(){ toast('Wavetable read failed'); }); }catch(e3){ toast('Wavetable read failed'); }
+  }
   function shMenu(e){   // fb213 — Grid header retired; sliders wear MATCHED emblems; the Shape section = TOOL RADIOS (brushes), not preset loaders (Max's Serum-tools call)
     if(!window.__synShowMenu) return;
     var sp=shGet(), moM=moGet(), lbRows=[];
@@ -23364,6 +23381,11 @@ restoreThemeFromBackend();
       tool('Square',4),
       tool('Triangle',5),
       tool('Sine',6),
+      { isHeader:true, label:'Wavetable → LFO' },   // fb247 — bake an oscillator's current wave into this LFO's shape
+      { label:'Oscillator A', white:true, onPick:function(){ wtToLfo(0); } },
+      { label:'Oscillator B', white:true, onPick:function(){ wtToLfo(1); } },
+      { label:'Oscillator C', white:true, onPick:function(){ wtToLfo(2); } },
+      { label:'Oscillator D', white:true, onPick:function(){ wtToLfo(3); } },
       { isHeader:true, label:'Window' },
       { label:'Extend', white:true, onPick:function(){ openExt(); } }
     ].concat(lbRows.length?[{isHeader:true,label:'Loopback'}].concat(lbRows):[]), e.clientX, e.clientY);
@@ -23679,6 +23701,10 @@ restoreThemeFromBackend();
   window.updateSynthLFO=function(v){};   // kept so the C++ per-frame push is a harmless no-op
   var DIVBEATS=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6,128,64,0.0625,0.03125,0.015625];   // beats-per-cycle per DIVS entry (fb219 tail appended)
   function effHz(){ if(!st.sync) return st.rateHz||1; var b=DIVBEATS[st.div]||1; return (120/60)/b; }   // 120 BPM preview source
+  // fb247 — the viz mirrors EVERYTHING audible (Max's hard rule). These match the DSP 1:1:
+  function dirRead(p){ var d=(moGet().dir)||0; if(d===1)return 1-p; if(d===2)return (p<0.5?p*2:2-p*2); return p; }   // dirP: Fwd / Rev / PingPong
+  function polV(v){ var pl=(moGet().pol)||0; if(pl===1)return 0.5*(v+1); if(pl===2)return 0.5*(v-1); return v; }     // applyPolarity: Bi / Uni+ / Uni−
+  function polFrac(v){ return 0.5+0.5*polV(v); }   // → display fraction [0,1]; output 0 rests at centre (0.5), Uni folds the swing into a half
   function placeHead(scope,amp){ if(!scope)return;
     if(st.shape===5||st.shape===9||st.shape===10) return;   // fb239 — the trail tick owns these dots
     var pl=scope.querySelector('#mv-ph'), fd=scope.querySelector('#mv-fd');
@@ -23688,15 +23714,16 @@ restoreThemeFromBackend();
       return; }
     if(scope===root||scope===ext){   // fb229 — the card hero is the same field: exact geometry on both screens   // fb212 — head + dot sample the SAME phase-shifted position (Max's Pac-Man follower fix); PHASE slides the head, the drawing stays put
       var gG=null;   // fb235 — card hero = pane geometry (exact clone)
-      var rp=(ph+st.phase)%1, x=shX(rp);
+      var rp=__lfoReadPos, x=shX(rp);   // fb247 — direction-mapped read position (Rev runs right→left, Ping bounces)
       if(pl){ pl.setAttribute('x1',x); pl.setAttribute('x2',x); }
       if(fd){ fd.setAttribute('cx',x.toFixed(1));
-        fd.setAttribute('cy',(st.shape===7?shY(shEvalPts(__shEffCache||shGet().pts,rp),gG):shY((stockVal(st.shape,rp)+1)/2,gG)).toFixed(1)); }   /* fb238 — the dot rides the LIVE modulated curve */
+        fd.setAttribute('cy',shY(__lfoDotFrac,gG).toFixed(1)); }   /* fb247 — the dot rides the TRUE output: polarity-folded, rise-ramped, smooth-glided */
       return; }
     var x2=ph*456;
     if(pl){ pl.setAttribute('x1',x2); pl.setAttribute('x2',x2); }
     if(fd){ fd.setAttribute('cx',x2.toFixed(1)); fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*amp).toFixed(1)); } }
   var __chainPrevPh=-1, __chainPlay=0;   // fb245 — CHAIN cycle-wrap tracker (advance the LFO snapshot chain each cycle)
+  var __lfoNoteOnT=0, __lfoNotePrev=false, __lfoReadPos=0, __lfoDotFrac=0.5;   // fb247 — direction / rise / smooth follower state
   function tick(t){ if(window.__cardOnly&&window.__cardOnly!=='lfo')return; if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
     var rP=window.__mvLfoPh;   // fb217 — THE TRUTH FEED: the DSP's actual LFO phase (Max: 'the follower is seconds off' — it was a free-running JS clock at a fake 120 BPM; now the dot IS the audible read position, sync/rate-mod/transport all inherently exact)
     if(rP&&window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250){ ph=(((rP[st.tab-1]||0)%1)+1)%1; }
@@ -23708,6 +23735,15 @@ restoreThemeFromBackend();
       if(!chFresh){ __chainPlay=0; __chainPrevPh=-1; }
       else if(__chainPlay!==1){ extSc.restart(); __chainPlay=1; __chainPrevPh=ph; }
       else { if(__chainPrevPh>=0 && ph < __chainPrevPh-0.5) extSc.advance(); __chainPrevPh=ph; } }
+    // fb247 — resolve the follower's TRUE read position + value once per frame (Max's hard rule: see everything audible).
+    // dirP maps the read (Rev/Ping) · polarity folds the value (Uni/Bi) · rise ramps the amplitude on note-on · smooth glides it.
+    { var na=!!window.__notesActive; if(na&&!__lfoNotePrev)__lfoNoteOnT=Date.now(); __lfoNotePrev=na;
+      var rp2=(((ph+st.phase)%1)+1)%1, m2=moGet();
+      __lfoReadPos=dirRead(rp2);
+      var sv=(st.shape===7)?(2*shEvalPts(__shEffCache||shGet().pts,__lfoReadPos)-1):stockVal(st.shape,__lfoReadPos);
+      var rg=1; if(na&&(m2.ri||0)>1){ var el=Date.now()-__lfoNoteOnT-(m2.de||0); rg=Math.max(0,Math.min(1,el/m2.ri)); }
+      var tf=0.5+rg*(polFrac(sv)-0.5), sm=(m2.sm||0);
+      if(sm>1){ var kk=1-Math.exp(-dt/(sm*0.001)); __lfoDotFrac+=kk*(tf-__lfoDotFrac); } else __lfoDotFrac=tf; }
     var amp=ampOf(st.depth);
     shGhostTick();   /* fb238 — per-point mod: ghost curve + eff-cache refresh at frame rate */
     shTrajTick();    /* fb239 — chaos/dune trajectory at frame rate */
@@ -27931,7 +27967,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb246';   // bump per ship  [fb246 = Uni/Bi polarity toggle (7th R2 button, un-forces the built LFOPolarity) + FIX: seedTo/snapshot setNorm(shape,1) mapped to Rossler since fb239 appended shapes past Custom — basic seeds now set Custom(7) not norm 1.0=Rossler (was: frozen playhead + silent shape-to-Rossler)]
+  var TERRAIN_BUILD = 'fb247';   // bump per ship  [fb247 = LFO ENDGAME viz: the follower mirrors EVERYTHING audible — Direction (dirP: Rev right→left, Ping bounce), Polarity fold (Uni→a half, Bi full), Rise ramp + Smooth glide (note-aware); Env/Delay/Swing/Retrig ride the fb231 phase feed. + WT→LFO: right-click scope → Osc A/B/C/D bakes the osc's current wavetable frame into the LFO custom shape]
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
