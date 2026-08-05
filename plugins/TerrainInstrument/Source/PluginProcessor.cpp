@@ -4239,6 +4239,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 ParameterIDs::LFO7_DEPTH, ParameterIDs::LFO8_DEPTH, ParameterIDs::LFO9_DEPTH,
                 ParameterIDs::LFO10_DEPTH };
             const juce::ScopedLock sl (synModLock);
+            // fb245 — LFO→LFO amt for GLOBAL dests. Per-voice already scales its LFO peaks (SynthVoice ~1985),
+            // but the processor global path read the RAW peek, so LfoAmt silently no-op'd for every global route.
+            // Pre-pass the amt exactly like the per-voice pass (source × master × depth), then scale the peek below.
+            float lfoAmt[wc::NUM_LFOS] = { 0.0f };
+            for (const auto& r : synModRoutes)
+            {
+                if (r.dest < (int) wc::ModDest::LfoAmt1 || r.dest >= (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS) continue;
+                if (r.src >= 0 && r.src < wc::NUM_LFOS)
+                    lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += flowLfo_[r.src].peek() * (r.depth * *rawParam (kLfoDepthIds[r.src]));
+                else if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
+                    lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1)) * std::abs (r.depth);
+            }
             for (const auto& r : synModRoutes)
             {
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
@@ -4267,7 +4279,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
                 const float master = *rawParam (kLfoDepthIds[r.src]);   // per-LFO MASTER ring (same law as the matrix merge below)
                 modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
-                                                          flowLfo_[r.src].peek(), r.depth * master);
+                                                          flowLfo_[r.src].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + lfoAmt[r.src]), r.depth * master);   // fb245 — LfoAmt now scales global dests too
             }
         }
         { // ZPROBE-ENV log
@@ -4889,7 +4901,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 synModCfg.lfos[i].sync        = sy;
                 synModCfg.lfos[i].rateHz      = modP (lp[i].rate, *rawParam (lp[i].rate), (int) wc::ModDest::LfoRateBase + i);   // fb196 — env-on-RATE (Hz mode; sync stays grid-locked until the LFO arc)
                 synModCfg.lfos[i].syncIdx     = juce::jlimit (0, wc::kNumSyncDivisions - 1, dv);
-                synModCfg.lfos[i].phaseOffset = *rawParam (lp[i].phase);
+                synModCfg.lfos[i].phaseOffset = modP (lp[i].phase, *rawParam (lp[i].phase), (int) wc::ModDest::LfoPhaseBase + i);   // fb245 — env/LFO on PHASE (read-phase shift, block-rate; output slew smooths)
                 {   // fb228 — L5 MOTION feeds the config (the Free-forcing is DEAD; RETRIG is the default)
                     const auto& mo = lfoMotionAudio_[i];
                     synModCfg.lfos[i].trigger   = mo.mn ? wc::LFOTrigger::Free                      // MONO: a Free pool is phase-locked = one shared LFO
@@ -4904,6 +4916,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     synModCfg.lfos[i].smoothMs  = mo.sm;
                     synModCfg.lfos[i].swing     = mo.sw;
                     synModCfg.lfos[i].tripDot   = mo.td;
+                    synModCfg.lfos[i].reseed    = (mo.rs != 0);   // fb245 — per-note reseed toggle
                 }
             }
             // Assignments come from the UI drag-matrix. Effective depth = per-route badge (the dest
@@ -5410,6 +5423,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 
     // EFFECTIVE FLOW knobs = base param + Σ(global-LFO × depth), clamp once. Shared by ARP + SEQ —
     // SEQ reuses the same FLOW_ARP_* params (per-mode memory lives in the JS).  (proven: 35/35)
+    // fb245 — LFO→LFO amt for FLOW/card knobs (same no-op the global path had: flowMod read the raw peek).
+    // Built from the resolved assignments (they already fold the source LFO's master into as.depth).
+    float flowLfoAmt[wc::NUM_LFOS] = { 0.0f };
+    for (int a = 0; a < synModCfg.numAssignments; ++a) {
+        const auto& as = synModCfg.assignments[a];
+        if (! as.enabled) continue;
+        const int dI = (int) as.dest;
+        if (dI < (int) wc::ModDest::LfoAmt1 || dI >= (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS) continue;
+        const int sI = (int) as.source;
+        if (sI >= (int) wc::ModSource::L1 && sI < (int) wc::ModSource::L1 + wc::NUM_LFOS)
+            flowLfoAmt[dI - (int) wc::ModDest::LfoAmt1] += flowLfo_[sI - (int) wc::ModSource::L1].peek() * as.depth;
+        else if (wc::isEnvModSource (sI))
+            flowLfoAmt[dI - (int) wc::ModDest::LfoAmt1] += monoEnvLevelOf (sI) * as.depth;
+    }
     auto flowBase = [&] (const char* id) { return juce::jlimit (0.0f, 1.0f, rawParam (id)->load()); };  // ->load(): atomic<float> can't deduce in jlimit
     auto flowMod  = [&] (wc::ModDest dest, float& oW, float& oV) -> float {
         float sum = 0.0f; const auto& info = wc::kDestInfo[(int) dest];
@@ -5421,7 +5448,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             { const float dwF = std::abs (as.depth);
               oW += dwF; oV += dwF * (monoEnvLevelOf ((int) as.source) + 1.0f); continue; }
             if (si < 0 || si >= wc::NUM_LFOS) continue;           // only LFO sources have a global value
-            sum += wc::routeContribution (info, flowLfo_[si].peek(), as.depth);
+            sum += wc::routeContribution (info, flowLfo_[si].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + flowLfoAmt[si]), as.depth);   // fb245 — LfoAmt scales flow/card knobs too
         }
         return sum; };
     // Each mode reads its OWN 5 knob params (per-mode knob memory: ARP=FLOW_ARP_*, SEQ=FLOW_SEQ_*).
@@ -7360,6 +7387,7 @@ void TerrainInstrumentAudioProcessor::setSynthLfoShapes (const juce::String& jso
                 M.sw  = juce::jlimit (0.0f, 1.0f,    (float) (double) mo.getProperty ("sw", 0.0));
                 M.td  = juce::jlimit (0, 2, (int) mo.getProperty ("td", 0));
                 M.ho  = ((int) mo.getProperty ("ho", 1)) ? 1 : 0;
+                M.rs  = ((int) mo.getProperty ("rs", 0)) ? 1 : 0;   // fb245 — per-note reseed
             }
         }
     }

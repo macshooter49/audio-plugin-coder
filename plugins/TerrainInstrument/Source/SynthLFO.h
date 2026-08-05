@@ -84,6 +84,7 @@ struct LFOSettings
     float smoothMs  = 0.0f;   // user output smoothing (stretches the house 2.5ms slew)
     float swing     = 0.0f;   // 0..1 — alternate cycles long/short (2:1 triplet feel at 1)
     int   tripDot   = 0;      // 0 straight · 1 triplet (x1.5 rate) · 2 dotted (x2/3 rate)
+    bool  reseed    = false;  // fb245 — reseed chaos/S&H/RNG on every note-on (per-note variety; default off = the free-running wander)
     // depth lives on the *route* (Assignment), not here — one LFO can drive many
     // destinations at different depths. This struct is the *shape generator*.
 };
@@ -157,6 +158,7 @@ public:
                 // leave phase running
                 break;
         }
+        if (s_.reseed) reseedForNote();   // fb245 — per-note reseed fires on EVERY note (even Free-triggered chaos, which never hits the switch above)
         riseBase_ = shapeAt (dirP (wrap01 (phase_ + s_.phaseOffset)));   // fb228 — RISE fades in FROM the start value (Serum grammar)
     }
 
@@ -387,6 +389,23 @@ private:
         freeOut_ = 0.0f; vx_ = 0.0f; vy_ = 0.0f;
         duneAcc_  = 0.0f; duneSeg_  = 0.5f;  dunePrev_  = nextRandom(); duneTgt_  = nextRandom();
         duneAcc2_ = 0.0f; duneSeg2_ = 0.17f; dunePrev2_ = nextRandom(); duneTgt2_ = nextRandom();
+    }
+
+    // fb245 — per-note RESEED (only when s_.reseed): unlike seedFreeRun's deterministic start,
+    // this kicks the free-run seed with a FRESH random draw so successive notes trace a
+    // different path (chaos is seed-sensitive — a small kick diverges the whole trajectory).
+    // The kick stays inside each attractor's basin, so it converges cleanly, never blows up.
+    // The S&H/Random sequence re-rolls too. rngState_ keeps evolving, so note N+1 ≠ note N.
+    void reseedForNote() noexcept
+    {
+        const double r0 = (double) nextRandom(), r1 = (double) nextRandom(), r2 = (double) nextRandom();
+        cx_ = 0.10 + 0.90 * (double) s_.startPhase + 0.30 * r0;
+        cy_ = 0.20 * r1;
+        cz_ = (s_.shape == LFOShape::Lorenz) ? 18.0 + 4.0 * r2 : 0.0;
+        freeOut_ = 0.0f; vx_ = 0.0f; vy_ = 0.0f;
+        duneAcc_  = 0.0f; duneSeg_  = 0.5f;  dunePrev_  = nextRandom(); duneTgt_  = nextRandom();
+        duneAcc2_ = 0.0f; duneSeg2_ = 0.17f; dunePrev2_ = nextRandom(); duneTgt2_ = nextRandom();
+        stepPrev_ = nextRandom(); stepHeld_ = nextRandom();   // re-roll S&H/Random
     }
 
     void advanceFreeRun (float nSamp) noexcept

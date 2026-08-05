@@ -192,7 +192,8 @@ enum class ModDest : int
     // envs 1..32 (5 legacy + 27 dyn). APPEND-ONLY (the law).
     EnvPBase,
     LfoRateBase = EnvPBase + 192,   // fb196 — env/LFO on an LFO's RATE (10 dests, Hz mode)
-    NumDests = LfoRateBase + 10
+    LfoPhaseBase = LfoRateBase + 10,   // fb245 — env/LFO on an LFO's PHASE (10 dests, read-phase shift 0..1)
+    NumDests = LfoPhaseBase + 10
 };
 
 // How a normalized modulation sum is converted to the parameter's real units.
@@ -893,6 +894,16 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // LfoRate8
     { ModDomain::Linear01,  1.0f },  // LfoRate9
     { ModDomain::Linear01,  1.0f },  // LfoRate10
+    { ModDomain::Linear01,  1.0f },  // LfoPhase1  (fb245 — read-phase shift, 0..1 wraps)
+    { ModDomain::Linear01,  1.0f },  // LfoPhase2
+    { ModDomain::Linear01,  1.0f },  // LfoPhase3
+    { ModDomain::Linear01,  1.0f },  // LfoPhase4
+    { ModDomain::Linear01,  1.0f },  // LfoPhase5
+    { ModDomain::Linear01,  1.0f },  // LfoPhase6
+    { ModDomain::Linear01,  1.0f },  // LfoPhase7
+    { ModDomain::Linear01,  1.0f },  // LfoPhase8
+    { ModDomain::Linear01,  1.0f },  // LfoPhase9
+    { ModDomain::Linear01,  1.0f },  // LfoPhase10
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──
