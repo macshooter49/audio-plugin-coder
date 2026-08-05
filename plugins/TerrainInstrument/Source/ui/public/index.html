@@ -27978,7 +27978,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb248';   // fb248 = wavetable fixes: WT->LFO reads the EXACT frame + Douglas-Peucker breakpoints (clean shapes); frame-move CROSSFADE declick (no clicks sweeping WT Pos / LFO on it); async import build (no UI freeze/purple flash)
+  var TERRAIN_BUILD = 'fb249';   // fb249 = MASTER LEVEL (Serum-matched loudness): +9 dB instrument makeup restores the never-made-up -6 dB pre-FX pad + ~+3 dB so a default sine lands ~-15 dBFS (was ~-25); NEW transparent-knee soft-clipper (0% added THD below -2.5 dBFS -> clean sines, no mud) replaces the always-curving tanh, same -0.3 dBFS DAC ceiling on hot chords
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

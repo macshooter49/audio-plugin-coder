@@ -21,6 +21,27 @@ static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window
  #include <objc/runtime.h>
 #endif
 
+// fb249 — MASTER LEVEL: instrument makeup gain + a transparent-knee soft-clipper.
+// Root cause of "Terrain is ~10 dB quieter than Serum": at default the voice mix ate a
+// -6 dB pre-FX pad (kVoiceToFxPad, NEVER made up) on top of conservative 0.7 osc-level
+// and 0.7 amp-sustain defaults — ~-12 dB baked in before velocity. This makeup restores
+// the pad's output cost and adds ~+3 dB so a default sine lands ~-15 dBFS (Serum-matched).
+// The OLD master clipper was an always-curving tanh (y = c·tanh(x/c)); at the louder level
+// it put a visible ~-32 dB 3rd harmonic on a PURE sine. The new clipper is UNITY (0% added
+// THD, measured) below the knee, so single notes stay pristine, then rolls smoothly to the
+// same -0.3 dBFS ceiling — hot chords still bound safely (DAC-protected), normal levels stay
+// clean. Makeup is applied PRE-clip so peaks can never exceed the ceiling.
+static constexpr float kMasterCeiling    = 0.96605f;  // -0.3 dBFS — output ceiling (unchanged)
+static constexpr float kSoftClipKnee     = 0.75f;     // ~-2.5 dBFS — transparent (unity) below this
+static constexpr float kInstrumentMakeup = 2.8184f;   // +9.0 dB — restores the -6 dB FX pad + ~+3 dB (Serum level). Bump toward 3.16f for +10 dB.
+static inline float masterSoftClip (float x) noexcept
+{
+    const float a = std::abs (x);
+    if (a <= kSoftClipKnee) return x;                 // transparent — zero added distortion in the normal range
+    const float span = kMasterCeiling - kSoftClipKnee;
+    return std::copysign (kSoftClipKnee + span * std::tanh ((a - kSoftClipKnee) / span), x);
+}
+
 //==============================================================================
 TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     : AudioProcessor (BusesProperties()
@@ -6435,12 +6456,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         if (rightChannel != nullptr)
             rightChannel[i] += indySumBuffer.getSample (1, i) * outputGain;
 
-        // Master soft-clipper — DAC protection net at -0.3 dBFS.
-        // Symmetric tanh: transparent below ~0.4, smooth roll-off, output bounded to (-c, c).
-        constexpr float kMasterCeiling = 0.96605f; // 10^(-0.3 / 20)
-        leftChannel[i]  = kMasterCeiling * std::tanh (leftChannel[i]  / kMasterCeiling);
+        // fb249 — instrument makeup gain (Serum-matched loudness), THEN the transparent-knee
+        // soft-clipper. Makeup is pre-clip so peaks are still bounded to the -0.3 dBFS ceiling;
+        // the knee keeps single notes at 0% added THD (clean sines — no mud). See the note at
+        // the top of this file for the root-cause writeup. Output knob (outputGain) already
+        // applied above, so it keeps full authority relative to this fixed makeup.
+        leftChannel[i]  = masterSoftClip (leftChannel[i]  * kInstrumentMakeup);
         if (rightChannel != nullptr)
-            rightChannel[i] = kMasterCeiling * std::tanh (rightChannel[i] / kMasterCeiling);
+            rightChannel[i] = masterSoftClip (rightChannel[i] * kInstrumentMakeup);
 
         // Write to scope buffer (mono mix for visualization)
         float scopeSample = rightChannel != nullptr ? (leftChannel[i] + rightChannel[i]) * 0.5f : leftChannel[i];
