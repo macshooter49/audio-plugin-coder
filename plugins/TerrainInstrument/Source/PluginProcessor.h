@@ -782,6 +782,9 @@ public:
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
     std::atomic<float> velVis_ { -1.f };   // fb262 — most-active voice velocity (−1 = silent) for the live velocity streak
+    // fb264 — master peak-limiter state (audio-thread only; coeffs set in prepareToPlay). Stereo-linked
+    // gain-reduction before the safety clip so dense chords stay loud without squaring into hard-clip buzz.
+    float limEnv_ = 0.0f, limGain_ = 1.0f, limAtkCoef_ = 0.0f, limRelCoef_ = 0.0f;
     // fb189 — LIVING UNDERLINE feed: most-active voice's env outputs (0..1, −1 = silent)
     // + the global LFO bank (bipolar). 32 slots = 5 legacy + 27 dynamic.
     std::atomic<float> modVizEnv_[32] {};

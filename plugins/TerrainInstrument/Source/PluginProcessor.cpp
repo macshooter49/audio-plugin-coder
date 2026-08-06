@@ -31,9 +31,20 @@ static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window
 // THD, measured) below the knee, so single notes stay pristine, then rolls smoothly to the
 // same -0.3 dBFS ceiling — hot chords still bound safely (DAC-protected), normal levels stay
 // clean. Makeup is applied PRE-clip so peaks can never exceed the ceiling.
+// fb264 — ROOT CAUSE of "dense chords hard-clip above ~4 notes": the tanh knee was narrow
+// (0.75→0.966, span 0.216) and voices sum with NO polyphony gain management, so once the summed
+// peak was driven past the knee — e.g. velocity→Volume at full depth on a 9th/11th — the wave
+// FLATTENED into a near-square = audibly hard clipping (measured: buzz 0.1%→23% as notes 1→11).
+// Fix = a stereo-linked peak LIMITER (gain-reduction, ~0.8 ms atk / 120 ms rel) BEFORE the clip:
+// it turns the level down a hair instead of squaring the wave, so chords stay LOUD but clean —
+// Serum's output stage is a limiter, not a fixed shaper. Knee raised 0.75→0.90 to MEET the limiter
+// threshold so nothing distorts below it; the clip is now only a transient safety catch. Validated
+// offline: buzz 23%→<3% at 11 notes, single notes 0% THD at every level, peak still 0.966 (no
+// loudness lost). See clip_final.py in the session scratchpad for the measurement.
 static constexpr float kMasterCeiling    = 0.96605f;  // -0.3 dBFS — output ceiling (unchanged)
-static constexpr float kSoftClipKnee     = 0.75f;     // ~-2.5 dBFS — transparent (unity) below this
+static constexpr float kSoftClipKnee     = 0.90f;     // fb264 — knee raised 0.75→0.90 (-0.9 dBFS): the limiter holds peaks here, so the clip is a rare safety catch. Transparent (unity) below this.
 static constexpr float kInstrumentMakeup = 2.8184f;   // +9.0 dB — restores the -6 dB FX pad + ~+3 dB (Serum level). Bump toward 3.16f for +10 dB.
+static constexpr float kLimiterThresh    = 0.90f;     // fb264 — master peak-limiter threshold (== knee). Post-makeup peaks are gain-reduced (not squared) to here; dense chords stay LOUD but clean.
 static inline float masterSoftClip (float x) noexcept
 {
     const float a = std::abs (x);
@@ -3559,6 +3570,14 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     for (auto& e : monoLegEnv_) e.prepare (sampleRate);   // fb178 — mono env tap
     for (auto& e : monoDynEnv_) e.prepare (sampleRate);
     monoHeld_ = 0;
+
+    // fb264 — master peak-limiter coefficients (stereo-linked; applied at the master output,
+    // see the fb264 note at the top of this file). One-pole time constants: 0.8 ms attack so a
+    // loud chord onset is caught before it squares, 120 ms release so recovery is smooth/click-free.
+    limAtkCoef_ = std::exp (-1.0f / (float) (sampleRate * 0.0008));   // 0.8 ms
+    limRelCoef_ = std::exp (-1.0f / (float) (sampleRate * 0.120));    // 120 ms
+    limEnv_  = 0.0f;
+    limGain_ = 1.0f;
     // CPU: prepare resets voice state — force the change-gated broadcasts (ModConfig +
     // engine params) to re-push on the first block after any prepare.
     synCfgPushed_    = false;
@@ -6528,14 +6547,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         if (rightChannel != nullptr)
             rightChannel[i] += indySumBuffer.getSample (1, i) * outputGain;
 
-        // fb249 — instrument makeup gain (Serum-matched loudness), THEN the transparent-knee
-        // soft-clipper. Makeup is pre-clip so peaks are still bounded to the -0.3 dBFS ceiling;
-        // the knee keeps single notes at 0% added THD (clean sines — no mud). See the note at
-        // the top of this file for the root-cause writeup. Output knob (outputGain) already
-        // applied above, so it keeps full authority relative to this fixed makeup.
-        leftChannel[i]  = masterSoftClip (leftChannel[i]  * kInstrumentMakeup);
+        // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked
+        // peak LIMITER (gain-reduction) so dense chords stay loud without the tanh squaring them
+        // into a hard-clip buzz, THEN the transparent-knee clip as a final transient safety catch.
+        // Output knob (outputGain) already applied above, so it keeps full authority over this stage.
+        const float mL = leftChannel[i] * kInstrumentMakeup;
+        const float mR = (rightChannel != nullptr) ? rightChannel[i] * kInstrumentMakeup : mL;
+        // Stereo-linked peak detector — one shared gain preserves the stereo image.
+        const float mPeak = juce::jmax (std::abs (mL), std::abs (mR));
+        limEnv_ = mPeak + (mPeak > limEnv_ ? limAtkCoef_ : limRelCoef_) * (limEnv_ - mPeak);
+        const float limTarget = (limEnv_ <= kLimiterThresh) ? 1.0f : (kLimiterThresh / limEnv_);
+        // Fast attack (pull down now), slow release (recover smoothly — click-free per the declick rule).
+        limGain_ = (limTarget < limGain_) ? (limAtkCoef_ * limGain_ + (1.0f - limAtkCoef_) * limTarget)
+                                          : (limRelCoef_ * limGain_ + (1.0f - limRelCoef_) * limTarget);
+        leftChannel[i]  = masterSoftClip (mL * limGain_);
         if (rightChannel != nullptr)
-            rightChannel[i] = masterSoftClip (rightChannel[i] * kInstrumentMakeup);
+            rightChannel[i] = masterSoftClip (mR * limGain_);
 
         // Write to scope buffer (mono mix for visualization)
         float scopeSample = rightChannel != nullptr ? (leftChannel[i] + rightChannel[i]) * 0.5f : leftChannel[i];
