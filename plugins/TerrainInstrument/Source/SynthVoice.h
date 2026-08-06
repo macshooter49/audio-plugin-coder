@@ -1062,11 +1062,12 @@ namespace tw
                 }
                 const float u_norm = ((float) u / (float) (activeCount - 1)) * 2.0f - 1.0f;  // -1..+1
                 detCents[(size_t) u] = u_norm * det * kUniMaxDetuneCents;
-                // BLEND — centre voice (u_norm≈0) full, outer voices scaled toward `blend`.
-                // UNISON LAW (voice-0-anchored): voice 0 is ALWAYS full gain. Without this,
-                // UNISON=2 has NO centre voice (u_norm = ±1 for both) and BLEND=0 zeroed
-                // BOTH sines → the osc rendered EXACT SILENCE at full envelope.
-                const float g = (u == 0) ? 1.0f : (1.0f - (1.0f - bl) * std::fabs (u_norm));
+                // BLEND — centre voice (u_norm≈0) full, outer voices scaled toward `blend`, SYMMETRICALLY
+                // in |u_norm| (a voice and its mirror always share a gain → equal L/R energy).
+                // fb255 — was `(u==0) ? 1.0f : …`, which pinned the LEFTMOST voice (u=0, u_norm=-1) to full
+                // gain while its right mirror scaled down → the unison leaned LEFT (Max's bug, worse at high
+                // Width). The floor keeps UNISON=2/BLEND=0 audible (the anchor's real job) without the bias.
+                const float g = std::fmax (kUniBlendFloor, 1.0f - (1.0f - bl) * std::fabs (u_norm));
                 // WIDTH — equal-power pan, angle in [0, π/2]; BLEND gain folded into the table
                 // so the render loop stays a plain sAu·pan multiply.
                 const float angle = (u_norm * wid + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
@@ -5722,6 +5723,12 @@ namespace tw
         int   activeUnisonA_ = 1, activeUnisonB_ = 1;   // 1..kMaxUnison per OSC
         float uNormA_ = 1.0f,     uNormB_ = 1.0f;       // auto-gain: 1/sqrt(Σ blendGain²) — holds loudness as voices rise
         static constexpr float kUniMaxDetuneCents = 50.0f;  // ±50 cents (±½ semitone) of detune at 100 %
+        // fb255 — UNISON BLEND FLOOR: the minimum per-voice blend gain, applied SYMMETRICALLY (both the
+        // leftmost and rightmost voices). Replaces the old voice-0-only "always full gain" anchor, which
+        // pinned the LEFTMOST voice loud while blend scaled the right down → the sound leaned LEFT (worse
+        // at high Width). A symmetric floor keeps UNISON=2/BLEND=0 from going silent (the reason the anchor
+        // existed) WITHOUT breaking L/R balance. Only active below ~blend 0.15; auto-gain restores loudness.
+        static constexpr float kUniBlendFloor = 0.15f;
 
         // ── WAVER — per-(osc × unison sine) OU analog pitch drift (replaces the old
         //    EROSION pitch sine-LFO). Depth 0..1 per osc; cents state + per-sine RNG. ──
