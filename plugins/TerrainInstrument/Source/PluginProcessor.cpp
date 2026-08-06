@@ -43,7 +43,7 @@ static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window
 // loudness lost). See clip_final.py in the session scratchpad for the measurement.
 static constexpr float kMasterCeiling    = 0.96605f;  // -0.3 dBFS — output ceiling (unchanged)
 static constexpr float kSoftClipKnee     = 0.90f;     // fb264 — knee raised 0.75→0.90 (-0.9 dBFS): the limiter holds peaks here, so the clip is a rare safety catch. Transparent (unity) below this.
-static constexpr float kInstrumentMakeup = 2.8184f;   // +9.0 dB — restores the -6 dB FX pad + ~+3 dB (Serum level). Bump toward 3.16f for +10 dB.
+static constexpr float kInstrumentMakeup = 1.0f;      // fb265 — 0 dB (was +9 dB / 2.8184). ROOT CAUSE of dense-chord clipping: the +9 dB makeup pushed a single sine to ~-6 dBFS, leaving NO polyphonic headroom, so a 3-note chord's constructive peak hit +3 dBFS and clipped into broadband IMD hash. A single voice is ALREADY ~-15 dBFS (0.7 level · 0.7071 center-pan · 0.7 amp-sustain · 0.5 FX pad) — Serum's level — so no makeup is needed. Now 3 notes sit ~-6 dBFS CLEAN, dense chords ride to the ceiling and the limiter below catches them. (Serum keeps headroom + gets loudness from its output stage, not an internal makeup; matched per Max 2026-08-06.) Loudness = turn up in the mixer, same as Serum. Bump toward 1.4f (+3 dB) if a touch more level is wanted.
 static constexpr float kLimiterThresh    = 0.90f;     // fb264 — master peak-limiter threshold (== knee). Post-makeup peaks are gain-reduced (not squared) to here; dense chords stay LOUD but clean.
 static inline float masterSoftClip (float x) noexcept
 {
