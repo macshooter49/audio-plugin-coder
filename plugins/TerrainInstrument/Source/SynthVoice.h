@@ -5007,11 +5007,12 @@ namespace tw
                     for (int u = 0; u < N; ++u)
                     {
                         auto& e = engs[(size_t) u];
-                        // VOICE-0-ANCHORED gain (Max: "unison turns shit down"): the dry voice —
-                        // the only one carrying the un-sprayed attack — keeps single-voice level;
-                        // only the detuned BED voices are RMS-normalised. Unison now adds around
-                        // the dry sound instead of ducking it (≤ ~+3 dB total, no 1/√N punch loss).
-                        const float gu = (u == 0) ? 1.0f : uNorm;
+                        // PUNCH ANCHOR (Max: "unison turns shit down"): keep full-level voice(s) for
+                        // the attack, RMS-normalise only the INNER bed — no 1/√N punch loss.
+                        // fb256 — anchor the SYMMETRIC OUTER PAIR (voices 0 AND N-1), not voice 0 alone.
+                        // Voice 0 is the LEFTMOST slot, so anchoring it alone pulled the image LEFT
+                        // (Max's bug on ALL engines). A mirror pair is balanced → punchy AND centered.
+                        const float gu = (u == 0 || u == N - 1) ? 1.0f : uNorm;
                         const float pl = panL[u] * gu, pr = panR[u] * gu;
                         for (int k = 0; k < srcN; ++k)
                         {
@@ -5037,9 +5038,10 @@ namespace tw
                 for (int u = 0; u < N; ++u)
                 {
                     auto& e = engs[(size_t) u];
-                    // VOICE-0-ANCHORED gain — see the warp-path comment above: dry voice at
-                    // single-voice level, RMS-normalised bed around it. No 1/√N punch loss.
-                    const float gu = (u == 0) ? 1.0f : uNorm;
+                    // fb256 — SYMMETRIC OUTER PAIR anchor (voices 0 AND N-1), see the warp-path
+                    // comment above: anchoring voice 0 alone (leftmost slot) pulled the image LEFT.
+                    // The mirror pair keeps the punch (no 1/√N loss) AND stays centered.
+                    const float gu = (u == 0 || u == N - 1) ? 1.0f : uNorm;
                     const float pl = panL[u] * gu, pr = panR[u] * gu;
                     for (int k = 0; k < numSamples; ++k)
                     {
