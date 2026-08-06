@@ -4358,6 +4358,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 else if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1)) * std::abs (r.depth);
             }
+            const float velCurve01_ = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb263 — velocity block-rate feed: curve-shaped, most-active voice
+            const float velGlobal_  = std::pow (juce::jmax (0.0f, velVis_.load (std::memory_order_relaxed)), std::pow (3.0f, 1.0f - 2.0f * velCurve01_));
             for (const auto& r : synModRoutes)
             {
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
@@ -4381,6 +4383,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         continue;
                     }
                     modSums[r.dest] += wc::routeContribution (diR, lv, std::abs (r.depth));   // fb180 — magnitude
+                    continue;
+                }
+                if (r.src == wc::kVelSrc)   // fb263 — VELOCITY at block-rate: reaches Level/Pan/Res/FX/macros (global, most-active voice). Fixes velocity→Volume being a silent no-op (viz moved, no audio).
+                {
+                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], velGlobal_, r.depth);
                     continue;
                 }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
