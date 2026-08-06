@@ -171,6 +171,7 @@ namespace tw
         // Live amp-env output [0,1] and whether this voice is sounding. The editor
         // polls the most-active voice each timer tick and pushes this to the WebUI.
         float getAmpEnvLevel() const noexcept { return (float) ampEnv_.level(); }
+        float getCurrentVelocity() const noexcept { return currentVelocity_; }   // fb262 — most-active-voice velocity for the live streak viz
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
         float dbgWarpEffA() const noexcept { return warpAmount_; }   // fb188 — probe tap
         float dbgLvlSm (int g) const noexcept   // fb183 — probe tap: the glided per-voice level
@@ -2018,7 +2019,7 @@ namespace tw
                     else if (sI >= (int) wc::ModSource::Drift1 && sI < (int) wc::ModSource::Drift1 + 8)
                                                           srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
                     else if (wc::isEnvModSource (sI))     srcV = envSourceValue (sI);   // fb178
-                    else if (sI == (int) wc::ModSource::Velocity) srcV = currentVelocity_;   // fb260 — per-voice velocity source (unipolar 0..1, additive via routeContribution)
+                    else if (sI == (int) wc::ModSource::Velocity) srcV = std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped (velDepth_ repurposed as the curve: 0.5=linear, >0.5 lifts soft hits, <0.5 hardens)
                     else continue;
                     // fb183 — env→LEVEL is OWNERSHIP, not offset: depth crossfades the knob
                     // toward the envelope's own shape (eff = (1−Σd)·knob + Σd·env). At 100%
@@ -3723,8 +3724,7 @@ namespace tw
                 float ampMod = 0.0f;                           // ENV2–5 routed to Amp (bipolar gain)
                 for (int k = 0; k < 4; ++k)
                     if (envDest_[k + 1] == kEnvAmp) ampMod += envDepth_[k + 1] * eAmpFree[k][i];
-                const float effVel = 1.0f - velDepth_ + velDepth_ * currentVelocity_;   // fb260 — global vel→amp depth: 1=full dynamics (default, == old), 0=flat/organ
-                const float velEnv = effVel * juce::jmax (0.0f, env * (1.0f + ampMod));
+                const float velEnv = juce::jmax (0.0f, env * (1.0f + ampMod));   // fb262 — GLOBAL VELOCITY REMOVED: amp no longer scales by note velocity (it was globally quieting soft notes). Velocity is now a pure routable mod source — drop it on Volume for dynamics.
 
                 // ── OSC SCOPE tap — per-osc, PRE-SUM, PRE-FILTER, pre-level/pan/VCA.
                 // Write each oscillator's raw mono signal so the live oscilloscope
@@ -4534,7 +4534,7 @@ namespace tw
         double sampleRate_      = 48000.0;
         int    currentMidiNote_ = 60;
         float  currentVelocity_ = 1.0f;
-        float  velDepth_ = 1.0f;   // fb260 — vel→amp depth (0..1) from SYN_VEL_DEPTH; 1 preserves legacy full-velocity amp
+        float  velDepth_ = 0.5f;   // fb262 — velocity CURVE amount (0..1, repurposed from depth): 0.5=linear, >0.5 lifts soft hits, <0.5 hardens. NO LONGER touches amp.
 
         // ── OSC SCOPE — per-osc audio-thread ring buffers (A/B/C/D) ─────────────
         // Live oscilloscope tap: per output sample the render loop writes each

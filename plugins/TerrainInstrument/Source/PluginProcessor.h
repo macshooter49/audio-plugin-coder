@@ -781,6 +781,7 @@ public:
     // Live AMP envelope output [0,1] of the most-active synth voice, for the UI
     // envelope follower (playhead dot). Written each audio block, read by the editor timer.
     std::atomic<float> ampEnvVis { 0.f };
+    std::atomic<float> velVis_ { -1.f };   // fb262 — most-active voice velocity (−1 = silent) for the live velocity streak
     // fb189 — LIVING UNDERLINE feed: most-active voice's env outputs (0..1, −1 = silent)
     // + the global LFO bank (bipolar). 32 slots = 5 legacy + 27 dynamic.
     std::atomic<float> modVizEnv_[32] {};
@@ -790,6 +791,7 @@ public:
     std::atomic<float> modVizLfoVY_[wc::NUM_LFOS] {};
     float modVizEnv (int k) const noexcept { return (k >= 0 && k < 32) ? modVizEnv_[k].load (std::memory_order_relaxed) : -1.f; }
     float modVizLfo (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfo_[k].load (std::memory_order_relaxed) : 0.f; }
+    float modVizVel () const noexcept { return velVis_.load (std::memory_order_relaxed); }   // fb262 — live velocity for the streak
     float modVizLfoPh (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoPh_[k].load (std::memory_order_relaxed) : 0.f; }
     float modVizLfoVX (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoVX_[k].load (std::memory_order_relaxed) : 0.f; }
     float modVizLfoVY (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoVY_[k].load (std::memory_order_relaxed) : 0.f; }

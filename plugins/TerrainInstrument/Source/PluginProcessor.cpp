@@ -3299,10 +3299,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_PORTA, 1 },
         "Synth Portamento",
         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
-    layout.add (std::make_unique<juce::AudioParameterFloat> (   // fb260 — velocity→amp depth
+    layout.add (std::make_unique<juce::AudioParameterFloat> (   // fb262 — velocity CURVE (repurposed from depth): 50=linear, >50 lifts soft hits
         juce::ParameterID { ParameterIDs::SYN_VEL_DEPTH, 1 },
-        "Synth Velocity Depth",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));   // default 100 = full velocity dynamics (== legacy behaviour)
+        "Synth Velocity Curve",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));   // default 50 = linear response
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_GLIDE_CURVE, 1 },
         "Synth Glide Curve",
@@ -5733,6 +5733,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         }
                 }
         ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
+        velVis_.store         ((any && bestVoice != nullptr) ? bestVoice->getCurrentVelocity() : -1.f, std::memory_order_relaxed);   // fb262 — live velocity streak feed (most-active voice)
         // fb189 — the living underline's feed: every env slot from the most-active voice
         // (envSourceValue returns level−1 → +1 restores raw 0..1) + the global LFO peeks.
         for (int k = 0; k < 32; ++k)

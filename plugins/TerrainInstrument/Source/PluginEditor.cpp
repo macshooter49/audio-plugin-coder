@@ -5346,7 +5346,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         for (int k = 0; k < 10; ++k) { if (k) xArr << ","; xArr << SF(audioProcessor.modVizLfoVX (k), 3); }   // fb239 — the swirl feed
         for (int k = 0; k < 10; ++k) { if (k) yArr << ","; yArr << SF(audioProcessor.modVizLfoVY (k), 3); }
         const int notesOn = (audioProcessor.ampEnvVis.load (std::memory_order_relaxed) >= 0.0f) ? 1 : 0;   // fb241 — note-gated chaos viz (free-running motion, animates only while MIDI plays)
-        js << "try{window.__notesActive=" << notesOn << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
+        const float velV = audioProcessor.modVizVel();   // fb262 — live velocity for the streak
+        js << "try{window.__notesActive=" << notesOn << ";window.__mvVel=" << SF(velV, 3) << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
               "if(window.__mvChaos){window.__mvChaos([" << xArr << "],[" << yArr << "]);}}catch(e){}";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
