@@ -4488,7 +4488,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // resized() scales the web UI via native pageZoom; the last size is
     // remembered (processor atomic → plugin state), so reopen = your size.
     {
-        constexpr int kBaseW = 820, kBaseH = 640 + CAPTURE_STRIP_HEIGHT;
+        constexpr int kBaseW = 820, kBaseH = 656 + CAPTURE_STRIP_HEIGHT;   // fb261 — web design box grew 640→656 (voice column bottomed at 644, was clipped)
         setResizeLimits (juce::roundToInt (kBaseW * 0.65), juce::roundToInt (kBaseH * 0.65),
                          juce::roundToInt (kBaseW * 1.90), juce::roundToInt (kBaseH * 1.90));
         if (auto* cons = getConstrainer())
@@ -5223,7 +5223,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     {
         ++healTicks_;
         if (std::abs (getWidth() - intendedW_) > 4)
-            setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (640 + CAPTURE_STRIP_HEIGHT) / 820.0));
+            setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (656 + CAPTURE_STRIP_HEIGHT) / 820.0));   // fb261 — 640→656 (voice column fit)
     }
 
 
