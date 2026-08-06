@@ -443,6 +443,7 @@ namespace ParameterIDs
 
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
     constexpr char SYN_VOICES[]   = "SYN_VOICES";    // int 1..16, polyphony cap (display-only this phase)
+    constexpr char SYN_VEL_DEPTH[] = "SYN_VEL_DEPTH"; // fb260 — float 0..100 → velocity→amp depth (100=full dynamics, 0=flat)
     constexpr char SYN_UNISON[]   = "SYN_UNISON";    // int 1..8, voices stacked per note
     constexpr char SYN_SPREAD[]   = "SYN_SPREAD";    // float 0..100, % detune+pan width for unison stack
     constexpr char SYN_EROSION[]  = "SYN_EROSION";   // float 0..100, % analog per-voice drift amount

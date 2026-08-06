@@ -4838,6 +4838,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
 #syn-panel .voice-meta { padding-top: 4px; display: flex; flex-direction: column; gap: 8px; font-size: 9px; color: var(--text-secondary); letter-spacing: 1px; font-weight: 200; }
 #syn-panel .voice-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; padding: 1px 4px; }   /* fb259 — emblems removed: label left, value right, uniform padding on EVERY row → V/V/P/G stack dead-even */
 #syn-panel .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
+#syn-panel .voice-row .vel-src { cursor: grab; }   /* fb260 — the Velocity label lifts out as a mod source (drag onto any knob), like an env/LFO */
 /* Phase 8a — draggable voice rows */
 #syn-panel .sel[data-syn-row] { cursor: ns-resize; user-select: none; }
 #syn-panel .voice-toggle-row { display: flex; gap: 4px; padding: 2px 0; }
@@ -7103,7 +7104,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           <div class="voice-meta">
             <div class="voice-toggle-row voice-mode-row"><button class="voice-toggle" data-syn-toggle="SYN_MONO">Mono</button><button class="voice-toggle" data-syn-toggle="SYN_LEGATO">Legato</button><button class="voice-toggle rr-vis-poly">Poly</button></div>
             <div class="voice-row" data-syn-row="SYN_VOICES"><span>Voices</span><b>8</b></div>
-            <div class="voice-row rr-vis-vel"><span>Velocity</span><b>72</b></div>
+            <div class="voice-row rr-vis-vel" data-syn-row="SYN_VEL_DEPTH"><span class="vel-src" data-drag-vel="1">Velocity</span><b>100</b></div>
             <div class="voice-row" data-syn-row="SYN_PORTA"><span>Portamento</span><b>0</b></div>
             <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><span>Glide</span><b>50</b></div>
             <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">Always</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">Scaled</button></div>
@@ -13204,7 +13205,7 @@ setTimeout(function wireSynControls () {
             if (paramId === 'SYN_VOICES' || paramId === 'SYN_UNISON') return String(Math.round(scaled));
             if (paramId === 'SYN_HORIZON') return Math.round(scaled).toString();
             if (paramId === 'SYN_OSC_A_WAVER' || paramId === 'SYN_OSC_B_WAVER') return Math.round(scaled) + '%';
-            if (paramId === 'SYN_PORTA' || paramId === 'SYN_GLIDE_CURVE') return Math.round(scaled) + '%';
+            if (paramId === 'SYN_PORTA' || paramId === 'SYN_GLIDE_CURVE' || paramId === 'SYN_VEL_DEPTH') return String(Math.round(scaled));   /* fb260 — plain integers, no % (Max: the numbers line up, not percentages) */
             return String(Math.round(scaled));
           };
 
@@ -13234,6 +13235,7 @@ setTimeout(function wireSynControls () {
             document.removeEventListener('pointerup', onUp);
           };
           rowEl.addEventListener('pointerdown', function(ev) {
+            if (ev.target && ev.target.closest && ev.target.closest('[data-drag-vel]')) return;   /* fb260 — the Velocity label is a mod-source drag, not the depth ns-resize */
             try {
               dragging = true;
               dragStartY = ev.clientY;
@@ -24102,7 +24104,7 @@ restoreThemeFromBackend();
 
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
   var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
-    var arr=assigns.map(function(a){return {s:(a.env?100+(a.env-1):a.lfo-1),d:a.dest,v:+a.depth.toFixed(4)};});   /* fb178 — env sources ride 100+ */
+    var arr=assigns.map(function(a){return {s:(a.vel?200:(a.env?100+(a.env-1):a.lfo-1)),d:a.dest,v:+a.depth.toFixed(4)};});   /* fb178 — env sources ride 100+ */
     if(pushFn)try{ pushFn(JSON.stringify(arr)); }catch(e){} }
 
   // ── LFO shape + rate (JS mirror of the engine, for the live visual) ──
@@ -24210,6 +24212,8 @@ restoreThemeFromBackend();
   /* fb178 — envelope routes: depth lands at FULL (+100%) per the drop-is-all-envelope decision. */
   function addEnvAssign(env,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].env===env&&assigns[i].dest===dest) return;
     if(assigns.length>=128)return; var a={env:env,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
+  function addVelAssign(dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].vel&&assigns[i].dest===dest) return;   /* fb260 — velocity source route (dedupe by dest) */
+    if(assigns.length>=128)return; var a={vel:1,dest:dest,depth:0.5,el:el}; assigns.push(a); markTargets(); push(); }
   function markTargets(){ document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
   function routeFor(el){ var sm=window.__selMod||{}, first=null, hit=null;   /* fb188 — the underline's depth drag edits the SELECTED modulator's route here, else the first */
     assigns.forEach(function(a){ if(curEl(a)!==el)return; if(!first)first=a;
@@ -24297,6 +24301,22 @@ restoreThemeFromBackend();
         if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addEnvAssign(en,dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
+  /* fb260 — drag VELOCITY from the voice panel onto any knob, exactly like an env/LFO. The
+     label (data-drag-vel) is the source grip; the row's number stays the vel→amp depth. */
+  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-vel]'); if(!t)return;
+    var sx=e.clientX, sy=e.clientY, started=false;
+    function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
+        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Vel'; document.body.appendChild(ghost);
+        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+      ghost.style.left=ev.clientX+'px'; ghost.style.top=ev.clientY+'px';
+      if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(200,ev.screenX,ev.screenY,0); }   /* 200 = velocity wire (== wc::kVelSrc) */
+      var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
+    function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+      if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(window.__tiModDragPush) window.__tiModDragPush(200,ev.screenX,ev.screenY,1);
+        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addVelAssign(dest,g.el); }
+        if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   // suppress the tab's switch-click right after a drag
   document.addEventListener('click',function(e){ var t=e.target.closest&&(e.target.closest('#mod-engine .mv-tabs .t')||e.target.closest('#syn-panel .env-sel')||e.target.closest('#syn-panel .syn-ctx-item')); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);   /* fb178 env chip · fb195 hub rows */
   /* fb153 — the fb149 'Pop' palette launcher is retired (chip + handler). The palette
@@ -24306,7 +24326,7 @@ restoreThemeFromBackend();
 
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
-  function srcName(a){ return a.env?('Env '+a.env):('LFO '+a.lfo); }
+  function srcName(a){ return a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo)); }
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
     rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%'; }); }
@@ -27991,7 +28011,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb259';   // fb259 = VOICE READOUT ALIGN: killed the mismatched voice-meta emblems (ic-voices/vel/trail/horizon — different viewBoxes, ragged) AND fixed the real culprit — the unwired Velocity row lacked the [data-syn-row] 4px padding the other three rows had, so its label sat 4px LEFT of Voices/Portamento/Glide. Rows are now a clean 2-col grid (label left / value right) with uniform padding on the base .voice-row → all four labels stack dead-even, values flush right. UI-only; no param/DSP change. [prior fb258 = SHAPER POINT MENU alignment: the red 'Delete point'/'Remove selected' row (shRedRow) had its own geometry (text at 10px, 9.5px, letter-spaced, rounded) so it sat left of + smaller than the 'Modulate X/Y ›' rows — looked uncentered/awkward. Now matches .syn-ctx-item exactly (text at 26px, 11px/300, no letter-spacing/radius); only the red color differs. Verified by render. [prior fb257 = LFO/ENV IDENTITY FIX: env & LFO underlines collided — __selMod (which drives the purple .sel glow) went stale on some selection paths (LFO stayed gray until re-click; env didn't clear a lit LFO). Now FOCUS FOLLOWS INTERACTION: touching the LFO panel selects the current LFO, touching the envelope editor selects the current envelope; card-lane re-select asserts BEFORE its early-return. Validated: assigned-to-selected = lit, else gray, env or LFO, no re-click. [prior fb256 = UNISON RECENTER (sample/granular/warp) (Max: "for ALL the engines"). Their punch anchor gave ONLY voice 0 (leftmost) full gain -> left bias. Now the SYMMETRIC OUTER PAIR (voices 0 AND N-1) is anchored: keeps the punch (no 1/vN loss), balanced 0.00 dB. Combined with fb255 (wavetable/basic path), unison is centered on every engine. [prior fb255 = UNISON RECENTER (wavetable/basic): the main (wavetable/basic) unison leaned LEFT with Blend/Width down. Root cause: the voice-0 blend EXEMPTION (voice 0 = leftmost, pinned to full gain while its right mirror scaled down). Fixed = symmetric blend gain for ALL voices + a symmetric floor (keeps UNISON=2/BLEND=0 audible without the bias). Proven 0.00 dB L/R bias across all counts/blend/width. [prior fb254 = LFO underline back to PURPLE (Max: one color, no teal/green/blue). The lights-up-when-you-select-it behavior stays; only the color reverts to the shared env purple #B794FF. [prior fb253 = SPECTRAL ON CUSTOM TABLES: the morph was built from the factory PRESET spec + imports bypassed it entirely, so custom/imported tables got no spectral. Now Wavetable::toSpec() analyzes ANY loaded table into a 16-frame spec (exact inverse of buildFromSpec, verified), cached per import; rebuildMorphIfNeeded morphs THAT and wavetableForOsc returns morph-of-import (raw import when morph off). Custom tables now get spectral + modulation, like presets. [prior fb252 = SPECTRAL MODULATABLE: the SpectralA..D mod dests + UI routing existed since fb76 but spectralEffAmt_ was NEVER written — so modulation never reached the morph rebuild. Now the audio thread publishes the effective (base+LFO/env) amount each block (via mdP, quantized 1/128 when routed); the 60Hz timer rebuilds the morph following it. Drop an LFO/env on SPECTRAL -> it moves. [prior fb251 = SPECTRAL AMPLIFIED: all 7 morph modes pushed harder (night-and-day) — HarmStretch spread 4→6.5/bright 0.9→1.15, Inharmonic exp 2.6→3.3, Vocode sharper formants, Smear darker/wider, RandomAmps wilder, DataCompress harder crush, Phaser deeper/more notches; amount=0 still exact identity. [prior fb250 = LFO IDENTIFICATION: the selected LFO's route underlines light TEAL (envelopes stay purple) so you know env-vs-LFO at a glance; __selMod now follows the LFO wherever you select it (docked tab + card lane), not just the docked tab. [prior fb249 = MASTER LEVEL (Serum-matched loudness): +9 dB instrument makeup restores the never-made-up -6 dB pre-FX pad + ~+3 dB so a default sine lands ~-15 dBFS (was ~-25); NEW transparent-knee soft-clipper (0% added THD below -2.5 dBFS -> clean sines, no mud) replaces the always-curving tanh, same -0.3 dBFS DAC ceiling on hot chords
+  var TERRAIN_BUILD = 'fb260';   // fb260 = VELOCITY MOD SOURCE: Velocity is now a routable per-voice mod source (like an env/LFO). Drag the "Velocity" label onto any knob to route it to filter cutoff / wavetable frame·warp·fold / sub / coarse pitch, attenuated per-route via the same ring. The reserved ModSource::Velocity enum slot was never wired; now the per-voice gather feeds currentVelocity_ (unipolar 0..1, additive via routeContribution) + a cut diversion. NEW global vel→amp depth (SYN_VEL_DEPTH 0..100, default 100 = full dynamics == legacy) on the Velocity row's number (ns-resize). Wire code 200 (kVelSrc) taught to the parser + per-voice route build; 4-point relay wired. %-signs stripped from Portamento/Glide/Velocity so the voice-row numbers line up. Block-rate dests (FX/macros/res) = fast-follow fb261. [prior fb259 = VOICE READOUT ALIGN: killed the mismatched voice-meta emblems (ic-voices/vel/trail/horizon — different viewBoxes, ragged) AND fixed the real culprit — the unwired Velocity row lacked the [data-syn-row] 4px padding the other three rows had, so its label sat 4px LEFT of Voices/Portamento/Glide. Rows are now a clean 2-col grid (label left / value right) with uniform padding on the base .voice-row → all four labels stack dead-even, values flush right. UI-only; no param/DSP change. [prior fb258 = SHAPER POINT MENU alignment: the red 'Delete point'/'Remove selected' row (shRedRow) had its own geometry (text at 10px, 9.5px, letter-spaced, rounded) so it sat left of + smaller than the 'Modulate X/Y ›' rows — looked uncentered/awkward. Now matches .syn-ctx-item exactly (text at 26px, 11px/300, no letter-spacing/radius); only the red color differs. Verified by render. [prior fb257 = LFO/ENV IDENTITY FIX: env & LFO underlines collided — __selMod (which drives the purple .sel glow) went stale on some selection paths (LFO stayed gray until re-click; env didn't clear a lit LFO). Now FOCUS FOLLOWS INTERACTION: touching the LFO panel selects the current LFO, touching the envelope editor selects the current envelope; card-lane re-select asserts BEFORE its early-return. Validated: assigned-to-selected = lit, else gray, env or LFO, no re-click. [prior fb256 = UNISON RECENTER (sample/granular/warp) (Max: "for ALL the engines"). Their punch anchor gave ONLY voice 0 (leftmost) full gain -> left bias. Now the SYMMETRIC OUTER PAIR (voices 0 AND N-1) is anchored: keeps the punch (no 1/vN loss), balanced 0.00 dB. Combined with fb255 (wavetable/basic path), unison is centered on every engine. [prior fb255 = UNISON RECENTER (wavetable/basic): the main (wavetable/basic) unison leaned LEFT with Blend/Width down. Root cause: the voice-0 blend EXEMPTION (voice 0 = leftmost, pinned to full gain while its right mirror scaled down). Fixed = symmetric blend gain for ALL voices + a symmetric floor (keeps UNISON=2/BLEND=0 audible without the bias). Proven 0.00 dB L/R bias across all counts/blend/width. [prior fb254 = LFO underline back to PURPLE (Max: one color, no teal/green/blue). The lights-up-when-you-select-it behavior stays; only the color reverts to the shared env purple #B794FF. [prior fb253 = SPECTRAL ON CUSTOM TABLES: the morph was built from the factory PRESET spec + imports bypassed it entirely, so custom/imported tables got no spectral. Now Wavetable::toSpec() analyzes ANY loaded table into a 16-frame spec (exact inverse of buildFromSpec, verified), cached per import; rebuildMorphIfNeeded morphs THAT and wavetableForOsc returns morph-of-import (raw import when morph off). Custom tables now get spectral + modulation, like presets. [prior fb252 = SPECTRAL MODULATABLE: the SpectralA..D mod dests + UI routing existed since fb76 but spectralEffAmt_ was NEVER written — so modulation never reached the morph rebuild. Now the audio thread publishes the effective (base+LFO/env) amount each block (via mdP, quantized 1/128 when routed); the 60Hz timer rebuilds the morph following it. Drop an LFO/env on SPECTRAL -> it moves. [prior fb251 = SPECTRAL AMPLIFIED: all 7 morph modes pushed harder (night-and-day) — HarmStretch spread 4→6.5/bright 0.9→1.15, Inharmonic exp 2.6→3.3, Vocode sharper formants, Smear darker/wider, RandomAmps wilder, DataCompress harder crush, Phaser deeper/more notches; amount=0 still exact identity. [prior fb250 = LFO IDENTIFICATION: the selected LFO's route underlines light TEAL (envelopes stay purple) so you know env-vs-LFO at a glance; __selMod now follows the LFO wherever you select it (docked tab + card lane), not just the docked tab. [prior fb249 = MASTER LEVEL (Serum-matched loudness): +9 dB instrument makeup restores the never-made-up -6 dB pre-FX pad + ~+3 dB so a default sine lands ~-15 dBFS (was ~-25); NEW transparent-knee soft-clipper (0% added THD below -2.5 dBFS -> clean sines, no mud) replaces the always-curving tanh, same -0.3 dBFS DAC ceiling on hot chords
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

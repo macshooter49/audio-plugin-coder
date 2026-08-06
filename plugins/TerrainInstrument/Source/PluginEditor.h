@@ -812,6 +812,7 @@ private:
     juce::WebSliderRelay synHorizonRelay { ParameterIDs::SYN_HORIZON };
     juce::WebSliderRelay synPortaRelay        { ParameterIDs::SYN_PORTA };
     juce::WebSliderRelay synGlideCurveRelay   { ParameterIDs::SYN_GLIDE_CURVE };
+    juce::WebSliderRelay synVelDepthRelay     { ParameterIDs::SYN_VEL_DEPTH };   // fb260
     juce::WebSliderRelay synGlideAlwaysRelay  { ParameterIDs::SYN_GLIDE_ALWAYS };
     juce::WebSliderRelay synGlideScaledRelay  { ParameterIDs::SYN_GLIDE_SCALED };
     juce::WebSliderRelay synMonoRelay         { ParameterIDs::SYN_MONO };
@@ -1424,6 +1425,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synHorizonAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synPortaAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synGlideCurveAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synVelDepthAttachment;   // fb260
     std::unique_ptr<juce::WebSliderParameterAttachment> synGlideAlwaysAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synGlideScaledAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synMonoAttachment;

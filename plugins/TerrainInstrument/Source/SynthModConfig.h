@@ -954,6 +954,7 @@ struct ModConfig
 
 // fb178 — envelope sources (Row 3 S2). Blob src encoding: 100 + (envNum-1), Env 1..32.
 static constexpr int kEnvSrcBase = 100;
+static constexpr int kVelSrc     = 200;   // fb260 — Velocity mod-source wire code (JS→C++); maps to ModSource::Velocity
 inline ModSource envSourceFor (int envNum) noexcept   // envNum 1..32
 {
     switch (envNum)

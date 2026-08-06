@@ -3299,6 +3299,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_PORTA, 1 },
         "Synth Portamento",
         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (   // fb260 — velocity→amp depth
+        juce::ParameterID { ParameterIDs::SYN_VEL_DEPTH, 1 },
+        "Synth Velocity Depth",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));   // default 100 = full velocity dynamics (== legacy behaviour)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_GLIDE_CURVE, 1 },
         "Synth Glide Curve",
@@ -5057,6 +5061,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         synModCfg.assignments[na].enabled = true;
                         ++na; continue;
                     }
+                    if (r.src == wc::kVelSrc)   // fb260 — Velocity → per-voice source (signed depth, no LFO master)
+                    {
+                        synModCfg.assignments[na].source  = wc::ModSource::Velocity;
+                        synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
+                        synModCfg.assignments[na].depth   = r.depth;
+                        synModCfg.assignments[na].enabled = true;
+                        ++na; continue;
+                    }
                     if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
                     const float master = *rawParam (lp[r.src].depth);
                     synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + r.src);
@@ -5388,6 +5400,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const bool  glScaled  = (*rawParam (ParameterIDs::SYN_GLIDE_SCALED)) > 0.5f;
         const float portaSec  = std::pow (portaPct * 0.01f, 2.0f) * 2.0f;   // squared → fine low end, ~2 s max
         const float glCurve01 = glCurvePct / 100.0f;
+        const float velDepth01 = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb260 — vel→amp depth 0..1
         const bool  glAnyHeld = synthNotesHeld_ > 0;
         for (int v = 0; v < synthEngine.getNumVoices(); ++v)
         {
@@ -5403,6 +5416,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 tv->setFoldCD (foldShapeC, foldAmtC, foldShapeD, foldAmtD);
                 tv->setInterpModeCD (interpModeC, interpModeD);
                 tv->setGlide (portaSec, glCurve01, glAlways, glScaled, synthGlideFrom_, glAnyHeld);   // PORTAMENTO
+                tv->setVelDepth (velDepth01);   // fb260 — velocity→amp depth
                 tv->setHorizonAmount (horizonPct  / 100.0f);   // (merged third pass — CPU: one 96-voice loop fewer)
                 // SYN_EROSION now drives the FILTER cutoff drift only — the per-voice
                 // PITCH drift it used to add is superseded by per-OSC WAVER (setWaver above).
@@ -7334,7 +7348,8 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
             r.depth = (float) (double) item.getProperty ("v", 0.0);
             const bool lfoSrc = (r.src >= 0 && r.src < wc::NUM_LFOS);
             const bool envSrc = (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32);   // fb178
-            if (! lfoSrc && ! envSrc)                                continue;
+            const bool velSrc = (r.src == wc::kVelSrc);   // fb260 — Velocity source
+            if (! lfoSrc && ! envSrc && ! velSrc)                    continue;
             if (r.dest < 0 || r.dest >= (int) wc::ModDest::NumDests) continue;
             r.depth = juce::jlimit (-1.0f, 1.0f, r.depth);
             if (parsed.size() < (size_t) wc::MAX_ASSIGNMENTS) parsed.push_back (r);

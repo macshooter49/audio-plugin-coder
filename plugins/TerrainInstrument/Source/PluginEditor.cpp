@@ -358,6 +358,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synHorizonRelay)
             .withOptionsFrom(synPortaRelay)
             .withOptionsFrom(synGlideCurveRelay)
+            .withOptionsFrom(synVelDepthRelay)
             .withOptionsFrom(synGlideAlwaysRelay)
             .withOptionsFrom(synGlideScaledRelay)
             .withOptionsFrom(synMonoRelay)
@@ -4376,6 +4377,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synGlideCurveAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_GLIDE_CURVE),
         synGlideCurveRelay, nullptr);
+    synVelDepthAttachment = std::make_unique<juce::WebSliderParameterAttachment>(   // fb260
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_VEL_DEPTH),
+        synVelDepthRelay, nullptr);
     synGlideAlwaysAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_GLIDE_ALWAYS),
         synGlideAlwaysRelay, nullptr);

@@ -498,6 +498,7 @@ namespace tw
         // fb63 — the Noise layer as a 6th filter source (its own bus routing, mirrors the osc mask logic).
         void setNoiseFilterRouting (bool f1, bool f2) noexcept { noiseSrc1_ = f1; noiseSrc2_ = f2; }
         // Back-panel Vel (velocity→cutoff depth) + post-filter Drive, per filter.
+        void setVelDepth (float d) noexcept { velDepth_ = juce::jlimit (0.0f, 1.0f, d); }   // fb260
         void setFilterVelocity (float v1, float v2) noexcept
         { velAmt1_ = juce::jlimit (0.0f, 1.0f, v1); velAmt2_ = juce::jlimit (0.0f, 1.0f, v2); }
         void setFilterPostDrive (float d1, float d2) noexcept
@@ -2017,6 +2018,7 @@ namespace tw
                     else if (sI >= (int) wc::ModSource::Drift1 && sI < (int) wc::ModSource::Drift1 + 8)
                                                           srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
                     else if (wc::isEnvModSource (sI))     srcV = envSourceValue (sI);   // fb178
+                    else if (sI == (int) wc::ModSource::Velocity) srcV = currentVelocity_;   // fb260 — per-voice velocity source (unipolar 0..1, additive via routeContribution)
                     else continue;
                     // fb183 — env→LEVEL is OWNERSHIP, not offset: depth crossfades the knob
                     // toward the envelope's own shape (eff = (1−Σd)·knob + Σd·env). At 100%
@@ -2056,7 +2058,7 @@ namespace tw
                     const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
                     // fb178 — env→cutoff joins the filter's semitone sum as a block constant
                     // (LFO→cutoff stays per-sample below; envs advance per block anyway).
-                    if (wc::isEnvModSource (sI))
+                    if (wc::isEnvModSource (sI) || sI == (int) wc::ModSource::Velocity)   // fb260 — velocity→cutoff joins the block-constant semitone sum, exactly like env
                     {
                         if      (as.dest == wc::ModDest::Cut1) { envCutBlk1_ += c; continue; }
                         else if (as.dest == wc::ModDest::Cut2) { envCutBlk2_ += c; continue; }
@@ -3721,7 +3723,8 @@ namespace tw
                 float ampMod = 0.0f;                           // ENV2–5 routed to Amp (bipolar gain)
                 for (int k = 0; k < 4; ++k)
                     if (envDest_[k + 1] == kEnvAmp) ampMod += envDepth_[k + 1] * eAmpFree[k][i];
-                const float velEnv = currentVelocity_ * juce::jmax (0.0f, env * (1.0f + ampMod));
+                const float effVel = 1.0f - velDepth_ + velDepth_ * currentVelocity_;   // fb260 — global vel→amp depth: 1=full dynamics (default, == old), 0=flat/organ
+                const float velEnv = effVel * juce::jmax (0.0f, env * (1.0f + ampMod));
 
                 // ── OSC SCOPE tap — per-osc, PRE-SUM, PRE-FILTER, pre-level/pan/VCA.
                 // Write each oscillator's raw mono signal so the live oscilloscope
@@ -4531,6 +4534,7 @@ namespace tw
         double sampleRate_      = 48000.0;
         int    currentMidiNote_ = 60;
         float  currentVelocity_ = 1.0f;
+        float  velDepth_ = 1.0f;   // fb260 — vel→amp depth (0..1) from SYN_VEL_DEPTH; 1 preserves legacy full-velocity amp
 
         // ── OSC SCOPE — per-osc audio-thread ring buffers (A/B/C/D) ─────────────
         // Live oscilloscope tap: per output sample the render loop writes each
