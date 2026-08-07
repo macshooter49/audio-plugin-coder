@@ -5854,16 +5854,20 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graph
                               : (isDarkMode ? juce::Colour(0xFF232340)     // fb271 — front: EXACT GRAIN ENGINE color (--bg-surface dark), not fb270's lighter #2F2B54
                                             : juce::Colour(0xFFE8E4EF)));  // front light (--bg-surface light = grain engine)
 
+    // fb272 — strip is thinner now (16px) and scales with the window; size the label to the strip
+    // height so the text never clips at small window sizes (Max: nothing cut off at the bottom).
+    const float fs = juce::jlimit (6.5f, 10.0f, b.getHeight() * 0.62f);
+
     if (state == 2) // ready — green, drag to DAW
     {
         g.setColour(juce::Colour(0xFF059669));
-        g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+        g.setFont(juce::FontOptions(fs).withStyle("Bold"));
         g.drawText(juce::String::fromUTF8("DRAG TO DAW \u2193"), b, juce::Justification::centred);
     }
     else if (state == 1) // exporting
     {
         g.setColour(juce::Colour(0xFF92400E));
-        g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+        g.setFont(juce::FontOptions(fs).withStyle("Bold"));
         g.drawText("SAVING...", b, juce::Justification::centred);
     }
     else // idle
@@ -5873,13 +5877,13 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graph
         if (avail < 1.0f)
         {
             g.setColour(dark ? juce::Colour(0x44606080) : juce::Colour(0x44857399));
-            g.setFont(juce::FontOptions(10.0f));
+            g.setFont(juce::FontOptions(fs));
             g.drawText("CAPTURE: LISTENING...", b, juce::Justification::centred);
         }
         else
         {
             g.setColour(dark ? juce::Colour(0xFF9B93B0) : juce::Colour(0xFF6B5B7B));
-            g.setFont(juce::FontOptions(10.0f));
+            g.setFont(juce::FontOptions(fs));
             g.drawText("CAPTURE: " + juce::String(mins) + "m " + juce::String(secs) + "s  \u2014  DRAG TO DAW",
                        b, juce::Justification::centred);
         }

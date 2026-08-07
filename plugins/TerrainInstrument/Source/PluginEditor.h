@@ -872,7 +872,7 @@ private:
     bool   userSized_ = false;
 
     // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
-    static constexpr int CAPTURE_STRIP_HEIGHT = 26;
+    static constexpr int CAPTURE_STRIP_HEIGHT = 16;   // fb272 — thinner strip (Max: "very thin"); whole window a bit shorter. Label font now scales with strip height so text never clips at small window sizes.
 
     class CaptureDragStrip : public juce::Component
     {
