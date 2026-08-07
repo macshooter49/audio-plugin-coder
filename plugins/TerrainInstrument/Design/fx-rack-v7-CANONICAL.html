@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain — FX Rack mockup v6</title>
+<style>
+  :root{
+    --bg-main:#1A1A2E; --bg-hero:#12121F;
+    --trk:rgba(255,255,255,0.13);
+    --purple:#B794FF; --red:#EF4444;
+    --wfaint:rgba(255,255,255,0.16);
+    --border:rgba(58,58,88,0.55);
+    --w:#FFFFFF; --w9:rgba(255,255,255,0.9); --w7:rgba(255,255,255,0.72); --w5:rgba(255,255,255,0.5); --w3:rgba(255,255,255,0.30);
+    --font:-apple-system,'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:radial-gradient(120% 140% at 50% -10%,#191830 0%,var(--bg-hero) 70%); color:var(--w9);
+       font-family:var(--font); -webkit-font-smoothing:antialiased; min-height:100vh;
+       display:flex; flex-direction:column; align-items:center; gap:18px; padding:32px 24px 56px;}
+  .caption{color:var(--w5); font-size:12px; letter-spacing:.14em; font-weight:400;}
+  .caption b{color:var(--w7); font-weight:600;}
+
+  .panel{width:1180px; max-width:100%; background:var(--bg-main); border:1px solid var(--border);
+         border-radius:10px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.45);}
+  .panel-top{display:flex; align-items:center; justify-content:space-between; padding:12px 16px 10px;}
+  /* CANONICAL selected state (four-modes recipe): transparent · purple outline · white pop + white glow */
+  .ab .seg{display:flex; border:1px solid var(--wfaint); border-radius:7px; overflow:hidden;}
+  .ab .seg button{background:transparent; border:0; color:var(--w5); font-family:var(--font); font-size:11px;
+        letter-spacing:.04em; padding:6px 13px; cursor:pointer; display:flex; align-items:center; gap:7px; font-weight:400;}
+  .ab .seg button .k{font-weight:700;}
+  .ab .seg button.on{color:var(--w); box-shadow:inset 0 0 0 1px var(--purple); text-shadow:0 0 4px rgba(255,255,255,.5);}
+  .ab .seg button.on .k{color:var(--purple); text-shadow:none;}
+  .ab .seg button + button{border-left:1px solid var(--wfaint);}
+  .hint{color:var(--w5); font-size:11px; font-weight:300;} .hint b{color:var(--w7); font-weight:400;}
+
+  .panel-body{display:flex; padding:0 16px 14px;}
+  .rack-wrap{flex:1; min-width:0;}
+  .rack{display:flex; gap:10px; align-items:stretch; overflow-x:auto; padding:2px 2px 10px;}
+  .rack::-webkit-scrollbar{height:6px;} .rack::-webkit-scrollbar-thumb{background:var(--border); border-radius:3px;}
+
+  .dev{flex:0 0 256px; height:198px; background:rgba(255,255,255,0.022); border:1px solid var(--border);
+       border-radius:8px; display:flex; flex-direction:column; transition:border-color .15s, background .15s;}
+  .dev:hover{background:rgba(255,255,255,0.035);}
+  .dev.sel{border-color:var(--purple); box-shadow:0 0 0 1px rgba(183,148,255,.35);}
+  .dev.off{opacity:.5;}
+  .dev-head{display:flex; align-items:center; gap:6px; padding:9px 10px 6px;}
+  .grip{color:var(--w3); font-size:12px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; display:flex; align-items:center;}
+  .dev-name{font-size:12px; color:var(--w); font-weight:500; white-space:nowrap; line-height:1;}
+  .type{font-size:9px; color:var(--w7); border:1px solid var(--wfaint); border-radius:9px; padding:2px 7px;
+        display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:300; line-height:1; margin-left:2px;}
+  .type .car{color:var(--w5); font-size:8px;}
+  /* preset pill — small, transparent, name-limited so it never overlaps */
+  .preset{display:flex; align-items:center; gap:5px; max-width:66px; border:1px solid var(--wfaint); border-radius:9px;
+          padding:2px 7px; cursor:pointer; line-height:1; overflow:hidden;}
+  .preset .star{color:var(--purple); font-size:8px; line-height:1;}
+  .preset .pname{font-size:9px; color:var(--w7); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .preset .car{color:var(--w5); font-size:8px; margin-left:auto;}
+  .spacer{flex:1;}
+  .head-r{display:flex; align-items:center; gap:9px;}
+  .code{font-family:var(--font); font-weight:300; font-size:9px; color:var(--w5); letter-spacing:.005em; line-height:1; white-space:nowrap;}
+  .pwr{width:9px; height:9px; border-radius:50%; border:1px solid var(--purple); background:var(--purple); box-shadow:0 0 7px rgba(183,148,255,.6); cursor:pointer;}
+  .dev.off .pwr{background:transparent; border-color:var(--w5); box-shadow:none;}
+  .x{width:12px; height:12px; display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1; color:var(--w5); cursor:pointer;}
+  .x:hover{color:var(--red);}
+
+  .core{flex:1; margin:2px 10px 0; position:relative; overflow:hidden;}
+  .core svg{width:100%; height:100%; display:block;}
+
+  .ctrls{display:flex; align-items:flex-end; gap:10px; padding:6px 10px 13px;}
+  .knobs{flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end;}
+  .knob{display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0;}
+  .knob .dial{width:30px; height:30px;} .knob .dial svg{width:100%; height:100%;}
+  .knob .lab{font-size:7px; letter-spacing:.01em; color:var(--w7); white-space:nowrap; text-align:center; font-weight:400;}
+  .divider{flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-1.5px; background:var(--wfaint);}
+  .rightcol{flex:0 0 96px; display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:7px;}
+  .pills{display:flex; gap:5px; width:100%;}
+  /* pill — fixed size, transparent, letters centered (+1px optical nudge via .t) */
+  .pill{flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent;
+        border:1px solid var(--wfaint); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--w5); font-weight:300; cursor:pointer;}
+  .pill .t{position:relative; top:0; line-height:1;}
+  .pill.on{border-color:var(--purple); color:var(--w); text-shadow:0 0 4px rgba(255,255,255,.5);}
+  .route{display:flex; gap:3px; width:100%;}
+  .route .r{flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400;
+            color:var(--w5); border:1px solid var(--wfaint); border-radius:3px;}
+  .route .r .t{position:relative; top:0; line-height:1;}
+  .route .r.on{color:var(--w); border-color:var(--purple); text-shadow:0 0 4px rgba(255,255,255,.5);}
+
+  .add{flex:0 0 118px; min-height:198px; border:1px dashed var(--wfaint); border-radius:8px; display:flex;
+       flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--w5); cursor:pointer; transition:.15s;}
+  .add:hover, body.show-menu .add{border-color:var(--purple); color:var(--purple);}
+  .add .plus{font-size:26px; font-weight:200; line-height:.7;}
+  .add .t{font-size:9px; letter-spacing:.05em; text-align:center; line-height:1.5; font-weight:300;}
+
+  .voice{flex:0 0 176px; margin-left:14px; padding-left:16px; border-left:1px solid var(--border); display:flex; flex-direction:column; gap:9px;}
+  .vrow{display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--w7); font-weight:300;} .vrow b{color:var(--w9); font-weight:400;}
+  .vtog{display:flex; gap:6px;} .vtog button{flex:1; background:transparent; border:1px solid var(--wfaint); color:var(--w5); font-family:var(--font); font-size:10px; border-radius:5px; padding:4px 0; cursor:pointer; font-weight:300;}
+  .vtog button.on{border-color:var(--purple); color:var(--w); text-shadow:0 0 4px rgba(255,255,255,.5);}
+  .panel-foot{border-top:1px solid var(--border); padding:8px 0; text-align:center; color:var(--w5); font-size:10.5px; letter-spacing:.14em; font-weight:300; background:var(--bg-main);}
+
+  .menu{display:none; position:absolute; left:calc(50% + 250px); top:126px; width:160px; background:#20203a; border:1px solid var(--wfaint); border-radius:8px; padding:5px; box-shadow:0 14px 34px rgba(0,0,0,.5); font-size:11px; color:var(--w7); z-index:5;}
+  body.show-menu .menu{display:block;}
+  .menu .mi{padding:6px 9px; border-radius:5px; display:flex; align-items:center; gap:9px; font-weight:300;}
+  .menu .mi.hi{box-shadow:inset 0 0 0 1px var(--purple); color:var(--w); text-shadow:0 0 4px rgba(255,255,255,.5);}
+  .menu .mi .g{color:var(--w5); font-size:11px; width:14px; text-align:center;}
+  .menu .sep{height:1px; background:var(--wfaint); margin:4px 6px;}
+  .mockwrap{position:relative;}
+  .legend{display:flex; gap:22px; flex-wrap:wrap; justify-content:center; color:var(--w5); font-size:11px; max-width:1040px; font-weight:300;} .legend b{color:var(--w7); font-weight:500;}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none !important;}}
+  @keyframes tapPulse{0%,100%{opacity:.3}50%{opacity:1}}
+  @keyframes ride{0%{offset-distance:0%}100%{offset-distance:100%}}
+  @keyframes glow{0%,100%{opacity:.4}50%{opacity:1}}
+  @keyframes scan{0%{transform:translateX(0);opacity:0}10%{opacity:.9}90%{opacity:.9}100%{transform:translateX(188px);opacity:0}}
+  @keyframes bloom{0%,100%{opacity:0}50%{opacity:.5}}
+</style>
+</head>
+<body>
+  <div class="caption">Terrain · Send page — <b>FX Rack</b> v7 · divider centered + taller · pill text recentered</div>
+
+  <div class="mockwrap">
+  <div class="panel">
+    <div class="panel-top">
+      <div class="ab"><div class="seg"><button class="on"><span class="k">A</span> Effects</button><button><span class="k">B</span> Macros</button></div></div>
+      <div class="hint">right-click the rack → <b>add effect</b> · drag <span style="color:var(--w3)">⋮⋮</span> to reorder</div>
+    </div>
+
+    <div class="panel-body">
+      <div class="rack-wrap">
+        <div class="rack">
+
+          <!-- REVERB — block matrix + purple BLOOM (identity), no follower -->
+          <div class="dev sel">
+            <div class="dev-head">
+              <span class="grip">⋮⋮</span><span class="dev-name">Reverb</span>
+              <span class="type">Hall<span class="car">▾</span></span>
+              <span class="preset"><span class="star">✦</span><span class="pname">Cave</span><span class="car">▾</span></span>
+              <span class="spacer"></span>
+              <span class="head-r"><span class="code">rt 2.4s</span><span class="pwr"></span><span class="x">✕</span></span>
+            </div>
+            <div class="core" id="rvcore"></div>
+            <div class="ctrls">
+              <div class="knobs">
+                <div class="knob"><div class="dial">DIAL_30</div><span class="lab">Size</span></div>
+                <div class="knob"><div class="dial">DIAL_55</div><span class="lab">Decay</span></div>
+                <div class="knob"><div class="dial">DIAL_8</div><span class="lab">Damp</span></div>
+                <div class="knob"><div class="dial">DIAL_100</div><span class="lab">Mix</span></div>
+              </div>
+              <div class="divider"></div>
+              <div class="rightcol">
+                <div class="pills"><span class="pill on"><span class="t">Mod</span></span><span class="pill"><span class="t">Freeze</span></span></div>
+                <div class="route"><span class="r on"><span class="t">A</span></span><span class="r on"><span class="t">B</span></span><span class="r on"><span class="t">C</span></span><span class="r on"><span class="t">D</span></span><span class="r on"><span class="t">S</span></span><span class="r on"><span class="t">N</span></span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- DELAY -->
+          <div class="dev">
+            <div class="dev-head">
+              <span class="grip">⋮⋮</span><span class="dev-name">Delay</span>
+              <span class="type">BBD<span class="car">▾</span></span>
+              <span class="preset"><span class="star">✦</span><span class="pname">Slap</span><span class="car">▾</span></span>
+              <span class="spacer"></span>
+              <span class="head-r"><span class="code">1/8 · 58</span><span class="pwr"></span><span class="x">✕</span></span>
+            </div>
+            <div class="core">
+              <svg viewBox="0 0 226 78" preserveAspectRatio="none">
+                <line x1="10" y1="39" x2="216" y2="39" stroke="var(--trk)" stroke-width="1"/>
+                <g stroke="var(--trk)" stroke-width="1">
+                  <line x1="26" y1="36" x2="26" y2="42"/><line x1="60" y1="36" x2="60" y2="42"/><line x1="94" y1="36" x2="94" y2="42"/>
+                  <line x1="128" y1="36" x2="128" y2="42"/><line x1="162" y1="36" x2="162" y2="42"/><line x1="196" y1="36" x2="196" y2="42"/>
+                </g>
+                <g stroke="#fff" stroke-linecap="round">
+                  <line x1="26"  y1="39" x2="26"  y2="10" stroke-width="1.5" opacity=".92" style="animation:tapPulse 2.4s ease-in-out infinite"/>
+                  <line x1="60"  y1="39" x2="60"  y2="62" stroke-width="1.4" opacity=".72" style="animation:tapPulse 2.4s ease-in-out infinite .3s"/>
+                  <line x1="94"  y1="39" x2="94"  y2="18" stroke-width="1.3" opacity=".54" style="animation:tapPulse 2.4s ease-in-out infinite .6s"/>
+                  <line x1="128" y1="39" x2="128" y2="56" stroke-width="1.2" opacity=".4"  style="animation:tapPulse 2.4s ease-in-out infinite .9s"/>
+                  <line x1="162" y1="39" x2="162" y2="26" stroke-width="1.1" opacity=".28" style="animation:tapPulse 2.4s ease-in-out infinite 1.2s"/>
+                  <line x1="196" y1="39" x2="196" y2="50" stroke-width="1"   opacity=".17" style="animation:tapPulse 2.4s ease-in-out infinite 1.5s"/>
+                </g>
+                <g fill="none" stroke="#fff">
+                  <rect x="23.5" y="7.5" width="5" height="5" opacity=".92"/><rect x="57.5" y="59.5" width="5" height="5" opacity=".72"/>
+                  <rect x="91.5" y="15.5" width="4.5" height="4.5" opacity=".54"/><rect x="125.5" y="53.5" width="4" height="4" opacity=".4"/>
+                </g>
+                <path d="M26 10 C 60 30, 128 44, 196 50" fill="none" stroke="var(--purple)" stroke-width="1" opacity=".45" stroke-dasharray="2 3"/>
+                <line x1="10" y1="12" x2="10" y2="66" stroke="var(--purple)" stroke-width="1" opacity=".5" style="animation:scan 3.4s linear infinite"/>
+              </svg>
+            </div>
+            <div class="ctrls">
+              <div class="knobs">
+                <div class="knob"><div class="dial">DIAL_50</div><span class="lab">Time</span></div>
+                <div class="knob"><div class="dial">DIAL_58</div><span class="lab">Fdbk</span></div>
+                <div class="knob"><div class="dial">DIAL_44</div><span class="lab">Tone</span></div>
+                <div class="knob"><div class="dial">DIAL_34</div><span class="lab">Mix</span></div>
+              </div>
+              <div class="divider"></div>
+              <div class="rightcol">
+                <div class="pills"><span class="pill on"><span class="t">Sync</span></span><span class="pill"><span class="t">Ping</span></span></div>
+                <div class="route"><span class="r on"><span class="t">A</span></span><span class="r on"><span class="t">B</span></span><span class="r"><span class="t">C</span></span><span class="r"><span class="t">D</span></span><span class="r"><span class="t">S</span></span><span class="r"><span class="t">N</span></span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SATURATE -->
+          <div class="dev">
+            <div class="dev-head">
+              <span class="grip">⋮⋮</span><span class="dev-name">Saturate</span>
+              <span class="type">Tube<span class="car">▾</span></span>
+              <span class="preset"><span class="star">✦</span><span class="pname">Grit</span><span class="car">▾</span></span>
+              <span class="spacer"></span>
+              <span class="head-r"><span class="code">×2.4</span><span class="pwr"></span><span class="x">✕</span></span>
+            </div>
+            <div class="core">
+              <svg viewBox="0 0 226 78" preserveAspectRatio="none">
+                <line x1="14" y1="66" x2="212" y2="66" stroke="var(--trk)" stroke-width="1"/>
+                <line x1="14" y1="66" x2="14" y2="8" stroke="var(--trk)" stroke-width="1"/>
+                <g stroke="var(--trk)" stroke-width="1">
+                  <line x1="63"  y1="66" x2="63"  y2="62"/><line x1="112" y1="66" x2="112" y2="62"/><line x1="161" y1="66" x2="161" y2="62"/>
+                  <line x1="14" y1="49" x2="18" y2="49"/><line x1="14" y1="32" x2="18" y2="32"/><line x1="14" y1="15" x2="18" y2="15"/>
+                </g>
+                <line x1="14" y1="66" x2="150" y2="10" stroke="#fff" stroke-width="1" opacity=".16" stroke-dasharray="2 3"/>
+                <path d="M14 66 C 62 56, 80 20, 150 13 C 176 10, 194 10, 212 10" fill="none" stroke="#fff" stroke-width="1.6"/>
+                <g fill="var(--bg-hero)" stroke="#fff" stroke-width="1.2"><circle cx="62" cy="56" r="2.6"/><circle cx="112" cy="17" r="2.6"/><circle cx="161" cy="11.5" r="2.6"/></g>
+                <circle r="2.6" fill="var(--purple)" style="offset-path:path('M14 66 C 62 56, 80 20, 150 13 C 176 10, 194 10, 212 10'); animation:ride 2.6s ease-in-out infinite alternate; filter:drop-shadow(0 0 4px rgba(183,148,255,.7))"/>
+                <g stroke="var(--purple)" stroke-width="1.4" stroke-linecap="round">
+                  <line x1="182" y1="70" x2="182" y2="60" opacity=".6" style="animation:glow 1.8s ease-in-out infinite"/>
+                  <line x1="190" y1="70" x2="190" y2="64" opacity=".6" style="animation:glow 1.8s ease-in-out infinite .3s"/>
+                  <line x1="198" y1="70" x2="198" y2="62" opacity=".6" style="animation:glow 1.8s ease-in-out infinite .6s"/>
+                  <line x1="206" y1="70" x2="206" y2="66" opacity=".6" style="animation:glow 1.8s ease-in-out infinite .9s"/>
+                </g>
+              </svg>
+            </div>
+            <div class="ctrls">
+              <div class="knobs">
+                <div class="knob"><div class="dial">DIAL_60</div><span class="lab">Drive</span></div>
+                <div class="knob"><div class="dial">DIAL_46</div><span class="lab">Warmth</span></div>
+                <div class="knob"><div class="dial">DIAL_50</div><span class="lab">Bias</span></div>
+                <div class="knob"><div class="dial">DIAL_100</div><span class="lab">Mix</span></div>
+              </div>
+              <div class="divider"></div>
+              <div class="rightcol">
+                <div class="pills"><span class="pill on"><span class="t">Pre</span></span><span class="pill"><span class="t">Auto</span></span></div>
+                <div class="route"><span class="r on"><span class="t">A</span></span><span class="r"><span class="t">B</span></span><span class="r"><span class="t">C</span></span><span class="r"><span class="t">D</span></span><span class="r"><span class="t">S</span></span><span class="r"><span class="t">N</span></span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="add"><span class="plus">+</span><span class="t">add effect<br><span style="color:var(--w3)">or right-click</span></span></div>
+        </div>
+      </div>
+
+      <div class="voice">
+        <div class="vtog"><button>Mono</button><button>Legato</button><button class="on">Poly</button></div>
+        <div class="vrow"><span>Voices</span><b>8</b></div>
+        <div class="vrow"><span>Velocity</span><b>Source ›</b></div>
+        <div class="vrow"><span>Portamento</span><b>0</b></div>
+        <div class="vrow"><span>Glide</span><b>50</b></div>
+        <div class="vtog"><button class="on">Always</button><button>Scaled</button></div>
+      </div>
+    </div>
+    <div class="panel-foot">Capture: 8m 4s — drag to DAW</div>
+  </div>
+
+  <div class="menu">
+    <div class="mi hi"><span class="g">~</span> Reverb</div><div class="mi"><span class="g">⇢</span> Delay</div>
+    <div class="mi"><span class="g">◺</span> Saturate</div><div class="mi"><span class="g">≈</span> Chorus</div>
+    <div class="mi"><span class="g">⌇</span> Flanger / Phaser</div><div class="mi"><span class="g">◲</span> Compressor</div>
+    <div class="sep"></div><div class="mi"><span class="g">▤</span> EQ</div><div class="mi"><span class="g">⎍</span> Utility</div><div class="mi"><span class="g">✳</span> Granular</div>
+  </div>
+  </div>
+
+  <div class="legend">
+    <div><b>Reverb</b> = purple bloom over the blocks (its identity, no follower)</div>
+    <div><b>Presets</b> pill in the header · <b>values</b> live in each knob (fixed size 0→100)</div>
+    <div><b>Selected</b> = purple outline · white pop · white glow (four-modes recipe) — pills, A–N, toggles</div>
+  </div>
+
+<script>
+  // white round-cap arc knob + thin-white centered VALUE (Glitch-Chance style, fixed size)
+  function knob(pct){
+    const cx=15,cy=15,r=11.5;
+    const pt=deg=>{const rad=deg*Math.PI/180;return [cx+r*Math.cos(rad),cy+r*Math.sin(rad)];};
+    const t0=pt(135),t1=pt(405),v0=pt(135),v1=pt(135+270*pct/100),dot=pt(135+270*pct/100);
+    const large=(270*pct/100)>180?1:0;
+    return `<svg viewBox="0 0 30 30">
+      <path d="M${t0[0].toFixed(1)} ${t0[1].toFixed(1)} A ${r} ${r} 0 1 1 ${t1[0].toFixed(1)} ${t1[1].toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="2" stroke-linecap="round"/>
+      <path d="M${v0[0].toFixed(1)} ${v0[1].toFixed(1)} A ${r} ${r} 0 ${large} 1 ${v1[0].toFixed(1)} ${v1[1].toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="2" stroke-linecap="round"/>
+      <text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,'SF Pro Display','Inter',sans-serif" font-size="8" font-weight="300" fill="rgba(255,255,255,0.62)">${pct}</text></svg>`;
+  }
+  document.querySelectorAll('.dial').forEach(d=>{const m=d.textContent.trim().match(/DIAL_(\d+)/); if(m) d.innerHTML=knob(Math.min(100,+m[1]));});
+
+  // REVERB energy-decay block matrix + purple BLOOM (identity; blooms over the bright pattern, petal-like)
+  (function buildReverb(){
+    const W=226,H=78, cols=20, rows=6, gap=1.4;
+    const cw=W/cols, ch=H/rows;
+    let white='', bloom='';
+    for(let c=0;c<cols;c++){
+      for(let r=0;r<rows;r++){
+        const bass=r/(rows-1);
+        const decay=Math.exp(-c/(4.5+bass*9));
+        let op=Math.max(0.05, Math.min(0.9, decay*(0.62+0.30*Math.sin(c*1.7+r*2.1)*0.5+0.15)));
+        const x=(c*cw+gap/2).toFixed(2), y=(r*ch+gap/2).toFixed(2), w=(cw-gap).toFixed(2), h=(ch-gap).toFixed(2);
+        white+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="#fff" opacity="${op.toFixed(3)}"/>`;
+        if(op>0.24){ // purple bloom only where there's energy → the bloom rides the reverb pattern
+          const delay=((c*0.13 + (r%2)*0.42 + r*0.05)%3.4).toFixed(2);
+          bloom+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="#B794FF" opacity="0" style="animation:bloom 3.4s ease-in-out infinite ${delay}s"/>`;
+        }
+      }
+    }
+    document.getElementById('rvcore').innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${white}${bloom}</svg>`;
+  })();
+
+  if(new URLSearchParams(location.search).get('menu')==='1') document.body.classList.add('show-menu');
+</script>
+</body>
+</html>

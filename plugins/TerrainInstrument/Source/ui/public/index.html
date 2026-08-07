@@ -7081,21 +7081,102 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
         #syn-panel .rr-pop .add{ font-size:9px; letter-spacing:1px; color:var(--text-muted); font-weight:300; padding-top:5px; border-top:1px solid var(--border); cursor:pointer; display:flex; align-items:center; gap:6px; }
         #syn-panel .rr-pop .add:hover{ color:var(--purple-400); }
         </style>
+        <style id="fxr-styles">
+        /* ═══ FX RACK (fxr-) — Ableton-style device chain in the macro slot. Chassis FROZEN;
+           per-effect core "world" + DSP are what change going forward. Namespaced fxr-* (no
+           collision w/ .dev/.core/.knob), theme-wired to the real tokens, scoped #syn-panel.
+           UI-ONLY (no DSP binding yet) — Wd9-armored JS below. ═══ */
+        #syn-panel .fxr-switch{ display:flex; align-items:center; gap:0; margin-bottom:6px; }
+        #syn-panel .fxr-seg{ display:flex; border:1px solid var(--border-strong); border-radius:7px; overflow:hidden; }
+        #syn-panel .fxr-tab{ background:transparent; border:0; color:var(--text-muted); font-family:inherit; font-size:11px; letter-spacing:.04em; padding:4px 12px; cursor:pointer; display:flex; align-items:center; gap:7px; font-weight:400; line-height:1; }
+        #syn-panel .fxr-tab .fxr-k{ font-weight:700; }
+        #syn-panel .fxr-tab + .fxr-tab{ border-left:1px solid var(--border-strong); }
+        #syn-panel .fxr-tab.on{ color:var(--text-primary); box-shadow:inset 0 0 0 1px var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+        #syn-panel .fxr-tab.on .fxr-k{ color:var(--purple-400); text-shadow:none; }
+        #syn-panel .fxr-tabhint{ margin-left:auto; font-size:9px; color:var(--text-dim); letter-spacing:1px; font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        /* min-width:0 → the grid's 1fr track can shrink so the rack scrolls (else it pushes the voice column off) */
+        #syn-panel .rr-left{ min-width:0; }
+        #syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
+        #syn-panel .fxr-macros-pane{ flex-direction:column; justify-content:center; }
+        #syn-panel .fxr-clip{ flex:1; min-width:0; overflow-x:auto; overflow-y:hidden; display:flex; }
+        #syn-panel .fxr-clip::-webkit-scrollbar{ height:8px; }
+        #syn-panel .fxr-clip::-webkit-scrollbar-track{ background:transparent; }
+        #syn-panel .fxr-clip::-webkit-scrollbar-thumb{ background:var(--border-strong); border-radius:4px; }
+        #syn-panel .fxr-clip:hover::-webkit-scrollbar-thumb{ background:var(--text-dim); }
+        #syn-panel .fxr-rack{ display:flex; gap:9px; align-items:stretch; padding:2px 2px 8px; min-height:0; }
+        #syn-panel .fxr-dev{ flex:0 0 236px; height:100%; min-height:0; background:rgba(255,255,255,0.022); border:1px solid var(--border-strong); border-radius:8px; display:flex; flex-direction:column; transition:border-color .15s, background .15s, opacity .15s; position:relative; }
+        #syn-panel .fxr-dev:hover{ background:rgba(255,255,255,0.038); }
+        #syn-panel .fxr-dev.fxr-sel{ border-color:var(--purple-400); box-shadow:0 0 0 1px rgba(183,148,255,.32); }
+        #syn-panel .fxr-dev.fxr-off{ opacity:.45; }
+        #syn-panel .fxr-dev.fxr-off *{ animation-play-state:paused !important; }
+        #syn-panel .fxr-head{ display:flex; align-items:center; gap:6px; padding:6px 9px 4px; }
+        #syn-panel .fxr-grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; display:flex; align-items:center; }
+        #syn-panel .fxr-grip:active{ cursor:grabbing; }
+        #syn-panel .fxr-name{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap; line-height:1; }
+        #syn-panel .fxr-type{ font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; padding:2px 7px; display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:300; line-height:1; margin-left:2px; white-space:nowrap; }
+        #syn-panel .fxr-type .fxr-car{ color:var(--text-muted); font-size:8px; }
+        #syn-panel .fxr-preset{ display:flex; align-items:center; gap:5px; max-width:62px; border:1px solid var(--border-strong); border-radius:9px; padding:2px 7px; cursor:pointer; line-height:1; overflow:hidden; }
+        #syn-panel .fxr-preset .fxr-star{ color:var(--purple-400); font-size:8px; line-height:1; }
+        #syn-panel .fxr-preset .fxr-pname{ font-size:9px; color:var(--text-secondary); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        #syn-panel .fxr-preset .fxr-car{ color:var(--text-muted); font-size:8px; margin-left:auto; }
+        #syn-panel .fxr-spacer{ flex:1; }
+        #syn-panel .fxr-headr{ display:flex; align-items:center; gap:9px; }
+        #syn-panel .fxr-code{ font-weight:300; font-size:9px; color:var(--text-muted); line-height:1; white-space:nowrap; }
+        #syn-panel .fxr-pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400); background:var(--purple-400); box-shadow:0 0 7px rgba(183,148,255,.6); cursor:pointer; flex:0 0 auto; }
+        #syn-panel .fxr-dev.fxr-off .fxr-pwr{ background:transparent; border-color:var(--text-muted); box-shadow:none; }
+        #syn-panel .fxr-x{ width:12px; height:12px; display:flex; align-items:center; justify-content:center; font-size:11px; line-height:1; color:var(--text-muted); cursor:pointer; }
+        #syn-panel .fxr-x:hover{ color:#EF4444; }
+        #syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
+        #syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+        #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
+        #syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
+        #syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+        #syn-panel .fxr-dial{ width:29px; height:29px; cursor:ns-resize; }
+        #syn-panel .fxr-dial svg{ width:100%; height:100%; display:block; }
+        #syn-panel .fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
+        #syn-panel .fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-1.5px; background:var(--border-strong); }
+        #syn-panel .fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:6px; }
+        #syn-panel .fxr-pills{ display:flex; gap:5px; width:100%; }
+        #syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
+        #syn-panel .fxr-pill .fxr-t{ position:relative; top:0; line-height:1; }
+        #syn-panel .fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+        #syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
+        #syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+        #syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
+        #syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+        #syn-panel .fxr-add{ flex:0 0 110px; align-self:stretch; border:1px dashed var(--border-strong); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+        #syn-panel .fxr-add:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+        #syn-panel .fxr-plus{ font-size:24px; font-weight:200; line-height:.7; }
+        #syn-panel .fxr-add .fxr-t{ font-size:9px; letter-spacing:.05em; text-align:center; line-height:1.4; font-weight:300; }
+        #syn-panel .fxr-dev.fxr-drag{ opacity:.85; box-shadow:0 12px 30px rgba(0,0,0,.5); z-index:5; }
+        @keyframes fxrTap{0%,100%{opacity:.3}50%{opacity:1}}
+        @keyframes fxrRide{0%{offset-distance:0%}100%{offset-distance:100%}}
+        @keyframes fxrGlow{0%,100%{opacity:.4}50%{opacity:1}}
+        @keyframes fxrScan{0%{transform:translateX(0);opacity:0}10%{opacity:.9}90%{opacity:.9}100%{transform:translateX(188px);opacity:0}}
+        @keyframes fxrBloom{0%,100%{opacity:0}50%{opacity:.5}}
+        </style>
         <div class="ribbon-row rr-new">
           <div class="rr-left">
-            <div class="rr-head">
-              <span class="rr-zlabel">Macros</span>
-              <div class="rr-bank"><div class="rr-bk on" data-bank="A">A</div><div class="rr-bk" data-bank="B">B</div></div>
-              <span class="rr-hint">right-click any knob → assign</span>
-            </div>
-            <div class="rr-macros" id="rr-macros"></div>
-            <div class="rr-drift">
-              <div>
-                <span class="rr-zlabel rr-lanelbl">Sway · analog drift</span>
-                <div class="rr-lane"><canvas id="rr-lane" width="900" height="60"></canvas></div>
+            <div class="fxr-switch">
+              <div class="fxr-seg">
+                <button class="fxr-tab on" data-fxr-tab="fx"><span class="fxr-k">A</span> Effects</button>
+                <button class="fxr-tab" data-fxr-tab="macros"><span class="fxr-k">B</span> Macros</button>
               </div>
-              <div class="rr-mini"><div class="knob-ring" data-rrk="0.34"></div><div class="rr-klabel">Depth</div></div>
-              <div class="rr-mini"><div class="knob-ring" data-rrk="0.52"></div><div class="rr-klabel">Rate</div></div>
+              <span class="fxr-tabhint">left→right chain · drag ⋮⋮ to reorder</span>
+            </div>
+            <div class="fxr-pane" data-fxr-pane="fx">
+              <div class="fxr-clip"><div class="fxr-rack" id="fxr-rack"></div></div>
+            </div>
+            <div class="fxr-pane fxr-macros-pane" data-fxr-pane="macros" style="display:none;">
+              <div class="rr-macros" id="rr-macros"></div>
+              <div class="rr-drift">
+                <div>
+                  <span class="rr-zlabel rr-lanelbl">Sway · analog drift</span>
+                  <div class="rr-lane"><canvas id="rr-lane" width="900" height="60"></canvas></div>
+                </div>
+                <div class="rr-mini"><div class="knob-ring" data-rrk="0.34"></div><div class="rr-klabel">Depth</div></div>
+                <div class="rr-mini"><div class="knob-ring" data-rrk="0.52"></div><div class="rr-klabel">Rate</div></div>
+              </div>
             </div>
           </div>
 
@@ -7200,6 +7281,155 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             }
           }catch(e){ try{console.log('[ribbon] init err',e);}catch(_){} } }
           if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+        })();
+        </script>
+
+        <script>
+        /* ── FX RACK (fxr) — live UI, no DSP binding yet. Wd9-armored: init + every handler in
+           try/catch; never throws into the render loop. Chassis frozen; cores + DSP vary later. ── */
+        (function(){
+        function init(){ try{
+          if(window.__fxrInit) return; var rack=document.getElementById('fxr-rack'); if(!rack) return; window.__fxrInit=1;
+          // knob: white round-cap arc + thin centered value (no purple dot)
+          function knobSVG(pct){
+            pct=Math.max(0,Math.min(100,Math.round(pct)));
+            var cx=15,cy=15,r=11.5;
+            function pt(deg){var a=deg*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+            var t0=pt(135),t1=pt(405),v1=pt(135+270*pct/100),large=(270*pct/100)>180?1:0;
+            return '<svg viewBox="0 0 30 30">'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+             +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="8" font-weight="300" fill="var(--text-secondary)">'+pct+'</text></svg>';
+          }
+          // per-effect core "worlds" (currentColor = theme white; purple = live signal)
+          var CORES={
+            reverb:function(){
+              var W=226,H=78,cols=20,rows=6,gap=1.4,cw=W/cols,ch=H/rows,white='',bloom='';
+              for(var c=0;c<cols;c++)for(var r=0;r<rows;r++){
+                var bass=r/(rows-1),decay=Math.exp(-c/(4.5+bass*9));
+                var op=Math.max(0.05,Math.min(0.9,decay*(0.62+0.30*Math.sin(c*1.7+r*2.1)*0.5+0.15)));
+                var x=(c*cw+gap/2).toFixed(2),y=(r*ch+gap/2).toFixed(2),w=(cw-gap).toFixed(2),h=(ch-gap).toFixed(2);
+                white+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="1" fill="currentColor" opacity="'+op.toFixed(3)+'"/>';
+                if(op>0.24){var d=((c*0.13+(r%2)*0.42+r*0.05)%3.4).toFixed(2);
+                  bloom+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="1" fill="var(--purple-400)" opacity="0" style="animation:fxrBloom 3.4s ease-in-out infinite '+d+'s"/>';}
+              }
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'+white+bloom+'</svg>';
+            },
+            delay:function(){
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+               +'<line x1="10" y1="39" x2="216" y2="39" stroke="var(--border)" stroke-width="1"/>'
+               +'<g stroke="var(--border)" stroke-width="1"><line x1="26" y1="36" x2="26" y2="42"/><line x1="60" y1="36" x2="60" y2="42"/><line x1="94" y1="36" x2="94" y2="42"/><line x1="128" y1="36" x2="128" y2="42"/><line x1="162" y1="36" x2="162" y2="42"/><line x1="196" y1="36" x2="196" y2="42"/></g>'
+               +'<g stroke="currentColor" stroke-linecap="round">'
+               +'<line x1="26" y1="39" x2="26" y2="10" stroke-width="1.5" opacity=".92" style="animation:fxrTap 2.4s ease-in-out infinite"/>'
+               +'<line x1="60" y1="39" x2="60" y2="62" stroke-width="1.4" opacity=".72" style="animation:fxrTap 2.4s ease-in-out infinite .3s"/>'
+               +'<line x1="94" y1="39" x2="94" y2="18" stroke-width="1.3" opacity=".54" style="animation:fxrTap 2.4s ease-in-out infinite .6s"/>'
+               +'<line x1="128" y1="39" x2="128" y2="56" stroke-width="1.2" opacity=".4" style="animation:fxrTap 2.4s ease-in-out infinite .9s"/>'
+               +'<line x1="162" y1="39" x2="162" y2="26" stroke-width="1.1" opacity=".28" style="animation:fxrTap 2.4s ease-in-out infinite 1.2s"/>'
+               +'<line x1="196" y1="39" x2="196" y2="50" stroke-width="1" opacity=".17" style="animation:fxrTap 2.4s ease-in-out infinite 1.5s"/></g>'
+               +'<g fill="none" stroke="currentColor"><rect x="23.5" y="7.5" width="5" height="5" opacity=".92"/><rect x="57.5" y="59.5" width="5" height="5" opacity=".72"/><rect x="91.5" y="15.5" width="4.5" height="4.5" opacity=".54"/><rect x="125.5" y="53.5" width="4" height="4" opacity=".4"/></g>'
+               +'<path d="M26 10 C 60 30, 128 44, 196 50" fill="none" stroke="var(--purple-400)" stroke-width="1" opacity=".45" stroke-dasharray="2 3"/>'
+               +'<line x1="10" y1="12" x2="10" y2="66" stroke="var(--purple-400)" stroke-width="1" opacity=".5" style="animation:fxrScan 3.4s linear infinite"/></svg>';
+            },
+            saturate:function(){
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+               +'<line x1="14" y1="66" x2="212" y2="66" stroke="var(--border)" stroke-width="1"/>'
+               +'<line x1="14" y1="66" x2="14" y2="8" stroke="var(--border)" stroke-width="1"/>'
+               +'<g stroke="var(--border)" stroke-width="1"><line x1="63" y1="66" x2="63" y2="62"/><line x1="112" y1="66" x2="112" y2="62"/><line x1="161" y1="66" x2="161" y2="62"/><line x1="14" y1="49" x2="18" y2="49"/><line x1="14" y1="32" x2="18" y2="32"/><line x1="14" y1="15" x2="18" y2="15"/></g>'
+               +'<line x1="14" y1="66" x2="150" y2="10" stroke="currentColor" stroke-width="1" opacity=".18" stroke-dasharray="2 3"/>'
+               +'<path d="M14 66 C 62 56, 80 20, 150 13 C 176 10, 194 10, 212 10" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+               +'<g fill="var(--bg-hero)" stroke="currentColor" stroke-width="1.2"><circle cx="62" cy="56" r="2.6"/><circle cx="112" cy="17" r="2.6"/><circle cx="161" cy="11.5" r="2.6"/></g>'
+               +'<circle r="2.6" fill="var(--purple-400)" style="offset-path:path(\'M14 66 C 62 56, 80 20, 150 13 C 176 10, 194 10, 212 10\'); animation:fxrRide 2.6s ease-in-out infinite alternate; filter:drop-shadow(0 0 4px rgba(183,148,255,.7))"/>'
+               +'<g stroke="var(--purple-400)" stroke-width="1.4" stroke-linecap="round"><line x1="182" y1="70" x2="182" y2="60" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite"/><line x1="190" y1="70" x2="190" y2="64" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite .3s"/><line x1="198" y1="70" x2="198" y2="62" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite .6s"/><line x1="206" y1="70" x2="206" y2="66" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite .9s"/></g></svg>';
+            }
+          };
+          var DEVS=[
+            {name:'Reverb',core:'reverb',type:'Hall',types:['Room','Plate','Hall','Convolution'],preset:'Cave',code:'rt 2.4s',on:true,
+             pills:[{t:'Mod',on:true},{t:'Freeze',on:false}],route:[1,1,1,1,1,1],knobs:[{l:'Size',v:30},{l:'Decay',v:55},{l:'Damp',v:8},{l:'Mix',v:100}]},
+            {name:'Delay',core:'delay',type:'BBD',types:['Digital','BBD','Tape','Ping-Pong'],preset:'Slap',code:'1/8 · 58',on:true,
+             pills:[{t:'Sync',on:true},{t:'Ping',on:false}],route:[1,1,0,0,0,0],knobs:[{l:'Time',v:50},{l:'Fdbk',v:58},{l:'Tone',v:44},{l:'Mix',v:34}]},
+            {name:'Saturate',core:'saturate',type:'Tube',types:['Tube','Tape','Diode','Fold','Fuzz'],preset:'Grit',code:'×2.4',on:true,
+             pills:[{t:'Pre',on:true},{t:'Auto',on:false}],route:[1,0,0,0,0,0],knobs:[{l:'Drive',v:60},{l:'Warmth',v:46},{l:'Bias',v:50},{l:'Mix',v:100}]}
+          ];
+          var RLBL=['A','B','C','D','S','N'];
+          function devHTML(d,idx){
+            var pills=d.pills.map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
+            var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
+            var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'">'+knobSVG(k.v)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
+            return '<div class="fxr-dev'+(idx===0?' fxr-sel':'')+(d.on?'':' fxr-off')+'" data-dev="'+idx+'">'
+              +'<div class="fxr-head">'
+                +'<span class="fxr-grip">⋮⋮</span><span class="fxr-name">'+d.name+'</span>'
+                +'<span class="fxr-type" data-act="type">'+d.type+'<span class="fxr-car">▾</span></span>'
+                +'<span class="fxr-preset" data-act="preset"><span class="fxr-star">✦</span><span class="fxr-pname">'+d.preset+'</span><span class="fxr-car">▾</span></span>'
+                +'<span class="fxr-spacer"></span>'
+                +'<span class="fxr-headr"><span class="fxr-code">'+d.code+'</span><span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x">✕</span></span>'
+              +'</div>'
+              +'<div class="fxr-core">'+CORES[d.core]()+'</div>'
+              +'<div class="fxr-ctrls">'
+                +'<div class="fxr-knobs">'+knobs+'</div>'
+                +'<div class="fxr-divider"></div>'
+                +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
+              +'</div></div>';
+          }
+          function render(){ try{
+            var h=DEVS.map(devHTML).join('');
+            h+='<div class="fxr-add" data-act="add"><span class="fxr-plus">+</span><span class="fxr-t">Add effect</span></div>';
+            rack.innerHTML=h;
+          }catch(e){} }
+          render();
+          function flash(el){ try{ el.style.borderColor='var(--purple-400)'; el.style.color='var(--purple-400)'; setTimeout(function(){el.style.borderColor='';el.style.color='';},180); }catch(e){} }
+          // clicks (delegated)
+          rack.addEventListener('click',function(e){ try{
+            var dev=e.target.closest('.fxr-dev'), act=e.target.closest('[data-act]');
+            if(act){ var a=act.getAttribute('data-act');
+              if(a==='add'){ flash(act); return; }
+              if(!dev) return; var idx=+dev.getAttribute('data-dev');
+              if(a==='pwr'){ DEVS[idx].on=!DEVS[idx].on; dev.classList.toggle('fxr-off',!DEVS[idx].on); return; }
+              if(a==='x'){ DEVS.splice(idx,1); render(); return; }
+              if(a==='type'){ var d=DEVS[idx],ti=d.types.indexOf(d.type); d.type=d.types[(ti+1)%d.types.length]; act.childNodes[0].nodeValue=d.type; return; }
+              if(a==='preset'){ return; }
+            }
+            var pill=e.target.closest('.fxr-pill');
+            if(pill&&dev){ var pi=[].indexOf.call(dev.querySelectorAll('.fxr-pill'),pill); pill.classList.toggle('fxr-on'); var dd=DEVS[+dev.getAttribute('data-dev')]; if(dd&&dd.pills[pi]) dd.pills[pi].on=pill.classList.contains('fxr-on'); return; }
+            var r=e.target.closest('.fxr-r');
+            if(r&&dev){ r.classList.toggle('fxr-on'); return; }
+            if(dev){ [].forEach.call(rack.querySelectorAll('.fxr-dev'),function(x){x.classList.remove('fxr-sel');}); dev.classList.add('fxr-sel'); }
+          }catch(e){} });
+          // knob drag (visual only)
+          rack.addEventListener('pointerdown',function(e){ try{
+            var dial=e.target.closest('.fxr-dial'); if(!dial) return; e.preventDefault();
+            var dev=dial.closest('.fxr-dev'),di=+dev.getAttribute('data-dev'),ki=+dial.getAttribute('data-k');
+            var startY=e.clientY,startV=DEVS[di].knobs[ki].v;
+            function mv(ev){ var v=Math.max(0,Math.min(100,startV+(startY-ev.clientY)*0.6)); DEVS[di].knobs[ki].v=v; dial.innerHTML=knobSVG(v); }
+            function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); }
+            document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up);
+          }catch(e){} });
+          // grip drag-reorder
+          rack.addEventListener('pointerdown',function(e){ try{
+            var grip=e.target.closest('.fxr-grip'); if(!grip) return; e.preventDefault();
+            var dev=grip.closest('.fxr-dev'); if(!dev) return; dev.classList.add('fxr-drag');
+            function mv(ev){ try{
+              var devs=[].slice.call(rack.querySelectorAll('.fxr-dev')),target=null;
+              for(var i=0;i<devs.length;i++){ if(devs[i]===dev) continue; var rc=devs[i].getBoundingClientRect(); if(ev.clientX<rc.left+rc.width/2){ target=devs[i]; break; } }
+              if(target){ if(target!==dev.nextSibling) rack.insertBefore(dev,target); }
+              else { var add=rack.querySelector('.fxr-add'); if(add) rack.insertBefore(dev,add); }
+            }catch(_){} }
+            function up(){ try{
+              document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); dev.classList.remove('fxr-drag');
+              var order=[].map.call(rack.querySelectorAll('.fxr-dev'),function(n){return DEVS[+n.getAttribute('data-dev')];});
+              DEVS=order; render();
+            }catch(_){} }
+            document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up);
+          }catch(e){} });
+          // A/B Effects/Macros switch
+          [].forEach.call(document.querySelectorAll('#syn-panel .fxr-tab'),function(tab){
+            tab.addEventListener('click',function(){ try{
+              [].forEach.call(document.querySelectorAll('#syn-panel .fxr-tab'),function(t){t.classList.remove('on');});
+              tab.classList.add('on'); var which=tab.getAttribute('data-fxr-tab');
+              [].forEach.call(document.querySelectorAll('#syn-panel .fxr-pane'),function(p){ p.style.display=(p.getAttribute('data-fxr-pane')===which)?'flex':'none'; });
+            }catch(e){} });
+          });
+        }catch(e){ try{console.log('[fxr] init err',e);}catch(_){} } }
+        if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
         })();
         </script>
 
@@ -28013,7 +28243,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb265';   // fb265 = HEADROOM RESTORED (real dense-chord clipping fix, Serum-matched): the fb249 +9dB master makeup pushed a single sine to ~-6 dBFS with NO polyphonic headroom, so 3 dissonant sines constructively peaked at +3 dBFS and CLIPPED into broadband IMD hash (visible on the analyzer as energy smeared across the spectrum vs Serum's clean 3 spikes). Terrain's sine is provably pure + nothing nonlinear is on at default, so that hash was purely clipping. FIX = cut kInstrumentMakeup 2.8184->1.0 (a single voice is already ~-15 dBFS = Serum's level; the makeup was an overshoot of fb249's OWN -15 target). Now 1 note ~-15, 3 notes ~-6, 6-8 notes ride to the ceiling with the fb264 limiter as a clean safety net. Offline-validated (fb265_confirm.py): every note-count clean (~2% = FFT floor). Loudness now comes from the mixer, like Serum. C++/DSP only. [prior fb264 = MASTER LIMITER (dense-chord hard-clip fix): velocity->Volume at full depth on a 9th/11th drove the summed, un-normalized polyphony past the tanh clipper's narrow knee (0.75->0.966), flattening the wave into a near-square = audible HARD clipping (measured buzz 0.1%->23% as notes 1->11). Added a stereo-linked peak LIMITER (gain-reduction, 0.8ms atk / 120ms rel, thresh 0.90) BEFORE the clip so dense chords stay LOUD but get turned down a hair instead of squaring (Serum's output is a limiter, not a fixed shaper); clip knee raised 0.75->0.90 to meet the threshold so nothing distorts below it, clip is now a transient-only safety catch. Offline-validated (clip_final.py): buzz 23%-><3% at 11 notes, single notes 0% THD at every level, peak still 0.966 (no loudness lost). C++/DSP only. [prior fb263 = TWO FIXES. (1) velocity->Volume (and Pan/Res/FX/macros) now AUDIBLE: velocity was skipped in the block-rate mod loop (only per-voice dests worked), so routing it to a block-rate dest moved the streak but produced NO audio. Added a velocity branch to the block-rate loop using the curve-shaped most-active-voice velocity (velGlobal_). Velocity routes now default to FULL depth (1.0) so 100% velocity = full effect. (2) BOTTOM COLOR: the OUTPUT/#footer strip (was --bg-surface) + the non-synth native capture strip (was #232340) were lighter than the front panel; both now use the panel color (--bg-main / #1A1A2E dark). [prior fb262 = VELOCITY = TRUE MOD SOURCE (Serum-2 model, reusing the env/LFO code). (a) GLOBAL VELOCITY REMOVED — amp no longer scales by note velocity (it was globally quieting soft notes); velocity is now purely a routable source (route it onto Volume for dynamics). (b) The 0-100 number is repurposed as the VELOCITY CURVE (velDepth_: 50=linear, >50 lifts soft hits, applied via pow) shaping the source, default 50. (c) SELECTION GLOW — touching the Velocity row sets __selMod={vel:1}; its routes glow purple exactly like env/LFO (added (a.vel&&sm.vel) to the fb257 sel test at both sites). (d) LIVE STREAK — velocity's live per-note value rides the SAME underline comet as LFO/env (window.__mvVel fed from the most-active voice via velVis_/modVizVel, drawn at the 24399 comet). [prior fb261 = TWO FIXES. (1) VELOCITY READBACK: restore() (the 2.5s getSynthMod re-sync) decoded wire code 200 as "Env 101" (sv-100+1) and pushed a phantom duplicate route next to the real Velocity one — now it decodes 200 → {vel:1} and dedups against the existing velocity route (no more Env 101). (2) DEFAULT WINDOW HEIGHT: the voice column (Voices/Velocity/Portamento/Glide + Always/Scaled) bottomed at 644px but the web design box was height:640 overflow:hidden, clipping the bottom row at default size. Bumped the web design height 640→656 (body + #plugin) + the matching C++ kBaseH/setSize, so the default window is 820×682 and the voice column fits with ~12px margin above the capture strip. [prior fb260 = VELOCITY MOD SOURCE: Velocity is now a routable per-voice mod source (like an env/LFO). Drag the "Velocity" label onto any knob to route it to filter cutoff / wavetable frame·warp·fold / sub / coarse pitch, attenuated per-route via the same ring. The reserved ModSource::Velocity enum slot was never wired; now the per-voice gather feeds currentVelocity_ (unipolar 0..1, additive via routeContribution) + a cut diversion. NEW global vel→amp depth (SYN_VEL_DEPTH 0..100, default 100 = full dynamics == legacy) on the Velocity row's number (ns-resize). Wire code 200 (kVelSrc) taught to the parser + per-voice route build; 4-point relay wired. %-signs stripped from Portamento/Glide/Velocity so the voice-row numbers line up. Block-rate dests (FX/macros/res) = fast-follow fb261. [prior fb259 = VOICE READOUT ALIGN: killed the mismatched voice-meta emblems (ic-voices/vel/trail/horizon — different viewBoxes, ragged) AND fixed the real culprit — the unwired Velocity row lacked the [data-syn-row] 4px padding the other three rows had, so its label sat 4px LEFT of Voices/Portamento/Glide. Rows are now a clean 2-col grid (label left / value right) with uniform padding on the base .voice-row → all four labels stack dead-even, values flush right. UI-only; no param/DSP change. [prior fb258 = SHAPER POINT MENU alignment: the red 'Delete point'/'Remove selected' row (shRedRow) had its own geometry (text at 10px, 9.5px, letter-spaced, rounded) so it sat left of + smaller than the 'Modulate X/Y ›' rows — looked uncentered/awkward. Now matches .syn-ctx-item exactly (text at 26px, 11px/300, no letter-spacing/radius); only the red color differs. Verified by render. [prior fb257 = LFO/ENV IDENTITY FIX: env & LFO underlines collided — __selMod (which drives the purple .sel glow) went stale on some selection paths (LFO stayed gray until re-click; env didn't clear a lit LFO). Now FOCUS FOLLOWS INTERACTION: touching the LFO panel selects the current LFO, touching the envelope editor selects the current envelope; card-lane re-select asserts BEFORE its early-return. Validated: assigned-to-selected = lit, else gray, env or LFO, no re-click. [prior fb256 = UNISON RECENTER (sample/granular/warp) (Max: "for ALL the engines"). Their punch anchor gave ONLY voice 0 (leftmost) full gain -> left bias. Now the SYMMETRIC OUTER PAIR (voices 0 AND N-1) is anchored: keeps the punch (no 1/vN loss), balanced 0.00 dB. Combined with fb255 (wavetable/basic path), unison is centered on every engine. [prior fb255 = UNISON RECENTER (wavetable/basic): the main (wavetable/basic) unison leaned LEFT with Blend/Width down. Root cause: the voice-0 blend EXEMPTION (voice 0 = leftmost, pinned to full gain while its right mirror scaled down). Fixed = symmetric blend gain for ALL voices + a symmetric floor (keeps UNISON=2/BLEND=0 audible without the bias). Proven 0.00 dB L/R bias across all counts/blend/width. [prior fb254 = LFO underline back to PURPLE (Max: one color, no teal/green/blue). The lights-up-when-you-select-it behavior stays; only the color reverts to the shared env purple #B794FF. [prior fb253 = SPECTRAL ON CUSTOM TABLES: the morph was built from the factory PRESET spec + imports bypassed it entirely, so custom/imported tables got no spectral. Now Wavetable::toSpec() analyzes ANY loaded table into a 16-frame spec (exact inverse of buildFromSpec, verified), cached per import; rebuildMorphIfNeeded morphs THAT and wavetableForOsc returns morph-of-import (raw import when morph off). Custom tables now get spectral + modulation, like presets. [prior fb252 = SPECTRAL MODULATABLE: the SpectralA..D mod dests + UI routing existed since fb76 but spectralEffAmt_ was NEVER written — so modulation never reached the morph rebuild. Now the audio thread publishes the effective (base+LFO/env) amount each block (via mdP, quantized 1/128 when routed); the 60Hz timer rebuilds the morph following it. Drop an LFO/env on SPECTRAL -> it moves. [prior fb251 = SPECTRAL AMPLIFIED: all 7 morph modes pushed harder (night-and-day) — HarmStretch spread 4→6.5/bright 0.9→1.15, Inharmonic exp 2.6→3.3, Vocode sharper formants, Smear darker/wider, RandomAmps wilder, DataCompress harder crush, Phaser deeper/more notches; amount=0 still exact identity. [prior fb250 = LFO IDENTIFICATION: the selected LFO's route underlines light TEAL (envelopes stay purple) so you know env-vs-LFO at a glance; __selMod now follows the LFO wherever you select it (docked tab + card lane), not just the docked tab. [prior fb249 = MASTER LEVEL (Serum-matched loudness): +9 dB instrument makeup restores the never-made-up -6 dB pre-FX pad + ~+3 dB so a default sine lands ~-15 dBFS (was ~-25); NEW transparent-knee soft-clipper (0% added THD below -2.5 dBFS -> clean sines, no mud) replaces the always-curving tanh, same -0.3 dBFS DAC ceiling on hot chords
+  var TERRAIN_BUILD = 'fb266';   // fb266 = FX RACK UI (v7 wired live): the approved Ableton-style device chain is now IN the SYN macro slot — A Effects / B Macros switch (macros moved to B, "Macros" label + assign-hint removed), 3 devices (Reverb/Delay/Saturate) with live pills·on/off-gray·knob-drag·grip-reorder·horiz-scroll·+Add-effect. Namespaced fxr-*, theme-wired to real tokens, core SVG absolute-positioned so the row stays leveled with the voice column. UI-ONLY, no DSP binding yet. [prior fb265 = HEADROOM RESTORED (real dense-chord clipping fix, Serum-matched): the fb249 +9dB master makeup pushed a single sine to ~-6 dBFS with NO polyphonic headroom, so 3 dissonant sines constructively peaked at +3 dBFS and CLIPPED into broadband IMD hash (visible on the analyzer as energy smeared across the spectrum vs Serum's clean 3 spikes). Terrain's sine is provably pure + nothing nonlinear is on at default, so that hash was purely clipping. FIX = cut kInstrumentMakeup 2.8184->1.0 (a single voice is already ~-15 dBFS = Serum's level; the makeup was an overshoot of fb249's OWN -15 target). Now 1 note ~-15, 3 notes ~-6, 6-8 notes ride to the ceiling with the fb264 limiter as a clean safety net. Offline-validated (fb265_confirm.py): every note-count clean (~2% = FFT floor). Loudness now comes from the mixer, like Serum. C++/DSP only. [prior fb264 = MASTER LIMITER (dense-chord hard-clip fix): velocity->Volume at full depth on a 9th/11th drove the summed, un-normalized polyphony past the tanh clipper's narrow knee (0.75->0.966), flattening the wave into a near-square = audible HARD clipping (measured buzz 0.1%->23% as notes 1->11). Added a stereo-linked peak LIMITER (gain-reduction, 0.8ms atk / 120ms rel, thresh 0.90) BEFORE the clip so dense chords stay LOUD but get turned down a hair instead of squaring (Serum's output is a limiter, not a fixed shaper); clip knee raised 0.75->0.90 to meet the threshold so nothing distorts below it, clip is now a transient-only safety catch. Offline-validated (clip_final.py): buzz 23%-><3% at 11 notes, single notes 0% THD at every level, peak still 0.966 (no loudness lost). C++/DSP only. [prior fb263 = TWO FIXES. (1) velocity->Volume (and Pan/Res/FX/macros) now AUDIBLE: velocity was skipped in the block-rate mod loop (only per-voice dests worked), so routing it to a block-rate dest moved the streak but produced NO audio. Added a velocity branch to the block-rate loop using the curve-shaped most-active-voice velocity (velGlobal_). Velocity routes now default to FULL depth (1.0) so 100% velocity = full effect. (2) BOTTOM COLOR: the OUTPUT/#footer strip (was --bg-surface) + the non-synth native capture strip (was #232340) were lighter than the front panel; both now use the panel color (--bg-main / #1A1A2E dark). [prior fb262 = VELOCITY = TRUE MOD SOURCE (Serum-2 model, reusing the env/LFO code). (a) GLOBAL VELOCITY REMOVED — amp no longer scales by note velocity (it was globally quieting soft notes); velocity is now purely a routable source (route it onto Volume for dynamics). (b) The 0-100 number is repurposed as the VELOCITY CURVE (velDepth_: 50=linear, >50 lifts soft hits, applied via pow) shaping the source, default 50. (c) SELECTION GLOW — touching the Velocity row sets __selMod={vel:1}; its routes glow purple exactly like env/LFO (added (a.vel&&sm.vel) to the fb257 sel test at both sites). (d) LIVE STREAK — velocity's live per-note value rides the SAME underline comet as LFO/env (window.__mvVel fed from the most-active voice via velVis_/modVizVel, drawn at the 24399 comet). [prior fb261 = TWO FIXES. (1) VELOCITY READBACK: restore() (the 2.5s getSynthMod re-sync) decoded wire code 200 as "Env 101" (sv-100+1) and pushed a phantom duplicate route next to the real Velocity one — now it decodes 200 → {vel:1} and dedups against the existing velocity route (no more Env 101). (2) DEFAULT WINDOW HEIGHT: the voice column (Voices/Velocity/Portamento/Glide + Always/Scaled) bottomed at 644px but the web design box was height:640 overflow:hidden, clipping the bottom row at default size. Bumped the web design height 640→656 (body + #plugin) + the matching C++ kBaseH/setSize, so the default window is 820×682 and the voice column fits with ~12px margin above the capture strip. [prior fb260 = VELOCITY MOD SOURCE: Velocity is now a routable per-voice mod source (like an env/LFO). Drag the "Velocity" label onto any knob to route it to filter cutoff / wavetable frame·warp·fold / sub / coarse pitch, attenuated per-route via the same ring. The reserved ModSource::Velocity enum slot was never wired; now the per-voice gather feeds currentVelocity_ (unipolar 0..1, additive via routeContribution) + a cut diversion. NEW global vel→amp depth (SYN_VEL_DEPTH 0..100, default 100 = full dynamics == legacy) on the Velocity row's number (ns-resize). Wire code 200 (kVelSrc) taught to the parser + per-voice route build; 4-point relay wired. %-signs stripped from Portamento/Glide/Velocity so the voice-row numbers line up. Block-rate dests (FX/macros/res) = fast-follow fb261. [prior fb259 = VOICE READOUT ALIGN: killed the mismatched voice-meta emblems (ic-voices/vel/trail/horizon — different viewBoxes, ragged) AND fixed the real culprit — the unwired Velocity row lacked the [data-syn-row] 4px padding the other three rows had, so its label sat 4px LEFT of Voices/Portamento/Glide. Rows are now a clean 2-col grid (label left / value right) with uniform padding on the base .voice-row → all four labels stack dead-even, values flush right. UI-only; no param/DSP change. [prior fb258 = SHAPER POINT MENU alignment: the red 'Delete point'/'Remove selected' row (shRedRow) had its own geometry (text at 10px, 9.5px, letter-spaced, rounded) so it sat left of + smaller than the 'Modulate X/Y ›' rows — looked uncentered/awkward. Now matches .syn-ctx-item exactly (text at 26px, 11px/300, no letter-spacing/radius); only the red color differs. Verified by render. [prior fb257 = LFO/ENV IDENTITY FIX: env & LFO underlines collided — __selMod (which drives the purple .sel glow) went stale on some selection paths (LFO stayed gray until re-click; env didn't clear a lit LFO). Now FOCUS FOLLOWS INTERACTION: touching the LFO panel selects the current LFO, touching the envelope editor selects the current envelope; card-lane re-select asserts BEFORE its early-return. Validated: assigned-to-selected = lit, else gray, env or LFO, no re-click. [prior fb256 = UNISON RECENTER (sample/granular/warp) (Max: "for ALL the engines"). Their punch anchor gave ONLY voice 0 (leftmost) full gain -> left bias. Now the SYMMETRIC OUTER PAIR (voices 0 AND N-1) is anchored: keeps the punch (no 1/vN loss), balanced 0.00 dB. Combined with fb255 (wavetable/basic path), unison is centered on every engine. [prior fb255 = UNISON RECENTER (wavetable/basic): the main (wavetable/basic) unison leaned LEFT with Blend/Width down. Root cause: the voice-0 blend EXEMPTION (voice 0 = leftmost, pinned to full gain while its right mirror scaled down). Fixed = symmetric blend gain for ALL voices + a symmetric floor (keeps UNISON=2/BLEND=0 audible without the bias). Proven 0.00 dB L/R bias across all counts/blend/width. [prior fb254 = LFO underline back to PURPLE (Max: one color, no teal/green/blue). The lights-up-when-you-select-it behavior stays; only the color reverts to the shared env purple #B794FF. [prior fb253 = SPECTRAL ON CUSTOM TABLES: the morph was built from the factory PRESET spec + imports bypassed it entirely, so custom/imported tables got no spectral. Now Wavetable::toSpec() analyzes ANY loaded table into a 16-frame spec (exact inverse of buildFromSpec, verified), cached per import; rebuildMorphIfNeeded morphs THAT and wavetableForOsc returns morph-of-import (raw import when morph off). Custom tables now get spectral + modulation, like presets. [prior fb252 = SPECTRAL MODULATABLE: the SpectralA..D mod dests + UI routing existed since fb76 but spectralEffAmt_ was NEVER written — so modulation never reached the morph rebuild. Now the audio thread publishes the effective (base+LFO/env) amount each block (via mdP, quantized 1/128 when routed); the 60Hz timer rebuilds the morph following it. Drop an LFO/env on SPECTRAL -> it moves. [prior fb251 = SPECTRAL AMPLIFIED: all 7 morph modes pushed harder (night-and-day) — HarmStretch spread 4→6.5/bright 0.9→1.15, Inharmonic exp 2.6→3.3, Vocode sharper formants, Smear darker/wider, RandomAmps wilder, DataCompress harder crush, Phaser deeper/more notches; amount=0 still exact identity. [prior fb250 = LFO IDENTIFICATION: the selected LFO's route underlines light TEAL (envelopes stay purple) so you know env-vs-LFO at a glance; __selMod now follows the LFO wherever you select it (docked tab + card lane), not just the docked tab. [prior fb249 = MASTER LEVEL (Serum-matched loudness): +9 dB instrument makeup restores the never-made-up -6 dB pre-FX pad + ~+3 dB so a default sine lands ~-15 dBFS (was ~-25); NEW transparent-knee soft-clipper (0% added THD below -2.5 dBFS -> clean sines, no mud) replaces the always-curving tanh, same -0.3 dBFS DAC ceiling on hot chords
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
