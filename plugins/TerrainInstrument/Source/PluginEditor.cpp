@@ -5850,9 +5850,9 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graph
     const bool dark = isDarkMode || synthViewActive;
     // fb269 — front page: match the GRAIN ENGINE / FX panels (--bg-surface), not the darker body.
     // Under the synth view keep the panel-dark (--bg-main) so it stays seamless with #syn-panel.
-    g.fillAll(synthViewActive ? juce::Colour(0xFF1A1A2E)
-                              : (isDarkMode ? juce::Colour(0xFF2F2B54)     // fb270 — front: lighter purple strip (--bg-strip dark)
-                                            : juce::Colour(0xFFEDE9F6)));  // front light (--bg-strip light)
+    g.fillAll(synthViewActive ? juce::Colour(0xFF1A1A2E)                   // synth view: seamless with #syn-panel (--bg-main)
+                              : (isDarkMode ? juce::Colour(0xFF232340)     // fb271 — front: EXACT GRAIN ENGINE color (--bg-surface dark), not fb270's lighter #2F2B54
+                                            : juce::Colour(0xFFE8E4EF)));  // front light (--bg-surface light = grain engine)
 
     if (state == 2) // ready — green, drag to DAW
     {
