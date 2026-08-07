@@ -27,6 +27,25 @@ Build audio plugin UIs using modern web technologies (HTML/CSS/JavaScript) inste
 
 ---
 
+## 🎯 CENTERLINE LAW (UI alignment — Max, PERMANENT, never forget)
+
+Every panel header/footer has **ONE horizontal centerline** through the device center; the
+vertical MIDDLE of *every* element sits on it (grip · name · type/preset pills · +/← · light · ×).
+Build it with **equal-height boxes + `align-items:center` and NO ad-hoc per-element `top:-Npx`
+nudges**. The **+, ←, and × are IDENTICAL fixed SVG boxes** (glyph centered at the box center,
+14×14 crossing at 7,7) — swapping **+ ⇄ ←** must never move a pixel; "bigger/smaller ≠ move."
+**Text glyphs fail this — use SVG.** Back/footer panels match front-panel quality: even grid
+(8 knobs 4×2, never 7), knobs big enough to FILL, **zero dead space**. VERIFY by rendering a
+centerline/grid overlay and reading it before showing the user. (See CLAUDE.md §5 + memory
+`feedback-panel-symmetry-centerline-hardrule`.)
+
+**DROPDOWNS, not click-to-rotate:** any multi-choice selector (type, preset, Character, Mod Sync)
+is a real continuous dropdown — native `<select>` overlay (the `engine-select` idiom), never
+click-to-cycle. Official FX back panel = header centerline + 2 dropdowns + 8 knobs (4×2) + 3
+column separators (memory `terrain-instrument-fx-back-panel-official-spec`).
+
+---
+
 ## 🔴 CRITICAL: Member Declaration Order (PREVENTS DAW CRASHES)
 
 **⚠️ #1 CAUSE OF WEBVIEW PLUGIN CRASHES - MUST FOLLOW**

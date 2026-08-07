@@ -163,6 +163,24 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
 - **UI spacing/alignment is Max's #1 principle.** Align the *visible glyph* (not the CSS box)
   to elements above/below; expect 1–3px nudges. References: Prophet 5, PolyBrute. Don't claim
   UI "done" until it passes this.
+- **🎯 CENTERLINE LAW (fb275 — PERMANENT, never forget).** Every panel header/footer has ONE
+  horizontal centerline through the device center, and the vertical MIDDLE of *every* element
+  sits on it: grip · name · type/preset pills · +/← · light · ×. Build it with equal-height
+  boxes + `align-items:center` and **NO ad-hoc per-element `top:-Npx` nudges** (those are what
+  break it). The **+, ←, and × are IDENTICAL fixed SVG boxes** (glyph centered at the box
+  center, e.g. 14×14 crossing at 7,7) — swapping **+ ⇄ ←** must NOT move a single pixel;
+  "bigger/smaller ≠ move." **Text glyphs fail this — use SVG.** (One allowed exception: a badge
+  like the preset ✦ may lift 1px while its pill stays on the line.) Back/footer panels must match
+  **front-panel quality**: even grid (8 knobs 4×2, never 7 as 4+3), knobs big enough to FILL,
+  **zero dead space**. VERIFY by rendering a literal centerline/grid overlay and reading it
+  BEFORE showing Max. Full text: memory `feedback-panel-symmetry-centerline-hardrule`.
+- **🔽 DROPDOWNS, not click-to-rotate (fb275 — PERMANENT).** Any multi-choice selector (FX type,
+  presets, Character, Mod Sync, …) is a real continuous **dropdown menu** (native `<select>`
+  overlay — the `engine-select` idiom), **NEVER click-to-cycle**. Character/Mod Sync must actually
+  work. **The OFFICIAL FX back panel** = header centerline + 2 dropdowns + 8 knobs (4×2) + 3 column
+  separators; every FX device (Reverb/Delay/Saturate/…) uses this exact chassis with its own 8
+  params — 11 total per device (3 + Mix on front, 8 on back). Canonical mockup:
+  `Design/fx-back-panel-mockup.html`; full spec: memory `terrain-instrument-fx-back-panel-official-spec`.
 - **Every filter response curve must mirror the DSP and MOVE with the knobs** — no flat
   placeholder lines, ever. Applies to the upcoming wavetable work too (no flat spectrums).
 - **Defer to manuals + research, never guess from training** when referencing other
