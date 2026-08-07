@@ -181,6 +181,16 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
   separators; every FX device (Reverb/Delay/Saturate/…) uses this exact chassis with its own 8
   params — 11 total per device (3 + Mix on front, 8 on back). Canonical mockup:
   `Design/fx-back-panel-mockup.html`; full spec: memory `terrain-instrument-fx-back-panel-official-spec`.
+- **🎚️ DRAMATICISM (Max, PERMANENT).** Every parameter is night-and-day: you can always tell what
+  it's doing, and at 100% it's *completely dramatic* — the sound MATCHES THE NUMBER (100% Mix =
+  fully wet; "loud" = LOUD). No control whose effect you can't perceive; calibrate range/curve so
+  the full sweep reads (not unusable at 2–10%, but bold at the top). Serum 2 is the bar. Full text:
+  memory `feedback-dramaticism-parameters-hardrule`.
+- **📚 LEARN FROM THE GREATS (Max, PERMANENT).** For every effect, study **Serum 2 FIRST** (its
+  per-type param sets — e.g. reverb Vintage ~8 knobs, Basin ~3 — and what each does), then Arturia /
+  Valhalla / Phase Plant / Omnisphere / GitHub+academic. A reference's param COUNT ≠ ours (fixed 8
+  back slots): pick the MOST ESSENTIAL, best-of-breed per type. Clean-room from manuals/behavior,
+  never copy source. Memory: `feedback-learn-from-reference-plugins-hardrule`.
 - **Every filter response curve must mirror the DSP and MOVE with the knobs** — no flat
   placeholder lines, ever. Applies to the upcoming wavetable work too (no flat spectrums).
 - **Defer to manuals + research, never guess from training** when referencing other
