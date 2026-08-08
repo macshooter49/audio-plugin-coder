@@ -1468,9 +1468,12 @@ private:
 
     // Space reverb (stereo — single instance handles both channels)
     SpaceReverb spaceReverb;
-    HallReverb  hallReverb;                       // fb276 — synth FX-rack reverb (Hall). Gated additive send.
-    bool  hallRvbActive_ = false;                 // any A/B/C/D/S/N route enabled (default OFF = fully bypassed)
-    float hallRvbDry_ = 1.0f, hallRvbWet_ = 0.0f; // equal-power mix, computed per block
+    HallReverb  hallReverb;                       // fb276/277 — synth FX-rack reverb (Hall). Gated additive send, click-free.
+    bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block
+    float hallRvbEnv_ = 0.0f, hallEnvT_ = 0.0f;   // fb277 — on/off FADE env (0 = fully bypassed) so route toggles don't click
+    float hallRvbDry_ = 1.0f, hallRvbWet_ = 0.0f; // equal-power mix — RAMPED per sample (no zipper)
+    float hallRvbDryT_ = 1.0f, hallRvbWetT_ = 0.0f; // mix targets
+    float hallSm_ = 0.0015f;                       // per-sample smoothing coeff (~15 ms), set in prepareToPlay
 
     // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
     // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)

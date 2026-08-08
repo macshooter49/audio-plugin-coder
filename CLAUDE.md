@@ -181,6 +181,11 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
   separators; every FX device (Reverb/Delay/Saturate/…) uses this exact chassis with its own 8
   params — 11 total per device (3 + Mix on front, 8 on back). Canonical mockup:
   `Design/fx-back-panel-mockup.html`; full spec: memory `terrain-instrument-fx-back-panel-official-spec`.
+- **🔇 NO CLICKS / CRACKLE (Max, PERMANENT).** Every parameter must be click-free while playing AND
+  while turning it. Smooth every continuous param (per-sample ramp ~10–30 ms), **GLIDE delay lengths**
+  (Size/pre-delay — comb-click law, never snap), **FADE** on/off toggles (don't hard-cut a live tail),
+  and **kill denormals** (flush recirculating/filter states + `ScopedNoDenormals`). VERIFY by
+  offline-sweeping the param. Memory: `feedback-no-clicks-crackle-smooth-params-hardrule`.
 - **🎚️ DRAMATICISM (Max, PERMANENT).** Every parameter is night-and-day: you can always tell what
   it's doing, and at 100% it's *completely dramatic* — the sound MATCHES THE NUMBER (100% Mix =
   fully wet; "loud" = LOUD). No control whose effect you can't perceive; calibrate range/curve so

@@ -3648,6 +3648,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     tapeLoop.prepare(sampleRate, samplesPerBlock);
     spaceReverb.prepare(sampleRate, samplesPerBlock);
     hallReverb.prepare (sampleRate);   // fb276 — synth FX-rack Hall reverb
+    hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
     moogDelay.prepare(sampleRate, samplesPerBlock);
     terrainChorus.prepare (sampleRate, samplesPerBlock);
 
@@ -6578,19 +6579,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         if (rightChannel != nullptr)
             rightChannel[i] += indySumBuffer.getSample (1, i) * outputGain;
 
-        // ── fb276 — synth FX-rack REVERB (Hall). ADDITIVE + ROUTE-GATED: with no A/B/C/D/S/N route
-        // enabled (the default) this is fully bypassed → zero change to the existing sound. Pre-makeup
-        // so the master limiter catches wet peaks. Per-block coeff update on i==0. (True per-osc send
-        // is the next pass; for now any route acts as the reverb enable.)
+        // ── fb276/277 — synth FX-rack REVERB (Hall). ADDITIVE + ROUTE-GATED + CLICK-FREE. Routes off
+        // ⇒ the on/off env fades to 0 ⇒ fully bypassed (zero cost + zero change to the default sound).
+        // Mix + on/off ramp per sample; the engine glides its own delays/coeffs. Pre-makeup so the
+        // limiter catches wet peaks. (True per-osc send is the next pass; any route = enable for now.)
         if (i == 0)
         {
-            hallRvbActive_ = rawParam (ParameterIDs::SYN_RVB_SRC_A)->load()   > 0.5f
-                          || rawParam (ParameterIDs::SYN_RVB_SRC_B)->load()   > 0.5f
-                          || rawParam (ParameterIDs::SYN_RVB_SRC_C)->load()   > 0.5f
-                          || rawParam (ParameterIDs::SYN_RVB_SRC_D)->load()   > 0.5f
-                          || rawParam (ParameterIDs::SYN_RVB_SRC_SUB)->load() > 0.5f
-                          || rawParam (ParameterIDs::SYN_RVB_SRC_NOISE)->load() > 0.5f;
-            if (hallRvbActive_)
+            hallRouteActive_ = rawParam (ParameterIDs::SYN_RVB_SRC_A)->load()   > 0.5f
+                            || rawParam (ParameterIDs::SYN_RVB_SRC_B)->load()   > 0.5f
+                            || rawParam (ParameterIDs::SYN_RVB_SRC_C)->load()   > 0.5f
+                            || rawParam (ParameterIDs::SYN_RVB_SRC_D)->load()   > 0.5f
+                            || rawParam (ParameterIDs::SYN_RVB_SRC_SUB)->load() > 0.5f
+                            || rawParam (ParameterIDs::SYN_RVB_SRC_NOISE)->load() > 0.5f;
+            hallEnvT_ = hallRouteActive_ ? 1.0f : 0.0f;
+            if (hallRouteActive_)
             {
                 hallReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
                 hallReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
@@ -6603,20 +6605,27 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 hallReverb.setLowDecay    (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 1.75f);
                 hallReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
                 hallReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
-                hallRvbWet_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
-                hallRvbDry_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
                 hallReverb.updateCoefficients();
+                const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
+                hallRvbWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+                hallRvbDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
             }
         }
-        if (hallRvbActive_)
+        if (hallRouteActive_ || hallRvbEnv_ > 1.0e-4f)
         {
+            hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
+            hallRvbDry_ += (hallRvbDryT_ - hallRvbDry_) * hallSm_;   // ramp mix
+            hallRvbWet_ += (hallRvbWetT_ - hallRvbWet_) * hallSm_;
             float rl, rr;
             const float inR = (rightChannel != nullptr) ? rightChannel[i] : leftChannel[i];
             hallReverb.processSample (leftChannel[i], inR, rl, rr);
-            leftChannel[i] = hallRvbDry_ * leftChannel[i] + hallRvbWet_ * rl;
+            const float e = hallRvbEnv_, inL = leftChannel[i];
+            leftChannel[i] = inL * (1.0f - e * (1.0f - hallRvbDry_)) + rl * (e * hallRvbWet_);
             if (rightChannel != nullptr)
-                rightChannel[i] = hallRvbDry_ * rightChannel[i] + hallRvbWet_ * rr;
+            {
+                const float inRR = rightChannel[i];
+                rightChannel[i] = inRR * (1.0f - e * (1.0f - hallRvbDry_)) + rr * (e * hallRvbWet_);
+            }
         }
 
         // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked
