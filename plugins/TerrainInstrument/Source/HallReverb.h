@@ -10,6 +10,12 @@
 //     lengths GLIDE (Size — comb-click law), and gains/coeffs ramp (no zipper).
 //   • Low-shelf bass gain precomputed per block (no per-sample pow).
 //   • Denormal-flushed recirculating state (belt-and-suspenders under FTZ).
+// fb278 — DRAMATIC DIFFUSION: one Schroeder allpass per FDN line INSIDE the
+//   feedback loop (Griesinger/Dattorro "tank" diffusion), on top of the 4 input
+//   diffusers. Diffusion now spreads echo density across the WHOLE tail, not just
+//   the ~30 ms attack: 0% = sparse/fluttery/metallic, 100% = glassy wash. The tank
+//   coeff RAMPS per-sample (click-free) and the tank delay folds into the Jot loss
+//   so RT60 stays exact (allpasses are unity-gain → decay unchanged).
 // PURE C++ (no JUCE): offline-validates standalone AND drops into the voice path.
 // ─────────────────────────────────────────────────────────────────────────────
 #include <vector>
@@ -37,6 +43,12 @@ public:
             int sz = 1; while (sz < len + 4) sz <<= 1;
             ap[i].assign ((size_t) sz, 0.0f); apMask[i] = sz - 1; apWr[i] = 0; apDelay[i] = len;
         }
+        for (int i = 0; i < N; ++i)   // fb278 — per-line in-loop tank diffuser (short, mutually prime)
+        {
+            const int len = std::max (8, (int) std::lround (tankLen48[i] * sr));
+            int sz = 1; while (sz < len + 4) sz <<= 1;
+            tank[i].assign ((size_t) sz, 0.0f); tankMask[i] = sz - 1; tankWr[i] = 0; tankDelay[i] = len;
+        }
         { int need = (int) std::ceil (0.25f * fs) + 8; int sz = 1; while (sz < need) sz <<= 1;
           pre.assign ((size_t) sz, 0.0f); preMask = sz - 1; preWr = 0; }
         smth = 1.0f - std::exp (-1.0f / (0.015f * fs));   // ~15 ms per-sample smoothing
@@ -51,6 +63,7 @@ public:
     {
         for (int i = 0; i < N; ++i) { std::fill (line[i].begin(), line[i].end(), 0.0f); dampZ[i] = bassZ[i] = 0.0f; }
         for (int i = 0; i < 4; ++i)  std::fill (ap[i].begin(), ap[i].end(), 0.0f);
+        for (int i = 0; i < N; ++i)  std::fill (tank[i].begin(), tank[i].end(), 0.0f);
         std::fill (pre.begin(), pre.end(), 0.0f);
         inLpZ = lcZ = 0.0f; dcxL = dcyL = dcxR = dcyR = 0.0f;
     }
@@ -79,13 +92,17 @@ public:
             float d = baseLen48[i] * sr * sizeScale;
             if (d > (float) lineMask[i] - 30.0f) d = (float) lineMask[i] - 30.0f;
             baseDelayT[i] = d;
-            float g = std::pow (10.0f, -3.0f * d / (fs * rt60));
+            // the in-loop tank diffuser adds tankDelay to the round-trip; fold it into the
+            // Jot loss so RT60 stays exact regardless of diffusion (allpass = unity gain).
+            float dLoop = d + (float) tankDelay[i];
+            float g = std::pow (10.0f, -3.0f * dLoop / (fs * rt60));
             if (g > 0.9995f) g = 0.9995f;
             gLineT[i]   = g;
             lowGainT[i] = std::pow (g, lowPow);   // low-shelf extra gain -> low RT60 = RT60*lowDecay
         }
         dampT = 0.9f * hiDamp;
         for (int i = 0; i < 4; ++i) apGT[i] = diffuse * apBaseG[i];
+        tankGT = 0.7f * diffuse;   // fb278 — in-loop tank diffusion (0 = pure delay/sparse, 0.7 = glassy)
         inLpT   = std::exp (-2.0f * PI * (1500.0f * std::pow (12.0f, tone)) / fs);   // tone: ~1.5k..18k
         lcT     = std::exp (-2.0f * PI * lowCut / fs);
         preSampT= preMs * 0.001f * fs;
@@ -96,7 +113,7 @@ public:
         {
             for (int i = 0; i < N; ++i) { baseDelayC[i] = baseDelayT[i]; gLineC[i] = gLineT[i]; lowGainC[i] = lowGainT[i]; }
             dampC = dampT; for (int i = 0; i < 4; ++i) apGC[i] = apGT[i];
-            inLpC = inLpT; lcC = lcT; preSampC = preSampT; modSampC = modSampT; widthC = widthT;
+            inLpC = inLpT; lcC = lcT; preSampC = preSampT; modSampC = modSampT; widthC = widthT; tankGC = tankGT;
             primed = true;
         }
     }
@@ -122,6 +139,7 @@ public:
         }
         dampC += (dampT - dampC) * smth;
         for (int i = 0; i < 4; ++i) apGC[i] += (apGT[i] - apGC[i]) * smth;
+        tankGC  += (tankGT  - tankGC)  * smth;
         inLpC   += (inLpT   - inLpC)   * smth;
         lcC     += (lcT     - lcC)     * smth;
         preSampC+= (preSampT- preSampC)* smth;
@@ -156,6 +174,15 @@ public:
             float dd = baseDelayC[i] + modSampC * fastSin (lfoPh[i]);
             if (dd < 1.0f) dd = 1.0f;
             float v = readFrac (line[i], lineMask[i], lineWr[i], dd);
+            // fb278 — in-loop tank diffusion allpass (Griesinger): smears every recirculation,
+            // so density builds across the whole tail. Unity-gain → RT60 untouched. Ramped coeff.
+            {
+                float td  = tank[i][(size_t) ((tankWr[i] - tankDelay[i]) & tankMask[i])];
+                float tin = v - tankGC * td;
+                tank[i][(size_t) tankWr[i]] = flush (tin);
+                tankWr[i] = (tankWr[i] + 1) & tankMask[i];
+                v = td + tankGC * tin;
+            }
             dampZ[i] = (1.0f - dampC) * v + dampC * dampZ[i];   v = dampZ[i];
             bassZ[i] = (1.0f - bassCoef) * v + bassCoef * bassZ[i];   // low band
             v = (v - bassZ[i]) + bassZ[i] * lowGainC[i];              // high + shelved low
@@ -207,17 +234,21 @@ private:
     static constexpr float baseLen48[N] = { 1699.f, 2003.f, 2399.f, 2699.f, 3011.f, 3347.f, 3701.f, 4099.f };
     static constexpr float apLen29k[4]  = { 142.f, 107.f, 379.f, 277.f };
     static constexpr float apBaseG[4]   = { 0.75f, 0.75f, 0.625f, 0.625f };
+    // fb278 — in-loop tank diffuser lengths (samples @48k): short, mutually prime, < smallest main line
+    static constexpr float tankLen48[N] = { 113.f, 157.f, 197.f, 239.f, 131.f, 179.f, 223.f, 271.f };
 
     float fs = 48000.0f, smth = 0.001f, bassCoef = 0.f, dcR = 0.999f;
     bool  primed = false;
     std::vector<float> line[N]; int lineMask[N] = {0}; int lineWr[N] = {0};
     std::vector<float> ap[4];   int apMask[4] = {0};   int apWr[4] = {0}; int apDelay[4] = {0};
+    std::vector<float> tank[N]; int tankMask[N] = {0}; int tankWr[N] = {0}; int tankDelay[N] = {0};  // fb278
     std::vector<float> pre;     int preMask = 0;       int preWr = 0;
     float dampZ[N] = {0}, bassZ[N] = {0}, lfoPh[N] = {0};
     float inLpZ = 0, lcZ = 0, dcxL = 0, dcyL = 0, dcxR = 0, dcyR = 0;
     // targets (block rate) + current (per-sample ramped)
     float baseDelayT[N] = {0}, baseDelayC[N] = {0}, gLineT[N] = {0}, gLineC[N] = {0}, lowGainT[N] = {1}, lowGainC[N] = {1};
     float dampT = 0, dampC = 0, apGT[4] = {0}, apGC[4] = {0}, inLpT = 0, inLpC = 0, lcT = 0, lcC = 0;
+    float tankGT = 0, tankGC = 0;   // fb278 — in-loop tank diffusion coeff (target / per-sample ramped)
     float preSampT = 0, preSampC = 0, modSampT = 0, modSampC = 0, widthT = 0.8f, widthC = 0.8f, modInc = 0, rt60 = 3.0f, mixExt = 0.3f;
     // param state
     float size = 0.3f, decay = 0.55f, tone = 0.5f, preMs = 20.f, diffuse = 0.7f, modDepth = 0.25f,
