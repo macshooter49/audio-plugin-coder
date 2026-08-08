@@ -16,10 +16,21 @@
 //   the ~30 ms attack: 0% = sparse/fluttery/metallic, 100% = glassy wash. The tank
 //   coeff RAMPS per-sample (click-free) and the tank delay folds into the Jot loss
 //   so RT60 stays exact (allpasses are unity-gain → decay unchanged).
+// fb279 — CHARACTER · MOD MODE · MOD · FREEZE (all wired + dramatic + click-free):
+//   • Character (8): Smooth/Random/Vintage/Cathedral/Chamber/Dark/Bright/Ethereal —
+//     each a strong bias set on decay/size/tone/damping/diffusion-floor/low-decay/
+//     width/mod → a night-and-day tonal personality. Rides the existing per-sample
+//     coeff ramps, so switching is click-free.
+//   • Mod Mode (6): Off/Subtle/Lush/Chorale scale a sine LFO (depth+rate); Random/
+//     Chaos CROSSFADE to a smoothed per-line random walk (shapeMix ramps → no click).
+//   • Mod (front toggle): master gate for the modulation (static ↔ moving).
+//   • Freeze (front toggle): feedback → ~unity + tank input cut → infinite held pad.
+//     Ramped grab (freezeCur), guaranteed stable (loop gain < 1, unity-gain allpasses).
 // PURE C++ (no JUCE): offline-validates standalone AND drops into the voice path.
 // ─────────────────────────────────────────────────────────────────────────────
 #include <vector>
 #include <cmath>
+#include <cstdint>
 
 class HallReverb
 {
@@ -51,6 +62,7 @@ public:
         }
         { int need = (int) std::ceil (0.25f * fs) + 8; int sz = 1; while (sz < need) sz <<= 1;
           pre.assign ((size_t) sz, 0.0f); preMask = sz - 1; preWr = 0; }
+        for (int i = 0; i < N; ++i) { oldRand[i] = rand11(); newRand[i] = rand11(); }   // fb279 — seed random walk
         smth = 1.0f - std::exp (-1.0f / (0.015f * fs));   // ~15 ms per-sample smoothing
         bassCoef = std::exp (-2.0f * PI * 400.0f / fs);
         dcR = 1.0f - (126.0f / fs);
@@ -80,13 +92,20 @@ public:
     void setLowDecay    (float m) { lowDecay= clampf (m, 0.25f, 2.0f); }
     void setLowCutHz    (float hz){ lowCut  = clampf (hz, 20.0f, 1000.0f); }
     void setWidth       (float v) { width   = clamp01 (v); }
+    void setCharacter   (int c)   { character = c < 0 ? 0 : (c > 7 ? 7 : c); }   // fb279
+    void setModMode     (int m)   { modMode   = m < 0 ? 0 : (m > 5 ? 5 : m); }   // Off..Chaos
+    void setModEnabled  (bool on) { modOn   = on; }                              // front Mod toggle
+    void setFreeze      (bool f)  { freezeOn = f; }                              // front Freeze toggle
 
     void updateCoefficients()
     {
-        rt60      = 0.3f * std::pow (20.0f / 0.3f, decay);
-        const float sizeScale = 0.5f + 1.3f * size;
+        const CharBias cb = CHAR[character];   // fb279 — Character voicing biases
+        rt60 = 0.3f * std::pow (20.0f / 0.3f, decay) * cb.decayMul;
+        const float sizeScale   = (0.5f + 1.3f * size) * cb.sizeMul;
+        const float diffEff     = std::max (diffuse, cb.diffFloor);                       // Character raises density floor
+        const float lowDecayEff = clampf (lowDecay * cb.lowMul, 0.25f, 3.0f);
         const float sr = fs / 48000.0f;
-        const float lowPow = 1.0f / lowDecay - 1.0f;
+        const float lowPow = 1.0f / lowDecayEff - 1.0f;
         for (int i = 0; i < N; ++i)
         {
             float d = baseLen48[i] * sr * sizeScale;
@@ -100,20 +119,29 @@ public:
             gLineT[i]   = g;
             lowGainT[i] = std::pow (g, lowPow);   // low-shelf extra gain -> low RT60 = RT60*lowDecay
         }
-        dampT = 0.9f * hiDamp;
-        for (int i = 0; i < 4; ++i) apGT[i] = diffuse * apBaseG[i];
-        tankGT = 0.7f * diffuse;   // fb278 — in-loop tank diffusion (0 = pure delay/sparse, 0.7 = glassy)
-        inLpT   = std::exp (-2.0f * PI * (1500.0f * std::pow (12.0f, tone)) / fs);   // tone: ~1.5k..18k
+        dampT = 0.9f * clamp01 (hiDamp * cb.dampMul + cb.dampAdd);                        // Character tilts HF damping
+        for (int i = 0; i < 4; ++i) apGT[i] = diffEff * apBaseG[i];
+        tankGT = 0.7f * diffEff;   // fb278 — in-loop tank diffusion (0 = pure delay/sparse, 0.7 = glassy)
+        float toneEff = clamp01 (tone * cb.toneMul + cb.toneAdd);
+        inLpT   = std::exp (-2.0f * PI * (1500.0f * std::pow (12.0f, toneEff)) / fs);     // tone: ~1.5k..18k
         lcT     = std::exp (-2.0f * PI * lowCut / fs);
         preSampT= preMs * 0.001f * fs;
-        modSampT= modDepth * 22.0f;
-        modInc  = modRate / fs;                     // rate change is phase-continuous (no click)
-        widthT  = width;
+        // ── modulation: Mod Mode scales depth+rate + selects sine vs random shape;
+        //    front Mod gates it; Character scales depth (modMul). ──
+        static constexpr float mDepth[6] = { 0.0f, 0.35f, 0.9f, 1.7f, 1.3f, 2.6f };       // Off,Subtle,Lush,Chorale,Random,Chaos
+        static constexpr float mRate [6] = { 1.0f, 0.7f,  1.0f, 0.4f, 1.0f, 1.9f };
+        float depth01 = modOn ? clampf (modDepth * mDepth[modMode] * cb.modMul, 0.0f, 2.5f) : 0.0f;
+        modSampT    = depth01 * 30.0f;                       // peak excursion (samples); Chaos ≈ wild warble
+        modInc      = (modRate * mRate[modMode]) / fs;       // phase-continuous (no click)
+        shapeMixTgt = (modMode >= 4) ? 1.0f : 0.0f;          // Random/Chaos = smoothed random walk
+        widthT      = clamp01 (width + cb.widthAdd);
+        freezeTgt   = freezeOn ? 1.0f : 0.0f;                // fb279 — infinite hold target
         if (! primed)   // first call after prepare: snap current == target (no start-up swell)
         {
             for (int i = 0; i < N; ++i) { baseDelayC[i] = baseDelayT[i]; gLineC[i] = gLineT[i]; lowGainC[i] = lowGainT[i]; }
             dampC = dampT; for (int i = 0; i < 4; ++i) apGC[i] = apGT[i];
             inLpC = inLpT; lcC = lcT; preSampC = preSampT; modSampC = modSampT; widthC = widthT; tankGC = tankGT;
+            shapeMix = shapeMixTgt; freezeCur = freezeTgt;
             primed = true;
         }
     }
@@ -145,6 +173,8 @@ public:
         preSampC+= (preSampT- preSampC)* smth;
         modSampC+= (modSampT- modSampC)* smth;
         widthC  += (widthT  - widthC)  * smth;
+        shapeMix += (shapeMixTgt - shapeMix) * smth;   // fb279 — sine<->random crossfade (click-free)
+        freezeCur+= (freezeTgt  - freezeCur)* smth;    // fb279 — freeze grab/release (click-free)
 
         float x = 0.5f * (inL + inR);
 
@@ -171,8 +201,15 @@ public:
         float sIn[N];
         for (int i = 0; i < N; ++i)
         {
-            float dd = baseDelayC[i] + modSampC * fastSin (lfoPh[i]);
+            // modulation excursion: crossfade sine <-> smoothed per-line random walk (Mod Mode).
+            float ph = lfoPh[i];
+            float sineV  = fastSin (ph);
+            float ss     = ph * ph * (3.0f - 2.0f * ph);                  // smoothstep across the cycle
+            float noiseV = oldRand[i] + (newRand[i] - oldRand[i]) * ss;
+            float exc = modSampC * ((1.0f - shapeMix) * sineV + shapeMix * noiseV);
+            float dd  = baseDelayC[i] + exc;
             if (dd < 1.0f) dd = 1.0f;
+            float maxd = (float) lineMask[i] - 4.0f; if (dd > maxd) dd = maxd;   // OOB guard (wild Chaos)
             float v = readFrac (line[i], lineMask[i], lineWr[i], dd);
             // fb278 — in-loop tank diffusion allpass (Griesinger): smears every recirculation,
             // so density builds across the whole tail. Unity-gain → RT60 untouched. Ramped coeff.
@@ -185,14 +222,20 @@ public:
             }
             dampZ[i] = (1.0f - dampC) * v + dampC * dampZ[i];   v = dampZ[i];
             bassZ[i] = (1.0f - bassCoef) * v + bassCoef * bassZ[i];   // low band
-            v = (v - bassZ[i]) + bassZ[i] * lowGainC[i];              // high + shelved low
-            sIn[i] = gLineC[i] * v;
-            lfoPh[i] += modInc; if (lfoPh[i] >= 1.0f) lfoPh[i] -= 1.0f;
+            // fb279 — Freeze pushes loop loss + bass gain toward unity so the tail holds forever.
+            float loopG = gLineC[i]   + (FREEZE_G - gLineC[i])   * freezeCur;
+            float lowG  = lowGainC[i] + (FREEZE_G - lowGainC[i]) * freezeCur;
+            v = (v - bassZ[i]) + bassZ[i] * lowG;                     // high + shelved low
+            sIn[i] = loopG * v;
+            // advance phase; on wrap pick a fresh random target (decorrelated per line)
+            lfoPh[i] += modInc;
+            if (lfoPh[i] >= 1.0f) { lfoPh[i] -= 1.0f; oldRand[i] = newRand[i]; newRand[i] = rand11(); }
         }
         // lossless mix (fast Walsh-Hadamard) * 1/sqrt(8)
         float m[N]; for (int i = 0; i < N; ++i) m[i] = sIn[i];
         fwht8 (m);
-        const float hs = 0.35355339f, inG = 0.5f;
+        const float hs = 0.35355339f;
+        const float inG = 0.5f * (1.0f - freezeCur);   // fb279 — Freeze cuts tank input → clean infinite hold
         for (int i = 0; i < N; ++i)
         {
             float w = inG * x + hs * m[i];
@@ -229,13 +272,32 @@ private:
                 { float u = a[j], v = a[j + len]; a[j] = u + v; a[j + len] = u - v; }
     }
     static inline float fastSin (float ph01) { return std::sin (2.0f * PI * ph01); }
+    inline float rand11()   // fb279 — cheap deterministic xorshift, returns ~[-1,1]
+    {
+        rngState ^= rngState << 13; rngState ^= rngState >> 17; rngState ^= rngState << 5;
+        return (float) ((rngState >> 8) & 0xFFFFFFu) * (1.0f / 8388607.5f) - 1.0f;
+    }
 
     static constexpr float PI = 3.14159265358979f;
+    static constexpr float FREEZE_G = 0.9999f;   // fb279 — freeze loop gain (RT60 ~ tens of min = "infinite", stable)
     static constexpr float baseLen48[N] = { 1699.f, 2003.f, 2399.f, 2699.f, 3011.f, 3347.f, 3701.f, 4099.f };
     static constexpr float apLen29k[4]  = { 142.f, 107.f, 379.f, 277.f };
     static constexpr float apBaseG[4]   = { 0.75f, 0.75f, 0.625f, 0.625f };
     // fb278 — in-loop tank diffuser lengths (samples @48k): short, mutually prime, < smallest main line
     static constexpr float tankLen48[N] = { 113.f, 157.f, 197.f, 239.f, 131.f, 179.f, 223.f, 271.f };
+    // fb279 — Character voicing biases (8): decayMul, sizeMul, toneMul, toneAdd, dampMul, dampAdd,
+    //   diffFloor, lowMul, widthAdd, modMul. Smooth = neutral reference (index 0).
+    struct CharBias { float decayMul, sizeMul, toneMul, toneAdd, dampMul, dampAdd, diffFloor, lowMul, widthAdd, modMul; };
+    static constexpr CharBias CHAR[8] = {
+        /* Smooth    */ { 1.00f, 1.00f, 1.00f, 0.00f, 1.00f, 0.00f, 0.00f, 1.00f,  0.00f, 1.0f },
+        /* Random    */ { 1.00f, 1.05f, 1.00f, 0.00f, 1.00f, 0.05f, 0.00f, 1.00f,  0.10f, 1.5f },
+        /* Vintage   */ { 0.85f, 0.95f, 0.50f, 0.00f, 1.00f, 0.28f, 0.15f, 1.30f, -0.10f, 1.3f },
+        /* Cathedral */ { 1.60f, 1.30f, 1.10f, 0.05f, 1.00f,-0.05f, 0.72f, 1.50f,  0.15f, 1.0f },
+        /* Chamber   */ { 0.70f, 0.75f, 1.00f, 0.00f, 1.00f, 0.05f, 0.00f, 0.80f, -0.05f, 0.9f },
+        /* Dark      */ { 1.00f, 1.00f, 0.35f, 0.00f, 1.00f, 0.42f, 0.00f, 1.20f,  0.00f, 1.0f },
+        /* Bright    */ { 1.10f, 1.00f, 1.70f, 0.15f, 0.30f, 0.00f, 0.00f, 0.70f,  0.10f, 1.0f },
+        /* Ethereal  */ { 1.40f, 1.10f, 1.30f, 0.05f, 0.70f, 0.00f, 0.72f, 0.90f,  0.20f, 2.2f },
+    };
 
     float fs = 48000.0f, smth = 0.001f, bassCoef = 0.f, dcR = 0.999f;
     bool  primed = false;
@@ -250,6 +312,13 @@ private:
     float dampT = 0, dampC = 0, apGT[4] = {0}, apGC[4] = {0}, inLpT = 0, inLpC = 0, lcT = 0, lcC = 0;
     float tankGT = 0, tankGC = 0;   // fb278 — in-loop tank diffusion coeff (target / per-sample ramped)
     float preSampT = 0, preSampC = 0, modSampT = 0, modSampC = 0, widthT = 0.8f, widthC = 0.8f, modInc = 0, rt60 = 3.0f, mixExt = 0.3f;
+    // fb279 — Character / Mod Mode / Mod / Freeze runtime state
+    int   character = 0, modMode = 2;                    // Smooth / Lush (defaults)
+    bool  modOn = true, freezeOn = false;
+    float shapeMix = 0, shapeMixTgt = 0;                 // 0 = sine, 1 = random walk (ramped crossfade)
+    float freezeCur = 0, freezeTgt = 0;                  // infinite-hold amount (ramped grab/release)
+    float oldRand[N] = {0}, newRand[N] = {0};            // per-line random-walk endpoints
+    std::uint32_t rngState = 0x9E3779B9u;                // xorshift seed (deterministic)
     // param state
     float size = 0.3f, decay = 0.55f, tone = 0.5f, preMs = 20.f, diffuse = 0.7f, modDepth = 0.25f,
           modRate = 0.4f, hiDamp = 0.35f, lowDecay = 1.0f, lowCut = 20.f, width = 0.8f;

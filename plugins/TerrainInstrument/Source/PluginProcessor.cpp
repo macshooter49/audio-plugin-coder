@@ -3393,6 +3393,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     for (const char* rid : { ParameterIDs::SYN_RVB_SRC_A, ParameterIDs::SYN_RVB_SRC_B, ParameterIDs::SYN_RVB_SRC_C,
                              ParameterIDs::SYN_RVB_SRC_D, ParameterIDs::SYN_RVB_SRC_SUB, ParameterIDs::SYN_RVB_SRC_NOISE })
         layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { rid, 1 }, juce::String (rid), false));
+    // fb279 — front Mod / Freeze toggles (Mod default ON so the reverb moves; Freeze default OFF)
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_MOD,    1 }, "Reverb Mod",    true));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_FREEZE, 1 }, "Reverb Freeze", false));
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
@@ -6605,6 +6608,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 hallReverb.setLowDecay    (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 1.75f);
                 hallReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
                 hallReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                // fb279 — Character (8) / Mod Mode (6) = INDEX per CLAUDE.md choice rule; front Mod + Freeze toggles.
+                hallReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                hallReverb.setModMode     ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                hallReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                hallReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
                 hallReverb.updateCoefficients();
                 const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
                 hallRvbWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
