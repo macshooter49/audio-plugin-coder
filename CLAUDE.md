@@ -191,6 +191,16 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
   fully wet; "loud" = LOUD). No control whose effect you can't perceive; calibrate range/curve so
   the full sweep reads (not unusable at 2–10%, but bold at the top). Serum 2 is the bar. Full text:
   memory `feedback-dramaticism-parameters-hardrule`.
+- **🔬 PERCEPTUAL TEST HARNESS (Max, PERMANENT — the fb283 law).** EVERY parameter you build or change is
+  validated with an OFFLINE PERCEPTUAL harness that tracks **HEARING** — not a visual before/after, not
+  sample-difference. Measure **phase-INDEPENDENT** metrics that correlate with the ear: **magnitude-spectrum
+  change, spectral centroid (brightness), HF-ratio, spectral-flux (movement), RT60, transient-chirp, THD** —
+  and PROVE each control is night-and-day (dramatic at 100%) with real numbers BEFORE reporting to Max. ⚠️
+  **Sample-difference RMS is BANNED as a dramaticism metric**: allpass / phase-only changes give a huge RMS but
+  are INAUDIBLE — fb282 Plate Dispersion measured "102% divergence" and Max heard *nothing* (fb283 caught it:
+  the real magnitude-spectrum change was 0.02 dB). Run every knob 0→100 and each dropdown option through the
+  harness, get results, confirm "this is different / this is dramatic," THEN ship. Reuse the metrics in
+  `scratchpad/rvb_perceptual.cpp` + `rvb_stability.cpp`. Memory: `feedback-perceptual-test-harness-hardrule`.
 - **📚 LEARN FROM THE GREATS (Max, PERMANENT).** For every effect, study **Serum 2 FIRST** (its
   per-type param sets — e.g. reverb Vintage ~8 knobs, Basin ~3 — and what each does), then Arturia /
   Valhalla / Phase Plant / Omnisphere / GitHub+academic. A reference's param COUNT ≠ ours (fixed 8

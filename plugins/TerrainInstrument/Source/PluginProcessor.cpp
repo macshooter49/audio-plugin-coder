@@ -3653,6 +3653,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     hallReverb.prepare (sampleRate);   // fb276 — synth FX-rack Hall reverb
     roomReverb.prepare (sampleRate);   // fb281 — synth FX-rack Room reverb
     plateReverb.prepare (sampleRate);  // fb282 — synth FX-rack Plate reverb
+    springReverb.prepare (sampleRate); // fb284 — synth FX-rack Spring reverb
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
     reverbSendBuf_.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);   // fb280 — per-osc no-bleed send bus
@@ -6626,7 +6627,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // fb281 — TYPE ROUTING (Hall=0 / Room=1; other types fall back to Hall until built). A type
             // change dips the wet through 0 (click-free), then swaps + resets the incoming engine.
             int pend = (int) *rawParam (ParameterIDs::SYN_RVB_TYPE);
-            if (pend != 0 && pend != 1 && pend != 2) pend = 0;   // Hall/Room/Plate have DSP; others fall back to Hall
+            if (pend < 0 || pend > 3) pend = 0;   // Hall/Room/Plate/Spring have DSP; others fall back to Hall
             if (activeRvbType_ < 0) activeRvbType_ = pend;   // first block: adopt immediately (no dip)
             if (pend != activeRvbType_)
             {
@@ -6634,7 +6635,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (hallRvbEnv_ < 1.0e-3f)   // faded out → commit the swap on the (now silent) engines
                 {
                     activeRvbType_ = pend;
-                    if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
+                    if (pend == 3) springReverb.reset(); else if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
                     rvbSwapping_ = false;
                 }
             }
@@ -6642,7 +6643,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             hallEnvT_ = (hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
             if (hallRouteActive_)
             {
-                if (activeRvbType_ == 2)
+                if (activeRvbType_ == 3)
+                {
+                    // ── SPRING — shared slots: SIZE→Tension · DIFFUSE→Transition · MODDEPTH→Shake · MODRATE→Dispersion
+                    //    HIDAMP→Damping · LOWDECAY→Drive · MODMODE→Springs(count). The boing = dispersive allpass loop. ──
+                    springReverb.setTension    (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                    springReverb.setDecay      (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                    springReverb.setTone       (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
+                    springReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 150.0f);
+                    springReverb.setTransition (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                    springReverb.setShake      (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                    springReverb.setDispersion (rawParam (ParameterIDs::SYN_RVB_MODRATE)->load());
+                    springReverb.setDamping    (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
+                    springReverb.setDrive      (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());
+                    springReverb.setLowCutHz   (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
+                    springReverb.setWidth      (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                    springReverb.setCharacter  ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                    springReverb.setSprings    ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                    springReverb.setModEnabled (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    springReverb.setFreeze     (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
+                    springReverb.updateCoefficients();
+                }
+                else if (activeRvbType_ == 2)
                 {
                     // ── PLATE — shared slots: MODRATE→Dispersion · MODMODE→Material · HIDAMP→Damping · LOWDECAY→Bass Decay ──
                     plateReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
@@ -6717,7 +6739,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
             const float sgL = rawL * outputGain, sgR = rawR * outputGain;
             float rl, rr;
-            if      (activeRvbType_ == 2) plateReverb.processSample (sgL, sgR, rl, rr);   // fb282 — active engine
+            if      (activeRvbType_ == 3) springReverb.processSample (sgL, sgR, rl, rr);   // fb284 — active engine
+            else if (activeRvbType_ == 2) plateReverb.processSample (sgL, sgR, rl, rr);   // fb282
             else if (activeRvbType_ == 1) roomReverb.processSample  (sgL, sgR, rl, rr);
             else                          hallReverb.processSample  (sgL, sgR, rl, rr);
             const float e = hallRvbEnv_, duck = e * (1.0f - hallRvbDry_), wet = e * hallRvbWet_;
