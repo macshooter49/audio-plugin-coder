@@ -9,6 +9,7 @@
 #include "TapeLoopProcessor.h"
 #include "SpaceReverb.h"
 #include "HallReverb.h"        // fb276 — synth FX-rack Hall reverb (8-line Jot/Hadamard FDN)
+#include "RoomReverb.h"        // fb281 — synth FX-rack Room reverb (early reflections + short dense FDN tail)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
 #include "ParametricEQ.h"
@@ -1470,6 +1471,9 @@ private:
     // Space reverb (stereo — single instance handles both channels)
     SpaceReverb spaceReverb;
     HallReverb  hallReverb;                       // fb276/277 — synth FX-rack reverb (Hall). Gated additive send, click-free.
+    RoomReverb  roomReverb;                       // fb281 — Room reverb (early reflections + short dense tail)
+    int   activeRvbType_ = -1;                    // 0 = Hall, 1 = Room (which engine is live); -1 = uninitialised
+    bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block
     float hallRvbEnv_ = 0.0f, hallEnvT_ = 0.0f;   // fb277 — on/off FADE env (0 = fully bypassed) so route toggles don't click
     float hallRvbDry_ = 1.0f, hallRvbWet_ = 0.0f; // equal-power mix — RAMPED per sample (no zipper)

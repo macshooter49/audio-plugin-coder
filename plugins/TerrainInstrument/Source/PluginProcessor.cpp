@@ -3651,6 +3651,8 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     tapeLoop.prepare(sampleRate, samplesPerBlock);
     spaceReverb.prepare(sampleRate, samplesPerBlock);
     hallReverb.prepare (sampleRate);   // fb276 — synth FX-rack Hall reverb
+    roomReverb.prepare (sampleRate);   // fb281 — synth FX-rack Room reverb
+    activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
     reverbSendBuf_.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);   // fb280 — per-osc no-bleed send bus
     reverbSendBuf_.clear();
@@ -6620,26 +6622,65 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // env fades to 0 ⇒ fully bypassed. Pre-makeup so the limiter catches wet peaks.
         if (i == 0)
         {
-            hallEnvT_ = hallRouteActive_ ? 1.0f : 0.0f;
+            // fb281 — TYPE ROUTING (Hall=0 / Room=1; other types fall back to Hall until built). A type
+            // change dips the wet through 0 (click-free), then swaps + resets the incoming engine.
+            int pend = (int) *rawParam (ParameterIDs::SYN_RVB_TYPE);
+            if (pend != 0 && pend != 1) pend = 0;
+            if (activeRvbType_ < 0) activeRvbType_ = pend;   // first block: adopt immediately (no dip)
+            if (pend != activeRvbType_)
+            {
+                rvbSwapping_ = true;
+                if (hallRvbEnv_ < 1.0e-3f)   // faded out → commit the swap on the (now silent) engines
+                {
+                    activeRvbType_ = pend;
+                    if (pend == 1) roomReverb.reset(); else hallReverb.reset();
+                    rvbSwapping_ = false;
+                }
+            }
+            else rvbSwapping_ = false;
+            hallEnvT_ = (hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
             if (hallRouteActive_)
             {
-                hallReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                hallReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                hallReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                hallReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 250.0f);
-                hallReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                hallReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                hallReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
-                hallReverb.setHighDamping (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                hallReverb.setLowDecay    (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 1.75f);
-                hallReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                hallReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                // fb279 — Character (8) / Mod Mode (6) = INDEX per CLAUDE.md choice rule; front Mod + Freeze toggles.
-                hallReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                hallReverb.setModMode     ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                hallReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                hallReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                hallReverb.updateCoefficients();
+                if (activeRvbType_ == 1)
+                {
+                    // ── ROOM — shared slots: MODRATE→Reflections · MODMODE→Shape · HIDAMP→Damping · LOWDECAY→Bass Decay ──
+                    roomReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                    roomReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                    roomReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
+                    roomReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 120.0f);
+                    roomReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                    roomReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                    roomReverb.setReflections (rawParam (ParameterIDs::SYN_RVB_MODRATE)->load());
+                    roomReverb.setDamping     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
+                    roomReverb.setBassDecay   (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 2.25f);
+                    roomReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
+                    roomReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                    roomReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                    roomReverb.setShape       ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                    roomReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    roomReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
+                    roomReverb.updateCoefficients();
+                }
+                else
+                {
+                    // ── HALL ──
+                    hallReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                    hallReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                    hallReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
+                    hallReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 250.0f);
+                    hallReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                    hallReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                    hallReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
+                    hallReverb.setHighDamping (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
+                    hallReverb.setLowDecay    (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 1.75f);
+                    hallReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
+                    hallReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                    hallReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                    hallReverb.setModMode     ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                    hallReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    hallReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
+                    hallReverb.updateCoefficients();
+                }
                 const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
                 hallRvbWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
                 hallRvbDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
@@ -6655,7 +6696,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
             const float sgL = rawL * outputGain, sgR = rawR * outputGain;
             float rl, rr;
-            hallReverb.processSample (sgL, sgR, rl, rr);
+            if (activeRvbType_ == 1) roomReverb.processSample (sgL, sgR, rl, rr);   // fb281 — active engine
+            else                     hallReverb.processSample (sgL, sgR, rl, rr);
             const float e = hallRvbEnv_, duck = e * (1.0f - hallRvbDry_), wet = e * hallRvbWet_;
             leftChannel[i]  += wet * rl - duck * sgL;    // add wet; duck ONLY the routed dry (unrouted untouched)
             if (rightChannel != nullptr)
