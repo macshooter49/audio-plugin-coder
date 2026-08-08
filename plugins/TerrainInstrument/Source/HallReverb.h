@@ -128,10 +128,13 @@ public:
         preSampT= preMs * 0.001f * fs;
         // ── modulation: Mod Mode scales depth+rate + selects sine vs random shape;
         //    front Mod gates it; Character scales depth (modMul). ──
-        static constexpr float mDepth[6] = { 0.0f, 0.35f, 0.9f, 1.7f, 1.3f, 2.6f };       // Off,Subtle,Lush,Chorale,Random,Chaos
-        static constexpr float mRate [6] = { 1.0f, 0.7f,  1.0f, 0.4f, 1.0f, 1.9f };
-        float depth01 = modOn ? clampf (modDepth * mDepth[modMode] * cb.modMul, 0.0f, 2.5f) : 0.0f;
-        modSampT    = depth01 * 30.0f;                       // peak excursion (samples); Chaos ≈ wild warble
+        // fb283 — DEEPER + more distinct modes (movement was barely above the static floor). Each mode is
+        // its own character: Off=static · Subtle=slow shimmer · Lush=classic wide chorus · Chorale=deep+slow
+        // ensemble detune · Random=evolving random shimmer · Chaos=fast wild warble.
+        static constexpr float mDepth[6] = { 0.0f, 0.50f, 1.15f, 2.00f, 1.60f, 3.00f };   // Off,Subtle,Lush,Chorale,Random,Chaos
+        static constexpr float mRate [6] = { 1.0f, 0.55f, 1.10f, 0.38f, 0.95f, 2.40f };
+        float depth01 = modOn ? clampf (modDepth * mDepth[modMode] * cb.modMul, 0.0f, 3.0f) : 0.0f;
+        modSampT    = depth01 * 50.0f;                       // peak excursion (samples); deep enough to clearly hear
         modInc      = (modRate * mRate[modMode]) / fs;       // phase-continuous (no click)
         shapeMixTgt = (modMode >= 4) ? 1.0f : 0.0f;          // Random/Chaos = smoothed random walk
         widthT      = clamp01 (width + cb.widthAdd);

@@ -10,9 +10,11 @@
 //     bright, smooth plate sheen (no early reflections — the opposite of a Room).
 // Enhancements over textbook Dattorro (all click-free — fractional reads + per-sample
 // glide, like the Hall/Room engines):
-//   • Dispersion — a cascade of 1st-order allpasses on the tank feedback = the metallic
-//     frequency-dependent "chirp"/ring (Thiran-style). CPU-gated (skipped at 0).
-//   • Character (8) plate voicings + Material (6) metals — two bias layers.
+//   • Dispersion (fb283 — now AUDIBLE) = allpass shimmer/boing (phase) + a METALLIC SPARKLE:
+//     a ramped RBJ band-pass resonance whose gain rides the knob → a bright metallic "zing"
+//     on all material (the fb282 pure-allpass version was magnitude-flat = inaudible). Out of loop.
+//   • Character (8) plate voicings + Material (6) metals — wide, archetypal signatures
+//     (brightness+decay+sparkle each distinct), read out via a bold ±13 dB brightness TILT.
 //   • Size glides all tank lengths + tap offsets; Bass Decay low-shelf; Mod; Freeze.
 // PURE C++ (no JUCE): offline-validates standalone AND drops into the voice path.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,6 +43,11 @@ public:
         smth = 1.0f - std::exp (-1.0f / (0.015f * fs));
         bassCoef = std::exp (-2.0f * PI * 350.0f / fs);
         dcR = 1.0f - (126.0f / fs);
+        // fb283 — metallic-sparkle resonator: RBJ band-pass @ ~6.2 kHz, moderate Q (rings, not whistles).
+        { float f0 = 6200.0f, Q = 1.7f, w0 = 2.0f * PI * f0 / fs, cw = std::cos (w0), sw = std::sin (w0);
+          float al = sw / (2.0f * Q), a0 = 1.0f + al;
+          rb0 = al / a0; rb1 = 0.0f; rb2 = -al / a0; ra1 = (-2.0f * cw) / a0; ra2 = (1.0f - al) / a0; }
+        tiltCoef = 1.0f - std::exp (-2.0f * PI * 1250.0f / fs);   // fb283 — brightness-tilt crossover ~1.8 kHz
         reset();
         primed = false;
         updateCoefficients();
@@ -57,6 +64,8 @@ public:
         inLpZ = lcZ = bassLz = bassRz = dampLz = dampRz = 0.0f; dcxL = dcyL = dcxR = dcyR = 0.0f;
         for (int i = 0; i < NDISP; ++i) { dzL[i] = dzR[i] = 0.0f; }
         for (int i = 0; i < NDO; ++i)   { doL[i] = doR[i] = 0.0f; }
+        rxL1 = rxL2 = ryL1 = ryL2 = rxR1 = rxR2 = ryR1 = ryR2 = 0.0f;   // fb283 — sparkle resonator state
+        tiltLpL = tiltLpR = 0.0f;                                        // fb283 — brightness-tilt state
         lfoPhL = 0.0f; lfoPhR = 0.37f;
     }
 
@@ -93,12 +102,26 @@ public:
         dampT = 0.05f + 0.9f * dampEff;                              // one-pole LP coeff in the tank
         float toneEff = clamp01 (tone * cb.toneMul * mb.tone + cb.toneAdd);
         inLpT = std::exp (-2.0f * PI * (1400.0f * std::pow (13.0f, toneEff)) / fs);   // bandwidth ~1.4k..18k
+        // fb283 — BOLD brightness TILT on the output: the tank's gentle one-pole damping alone barely
+        // moves the tail centroid (metals/Tone read weak). A ±~10 dB high/low tilt driven by the same
+        // brightness makes Material (aluminum-bright ↔ copper-dark), Tone, and Character night-and-day.
+        // Identity at toneEff=0.5 → the default sound is untouched. Out of loop → stable; ramped → click-free.
+        float tilt = (toneEff - 0.5f) * 2.0f;                 // -1 dark .. +1 bright
+        hiGainT = std::pow (4.8f, tilt);                      // highs: ~-13 dB .. +13 dB (night-and-day)
+        loGainT = std::pow (2.1f, -tilt);                     // lows: opposite tilt (warmth on dark)
         lcT   = std::exp (-2.0f * PI * lowCut / fs);
         float diffEff = clamp01 (std::max (diffuse, cb.diffFloor) * mb.diff);
         g1T = 0.70f * diffEff;                                       // decay-diffusion 1 (mod allpass)
         g2T = 0.50f * diffEff;                                       // decay-diffusion 2
         idGT = diffEff;                                             // input diffuser scale
-        dispCoefT = clampf (disp * cb.dispMul * mb.disp, 0.0f, 1.0f) * 0.62f;   // 1st-order allpass coeff
+        // fb283 — Dispersion is now AUDIBLE on all material. It splits into two layers:
+        //  (a) allpass shimmer/boing (phase — inharmonic detune + transient chirp), and
+        //  (b) a metallic resonant SPARKLE: a ringing HF peak whose gain rides Dispersion, so the
+        //      knob is night-and-day (0 = clean plate, 100% = bright shimmery metal). Distinct from
+        //      Tone/Material (broadband) — this is a narrow resonant zing. Out of the loop → stable.
+        float dispAmt = clampf (disp * cb.dispMul * mb.disp, 0.0f, 1.0f);
+        dispCoefT   = dispAmt * 0.58f;                              // in/out allpass shimmer (phase character)
+        dispBrightT = dispAmt * 3.2f;                              // resonant sparkle add-gain (measurable + audible)
         preSampT = preMs * 0.001f * fs;
         // bass-decay low-shelf: low band reaches RT60×bassMul
         float bassEff = clampf (bassMul * cb.lowMul, 0.25f, 3.0f);
@@ -111,7 +134,8 @@ public:
         if (! primed)
         {
             sizeScaleC = sizeScaleT; decayC = decayT; dampC = dampT; inLpC = inLpT; lcC = lcT;
-            g1C = g1T; g2C = g2T; idGC = idGT; dispCoefC = dispCoefT; preSampC = preSampT;
+            g1C = g1T; g2C = g2T; idGC = idGT; dispCoefC = dispCoefT; dispBrightC = dispBrightT; preSampC = preSampT;
+            hiGainC = hiGainT; loGainC = loGainT;
             lowGainC = lowGainT; modSampC = modSampT; widthC = widthT; freezeCur = freezeTgt;
             primed = true;
         }
@@ -135,6 +159,9 @@ public:
         g2C        += (g2T        - g2C)        * smth;
         idGC       += (idGT       - idGC)       * smth;
         dispCoefC  += (dispCoefT  - dispCoefC)  * smth;
+        dispBrightC+= (dispBrightT- dispBrightC) * smth;
+        hiGainC    += (hiGainT    - hiGainC)     * smth;
+        loGainC    += (loGainT    - loGainC)     * smth;
         preSampC   += (preSampT   - preSampC)   * smth;
         lowGainC   += (lowGainT   - lowGainC)   * smth;
         modSampC   += (modSampT   - modSampC)   * smth;
@@ -202,8 +229,9 @@ public:
                           - readFrac (del1R, del1Rmask, del1Rwr, 2111.f*S) - readFrac (dif2R, dif2Rmask, dif2Rwr, 335.f*S)
                           - readFrac (del2R, del2Rmask, del2Rwr, 121.f*S) );
 
-        // output dispersion — directly colours the wet with the metallic frequency-dependent chirp
-        // (the audible plate "ring"). In-loop dispersion shapes the tail; this makes it dramatic + direct.
+        // output dispersion allpasses — phase-only (magnitude-flat): the inharmonic shimmer +
+        // transient "boing" character. Audible on transients but NOT on a diffuse tail (that was
+        // fb282's mistake — RMS moved, the ear didn't). The audible/measurable sparkle is below.
         if (dispCoefC > 0.001f)
             for (int i = 0; i < NDO; ++i)
             {
@@ -211,6 +239,21 @@ public:
                 float a = c * yl + doL[i]; doL[i] = yl - c * a; yl = a;
                 float b = c * yr + doR[i]; doR[i] = yr - c * b; yr = b;
             }
+        // fb283 — METALLIC SPARKLE: a ringing HF resonance (RBJ band-pass, fixed coeffs) added with
+        // a gain that rides Dispersion. THIS is what you hear — a bright metallic "zing" that grows
+        // with the knob on ANY material (sustained + transient) and MOVES the spectrum (measurable).
+        // Out of the feedback loop → unconditionally stable; gain ramps → click-free; 0 = identity.
+        if (dispBrightC > 1.0e-4f)
+        {
+            float bpL = rb0*yl + rb1*rxL1 + rb2*rxL2 - ra1*ryL1 - ra2*ryL2;
+            rxL2 = rxL1; rxL1 = yl; ryL2 = ryL1; ryL1 = flush (bpL); yl += dispBrightC * bpL;
+            float bpR = rb0*yr + rb1*rxR1 + rb2*rxR2 - ra1*ryR1 - ra2*ryR2;
+            rxR2 = rxR1; rxR1 = yr; ryR2 = ryR1; ryR1 = flush (bpR); yr += dispBrightC * bpR;
+        }
+        // fb283 — brightness TILT (Material/Tone/Character): one-pole split @ ~1.8 kHz, recombine with
+        // high/low gains. Identity when hiGain=loGain=1 (toneEff 0.5). Bold, stable, click-free.
+        tiltLpL += (yl - tiltLpL) * tiltCoef; { float hi = yl - tiltLpL; yl = tiltLpL * loGainC + hi * hiGainC; }
+        tiltLpR += (yr - tiltLpR) * tiltCoef; { float hi = yr - tiltLpR; yr = tiltLpR * loGainC + hi * hiGainC; }
 
         // advance all tank write pointers + LFOs
         dif1Lwr = (dif1Lwr + 1) & dif1Lmask; dif1Rwr = (dif1Rwr + 1) & dif1Rmask;
@@ -265,13 +308,15 @@ private:
     };
     // Plate Material (6 metals): tone, damp, disp, diff, decay multipliers (dense metals ring longer).
     struct MatBias { float tone, damp, disp, diff, decay; };
+    // fb283 — WIDE, archetypal metals: tone (input bandwidth) + damp (tank brightness) move TOGETHER so
+    // brightness reads on the tail, decay sets ring length, disp sets each metal's metallic sparkle.
     static constexpr MatBias MAT[6] = {
-        /* Steel    */ { 1.00f, 1.00f, 1.00f, 1.00f, 1.00f },
-        /* Gold     */ { 1.15f, 0.95f, 0.90f, 1.10f, 1.10f },
-        /* Aluminum */ { 1.75f, 0.55f, 1.10f, 0.95f, 0.72f },
-        /* Brass    */ { 0.80f, 1.10f, 1.30f, 1.15f, 1.40f },
-        /* Copper   */ { 0.45f, 1.55f, 0.85f, 1.00f, 1.18f },
-        /* Chrome   */ { 1.55f, 0.65f, 1.45f, 1.00f, 0.82f },
+        /* Steel    */ { 1.00f, 1.00f, 1.00f, 1.00f, 1.00f },   // balanced reference
+        /* Gold     */ { 0.72f, 1.30f, 0.60f, 1.18f, 1.30f },   // warm · smooth · long ring
+        /* Aluminum */ { 1.95f, 0.30f, 1.55f, 0.90f, 0.58f },   // bright · zingy · short (light metal)
+        /* Brass    */ { 0.60f, 1.20f, 1.25f, 1.20f, 1.75f },   // dark · resonant · longest ring
+        /* Copper   */ { 0.46f, 1.80f, 0.50f, 1.05f, 1.16f },   // mellow · darkest · medium
+        /* Chrome   */ { 2.10f, 0.25f, 1.80f, 0.95f, 0.64f },   // brilliant · glassy · tight
     };
 
     float fs = 48000.0f, scl = 1.613f, smth = 0.001f, bassCoef = 0.f, dcR = 0.999f;
@@ -285,6 +330,12 @@ private:
     // targets + ramped
     float sizeScaleT=1, sizeScaleC=1, decayT=0.3f, decayC=0.3f, dampT=0.5f, dampC=0.5f, inLpT=0, inLpC=0, lcT=0, lcC=0;
     float g1T=0.7f, g1C=0.7f, g2T=0.5f, g2C=0.5f, idGT=1, idGC=1, dispCoefT=0, dispCoefC=0, preSampT=0, preSampC=0;
+    float dispBrightT=0, dispBrightC=0;                 // fb283 — metallic sparkle add-gain (ramped)
+    float hiGainT=1, hiGainC=1, loGainT=1, loGainC=1, tiltCoef=0.3f;   // fb283 — brightness tilt (ramped)
+    float tiltLpL=0, tiltLpR=0;                         // fb283 — tilt one-pole split state
+    // fb283 — metallic resonance: fixed RBJ band-pass coeffs (computed in prepare) + per-channel DF-I state
+    float rb0=0, rb1=0, rb2=0, ra1=0, ra2=0;
+    float rxL1=0, rxL2=0, ryL1=0, ryL2=0, rxR1=0, rxR2=0, ryR1=0, ryR2=0;
     float lowGainT=1, lowGainC=1, modSampT=0, modSampC=0, widthT=0.8f, widthC=0.8f, modInc=0, rt60=2.0f, mixExt=0.3f;
     float freezeCur=0, freezeTgt=0;
     // param state
