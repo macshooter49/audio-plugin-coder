@@ -201,6 +201,30 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
   the real magnitude-spectrum change was 0.02 dB). Run every knob 0→100 and each dropdown option through the
   harness, get results, confirm "this is different / this is dramatic," THEN ship. Reuse the metrics in
   `scratchpad/rvb_perceptual.cpp` + `rvb_stability.cpp`. Memory: `feedback-perceptual-test-harness-hardrule`.
+- **🎚️➡️🌫️ SIGNAL CHAIN — FILTER BEFORE EFFECTS (Max, PERMANENT).** The per-osc path is **engine → FILTER →
+  effects**. Any effect send (reverb, etc.) taps the **POST-filter** signal, NEVER the raw pre-filter osc.
+  Routing osc A through a filter AND to a reverb must send the **FILTERED** A (no-bleed preserved: unrouted
+  oscs stay out). (fb280 bug: the send tapped pre-filter → filtered oscs sent a dry "blind" signal.)
+- **🔘 POWER/BYPASS GATES EVERYTHING (Max, PERMANENT).** An effect's on/off (power pill) FULLY bypasses it AND
+  disables its per-osc routing — power OFF ⇒ nothing passes, regardless of the A/B/C/D/S/N route pills. The
+  routing must OBEY the power button; you never turn an effect off by manually clearing its (already-grayed) routes.
+- **🎛️🔗 MOD IS A MATCHED PAIR (Max, PERMANENT).** Mod Depth + Mod Rate go together or not at all — never a lone
+  one (fb285: Plate had Mod Depth with no Mod Rate = dead/confusing). A type has BOTH or NEITHER; a front "Mod"
+  pill exists ONLY where both are present. Mod is NOT auto-on every type — most sounds don't want reverb mod;
+  leave rich modulation to the types it defines (Hall/Digital), use Terrain-Patcher wow/flutter for the rest.
+- **🎨 TYPE-UNIQUE CONTROLS + PILLS (Max, PERMANENT).** Every reverb/effect type shares the CHASSIS (header
+  centerline, boxes, visual identity, framework) but its **DSP + params + front pills are UNIQUE to its
+  character** — don't force the same param set / same two pills on every type. No dead/obsolete params anywhere;
+  each type's 8 back knobs + its front pills must all do something real for THAT type (e.g., Digital→Mod pill;
+  Spring→no Mod so a different pill). Freeze can be universal; the other pill(s) are per-character.
+- **🔇🚫 NO NOISE IN REVERBS (Max, PERMANENT)** unless it's NATURAL to the algorithm (a plate's metallic
+  character) OR fully controlled by a param (e.g., Spring **Shake**) — and at that param = 0, **ZERO noise**. No
+  uncontrollable hiss/rattle baked into any character. We have noise engines + the Terrain Patcher for noise; a
+  reverb is not where noise belongs.
+- **🎯 PARAMS PLAY THEIR ROLES (Max, PERMANENT).** Every param must AUDIBLY change the sound in its own lane and
+  do its actual JOB — a **decay** param changes the DECAY (per-band ring time), NOT act as a static EQ; validate
+  each with the perceptual harness. Prefer ESSENTIAL params: don't bloat effects with filter/EQ knobs the
+  Terrain-Patcher (downstream EQ/filters) already covers. Reverb design laws: `feedback-reverb-device-design-laws`.
 - **📚 LEARN FROM THE GREATS (Max, PERMANENT).** For every effect, study **Serum 2 FIRST** (its
   per-type param sets — e.g. reverb Vintage ~8 knobs, Basin ~3 — and what each does), then Arturia /
   Valhalla / Phase Plant / Omnisphere / GitHub+academic. A reference's param COUNT ≠ ours (fixed 8

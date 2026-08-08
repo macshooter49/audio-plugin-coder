@@ -6656,7 +6656,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     digitalReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
                     digitalReverb.setModRate     (0.02f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 5.98f);
                     digitalReverb.setTrebleDecay (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                    digitalReverb.setBassDecay   (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 3.75f);
+                    digitalReverb.setBassDecay   (0.16f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 6.84f);   // fb286 — wider LF bloom
                     digitalReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
                     digitalReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
                     digitalReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));

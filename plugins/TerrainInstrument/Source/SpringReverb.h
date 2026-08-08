@@ -118,11 +118,14 @@ public:
         transGainT = 0.20f + 3.6f * clamp01 (trans);                  // <1 = dark boing, >1 = brittle zing
         // Drive → germanium saturation amount
         driveT = clamp01 (drive + cb.driveAdd) * 7.0f;               // pre-gain into tanh
-        // Shake → mod excursion + SPEED (a slow deep wobble barely smears; turbulence must be faster)
-        float shk = modOn ? clamp01 (shake + cb.shakeAdd) : 0.0f;
-        modAmpT   = 4.0f + 64.0f * shk;                             // samples of leaky-noise jitter
-        modRateT  = 0.0012f + 0.055f * shk;                        // random-walk speed (still → violent turbulence)
-        rattleT   = shk * shk * cb.rattleMul;                      // injected rattle noise level
+        // Shake → mod excursion + SPEED + rattle. fb286 — NO NOISE IN REVERBS unless controlled: Shake is now the
+        // SOLE noise control (Character no longer bakes in rattle via shakeAdd). At Shake=0 → rattle 0 = ZERO added
+        // noise; only a tiny anti-metallic wobble remains (delay jitter, not additive noise). Cheap/Lo-Fi keep a
+        // stronger rattle CHARACTER (rattleMul), but it only appears when YOU raise Shake.
+        float shk = modOn ? clamp01 (shake) : 0.0f;                // Shake KNOB only (no shakeAdd)
+        modAmpT   = 3.0f + 60.0f * shk;                            // tiny base wobble (anti-metallic blur, NOT noise) + Shake turbulence
+        modRateT  = 0.0010f + 0.055f * shk;                       // random-walk speed (gentle → violent)
+        rattleT   = shk * shk * cb.rattleMul;                     // additive rattle ONLY from the knob (Shake=0 ⇒ 0)
         widthT    = clamp01 (width + cb.widthAdd);
         preSampT  = preMs * 0.001f * fs;
         freezeTgt = freezeOn ? 1.0f : 0.0f;
@@ -250,7 +253,7 @@ private:
         /* Cheap     */ { 1.20f, 0.55f, 0.80f, 0.00f, 0.20f, 0.80f, 1.30f, 0.10f, 0.20f, 0.028f,  0.05f },  // fast bright metallic drip, rattly
         /* Outboard  */ { 1.00f, 1.05f, 1.10f, 0.05f, 0.55f, 1.05f, 0.70f, 0.00f, 0.05f, 0.012f,  0.00f },  // germanium-warmed, compressed
         /* Long Pipe */ { 1.05f, 1.55f, 1.05f, 0.05f, 0.10f, 1.35f, 0.90f, 0.00f, 0.15f, 0.014f,  0.15f },  // cavernous modulated wash
-        /* Dub       */ { 0.90f, 1.25f, 1.30f, 0.22f, 0.25f, 1.25f, 0.45f, 0.00f, 0.05f, 0.010f,  0.05f },  // dark, heavy, dubby
+        /* Dub       */ { 0.90f, 1.25f, 1.42f, 0.28f, 0.25f, 1.25f, 0.30f, 0.00f, 0.05f, 0.010f,  0.05f },  // dark, heavy, dubby (darkest)
         /* Lo-Fi     */ { 1.45f, 1.30f, 0.85f, 0.00f, 0.35f, 1.10f, 1.10f, 0.05f, 0.35f, 0.040f,  0.10f },  // extreme dispersion, cartoon boing
     };
 

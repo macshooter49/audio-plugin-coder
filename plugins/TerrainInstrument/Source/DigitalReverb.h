@@ -74,7 +74,7 @@ public:
     void setModDepth    (float v) { modDepth= clamp01 (v); }   // MODDEPTH → THE 224 chorus excursion
     void setModRate     (float hz){ modRate = clampf (hz, 0.02f, 6.0f); }  // MODRATE → chorus speed
     void setTrebleDecay (float v) { trebDec = clamp01 (v); }   // HIDAMP → in-loop HF decay (dark tail)
-    void setBassDecay   (float m) { bassMul = clampf (m, 0.25f, 4.0f); }   // LOWDECAY → LF bloom
+    void setBassDecay   (float m) { bassMul = clampf (m, 0.16f, 7.0f); }   // LOWDECAY → LF bloom
     void setLowCutHz    (float hz){ lowCut  = clampf (hz, 20.0f, 1000.0f); }
     void setWidth       (float v) { width   = clamp01 (v); }
     void setCharacter   (int c)   { character = c < 0 ? 0 : (c > 7 ? 7 : c); }   // 8 programs
@@ -93,29 +93,35 @@ public:
         float dc = std::pow (10.0f, -1.5f * dTot / (fs * rt60));
         if (dc > 0.9995f) dc = 0.9995f;
         decayT = dc;
-        // dual-band: LF decays at dc^(1/bassMul) (bass bloom = rings longer than mid) — inherently <1 stable
-        float bassEff = clampf (bassMul * cb.bassMul, 0.25f, 4.0f);
+        // dual-band: LF decays at dc^(1/bassMul) (bass bloom = rings longer than mid) — inherently <1 stable.
+        // fb286 — WIDER range so Bass Decay is a dramatic per-band DECAY-TIME (not an EQ): tight thin lows → huge booming bloom.
+        float bassEff = clampf (bassMul * cb.bassMul, 0.16f, 7.0f);
         lowGainT = std::pow (dc, 1.0f / bassEff - 1.0f);
-        // Treble Decay: in-loop LP coeff (more = darker). Program tilts it.
+        // Treble Decay: in-loop LP coeff (more = highs die faster each pass = darker tail over TIME). fb286 — steeper
+        // range: 0% = endless bright glassy shimmer, 100% = highs vanish almost immediately (a decay rate, not a shelf).
         float dampEff = clamp01 (trebDec * cb.dampMul + cb.dampAdd);
-        dampT = 0.02f + 0.93f * dampEff;
+        dampT = 0.012f + 0.972f * dampEff;
         // Tone: input band-limit + bold OUTPUT tilt (identity at toneEff 0.5)
         float toneEff = clamp01 (tone * cb.toneMul + cb.toneAdd);
         inLpT = std::exp (-2.0f * PI * (1400.0f * std::pow (13.0f, toneEff)) / fs);
         float tilt = (toneEff - 0.5f) * 2.0f;
         hiGainT = std::pow (4.0f, tilt); loGainT = std::pow (1.9f, -tilt);
         lcT = std::exp (-2.0f * PI * lowCut / fs);
-        // Diffusion: input + decay allpass coeffs (density). Program sets a floor (Halls build; plates dense).
-        float diffEff = clamp01 (std::max (diffuse, cb.diffFloor) * cb.diffMul);
-        idGT = 0.55f + 0.30f * diffEff;                                     // input diffuser scale
-        g1T  = 0.70f * diffEff; g2T = 0.50f * diffEff;                       // decay-diffusion
+        // Diffusion: input + decay allpass coeffs (density). fb286 — the knob was clamped to the program
+        // FLOOR (max(diffuse,floor)) so low values were dead; now the knob spans the whole range (program
+        // only nudges the centre) and the gains sweep WIDE → 0% = grainy 'tearing-cloth' flutter, 100% = glassy.
+        float diffEff = clamp01 (0.12f * cb.diffFloor + diffuse * cb.diffMul);
+        idGT = 0.18f + 0.68f * diffEff;                                     // input diffuser scale (sparse→dense)
+        g1T  = 0.83f * diffEff; g2T = 0.66f * diffEff;                       // decay-diffusion (0→glassy)
         // Chorus: Mod Depth × voicing × program; ±~24..60 samples; Voicing sets shape(rnd)/rate/grain.
         float depth = modOn ? clampf (modDepth * vb.depthMul * cb.modMul, 0.0f, 2.5f) : 0.0f;
-        modApT = depth * 24.0f;                                             // allpass excursion (samples)
-        modTapT= depth * 17.0f;                                            // tap excursion (samples)
-        modRndT= vb.rnd; grainT = modOn ? vb.grain : 0.0f;
+        modApT = depth * 36.0f;                                             // allpass excursion (samples) — deeper seasick 224 chorus
+        modTapT= depth * 25.0f;                                            // tap excursion (samples)
+        modRndT= vb.rnd;
         for (int i = 0; i < 4; ++i) modIncT[i] = (modRate * vb.rateMul * MODR[i]) / fs;
-        gritT  = modOn ? vb.grain * 6.0e-5f : 0.0f;                        // faint 224 hiss (output-only, ~-84 dB)
+        // fb286 — NO NOISE IN REVERBS (Max): removed the Random-Vintage output hiss AND the coarse
+        // modulation-grain quantization (the Chaos crackle source). Random-Vintage stays distinct via its
+        // noise-DRIVEN modulation SHAPE (random walk vs Sine), not additive noise.
         widthT = clamp01 (width + cb.widthAdd + vb.widthAdd);
         preSampT = preMs * 0.001f * fs;
         freezeTgt = freezeOn ? 1.0f : 0.0f;
@@ -159,9 +165,7 @@ public:
             float sine = fastSin (ph);
             float ss = ph * ph * (3.0f - 2.0f * ph);
             float walk = oldR[i] + (newR[i] - oldR[i]) * ss;
-            float e = (1.0f - modRndC) * sine + modRndC * walk;
-            if (grainC > 0.01f) { float q = std::round (e * 6.0f) * (1.0f / 6.0f); e += grainC * (q - e); }   // vintage grain
-            exc[i] = e;
+            exc[i] = (1.0f - modRndC) * sine + modRndC * walk;
             modPh[i] += modIncC[i];
             if (modPh[i] >= 1.0f) { modPh[i] -= 1.0f; oldR[i] = newR[i]; newR[i] = rand11(); }
         }
@@ -230,7 +234,7 @@ public:
         float wl = mid + sid, wr = mid - sid;
         float ol = wl - dcxL + dcR * dcyL; dcxL = wl; dcyL = flush (ol);
         float orr= wr - dcxR + dcR * dcyR; dcxR = wr; dcyR = flush (orr);
-        wetL = dcyL + gritC * rand11(); wetR = dcyR + gritC * rand11();   // faint authentic 224 hiss (Random-Vintage)
+        wetL = dcyL; wetR = dcyR;   // fb286 — no hiss (noise removed from reverbs per Max)
     }
 
 private:
@@ -273,11 +277,11 @@ private:
     // 6 Chorus VOICINGS: depthMul, rateMul, rnd (0=sine 1=random), grain, widthAdd.
     struct VoiceBias { float depthMul, rateMul, rnd, grain, widthAdd; };
     static constexpr VoiceBias VOICE[6] = {
-        /* Random-Vintage */ { 1.00f, 1.00f, 1.00f, 1.00f, 0.00f },   // authentic grainy 224 shimmer (DEFAULT)
+        /* Random-Vintage */ { 1.05f, 2.30f, 1.00f, 0.00f, 0.00f },   // authentic noise-driven 224 shimmer (DEFAULT)
         /* Sine           */ { 0.90f, 1.00f, 0.00f, 0.00f, 0.00f },   // smooth modern swirl
         /* Ensemble       */ { 1.65f, 0.70f, 0.35f, 0.00f, 0.15f },   // deep detune, widest/thickest
         /* Wow/Drift      */ { 1.40f, 0.22f, 1.00f, 0.00f, 0.00f },   // slow evolving ambient drift
-        /* Chaos          */ { 2.30f, 2.70f, 1.00f, 0.35f, 0.05f },   // fast wild warble
+        /* Chaos          */ { 2.20f, 2.60f, 1.00f, 0.00f, 0.05f },   // fast wild warble (grain gone → clean)
         /* Off            */ { 0.00f, 1.00f, 0.00f, 0.00f, 0.00f },   // static tank — colder, metallic
     };
 
