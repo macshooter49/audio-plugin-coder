@@ -12,6 +12,7 @@
 #include "RoomReverb.h"        // fb281 — synth FX-rack Room reverb (early reflections + short dense FDN tail)
 #include "PlateReverb.h"       // fb282 — synth FX-rack Plate reverb (Dattorro figure-8 tank + dispersion)
 #include "SpringReverb.h"      // fb284 — synth FX-rack Spring reverb (dispersive allpass boing loop)
+#include "DigitalReverb.h"     // fb285 — synth FX-rack Digital reverb (Lexicon 224 cross-coupled tank + random chorus)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
 #include "ParametricEQ.h"
@@ -1476,7 +1477,8 @@ private:
     RoomReverb  roomReverb;                       // fb281 — Room reverb (early reflections + short dense tail)
     PlateReverb plateReverb;                      // fb282 — Plate reverb (Dattorro figure-8 tank + dispersion)
     SpringReverb springReverb;                    // fb284 — Spring reverb (dispersive allpass boing loop)
-    int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring (live engine); -1 = uninitialised
+    DigitalReverb digitalReverb;                  // fb285 — Digital reverb (Lexicon 224 cross-coupled tank + random chorus)
+    int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring 4=Digital (live engine); -1 = uninitialised
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block
     float hallRvbEnv_ = 0.0f, hallEnvT_ = 0.0f;   // fb277 — on/off FADE env (0 = fully bypassed) so route toggles don't click

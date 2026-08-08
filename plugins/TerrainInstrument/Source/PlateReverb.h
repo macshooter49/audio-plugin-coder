@@ -188,9 +188,11 @@ public:
         // read both half outputs (tails of del2), then disperse + bass-shelf + decay the feedback.
         float outL = readFrac (del2L, del2Lmask, del2Lwr, 3720.f * S);
         float outR = readFrac (del2R, del2Rmask, del2Rwr, 3163.f * S);
-        // bass-decay low-shelf on the feedback
-        bassLz = (1.0f - bassCoef) * outL + bassCoef * bassLz; outL = (outL - bassLz) + bassLz * lowGainC;
-        bassRz = (1.0f - bassCoef) * outR + bassCoef * bassRz; outR = (outR - bassRz) + bassRz * lowGainC;
+        // bass-decay low-shelf on the feedback. fb285 — at FREEZE the loop gain → FREEZE_G, so the
+        // low-band boost must ramp to UNITY or dec·lowGain > 1 and the low band DIVERGES on freeze-hold.
+        const float lowGeff = lowGainC + (1.0f - lowGainC) * freezeCur;
+        bassLz = (1.0f - bassCoef) * outL + bassCoef * bassLz; outL = (outL - bassLz) + bassLz * lowGeff;
+        bassRz = (1.0f - bassCoef) * outR + bassCoef * bassRz; outR = (outR - bassRz) + bassRz * lowGeff;
         // dispersion cascade (metallic chirp) — CPU-gated
         if (dispCoefC > 0.001f)
             for (int i = 0; i < NDISP; ++i)
