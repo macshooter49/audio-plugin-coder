@@ -872,6 +872,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // (same pattern as getNoiseViz — costs nothing while the card is closed).
                 complete (juce::var (audioProcessor.getArpFeedJson()));
             })
+            .withNativeFunction("getReverbBloom", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb280 — audio-reactive reverb bloom (0..1.5 smoothed wet level); the FX-rack
+                // reverb core rAF-polls this so the purple core breathes with the tail.
+                complete (juce::var ((double) audioProcessor.getReverbBloom()));
+            })
             .withNativeFunction("getChopFeed", [this](const juce::Array<juce::var>&,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

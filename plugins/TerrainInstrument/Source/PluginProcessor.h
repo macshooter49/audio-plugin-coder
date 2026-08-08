@@ -683,6 +683,7 @@ public:
     std::map<juce::String, juce::String> cardStates_;
     std::atomic<int> flowPlayingViz_ { 0 };   // fb137 — transport state for the feeds ("pl")
     juce::String      getArpLanesJson() const;                          // for JS restore + state save
+    float             getReverbBloom() const noexcept { return hallBloomViz_.load (std::memory_order_relaxed); }  // fb280 — wet bloom 0..1 for the FX-rack core viz
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
     void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
@@ -1474,6 +1475,14 @@ private:
     float hallRvbDry_ = 1.0f, hallRvbWet_ = 0.0f; // equal-power mix — RAMPED per sample (no zipper)
     float hallRvbDryT_ = 1.0f, hallRvbWetT_ = 0.0f; // mix targets
     float hallSm_ = 0.0015f;                       // per-sample smoothing coeff (~15 ms), set in prepareToPlay
+    // fb280 — PER-OSC NO-BLEED SEND: the synth voices accumulate ONLY the routed oscillators
+    // (A/B/C/D/Sub/Noise) into this bus during render; the master loop reverbs it and adds the wet
+    // back (true wet/dry on the routed portion), so unrouted oscs stay bone dry.
+    juce::AudioBuffer<float> reverbSendBuf_;
+    float hallRvbG_[6] = { 0,0,0,0,0,0 };          // per-source route gains this block (A,B,C,D,Sub,Noise)
+    // fb280 — audio-reactive BLOOM: smoothed wet level published to the UI (core breathes with the tail).
+    std::atomic<float> hallBloomViz_ { 0.0f };
+    float hallBloomEnv_ = 0.0f;                     // fast-attack / slow-release wet envelope
 
     // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
     // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)

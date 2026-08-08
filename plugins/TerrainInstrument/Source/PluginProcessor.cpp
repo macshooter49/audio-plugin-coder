@@ -3652,6 +3652,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     spaceReverb.prepare(sampleRate, samplesPerBlock);
     hallReverb.prepare (sampleRate);   // fb276 — synth FX-rack Hall reverb
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
+    reverbSendBuf_.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);   // fb280 — per-osc no-bleed send bus
+    reverbSendBuf_.clear();
+    hallBloomEnv_ = 0.0f; hallBloomViz_.store (0.0f, std::memory_order_relaxed);
     moogDelay.prepare(sampleRate, samplesPerBlock);
     terrainChorus.prepare (sampleRate, samplesPerBlock);
 
@@ -5596,6 +5599,31 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         synthScratch.setSize (2, numSamples, false, true, true);
     synthScratch.clear();
 
+    // ── fb280 — PER-OSC NO-BLEED REVERB SEND: read the six route pills, hand each SynthVoice the
+    // shared send bus + 0/1 gains, and clear the bus. During render below the voices accumulate ONLY
+    // the routed oscillators into it (post-level/pan/amp-env); the master loop reverbs it and adds the
+    // wet back. Routes off ⇒ null target ⇒ voices skip the tap ⇒ zero cost + zero change to the mix.
+    if (reverbSendBuf_.getNumSamples() < numSamples)
+        reverbSendBuf_.setSize (2, numSamples, false, true, true);
+    reverbSendBuf_.clear (0, numSamples);
+    hallRvbG_[0] = rawParam (ParameterIDs::SYN_RVB_SRC_A)->load()     > 0.5f ? 1.0f : 0.0f;
+    hallRvbG_[1] = rawParam (ParameterIDs::SYN_RVB_SRC_B)->load()     > 0.5f ? 1.0f : 0.0f;
+    hallRvbG_[2] = rawParam (ParameterIDs::SYN_RVB_SRC_C)->load()     > 0.5f ? 1.0f : 0.0f;
+    hallRvbG_[3] = rawParam (ParameterIDs::SYN_RVB_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
+    hallRvbG_[4] = rawParam (ParameterIDs::SYN_RVB_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
+    hallRvbG_[5] = rawParam (ParameterIDs::SYN_RVB_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
+    hallRouteActive_ = (hallRvbG_[0] + hallRvbG_[1] + hallRvbG_[2] + hallRvbG_[3] + hallRvbG_[4] + hallRvbG_[5]) > 0.0f;
+    {
+        float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
+        float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
+        for (int vi = 0; vi < kSynthVoiceCount; ++vi)
+            if (auto* sv = synthVoices_[(size_t) vi])
+            {
+                sv->setReverbRoutes (hallRvbG_[0], hallRvbG_[1], hallRvbG_[2], hallRvbG_[3], hallRvbG_[4], hallRvbG_[5]);
+                sv->setReverbSendTarget (rsL, rsR);
+            }
+    }
+
     // GEODE — the partial budget is a PER-BLOCK quota (partials are re-rendered every block,
     // unlike grains which persist and retire). Reset it to 0 before the voices render, or it
     // grows unbounded and clamps every SPEC voice to 0 active partials (static → silence).
@@ -6153,6 +6181,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Per-sample processing
     auto* leftChannel  = buffer.getWritePointer(0);
     auto* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
+    const float* rvbSendL = reverbSendBuf_.getReadPointer (0);   // fb280 — routed-osc send (filled during synth render)
+    const float* rvbSendR = reverbSendBuf_.getReadPointer (1);
+    float hallBlockWetPk = 0.0f;                                 // fb280 — peak wet this block → bloom viz
 
     // ── Per-chop FX-independence (option 1): aggregate active indy masks ─
     // Walk all voices across all 4 layers. For each voice that's currently
@@ -6582,18 +6613,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         if (rightChannel != nullptr)
             rightChannel[i] += indySumBuffer.getSample (1, i) * outputGain;
 
-        // ── fb276/277 — synth FX-rack REVERB (Hall). ADDITIVE + ROUTE-GATED + CLICK-FREE. Routes off
-        // ⇒ the on/off env fades to 0 ⇒ fully bypassed (zero cost + zero change to the default sound).
-        // Mix + on/off ramp per sample; the engine glides its own delays/coeffs. Pre-makeup so the
-        // limiter catches wet peaks. (True per-osc send is the next pass; any route = enable for now.)
+        // ── fb276-280 — synth FX-rack REVERB (Hall). PER-OSC NO-BLEED SEND: only the routed oscillators
+        // (accumulated into reverbSendBuf_ during synth render) feed the reverb; the wet is added back with
+        // a true wet/dry on the ROUTED portion only (duck routed dry + add wet ⇒ 100% Mix = fully wet),
+        // so unrouted oscs stay bone dry. hallRouteActive_ + gains were resolved pre-render. Routes off ⇒
+        // env fades to 0 ⇒ fully bypassed. Pre-makeup so the limiter catches wet peaks.
         if (i == 0)
         {
-            hallRouteActive_ = rawParam (ParameterIDs::SYN_RVB_SRC_A)->load()   > 0.5f
-                            || rawParam (ParameterIDs::SYN_RVB_SRC_B)->load()   > 0.5f
-                            || rawParam (ParameterIDs::SYN_RVB_SRC_C)->load()   > 0.5f
-                            || rawParam (ParameterIDs::SYN_RVB_SRC_D)->load()   > 0.5f
-                            || rawParam (ParameterIDs::SYN_RVB_SRC_SUB)->load() > 0.5f
-                            || rawParam (ParameterIDs::SYN_RVB_SRC_NOISE)->load() > 0.5f;
             hallEnvT_ = hallRouteActive_ ? 1.0f : 0.0f;
             if (hallRouteActive_)
             {
@@ -6624,16 +6650,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
             hallRvbDry_ += (hallRvbDryT_ - hallRvbDry_) * hallSm_;   // ramp mix
             hallRvbWet_ += (hallRvbWetT_ - hallRvbWet_) * hallSm_;
+            // Send = routed oscs (voice-level), scaled by outputGain so it matches the dry mix level.
+            const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
+            const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
+            const float sgL = rawL * outputGain, sgR = rawR * outputGain;
             float rl, rr;
-            const float inR = (rightChannel != nullptr) ? rightChannel[i] : leftChannel[i];
-            hallReverb.processSample (leftChannel[i], inR, rl, rr);
-            const float e = hallRvbEnv_, inL = leftChannel[i];
-            leftChannel[i] = inL * (1.0f - e * (1.0f - hallRvbDry_)) + rl * (e * hallRvbWet_);
+            hallReverb.processSample (sgL, sgR, rl, rr);
+            const float e = hallRvbEnv_, duck = e * (1.0f - hallRvbDry_), wet = e * hallRvbWet_;
+            leftChannel[i]  += wet * rl - duck * sgL;    // add wet; duck ONLY the routed dry (unrouted untouched)
             if (rightChannel != nullptr)
-            {
-                const float inRR = rightChannel[i];
-                rightChannel[i] = inRR * (1.0f - e * (1.0f - hallRvbDry_)) + rr * (e * hallRvbWet_);
-            }
+                rightChannel[i] += wet * rr - duck * sgR;
+            const float wmag = 0.5f * (std::abs (rl) + std::abs (rr)) * e;   // fb280 — bloom follows audible wet
+            if (wmag > hallBlockWetPk) hallBlockWetPk = wmag;
+        }
+        if (i == numSamples - 1)   // fb280 — publish the bloom once/block (fast swell, slow linger; releases to 0 when idle)
+        {
+            const float bt = (hallBlockWetPk > hallBloomEnv_) ? 0.40f : 0.05f;
+            hallBloomEnv_ += (hallBlockWetPk - hallBloomEnv_) * bt;
+            hallBloomViz_.store (juce::jlimit (0.0f, 1.5f, hallBloomEnv_), std::memory_order_relaxed);
         }
 
         // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked

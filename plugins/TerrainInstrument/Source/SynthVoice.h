@@ -1866,6 +1866,16 @@ namespace tw
         void pitchWheelMoved (int) override {}
         void controllerMoved (int, int) override {}
 
+        // fb280 — per-osc reverb send (no-bleed). The processor hands each voice a shared
+        // stereo send bus + 0/1 gains per source (A,B,C,D,Sub,Noise) each block; the voice
+        // accumulates ONLY the routed oscillators' post-level/pan/amp-env samples into it.
+        void setReverbSendTarget (float* L, float* R) noexcept { rvbSendL_ = L; rvbSendR_ = R; }
+        void setReverbRoutes (float a, float b, float c, float d, float sub, float noise) noexcept
+        {
+            rvbG_[0] = a; rvbG_[1] = b; rvbG_[2] = c; rvbG_[3] = d; rvbG_[4] = sub; rvbG_[5] = noise;
+            rvbAny_ = (a + b + c + d + sub + noise) > 0.0f;
+        }
+
         void renderNextBlock (juce::AudioBuffer<float>& out,
                               int startSample, int numSamples) override
         {
@@ -3851,6 +3861,16 @@ namespace tw
                 busB2R[i]   = busCo2_[0]*oAR + busCo2_[1]*oBR + busCo2_[2]*oCR + busCo2_[3]*oDR + busCo2_[4]*subBR + noiseAddR * noiseCo2_;
                 busDryL[i]  = busCoD_[0]*oAL + busCoD_[1]*oBL + busCoD_[2]*oCL + busCoD_[3]*oDL + busCoD_[4]*subBL + noiseAddL * noiseCoD_;
                 busDryR[i]  = busCoD_[0]*oAR + busCoD_[1]*oBR + busCoD_[2]*oCR + busCoD_[3]*oDR + busCoD_[4]*subBR + noiseAddR * noiseCoD_;
+                // fb280 — PER-OSC REVERB SEND (no-bleed): accumulate ONLY the routed oscillators'
+                // post-level/pan/amp-env samples (oAL…noiseAddL) into the shared send bus, block-aligned
+                // at [startSample+i] to match the output commit. Unrouted oscs contribute exactly zero,
+                // so the reverb hears only what's routed — osc B/C/D stay bone dry when only A is sent.
+                if (rvbSendL_ != nullptr && rvbAny_)
+                {
+                    const int oi = startSample + i;
+                    rvbSendL_[oi] += rvbG_[0]*oAL + rvbG_[1]*oBL + rvbG_[2]*oCL + rvbG_[3]*oDL + rvbG_[4]*subBL + rvbG_[5]*noiseAddL;
+                    rvbSendR_[oi] += rvbG_[0]*oAR + rvbG_[1]*oBR + rvbG_[2]*oCR + rvbG_[3]*oDR + rvbG_[4]*subBR + rvbG_[5]*noiseAddR;
+                }
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
                 modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
@@ -4648,6 +4668,11 @@ namespace tw
         bool                    noiseSrc1_ = false, noiseSrc2_ = false;
         float                   noiseCo1_ = 0.0f, noiseCo2_ = 0.0f, noiseCoD_ = 1.0f;
         juce::AudioBuffer<float> fltBus2_, fltDry_;              // F2 + dry buses (bus1 = scratch_)
+        // fb280 — per-osc reverb send: shared bus pointers + 0/1 route gains (A,B,C,D,Sub,Noise).
+        float*                  rvbSendL_ = nullptr;
+        float*                  rvbSendR_ = nullptr;
+        float                   rvbG_[6] = { 0, 0, 0, 0, 0, 0 };
+        bool                    rvbAny_ = false;
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
         float                   drvNorm1_ = 1.0f, drvNorm2_ = 1.0f;  // fb123 — bus send level (drive normalization)
