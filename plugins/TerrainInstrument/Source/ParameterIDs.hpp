@@ -340,6 +340,30 @@ namespace ParameterIDs
     constexpr char SYN_FILTER1_SRC_NOISE[] = "SYN_FILTER1_SRC_NOISE";   // fb63 — route the Noise layer into Filter 1
     constexpr char SYN_FILTER2_SRC_NOISE[] = "SYN_FILTER2_SRC_NOISE";   // fb63 — route the Noise layer into Filter 2
 
+    // ════════ FX RACK · REVERB (Hall first — fb276) ════════════════════════════════════════
+    // setSynParam-only (no relays); choices read as INDEX. Per-osc route bits default OFF (no bleed).
+    constexpr char SYN_RVB_TYPE[]      = "SYN_RVB_TYPE";       // choice: Hall..Convolution (9)
+    constexpr char SYN_RVB_CHARACTER[] = "SYN_RVB_CHARACTER";  // choice: per-type voicing
+    constexpr char SYN_RVB_MODMODE[]   = "SYN_RVB_MODMODE";    // choice: Off..Chaos
+    constexpr char SYN_RVB_SIZE[]      = "SYN_RVB_SIZE";       // float 0..1 (front)
+    constexpr char SYN_RVB_DECAY[]     = "SYN_RVB_DECAY";      // float 0..1 (front) -> RT60 0.3..20 s
+    constexpr char SYN_RVB_TONE[]      = "SYN_RVB_TONE";       // float 0..1 (front) dark<->bright
+    constexpr char SYN_RVB_MIX[]       = "SYN_RVB_MIX";        // float 0..1 (front) equal-power
+    constexpr char SYN_RVB_PREDELAY[]  = "SYN_RVB_PREDELAY";   // float 0..1 -> 0..250 ms
+    constexpr char SYN_RVB_DIFFUSE[]   = "SYN_RVB_DIFFUSE";    // float 0..1
+    constexpr char SYN_RVB_MODDEPTH[]  = "SYN_RVB_MODDEPTH";   // float 0..1
+    constexpr char SYN_RVB_MODRATE[]   = "SYN_RVB_MODRATE";    // float 0..1 -> 0.05..5 Hz
+    constexpr char SYN_RVB_HIDAMP[]    = "SYN_RVB_HIDAMP";     // float 0..1 (High Damping)
+    constexpr char SYN_RVB_LOWDECAY[]  = "SYN_RVB_LOWDECAY";   // float 0..1 -> 0.25..2x
+    constexpr char SYN_RVB_LOWCUT[]    = "SYN_RVB_LOWCUT";     // float 0..1 -> 20..1000 Hz
+    constexpr char SYN_RVB_WIDTH[]     = "SYN_RVB_WIDTH";      // float 0..1
+    constexpr char SYN_RVB_SRC_A[]     = "SYN_RVB_SRC_A";      // bool, default OFF (per-osc send)
+    constexpr char SYN_RVB_SRC_B[]     = "SYN_RVB_SRC_B";
+    constexpr char SYN_RVB_SRC_C[]     = "SYN_RVB_SRC_C";
+    constexpr char SYN_RVB_SRC_D[]     = "SYN_RVB_SRC_D";
+    constexpr char SYN_RVB_SRC_SUB[]   = "SYN_RVB_SRC_SUB";
+    constexpr char SYN_RVB_SRC_NOISE[] = "SYN_RVB_SRC_NOISE";
+
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)
     constexpr char SYN_ENV_FLT_D[]     = "SYN_ENV_FLT_D";      // float ms (skewed)

@@ -3364,6 +3364,36 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── ARP extension card (fb105): PLAY/MOTION scalars + 28 lane depth knobs.
     // Post-ceiling params: driven by setSynParam only (no relays). Choice params
     // are read as the INDEX ((int)*rawParam) per the CLAUDE.md hard rule.
+
+    // ════════ FX RACK · REVERB (Hall) — fb276. setSynParam-only; choices = INDEX; routes default OFF. ════════
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_RVB_TYPE, 1 }, "Reverb Type",
+        juce::StringArray { "Hall","Room","Plate","Spring","Digital","Vintage","Basin","Shimmer","Convolution" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_RVB_CHARACTER, 1 }, "Reverb Character",
+        juce::StringArray { "Smooth","Random","Vintage","Cathedral","Chamber","Dark","Bright","Ethereal" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_RVB_MODMODE, 1 }, "Reverb Mod Mode",
+        juce::StringArray { "Off","Subtle","Lush","Chorale","Random","Chaos" }, 2));
+    auto addRvbF = [&] (const char* id, const char* nm, float def) {
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
+    addRvbF (ParameterIDs::SYN_RVB_SIZE,     "Reverb Size",       0.30f);
+    addRvbF (ParameterIDs::SYN_RVB_DECAY,    "Reverb Decay",      0.55f);
+    addRvbF (ParameterIDs::SYN_RVB_TONE,     "Reverb Tone",       0.50f);
+    addRvbF (ParameterIDs::SYN_RVB_MIX,      "Reverb Mix",        0.35f);
+    addRvbF (ParameterIDs::SYN_RVB_PREDELAY, "Reverb Pre-Delay",  0.10f);
+    addRvbF (ParameterIDs::SYN_RVB_DIFFUSE,  "Reverb Diffusion",  0.70f);
+    addRvbF (ParameterIDs::SYN_RVB_MODDEPTH, "Reverb Mod Depth",  0.25f);
+    addRvbF (ParameterIDs::SYN_RVB_MODRATE,  "Reverb Mod Rate",   0.30f);
+    addRvbF (ParameterIDs::SYN_RVB_HIDAMP,   "Reverb High Damp",  0.35f);
+    addRvbF (ParameterIDs::SYN_RVB_LOWDECAY, "Reverb Low Decay",  0.50f);
+    addRvbF (ParameterIDs::SYN_RVB_LOWCUT,   "Reverb Low Cut",    0.00f);
+    addRvbF (ParameterIDs::SYN_RVB_WIDTH,    "Reverb Width",      0.80f);
+    for (const char* rid : { ParameterIDs::SYN_RVB_SRC_A, ParameterIDs::SYN_RVB_SRC_B, ParameterIDs::SYN_RVB_SRC_C,
+                             ParameterIDs::SYN_RVB_SRC_D, ParameterIDs::SYN_RVB_SRC_SUB, ParameterIDs::SYN_RVB_SRC_NOISE })
+        layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { rid, 1 }, juce::String (rid), false));
+
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
         juce::StringArray { "Up", "Down", "Up-Dn", "Random" }, 0));
@@ -3617,6 +3647,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     tapeProcessorR.prepare(sampleRate, samplesPerBlock);
     tapeLoop.prepare(sampleRate, samplesPerBlock);
     spaceReverb.prepare(sampleRate, samplesPerBlock);
+    hallReverb.prepare (sampleRate);   // fb276 — synth FX-rack Hall reverb
     moogDelay.prepare(sampleRate, samplesPerBlock);
     terrainChorus.prepare (sampleRate, samplesPerBlock);
 
@@ -6546,6 +6577,47 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         leftChannel[i] += indySumBuffer.getSample (0, i) * outputGain;
         if (rightChannel != nullptr)
             rightChannel[i] += indySumBuffer.getSample (1, i) * outputGain;
+
+        // ── fb276 — synth FX-rack REVERB (Hall). ADDITIVE + ROUTE-GATED: with no A/B/C/D/S/N route
+        // enabled (the default) this is fully bypassed → zero change to the existing sound. Pre-makeup
+        // so the master limiter catches wet peaks. Per-block coeff update on i==0. (True per-osc send
+        // is the next pass; for now any route acts as the reverb enable.)
+        if (i == 0)
+        {
+            hallRvbActive_ = rawParam (ParameterIDs::SYN_RVB_SRC_A)->load()   > 0.5f
+                          || rawParam (ParameterIDs::SYN_RVB_SRC_B)->load()   > 0.5f
+                          || rawParam (ParameterIDs::SYN_RVB_SRC_C)->load()   > 0.5f
+                          || rawParam (ParameterIDs::SYN_RVB_SRC_D)->load()   > 0.5f
+                          || rawParam (ParameterIDs::SYN_RVB_SRC_SUB)->load() > 0.5f
+                          || rawParam (ParameterIDs::SYN_RVB_SRC_NOISE)->load() > 0.5f;
+            if (hallRvbActive_)
+            {
+                hallReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                hallReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                hallReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
+                hallReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 250.0f);
+                hallReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                hallReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                hallReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
+                hallReverb.setHighDamping (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
+                hallReverb.setLowDecay    (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 1.75f);
+                hallReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
+                hallReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
+                hallRvbWet_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+                hallRvbDry_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+                hallReverb.updateCoefficients();
+            }
+        }
+        if (hallRvbActive_)
+        {
+            float rl, rr;
+            const float inR = (rightChannel != nullptr) ? rightChannel[i] : leftChannel[i];
+            hallReverb.processSample (leftChannel[i], inR, rl, rr);
+            leftChannel[i] = hallRvbDry_ * leftChannel[i] + hallRvbWet_ * rl;
+            if (rightChannel != nullptr)
+                rightChannel[i] = hallRvbDry_ * rightChannel[i] + hallRvbWet_ * rr;
+        }
 
         // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked
         // peak LIMITER (gain-reduction) so dense chords stay loud without the tanh squaring them

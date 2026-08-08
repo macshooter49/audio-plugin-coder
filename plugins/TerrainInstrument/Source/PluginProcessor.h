@@ -8,6 +8,7 @@
 #include "TapeProcessor.h"
 #include "TapeLoopProcessor.h"
 #include "SpaceReverb.h"
+#include "HallReverb.h"        // fb276 — synth FX-rack Hall reverb (8-line Jot/Hadamard FDN)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
 #include "ParametricEQ.h"
@@ -1467,6 +1468,9 @@ private:
 
     // Space reverb (stereo — single instance handles both channels)
     SpaceReverb spaceReverb;
+    HallReverb  hallReverb;                       // fb276 — synth FX-rack reverb (Hall). Gated additive send.
+    bool  hallRvbActive_ = false;                 // any A/B/C/D/S/N route enabled (default OFF = fully bypassed)
+    float hallRvbDry_ = 1.0f, hallRvbWet_ = 0.0f; // equal-power mix, computed per block
 
     // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
     // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)
