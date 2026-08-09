@@ -3660,6 +3660,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     digitalReverb.prepare (sampleRate);// fb285 — synth FX-rack Digital reverb (Lexicon 224)
     vintageReverb.prepare (sampleRate);// fb288 — synth FX-rack Vintage reverb (80s digital rack)
     basinReverb.prepare (sampleRate);  // fb289 — synth FX-rack Basin reverb (huge dark wash)
+    shimmerReverb.prepare (sampleRate);// fb290 — synth FX-rack Shimmer reverb (octave wash)
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
     // fb287 — DUCK follower: fast attack (grab transients ~5 ms), slow release (bloom back ~280 ms) → the
@@ -6643,7 +6644,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // fb281 — TYPE ROUTING (Hall=0 / Room=1; other types fall back to Hall until built). A type
             // change dips the wet through 0 (click-free), then swaps + resets the incoming engine.
             int pend = (int) *rawParam (ParameterIDs::SYN_RVB_TYPE);
-            if (pend < 0 || pend > 6) pend = 0;   // Hall/Room/Plate/Spring/Digital/Vintage/Basin have DSP; others fall back to Hall
+            if (pend < 0 || pend > 7) pend = 0;   // Hall..Shimmer have DSP; Convolution (8) falls back to Hall
             if (activeRvbType_ < 0) activeRvbType_ = pend;   // first block: adopt immediately (no dip)
             if (pend != activeRvbType_)
             {
@@ -6651,7 +6652,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (hallRvbEnv_ < 1.0e-3f)   // faded out → commit the swap on the (now silent) engines
                 {
                     activeRvbType_ = pend;
-                    if (pend == 6) basinReverb.reset(); else if (pend == 5) vintageReverb.reset(); else if (pend == 4) digitalReverb.reset(); else if (pend == 3) springReverb.reset(); else if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
+                    if (pend == 7) shimmerReverb.reset(); else if (pend == 6) basinReverb.reset(); else if (pend == 5) vintageReverb.reset(); else if (pend == 4) digitalReverb.reset(); else if (pend == 3) springReverb.reset(); else if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
                     rvbSwapping_ = false;
                 }
             }
@@ -6659,7 +6660,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             hallEnvT_ = (hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
             if (hallRouteActive_)
             {
-                if (activeRvbType_ == 6)
+                if (activeRvbType_ == 7)
+                {
+                    // ── SHIMMER (ethereal octave wash) — Hall FDN + pitch-shifter in the feedback loop. Signature slots:
+                    //    HIDAMP→Shimmer (pitch blend = shimmer amount) · LOWDECAY→Regen (feedback buildup) ·
+                    //    MODMODE→Shift (6 intervals; +12 default) · MODDEPTH+RATE = the chorus pair. ──
+                    shimmerReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                    shimmerReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                    shimmerReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
+                    shimmerReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 200.0f);
+                    shimmerReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                    shimmerReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                    shimmerReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
+                    shimmerReverb.setShimmer     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());     // HIDAMP slot → Shimmer (pitch blend)
+                    shimmerReverb.setRegen       (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());   // LOWDECAY slot → Regen (feedback)
+                    shimmerReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
+                    shimmerReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                    shimmerReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                    shimmerReverb.setShift        ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                    shimmerReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    shimmerReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
+                    shimmerReverb.updateCoefficients();
+                }
+                else if (activeRvbType_ == 6)
                 {
                     // ── BASIN (huge dark ambient wash) — Hall FDN retuned. Signature slots: HIDAMP→Damping (dark) ·
                     //    LOWDECAY→Bass Decay = the BASS-SAFE crossover (default <1 ⇒ lows decay FASTER than mids;
@@ -6828,7 +6851,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
             const float sgL = rawL * outputGain, sgR = rawR * outputGain;
             float rl, rr;
-            if      (activeRvbType_ == 6) basinReverb.processSample   (sgL, sgR, rl, rr);  // fb289 — Basin
+            if      (activeRvbType_ == 7) shimmerReverb.processSample (sgL, sgR, rl, rr);  // fb290 — Shimmer
+            else if (activeRvbType_ == 6) basinReverb.processSample   (sgL, sgR, rl, rr);  // fb289 — Basin
             else if (activeRvbType_ == 5) vintageReverb.processSample (sgL, sgR, rl, rr);  // fb288 — Vintage
             else if (activeRvbType_ == 4) digitalReverb.processSample (sgL, sgR, rl, rr);  // fb285 — active engine
             else if (activeRvbType_ == 3) springReverb.processSample (sgL, sgR, rl, rr);   // fb284
