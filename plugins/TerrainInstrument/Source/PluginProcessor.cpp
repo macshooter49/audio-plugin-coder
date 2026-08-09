@@ -3658,6 +3658,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     plateReverb.prepare (sampleRate);  // fb282 — synth FX-rack Plate reverb
     springReverb.prepare (sampleRate); // fb284 — synth FX-rack Spring reverb
     digitalReverb.prepare (sampleRate);// fb285 — synth FX-rack Digital reverb (Lexicon 224)
+    vintageReverb.prepare (sampleRate);// fb288 — synth FX-rack Vintage reverb (80s digital rack)
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
     // fb287 — DUCK follower: fast attack (grab transients ~5 ms), slow release (bloom back ~280 ms) → the
@@ -6641,7 +6642,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // fb281 — TYPE ROUTING (Hall=0 / Room=1; other types fall back to Hall until built). A type
             // change dips the wet through 0 (click-free), then swaps + resets the incoming engine.
             int pend = (int) *rawParam (ParameterIDs::SYN_RVB_TYPE);
-            if (pend < 0 || pend > 4) pend = 0;   // Hall/Room/Plate/Spring/Digital have DSP; others fall back to Hall
+            if (pend < 0 || pend > 5) pend = 0;   // Hall/Room/Plate/Spring/Digital/Vintage have DSP; others fall back to Hall
             if (activeRvbType_ < 0) activeRvbType_ = pend;   // first block: adopt immediately (no dip)
             if (pend != activeRvbType_)
             {
@@ -6649,7 +6650,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (hallRvbEnv_ < 1.0e-3f)   // faded out → commit the swap on the (now silent) engines
                 {
                     activeRvbType_ = pend;
-                    if (pend == 4) digitalReverb.reset(); else if (pend == 3) springReverb.reset(); else if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
+                    if (pend == 5) vintageReverb.reset(); else if (pend == 4) digitalReverb.reset(); else if (pend == 3) springReverb.reset(); else if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
                     rvbSwapping_ = false;
                 }
             }
@@ -6657,7 +6658,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             hallEnvT_ = (hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
             if (hallRouteActive_)
             {
-                if (activeRvbType_ == 4)
+                if (activeRvbType_ == 5)
+                {
+                    // ── VINTAGE (80s digital rack) — signature slots: HIDAMP→Age (reduced-SR alias+band-limit) ·
+                    //    LOWDECAY→Grit (bit-crush) · LOWCUT→Drive (input saturation) · MODMODE→Shape (Normal/Gate/
+                    //    Gate-Long/Reverse/Nonlin/Ambience) · DIFFUSE→Diffusion · MODDEPTH+MODRATE = the chorus pair. ──
+                    vintageReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                    vintageReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                    vintageReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
+                    vintageReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 200.0f);
+                    vintageReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                    vintageReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                    vintageReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
+                    vintageReverb.setAge         (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());     // HIDAMP slot → Age
+                    vintageReverb.setGrit        (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());   // LOWDECAY slot → Grit
+                    vintageReverb.setDrive       (rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load());     // LOWCUT slot → Drive
+                    vintageReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                    vintageReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                    vintageReverb.setShape        ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                    vintageReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    vintageReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
+                    vintageReverb.updateCoefficients();
+                }
+                else if (activeRvbType_ == 4)
                 {
                     // ── DIGITAL (Lexicon 224) — shared slots: DIFFUSE→Diffusion · MODDEPTH→Mod Depth (the chorus) ·
                     //    MODRATE→Mod Rate · HIDAMP→Treble Decay · LOWDECAY→Bass Decay · MODMODE→Chorus Voicing. ──
@@ -6782,7 +6805,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
             const float sgL = rawL * outputGain, sgR = rawR * outputGain;
             float rl, rr;
-            if      (activeRvbType_ == 4) digitalReverb.processSample (sgL, sgR, rl, rr);  // fb285 — active engine
+            if      (activeRvbType_ == 5) vintageReverb.processSample (sgL, sgR, rl, rr);  // fb288 — Vintage
+            else if (activeRvbType_ == 4) digitalReverb.processSample (sgL, sgR, rl, rr);  // fb285 — active engine
             else if (activeRvbType_ == 3) springReverb.processSample (sgL, sgR, rl, rr);   // fb284
             else if (activeRvbType_ == 2) plateReverb.processSample (sgL, sgR, rl, rr);   // fb282
             else if (activeRvbType_ == 1) roomReverb.processSample  (sgL, sgR, rl, rr);

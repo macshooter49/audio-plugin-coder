@@ -13,6 +13,7 @@
 #include "PlateReverb.h"       // fb282 — synth FX-rack Plate reverb (Dattorro figure-8 tank + dispersion)
 #include "SpringReverb.h"      // fb284 — synth FX-rack Spring reverb (dispersive allpass boing loop)
 #include "DigitalReverb.h"     // fb285 — synth FX-rack Digital reverb (Lexicon 224 cross-coupled tank + random chorus)
+#include "VintageReverb.h"     // fb288 — synth FX-rack Vintage reverb (80s digital rack: reduced-SR + bit-crush + drive + gated/reverse shapes)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
 #include "ParametricEQ.h"
@@ -1478,6 +1479,7 @@ private:
     PlateReverb plateReverb;                      // fb282 — Plate reverb (Dattorro figure-8 tank + dispersion)
     SpringReverb springReverb;                    // fb284 — Spring reverb (dispersive allpass boing loop)
     DigitalReverb digitalReverb;                  // fb285 — Digital reverb (Lexicon 224 cross-coupled tank + random chorus)
+    VintageReverb vintageReverb;                  // fb288 — Vintage reverb (80s digital rack: SR-reduction + grit + drive + gated/reverse shapes)
     int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring 4=Digital (live engine); -1 = uninitialised
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block
