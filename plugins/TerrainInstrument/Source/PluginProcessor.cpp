@@ -3396,6 +3396,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // fb279 — front Mod / Freeze toggles (Mod default ON so the reverb moves; Freeze default OFF)
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_MOD,    1 }, "Reverb Mod",    true));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_FREEZE, 1 }, "Reverb Freeze", false));
+    // fb287 — device POWER (default ON so a fresh patch works) + DUCK (Room/Spring 2nd pill, default OFF).
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_POWER,  1 }, "Reverb Power",  true));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_DUCK,   1 }, "Reverb Duck",   false));
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
@@ -3657,6 +3660,11 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     digitalReverb.prepare (sampleRate);// fb285 — synth FX-rack Digital reverb (Lexicon 224)
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
+    // fb287 — DUCK follower: fast attack (grab transients ~5 ms), slow release (bloom back ~280 ms) → the
+    // classic ducking-reverb swell in the gaps between notes. One-pole per-sample; click-free by construction.
+    duckAtkCoef_ = std::exp (-1.0f / (float) (sampleRate * 0.005));
+    duckRelCoef_ = std::exp (-1.0f / (float) (sampleRate * 0.220));
+    duckEnv_ = 0.0f;
     reverbSendBuf_.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);   // fb280 — per-osc no-bleed send bus
     reverbSendBuf_.clear();
     hallBloomEnv_ = 0.0f; hallBloomViz_.store (0.0f, std::memory_order_relaxed);
@@ -5617,6 +5625,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     hallRvbG_[3] = rawParam (ParameterIDs::SYN_RVB_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
     hallRvbG_[4] = rawParam (ParameterIDs::SYN_RVB_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
     hallRvbG_[5] = rawParam (ParameterIDs::SYN_RVB_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
+    // fb287 — POWER GATES EVERYTHING (Max): the device power pill OFF fully bypasses the reverb AND
+    // disables its per-osc routing — zero the send gains so nothing passes regardless of the A/B/C/D/S/N
+    // pills (the routing OBEYS the power button; you never turn it off by clearing already-grayed routes).
+    if (rawParam (ParameterIDs::SYN_RVB_POWER)->load() <= 0.5f)
+        for (int k = 0; k < 6; ++k) hallRvbG_[k] = 0.0f;
     hallRouteActive_ = (hallRvbG_[0] + hallRvbG_[1] + hallRvbG_[2] + hallRvbG_[3] + hallRvbG_[4] + hallRvbG_[5]) > 0.0f;
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
@@ -6682,18 +6695,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     springReverb.setWidth      (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
                     springReverb.setCharacter  ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
                     springReverb.setSprings    ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    springReverb.setModEnabled (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    springReverb.setModEnabled (true);   // fb287 — SYN_RVB_MOD is Duck for Spring; Shake stays gated by its own knob (0 = silent)
                     springReverb.setFreeze     (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
                     springReverb.updateCoefficients();
                 }
                 else if (activeRvbType_ == 2)
                 {
-                    // ── PLATE — shared slots: MODRATE→Dispersion · MODMODE→Material · HIDAMP→Damping · LOWDECAY→Bass Decay ──
+                    // ── PLATE — fb287 MATCHED MOD PAIR: DIFFUSE slot → Mod Rate (relabeled; plate density is
+                    //    Character/Material, so the Diffusion knob retired) · MODDEPTH → Mod Depth · MODRATE → Dispersion
+                    //    · MODMODE → Material · HIDAMP → Damping · LOWDECAY → Bass Decay. ──
                     plateReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
                     plateReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
                     plateReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
                     plateReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 120.0f);
-                    plateReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                    plateReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load() * 4.95f);   // fb287 — matched pair w/ Mod Depth (was Diffusion)
                     plateReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
                     plateReverb.setDispersion  (rawParam (ParameterIDs::SYN_RVB_MODRATE)->load());
                     plateReverb.setDamping     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
@@ -6708,13 +6723,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
                 else if (activeRvbType_ == 1)
                 {
-                    // ── ROOM — shared slots: MODRATE→Reflections · MODMODE→Shape · HIDAMP→Damping · LOWDECAY→Bass Decay ──
+                    // ── ROOM — fb287: NO user mod (its 2nd pill is Duck). MODDEPTH slot → Spread (ER stereo width);
+                    //    MODRATE→Reflections · MODMODE→Shape · HIDAMP→Damping · LOWDECAY→Bass Decay. Internal gentle
+                    //    de-metallizing mod stays ON (fixed default) — it's part of the room, not a user control. ──
                     roomReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
                     roomReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
                     roomReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
                     roomReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 120.0f);
                     roomReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    roomReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                    roomReverb.setSpread      (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());   // fb287 — ER stereo width (owns the MODDEPTH slot)
                     roomReverb.setReflections (rawParam (ParameterIDs::SYN_RVB_MODRATE)->load());
                     roomReverb.setDamping     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
                     roomReverb.setBassDecay   (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 2.25f);
@@ -6722,7 +6739,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     roomReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
                     roomReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
                     roomReverb.setShape       ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    roomReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    roomReverb.setModEnabled  (true);   // fb287 — SYN_RVB_MOD is Duck for Room; keep the gentle internal mod always on
                     roomReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
                     roomReverb.updateCoefficients();
                 }
@@ -6749,6 +6766,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
                 hallRvbWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
                 hallRvbDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+                // fb287 — DUCK is the Room/Spring 2nd pill (SYN_RVB_DUCK). Only those two types ; other types'
+                // 2nd pill is Mod. Resolve once per block so the per-sample follower stays branch-light.
+                rvbDuckActive_ = (activeRvbType_ == 1 || activeRvbType_ == 3)
+                                 && rawParam (ParameterIDs::SYN_RVB_DUCK)->load() > 0.5f;
             }
         }
         if (hallRouteActive_ || hallRvbEnv_ > 1.0e-4f)
@@ -6767,10 +6788,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (activeRvbType_ == 1) roomReverb.processSample  (sgL, sgR, rl, rr);
             else                          hallReverb.processSample  (sgL, sgR, rl, rr);
             const float e = hallRvbEnv_, duck = e * (1.0f - hallRvbDry_), wet = e * hallRvbWet_;
-            leftChannel[i]  += wet * rl - duck * sgL;    // add wet; duck ONLY the routed dry (unrouted untouched)
+            // fb287 — DUCK (Room/Spring 2nd pill): env-follow the routed dry (send) level and pull the WET
+            // down under it (dynamic — louder input ducks deeper), so the reverb recedes while you play and
+            // BLOOMS in the gaps. duck (the wet/dry crossfade above) is untouched; only the wet gain scales.
+            float duckG = 1.0f;
+            if (rvbDuckActive_)
+            {
+                const float inLvl = 0.5f * (std::abs (sgL) + std::abs (sgR));
+                duckEnv_ = inLvl + (inLvl > duckEnv_ ? duckAtkCoef_ : duckRelCoef_) * (duckEnv_ - inLvl);
+                duckG = 1.0f / (1.0f + 7.0f * duckEnv_);   // 1 in the gaps → deep duck under signal
+            }
+            const float wetG = wet * duckG;
+            leftChannel[i]  += wetG * rl - duck * sgL;    // add wet (ducked); duck ONLY the routed dry (unrouted untouched)
             if (rightChannel != nullptr)
-                rightChannel[i] += wet * rr - duck * sgR;
-            const float wmag = 0.5f * (std::abs (rl) + std::abs (rr)) * e;   // fb280 — bloom follows audible wet
+                rightChannel[i] += wetG * rr - duck * sgR;
+            const float wmag = 0.5f * (std::abs (rl) + std::abs (rr)) * e * duckG;   // fb280/fb287 — bloom follows audible (ducked) wet
             if (wmag > hallBlockWetPk) hallBlockWetPk = wmag;
         }
         if (i == numSamples - 1)   // fb280 — publish the bloom once/block (fast swell, slow linger; releases to 0 when idle)

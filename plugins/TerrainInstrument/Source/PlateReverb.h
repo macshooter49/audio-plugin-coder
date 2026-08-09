@@ -76,6 +76,7 @@ public:
     void setPreDelayMs  (float ms){ preMs   = clampf (ms, 0.0f, 120.0f); }
     void setDiffusion   (float v) { diffuse = clamp01 (v); }
     void setModDepth    (float v) { modDepth= clamp01 (v); }
+    void setModRate     (float hz){ modRateHz = clampf (hz, 0.02f, 6.0f); }   // fb287 — Mod Rate now a real knob (was fixed from Size); matched pair with Mod Depth
     void setDispersion  (float v) { disp    = clamp01 (v); }   // metallic chirp
     void setDamping     (float v) { damp    = clamp01 (v); }
     void setBassDecay   (float m) { bassMul = clampf (m, 0.25f, 2.5f); }
@@ -128,7 +129,7 @@ public:
         lowGainT = std::pow (dc, 1.0f / bassEff - 1.0f);
         float depth01 = modOn ? clampf (modDepth * cb.modMul, 0.0f, 2.0f) : 0.0f;
         modSampT = depth01 * 12.0f;                                 // ± excursion on the dif1 allpasses
-        modInc   = (0.9f * (0.6f + 0.8f * size)) / fs;
+        modInc   = modRateHz / fs;                                  // fb287 — Mod Rate knob (matched pair w/ Mod Depth); was size-derived
         widthT   = clamp01 (width + cb.widthAdd);
         freezeTgt= freezeOn ? 1.0f : 0.0f;
         if (! primed)
@@ -344,5 +345,5 @@ private:
     int   character=0, material=0;
     bool  modOn=true, freezeOn=false;
     float size=0.5f, decay=0.5f, tone=0.55f, preMs=6.f, diffuse=0.7f, modDepth=0.3f, disp=0.3f,
-          damp=0.4f, bassMul=1.0f, lowCut=20.f, width=0.85f;
+          damp=0.4f, bassMul=1.0f, lowCut=20.f, width=0.85f, modRateHz=0.9f;   // fb287 — Mod Rate (Hz)
 };

@@ -363,8 +363,10 @@ namespace ParameterIDs
     constexpr char SYN_RVB_SRC_D[]     = "SYN_RVB_SRC_D";
     constexpr char SYN_RVB_SRC_SUB[]   = "SYN_RVB_SRC_SUB";
     constexpr char SYN_RVB_SRC_NOISE[] = "SYN_RVB_SRC_NOISE";
-    constexpr char SYN_RVB_MOD[]       = "SYN_RVB_MOD";       // fb279 bool — front Mod toggle (modulation on/off), default ON
+    constexpr char SYN_RVB_MOD[]       = "SYN_RVB_MOD";       // fb279 bool — front Mod toggle (modulation on/off), default ON (Hall/Digital/Plate)
     constexpr char SYN_RVB_FREEZE[]    = "SYN_RVB_FREEZE";    // fb279 bool — front Freeze toggle (infinite hold), default OFF
+    constexpr char SYN_RVB_POWER[]     = "SYN_RVB_POWER";     // fb287 bool — device power (OFF = full bypass + routing disabled), default ON
+    constexpr char SYN_RVB_DUCK[]      = "SYN_RVB_DUCK";      // fb287 bool — Room/Spring 2nd pill (ducking reverb), default OFF
 
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)

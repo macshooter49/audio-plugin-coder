@@ -317,6 +317,8 @@ namespace tw
             // and per-voice EROSION drift.
             filterSlot_.prepare (sr);
             filterSlot2_.prepare (sr);
+            sendFilterSlot_.prepare (sr);    // fb287 — post-filter reverb send mirrors the two main filters
+            sendFilterSlot2_.prepare (sr);
 
             // Batch 1 — prepare the per-voice LFO bank (sample rate only; each LFO's
             // frequency + shape are pushed per block via setModConfig).
@@ -385,6 +387,9 @@ namespace tw
             scratch_.setSize    (2, spb, false, true,  true);
             fltBus2_.setSize    (2, spb, false, true,  true);   // per-osc filter routing buses
             fltDry_ .setSize    (2, spb, false, true,  true);
+            rvbSendF1_ .setSize (2, spb, false, true,  true);   // fb287 — reverb-send routing buses (routed-osc subset)
+            rvbSendF2_ .setSize (2, spb, false, true,  true);
+            rvbSendDry_.setSize (2, spb, false, true,  true);
             envScratch_.setSize (5, spb, false, true,  true);
             sampleBlkA_.setSize (2, spb, false, false, true);
             sampleBlkB_.setSize (2, spb, false, false, true);
@@ -474,6 +479,7 @@ namespace tw
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
             filterType1_ = clamped;
             filterSlot_.setType (static_cast<tw::filters::Type> (clamped));
+            sendFilterSlot_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
         }
         // ── Filter 2 (independent) + routing/mix setters ──
         void setFilterParameters2 (float cutoffHz, float resonance) noexcept
@@ -486,6 +492,7 @@ namespace tw
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
             filterType2_ = clamped;
             filterSlot2_.setType (static_cast<tw::filters::Type> (clamped));
+            sendFilterSlot2_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
         }
         void setFilterDrive2 (float drv01) noexcept   { drv012_ = juce::jlimit (0.0f, 1.0f, drv01); }
         void setFilterEnvAmount2 (float env) noexcept { envAmount2_ = juce::jlimit (-1.0f, 1.0f, env); }
@@ -528,7 +535,8 @@ namespace tw
             }
         }
         void setFilterPoles (int tap1, int tap2) noexcept
-        { filterSlot_.setPoles (tap1); filterSlot2_.setPoles (tap2); }   // tap 0..3 = 6/12/18/24 dB
+        { filterSlot_.setPoles (tap1); filterSlot2_.setPoles (tap2);      // tap 0..3 = 6/12/18/24 dB
+          sendFilterSlot_.setPoles (tap1); sendFilterSlot2_.setPoles (tap2); }   // fb287 — send mirror
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
         // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
         // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
@@ -1815,6 +1823,8 @@ namespace tw
             // voice doesn't bleed into the new note's onset.
             filterSlot_.reset();
             filterSlot2_.reset();
+            sendFilterSlot_.reset();     // fb287 — send mirror
+            sendFilterSlot2_.reset();
 
             // Phase 8a polish — reset steal-fade state on new note
             stealing_         = false;
@@ -1917,6 +1927,17 @@ namespace tw
             auto* busB2R = fltBus2_.getWritePointer (1);
             auto* busDryL = fltDry_.getWritePointer (0);
             auto* busDryR = fltDry_.getWritePointer (1);
+            // fb287 — reverb SEND buses (routed-osc subset, same filter split). Non-null only when a route
+            // is active AND we have a send target, so the default path is untouched (no fill, no cost).
+            const bool sendActive = (rvbSendL_ != nullptr) && rvbAny_;
+            if (sendActive && (rvbSendF1_.getNumChannels() < 2 || rvbSendF1_.getNumSamples() < numSamples))
+            { rvbSendF1_.setSize (2, numSamples, false, true, true); rvbSendF2_.setSize (2, numSamples, false, true, true); rvbSendDry_.setSize (2, numSamples, false, true, true); }
+            float* sF1L = sendActive ? rvbSendF1_.getWritePointer (0) : nullptr;
+            float* sF1R = sendActive ? rvbSendF1_.getWritePointer (1) : nullptr;
+            float* sF2L = sendActive ? rvbSendF2_.getWritePointer (0) : nullptr;
+            float* sF2R = sendActive ? rvbSendF2_.getWritePointer (1) : nullptr;
+            float* sDryL = sendActive ? rvbSendDry_.getWritePointer (0) : nullptr;
+            float* sDryR = sendActive ? rvbSendDry_.getWritePointer (1) : nullptr;
             // Per-block routing coefficients (independent + dry-bypass model): each source
             // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
             // → dry if in neither. Multiply-by-0/1 keeps the per-sample sum branchless.
@@ -3861,15 +3882,22 @@ namespace tw
                 busB2R[i]   = busCo2_[0]*oAR + busCo2_[1]*oBR + busCo2_[2]*oCR + busCo2_[3]*oDR + busCo2_[4]*subBR + noiseAddR * noiseCo2_;
                 busDryL[i]  = busCoD_[0]*oAL + busCoD_[1]*oBL + busCoD_[2]*oCL + busCoD_[3]*oDL + busCoD_[4]*subBL + noiseAddL * noiseCoD_;
                 busDryR[i]  = busCoD_[0]*oAR + busCoD_[1]*oBR + busCoD_[2]*oCR + busCoD_[3]*oDR + busCoD_[4]*subBR + noiseAddR * noiseCoD_;
-                // fb280 — PER-OSC REVERB SEND (no-bleed): accumulate ONLY the routed oscillators'
-                // post-level/pan/amp-env samples (oAL…noiseAddL) into the shared send bus, block-aligned
-                // at [startSample+i] to match the output commit. Unrouted oscs contribute exactly zero,
-                // so the reverb hears only what's routed — osc B/C/D stay bone dry when only A is sent.
-                if (rvbSendL_ != nullptr && rvbAny_)
+                // fb287 — PER-OSC REVERB SEND (no-bleed, POST-FILTER): build the send BUSES here (the routed
+                // oscillators only, split by the SAME per-osc filter routing busCo1/2/D as the audible path),
+                // then run them through the dedicated send-filters in the filter loop below → the reverb hears
+                // the FILTERED routed oscs (fb280 tapped PRE-filter → filtered oscs sent a dry "blind" signal).
+                // Unrouted oscs contribute exactly zero; filter routing per osc is preserved (a bypass-routed
+                // osc lands in the send-dry bus and passes unfiltered, matching its audible path).
+                if (sendActive)
                 {
-                    const int oi = startSample + i;
-                    rvbSendL_[oi] += rvbG_[0]*oAL + rvbG_[1]*oBL + rvbG_[2]*oCL + rvbG_[3]*oDL + rvbG_[4]*subBL + rvbG_[5]*noiseAddL;
-                    rvbSendR_[oi] += rvbG_[0]*oAR + rvbG_[1]*oBR + rvbG_[2]*oCR + rvbG_[3]*oDR + rvbG_[4]*subBR + rvbG_[5]*noiseAddR;
+                    const float rAL = rvbG_[0]*oAL, rBL = rvbG_[1]*oBL, rCL = rvbG_[2]*oCL, rDL = rvbG_[3]*oDL, rSL = rvbG_[4]*subBL, rNL = rvbG_[5]*noiseAddL;
+                    const float rAR = rvbG_[0]*oAR, rBR = rvbG_[1]*oBR, rCR = rvbG_[2]*oCR, rDR = rvbG_[3]*oDR, rSR = rvbG_[4]*subBR, rNR = rvbG_[5]*noiseAddR;
+                    sF1L[i]  = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
+                    sF1R[i]  = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
+                    sF2L[i]  = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
+                    sF2R[i]  = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
+                    sDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
+                    sDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
                 }
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
@@ -3885,6 +3913,7 @@ namespace tw
                     scratchL[i] *= robinAmpL_;  scratchR[i] *= robinAmpR_;
                     busB2L[i]   *= robinAmpL_;  busB2R[i]   *= robinAmpR_;
                     busDryL[i]  *= robinAmpL_;  busDryR[i]  *= robinAmpR_;
+                    if (sendActive) { sF1L[i]*=robinAmpL_; sF1R[i]*=robinAmpR_; sF2L[i]*=robinAmpL_; sF2R[i]*=robinAmpR_; sDryL[i]*=robinAmpL_; sDryR[i]*=robinAmpR_; }   // fb287 — send matches
                 }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
@@ -3892,9 +3921,11 @@ namespace tw
             {
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    scratchL[i] *= stealingFade_;  scratchR[i] *= stealingFade_;
-                    busB2L[i]   *= stealingFade_;  busB2R[i]   *= stealingFade_;   // fade the routing buses too
-                    busDryL[i]  *= stealingFade_;  busDryR[i]  *= stealingFade_;
+                    const float sf = stealingFade_;
+                    scratchL[i] *= sf;  scratchR[i] *= sf;
+                    busB2L[i]   *= sf;  busB2R[i]   *= sf;   // fade the routing buses too
+                    busDryL[i]  *= sf;  busDryR[i]  *= sf;
+                    if (sendActive) { sF1L[i]*=sf; sF1R[i]*=sf; sF2L[i]*=sf; sF2R[i]*=sf; sDryL[i]*=sf; sDryR[i]*=sf; }   // fb287 — send fades too
                     stealingFade_ *= stealingFadeStep_;
                 }
                 if (stealingFade_ < 0.001f)
@@ -4099,18 +4130,22 @@ namespace tw
                     };
                     // Filter the two buses (dry is added by the caller). filterMix blends each
                     // filter's wet vs its own bus input, exactly as the old per-filter MIX did.
-                    auto filterBuses = [&] (float b1L, float b1R, float b2L, float b2R, float& outL, float& outR)
+                    // fb287 — takes the two filter slots as params so the SAME combine drives the audible
+                    // path (filterSlot_/filterSlot2_) AND the reverb SEND (sendFilterSlot_/…2_): identical
+                    // series/parallel, mix, and drive → the reverb hears exactly what you hear, post-filter.
+                    auto filterBuses = [&] (float b1L, float b1R, float b2L, float b2R, float& outL, float& outR,
+                                            tw::filters::FilterSlot& f1, tw::filters::FilterSlot& f2)
                     {
                         if (! par)   // SERIES: F1(bus1) → drive1 → (+ bus2 F2-only) → F2 → drive2
                         {
                             float w1L = b1L, w1R = b1R;
-                            if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
+                            if (a1) { float wl = b1L, wr = b1R; f1.processStereo (wl, wr);
                                       w1L = mixSm1_ * wl + (1.0f - mixSm1_) * b1L;
                                       w1R = mixSm1_ * wr + (1.0f - mixSm1_) * b1R; }
                             pdrive (w1L, w1R, pdrvSm1_, driveType1_, drvNorm1_);
                             const float pL = w1L + b2L, pR = w1R + b2R;
                             float w2L = pL, w2R = pR;
-                            if (a2) { float wl = pL, wr = pR; filterSlot2_.processStereo (wl, wr);
+                            if (a2) { float wl = pL, wr = pR; f2.processStereo (wl, wr);
                                       w2L = mixSm2_ * wl + (1.0f - mixSm2_) * pL;
                                       w2R = mixSm2_ * wr + (1.0f - mixSm2_) * pR; }
                             pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
@@ -4119,12 +4154,12 @@ namespace tw
                         else         // PARALLEL: F1(bus1) + F2(bus2), each with its own post-drive
                         {
                             float w1L = b1L, w1R = b1R;
-                            if (a1) { float wl = b1L, wr = b1R; filterSlot_.processStereo (wl, wr);
+                            if (a1) { float wl = b1L, wr = b1R; f1.processStereo (wl, wr);
                                       w1L = mixSm1_ * wl + (1.0f - mixSm1_) * b1L;
                                       w1R = mixSm1_ * wr + (1.0f - mixSm1_) * b1R; }
                             pdrive (w1L, w1R, pdrvSm1_, driveType1_, drvNorm1_);
                             float w2L = b2L, w2R = b2R;
-                            if (a2) { float wl = b2L, wr = b2R; filterSlot2_.processStereo (wl, wr);
+                            if (a2) { float wl = b2L, wr = b2R; f2.processStereo (wl, wr);
                                       w2L = mixSm2_ * wl + (1.0f - mixSm2_) * b2L;
                                       w2R = mixSm2_ * wr + (1.0f - mixSm2_) * b2R; }
                             pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
@@ -4139,8 +4174,8 @@ namespace tw
                         // the existing osPrev feedback) + bus2; dry bypasses (added once, post-decimate).
                         const float m1L = 0.5f * (osPrevL_   + sL[i]),     m1R = 0.5f * (osPrevR_   + sR[i]);
                         const float m2L = 0.5f * (osPrevB2L_ + busB2L[i]), m2R = 0.5f * (osPrevB2R_ + busB2R[i]);
-                        float yMidL, yMidR; filterBuses (m1L, m1R, m2L, m2R, yMidL, yMidR);
-                        float yL, yR;       filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], yL, yR);
+                        float yMidL, yMidR; filterBuses (m1L, m1R, m2L, m2R, yMidL, yMidR, filterSlot_, filterSlot2_);
+                        float yL, yR;       filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], yL, yR, filterSlot_, filterSlot2_);
                         float wetL = 0.5f * (yMidL + yL), wetR = 0.5f * (yMidR + yR);
                         // fb237 — ROUTING INTEGRITY: the interp history is the BUS INPUT (bus2's exact
                         // grammar below). It stored the OUTPUT (wet + dry) — so every UNROUTED source
@@ -4154,9 +4189,32 @@ namespace tw
                     }
                     else
                     {
-                        float oL, oR; filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], oL, oR);
+                        float oL, oR; filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], oL, oR, filterSlot_, filterSlot2_);
                         widen (oL, oR);
                         sL[i] = oL + dryL; sR[i] = oR + dryR;
+                    }
+
+                    // fb287 — POST-FILTER REVERB SEND: run the routed-osc send buses through the dedicated
+                    // send-filters with the SAME coefficients (cutoff/res/drive) computed this sample, single-
+                    // rate (the diffuse tail masks send-side aliasing — no oversample needed). Accumulate the
+                    // filtered send into the shared bus. When no filter is engaged, send = the raw routed sum
+                    // (identical to fb280). This is what makes 'osc A → filter → reverb' send the FILTERED A.
+                    if (sendActive)
+                    {
+                        const int oi = startSample + i;
+                        if (a1 || a2)
+                        {
+                            sendFilterSlot_.setParams  (lastCutHz1_, res1, drvSm1_, sr);
+                            sendFilterSlot2_.setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            float soL, soR; filterBuses (sF1L[i], sF1R[i], sF2L[i], sF2R[i], soL, soR, sendFilterSlot_, sendFilterSlot2_);
+                            rvbSendL_[oi] += soL + sDryL[i];
+                            rvbSendR_[oi] += soR + sDryR[i];
+                        }
+                        else   // no filter engaged → the send is the raw routed sum (byte-identical to fb280)
+                        {
+                            rvbSendL_[oi] += sF1L[i] + sF2L[i] + sDryL[i];
+                            rvbSendR_[oi] += sF1R[i] + sF2R[i] + sDryR[i];
+                        }
                     }
                 }
                 // CPU: unticked LFOs advance phase once for the whole block — peek() (the
@@ -4175,6 +4233,7 @@ namespace tw
                 {
                     filterSlot_.reset();
             filterSlot2_.reset();
+                    sendFilterSlot_.reset(); sendFilterSlot2_.reset();   // fb287 — send mirror
                     osPrevL_ = osPrevR_ = 0.0f;
                     osPrevB2L_ = osPrevB2R_ = 0.0f;
                     juce::FloatVectorOperations::clear (sL, numSamples);
@@ -4639,6 +4698,13 @@ namespace tw
         // Filter 2 — fully independent second FilterSlot (own type/cut/res/drv/env).
         // Shares the FLT envelope shape + EROSION drift, with its own ENV amount.
         tw::filters::FilterSlot filterSlot2_;
+        // fb287 — POST-FILTER REVERB SEND: dedicated send-filters that MIRROR filterSlot_/filterSlot2_
+        // (same type/poles/cutoff/res/drive each sample) but run on the reverb-routed-osc subset, so the
+        // reverb hears the FILTERED signal (the fb280 send tapped PRE-filter → filtered oscs sent dry).
+        // Own state (a different input than the main filters), used only when a route is active + a filter
+        // is engaged; otherwise the send is the raw routed sum (byte-identical to before).
+        tw::filters::FilterSlot sendFilterSlot_;
+        tw::filters::FilterSlot sendFilterSlot2_;
         float                   baseCutHz2_  = 20000.0f;
         float                   baseRes012_  = 0.0f;
         float                   drv012_      = 0.0f;
@@ -4668,6 +4734,10 @@ namespace tw
         bool                    noiseSrc1_ = false, noiseSrc2_ = false;
         float                   noiseCo1_ = 0.0f, noiseCo2_ = 0.0f, noiseCoD_ = 1.0f;
         juce::AudioBuffer<float> fltBus2_, fltDry_;              // F2 + dry buses (bus1 = scratch_)
+        // fb287 — per-osc reverb SEND buses (routed-osc subset split by the SAME filter routing): F1/F2/dry.
+        // Filled in the summing loop, robin/steal-scaled alongside the main buses, then run through the
+        // dedicated send-filters in the filter loop → the FILTERED post-filter reverb send.
+        juce::AudioBuffer<float> rvbSendF1_, rvbSendF2_, rvbSendDry_;
         // fb280 — per-osc reverb send: shared bus pointers + 0/1 route gains (A,B,C,D,Sub,Noise).
         float*                  rvbSendL_ = nullptr;
         float*                  rvbSendR_ = nullptr;

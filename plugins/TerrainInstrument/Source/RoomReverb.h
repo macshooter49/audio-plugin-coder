@@ -82,6 +82,7 @@ public:
     void setPreDelayMs  (float ms){ preMs   = clampf (ms, 0.0f, 120.0f); }
     void setDiffusion   (float v) { diffuse = clamp01 (v); }
     void setModDepth    (float v) { modDepth= clamp01 (v); }
+    void setSpread      (float v) { spread  = clamp01 (v); }   // fb287 — early-reflection stereo width (Room has no mod → this owns the MODDEPTH slot)
     void setReflections (float v) { refl    = clamp01 (v); }   // ER ↔ tail balance
     void setDamping     (float v) { damp    = clamp01 (v); }   // HF absorption
     void setBassDecay   (float m) { bassMul = clampf (m, 0.25f, 2.5f); }
@@ -128,6 +129,7 @@ public:
         modSampT   = depth01 * 14.0f;
         modInc     = (0.7f * (0.6f + 0.8f * size)) / fs;   // ~0.4–1.0 Hz, a touch faster in bigger rooms
         widthT     = clamp01 (width + cb.widthAdd);
+        spreadT    = spread;                               // fb287 — ER stereo-width target (M/S on the reflections)
         freezeTgt  = freezeOn ? 1.0f : 0.0f;
         // Reflections (+ Character reflMul) = ER prominence vs tail balance. Low floor so
         // Reflections=0 is a smooth diffuse room and =1 is all discrete early slaps (night & day).
@@ -144,7 +146,7 @@ public:
             dampC = dampT; for (int i = 0; i < 4; ++i) apGC[i] = apGT[i];
             inLpC = inLpT; erLpC = erLpT; lcC = lcT; preSampC = preSampT; modSampC = modSampT; widthC = widthT;
             tankGC = tankGT; sizeScaleC = sizeScaleT; freezeCur = freezeTgt;
-            erGainBaseC = erGainBaseT; tailGainC = tailGainT;
+            erGainBaseC = erGainBaseT; tailGainC = tailGainT; spreadC = spreadT;
             commitTaps(); shapeActive = shape; erGateC = 1.0f; erGateTgt = 1.0f; erDipping = false;
             primed = true;
         }
@@ -177,6 +179,7 @@ public:
         sizeScaleC += (sizeScaleT - sizeScaleC) * smth;
         erGainBaseC+= (erGainBaseT- erGainBaseC)* smth;
         tailGainC  += (tailGainT  - tailGainC)  * smth;
+        spreadC    += (spreadT    - spreadC)    * smth;
         freezeCur  += (freezeTgt  - freezeCur)  * smth;
         erGateC    += (erGateTgt  - erGateC)    * smth;
         if (erDipping && erGateC < 0.02f) { commitTaps(); shapeActive = shapePending; erDipping = false; erGateTgt = 1.0f; }
@@ -209,6 +212,10 @@ public:
         erLpR = (1.0f - erLpC) * erR + erLpC * erLpR;   erR = erLpR;
         const float erScale = erGainBaseC * erGateC * (1.0f - freezeCur);  // freeze holds only the diffuse tail
         erL *= erScale; erR *= erScale;
+        // fb287 — SPREAD: widen the early reflections' stereo image (M/S on the ER pair only; the tail keeps
+        // its own Width). 0 = collapsed/narrow discrete slaps, 1 = very wide. Ramped → click-free; mono-safe.
+        { const float erMid = 0.5f * (erL + erR), erSide = 0.5f * (erL - erR) * (0.10f + 2.30f * spreadC);
+          erL = erMid + erSide; erR = erMid - erSide; }
 
         // ── LATE TAIL: input diffusion → room FDN (borrowed from the validated Hall core) ──
         // xt = the ~12 ms-delayed input read above, so the diffuse field trails the discrete ERs.
@@ -365,6 +372,7 @@ private:
     float tankGT = 0, tankGC = 0, preSampT = 0, preSampC = 0, modSampT = 0, modSampC = 0;
     float widthT = 0.7f, widthC = 0.7f, modInc = 0, rt60 = 1.0f, mixExt = 0.3f;
     float sizeScaleT = 1, sizeScaleC = 1, erGainBaseT = 1, erGainBaseC = 1, tailGainT = 1, tailGainC = 1;
+    float spreadT = 0.5f, spreadC = 0.5f;   // fb287 — ER stereo-width (target + ramped)
     float tailPreSamp = 576.f;   // late-field pre-delay (~12 ms), constant → click-free
     float freezeCur = 0, freezeTgt = 0, erGateC = 1, erGateTgt = 1;
     bool  erDipping = false;
@@ -378,5 +386,5 @@ private:
     int   character = 0;
     bool  modOn = true, freezeOn = false;
     float size = 0.5f, decay = 0.45f, tone = 0.5f, preMs = 8.f, diffuse = 0.6f, modDepth = 0.25f,
-          refl = 0.6f, damp = 0.4f, bassMul = 1.0f, lowCut = 20.f, width = 0.7f;
+          refl = 0.6f, damp = 0.4f, bassMul = 1.0f, lowCut = 20.f, width = 0.7f, spread = 0.5f;   // fb287 — ER Spread
 };

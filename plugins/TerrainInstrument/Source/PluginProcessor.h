@@ -1493,6 +1493,11 @@ private:
     // fb280 — audio-reactive BLOOM: smoothed wet level published to the UI (core breathes with the tail).
     std::atomic<float> hallBloomViz_ { 0.0f };
     float hallBloomEnv_ = 0.0f;                     // fast-attack / slow-release wet envelope
+    // fb287 — DUCK (Room/Spring 2nd pill): a ducking reverb pulls the WET down while the routed dry input
+    // is present and blooms it back in the gaps. Env-follows the send level; gain = 1/(1+k·env) (dynamic,
+    // self-normalizing). Fast attack, slow release. Only engages when the Duck pill is on for Room/Spring.
+    float duckEnv_ = 0.0f, duckAtkCoef_ = 0.0f, duckRelCoef_ = 0.0f;
+    bool  rvbDuckActive_ = false;                   // resolved per block (Duck pill on AND type is Room/Spring)
 
     // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
     // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)
