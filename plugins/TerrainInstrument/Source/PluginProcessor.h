@@ -16,6 +16,7 @@
 #include "VintageReverb.h"     // fb288 — synth FX-rack Vintage reverb (80s digital rack: reduced-SR + bit-crush + drive + gated/reverse shapes)
 #include "BasinReverb.h"       // fb289 — synth FX-rack Basin reverb (huge dark ambient wash: Hall FDN retuned + bass-safe crossover + deep motion)
 #include "ShimmerReverb.h"     // fb290 — synth FX-rack Shimmer reverb (ethereal octave wash: Hall FDN + granular pitch-shifter in the feedback loop)
+#include "ConvolutionReverb.h" // fb291 — synth FX-rack Convolution reverb (true FFT convolution + synth/user IR + Reverse/Attack/Distance/Density bake)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
 #include "ParametricEQ.h"
@@ -1484,6 +1485,7 @@ private:
     VintageReverb vintageReverb;                  // fb288 — Vintage reverb (80s digital rack: SR-reduction + grit + drive + gated/reverse shapes)
     BasinReverb  basinReverb;                      // fb289 — Basin reverb (huge dark ambient wash: Hall FDN retuned + bass-safe crossover + deep motion)
     ShimmerReverb shimmerReverb;                   // fb290 — Shimmer reverb (ethereal octave wash: Hall FDN + granular pitch-shifter in the feedback loop)
+    ConvolutionReverb convolutionReverb;           // fb291 — Convolution reverb (true FFT partitioned convolution + synth/user IR + Reverse/Attack/Distance/Density)
     int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring 4=Digital (live engine); -1 = uninitialised
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block
