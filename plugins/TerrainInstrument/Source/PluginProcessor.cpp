@@ -3659,6 +3659,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     springReverb.prepare (sampleRate); // fb284 — synth FX-rack Spring reverb
     digitalReverb.prepare (sampleRate);// fb285 — synth FX-rack Digital reverb (Lexicon 224)
     vintageReverb.prepare (sampleRate);// fb288 — synth FX-rack Vintage reverb (80s digital rack)
+    basinReverb.prepare (sampleRate);  // fb289 — synth FX-rack Basin reverb (huge dark wash)
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
     // fb287 — DUCK follower: fast attack (grab transients ~5 ms), slow release (bloom back ~280 ms) → the
@@ -6642,7 +6643,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // fb281 — TYPE ROUTING (Hall=0 / Room=1; other types fall back to Hall until built). A type
             // change dips the wet through 0 (click-free), then swaps + resets the incoming engine.
             int pend = (int) *rawParam (ParameterIDs::SYN_RVB_TYPE);
-            if (pend < 0 || pend > 5) pend = 0;   // Hall/Room/Plate/Spring/Digital/Vintage have DSP; others fall back to Hall
+            if (pend < 0 || pend > 6) pend = 0;   // Hall/Room/Plate/Spring/Digital/Vintage/Basin have DSP; others fall back to Hall
             if (activeRvbType_ < 0) activeRvbType_ = pend;   // first block: adopt immediately (no dip)
             if (pend != activeRvbType_)
             {
@@ -6650,7 +6651,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (hallRvbEnv_ < 1.0e-3f)   // faded out → commit the swap on the (now silent) engines
                 {
                     activeRvbType_ = pend;
-                    if (pend == 5) vintageReverb.reset(); else if (pend == 4) digitalReverb.reset(); else if (pend == 3) springReverb.reset(); else if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
+                    if (pend == 6) basinReverb.reset(); else if (pend == 5) vintageReverb.reset(); else if (pend == 4) digitalReverb.reset(); else if (pend == 3) springReverb.reset(); else if (pend == 2) plateReverb.reset(); else if (pend == 1) roomReverb.reset(); else hallReverb.reset();
                     rvbSwapping_ = false;
                 }
             }
@@ -6658,7 +6659,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             hallEnvT_ = (hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
             if (hallRouteActive_)
             {
-                if (activeRvbType_ == 5)
+                if (activeRvbType_ == 6)
+                {
+                    // ── BASIN (huge dark ambient wash) — Hall FDN retuned. Signature slots: HIDAMP→Damping (dark) ·
+                    //    LOWDECAY→Bass Decay = the BASS-SAFE crossover (default <1 ⇒ lows decay FASTER than mids;
+                    //    the 0.22·9^v curve lands 0.5→0.66 safe, sweeps to bloom) · MODMODE→Motion · MODDEPTH+RATE pair. ──
+                    basinReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                    basinReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                    basinReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
+                    basinReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 250.0f);
+                    basinReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                    basinReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
+                    basinReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
+                    basinReverb.setDamping     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
+                    basinReverb.setBassDecay   (0.22f * std::pow (9.0f, rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load()));   // bass-safe(<1) ↔ bloom(>1)
+                    basinReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
+                    basinReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
+                    basinReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                    basinReverb.setMotion      ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                    basinReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
+                    basinReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
+                    basinReverb.updateCoefficients();
+                }
+                else if (activeRvbType_ == 5)
                 {
                     // ── VINTAGE (80s digital rack) — signature slots: HIDAMP→Age (reduced-SR alias+band-limit) ·
                     //    LOWDECAY→Grit (bit-crush) · LOWCUT→Drive (input saturation) · MODMODE→Shape (Normal/Gate/
@@ -6805,7 +6828,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
             const float sgL = rawL * outputGain, sgR = rawR * outputGain;
             float rl, rr;
-            if      (activeRvbType_ == 5) vintageReverb.processSample (sgL, sgR, rl, rr);  // fb288 — Vintage
+            if      (activeRvbType_ == 6) basinReverb.processSample   (sgL, sgR, rl, rr);  // fb289 — Basin
+            else if (activeRvbType_ == 5) vintageReverb.processSample (sgL, sgR, rl, rr);  // fb288 — Vintage
             else if (activeRvbType_ == 4) digitalReverb.processSample (sgL, sgR, rl, rr);  // fb285 — active engine
             else if (activeRvbType_ == 3) springReverb.processSample (sgL, sgR, rl, rr);   // fb284
             else if (activeRvbType_ == 2) plateReverb.processSample (sgL, sgR, rl, rr);   // fb282
